@@ -80,6 +80,48 @@ fn restore_json(md1: &[String]) -> Value {
     serde_json::from_slice(&out.get_output().stdout).expect("restore JSON")
 }
 
+/// Independent address-equivalence oracle for the faithful arm: the toolkit's
+/// REPORTED `first_addresses` (its internal derivation) must equal an INDEPENDENT
+/// rust-miniscript derivation of the reconstructed descriptor STRING
+/// (`into_single_descriptors` — a code path that does NOT re-enter md-codec's
+/// reconstruction). Used where `assert_md1_fixed_point` is inapplicable (a
+/// faithful-arm divergent card reconstructs fingerprint-ONLY origins, which
+/// `bundle` won't re-ingest — a pre-existing bundle limitation, not a fidelity
+/// gap; the card's per-key suffix is faithfully reconstructed regardless).
+fn assert_reported_addresses_match_independent_derivation(restore_value: &Value) {
+    use miniscript::descriptor::DescriptorPublicKey;
+    use miniscript::{DefiniteDescriptorKey, Descriptor};
+    use std::str::FromStr;
+    let w = &restore_value["wallets"][0];
+    let desc = w["descriptor"].as_str().unwrap();
+    let reported: Vec<String> = w["first_addresses"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    assert!(!reported.is_empty(), "restore reported no addresses: {desc}");
+    let d = Descriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
+    let receive = if d.is_multipath() {
+        d.clone().into_single_descriptors().unwrap().remove(0)
+    } else {
+        d.clone()
+    };
+    for (i, rep) in reported.iter().enumerate() {
+        let def: Descriptor<DefiniteDescriptorKey> = if receive.has_wildcard() {
+            receive.derive_at_index(i as u32).unwrap()
+        } else {
+            Descriptor::<DefiniteDescriptorKey>::try_from(receive.clone()).unwrap()
+        };
+        let indep = def.address(bitcoin::Network::Bitcoin).unwrap().to_string();
+        assert_eq!(
+            rep, &indep,
+            "toolkit-reported address[{i}] diverged from the independent \
+             rust-miniscript derivation of the reconstructed descriptor: {desc}"
+        );
+    }
+}
+
 /// The reconstructed descriptor's md1 == the original md1 (md1 fixed-point).
 fn assert_md1_fixed_point(original_md1: &[String], reconstructed_descriptor: &str) {
     let out = Command::cargo_bin("mnemonic")
@@ -407,22 +449,200 @@ fn general_legacy_sh_multi_reconstructs() {
     assert_md1_fixed_point(&md1, desc);
 }
 
-/// (11) impl-review I1: a card with per-cosigner use-site overrides (cosigners
-/// not sharing one multipath suffix) is REFUSED loudly — md-codec would render
-/// one shared suffix, silently misrepresenting the wallet.
+/// (11) P2.3 FLIP (was: I1 refusal): a card with per-cosigner use-site overrides
+/// (a STANDARD `@0` baseline, a `None`-multipath `@1` override) now restores
+/// FAITHFULLY. md-codec 0.37.0's `to_miniscript_descriptor_multipath` reconstructs
+/// each `@N`'s own group; the toolkit faithful arm consumes it. The `Some`/`None`
+/// mix proves `@1` renders as a single-path `/*` while `@0` stays `<0;1>`.
+/// md1 fixed-point is the strongest faithfulness oracle (re-bundle == original).
 #[test]
-fn per_key_use_site_override_refused() {
+fn per_key_use_site_override_some_none_mix_restores_faithfully() {
     let md1 = bundle_general("wsh(multi(2,@0/<0;1>/*,@1/*))");
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    // @0 keeps its <0;1> group; @1 is a bare single-path /* (the None override).
+    assert!(
+        desc.contains("<0;1>/*"),
+        "@0 keeps its multipath group: {desc}"
+    );
+    // Exactly ONE `<0;1>` occurrence: @1 must NOT have been clobbered into one.
+    assert_eq!(
+        desc.matches("<0;1>").count(),
+        1,
+        "@1 (None override) must stay single-path /*, not be re-clobbered to <0;1>: {desc}"
+    );
+    assert_reported_addresses_match_independent_derivation(&v);
+}
+
+/// (11a) P2.1+P2.2 CORE: a card with a STANDARD `@0` baseline and a DIVERGENT
+/// `@1` use-site override (`@1/<2;3>/*`) reconstructs FAITHFULLY — the
+/// reconstructed STRING carries `@1`'s divergent `<2;3>` suffix (NOT a clobbered
+/// `<0;1>`), and the divergent cosigner's receive address derives INDEPENDENTLY
+/// (rust-miniscript) to the pinned golden anchored OUTSIDE the toolkit codec.
+///
+/// P2.1 evidence: had the plain-template arm fired, its renderer would print
+/// `<0;1>` for BOTH keys (`wallet_export/pipeline.rs`) — so observing `<2;3>` in
+/// the output PROVES the override card routed to the faithful arm.
+#[test]
+fn per_key_use_site_override_divergent_restores_faithfully() {
+    let md1 = bundle_general("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))");
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    // @0's baseline group AND @1's divergent group both present, distinct.
+    assert!(desc.contains("<0;1>/*"), "@0 keeps <0;1>: {desc}");
+    assert!(
+        desc.contains("<2;3>/*"),
+        "@1's DIVERGENT <2;3> suffix preserved (faithful arm, not plain-template clobber): {desc}"
+    );
+    assert_reported_addresses_match_independent_derivation(&v);
+    assert_divergent_address_independent_golden(desc);
+}
+
+/// (11b) `wsh(sortedmulti)` divergent: sortedmulti sorts per-derived-key at
+/// `into_single_descriptors`; the divergent suffix must still round-trip.
+#[test]
+fn per_key_use_site_override_divergent_sortedmulti_restores_faithfully() {
+    let md1 = bundle_general("wsh(sortedmulti(2,@0/<0;1>/*,@1/<2;3>/*))");
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    assert!(desc.starts_with("wsh(sortedmulti(2,"), "sortedmulti kept: {desc}");
+    assert!(desc.contains("<0;1>/*"), "@0 keeps <0;1>: {desc}");
+    assert!(desc.contains("<2;3>/*"), "@1 divergent <2;3> kept: {desc}");
+    assert_reported_addresses_match_independent_derivation(&v);
+}
+
+/// (11c) `sh(wsh(multi))` (M2) divergent: the nested-witness path also routes
+/// to the faithful arm and preserves the divergent suffix.
+#[test]
+fn per_key_use_site_override_divergent_sh_wsh_multi_restores_faithfully() {
+    let md1 = bundle_general("sh(wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*)))");
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    assert!(desc.starts_with("sh(wsh(multi(2,"), "sh-wsh-multi kept: {desc}");
+    assert!(desc.contains("<2;3>/*"), "@1 divergent <2;3> kept: {desc}");
+    assert_reported_addresses_match_independent_derivation(&v);
+}
+
+/// (11d) bare `sh(multi)` P2SH (M1) divergent — a DISTINCT routing path:
+/// `plain_template_from_tree` matches only `Wsh`/`Sh→Wsh`, so bare `sh(multi)`
+/// already returns `None` → faithful arm. With an override it must STILL
+/// reconstruct the divergent suffix faithfully.
+#[test]
+fn per_key_use_site_override_divergent_bare_sh_multi_restores_faithfully() {
+    let md1 = bundle_general("sh(multi(2,@0/<0;1>/*,@1/<2;3>/*))");
+    let v = restore_json(&md1);
+    let desc = v["wallets"][0]["descriptor"].as_str().unwrap();
+    assert!(desc.starts_with("sh(multi(2,"), "bare sh(multi) kept: {desc}");
+    assert!(desc.contains("<2;3>/*"), "@1 divergent <2;3> kept: {desc}");
+    assert_reported_addresses_match_independent_derivation(&v);
+}
+
+/// (11e) P2.3 guard — a TAPROOT override card (`tr(NUMS,multi_a)` with a
+/// divergent `@1`) is STILL REFUSED loudly (the taproot leg is deferred:
+/// `taproot_override_card(d)` guard). The error names the taproot deferral.
+#[test]
+fn taproot_use_site_override_still_refused() {
+    let md1 = bundle_general("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))");
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_md1_args(&md1))
         .assert()
         .failure()
         .stderr(
-            predicate::str::contains("per-cosigner use-site").and(predicate::str::contains(
-                "restore-md1-per-key-use-site-and-hardened-wildcard",
+            predicate::str::contains("taproot").and(predicate::str::contains(
+                "restore-md1-taproot-use-site-override-arm",
             )),
         );
+}
+
+/// (11f) P2.3 guard — a NON-taproot override card whose `@1` override carries a
+/// HARDENED wildcard (`/*h`) is STILL REFUSED loudly (`has_hardened_use_site(d)`
+/// guard; watch-only cannot derive hardened). The baseline `@0` is CLEAN — the
+/// hardened path is ONLY in `@1`'s override — so this exercises the
+/// override-aware leg of the predicate (not just the baseline scan).
+#[test]
+fn override_hardened_wildcard_refused() {
+    let md1 = bundle_general("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_md1_args(&md1))
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("hardened use-site path"));
+}
+
+/// Independent golden anchor (SPEC I1): the divergent cosigner `@1`'s chain-0
+/// idx-0 receive address, derived via rust-miniscript `into_single_descriptors`
+/// on the RECONSTRUCTED descriptor (a code path that does NOT go through
+/// md-codec's reconstruction), must equal a value pinned from an offline
+/// derivation of `@1`'s xpub at `2/0` (its OWN alt0, chain 0). The two cosigner
+/// xpubs in the reconstructed descriptor come from the fixed C0/C1 phrases, so
+/// the golden is deterministic. Anchored 2026-06-19 (see test (11g) generator).
+fn assert_divergent_address_independent_golden(reconstructed_desc: &str) {
+    use miniscript::descriptor::DescriptorPublicKey;
+    use miniscript::{DefiniteDescriptorKey, Descriptor};
+    use std::str::FromStr;
+    // chain-0 single descriptor (receive). into_single_descriptors() honors
+    // each key's OWN multipath: @1 takes its <2;3> alt0 = child 2.
+    let d = Descriptor::<DescriptorPublicKey>::from_str(reconstructed_desc).unwrap();
+    let receive = d.into_single_descriptors().unwrap().remove(0);
+    let def: Descriptor<DefiniteDescriptorKey> = receive.derive_at_index(0).unwrap();
+    let addr = def.address(bitcoin::Network::Bitcoin).unwrap().to_string();
+    // INDEPENDENT golden: the wsh(multi) script-hash address for chain0/idx0,
+    // where @0 derives at <0;1>→0/0 and @1 derives at its DIVERGENT <2;3>→2/0.
+    // A baseline-clobber bug (@1 at 0/0) would produce a DIFFERENT address.
+    assert_eq!(
+        addr, DIVERGENT_WSH_MULTI_CHAIN0_IDX0_GOLDEN,
+        "divergent-suffix chain0/idx0 address drifted — @1 must derive at its OWN <2;3> alt, not the baseline <0;1>"
+    );
+}
+
+/// Offline-anchored golden: chain0/idx0 of
+/// `wsh(multi(2, <C0-xpub>/<0;1>/*, <C1-xpub>/<2;3>/*))`. @1's divergence makes
+/// this DISTINCT from the all-baseline `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))`
+/// address — the anti-clobber discriminator. Captured 2026-06-19 by test (11g).
+const DIVERGENT_WSH_MULTI_CHAIN0_IDX0_GOLDEN: &str =
+    "bc1qkay38njhhx0c5zx43vrfglxlj0wa7dhm7d54q9fu7gredyj8hpusnqjy9k";
+
+/// (11g) GENERATOR + anti-vacuity: prove the divergent golden DIFFERS from the
+/// all-baseline address (so the golden actually anchors divergence, not codec
+/// self-agreement) AND print the value to bake into the const above. The
+/// xpubs are derived from the fixed C0/C1 phrases via the toolkit's own
+/// bundle — but the ADDRESS golden is computed by rust-miniscript here, an
+/// INDEPENDENT path from md-codec reconstruction.
+#[test]
+fn divergent_golden_differs_from_baseline_and_anchors() {
+    use miniscript::descriptor::DescriptorPublicKey;
+    use miniscript::{DefiniteDescriptorKey, Descriptor};
+    use std::str::FromStr;
+    // Pull the two cosigner xpubs out of a divergent restore (their VALUE is
+    // independent of the divergence; the suffix is what we vary below).
+    let md1 = bundle_general("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))");
+    let v = restore_json(&md1);
+    let divergent_desc = v["wallets"][0]["descriptor"].as_str().unwrap().to_string();
+
+    let addr_at = |desc: &str| -> String {
+        let d = Descriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
+        let receive = d.into_single_descriptors().unwrap().remove(0);
+        let def: Descriptor<DefiniteDescriptorKey> = receive.derive_at_index(0).unwrap();
+        def.address(bitcoin::Network::Bitcoin).unwrap().to_string()
+    };
+
+    // The all-baseline counterpart: same xpubs, @1 at <0;1> instead of <2;3>.
+    // Strip the BIP-380 `#checksum` first — the string edit invalidates it, and
+    // rust-miniscript's `from_str` accepts a checksum-less descriptor.
+    let strip_csum = |s: &str| s.split('#').next().unwrap().to_string();
+    let baseline_desc = strip_csum(&divergent_desc).replacen("<2;3>", "<0;1>", 1);
+    let divergent_addr = addr_at(&divergent_desc);
+    let baseline_addr = addr_at(&baseline_desc);
+
+    eprintln!("DIVERGENT_WSH_MULTI_CHAIN0_IDX0_GOLDEN = {divergent_addr}");
+    eprintln!("(all-baseline counterpart = {baseline_addr})");
+    assert_ne!(
+        divergent_addr, baseline_addr,
+        "the golden must ANCHOR divergence: @1's <2;3> alt0 (child 2) must yield a \
+         DIFFERENT chain0/idx0 address than the baseline <0;1> alt0 (child 0)"
+    );
 }
 
 /// (12) impl-review I2: a hardened wildcard (`/*h`) is REFUSED loudly (can't
@@ -435,5 +655,11 @@ fn hardened_wildcard_refused() {
         .args(restore_md1_args(&md1))
         .assert()
         .failure()
-        .stderr(predicate::str::contains("hardened wildcard"));
+        // P2.3 broadened the message to "hardened use-site path (`/*h` wildcard
+        // or a hardened multipath alternative …)" — still the hardened guard.
+        .stderr(
+            predicate::str::contains("hardened use-site path").and(predicate::str::contains(
+                "restore-md1-per-key-use-site-and-hardened-wildcard",
+            )),
+        );
 }

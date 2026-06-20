@@ -7,15 +7,21 @@
 //! advisory closes that gap with a NON-BLOCKING stderr note that fires IFF
 //! restore would refuse, across three shapes:
 //!   1. sortedmulti() inside a combinator (not the sole wsh/sh child),
-//!   2. per-cosigner use-site path overrides,
-//!   3. a hardened wildcard (`/*h`).
+//!   2. a HARDENED use-site path anywhere (`/*h` wildcard or a hardened alt,
+//!      baseline OR per-cosigner override),
+//!   3. a TAPROOT (`tr`) root carrying per-cosigner use-site overrides (deferred).
+//!
+//! P2.4 UPDATE: non-taproot, non-hardened per-cosigner use-site overrides are now
+//! RESTORABLE (faithful per-`@N` reconstruction) — the old blanket overrides
+//! advisory was DROPPED, and a `shared_suffix`-style divergent card now bundles
+//! WITHOUT an advisory and restores faithfully.
 //!
 //! Mirrors the v0.55.2 `older()` advisory (`cli_older_advisory.rs`). The CORE
 //! correctness property is PARITY: every positive cell feeds ONE descriptor to
 //! BOTH `bundle` (advisory fires, exit 0) AND `restore --md1` of the emitted card
 //! (refusal) — proving the advisory predicate matches restore's refusal predicate.
 //!
-//! Ships with v0.57.1 (PATCH, advisory-only). FOLLOWUP `bundle-unrestorable-shape-advisory`.
+//! FOLLOWUP `bundle-unrestorable-shape-advisory`.
 
 use assert_cmd::Command;
 use serde_json::Value;
@@ -96,43 +102,92 @@ fn shape1_sortedmulti_in_combinator_fires_and_restore_refuses() {
     );
 }
 
-/// Shape 2 — per-cosigner use-site path overrides (`@0/<0;1>/*` vs `@1/*`).
-/// bundle exit 0 + advisory; restore refuses (restore.rs:1247).
+/// Shape 2 — a HARDENED use-site path (`/*h`). bundle exit 0 + advisory; restore
+/// refuses (shared `has_hardened_use_site` predicate).
 #[test]
-fn shape2_use_site_overrides_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/*))").success();
+fn shape2_hardened_wildcard_fires_and_restore_refuses() {
+    let out = bundle_two_cosigner("wsh(multi(2,@0/*h,@1/*h))").success();
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
-        stderr.contains(ADVISORY_PREFIX) && stderr.contains("use-site"),
+        stderr.contains(ADVISORY_PREFIX) && stderr.contains("hardened use-site path"),
         "shape-2 advisory must fire on stderr; got: {stderr}"
     );
     let cards = md1_cards(&o.stdout);
     let r = restore_md1(&cards).failure();
     let rerr = String::from_utf8_lossy(&r.get_output().stderr);
     assert!(
-        rerr.contains("use-site path overrides"),
+        rerr.contains("hardened use-site path"),
         "shape-2 restore must refuse loudly; got: {rerr}"
     );
 }
 
-/// Shape 3 — hardened wildcard (`/*h`). bundle exit 0 + advisory; restore refuses
-/// (restore.rs:1254).
+/// Shape 2b — an OVERRIDE-only hardened wildcard (`@0` clean, `@1/<2;3>/*h`):
+/// exercises the override-aware leg of `has_hardened_use_site` (not just the
+/// baseline scan). bundle exit 0 + advisory; restore refuses.
 #[test]
-fn shape3_hardened_wildcard_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("wsh(multi(2,@0/*h,@1/*h))").success();
+fn shape2b_override_hardened_wildcard_fires_and_restore_refuses() {
+    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))").success();
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
-        stderr.contains(ADVISORY_PREFIX) && stderr.contains("hardened wildcard"),
+        stderr.contains(ADVISORY_PREFIX) && stderr.contains("hardened use-site path"),
+        "shape-2b advisory must fire on stderr; got: {stderr}"
+    );
+    let cards = md1_cards(&o.stdout);
+    let r = restore_md1(&cards).failure();
+    let rerr = String::from_utf8_lossy(&r.get_output().stderr);
+    assert!(
+        rerr.contains("hardened use-site path"),
+        "shape-2b restore must refuse loudly; got: {rerr}"
+    );
+}
+
+/// Shape 3 — a TAPROOT root carrying per-cosigner use-site overrides
+/// (`tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))`). bundle exit 0 + advisory;
+/// restore refuses (shared `taproot_override_card` predicate; taproot leg
+/// deferred to FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
+#[test]
+fn shape3_taproot_use_site_override_fires_and_restore_refuses() {
+    let out =
+        bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let o = out.get_output();
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        stderr.contains(ADVISORY_PREFIX) && stderr.contains("taproot"),
         "shape-3 advisory must fire on stderr; got: {stderr}"
     );
     let cards = md1_cards(&o.stdout);
     let r = restore_md1(&cards).failure();
     let rerr = String::from_utf8_lossy(&r.get_output().stderr);
     assert!(
-        rerr.contains("hardened wildcard"),
+        rerr.contains("taproot")
+            && rerr.contains("restore-md1-taproot-use-site-override-arm"),
         "shape-3 restore must refuse loudly; got: {rerr}"
+    );
+}
+
+/// P2.4 PARITY (the flip): a NON-taproot, non-hardened per-cosigner use-site
+/// override card (`@0/<0;1>/*` vs DIVERGENT `@1/<2;3>/*`) is now RESTORABLE —
+/// bundle fires NO advisory, and restore SUCCEEDS faithfully (the divergent
+/// suffix survives). Proves the dropped overrides-advisory matches the narrowed
+/// guard.
+#[test]
+fn nontaproot_nonhardened_override_no_advisory_and_restores() {
+    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let o = out.get_output();
+    let stderr = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        !stderr.contains(ADVISORY_PREFIX),
+        "non-taproot non-hardened override must NOT fire the advisory; got: {stderr}"
+    );
+    // Parity: restore reconstructs it faithfully (exit 0) with the divergent suffix.
+    let cards = md1_cards(&o.stdout);
+    let r = restore_md1(&cards).success();
+    let rout = String::from_utf8_lossy(&r.get_output().stdout);
+    assert!(
+        rout.contains("<2;3>/*"),
+        "restore must reconstruct @1's divergent <2;3> suffix; got: {rout}"
     );
 }
 
@@ -167,7 +222,7 @@ fn import_wallet_hardened_wildcard_fires_advisory() {
         .success();
     let stderr = String::from_utf8_lossy(&out.get_output().stderr);
     assert!(
-        stderr.contains(ADVISORY_PREFIX) && stderr.contains("hardened wildcard"),
+        stderr.contains(ADVISORY_PREFIX) && stderr.contains("hardened use-site path"),
         "import-wallet must surface the unrestorable-shape advisory; got: {stderr}"
     );
 }

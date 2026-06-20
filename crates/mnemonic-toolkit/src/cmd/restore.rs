@@ -1004,15 +1004,15 @@ fn origin_path_to_derivation_path(
     Ok(comps.into())
 }
 
-/// Translator that fixes the 3 caveats of md-codec's `to_miniscript_descriptor`
-/// output so it round-trips faithfully: it renders single-path, depth-0,
-/// `Main`-network keys. This promotes each `XPub` to a canonical multipath
-/// (`<0;1>/*`) `MultiXPub` with the `--network`-correct kind — or, for a
-/// wildcard-only md1 (no multipath group), passes the `XPub` through
-/// network-corrected only (R0-r1 I3: do NOT fabricate `<0;1>`).
+/// Translator that applies the ONE caveat md-codec's
+/// `to_miniscript_descriptor_multipath` leaves to the consumer: md-codec
+/// hardcodes the `Main` network on its rendered xpubs. This corrects each key's
+/// network kind to `--network` and passes the per-`@N` multipath GROUP through
+/// unchanged (the builder already set it from each key's OWN
+/// `ExpandedKey.use_site_path`, P2.2 — no baseline re-clobber). NUMS `Single`
+/// internal keys pass through untouched (strict-NUMS refusal preserved).
 struct ReconstructTranslator {
     network: CliNetwork,
-    multipath: Option<Vec<md_codec::use_site_path::Alternative>>,
 }
 
 /// The BIP-341 NUMS H-point as an `XOnlyPublicKey` (parsed from the shared
@@ -1027,16 +1027,14 @@ impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
     type Error = ToolkitError;
 
     fn pk(&mut self, pk: &DescriptorPublicKey) -> Result<DescriptorPublicKey, ToolkitError> {
-        use miniscript::descriptor::{
-            DerivPaths, DescriptorMultiXKey, DescriptorXKey, SinglePubKey,
-        };
+        use miniscript::descriptor::SinglePubKey;
         // A `Single` key appears in exactly one card rendering: the BIP-341
         // NUMS H-point internal key of a `tr(NUMS,…)` policy (md-codec
         // `build_nums_internal_key` is the only `Single` producer; every
-        // policy key is an `XPub`). Pass it through UNCHANGED iff it IS the
-        // H-point — x-only equality, never string matching — and never
-        // promote it to multipath/network. Any other `Single` cannot come
-        // from a toolkit wallet-policy card → refuse (strict-NUMS, v0.55.1).
+        // policy key is an `XPub`/`MultiXPub`). Pass it through UNCHANGED iff
+        // it IS the H-point — x-only equality, never string matching — and
+        // never promote it to multipath/network. Any other `Single` cannot
+        // come from a toolkit wallet-policy card → refuse (strict-NUMS, v0.55.1).
         if let DescriptorPublicKey::Single(s) = pk {
             if matches!(&s.key, SinglePubKey::XOnly(x) if *x == nums_xonly()) {
                 return Ok(pk.clone());
@@ -1045,54 +1043,44 @@ impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
                 "--md1 reconstruction: unexpected non-NUMS single key in wallet policy",
             ));
         }
-        // The remaining wallet-policy keys are ALWAYS `XPub` (md-codec
-        // `build_descriptor_public_key`); be total (R0-r1 M6) — never panic.
-        let xk = match pk {
-            DescriptorPublicKey::XPub(x) => x,
-            _ => {
-                return Err(bad(
-                    "--md1 reconstruction: unexpected non-XPub key in wallet policy",
-                ))
+        // `to_miniscript_descriptor_multipath` (P2.2) already assembled each
+        // key with its OWN per-`@N` multipath group from
+        // `ExpandedKey.use_site_path` — so the ONLY remaining caveat is the
+        // hardcoded `Main` network. Correct the network kind in place and pass
+        // the group (and wildcard/origin) through UNCHANGED — NO baseline
+        // re-clobber. Be total (R0-r1 M6) — never panic: a wallet-policy key is
+        // always `MultiXPub` (with a group) or `XPub` (a `None`-multipath
+        // override / wildcard-only key); anything else → refuse.
+        match pk {
+            DescriptorPublicKey::MultiXPub(x) => {
+                let mut x = x.clone();
+                x.xkey.network = self.network.network_kind();
+                Ok(DescriptorPublicKey::MultiXPub(x))
             }
-        };
-        let mut xkey: Xpub = xk.xkey;
-        xkey.network = self.network.network_kind();
-        match &self.multipath {
-            Some(alts) => {
-                let mut paths: Vec<DerivationPath> = Vec::with_capacity(alts.len());
-                for a in alts {
-                    let cn = if a.hardened {
-                        ChildNumber::from_hardened_idx(a.value)
-                    } else {
-                        ChildNumber::from_normal_idx(a.value)
-                    }
-                    .map_err(|_| {
-                        bad(format!(
-                            "--md1 multipath component {} out of range",
-                            a.value
-                        ))
-                    })?;
-                    paths.push(DerivationPath::from(vec![cn]));
-                }
-                let derivation_paths =
-                    DerivPaths::new(paths).ok_or_else(|| bad("--md1 multipath group is empty"))?;
-                Ok(DescriptorPublicKey::MultiXPub(DescriptorMultiXKey {
-                    origin: xk.origin.clone(),
-                    xkey,
-                    derivation_paths,
-                    wildcard: xk.wildcard,
-                }))
+            DescriptorPublicKey::XPub(x) => {
+                let mut x = x.clone();
+                x.xkey.network = self.network.network_kind();
+                Ok(DescriptorPublicKey::XPub(x))
             }
-            None => Ok(DescriptorPublicKey::XPub(DescriptorXKey {
-                origin: xk.origin.clone(),
-                xkey,
-                derivation_path: xk.derivation_path.clone(),
-                wildcard: xk.wildcard,
-            })),
+            _ => Err(bad(
+                "--md1 reconstruction: unexpected non-XPub key in wallet policy",
+            )),
         }
     }
 
     translate_hash_clone!(DescriptorPublicKey);
+}
+
+/// A taproot (`Tag::Tr` root) wallet-policy md1 that ALSO carries per-cosigner
+/// use-site overrides. The taproot reconstruction arm routes around the faithful
+/// per-`@N` path (the single-leaf `multi_a`/`sortedmulti_a` Template path + the
+/// `sortedmulti_a` render gap), so an override there would mis-render silently —
+/// REFUSED (deferred: FOLLOWUP `restore-md1-taproot-use-site-override-arm`).
+/// This is the SINGLE source shared by the restore guard (P2.3) and the engrave
+/// advisory (P2.4, `unrestorable_advisory.rs`) so the advisory fires IFF restore
+/// refuses (exact parity).
+pub(crate) fn taproot_override_card(d: &md_codec::Descriptor) -> bool {
+    matches!(d.tree.tag, md_codec::Tag::Tr) && d.tlv.use_site_path_overrides.is_some()
 }
 
 /// Reconstruct the faithful concrete watch-only descriptor STRING from a general
@@ -1106,7 +1094,12 @@ fn faithful_multisig_descriptor(
     d: &md_codec::Descriptor,
     network: CliNetwork,
 ) -> Result<String, ToolkitError> {
-    let ms0 = md_codec::to_miniscript::to_miniscript_descriptor(d, 0).map_err(|e| {
+    // P2.2/C2: the multipath builder assembles each `@N`'s OWN per-key group
+    // (from `ExpandedKey.use_site_path`, where `@N` == Vec position) — so a
+    // divergent `@1/<2;3>/*` reconstructs to ITS group, not the baseline
+    // `<0;1>` collapse the old single-path `to_miniscript_descriptor(d, 0)`
+    // produced. The `ReconstructTranslator` below is now network-correction ONLY.
+    let ms0 = md_codec::to_miniscript::to_miniscript_descriptor_multipath(d).map_err(|e| {
         // A `cannot wrap a fragment of type B` error is the known `pk(@N)`/
         // `pkh(@N)` double-Check shape (PART 2); other errors are unrelated, so
         // attribute the slug conditionally rather than blaming it for everything.
@@ -1120,10 +1113,7 @@ fn faithful_multisig_descriptor(
             "--md1 → descriptor: {e}{hint}. The engraved card remains a faithful backup."
         ))
     })?;
-    let mut t = ReconstructTranslator {
-        network,
-        multipath: d.use_site_path.multipath.clone(),
-    };
+    let mut t = ReconstructTranslator { network };
     let translated = ms0.translate_pk(&mut t).map_err(|e| match e {
         miniscript::TranslateErr::TranslatorErr(te) => te,
         miniscript::TranslateErr::OuterError(oe) => bad(format!("--md1 reconstruction: {oe}")),
@@ -1237,25 +1227,32 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         });
     }
 
-    // Use-site fidelity guard (impl-review I1/I2): md-codec's reconstruction
-    // renders ONE baseline use-site (the same multipath + an UNHARDENED wildcard)
-    // for every key. Two constructible card shapes would therefore reconstruct a
-    // DIFFERENT wallet than the card encodes, SILENTLY — the exact funds-safety
-    // class this fix exists to close. Refuse loudly rather than mis-render; the
-    // engraved card remains a faithful backup. (Both arms — plain and faithful —
-    // share the md-codec limitation, so the guard precedes classify.)
-    if d.tlv.use_site_path_overrides.is_some() {
+    // Use-site fidelity guard (P2.3, narrowed): faithful per-`@N` reconstruction
+    // (C1 routing + C2 multipath builder) now restores non-taproot, non-hardened
+    // override cards correctly — so the blanket override refusal is gone. TWO
+    // residual shapes still RECONSTRUCT WRONG/UNDERIVABLE and must refuse loudly
+    // (the funds-safety class this fix closes); both predicates are SHARED with
+    // the engrave-surface advisory (`unrestorable_advisory.rs`) so the advisory
+    // fires IFF restore refuses (exact parity).
+    //
+    //  (1) ANY hardened use-site (baseline OR override; `/*h` wildcard OR a
+    //      hardened multipath alt) — watch-only cannot derive hardened, and a
+    //      reconstructed descriptor would silently render an unhardened `/*`.
+    //  (2) A TAPROOT root WITH overrides — the taproot leg routes around the
+    //      faithful arm (Template / `sortedmulti_a` gap); deferred to FOLLOWUP
+    //      `restore-md1-taproot-use-site-override-arm`.
+    if md_codec::to_miniscript::has_hardened_use_site(&d) {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--md1",
-            message: "this md1 carries per-cosigner use-site path overrides (the cosigners do not share one multipath/derivation suffix); faithful reconstruction is not yet supported, and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
+            message: "this md1 uses a hardened use-site path (`/*h` wildcard or a hardened multipath alternative, baseline or per-cosigner) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened path. Faithful reconstruction is not supported. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
         });
     }
-    if d.use_site_path.wildcard_hardened {
+    if taproot_override_card(&d) {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--md1",
-            message: "this md1 uses a hardened wildcard (`/*h`) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened `/*`. Faithful reconstruction is not yet supported. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
+            message: "this taproot md1 carries per-cosigner use-site path overrides; faithful taproot reconstruction is not yet supported (the taproot arm routes around the per-key reconstruction path) and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-taproot-use-site-override-arm",
         });
     }
 
@@ -1285,6 +1282,14 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 TaprootRestore::Template(t, ik) => (Some(t), Some(ik)),
                 TaprootRestore::GeneralFaithful(ik) => (None, Some(ik)),
             }
+        } else if d.tlv.use_site_path_overrides.is_some() {
+            // C1 (P2.1): an override card carries per-`@N` divergent suffixes the
+            // plain-template renderer cannot express (it hardcodes `<0;1>` per
+            // key). Force the faithful arm (`template_opt = None`), which
+            // reconstructs each `@N`'s OWN group via the md-codec multipath
+            // builder. (Taproot override cards never reach here — pre-refused by
+            // the use-site guard above.)
+            (None, None)
         } else {
             (plain_template_from_tree(&d.tree, &d.use_site_path), None)
         };

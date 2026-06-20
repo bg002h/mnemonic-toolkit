@@ -633,8 +633,15 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
     const C0: &str =
         "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
-    // per-key use-site override (mixed multipath); hardened wildcard.
-    for desc in ["wsh(multi(2,@0/<0;1>/*,@1/*))", "wsh(multi(2,@0/*h,@1/*h))"] {
+    // P2.3 narrowed the override refusal: non-taproot, non-hardened overrides are
+    // now RESTORABLE (see `divergent_use_site_override_roundtrips_faithfully`).
+    // The shapes that STILL refuse loudly: a hardened wildcard (baseline OR
+    // override), and a TAPROOT root with overrides (deferred).
+    for desc in [
+        "wsh(multi(2,@0/*h,@1/*h))",                 // hardened wildcard (baseline)
+        "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))",      // hardened wildcard (override only)
+        "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))", // taproot override (deferred)
+    ] {
         let out = bin()
             .args([
                 "bundle",
@@ -665,6 +672,63 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
         }
         // MUST fail loudly — never exit-0 with a silent (wrong) reconstruction.
         bin().args(&a).assert().failure();
+    }
+}
+
+/// P2.5 — a DIVERGENT per-cosigner use-site override card (`@0/<0;1>/*` vs the
+/// divergent `@1/<2;3>/*`) round-trips FAITHFULLY through bundle → restore: the
+/// reconstructed descriptor STRING carries `@1`'s `<2;3>` suffix (not a baseline
+/// `<0;1>` clobber), and the toolkit's reported addresses equal the INDEPENDENT
+/// rust-miniscript derivation (`derive_receive` — `into_single_descriptors`, a
+/// code path that does NOT re-enter md-codec's reconstruction). Built via the @N
+/// SLOT pipeline (`build_descriptor` only emits uniform `/<0;1>/*`). Covers
+/// `wsh(multi)`, `wsh(sortedmulti)`, `sh(wsh(multi))`, and bare `sh(multi)`.
+#[test]
+fn divergent_use_site_override_roundtrips_faithfully() {
+    const C0: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    for desc in [
+        "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))",
+        "wsh(sortedmulti(2,@0/<0;1>/*,@1/<2;3>/*))",
+        "sh(wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*)))",
+        "sh(multi(2,@0/<0;1>/*,@1/<2;3>/*))",
+    ] {
+        let out = bin()
+            .args([
+                "bundle",
+                "--descriptor",
+                desc,
+                "--network",
+                "mainnet",
+                "--slot",
+                &format!("@0.phrase={C0}"),
+                "--slot",
+                &format!("@1.phrase={C1}"),
+                "--json",
+                "--no-engraving-card",
+            ])
+            .assert()
+            .success();
+        let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+        let md1: Vec<String> = v["md1"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap().to_string())
+            .collect();
+        let (recon, addrs) = restore(&md1);
+        // STRING fidelity: @1's divergent suffix survived (no baseline clobber).
+        assert!(
+            recon.contains("<2;3>/*"),
+            "[{desc}] reconstructed must carry @1's divergent <2;3>: {recon}"
+        );
+        // Address-equivalence vs the INDEPENDENT rust-miniscript oracle.
+        assert_eq!(
+            derive_receive(&recon, 2),
+            addrs,
+            "[{desc}] reported addresses must equal the independent derivation of {recon}"
+        );
     }
 }
 

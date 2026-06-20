@@ -1,16 +1,27 @@
 //! Non-blocking advisory for descriptor shapes `restore --md1` cannot reconstruct
 //! (FOLLOWUP `bundle-unrestorable-shape-advisory`, C1).
 //!
-//! `bundle` and `import-wallet` engrave a wire-faithful md1 card for three
+//! `bundle` and `import-wallet` engrave a wire-faithful md1 card for the
 //! descriptor shapes that `restore --md1` then REFUSES (loudly — the card stays a
 //! faithful backup, but mechanical watch-only reconstruction is unavailable):
 //!   1. `sortedmulti()` inside a combinator (not the sole child of `wsh`/`sh`) —
 //!      md-codec's pinned miniscript 13.0.0 has no `Terminal::SortedMulti` leaf
 //!      (`to_miniscript.rs`), so restore refuses ("sole child of wsh/sh").
-//!   2. per-cosigner use-site path overrides (`tlv.use_site_path_overrides`) —
-//!      restore would silently render one shared suffix (`restore.rs:1247`).
-//!   3. a hardened wildcard (`use_site_path.wildcard_hardened`, `/*h`) — restore
-//!      would silently render `/*` (`restore.rs:1254`).
+//!   2. a HARDENED use-site path anywhere — baseline OR a per-cosigner override,
+//!      `/*h` wildcard OR a hardened multipath alt — from which watch-only
+//!      addresses cannot be derived (`md_codec::has_hardened_use_site`; restore
+//!      refuses via the same predicate).
+//!   3. a TAPROOT (`tr`) root carrying per-cosigner use-site overrides — the
+//!      taproot reconstruction arm routes around the faithful per-`@N` path, so
+//!      restore refuses (`taproot_override_card`, deferred to FOLLOWUP
+//!      `restore-md1-taproot-use-site-override-arm`).
+//!
+//! NOTE (P2.4): non-taproot, non-hardened per-cosigner use-site overrides are now
+//! RESTORABLE (faithful per-`@N` reconstruction) — so the old blanket
+//! `PerKeyUseSiteOverrides` advisory was DROPPED. The two residual override
+//! refusals (hardened, taproot) reuse the EXACT predicates the restore guard uses
+//! (`has_hardened_use_site` / `taproot_override_card`) — single source ⇒ the
+//! advisory fires IFF restore refuses.
 //!
 //! This module mirrors `timelock_advisory` (the v0.55.2 `older()` advisory): a
 //! pure predicate over `md_codec::Descriptor` + a best-effort stderr emitter. The
@@ -27,12 +38,13 @@ use md_codec::tree::{Body, Node};
 /// Which unrestorable shape a descriptor carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnrestorableShape {
+    /// A hardened use-site path anywhere (baseline or override; `/*h` wildcard
+    /// or a hardened multipath alt). Watch-only cannot derive hardened.
+    HardenedWildcard,
     /// `sortedmulti()` nested inside a combinator (shape 1).
     SortedMultiInCombinator,
-    /// Per-cosigner use-site path overrides (shape 2).
-    PerKeyUseSiteOverrides,
-    /// A hardened wildcard `/*h` (shape 3).
-    HardenedWildcard,
+    /// A taproot (`tr`) root carrying per-cosigner use-site overrides (deferred).
+    TaprootUseSiteOverride,
 }
 
 /// A collected unrestorable-shape advisory.
@@ -47,23 +59,25 @@ impl UnrestorableAdvisory {
     /// shape + the slug, mirroring restore's own refusal wording.
     pub fn message(&self) -> String {
         match self.shape {
+            UnrestorableShape::HardenedWildcard => "advisory: restore --md1 cannot reconstruct \
+                this descriptor — it uses a hardened use-site path (`/*h` wildcard or a hardened \
+                multipath alternative, baseline or per-cosigner), from which watch-only addresses \
+                cannot be derived and which would silently render an unhardened path. The engraved \
+                card is a faithful backup; keep the full descriptor to restore. Tracked: \
+                restore-md1-per-key-use-site-and-hardened-wildcard"
+                .to_string(),
             UnrestorableShape::SortedMultiInCombinator => "advisory: restore --md1 cannot \
                 reconstruct this descriptor — it places sortedmulti() inside a combinator \
                 (sortedmulti must be the sole child of wsh/sh). The engraved card is a faithful \
                 backup; keep the full descriptor to restore. Tracked: \
                 bundle-accepts-sortedmulti-in-combinator-restore-cannot"
                 .to_string(),
-            UnrestorableShape::PerKeyUseSiteOverrides => "advisory: restore --md1 cannot \
-                reconstruct this descriptor — it carries per-cosigner use-site path overrides (the \
-                cosigners do not share one derivation suffix). The engraved card is a faithful \
-                backup; keep the full descriptor to restore. Tracked: \
-                restore-md1-per-key-use-site-and-hardened-wildcard"
-                .to_string(),
-            UnrestorableShape::HardenedWildcard => "advisory: restore --md1 cannot reconstruct \
-                this descriptor — it uses a hardened wildcard (`/*h`), from which watch-only \
-                addresses cannot be derived and which would silently render `/*`. The engraved \
-                card is a faithful backup; keep the full descriptor to restore. Tracked: \
-                restore-md1-per-key-use-site-and-hardened-wildcard"
+            UnrestorableShape::TaprootUseSiteOverride => "advisory: restore --md1 cannot \
+                reconstruct this descriptor — it is a taproot policy carrying per-cosigner \
+                use-site path overrides (faithful taproot reconstruction is not yet supported; the \
+                taproot arm would misrepresent the divergent suffixes). The engraved card is a \
+                faithful backup; keep the full descriptor to restore. Tracked: \
+                restore-md1-taproot-use-site-override-arm"
                 .to_string(),
         }
     }
@@ -73,19 +87,23 @@ impl UnrestorableAdvisory {
 /// per shape (each is a single structural fact), so the result holds 0..=3 items.
 pub fn unrestorable_advisories(desc: &md_codec::Descriptor) -> Vec<UnrestorableAdvisory> {
     let mut out = Vec::new();
+    // P2.4 parity: the hardened + taproot-override predicates are the SAME ones
+    // the restore guard uses (`restore.rs`), so the advisory fires IFF restore
+    // refuses. (Non-taproot, non-hardened use-site overrides are now restorable
+    // — no advisory for them.)
+    if md_codec::to_miniscript::has_hardened_use_site(desc) {
+        out.push(UnrestorableAdvisory {
+            shape: UnrestorableShape::HardenedWildcard,
+        });
+    }
     if tree_has_sortedmulti_in_combinator(&desc.tree) {
         out.push(UnrestorableAdvisory {
             shape: UnrestorableShape::SortedMultiInCombinator,
         });
     }
-    if desc.tlv.use_site_path_overrides.is_some() {
+    if crate::cmd::restore::taproot_override_card(desc) {
         out.push(UnrestorableAdvisory {
-            shape: UnrestorableShape::PerKeyUseSiteOverrides,
-        });
-    }
-    if desc.use_site_path.wildcard_hardened {
-        out.push(UnrestorableAdvisory {
-            shape: UnrestorableShape::HardenedWildcard,
+            shape: UnrestorableShape::TaprootUseSiteOverride,
         });
     }
     out
@@ -239,11 +257,13 @@ mod tests {
             m1.contains("advisory: restore --md1 cannot reconstruct") && m1.contains("sortedmulti")
         );
         let m2 = UnrestorableAdvisory {
-            shape: UnrestorableShape::PerKeyUseSiteOverrides,
+            shape: UnrestorableShape::TaprootUseSiteOverride,
         }
         .message();
         assert!(
-            m2.contains("advisory: restore --md1 cannot reconstruct") && m2.contains("use-site")
+            m2.contains("advisory: restore --md1 cannot reconstruct")
+                && m2.contains("taproot")
+                && m2.contains("restore-md1-taproot-use-site-override-arm")
         );
         let m3 = UnrestorableAdvisory {
             shape: UnrestorableShape::HardenedWildcard,
@@ -251,7 +271,7 @@ mod tests {
         .message();
         assert!(
             m3.contains("advisory: restore --md1 cannot reconstruct")
-                && m3.contains("hardened wildcard")
+                && m3.contains("hardened use-site path")
         );
     }
 }

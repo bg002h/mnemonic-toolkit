@@ -58,6 +58,16 @@ const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9a
 /// connection can never make the test vacuously pass.
 const WPKH_CHAIN0_IDX0_GOLDEN: &str = "bc1qqew6k2qzwadxjdzr8qw5dwupjyccj49z7yey9r";
 
+/// P2.5 divergent-shape anti-vacuity golden — chain-0 idx-0 of
+/// `wsh(multi(2,K0/<0;1>/*,K1/<2;3>/*,K2/<4;5>/*))`, derived INDEPENDENTLY
+/// (rust-miniscript `derive_receive`), captured 2026-06-19. Because @1/@2 take
+/// their OWN multipath alt0 (children 2 and 4) instead of the baseline child 0,
+/// this address is DISTINCT from the all-baseline `wsh-multi-2of3` address — the
+/// discriminator that proves a baseline-clobber regression. Pinned + cross-checked
+/// against the all-baseline counterpart by `divergent_differential_golden`.
+const WSH_MULTI_DIVERGENT_CHAIN0_IDX0_GOLDEN: &str =
+    "bc1qlfsk4typrllqv4sa0jxp0ps8mys6asup7kk2rjd5xr0mg34sfjzs6ed09p";
+
 // Origin-annotated MAINNET xpubs — the STRESS-A frozen key pool
 // (`prop_backup_restore_roundtrip.rs`). Origin `/48h/0h/0h/2h` is OPAQUE
 // metadata (the toolkit does no purpose/depth validation; derivation uses
@@ -95,6 +105,15 @@ fn corpus() -> Vec<Shape> {
         Shape {
             label: "wsh-multi-2of3",
             descriptor: format!("wsh(multi(2,{K0}{m},{K1}{m},{K2}{m}))"),
+        },
+        Shape {
+            // P2.5 — DIVERGENT per-cosigner use-site suffixes: @1 and @2 carry
+            // their OWN multipath groups (`<2;3>`, `<4;5>`) ≠ @0's baseline
+            // `<0;1>`. The bundle→restore→derive path must preserve each group;
+            // the independent `derive_receive` oracle + Core both honor per-key
+            // multipath natively. Anchored by `divergent_differential_golden`.
+            label: "wsh-multi-2of3-divergent",
+            descriptor: format!("wsh(multi(2,{K0}{m},{K1}/<2;3>/*,{K2}/<4;5>/*))"),
         },
         Shape {
             label: "sh-wsh-sortedmulti-2of3",
@@ -362,6 +381,18 @@ fn bitcoind_end_to_end_differential() {
             );
             golden_asserted = true;
         }
+        // P2.5 divergent-shape golden: restore's reported @1/@2-divergent address
+        // == the INDEPENDENT golden, anchoring per-key suffix fidelity BEFORE Core.
+        if shape.label == "wsh-multi-2of3-divergent" {
+            assert_eq!(
+                reported[0], WSH_MULTI_DIVERGENT_CHAIN0_IDX0_GOLDEN,
+                "anti-vacuity golden: divergent-suffix restore address drifted (baseline clobber?)"
+            );
+            assert!(
+                recon_desc.contains("<2;3>/*") && recon_desc.contains("<4;5>/*"),
+                "divergent shape must reconstruct @1/@2's OWN suffixes: {recon_desc}"
+            );
+        }
 
         let recon_c0 = single_chain_desc(&recon_desc, 0);
 
@@ -431,5 +462,31 @@ fn bitcoind_end_to_end_differential() {
          change-branch equivalence + checksum round-trip per shape), all \
          byte-identical vs bitcoind v27.0",
         corpus().len()
+    );
+}
+
+/// P2.5 anti-vacuity (DEFAULT-CI, NOT `#[ignore]`): the divergent-shape golden
+/// must (a) match the INDEPENDENT rust-miniscript derivation of the divergent
+/// corpus descriptor AND (b) DIFFER from the all-baseline `wsh-multi-2of3`
+/// counterpart — proving the golden anchors @1/@2's divergence (not codec
+/// self-agreement) and would catch a baseline-clobber regression. Also doubles
+/// as the generator: run with `--nocapture` to (re)capture the pinned value.
+#[test]
+fn divergent_differential_golden() {
+    let m = "/<0;1>/*";
+    let divergent = format!("wsh(multi(2,{K0}{m},{K1}/<2;3>/*,{K2}/<4;5>/*))");
+    let baseline = format!("wsh(multi(2,{K0}{m},{K1}{m},{K2}{m}))");
+    let divergent_addr = derive_receive(&divergent, 1).remove(0);
+    let baseline_addr = derive_receive(&baseline, 1).remove(0);
+    eprintln!("WSH_MULTI_DIVERGENT_CHAIN0_IDX0_GOLDEN = {divergent_addr}");
+    eprintln!("(all-baseline wsh-multi-2of3 counterpart = {baseline_addr})");
+    assert_ne!(
+        divergent_addr, baseline_addr,
+        "the divergent golden must ANCHOR divergence: @1/@2's own alt0 (children \
+         2/4) must yield a DIFFERENT chain0/idx0 address than the baseline (child 0)"
+    );
+    assert_eq!(
+        divergent_addr, WSH_MULTI_DIVERGENT_CHAIN0_IDX0_GOLDEN,
+        "independent miniscript derivation drifted from the pinned divergent golden"
     );
 }
