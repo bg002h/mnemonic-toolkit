@@ -1100,13 +1100,71 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
 /// every-slot-supplied gate). The `(key65, origin)` PAIR is the search's
 /// permutable unit.
 #[derive(Clone, Debug)]
-struct CandidateKey {
+pub(crate) struct CandidateKey {
     key65: [u8; 65],
     fingerprint: Fingerprint,
     origin: DerivationPath,
     /// True for an own-seed-derived key (for the "your seed" annotation + the
     /// own-position gate); false for a cosigner mk1/xpub.
     is_own: bool,
+}
+
+/// #28 phase 2 — the ARG-STRUCT-NEUTRAL input to the shared multisig-template
+/// completion engine [`complete_multisig_template`]. Both `restore` and
+/// `verify-bundle` populate this from their own `*Args` (the only difference
+/// between the two surfaces) and then run the IDENTICAL completion. The funds-
+/// safety core (cosigner parse → per-slot origin BUILD → floors → mode → search
+/// → fresh-descriptor build) lives once, behind this struct — so the two
+/// surfaces can never drift on a silent-wrong-wallet decision.
+pub(crate) struct MultisigCompletionCtx<'a> {
+    /// The seed entropy already resolved by the caller (stdin/`@env:`/etc.).
+    pub entropy: &'a [u8],
+    /// The BIP-39 passphrase (already resolved; empty = none).
+    pub passphrase: &'a str,
+    /// The wordlist language to derive the own key under.
+    pub derive_language: bip39::Language,
+    /// The own account(s) the `--from` seed is used at (one own key each).
+    pub own_accounts: Vec<u32>,
+    /// An explicit `--origin` own-origin override (else cosigner-family default).
+    pub explicit_own_origin: Option<DerivationPath>,
+    /// `--cosigner` specs verbatim (assigned `@N=` or unassigned), pre-grouped.
+    pub cosigner_specs: &'a [String],
+    /// `--own-account-max` (gated — REFUSED if present; the subset-search is
+    /// deferred). Carried so the gate fires uniformly across both surfaces.
+    pub own_account_max: Option<u32>,
+    /// The completion mode target — `--expect-wallet-id` (id-search).
+    pub expect_wallet_id: Option<String>,
+    /// The completion mode target — `--search-address` (address-search).
+    pub search_address: Option<String>,
+    /// Address-search range `[min, max)`.
+    pub search_addr_min: u32,
+    pub search_addr_max: u32,
+    /// Address-search chain scope.
+    pub search_chain: CliSearchChain,
+    /// `--accept-search-time` cap override (forced acknowledgment).
+    pub accept_search_time: Option<String>,
+    /// The network the recomposed wallet is on.
+    pub network: CliNetwork,
+}
+
+/// #28 phase 2 — the resolved output of [`complete_multisig_template`]: the
+/// freshly-built, fully-keyed completed descriptor + the supplied pool + the
+/// resolved slot→pool assignment. The caller (restore: emit; verify-bundle:
+/// bind + recompose + report) consumes these.
+pub(crate) struct MultisigCompletionOutcome {
+    /// The completed, fully-keyed `md_codec::Descriptor` (the C1-fresh build).
+    pub completed: md_codec::Descriptor,
+    /// The supplied candidate pool (own keys + cosigners), pre-search order.
+    pub pool: Vec<CandidateKey>,
+    /// `assignment[i]` = the `pool` index placed at slot `@i`.
+    pub assignment: Vec<usize>,
+}
+
+impl MultisigCompletionOutcome {
+    /// The slot whose pool entry is the operator's own key (for the annotation).
+    pub(crate) fn own_position(&self) -> Option<usize> {
+        self.assignment.iter().position(|&pi| self.pool[pi].is_own)
+    }
 }
 
 /// Derive the watch-only scriptPubKey at `(chain, index)` from a parsed
@@ -1162,47 +1220,34 @@ fn own_origin_from_family(family: &DerivationPath, account: u32) -> Option<Deriv
     Some(DerivationPath::from(comps))
 }
 
-/// `mnemonic restore --md1 <keyless CANONICAL MULTISIG template>` — complete a
-/// concrete watch-only multisig wallet from `--from` (own seed) + `--cosigner`
-/// (external mk1/xpub) via the permutation-search engine. The R0-heavy
-/// funds-safety core; see the section banner above.
-fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
-    d: &md_codec::Descriptor,
-    args: &RestoreArgs,
-    stdin: &mut R,
-    stdout: &mut W,
+/// #28 phase 2 — the resolved `--from` seed for a multisig-template completion:
+/// the (pinned) entropy + the BIP-39 passphrase + the wordlist language. The
+/// mlock pins live for the lifetime of this struct (held by the caller).
+pub(crate) struct TemplateSeed {
+    pub entropy: zeroize::Zeroizing<Vec<u8>>,
+    pub passphrase: String,
+    pub derive_language: bip39::Language,
+    _pin: Option<mnemonic_toolkit::mlock::PinnedPageRange>,
+    _pin_pp: Option<mnemonic_toolkit::mlock::PinnedPageRange>,
+}
+
+/// #28 phase 2 — resolve a `--from` seed string (+ passphrase) for a multisig-
+/// template completion, SHARED by `restore` + `verify-bundle` so the two
+/// surfaces resolve the seed (argv-leak advisories, stdin-coexist gate, `@env:`
+/// / stdin handling, the seed-source node gate) byte-for-byte identically. A
+/// missing `--from` returns `no_from` (the surface's own floor-1(i) message
+/// naming `--from`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn resolve_template_completion_seed<E: Write>(
+    from_raw: Option<&str>,
+    no_from: ToolkitError,
+    passphrase: Option<&str>,
+    passphrase_stdin: bool,
+    language: Option<CliLanguage>,
+    stdin: &mut dyn Read,
     stderr: &mut E,
-) -> Result<u8, ToolkitError> {
-    use mnemonic_toolkit::permutation_search as ps;
-
-    let network = args.network.unwrap_or(CliNetwork::Mainnet);
-    let n = d.n as usize;
-
-    // --- I-1 gate (P3a R0): `--own-account-max` (own-account RANGE search) is
-    // NOT supported yet. The permutation engine enumerates only n! placements of
-    // the FIRST n pool entries, so an OVER-supplied pool (own keys derived at
-    // 0..K → more own candidates than slots) would leave pool indices ≥ n NEVER
-    // evaluated and a legitimate wallet would silently NO-MATCH. The genuine
-    // subset-search (k-permutations P(pool,n) + unknown-own-slot-count) is
-    // deferred — see FOLLOWUP `template-multisig-own-account-range-subset-search`.
-    // Refuse LOUDLY at input with an actionable next step. ------------------------
-    if args.own_account_max.is_some() {
-        return Err(bad(
-            "own-account range search (--own-account-max) is not supported yet for multisig \
-             template completion: specify your exact own account(s) with --account <N[,N,…]> so \
-             the supplied keys exactly fill the N cosigner slots.",
-        ));
-    }
-
-    // --- Floor 1(i): `--from` is REQUIRED for a template completion ----------
-    let from_raw = args.from.as_deref().ok_or(ToolkitError::ModeViolation {
-        mode: "restore",
-        flag: "--md1",
-        message: "restore of a keyless MULTISIG TEMPLATE md1 requires --from <seed> \
-                  (the template carries no keys; the seed derives your cosigner key, and \
-                  --cosigner <mk1> supplies the others). Supply \
-                  --from ms1=…/phrase=…/entropy=…/seedqr=…",
-    })?;
+) -> Result<TemplateSeed, ToolkitError> {
+    let from_raw = from_raw.ok_or(no_from)?;
     let from = parse_from_input(from_raw).map_err(bad)?;
     let from_uses_stdin = from.value == "-";
     if !matches!(
@@ -1214,7 +1259,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
             from.node.as_str()
         )));
     }
-    if args.passphrase_stdin && from_uses_stdin {
+    if passphrase_stdin && from_uses_stdin {
         return Err(bad(
             "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
         ));
@@ -1229,7 +1274,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
             &format!("--from {node}=-"),
         );
     }
-    if let Some(pp) = args.passphrase.as_deref() {
+    if let Some(pp) = passphrase {
         if !pp.starts_with("@env:") {
             crate::secret_advisory::secret_in_argv_warning(
                 stderr,
@@ -1240,23 +1285,159 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     }
 
     // --- Resolve the seed entropy --------------------------------------------
-    let passphrase: String = if args.passphrase_stdin {
-        read_stdin_passphrase(stdin)?
+    // `stdin` is `&mut dyn Read` (unsized); reborrow as `&mut (&mut dyn Read)`
+    // so the generic `<R: Read>` stdin helpers monomorphize over the sized
+    // reference type.
+    let passphrase: String = if passphrase_stdin {
+        read_stdin_passphrase(&mut &mut *stdin)?
     } else {
-        match args.passphrase.as_deref() {
+        match passphrase {
             Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
             None => String::new(),
         }
     };
     let from_value: String = if from_uses_stdin {
-        read_stdin_to_string(stdin)?
+        read_stdin_to_string(&mut &mut *stdin)?
     } else {
         crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
     };
-    let (entropy, derive_language) = resolve_seed_entropy(&from.node, &from_value, args.language)?;
-    let _pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
-    let _pin_pp = (!passphrase.is_empty())
+    let (entropy, derive_language) = resolve_seed_entropy(&from.node, &from_value, language)?;
+    let pin = Some(mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]));
+    let pin_pp = (!passphrase.is_empty())
         .then(|| mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes()));
+    Ok(TemplateSeed {
+        entropy,
+        passphrase,
+        derive_language,
+        _pin: pin,
+        _pin_pp: pin_pp,
+    })
+}
+
+/// `mnemonic restore --md1 <keyless CANONICAL MULTISIG template>` — complete a
+/// concrete watch-only multisig wallet from `--from` (own seed) + `--cosigner`
+/// (external mk1/xpub) via the permutation-search engine. The R0-heavy
+/// funds-safety core; see the section banner above.
+fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
+    d: &md_codec::Descriptor,
+    args: &RestoreArgs,
+    stdin: &mut R,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<u8, ToolkitError> {
+    let network = args.network.unwrap_or(CliNetwork::Mainnet);
+
+    // (The `--own-account-max` I-1 gate now lives in the SHARED
+    // `complete_multisig_template` core, so both restore + verify-bundle refuse
+    // it uniformly.)
+
+    // --- Floor 1(i): `--from` is REQUIRED + resolve the seed entropy ----------
+    // Factored into the SHARED helper so verify-bundle's multisig-template path
+    // resolves the seed identically (same argv advisories, stdin coexist gate,
+    // `@env:`/stdin handling).
+    let no_from = ToolkitError::ModeViolation {
+        mode: "restore",
+        flag: "--md1",
+        message: "restore of a keyless MULTISIG TEMPLATE md1 requires --from <seed> \
+                  (the template carries no keys; the seed derives your cosigner key, and \
+                  --cosigner <mk1> supplies the others). Supply \
+                  --from ms1=…/phrase=…/entropy=…/seedqr=…",
+    };
+    let seed = resolve_template_completion_seed(
+        args.from.as_deref(),
+        no_from,
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        args.language,
+        stdin,
+        stderr,
+    )?;
+
+    // --- The explicit own-origin override (#28 phase-1 `--origin`, reused). ---
+    let explicit_own_origin = parse_explicit_own_origin(args.origin.as_deref())?;
+
+    // --- Build the NEUTRAL completion ctx + run the SHARED engine ------------
+    // Everything funds-safety-critical (cosigner parse → per-slot origin BUILD →
+    // floors → mode → search → fresh-descriptor build) lives in
+    // `complete_multisig_template`, shared byte-for-byte with `verify-bundle`.
+    let ctx = MultisigCompletionCtx {
+        entropy: &seed.entropy,
+        passphrase: &seed.passphrase,
+        derive_language: seed.derive_language,
+        own_accounts: args.account.clone(),
+        explicit_own_origin,
+        cosigner_specs: &args.cosigner,
+        own_account_max: args.own_account_max,
+        expect_wallet_id: args.expect_wallet_id.clone(),
+        search_address: args.search_address.clone(),
+        search_addr_min: args.search_addr_min,
+        search_addr_max: args.search_addr_max,
+        search_chain: args.search_chain,
+        accept_search_time: args.accept_search_time.clone(),
+        network,
+    };
+    let outcome = complete_multisig_template(d, &ctx, stderr)?;
+    emit_completed_multisig(
+        &outcome.completed,
+        &outcome.pool,
+        &outcome.assignment,
+        args,
+        network,
+        stdout,
+        stderr,
+    )
+}
+
+/// Parse the `--origin` own-origin override (accepts `m/…` or bare `…`).
+fn parse_explicit_own_origin(s: Option<&str>) -> Result<Option<DerivationPath>, ToolkitError> {
+    match s {
+        Some(s) => Ok(Some(
+            DerivationPath::from_str(s.trim_start_matches("m/").trim_start_matches('m'))
+                .or_else(|_| DerivationPath::from_str(s))
+                .map_err(|e| bad(format!("--origin {s}: {e}")))?,
+        )),
+        None => Ok(None),
+    }
+}
+
+/// #28 phase 2 — the SHARED, arg-struct-NEUTRAL multisig-template completion
+/// engine. Given a keyless MULTISIG/general template `d` + the resolved
+/// [`MultisigCompletionCtx`], runs the IDENTICAL funds-safety completion both
+/// `restore` (emit) and `verify-bundle` (bind + recompose) need:
+///   cosigner parse → per-slot origin BUILD (NEVER the carried `path_decl`, the
+///   C1 invariant) → the every-slot + distinct-key floors → the completion mode
+///   (id-search / address-search / explicit `@N=`) → the permutation search →
+///   the unique assignment + a fresh fully-keyed descriptor.
+///
+/// On NO-MATCH / AMBIGUOUS / any floor violation it RETURNS the (refuse) error —
+/// never a silent wrong wallet. `stderr` carries the explicit-mode warning + the
+/// search progress line. Restore behavior is byte-identical to the pre-factor
+/// inline body (the wrapper now just resolves the seed + builds the ctx + emits).
+pub(crate) fn complete_multisig_template<E: Write>(
+    d: &md_codec::Descriptor,
+    ctx: &MultisigCompletionCtx,
+    stderr: &mut E,
+) -> Result<MultisigCompletionOutcome, ToolkitError> {
+    use mnemonic_toolkit::permutation_search as ps;
+
+    let network = ctx.network;
+    let n = d.n as usize;
+
+    // --- I-1 gate (P3a R0): `--own-account-max` (own-account RANGE search) is
+    // NOT supported yet. The permutation engine enumerates only n! placements of
+    // the FIRST n pool entries, so an OVER-supplied pool (own keys derived at
+    // 0..K → more own candidates than slots) would leave pool indices ≥ n NEVER
+    // evaluated and a legitimate wallet would silently NO-MATCH. The genuine
+    // subset-search (k-permutations P(pool,n) + unknown-own-slot-count) is
+    // deferred — see FOLLOWUP `template-multisig-own-account-range-subset-search`.
+    // Refuse LOUDLY at input with an actionable next step. ------------------------
+    if ctx.own_account_max.is_some() {
+        return Err(bad(
+            "own-account range search (--own-account-max) is not supported yet for multisig \
+             template completion: specify your exact own account(s) with --account <N[,N,…]> so \
+             the supplied keys exactly fill the N cosigner slots.",
+        ));
+    }
 
     // --- Parse `--cosigner`: unassigned (search) vs assigned `@N=` (explicit) -
     // (I-B) The phase-1 `@N=` parse read only the 65-byte key for a cross-check;
@@ -1271,7 +1452,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     let mut assigned_chunks: std::collections::BTreeMap<u8, Vec<String>> =
         std::collections::BTreeMap::new();
     let mut unassigned_chunks: Vec<String> = Vec::new();
-    for spec in &args.cosigner {
+    for spec in ctx.cosigner_specs {
         if spec.starts_with('@') {
             let (lhs, rhs) = spec.split_once('=').ok_or_else(|| {
                 bad(format!(
@@ -1343,15 +1524,9 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         .map(|c| c.origin.clone())
         .next();
 
-    // The explicit own-origin override (#28 phase-1 `--origin`, reused).
-    let explicit_own_origin = match args.origin.as_deref() {
-        Some(s) => Some(
-            DerivationPath::from_str(s.trim_start_matches("m/").trim_start_matches('m'))
-                .or_else(|_| DerivationPath::from_str(s))
-                .map_err(|e| bad(format!("--origin {s}: {e}")))?,
-        ),
-        None => None,
-    };
+    // The explicit own-origin override (#28 phase-1 `--origin`, reused) — parsed
+    // by the caller into `ctx.explicit_own_origin`.
+    let explicit_own_origin = ctx.explicit_own_origin.as_ref();
 
     // The canonical-origin fallback (BIP-48 for canonical multisig) — used ONLY
     // in the all-own, no-`--origin`, no-cosigner-family case below. Computed
@@ -1376,7 +1551,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // The own accounts: the `--account` LIST. (The `--own-account-max` range is
     // gated above — I-1 — until the subset-search engine lands; once supplied,
     // `pool.len() == n` always holds and the engine's n! enumeration is exact.)
-    let own_accounts: Vec<u32> = args.account.clone();
+    let own_accounts: &[u32] = &ctx.own_accounts;
     if own_accounts.is_empty() {
         return Err(bad("--account list is empty"));
     }
@@ -1384,7 +1559,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // duplicate-key collision (floor 2). Reject early with a clear message.
     {
         let mut seen = std::collections::BTreeSet::new();
-        for a in &own_accounts {
+        for a in own_accounts {
             if !seen.insert(*a) {
                 return Err(bad(format!(
                     "--account: duplicate account {a} (the own seed at one account is one key)"
@@ -1395,13 +1570,13 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
 
     // --- Build the OWN candidate keys (one per own account) ------------------
     let mut own_keys: Vec<CandidateKey> = Vec::new();
-    for &acct in &own_accounts {
+    for &acct in own_accounts {
         // The own origin: --origin override → the cosigner family with the
         // account substituted → the canonical (BIP-48) fallback. The fallback
         // is resolved LAZILY (only here, and only when neither --origin nor a
         // cosigner family pins the own origin) so a general template with
         // cosigners never trips the "not canonical-origin" error.
-        let origin = if let Some(o) = &explicit_own_origin {
+        let origin = if let Some(o) = explicit_own_origin {
             o.clone()
         } else if let Some(fam) = &cosigner_family {
             match own_origin_from_family(fam, acct) {
@@ -1415,9 +1590,9 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
             own_origin_from_family(&fb, acct).unwrap_or(fb)
         };
         let acct_key = crate::derive_slot::derive_bip32_from_entropy_at_path(
-            &entropy,
-            &passphrase,
-            derive_language,
+            ctx.entropy,
+            ctx.passphrase,
+            ctx.derive_language,
             network,
             &origin,
         )?;
@@ -1431,15 +1606,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
 
     // ---- EXPLICIT mode (all `--cosigner @N=`, no search) --------------------
     if any_assigned {
-        return complete_explicit_assignment(
-            d,
-            args,
-            network,
-            &own_keys,
-            &assigned_cosigners,
-            stdout,
-            stderr,
-        );
+        return complete_explicit_assignment(d, &own_keys, &assigned_cosigners, stderr);
     }
 
     // --- The full candidate pool = own keys + unassigned cosigners -----------
@@ -1495,8 +1662,8 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         perm_count_u128(n, n).ok_or_else(|| bad("multisig template: candidate space overflow"))?;
 
     // --- Select the mode + build the evaluator -------------------------------
-    let id_search = args.expect_wallet_id.is_some();
-    let addr_search = args.search_address.is_some();
+    let id_search = ctx.expect_wallet_id.is_some();
+    let addr_search = ctx.search_address.is_some();
     // SORTED carve-out (SPEC §6.1): a `sortedmulti`/`sortedmulti_a` wallet is
     // ORDER-INDEPENDENT — every key→slot permutation yields the SAME address, so
     // an address-search would find all n! placements (→ Ambiguous) even though
@@ -1528,7 +1695,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
 
     let outcome = if id_search {
         // ---- id-search (strong-prefix sized to the realized S) -------------
-        let prefix_hex = args.expect_wallet_id.as_deref().unwrap();
+        let prefix_hex = ctx.expect_wallet_id.as_deref().unwrap();
         let prefix = decode_wallet_id_prefix(prefix_hex)?;
         ps::validate_prefix_strength(prefix.len(), realized_s).map_err(map_search_error)?;
         let evaluator = |assignment: &[usize], _addr_idx: u64| -> bool {
@@ -1543,22 +1710,29 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
                 Err(_) => false,
             }
         };
-        run_capped_search(&evaluator, n, ps::SearchMode::Id, realized_s, args, stderr)?
+        run_capped_search(
+            &evaluator,
+            n,
+            ps::SearchMode::Id,
+            realized_s,
+            ctx.accept_search_time.as_deref(),
+            stderr,
+        )?
     } else if addr_search {
         // ---- address-search (full scriptPubKey; collision-free) ------------
-        let addr_str = args.search_address.as_deref().unwrap();
+        let addr_str = ctx.search_address.as_deref().unwrap();
         let target_spk = address_to_script_pubkey(addr_str, network)?;
-        if args.search_addr_max <= args.search_addr_min {
+        if ctx.search_addr_max <= ctx.search_addr_min {
             return Err(bad(
                 "--search-addr-max must be greater than --search-addr-min",
             ));
         }
         let range = ps::AddressRange {
-            min: args.search_addr_min,
-            max: args.search_addr_max,
-            chains: args.search_chain.to_scope(),
+            min: ctx.search_addr_min,
+            max: ctx.search_addr_max,
+            chains: ctx.search_chain.to_scope(),
         };
-        let scope = args.search_chain;
+        let scope = ctx.search_chain;
         let evaluator = |assignment: &[usize], addr_idx: u64| -> bool {
             // SORTED collapse: only the identity placement is evaluated (all
             // placements are the same wallet — see `sorted_shape` above).
@@ -1594,7 +1768,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
             n,
             ps::SearchMode::Address(range),
             realized_s,
-            args,
+            ctx.accept_search_time.as_deref(),
             stderr,
         )?
     } else {
@@ -1630,9 +1804,13 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         }
     };
 
-    // --- Build + emit the completed watch-only wallet ------------------------
-    let cand = build_candidate(&assignment)?;
-    emit_completed_multisig(&cand, &pool, &assignment, args, network, stdout, stderr)
+    // --- Build the completed watch-only wallet (the caller emits/binds) ------
+    let completed = build_candidate(&assignment)?;
+    Ok(MultisigCompletionOutcome {
+        completed,
+        pool,
+        assignment,
+    })
 }
 
 /// Decode a `--cosigner` card — one or more `mk1` chunks, or a single bare xpub
@@ -1738,7 +1916,7 @@ fn run_capped_search<Ev, E: Write>(
     n: usize,
     mode: mnemonic_toolkit::permutation_search::SearchMode,
     realized_perms: u128,
-    args: &RestoreArgs,
+    accept_search_time: Option<&str>,
     stderr: &mut E,
 ) -> Result<mnemonic_toolkit::permutation_search::SearchOutcome, ToolkitError>
 where
@@ -1756,7 +1934,7 @@ where
     let realized_total = realized_perms.saturating_mul(outer);
     // Calibrate per-candidate cost on this machine, then cap.
     let per = ps::calibrate_per_candidate(evaluator, n, 64, 0);
-    let accept = match args.accept_search_time.as_deref() {
+    let accept = match accept_search_time {
         Some(s) => Some(parse_search_duration(s)?),
         None => None,
     };
@@ -1776,8 +1954,10 @@ where
 /// Convert a candidate keyed `md_codec::Descriptor` to its watch-only miniscript
 /// descriptor STRING via the #25 per-`@N` multipath reconstruction
 /// (`faithful_multisig_descriptor`'s engine), so the address derivation reads
-/// the SAME fresh assembly the id does.
-fn candidate_descriptor_string(
+/// the SAME fresh assembly the id does. `pub(crate)` so `verify-bundle`'s
+/// multisig-template recompose reuses the IDENTICAL engine restore emits with
+/// (funds-safety parity across the two surfaces).
+pub(crate) fn candidate_descriptor_string(
     cand: &md_codec::Descriptor,
     network: CliNetwork,
 ) -> Result<String, ToolkitError> {
@@ -1787,16 +1967,14 @@ fn candidate_descriptor_string(
 /// EXPLICIT mode (Mode B, SPEC §4.3): all `--cosigner @N=` assigned, no search.
 /// Build directly from the asserted assignment + fire the §3.4 warning. No
 /// verification (operator's risk) — but the every-slot gate + distinct-keys gate
-/// still apply.
-fn complete_explicit_assignment<W: Write, E: Write>(
+/// still apply. Returns the neutral [`MultisigCompletionOutcome`] (the caller
+/// emits/binds).
+fn complete_explicit_assignment<E: Write>(
     d: &md_codec::Descriptor,
-    args: &RestoreArgs,
-    network: CliNetwork,
     own_keys: &[CandidateKey],
     assigned: &std::collections::BTreeMap<u8, CandidateKey>,
-    stdout: &mut W,
     stderr: &mut E,
-) -> Result<u8, ToolkitError> {
+) -> Result<MultisigCompletionOutcome, ToolkitError> {
     use mnemonic_toolkit::permutation_search as ps;
     let n = d.n as usize;
     if own_keys.len() != 1 {
@@ -1846,9 +2024,13 @@ fn complete_explicit_assignment<W: Write, E: Write>(
             origin: crate::synthesize::derivation_path_to_origin_path(&c.origin),
         })
         .collect();
-    let cand = crate::synthesize::build_keyed_template_descriptor(d, &triples)?;
+    let completed = crate::synthesize::build_keyed_template_descriptor(d, &triples)?;
     let assignment: Vec<usize> = (0..n).collect();
-    emit_completed_multisig(&cand, &placed, &assignment, args, network, stdout, stderr)
+    Ok(MultisigCompletionOutcome {
+        completed,
+        pool: placed,
+        assignment,
+    })
 }
 
 /// Build + emit the completed watch-only multisig wallet (text or JSON). The

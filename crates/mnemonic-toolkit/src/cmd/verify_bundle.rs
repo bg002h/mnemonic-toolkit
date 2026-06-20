@@ -84,6 +84,57 @@ pub struct VerifyBundleArgs {
     #[arg(long = "expect-wallet-id")]
     pub expect_wallet_id: Option<String>,
 
+    /// #28 phase 2 — the operator's OWN seed for completing a keyless multisig
+    /// (or general policy) TEMPLATE bundle (`bundle --md1-form=template`, n≥2).
+    /// Same grammar and semantics as `restore --from` (an `ms1=`, `phrase=`,
+    /// `entropy=` or `seedqr=` source; `@env:VAR` or stdin supported). REQUIRED to
+    /// complete a multisig template (the template carries no keys); ignored for a
+    /// single-sig template or keyed wallet-policy bundle. The own key is derived
+    /// at `--account` (a single own account for verify; multi-own-account
+    /// completion is restore-only this cycle) honoring `--origin`.
+    #[arg(long = "from")]
+    pub from: Option<String>,
+
+    /// #28 phase 2 — an UNASSIGNED cosigner key (`mk1`/xpub) for completing a
+    /// keyless MULTISIG / general TEMPLATE bundle; repeat per cosigner card. Same
+    /// grammar + semantics as `restore --cosigner`: the bare form is search-
+    /// placed; `@N=<mk1|xpub>` assigns it explicitly. The mk1 carries each
+    /// cosigner's origin. Only meaningful with `--from` + a keyless multisig
+    /// template; ignored otherwise. (Distinct from `--mk1`, which supplies the
+    /// engraved template STUB cards the binding check validates.)
+    #[arg(long = "cosigner")]
+    pub cosigner: Vec<String>,
+
+    /// #28 phase 2 — a known receive (or change) ADDRESS of the wallet; triggers
+    /// ADDRESS-SEARCH for a multisig template completion (mirrors
+    /// `restore --search-address`). Recommended over `--expect-wallet-id`
+    /// (full-scriptPubKey match — collision-free).
+    #[arg(long = "search-address")]
+    pub search_address: Option<String>,
+
+    /// #28 phase 2 — inclusive lower address index for `--search-address`
+    /// (default 0; mirrors `restore`).
+    #[arg(long = "search-addr-min", default_value_t = 0)]
+    pub search_addr_min: u32,
+
+    /// #28 phase 2 — exclusive upper address index for `--search-address`
+    /// (default 20; mirrors `restore`).
+    #[arg(long = "search-addr-max", default_value_t = 20)]
+    pub search_addr_max: u32,
+
+    /// #28 phase 2 — which BIP-32 change-chain branch(es) `--search-address`
+    /// scans: `receive` (0, default), `change` (1), or `both` (mirrors
+    /// `restore`).
+    #[arg(long = "search-chain", value_enum, default_value_t = crate::cmd::restore::CliSearchChain::Receive)]
+    pub search_chain: crate::cmd::restore::CliSearchChain,
+
+    /// #28 phase 2 — override the 1-hour search-time ceiling for a multisig
+    /// template completion (mirrors `restore --accept-search-time`). Must be ≥
+    /// the printed exhaustive-time estimate (a forced acknowledgment). Accepts a
+    /// humantime duration (e.g. `2h`, `90min`).
+    #[arg(long = "accept-search-time")]
+    pub accept_search_time: Option<String>,
+
     /// Per-slot `ms1` card(s) to verify. Single-sig: supply once
     /// (`--ms1 <s>`). Multisig: repeat per slot — `--ms1 <s1>
     /// --ms1 <s2>` for full-path. For watch-only cosigners, two
@@ -316,6 +367,17 @@ pub fn run<W: Write, E: Write>(
                 && crate::synthesize::cli_template_from_tree(&d.tree).is_some();
             if is_singlesig_template {
                 return verify_singlesig_template(&d, args, stdin, stdout, stderr, json_context);
+            }
+            // #28 phase 2 — keyless MULTISIG / general TEMPLATE bundle (n≥2,
+            // canonical OR general — same routing as restore P3b). The supplied
+            // `--from` seed + `--cosigner` keys complete a concrete watch-only
+            // wallet via the SHARED completion engine; verify-bundle then asserts
+            // the card↔template-id binding + surfaces the completed id/address.
+            // WITHOUT `--from` this still routes here and refuses (floor 1(i)),
+            // naming `--from`.
+            let is_multisig_template = !d.is_wallet_policy() && d.n >= 2;
+            if is_multisig_template {
+                return verify_multisig_template(&d, args, stdin, stdout, stderr, json_context);
             }
         }
     }
@@ -716,6 +778,235 @@ fn verify_singlesig_template<W: Write, E: Write>(
     }
 
     Ok(if any_fail { 4 } else { 0 })
+}
+
+/// #28 phase 2 — verify + recompose a keyless MULTISIG / general TEMPLATE bundle.
+///
+/// The supplied `--md1` (`d`, already reassembled + classified keyless n≥2) is a
+/// `bundle --md1-form=template` policy. We:
+///  1. require `--from` (the operator's own seed — the template is keyless);
+///  2. run the SAME completion engine `restore` uses
+///     (`complete_multisig_template`): `--from` own slot(s) + `--cosigner` keys →
+///     per-slot origin BUILD → the floors → the search → the unique key→slot
+///     assignment + a fresh, fully-keyed descriptor (NEVER the carried
+///     `path_decl` — the C1 invariant);
+///  3. assert the card↔template-id BINDING:
+///     - `md1_template_match`: the supplied keyless `--md1`'s
+///       `WalletDescriptorTemplateId` (key-invariant) equals the completed
+///       wallet's — i.e. the engraved md1 IS this wallet's template;
+///     - `mk1_template_stub_bind`: each supplied `--mk1[slot]` template STUB
+///       card's `chunk_set_id` equals
+///       `derive_mk1_chunk_set_id_for_slot(template_id_stub, slot)`;
+///  4. recompose the watch-only wallet (descriptor + first receive) via the
+///     IDENTICAL engine restore emits with (funds-safety parity);
+///  5. surface the completed `WalletPolicyId` + first address as a `VerifyCheck`.
+///
+/// `--expect-wallet-id` / `--search-address` are consumed BY the completion
+/// engine (the search target), so a UNIQUE outcome already implies the completed
+/// id/address matches; on NO-MATCH / AMBIGUOUS / any floor the engine RETURNS the
+/// (refuse) error (exit 2/4), never a silent OK.
+fn verify_multisig_template<W: Write, E: Write>(
+    d: &md_codec::Descriptor,
+    args: &VerifyBundleArgs,
+    stdin: &mut dyn std::io::Read,
+    stdout: &mut W,
+    stderr: &mut E,
+    json_context: bool,
+) -> Result<u8, ToolkitError> {
+    use crate::cmd::restore::{
+        candidate_descriptor_string, complete_multisig_template, resolve_template_completion_seed,
+        MultisigCompletionCtx,
+    };
+    use std::str::FromStr;
+
+    let network = args.network;
+
+    // (1) Floor 1(i): `--from` REQUIRED + resolve the seed (SHARED with restore).
+    let no_from = ToolkitError::ModeViolation {
+        mode: "verify-bundle",
+        flag: "--md1",
+        message: "verifying a keyless MULTISIG TEMPLATE bundle requires the operator's own seed \
+                  via --from <seed> (the template carries no keys; the seed derives your cosigner \
+                  key, and --cosigner <mk1> supplies the others). Supply \
+                  --from ms1=…/phrase=…/entropy=…/seedqr=…",
+    };
+    let seed = resolve_template_completion_seed(
+        args.from.as_deref(),
+        no_from,
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        args.language,
+        stdin,
+        stderr,
+    )?;
+
+    // The explicit own-origin override (#28 phase-1 `--origin`, reused).
+    let explicit_own_origin = match args.origin.as_deref() {
+        Some(s) => Some(
+            bitcoin::bip32::DerivationPath::from_str(
+                s.trim_start_matches("m/").trim_start_matches('m'),
+            )
+            .or_else(|_| bitcoin::bip32::DerivationPath::from_str(s))
+            .map_err(|e| ToolkitError::BadInput(format!("--origin {s}: {e}")))?,
+        ),
+        None => None,
+    };
+
+    // (2) Build the NEUTRAL ctx + run the SHARED completion engine. For the
+    // verify surface `--account` is a single own account (multi-own-account
+    // completion is restore-only this cycle).
+    let ctx = MultisigCompletionCtx {
+        entropy: &seed.entropy,
+        passphrase: &seed.passphrase,
+        derive_language: seed.derive_language,
+        own_accounts: vec![args.account],
+        explicit_own_origin,
+        cosigner_specs: &args.cosigner,
+        own_account_max: None,
+        expect_wallet_id: args.expect_wallet_id.clone(),
+        search_address: args.search_address.clone(),
+        search_addr_min: args.search_addr_min,
+        search_addr_max: args.search_addr_max,
+        search_chain: args.search_chain,
+        accept_search_time: args.accept_search_time.clone(),
+        network,
+    };
+    let outcome = complete_multisig_template(d, &ctx, stderr)?;
+
+    // (3) Binding: the supplied md1 + mk1 STUB cards bind to the recomposed
+    // wallet's key-invariant `WalletDescriptorTemplateId`.
+    let completed_template_id = md_codec::compute_wallet_descriptor_template_id(&outcome.completed)
+        .map_err(ToolkitError::from)?;
+    let supplied_template_id =
+        md_codec::compute_wallet_descriptor_template_id(d).map_err(ToolkitError::from)?;
+    let md1_match = completed_template_id.as_bytes() == supplied_template_id.as_bytes();
+
+    let mut checks: Vec<VerifyCheck> = Vec::new();
+    checks.push(VerifyCheck {
+        name: "md1_template_match".into(),
+        passed: md1_match,
+        detail: if md1_match {
+            "supplied md1 matches the recomposed wallet's keyless template (WalletDescriptorTemplateId)".into()
+        } else {
+            "supplied md1 does NOT match the recomposed wallet's template (card mismatch or policy/template cross-mix)".into()
+        },
+        ..Default::default()
+    });
+
+    // `mk1_template_stub_bind`: the supplied --mk1 template stubs' chunk_set_ids
+    // must equal `derive_mk1_chunk_set_id_for_slot(template_stub, slot)` for the
+    // recomposed wallet's template-id. The stubs are slot-indexed; group them by
+    // their declared csi (each cosigner's chunks share one csi), then check the
+    // SET of csis equals the expected per-slot set. Empty --mk1 → not checked.
+    let mk1_bind =
+        check_mk1_template_stubs(&args.mk1, completed_template_id.as_bytes(), d.n as usize);
+    if let Some(passed) = mk1_bind {
+        checks.push(VerifyCheck {
+            name: "mk1_template_stub_bind".into(),
+            passed,
+            detail: if passed {
+                "supplied mk1 template stub(s) bind via the template-id stub".into()
+            } else {
+                "supplied mk1 stub(s) do NOT bind via the template-id stub (card mismatch or policy/template cross-mix)".into()
+            },
+            ..Default::default()
+        });
+    }
+
+    // (4) Recompose the watch-only wallet via the IDENTICAL restore engine.
+    let descriptor = candidate_descriptor_string(&outcome.completed, network)?;
+    let parsed = miniscript::Descriptor::<miniscript::DescriptorPublicKey>::from_str(&descriptor)
+        .map_err(|e| {
+        ToolkitError::DescriptorParse(format!("completed descriptor parse: {e}"))
+    })?;
+    let first_recv =
+        crate::derive_address::derive_receive_addresses(&parsed, 1, network.to_bitcoin_network())?
+            .into_iter()
+            .next()
+            .ok_or_else(|| ToolkitError::DescriptorParse("no first receive address".into()))?;
+
+    // (5) Surface the completed WalletPolicyId + first address (funds-safety).
+    let completed_id =
+        md_codec::compute_wallet_policy_id(&outcome.completed).map_err(ToolkitError::from)?;
+    let completed_id_hex = hex::encode(completed_id.as_bytes());
+    checks.push(VerifyCheck {
+        name: "wallet_completed".into(),
+        passed: true,
+        detail: format!("completed WalletPolicyId {completed_id_hex}; first receive {first_recv}"),
+        ..Default::default()
+    });
+
+    let own_pos = outcome.own_position();
+
+    // ---- Emit verdict (mirror verify_singlesig_template's envelope) ---------
+    let any_fail = checks.iter().any(|c| !c.passed);
+    if json_context {
+        let result = if any_fail { "mismatch" } else { "ok" };
+        let json = serde_json::json!({
+            "result": result,
+            "mode": "multisig-template",
+            "wallet_policy_id": completed_id_hex,
+            "own_position": own_pos,
+            "descriptor": descriptor,
+            "first_receive": first_recv,
+            "checks": checks.iter().map(|c| serde_json::json!({
+                "name": c.name, "passed": c.passed, "detail": c.detail,
+            })).collect::<Vec<_>>(),
+        });
+        writeln!(stdout, "{}", serde_json::to_string(&json).unwrap()).map_err(ToolkitError::Io)?;
+    } else {
+        for c in &checks {
+            writeln!(
+                stderr,
+                "{} {}: {}",
+                if c.passed { "✓" } else { "✗" },
+                c.name,
+                c.detail
+            )
+            .map_err(ToolkitError::Io)?;
+        }
+        if any_fail {
+            writeln!(stdout, "mismatch").map_err(ToolkitError::Io)?;
+        } else {
+            writeln!(stdout, "OK (multisig template recomposed)").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "wallet-policy-id: {completed_id_hex}").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "descriptor:  {descriptor}").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "first recv:  {first_recv}").map_err(ToolkitError::Io)?;
+            if let Some(p) = own_pos {
+                writeln!(stdout, "your seed completes cosigner slot @{p}")
+                    .map_err(ToolkitError::Io)?;
+            }
+        }
+    }
+
+    Ok(if any_fail { 4 } else { 0 })
+}
+
+/// `mk1_template_stub_bind`: validate the supplied `--mk1` TEMPLATE stub cards
+/// bind to `template_id` (the recomposed wallet's `WalletDescriptorTemplateId`).
+/// Each cosigner's mk1 chunks declare a `chunk_set_id`; for slot `i` the expected
+/// csi is `derive_mk1_chunk_set_id_for_slot(template_id[0..4], i)`. The supplied
+/// stubs are slot-ordered, so the SET of supplied csis must equal the expected
+/// per-slot set `{ csi(i) : i in 0..n }`. Returns `None` when no `--mk1` is
+/// supplied (the check is skipped — completion still gates funds-safety).
+fn check_mk1_template_stubs(mk1: &[String], template_id: &[u8], n: usize) -> Option<bool> {
+    if mk1.is_empty() {
+        return None;
+    }
+    let stub: [u8; 4] = [
+        template_id[0],
+        template_id[1],
+        template_id[2],
+        template_id[3],
+    ];
+    let expected: std::collections::BTreeSet<u32> = (0..n as u32)
+        .map(|i| crate::synthesize::derive_mk1_chunk_set_id_for_slot(&stub, i))
+        .collect();
+    let supplied: std::collections::BTreeSet<u32> =
+        mk1.iter().filter_map(|s| chunk_set_id_extract(s)).collect();
+    // Every supplied stub csi must be one of the expected per-slot csis, and the
+    // supplied set must cover all n slots (one stub per cosigner).
+    Some(supplied == expected)
 }
 
 fn run_full<W: Write, E: Write>(
