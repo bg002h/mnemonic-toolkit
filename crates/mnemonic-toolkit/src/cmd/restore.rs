@@ -100,6 +100,25 @@ pub struct RestoreArgs {
     #[arg(long, default_value_t = 0)]
     pub account: u32,
 
+    /// #28 phase 1 — explicit origin derivation path for single-sig
+    /// template-completion (`restore --md1 <keyless-template>`). Overrides the
+    /// template's canonical `m/<purpose>'/<coin>'/<account>'` default with an
+    /// arbitrary BIP-32 path (e.g. `m/84'/0'/7'`). Only meaningful for keyless
+    /// single-sig template md1 restore; ignored otherwise.
+    #[arg(long = "origin")]
+    pub origin: Option<String>,
+
+    /// #28 phase 1 — expected `WalletPolicyId` (hex prefix) for single-sig
+    /// template-completion. Restore recomputes the `WalletPolicyId` from the
+    /// completed, fully-keyed, explicit-origin wallet and matches its leading
+    /// bytes against this prefix; a MISMATCH refuses loudly (exit 4). Any-length
+    /// prefix; an advisory warns when shorter than 4 bytes (8 hex chars) — a
+    /// collision footgun — but does NOT enforce it (the printed convenience
+    /// prefix is 4 bytes). The value the `bundle --md1-form=template` advisory
+    /// printed on stderr.
+    #[arg(long = "expect-wallet-id")]
+    pub expect_wallet_id: Option<String>,
+
     /// Restrict to a single single-sig wallet type. Omit = all four
     /// (bip44/49/84/86). A multisig template is refused (restore is single-sig).
     #[arg(long, value_enum)]
@@ -171,10 +190,31 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     _no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
-    // Multisig-cosigner mode (v0.44.0): `--md1` present → reconstruct the concrete
-    // watch-only multisig descriptor from the wallet-policy md1; `--from` is the
-    // optional own-position cross-check. Dispatched before the single-sig path.
+    // `--md1` present → md1-driven reconstruction. Two ingest routes:
+    //
+    //   (1) #28 phase 1 — a KEYLESS SINGLE-SIG TEMPLATE md1 (`--md1-form=template`
+    //       output): `!is_wallet_policy() && n==1 && canonical_origin().is_some()`.
+    //       The template carries the script type + use-site; the seed (`--from`,
+    //       REQUIRED here) provides the key; `--account`/`--origin` the origin.
+    //       Routed to the NEW single-sig template completion below.
+    //   (2) everything else (a keyed wallet-policy md1, OR a keyless MULTISIG
+    //       template) → today's multisig reconstruction. run_multisig's
+    //       keyless-md1 gate then correctly catches a keyless *multisig* template.
+    //
+    // The reassemble here mirrors run_multisig's (cheap; the cards are already in
+    // memory). On a decode error we fall through to run_multisig so it owns the
+    // (identical) error message.
     if !args.md1.is_empty() {
+        let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
+        if let Ok(d) = md_codec::chunk::reassemble(&md1_refs) {
+            let is_singlesig_template = !d.is_wallet_policy()
+                && d.n == 1
+                && md_codec::canonical_origin::canonical_origin(&d.tree).is_some()
+                && crate::synthesize::cli_template_from_tree(&d.tree).is_some();
+            if is_singlesig_template {
+                return run_singlesig_template_completion(&d, args, stdin, stdout, stderr);
+            }
+        }
         return run_multisig(args, stdin, stdout, stderr);
     }
 
@@ -606,6 +646,338 @@ pub fn run<R: Read, W: Write, E: Write>(
     );
 
     Ok(0)
+}
+
+/// #28 phase 1 — complete a KEYLESS SINGLE-SIG TEMPLATE md1 into a concrete
+/// watch-only wallet. The template (`d`, already reassembled + classified by
+/// the caller) supplies the script type + use-site; the seed (`--from`,
+/// MANDATORY here) supplies the key; `--account` / `--origin` supply the
+/// origin.
+///
+/// FUNDS-SAFETY (C2): `--from` is `required_unless_present="md1"` at clap level,
+/// so `restore --md1 <template>` with NO `--from` is clap-valid and would
+/// mis-route to a watch-only document for nobody's wallet. This arm REJECTS a
+/// missing `--from` explicitly — the seed is the key; a no-seed template
+/// restore is a silent-wrong-route hole.
+///
+/// `--expect-wallet-id <prefix>` (optional): recomputes the `WalletPolicyId`
+/// from the completed, fully-keyed, EXPLICIT-origin, presence-`0b11` descriptor
+/// (via the SHARED `wallet_policy_id_for_singlesig` — the same preimage the
+/// `bundle` D7 advisory printed) and matches its leading bytes; a MISMATCH
+/// refuses loudly (exit 4). Note `--origin` overrides break the
+/// canonical-account assumption D7 was computed under, so `--expect-wallet-id`
+/// is only checked when no `--origin` is supplied (an explicit-origin wallet's
+/// id is a different preimage).
+fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
+    d: &md_codec::Descriptor,
+    args: &RestoreArgs,
+    stdin: &mut R,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<u8, ToolkitError> {
+    let network = args.network.unwrap_or(CliNetwork::Mainnet);
+
+    // tree → CliTemplate (the caller already guaranteed Some).
+    let template = crate::synthesize::cli_template_from_tree(&d.tree)
+        .ok_or_else(|| bad("template md1 tree is not a canonical single-sig shape"))?;
+
+    // --- (b) `--from` REQUIRED (the C2 funds-safety hole) -------------------
+    let from_raw = args.from.as_deref().ok_or_else(|| {
+        ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "restore of a keyless single-sig TEMPLATE md1 requires --from <seed> \
+                      (the template carries no key; the seed derives it). Supply \
+                      --from ms1=…/phrase=…/entropy=…/seedqr=…",
+        }
+    })?;
+    let from = parse_from_input(from_raw).map_err(bad)?;
+    let from_uses_stdin = from.value == "-";
+    if !matches!(
+        from.node,
+        NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
+    ) {
+        return Err(bad(format!(
+            "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
+            from.node.as_str()
+        )));
+    }
+
+    // Single-stdin guard (mirror the single-sig path).
+    if args.passphrase_stdin && from_uses_stdin {
+        return Err(bad(
+            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+        ));
+    }
+
+    // argv-leak advisory.
+    if !from_uses_stdin && !from.value.starts_with("@env:") {
+        let node = from_raw.split('=').next().unwrap_or("");
+        crate::secret_advisory::secret_in_argv_warning(
+            stderr,
+            &format!("--from {node}="),
+            &format!("--from {node}=-"),
+        );
+    }
+    if let Some(pp) = args.passphrase.as_deref() {
+        if !pp.starts_with("@env:") {
+            crate::secret_advisory::secret_in_argv_warning(
+                stderr,
+                "--passphrase",
+                "--passphrase-stdin",
+            );
+        }
+    }
+
+    let passphrase: String = if args.passphrase_stdin {
+        read_stdin_passphrase(stdin)?
+    } else {
+        match args.passphrase.as_deref() {
+            Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+            None => String::new(),
+        }
+    };
+    let passphrase_applied = !passphrase.is_empty();
+
+    let from_value: String = if from_uses_stdin {
+        read_stdin_to_string(stdin)?
+    } else {
+        crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
+    };
+
+    // Resolve the seed node → (entropy, derive_language). Mirrors the single-sig
+    // `run` body.
+    let (entropy, derive_language): (zeroize::Zeroizing<Vec<u8>>, bip39::Language) = match from.node
+    {
+        NodeType::Ms1 => {
+            let res = crate::slot_ms1::resolve_ms1_slot(&from_value, args.language, 0)?;
+            (res.entropy, res.derive_language)
+        }
+        NodeType::Phrase => {
+            let language = args.language.unwrap_or_default();
+            let entropy = zeroize::Zeroizing::new(
+                Mnemonic::parse_in(language.into(), &from_value)
+                    .map_err(ToolkitError::Bip39)?
+                    .to_entropy(),
+            );
+            (entropy, language.into())
+        }
+        NodeType::Seedqr => {
+            let language = args.language.unwrap_or_default();
+            let phrase = mnemonic_toolkit::seedqr::decode(&from_value)
+                .map_err(|e| crate::cmd::seedqr::map_seedqr_error(e, "restore"))?;
+            let entropy = zeroize::Zeroizing::new(
+                Mnemonic::parse_in(language.into(), &phrase)
+                    .map_err(ToolkitError::Bip39)?
+                    .to_entropy(),
+            );
+            (entropy, language.into())
+        }
+        NodeType::Entropy => {
+            let entropy = zeroize::Zeroizing::new(
+                hex::decode(from_value.trim())
+                    .map_err(|e| bad(format!("--from entropy= hex-decode: {e}")))?,
+            );
+            (entropy, bip39::Language::English)
+        }
+        _ => unreachable!("seed-node guard above restricts to ms1/phrase/seedqr/entropy"),
+    };
+    let _pin_entropy = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
+    let _pin_pp = if passphrase.is_empty() {
+        None
+    } else {
+        Some(mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes()))
+    };
+
+    // --- (c) derive the account key at --origin OR the template default -----
+    let explicit_origin = match args.origin.as_deref() {
+        Some(s) => Some(
+            DerivationPath::from_str(s.trim_start_matches("m/").trim_start_matches('m'))
+                .or_else(|_| DerivationPath::from_str(s))
+                .map_err(|e| bad(format!("--origin {s}: {e}")))?,
+        ),
+        None => None,
+    };
+    let acct = match &explicit_origin {
+        Some(path) => crate::derive_slot::derive_bip32_from_entropy_at_path(
+            &entropy,
+            &passphrase,
+            derive_language,
+            network,
+            path,
+        )?,
+        None => derive_bip32_from_entropy(
+            &entropy,
+            &passphrase,
+            derive_language,
+            network,
+            template,
+            args.account,
+        )?,
+    };
+    let master_fingerprint = acct.master_fingerprint;
+    let fp_str = master_fingerprint.to_string().to_lowercase();
+
+    let script_type = script_type_from_template(template)
+        .expect("template_from_tree only yields single-sig templates");
+
+    // First receive address(es): m/0/i children of the account xpub.
+    let secp = Secp256k1::verification_only();
+    let mut first_recv = Vec::with_capacity(args.count as usize);
+    for i in 0..args.count {
+        let chain = ChildNumber::from_normal_idx(0).unwrap();
+        let leaf = ChildNumber::from_normal_idx(i)
+            .map_err(|_| bad(format!("address index {i} out of BIP-32 normal range")))?;
+        let dp: DerivationPath = vec![chain, leaf].into();
+        let child = acct
+            .account_xpub
+            .derive_pub(&secp, &dp)
+            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+        first_recv.push(render_address_from_xpub(&secp, &child, script_type, network));
+    }
+
+    // Concrete watch-only descriptor.
+    let slot = ResolvedSlot {
+        xpub: acct.account_xpub,
+        fingerprint: master_fingerprint,
+        path: acct.account_path.clone(),
+        entropy: None,
+        master_xpub: None,
+        language: None,
+        _entropy_pin: None,
+    };
+    let descriptor = build_descriptor_string(
+        template,
+        std::slice::from_ref(&slot),
+        1,
+        network,
+        args.account,
+        None,
+    )?;
+
+    // --- --expect-wallet-id (D7 recompute-and-match) ------------------------
+    // Only checked for the canonical (no --origin) path: D7 was computed by the
+    // bundle from the canonical `m/<purpose>'/<coin>'/account'` origin, so an
+    // explicit --origin override is a different preimage (advise, don't match).
+    if let Some(prefix_hex) = args.expect_wallet_id.as_deref() {
+        if explicit_origin.is_some() {
+            writeln!(
+                stderr,
+                "notice: --expect-wallet-id is not checked when --origin overrides the canonical \
+                 account path (the wallet-id was computed for the canonical origin)."
+            )
+            .map_err(ToolkitError::Io)?;
+        } else {
+            let prefix = decode_wallet_id_prefix(prefix_hex)?;
+            if prefix.len() < 4 {
+                writeln!(
+                    stderr,
+                    "advisory: --expect-wallet-id prefix is only {} byte(s); ≥4 bytes is \
+                     recommended (a short prefix is a collision footgun).",
+                    prefix.len()
+                )
+                .map_err(ToolkitError::Io)?;
+            }
+            let id = crate::synthesize::wallet_policy_id_for_singlesig(
+                template,
+                network,
+                &acct.account_xpub,
+                master_fingerprint,
+                args.account,
+            )?;
+            let id_bytes = id.as_bytes();
+            if id_bytes.len() < prefix.len() || id_bytes[..prefix.len()] != prefix[..] {
+                let derived_prefix: String = id_bytes
+                    .iter()
+                    .take(prefix.len().max(4))
+                    .map(|b| format!("{b:02x}"))
+                    .collect();
+                writeln!(stderr, "✗ WALLET-ID MISMATCH").map_err(ToolkitError::Io)?;
+                return Err(ToolkitError::RestoreMismatch {
+                    reference: "wallet-id",
+                    derived: derived_prefix,
+                    expected: prefix_hex.trim().to_lowercase(),
+                    slot: None,
+                });
+            }
+            writeln!(
+                stderr,
+                "✓ wallet-id verified: completed wallet matches --expect-wallet-id"
+            )
+            .map_err(ToolkitError::Io)?;
+        }
+    }
+
+    // ---- Compose output (text or JSON) -------------------------------------
+    let stdout_content: String = if args.json {
+        let envelope = json!({
+            "master_fingerprint": fp_str,
+            "passphrase_applied": passphrase_applied,
+            "network": network.human_name(),
+            "completed_from": "template-md1",
+            "wallets": [json!({
+                "wallet_type": template.human_name(),
+                "descriptor": descriptor,
+                "first_addresses": first_recv,
+            })],
+        });
+        format!(
+            "{}\n",
+            serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?
+        )
+    } else {
+        let mut s = String::new();
+        s.push_str(&format!(
+            "master fingerprint: {fp_str}  (passphrase: {})\n",
+            if passphrase_applied { "applied" } else { "none" }
+        ));
+        s.push_str(
+            "CONFIRM: this fingerprint matches the wallet you are restoring before importing.\n",
+        );
+        s.push('\n');
+        s.push_str(&format!("{}:\n", template_label(template)));
+        s.push_str(&format!("  descriptor: {descriptor}\n"));
+        for addr in &first_recv {
+            s.push_str(&format!("  first recv: {addr}\n"));
+        }
+        s
+    };
+
+    if args.output == "-" {
+        write!(stdout, "{stdout_content}").map_err(ToolkitError::Io)?;
+    } else {
+        std::fs::write(&args.output, &stdout_content)
+            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+    }
+
+    if args.expect_wallet_id.is_none() {
+        writeln!(
+            stderr,
+            "UNVERIFIED: no --expect-wallet-id supplied; verify the master fingerprint above \
+             ({fp_str}) against your records before importing"
+        )
+        .map_err(ToolkitError::Io)?;
+    }
+    crate::secret_advisory::emit_output_class_advisory(
+        crate::secret_advisory::OutputClass::WatchOnly,
+        stderr,
+    );
+    Ok(0)
+}
+
+/// #28 — decode an `--expect-wallet-id` hex prefix into bytes. Accepts an
+/// even-length lowercase/uppercase hex string (any length ≥1 byte). Odd-length
+/// or non-hex → BadInput (exit 1).
+fn decode_wallet_id_prefix(s: &str) -> Result<Vec<u8>, ToolkitError> {
+    let t = s.trim();
+    if t.is_empty() {
+        return Err(bad("--expect-wallet-id must not be empty"));
+    }
+    hex::decode(t).map_err(|e| {
+        bad(format!(
+            "--expect-wallet-id must be an even-length hex prefix of the WalletPolicyId: {e}"
+        ))
+    })
 }
 
 /// Build the importable wallet-software payload for a single template via the
