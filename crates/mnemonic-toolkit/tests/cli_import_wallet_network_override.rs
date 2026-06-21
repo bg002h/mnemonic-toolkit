@@ -84,3 +84,36 @@ fn mainnet_blob_override_to_mainnet_noop_ok() {
     assert_eq!(out.status.code(), Some(0));
     assert_eq!(bundle_network(&out), "mainnet");
 }
+
+// --- cycle-5 H9 (axis 1): the `--network` class-check must read the SAME
+// per-entry network the rebind writes. Pre-fix, the guard inspected
+// `parsed.first()` only, then `iter_mut()` rebound EVERY entry — so a
+// heterogeneous `[Bitcoin, Testnet]` Vec whose `first()` matched the override
+// passed and the Testnet entry was silently relabeled mainnet. Exit 1,
+// `ImportWalletNetworkClassMismatch` (the adjacent-sibling refusal). ---
+
+#[test]
+fn mixed_mainnet_testnet_blob_override_mainnet_refused_per_entry() {
+    // entry0 = mainnet (passes the old first()-only check); entry1 = testnet
+    // (coin-type-1) → must be caught per-entry now.
+    let out = run_import("core-mixed-mainnet-testnet.json", Some("mainnet"));
+    assert_eq!(
+        out.status.code(),
+        Some(1),
+        "cross-entry heterogeneous [Bitcoin, Testnet] + --network mainnet must refuse (exit 1)"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("coin-type"),
+        "expected coin-type-class mismatch; got: {stderr}"
+    );
+}
+
+#[test]
+fn homogeneous_two_mainnet_blob_override_mainnet_ok() {
+    // Positive control: a homogeneous all-mainnet blob + --network mainnet must
+    // STILL import (the per-entry extension does NOT over-reject a valid blob).
+    let out = run_import("core-two-mainnet.json", Some("mainnet"));
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(bundle_network(&out), "mainnet");
+}

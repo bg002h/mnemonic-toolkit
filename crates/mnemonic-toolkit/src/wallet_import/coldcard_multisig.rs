@@ -489,6 +489,13 @@ pub(super) fn parse_text(
 
     validate_watch_only_resolved(&cosigners_slots)?;
 
+    // cycle-5 S-NET (axis 2 / H15): xpub-version vs coin-type cross-check.
+    crate::wallet_import::pipeline::assert_slots_network_agrees(
+        &cosigners_slots,
+        network,
+        "import: coldcard-multisig",
+    )?;
+
     let metadata = ColdcardMultisigSourceMetadata {
         name,
         policy,

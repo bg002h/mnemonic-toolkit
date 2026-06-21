@@ -1,0 +1,13 @@
+# cycle-5 S-NET (H15) RED fixture — mainnet xpubs on a coin-type-1 (testnet)
+# derivation path. The decoded xpub NetworkKind (Main) disagrees with the
+# coin-type-derived asserted network (Test) → must reject (NetworkMismatch,
+# exit 2). Same mainnet xpubs as coldcard-ms-2of3-p2wsh-no-xfp.txt, only the
+# Derivation coin-type child is flipped 0' -> 1'.
+Name: TestMs2of3MismatchNet
+Policy: 2 of 3
+Derivation: m/48'/1'/0'/2'
+Format: P2WSH
+
+34A3A4F1: xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX
+FF9DFBCF: xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6
+B7F7DFEA: xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx

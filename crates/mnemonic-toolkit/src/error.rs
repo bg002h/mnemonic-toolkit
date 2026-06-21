@@ -275,9 +275,6 @@ pub enum ToolkitError {
     /// a WIF's own network byte). cycle-5 S-NET: fail-closed network-provenance
     /// invariant, wired at import/convert/export sites via
     /// `network::assert_network_agrees`. Exit 2 (user-input / funds-safety).
-    // `#[allow(dead_code)]` removed as call sites land in Phase 2-4; kept on the
-    // helper in network.rs until the first production caller is wired.
-    #[allow(dead_code)]
     NetworkMismatch {
         decoded_network: &'static str,
         expected_network: &'static str,

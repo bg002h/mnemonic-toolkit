@@ -403,6 +403,18 @@ impl WalletFormatParser for ElectrumParser {
         }
         validate_watch_only_resolved(&cosigners)?;
 
+        // cycle-5 S-NET (axis 2 / H15 = L2): xpub-version vs coin-type
+        // cross-check. The single-sig path already derives `network` from the
+        // xpub version bytes (`network_from_xpub_neutral`) so this is a no-op
+        // there; the multisig path derives `network` from the coin-type only,
+        // so this aligns multi with single — a `tpub` cosigner on a mainnet
+        // coin-type path is now rejected (was silently accepted).
+        crate::wallet_import::pipeline::assert_slots_network_agrees(
+            &cosigners,
+            network,
+            "import: electrum",
+        )?;
+
         // Step 7: dropped-field detection + stderr NOTICE.
         let mut dropped_fields: Vec<String> = Vec::new();
         for (k, _) in obj.iter() {

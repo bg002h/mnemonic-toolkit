@@ -263,6 +263,13 @@ impl WalletFormatParser for SpecterParser {
         }
         validate_watch_only_resolved(&cosigners)?;
 
+        // cycle-5 S-NET (axis 2 / H15): xpub-version vs coin-type cross-check.
+        crate::wallet_import::pipeline::assert_slots_network_agrees(
+            &cosigners,
+            network,
+            "import: specter",
+        )?;
+
         // Step 5: threshold extraction (multisig only; singlesig → None).
         let threshold = extract_threshold_local(&descriptor_str)?;
 

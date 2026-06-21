@@ -448,6 +448,13 @@ impl WalletFormatParser for SparrowParser {
         }
         validate_watch_only_resolved(&cosigners)?;
 
+        // cycle-5 S-NET (axis 2 / H15): xpub-version vs coin-type cross-check.
+        crate::wallet_import::pipeline::assert_slots_network_agrees(
+            &cosigners,
+            network,
+            "import: sparrow",
+        )?;
+
         // Threshold extraction — for MULTI scripts (`multi(K,...)`,
         // `sortedmulti(K,...)`); SINGLE has no threshold token.
         let threshold = extract_threshold_local(&substituted)?;

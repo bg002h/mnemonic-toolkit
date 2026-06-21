@@ -99,6 +99,15 @@ impl WalletFormatParser for DescriptorParser {
         }
         validate_watch_only_resolved(&cosigners)?;
 
+        // cycle-5 S-NET (axis 2 / H15): each decoded xpub's NetworkKind must
+        // agree with the coin-type-derived network — rejects a hand-edited blob
+        // carrying a tpub on a mainnet coin-type path (or vice-versa).
+        crate::wallet_import::pipeline::assert_slots_network_agrees(
+            &cosigners,
+            network,
+            "import: descriptor",
+        )?;
+
         // Step 5: threshold (multisig only; singlesig → None).
         let threshold = extract_threshold_local(&descriptor_str)?;
 

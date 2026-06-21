@@ -306,6 +306,14 @@ fn parse_entry(
 
     validate_watch_only_resolved(&cosigners)?;
 
+    // cycle-5 S-NET (axis 2 / H15): per-entry, each decoded xpub's NetworkKind
+    // must agree with this entry's coin-type-derived network.
+    crate::wallet_import::pipeline::assert_slots_network_agrees(
+        &cosigners,
+        network,
+        "import: bitcoin-core",
+    )?;
+
     let threshold = extract_threshold(descriptor_body_no_csum)?;
 
     // v0.27.1 Phase 2 I4 fold: distinguish "absent" (default false) from

@@ -1189,8 +1189,16 @@ electrum|jade|sparrow|specter>"
     // prefix is coin-type-bound (parser yields only Bitcoin/coin-type-0 or
     // Testnet/coin-type-1). Closes `wallet-import-signet-regtest-disambiguation`.
     if let Some(override_net) = args.network {
-        if let Some(first) = parsed.first() {
-            let parsed_coin_type: u32 = if first.network == bitcoin::Network::Bitcoin {
+        // cycle-5 H9 (axis 1): the class-check must read the SAME per-entry
+        // network the rebind writes — checking `parsed.first()` only, then
+        // rebinding via `iter_mut()`, silently relabels a heterogeneous
+        // `[Bitcoin, Testnet]` Vec whose `first()` happens to match the
+        // override. Refuse if ANY entry's coin-type class disagrees with the
+        // requested override (reuse `ImportWalletNetworkClassMismatch`, exit
+        // 1 — the adjacent-sibling refusal; this is the SAME condition applied
+        // per-entry, NOT the xpub-version axis-2 `NetworkMismatch`/exit 2).
+        for p in parsed.iter() {
+            let parsed_coin_type: u32 = if p.network == bitcoin::Network::Bitcoin {
                 0
             } else {
                 1
@@ -1201,10 +1209,12 @@ electrum|jade|sparrow|specter>"
                     parsed_coin_type,
                 });
             }
-            let rebound = override_net.to_bitcoin_network();
-            for p in parsed.iter_mut() {
-                p.network = rebound;
-            }
+        }
+        // All entries are within the same coin-type class as the override; the
+        // override may only rebind WITHIN that homogeneous class.
+        let rebound = override_net.to_bitcoin_network();
+        for p in parsed.iter_mut() {
+            p.network = rebound;
         }
     }
 

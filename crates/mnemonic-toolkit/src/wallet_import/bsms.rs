@@ -268,6 +268,13 @@ impl WalletFormatParser for BsmsParser {
 
         validate_watch_only_resolved(&cosigners)?;
 
+        // cycle-5 S-NET (axis 2 / H15 = L10): xpub-version vs coin-type cross-check.
+        crate::wallet_import::pipeline::assert_slots_network_agrees(
+            &cosigners,
+            network,
+            "import: bsms",
+        )?;
+
         let threshold = extract_threshold(descriptor_body_no_csum)?;
 
         // SPEC §4.1 — first-address verification. v0.27.0 wires in the

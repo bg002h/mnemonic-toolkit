@@ -70,9 +70,6 @@ impl CliNetwork {
 /// BIP-32 xpub version bytes distinguish only two families — `Main`
 /// (`0488b21e`) and `Test` (`043587cf`, covering testnet/signet/regtest) — so
 /// non-mainnet renders as `"testnet"` at this granularity.
-// `#[allow(dead_code)]` is removed once the helper has a production caller
-// (Phase 2 wires the first import-parser site).
-#[allow(dead_code)]
 pub(crate) const fn network_kind_name(kind: NetworkKind) -> &'static str {
     match kind {
         NetworkKind::Main => "mainnet",
@@ -94,9 +91,6 @@ pub(crate) const fn network_kind_name(kind: NetworkKind) -> &'static str {
 /// is unconditional — given two `NetworkKind`s it compares them; the
 /// skip-when-no-asserted-network discipline lives at the call site so that an
 /// originless `tpub` descriptor is NOT over-rejected.
-// `#[allow(dead_code)]` is removed once Phase 2 wires the first import-parser
-// call site; kept here so the Phase-1 foundation commit is clippy-clean.
-#[allow(dead_code)]
 pub(crate) fn assert_network_agrees(
     decoded: NetworkKind,
     asserted: NetworkKind,

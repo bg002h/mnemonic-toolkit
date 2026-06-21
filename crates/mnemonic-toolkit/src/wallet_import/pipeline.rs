@@ -121,6 +121,31 @@ pub(crate) fn finalize_slot_fields(
     Ok((xpub, fp, path))
 }
 
+/// cycle-5 S-NET (axis 2 / H15 + L2 + L10): cross-check each resolved
+/// cosigner's decoded xpub NetworkKind against the coin-type-derived asserted
+/// `bitcoin::Network`, fail-closed via `network::assert_network_agrees`. A
+/// hand-edited blob whose xpub version bytes (e.g. a `tpub`, decoded to
+/// `NetworkKind::Test`) contradict its own coin-type path (e.g. `84'/0'`,
+/// asserting mainnet) is rejected with `NetworkMismatch` (exit 2).
+///
+/// PRECONDITION (no-op contract): the caller passes a coin-type-DERIVED
+/// `asserted` network. The origin-bearing parsers (descriptor / specter /
+/// sparrow / bsms / bitcoin-core / coldcard-multisig / electrum-multisig) only
+/// reach this call once `network_from_*` has succeeded — which itself errors on
+/// an originless / sub-2-component-origin input. So an originless `tpub`
+/// descriptor never reaches here and is NOT over-rejected.
+pub(crate) fn assert_slots_network_agrees(
+    cosigners: &[ResolvedSlot],
+    asserted: bitcoin::Network,
+    context: &'static str,
+) -> Result<(), ToolkitError> {
+    let asserted_kind = bitcoin::NetworkKind::from(asserted);
+    for slot in cosigners {
+        crate::network::assert_network_agrees(slot.xpub.network, asserted_kind, context)?;
+    }
+    Ok(())
+}
+
 /// Cheap `@\d`-presence probe (the toolkit's `@N` placeholder form). NEW.
 fn at_n_probe() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();

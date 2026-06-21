@@ -1,0 +1,17 @@
+{
+  "wallet_name": "mixed_main_test",
+  "descriptors": [
+    {
+      "desc": "wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#5ql5mvwg",
+      "active": true,
+      "internal": false,
+      "range": [0, 1000]
+    },
+    {
+      "desc": "wpkh([704c7836/84'/1'/0']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*)#r486umak",
+      "active": true,
+      "internal": false,
+      "range": [0, 1000]
+    }
+  ]
+}
