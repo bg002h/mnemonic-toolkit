@@ -779,7 +779,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 - **fix:** validate via `PublicKey::from_slice(&bytes[45..78])` (or `Xpub::decode`) at intake; return
   `BadXpub`. Low (clean failure, unlikely accidental). · **spec:** BIP-32 (`bytes[45..78]` is a valid point).
 
-### - [ ] M12 · `mk repair` emits an INVALID mixed-case mk1 string for all-uppercase input (even when clean)
+<!-- FIXED cycle-12 (mk-cli v0.10.1 @df7c2eb) — repair.rs lowercases the mk1 prefix so all-uppercase input no longer re-emits a mixed-case string mk decode rejects; whole-diff review GREEN -->
+### - [x] M12 · `mk repair` emits an INVALID mixed-case mk1 string for all-uppercase input (even when clean)
 - **repo/class:** mk-cli · **other** (broken artifact) · `w3-mk-cli-repair-verify-1`
 - **location:** `mk-cli/src/cmd/repair.rs:97-147` (`reconstruct_corrected`); `cmd/mod.rs:97` (no case-normalize)
 - **bug:** `reconstruct_corrected` splices the original-cased prefix (`MK`) with lowercase data symbols from
@@ -811,7 +812,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   bug class as L4 (`md repair`). Fix: branch on `is_wallet_policy()` → `WatchOnly`/`Template` (as `md
   address` does).
 
-### - [ ] L20 · `classify_code_variant` off-by-one mislabels a 96-symbol long-code mk1 chunk as "regular"
+<!-- FIXED cycle-12 (mk-cli v0.10.1 @df7c2eb) — threshold corrected to 93 + "mk1".len() so a 96-symbol data-part labels "long" per mk-codec bch_code_for_length (96..=108); display-only, no funds/wire path -->
+### - [x] L20 · `classify_code_variant` off-by-one mislabels a 96-symbol long-code mk1 chunk as "regular"
 - **repo/class:** mk-cli · **other** (display) · `w3-mk-cli-repair-verify-2`
 - **location:** `mk-cli/src/cmd/mod.rs:131-140`; authoritative `mk-codec/src/string_layer/bch.rs:117-124`
 - **bug:** `s.len() <= 96+len("mk1")` (≤99) → "regular", but a long-code minimum data-part of 96 gives total
