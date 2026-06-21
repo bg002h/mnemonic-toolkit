@@ -167,6 +167,14 @@ pub enum ToolkitError {
     /// key-path key); deferred to v0.8. Exit 2. The `&'static str` payload is
     /// the offending template name (`"tr-multi-a"` or `"tr-sortedmulti-a"`).
     ExportWalletTaprootMultisigUnsupported(&'static str),
+    /// SPEC cycle-2 H10 — the electrum / coldcard / jade multisig file formats
+    /// are BIP-67 sortedmulti-only (no field to express literal `multi(...)`
+    /// key order), so exporting an UNSORTED `wsh-multi` / `sh-wsh-multi` to them
+    /// would silently coerce to sortedmulti → different witnessScript/address.
+    /// Refuse, pointing to a faithful format (descriptor / bitcoin-core /
+    /// sparrow). Exit 2. The `format` payload is the offending format name
+    /// (`"electrum"` / `"coldcard"` / `"coldcard-multisig"` / `"jade"`).
+    ExportWalletUnsortedMultisigUnsupported { format: &'static str },
     FutureFormat {
         source: &'static str,
         detail: String,
@@ -543,6 +551,7 @@ impl ToolkitError {
             ToolkitError::ExportWalletMissingFields { .. } => 2,
             ToolkitError::ExportWalletSecretInput => 2,
             ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => 2,
+            ToolkitError::ExportWalletUnsortedMultisigUnsupported { .. } => 2,
             ToolkitError::FutureFormat { .. } => 3,
             ToolkitError::HrpMismatch { .. } => 2,
             ToolkitError::ImportWalletAmbiguousFormat(_) => 1,
@@ -606,6 +615,9 @@ impl ToolkitError {
             ToolkitError::ExportWalletSecretInput => "ExportWalletSecretInput",
             ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => {
                 "ExportWalletTaprootMultisigUnsupported"
+            }
+            ToolkitError::ExportWalletUnsortedMultisigUnsupported { .. } => {
+                "ExportWalletUnsortedMultisigUnsupported"
             }
             ToolkitError::FutureFormat { .. } => "FutureFormat",
             ToolkitError::HrpMismatch { .. } => "HrpMismatch",
@@ -749,6 +761,9 @@ impl ToolkitError {
             ToolkitError::ExportWalletTaprootMultisigUnsupported(name) => {
                 crate::wallet_export::taproot_multisig_unsupported_message(name)
             }
+            ToolkitError::ExportWalletUnsortedMultisigUnsupported { format } => format!(
+                "--format {format} cannot faithfully export an UNSORTED multisig (wsh-multi / sh-wsh-multi): the {format} multisig file format is BIP-67 sortedmulti-only and would silently reorder the keys, changing the witnessScript and every address. Use --format descriptor, --format bitcoin-core, or --format sparrow (which preserve literal multi(...) key order), or use a sortedmulti template if BIP-67 ordering is intended."
+            ),
             ToolkitError::FutureFormat { source, detail } => format!(
                 "{} reserved-not-emitted: {}; deferred to v0.2+",
                 source, detail,

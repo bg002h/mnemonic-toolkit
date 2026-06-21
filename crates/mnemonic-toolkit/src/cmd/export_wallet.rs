@@ -106,6 +106,36 @@ pub(crate) fn emit_payload(
         });
     }
 
+    // SPEC cycle-2 H10 — refuse an UNSORTED multisig (`wsh-multi` /
+    // `sh-wsh-multi`) to the field-less electrum / coldcard(-multisig) / jade
+    // vendors. Those file formats are BIP-67 sortedmulti-only (no field to
+    // express literal `multi(...)` key order), so emitting an unsorted multisig
+    // would silently coerce to sortedmulti → different witnessScript / address
+    // (oracle-proven by `tests/bitcoind_differential.rs`'s
+    // `wsh-multi-2of3-divergent` row). STRUCTURED check on the resolved typed
+    // `CliTemplate` — immune to the `sortedmulti(`-as-substring false-match a
+    // naive `.contains("multi(")` would hit. Disjoint from the per-emitter
+    // taproot guard (matches only the two unsorted-`Wsh`/`ShWsh` variants), so
+    // `tr-multi-a` / `tr-sortedmulti-a` pass through to their existing taproot
+    // refusal unshadowed. Sorted variants + single-sig + the faithful formats
+    // (descriptor / sparrow / bitcoin-core) are unaffected. Restore's
+    // `build_multisig_import_payload` calls this same chokepoint, so the guard
+    // also covers `restore --md1 --format electrum/coldcard/jade` for free.
+    if matches!(
+        inputs.template,
+        Some(CliTemplate::WshMulti | CliTemplate::ShWshMulti)
+    ) && matches!(
+        format,
+        CliExportFormat::Electrum
+            | CliExportFormat::Coldcard
+            | CliExportFormat::ColdcardMultisig
+            | CliExportFormat::Jade
+    ) {
+        return Err(ToolkitError::ExportWalletUnsortedMultisigUnsupported {
+            format: format_name,
+        });
+    }
+
     match format {
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(inputs),
@@ -880,6 +910,224 @@ mod format_requires_template_tests {
                 !format_requires_template(f),
                 "{f:?} must be passthrough (template stays None)"
             );
+        }
+    }
+}
+
+/// SPEC cycle-2 H10 — the structured `emit_payload` guard that refuses an
+/// UNSORTED `wsh-multi` / `sh-wsh-multi` template to the field-less
+/// electrum / coldcard(-multisig) / jade vendors (which are BIP-67
+/// sortedmulti-only and would silently reorder the keys → wrong
+/// witnessScript/address). Tests assert on the typed `kind()` /
+/// `exit_code()` of the returned `ToolkitError`, the dimension the
+/// process-exit-code-only integration tests cannot reach.
+#[cfg(test)]
+mod h10_unsorted_multi_refusal_tests {
+    use super::{emit_payload, CliExportFormat};
+    use crate::network::CliNetwork;
+    use crate::template::CliTemplate;
+    use crate::wallet_export::{BsmsForm, CheckedDescriptor, EmitInputs, TimestampArg, WalletScriptType};
+
+    /// Build a minimal `EmitInputs` carrying a given template. The descriptor
+    /// content is a placeholder — the H10 guard fires structurally on the
+    /// typed `template` enum BEFORE any per-format emit / descriptor parse, so
+    /// only the `#<csum>` suffix shape must be well-formed.
+    fn inputs_with_template(template: Option<CliTemplate>) -> EmitInputs<'static> {
+        EmitInputs {
+            canonical_descriptor: CheckedDescriptor::new(
+                "wsh(multi(2,xpubAAAA,xpubBBBB))#abcdefgh",
+            )
+            .unwrap(),
+            resolved_slots: &[],
+            template,
+            script_type: WalletScriptType::P2wshMulti,
+            network: CliNetwork::Mainnet,
+            account: 0,
+            threshold: Some(2),
+            threshold_user_supplied: true,
+            master_xpub_at_0: None,
+            wallet_name: "h10-test",
+            wallet_name_is_non_default: false,
+            taproot_internal_key: None,
+            range: (0, 999),
+            timestamp: TimestampArg::Unix(0),
+            bitcoin_core_version: 25,
+            bsms_form: BsmsForm::FourLine,
+        }
+    }
+
+    const FIELDLESS: [CliExportFormat; 4] = [
+        CliExportFormat::Electrum,
+        CliExportFormat::Coldcard,
+        CliExportFormat::ColdcardMultisig,
+        CliExportFormat::Jade,
+    ];
+
+    /// The two UNSORTED-multi templates → each field-less vendor → the typed
+    /// `ExportWalletUnsortedMultisigUnsupported` refusal, exit 2.
+    #[test]
+    fn unsorted_multi_refused_typed_exit2_for_fieldless_vendors() {
+        for tmpl in [CliTemplate::WshMulti, CliTemplate::ShWshMulti] {
+            for fmt in FIELDLESS {
+                let err = emit_payload(&inputs_with_template(Some(tmpl)), fmt)
+                    .expect_err(&format!("{tmpl:?} → {fmt:?} must refuse"));
+                assert_eq!(
+                    err.kind(),
+                    "ExportWalletUnsortedMultisigUnsupported",
+                    "{tmpl:?} → {fmt:?} must be the typed H10 refusal, got {}",
+                    err.kind()
+                );
+                assert_eq!(err.exit_code(), 2, "{tmpl:?} → {fmt:?} must exit 2");
+            }
+        }
+    }
+
+    /// The refusal message names a faithful format so the user has a recovery
+    /// path (anti-dead-end; pins §2.4 wording at the byte level for the
+    /// faithful-format pointer).
+    #[test]
+    fn unsorted_multi_refusal_message_points_to_faithful_format() {
+        let err = emit_payload(
+            &inputs_with_template(Some(CliTemplate::WshMulti)),
+            CliExportFormat::Electrum,
+        )
+        .unwrap_err();
+        let msg = err.message();
+        assert!(
+            msg.contains("descriptor"),
+            "H10 refusal must point to a faithful format; got: {msg}"
+        );
+        assert!(
+            msg.contains("electrum"),
+            "H10 refusal must name the offending format; got: {msg}"
+        );
+    }
+
+    /// SORTED-multi templates STILL export to the field-less vendors (BIP-67 is
+    /// exactly what they implement) — the guard must NOT over-refuse. Any
+    /// outcome other than the new typed refusal is acceptable here (the point
+    /// is that the H10 guard does NOT fire); a sorted-multi export succeeds.
+    #[test]
+    fn sorted_multi_not_refused_by_h10_guard() {
+        for tmpl in [
+            CliTemplate::WshSortedMulti,
+            CliTemplate::ShWshSortedMulti,
+        ] {
+            for fmt in FIELDLESS {
+                let res = emit_payload(&inputs_with_template(Some(tmpl)), fmt);
+                if let Err(e) = &res {
+                    assert_ne!(
+                        e.kind(),
+                        "ExportWalletUnsortedMultisigUnsupported",
+                        "{tmpl:?} → {fmt:?} must NOT hit the H10 unsorted-multi guard"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Taproot multisig templates pass the H10 guard untouched (disjoint
+    /// variant set) and hit their EXISTING per-emitter taproot refusal — proving
+    /// §2.3/§2.5 disjointness: the new guard does not shadow the taproot guard.
+    #[test]
+    fn taproot_multi_hits_existing_taproot_guard_not_h10() {
+        for tmpl in [CliTemplate::TrMultiA, CliTemplate::TrSortedMultiA] {
+            for fmt in FIELDLESS {
+                let err = emit_payload(&inputs_with_template(Some(tmpl)), fmt)
+                    .expect_err(&format!("{tmpl:?} → {fmt:?} must refuse (taproot)"));
+                assert_ne!(
+                    err.kind(),
+                    "ExportWalletUnsortedMultisigUnsupported",
+                    "{tmpl:?} → {fmt:?} must NOT be the H10 refusal (it is the taproot guard)"
+                );
+            }
+        }
+    }
+
+    /// Single-sig templates → field-less vendors: the H10 guard does NOT fire
+    /// (it matches only the two unsorted-multi variants).
+    #[test]
+    fn single_sig_not_refused_by_h10_guard() {
+        for tmpl in [CliTemplate::Bip44, CliTemplate::Bip49, CliTemplate::Bip84] {
+            for fmt in FIELDLESS {
+                let res = emit_payload(&inputs_with_template(Some(tmpl)), fmt);
+                if let Err(e) = &res {
+                    assert_ne!(
+                        e.kind(),
+                        "ExportWalletUnsortedMultisigUnsupported",
+                        "{tmpl:?} → {fmt:?} must NOT hit the H10 guard"
+                    );
+                }
+            }
+        }
+    }
+
+    /// FAITHFUL formats (descriptor / sparrow / bitcoin-core) STILL accept an
+    /// unsorted `wsh-multi` — they carry the literal `multi(` token and preserve
+    /// key order, so the H10 guard must never fire for them.
+    #[test]
+    fn faithful_formats_not_refused_for_unsorted_multi() {
+        for fmt in [
+            CliExportFormat::Descriptor,
+            CliExportFormat::Sparrow,
+            CliExportFormat::BitcoinCore,
+        ] {
+            let res = emit_payload(
+                &inputs_with_template(Some(CliTemplate::WshMulti)),
+                fmt,
+            );
+            if let Err(e) = &res {
+                assert_ne!(
+                    e.kind(),
+                    "ExportWalletUnsortedMultisigUnsupported",
+                    "faithful {fmt:?} must NOT hit the H10 unsorted-multi guard"
+                );
+            }
+        }
+    }
+
+    /// The direct `--descriptor` path resolves `template == None`; the H10 guard
+    /// does NOT fire (and need not — it is already funds-safe). The field-less
+    /// emitter's OWN generic `BadInput` ("requires --template") refuses it. This
+    /// pins the typed-vs-generic boundary (§2.6 test 3): refused, but NOT by the
+    /// new typed kind.
+    #[test]
+    fn template_none_falls_through_to_generic_badinput_not_h10() {
+        for fmt in FIELDLESS {
+            let err = emit_payload(&inputs_with_template(None), fmt)
+                .expect_err(&format!("{fmt:?} with template=None must refuse"));
+            assert_ne!(
+                err.kind(),
+                "ExportWalletUnsortedMultisigUnsupported",
+                "{fmt:?} template=None must be the generic refusal, NOT the typed H10 error"
+            );
+        }
+    }
+
+    /// Import-json resolution mechanism (§2.6 test 2): an unsorted
+    /// `wsh(multi)` / `sh(wsh(multi))` descriptor resolves to the unsorted
+    /// `WshMulti` / `ShWshMulti` template (the value `run_from_import_json`
+    /// feeds into `emit_payload`), so the structured guard fires. Sorted forms
+    /// resolve to the sorted variants (allowed). Proves the import-json path
+    /// feeds the guard a refused variant without standing up a full envelope.
+    #[test]
+    fn template_from_descriptor_preserves_unsorted_distinction() {
+        use miniscript::{Descriptor, DescriptorPublicKey};
+        use std::str::FromStr;
+        let cases = [
+            (
+                "wsh(multi(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))",
+                CliTemplate::WshMulti,
+            ),
+            (
+                "wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))",
+                CliTemplate::WshSortedMulti,
+            ),
+        ];
+        for (desc, expected) in cases {
+            let parsed = Descriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
+            let got = crate::wallet_export::template_from_descriptor(&parsed).unwrap();
+            assert_eq!(got, expected, "{desc} must resolve to {expected:?}");
         }
     }
 }
