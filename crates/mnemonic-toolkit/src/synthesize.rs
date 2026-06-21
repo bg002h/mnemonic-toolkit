@@ -484,7 +484,12 @@ pub fn synthesize_descriptor(
     // the binding stub re-roots on the key-stable `WalletDescriptorTemplateId`
     // (SPEC §4.3) so the keyless md1 and the keyed mk1 derive the SAME stub.
     if md1_form.is_template() {
-        return synthesize_template_descriptor(descriptor, cosigners, privacy_preserving);
+        return synthesize_template_descriptor(
+            descriptor,
+            cosigners,
+            privacy_preserving,
+            run_language,
+        );
     }
 
     let policy_id = md_codec::compute_wallet_policy_id(descriptor).map_err(ToolkitError::from)?;
@@ -1159,6 +1164,7 @@ fn synthesize_template_descriptor(
     descriptor: &Descriptor,
     cosigners: &[CosignerKeyInfo],
     privacy_preserving: bool,
+    run_language: bip39::Language,
 ) -> Result<Bundle, ToolkitError> {
     // --- Shape-admission gate (SPEC §3.1) -----------------------------------
     // Admit single-sig, non-taproot multisig/general, and `tr(NUMS, multi_a)`;
@@ -1258,11 +1264,15 @@ fn synthesize_template_descriptor(
 
     // ms1 strings — UNCHANGED by form (plain codex32 entropy/mnem; no id field).
     // One per slot; watch-only slots → "" sentinel (SPEC §5.8 length-N rule).
+    // cycle-2 H8: thread the run-level `--language` so a non-English seed
+    // re-emits in its real wordlist (`Mnem`), not silently English (`Entr`).
+    // Slot language wins via `unwrap_or`; `None` (descriptor-@N phrase/entropy)
+    // falls back to `run_language` — byte-identical to the keyed path `:547`.
     let mut ms1: MsField = Vec::with_capacity(n);
     for c in cosigners {
         match &c.entropy {
             Some(e) => {
-                let emit_lang = c.language.unwrap_or(bip39::Language::English);
+                let emit_lang = c.language.unwrap_or(run_language);
                 let payload = if emit_lang == bip39::Language::English {
                     ms_codec::Payload::Entr((**e).clone())
                 } else {
@@ -2404,8 +2414,13 @@ mod tests {
             "fixture must be a non-canonical wrapper to exercise C1"
         );
 
-        let bundle = synthesize_template_descriptor(&descriptor, &cosigners, false)
-            .expect("general-policy template emits");
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+        )
+        .expect("general-policy template emits");
 
         // The emitted template md1 DECODES (carried origins).
         let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
@@ -2440,7 +2455,9 @@ mod tests {
             md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_some(),
             "wsh(sortedmulti) is a canonical wrapper"
         );
-        let bundle = synthesize_template_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle =
+            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let decoded = md_codec::chunk::reassemble(&md1_refs).unwrap();
         // Origins elided to empty (Shared empty), yet decode succeeds.
@@ -2591,7 +2608,9 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle = synthesize_template_descriptor(&descriptor, &cosigners, false).unwrap();
+        let bundle =
+            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .unwrap();
         let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let template = md_codec::chunk::reassemble(&md1_refs).unwrap();
 
@@ -2603,5 +2622,202 @@ mod tests {
             id_swapped.as_bytes(),
             "multi (order-dependent) — swapping slot keys must change the WalletPolicyId"
         );
+    }
+
+    // ------------------------------------------------------------------------
+    // cycle-2 WS-A / H8 — S-TEMPLATE: the `--md1-form=template` ms1 emit loop
+    // must thread the run-level `--language` (`run_language`) so a NON-English
+    // seed re-emits in its real wordlist (`Payload::Mnem`), not silently as
+    // English (`Payload::Entr`). Re-emitting a non-English seed's entropy as
+    // English carries only the entropy, not the wordlist — English-defaulted
+    // recovery then derives a DIFFERENT 512-bit BIP-39 seed → WRONG master
+    // seed → unrecoverable card. The keyed path (`synthesize_descriptor`,
+    // `:547`) already threads `run_language`; this pins the template twin.
+    // ------------------------------------------------------------------------
+
+    /// The funds-safety anchor (single-sig). A `language = None` slot under a
+    /// non-English `run_language` (Spanish, wire code 3) emitted via
+    /// `--md1-form=template` must decode to `Payload::Mnem { language: 3, .. }`
+    /// — NOT `Payload::Entr` (the silent-English bug) and NOT English.
+    #[test]
+    fn template_singlesig_non_english_run_language_emits_mnem() {
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+            "wpkh(@0/<0;1>/*)",
+            crate::parse_descriptor::ScriptCtx::SingleSig,
+            1,
+        );
+        // Slot language UNSET → run-level `--language` is the sole carrier.
+        assert!(cosigners[0].language.is_none(), "anchor: slot language unset");
+        cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+
+        let bundle =
+            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::Spanish)
+                .expect("template single-sig emits");
+
+        let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
+        match payload {
+            ms_codec::Payload::Mnem { language, entropy: e } => {
+                assert_eq!(
+                    language, 3,
+                    "Spanish run_language must emit wire code 3 (got {language})"
+                );
+                assert_eq!(e, entropy, "mnem payload carries the input entropy");
+            }
+            ms_codec::Payload::Entr(_) => {
+                panic!("H8 BUG: template path silently re-emitted a Spanish seed as English Entr")
+            }
+            other => panic!("expected a Mnem ms1 payload, got {other:?}"),
+        }
+    }
+
+    /// The funds-safety anchor (multisig). The SAME shared ms1 loop serves the
+    /// `n >= 2` template form — pin it too so a future divergence between the
+    /// single-sig and multisig template emit re-RED's. Slot 0 carries Spanish
+    /// entropy; its ms1 must decode `Payload::Mnem { language: 3 }`.
+    #[test]
+    fn template_multisig_non_english_run_language_emits_mnem() {
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+            crate::parse_descriptor::ScriptCtx::MultiSig,
+            2,
+        );
+        assert!(cosigners[0].language.is_none(), "anchor: slot language unset");
+        cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+
+        let bundle =
+            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::Spanish)
+                .expect("template multisig emits");
+
+        let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
+        match payload {
+            ms_codec::Payload::Mnem { language, entropy: e } => {
+                assert_eq!(language, 3, "multisig slot 0: Spanish wire code 3 (got {language})");
+                assert_eq!(e, entropy);
+            }
+            ms_codec::Payload::Entr(_) => {
+                panic!("H8 BUG: multisig template silently re-emitted Spanish as English Entr")
+            }
+            other => panic!("expected a Mnem ms1 payload, got {other:?}"),
+        }
+        // Watch-only slot 1 (entropy None) is still the "" sentinel.
+        assert_eq!(bundle.ms1[1], "", "watch-only slot keeps the empty sentinel");
+    }
+
+    /// COMPUTE-don't-hardcode master-fingerprint divergence (spec §1.3 / R0-M3).
+    /// The `1b6aef92`(Spanish)/`73c5da0a`(English) oracle from the bughunt report
+    /// is DOCUMENTATION-ONLY below — never the assertion RHS. The RED property is
+    /// the DIVERGENCE: the SAME entropy through the Spanish vs English wordlist
+    /// yields DIFFERENT 512-bit seeds → different master fingerprints; and the
+    /// template path's reconstructed fingerprint must equal the test-COMPUTED
+    /// Spanish one (proving the emitted card carries the real wordlist, so an
+    /// English-defaulted recovery would NOT reproduce these keys).
+    #[test]
+    fn template_non_english_master_fp_diverges_from_english() {
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+            "wpkh(@0/<0;1>/*)",
+            crate::parse_descriptor::ScriptCtx::SingleSig,
+            1,
+        );
+        cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+
+        let secp = Secp256k1::new();
+        // Derive both master fingerprints IN-TEST from the same entropy through
+        // the two wordlists (documentation-only oracle: Spanish ~ 1b6aef92,
+        // English ~ 73c5da0a — NOT used as an assertion literal).
+        let fp_for = |lang: bip39::Language| {
+            let m = bip39::Mnemonic::from_entropy_in(lang, &entropy).unwrap();
+            let seed = m.to_seed("");
+            let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+            master.fingerprint(&secp)
+        };
+        let spanish_master_fp = fp_for(bip39::Language::Spanish);
+        let english_master_fp = fp_for(bip39::Language::English);
+        assert_ne!(
+            spanish_master_fp, english_master_fp,
+            "BIP-39 seed = PBKDF2 over the wordlist string → Spanish and English \
+             entropy diverge into different master seeds"
+        );
+
+        // The template path under Spanish run_language emits a mnem card; its
+        // wire language reconstructs the Spanish mnemonic, whose master fp MUST
+        // equal the test-computed Spanish fp (not the English one).
+        let bundle =
+            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::Spanish)
+                .expect("template single-sig emits");
+        let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
+        let (wire_lang, decoded_entropy) = match payload {
+            ms_codec::Payload::Mnem { language, entropy: e } => (language, e),
+            other => panic!("H8: expected a Mnem payload for a Spanish seed, got {other:?}"),
+        };
+        let recovered_lang = crate::language::wire_code_to_bip39(wire_lang).unwrap();
+        let recovered = bip39::Mnemonic::from_entropy_in(recovered_lang, &decoded_entropy).unwrap();
+        let seed = recovered.to_seed("");
+        let recovered_fp = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed)
+            .unwrap()
+            .fingerprint(&secp);
+        assert_eq!(
+            recovered_fp, spanish_master_fp,
+            "template card reconstructs the SPANISH master seed (not English)"
+        );
+        assert_ne!(
+            recovered_fp, english_master_fp,
+            "the reconstructed seed must NOT be the English one — that is the funds-loss bug"
+        );
+    }
+
+    /// English regression guard — an English `run_language` slot STILL emits
+    /// `Payload::Entr` (the `emit_lang == English` branch), byte-identical to
+    /// today. The fix must not turn English seeds into mnem cards.
+    #[test]
+    fn template_english_run_language_still_emits_entr() {
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+            "wpkh(@0/<0;1>/*)",
+            crate::parse_descriptor::ScriptCtx::SingleSig,
+            1,
+        );
+        cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+
+        let bundle =
+            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
+                .expect("template single-sig emits");
+
+        let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
+        match payload {
+            ms_codec::Payload::Entr(b) => assert_eq!(b, entropy, "English → Entr round-trips"),
+            other => panic!("English run_language must stay Entr, got {other:?}"),
+        }
+    }
+
+    /// Keyed↔template parity (anti-drift) — for the SAME `(entropy,
+    /// run_language)` input the template path and the keyed path produce a
+    /// BYTE-IDENTICAL ms1, structurally pinning the keyed↔template symmetry so a
+    /// future divergence re-RED's. Run for both English (Entr) and Spanish (Mnem).
+    #[test]
+    fn template_keyed_ms1_parity_across_languages() {
+        for lang in [bip39::Language::English, bip39::Language::Spanish] {
+            let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+                "wpkh(@0/<0;1>/*)",
+                crate::parse_descriptor::ScriptCtx::SingleSig,
+                1,
+            );
+            cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
+
+            let keyed = synthesize_descriptor(
+                &descriptor,
+                &cosigners,
+                false,
+                lang,
+                Md1Form::Policy,
+            )
+            .expect("keyed path emits");
+            let templated =
+                synthesize_template_descriptor(&descriptor, &cosigners, false, lang)
+                    .expect("template path emits");
+
+            assert_eq!(
+                keyed.ms1, templated.ms1,
+                "keyed and template ms1 must be byte-identical for run_language={lang:?}"
+            );
+        }
     }
 }
