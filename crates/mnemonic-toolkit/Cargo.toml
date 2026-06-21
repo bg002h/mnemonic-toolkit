@@ -1,6 +1,6 @@
 [package]
 name = "mnemonic-toolkit"
-version = "0.62.0"
+version = "0.62.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -26,14 +26,14 @@ path = "src/main.rs"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
 
 [dependencies]
-ms-codec = "0.4.4"
+ms-codec = "0.5"
 # Direct dep so `friendly_ms_codec` can render prose for the codex32 share
 # errors wrapped by `ms_codec::Error::Codex32(_)` (ThresholdNotPassed /
 # RepeatedIndex / Mismatched*). Exact-pinned to match ms-codec's transitive
 # pin (already resolved at =0.1.0 in Cargo.lock); mirrors ms-cli.
 codex32 = "=0.1.0"
 mk-codec = "0.4.0"
-md-codec = "0.37"
+md-codec = "0.38"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"

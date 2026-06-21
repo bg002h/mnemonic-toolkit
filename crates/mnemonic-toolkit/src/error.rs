@@ -414,7 +414,15 @@ fn ms_codec_exit_code(e: &ms_codec::Error) -> u8 {
         // `InvalidThreshold`/`InvalidShareCount` are user-input (BadInput,
         // exit 1) and fall through to the wildcard below — matching ms-cli.
         | ms_codec::Error::IsShareNotSingleString { .. }
-        | ms_codec::Error::SecretShareSuppliedToCombine => 2,
+        | ms_codec::Error::SecretShareSuppliedToCombine
+        // cycle-4 M6 (ms-codec 0.5.0): a combine over a same-id but
+        // INCONSISTENT share set (shares from different splits sharing
+        // hrp/id/threshold/length) — would have silently produced a WRONG
+        // secret pre-0.5.0. This is a funds-safety FORMAT VIOLATION → exit 2,
+        // alongside the other combine-family rejects. The enum is
+        // `#[non_exhaustive]`, so this is a SILENT fallthrough (the `_ => 1`
+        // wildcard would otherwise absorb it) — the arm is explicit by design.
+        | ms_codec::Error::InconsistentShareSet => 2,
         // ReservedTagNotEmittedInV01 is intercepted by From → FutureFormat.
         _ => 1,
     }
@@ -513,7 +521,16 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::DecodeRecursionDepthExceeded { .. }
         // v0.34.0 BCH-error-correction variant (Phase B.2): uncorrectable chunk
         // → exit 2 (Repair error class, matches RepairError::TooManyErrors).
-        | md_codec::Error::TooManyErrors { .. } => 2,
+        | md_codec::Error::TooManyErrors { .. }
+        // cycle-4 (md-codec 0.38.0) length-cap rejects on the codex32 regular
+        // code (93-symbol bounded). H6 = encode-side over-80-data-symbol reject;
+        // M4 = correcting-decode over-93-symbol chunk reject; I1 = non-correcting
+        // decode over-93-symbol string reject. All three are decode/format-reject
+        // class → exit 2, same routing as the sibling chunk-shape/TooManyErrors
+        // rejects above.
+        | md_codec::Error::PayloadTooLongForSingleString { .. }
+        | md_codec::Error::ChunkSymbolCountOutOfRange { .. }
+        | md_codec::Error::StringSymbolCountOutOfRange { .. } => 2,
         // WireVersionMismatch is intercepted by From → FutureFormat.
         md_codec::Error::WireVersionMismatch { .. } => 3,
     }

@@ -135,6 +135,16 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
              distributed shares (the secret is the recovery target)"
                 .to_string()
         }
+        // cycle-4 M6 (ms-codec 0.5.0): the supplied shares share the same
+        // hrp/id/threshold/length header but are NOT all from one split — they
+        // do not lie on a single Shamir polynomial. Combining them would have
+        // silently recovered a WRONG secret pre-0.5.0; ms-codec now rejects.
+        ms_codec::Error::InconsistentShareSet => {
+            "ms1 inconsistent share set: one or more shares are not from the same split \
+             (they share an id but do not lie on one polynomial). Combining them would \
+             recover the WRONG secret — supply only shares from a single split"
+                .to_string()
+        }
         ms_codec::Error::InvalidThreshold(k) => format!(
             "ms-shares split: --threshold {} invalid; K-of-N shares require K in 2..=9",
             k,
@@ -363,6 +373,31 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         E::TooManyErrors { chunk_index, bound } => format!(
             "md1 chunk {} uncorrectable (exceeds singleton bound = {})",
             chunk_index, bound,
+        ),
+        // cycle-4 (md-codec 0.38.0) codex32 regular-code length caps.
+        // H6 encode-side: a single md1 string is capped at 80 data symbols
+        // (93-symbol codeword); the remedy is chunked encoding.
+        E::PayloadTooLongForSingleString { data_symbols, max } => format!(
+            "md1 payload is {} data symbols; a single md1 string caps at {} \
+             (use chunked encoding / --force-chunked)",
+            data_symbols, max,
+        ),
+        // M4 correcting-decode: an over-93-symbol chunk handed to the BCH
+        // corrector is out of the regular code's domain (degree aliasing) and
+        // is rejected before correction.
+        E::ChunkSymbolCountOutOfRange {
+            chunk_index,
+            symbols,
+            max,
+        } => format!(
+            "md1 chunk {} has {} symbols; the codex32 regular code caps a string at {}",
+            chunk_index, symbols, max,
+        ),
+        // I1 non-correcting decode: an over-93-symbol single string is
+        // structurally out-of-domain even when its checksum verifies.
+        E::StringSymbolCountOutOfRange { symbols, max } => format!(
+            "md1 string has {} symbols; the codex32 regular code caps a string at {}",
+            symbols, max,
         ),
     }
 }

@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.62.1] — 2026-06-21
+
+**SemVer-PATCH — cycle-4 codec-funds convergence: pins the two just-published codec funds-safety MINORs (`md-codec` 0.38.0 + `ms-codec` 0.5.0) and adds the downstream lockstep exit-code / prose arms. No toolkit CLI-flag / `--json` wire-shape change → no GUI schema-mirror or manual leg.**
+
+### Changed
+
+- **Pinned `md-codec` 0.37 → 0.38.0 and `ms-codec` 0.4.4 → 0.5.0** (caret pins hand-edited — `cargo update` cannot cross the `^0.37`<0.38 / `^0.4.4`<0.5.0 bounds), pulling the three codex32 regular-code length caps (H6 encode-side `PayloadTooLongForSingleString`; M4 correcting-decode `ChunkSymbolCountOutOfRange`; I1 non-correcting-decode `StringSymbolCountOutOfRange`) and the ms-codec cross-share polynomial-consistency check (M6 `InconsistentShareSet`).
+- **`md_codec_exit_code` (exhaustive match — the pin bump was compile-forced) gains arms** for `PayloadTooLongForSingleString`, `ChunkSymbolCountOutOfRange`, and `StringSymbolCountOutOfRange` → **exit 2** (decode/format-reject class, alongside the `TooManyErrors` group). `friendly_md_codec` (also an exhaustive match) gains matching prose arms.
+- **`ms_codec_exit_code` gains an explicit `InconsistentShareSet => 2` arm** (funds/format-violation class). Because `ms_codec::Error` is `#[non_exhaustive]` and the match ends `_ => 1`, this is a SILENT lockstep — the arm is explicit by design (a missing arm would mis-route a funds error to exit 1). `friendly_ms_codec` gains a clear prose arm ("inconsistent share set: one or more shares are not from the same split…").
+
+### Funds-safety notes (toolkit-surface behavior)
+
+- `mnemonic inspect <over-93-symbol md1>` → **exit 2** — the I1 non-correcting cap surfacing through `md_codec_exit_code`.
+- `mnemonic ms-shares combine <inconsistent same-id share set>` → **exit 2** with prose; valid exactly-k and over-threshold all-consistent combines still recover the correct secret unchanged (no regression).
+- `mnemonic repair --md1 <over-93-symbol md1>` → exit 2 via the toolkit's own `repair.rs` length-band classifier (independent of the codec M4 cap). `mnemonic restore --md1 <over-93-symbol md1>` → exit 1: the cap MESSAGE renders but the restore path's pre-existing `bad()` wrapper down-classifies every md1-reassemble failure to `BadInput` (unchanged from prior releases; re-routing it is out of scope for this PATCH).
+
+Provenance: `design/BRAINSTORM_cycle4_codec_funds_fixes.md` + `design/IMPLEMENTATION_PLAN_cycle4_codec_funds_fixes.md` (both R0-GREEN), `design/agent-reports/cycle4-*`. Codec tags: `descriptor-mnemonic-md-codec-v0.38.0`, `mnemonic-secret-ms-codec-v0.5.0` (both on crates.io). Toolkit-only consumer step; `mk-codec` unchanged.
+
 ## mnemonic-toolkit [0.62.0] — 2026-06-21
 
 **SemVer-MINOR — FUNDS-SAFETY: three more empirically-grounded fixes from the constellation differential-oracle bug hunt (H8 / H10 / H7), cycle-2. No CLI-flag / `--json` wire-shape / codec change.**
