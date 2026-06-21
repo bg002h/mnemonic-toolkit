@@ -2725,7 +2725,51 @@ fn emit_multisig_checks(
                     detail: "wallet-policy mode confirmed".into(),
                     ..Default::default()
                 });
-                // md1_xpub_match (B.3: SPEC §5.7 multiset semantics, sort-then-compare).
+                // md1_xpub_match — H1 (cycle-1): widened from a sorted-pubkey-
+                // multiset-only compare (B.3 SPEC §5.7) to ALSO require a
+                // STRUCTURAL decoded-policy compare. The legacy multiset gate
+                // GREEN-lit a supplied md1 that reconstructs a DIFFERENT wallet
+                // (wrong threshold / sorted-vs-unsorted / script-type-wrapper /
+                // divergent change-chain multipath) whenever its cosigner pubkey
+                // SET matched — a false-assurance hole. The widened gate compares
+                // the derived `md_codec::Descriptor` structure:
+                //   - `tree ==`            → Tag (Multi/SortedMulti/Tr/…) + threshold
+                //                            `k` + script-type wrapper + nesting
+                //                            (distinguishes `sh(multi)` from
+                //                            `sh(wsh(multi))`) + index-aware per-slot
+                //                            binding (`Body::MultiKeys.indices` order).
+                //   - `use_site_path ==`   → the change-chain / multipath
+                //                            alternatives (`<0;1>` vs `<2;3>`,
+                //                            presence/count) that fix the WATCHED
+                //                            ADDRESS SET (md-codec `derive_address`).
+                //   - per-`@N` `tlv.use_site_path_overrides ==` → the per-cosigner
+                //                            override paths that ALSO fix the
+                //                            address set (the #25/#26 silent-wrong-
+                //                            address class).
+                // Origins (`path_decl` + the origin/fingerprint TLV columns) are
+                // EXCLUDED: they carry legitimate elision/canonicalization variance
+                // (bug-hunt L14) and binding them would false-FAIL a legit
+                // origin-elided descriptor-mode backup — the exact class the v0.5.0
+                // B.3 multiset change exists to tolerate.
+                //
+                // FALSE-FAIL SAFETY BASIS — the DECODE BOUNDARY, not field stability:
+                // both operands here are DECODED md1 (`expected_md_decoded` /
+                // `desc`). md-codec's decoder enforces canonical form on every
+                // `Descriptor` (ascending placeholder first-occurrences; rejected
+                // `@0`/baseline-redundant overrides; ascending TLV idx column), so
+                // two semantically-identical wallets decode to byte-identical `tree`
+                // labels AND `use_site_path_overrides` `@N` keys. Hence `==` over
+                // these decoded fields cannot false-fail a legitimately-equal
+                // wallet. (The baseline `use_site_path` is additionally intrinsically
+                // stable — it has no in-field canonicalization; the override map IS
+                // canonicalization-touched but is made `==`-safe by this same decode
+                // boundary. Per plan-doc R0 round-2 m-NEW-1: the precise basis is
+                // decode-boundary canonicalization, NOT `validate_multipath_consistency`,
+                // which only checks alt-COUNT equality.)
+                let policy_match = expected_md_decoded.tree == desc.tree
+                    && expected_md_decoded.use_site_path == desc.use_site_path
+                    && expected_md_decoded.tlv.use_site_path_overrides
+                        == desc.tlv.use_site_path_overrides;
                 let exp_pubs: Vec<[u8; 65]> = expected_md_decoded
                     .tlv
                     .pubkeys
@@ -2743,12 +2787,47 @@ fn emit_multisig_checks(
                 exp_sorted.sort();
                 act_sorted.sort();
                 let pubkeys_match = exp_sorted == act_sorted;
-                if pubkeys_match {
+                // NAME unchanged (`md1_xpub_match`) per Q-WIRE — only the `passed`
+                // predicate widens; the `--json` `checks[]` wire-shape is identical.
+                if policy_match && pubkeys_match {
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
                         passed: true,
-                        detail: format!("all {} pubkeys match expected (multiset)", exp_pubs.len()),
+                        detail: format!(
+                            "all {} pubkeys match expected (multiset) and decoded policy \
+                             (tree + use-site path) matches",
+                            exp_pubs.len()
+                        ),
                         ..Default::default()
+                    });
+                } else if !policy_match {
+                    // Structural divergence (wrong threshold / sorted-vs-unsorted /
+                    // script-type-wrapper / divergent change-chain multipath /
+                    // per-`@N` use-site override). Reconstructs a DIFFERENT wallet
+                    // even if the pubkey SET matched.
+                    let mut classes: Vec<&str> = Vec::new();
+                    if expected_md_decoded.tree != desc.tree {
+                        classes.push("policy tree (threshold/script-type/order)");
+                    }
+                    if expected_md_decoded.use_site_path != desc.use_site_path {
+                        classes.push("use-site path (change-chain/multipath)");
+                    }
+                    if expected_md_decoded.tlv.use_site_path_overrides
+                        != desc.tlv.use_site_path_overrides
+                    {
+                        classes.push("per-cosigner use-site override");
+                    }
+                    checks.push(VerifyCheck {
+                        name: "md1_xpub_match".into(),
+                        passed: false,
+                        detail: format!(
+                            "md1 reconstructs a DIFFERENT wallet — structural policy mismatch: {}",
+                            classes.join(", ")
+                        ),
+                        expected: Some(format!("{:?}", expected_md_decoded.tree)),
+                        actual: Some(format!("{:?}", desc.tree)),
+                        diff_byte_offset: None,
+                        decode_error: None,
                     });
                 } else {
                     let exp_hex = exp_pubs
@@ -3902,5 +3981,265 @@ mod helper_tests {
                 .unwrap();
             assert!(!mat.passed, "case 4 ms1_entropy_match[{i}] must fail");
         }
+    }
+
+    // ───────────────────────── H1 (cycle-1) ─────────────────────────
+    //
+    // H1 — `md1_xpub_match` must FAIL for a supplied md1 that reconstructs a
+    // DIFFERENT wallet than the engraved bundle, even when the cosigner
+    // pubkey-SET is identical (so the legacy sorted-multiset compare wrongly
+    // GREEN-lit it). The widened gate ALSO requires a structural decoded-policy
+    // compare (`tree == && use_site_path ==` + per-`@N`
+    // `tlv.use_site_path_overrides`), keeping the subordinate pubkey-set check.
+    // Origins (`path_decl` + origin/fingerprint TLV) are EXCLUDED (legitimate
+    // elision/canonicalization variance — bug-hunt L14). See
+    // design/IMPLEMENTATION_PLAN_cycle1_critical_fixes.md §6.3 / R0 round-2.
+
+    use bitcoin::bip32::DerivationPath;
+    use crate::parse::{CosignerSpec, MultisigPathFamily};
+    use crate::synthesize::synthesize_multisig_watch_only;
+
+    /// Build N distinct cosigner specs at the canonical BIP-48 depth-4 path
+    /// from N distinct mnemonics. The 65-byte md1 pubkeys derive ONLY from the
+    /// cosigner xpubs (chain_code||pubkey), so they are template-/threshold-
+    /// independent — a divergent-policy bundle synthesized from the SAME
+    /// cosigners carries the SAME pubkey multiset (the precise condition under
+    /// which the legacy multiset-only gate false-GREENed).
+    fn h1_cosigners(phrases: &[&str]) -> Vec<CosignerSpec> {
+        let secp = Secp256k1::new();
+        let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();
+        phrases
+            .iter()
+            .map(|p| {
+                let m = Mnemonic::parse_in(bip39::Language::English, *p).unwrap();
+                let seed = m.to_seed("");
+                let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+                let xpriv = master.derive_priv(&secp, &path).unwrap();
+                let xpub = Xpub::from_priv(&secp, &xpriv);
+                let fp = master.fingerprint(&secp);
+                CosignerSpec {
+                    xpub,
+                    master_fingerprint: fp,
+                    path: Some(path.clone()),
+                }
+            })
+            .collect()
+    }
+
+    const H1_P1: &str = TREZOR_24;
+    const H1_P2: &str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    const H1_P3: &str =
+        "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+
+    /// Synthesize a watch-only multisig bundle from the SAME 3 cosigners with a
+    /// chosen `(template, threshold)`. The cosigner pubkey multiset is identical
+    /// across all `(template, threshold)` choices.
+    fn h1_bundle(template: CliTemplate, threshold: u8) -> Bundle {
+        let cosigners = h1_cosigners(&[H1_P1, H1_P2, H1_P3]);
+        synthesize_multisig_watch_only(
+            &cosigners,
+            CliNetwork::Mainnet,
+            template,
+            threshold,
+            0,
+            MultisigPathFamily::default(),
+            false,
+        )
+        .unwrap()
+    }
+
+    /// Run `emit_verify_checks` with `expected`'s ms1/mk1 but a SUPPLIED md1
+    /// drawn from a DIFFERENT policy (same cosigners). Returns the
+    /// `md1_xpub_match` check.
+    fn h1_run(expected: &Bundle, supplied_md1: &[String]) -> VerifyCheck {
+        let supplied_ms1 = expected.ms1.clone();
+        let supplied_mk1: Vec<String> = match &expected.mk1 {
+            MkField::Multi(per_cos) => per_cos.iter().flat_map(|v| v.iter().cloned()).collect(),
+            MkField::Single(_) => panic!("expected multisig"),
+        };
+        let supplied_md1_v = supplied_md1.to_vec();
+        let supplied = SuppliedCards {
+            ms1: &supplied_ms1,
+            mk1: &supplied_mk1,
+            md1: &supplied_md1_v,
+        };
+        let mut so: Vec<u8> = Vec::new();
+        let mut se: Vec<u8> = Vec::new();
+        let checks =
+            emit_verify_checks(expected, &supplied, true, true, false, &mut so, &mut se).unwrap();
+        checks
+            .into_iter()
+            .find(|c| c.name == "md1_xpub_match")
+            .expect("md1_xpub_match present")
+    }
+
+    /// Re-encode `expected`'s md1 with a mutated `use_site_path` baseline (same
+    /// `.tree`, same pubkeys) — for the C-PLAN-1 multipath-divergence case.
+    fn h1_remap_use_site_path(
+        md1: &[String],
+        new_use_site: md_codec::use_site_path::UseSitePath,
+    ) -> Vec<String> {
+        let refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+        let mut desc = md_codec::chunk::reassemble(&refs).expect("expected md1 decodes");
+        desc.use_site_path = new_use_site;
+        md_codec::chunk::split(&desc).expect("re-encode mutated descriptor")
+    }
+
+    /// H1 case 1 — wrong threshold: engraved `wsh(sortedmulti(2,A,B,C))`,
+    /// supplied `wsh(sortedmulti(1,A,B,C))` (1-of-3 anyone-spends). Same pubkey
+    /// SET ⇒ legacy multiset gate passed; widened gate MUST fail.
+    #[test]
+    fn h1_wrong_threshold_fails() {
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        let supplied = h1_bundle(CliTemplate::WshSortedMulti, 1);
+        let c = h1_run(&expected, &supplied.md1);
+        assert!(
+            !c.passed,
+            "wrong-threshold (1-of-3 vs 2-of-3) md1 must FAIL md1_xpub_match"
+        );
+    }
+
+    /// H1 case 2 — sorted-vs-unsorted: engraved `wsh(sortedmulti(2,…))`,
+    /// supplied unsorted `wsh(multi(2,…))` (different Tag → consensus-different).
+    #[test]
+    fn h1_sorted_vs_unsorted_fails() {
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        let supplied = h1_bundle(CliTemplate::WshMulti, 2);
+        let c = h1_run(&expected, &supplied.md1);
+        assert!(
+            !c.passed,
+            "sorted-vs-unsorted (SortedMulti vs Multi) md1 must FAIL md1_xpub_match"
+        );
+    }
+
+    /// H1 case 3 — script-type wrapper: engraved `wsh(sortedmulti(2,…))`,
+    /// supplied `sh(wsh(sortedmulti(2,…)))` (P2SH-nested — different address
+    /// type). The `sh(multi)`/`sh(wsh(multi))` trap: `tree ==` distinguishes
+    /// the nested body that a root-tag-only check would miss.
+    #[test]
+    fn h1_script_type_wrapper_fails() {
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        let supplied = h1_bundle(CliTemplate::ShWshSortedMulti, 2);
+        let c = h1_run(&expected, &supplied.md1);
+        assert!(
+            !c.passed,
+            "wsh vs sh(wsh(...)) md1 must FAIL md1_xpub_match (script-type/nesting)"
+        );
+    }
+
+    /// H1 case 4 — C-PLAN-1: identical `.tree`, DIVERGENT `use_site_path`
+    /// multipath (`<0;1>` vs `<2;3>` change-chains → DIFFERENT watched-address
+    /// set). This is the gap a `.tree`-only gate would have GREEN-lit.
+    #[test]
+    fn h1_multipath_divergence_fails() {
+        use md_codec::use_site_path::{Alternative, UseSitePath};
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        // <2;3>/* — same .tree, same pubkeys, different change-chains.
+        let divergent = UseSitePath {
+            multipath: Some(vec![
+                Alternative {
+                    hardened: false,
+                    value: 2,
+                },
+                Alternative {
+                    hardened: false,
+                    value: 3,
+                },
+            ]),
+            wildcard_hardened: false,
+        };
+        let supplied_md1 = h1_remap_use_site_path(&expected.md1, divergent);
+        let c = h1_run(&expected, &supplied_md1);
+        assert!(
+            !c.passed,
+            "use_site_path-divergent (<0;1> vs <2;3>) md1 must FAIL md1_xpub_match — \
+             a .tree-only gate would have false-GREENed this different-address wallet"
+        );
+    }
+
+    /// H1 case 4b — C-PLAN-1 variant: multipath PRESENCE/COUNT divergence
+    /// (`<0;1>/*` vs bare `/*`, no multipath). Same `.tree`, same pubkeys.
+    #[test]
+    fn h1_multipath_presence_divergence_fails() {
+        use md_codec::use_site_path::UseSitePath;
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        let bare = UseSitePath {
+            multipath: None,
+            wildcard_hardened: false,
+        };
+        let supplied_md1 = h1_remap_use_site_path(&expected.md1, bare);
+        let c = h1_run(&expected, &supplied_md1);
+        assert!(
+            !c.passed,
+            "multipath presence/count divergence (<0;1>/* vs bare /*) must FAIL md1_xpub_match"
+        );
+    }
+
+    /// H1 clean-negative 1 — genuine match: byte-identical engraved md1 must
+    /// still PASS (no over-rejection). Identical `.tree` AND `use_site_path`.
+    #[test]
+    fn h1_genuine_match_passes() {
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        let supplied_md1 = expected.md1.clone();
+        let c = h1_run(&expected, &supplied_md1);
+        assert!(
+            c.passed,
+            "genuine matching md1 must PASS md1_xpub_match (no over-rejection)"
+        );
+    }
+
+    /// H1 clean-negative 2 — origin-DIVERGENT-but-policy-equal: the SAME
+    /// `.tree` / `use_site_path` / pubkey SET with a DIFFERENT per-cosigner
+    /// origin path must still PASS. Origins are EXCLUDED from the gate (L14
+    /// elision/canonicalization brittleness), so changing only the origin does
+    /// NOT false-fail. (Binding origins would re-introduce the v0.5.0-era
+    /// origin-elision false-FAIL the B.3 multiset change exists to avoid.)
+    /// Re-encoded via decode → mutate `path_decl` origin → re-split; `.tree`,
+    /// `use_site_path`, and pubkeys are UNCHANGED — only the origin differs.
+    #[test]
+    fn h1_origin_divergent_but_policy_equal_passes() {
+        use md_codec::origin_path::{OriginPath, PathComponent, PathDeclPaths};
+        let expected = h1_bundle(CliTemplate::WshSortedMulti, 2);
+        let refs: Vec<&str> = expected.md1.iter().map(|s| s.as_str()).collect();
+        let mut desc = md_codec::chunk::reassemble(&refs).expect("expected md1 decodes");
+        // A DIFFERENT-but-valid origin: m/48'/0'/5'/2' (account index 0' → 5').
+        let alt_origin = OriginPath {
+            components: vec![
+                PathComponent {
+                    hardened: true,
+                    value: 48,
+                },
+                PathComponent {
+                    hardened: true,
+                    value: 0,
+                },
+                PathComponent {
+                    hardened: true,
+                    value: 5,
+                },
+                PathComponent {
+                    hardened: true,
+                    value: 2,
+                },
+            ],
+        };
+        desc.path_decl.paths = match desc.path_decl.paths {
+            PathDeclPaths::Shared(_) => PathDeclPaths::Shared(alt_origin),
+            PathDeclPaths::Divergent(v) => {
+                PathDeclPaths::Divergent(v.iter().map(|_| alt_origin.clone()).collect())
+            }
+        };
+        // Also clear origin-bearing TLV columns (fingerprints/overrides) — all
+        // origin-category fields the gate must IGNORE. `.tree`/`use_site_path`/
+        // pubkeys remain identical to `expected`.
+        desc.tlv.fingerprints = None;
+        desc.tlv.origin_path_overrides = None;
+        let supplied_md1 = md_codec::chunk::split(&desc).expect("re-encode origin-mutated descriptor");
+        let c = h1_run(&expected, &supplied_md1);
+        assert!(
+            c.passed,
+            "origin-divergent-but-policy-equal md1 must PASS md1_xpub_match (origins EXCLUDED)"
+        );
     }
 }
