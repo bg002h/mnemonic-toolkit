@@ -64,14 +64,23 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
         //   1: @N index
         //   2: 8-hex fingerprint inside `[...]`
         //   3: origin path inside `[...]` (may be empty if `[fp]` alone)
-        //   4: multipath alts (semicolon-separated digits, each with an
-        //      optional `'`/`h` hardened marker — CAPTURED so a hardened alt is
-        //      no longer silently dropped, then REJECTED in the parse below
-        //      (H13: an xpub card cannot do hardened public derivation, so a
-        //      hardened-multipath card is permanently un-restorable).
+        //   4: multipath body — captured PERMISSIVELY (`[^>]*`) whenever a
+        //      `/<…>` delimiter is present, then STRICTLY validated in the parse
+        //      below.
         //   5: wildcard suffix (`/*`, `/*'`, `/*h`)
+        //
+        // H13 + C1 fix (impl-review round-1): a PRESENT `<…>` multipath
+        // delimiter is MUST-be-valid. A prior strict-alternation capture inside
+        // the OPTIONAL group skip-matched empty on a malformed body (e.g.
+        // `<0'';1>`, `<0'h;1>`) — the placeholder then lexed as if there were no
+        // multipath, and the residual `<…>` got silently stripped downstream,
+        // SILENTLY COLLAPSING to a bare `/*` (wrong-address / un-restorable).
+        // Capturing the body permissively guarantees the validator below SEES
+        // every present body and can REJECT hardened (`<0';1'>`), malformed
+        // double-marker (`<0'';1>`), and any other non-`[0-9;]` residue, while
+        // still ACCEPTING valid `<0;1>` / `<0;1;2>`.
         Regex::new(
-            r"@(\d+)(?:\[([0-9a-fA-F]{8})((?:/\d+(?:'|h)?)*)\])?(?:/<((?:\d+(?:'|h)?)(?:;\d+(?:'|h)?)*)>)?(/\*(?:'|h)?)?",
+            r"@(\d+)(?:\[([0-9a-fA-F]{8})((?:/\d+(?:'|h)?)*)\])?(?:/<([^>]*)>)?(/\*(?:'|h)?)?",
         )
         .expect("static regex compiles")
     });
@@ -110,14 +119,19 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
         let multipath_alts = caps
             .get(4)
             .map(|m| {
+                // C1 fix: the body is captured PERMISSIVELY, so a PRESENT `<…>`
+                // is validated STRICTLY here. Every `;`-split alternative MUST be
+                // a bare, non-empty unsigned integer with NO hardened marker and
+                // no stray residue. This single robust check rejects hardened
+                // (`<0';1'>`), malformed double-marker (`<0'';1>`, `<0'h;1>`,
+                // `<0h';1>`), and any other non-`[0-9;]` residue — fail-closed
+                // and loud — while accepting valid `<0;1>` / `<0;1;2>`. An xpub
+                // card cannot do hardened public derivation (BIP-32), so a
+                // hardened-multipath card is permanently un-restorable: NEVER
+                // silently collapse to a bare `/*`.
                 m.as_str()
                     .split(';')
                     .map(|n| {
-                        // H13: a hardened multipath alternative (`0'` / `0h`) is
-                        // un-derivable from a watch-only xpub (BIP-32 forbids
-                        // hardened public derivation), so a card carrying one is
-                        // permanently un-restorable. REJECT with a typed error
-                        // rather than silently collapsing to a bare `/*`.
                         if n.ends_with('\'') || n.ends_with('h') {
                             return Err(ToolkitError::DescriptorParse(format!(
                                 "@{i} multipath alternative `{n}` is hardened; \
@@ -127,7 +141,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                         }
                         n.parse::<u32>().map_err(|_| {
                             ToolkitError::DescriptorParse(format!(
-                                "@{i} multipath alt `{n}` is not u32"
+                                "@{i} multipath alt `{n}` is not a bare unsigned integer"
                             ))
                         })
                     })
@@ -342,16 +356,18 @@ pub fn substitute_synthetic(
 ) -> Result<(String, BTreeMap<String, u8>), ToolkitError> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
-        // H13: the multipath strip class is `[0-9;'h]` (was `[0-9;]`) so a
-        // hardened body is matched-and-stripped rather than leaving a residual
-        // `'>` for `Descriptor::from_str` to choke on. This is defense-in-depth
-        // for direct callers of `substitute_synthetic` that bypass the lexer;
-        // on the production `parse_descriptor` path the hardened reject already
-        // fires in `lex_placeholders`/`resolve_placeholders` (call order:
-        // lex → resolve → substitute_synthetic) before this regex runs. Kept in
-        // lockstep with md-cli's `substitute_synthetic` strip class.
+        // C1 fix (impl-review round-1): the multipath strip class is `[0-9;]`
+        // (REVERTED from the H13 widening to `[0-9;'h]`). The widening was the
+        // direct silencer of the malformed-double-marker regression — it
+        // matched-and-stripped a residual `<0'';1>` cleanly, turning a loud
+        // error into a silent bare-`/*` collapse. It is moot now that the lexer
+        // (`lex_placeholders`) rejects hardened / malformed bodies FIRST with a
+        // typed `ToolkitError::DescriptorParse`: on the production
+        // `parse_descriptor` path (lex → resolve → substitute_synthetic) this
+        // strip never sees a marker-bearing body. Kept in lockstep with md-cli's
+        // `substitute_synthetic` strip class.
         Regex::new(
-            r"@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;'h]+>)?(?:/\*(?:'|h)?)?",
+            r"@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;]+>)?(?:/\*(?:'|h)?)?",
         )
         .expect("static regex compiles")
     });
@@ -1585,6 +1601,47 @@ mod tests {
             "hardened multipath must reject through parse_descriptor, got: {err:?}"
         );
         assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn lex_rejects_malformed_double_marker_multipath() {
+        // C1 (H13 impl-review round-1): MALFORMED double-marker bodies
+        // (`<0'';1>`, `<0'h;1>`, `<0h';1>`) must be a typed REJECT at lex — never
+        // silently skip-match the optional group + strip the residue to a bare
+        // `/*` collapse (the regression the round-1 review flagged). The
+        // permissive capture `/<([^>]*)>` guarantees the validator SEES the body
+        // even when it does not match the strict integer-alternation shape.
+        for body in ["<0'';1>", "<0'h;1>", "<0h';1>"] {
+            let template = format!("wsh(multi(2,@0/{body}/*,@1/{body}/*))");
+            match lex_placeholders(&template) {
+                Ok(occs) => panic!("malformed body `{body}` lexed OK: {occs:?}"),
+                Err(err) => {
+                    assert!(
+                        matches!(err, ToolkitError::DescriptorParse(_)),
+                        "malformed body `{body}`: expected DescriptorParse, got {err:?}"
+                    );
+                    assert_eq!(err.exit_code(), 2, "malformed body `{body}` exit code");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parse_descriptor_rejects_malformed_double_marker_no_silent_collapse() {
+        // End-to-end C1 regression-guard: malformed double-marker bodies must
+        // produce a typed `DescriptorParse` (exit 2) through the full pipeline,
+        // NOT a silent collapse to a bare-`/*` card (which the round-1 review
+        // proved returned `use_site_path.multipath = None` — wrong-address /
+        // un-restorable). The lexer reject pre-empts `substitute_synthetic`.
+        for body in ["<0'';1>", "<0'h;1>", "<0h';1>"] {
+            let template = format!("wsh(multi(2,@0/{body}/*,@1/{body}/*))");
+            let err = parse_descriptor(&template, &[], &[]).unwrap_err();
+            assert!(
+                matches!(err, ToolkitError::DescriptorParse(_)),
+                "malformed body `{body}` must reject through parse_descriptor, got: {err:?}"
+            );
+            assert_eq!(err.exit_code(), 2, "malformed body `{body}` exit code");
+        }
     }
 
     #[test]
