@@ -1503,6 +1503,24 @@ fn emit_json_envelope<W: Write, E: Write>(
             }
         };
 
+        // M1 (cycle-13): decode the REAL BIP-32 account from the single-sig
+        // origin path so `export-wallet --from-import-json` re-emits the
+        // correct origin on the template emitters (sparrow/electrum/coldcard),
+        // which rebuild it via `template.origin_path_str(network, account)`.
+        // Pre-fix this was hardcoded `0`, dropping a non-zero account (xpub
+        // still correct, but declared origin → `m/.../0'` → PSBT key-origin
+        // matching / account discovery fails). Multisig drives its origins
+        // per-slot (`origin_path_bare()`) and ignores `bundle.account`, so this
+        // is single-sig-only; a non-standard / absent origin falls back to 0.
+        let account: u32 = if n == 1 {
+            origin_path
+                .as_deref()
+                .and_then(account_from_origin_path)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
         // Per §3.2.1 row `multisig`: Some when N>1, None for N=1.
         let multisig = if n > 1 {
             let cosigners: Vec<CosignerEntry> = p
@@ -1554,7 +1572,7 @@ fn emit_json_envelope<W: Write, E: Write>(
             network: network_human_name(p.network),
             template: None,
             descriptor: descriptor_field,
-            account: 0,
+            account,
             origin_path,
             origin_paths,
             master_fingerprint,
@@ -2081,6 +2099,29 @@ fn path_family_from_paths(paths: &[String]) -> (&'static str, Option<String>) {
             ("bip87", Some(notice))
         }
     }
+}
+
+/// M1 (cycle-13) — decode the BIP-32 account from a single-sig origin path
+/// (bracket-bare, e.g. `m/84'/0'/5'`). The account is the 3rd hardened
+/// component (BIP-44 index 2: `m/<purpose>'/<coin>'/<account>'`). Returns
+/// `None` for an absent / non-standard path (fewer than 3 components, a
+/// non-hardened or non-numeric account component) so the caller falls back
+/// to account 0 safely. Accepts both `'` and `h` hardened markers.
+fn account_from_origin_path(path: &str) -> Option<u32> {
+    let comps: Vec<&str> = path
+        .trim_start_matches("m/")
+        .trim_start_matches('m')
+        .trim_start_matches('/')
+        .split('/')
+        .collect();
+    // Need at least purpose / coin-type / account.
+    let account_comp = comps.get(2)?;
+    // The account component MUST be hardened (canonical single-sig structure);
+    // a non-hardened 3rd component is non-standard → fall back to 0.
+    let digits = account_comp
+        .strip_suffix('\'')
+        .or_else(|| account_comp.strip_suffix('h'))?;
+    digits.parse::<u32>().ok()
 }
 
 /// SPEC §7.4: when `--json` is NOT set, the round-trip diff goes ONLY on
