@@ -140,7 +140,8 @@ scratch next cycle.
   `persistence.rs:94-99` (`redact_for_persistence`) keying on the narrow set (`secrets.rs:34,160-162`).
   This is the highest-severity facet of H3 — a spendable key at rest (default 0644), surviving restarts.
 
-### - [ ] H4 · `ms derive` panics (`unreachable!`) on a valid non-English (mnem) ms1 string
+### - [x] H4 · `ms derive` panics (`unreachable!`) on a valid non-English (mnem) ms1 string
+<!-- FIXED cycle-8 (ms-cli v0.9.0 @e80ea3b, tag ms-cli-v0.9.0, crates.io) — derive routes a Mnem ms1 through the shared `payload_entropy_and_language` helper using the WIRE language byte (CliLanguage::from_code), not the --language flag → no panic + CORRECT fingerprint (French 7d53dc37, not the wrong English 73c5da0a a naive --language patch produces). effective_lang threaded to all label sites. ms-codec NO-BUMP. -->
 - **repo/class:** ms-cli · **E-panic-dos**
 - **id:** `ms-derive-mnem-payload-panic`
 - **location:** `mnemonic-secret/crates/ms-cli/src/cmd/derive.rs:185`
@@ -160,7 +161,8 @@ scratch next cycle.
   `#[non_exhaustive]` future-variant guard.
 - **spec:** BIP-39 (language → sentence → seed); ms-codec `decode.rs:78-95`.
 
-### - [ ] H5 · `ms verify` panics (`unreachable!`) on a valid non-English (mnem) ms1 string
+### - [x] H5 · `ms verify` panics (`unreachable!`) on a valid non-English (mnem) ms1 string
+<!-- FIXED cycle-8 (ms-cli v0.9.0 @e80ea3b) — verify routes the Ok((tag,payload)) arm through the same wire-language helper (both Err arms incl. exit-3 ReservedTagNotEmittedInV01 preserved verbatim); --language Option-ized (no spurious default note). -->
 - **repo/class:** ms-cli · **E-panic-dos**
 - **id:** `ms-verify-mnem-payload-panic`
 - **location:** `mnemonic-secret/crates/ms-cli/src/cmd/verify.rs:64`
@@ -348,7 +350,8 @@ scratch next cycle.
   when false.
 - **spec:** output-class advisory contract; `is_wallet_policy()`.
 
-### - [ ] L5 · `ms-cli CliError::Codex32` wraps the raw `codex32::Error`, bypassing ms-codec's sanitizing Debug (latent secret leak)
+### - [x] L5 · `ms-cli CliError::Codex32` wraps the raw `codex32::Error`, bypassing ms-codec's sanitizing Debug (latent secret leak)
+<!-- FIXED cycle-8 (ms-cli v0.9.0 @e80ea3b) — hand-rolled CliError Debug delegates to sanitized kind()+message() so codex32::Error's `string` (which echoes the secret ms1) doesn't leak; mutation-proven (forcing the echo turns the L5 test RED). Latent (no production {:?} on CliError), defensively closed. -->
 - **repo/class:** ms-codec/ms-cli · **D-secret-leak** (latent) · `ms-cli-clierror-codex32-bypasses-sanitized-debug`
 - **location:** `mnemonic-secret/crates/ms-cli/src/error.rs:20`
 - **bug:** `#[derive(Debug)] enum CliError` carries `Codex32(codex32::Error)` directly, not through
@@ -1043,7 +1046,8 @@ recurring theme of the whole hunt.
 
 ## Confirmed — LOW (Wave B)
 
-### - [ ] L26 · `ms combine --to entropy` silently drops the mnem wordlist-language (asymmetric vs the toolkit, which warns)
+### - [x] L26 · `ms combine --to entropy` silently drops the mnem wordlist-language (asymmetric vs the toolkit, which warns)
+<!-- FIXED cycle-8 (ms-cli v0.9.0 @e80ea3b) — ms combine --to entropy now emits a non-English-wordlist advisory (stderr-only, no --json/exit change; entropy is correct, language is re-encode metadata); --to ms1 preserves the language byte. -->
 - **repo/class:** ms-cli · **B-policy-collapse** · `w4b-sdl-01`
 - **location:** `ms-cli/src/cmd/combine.rs:91-117` (payload routing), `:157-175` (`emit_entropy` — hex only)
 - **bug:** when `ms combine` recovers a `Payload::Mnem{language,entropy}` (non-English wordlist) and the user
