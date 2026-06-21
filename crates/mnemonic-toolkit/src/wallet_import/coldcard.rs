@@ -234,11 +234,24 @@ impl WalletFormatParser for ColdcardParser {
         let xfp = parse_xfp_hex(xfp_str)?;
 
         // Step 4: optional account (default 0).
-        let raw_account = obj
-            .get("account")
-            .and_then(|v| v.as_u64())
-            .map(|n| n as u32)
-            .unwrap_or(0);
+        //
+        // cycle-5 S-NET L3 ride-along (firewalled from the network helper): the
+        // legacy top-level-xpub fallback below (`deriv_path_str_opt == None`
+        // arm) interpolates `raw_account` into the origin path. A `>u32::MAX`
+        // JSON account value previously truncated via `as u32`, silently
+        // rewriting the user's account index in the baked origin annotation. A
+        // backup tool must NEVER silently rewrite an index — reject on
+        // out-of-range (ImportWalletParse, exit 2) instead of saturating.
+        let raw_account: u32 = match obj.get("account").and_then(|v| v.as_u64()) {
+            Some(n) => u32::try_from(n).map_err(|_| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: coldcard: parse error: `account` value {n} exceeds u32 range \
+                     (max {}); a BIP-32 account index must fit in a hardened child number",
+                    u32::MAX
+                ))
+            })?,
+            None => 0,
+        };
 
         // Step 5: dominant-BIP selection per SPEC §11.3.1.
         let (bip_derivation, account_xpub_str, deriv_path_str_opt) =
