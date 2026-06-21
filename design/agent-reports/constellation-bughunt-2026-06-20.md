@@ -725,7 +725,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 
 ## Confirmed — MEDIUM (Wave 3)
 
-### - [ ] M8 · `build-descriptor` accepts a key carrying an extra derivation suffix → silently derives a deeper subtree
+### - [x] M8 · `build-descriptor` accepts a key carrying an extra derivation suffix → silently derives a deeper subtree
+<!-- FIXED cycle-7 (toolkit v0.65.0 @20514561, tag mnemonic-toolkit-v0.65.0) — gate.rs::check_secret_key now REJECTS (else-after-xprv-screen) a key whose post-[origin]-strip xpub body contains '/' (the extra-derivation-suffix class) via existing DiagnosticKind::SchemaField (exit 2, no --json delta). Was: silently accepted → builder appended /<0;1>/* → DEEPER/WRONG subtree (mutation-proven). Covers all 4 key fields + nested recursion + both intake paths; no over-rejection (bare/[origin]/SLIP-132 still build). -->
 - **repo/class:** toolkit · **A-wrong-address** · `w3-tk-descbuild-key-extra-path-suffix-silent`
 - **location:** `descriptor_builder/ir.rs:218-227` (appends `/<0;1>/*`), `:22-23` (account-level contract);
   `descriptor_builder/gate.rs:347-360` (only an xprv screen exists)
@@ -837,7 +838,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   in heap. Same residue class as the ms-cli stdin reader fixed in Cycle A. Already tracked as Cycle-B target
   #1 (`secret-memory-hygiene-cycle-b`). Fix: `Zeroizing<String>` + `ZeroizeOnDrop` when Cycle-B lands.
 
-### - [ ] L23 · `ecies_decrypt_message` panics (not `InvalidScalar`) on a zero privkey (latent public-API)
+### - [x] L23 · `ecies_decrypt_message` panics (not `InvalidScalar`) on a zero privkey (latent public-API)
+<!-- FIXED cycle-7 (toolkit v0.65.0 @20514561) — explicit zero-scalar → Err(EciesDecryptError::InvalidScalar) before mul_tweak().expect(); reuses the existing variant. Latent (sole caller derive_storage_eckey already rejects zero), defensively closed. -->
 - **repo/class:** toolkit · **E-panic-dos** (latent) · `w3-tk-electrum-crypto-01`
 - **location:** `electrum_crypto.rs:345-351`; `:309-311` (sole in-tree caller is safe)
 - **bug:** `Scalar::from_be_bytes` accepts 0 (≤ n−1), so the `InvalidScalar` guard passes; then
