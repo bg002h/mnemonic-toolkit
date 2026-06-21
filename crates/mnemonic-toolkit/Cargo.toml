@@ -1,6 +1,6 @@
 [package]
 name = "mnemonic-toolkit"
-version = "0.65.1"
+version = "0.65.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -33,7 +33,7 @@ ms-codec = "0.5"
 # pin (already resolved at =0.1.0 in Cargo.lock); mirrors ms-cli.
 codex32 = "=0.1.0"
 mk-codec = "0.4.0"
-md-codec = "0.38"
+md-codec = "0.39"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"

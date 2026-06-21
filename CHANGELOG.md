@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.65.2] — 2026-06-21
+
+**SemVer-PATCH — transitive md-codec pin bump `0.38` → `0.39` (constellation bug-hunt cycle-10).** No toolkit source change. Picks up md-codec v0.39.0: M3 `derive_address` chain-gate widening (change addresses derivable for `None`-baseline + per-`@N`-override wallets — a funds-availability fix), L14/L15 WalletPolicyId/WalletDescriptorTemplateId stability across origin elision + placeholder ordering (in-memory identity values only — NOT on the md1 wire; a toolkit-built explicit-origin descriptor now correctly matches an md-cli-elided card's id), and the L6 typed `DivergentPathCountMismatch` guard. The toolkit only ever builds explicit-origin / canonical-ordering descriptors, so its recorded in-memory ids are unchanged in practice; full `cargo test -p mnemonic-toolkit` GREEN against md-codec 0.39.0. No new flag/wire/variant → no GUI schema-mirror.
+
 ## mnemonic-toolkit [0.65.1] — 2026-06-21
 
 **SemVer-PATCH — toolkit secret-hygiene / robustness cluster (constellation bug-hunt cycle-11b: L21 · L24 · L25). No new `ToolkitError` variant, no CLI-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no codec bump; manual PROSE only (no flag-table change).**
