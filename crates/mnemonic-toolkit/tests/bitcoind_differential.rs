@@ -873,3 +873,203 @@ fn bitcoind_template_completion_differential() {
         template_corpus().len()
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// H12 (cycle-1) — descriptor-mode taproot multisig defaults the BIP-48 origin
+// to script-type 3' (P2TR), not 2' (P2WSH).
+//
+// The bug is funds-critical AND only visible through a SEED-derived cosigner:
+// when a `tr(NUMS, multi_a/sortedmulti_a)` descriptor's cosigner origin is
+// elided, the toolkit re-derives each cosigner's ACCOUNT xpub AT the inferred
+// origin path. Pre-H12 that path ended in `2'`, so every cosigner xpub — and
+// thus every receive/change address — landed in the wrong (P2WSH) subtree,
+// un-cosignable by Sparrow/Coldcard/Jade (which re-derive at `3'`).
+//
+// This row bundles an ORIGIN-ELIDED taproot multisig from two controlled seeds
+// (account 0), reads back the per-cosigner xpubs the toolkit derived, and
+// builds the concrete descriptor it implies. The oracle asserts that descriptor
+// derives the SAME addresses as the INDEPENDENT `48'/0'/0'/3'` derivation, and
+// DIFFERS from the `48'/0'/0'/2'` (pre-H12 wrong) subtree — via BOTH
+// rust-miniscript (DEFAULT-CI anti-vacuity) AND Core `deriveaddresses`
+// (env-gated heavy leg). Mainnet (the harness's offline `-chain=main` contract;
+// the toolkit renders mainnet `xpub…`).
+
+/// Build the toolkit's bundled taproot-multisig descriptor by reading back the
+/// per-cosigner xpubs from `bundle --json` for an ORIGIN-ELIDED descriptor
+/// (seed slots, account 0, mainnet). Returns `(concrete_descriptor, origins)`.
+fn h12_bundle_concrete(at_template: &str) -> (String, Vec<String>) {
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--account",
+            "0",
+            "--descriptor",
+            at_template,
+            "--slot",
+            &format!("@0.phrase={SEED_A}"),
+            "--slot",
+            &format!("@1.phrase={SEED_B}"),
+            "--no-engraving-card",
+            "--json",
+        ])
+        .output()
+        .expect("spawn mnemonic bundle");
+    assert!(
+        out.status.success(),
+        "h12 bundle failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).expect("bundle --json");
+    let cosigners = v["multisig"]["cosigners"].as_array().expect("cosigners");
+    let xpubs: Vec<String> = cosigners
+        .iter()
+        .map(|c| c["xpub"].as_str().expect("xpub").to_string())
+        .collect();
+    let origins: Vec<String> = cosigners
+        .iter()
+        .map(|c| c["origin_path"].as_str().expect("origin_path").to_string())
+        .collect();
+    assert_eq!(xpubs.len(), 2, "2-cosigner taproot multisig");
+    // `multi_a` (unsorted) preserves cosigner order; `sortedmulti_a` is order-
+    // independent for derivation, so positional order here is fine for both.
+    let inner = if at_template.contains("sortedmulti_a") {
+        "sortedmulti_a"
+    } else {
+        "multi_a"
+    };
+    let desc = format!(
+        "tr({NUMS_HEX},{inner}(2,{}/<0;1>/*,{}/<0;1>/*))",
+        xpubs[0], xpubs[1]
+    );
+    (desc, origins)
+}
+
+/// Concrete `tr(NUMS, <inner>(2, …))` from the two seeds derived at `st_path`
+/// (the INDEPENDENT origin-subtree oracle).
+fn h12_independent_concrete(inner: &str, st_path: &str) -> String {
+    let (xa, _) = xpub_at(SEED_A, st_path);
+    let (xb, _) = xpub_at(SEED_B, st_path);
+    format!("tr({NUMS_HEX},{inner}(2,{xa}/<0;1>/*,{xb}/<0;1>/*))")
+}
+
+/// DEFAULT-CI anti-vacuity leg (NOT `#[ignore]`): the toolkit's bundled taproot
+/// cosigner xpubs (origin defaulted) must derive the SAME addresses as the
+/// INDEPENDENT `3'` subtree, and DIFFER from the `2'` subtree. This is the
+/// rust-miniscript half of the H12 oracle; it gates the fix without a node.
+#[test]
+fn h12_taproot_default_origin_anti_vacuity_leg() {
+    for (template, inner) in [
+        ("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))", "multi_a"),
+        (
+            "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            "sortedmulti_a",
+        ),
+    ] {
+        let (bundled_desc, origins) = h12_bundle_concrete(template);
+
+        // (a) The emitted origin is the 3' (P2TR) subtree.
+        for op in &origins {
+            assert_eq!(
+                op, "m/48'/0'/0'/3'",
+                "[{inner}] taproot cosigner origin must default to 3'; got {op}"
+            );
+        }
+
+        let bundled_addrs = derive_receive(&bundled_desc, N + 1);
+        let addrs_3 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/3'"), N + 1);
+        let addrs_2 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/2'"), N + 1);
+
+        // (b) MATCH the 3' subtree.
+        assert_eq!(
+            bundled_addrs, addrs_3,
+            "[{inner}] bundled taproot addresses must equal the INDEPENDENT 3' derivation"
+        );
+        // (c) DIFFER from the 2' subtree (the pre-H12 wrong subtree).
+        assert_ne!(
+            bundled_addrs, addrs_2,
+            "[{inner}] bundled taproot addresses must DIFFER from the 2' (wrong) subtree — \
+             a 2'/3' subtree confusion would make this vacuous"
+        );
+        // Sanity: 2' and 3' subtrees are genuinely distinct (anti-vacuity of (c)).
+        assert_ne!(
+            addrs_3, addrs_2,
+            "[{inner}] the 2' and 3' subtree derivations must differ (oracle sanity)"
+        );
+    }
+}
+
+/// Env-gated heavy leg: Core `deriveaddresses` corroborates the H12 oracle — the
+/// toolkit's bundled taproot descriptor matches Core on the 3' subtree and
+/// DIFFERS from Core on the 2' subtree. Same CONNECT-ONLY contract.
+#[test]
+#[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
+fn bitcoind_h12_taproot_default_origin_differential() {
+    let Some(w) = read_wiring() else {
+        eprintln!(
+            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
+        );
+        return;
+    };
+    let info = bitcoin_cli(&w, &["getblockchaininfo"]);
+    assert_eq!(
+        info.get("chain").and_then(|c| c.as_str()),
+        Some("main"),
+        "bitcoind must be on -chain=main (got {info:?})"
+    );
+
+    let mut total_checks = 0usize;
+    for (template, inner) in [
+        ("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))", "multi_a"),
+        (
+            "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            "sortedmulti_a",
+        ),
+    ] {
+        let (bundled_desc, origins) = h12_bundle_concrete(template);
+        for op in &origins {
+            assert_eq!(op, "m/48'/0'/0'/3'", "[{inner}] origin must be 3'");
+        }
+
+        let bundled_addrs = derive_receive(&bundled_desc, N + 1);
+        let desc3 = h12_independent_concrete(inner, "48'/0'/0'/3'");
+        let desc2 = h12_independent_concrete(inner, "48'/0'/0'/2'");
+
+        // Anti-vacuity BEFORE Core: bundled == independent 3'.
+        assert_eq!(
+            bundled_addrs,
+            derive_receive(&desc3, N + 1),
+            "[{inner}] anti-vacuity: bundled addrs must equal independent 3' BEFORE Core"
+        );
+
+        // Core on the BUNDLED descriptor's chain-0 == toolkit's reported addrs.
+        let core_bundled = core_addresses(&w, &single_chain_desc(&bundled_desc, 0));
+        // Core on the independent 3' and 2' subtrees.
+        let core_3 = core_addresses(&w, &single_chain_desc(&desc3, 0));
+        let core_2 = core_addresses(&w, &single_chain_desc(&desc2, 0));
+
+        for i in 0..=(N as usize) {
+            assert_eq!(
+                bundled_addrs[i], core_bundled[i],
+                "H12 ADDRESS DIVERGENCE (FUNDS-CRITICAL) [{inner}] idx{i}: \
+                 toolkit={} bitcoind={}",
+                bundled_addrs[i], core_bundled[i]
+            );
+            assert_eq!(
+                core_bundled[i], core_3[i],
+                "[{inner}] idx{i}: bundled must match Core on the 3' subtree"
+            );
+            assert_ne!(
+                core_bundled[i], core_2[i],
+                "[{inner}] idx{i}: bundled (3') must DIFFER from Core on the 2' subtree"
+            );
+            total_checks += 1;
+        }
+    }
+    eprintln!(
+        "toolkit bitcoind H12 differential PASS: {total_checks} taproot 3'-vs-2' \
+         address checks, byte-identical to Core on 3' and diverging from 2'"
+    );
+}

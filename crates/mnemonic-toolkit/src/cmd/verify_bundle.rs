@@ -1369,8 +1369,18 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // info notice — verify-bundle is read-only, the original bundle emit
     // already produced the notice.
     if is_non_canonical {
-        let default_path =
-            crate::cmd::bundle::compute_default_origin_path(args.network, args.account);
+        // H12 — taproot-aware default-origin script-type (mirror of bundle.rs).
+        // The verify side MUST agree with bundle, so it derives the BIP-48 leaf
+        // from the SAME canonicity-probe tree root `Tag` (Tr → 3', sh → 1',
+        // else 2'); otherwise verify-bundle would re-derive a taproot cosigner
+        // at 2' and spuriously reject a correct 3' bundle.
+        let default_script_type =
+            crate::template::bip48_script_type_for_root_tag(&canonicity_probe.tree.tag);
+        let default_path = crate::cmd::bundle::compute_default_origin_path(
+            args.network,
+            args.account,
+            default_script_type,
+        );
         let mut new_paths: Vec<md_codec::origin_path::OriginPath> =
             match &descriptor_resolved.path_decl.paths {
                 md_codec::origin_path::PathDeclPaths::Shared(op) => {
