@@ -1350,6 +1350,34 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
 
     crate::slot_input::validate_slot_set(&args.slot)?;
 
+    // cycle-11b L24 — exact-coverage bounds gate. `validate_slot_set` checks
+    // contiguity (`0..=max_idx`) only, NOT range-vs-`n`, so a contiguous slot set
+    // whose max index exceeds the descriptor's placeholder count `n` would reach
+    // the per-slot path-override loop below and OOB-write `new_paths[idx]` (panic).
+    // This mirrors `bundle.rs`'s gate byte-for-byte (iterating `args.slot` here vs
+    // bundle.rs's `slots`); it catches the over-`n` panic AND the under-`n` case.
+    // S-VERIFY (PLAN_constellation_bughunt_fix_program.md §292; FOLLOWUP
+    // `verify-bundle-bundle-rs-descriptor-mode-dedup`): this duplicates
+    // bundle.rs:1373-1388 — fold both into the shared descriptor-mode binding fn
+    // when that dedup lands (one gate, both callers).
+    if args
+        .slot
+        .iter()
+        .map(|s| s.index as usize + 1)
+        .max()
+        .unwrap_or(0)
+        != n
+    {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "descriptor has n={n} placeholders but --slot vec covers {} slots",
+            args.slot
+                .iter()
+                .map(|s| s.index as usize + 1)
+                .max()
+                .unwrap_or(0)
+        )));
+    }
+
     // v0.19.0 SPEC §4.12 — canonicity-aware verify-bundle round-trip.
     // Mirror bundle.rs's descriptor-mode binding logic so default-inferred
     // bundles round-trip correctly. Without this, verify-bundle would

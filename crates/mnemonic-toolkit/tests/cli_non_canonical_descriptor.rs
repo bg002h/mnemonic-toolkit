@@ -305,3 +305,109 @@ fn canonical_descriptor_refuses_phrase_plus_path_subkey_pair() {
             "slot @0 has both secret-bearing input and watch-only input; pick one per slot.",
         ));
 }
+
+// ============================================================================
+// cycle-11b L24 — verify-bundle descriptor-mode OOB-panic → typed DescriptorParse
+// ============================================================================
+
+/// cycle-11b L24 (E-panic-dos): `verify-bundle --descriptor` in non-canonical
+/// mode applied `--slot @N.path` overrides via an unguarded `new_paths[idx]`
+/// write (verify_bundle.rs override loop) — `validate_slot_set` only enforces
+/// contiguity (`0..=max_idx`), NOT range-vs-`n`. A contiguous slot set whose max
+/// index exceeds the descriptor's placeholder count `n` therefore passed
+/// validation and panicked (index out of bounds) on the OOB write. `bundle.rs`
+/// has the `max(idx+1) != n` exact-coverage gate; verify_bundle.rs omitted it
+/// (hand-copied descriptor-mode binding guard-drift). Fix: mirror the gate →
+/// clean `DescriptorParse` (exit 2).
+///
+/// M2 fixture preconditions (so the override loop genuinely reaches the OOB
+/// write — without these the RED passes for the wrong reason):
+///  1. The descriptor MUST be genuinely NON-CANONICAL so control enters the
+///     `is_non_canonical` override block. `wsh(andor(pkh(@0),after(12000000),
+///     pk(@1)))` is a general-policy wrapper with no canonical_origin mapping
+///     (asserted via the `info: non-canonical descriptor` notice the bundle/
+///     verify path emits for it). n = 2 (placeholders @0, @1).
+///  2. `@2` MUST carry the LEGAL phrase-bearing set `[Phrase, Path]` — TWO
+///     `--slot @2.*` flags. `@2.path=…` ALONE yields `{Path}`, which (a) is
+///     rejected by `validate_slot_set` FIRST (no bare-`[Path]` legal-set arm) so
+///     the override loop is never reached, and (b) even past validation would
+///     hit the `subkeys.contains(Phrase|Seedqr|Ms1)`-else-`continue` filter. The
+///     co-located `@2.phrase` makes `@2 = {Phrase, Path}` (a legal set), so it
+///     clears both gates and reaches the unguarded `new_paths[2]` write.
+#[test]
+fn verify_bundle_descriptor_slot_over_n_rejects_not_panics() {
+    // n = 2 placeholders (@0, @1); @2 over-runs new_paths (len 2).
+    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            // @2 = {Phrase, Path}: legal phrase-bearing set, contiguous index 2.
+            "--slot",
+            &format!("@2.phrase={BIP39_TEST_3}"),
+            "--slot",
+            "@2.path=m/84'/0'/0'",
+            // verify-bundle requires --mk1/--md1 (clap). Empty sentinels pass the
+            // per-flag HRP gate (SPEC §5.8 exemption) and fail md1 reassembly, so
+            // control falls through to the descriptor-mode binding (and the gate)
+            // BEFORE any expected-wire comparison.
+            "--mk1",
+            "",
+            "--md1",
+            "",
+        ])
+        .assert()
+        // Post-fix: clean typed DescriptorParse (exit 2), NOT a panic.
+        .code(2)
+        .stderr(
+            predicate::str::contains("descriptor has n=2 placeholders but --slot vec covers 3 slots")
+                .or(predicate::str::contains("n=2").and(predicate::str::contains("3 slots"))),
+        );
+}
+
+/// cycle-11b L24 REGRESSION — the gate is exact-coverage (`!= n`), so the
+/// in-range path-override flow (here `@0`/`@1` path overrides, max idx+1 == n)
+/// MUST NOT over-fire. The descriptor is the same non-canonical 2-key wrapper;
+/// both slots carry `[Phrase, Path]`. The gate passes (covers exactly 2 of n=2),
+/// the override loop runs, and verify-bundle proceeds past it (it then fails
+/// downstream for lack of expected `--md1`/`--mk1` wire, NOT with the n/slot
+/// mismatch). Assert the n/slot DescriptorParse message does NOT appear.
+#[test]
+fn verify_bundle_descriptor_exact_coverage_path_override_does_not_over_fire() {
+    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-bundle",
+            "--descriptor",
+            descriptor,
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/84'/0'/0'",
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--slot",
+            "@1.path=m/84'/0'/1'",
+            "--mk1",
+            "",
+            "--md1",
+            "",
+        ])
+        .assert();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("placeholders but --slot vec covers"),
+        "exact-coverage path-override over-fired the n/slot gate; got:\n{stderr}"
+    );
+}
