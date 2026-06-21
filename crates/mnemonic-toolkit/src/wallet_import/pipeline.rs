@@ -43,18 +43,30 @@ fn key_regex() -> &'static Regex {
 }
 
 /// True if the descriptor contains ANY cosigner-key token — an extended key
-/// (xpub-family, with OR without a `[fp/path]` origin) or a 66-hex compressed
-/// pubkey. Used by `classify_descriptor_form`'s `(false,false)` arm to tell a
-/// KEY-but-origin-less descriptor (→ "must carry a key origin") from a truly
+/// (xpub-family, with OR without a `[fp/path]` origin), a 66-hex compressed
+/// pubkey, or (cycle-11b L25) a 64-hex x-only (BIP-340/341) taproot pubkey in a
+/// KEY position. Used by `classify_descriptor_form`'s `(false,false)` arm to tell
+/// a KEY-but-origin-less descriptor (→ "must carry a key origin") from a truly
 /// KEYLESS one (hashlock/timelock only → no cosigner key to engrave → routed to
-/// `export-wallet`). Deliberately does NOT match bare 64-hex, which is ambiguous
-/// (an x-only taproot pubkey vs a `sha256()`/`hash256()` hash literal): a keyless
-/// sha256-hashlock descriptor is therefore correctly treated as keyless.
+/// `export-wallet`).
+///
+/// A bare 64-hex token is genuinely ambiguous (an x-only taproot pubkey vs a
+/// `sha256()`/`hash256()` hash literal), so it is matched ONLY when it sits in a
+/// taproot KEY position — directly after `tr(` (the internal key) or as the
+/// argument of a `pk(` / `pk_k(` / `pk_h(` key fragment — NOT as a bare token.
+/// `sha256(`/`hash256(`/`ripemd160(`/`hash160(` 64-hex arguments are therefore
+/// still correctly treated as keyless. The x-only anchor is ADDITIVE: the
+/// `\b0[23]…{64}\b` 66-hex compressed-key alternation is unchanged, and a
+/// `pk(02…{64})` compressed key still matches via that alternation (and, on its
+/// first 64 hex, the additive `pk(`-anchor too — harmless, it is a key either
+/// way).
 pub(crate) fn has_any_key_token(s: &str) -> bool {
     static R: OnceLock<Regex> = OnceLock::new();
     R.get_or_init(|| {
-        Regex::new(r"[xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+|\b0[23][0-9a-fA-F]{64}\b")
-            .expect("has_any_key_token is a fixed string literal")
+        Regex::new(
+            r"[xtyzuvYZUV]pub[A-HJ-NP-Za-km-z1-9]+|\b0[23][0-9a-fA-F]{64}\b|(?:tr|pk|pk_k|pk_h)\([0-9a-fA-F]{64}",
+        )
+        .expect("has_any_key_token is a fixed string literal")
     })
     .is_match(s)
 }
@@ -574,6 +586,43 @@ mod tests {
             "wsh(and_v(v:sha256(0000000000000000000000000000000000000000000000000000000000000000),after(800000)))"
         ));
         assert!(!has_any_key_token("wsh(thresh(2,older(144),older(288)))"));
+    }
+
+    // cycle-11b L25 — position-aware x-only detection. A bare 64-hex x-only
+    // (BIP-340/341) taproot key in a KEY position (`tr(<xonly>` internal key, or
+    // `pk(<xonly>)` leaf) was NOT matched by has_any_key_token (which only knew
+    // xpub-family + `02/03`-prefixed 66-hex). So an origin-less `tr(<xonly>,...)`
+    // descriptor routed to the WRONG "keyless script (hashlock/timelock only)"
+    // message instead of the correct "must carry a key origin". Both arms still
+    // Err (the descriptor is rejected either way for lacking origins) — this is a
+    // message-only re-route. FOLLOWUP: import-classify-xonly-position-aware.
+    #[test]
+    fn has_any_key_token_detects_xonly_in_taproot_key_position() {
+        // x-only key directly after `tr(` (taproot internal key).
+        assert!(has_any_key_token(
+            "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0)"
+        ));
+        // x-only key as the argument of `pk(` inside a tapscript leaf.
+        assert!(has_any_key_token(
+            "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,pk(1d1bf2bf6f3e3a0f6d0e7a8c9b2d4e5f60718293a4b5c6d7e8f9012345678abcd))"
+        ));
+    }
+
+    #[test]
+    fn classify_xonly_origin_less_routes_to_must_carry_key_origin() {
+        let err = classify_descriptor_form(
+            "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,pk(1d1bf2bf6f3e3a0f6d0e7a8c9b2d4e5f60718293a4b5c6d7e8f9012345678abcd))",
+        )
+        .unwrap_err();
+        let m = err.message();
+        assert!(
+            m.contains("must carry a key origin"),
+            "x-only origin-less taproot must route to the key-origin message; got: {m}"
+        );
+        assert!(
+            !m.contains("keyless script"),
+            "x-only descriptor must NOT route to the keyless message; got: {m}"
+        );
     }
 
     #[test]
