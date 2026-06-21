@@ -1718,3 +1718,399 @@ fn allow_duplicate_tokens_idempotent() {
         .count();
     assert_eq!(v_count, 1, "banner names the rule once");
 }
+
+// ======================================================================
+// M8 — build-descriptor must REJECT a key that carries its own extra
+// derivation suffix (`…xpub.../5`, `/5/6`, `/0h`, `/<0;1>`, `/*`).
+//
+// The renderer (`ir.rs::with_multipath`) OWNS the `/<0;1>/*` receive/change
+// suffix and blind-concats it onto every key, so a key bringing its own
+// trailing derivation tail was silently rendered to a DEEPER (wrong) subtree
+// (`…/5/<0;1>/*`) and ACCEPTED by `Descriptor::from_str` — a wrong-address
+// funds bug on legitimate-looking input. The fix fails closed: exit 2, no
+// descriptor emitted, no key bytes echoed. (cycle-7 M8; spec/plan §3.1.)
+// ======================================================================
+
+/// A bare, valid account-level xpub WITHOUT an `[origin]` prefix.
+const M8_BARE_XPUB: &str = "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8";
+
+/// A normal `[origin]xpub` account-level key (the legitimate, must-still-build
+/// form — `K1`'s shape: a bracketed origin path + bare xpub body, zero `/`
+/// after the `]`).
+const M8_ORIGIN_XPUB: &str = K1;
+
+/// T1 — a single-sig **preset** (`simple-timelocked-inheritance`) whose `--key`
+/// carries a trailing `/5` derivation tail → exit 2, `--json` diagnostic
+/// `kind=schema_field`, message names the extra-derivation suffix, the key body
+/// is NEVER echoed (T6 no-leak folded in), and NO descriptor is emitted.
+#[test]
+fn m8_preset_single_sig_extra_suffix_refused_exit2() {
+    let suffixed = format!("{M8_ORIGIN_XPUB}/5");
+    // human → stderr, exit 2, no key leak, no descriptor on stdout
+    let out = bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "simple-timelocked-inheritance",
+            "--key",
+            &suffixed,
+            "--recovery-key",
+            K2,
+            "--older",
+            "65535",
+            "--format",
+            "descriptor",
+        ])
+        .assert()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stderr.contains("schema_field"),
+        "diagnostic kind named in human stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("extra derivation path"),
+        "message names the extra-derivation suffix: {stderr}"
+    );
+    // T6 (no-leak): the xpub body never appears in any output.
+    assert!(
+        !stderr.contains(M8_ORIGIN_XPUB),
+        "M8 refusal must not echo the key body to stderr: {stderr}"
+    );
+    assert!(
+        !stdout.contains(M8_ORIGIN_XPUB),
+        "M8 refusal must not echo the key body to stdout"
+    );
+    assert!(
+        stdout.is_empty(),
+        "no descriptor emitted for an extra-suffix key"
+    );
+
+    // --json → diagnostics on stdout, exit 2, kind=schema_field, null descriptor.
+    let out = bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "simple-timelocked-inheritance",
+            "--key",
+            &suffixed,
+            "--recovery-key",
+            K2,
+            "--older",
+            "65535",
+            "--json",
+        ])
+        .assert()
+        .code(2);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        !stdout.contains(M8_ORIGIN_XPUB),
+        "M8 refusal must not echo the key body to --json: {stdout}"
+    );
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v["descriptor"].is_null(), "no descriptor in failure envelope");
+    let diags = v["diagnostics"].as_array().unwrap();
+    assert!(
+        diags.iter().any(|d| d["kind"] == "schema_field"
+            && d["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("extra derivation path")),
+        "a schema_field diagnostic names the extra-derivation suffix: {stdout}"
+    );
+}
+
+/// T1b — per-archetype flag-provenance of the M8 refusal (plan-R0 I-1). Because
+/// the M8 reject reuses `SchemaField` kind, the archetype provenance table
+/// annotates the `flag` field per its real behavior. Single-key archetypes
+/// (e.g. `simple-timelocked-inheritance`) annotate `--key`; quorum archetypes
+/// (e.g. `decaying-multisig`) annotate `--threshold` (the
+/// `(quorum-node, Some(SchemaField), THRESHOLD)` provenance override wins the
+/// equal-prefix tiebreak over the catch-all `--key`).
+///
+/// This is a provenance-system artifact, NOT a defect: the diagnostic `path`
+/// and `message` still name the offending key, and exit-2 fires regardless of
+/// the `flag` annotation. Assert BOTH archetype classes.
+#[test]
+fn m8_preset_flag_provenance_per_archetype() {
+    // (a) single-key archetype → flag = --key
+    let suffixed = format!("{M8_ORIGIN_XPUB}/5");
+    let out = bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "simple-timelocked-inheritance",
+            "--key",
+            &suffixed,
+            "--recovery-key",
+            K2,
+            "--older",
+            "65535",
+            "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let single = v["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["kind"] == "schema_field")
+        .expect("schema_field diagnostic present (single-key)");
+    assert_eq!(
+        single["flag"], "--key",
+        "single-key archetype M8 refusal annotates flag=--key: {single}"
+    );
+
+    // (b) quorum archetype → flag = --threshold
+    let suffixed2 = format!("{M8_ORIGIN_XPUB}/5");
+    let out = bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            &suffixed2,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "1000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K5,
+            "--after",
+            "4000000",
+            "--json",
+        ])
+        .assert()
+        .code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let quorum = v["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["kind"] == "schema_field")
+        .expect("schema_field diagnostic present (quorum)");
+    assert_eq!(
+        quorum["flag"], "--threshold",
+        "quorum archetype M8 refusal annotates flag=--threshold: {quorum}"
+    );
+    // The path + message still name the offending key node regardless of flag.
+    assert!(
+        quorum["node_path"]
+            .as_str()
+            .unwrap()
+            .contains("keys["),
+        "quorum diagnostic path addresses the offending multi key: {quorum}"
+    );
+}
+
+/// T2 — the same single guard covers the `--spec` JSON intake path: a `Pk` key
+/// with `xpub.../5` AND a `Multi.keys[i]` with `xpub.../5` → exit 2,
+/// `schema_field`. For the Multi case pin the diagnostic `node_path` =
+/// `root.multi.keys[0]` (Minor-2 path-fidelity).
+#[test]
+fn m8_spec_intake_pk_and_multi_extra_suffix_refused_exit2() {
+    let suffixed = format!("{M8_BARE_XPUB}/5");
+
+    // (a) Pk
+    let spec = format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{{"pk":"{suffixed}"}}}}"#);
+    let out = bin()
+        .args(["build-descriptor", "--network", "mainnet", "--json"])
+        .write_stdin(spec)
+        .assert()
+        .code(2);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        !stdout.contains(M8_BARE_XPUB),
+        "M8 spec/Pk refusal must not echo the key body: {stdout}"
+    );
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v["descriptor"].is_null());
+    let diags = v["diagnostics"].as_array().unwrap();
+    assert!(
+        diags.iter().any(|d| d["kind"] == "schema_field"
+            && d["node_path"] == "root"
+            && d["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("extra derivation path")),
+        "Pk extra-suffix → schema_field at node_path=root: {stdout}"
+    );
+
+    // (b) Multi.keys[0] — pin node_path = root.multi.keys[0]
+    let spec = format!(
+        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"multi":{{"k":2,"keys":["{suffixed}","{M8_BARE_XPUB}"]}}}}}}"#
+    );
+    let out = bin()
+        .args(["build-descriptor", "--network", "mainnet", "--json"])
+        .write_stdin(spec)
+        .assert()
+        .code(2);
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let v: Value = serde_json::from_str(&stdout).unwrap();
+    assert!(v["descriptor"].is_null());
+    let diags = v["diagnostics"].as_array().unwrap();
+    assert!(
+        diags.iter().any(|d| d["kind"] == "schema_field"
+            && d["node_path"] == "root.multi.keys[0]"
+            && d["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("extra derivation path")),
+        "Multi key[0] extra-suffix → schema_field at node_path=root.multi.keys[0]: {stdout}"
+    );
+}
+
+/// T3 (positive control / over-rejection guard, D16) — a NORMAL account-level
+/// key (bare body, no trailing `/`) STILL BUILDS via BOTH the preset `--key`
+/// path AND the `--spec` JSON path. Guards against over-rejection.
+#[test]
+fn m8_positive_control_normal_key_still_builds_both_paths() {
+    // (a) preset --key (a full single-sig archetype with a bare [origin]xpub)
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "simple-timelocked-inheritance",
+            "--key",
+            M8_ORIGIN_XPUB,
+            "--recovery-key",
+            K2,
+            "--older",
+            "65535",
+            "--format",
+            "descriptor",
+        ])
+        .assert()
+        .success();
+
+    // (b) --spec JSON Pk with a bare xpub body
+    let spec = format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{{"pk":"{M8_BARE_XPUB}"}}}}"#);
+    bin()
+        .args([
+            "build-descriptor",
+            "--network",
+            "mainnet",
+            "--format",
+            "descriptor",
+        ])
+        .write_stdin(spec)
+        .assert()
+        .success();
+
+    // (c) --spec JSON Multi with bare xpub bodies
+    let spec = format!(
+        r#"{{"schema_version":1,"wrapper":"wsh","root":{{"multi":{{"k":2,"keys":["{M8_BARE_XPUB}","{}"]}}}}}}"#,
+        "xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB"
+    );
+    bin()
+        .args([
+            "build-descriptor",
+            "--network",
+            "mainnet",
+            "--format",
+            "descriptor",
+        ])
+        .write_stdin(spec)
+        .assert()
+        .success();
+}
+
+/// T4 (asymmetry pin) — a key ending in `*` (`xpub.../*`) is STILL refused
+/// (exit 2). Today it is caught at step-2 (`InvalidWildcardInDerivationPath`);
+/// after the fix it is caught at step-1 by the new suffix guard. Tolerant of
+/// WHICH step refuses — only the exit-2 refusal is pinned.
+#[test]
+fn m8_trailing_wildcard_still_refused_exit2() {
+    let suffixed = format!("{M8_BARE_XPUB}/*");
+    let spec = format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{{"pk":"{suffixed}"}}}}"#);
+    bin()
+        .args(["build-descriptor", "--network", "mainnet"])
+        .write_stdin(spec)
+        .assert()
+        .code(2);
+}
+
+/// T5 (multi-segment + hardened) — any trailing path tail is refused:
+/// `xpub.../5/6` (two fixed indices) and `xpub.../0h` (a hardened index).
+#[test]
+fn m8_multi_segment_and_hardened_suffix_refused_exit2() {
+    for tail in ["/5/6", "/0h"] {
+        let suffixed = format!("{M8_BARE_XPUB}{tail}");
+        let spec =
+            format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{{"pk":"{suffixed}"}}}}"#);
+        let out = bin()
+            .args(["build-descriptor", "--network", "mainnet", "--json"])
+            .write_stdin(spec)
+            .assert()
+            .code(2);
+        let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+        assert!(v["descriptor"].is_null(), "no descriptor for tail {tail}");
+        let diags = v["diagnostics"].as_array().unwrap();
+        assert!(
+            diags
+                .iter()
+                .any(|d| d["kind"] == "schema_field"
+                    && d["message"]
+                        .as_str()
+                        .unwrap_or("")
+                        .contains("extra derivation path")),
+            "tail {tail} → schema_field extra-derivation refusal"
+        );
+    }
+}
+
+/// T5b (recursion coverage) — an extra-suffix key NESTED under a combinator
+/// (`and_v` / `thresh` / `andor`), reached via the `child_paths` recursion, is
+/// still refused (exit 2). Pins that the guard fires at arbitrary depth, not
+/// just at the root.
+#[test]
+fn m8_nested_extra_suffix_refused_exit2() {
+    let suffixed = format!("{M8_BARE_XPUB}/5");
+    // and_v[ pk(suffixed) , older(144) ] — the suffixed key is a deep child.
+    let cases = [
+        format!(
+            r#"{{"schema_version":1,"wrapper":"wsh","root":{{"and_v":[{{"pk":"{suffixed}"}},{{"older":144}}]}}}}"#
+        ),
+        // andor[ pk(K1) , pk(suffixed) , older(144) ] — suffix in the THEN arm.
+        format!(
+            r#"{{"schema_version":1,"wrapper":"wsh","root":{{"andor":[{{"pk":"{M8_BARE_XPUB}"}},{{"pk":"{suffixed}"}},{{"older":144}}]}}}}"#
+        ),
+        // thresh containing a suffixed multi key, deeply nested.
+        format!(
+            r#"{{"schema_version":1,"wrapper":"wsh","root":{{"and_v":[{{"thresh":{{"k":1,"subs":[{{"pk":"{suffixed}"}}]}}}},{{"older":144}}]}}}}"#
+        ),
+    ];
+    for spec in cases {
+        let out = bin()
+            .args(["build-descriptor", "--network", "mainnet", "--json"])
+            .write_stdin(spec.clone())
+            .assert()
+            .code(2);
+        let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+        assert!(
+            v["descriptor"].is_null(),
+            "no descriptor for nested suffix: {spec}"
+        );
+        let diags = v["diagnostics"].as_array().unwrap();
+        assert!(
+            diags.iter().any(|d| d["kind"] == "schema_field"
+                && d["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("extra derivation path")),
+            "nested extra-suffix → schema_field refusal: {spec}"
+        );
+    }
+}

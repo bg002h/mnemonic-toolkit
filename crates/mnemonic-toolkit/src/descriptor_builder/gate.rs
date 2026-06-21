@@ -356,6 +356,26 @@ fn check_secret_key(key: &str, path: &str, kind: &str, out: &mut Vec<Diagnostic>
             ),
             flag: None,
         });
+    } else if key_part.contains('/') {
+        // M8 funds-safety: the renderer (`ir.rs::with_multipath`) OWNS the
+        // `/<0;1>/*` receive/change/index suffix and blind-concats it onto every
+        // key, so a key carrying its OWN trailing derivation tail (`…/5`,
+        // `…/5/6`, `…/0h`, `…/<0;1>`, `…/*`) would be silently rendered to a
+        // DEEPER (wrong) subtree (`…/5/<0;1>/*`) and accepted by
+        // `Descriptor::from_str` — a wrong-address bug. After the `[origin]`
+        // strip above, a legitimate account-level key's body has ZERO `/` (the
+        // only legitimate pre-key `/`-bearing token, the `[origin]` path, lives
+        // INSIDE the brackets and was stripped), so ANY `/` is a smuggled
+        // derivation tail. Fail closed (NEVER echo the key). REUSE `SchemaField`
+        // via `field_diag` → zero `--json` wire-shape delta. (Ordered AFTER the
+        // xprv screen so a key that is both an xprv AND suffixed never
+        // double-reports — the secret-leak refusal takes precedence.)
+        out.push(field_diag(
+            path,
+            format!(
+                "{kind} key carries an extra derivation path; build-descriptor accepts only a bare account-level key ([fp/path]xpub…) — the builder appends the /<0;1>/* receive/change suffix itself"
+            ),
+        ));
     }
 }
 
