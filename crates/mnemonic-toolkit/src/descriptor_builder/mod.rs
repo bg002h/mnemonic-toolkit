@@ -63,7 +63,7 @@ mod fixtures_test {
     fn decaying_multisig() {
         check(
             include_str!("../../tests/fixtures/descriptor_builder/decaying-multisig.json"),
-            "wsh(andor(multi(2,A,B),older(1000),andor(multi(2,C,D),older(2000),and_v(v:pk(E),after(500000)))))",
+            "wsh(andor(multi(2,A,B),older(1000),andor(multi(2,C,D),older(2000),and_v(v:pk(E),after(4000000)))))",
         );
     }
 

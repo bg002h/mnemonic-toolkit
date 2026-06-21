@@ -16,7 +16,7 @@
         { "older": 2000 },
         { "and_v": [
           { "wrap": { "w": "v", "sub": { "pk": "[55555555/48h/0h/0h/2h]xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw" } } },
-          { "after": 500000 }
+          { "after": 4000000 }
         ]}
       ]}
     ]

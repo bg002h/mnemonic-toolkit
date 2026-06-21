@@ -79,7 +79,7 @@ const ARCHETYPES: &[Archetype] = &[
             "--final-key",
             K5,
             "--after",
-            "500000",
+            "4000000",
         ],
     },
     Archetype {
@@ -568,12 +568,236 @@ fn preset_decay_ordering_violation_exit_2() {
             "--final-key",
             K5,
             "--after",
-            "500000",
+            "4000000",
         ])
         .assert()
         .code(2)
         .stderr(predicates::str::contains("--recovery-older"))
         .stderr(predicates::str::contains("--older"));
+}
+
+/// cycle-6 D-decay-rel (funds-loss): a 512-second-unit `--recovery-older` whose
+/// raw value exceeds a block-height `--older` passes the old raw `<=` compare but
+/// actually unlocks the recovery tier FIRST. `--older 145` (≈24h, blocks) +
+/// `--recovery-older 4194305` (0x40_0001 = 1×512s ≈ 8.5min) is the recon repro;
+/// the two operands are in different BIP-68 units and cannot be ordered offline →
+/// REFUSE fail-closed. Accepted (exit 0) before the fix.
+#[test]
+fn preset_decay_cross_unit_refused_exit_2() {
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "145",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "4194305",
+            "--final-key",
+            K5,
+            "--after",
+            "4000000",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("--older"))
+        .stderr(predicates::str::contains("--recovery-older"))
+        .stderr(predicates::str::contains("different BIP-68 timelock units"));
+}
+
+/// cycle-6 D-decay-rel positive control: same-unit, strictly-ordered (`--older
+/// 1000` < `--recovery-older 2000`, both blocks) still builds (exit 0). This is
+/// the canon shape; guards against over-rejecting a legitimate same-unit wallet.
+#[test]
+fn preset_decay_same_unit_ordered_builds() {
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "1000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K5,
+            "--after",
+            "4000000",
+        ])
+        .assert()
+        .success();
+}
+
+/// cycle-6 D-decay-rel positive control: both tiers 512-second units, strictly
+/// ordered (`--older 4194305` = 0x40_0001 < `--recovery-older 4194306` = 0x40_0002)
+/// → same unit, value 1 < 2 → builds. A consistent cross-unit-free decay ladder
+/// is accepted (R1: refuse only MIXED units, not the 512s axis itself).
+#[test]
+fn preset_decay_same_unit_both_512s_builds() {
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "4194305",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "4194306",
+            "--final-key",
+            K5,
+            "--after",
+            "4000000",
+        ])
+        .assert()
+        .success();
+}
+
+/// cycle-6 D-decay-abs (funds-loss): an absolute `--after 500000` is a long-past
+/// mainnet block height (< ABS_HEIGHT_PAST_FLOOR = 900_000) → the final-key tier
+/// is spendable immediately and the decay ladder collapses to its weakest leaf →
+/// REFUSE fail-closed. Accepted (exit 0) before the fix. Canon args otherwise.
+#[test]
+fn preset_decay_past_after_height_refused_exit_2() {
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "1000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K5,
+            "--after",
+            "500000",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("--after"))
+        .stderr(predicates::str::contains("already in the past"));
+}
+
+/// cycle-6 D-decay-abs positive control: `--after 4000000` is a FUTURE block
+/// height (4_000_000 > ABS_HEIGHT_PAST_FLOOR = 900_000, and < 500_000_000 ⇒
+/// height-classified) → builds. The static floor is monotone-safe: it never
+/// refuses a legitimately-future locktime.
+#[test]
+fn preset_decay_future_after_height_builds() {
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "1000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "2000",
+            "--final-key",
+            K5,
+            "--after",
+            "4000000",
+        ])
+        .assert()
+        .success();
+}
+
+/// cycle-6 D-decay-rel regression guard: the same-unit mis-order
+/// (`--older 2000` > `--recovery-older 1000`, both blocks) is ALREADY refused
+/// today (raw `1000 <= 2000`); under the unit-aware rewrite it MUST stay exit 2
+/// (`v_r=1000 <= v_p=2000`, same unit) with the "progressively later" message.
+#[test]
+fn preset_decay_same_unit_mis_ordered_stays_exit_2() {
+    bin()
+        .args([
+            "build-descriptor",
+            "--archetype",
+            "decaying-multisig",
+            "--key",
+            K1,
+            "--key",
+            K2,
+            "--threshold",
+            "2",
+            "--older",
+            "2000",
+            "--recovery-key",
+            K3,
+            "--recovery-key",
+            K4,
+            "--recovery-threshold",
+            "2",
+            "--recovery-older",
+            "1000",
+            "--final-key",
+            K5,
+            "--after",
+            "4000000",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("--recovery-older"))
+        .stderr(predicates::str::contains("progressively later"));
 }
 
 /// Gate flow-through (presets SPEC §3.2/§7): the producer does NOT duplicate
@@ -680,7 +904,7 @@ fn preset_key_order_is_preserved_and_load_bearing() {
 fn preset_negative_discrimination_mutated_param_breaks_golden() {
     let mutations: &[(&str, &str, &str)] = &[
         ("simple-timelocked-inheritance", "--older", "65534"),
-        ("decaying-multisig", "--after", "500001"),
+        ("decaying-multisig", "--after", "4000001"),
         ("kofn-recovery", "--threshold", "3"),
         ("tiered-recovery", "--older", "4033"),
         ("hashlock-gated", "--older", "145"),
@@ -1017,7 +1241,7 @@ fn cross_branch_duplicates_carry_no_flag() {
             "--final-key",
             K3,
             "--after",
-            "500000",
+            "4000000",
             "--json",
         ])
         .assert()

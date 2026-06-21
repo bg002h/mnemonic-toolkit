@@ -30,7 +30,7 @@ pub struct ArchetypeParams {
 /// Parameter-kind METADATA for the `--spec-schema` archetypes section + the
 /// manual — no producer check keys off it (hex/timelock validation is the
 /// gate's, SPEC §3.2). `AbsoluteLocktime` is deliberately locktime-neutral:
-/// the decaying-multisig canon uses a block HEIGHT `after(500000)`, not a
+/// the decaying-multisig canon uses a block HEIGHT `after(4000000)`, not a
 /// unix time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParamKind {
@@ -303,13 +303,66 @@ pub fn validate_params(
     // sane, yet inversion silently defeats the archetype (SPEC §3.1.3); a user
     // who genuinely wants inverted timelocks has `--spec`.
     if def.id == "decaying-multisig" {
+        // D-decay-rel (cycle-6): the tier-1→tier-2 relative-timelock ordering
+        // must be checked in a COMMON BIP-68 unit. `older_unit_value` classifies
+        // each clean operand's unit (bit-22) + low-16 value; a masked operand is
+        // refused independently downstream by the gate (`gate.rs` Older arm), so
+        // no cleanliness precondition is needed here — we compare unit+value only.
         if let (Some(older), Some(recovery_older)) = (params.older, params.recovery_older) {
-            if recovery_older <= older {
+            let (u_p, v_p) = crate::timelock_advisory::older_unit_value(older);
+            let (u_r, v_r) = crate::timelock_advisory::older_unit_value(recovery_older);
+            if u_p != u_r {
+                // CROSS-UNIT — a block delay and a 512-second delay cannot be
+                // totally ordered without baking in a block-interval assumption.
+                // Refuse fail-closed (R1); `--spec` is the escape hatch.
+                diags.push(param_diag(
+                    RECOVERY_OLDER,
+                    format!(
+                        "decaying-multisig --older ({older}) and --recovery-older \
+                         ({recovery_older}) use different BIP-68 timelock units \
+                         (one block-height, one 512-second) and cannot be ordered; \
+                         express both in the same unit, or author the policy with --spec"
+                    ),
+                ));
+            } else if v_r <= v_p {
+                // SAME-UNIT but not strictly later — the unit-aware generalization
+                // of the former raw `recovery_older <= older` compare (keeps the
+                // 2000/2000-blocks negative test GREEN: v_r == v_p ⇒ refused).
                 diags.push(param_diag(
                     RECOVERY_OLDER,
                     format!(
                         "decaying-multisig requires --recovery-older ({recovery_older}) > \
                          --older ({older}): tiers must unlock progressively later"
+                    ),
+                ));
+            }
+        }
+
+        // D-decay-abs (cycle-6): tier-3's absolute `after(T)` must be FUTURE.
+        // `after` is absolute (a wall-clock/height moment) and the `older` tiers
+        // are relative (a delay per UTXO), so they live in different reference
+        // frames and cannot be totally ordered offline — the decidable invariant
+        // is future-ness. Classify via the BIP-65 500_000_000 height/time split,
+        // refuse fail-closed below the conservative static past-floors. STRICT `<`
+        // (monotone-safe: only false-NEGATIVE on a borderline-recent locktime,
+        // never false-POSITIVE on a legit future one). Future values are silent.
+        if let Some(after) = params.after {
+            let is_height = after < 500_000_000;
+            let past = if is_height {
+                after < crate::timelock_advisory::ABS_HEIGHT_PAST_FLOOR
+            } else {
+                after < crate::timelock_advisory::ABS_TIME_PAST_FLOOR
+            };
+            if past {
+                diags.push(param_diag(
+                    AFTER,
+                    format!(
+                        "decaying-multisig --after ({after}) encodes an absolute locktime \
+                         that is already in the past ({}), so the final-key tier would be \
+                         spendable immediately and the decay ladder collapses; use a future \
+                         {} value, or author the policy with --spec",
+                        if is_height { "block height" } else { "Unix time" },
+                        if is_height { "block height" } else { "Unix timestamp" },
                     ),
                 ));
             }
@@ -539,7 +592,7 @@ mod tests {
                 recovery_threshold: Some(2),
                 recovery_older: Some(2000),
                 final_key: Some(K5.to_string()),
-                after: Some(500000),
+                after: Some(4000000),
                 ..Default::default()
             },
             "hashlock-gated" => ArchetypeParams {
