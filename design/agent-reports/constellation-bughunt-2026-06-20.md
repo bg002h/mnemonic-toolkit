@@ -173,7 +173,8 @@ scratch next cycle.
   `unreachable!` only as the genuine future-variant guard.
 - **spec:** BIP-39; ms-codec `decode.rs:88-94`.
 
-### - [ ] H6 · md1 single-string encode/decode run outside the BCH(93,80,8) regular-code domain (no length cap)
+### - [x] H6 · md1 single-string encode/decode run outside the BCH(93,80,8) regular-code domain (no length cap)
+<!-- FIXED cycle-4 (md-codec v0.38.0 @836faf8, crates.io; toolkit v0.62.1 @0b39709c pins it) — encode-side 80-DATA-symbol cap at wrap_payload (Error::PayloadTooLongForSingleString) + decode-side 93-CODEWORD caps (M4 ChunkSymbolCountOutOfRange + I1 StringSymbolCountOutOfRange). Out-of-domain md1 now fail-closed rejected on encode/repair/inspect/restore. FOLLOWUP encode-no-regular-code-length-cap. -->
 - **repo/class:** md-codec · **C-corrupt-accept**
 - **id:** `encode-no-regular-code-length-cap` (encode side) — companion to M4 (decode side)
 - **location(s):** `md-codec/src/codex32.rs:67` (`wrap_payload`); `md-codec/src/encode.rs:136`
@@ -259,7 +260,8 @@ scratch next cycle.
   gate is sufficient.
 - **spec:** BIP-388 multipath substitution; `<a;b>` semantics; md-codec `validate.rs` D5(b).
 
-### - [ ] M4 · `decode_regular_errors`/`chien_search` accept `len > 93` → aliased error positions (decode-side companion to H6)
+### - [x] M4 · `decode_regular_errors`/`chien_search` accept `len > 93` → aliased error positions (decode-side companion to H6)
+<!-- FIXED cycle-4 (md-codec v0.38.0 @836faf8, crates.io) — typed Error::ChunkSymbolCountOutOfRange at the decode_with_correction boundary + None-floors at decode_regular_errors/chien_search tops (reject len>93 before the unbounded loop). Paired-with-but-independent-of H6 (encode-cap vs decode-cap). FOLLOWUP chien-search-unbounded-length. -->
 - **repo/class:** md-codec · **C-corrupt-accept**
 - **id:** `chien-search-unbounded-length`
 - **location(s):** `md-codec/src/bch_decode.rs:284` (`chien_search`), `:403` (`decode_regular_errors`)
@@ -471,7 +473,8 @@ scratch next cycle.
 
 ## Confirmed — MEDIUM (Wave 2)
 
-### - [ ] M6 · `combine_shares()` silently reconstructs a WRONG secret from an inconsistent same-id share set
+### - [x] M6 · `combine_shares()` silently reconstructs a WRONG secret from an inconsistent same-id share set
+<!-- FIXED cycle-4 (ms-codec v0.5.0 @44ac71f, crates.io; toolkit v0.62.1 @0b39709c pins it) — combine_shares now truncates to k, recovers from the first k shares, and verifies every EXTRA supplied share lies on that polynomial via interpolate_at(k_set, idx) → Error::InconsistentShareSet. Beyond-BIP-93 defense-in-depth; valid exactly-k + all-consistent combines bit-identical. ms-cli + toolkit exit-2 arms (silent lockstep, explicit). Exactly-k mixed pair intrinsically undetectable (out of scope per BIP-93). FOLLOWUP w2-ms-slip39-gf256-1. -->
 - **repo/class:** ms-codec · **C-corrupt-accept** · `w2-ms-slip39-gf256-1`
 - **location(s):** `ms-codec/src/shares.rs:186-270` (`combine_shares`; `interpolate_at` at `:263`);
   `ms-codec/src/envelope.rs:192-220` (`dispatch_payload` — only probabilistic backstop)
