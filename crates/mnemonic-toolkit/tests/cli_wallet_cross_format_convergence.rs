@@ -451,21 +451,46 @@ fn c4_unsorted_multi_order_preservation() {
         );
     }
 
-    // Probe coldcard-multisig: its importer always builds sortedmulti
-    // (coldcard_multisig.rs:663), so an unsorted multi is expected to come back
-    // as SortedMulti — a documented by-design coercion, recorded not hard-failed.
-    let cc = export_then_import_bundle(
+    // Probe coldcard-multisig: its file format is BIP-67 sortedmulti-only (no
+    // field to express literal `multi(...)` key order), so an unsorted
+    // `wsh-multi` export would silently coerce to sortedmulti → different
+    // witnessScript/address. As of cycle-2 H10 the export now REFUSES (exit 2,
+    // typed `ExportWalletUnsortedMultisigUnsupported`) rather than emitting the
+    // silently-reordered file. This was previously a documented by-design
+    // coercion; it is now a funds-safety refusal.
+    let mut probe: Vec<String> = [
+        "export-wallet",
+        "--format",
         "coldcard-multisig",
-        &export_multisig("coldcard-multisig", "wsh-multi", &cosigners),
+        "--template",
+        "wsh-multi",
+        "--threshold",
+        "2",
+        "--multisig-path-family",
+        "bip48",
+        "--network",
+        "mainnet",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    for (i, (xpub, fp)) in cosigners.iter().enumerate() {
+        probe.push("--slot".into());
+        probe.push(format!("@{i}.xpub={xpub}"));
+        probe.push("--slot".into());
+        probe.push(format!("@{i}.fingerprint={fp}"));
+        probe.push("--slot".into());
+        probe.push(format!("@{i}.path=m/48'/0'/0'/2'"));
+    }
+    let (ok, _stdout, stderr) = run(&probe, None);
+    assert!(
+        !ok,
+        "C4 (H10): coldcard-multisig must REFUSE an unsorted wsh-multi (no silent sortedmulti coercion); got success"
     );
-    let cc_tag = key_material(&cc).md1_multi_tag;
-    // Same key SET regardless (sorted or not), but tag may differ:
-    assert_eq!(
-        key_material(&cc).triples,
-        anchor_km.triples,
-        "C4 probe: coldcard preserves the key set"
+    assert!(
+        stderr.contains("UNSORTED multisig") && stderr.contains("sortedmulti-only"),
+        "C4 (H10): refusal must explain the unsorted→sortedmulti hazard; got: {stderr}"
     );
-    eprintln!("C4 coldcard-multisig probe: unsorted wsh(multi) round-trips as multi_tag={cc_tag:?} (Some(\"SortedMulti\") = expected by-design coercion)");
 }
 
 // ===========================================================================
