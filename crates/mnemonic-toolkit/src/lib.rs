@@ -179,6 +179,8 @@ pub mod slot_input;
 #[cfg(fuzzing)]
 pub mod synthesize;
 #[cfg(fuzzing)]
+pub mod taproot_override_classify;
+#[cfg(fuzzing)]
 pub mod template;
 #[cfg(fuzzing)]
 pub mod timelock_advisory;

@@ -30,6 +30,7 @@ mod slip0132;
 mod slot_input;
 mod slot_ms1;
 mod synthesize;
+mod taproot_override_classify;
 mod template;
 mod timelock_advisory;
 mod unrestorable_advisory;

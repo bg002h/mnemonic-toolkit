@@ -113,8 +113,8 @@ pub fn unrestorable_advisories(desc: &md_codec::Descriptor) -> Vec<UnrestorableA
     // the restorable subset (`sortedmulti_a` leaf / non-NUMS trunk / hardened).
     // SAME expression as the narrowed restore guard (`restore.rs`) → exact
     // parity: a restorable `tr(NUMS, multi_a)` override is now SILENT here.
-    if crate::cmd::restore::taproot_override_card(desc)
-        && !crate::cmd::restore::restorable_taproot_override_card(desc)
+    if crate::taproot_override_classify::taproot_override_card(desc)
+        && !crate::taproot_override_classify::restorable_taproot_override_card(desc)
     {
         out.push(UnrestorableAdvisory {
             shape: UnrestorableShape::TaprootUseSiteOverride,
