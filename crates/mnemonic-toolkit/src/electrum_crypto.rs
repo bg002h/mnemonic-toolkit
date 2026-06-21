@@ -342,10 +342,19 @@ pub fn ecies_decrypt_message(
 
     // ECDH: ecdh_point = ephemeral_pubkey × privkey_scalar; compressed (33B).
     let secp = Secp256k1::new();
+    // L23: `Scalar::from_be_bytes` only range-checks `< n`, so a zero scalar
+    // passes the InvalidScalar guard below; reject it explicitly at the input
+    // boundary (mirrors derive_storage_eckey's guard) so the `.expect(...)` on
+    // `mul_tweak` below stays a true invariant assertion — the zero tweak is
+    // `Err(InvalidTweak)` and would otherwise PANIC there.
+    if privkey.iter().all(|&b| b == 0) {
+        return Err(EciesDecryptError::InvalidScalar);
+    }
     let scalar = Scalar::from_be_bytes(*privkey).map_err(|_| EciesDecryptError::InvalidScalar)?;
-    // mul_tweak cannot fail here: the scalar is in [1, n-1] (derive_storage_eckey
-    // rejects zero; reduction guarantees < n), and a valid order-n point times
-    // a nonzero scalar < n is never the identity (prime-order group).
+    // mul_tweak cannot fail here: the scalar is in [1, n-1] (the zero-reject
+    // above + derive_storage_eckey rejecting zero; reduction guarantees < n),
+    // and a valid order-n point times a nonzero scalar < n is never the
+    // identity (prime-order group).
     let shared = ephemeral_pubkey
         .mul_tweak(&secp, &scalar)
         .expect("valid point × nonzero scalar in [1,n-1] is never the identity");
@@ -789,6 +798,24 @@ mod tests {
         assert!(matches!(
             ecies_decrypt_message(BIE1_KAT1, &wrong),
             Err(EciesDecryptError::HmacMismatch)
+        ));
+    }
+
+    /// L23 — a zero private scalar yields a typed `InvalidScalar` error, NOT a
+    /// panic. `Scalar::from_be_bytes` only range-checks `< n`, so a zero scalar
+    /// passes that guard; without an explicit pre-reject it then reaches
+    /// `mul_tweak(...).expect(...)` (the zero tweak is `Err(InvalidTweak)`) and
+    /// PANICS. The fix rejects zero at the input boundary. A valid BIE1 blob is
+    /// reused so the call reaches the scalar step (past the base64/length/magic/
+    /// ephemeral-pubkey gates); only the `privkey` arg is varied to all-zero.
+    /// Latent/not-CLI-reachable today (the sole in-tree caller
+    /// `derive_storage_eckey` already rejects zero); robustness for a future /
+    /// downstream-library caller of this `pub fn`.
+    #[test]
+    fn ecies_decrypt_message_zero_scalar_typed_error_not_panic() {
+        assert!(matches!(
+            ecies_decrypt_message(BIE1_KAT1, &[0u8; 32]),
+            Err(EciesDecryptError::InvalidScalar)
         ));
     }
 
