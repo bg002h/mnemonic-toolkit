@@ -283,6 +283,24 @@ impl CliTemplate {
     }
 }
 
+/// BIP-48 default-origin script-type component for a descriptor whose root
+/// md-codec [`Tag`] is known but whose `--template` is not (the descriptor-mode
+/// default-origin inference path — H12). Maps the root tag to a representative
+/// multisig [`CliTemplate`] and reuses [`CliTemplate::bip48_script_type`] as the
+/// single 1/2/3 mapping authority:
+///   `Tag::Tr` → `3'` (P2TR; a de-facto interop convention adopted by
+///   Sparrow/Coldcard/Jade and what template-mode already emits),
+///   `Tag::Sh` (sh(wsh)) → `1'`, everything else (wsh / indeterminate) → `2'`.
+/// The `2'` default preserves the pre-H12 behavior for the wsh case.
+pub fn bip48_script_type_for_root_tag(tag: &Tag) -> u32 {
+    let representative = match tag {
+        Tag::Tr => CliTemplate::TrSortedMultiA,
+        Tag::Sh => CliTemplate::ShWshSortedMulti,
+        _ => CliTemplate::WshSortedMulti,
+    };
+    representative.bip48_script_type().unwrap_or(2)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

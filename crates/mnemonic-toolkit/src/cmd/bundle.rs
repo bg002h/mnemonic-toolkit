@@ -1440,9 +1440,16 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // `vec.len() == n`. `--slot @N.path=` overrides happen later in the
     // per-slot loop (lines 1018-1029 already handle Xpub slots; Phase 4
     // extends to Phrase slots via the canonical-mode guard above).
+    // H12 — taproot-aware default-origin script-type. The canonicity probe
+    // holds the descriptor's md-codec tree, whose root `Tag` selects the BIP-48
+    // leaf (Tr → 3' P2TR, sh → 1', else wsh 2'). Pre-H12 this was hardcoded 2',
+    // putting taproot cosigner keys in the wrong (un-cosignable) subtree.
+    let default_script_type =
+        crate::template::bip48_script_type_for_root_tag(&canonicity_probe.tree.tag);
     let mut defaulted_indices: Vec<u8> = Vec::new();
     if is_non_canonical {
-        let default_path = compute_default_origin_path(args.network, args.account);
+        let default_path =
+            compute_default_origin_path(args.network, args.account, default_script_type);
         let mut new_paths: Vec<md_codec::origin_path::OriginPath> =
             match &resolved_placeholders.path_decl.paths {
                 PathDeclPaths::Shared(op) => {
@@ -1828,7 +1835,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // v0.19.0 SPEC §4.12.d — stderr info notice on default-path application.
     // Printed BEFORE the bundle to surface the assumption legibly. Suppressed
     // when no `@N` received the default (defaulted_indices is empty).
-    emit_default_path_notice(stderr, &defaulted_indices, args.network, args.account)?;
+    emit_default_path_notice(
+        stderr,
+        &defaulted_indices,
+        args.network,
+        args.account,
+        default_script_type,
+    )?;
 
     // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 1) — surface
     // BIP-68 consensus-masked older() operands on the finalized MdDescriptor
@@ -2201,15 +2214,19 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
 }
 
 /// v0.19.0 SPEC §4.12.b — compute the default origin path
-/// `m/48'/<coin>'/<account>'/2'` for non-canonical descriptors with bare
-/// `@N` placeholders. `<coin>` derives from `--network` (mainnet → `0'`,
-/// testnet/signet/regtest → `1'` per BIP-44); `<account>` consumes
-/// `--account N`. Public so verify-bundle's descriptor mode can mirror
-/// the same default-inference per SPEC §4.11.c (symmetric verify-bundle
+/// `m/48'/<coin>'/<account>'/<script_type>'` for non-canonical descriptors with
+/// bare `@N` placeholders. `<coin>` derives from `--network` (mainnet → `0'`,
+/// testnet/signet/regtest → `1'` per BIP-44); `<account>` consumes `--account N`.
+/// `script_type` is the BIP-48 leaf (1=sh-wsh, 2=wsh, 3=taproot/P2TR), computed
+/// by the caller from the descriptor's root md-codec `Tag` via
+/// `template::bip48_script_type_for_root_tag` (H12 — taproot multisig must
+/// default to `3'`, not `2'`). Public so verify-bundle's descriptor mode can
+/// mirror the same default-inference per SPEC §4.11.c (symmetric verify-bundle
 /// enforcement).
 pub fn compute_default_origin_path(
     network: crate::network::CliNetwork,
     account: u32,
+    script_type: u32,
 ) -> md_codec::origin_path::OriginPath {
     use md_codec::origin_path::{OriginPath, PathComponent};
     OriginPath {
@@ -2228,7 +2245,7 @@ pub fn compute_default_origin_path(
             },
             PathComponent {
                 hardened: true,
-                value: 2,
+                value: script_type,
             },
         ],
     }
@@ -2265,6 +2282,7 @@ fn emit_default_path_notice<E: Write>(
     defaulted_indices: &[u8],
     network: crate::network::CliNetwork,
     account: u32,
+    script_type: u32,
 ) -> Result<(), ToolkitError> {
     if defaulted_indices.is_empty() {
         return Ok(());
@@ -2275,9 +2293,11 @@ fn emit_default_path_notice<E: Write>(
         .collect::<Vec<_>>()
         .join(",");
     let coin = network.coin_type();
+    // H12 — render the ACTUAL inferred script-type leaf (3' for taproot), not a
+    // hardcoded 2'.
     writeln!(
         stderr,
-        "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/..."
+        "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/..."
     )
     .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     Ok(())
@@ -2940,5 +2960,39 @@ mod self_check_mk1_xpub_binding_tests {
             self_check_bundle(&bad, &args, &expected),
             "mk1_xpub_binding[0]",
         );
+    }
+
+    // H12 (cycle-1) — taproot-aware default-origin helper. The BIP-48
+    // script-type component must be 3' for taproot multisig (P2TR de-facto
+    // interop convention: Sparrow/Coldcard/Jade), 2' for wsh, 1' for sh(wsh).
+    // Pre-H12 the helper hardcoded 2' regardless of script type, putting every
+    // taproot cosigner key in the wrong subtree (un-cosignable wallets).
+    #[test]
+    fn compute_default_origin_path_taproot_emits_3prime() {
+        let op = compute_default_origin_path(CliNetwork::Mainnet, 0, 3);
+        let last = op.components.last().expect("non-empty origin path");
+        assert!(last.hardened, "script-type component must be hardened");
+        assert_eq!(
+            last.value, 3,
+            "taproot default origin must use BIP-48 script-type 3' (P2TR); got {}'",
+            last.value
+        );
+        // Full shape: m/48'/0'/0'/3' on mainnet, account 0.
+        let shape: Vec<(bool, u32)> = op.components.iter().map(|c| (c.hardened, c.value)).collect();
+        assert_eq!(
+            shape,
+            vec![(true, 48), (true, 0), (true, 0), (true, 3)],
+            "mainnet account-0 taproot default origin must be m/48'/0'/0'/3'"
+        );
+    }
+
+    #[test]
+    fn compute_default_origin_path_wsh_and_shwsh_unchanged() {
+        // wsh (script-type 2') — the prior hardcoded value, must be preserved.
+        let wsh = compute_default_origin_path(CliNetwork::Mainnet, 0, 2);
+        assert_eq!(wsh.components.last().unwrap().value, 2);
+        // sh(wsh) (script-type 1').
+        let shwsh = compute_default_origin_path(CliNetwork::Mainnet, 0, 1);
+        assert_eq!(shwsh.components.last().unwrap().value, 1);
     }
 }

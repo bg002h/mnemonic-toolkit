@@ -873,3 +873,404 @@ fn bitcoind_template_completion_differential() {
         template_corpus().len()
     );
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// H12 (cycle-1) — descriptor-mode taproot multisig defaults the BIP-48 origin
+// to script-type 3' (P2TR), not 2' (P2WSH).
+//
+// The bug is funds-critical AND only visible through a SEED-derived cosigner:
+// when a `tr(NUMS, multi_a/sortedmulti_a)` descriptor's cosigner origin is
+// elided, the toolkit re-derives each cosigner's ACCOUNT xpub AT the inferred
+// origin path. Pre-H12 that path ended in `2'`, so every cosigner xpub — and
+// thus every receive/change address — landed in the wrong (P2WSH) subtree,
+// un-cosignable by Sparrow/Coldcard/Jade (which re-derive at `3'`).
+//
+// This row bundles an ORIGIN-ELIDED taproot multisig from two controlled seeds
+// (account 0), reads back the per-cosigner xpubs the toolkit derived, and
+// builds the concrete descriptor it implies. The oracle asserts that descriptor
+// derives the SAME addresses as the INDEPENDENT `48'/0'/0'/3'` derivation, and
+// DIFFERS from the `48'/0'/0'/2'` (pre-H12 wrong) subtree — via BOTH
+// rust-miniscript (DEFAULT-CI anti-vacuity) AND Core `deriveaddresses`
+// (env-gated heavy leg). Mainnet (the harness's offline `-chain=main` contract;
+// the toolkit renders mainnet `xpub…`).
+
+/// Build the toolkit's bundled taproot-multisig descriptor by reading back the
+/// per-cosigner xpubs from `bundle --json` for an ORIGIN-ELIDED descriptor
+/// (seed slots, account 0, mainnet). Returns `(concrete_descriptor, origins)`.
+fn h12_bundle_concrete(at_template: &str) -> (String, Vec<String>) {
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--account",
+            "0",
+            "--descriptor",
+            at_template,
+            "--slot",
+            &format!("@0.phrase={SEED_A}"),
+            "--slot",
+            &format!("@1.phrase={SEED_B}"),
+            "--no-engraving-card",
+            "--json",
+        ])
+        .output()
+        .expect("spawn mnemonic bundle");
+    assert!(
+        out.status.success(),
+        "h12 bundle failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).expect("bundle --json");
+    let cosigners = v["multisig"]["cosigners"].as_array().expect("cosigners");
+    let xpubs: Vec<String> = cosigners
+        .iter()
+        .map(|c| c["xpub"].as_str().expect("xpub").to_string())
+        .collect();
+    let origins: Vec<String> = cosigners
+        .iter()
+        .map(|c| c["origin_path"].as_str().expect("origin_path").to_string())
+        .collect();
+    assert_eq!(xpubs.len(), 2, "2-cosigner taproot multisig");
+    // `multi_a` (unsorted) preserves cosigner order; `sortedmulti_a` is order-
+    // independent for derivation, so positional order here is fine for both.
+    let inner = if at_template.contains("sortedmulti_a") {
+        "sortedmulti_a"
+    } else {
+        "multi_a"
+    };
+    let desc = format!(
+        "tr({NUMS_HEX},{inner}(2,{}/<0;1>/*,{}/<0;1>/*))",
+        xpubs[0], xpubs[1]
+    );
+    (desc, origins)
+}
+
+/// Concrete `tr(NUMS, <inner>(2, …))` from the two seeds derived at `st_path`
+/// (the INDEPENDENT origin-subtree oracle).
+fn h12_independent_concrete(inner: &str, st_path: &str) -> String {
+    let (xa, _) = xpub_at(SEED_A, st_path);
+    let (xb, _) = xpub_at(SEED_B, st_path);
+    format!("tr({NUMS_HEX},{inner}(2,{xa}/<0;1>/*,{xb}/<0;1>/*))")
+}
+
+/// DEFAULT-CI anti-vacuity leg (NOT `#[ignore]`): the toolkit's bundled taproot
+/// cosigner xpubs (origin defaulted) must derive the SAME addresses as the
+/// INDEPENDENT `3'` subtree, and DIFFER from the `2'` subtree. This is the
+/// rust-miniscript half of the H12 oracle; it gates the fix without a node.
+#[test]
+fn h12_taproot_default_origin_anti_vacuity_leg() {
+    for (template, inner) in [
+        ("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))", "multi_a"),
+        (
+            "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            "sortedmulti_a",
+        ),
+    ] {
+        let (bundled_desc, origins) = h12_bundle_concrete(template);
+
+        // (a) The emitted origin is the 3' (P2TR) subtree.
+        for op in &origins {
+            assert_eq!(
+                op, "m/48'/0'/0'/3'",
+                "[{inner}] taproot cosigner origin must default to 3'; got {op}"
+            );
+        }
+
+        let bundled_addrs = derive_receive(&bundled_desc, N + 1);
+        let addrs_3 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/3'"), N + 1);
+        let addrs_2 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/2'"), N + 1);
+
+        // (b) MATCH the 3' subtree.
+        assert_eq!(
+            bundled_addrs, addrs_3,
+            "[{inner}] bundled taproot addresses must equal the INDEPENDENT 3' derivation"
+        );
+        // (c) DIFFER from the 2' subtree (the pre-H12 wrong subtree).
+        assert_ne!(
+            bundled_addrs, addrs_2,
+            "[{inner}] bundled taproot addresses must DIFFER from the 2' (wrong) subtree — \
+             a 2'/3' subtree confusion would make this vacuous"
+        );
+        // Sanity: 2' and 3' subtrees are genuinely distinct (anti-vacuity of (c)).
+        assert_ne!(
+            addrs_3, addrs_2,
+            "[{inner}] the 2' and 3' subtree derivations must differ (oracle sanity)"
+        );
+    }
+}
+
+/// Env-gated heavy leg: Core `deriveaddresses` corroborates the H12 oracle — the
+/// toolkit's bundled taproot descriptor matches Core on the 3' subtree and
+/// DIFFERS from Core on the 2' subtree. Same CONNECT-ONLY contract.
+#[test]
+#[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
+fn bitcoind_h12_taproot_default_origin_differential() {
+    let Some(w) = read_wiring() else {
+        eprintln!(
+            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
+        );
+        return;
+    };
+    let info = bitcoin_cli(&w, &["getblockchaininfo"]);
+    assert_eq!(
+        info.get("chain").and_then(|c| c.as_str()),
+        Some("main"),
+        "bitcoind must be on -chain=main (got {info:?})"
+    );
+
+    let mut total_checks = 0usize;
+    for (template, inner) in [
+        ("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))", "multi_a"),
+        (
+            "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            "sortedmulti_a",
+        ),
+    ] {
+        let (bundled_desc, origins) = h12_bundle_concrete(template);
+        for op in &origins {
+            assert_eq!(op, "m/48'/0'/0'/3'", "[{inner}] origin must be 3'");
+        }
+
+        let bundled_addrs = derive_receive(&bundled_desc, N + 1);
+        let desc3 = h12_independent_concrete(inner, "48'/0'/0'/3'");
+        let desc2 = h12_independent_concrete(inner, "48'/0'/0'/2'");
+
+        // Anti-vacuity BEFORE Core: bundled == independent 3'.
+        assert_eq!(
+            bundled_addrs,
+            derive_receive(&desc3, N + 1),
+            "[{inner}] anti-vacuity: bundled addrs must equal independent 3' BEFORE Core"
+        );
+
+        // Core on the BUNDLED descriptor's chain-0 == toolkit's reported addrs.
+        let core_bundled = core_addresses(&w, &single_chain_desc(&bundled_desc, 0));
+        // Core on the independent 3' and 2' subtrees.
+        let core_3 = core_addresses(&w, &single_chain_desc(&desc3, 0));
+        let core_2 = core_addresses(&w, &single_chain_desc(&desc2, 0));
+
+        for i in 0..=(N as usize) {
+            assert_eq!(
+                bundled_addrs[i], core_bundled[i],
+                "H12 ADDRESS DIVERGENCE (FUNDS-CRITICAL) [{inner}] idx{i}: \
+                 toolkit={} bitcoind={}",
+                bundled_addrs[i], core_bundled[i]
+            );
+            assert_eq!(
+                core_bundled[i], core_3[i],
+                "[{inner}] idx{i}: bundled must match Core on the 3' subtree"
+            );
+            assert_ne!(
+                core_bundled[i], core_2[i],
+                "[{inner}] idx{i}: bundled (3') must DIFFER from Core on the 2' subtree"
+            );
+            total_checks += 1;
+        }
+    }
+    eprintln!(
+        "toolkit bitcoind H12 differential PASS: {total_checks} taproot 3'-vs-2' \
+         address checks, byte-identical to Core on 3' and diverging from 2'"
+    );
+}
+
+// H1 (cycle-1) — verify-bundle MUST report `result: mismatch` (exit≠0) for a
+// supplied md1 that reconstructs a DIFFERENT wallet than the engraved bundle —
+// even when the cosigner pubkey SET is identical (the legacy sorted-multiset
+// gate false-GREENed these). Discriminator cases: wrong threshold
+// (`sortedmulti(1)` vs `(2)`), sorted-vs-unsorted (`multi` vs `sortedmulti`),
+// script-type wrapper (`sh-wsh` vs `wsh`), and the C-PLAN-1 multipath-divergence
+// (`<0;1>` vs `<2;3>` change-chains → DIFFERENT watched-address set, same
+// `.tree`). The verdict is verify-bundle exit-code-behavioral (no Core derive
+// needed for the mismatch verdict). The `<0;1>`-vs-`<2;3>` "different addresses"
+// premise is already anchored by `derive_receive` over divergent multipath
+// groups elsewhere in this harness (the corpus shapes + `divergent_differential_
+// golden`). DEFAULT-CI (NOT `#[ignore]`) — needs no bitcoind.
+
+/// Generate a watch-only multisig bundle's `(ms1, mk1_flat, md1)` from the SAME
+/// two seeds (SEED_A/SEED_B) for a chosen `--template` + `--threshold`. The
+/// cosigner pubkey SET is identical across all template/threshold choices.
+fn h1_bundle_cards(template: &str, threshold: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            template,
+            "--threshold",
+            threshold,
+            "--slot",
+            &format!("@0.phrase={SEED_A}"),
+            "--slot",
+            &format!("@1.phrase={SEED_B}"),
+            "--json",
+        ])
+        .output()
+        .expect("spawn mnemonic bundle");
+    assert!(
+        out.status.success(),
+        "h1 bundle failed ({template}/{threshold}): {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).expect("bundle --json");
+    let ms1 = v["ms1"]
+        .as_array()
+        .expect("ms1 array")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    let mut mk1 = Vec::new();
+    for inner in v["mk1"].as_array().expect("mk1 array") {
+        for chunk in inner.as_array().expect("inner mk1 array") {
+            mk1.push(chunk.as_str().unwrap().to_string());
+        }
+    }
+    let md1 = v["md1"]
+        .as_array()
+        .expect("md1 array")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    (ms1, mk1, md1)
+}
+
+/// Run `verify-bundle` for the GENUINE 2-of-3… (here 2-of-2) `wsh-sortedmulti`
+/// expected (derived from SEED_A/SEED_B) but supply a (possibly DIVERGENT) md1.
+/// Returns whether verify-bundle reported success (`result: ok`, exit 0).
+fn h1_verify_supplied_md1(
+    genuine_ms1: &[String],
+    genuine_mk1: &[String],
+    supplied_md1: &[String],
+) -> bool {
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--slot".into(),
+        format!("@0.phrase={SEED_A}"),
+        "--slot".into(),
+        format!("@1.phrase={SEED_B}"),
+    ];
+    for s in genuine_ms1 {
+        args.push("--ms1".into());
+        args.push(s.clone());
+    }
+    for s in genuine_mk1 {
+        args.push("--mk1".into());
+        args.push(s.clone());
+    }
+    for s in supplied_md1 {
+        args.push("--md1".into());
+        args.push(s.clone());
+    }
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .expect("spawn mnemonic verify-bundle");
+    out.status.success()
+}
+
+/// Replace the `<0;1>` change-chain multipath in every md1-bearing engrave with
+/// `<2;3>` by re-routing through `bundle --descriptor` on the read-back cosigner
+/// xpubs. (We reuse the toolkit's own bundle pipeline so the resulting md1 is a
+/// valid, decodable card with the SAME `.tree`/pubkeys but a DIVERGENT
+/// `use_site_path` — the C-PLAN-1 case.)
+fn h1_divergent_multipath_md1() -> Vec<String> {
+    // Read back the genuine cosigner xpubs from a wsh-sortedmulti(2) bundle.
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--slot",
+            &format!("@0.phrase={SEED_A}"),
+            "--slot",
+            &format!("@1.phrase={SEED_B}"),
+            "--json",
+        ])
+        .output()
+        .expect("spawn mnemonic bundle");
+    assert!(out.status.success());
+    let v: Value = serde_json::from_slice(&out.stdout).expect("bundle --json");
+    let cosigners = v["multisig"]["cosigners"].as_array().expect("cosigners");
+    let xpubs: Vec<String> = cosigners
+        .iter()
+        .map(|c| c["xpub"].as_str().expect("xpub").to_string())
+        .collect();
+    let origins: Vec<String> = cosigners
+        .iter()
+        .map(|c| c["origin_path"].as_str().expect("origin_path").to_string())
+        .collect();
+    // Build a concrete descriptor with the SAME pubkeys/threshold/script-type
+    // but `<2;3>` change-chains, with EXPLICIT origins (so re-bundle derives the
+    // identical cosigner xpubs → identical pubkeys/.tree, only use_site_path
+    // differs).
+    let origin_strip = |op: &str| op.trim_start_matches("m/").to_string();
+    let desc = format!(
+        "wsh(sortedmulti(2,[{fp0}/{o0}]{x0}/<2;3>/*,[{fp1}/{o1}]{x1}/<2;3>/*))",
+        fp0 = cosigners[0]["master_fingerprint"].as_str().unwrap(),
+        o0 = origin_strip(&origins[0]),
+        x0 = xpubs[0],
+        fp1 = cosigners[1]["master_fingerprint"].as_str().unwrap(),
+        o1 = origin_strip(&origins[1]),
+        x1 = xpubs[1],
+    );
+    bundle_md1(&desc)
+}
+
+/// DEFAULT-CI H1 discriminator: a divergent-policy supplied md1 (wrong-k /
+/// sorted-vs-unsorted / script-type / multipath) must make verify-bundle FAIL
+/// (`result: mismatch`, exit≠0); the genuine md1 must PASS (`result: ok`).
+#[test]
+fn h1_verify_bundle_rejects_divergent_policy_md1() {
+    // The GENUINE engraved bundle: 2-of-2 wsh-sortedmulti.
+    let (ms1, mk1, genuine_md1) = h1_bundle_cards("wsh-sortedmulti", "2");
+
+    // CLEAN-NEGATIVE: genuine md1 → PASS (no over-rejection).
+    assert!(
+        h1_verify_supplied_md1(&ms1, &mk1, &genuine_md1),
+        "genuine matching md1 must verify OK (no over-rejection)"
+    );
+
+    // 1. wrong threshold: 1-of-2 anyone-spends (same pubkey set).
+    let (_, _, k1_md1) = h1_bundle_cards("wsh-sortedmulti", "1");
+    assert!(
+        !h1_verify_supplied_md1(&ms1, &mk1, &k1_md1),
+        "wrong-threshold (1-of-2 vs 2-of-2) md1 must FAIL verify-bundle"
+    );
+
+    // 2. sorted-vs-unsorted: wsh(multi(2,…)) (different Tag).
+    let (_, _, unsorted_md1) = h1_bundle_cards("wsh-multi", "2");
+    assert!(
+        !h1_verify_supplied_md1(&ms1, &mk1, &unsorted_md1),
+        "sorted-vs-unsorted md1 must FAIL verify-bundle"
+    );
+
+    // 3. script-type wrapper: sh(wsh(sortedmulti(2,…))) (P2SH-nested).
+    let (_, _, shwsh_md1) = h1_bundle_cards("sh-wsh-sortedmulti", "2");
+    assert!(
+        !h1_verify_supplied_md1(&ms1, &mk1, &shwsh_md1),
+        "wsh-vs-sh(wsh(...)) md1 must FAIL verify-bundle"
+    );
+
+    // 4. C-PLAN-1 multipath divergence: <0;1> vs <2;3> (same .tree, same
+    //    pubkeys, DIFFERENT watched-address set).
+    let divergent_md1 = h1_divergent_multipath_md1();
+    assert!(
+        !h1_verify_supplied_md1(&ms1, &mk1, &divergent_md1),
+        "use_site_path-divergent (<0;1> vs <2;3>) md1 must FAIL verify-bundle — \
+         a .tree-only gate would false-GREEN this different-address wallet"
+    );
+}

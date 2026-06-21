@@ -296,6 +296,11 @@ fn parse_literal_xpub(
 ) -> Result<DescriptorIntake, ToolkitError> {
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(descriptor_str)
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
+    // H12 — taproot-aware default-origin script-type. `parsed` is a
+    // rust-miniscript `Descriptor` (NOT an md-codec `Tag`), so detect taproot
+    // directly (precedent: `wallet_import/bsms.rs`): Tr → 3' (P2TR), else 2'.
+    // Pre-H12 the literal `2` put taproot cosigner keys in the wrong subtree.
+    let default_script_type = if matches!(parsed, MsDescriptor::Tr(_)) { 3 } else { 2 };
     // Non-blocking consensus-masked older() advisory (Adapter B; post-from_str,
     // bit-31 unreachable). SPEC_older_timelock_advisory §4 / PLAN Task 10 3a.
     let adv = crate::timelock_advisory::older_advisories_descriptor(&parsed);
@@ -319,9 +324,10 @@ fn parse_literal_xpub(
                 let mut effective_path = path_anno.clone();
                 if effective_path.is_none() {
                     // v0.19.0 silent-default-path inference: assign BIP-48
-                    // m/48'/coin'/account'/2' as the cosigner path. Mirrors
-                    // `cmd/bundle.rs:1367-1388` notice + plan §4.3 step 4.
-                    let default = bip48_default_path(network, account, 2);
+                    // m/48'/coin'/account'/<script_type>' as the cosigner path
+                    // (H12 — 3' for taproot). Mirrors `cmd/bundle.rs` notice +
+                    // plan §4.3 step 4.
+                    let default = bip48_default_path(network, account, default_script_type);
                     effective_path = Some(default);
                     defaulted_indices.push(idx as u8);
                 }
@@ -342,7 +348,8 @@ fn parse_literal_xpub(
                 };
                 let mut effective_path = path_anno.clone();
                 if effective_path.is_none() {
-                    let default = bip48_default_path(network, account, 2);
+                    // H12 — taproot-aware default (3' for taproot, else 2').
+                    let default = bip48_default_path(network, account, default_script_type);
                     effective_path = Some(default);
                     defaulted_indices.push(idx as u8);
                 }
@@ -392,9 +399,10 @@ fn parse_literal_xpub(
             .collect::<Vec<_>>()
             .join(",");
         let coin = network.coin_type();
+        // H12 — render the ACTUAL inferred script-type leaf (3' for taproot).
         writeln!(
             stderr,
-            "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path] in the descriptor."
+            "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/{default_script_type}' (BIP-48 cosigner path). Override per-placeholder with [fp/path] in the descriptor."
         )
         .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     }
@@ -468,5 +476,64 @@ mod tests {
         assert!(!contains_at_n_placeholder("wpkh(xpub6Cuvy7w8aDxakdjsxFq8M2NbXdZHghkpAcKvqzh4WUR8FBxXVKkjjsedX9yzeYZPjVx3vrwJxYqLmnfvSdyXxztnUMpsiE7Q1wPwhP3DmFy)"));
         // Edge: `@a` should NOT trigger.
         assert!(!contains_at_n_placeholder("foo@a"));
+    }
+
+    // ── H12 (cycle-1): xpub-search literal-xpub default-origin is taproot-aware ──
+    // `parse_literal_xpub` operates on a rust-miniscript `Descriptor` (not an
+    // md-codec `Tag`), so taproot detection is `matches!(parsed, Tr(_))` →
+    // script-type 3', else 2'. Pre-H12 the literal `2` hardcode put taproot
+    // cosigner keys in the wrong (P2WSH) subtree on the xpub-search intake path.
+    const H12_XPUB_A: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+    const H12_XPUB_B: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
+
+    fn last_component_hardened(p: &DerivationPath) -> Option<(u32, bool)> {
+        use bitcoin::bip32::ChildNumber;
+        p.into_iter().last().map(|c| match c {
+            ChildNumber::Hardened { index } => (*index, true),
+            ChildNumber::Normal { index } => (*index, false),
+        })
+    }
+
+    #[test]
+    fn literal_xpub_taproot_defaults_origin_to_3prime() {
+        let mut sink = Vec::new();
+        // Origin-elided taproot multisig → default-inference fires; must land
+        // in the 3' (P2TR) subtree.
+        let desc = format!(
+            "tr({NUMS_H_POINT_X_ONLY_HEX},multi_a(2,{H12_XPUB_A}/<0;1>/*,{H12_XPUB_B}/<0;1>/*))"
+        );
+        let intake = parse_literal_xpub(&desc, crate::network::CliNetwork::Mainnet, 0, &mut sink)
+            .expect("origin-elided taproot multisig must parse");
+        let xpub_cosigners: Vec<&CosignerExtract> =
+            intake.cosigners.iter().filter(|c| c.xpub_65.is_some()).collect();
+        assert_eq!(xpub_cosigners.len(), 2, "two xpub cosigners");
+        for c in xpub_cosigners {
+            let p = c
+                .derivation_path_anno
+                .as_ref()
+                .expect("defaulted cosigner must carry an inferred path");
+            assert_eq!(
+                last_component_hardened(p),
+                Some((3, true)),
+                "taproot cosigner default origin must end in 3' (P2TR); got {p}"
+            );
+        }
+    }
+
+    #[test]
+    fn literal_xpub_wsh_defaults_origin_to_2prime() {
+        let mut sink = Vec::new();
+        // Clean-negative: origin-elided wsh multisig still defaults to 2'.
+        let desc = format!("wsh(sortedmulti(2,{H12_XPUB_A}/<0;1>/*,{H12_XPUB_B}/<0;1>/*))");
+        let intake = parse_literal_xpub(&desc, crate::network::CliNetwork::Mainnet, 0, &mut sink)
+            .expect("origin-elided wsh multisig must parse");
+        for c in intake.cosigners.iter().filter(|c| c.xpub_65.is_some()) {
+            let p = c.derivation_path_anno.as_ref().expect("inferred path");
+            assert_eq!(
+                last_component_hardened(p),
+                Some((2, true)),
+                "wsh cosigner default origin must end in 2' (P2WSH); got {p}"
+            );
+        }
     }
 }

@@ -160,9 +160,11 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    // H12 (cycle-1): a taproot (`tr(...)`) root tag defaults the BIP-48
+    // script-type leaf to 3' (P2TR), not 2' (P2WSH).
     assert!(
         stderr.contains(
-            "info: non-canonical descriptor; defaulting origin path for @0 to m/48'/0'/0'/2'"
+            "info: non-canonical descriptor; defaulting origin path for @0 to m/48'/0'/0'/3'"
         ),
         "stderr did not contain default-path info notice for tr(NUMS); got:\n{stderr}"
     );
