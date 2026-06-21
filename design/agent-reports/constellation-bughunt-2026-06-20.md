@@ -227,7 +227,8 @@ scratch next cycle.
   round-trip test.
 - **spec:** BIP-32 key-origin; BIP-44/49/84 account at path index 2.
 
-### - [ ] M2 · Placeholder index 255 overflows `n` to 0 → BTreeMap-index panic (and silent wrong `n` when `@0` present)
+### - [x] M2 · Placeholder index 255 overflows `n` to 0 → BTreeMap-index panic (and silent wrong `n` when `@0` present)
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322) — placeholder index bounded ≤254 before the (N+1) as u8 cast + checked get; @255 panic → typed TemplateParse reject; @254 still accepts. -->
 - **repo/class:** md-cli · **E-panic-dos**
 - **id:** `placeholder-count-u8-overflow-panic`
 - **location:** `descriptor-mnemonic/crates/md-cli/src/parse/template.rs:188-201`
@@ -279,7 +280,8 @@ scratch next cycle.
 - **fix:** reject `data_with_checksum_len > 93` at the top of `decode_regular_errors`/`chien_search`.
 - **spec:** BIP-93/codex32 regular code length 93; generator order 93.
 
-### - [ ] M5 · Lexer/substitution regexes disagree when a multipath group is not last → use-site path ≠ parsed descriptor
+### - [x] M5 · Lexer/substitution regexes disagree when a multipath group is not last → use-site path ≠ parsed descriptor
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322, tag descriptor-mnemonic-md-cli-v0.9.0, crates.io) — a non-final <a;b> multipath (e.g. wpkh(@0/<2;3>/0'/*)) is now REJECTED (was: descriptor carried multipath over a single-path tree → WRONG address); fail-closed, an md1/UseSitePath representability limit (BIP-389 permits the form, md1 can't represent it). H13's hardened/malformed reject PRESERVED byte-identical (validator fires first; fused-test mutation-proven). md-codec NO-BUMP, no toolkit pin. -->
 - **repo/class:** md-cli · **B-policy-collapse**
 - **id:** `lexer-substitution-divergence-multipath-not-last`
 - **location:** `descriptor-mnemonic/crates/md-cli/src/parse/template.rs:32-91`, `:357-381`
@@ -339,7 +341,8 @@ scratch next cycle.
   `ImportWalletParse` naming the field.
 - **spec:** BIP-32 child indices are u32.
 
-### - [ ] L4 · `md repair` always emits the "keyless template (no keys)" advisory even when the md1 carries watch-only pubkeys
+### - [x] L4 · `md repair` always emits the "keyless template (no keys)" advisory even when the md1 carries watch-only pubkeys
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322) — is_wallet_policy()-gated label: keyed md1 → WatchOnly, keyless stays Template (repair.rs; _descriptor→descriptor binding fixed for clippy -D warnings). -->
 - **repo/class:** md-cli · **D-secret-leak** (privacy) · `repair-advisory-mislabels-watch-only-as-keyless-template`
 - **location:** `descriptor-mnemonic/crates/md-cli/src/cmd/repair.rs:156-159`
 - **bug:** `md repair` unconditionally emits `OutputClass::Template` ("stdout is a keyless descriptor
@@ -373,7 +376,8 @@ scratch next cycle.
 - **fix:** add the same length guard before the reorder.
 - **spec:** md1 spec §3.4 origin-path-decl divergent mode.
 
-### - [ ] L7 · `md repair --help` epilog claims non-chunked single-string md1 are rejected, but they are now repaired (doc drift)
+### - [x] L7 · `md repair --help` epilog claims non-chunked single-string md1 are rejected, but they are now repaired (doc drift)
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322) — stale "rejected with a wire-format error" prose removed from main.rs:241; the toolkit-manual MIRROR (docs/manual/src/40-cli-reference/42-md.md) corrected in lockstep (paired-PR docs discipline — not lint-gated) in THIS commit (non-chunked repaired since md-codec v0.35.0). -->
 - **repo/class:** md-cli · **other** · `repair-help-epilog-stale-rejects-nonchunked-claim`
 - **location:** `descriptor-mnemonic/crates/md-cli/src/main.rs:241`
 - **bug:** Epilog says non-chunked single md1 are "rejected with a wire-format error", but
@@ -748,7 +752,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 - **fix:** recursively walk `state.tree` in the exit sweep, zeroizing each node's `key`/`keys`; ideally
   store tree keys in a zeroizing buffer. Add a test.
 
-### - [ ] M10 · BIP-86 single-key taproot `tr(@0)` falsely rejected (depth gate treats all `tr(...)` as depth-4 multisig)
+### - [x] M10 · BIP-86 single-key taproot `tr(@0)` falsely rejected (depth gate treats all `tr(...)` as depth-4 multisig)
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322) — bare keypath tr(@0)/tr(@0/<0;1>/*) now classified SingleSig (depth-3 BIP-86 accepted); script-path tr(...,{...})/multi_a stay MultiSig (no over-accept, depth gate kept strict). is_bare_keypath_tr (no top-level comma/brace). -->
 - **repo/class:** md-cli · **E-panic-dos** (false reject) · `w3-mdcli-01`
 - **location:** `md-cli/src/parse/template.rs:1792-1799` (`ctx_for_template`); `parse/keys.rs:67-77` (depth gate)
 - **bug:** `ctx_for_template` maps only `wpkh(`/`pkh(`/`sh(wpkh(` to `SingleSig` (depth 3); every other head
@@ -763,7 +768,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   (depth never participates in derivation).
 - **spec:** BIP-86 (depth-3 account); BIP-388.
 
-### - [ ] M11 · `parse_key` accepts an off-curve xpub (no secp256k1 point check); failure deferred to derive time
+### - [x] M11 · `parse_key` accepts an off-curve xpub (no secp256k1 point check); failure deferred to derive time
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322) — keys.rs adds a secp256k1 PublicKey::from_slice point check → off-curve xpub rejected at parse (BadXpub); real depth-3/4 xpubs still parse. -->
 - **repo/class:** md-cli · **C-corrupt-accept** · `w3-mdcli-04`
 - **location:** `md-cli/src/parse/keys.rs:33-80` (esp. `:78-79` payload copy, no point validation)
 - **bug:** `parse_key` validates base58check/length/version/depth then blindly copies `bytes[13..78]`
@@ -795,7 +801,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   blob sniffs positive then bails. Fix: treat null as unknown-origin (`00000000` fp + purpose inferred from
   the SLIP-132 prefix) with a NOTICE. · **spec:** Electrum `keystore.dump()`; BIP-380 `00000000`.
 
-### - [ ] L19 · `md encode` emits "keyless template (no keys)" advisory even when `--key` embeds watch-only xpubs
+### - [x] L19 · `md encode` emits "keyless template (no keys)" advisory even when `--key` embeds watch-only xpubs
+<!-- FIXED cycle-9 (md-cli v0.9.0 @1a4b322) — same is_wallet_policy() gate at encode.rs json+text sites (sibling of L4). -->
 - **repo/class:** md-cli · **D-secret-leak** (privacy) · `w3-mdcli-03` _(sibling of L4)_
 - **location:** `md-cli/src/cmd/encode.rs:73-76,110-113`; `output_advisory.rs:35`
 - **bug:** both emit paths call `emit_output_class_advisory(OutputClass::Template, …)` unconditionally; with
