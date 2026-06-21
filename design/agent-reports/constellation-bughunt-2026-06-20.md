@@ -573,7 +573,8 @@ scratch next cycle.
   `pk.network`; a testnet WIF → `xpub…` (mainnet) instead of `tpub…`. Sentinel is flagged non-derivable;
   blast radius limited. Fix: derive network from `pk.network`, or error on disagreement.
 
-### - [ ] L12 · GUI canonicity regex misclassifies `@N[fp/path]` descriptors → lifts the `--account` pin
+<!-- FIXED cycle-11a (mnemonic-gui v0.46.0 @1999323, PR #14) — the three single-key canonicity regexes now accept the suffix-origin form @N[fp/path]; benign over-acceptance of double-origin (v0.60.0 accepts / v0.62.0+ refuses-at-parse); is_match only (no capture renumber). Whole-diff review GREEN. -->
+### - [x] L12 · GUI canonicity regex misclassifies `@N[fp/path]` descriptors → lifts the `--account` pin
 - **repo/class:** gui · **A-wrong-address** · `w2-gui-cond-02`
 - **location:** `mnemonic-gui/src/form/conditional.rs:99-126,136-141,238-245`
 - **bug:** the GUI's textual `classify_descriptor_canonicity` places the origin bracket **before** `@N`
@@ -583,7 +584,8 @@ scratch next cycle.
   Confusing error, not silent wrong address. Fix: accept `@N[fp/path]` in the regex, or call
   `gui-schema --classify-descriptor` (the toolkit's own classifier).
 
-### - [ ] L13 · GUI `convert --from` dropdown missing the valid `seedqr` node type
+<!-- FIXED cycle-11a (mnemonic-gui v0.46.0 @1999323, PR #14) — split CONVERT_FROM_NODES (14, seedqr@1) for --from vs CONVERT_TO_NODES (13, seedqr-free) for --to, matching the toolkit NodeType::as_str / --to PossibleValuesParser asymmetry; zero schema_mirror drift. -->
+### - [x] L13 · GUI `convert --from` dropdown missing the valid `seedqr` node type
 - **repo/class:** gui · **B-policy-collapse** (coverage) · `w2-gui-cond-01`
 - **location:** `mnemonic-gui/src/schema/mnemonic.rs:130-144` (`NODE_TYPES`), false "exact mirror" comment
   `:123-129`; authoritative `cmd/convert.rs:54-72` (`seedqr` at index 1)
@@ -746,7 +748,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   is followed by extra `/`-segments; the renderer owns the `/<0;1>/*` suffix.
 - **spec:** BIP-388 (key info items are account-level xpubs).
 
-### - [ ] M9 · GUI exit zeroize sweep skips `state.tree` → private keys typed into the descriptor builder never scrubbed
+<!-- FIXED cycle-11a (mnemonic-gui v0.46.0 @1999323, PR #14) — TreeNode::zeroize_keys recursive walk (key + keys[i] + all children; hex public, excluded) wired into zeroize_form_state via state.tree.as_mut(). Whole-diff review enumerated every field, confirmed no missed secret + heap-zeroized + RED non-vacuous. -->
+### - [x] M9 · GUI exit zeroize sweep skips `state.tree` → private keys typed into the descriptor builder never scrubbed
 - **repo/class:** gui · **D-secret-leak** · `w3-gui-tree-key-not-zeroized-on-exit`
 - **location:** `mnemonic-gui/src/secrets.rs:278-310` (`zeroize_form_state`); `schema/mod.rs:324-333`
   (`FormState.tree`); `form/tree_model.rs:81,89` (`TreeNode.key/.keys` plain String)
