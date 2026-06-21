@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.61.0] — 2026-06-20
+
+**SemVer-MINOR — FUNDS-SAFETY: three empirically-proven CRITICAL fixes from the constellation differential-oracle bug hunt (H12 / H1 / H13). Bitcoin Core `deriveaddresses` confirmed both the wrong-address divergences and their closure. No CLI-flag / `--json` wire-shape change.**
+
+### Fixed
+
+- **H12 — descriptor-mode taproot multisig now defaults the BIP-48 cosigner origin to script-type `3'` (P2TR), not `2'` (P2WSH).** A `tr(NUMS, multi_a/sortedmulti_a)` descriptor supplied path-less in descriptor mode previously engraved `[fp/48'/coin'/account'/2']` AND derived the cosigner key at the `2'` subtree, so every receive/change address diverged from the `3'` wallet any BIP-48 coordinator (Sparrow/Coldcard/Jade) re-derives — a non-cosignable wallet. The default-origin helper is now taproot-aware (reuses `bip48_script_type()`) at all three sites (`bundle`, `verify-bundle`, `xpub-search` intake). `3'`=P2TR is a documented de-facto interop convention. Differential-oracle-proven.
+- **H1 — `verify-bundle`'s `md1_xpub_match` now compares the full policy structure, not just the pubkey multiset.** It previously returned `result: ok` for a supplied md1 reconstructing a DIFFERENT wallet — wrong threshold (e.g. 1-of-3 anyone-spends vs 2-of-3), unsorted-vs-sorted, script-type/wrapper drift, or divergent multipath change-chains. The predicate now also requires `tree == && use_site_path == && use_site_path_overrides ==` (origins excluded — legitimate elision variance), retaining the subordinate pubkey-set check. Check NAME and `--json checks[]` shape unchanged (predicate-only widening).
+- **H13 — hardened multipath (`<0';1'>` / `<0h;1h>`) in a descriptor template is now REJECTED with a typed `ToolkitError::DescriptorParse`, not silently collapsed to a bare single-path key** (a silent policy-collapse to a different, derivable wallet). Hardened derivation is impossible on a watch-only (xpub) card (BIP-32 / BIP-389), so error is the only safe outcome. Malformed double-marker bodies (`<0'';1>`) are also rejected. Lockstep with `md-cli 0.8.0`.
+
+Provenance: `design/agent-reports/constellation-bughunt-2026-06-20.md`, `design/PLAN_constellation_bughunt_fix_program.md`, `design/BRAINSTORM_cycle1_critical_fixes.md` + plan-doc + 9 R0/impl reviews. (Version `0.61.0` taken first-to-ship; the paused own-account-subset-search cycle renumbers to `0.62.0`.)
+
 ## mnemonic-toolkit [0.60.0] — 2026-06-20
 
 **SemVer-MINOR — `bundle --md1-form=template` extends to MULTISIG + general policies; `restore`/`verify-bundle` complete a concrete watch-only wallet from a keyless multisig template + externally-supplied cosigner keys via a parallel permutation-search engine. #28 phase 2.**
