@@ -242,7 +242,8 @@ scratch next cycle.
   replace `by_i[&0]` with checked `.get(&0).ok_or(...)`.
 - **spec:** BIP-388 `@N` placeholders; md1 encodes key count `n` as a u8-derived field.
 
-### - [ ] M3 · `derive_address` chain gate reads baseline use-site only → valid change addresses unreachable on None-baseline + Some-override
+<!-- FIXED cycle-10 (md-codec v0.39.0 @8c73b4d, crates.io) — derive_address chain-gate widened to MAX alt-count over baseline + every per-@N override (None→1); provably fail-closed (per-key use_site_to_derivation_path still rejects). Whole-diff review GREEN. Toolkit pin-bump → 0.65.2 pending (after cycle-11b 0.65.1). -->
+### - [x] M3 · `derive_address` chain gate reads baseline use-site only → valid change addresses unreachable on None-baseline + Some-override
 - **repo/class:** md-codec · **B-policy-collapse**
 - **id:** `derive-chain-gate-baseline-only-ignores-overrides`
 - **location:** `descriptor-mnemonic/crates/md-codec/src/derive.rs:108-122`
@@ -365,7 +366,8 @@ scratch next cycle.
   `codex32::Error`. Add a no-echo test.
 - **spec:** BIP-93/codex32 (ms1 data-part is the secret); ms-codec sanitized-Debug contract.
 
-### - [ ] L6 · `canonicalize_placeholder_indices` indexes Divergent `path_decl` without a `len == n` guard (library-reachable panic)
+<!-- FIXED cycle-10 (md-codec v0.39.0 @8c73b4d, crates.io) — added the existing DivergentPathCountMismatch len==n guard (mirroring expand_per_at_n) before the reorder index; n_keys bound before the &mut borrow. -->
+### - [x] L6 · `canonicalize_placeholder_indices` indexes Divergent `path_decl` without a `len == n` guard (library-reachable panic)
 - **repo/class:** md-codec · **E-panic-dos** · `canonicalize-divergent-path-decl-unchecked-len-panic`
 - **location:** `descriptor-mnemonic/crates/md-codec/src/canonicalize.rs:206-219`
 - **bug:** Non-identity permutation branch does `old_paths[inverse[new_idx]]` for `new_idx in 0..n` with
@@ -590,7 +592,8 @@ scratch next cycle.
   dropdown **values**, so it didn't catch the drift. Fix: add `seedqr` at index 1; use a `--to`-restricted
   set (toolkit rejects `--to seedqr`); extend the conditional-drift test to dropdown values.
 
-### - [ ] L14 · `WalletPolicyId` is NOT stable across origin-path elision (contradicts its doc-invariant)
+<!-- FIXED cycle-10 (md-codec v0.39.0 @8c73b4d, crates.io) — compute_wallet_policy_id canonical-fills an elided (empty-components) in-memory origin via canonical_origin(&d.tree) so elided hashes identically to explicit; decoded wires unaffected; in-memory-only (not on the md1 wire) → MINOR. -->
+### - [x] L14 · `WalletPolicyId` is NOT stable across origin-path elision (contradicts its doc-invariant)
 - **repo/class:** md-codec · **B-policy-collapse** · `w2-md-canon-1`
 - **location:** `md-codec/src/identity.rs:106-113` (false doc), `:172-240` (`compute_wallet_policy_id`),
   `canonicalize.rs:420-474` (`canonical_origin` used only as error-gate)
@@ -600,7 +603,8 @@ scratch next cycle.
   consumer dedups/matches engravings by id (e.g. mk1 cosigner stub binding). Fix: make the doc honest
   (id is origin-significant) **or** implement canonical-fill. · **spec:** spec v0.13 §5.3.
 
-### - [ ] L15 · `compute_wallet_descriptor_template_id` doesn't canonicalize placeholder ordering (asymmetry vs policy-id)
+<!-- FIXED cycle-10 (md-codec v0.39.0 @8c73b4d, crates.io) — compute_wallet_descriptor_template_id now canonicalizes placeholder ordering on a clone first (mirrors policy-id); identity fast-path leaves canonical inputs unchanged; in-memory-only. -->
+### - [x] L15 · `compute_wallet_descriptor_template_id` doesn't canonicalize placeholder ordering (asymmetry vs policy-id)
 - **repo/class:** md-codec · **B-policy-collapse** · `w2-md-canon-3`
 - **location:** `md-codec/src/identity.rs:71-104` vs `:172-177`
 - **bug:** the WDT-id hashes raw placeholder indices with no canonicalization, while
@@ -618,7 +622,8 @@ scratch next cycle.
   address) but a fidelity/availability gap. Fix: extend the varint to the full 31-bit range, or
   enforce/document the ceiling at the parse boundary. · **spec:** BIP-32 child numbers 0..2³¹−1.
 
-### - [ ] L17 · Test `walletpolicyid_stable_across_origin_elision` is vacuous (masks L14)
+<!-- FIXED cycle-10 (md-codec v0.39.0 @8c73b4d, crates.io) — de-vacuified: the test now builds a genuinely ELIDED empty path_decl wpkh(@0) and asserts it hashes identically to the explicit m/84'/0'/0' form (the RED→GREEN gate for L14; confirmed RED by temporarily reverting L14). -->
+### - [x] L17 · Test `walletpolicyid_stable_across_origin_elision` is vacuous (masks L14)
 - **repo/class:** md-codec · **other** · `w2-md-canon-2`
 - **location:** `md-codec/src/identity.rs:571-588` (+ fixture `:385-419`)
 - **bug:** both operands carry an explicit `Shared(BIP84)` `path_decl`; the "override" is byte-identical
