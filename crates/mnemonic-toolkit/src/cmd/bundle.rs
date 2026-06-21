@@ -1647,12 +1647,29 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             }
             let xpub = BipXpub::from_str(&xpub_str)
                 .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
-            let fp = slot_inputs
+            // Explicit `--slot @N.fingerprint=` (if supplied).
+            let slot_fp = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
-                .and_then(|s| Fingerprint::from_str(&s.value).ok())
-                .or(anno_fp)
-                .unwrap_or_default();
+                .and_then(|s| Fingerprint::from_str(&s.value).ok());
+            // H7 (cycle-2): if BOTH a descriptor `@N` fingerprint annotation
+            // (prefix `[fp/path]@N` or suffix `@N[fp/path]`) AND an explicit
+            // `--slot @N.fingerprint=` are present, they MUST AGREE. The
+            // phrase/entropy arm's master-fp cross-check (`:1617`) never reaches
+            // the xpub slot, and the `.or(anno_fp)` below silently lets the slot
+            // value win — so without this check a prefix-anno fp that DISAGREES
+            // with `--slot @N.fingerprint=` is silently dropped (funds-safety:
+            // the user's stated origin fingerprint is ignored). Refuse on
+            // mismatch, modeled on the `:1618-1620` compare-and-`DescriptorParse`
+            // shape and the Row-19 inline-path-vs-`--slot @N.path=` precedent.
+            if let (Some(anno), Some(slot)) = (anno_fp, slot_fp) {
+                if anno != slot {
+                    return Err(ToolkitError::DescriptorParse(format!(
+                        "--slot @{idx}.fingerprint specifies {slot} but descriptor @{idx} annotation specifies {anno}"
+                    )));
+                }
+            }
+            let fp = slot_fp.or(anno_fp).unwrap_or_default();
             let path = match slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Path)
