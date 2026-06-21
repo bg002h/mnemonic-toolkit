@@ -64,10 +64,14 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
         //   1: @N index
         //   2: 8-hex fingerprint inside `[...]`
         //   3: origin path inside `[...]` (may be empty if `[fp]` alone)
-        //   4: multipath alts (semicolon-separated digits)
+        //   4: multipath alts (semicolon-separated digits, each with an
+        //      optional `'`/`h` hardened marker — CAPTURED so a hardened alt is
+        //      no longer silently dropped, then REJECTED in the parse below
+        //      (H13: an xpub card cannot do hardened public derivation, so a
+        //      hardened-multipath card is permanently un-restorable).
         //   5: wildcard suffix (`/*`, `/*'`, `/*h`)
         Regex::new(
-            r"@(\d+)(?:\[([0-9a-fA-F]{8})((?:/\d+(?:'|h)?)*)\])?(?:/<([0-9;]+)>)?(/\*(?:'|h)?)?",
+            r"@(\d+)(?:\[([0-9a-fA-F]{8})((?:/\d+(?:'|h)?)*)\])?(?:/<((?:\d+(?:'|h)?)(?:;\d+(?:'|h)?)*)>)?(/\*(?:'|h)?)?",
         )
         .expect("static regex compiles")
     });
@@ -109,6 +113,18 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                 m.as_str()
                     .split(';')
                     .map(|n| {
+                        // H13: a hardened multipath alternative (`0'` / `0h`) is
+                        // un-derivable from a watch-only xpub (BIP-32 forbids
+                        // hardened public derivation), so a card carrying one is
+                        // permanently un-restorable. REJECT with a typed error
+                        // rather than silently collapsing to a bare `/*`.
+                        if n.ends_with('\'') || n.ends_with('h') {
+                            return Err(ToolkitError::DescriptorParse(format!(
+                                "@{i} multipath alternative `{n}` is hardened; \
+                                 hardened derivation is impossible on a watch-only \
+                                 (xpub) card, so such a descriptor is un-restorable"
+                            )));
+                        }
                         n.parse::<u32>().map_err(|_| {
                             ToolkitError::DescriptorParse(format!(
                                 "@{i} multipath alt `{n}` is not u32"
@@ -190,11 +206,11 @@ pub fn resolve_placeholders(
         }
     }
     let at0 = by_i[&0];
-    let use_site_path = make_use_site_path(at0);
+    let use_site_path = make_use_site_path(at0)?;
     let mut use_site_path_overrides = Vec::new();
     for i in 1..n {
         let occ = by_i[&i];
-        let usp_i = make_use_site_path(occ);
+        let usp_i = make_use_site_path(occ)?;
         if usp_i != use_site_path {
             use_site_path_overrides.push((i, usp_i));
         }
@@ -220,7 +236,17 @@ pub fn resolve_placeholders(
     })
 }
 
-fn make_use_site_path(occ: &PlaceholderOccurrence) -> UseSitePath {
+/// Build the `UseSitePath` for one placeholder occurrence.
+///
+/// H13: returns `Result` so the hardened-multipath reject is surfaced as a typed
+/// `ToolkitError::DescriptorParse`. A hardened multipath alternative is already
+/// rejected upstream in `lex_placeholders` (the `'`/`h` marker is captured and
+/// refused there), so `multipath_alts` reaching here is exclusively non-hardened
+/// and every `Alternative` is built with `hardened: false`. The `Result`
+/// signature keeps this function the structural twin of md-cli's
+/// `make_use_site_path` (m-format mirror invariant) and fails closed should a
+/// hardened alt ever reach it via a future caller.
+fn make_use_site_path(occ: &PlaceholderOccurrence) -> Result<UseSitePath, ToolkitError> {
     let alts: Vec<Alternative> = occ
         .multipath_alts
         .iter()
@@ -229,10 +255,10 @@ fn make_use_site_path(occ: &PlaceholderOccurrence) -> UseSitePath {
             value: *v,
         })
         .collect();
-    UseSitePath {
+    Ok(UseSitePath {
         multipath: if alts.is_empty() { None } else { Some(alts) },
         wildcard_hardened: occ.wildcard_hardened,
-    }
+    })
 }
 
 fn to_origin_path(p: Option<&DerivationPath>) -> OriginPath {
@@ -316,8 +342,18 @@ pub fn substitute_synthetic(
 ) -> Result<(String, BTreeMap<String, u8>), ToolkitError> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
-        Regex::new(r"@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;]+>)?(?:/\*(?:'|h)?)?")
-            .expect("static regex compiles")
+        // H13: the multipath strip class is `[0-9;'h]` (was `[0-9;]`) so a
+        // hardened body is matched-and-stripped rather than leaving a residual
+        // `'>` for `Descriptor::from_str` to choke on. This is defense-in-depth
+        // for direct callers of `substitute_synthetic` that bypass the lexer;
+        // on the production `parse_descriptor` path the hardened reject already
+        // fires in `lex_placeholders`/`resolve_placeholders` (call order:
+        // lex → resolve → substitute_synthetic) before this regex runs. Kept in
+        // lockstep with md-cli's `substitute_synthetic` strip class.
+        Regex::new(
+            r"@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;'h]+>)?(?:/\*(?:'|h)?)?",
+        )
+        .expect("static regex compiles")
     });
     let mut key_map: BTreeMap<String, u8> = BTreeMap::new();
     let mut keys_seen: HashSet<u8> = HashSet::new();
@@ -1433,6 +1469,136 @@ mod tests {
         };
         let r = resolve_placeholders(&[occ.clone(), occ]).unwrap();
         assert_eq!(r.n, 1);
+    }
+
+    // ---- A.3b: H13 — hardened multipath alternative REJECTED (never silent-collapse) ----
+    //
+    // A hardened multipath body (`<0';1'>` / `<0h;1h>`) must be DETECTED at lex
+    // and REJECTED with a typed `ToolkitError::DescriptorParse` (exit 2) — md1
+    // cosigner keys are xpubs and BIP-32 forbids hardened derivation from a
+    // public key, so such a card is permanently un-restorable. The pre-fix lexer
+    // silently dropped the `'`/`h` (regex `[0-9;]` class), collapsing `<0';1'>`
+    // to a bare single-path key → wrong addresses. See
+    // design/IMPLEMENTATION_PLAN_cycle1_critical_fixes.md (H13 toolkit phase P2).
+
+    #[test]
+    fn lex_captures_hardened_multipath_marker() {
+        // RED before fix: the `[0-9;]` group-4 class cannot match `'`, so `<0';1'>`
+        // lexes as multipath_alts == [0] (the `';1'` is silently dropped) — a
+        // SILENT COLLAPSE. After the fix the lexer must SEE the marker and the
+        // whole occurrence is rejected; here we assert the marker is no longer
+        // invisible by checking lex no longer silently yields the truncated [0].
+        let err = lex_placeholders("wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))").unwrap_err();
+        assert!(
+            matches!(err, ToolkitError::DescriptorParse(_)),
+            "hardened multipath must raise DescriptorParse, got: {err:?}"
+        );
+        assert_eq!(err.exit_code(), 2, "DescriptorParse exit code");
+        let msg = err.message();
+        assert!(
+            msg.contains("hardened"),
+            "message must name the hardened alternative, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn lex_rejects_hardened_multipath_h_form() {
+        // The `h` spelling of the hardened marker must reject identically to `'`.
+        let err = lex_placeholders("wsh(multi(2,@0/<0h;1h>/*,@1/<0h;1h>/*))").unwrap_err();
+        assert!(
+            matches!(err, ToolkitError::DescriptorParse(_)),
+            "hardened `h` multipath must raise DescriptorParse, got: {err:?}"
+        );
+        assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn lex_rejects_single_hardened_alt() {
+        // Only one alt hardened (`<0;1'>`) must still reject — ANY hardened alt
+        // makes the card un-restorable.
+        let err = lex_placeholders("wpkh(@0/<0;1'>/*)").unwrap_err();
+        assert!(
+            matches!(err, ToolkitError::DescriptorParse(_)),
+            "single hardened alt must raise DescriptorParse, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn lex_nonhardened_multipath_still_parses() {
+        // CLEAN-NEGATIVE: a wire-correct, derivable `<0;1>` multipath MUST still
+        // lex correctly (no over-reject — the differential oracle proved `<0;1>`
+        // round-trips to the intended addresses).
+        let occs = lex_placeholders("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))").unwrap();
+        assert_eq!(occs.len(), 2);
+        assert_eq!(occs[0].multipath_alts, vec![0, 1]);
+        assert!(!occs[0].wildcard_hardened);
+        assert_eq!(occs[1].multipath_alts, vec![0, 1]);
+    }
+
+    #[test]
+    fn resolve_placeholders_rejects_hardened_multipath() {
+        // Unit on the lex→resolve seam: a hardened multipath body must surface a
+        // typed `DescriptorParse` through `resolve_placeholders` (which calls the
+        // now-`Result` `make_use_site_path`), and a clean `<0;1>` body must still
+        // resolve. RED before fix: the lexer silently drops the `'` so a hardened
+        // body resolves to a truncated [0] alt instead of rejecting.
+        let occs =
+            lex_placeholders("wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))").map(|o| {
+                resolve_placeholders(&o)
+            });
+        match occs {
+            // lex rejected outright — acceptable (reject fires at lex).
+            Err(ToolkitError::DescriptorParse(_)) => {}
+            // lex passed; resolve must then reject.
+            Ok(Err(ToolkitError::DescriptorParse(_))) => {}
+            other => panic!("hardened multipath must reject at lex or resolve, got: {other:?}"),
+        }
+        // CLEAN-NEGATIVE: non-hardened resolves.
+        let clean = lex_placeholders("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))").unwrap();
+        assert!(resolve_placeholders(&clean).is_ok());
+        // `make_use_site_path` (now `Result`) returns `Ok` for a clean occ.
+        let clean_occ = PlaceholderOccurrence {
+            i: 0,
+            fingerprint_anno: None,
+            origin_path_anno: None,
+            multipath_alts: vec![0, 1],
+            wildcard_hardened: false,
+        };
+        assert!(make_use_site_path(&clean_occ).is_ok());
+    }
+
+    #[test]
+    fn parse_descriptor_rejects_hardened_multipath_no_silent_collapse() {
+        // End-to-end through the production pipeline: a hardened multipath
+        // descriptor must produce a typed `DescriptorParse` (exit 2), NOT a
+        // silently-collapsed bare-`/*` md1. The reject fires in
+        // `lex_placeholders`/`resolve_placeholders` BEFORE `substitute_synthetic`
+        // (call order parse_descriptor: lex → resolve → substitute_synthetic).
+        let err = parse_descriptor(
+            "wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))",
+            &[],
+            &[],
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, ToolkitError::DescriptorParse(_)),
+            "hardened multipath must reject through parse_descriptor, got: {err:?}"
+        );
+        assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn parse_descriptor_nonhardened_multipath_ok() {
+        // CLEAN-NEGATIVE end-to-end: a non-hardened `<0;1>` multisig descriptor
+        // still parses to a Descriptor (no over-reject).
+        let desc = parse_descriptor(
+            "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
+            &[],
+            &[],
+        )
+        .expect("non-hardened multipath must parse");
+        // Two cosigner slots.
+        assert_eq!(desc.n, 2);
     }
 
     // ---- A.4: walk_root Layer 1 dispatch (10 round-trips) ----
