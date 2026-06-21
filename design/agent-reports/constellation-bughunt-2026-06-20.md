@@ -415,7 +415,8 @@ scratch next cycle.
 
 ## Confirmed — HIGH (Wave 2)
 
-### - [ ] H7 · Prefix-form `[fp/path]@N` origin annotation silently ignored → origin path dropped + fingerprint guard bypassed
+### - [x] H7 · Prefix-form `[fp/path]@N` origin annotation silently ignored → origin path dropped + fingerprint guard bypassed
+<!-- FIXED cycle-2 (toolkit v0.62.0): 36095b88 — lex_placeholders ACCEPTs the BIP-380 prefix form; all-named capture groups keep cycle-1's H13 reject intact. FOLLOWUP descriptor-prefix-form-origin-annotation-ignored. -->
 - **repo/class:** toolkit · **B-policy-collapse** · `w2-tk-synth-parse-01`
 - **location(s):** `parse_descriptor.rs:60-140` (`lex_placeholders` regex `:69-71`); `parse_descriptor.rs:319`
   (`substitute_synthetic` strip); `cmd/bundle.rs:1369-1370,1569-1626` (bypassed fp cross-check);
@@ -440,7 +441,8 @@ scratch next cycle.
 - **spec:** BIP-380 key-origin (`[fingerprint/path]KEY` — origin is a **prefix**); manual
   §41-mnemonic "non-canonical" point 2.
 
-### - [ ] H8 · `--md1-form=template` drops the BIP-39 wordlist language → non-English seed re-emits as English → wrong master seed
+### - [x] H8 · `--md1-form=template` drops the BIP-39 wordlist language → non-English seed re-emits as English → wrong master seed
+<!-- FIXED cycle-2 (toolkit v0.62.0): 53787cbb — run_language threaded into synthesize_template_descriptor; template ms1 emit uses unwrap_or(run_language). FOLLOWUP template-form-md1-drops-bip39-wordlist-language. -->
 - **repo/class:** toolkit · **B-policy-collapse** · `w2-tk-bundle-template-emit-01` · _highest-impact funds-loss this hunt_
 - **location(s):** `synthesize.rs:1265` (template ms1 emit hardcodes English); `synthesize.rs:486-488`
   (call drops `run_language`); `synthesize.rs:1158-1162` (fn sig lacks language param); `synthesize.rs:547`
@@ -664,7 +666,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 - **spec:** SPEC wallet-import signet/regtest disambiguation (override honored only within one coin-type
   class); BIP-44/SLIP-132 coin-type 0=mainnet/1=testnet; bech32 HRP network-distinct.
 
-### - [ ] H10 · Unsorted `multi(...)` silently exported as BIP-67 `sortedmulti` to Coldcard/Jade/Electrum → wrong addresses
+### - [x] H10 · Unsorted `multi(...)` silently exported as BIP-67 `sortedmulti` to Coldcard/Jade/Electrum → wrong addresses
+<!-- FIXED cycle-2 (toolkit v0.62.0): 29b39723 — typed ExportWalletUnsortedMultisigUnsupported (exit 2) in the emit_payload chokepoint; PURE REFUSAL. FOLLOWUP export-wallet-unsorted-multi-silent-sortedmulti-coercion (+ open export-wallet-direct-descriptor-unsorted-multi-generic-refusal). -->
 - **repo/class:** toolkit · **A-wrong-address** (B→A) · `w3-tk-export-2`
 - **location(s):** `wallet_export/coldcard.rs:258-369`; `wallet_export/jade.rs:43-46`;
   `wallet_export/electrum.rs:131-191`; `cmd/export_wallet.rs:122-128` (dispatch accepts unsorted)
