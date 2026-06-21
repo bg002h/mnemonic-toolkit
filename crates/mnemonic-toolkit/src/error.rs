@@ -270,10 +270,18 @@ pub enum ToolkitError {
     MultisigConfig {
         message: String,
     },
+    /// A decoded key's NetworkKind (mainnet vs testnet/signet/regtest)
+    /// disagrees with the asserted network (coin-type-derived, `--network`, or
+    /// a WIF's own network byte). cycle-5 S-NET: fail-closed network-provenance
+    /// invariant, wired at import/convert/export sites via
+    /// `network::assert_network_agrees`. Exit 2 (user-input / funds-safety).
+    // `#[allow(dead_code)]` removed as call sites land in Phase 2-4; kept on the
+    // helper in network.rs until the first production caller is wired.
     #[allow(dead_code)]
     NetworkMismatch {
-        xpub_network: &'static str,
-        expected: &'static str,
+        decoded_network: &'static str,
+        expected_network: &'static str,
+        context: &'static str,
     },
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
@@ -828,11 +836,13 @@ impl ToolkitError {
             ToolkitError::MsCodec(e) => crate::friendly::friendly_ms_codec(e),
             ToolkitError::MultisigConfig { message } => message.clone(),
             ToolkitError::NetworkMismatch {
-                xpub_network,
-                expected,
+                decoded_network,
+                expected_network,
+                context,
             } => format!(
-                "xpub network {} does not match --network {}",
-                xpub_network, expected,
+                "network mismatch: {context}: key encodes {decoded_network} but \
+                 {expected_network} was asserted (xpub version bytes distinguish \
+                 mainnet vs testnet/signet/regtest only)"
             ),
             ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
             ToolkitError::Repair(e) => format!("{e}"),
@@ -911,11 +921,13 @@ impl ToolkitError {
                 "flag": flag,
             })),
             ToolkitError::NetworkMismatch {
-                xpub_network,
-                expected,
+                decoded_network,
+                expected_network,
+                context,
             } => Some(json!({
-                "xpub_network": xpub_network,
-                "expected": expected,
+                "decoded_network": decoded_network,
+                "expected_network": expected_network,
+                "context": context,
             })),
             ToolkitError::SlotInputViolation { kind, .. } => Some(json!({ "kind": kind })),
             _ => None,
@@ -1011,8 +1023,9 @@ mod tests {
         );
         assert_eq!(
             ToolkitError::NetworkMismatch {
-                xpub_network: "main",
-                expected: "test"
+                decoded_network: "mainnet",
+                expected_network: "testnet",
+                context: "test"
             }
             .exit_code(),
             2,

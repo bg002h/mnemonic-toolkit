@@ -66,6 +66,52 @@ impl CliNetwork {
     }
 }
 
+/// cycle-5 S-NET: the static name of a `NetworkKind` for error messages.
+/// BIP-32 xpub version bytes distinguish only two families — `Main`
+/// (`0488b21e`) and `Test` (`043587cf`, covering testnet/signet/regtest) — so
+/// non-mainnet renders as `"testnet"` at this granularity.
+// `#[allow(dead_code)]` is removed once the helper has a production caller
+// (Phase 2 wires the first import-parser site).
+#[allow(dead_code)]
+pub(crate) const fn network_kind_name(kind: NetworkKind) -> &'static str {
+    match kind {
+        NetworkKind::Main => "mainnet",
+        NetworkKind::Test => "testnet",
+    }
+}
+
+/// cycle-5 S-NET: the shared fail-closed network-provenance invariant.
+///
+/// Rejects when a decoded artifact's `NetworkKind` (an xpub's `.network` OR a
+/// WIF's `pk.network`) disagrees with the asserted network (coin-type-derived,
+/// `--network`-derived, or envelope-declared). Granularity is `NetworkKind`
+/// (Main vs Test, 2-way) — exactly the partition xpub version bytes and
+/// coin-types encode (mainnet vs testnet/signet/regtest). Ports the
+/// `synthesize.rs` `CosignerSpec` predicate to a reusable site.
+///
+/// PRECONDITION (caller-side): callers MUST skip this call entirely when there
+/// is NO asserted network (originless / no-coin-type input). The helper itself
+/// is unconditional — given two `NetworkKind`s it compares them; the
+/// skip-when-no-asserted-network discipline lives at the call site so that an
+/// originless `tpub` descriptor is NOT over-rejected.
+// `#[allow(dead_code)]` is removed once Phase 2 wires the first import-parser
+// call site; kept here so the Phase-1 foundation commit is clippy-clean.
+#[allow(dead_code)]
+pub(crate) fn assert_network_agrees(
+    decoded: NetworkKind,
+    asserted: NetworkKind,
+    context: &'static str,
+) -> Result<(), crate::error::ToolkitError> {
+    if decoded != asserted {
+        return Err(crate::error::ToolkitError::NetworkMismatch {
+            decoded_network: network_kind_name(decoded),
+            expected_network: network_kind_name(asserted),
+            context,
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,5 +130,69 @@ mod tests {
         assert_eq!(CliNetwork::Testnet.network_kind(), NetworkKind::Test);
         assert_eq!(CliNetwork::Signet.network_kind(), NetworkKind::Test);
         assert_eq!(CliNetwork::Regtest.network_kind(), NetworkKind::Test);
+    }
+
+    // --- cycle-5 S-NET: shared network-provenance helper ---
+
+    #[test]
+    fn network_kind_name_renders_two_families() {
+        assert_eq!(network_kind_name(NetworkKind::Main), "mainnet");
+        assert_eq!(network_kind_name(NetworkKind::Test), "testnet");
+    }
+
+    #[test]
+    fn assert_network_agrees_same_kind_is_ok() {
+        assert!(assert_network_agrees(NetworkKind::Main, NetworkKind::Main, "test").is_ok());
+        assert!(assert_network_agrees(NetworkKind::Test, NetworkKind::Test, "test").is_ok());
+    }
+
+    #[test]
+    fn assert_network_agrees_main_vs_test_rejects() {
+        let err = assert_network_agrees(NetworkKind::Main, NetworkKind::Test, "test ctx")
+            .expect_err("Main vs Test must reject");
+        match err {
+            crate::error::ToolkitError::NetworkMismatch {
+                decoded_network,
+                expected_network,
+                context,
+            } => {
+                assert_eq!(decoded_network, "mainnet");
+                assert_eq!(expected_network, "testnet");
+                assert_eq!(context, "test ctx");
+            }
+            other => panic!("expected NetworkMismatch, got {other:?}"),
+        }
+        assert_eq!(err_exit_code(NetworkKind::Main, NetworkKind::Test), 2);
+    }
+
+    #[test]
+    fn assert_network_agrees_test_vs_main_rejects_symmetric() {
+        let err = assert_network_agrees(NetworkKind::Test, NetworkKind::Main, "ctx")
+            .expect_err("Test vs Main must reject");
+        match err {
+            crate::error::ToolkitError::NetworkMismatch {
+                decoded_network,
+                expected_network,
+                ..
+            } => {
+                assert_eq!(decoded_network, "testnet");
+                assert_eq!(expected_network, "mainnet");
+            }
+            other => panic!("expected NetworkMismatch, got {other:?}"),
+        }
+    }
+
+    fn err_exit_code(decoded: NetworkKind, asserted: NetworkKind) -> u8 {
+        assert_network_agrees(decoded, asserted, "x")
+            .expect_err("mismatch")
+            .exit_code()
+    }
+
+    #[test]
+    fn network_kind_from_signet_regtest_is_test() {
+        assert_eq!(NetworkKind::from(bitcoin::Network::Signet), NetworkKind::Test);
+        assert_eq!(NetworkKind::from(bitcoin::Network::Regtest), NetworkKind::Test);
+        assert_eq!(NetworkKind::from(bitcoin::Network::Testnet), NetworkKind::Test);
+        assert_eq!(NetworkKind::from(bitcoin::Network::Bitcoin), NetworkKind::Main);
     }
 }
