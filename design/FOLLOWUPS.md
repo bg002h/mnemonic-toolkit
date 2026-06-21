@@ -87,6 +87,30 @@ Single source of truth for items that surfaced during a review or implementation
 - **Tier:** resolved (Tier-3 C4).
 - **Companion:** none (toolkit-local; alongside shipped `import-wallet-format-descriptor` C5).
 
+### `convert-composite-bip38-empty-passphrase-refusal` — ✓ RESOLVED (v0.65.1, 2026-06-21) — refuse composite (seedqr|phrase|entropy)→bip38 on unset --bip38-passphrase
+
+- **Surfaced:** 2026-06-20, the constellation bug-hunt (finding **L21**, D-secret-leak). On a composite `(seedqr|phrase|entropy) → bip38` edge, `--passphrase` feeds only the BIP-39 PBKDF2 leg; an unset `--bip38-passphrase` silently encrypted the BIP-38 Scrypt layer with the EMPTY passphrase (`bip38_passphrase.unwrap_or("")`), and the "ignored passphrase" warning is suppressed on BIP-38 edges → a user who passed `--passphrase X` (the v0.7 dual-purpose habit) got an engravable steel card they believed was BIP-38-protected but was encrypted with "". This is a NEW residual footgun on top of the already-resolved `bip38-distinct-passphrase-flag` (v0.8) two-channel split.
+- **Where:** `cmd/convert.rs` — the composite `Bip38 =>` sub-arm head (inside the `Seedqr | Phrase | Entropy =>` outer arm in `compute_outputs`), before the `unwrap_or("")` empty encrypt.
+- **Fix (shipped):** POSITION-BASED fail-closed refusal — the sub-arm's position inside `Seedqr | Phrase | Entropy =>` structurally proves all three sources incl. Seedqr (no `from`-set list that could drop Seedqr). When the in-scope `bip38_passphrase: Option<&str>` param is `None`, return `ConvertRefusal` (exit 2) before the empty encrypt. Predicate tests `.is_none()` (NOT `.is_empty()`), so the deliberate `--bip38-passphrase ""` (Some("")) path STILL encrypts. Reuses `ConvertRefusal` — no new variant/flag, no GUI-schema / manual-flag-table lockstep. Direct `(wif↔bip38)` edges (separate arms) keep their documented `--passphrase` fallback. Manual prose (`56-bip39-vs-bip38-pass.md` edge table generalized to "REFUSED if unset" + new `(seedqr, bip38)` row; `41-mnemonic.md` `--bip38-passphrase` row note) shipped same commit. Tests: `cli_convert_bip38.rs` — RED phrase/entropy/SEEDQR refusals + GREEN explicit-empty (phrase + seedqr) + real-passphrase + direct-edge regression.
+- **Tier:** resolved (cycle-11b L21).
+- **Companion:** none (toolkit-local).
+
+### `verify-bundle-bundle-rs-descriptor-mode-dedup` — OPEN — S-VERIFY dedup of the bundle.rs ↔ verify_bundle.rs descriptor-mode binding (carries cycle-11b L24's standalone gate)
+
+- **Surfaced:** 2026-06-20, the constellation bug-hunt (finding **L24**, E-panic-dos) + the program's S-VERIFY thesis (`PLAN_constellation_bughunt_fix_program.md §292`). `bundle.rs` and `verify_bundle.rs` carry hand-copied descriptor-mode binding logic that drifts (L24 was exactly such a drift: `bundle.rs` had the `max(idx+1) != n` exact-coverage gate; `verify_bundle.rs` omitted it → OOB panic). The structural fix is to deduplicate the two descriptor-mode bindings into ONE shared function so guard-drift cannot recur.
+- **Where:** `cmd/bundle.rs` (descriptor-mode binding incl. the gate at `:1373-1388`) ↔ `cmd/verify_bundle.rs::descriptor_mode_verify_run` (the mirror; cycle-11b added the gate at the `validate_slot_set` window).
+- **Status (cycle-11b L24):** the standalone gate landed in `verify_bundle.rs` (v0.65.1 @03017917) — a deliberate duplicate of `bundle.rs`'s, carrying an in-code S-VERIFY fold comment citing THIS slug. The genuine dedup-into-shared-fn work is future. When the S-VERIFY dedup runs, fold BOTH gates (and the H1-class checks) into the shared descriptor-mode binding fn (one gate, both callers) and resolve this slug.
+- **Tier:** OPEN (S-VERIFY; not scheduled — cycle-11b landed only the standalone gate).
+- **Companion:** none (toolkit-local).
+
+### `import-classify-xonly-position-aware` — ✓ RESOLVED (v0.65.1, 2026-06-21) — position-aware x-only key detection in has_any_key_token
+
+- **Surfaced:** 2026-06-20, the constellation bug-hunt (finding **L25**, cosmetic err-msg). `has_any_key_token` (`wallet_import/pipeline.rs`) matched xpub-family + `02/03`-prefixed 66-hex compressed keys but NOT bare 64-hex x-only (BIP-340/341) taproot keys, so an origin-less `tr(<xonly>, pk(<xonly2>))` routed to the misleading "keyless script (hashlock/timelock only)" message instead of "must carry a key origin" — a NEW residual on top of the resolved `bundle-keyless-descriptor-honest-refusal` (which left x-only undetected).
+- **Where:** `wallet_import/pipeline.rs::has_any_key_token` (regex) + `classify_descriptor_form`'s `(false,false)` arm.
+- **Fix (shipped):** ADDITIVE position-aware anchors `(?:tr|pk|pk_k|pk_h)\([0-9a-fA-F]{64}` — match a 64-hex token only in a taproot KEY position (`tr(` internal key, or `pk(`/`pk_k(`/`pk_h(` argument), NOT as a bare token. So `sha256(`/`hash256(`/`ripemd160(`/`hash160(` 64-hex args stay keyless and the `\b0[23]…{64}\b` 66-hex compressed-key alternation is unchanged. Re-routes the x-only case to "must carry a key origin"; both arms still `Err` (message-only). Chose option (a) targeted-context-match (NOT structural parse (b)) — sufficient for a PATCH cosmetic fix, no parse dependency. Tests: `pipeline.rs` units — x-only-in-key-position detected + origin-less x-only → key-origin message; regressions (66-hex compressed-key-is-keyed AND sha256/ripemd160-hash-literal-is-keyless) stay GREEN.
+- **Tier:** resolved (cycle-11b L25).
+- **Companion:** none (toolkit-local).
+
 ### `install-sh-sibling-pins-stale-vs-flag-bearing-clis` — bump install.sh canonical sibling pins to the P1/P2/P3 flag-bearing releases
 
 - **Surfaced:** 2026-06-15, P4 release (mnemonic-toolkit v0.56.0). `scripts/install.sh`'s canonical sibling pins are `descriptor-mnemonic-md-cli-v0.6.2` / `ms-cli-v0.7.0` / `mk-cli-v0.8.0` — all PRE-`--group-size`/`--separator`. The cycle shipped md-cli v0.7.0 (P1), ms-cli v0.8.0 (P2), mk-cli v0.9.0 (P3) with the flags. The v0.56.0 manual documents the flags but `manual.yml` still builds the OLD CLIs (flag-coverage is forward-only — help→doc — so it passes; the docs are simply ahead of the pinned binaries).

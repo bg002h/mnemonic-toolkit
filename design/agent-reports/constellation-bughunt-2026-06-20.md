@@ -828,7 +828,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   99, so a 96-symbol long chunk is mislabeled. Display/JSON only. Fix: threshold `≤ 93+len("mk1")` (≤96), or
   classify via `bch_code_for_length`. · **spec:** BIP-93 (regular data-part 14..=93, long 96..=108).
 
-### - [ ] L21 · `convert (phrase|entropy)→bip38` with only `--passphrase` silently encrypts with an EMPTY passphrase
+### - [x] L21 · `convert (phrase|entropy)→bip38` with only `--passphrase` silently encrypts with an EMPTY passphrase
+<!-- FIXED cycle-11b (toolkit v0.65.1 @af7100ff) — composite (seedqr|phrase|entropy)→bip38 with an unset --bip38-passphrase now REFUSED (ConvertRefusal, exit 2) at the Bip38=> sub-arm head inside the Seedqr|Phrase|Entropy=> outer arm (position-based, covers all THREE sources incl. seedqr). Predicate tests the in-scope bip38_passphrase.is_none() (NOT .is_empty()), so --bip38-passphrase "" still encrypts. Direct (wif↔bip38) edges' --passphrase fallback left as-is. Manual prose (edge table + --bip38-passphrase row) same commit. FOLLOWUP convert-composite-bip38-empty-passphrase-refusal (resolved). -->
 - **repo/class:** toolkit · **D-secret-leak** · `w3-tk-convert-01`
 - **location:** `cmd/convert.rs:1366` (empty fallback), `:932` (guard satisfied by `--passphrase`),
   `:1502,1522` (asymmetric direct edges fall back to `--passphrase`)
@@ -944,7 +945,9 @@ mostly siblings of known patterns) — _except_ the taproot BIP-48 origin bug, a
 
 ## Confirmed — LOW (final round)
 
-### - [ ] L24 · `verify-bundle` descriptor-mode `--slot @N.path` loop indexes `new_paths[idx]` unbounded → OOB panic for `idx ≥ n`
+### - [x] L24 · `verify-bundle` descriptor-mode `--slot @N.path` loop indexes `new_paths[idx]` unbounded → OOB panic for `idx ≥ n`
+<!-- FIXED cycle-11b (toolkit v0.65.1 @03017917) — mirrored bundle.rs:1373-1388's exact-coverage `max(idx+1) != n` gate into verify_bundle.rs (iterating args.slot), after validate_slot_set and before the canonicity probe. OOB panic (new_paths[idx] at :1435) → clean DescriptorParse (exit 2); also catches the under-n case (bundle.rs parity). Standalone gate carries an S-VERIFY fold note. FOLLOWUP verify-bundle-bundle-rs-descriptor-mode-dedup (OPEN — folds the gate into the shared descriptor-mode binding fn when the S-VERIFY dedup lands). -->
+
 - **repo/class:** toolkit · **E-panic-dos** · `w4a-1`
 - **location:** `cmd/verify_bundle.rs:1374-1393` (`new_paths` built with exactly `n`), `:1425` (write, no
   `idx<n` guard), `:1456-1462` (range-checked loop runs **after**); `slot_input.rs:249-267`
@@ -957,7 +960,9 @@ mostly siblings of known patterns) — _except_ the taproot BIP-48 origin bug, a
   **Structural:** deduplicate the `bundle.rs ↔ verify_bundle.rs` descriptor-mode binding into one shared
   function so guard-drift (this + H1's class) can't recur.
 
-### - [ ] L25 · `import-wallet` keyed/keyless classifier blind to raw x-only taproot keys → routes to the "keyless" error message
+### - [x] L25 · `import-wallet` keyed/keyless classifier blind to raw x-only taproot keys → routes to the "keyless" error message
+<!-- FIXED cycle-11b (toolkit v0.65.1 @3bc84d0c) — has_any_key_token extended with ADDITIVE position-aware anchors `(?:tr|pk|pk_k|pk_h)\([0-9a-fA-F]{64}`, matching a 64-hex x-only key only in a taproot KEY position (not as a bare token, so sha256/hash256/ripemd160/hash160 64-hex args stay keyless). The 66-hex `02/03` compressed-key alternation is unchanged. Origin-less tr(<xonly>,...) now re-routes from "keyless script" to the correct "must carry a key origin" message; both arms still Err. FOLLOWUP import-classify-xonly-position-aware (resolved). -->
+
 - **repo/class:** toolkit · **other** · `w4a-taproot-01`
 - **location:** `wallet_import/pipeline.rs:53-60` (`has_any_key_token` regex), `:160-180`
   (`classify_descriptor_form` `(false,false)` arm)

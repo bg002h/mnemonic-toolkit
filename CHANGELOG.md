@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.65.1] — 2026-06-21
+
+**SemVer-PATCH — toolkit secret-hygiene / robustness cluster (constellation bug-hunt cycle-11b: L21 · L24 · L25). No new `ToolkitError` variant, no CLI-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no codec bump; manual PROSE only (no flag-table change).**
+
+### Fixed
+
+- **L21 (funds-safety / SECRET) — `convert` now REFUSES a composite `(seedqr|phrase|entropy)→bip38` edge when `--bip38-passphrase` is unset.** Previously `--passphrase` fed only the BIP-39 PBKDF2 leg, so an unset `--bip38-passphrase` silently encrypted the BIP-38 Scrypt layer with the EMPTY passphrase (and the "ignored passphrase" warning is suppressed on BIP-38 edges → silent) — an engravable card the user believed was BIP-38-protected was encrypted with `""`. A position-based refusal at the composite `Bip38 =>` sub-arm head (covering all three sources incl. seedqr) returns `ConvertRefusal` (**exit 2**) before the empty encrypt. The predicate tests `.is_none()` (not emptiness), so `--bip38-passphrase ""` still encrypts deliberately. Direct `(wif↔bip38)` edges keep their documented `--passphrase` fallback. Manual PROSE updated (`56-bip39-vs-bip38-pass.md` edge table + `41-mnemonic.md` `--bip38-passphrase` row).
+- **L24 (robustness) — `verify-bundle` descriptor-mode `--slot @N.path` over-`n` OOB panic → typed `DescriptorParse`.** `validate_slot_set` enforces only contiguity (`0..=max_idx`), not range-vs-`n`, so a contiguous slot set whose max index exceeds the descriptor's placeholder count `n` reached the per-slot override loop and panicked on the unguarded `new_paths[idx]` write. Mirrored `bundle.rs`'s exact-coverage `max(idx+1) != n` gate into `verify_bundle.rs` → clean `DescriptorParse` (**exit 2**); also catches the under-`n` case (bundle.rs parity). Standalone gate carries an S-VERIFY fold note (FOLLOWUP `verify-bundle-bundle-rs-descriptor-mode-dedup`).
+- **L25 (cosmetic) — `import-wallet` now classifies a raw 64-hex x-only taproot key in a key position as keyed.** `has_any_key_token` matched xpub-family + `02/03`-prefixed 66-hex compressed keys but not bare 64-hex x-only (BIP-340/341) keys, so an origin-less `tr(<xonly>, …)` routed to the misleading "keyless script (hashlock/timelock only)" message. An ADDITIVE position-aware anchor (`tr(`/`pk(`/`pk_k(`/`pk_h(` + 64-hex) re-routes it to the correct "must carry a key origin" message; `sha256`/`hash256`/`ripemd160`/`hash160` 64-hex hash literals stay keyless, and the 66-hex compressed-key match is unchanged. Both arms still `Err` (message-only change).
+
+All three are toolkit-only: no `md-codec` / `ms-codec` / `mk-codec` bump, no new `ToolkitError` variant, no CLI-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; only manual PROSE.
+
 ## mnemonic-toolkit [0.65.0] — 2026-06-21
 
 **SemVer-MINOR — `build-descriptor` extra-derivation-suffix fail-closed reject (constellation bug-hunt cycle-7). No new `DiagnosticKind` → no `--json` wire-shape change, no GUI schema-mirror; no codec/manual leg.**
