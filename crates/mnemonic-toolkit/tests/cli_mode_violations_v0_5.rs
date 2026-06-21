@@ -149,6 +149,12 @@ fn descriptor_and_template_rejected() {
 
 #[test]
 fn descriptor_without_template_accepted() {
+    // H7 (cycle-2): use an UN-annotated descriptor. A `[deadbeef/...]@0` origin
+    // annotation no longer silently dropped — it now FIRES the per-`@N`
+    // master-fingerprint cross-check, and `deadbeef` does NOT match TREZOR_24's
+    // master fp, so an annotated descriptor would (correctly) be refused. This
+    // test asserts MODE acceptance (descriptor without template), not the
+    // annotation behavior, so the annotation is removed.
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -156,7 +162,7 @@ fn descriptor_without_template_accepted() {
             "--slot",
             &format!("@0.phrase={TREZOR_24}"),
             "--descriptor",
-            "wpkh([deadbeef/84'/0'/0']@0/<0;1>/*)",
+            "wpkh(@0/<0;1>/*)",
             "--network",
             "mainnet",
             "--no-engraving-card",

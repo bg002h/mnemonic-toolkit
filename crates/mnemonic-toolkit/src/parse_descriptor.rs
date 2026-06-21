@@ -60,14 +60,29 @@ pub struct PlaceholderOccurrence {
 pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, ToolkitError> {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
-        // Captures:
-        //   1: @N index
-        //   2: 8-hex fingerprint inside `[...]`
-        //   3: origin path inside `[...]` (may be empty if `[fp]` alone)
-        //   4: multipath body — captured PERMISSIVELY (`[^>]*`) whenever a
-        //      `/<…>` delimiter is present, then STRICTLY validated in the parse
-        //      below.
-        //   5: wildcard suffix (`/*`, `/*'`, `/*h`)
+        // Captures (ALL NAMED — H7/C1: access purely BY NAME, never by numeric
+        // index; numbering is by opening-paren order, so the NEW prefix group
+        // before `@(\d+)` shifts every numeric index — a leftover `caps[N]` would
+        // read the WRONG group and silently break the H13 multipath validator. By
+        // accessing every group by name the prefix bracket can sit anywhere and
+        // the validator still reads the multipath body):
+        //   pfx_fp   : 8-hex fingerprint inside a BIP-380-canonical PREFIX `[...]`
+        //              (H7 — `[fp/path]@N`), MANDATORY whenever the prefix bracket
+        //              is present (mirrors the suffix grammar).
+        //   pfx_path : origin path inside the prefix `[...]`.
+        //   idx      : @N index.
+        //   sfx_fp   : 8-hex fingerprint inside the (legacy) SUFFIX `[...]`
+        //              (`@N[fp/path]`).
+        //   sfx_path : origin path inside the suffix `[...]`.
+        //   mpath    : multipath body — captured PERMISSIVELY (`[^>]*`) whenever a
+        //              `/<…>` delimiter is present, then STRICTLY validated in the
+        //              parse below (H13).
+        //   wild     : wildcard suffix (`/*`, `/*'`, `/*h`).
+        //
+        // H7 (cycle-2): the prefix-origin alternation is ADDITIVE — every existing
+        // SUFFIX-form input matches unchanged (the prefix group is optional). The
+        // per-`@N` fp/path is taken from whichever of {prefix, suffix} is present;
+        // BOTH present on the same `@N` is an ambiguous double-origin → refuse.
         //
         // H13 + C1 fix (impl-review round-1): a PRESENT `<…>` multipath
         // delimiter is MUST-be-valid. A prior strict-alternation capture inside
@@ -80,17 +95,30 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
         // double-marker (`<0'';1>`), and any other non-`[0-9;]` residue, while
         // still ACCEPTING valid `<0;1>` / `<0;1;2>`.
         Regex::new(
-            r"@(\d+)(?:\[([0-9a-fA-F]{8})((?:/\d+(?:'|h)?)*)\])?(?:/<([^>]*)>)?(/\*(?:'|h)?)?",
+            r"(?:\[(?P<pfx_fp>[0-9a-fA-F]{8})(?P<pfx_path>(?:/\d+(?:'|h)?)*)\])?@(?P<idx>\d+)(?:\[(?P<sfx_fp>[0-9a-fA-F]{8})(?P<sfx_path>(?:/\d+(?:'|h)?)*)\])?(?:/<(?P<mpath>[^>]*)>)?(?P<wild>/\*(?:'|h)?)?",
         )
         .expect("static regex compiles")
     });
     let mut out = Vec::new();
     for caps in re.captures_iter(descriptor) {
-        let i: u8 = caps[1].parse().map_err(|_| {
-            ToolkitError::DescriptorParse(format!("@i index out of range: @{}", &caps[1]))
+        let idx_match = &caps["idx"];
+        let i: u8 = idx_match.parse().map_err(|_| {
+            ToolkitError::DescriptorParse(format!("@i index out of range: @{idx_match}"))
         })?;
-        let fingerprint_anno = caps
-            .get(2)
+        // H7: take fp/path from whichever of {prefix, suffix} is present; BOTH
+        // present on the same `@N` is an ambiguous double-origin → refuse (never
+        // silently pick one — funds-safety).
+        let pfx_fp = caps.name("pfx_fp");
+        let sfx_fp = caps.name("sfx_fp");
+        if pfx_fp.is_some() && sfx_fp.is_some() {
+            return Err(ToolkitError::DescriptorParse(format!(
+                "@{i} carries BOTH a prefix `[fp/path]@{i}` and a suffix `@{i}[fp/path]` \
+                 key-origin annotation; this double-origin is ambiguous — supply exactly one"
+            )));
+        }
+        let fp_match = pfx_fp.or(sfx_fp);
+        let path_match = caps.name("pfx_path").or_else(|| caps.name("sfx_path"));
+        let fingerprint_anno = fp_match
             .map(|m| {
                 Fingerprint::from_str(m.as_str()).map_err(|e| {
                     ToolkitError::DescriptorParse(format!(
@@ -100,8 +128,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                 })
             })
             .transpose()?;
-        let origin_path_anno = caps
-            .get(3)
+        let origin_path_anno = path_match
             .and_then(|m| {
                 let s = m.as_str();
                 if s.is_empty() {
@@ -117,7 +144,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
             })
             .transpose()?;
         let multipath_alts = caps
-            .get(4)
+            .name("mpath")
             .map(|m| {
                 // C1 fix: the body is captured PERMISSIVELY, so a PRESENT `<…>`
                 // is validated STRICTLY here. Every `;`-split alternative MUST be
@@ -150,7 +177,7 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
             .transpose()?
             .unwrap_or_default();
         let wildcard_hardened = caps
-            .get(5)
+            .name("wild")
             .map(|m| m.as_str().ends_with('\'') || m.as_str().ends_with('h'))
             .unwrap_or(false);
         out.push(PlaceholderOccurrence {
@@ -366,8 +393,15 @@ pub fn substitute_synthetic(
         // `parse_descriptor` path (lex → resolve → substitute_synthetic) this
         // strip never sees a marker-bearing body. Kept in lockstep with md-cli's
         // `substitute_synthetic` strip class.
+        // H7 (cycle-2): mirror the BIP-380-canonical PREFIX origin bracket
+        // `[fp/path]@N` as a NON-CAPTURING `(?:\[…\])?` prepended BEFORE `@(\d+)`
+        // so a leading `[fp/path]` is stripped before `Descriptor::from_str`,
+        // identically to the (legacy) suffix bracket. The prefix group MUST stay
+        // non-capturing so the SOLE consumer `caps[1]` (the `@N` index, below)
+        // does not shift. The multipath class stays the C1-narrow `[0-9;]+` (do
+        // NOT widen — the lexer rejects markers first).
         Regex::new(
-            r"@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;]+>)?(?:/\*(?:'|h)?)?",
+            r"(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?@(\d+)(?:\[[0-9a-fA-F]{8}(?:/\d+(?:'|h)?)*\])?(?:/<[0-9;]+>)?(?:/\*(?:'|h)?)?",
         )
         .expect("static regex compiles")
     });
@@ -1401,6 +1435,162 @@ mod tests {
         let occs = lex_placeholders("wpkh(@0/<0;1>/*')").unwrap();
         assert_eq!(occs.len(), 1);
         assert!(occs[0].wildcard_hardened);
+    }
+
+    // ---- A.2c: H7 (cycle-2) — BIP-380-canonical PREFIX-form `[fp/path]@N` ----
+    //
+    // BIP-380 key-origin is a PREFIX `[fingerprint/path]KEY`; the toolkit
+    // historically accepted ONLY the suffix form `@N[fp/path]`, silently dropping
+    // a leading `[fp/path]` AND bypassing the per-@N master-fp cross-check
+    // (funds-loss: backup watches a different address set). H7 ACCEPTs the prefix
+    // form by converting `lex_placeholders` to all-NAMED capture groups (so a
+    // prepended prefix alternation can NEVER shift the H13 multipath validator's
+    // group) and populating `fingerprint_anno`/`origin_path_anno` from whichever
+    // of {prefix, suffix} is present.
+
+    #[test]
+    fn lex_prefix_origin_parity_with_suffix() {
+        // The BIP-380 PREFIX form must lex to the SAME fp/path as the suffix form.
+        let prefix = lex_placeholders("wpkh([deadbeef/84'/0'/0']@0/<0;1>/*)").unwrap();
+        let suffix = lex_placeholders("wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)").unwrap();
+        assert_eq!(prefix.len(), 1);
+        assert_eq!(
+            prefix[0].fingerprint_anno,
+            Some(Fingerprint::from_str("deadbeef").unwrap()),
+            "prefix form must carry the 8-hex fingerprint annotation"
+        );
+        assert_eq!(
+            prefix[0].origin_path_anno.as_ref().map(|p| p.to_string()),
+            Some("84'/0'/0'".to_string()),
+            "prefix form must carry the origin path annotation"
+        );
+        // Byte-for-byte structural parity with the suffix oracle.
+        assert_eq!(
+            prefix[0].fingerprint_anno, suffix[0].fingerprint_anno,
+            "prefix fp must equal suffix fp"
+        );
+        assert_eq!(
+            prefix[0].origin_path_anno, suffix[0].origin_path_anno,
+            "prefix path must equal suffix path"
+        );
+        assert_eq!(prefix[0].multipath_alts, suffix[0].multipath_alts);
+        assert_eq!(prefix[0].wildcard_hardened, suffix[0].wildcard_hardened);
+    }
+
+    #[test]
+    fn lex_prefix_origin_multisig_per_slot() {
+        // Per-slot prefix annotations on a 2-of-2 multisig.
+        let occs = lex_placeholders(
+            "wsh(sortedmulti(2,[deadbeef/48'/0'/0'/2']@0/<0;1>/*,[cafef00d/48'/0'/0'/2']@1/<0;1>/*))",
+        )
+        .unwrap();
+        assert_eq!(occs.len(), 2);
+        assert_eq!(
+            occs[0].fingerprint_anno,
+            Some(Fingerprint::from_str("deadbeef").unwrap())
+        );
+        assert_eq!(
+            occs[1].fingerprint_anno,
+            Some(Fingerprint::from_str("cafef00d").unwrap())
+        );
+        assert_eq!(
+            occs[0].origin_path_anno.as_ref().map(|p| p.to_string()),
+            Some("48'/0'/0'/2'".to_string())
+        );
+    }
+
+    #[test]
+    fn lex_strip_parity_prefix_equals_suffix() {
+        // `substitute_synthetic` of the prefix form yields the SAME bare-xpub
+        // descriptor as the suffix form — the leading `[fp/path]` is stripped
+        // before `Descriptor::from_str`, no leaked bracket.
+        let (prefix_sub, _) =
+            substitute_synthetic("wpkh([deadbeef/84'/0'/0']@0/<0;1>/*)", ScriptCtx::SingleSig)
+                .unwrap();
+        let (suffix_sub, _) =
+            substitute_synthetic("wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)", ScriptCtx::SingleSig)
+                .unwrap();
+        assert_eq!(
+            prefix_sub, suffix_sub,
+            "prefix-form substitution must equal the suffix-form substitution (no leaked `[...]`)"
+        );
+        assert!(
+            !prefix_sub.contains('['),
+            "no `[fp/path]` bracket may leak into the substituted descriptor: {prefix_sub}"
+        );
+    }
+
+    #[test]
+    fn lex_prefix_path_only_no_fp_rejected_like_suffix() {
+        // Composition edge (i): the prefix form's 8-hex fingerprint is MANDATORY.
+        // A path-only prefix bracket `[/84'/0'/0']@0` (no 8-hex fp) does NOT match
+        // the prefix alternation, so the bracket LEAKS into the substituted
+        // descriptor and `Descriptor::from_str` rejects it as malformed — the SAME
+        // end-to-end outcome as the suffix path-only form `@0[/84'/0'/0']` — NEVER
+        // exit-0 with the bracket silently dropped. (The reject fires at
+        // `parse_descriptor` / `Descriptor::from_str`, not at the lex step: the
+        // suffix grammar's `[0-9a-fA-F]{8}` is likewise mandatory, so neither
+        // path-only form matches the origin bracket; both leak it downstream.)
+        let prefix_err = parse_descriptor("wpkh([/84'/0'/0']@0/<0;1>/*)", &[], &[])
+            .expect_err("path-only prefix must reject end-to-end");
+        assert!(
+            matches!(prefix_err, ToolkitError::DescriptorParse(_)),
+            "path-only prefix must raise DescriptorParse, got: {prefix_err:?}"
+        );
+        // Suffix oracle: the path-only suffix form also rejects end-to-end.
+        let suffix_err = parse_descriptor("wpkh(@0[/84'/0'/0']/<0;1>/*)", &[], &[])
+            .expect_err("path-only suffix must reject end-to-end");
+        assert!(
+            matches!(suffix_err, ToolkitError::DescriptorParse(_)),
+            "path-only suffix must raise DescriptorParse, got: {suffix_err:?}"
+        );
+    }
+
+    #[test]
+    fn lex_both_positions_present_refused() {
+        // Composition edge (both-positions): a prefix AND a suffix origin bracket
+        // on the SAME `@N` is an ambiguous double-origin → typed refuse (never
+        // silently pick one).
+        let err = lex_placeholders("wpkh([deadbeef/84'/0'/0']@0[cafef00d/84'/0'/0']/<0;1>/*)")
+            .expect_err("both-positions must refuse");
+        assert!(
+            matches!(err, ToolkitError::DescriptorParse(_)),
+            "both-positions origin must raise DescriptorParse, got: {err:?}"
+        );
+        assert_eq!(err.exit_code(), 2);
+    }
+
+    #[test]
+    fn lex_prefix_hardened_multipath_still_rejects_h13() {
+        // H13 NON-REGRESSION (the C1 Critical guard): the named-group conversion
+        // must NOT detach the H13 hardened-multipath validator from the multipath
+        // body. BOTH the bare form AND a prefix-annotated form must STILL reject a
+        // hardened `<0';1'>` multipath with the cycle-1 typed error — proving the
+        // prefix alternation did not shift the multipath group out from under the
+        // validator (the silent-stop-firing regression a numeric `caps[N]` leftover
+        // would introduce).
+        let bare = lex_placeholders("wpkh(@0/<0';1'>/*)").expect_err("bare hardened rejects");
+        assert!(
+            matches!(bare, ToolkitError::DescriptorParse(_)),
+            "bare hardened multipath must reject, got: {bare:?}"
+        );
+        assert!(
+            bare.message().contains("hardened"),
+            "bare reject must name `hardened`, got: {}",
+            bare.message()
+        );
+
+        let prefixed = lex_placeholders("wpkh([deadbeef/84'/0'/0']@0/<0';1'>/*)")
+            .expect_err("prefix-annotated hardened rejects");
+        assert!(
+            matches!(prefixed, ToolkitError::DescriptorParse(_)),
+            "prefix-annotated hardened multipath must STILL reject, got: {prefixed:?}"
+        );
+        assert!(
+            prefixed.message().contains("hardened"),
+            "prefix-annotated reject must name `hardened` (validator still reads mpath), got: {}",
+            prefixed.message()
+        );
     }
 
     #[test]
