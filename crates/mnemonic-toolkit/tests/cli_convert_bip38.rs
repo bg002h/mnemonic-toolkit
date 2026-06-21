@@ -3,6 +3,7 @@
 //! <https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki>
 
 use assert_cmd::Command;
+use predicates::prelude::*;
 
 // --- BIP-38 spec test vectors (non-EC-multiplied) ---
 //
@@ -610,8 +611,13 @@ fn composite_phrase_to_bip38_separate_passphrase_semantics_pinned() {
         "BIP-39 extension must change derived WIF; if these are equal, the test setup is wrong"
     );
 
-    // BIP38_C: phrase → bip38 with --passphrase X only (composite arm,
-    // no --bip38-passphrase).
+    // BIP38_C: phrase → bip38 with --passphrase X driving PBKDF2 and an
+    // EXPLICIT empty BIP-38 passphrase (`--bip38-passphrase ""`).
+    // cycle-11b L21: an UNSET --bip38-passphrase on this composite arm is now
+    // REFUSED (it would silently encrypt with ""); the deliberate empty path is
+    // the explicit `--bip38-passphrase ""` below. This still pins the v0.8 §12.b
+    // semantic — --passphrase feeds BIP-39 PBKDF2 only, the BIP-38 layer is the
+    // empty passphrase — recovered via `--bip38-passphrase ""`.
     let bip38_c = convert_value(&[
         "convert",
         "--from",
@@ -622,6 +628,8 @@ fn composite_phrase_to_bip38_separate_passphrase_semantics_pinned() {
         PATH,
         "--passphrase",
         X,
+        "--bip38-passphrase",
+        "",
     ]);
 
     // Decrypt BIP38_C with EMPTY Scrypt passphrase (SPEC v0.8 §12.b
@@ -724,4 +732,211 @@ fn direct_wif_to_bip38_passphrase_fallback() {
     ]);
     assert_eq!(bip38_a, V1_BIP38);
     assert_eq!(bip38_b, V1_BIP38);
+}
+
+// ============================================================================
+// cycle-11b L21 — composite (seedqr|phrase|entropy) → bip38 with an UNSET
+// --bip38-passphrase silently encrypted the BIP-38 layer with the EMPTY
+// passphrase (a SECRET footgun: an engravable card the user believes is
+// BIP-38-protected is encrypted with ""). `--passphrase` feeds only BIP-39
+// PBKDF2 on the composite arm, and the "ignored passphrase" warning is
+// suppressed on BIP-38 edges → silent. Fix: REFUSE the composite arm
+// (position-based, at the `Bip38 =>` sub-arm head inside the
+// `Seedqr | Phrase | Entropy =>` outer arm) when `--bip38-passphrase` is unset,
+// reusing ConvertRefusal (exit 2). `--bip38-passphrase ""` (Some("")) STILL
+// encrypts (the predicate tests `.is_none()`, not emptiness). Direct
+// `(wif↔bip38)` edges are separate arms and fall back to `--passphrase` — left
+// as-is. FOLLOWUP: convert-composite-bip38-empty-passphrase-refusal.
+// ============================================================================
+
+const ALL_ZERO_PHRASE: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const ALL_ZERO_ENTROPY: &str = "00000000000000000000000000000000";
+// 12-word SeedQR digit-string for the all-zero entropy phrase above (each
+// 4-digit group is a BIP-39 wordlist index; cf. cli_seedqr_from_unification.rs).
+const ALL_ZERO_SEEDQR: &str = "000000000000000000000000000000000000000000000003";
+const COMPOSITE_PATH: &str = "m/84'/0'/0'/0/0";
+
+/// RED-1 (phrase): `--from phrase --to bip38 --passphrase X` with NO
+/// `--bip38-passphrase` is REFUSED (exit 2). Pre-fix it silently emitted a
+/// `6P…` empty-passphrase ciphertext (exit 0).
+#[test]
+fn composite_phrase_to_bip38_unset_bip38_passphrase_refuses() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("phrase={ALL_ZERO_PHRASE}"),
+            "--to",
+            "bip38",
+            "--path",
+            COMPOSITE_PATH,
+            "--passphrase",
+            "X",
+        ])
+        .assert()
+        .code(2)
+        .stderr(
+            predicates::str::contains("--bip38-passphrase")
+                .and(predicates::str::contains("--bip38-passphrase \"\"")),
+        );
+}
+
+/// RED-2 (entropy): same refusal for the entropy source.
+#[test]
+fn composite_entropy_to_bip38_unset_bip38_passphrase_refuses() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("entropy={ALL_ZERO_ENTROPY}"),
+            "--to",
+            "bip38",
+            "--path",
+            COMPOSITE_PATH,
+            "--passphrase",
+            "X",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("--bip38-passphrase"));
+}
+
+/// RED-3 (SEEDQR — the C1 source): `(Seedqr, Bip38)` is an argv-permitted edge
+/// that decodes to a BIP-39 phrase and hits the SAME empty-encrypt path. The
+/// position-based arm-head refusal (inside the `Seedqr | Phrase | Entropy =>`
+/// outer arm) covers it structurally. Without this test the seedqr footgun is
+/// uncovered and the suite would falsely certify L21 fixed.
+#[test]
+fn composite_seedqr_to_bip38_unset_bip38_passphrase_refuses() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "convert",
+            "--from",
+            &format!("seedqr={ALL_ZERO_SEEDQR}"),
+            "--to",
+            "bip38",
+            "--path",
+            COMPOSITE_PATH,
+            "--passphrase",
+            "X",
+        ])
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains("--bip38-passphrase"));
+}
+
+/// GREEN-1 (explicit empty STILL encrypts — phrase): `--bip38-passphrase ""`
+/// (Some("")) is distinguished from `None`, so the refusal does NOT fire and the
+/// arm encrypts with the empty BIP-38 passphrase. Round-trips back to a WIF.
+#[test]
+fn composite_phrase_to_bip38_explicit_empty_still_encrypts() {
+    let bip38 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={ALL_ZERO_PHRASE}"),
+        "--to",
+        "bip38",
+        "--path",
+        COMPOSITE_PATH,
+        "--passphrase",
+        "X",
+        "--bip38-passphrase",
+        "",
+    ]);
+    assert!(
+        bip38.starts_with("6P"),
+        "explicit-empty composite bip38 should still encrypt; got: {bip38}"
+    );
+    // Round-trip recovers a WIF with the explicit empty BIP-38 passphrase.
+    let wif = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={bip38}"),
+        "--to",
+        "wif",
+        "--bip38-passphrase",
+        "",
+    ]);
+    assert!(
+        wif.starts_with('L') || wif.starts_with('K') || wif.starts_with('5'),
+        "round-trip should recover a WIF; got: {wif}"
+    );
+}
+
+/// GREEN-1b (explicit empty STILL encrypts — SEEDQR): pins that the
+/// position-based refusal does NOT over-fire on the seedqr source when the
+/// explicit `--bip38-passphrase ""` path is taken.
+#[test]
+fn composite_seedqr_to_bip38_explicit_empty_still_encrypts() {
+    let bip38 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("seedqr={ALL_ZERO_SEEDQR}"),
+        "--to",
+        "bip38",
+        "--path",
+        COMPOSITE_PATH,
+        "--passphrase",
+        "X",
+        "--bip38-passphrase",
+        "",
+    ]);
+    assert!(
+        bip38.starts_with("6P"),
+        "explicit-empty composite seedqr→bip38 should still encrypt; got: {bip38}"
+    );
+}
+
+/// GREEN-2 (real passphrase STILL encrypts): `--bip38-passphrase secret` → the
+/// refusal does not over-fire; round-trips with the same passphrase.
+#[test]
+fn composite_phrase_to_bip38_real_bip38_passphrase_still_encrypts() {
+    let bip38 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("phrase={ALL_ZERO_PHRASE}"),
+        "--to",
+        "bip38",
+        "--path",
+        COMPOSITE_PATH,
+        "--passphrase",
+        "X",
+        "--bip38-passphrase",
+        "secret",
+    ]);
+    assert!(bip38.starts_with("6P"), "got: {bip38}");
+    let wif = convert_value(&[
+        "convert",
+        "--from",
+        &format!("bip38={bip38}"),
+        "--to",
+        "wif",
+        "--bip38-passphrase",
+        "secret",
+    ]);
+    assert!(
+        wif.starts_with('L') || wif.starts_with('K') || wif.starts_with('5'),
+        "got: {wif}"
+    );
+}
+
+/// REGRESSION (direct edge untouched): the direct `(wif, bip38)` edge still
+/// falls back to `--passphrase` when `--bip38-passphrase` is unset — the
+/// composite refusal does NOT fire on direct edges.
+#[test]
+fn direct_wif_to_bip38_unset_bip38_passphrase_still_falls_back() {
+    let bip38 = convert_value(&[
+        "convert",
+        "--from",
+        &format!("wif={V1_WIF}"),
+        "--to",
+        "bip38",
+        "--passphrase",
+        V1_PASS,
+    ]);
+    assert_eq!(bip38, V1_BIP38);
 }

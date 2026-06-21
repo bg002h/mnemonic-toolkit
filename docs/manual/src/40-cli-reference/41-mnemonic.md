@@ -799,7 +799,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
-| `--bip38-passphrase <BIP38_PASSPHRASE>` | distinct BIP-38 Scrypt passphrase channel (v0.8 BREAKING — separate from `--passphrase`) |
+| `--bip38-passphrase <BIP38_PASSPHRASE>` | distinct BIP-38 Scrypt passphrase channel (v0.8 BREAKING — separate from `--passphrase`). On a composite `(seedqr\|phrase\|entropy)→bip38` edge, `--bip38-passphrase` is **required**; an unset value is refused (it would otherwise encrypt the BIP-38 layer with the empty passphrase, since `--passphrase` feeds only BIP-39 PBKDF2). Pass `--bip38-passphrase ""` to deliberately use an empty BIP-38 passphrase. |
 | `--bip38-passphrase-stdin` | read `--bip38-passphrase` from stdin (raw, NULL-byte preserving); closes the BIP-38 V3 spec NULL-byte passphrase argv gap |
 | `--electrum-version <ELECTRUM_VERSION>` | Electrum seed-version selector for `(Entropy, ElectrumPhrase)` |
 | `--electrum-language <ELECTRUM_LANGUAGE>` | Electrum-specific wordlist (English + 4 non-English) |

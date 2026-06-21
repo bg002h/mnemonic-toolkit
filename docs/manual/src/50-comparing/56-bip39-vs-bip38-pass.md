@@ -41,17 +41,22 @@ mnemonic convert \
   --bip38-passphrase "<BIP-38 passphrase>"
 ```
 
-The two arguments are now independent. On composite edges, both
-passphrases must be supplied (or both can be empty). On direct
-`(wif, bip38)` and `(bip38, wif)` edges, `--bip38-passphrase` falls
-back to `--passphrase` if the dedicated flag is absent.
+The two arguments are now independent. On a composite
+`(seedqr|phrase|entropy) → bip38` edge, `--bip38-passphrase` is
+**required**: `--passphrase` feeds only the BIP-39 PBKDF2 leg, so an
+unset `--bip38-passphrase` is **refused** rather than silently
+encrypting the BIP-38 layer with the empty passphrase. To deliberately
+use an empty BIP-38 passphrase, pass `--bip38-passphrase ""` explicitly.
+On direct `(wif, bip38)` and `(bip38, wif)` edges, `--bip38-passphrase`
+falls back to `--passphrase` if the dedicated flag is absent.
 
 | Edge | `--passphrase` | `--bip38-passphrase` |
 |---|---|---|
 | `(phrase, ms1)` | BIP-39 | unused |
 | `(wif, bip38)` direct | falls through to BIP-38 if `--bip38-passphrase` unset | BIP-38 |
-| `(phrase, bip38)` composite | BIP-39 | BIP-38 (independent; no fallback) |
-| `(entropy, bip38)` composite | unused (no BIP-39 step) | BIP-38 (defaults to `""` if unset; BREAKING) |
+| `(phrase, bip38)` composite | BIP-39 | BIP-38 (independent; **REFUSED if unset**; `--bip38-passphrase ""` for an explicit empty passphrase) |
+| `(entropy, bip38)` composite | unused (no BIP-39 step) | BIP-38 (**REFUSED if unset**; `--bip38-passphrase ""` for an explicit empty passphrase) |
+| `(seedqr, bip38)` composite | BIP-39 (seedqr decodes to a phrase) | BIP-38 (**REFUSED if unset**; `--bip38-passphrase ""` for an explicit empty passphrase) |
 
 ## NULL-byte passphrase edge case
 

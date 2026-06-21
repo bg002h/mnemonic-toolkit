@@ -511,6 +511,17 @@ fn refusal_bip38_no_passphrase() -> ToolkitError {
     )
 }
 
+/// cycle-11b L21 — composite `(seedqr|phrase|entropy) → bip38` with an unset
+/// `--bip38-passphrase` would silently encrypt the BIP-38 layer with the empty
+/// passphrase (a SECRET footgun: `--passphrase` feeds only BIP-39 PBKDF2 on this
+/// arm, and the "ignored passphrase" warning is suppressed on BIP-38 edges).
+/// Refuse fail-closed; the explicit empty path is `--bip38-passphrase ""`.
+fn refusal_composite_bip38_no_bip38_passphrase() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "composite (seedqr|phrase|entropy)→bip38 requires --bip38-passphrase (or --bip38-passphrase-stdin); on this edge --passphrase feeds only BIP-39 PBKDF2 and the BIP-38 layer would be encrypted with the empty passphrase. To deliberately use an empty BIP-38 passphrase, pass --bip38-passphrase \"\" explicitly.".into(),
+    )
+}
+
 fn refusal_bip38_passphrase_mismatch() -> ToolkitError {
     ToolkitError::ConvertRefusal(
         "BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §\"Decryption\" address-hash check).".into(),
@@ -1352,8 +1363,23 @@ fn compute_outputs(
                         // Same --path requirement as the direct phrase→wif edge.
                         // BREAKING (v0.8): on this composite arm `--passphrase`
                         // feeds BIP-39 PBKDF2 only; `--bip38-passphrase` feeds
-                        // BIP-38 Scrypt independently. If the latter is unset,
-                        // BIP-38 encrypt uses `""` (no fallback to --passphrase).
+                        // BIP-38 Scrypt independently.
+                        //
+                        // cycle-11b L21 — POSITION-BASED refusal. This sub-arm sits
+                        // inside the outer `Seedqr | Phrase | Entropy =>` arm, so
+                        // reaching it already proves `from ∈ {Seedqr,Phrase,Entropy}`
+                        // — no `from`-set test (a written list could drop Seedqr).
+                        // When `--bip38-passphrase` is unset, the BIP-38 layer would
+                        // silently encrypt with `""` (the `unwrap_or("")` below) and
+                        // the "ignored passphrase" warning is suppressed on BIP-38
+                        // edges → a silent empty-passphrase card. Refuse fail-closed
+                        // BEFORE the empty encrypt. `bip38_passphrase` is the in-scope
+                        // `Option<&str>` param (== `effective_bip38_passphrase
+                        // .as_deref()`); `.is_none()` (NOT `.is_empty()`) preserves
+                        // the explicit `--bip38-passphrase ""` (Some("")) encrypt path.
+                        if bip38_passphrase.is_none() {
+                            return Err(refusal_composite_bip38_no_bip38_passphrase());
+                        }
                         let path_str = args
                             .path
                             .as_deref()
