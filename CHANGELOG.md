@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.63.0] — 2026-06-21
+
+**SemVer-MINOR — S-NET network-provenance invariant (constellation bug-hunt cycle-5). A new fail-closed rule rejects a decoded xpub/WIF whose network disagrees with the asserted network / coin-type. No CLI-flag / `--json` wire-shape / dropdown change → no GUI schema-mirror, no manual leg, no codec change.**
+
+### Fixed
+
+- **H15 / M13 / M14 — network-provenance cross-check at the import / convert / export surfaces.** A decoded extended key (xpub) or WIF whose embedded network byte disagrees with the asserted `--network` / coin-type was previously accepted, silently producing a wallet on the wrong chain. A shared `network::assert_network_agrees` helper is now wired at the 7 import parsers, the two `convert` arms (`--xpub-prefix`, `--from wif --to xpub`), and `export-wallet --from-import-json`. This wires the formerly-dead `ToolkitError::NetworkMismatch` (**exit 2**). The `NetworkMismatch` error's `detail_json` adds error-shape keys — NOT a `schema_mirror` trigger (that gate covers clap flag-names / dropdown-values, not the `--json` error-shape).
+- **H9 — `import-wallet --network` class-check is now PER-ENTRY** (was `first()`-only, so a class-mismatched non-first entry slipped through). A disagreement now fires the typed `ToolkitError::ImportWalletNetworkClassMismatch` (**exit 1**).
+- **L3 — `build-descriptor` coldcard single-sig account `> u32::MAX` now REJECTS** instead of silently truncating.
+- **L1 — `build-descriptor` now WARNs (not rejects) on a `--network` / keys preview disagreement.**
+
+Closes H15 / M13 / M14 / H9 / L1 / L2 / L3 / L10 / L11.
+
+Provenance: `design/agent-reports/constellation-bughunt-2026-06-20.md`, `design/PLAN_constellation_bughunt_fix_program.md`, the cycle-5 brainstorm / plan / R0 / impl reviews. Toolkit-only: no CLI-flag / `--json` wire-shape change, no `md-codec`/`ms-codec`/`mk-codec` bump, so no GUI schema-mirror or manual leg. (Version `0.63.0` taken first-to-ship; the paused own-account-subset-search cycle renumbers.)
+
 ## mnemonic-toolkit [0.62.1] — 2026-06-21
 
 **SemVer-PATCH — cycle-4 codec-funds convergence: pins the two just-published codec funds-safety MINORs (`md-codec` 0.38.0 + `ms-codec` 0.5.0) and adds the downstream lockstep exit-code / prose arms. No toolkit CLI-flag / `--json` wire-shape change → no GUI schema-mirror or manual leg.**
