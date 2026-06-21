@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.65.0] — 2026-06-21
+
+**SemVer-MINOR — `build-descriptor` extra-derivation-suffix fail-closed reject (constellation bug-hunt cycle-7). No new `DiagnosticKind` → no `--json` wire-shape change, no GUI schema-mirror; no codec/manual leg.**
+
+### Fixed
+
+- **M8 (funds) — `build-descriptor` now REJECTS a key whose xpub body carries an extra derivation suffix** (e.g. `[fp/84h/0h/0h]xpub.../5`). Previously such a key was silently accepted and the builder appended `/<0;1>/*` on top, deriving a DEEPER / WRONG subtree — a silent wrong-address bug (funds-safety). The reject routes through the existing `DiagnosticKind::SchemaField` (**exit 2**); the diagnostic path + message name the offending key — for quorum archetypes the `flag` provenance resolves to `--threshold`, single-key to `--key` (both exit 2). No new `DiagnosticKind` → no `--json` wire-shape change, no GUI schema-mirror.
+- **L23 — `ecies_decrypt_message` now returns a typed `EciesDecryptError::InvalidScalar`** (was a panic via `.expect()`) on a zero private scalar. Latent — not CLI-reachable (the sole caller already rejects a zero scalar) — so this is a defensive close, not a behavior change at any surface. No codec / GUI / manual lockstep.
+
+Both fixes are toolkit-only: no `md-codec` / `ms-codec` / `mk-codec` bump, no CLI-flag / dropdown / `--json` wire-shape change, so no GUI schema-mirror or manual leg.
+
 ## mnemonic-toolkit [0.64.0] — 2026-06-21
 
 **SemVer-MINOR — decaying-multisig decay-ordering fail-closed validation (constellation bug-hunt cycle-6). No CLI-flag / `--json` wire-shape / dropdown change, no new `ToolkitError` variant → no GUI schema-mirror, no manual leg, no codec change.**
