@@ -741,6 +741,20 @@ fn run_from_import_json<W: Write, E: Write>(
     // Derive network from envelope.
     let network = cli_network_from_str(&envelope.bundle.network)?;
 
+    // cycle-5 S-NET (M13): the envelope's declared `bundle.network` string is
+    // trusted today (only the BIP-380 checksum is validated upstream). A
+    // mainnet-labeled envelope carrying testnet xpubs would be re-emitted with
+    // wrong version bytes by the downstream `apply_xpub_prefix`. Cross-check
+    // each decoded cosigner xpub's NetworkKind against the declared network and
+    // refuse fail-closed BEFORE any re-emit.
+    for slot in &resolved_slots {
+        crate::network::assert_network_agrees(
+            slot.xpub.network,
+            network.network_kind(),
+            "export: --from-import-json",
+        )?;
+    }
+
     // Script-type from the parsed descriptor (canonical form sans checksum).
     use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
     use std::str::FromStr;

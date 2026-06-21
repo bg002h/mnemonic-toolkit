@@ -1,0 +1,33 @@
+[
+  {
+    "bundle": {
+      "account": 0,
+      "descriptor": "wpkh([704c7836/84'/1'/0']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*)#r486umak",
+      "master_fingerprint": "704c7836",
+      "md1": [
+        "md1fvv4lpqpqpm6j8pqqxqqks8qnrcxc25zzd2hzc95hddu2ummsysjceruehe277n0",
+        "md1fvv4lpqw0flkl0pkkjaa4cpdupdrtfch08sgxlz3czrg9dp9k8vtzkt0jk0w6lwn",
+        "md1fvv4lpqsd7d7rl5zjprj8dfruj2l54e58u694qqpc83a8h48kxqdkd96urjeq47r"
+      ],
+      "mk1": [
+        "mk1qps7vfzqqsqc0xyhldcyc7pklczdfqyqsqygrqyqsqygpqyqsqyg9qyqsqyqgdv8ea5490jlf42utqkja4h3tn0wqjv7j7hdnu4t8ajtupfu",
+        "mk1qps7vfzplkl0pkkjaa4cpdupdrtfch08sgxlz3czrg9dp9k8vxlxlpl6pfq3erk537f9062u6r7dz6sqqurc7nm6nmry6rmzrurr64ev0jfd",
+        "mk1qps7vfzza3n7kgvvwa7zvdj72a"
+      ],
+      "mode": "watch-only",
+      "ms1": [
+        ""
+      ],
+      "multisig": null,
+      "network": "mainnet",
+      "origin_path": "m/84'/1'/0'",
+      "origin_paths": null,
+      "privacy_preserving": false,
+      "schema_version": "4",
+      "template": null
+    },
+    "roundtrip": {},
+    "schema_version": "1",
+    "source_format": "descriptor"
+  }
+]

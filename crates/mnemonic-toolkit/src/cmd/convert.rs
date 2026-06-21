@@ -1106,6 +1106,16 @@ pub fn run<R: Read, W: Write, E: Write>(
                 if *node == NodeType::Xpub {
                     let xpub = bip32::Xpub::from_str(value)
                         .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+                    // cycle-5 S-NET (M14): the only existing guard requires
+                    // --network to be PRESENT (§5.a), not to AGREE with the
+                    // xpub's own version bytes. Re-emitting a tpub into a
+                    // mainnet `--network zpub` family would mint a wrong-network
+                    // artifact — refuse fail-closed before the prefix swap.
+                    crate::network::assert_network_agrees(
+                        xpub.network,
+                        network.network_kind(),
+                        "convert: --xpub-prefix",
+                    )?;
                     *value = apply_xpub_prefix(&xpub, prefix, network);
                 }
             }
@@ -1480,6 +1490,17 @@ fn compute_outputs(
         Wif => {
             let pk = PrivateKey::from_wif(value)
                 .map_err(|e| ToolkitError::BadInput(format!("--from wif parse: {e}")))?;
+            // cycle-5 S-NET (L11): a WIF carries its OWN network byte
+            // (`pk.network`); the sentinel xpub below was built from `--network`
+            // (default mainnet), silently discarding it — so a testnet WIF
+            // emitted a mainnet `xpub…`. Cross-check the WIF's true network
+            // against the asserted `--network` and refuse on disagreement (the
+            // user can pass the matching `--network` to get the intended prefix).
+            crate::network::assert_network_agrees(
+                pk.network,
+                network.network_kind(),
+                "convert: wif→xpub",
+            )?;
             let pubkey = pk.public_key(&secp);
             let sentinel_xpub = bip32::Xpub {
                 network: network.network_kind(),
