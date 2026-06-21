@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.64.0] — 2026-06-21
+
+**SemVer-MINOR — decaying-multisig decay-ordering fail-closed validation (constellation bug-hunt cycle-6). No CLI-flag / `--json` wire-shape / dropdown change, no new `ToolkitError` variant → no GUI schema-mirror, no manual leg, no codec change.**
+
+### Fixed
+
+- **D-decay-rel — `build-descriptor`'s `validate_params` now refuses a mis-orderable `--older` / `--recovery-older` relative-timelock pair.** A CROSS-UNIT pair (one block-height delay, one 512-second delay) is not orderable offline — block delays and time delays cannot be compared without consensus state — so the decay tiers' relative spendability ordering is undefined; it is now rejected. A SAME-UNIT pair that is not strictly ordered (a recovery tier whose delay is ≤ the primary's) is also rejected — a recovery tier could otherwise unlock BEFORE the primary, silently mis-building the intended decaying spending policy. A new `timelock_advisory::older_unit_value` helper classifies the BIP-68 bit-22 (512-second) time-unit vs block-unit of an `older(n)` value to drive the cross-unit / same-unit determination.
+- **D-decay-abs — `build-descriptor` now refuses an absolute `after(N)` whose value is a PAST block height or unix-time.** A last-resort `after()` tier set to an already-elapsed BIP-65 locktime would be immediately spendable, silently mis-building the decay policy; static BIP-65 past-floor constants now reject it.
+
+Both classes previously silently mis-built a wrong spending policy (funds-safety). Routed through the existing `Diagnostic { kind: Param }` (**exit 2**) — no new flag, `--json` wire-shape, or `ToolkitError` variant.
+
+The canon `decaying-multisig` fixtures migrated `after(500000)` → `after(4000000)` (past-floor compliant); the descriptor checksum regenerated `#llvl05j9` → `#9fqrjy7e`.
+
+Closes D-decay-rel + D-decay-abs; re-scopes FOLLOWUP `archetype-older-blocks-flag-accepts-time-units` (funds facet resolved). Toolkit-only: no `md-codec`/`ms-codec`/`mk-codec` bump, so no GUI schema-mirror or manual leg.
+
 ## mnemonic-toolkit [0.63.0] — 2026-06-21
 
 **SemVer-MINOR — S-NET network-provenance invariant (constellation bug-hunt cycle-5). A new fail-closed rule rejects a decoded xpub/WIF whose network disagrees with the asserted network / coin-type. No CLI-flag / `--json` wire-shape / dropdown change → no GUI schema-mirror, no manual leg, no codec change.**
