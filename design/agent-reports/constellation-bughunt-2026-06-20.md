@@ -63,7 +63,9 @@ scratch next cycle.
 
 ## Confirmed — HIGH
 
-### - [ ] H1 · `verify-bundle` only compares the pubkey multiset, never the policy tree/threshold/script-type → false GREEN
+### - [x] H1 · `verify-bundle` only compares the pubkey multiset, never the policy tree/threshold/script-type → false GREEN
+<!-- FIXED cycle-1 (toolkit v0.61.0 @f9467cc5) — md1_xpub_match widened to compare tree + use_site_path + use_site_path_overrides (origins excluded per L14, name preserved → no --json change). Report-tick reconciliation in cycle-3 (the cycle-1 checkbox was shipped but never flipped). -->
+<!-- See the detailed H1 (→ CRITICAL) entry below. -->
 - **repo/class:** toolkit · **B-policy-collapse**
 - **id:** `verify-bundle-md1-policy-structure-not-compared`
 - **location(s):**
@@ -90,7 +92,8 @@ scratch next cycle.
 - **spec:** SPEC_mnemonic_toolkit_v0_5 §5.7 (multiset compare); SPEC_bundle_md1_template_multisig
   2026-06-20:111 (key order is consensus-significant for non-sorted shapes); descriptor/miniscript.
 
-### - [ ] H2 · GUI runner logs full unmasked argv (seed phrase / entropy / passphrase) to stderr at debug
+### - [x] H2 · GUI runner logs full unmasked argv (seed phrase / entropy / passphrase) to stderr at debug
+<!-- FIXED cycle-3 (mnemonic-gui v0.45.0): 600b4dc — runner spawn-log now emits program=%argv[0] + argv_len only, never the cleartext argv. FOLLOWUP gui-runner-debug-logs-unmasked-secret-argv. -->
 - **repo/class:** gui · **D-secret-leak**
 - **id:** `gui-runner-debug-logs-unmasked-secret-argv`
 - **location:** `mnemonic-gui/src/runner.rs:119`
@@ -108,7 +111,8 @@ scratch next cycle.
   captured tracing output.
 - **spec:** BIP-39 (mnemonic/entropy is the master secret).
 
-### - [ ] H3 · `convert --from minikey=<key>` leaks a Casascius mini private key (no mask / no confirm / plaintext persistence)
+### - [x] H3 · `convert --from minikey=<key>` leaks a Casascius mini private key (no mask / no confirm / plaintext persistence)
+<!-- FIXED cycle-3 (mnemonic-gui v0.45.0): 8ac983f + 2cc9c9f — new node_type_is_argv_secret (wide SECRET_NODE_TYPES_ARGV = narrow + minikey) routes argv-mask/run-confirm/persist-redact; node-aware composite paste-warn wired into the value widget. No toolkit pin bump. FOLLOWUP gui-minikey-secret-not-masked-in-argv-preview. -->
 - **repo/class:** gui · **D-secret-leak**
 - **id:** `gui-minikey-secret-not-masked-in-argv-preview`
 - **location(s):** `mnemonic-gui/src/secrets.rs:160` (`node_type_is_secret` backed by the **narrow**
@@ -857,7 +861,9 @@ mostly siblings of known patterns) — _except_ the taproot BIP-48 origin bug, a
 
 ## Confirmed — HIGH (final round)
 
-### - [ ] H12 · Descriptor-mode default origin engraves BIP-48 script-type `2'` (P2WSH) for taproot multisig instead of `3'` (P2TR) → wrong re-derived keys/addresses
+### - [x] H12 · Descriptor-mode default origin engraves BIP-48 script-type `2'` (P2WSH) for taproot multisig instead of `3'` (P2TR) → wrong re-derived keys/addresses
+<!-- FIXED cycle-1 (toolkit v0.61.0 @f9467cc5) — taproot-aware default-origin (reuse bip48_script_type() → 3' for Tag::Tr, 3 sites incl. descriptor_intake). Report-tick reconciliation in cycle-3 (shipped but checkbox never flipped). -->
+<!-- See the detailed H12 (→ CRITICAL) entry below. -->
 - **repo/class:** toolkit · **A-wrong-address** · `w4a-taproot-bip48-default-script-type` · _new funds-loss_
 - **location(s):** `cmd/bundle.rs:2210-2235` (`compute_default_origin_path`, hardcoded `value:2` at `:2231`),
   `:1397-1398,1444-1445` (call site); `cmd/verify_bundle.rs:1373` (mirror reproduces the wrong path);
@@ -883,7 +889,9 @@ mostly siblings of known patterns) — _except_ the taproot BIP-48 origin bug, a
 - **spec:** BIP-48 `m/48'/coin'/account'/script_type'` (1'=P2SH-P2WSH, 2'=P2WSH, **3'=P2TR**); the toolkit's
   own `template.rs:231-235` already encodes `3'` for taproot.
 
-### - [ ] H13 · Hardened multipath alternatives (`<0h;1h>` / `<2';3'>`) silently dropped at template lex → single-path key (md-cli + toolkit mirror)
+### - [x] H13 · Hardened multipath alternatives (`<0h;1h>` / `<2';3'>`) silently dropped at template lex → single-path key (md-cli + toolkit mirror)
+<!-- FIXED cycle-1 (toolkit v0.61.0 @f9467cc5 + md-cli v0.8.0 @58cc9ec) — lexer REJECTS hardened/malformed multipath via typed error (md-cli + toolkit lockstep; hardened-from-xpub is impossible). Report-tick reconciliation in cycle-3 (shipped but checkbox never flipped). -->
+<!-- See the detailed H13 (→ CRITICAL) entry below. -->
 - **repo/class:** md-cli (+ toolkit mirror) · **B-policy-collapse** · `w4a-mp-2`
 - **location(s):** `md-cli/src/parse/template.rs:40` (`lex_placeholders` multipath body class `[0-9;]+`),
   `:220-233` (hardcoded `hardened:false` at `:225`), `:365` (canonicity probe shares the class);
@@ -1093,7 +1101,8 @@ clean-negatives, 0 NEW.** Severities here SUPERSEDE the static ratings.
 
 ## EMPIRICALLY-PROVEN CRITICAL (escalated from static HIGH)
 
-### - [ ] H12 (→ CRITICAL) · descriptor-mode taproot multisig derives cosigner keys at BIP-48 `2'` not `3'` — every address diverges
+### - [x] H12 (→ CRITICAL) · descriptor-mode taproot multisig derives cosigner keys at BIP-48 `2'` not `3'` — every address diverges
+<!-- FIXED cycle-1 (toolkit v0.61.0 @f9467cc5) — taproot-aware compute_default_origin_path (3' for Tag::Tr via bip48_script_type(), incl. Descriptor::Tr at descriptor_intake). Report-tick reconciliation in cycle-3. -->
 - proof: descriptor-mode bundle prints "defaulting origin path … to m/48'/0'/0'/2'"; the **mk-decoded
   cosigner xpub is byte-for-byte the independent `2'` BIP32 derivation, ≠ `3'`** → keys live in the wrong
   subtree (not just a label). Core `deriveaddresses`: intended `2-of-2 tr(NUMS,multi_a)` receive[0]
@@ -1106,7 +1115,8 @@ clean-negatives, 0 NEW.** Severities here SUPERSEDE the static ratings.
 - consequence: any BIP-48 coordinator (Sparrow/Coldcard/Jade) re-derives at `3'` → different keys, output,
   address at every index → coins unspendable by any participant. _Fix elevated to top of the program._
 
-### - [ ] H1 (→ CRITICAL) · `verify-bundle` returns `result: ok` (exit 0) for a wallet that reconstructs DIFFERENTLY
+### - [x] H1 (→ CRITICAL) · `verify-bundle` returns `result: ok` (exit 0) for a wallet that reconstructs DIFFERENTLY
+<!-- FIXED cycle-1 (toolkit v0.61.0 @f9467cc5) — emit_multisig_checks md1 compare widened to expected.tree == desc.tree && use_site_path == && tlv.use_site_path_overrides == (origins excluded per L14). Report-tick reconciliation in cycle-3. -->
 - proof: engraved a real `wsh(sortedmulti(2,A,B,C))` bundle, then verify-bundle GREEN-lit (exit 0): (a)
   `sortedmulti(1,…)` 1-of-3 **anyone-spends**, (b) `multi(2,…)` **unsorted**, (c) `sh(wsh(sortedmulti(2)))`
   **P2SH-nested** — addresses `bcrt1q3nh67k…` / `bcrt1qja7rvt…` / `2MypJZ…` all ≠ the real
@@ -1117,7 +1127,8 @@ clean-negatives, 0 NEW.** Severities here SUPERSEDE the static ratings.
   `:583` already does this). _verify-bundle blindness compounds H12/H10/H13 — it's the safety net that
   should catch all three structural-drift classes and doesn't._
 
-### - [ ] H13 (→ CRITICAL) · hardened multipath `<0h;1h>`/`<2';3'>` silently collapsed to bare `/*` → wrong addresses (md-cli + toolkit)
+### - [x] H13 (→ CRITICAL) · hardened multipath `<0h;1h>`/`<2';3'>` silently collapsed to bare `/*` → wrong addresses (md-cli + toolkit)
+<!-- FIXED cycle-1 (toolkit v0.61.0 @f9467cc5 + md-cli v0.8.0 @58cc9ec) — lex_placeholders / template lexer REJECT hardened+malformed multipath via typed error (lockstep). Report-tick reconciliation in cycle-3. -->
 - proof: `md encode` exits 0 silently; `md decode` of the md1 (both md-cli **and** the toolkit
   `bundle --descriptor` md1) returns the collapsed `wsh(multi(2,@0/*,@1/*))`. `md address` renders
   `bcrt1qq0kxm9…` = Core's bare-key derivation, while the intended hardened wallet is `bcrt1q5tgwjk…`. Core
