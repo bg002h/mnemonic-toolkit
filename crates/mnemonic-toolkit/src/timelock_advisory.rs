@@ -64,6 +64,39 @@ pub fn older_consensus_masked(n: u32) -> Option<TimelockMaskConsequence> {
     }
 }
 
+/// `(unit, low-16 value)` of a CLEAN BIP-68 relative-locktime operand.
+///
+/// Unit/value extraction ONLY (bit-22 type-flag + low-16 mask), NOT a footgun
+/// screen — the caller (preset decay-ordering check) has already established the
+/// operand reaches it through the gate, which independently refuses a genuinely
+/// masked/disabled operand. Well-defined for any `u32`: it reads only bit-22 and
+/// the low 16 bits, exactly the bits consensus uses for the value.
+///
+/// Unlike [`older_consensus_masked`] (which returns `None` for clean operands and
+/// so cannot classify their unit), this always yields the unit, enabling the
+/// same-unit precondition of the decaying-multisig tier-ordering rule.
+pub fn older_unit_value(n: u32) -> (TimelockUnit, u16) {
+    let unit = if n & 0x0040_0000 != 0 {
+        TimelockUnit::Seconds512
+    } else {
+        TimelockUnit::Blocks
+    };
+    (unit, (n & 0x0000_FFFF) as u16)
+}
+
+/// Conservative static "already-past" block-height floor for the
+/// decaying-multisig D-decay-abs future-ness check. A mainnet height mined long
+/// ago (~mid-2025); chosen safely below any plausible *future* height yet above
+/// all genesis-era heights, so a legitimate forward-dated height is never
+/// refused. Monotone-safe: shrinks the false-negative window over time, never
+/// false-positive. See `design/BRAINSTORM_cycle6_timelock_decay.md` §4.2.
+pub const ABS_HEIGHT_PAST_FLOOR: u32 = 900_000;
+
+/// Conservative static "already-past" MTP-time floor (Unix seconds, ~2025-06-15
+/// UTC) for the decaying-multisig D-decay-abs future-ness check. Same
+/// monotone-safe rationale as [`ABS_HEIGHT_PAST_FLOOR`].
+pub const ABS_TIME_PAST_FLOOR: u32 = 1_750_000_000;
+
 impl TimelockAdvisory {
     /// The stderr advisory line (SPEC §5). Two forms by consequence.
     pub fn message(&self) -> String {
@@ -222,6 +255,19 @@ fn walk_node(node: &Node, seen: &mut BTreeSet<u32>, out: &mut Vec<TimelockAdviso
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn older_unit_value_classifies_clean_operands() {
+        use TimelockUnit::*;
+        // 145 blocks: bit-22 CLEAR → (Blocks, 145).
+        assert_eq!(older_unit_value(145), (Blocks, 145));
+        // 4194305 == 0x40_0001: bit-22 SET, low-16 == 1 → (Seconds512, 1).
+        assert_eq!(older_unit_value(4194305), (Seconds512, 1));
+        // 4000000 == 0x3D_0900: bit-22 CLEAR (4_000_000 < 0x40_0000) → Blocks; low-16 == 0x0900 == 2304.
+        assert_eq!(older_unit_value(4000000), (Blocks, 2304));
+        // 0x40_0002 == 4194306: bit-22 SET, value 2 → (Seconds512, 2).
+        assert_eq!(older_unit_value(0x0040_0002), (Seconds512, 2));
+    }
 
     #[test]
     fn predicate_classifies_operands() {
