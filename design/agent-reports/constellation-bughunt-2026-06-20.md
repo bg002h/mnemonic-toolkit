@@ -301,7 +301,8 @@ scratch next cycle.
 
 ## Confirmed — LOW
 
-### - [ ] L1 · `build-descriptor` human view derives the first address with `--network` (default mainnet), no xpub-network cross-check
+### - [x] L1 · `build-descriptor` human view derives the first address with `--network` (default mainnet), no xpub-network cross-check
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb, tag mnemonic-toolkit-v0.63.0) — S-NET: build-descriptor now WARNs (stderr, exit 0 — deliverable is network-agnostic) on a --network/keys preview disagreement via `infer_descriptor_network_kind`; not a hard reject. -->
 - **repo/class:** toolkit · **A-wrong-address** (display) · `build-descriptor-wrong-network-address-display`
 - **location:** `crates/mnemonic-toolkit/src/cmd/build_descriptor.rs:476-485`
 - **bug:** `emit_human()` uses `args.network.unwrap_or(Mainnet)` for `derive_receive_addresses`, never
@@ -312,7 +313,8 @@ scratch next cycle.
   when `--network` omitted, or diagnose/refuse on disagreement.
 - **spec:** SLIP-132/BIP-32 version bytes; BIP-173/350 HRP (`bc` vs `tb`).
 
-### - [ ] L2 · Electrum multisig network inferred from BIP-48 coin-type only, not cross-checked vs cosigner xpub prefix
+### - [x] L2 · Electrum multisig network inferred from BIP-48 coin-type only, not cross-checked vs cosigner xpub prefix
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — S-NET: electrum-multisig parser now cross-checks each cosigner xpub's version vs the coin-type network via `assert_network_agrees` → NetworkMismatch (exit 2). -->
 - **repo/class:** toolkit · **A-wrong-address** · `electrum-multisig-network-from-cointype-not-xpub-prefix`
 - **location:** `crates/mnemonic-toolkit/src/wallet_import/electrum.rs:698-718`
 - **bug:** `build_multisig_descriptor` decides network solely from the BIP-48 coin-type child; the
@@ -324,7 +326,8 @@ scratch next cycle.
   `ImportWalletParse` (mirror the single-sig `network_from_xpub_neutral` cross-check).
 - **spec:** SLIP-132; BIP-48 coin-type at path index 1.
 
-### - [ ] L3 · Coldcard single-sig `account` silently truncated via `as u32`; legacy-xpub fallback bakes it into the origin path
+### - [x] L3 · Coldcard single-sig `account` silently truncated via `as u32`; legacy-xpub fallback bakes it into the origin path
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — ride-along (firewalled from the network helper): coldcard single-sig account now `u32::try_from` → REJECTS (ImportWalletParse, exit 2) on >u32::MAX instead of silently truncating. RED drives the legacy top-level-xpub fixture. -->
 - **repo/class:** toolkit · **A-wrong-address** · `coldcard-singlesig-account-u32-truncation-legacy-fallback`
 - **location:** `crates/mnemonic-toolkit/src/wallet_import/coldcard.rs:237-241`
 - **bug:** `account = obj["account"].as_u64().map(|n| n as u32).unwrap_or(0)` wraps a `>u32::MAX` JSON
@@ -543,7 +546,8 @@ scratch next cycle.
 - **fix:** apply the same `has_hardened_use_site` / `taproot_override_card` guards at the top of the
   completion path; consider refusing templates carrying `origin_path_overrides`.
 
-### - [ ] L10 · BSMS network inferred from coin-type only, no xpub-version cross-check
+### - [x] L10 · BSMS network inferred from coin-type only, no xpub-version cross-check
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — S-NET: BSMS parser cross-checks each xpub version vs coin-type network via `assert_network_agrees` → NetworkMismatch (exit 2). -->
 - **repo/class:** toolkit · **A-wrong-address** · `w2-tk-msimport-03`
 - **location:** `wallet_import/bsms.rs:386-413` (`network_from_origins`/`coin_type_from_path`),
   `:249,297` (first-address)
@@ -552,7 +556,8 @@ scratch next cycle.
   wrong-network address. Fix: assert xpub network consistent across cosigners and with coin-type; else
   `ImportWalletParse`. · **spec:** BIP-32 xpub `0x0488B21E` / tpub `0x043587CF`.
 
-### - [ ] L11 · `convert --from wif --to xpub` uses `--network` (default mainnet), ignoring the WIF's embedded network
+### - [x] L11 · `convert --from wif --to xpub` uses `--network` (default mainnet), ignoring the WIF's embedded network
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — S-NET: convert wif→xpub now extracts the WIF's OWN NetworkKind (pk.network) and cross-checks vs --network via `assert_network_agrees` → NetworkMismatch (exit 2); escape is --network testnet. -->
 - **repo/class:** toolkit · **A-wrong-address** · `w2-xcut-02`
 - **location:** `cmd/convert.rs:1480-1491` (Wif arm), `:1217` (`network = args.network.unwrap_or(Mainnet)`)
 - **bug:** the sentinel xpub's network is set from `--network` (default mainnet), discarding the parsed
@@ -651,7 +656,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 
 ## Confirmed — HIGH (Wave 3)
 
-### - [ ] H9 · `import-wallet --network` mislabels heterogeneous-network entries (class-check on `first()`, rebind to ALL)
+### - [x] H9 · `import-wallet --network` mislabels heterogeneous-network entries (class-check on `first()`, rebind to ALL)
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — axis-1: the import-wallet --network class-check is now PER-ENTRY (reads each parsed entry's own network before the iter_mut rebind, was first()-only) → ImportWalletNetworkClassMismatch (exit 1). Distinct axis from the exit-2 NetworkMismatch xpub-version check (intentional two-axis coexistence). RED via --format bitcoin-core (only multi-entry parser). -->
 - **repo/class:** toolkit · **A-wrong-address** · `w3-tk-iw-01`
 - **location(s):** `cmd/import_wallet.rs:1191-1209` (guard vs rebind), `:1544` (per-entry emit);
   `wallet_import/bitcoin_core.rs:444-450` (per-descriptor coin-type)
@@ -982,7 +988,8 @@ recurring theme of the whole hunt.
 - **spec:** BIP-32 (master/parent fp = HASH160(pubkey)[:4], child→parent one-way); BIP-380 key-origin;
   rust-bitcoin `Xpub::fingerprint()` = current key's identifier.
 
-### - [ ] H15 · 7 import parsers derive network from the BIP-48 coin-type, never cross-checking the xpub/tpub version bytes → wrong-network accept/mislabel
+### - [x] H15 · 7 import parsers derive network from the BIP-48 coin-type, never cross-checking the xpub/tpub version bytes → wrong-network accept/mislabel
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — axis-2 STRUCTURAL ANCHOR: new shared `pipeline::assert_slots_network_agrees` wires `assert_network_agrees` (xpub's OWN NetworkKind vs coin-type NetworkKind, 2-way Main/Test) at ALL 7 import parsers (descriptor/specter/sparrow/bitcoin-core/bsms/coldcard-multisig/electrum) → NetworkMismatch (exit 2). No-op when no asserted network (originless). Wires the formerly-dead variant. -->
 - **repo/class:** toolkit · **A-wrong-address** · `w4b-1` _(the network-provenance cluster, root instance)_
 - **location(s):** `wallet_import/descriptor.rs:168-213` (`network_from_origins`/`coin_type_from_path`);
   `specter.rs:370-397`; `sparrow.rs:591-633`; `bitcoin_core.rs:430-475`; `bsms.rs:386-430`;
@@ -1006,7 +1013,8 @@ recurring theme of the whole hunt.
 
 ## Confirmed — MEDIUM (Wave B)
 
-### - [ ] M13 · `export-wallet --from-import-json` takes network from the envelope JSON string, no cross-check vs the descriptor's xpub version bytes
+### - [x] M13 · `export-wallet --from-import-json` takes network from the envelope JSON string, no cross-check vs the descriptor's xpub version bytes
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — S-NET: export-wallet --from-import-json now cross-checks each decoded xpub's network vs the envelope's declared bundle.network via `assert_network_agrees` → NetworkMismatch (exit 2). -->
 - **repo/class:** toolkit · **A-wrong-address** (C→A) · `w4b-4`
 - **location:** `cmd/export_wallet.rs:711-712` (`network = cli_network_from_str(envelope.bundle.network)`),
   `:824`; `wallet_import/json_envelope.rs:149-154,339-410,483-495` (only the BIP-380 checksum is validated);
@@ -1020,7 +1028,8 @@ recurring theme of the whole hunt.
   (reuse `NetworkMismatch`). · **spec:** SLIP-132; the envelope's own threat model already guards the
   checksum but not the network.
 
-### - [ ] M14 · `convert --xpub-prefix` re-emits with the `--network` version family without checking the xpub's own network
+### - [x] M14 · `convert --xpub-prefix` re-emits with the `--network` version family without checking the xpub's own network
+<!-- FIXED cycle-5 (toolkit v0.63.0 @bad8a3fb) — S-NET: convert --xpub-prefix now cross-checks the input xpub's own network vs the --network family via `assert_network_agrees` → NetworkMismatch (exit 2), preventing a cross-network prefix re-emit. -->
 - **repo/class:** toolkit · **A-wrong-address** · `w4b-5`
 - **location:** `cmd/convert.rs:1100-1113` (`apply_xpub_prefix(&xpub, prefix, network)` with
   `network = args.network.unwrap_or(Mainnet)`), `:921-926` (guard checks **presence** of `--network`, not
