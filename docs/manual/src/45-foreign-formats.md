@@ -544,19 +544,43 @@ For the 2-of-3 P2WSH fixture, the parser synthesizes
 `wsh(sortedmulti(2, [34a3a4f1/48'/0'/0'/2']xpub6FQya..., ...))` and
 populates `mk1` with all three cosigner xpubs.
 
-### XFP-header policy (5-row truth table)
+### XFP-header policy (depth-gated truth table)
 
-The `XFP:` header line interacts with the computed fingerprint (from
-the master xpub or per-cosigner xpubs) per the table at SPEC §11.4.1.
-The header-matches-computed case is the silent-pass row; the
-header-disagrees case emits a stderr WARNING but proceeds with the
-header value as authoritative:
+The `XFP:` / per-cosigner `<XFP>:` prefix is, by Coldcard convention,
+the **master** (depth-0) fingerprint. A cosigner xpub's *own*
+`fingerprint()` equals the master fingerprint **only when the xpub is
+the master** (`xpub.depth == 0`). A real Coldcard multisig export
+carries **account** xpubs (e.g. at `m/48'/0'/0'/2'`, depth 4), whose
+own fingerprint is **not** the master and from which the master is
+**unrecoverable**. The intake policy is therefore gated on the decoded
+`xpub.depth` byte (per the table at SPEC §11.4.1):
 
-```text
-warning: import-wallet: coldcard-multisig: xfp header `XFP: <hex>`
-  disagrees with computed fingerprint `<hex>` from cosigner xpub;
-  using blob-supplied header value as authoritative
-```
+- **Supplied XFP, any depth** → use the supplied master fingerprint.
+  At depth>0 this is **silent** (the supplied value is the only signal
+  for the master; comparing it to the account-key id would always
+  spuriously disagree). At depth 0, a mismatch between the supplied
+  XFP and the computed fingerprint emits a stderr WARNING and proceeds
+  with the header value as authoritative:
+
+  ```text
+  warning: import-wallet: coldcard-multisig: xfp header `XFP: <hex>`
+    disagrees with computed fingerprint `<hex>` from cosigner xpub;
+    using blob-supplied header value as authoritative
+  ```
+
+- **No supplied XFP, depth-0 master xpub** → use the computed
+  `fingerprint()` (it IS the master fingerprint at depth 0), silently.
+
+- **No supplied XFP, depth>0 account xpub** → **REFUSE** (exit 2): the
+  master fingerprint is unrecoverable from an account xpub. Re-export
+  with the device's XFP — a top-level `XFP:` header or a per-cosigner
+  `<XFP>: <xpub>` line carrying the master fingerprint. (Real Coldcard
+  / Jade firmware always stamps the `XFP:`; this refusal guards against
+  silently engraving a wrong master fingerprint into a steel backup.)
+
+The same intake policy applies to the **Jade** import surface — Jade's
+inner `multisig_file` body is parsed by the identical Coldcard-multisig
+parser, so a depth>0/no-XFP Jade blob refuses identically.
 
 ### Provenance metadata
 

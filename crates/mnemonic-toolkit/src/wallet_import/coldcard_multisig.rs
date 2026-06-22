@@ -50,7 +50,11 @@
 //!
 //! Also accepted: an optional leading `XFP: <hex>` line carrying the master
 //! fingerprint (Coldcard variant). When present, it OVERRIDES the
-//! computed-from-xpub fingerprint per SPEC §11.4.1 5-row truth table.
+//! computed-from-xpub fingerprint per SPEC §11.4.1 (cycle-13a DEPTH-GATED
+//! truth table). The computed `Xpub::fingerprint()` is the master fingerprint
+//! ONLY when `xpub.depth == 0`; at depth>0 a NO-XFP blob is REFUSED (the
+//! master fp is unrecoverable from an account xpub) and a supplied XFP is
+//! accepted silently (no disagreement warning).
 //!
 //! ## Provenance
 //!
@@ -354,17 +358,35 @@ pub(super) fn parse_text(
         })?;
         let path_components_str = derivation_path_components(path_str);
 
-        // Resolve effective XFP per SPEC §11.4.1.
+        // Resolve effective XFP per SPEC §11.4.1 — DEPTH-GATED (cycle-13a H14).
+        //
+        // `Xpub::fingerprint()` is the HASH160 of the CURRENT key (rust-bitcoin
+        // `bip32.rs`), so it equals the BIP-380 *master* fingerprint ONLY when
+        // the xpub IS the master, i.e. `xpub.depth == 0`. At depth>0 it is the
+        // account-key's own id, NOT the master — and the master fp is
+        // unrecoverable from a child xpub (child→parent is one-way). So the
+        // depth byte of the decoded xpub is the authoritative discriminator
+        // (independent of the declared `Derivation:` path).
         let xpub_parse_result = Xpub::from_str(&raw.xpub_str);
         let computed_fp: Option<Fingerprint> =
             xpub_parse_result.as_ref().ok().map(|x| x.fingerprint());
+        let computed_depth: Option<u8> = xpub_parse_result.as_ref().ok().map(|x| x.depth);
+        let xpub_is_master = computed_depth == Some(0);
         let supplied_fp: Option<Fingerprint> = raw.per_line_xfp.or(header_xfp); // per-line shared form OR top-level XFP header.
 
         let effective_fp: Fingerprint = match (supplied_fp, computed_fp) {
-            // Row 1: header present + computed available + match → silent.
+            // H14-c: supplied XFP at depth>0 → the supplied value is the only
+            // signal for the master fp; comparing it to the account-key id
+            // (which can NEVER equal the master at depth>0) would emit a
+            // guaranteed-spurious warning. Accept supplied silently; do NOT
+            // compute/compare; do NOT set xfp_header_disagreed.
+            (Some(supplied), _) if !xpub_is_master => supplied,
+            // Row 1 (H14-d at depth 0): supplied + computed available + match.
             (Some(supplied), Some(computed)) if supplied == computed => supplied,
-            // Row 2: header present + computed available + MISMATCH →
-            // WARNING + use header (per SPEC §11.4.1 byte-exact template).
+            // Row 2 (H14-d at depth 0): supplied + computed available +
+            // MISMATCH → WARNING + use supplied (per SPEC §11.4.1 byte-exact
+            // template). Reachable only at depth 0 (depth>0 took H14-c above),
+            // where the computed fp IS comparable to the master XFP.
             (Some(supplied), Some(computed)) => {
                 xfp_header_disagreed = true;
                 writeln!(
@@ -378,13 +400,30 @@ pub(super) fn parse_text(
                 .map_err(ToolkitError::Io)?;
                 supplied
             }
-            // Row 3: header present + xpub malformed (computed unavailable)
-            // → use header silently; the xpub-parse error surfaces below
-            // when we try to build the descriptor.
+            // Row 3 (H14-e): supplied + xpub malformed (computed/depth
+            // unavailable) → use supplied silently; the xpub-parse error
+            // surfaces below when we try to build the descriptor.
             (Some(supplied), None) => supplied,
-            // Row 4: no header + computed available → use computed silently.
-            (None, Some(computed)) => computed,
-            // Row 5: no header + no computed → hard error.
+            // H14-a: no supplied XFP + computed available + xpub IS the master
+            // (depth 0) → `xpub.fingerprint()` IS the master fp → use it
+            // silently.
+            (None, Some(computed)) if xpub_is_master => computed,
+            // H14-b: no supplied XFP + computed available BUT xpub is depth>0
+            // → the master fp is UNRECOVERABLE from an account xpub → REFUSE
+            // (was the Row-4 silent-substitute bug). Exit 2 (ImportWalletParse).
+            (None, Some(_)) => {
+                let depth = computed_depth.unwrap_or_default();
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: coldcard-multisig: parse error: cosigner {i}: cannot \
+                     determine master fingerprint — the cosigner xpub is at depth {depth} \
+                     (an account xpub), so its own fingerprint is NOT the master fingerprint \
+                     a BIP-380 key-origin requires, and the master fingerprint is unrecoverable \
+                     from an account xpub. Re-export with the device's XFP (a top-level `XFP:` \
+                     header or a per-cosigner `<XFP>: <xpub>` line carrying the master \
+                     fingerprint)."
+                )));
+            }
+            // Row 5: no supplied XFP + no computed (xpub malformed) → hard error.
             (None, None) => {
                 let xpub_err = xpub_parse_result
                     .as_ref()
@@ -946,6 +985,213 @@ Derivation: m/0\n";
     const FP_B: &str = "FF9DFBCF";
     const FP_C: &str = "B7F7DFEA";
 
+    // cycle-13a (H14 depth-gated truth table): genuine DEPTH-0 master xpubs.
+    // The account xpubs above (XPUB_A/B depth 4, XPUB_C depth 3 — all >0) can
+    // no longer feed the Row-2/Row-4 warn/silent-computed fixtures, because the
+    // H14 matrix gates `xpub.fingerprint()`-as-master-fp on `xpub.depth == 0`
+    // (a depth>0 xpub's own fingerprint is NOT the master fp, so the disagree
+    // warning would be meaningless / the no-XFP case now REFUSES). These three
+    // are deterministically generated BIP-32 master (depth-0) xpubs; their
+    // `FP_D0_*` values are `Xpub::fingerprint()` (= master id at depth 0),
+    // verified at `depth0_const_fingerprints_pinned` below.
+    const XPUB_D0_A: &str = "xpub661MyMwAqRbcGQ5dEWgzwBWpcFA5Uc2TKjZy6gqBoHgMGBKn91Q7ooXXCk2cdjU6nh1GW5tF7ttjKiYg2RJ5ybBZscgMqLE7RevfHn4J1jS";
+    const FP_D0_A: &str = "57ACB302";
+    const XPUB_D0_B: &str = "xpub661MyMwAqRbcF4AYTpoZvFuiLUyBtTmtVhoUVutzfJzeCFvNFjRcdtLLaWgDb7gwHmLBTV6gZf4T9rqSnxcu8hcmLigphSiFioYqVFcRSEZ";
+    const FP_D0_B: &str = "0734F923";
+    const XPUB_D0_C: &str = "xpub661MyMwAqRbcFCaP8gCBrgGNeaypTxHjEXKShDXjuEMf33MdFcJvStdLeHJjXygp28GU1fTNTTsRmJVRnm3RyQ2S2BFFaT8btZLTwWupf3a";
+    const FP_D0_C: &str = "689B0FA9";
+
+    /// cycle-13a: pin the depth byte == 0 AND `Xpub::fingerprint()` of the
+    /// new depth-0 master-xpub consts against the vendored bitcoin crate (the
+    /// authoritative source for the H14 discriminator). Guards the generated
+    /// constants from silently drifting wrong.
+    #[test]
+    fn depth0_const_fingerprints_pinned() {
+        for (xpub, want_fp) in [
+            (XPUB_D0_A, FP_D0_A),
+            (XPUB_D0_B, FP_D0_B),
+            (XPUB_D0_C, FP_D0_C),
+        ] {
+            let x = Xpub::from_str(xpub).expect("depth-0 const xpub must parse");
+            assert_eq!(x.depth, 0, "const must be a depth-0 master xpub");
+            assert_eq!(
+                x.fingerprint().to_string().to_uppercase(),
+                want_fp,
+                "pinned FP_D0_* must equal Xpub::fingerprint()"
+            );
+        }
+    }
+
+    // ====================================================================
+    // cycle-13a H14 — depth-gated master-fingerprint truth table (P1)
+    // SPEC §11.4.1. The discriminator is `xpub.depth == 0`: only a depth-0
+    // master xpub's own `fingerprint()` IS the BIP-380 master fp.
+    // ====================================================================
+
+    /// #6 (H14-b): depth>0 account xpub, shared `Derivation:`, NO `XFP:`
+    /// header, bare xpub → the master fingerprint is UNRECOVERABLE from an
+    /// account xpub → REFUSE (`ImportWalletParse`, exit 2). RED today
+    /// (silently substitutes the account-key id as the master fp, Row 4).
+    #[test]
+    fn import_coldcard_multisig_depth_gt0_no_xfp_refuses() {
+        // XPUB_A is depth 4 (m/48'/0'/0'/2' account xpub), no XFP anywhere.
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 1\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+{XPUB_A}\n"
+        );
+        let mut stderr = Vec::new();
+        let err = parse_text(blob.as_bytes(), &mut stderr).unwrap_err();
+        match &err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(
+                    msg.contains("depth") && msg.contains("master fingerprint"),
+                    "H14-b refusal must cite depth + master fingerprint; got: {msg}"
+                );
+            }
+            other => panic!("expected ImportWalletParse (exit 2), got: {other:?}"),
+        }
+    }
+
+    /// #7 (H14-c): depth>0 account xpub WITH a top-level `XFP:` header that
+    /// differs from `xpub.fingerprint()` → use the SUPPLIED master fp,
+    /// stderr SILENT (no disagreement warning — the account-key id can never
+    /// equal the master fp at depth>0, so the comparison is meaningless).
+    /// RED today (Row 2 fires a spurious warning).
+    #[test]
+    fn import_coldcard_multisig_depth_gt0_with_header_xfp_no_warning() {
+        // XPUB_A depth 4; header XFP DEADBEEF (synthetic master) != FP_A.
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 1\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+XFP: DEADBEEF\n\
+{XPUB_A}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        let meta = match &p.provenance {
+            ImportProvenance::ColdcardMultisig(m) => m,
+            other => panic!("expected ColdcardMultisig provenance, got {other:?}"),
+        };
+        assert!(
+            !meta.xfp_header_disagreed,
+            "depth>0 + supplied XFP must NOT set xfp_header_disagreed (H14-c)"
+        );
+        assert!(
+            stderr.is_empty(),
+            "depth>0 + supplied XFP must be SILENT (H14-c); got: {:?}",
+            String::from_utf8_lossy(&stderr)
+        );
+        assert_eq!(
+            p.cosigners[0].fingerprint.to_string().to_uppercase(),
+            "DEADBEEF",
+            "must use the supplied master fp at depth>0"
+        );
+    }
+
+    /// #8 (H14-c): depth>0 account xpub with a PER-LINE `<XFP>: <xpub>`
+    /// master fp != computed → use supplied, SILENT, exit 0. RED today.
+    #[test]
+    fn import_coldcard_multisig_depth_gt0_per_line_xfp_no_warning() {
+        // CAFEBABE per-line master fp on a depth-4 xpub.
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 1\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+\n\
+CAFEBABE: {XPUB_A}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        let meta = match &p.provenance {
+            ImportProvenance::ColdcardMultisig(m) => m,
+            other => panic!("expected ColdcardMultisig provenance, got {other:?}"),
+        };
+        assert!(
+            !meta.xfp_header_disagreed,
+            "depth>0 + per-line XFP must NOT set xfp_header_disagreed (H14-c)"
+        );
+        assert!(
+            stderr.is_empty(),
+            "depth>0 + per-line XFP must be SILENT (H14-c); got: {:?}",
+            String::from_utf8_lossy(&stderr)
+        );
+        assert_eq!(
+            p.cosigners[0].fingerprint.to_string().to_uppercase(),
+            "CAFEBABE"
+        );
+    }
+
+    /// #9 (H14-a): genuine DEPTH-0 master xpub, NO XFP → use
+    /// `xpub.fingerprint()` (= master fp at depth 0) SILENTLY, exit 0.
+    /// Guards against over-refusing (the H14-b refusal must NOT fire at
+    /// depth 0). GREEN both before and after the fix at depth 0.
+    #[test]
+    fn import_coldcard_multisig_depth0_no_xfp_uses_computed() {
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 1\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+{XPUB_D0_A}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        assert!(
+            stderr.is_empty(),
+            "depth-0 + no-XFP must be silent (H14-a); got: {:?}",
+            String::from_utf8_lossy(&stderr)
+        );
+        assert_eq!(
+            p.cosigners[0].fingerprint.to_string().to_uppercase(),
+            FP_D0_A,
+            "depth-0 uses computed master fp"
+        );
+    }
+
+    /// #10 (H14-d): DEPTH-0 master xpub, supplied XFP != computed → WARNING +
+    /// use supplied (Row 2 stays meaningful at depth 0 — the computed fp IS
+    /// comparable to the master XFP). Guards against under-warning.
+    #[test]
+    fn import_coldcard_multisig_depth0_xfp_mismatch_warns() {
+        // XFP DEADBEEF != FP_D0_A computed at depth 0.
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 1\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+XFP: DEADBEEF\n\
+{XPUB_D0_A}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        let meta = match &p.provenance {
+            ImportProvenance::ColdcardMultisig(m) => m,
+            other => panic!("expected ColdcardMultisig provenance, got {other:?}"),
+        };
+        assert!(
+            meta.xfp_header_disagreed,
+            "depth-0 XFP mismatch must set xfp_header_disagreed (H14-d)"
+        );
+        let s = String::from_utf8_lossy(&stderr);
+        assert!(
+            s.contains("warning: import-wallet: coldcard-multisig: xfp header"),
+            "depth-0 mismatch must WARN (H14-d); got: {s}"
+        );
+        assert!(s.contains("DEADBEEF"), "warning must cite header; got: {s}");
+        assert!(s.contains(FP_D0_A), "warning must cite computed; got: {s}");
+        assert_eq!(
+            p.cosigners[0].fingerprint.to_string().to_uppercase(),
+            "DEADBEEF",
+            "depth-0 mismatch uses supplied (header authoritative)"
+        );
+    }
+
     /// SPEC §11.4 happy-path: shared-derivation shape, no XFP header, all
     /// per-cosigner `<XFP>: <xpub>` fingerprints match xpub.fingerprint().
     /// Row 1 of the truth table (silent). Telemetry: xfp_was_blob_supplied=
@@ -984,15 +1230,17 @@ Format: P2WSH\n\
         );
     }
 
-    /// SPEC §11.4.1 row 2: header present + computed available + MISMATCH.
-    /// WARNING fires + header is authoritative. `xfp_header_disagreed=true`.
+    /// SPEC §11.4.1 row 2 (H14-d at depth 0): header present + computed
+    /// available + MISMATCH. WARNING fires + header is authoritative.
+    /// `xfp_header_disagreed=true`. cycle-13a: the cosigner xpub is a genuine
+    /// DEPTH-0 master xpub (`XPUB_D0_A`) — the Row-2 disagreement warning is
+    /// only meaningful at depth 0, where `xpub.fingerprint()` IS comparable to
+    /// the supplied master XFP. (Pre-cycle-13a this fixture used a depth-4
+    /// account xpub, which now takes the silent H14-c arm.)
     #[test]
     fn parse_xfp_header_mismatch_warns_uses_header() {
-        // Top-level XFP header DEADBEEF; per-cosigner XFPs match computed,
-        // but the top-level header is wrong relative to the first cosigner's
-        // computed fingerprint (the parser per SPEC §11.4 applies the truth
-        // table per-cosigner; we engineer disagreement on the first cosigner
-        // by using a bare `<xpub>` line that takes the header fingerprint).
+        // Top-level XFP header DEADBEEF disagrees with the depth-0 master
+        // xpub's computed fingerprint FP_D0_A.
         let blob = format!(
             "Name: T\n\
 Policy: 1 of 1\n\
@@ -1000,7 +1248,7 @@ Derivation: m/48'/0'/0'/2'\n\
 Format: P2WSH\n\
 XFP: DEADBEEF\n\
 \n\
-{XPUB_A}\n" // bare xpub → supplied = header DEADBEEF, computed = FP_A (mismatch).
+{XPUB_D0_A}\n" // bare xpub → supplied = header DEADBEEF, computed = FP_D0_A (mismatch).
         );
         let mut stderr = Vec::new();
         let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
@@ -1020,8 +1268,8 @@ XFP: DEADBEEF\n\
             "row-2 WARNING must cite header value DEADBEEF; got: {s}"
         );
         assert!(
-            s.contains(FP_A),
-            "row-2 WARNING must cite computed value {FP_A}; got: {s}"
+            s.contains(FP_D0_A),
+            "row-2 WARNING must cite computed value {FP_D0_A}; got: {s}"
         );
         assert!(
             s.contains("using blob-supplied header value as authoritative"),
@@ -1034,15 +1282,70 @@ XFP: DEADBEEF\n\
         );
     }
 
-    /// SPEC §11.4.1 row 4: no header + computed available (bare xpub
-    /// without `<XFP>:` prefix would be the same path, but in this test we
-    /// exercise it via the `<XFP>: <xpub>` form which still goes through
-    /// the same `parse_fingerprint_hex` path).
+    /// SPEC §11.4.1 H14-a (formerly "row 4"): no header + computed available
+    /// AND the xpub IS the DEPTH-0 master → `xpub.fingerprint()` IS the master
+    /// fp → use it SILENTLY. cycle-13a SPLIT (a): re-pointed to genuine depth-0
+    /// master xpubs (`XPUB_D0_*`) so the "uses computed silently" assertion
+    /// stays valid — at depth 0 the computed fp legitimately IS the master fp.
+    /// (The depth>0/no-XFP companion now REFUSES — see the SPLIT (b) test
+    /// `parse_no_header_depth_gt0_refuses` directly below.)
     #[test]
     fn parse_no_header_no_per_cosigner_xfp_uses_computed_silent() {
         // Per-cosigner shape: `Derivation:` before each bare xpub; no XFP
-        // anywhere → computed-from-xpub path (row 4 of truth table). The
-        // `xfp_was_blob_supplied` telemetry flag is `false` for this case.
+        // anywhere; all three cosigners are DEPTH-0 masters → computed-from-
+        // xpub path (H14-a). `xfp_was_blob_supplied` telemetry stays `false`.
+        let blob = format!(
+            "Name: T\n\
+Policy: 2 of 3\n\
+Format: P2WSH\n\
+Derivation: m/48'/0'/0'/2'\n\
+{XPUB_D0_A}\n\
+Derivation: m/48'/0'/0'/2'\n\
+{XPUB_D0_B}\n\
+Derivation: m/48'/0'/0'/2'\n\
+{XPUB_D0_C}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        let meta = match &p.provenance {
+            ImportProvenance::ColdcardMultisig(m) => m,
+            other => panic!("expected ColdcardMultisig provenance, got {other:?}"),
+        };
+        assert!(
+            !meta.xfp_was_blob_supplied,
+            "H14-a (no XFP anywhere) must set xfp_was_blob_supplied=false"
+        );
+        assert!(!meta.xfp_header_disagreed);
+        assert!(
+            stderr.is_empty(),
+            "H14-a (depth-0, no XFP) must be silent; got: {:?}",
+            String::from_utf8_lossy(&stderr)
+        );
+        // All cosigners use computed (= master at depth 0) fingerprints.
+        assert_eq!(
+            p.cosigners[0].fingerprint.to_string().to_uppercase(),
+            FP_D0_A
+        );
+        assert_eq!(
+            p.cosigners[1].fingerprint.to_string().to_uppercase(),
+            FP_D0_B
+        );
+        assert_eq!(
+            p.cosigners[2].fingerprint.to_string().to_uppercase(),
+            FP_D0_C
+        );
+    }
+
+    /// SPEC §11.4.1 H14-b: no header + computed available BUT the cosigner
+    /// xpub is at depth>0 (an account xpub) → the master fp is UNRECOVERABLE
+    /// → REFUSE (`ImportWalletParse`, exit 2). cycle-13a SPLIT (b): this is
+    /// the silent-substitute → refuse flip that the lane is built on (the
+    /// former `parse_no_header_no_per_cosigner_xfp_uses_computed_silent` used
+    /// depth-4 xpubs with NO XFP and silently substituted the account-key id).
+    #[test]
+    fn parse_no_header_depth_gt0_refuses() {
+        // Same shape as the H14-a test but with DEPTH-4 account xpubs and no
+        // XFP anywhere → must refuse, not silently substitute.
         let blob = format!(
             "Name: T\n\
 Policy: 2 of 3\n\
@@ -1055,25 +1358,16 @@ Derivation: m/48'/0'/0'/2'\n\
 {XPUB_C}\n"
         );
         let mut stderr = Vec::new();
-        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
-        let meta = match &p.provenance {
-            ImportProvenance::ColdcardMultisig(m) => m,
-            other => panic!("expected ColdcardMultisig provenance, got {other:?}"),
-        };
-        assert!(
-            !meta.xfp_was_blob_supplied,
-            "row-4 (no XFP anywhere) must set xfp_was_blob_supplied=false"
-        );
-        assert!(!meta.xfp_header_disagreed);
-        assert!(
-            stderr.is_empty(),
-            "row-4 must be silent; got: {:?}",
-            String::from_utf8_lossy(&stderr)
-        );
-        // All cosigners use computed fingerprints.
-        assert_eq!(p.cosigners[0].fingerprint.to_string().to_uppercase(), FP_A);
-        assert_eq!(p.cosigners[1].fingerprint.to_string().to_uppercase(), FP_B);
-        assert_eq!(p.cosigners[2].fingerprint.to_string().to_uppercase(), FP_C);
+        let err = parse_text(blob.as_bytes(), &mut stderr).unwrap_err();
+        match &err {
+            ToolkitError::ImportWalletParse(msg) => {
+                assert!(
+                    msg.contains("depth") && msg.contains("master fingerprint"),
+                    "H14-b refusal must cite depth + master fingerprint; got: {msg}"
+                );
+            }
+            other => panic!("expected ImportWalletParse (exit 2), got: {other:?}"),
+        }
     }
 
     /// SPEC §11.4.1 row 5: no header + xpub malformed → hard error citing
@@ -1261,6 +1555,9 @@ Format: P2WSH\n\
 
     /// Per-cosigner shape mixed with `<XFP>:` for a single cosigner where
     /// the per-line XFP DIVERGES from the computed value → row 2 WARNING.
+    /// cycle-13a: re-pointed to a DEPTH-0 master xpub (`XPUB_D0_A`) — the
+    /// Row-2/H14-d disagreement warning is only meaningful at depth 0 (at
+    /// depth>0 a supplied per-line XFP takes the silent H14-c arm).
     #[test]
     fn parse_per_cosigner_xfp_divergence_warns() {
         let blob = format!(
@@ -1269,7 +1566,7 @@ Policy: 1 of 1\n\
 Derivation: m/48'/0'/0'/2'\n\
 Format: P2WSH\n\
 \n\
-CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
+CAFEBABE: {XPUB_D0_A}\n" // per-line XFP CAFEBABE vs computed FP_D0_A (depth 0)
         );
         let mut stderr = Vec::new();
         let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
@@ -1281,7 +1578,7 @@ CAFEBABE: {XPUB_A}\n" // per-line XFP CAFEBABE vs computed FP_A
         assert!(meta.xfp_header_disagreed);
         let s = String::from_utf8_lossy(&stderr);
         assert!(s.contains("CAFEBABE"), "got: {s}");
-        assert!(s.contains(FP_A), "got: {s}");
+        assert!(s.contains(FP_D0_A), "got: {s}");
         assert_eq!(
             p.cosigners[0].fingerprint.to_string().to_uppercase(),
             "CAFEBABE",
@@ -1414,6 +1711,13 @@ Format: P2WSH\n\
     }
 
     /// Cross-cosigner coin-type heterogeneity rejected.
+    /// cycle-13a: the per-cosigner truth-table loop runs BEFORE the coin-type
+    /// heterogeneity check, so a NO-XFP depth>0 blob would now refuse with the
+    /// H14-b master-fp message before the coin-type validation is reached. We
+    /// supply a top-level `XFP:` master fp (depth>0 → H14-c silent accept) so
+    /// the truth-table loop passes and the coin-type cross-check stays the
+    /// reached/exercised refusal point. The per-line `Derivation:` paths still
+    /// diverge in coin-type (mainnet 0 vs testnet 1).
     #[test]
     fn parse_heterogeneous_coin_type_rejected() {
         let tpub_a = "tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC";
@@ -1422,6 +1726,7 @@ Format: P2WSH\n\
             "Name: T\n\
 Policy: 2 of 2\n\
 Format: P2WSH\n\
+XFP: DEADBEEF\n\
 Derivation: m/48'/0'/0'/2'\n\
 {XPUB_A}\n\
 Derivation: m/48'/1'/0'/2'\n\

@@ -19,6 +19,16 @@ const FIX_2OF3_NO_XFP: &str = "tests/fixtures/wallet_import/coldcard-ms-2of3-p2w
 const FIX_3OF5: &str = "tests/fixtures/wallet_import/coldcard-ms-3of5-p2wsh.txt";
 const FIX_MALFORMED: &str = "tests/fixtures/wallet_import/coldcard-ms-malformed-missing-format.txt";
 
+/// cycle-13a (H14 depth-gated truth table): a genuine DEPTH-0 master xpub.
+/// The Row-2 disagreement WARNING is only meaningful at depth 0, where the
+/// xpub's own `fingerprint()` IS the master fp and is comparable to a supplied
+/// XFP. At depth>0 a supplied XFP is accepted silently (H14-c), so the prior
+/// depth-4 blobs in the two divergence-warning cells below would go silent.
+/// `XPUB_D0_A.fingerprint() == 57ACB302` (pinned against the bitcoin crate in
+/// the `coldcard_multisig::tests::depth0_const_fingerprints_pinned` unit test).
+const XPUB_D0_A: &str = "xpub661MyMwAqRbcGQ5dEWgzwBWpcFA5Uc2TKjZy6gqBoHgMGBKn91Q7ooXXCk2cdjU6nh1GW5tF7ttjKiYg2RJ5ybBZscgMqLE7RevfHn4J1jS";
+const FP_D0_A: &str = "57ACB302";
+
 /// Run `mnemonic import-wallet --blob <path> --format coldcard-multisig`.
 fn run_explicit(path: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
@@ -165,10 +175,11 @@ fn coldcard_ms_malformed_missing_format_refused() {
 #[test]
 fn coldcard_ms_xfp_header_divergence_warns_byte_exact_template() {
     // Synthetic blob: top-level `XFP: DEADBEEF` disagrees with computed
-    // fingerprint `34A3A4F1` from the cosigner xpub. The parser must emit
-    // the SPEC §11.4.1 row-2 WARNING (byte-exact template) AND succeed
-    // (header value is authoritative per the truth table).
-    let xpub_a = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+    // fingerprint `57ACB302` from the DEPTH-0 master cosigner xpub. The parser
+    // must emit the SPEC §11.4.1 row-2 WARNING (byte-exact template) AND
+    // succeed (header value is authoritative per the truth table).
+    // cycle-13a: re-pointed to a depth-0 master xpub so the disagreement
+    // warning stays meaningful (depth>0 + supplied XFP is silent under H14-c).
     let blob = format!(
         "Name: T\n\
 Policy: 1 of 1\n\
@@ -176,7 +187,7 @@ Derivation: m/48'/0'/0'/2'\n\
 Format: P2WSH\n\
 XFP: DEADBEEF\n\
 \n\
-{xpub_a}\n"
+{XPUB_D0_A}\n"
     );
     let out = run_stdin(&blob).success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
@@ -193,7 +204,7 @@ XFP: DEADBEEF\n\
         "WARNING must cite blob's XFP header value; got: {stderr}"
     );
     assert!(
-        stderr.contains("`34A3A4F1`"),
+        stderr.contains(&format!("`{FP_D0_A}`")),
         "WARNING must cite computed fingerprint; got: {stderr}"
     );
     assert!(
@@ -208,22 +219,23 @@ XFP: DEADBEEF\n\
 #[test]
 fn coldcard_ms_per_cosigner_xfp_divergence_warns_per_cosigner() {
     // Synthetic blob: per-cosigner `<XFP>: <xpub>` form where the XFP
-    // prefix CAFEBABE disagrees with computed `34A3A4F1`. Same WARNING
+    // prefix CAFEBABE disagrees with computed `57ACB302`. Same WARNING
     // template applies (the truth table is per-cosigner, not just per-header).
-    let xpub_a = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+    // cycle-13a: re-pointed to a depth-0 master xpub (depth>0 + per-line XFP
+    // is silent under H14-c).
     let blob = format!(
         "Name: T\n\
 Policy: 1 of 1\n\
 Derivation: m/48'/0'/0'/2'\n\
 Format: P2WSH\n\
 \n\
-CAFEBABE: {xpub_a}\n"
+CAFEBABE: {XPUB_D0_A}\n"
     );
     let out = run_stdin(&blob).success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(stderr.contains("warning: import-wallet: coldcard-multisig: xfp header"));
     assert!(stderr.contains("CAFEBABE"));
-    assert!(stderr.contains("34A3A4F1"));
+    assert!(stderr.contains(FP_D0_A));
 }
 
 // ============================================================================

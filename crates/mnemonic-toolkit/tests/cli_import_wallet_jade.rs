@@ -288,3 +288,39 @@ fn jade_format_mismatch_against_coldcard_multisig_blob() {
          got: {stderr}"
     );
 }
+
+// ============================================================================
+// cycle-13a #14 (H14-b / M-1 blast-radius) — the depth-gated master-fp refusal
+// fires on the JADE import surface too, since `wallet_import/jade.rs` delegates
+// the inner `multisig_file` to the shared `coldcard_multisig::parse_text`.
+// ============================================================================
+
+#[test]
+fn import_jade_depth_gt0_no_xfp_refuses() {
+    // Jade `get_registered_multisig` reply whose inner `multisig_file` carries
+    // a DEPTH-4 account xpub with NO XFP (header or per-line) → the shared
+    // parser refuses (master fp unrecoverable from an account xpub), exit 2.
+    let xpub_a = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+    let multisig_file = format!(
+        "Name: T\nPolicy: 1 of 1\nDerivation: m/48'/0'/0'/2'\nFormat: P2WSH\n{xpub_a}\n"
+    );
+    let envelope = serde_json::json!({
+        "id": "jade-test-depth-refuse",
+        "multisig_name": "T",
+        "multisig_file": multisig_file,
+    })
+    .to_string();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "jade"])
+        .write_stdin(envelope)
+        .assert()
+        .failure();
+    let code = out.get_output().status.code().expect("exit code present");
+    assert_eq!(code, 2, "H14-b refusal must exit 2 (ImportWalletParse); got {code}");
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("depth") && stderr.contains("master fingerprint"),
+        "Jade refusal must cite depth + master fingerprint (delegated H14-b); got: {stderr}"
+    );
+}

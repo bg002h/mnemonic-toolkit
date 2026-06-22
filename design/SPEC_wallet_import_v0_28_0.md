@@ -416,17 +416,23 @@ Some firmware variants prefix a `XFP: <hex>` header line; sniff tolerates both (
 
 **Parse contract:** line-oriented parser. Extract Name, Policy (K-of-N), Format (P2WSH / P2SH-P2WSH / P2SH), per-cosigner Derivation+xpub pairs. Synthesize descriptor: `wsh(sortedmulti(K, [xfp/path]xpub, ...))` or `sh(wsh(...))` per Format header.
 
-**§11.4.1 — xfp policy (R1-I3 5-row truth table):**
+**§11.4.1 — xfp policy (cycle-13a H14 DEPTH-GATED truth table):**
 
-| header present | computed available | computed matches | action |
-|---|---|---|---|
-| Y | Y | Y | use header (silent) |
-| Y | Y | N | WARNING + use header. Byte-exact template: `` warning: import-wallet: coldcard-multisig: xfp header `XFP: <hex>` disagrees with computed fingerprint `<hex>` from cosigner xpub; using blob-supplied header value as authoritative `` |
-| Y | N (xpub malformed) | — | use header (silent); xpub-parse error surfaces elsewhere via `ImportWalletParse` |
-| N | Y | — | use computed (silent) |
-| N | N | — | `ImportWalletParse` error: `"coldcard-multisig: cannot compute xfp: no XFP header and xpub parse failed: <e>"` |
+The supplied `XFP:` (top-level header) / per-cosigner `<XFP>:` prefix is, by Coldcard convention, the **master** (depth-0) fingerprint. `bitcoin::bip32::Xpub::fingerprint()` is the HASH160 of the **current** key, so it equals the master fingerprint **only when `xpub.depth == 0`** (the xpub IS the master). At `depth > 0` the computed value is the account-key's own id — NOT the master — and the master fingerprint is **unrecoverable** from a child xpub (HASH160 is one-way; you cannot ascend the tree). The decoded `xpub.depth` byte is therefore the authoritative discriminator (independent of the declared `Derivation:` path). The table is gated on it:
 
-**Computed-fingerprint formula:** `bitcoin::bip32::Xpub::fingerprint()` on the master xpub (if depth=0) or on the cosigner xpub itself (if depth>0; per BIP-32 fingerprint-of-current-key semantics).
+| `xpub.depth == 0`? | XFP supplied? | computed available? | matches? | action |
+|---|---|---|---|---|
+| 0 | Y | Y | Y | use supplied (silent) |
+| 0 | Y | Y | N | WARNING + use supplied. Byte-exact template: `` warning: import-wallet: coldcard-multisig: xfp header `XFP: <hex>` disagrees with computed fingerprint `<hex>` from cosigner xpub; using blob-supplied header value as authoritative `` |
+| 0 | N | Y | — | use computed (= master fp at depth 0) (silent) |
+| >0 | Y | (any) | — | use supplied (silent) — the supplied value is the only signal for the master fp; comparing it to the account-key id would emit a guaranteed-spurious warning, so the disagreement warning is **suppressed** at depth>0 and `xfp_header_disagreed` is NOT set |
+| >0 | N | Y | — | **`ImportWalletParse` REFUSE** (exit 2): the master fingerprint is unrecoverable from a depth-N account xpub. Message cites the cosigner index, the depth, "master fingerprint", and directs the user to re-export with the device's XFP (a top-level `XFP:` header or a per-cosigner `<XFP>: <xpub>` line) |
+| any | Y | N (xpub malformed) | — | use supplied (silent); xpub-parse error surfaces elsewhere via `ImportWalletParse` |
+| any | N | N (xpub malformed) | — | `ImportWalletParse` error: `"coldcard-multisig: cannot compute xfp: no XFP header and xpub parse failed: <e>"` |
+
+The `xfp_header_disagreed` WARNING (`xfp_header_disagreed=true`) is gated on `xpub.depth == 0` — it fires only when the computed fp is legitimately comparable to the supplied master XFP.
+
+**Computed-fingerprint formula (corrected, cycle-13a):** the BIP-380 master fingerprint is `bitcoin::bip32::Xpub::fingerprint()` **if and only if `xpub.depth == 0`**. At `depth > 0` the master fingerprint is conveyed ONLY by a supplied XFP (top-level `XFP:` header or a per-cosigner `<XFP>:` line) and is otherwise unrecoverable → **REFUSE**. (The pre-cycle-13a formula — "or on the cosigner xpub itself if depth>0" — was the source of the H14 bug: it conflated the account-key's own id with the master fingerprint a key-origin requires.)
 
 **Provenance:** `ImportProvenance::ColdcardMultisig(ColdcardMultisigSourceMetadata)`:
 
