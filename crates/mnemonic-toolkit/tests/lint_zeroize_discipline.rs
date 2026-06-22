@@ -426,12 +426,10 @@ fn canonical_zeroize_list_has_expected_row_count() {
     let n = ZEROIZE_ROWS.len();
     assert!(
         (18..=66).contains(&n),
-        "ZEROIZE_ROWS row count = {n}; expected 18..=66 (upper bound widened in cycle-15t \
-         toolkit derived-output zeroize: +rows for bip85 SecretString returns, derive_child \
-         output, electrum norm-scratch + phrase_to_entropy move-out, and the new src/seedqr.rs \
-         source_file row; live 54 + the new rows, ceiling raised from 60 to 66 for headroom. \
-         Prior widen: +16 promoted canonical rows from the 19-file zeroize audit, 36 + 16 = 52. \
-         Survey §1 toolkit table is the canonical reference."
+        "ZEROIZE_ROWS row count = {n}; expected 18..=66. The upper bound carries headroom \
+         above the current canonical-row count for near-term secret-site additions — widen \
+         it deliberately when a cycle exceeds it. This count is a coarse drift tripwire; the \
+         per-row evidence test below is authoritative. Survey §1 toolkit table is canonical."
     );
 }
 
@@ -495,7 +493,16 @@ const NON_ROW_SECRET_FILES: &[&str] = &[
     "src/slip39/feistel.rs", // CRYPTO-INTERNAL: SLIP-0039 Feistel L/R halves + round key (consumer slip39/mod.rs owns output)
     "src/nostr.rs", // PASS-THROUGH: decode_nostr_key hands the decoded INPUT upstream; cmd/nostr.rs owns the derived secret
     "src/secret_string.rs", // PRIMITIVE: the SecretString newtype DEFINITION, not an allocation site
-    "src/bundle_unified.rs", // TEST-ONLY: the sole SecretString::new is in a #[cfg(test)] s() helper that builds a SlotInput fixture (cycle-14 L22); no production secret-bearing allocation lives here — SlotInput.value's canonical row is src/slot_input.rs
+];
+
+/// Files whose ONLY secret-pattern matches live inside a `#[cfg(test)]` region
+/// (test fixtures), verified by `test_only_secret_files_confine_secret_patterns_to_cfg_test`.
+/// Distinct from NON_ROW_SECRET_FILES (whole-file crypto-internal/primitive
+/// exemptions) — these are exempt ONLY because the secret is test-scoped, so a
+/// future PRODUCTION secret allocation above the cfg(test) marker is CAUGHT
+/// (cycle-15 Group A, closing the bundle-unified whole-file-allowlist masking).
+const TEST_ONLY_SECRET_FILES: &[&str] = &[
+    "src/bundle_unified.rs", // the sole SecretString::new is the #[cfg(test)] s() SlotInput fixture (cycle-14 L22); SlotInput.value's canonical row is src/slot_input.rs
 ];
 
 /// Persistent glob-cardinality floor. The partition is exactly 37
@@ -536,6 +543,36 @@ fn file_is_secret_bearing(path: &Path) -> bool {
     SECRET_PATTERNS.iter().any(|p| source.contains(p))
 }
 
+/// Index of the first line containing `#[cfg(test)]`, if any.
+fn first_cfg_test_line(src: &str) -> Option<usize> {
+    src.lines().position(|l| l.contains("#[cfg(test)]"))
+}
+
+/// Line indices (0-based) of every line containing a SECRET_PATTERN that lies
+/// BEFORE `boundary` (i.e. outside the test region). Substring-exact, same
+/// SECRET_PATTERNS as the partition scan (NO comment-stripping — intended; a
+/// SECRET_PATTERN substring in a doc/comment above #[cfg(test)] deliberately
+/// trips, mirroring the partition scan's substring semantics).
+fn production_secret_lines(src: &str, boundary: usize) -> Vec<usize> {
+    src.lines()
+        .enumerate()
+        .take(boundary)
+        .filter(|(_, l)| SECRET_PATTERNS.iter().any(|p| l.contains(p)))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+#[test]
+fn confinement_helpers_flag_production_secret_above_cfg_test() {
+    let synthetic = "fn prod() { let k = Zeroizing::new([0u8;32]); }\n#[cfg(test)]\nmod t { fn s() { SecretString::new(x); } }\n";
+    let b = first_cfg_test_line(synthetic).expect("has #[cfg(test)]");
+    assert_eq!(production_secret_lines(synthetic, b), vec![0]); // the prod Zeroizing::new line
+                                                                // and a clean (test-confined-only) source yields no production lines:
+    let clean = "fn prod() {}\n#[cfg(test)]\nmod t { fn s() { SecretString::new(x); } }\n";
+    let cb = first_cfg_test_line(clean).unwrap();
+    assert!(production_secret_lines(clean, cb).is_empty());
+}
+
 #[test]
 fn every_secret_bearing_src_file_is_declared_or_allowlisted() {
     let root = crate_root();
@@ -544,8 +581,11 @@ fn every_secret_bearing_src_file_is_declared_or_allowlisted() {
 
     let declared: std::collections::HashSet<&str> =
         ZEROIZE_ROWS.iter().map(|r| r.source_file).collect();
-    let allowlisted: std::collections::HashSet<&str> =
-        NON_ROW_SECRET_FILES.iter().copied().collect();
+    let allowlisted: std::collections::HashSet<&str> = NON_ROW_SECRET_FILES
+        .iter()
+        .chain(TEST_ONLY_SECRET_FILES.iter())
+        .copied()
+        .collect();
 
     let mut secret_files: Vec<String> = Vec::new();
     let mut undeclared: Vec<String> = Vec::new();
@@ -594,14 +634,22 @@ fn non_row_secret_allowlist_is_non_empty_and_each_entry_still_bears_a_secret() {
             "NON_ROW_SECRET_FILES must not be empty — the audited crypto-internal / \
              pass-through / primitive exemptions belong here"
         );
+        assert!(
+            !TEST_ONLY_SECRET_FILES.is_empty(),
+            "TEST_ONLY_SECRET_FILES must not be empty — the cfg(test)-confined fixture \
+             exemptions belong here (emptying it silently dissolves the confinement tier)"
+        );
     }
     let root = crate_root();
     let mut stale: Vec<&str> = Vec::new();
-    for entry in NON_ROW_SECRET_FILES {
+    for entry in NON_ROW_SECRET_FILES
+        .iter()
+        .chain(TEST_ONLY_SECRET_FILES.iter())
+    {
         let path = root.join(entry);
         assert!(
             path.exists(),
-            "NON_ROW_SECRET_FILES entry {entry} does not exist — remove the stale entry"
+            "allowlist entry {entry} does not exist — remove the stale entry"
         );
         if !file_is_secret_bearing(&path) {
             stale.push(entry);
@@ -609,8 +657,27 @@ fn non_row_secret_allowlist_is_non_empty_and_each_entry_still_bears_a_secret() {
     }
     assert!(
         stale.is_empty(),
-        "NON_ROW_SECRET_FILES entries no longer contain a secret pattern (remove \
+        "allowlist entries no longer contain a secret pattern (remove \
          the stale allowlist entry):\n  {}",
         stale.join("\n  "),
     );
+}
+
+#[test]
+fn test_only_secret_files_confine_secret_patterns_to_cfg_test() {
+    let root = crate_root();
+    for entry in TEST_ONLY_SECRET_FILES {
+        let src = fs::read_to_string(root.join(entry))
+            .unwrap_or_else(|e| panic!("read {entry}: {e}"));
+        let boundary = first_cfg_test_line(&src).unwrap_or_else(|| {
+            panic!("{entry} in TEST_ONLY_SECRET_FILES has no #[cfg(test)] marker")
+        });
+        let prod = production_secret_lines(&src, boundary);
+        assert!(
+            prod.is_empty(),
+            "{entry}: secret pattern(s) at production line(s) {prod:?} (above #[cfg(test)] line {boundary}); \
+             a TEST_ONLY exemption requires all secret patterns be test-scoped — move it to a canonical \
+             ZEROIZE_ROWS row or NON_ROW_SECRET_FILES"
+        );
+    }
 }
