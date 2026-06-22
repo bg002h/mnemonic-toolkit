@@ -17,6 +17,7 @@
 //! `cmd/seedqr.rs` converts via `map_seedqr_error(e, action)`.
 
 use bip39::{Language, Mnemonic};
+use zeroize::Zeroizing;
 
 /// Library-local error. Mapped to `ToolkitError::BadInput` at the CLI
 /// boundary via `cmd::seedqr::map_seedqr_error`.
@@ -94,8 +95,11 @@ impl std::error::Error for SeedqrError {}
 
 /// Decode a SeedQR numeric string into a BIP-39 phrase.
 pub fn decode(input: &str) -> Result<String, SeedqrError> {
-    // Strip all ASCII whitespace.
-    let stripped: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+    // Strip all ASCII whitespace. cycle-15t — the raw SeedQR digit string is
+    // secret scratch; wrap in Zeroizing so it scrubs on drop (M-2: the public
+    // `String` return is KEPT; only internals wrap).
+    let stripped: Zeroizing<String> =
+        Zeroizing::new(input.chars().filter(|c| !c.is_ascii_whitespace()).collect());
 
     // Validate length. v0.31.5: widened from {48, 96} to the full BIP-39
     // word-count set {48, 60, 72, 84, 96} (= 12, 15, 18, 21, 24 words × 4
@@ -139,10 +143,12 @@ pub fn decode(input: &str) -> Result<String, SeedqrError> {
 
 /// Encode a BIP-39 phrase into a SeedQR numeric string.
 pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
-    // Tokenize on whitespace, lowercase.
-    let words: Vec<String> = phrase
+    // Tokenize on whitespace, lowercase. cycle-15t — each word is a secret
+    // BIP-39 token; wrap in Zeroizing so the per-word copies scrub on drop
+    // (M-2: public `String` return is KEPT; only internal scratch wraps).
+    let words: Vec<Zeroizing<String>> = phrase
         .split_whitespace()
-        .map(|w| w.to_lowercase())
+        .map(|w| Zeroizing::new(w.to_lowercase()))
         .collect();
 
     // Validate word count. v0.31.5: widened from {12, 24} to the full
@@ -152,13 +158,20 @@ pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
     }
 
     // Parse + checksum-validate via bip39 (also rejects invalid words).
-    let normalized = words.join(" ");
-    Mnemonic::parse_in(Language::English, &normalized)
+    let normalized: Zeroizing<String> = Zeroizing::new(
+        words
+            .iter()
+            .map(|w| w.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    Mnemonic::parse_in(Language::English, &*normalized)
         .map_err(|e| SeedqrError::ChecksumFailure(e.to_string()))?;
 
-    // Map each word to its index via linear search.
+    // Map each word to its index via linear search. The SeedQR digit string
+    // IS the secret return-carrier; build it in Zeroizing scratch.
     let wordlist = Language::English.word_list();
-    let mut digits = String::with_capacity(words.len() * 4);
+    let mut digits: Zeroizing<String> = Zeroizing::new(String::with_capacity(words.len() * 4));
     for word in &words {
         let idx = wordlist
             .iter()
@@ -168,7 +181,10 @@ pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
         digits.push_str(&format!("{idx:04}"));
     }
 
-    Ok(digits)
+    // I-1 / Open-Q1 — the literal return value is necessarily a bare `String`;
+    // the scratch buffer scrubs, this single return-move is the documented
+    // small residue window.
+    Ok((*digits).clone())
 }
 
 /// Encode a BIP-39 phrase into a CompactSeedQR payload as lowercase hex
@@ -180,20 +196,31 @@ pub fn encode(phrase: &str) -> Result<String, SeedqrError> {
 /// `Mnemonic::to_entropy()`. The reference impl handles only 12-word
 /// (16 bytes) and 24-word (32 bytes) seeds; other word counts are refused.
 pub fn encode_compact(phrase: &str) -> Result<String, SeedqrError> {
-    let words: Vec<String> = phrase
+    // cycle-15t — secret per-word + normalized-phrase scratch wraps in
+    // Zeroizing (M-2: public `String` return is KEPT).
+    let words: Vec<Zeroizing<String>> = phrase
         .split_whitespace()
-        .map(|w| w.to_lowercase())
+        .map(|w| Zeroizing::new(w.to_lowercase()))
         .collect();
 
     if !matches!(words.len(), 12 | 24) {
         return Err(SeedqrError::CompactWordCountUnsupported { got: words.len() });
     }
 
-    let normalized = words.join(" ");
-    let m = Mnemonic::parse_in(Language::English, &normalized)
+    let normalized: Zeroizing<String> = Zeroizing::new(
+        words
+            .iter()
+            .map(|w| w.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    let m = Mnemonic::parse_in(Language::English, &*normalized)
         .map_err(|e| SeedqrError::ChecksumFailure(e.to_string()))?;
 
-    Ok(hex::encode(m.to_entropy()))
+    // The raw BIP-39 entropy is the highest-value secret here; wrap before
+    // hex-encoding so the byte buffer scrubs on drop.
+    let entropy: Zeroizing<Vec<u8>> = Zeroizing::new(m.to_entropy());
+    Ok(hex::encode(&*entropy))
 }
 
 /// Decode a CompactSeedQR hex payload into a BIP-39 phrase (v0.32.0).
@@ -203,16 +230,20 @@ pub fn encode_compact(phrase: &str) -> Result<String, SeedqrError> {
 /// BIP-39 entropy sizes (15/18/21-word) but NOT compact-supported per
 /// SeedSigner — then recomputes the BIP-39 checksum to produce the phrase.
 pub fn decode_compact(input: &str) -> Result<String, SeedqrError> {
-    let stripped: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+    // cycle-15t — raw hex-digit scratch + hex-decoded raw entropy wrap in
+    // Zeroizing (the decoded `bytes` are the highest-value secret here).
+    let stripped: Zeroizing<String> =
+        Zeroizing::new(input.chars().filter(|c| !c.is_ascii_whitespace()).collect());
 
-    let bytes =
-        hex::decode(&stripped).map_err(|e| SeedqrError::CompactInvalidHex(e.to_string()))?;
+    let bytes: Zeroizing<Vec<u8>> = Zeroizing::new(
+        hex::decode(&*stripped).map_err(|e| SeedqrError::CompactInvalidHex(e.to_string()))?,
+    );
 
     if !matches!(bytes.len(), 16 | 32) {
         return Err(SeedqrError::CompactByteCountUnsupported { got: bytes.len() });
     }
 
-    let m = Mnemonic::from_entropy_in(Language::English, &bytes)
+    let m = Mnemonic::from_entropy_in(Language::English, &bytes[..])
         .map_err(|e| SeedqrError::ChecksumFailure(e.to_string()))?;
 
     Ok(m.to_string())
@@ -520,5 +551,60 @@ mod tests {
     fn encode_rejects_checksum_failure() {
         let bad = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
         assert!(matches!(encode(bad), Err(SeedqrError::ChecksumFailure(_))));
+    }
+
+    // ========================================================================
+    // cycle-15t Slug-3 — seedqr internal-scratch zeroize (M-2: public `String`
+    // returns are KEPT; only the internal scratch wraps in Zeroizing).
+    // ========================================================================
+
+    /// T7 — public-API-stability fence (stays GREEN): the four `pub fn` STILL
+    /// return `Result<String, SeedqrError>` (we did NOT widen the public
+    /// return → no SemVer break). A widened return fails the fn-pointer
+    /// coercion at compile time.
+    #[test]
+    fn t7_public_returns_stay_string() {
+        let _d: fn(&str) -> Result<String, SeedqrError> = decode;
+        let _e: fn(&str) -> Result<String, SeedqrError> = encode;
+        let _ec: fn(&str) -> Result<String, SeedqrError> = encode_compact;
+        let _dc: fn(&str) -> Result<String, SeedqrError> = decode_compact;
+    }
+
+    /// T8 — internal-scratch evidence (RED until the wraps land): the secret
+    /// scratch in `seedqr.rs` is `Zeroizing`-wrapped — the `decode`/`decode_compact`
+    /// raw-digit `stripped`, the per-word `words`/`normalized`/`digits`, and the
+    /// `decode_compact` hex-decoded `bytes` (highest-value: raw entropy). The
+    /// anchors are assembled at runtime so this test's own source does NOT
+    /// self-match the `src.contains(...)` checks.
+    #[test]
+    fn t8_internal_scratch_is_zeroizing() {
+        let src = std::fs::read_to_string("src/seedqr.rs").expect("read src/seedqr.rs");
+        let zs = format!("Zeroizing<{}>", "String");
+        let zv = format!("Zeroizing<{}>", "Vec<u8>");
+        // raw-digit scratch (decode + decode_compact).
+        assert!(
+            src.contains(&format!("let stripped: {zs}")),
+            "T8: `stripped` raw-digit scratch must be Zeroizing<String>"
+        );
+        // per-word vecs (encode + encode_compact).
+        assert!(
+            src.contains(&format!("let words: Vec<{zs}>")),
+            "T8: per-word `words` must be Vec<Zeroizing<String>>"
+        );
+        // normalized join (encode + encode_compact).
+        assert!(
+            src.contains(&format!("let normalized: {zs}")),
+            "T8: `normalized` must be Zeroizing<String>"
+        );
+        // SeedQR digit secret return-carrier (encode).
+        assert!(
+            src.contains(&format!("let mut digits: {zs}")),
+            "T8: `digits` must be Zeroizing<String>"
+        );
+        // decode_compact hex-decoded raw entropy (highest-value scratch).
+        assert!(
+            src.contains(&format!("let bytes: {zv}")),
+            "T8: decode_compact `bytes` must be Zeroizing<Vec<u8>>"
+        );
     }
 }

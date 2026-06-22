@@ -76,15 +76,22 @@ pub(crate) enum ElectrumError {
 ///    U+0489 have ccc=0, so Python KEEPS them — `is_combining_mark` (category
 ///    Mark) would wrongly strip them. We use `canonical_combining_class(c) != 0`
 ///    to match Python byte-for-byte.
-fn normalize_text_electrum(s: &str) -> String {
-    let nfkd: String = s.nfkd().collect();
-    let lowered: String = nfkd.chars().flat_map(|c| c.to_lowercase()).collect();
-    let stripped: String = lowered
-        .chars()
-        .filter(|c| canonical_combining_class(*c) == 0)
-        .collect();
+// cycle-15t — the normalized phrase/passphrase are secret copies alive across
+// PBKDF2; return `Zeroizing<String>` so they scrub on drop. Private helper,
+// consumed-by-move into `norm_phrase`/`norm_pp`, never `{:?}`-printed → bare
+// `Zeroizing` (not `SecretString`) is the correct choice (rule Z-DEBUG).
+fn normalize_text_electrum(s: &str) -> Zeroizing<String> {
+    let nfkd: Zeroizing<String> = Zeroizing::new(s.nfkd().collect());
+    let lowered: Zeroizing<String> =
+        Zeroizing::new(nfkd.chars().flat_map(|c| c.to_lowercase()).collect());
+    let stripped: Zeroizing<String> = Zeroizing::new(
+        lowered
+            .chars()
+            .filter(|c| canonical_combining_class(*c) == 0)
+            .collect(),
+    );
     let collapsed = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
-    strip_cjk_internal_whitespace(&collapsed)
+    Zeroizing::new(strip_cjk_internal_whitespace(&collapsed))
 }
 
 /// Electrum native-seed → BIP-32 seed bytes (`mnemonic.py::mnemonic_to_seed`
@@ -138,15 +145,19 @@ pub(crate) fn validate_seed_version(phrase: &str) -> Result<SeedVersion, Electru
 pub(crate) fn phrase_to_entropy(
     phrase: &str,
     wordlist: ElectrumWordlist,
-) -> Result<Vec<u8>, ElectrumError> {
+) -> Result<Zeroizing<Vec<u8>>, ElectrumError> {
     // Per-word normalization (NFKD + lowercase + strip combining); explicitly
     // NOT collapsing CJK-internal whitespace, since Electrum's `mnemonic_decode`
     // splits on whitespace BEFORE looking up each word in the wordlist. Stripping
     // CJK-internal whitespace would collapse `眼 悲 叛` into a single super-word
     // `眼悲叛` that no wordlist contains.
-    let words: Vec<String> = phrase
+    // SPEC v0.9.0 §1 item 2 (cycle-15t) — wrap each normalized secret word in
+    // Zeroizing at the consumption boundary so it scrubs on drop. We do NOT
+    // widen `wordlists::normalize_electrum` (M-4: cross-module helper with
+    // other callers); the wrap lives only here.
+    let words: Vec<Zeroizing<String>> = phrase
         .split_whitespace()
-        .map(normalize_electrum)
+        .map(|w| Zeroizing::new(normalize_electrum(w)))
         .filter(|w| !w.is_empty())
         .collect();
     if words.is_empty() {
@@ -155,15 +166,16 @@ pub(crate) fn phrase_to_entropy(
     let wl = wordlist.words();
     let base = wordlist.base();
     // SPEC v0.9.0 §1 item 2 — `acc` holds the secret integer during
-    // base-N decode; wrap so it scrubs on drop. We unwrap on return
-    // because the caller signature is `Vec<u8>` (callers wrap their
-    // copy separately per their site).
+    // base-N decode; wrap so it scrubs on drop. cycle-15t: return the
+    // `Zeroizing<Vec<u8>>` BY MOVE instead of deref-cloning the inner `Vec`
+    // out — the prior return cloned the secret entropy into a bare
+    // un-scrubbed heap `Vec` that outlived `acc`'s scrub.
     let mut acc: zeroize::Zeroizing<Vec<u8>> = zeroize::Zeroizing::new(vec![0]);
     for w in words.iter().rev() {
         let idx = wl
             .iter()
-            .position(|x| x == w)
-            .ok_or_else(|| ElectrumError::UnknownWord(w.clone()))?;
+            .position(|x| x.as_str() == w.as_str())
+            .ok_or_else(|| ElectrumError::UnknownWord((**w).clone()))?;
         // acc = acc * base + idx (little-endian byte arithmetic).
         mul_add_le(&mut acc, base, idx as u32);
     }
@@ -172,7 +184,7 @@ pub(crate) fn phrase_to_entropy(
         acc.pop();
     }
     acc.reverse();
-    Ok((*acc).clone())
+    Ok(acc)
 }
 
 /// Encode entropy → phrase at `version` and `wordlist`. Increments the
@@ -212,10 +224,14 @@ pub(crate) fn entropy_to_phrase(
                 break;
             }
         }
-        let phrase = words.join(" ");
+        // cycle-15t — each rejected candidate's secret phrase scrubs on drop
+        // (Zeroizing scratch). I-1: the return STAYS `String` (do NOT widen —
+        // `compute_outputs` type-unifies it against bare-`String` match arms);
+        // the single matched candidate moves its value out at the `Ok`.
+        let phrase = Zeroizing::new(words.join(" "));
         if let Ok(v) = validate_seed_version(&phrase) {
             if v == version {
-                return Ok(phrase);
+                return Ok((*phrase).clone());
             }
         }
         add_one_le(&mut acc);
@@ -240,10 +256,15 @@ fn hmac_sha512_hex(key: &[u8], msg: &[u8]) -> String {
 /// dispatch, where Electrum hashes the fully-normalized phrase. The
 /// wordlist-lookup path uses per-word normalization without CJK
 /// whitespace stripping (see `phrase_to_entropy`).
-fn normalize_phrase_for_hmac(s: &str) -> String {
-    let stage1 = normalize_electrum(s);
-    let collapsed: String = stage1.split_whitespace().collect::<Vec<_>>().join(" ");
-    strip_cjk_internal_whitespace(&collapsed)
+// cycle-15t — HMAC-dispatch normalize intermediates are secret phrase copies;
+// return `Zeroizing<String>` (private helper, consumed-by-move, never
+// `{:?}`-printed). `stage1` wraps at the `normalize_electrum` consumption
+// boundary (M-4: the cross-module helper itself stays `-> String`).
+fn normalize_phrase_for_hmac(s: &str) -> Zeroizing<String> {
+    let stage1 = Zeroizing::new(normalize_electrum(s));
+    let collapsed: Zeroizing<String> =
+        Zeroizing::new(stage1.split_whitespace().collect::<Vec<_>>().join(" "));
+    Zeroizing::new(strip_cjk_internal_whitespace(&collapsed))
 }
 
 fn strip_cjk_internal_whitespace(s: &str) -> String {
@@ -482,5 +503,85 @@ mod tests {
             "almíbar tibio superar vencer hacha peatón príncipe matar consejo polen vehículo odisea";
         let r = phrase_to_entropy(spanish_phrase, ElectrumWordlist::Japanese);
         assert!(matches!(r, Err(ElectrumError::UnknownWord(_))));
+    }
+
+    // ========================================================================
+    // cycle-15t Slug-2 — electrum derived-secret zeroize.
+    // ========================================================================
+
+    /// T4 — `phrase_to_entropy` returns `Zeroizing<Vec<u8>>` (RED until the
+    /// deref-clone-out-of-acc move-fix flips the return type). A bare-`Vec<u8>`
+    /// return makes this fn-pointer coercion fail to compile.
+    #[test]
+    #[allow(clippy::type_complexity)] // the fn-pointer type IS the fence
+    fn t4_phrase_to_entropy_returns_zeroizing() {
+        let _f: fn(&str, ElectrumWordlist) -> Result<zeroize::Zeroizing<Vec<u8>>, ElectrumError> =
+            phrase_to_entropy;
+    }
+
+    /// T4-GUARD (stays GREEN) — `entropy_to_phrase` STILL returns
+    /// `Result<String, _>` (I-1: the public return is NOT widened, to keep
+    /// `compute_outputs`' match-arm unification intact).
+    #[test]
+    fn t4_guard_entropy_to_phrase_stays_string() {
+        let _f: fn(&[u8], SeedVersion, ElectrumWordlist) -> Result<String, ElectrumError> =
+            entropy_to_phrase;
+    }
+
+    /// T4-GUARD (M-4, stays GREEN) — `wordlists::normalize_electrum` is NOT
+    /// widened (cross-module helper with other callers): a source-grep proves
+    /// its `-> String` decl is unchanged; the `Zeroizing` wrap lives only at
+    /// the electrum-side call sites.
+    #[test]
+    fn t4_guard_wordlists_normalize_electrum_unwidened() {
+        let src = std::fs::read_to_string("src/wordlists/mod.rs")
+            .expect("read src/wordlists/mod.rs");
+        assert!(
+            src.contains("pub(crate) fn normalize_electrum(s: &str) -> String"),
+            "M-4: wordlists::normalize_electrum must keep `-> String` (cross-module helper)"
+        );
+    }
+
+    /// T5 — no-clone-out-of-Zeroizing: `phrase_to_entropy` returns by MOVE,
+    /// never clones the secret entropy out of the `Zeroizing` wrapper into a
+    /// bare un-scrubbed `Vec`. The forbidden-literal anchor is assembled at
+    /// runtime so this test's own source does NOT self-match.
+    #[test]
+    fn t5_phrase_to_entropy_no_clone_out_of_zeroizing() {
+        let src = std::fs::read_to_string("src/electrum.rs").expect("read src/electrum.rs");
+        // Assemble the forbidden literal at runtime (avoids self-match in this
+        // test's source). The pattern is the deref-clone-out-of-acc return.
+        let forbidden = format!("Ok((*{}).clone())", "acc");
+        assert!(
+            !src.contains(&forbidden),
+            "T5: electrum must NOT clone secret entropy out of the Zeroizing wrapper"
+        );
+        assert!(
+            src.contains("    Ok(acc)\n"),
+            "T5: phrase_to_entropy must return the Zeroizing Vec by move"
+        );
+    }
+
+    /// T-norm-scrub evidence — the normalize intermediates wrap in Zeroizing
+    /// at the electrum consumption boundary (norm_phrase/norm_pp plus the
+    /// per-word and per-candidate scratch). Anchors are wrap-survivable single
+    /// tokens (R0 plan-doc m-2): the toolkit is never cargo-fmt'd.
+    #[test]
+    fn t_electrum_normalize_intermediates_are_zeroizing() {
+        let src = std::fs::read_to_string("src/electrum.rs").expect("read src/electrum.rs");
+        // electrum-LOCAL helper return widened to Zeroizing<String>.
+        assert!(
+            src.contains("fn normalize_text_electrum(s: &str) -> Zeroizing<String>"),
+            "normalize_text_electrum must return Zeroizing<String>"
+        );
+        // per-word + per-candidate consumption-boundary wraps.
+        assert!(
+            src.contains("Zeroizing::new(normalize_electrum"),
+            "per-word normalize result must wrap in Zeroizing at the call site"
+        );
+        assert!(
+            src.contains("fn normalize_phrase_for_hmac(s: &str) -> Zeroizing<String>"),
+            "normalize_phrase_for_hmac must return Zeroizing<String>"
+        );
     }
 }

@@ -99,6 +99,15 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/bip85.rs",
         evidence: &["let mut out = Zeroizing::new(vec![0u8; 64])"],
     },
+    // cycle-15t: the 7 `format_*` rendered child-secret returns
+    // (phrase/WIF/xprv/hex/password/dice) are `Result<SecretString, _>` —
+    // length-only redacting Debug; Display/Deref render verbatim so the
+    // derive-child text path is byte-identical.
+    ZeroizeRow {
+        label: "bip85 format_* return rendered child secret as SecretString",
+        source_file: "src/bip85.rs",
+        evidence: &["-> Result<SecretString, ToolkitError>"],
+    },
     // ---- synthesize.rs ----
     ZeroizeRow {
         label: "synthesize_multisig_full seed wrapped via derive_master_seed",
@@ -166,6 +175,13 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/derive_child.rs",
         evidence: &["Option<zeroize::Zeroizing<String>>"],
     },
+    // cycle-15t: the single emitter local that aggregates every `format_*`
+    // child secret is a SecretString (the 7 arms type-unify).
+    ZeroizeRow {
+        label: "derive-child output emitter local is SecretString",
+        source_file: "src/cmd/derive_child.rs",
+        evidence: &["let output: crate::secret_string::SecretString"],
+    },
     // ---- cmd/convert.rs (per-arm wraps) ----
     ZeroizeRow {
         label: "convert Phrase/Entropy arm wraps entropy",
@@ -187,6 +203,27 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         label: "electrum entropy_to_phrase accumulator wraps Vec<u8>",
         source_file: "src/electrum.rs",
         evidence: &["zeroize::Zeroizing::new(entropy.iter()"],
+    },
+    // cycle-15t: phrase_to_entropy returns the secret entropy BY MOVE
+    // (Zeroizing<Vec<u8>>) instead of deref-cloning it out into a bare Vec.
+    ZeroizeRow {
+        label: "electrum phrase_to_entropy returns Zeroizing<Vec<u8>> by move (no clone-out)",
+        source_file: "src/electrum.rs",
+        evidence: &["-> Result<Zeroizing<Vec<u8>>, ElectrumError>"],
+    },
+    // cycle-15t: the normalize intermediates (norm_phrase/norm_pp +
+    // HMAC-dispatch scratch) are Zeroizing<String> via the electrum-LOCAL
+    // helper returns; the per-word scratch wraps at the consumption boundary
+    // (M-4: wordlists::normalize_electrum itself stays `-> String`).
+    ZeroizeRow {
+        label: "electrum normalize_text_electrum + normalize_phrase_for_hmac return Zeroizing<String>",
+        source_file: "src/electrum.rs",
+        evidence: &["fn normalize_text_electrum(s: &str) -> Zeroizing<String>"],
+    },
+    ZeroizeRow {
+        label: "electrum per-word normalize result wraps in Zeroizing at the call site",
+        source_file: "src/electrum.rs",
+        evidence: &["Zeroizing::new(normalize_electrum"],
     },
     // ---- cmd/final_word.rs (v0.11.0) ----
     ZeroizeRow {
@@ -310,6 +347,15 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/seedqr.rs",
         evidence: &["zeroize::Zeroizing<String>", "Zeroizing::new"],
     },
+    // cycle-15t: the LIB seedqr module wraps its internal scratch (raw-digit
+    // `stripped`, per-word `words`/`normalized`/`digits`, decode_compact
+    // hex-decoded `bytes`) in Zeroizing; M-2 keeps the four `pub fn` returns
+    // bare `String` (no SemVer break).
+    ZeroizeRow {
+        label: "seedqr LIB module wraps internal scratch (digits/normalized/bytes) in Zeroizing",
+        source_file: "src/seedqr.rs",
+        evidence: &["Zeroizing::new"],
+    },
     ZeroizeRow {
         label: "verify-bundle Phrase arm wraps passphrase + entropy in Zeroizing",
         source_file: "src/cmd/verify_bundle.rs",
@@ -379,10 +425,12 @@ fn canonical_zeroize_list_has_expected_row_count() {
     // authoritative check.
     let n = ZEROIZE_ROWS.len();
     assert!(
-        (18..=60).contains(&n),
-        "ZEROIZE_ROWS row count = {n}; expected 18..=60 (range upper bound widened in the \
-         zeroize-lint source→declared completeness cycle: +16 promoted canonical rows from \
-         the 19-file zeroize audit, 36 + 16 = 52). \
+        (18..=66).contains(&n),
+        "ZEROIZE_ROWS row count = {n}; expected 18..=66 (upper bound widened in cycle-15t \
+         toolkit derived-output zeroize: +rows for bip85 SecretString returns, derive_child \
+         output, electrum norm-scratch + phrase_to_entropy move-out, and the new src/seedqr.rs \
+         source_file row; live 54 + the new rows, ceiling raised from 60 to 66 for headroom. \
+         Prior widen: +16 promoted canonical rows from the 19-file zeroize audit, 36 + 16 = 52. \
          Survey §1 toolkit table is the canonical reference."
     );
 }

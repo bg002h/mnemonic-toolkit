@@ -221,7 +221,10 @@ pub fn run<R: Read, W: Write, E: Write>(
         _ => {}
     }
 
-    let output = match args.application.as_str() {
+    // cycle-15t — every `format_*` returns `SecretString` (length-only
+    // redacting Debug; Display/Deref render verbatim so `writeln!` below is
+    // byte-identical), so the rendered child secret scrubs on drop.
+    let output: crate::secret_string::SecretString = match args.application.as_str() {
         "bip39" => {
             let words = args.length;
             if !matches!(words, 12 | 15 | 18 | 21 | 24) {

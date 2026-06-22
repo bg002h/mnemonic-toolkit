@@ -7,6 +7,7 @@
 //! Reference: <https://github.com/bitcoin/bips/blob/master/bip-0085.mediawiki>.
 
 use crate::error::{BitcoinErrorKind, ToolkitError};
+use crate::secret_string::SecretString;
 use bip39::Mnemonic;
 use bitcoin::bip32::{ChildNumber, DerivationPath, Xpriv};
 use bitcoin::hashes::{sha512, Hash, HashEngine, Hmac, HmacEngine};
@@ -75,7 +76,7 @@ pub(crate) fn format_bip39_phrase(
     language: bip39::Language,
     words: u32,
     index: u32,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 39, &[language_code, words], index)?;
     // Cycle B Phase 3a Site 4 — pin the bip85-derived entropy heap pages
     // for the function-body lifetime. Drop order: _entropy_pin munlocks
@@ -87,7 +88,7 @@ pub(crate) fn format_bip39_phrase(
     // tracked by FOLLOWUP `rust-bip39-mnemonic-zeroize-upstream`.
     let mnemonic =
         Mnemonic::from_entropy_in(language, &entropy[..bytes]).map_err(ToolkitError::Bip39)?;
-    Ok(mnemonic.to_string())
+    Ok(SecretString::new(mnemonic.to_string()))
 }
 
 // ============================================================================
@@ -104,7 +105,7 @@ pub(crate) fn format_hd_seed_wif(
     master: &Xpriv,
     index: u32,
     network: NetworkKind,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 2, &[], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     // SAFETY: third-party-blocked — `secp256k1::SecretKey` is stack-bound,
@@ -118,7 +119,7 @@ pub(crate) fn format_hd_seed_wif(
         network,
         inner,
     };
-    Ok(pk.to_wif())
+    Ok(SecretString::new(pk.to_wif()))
 }
 
 // ============================================================================
@@ -132,7 +133,7 @@ pub(crate) fn format_xprv_child(
     master: &Xpriv,
     index: u32,
     network: NetworkKind,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 32, &[], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     let chain_code = bitcoin::bip32::ChainCode::from(<[u8; 32]>::try_from(&entropy[..32]).unwrap());
@@ -151,7 +152,7 @@ pub(crate) fn format_xprv_child(
         private_key: inner,
         chain_code,
     };
-    Ok(xprv.to_string())
+    Ok(SecretString::new(xprv.to_string()))
 }
 
 // ============================================================================
@@ -164,10 +165,10 @@ pub(crate) fn format_hex_bytes(
     master: &Xpriv,
     num_bytes: u32,
     index: u32,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 128_169, &[num_bytes], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
-    Ok(hex::encode(&entropy[..num_bytes as usize]))
+    Ok(SecretString::new(hex::encode(&entropy[..num_bytes as usize])))
 }
 
 // ============================================================================
@@ -182,11 +183,11 @@ pub(crate) fn format_password_base64(
     master: &Xpriv,
     length: u32,
     index: u32,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 707_764, &[length], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     let encoded = base64_standard(&entropy[..]);
-    Ok(encoded[..length as usize].to_string())
+    Ok(SecretString::new(encoded[..length as usize].to_string()))
 }
 
 /// SPEC §4 — Base85 password (10 ≤ length ≤ 80).
@@ -197,11 +198,11 @@ pub(crate) fn format_password_base85(
     master: &Xpriv,
     length: u32,
     index: u32,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 707_785, &[length], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
     let encoded = base85_btc(&entropy[..]);
-    Ok(encoded[..length as usize].to_string())
+    Ok(SecretString::new(encoded[..length as usize].to_string()))
 }
 
 // ============================================================================
@@ -224,7 +225,7 @@ pub(crate) fn format_dice_rolls(
     sides: u32,
     rolls: u32,
     index: u32,
-) -> Result<String, ToolkitError> {
+) -> Result<SecretString, ToolkitError> {
     if sides < 2 {
         return Err(ToolkitError::BadInput(format!(
             "BIP-85 dice: sides must be >= 2, got {sides}",
@@ -270,7 +271,7 @@ pub(crate) fn format_dice_rolls(
         // else: rejection sample — read the next chunk.
     }
 
-    Ok(out.join(","))
+    Ok(SecretString::new(out.join(",")))
 }
 
 // ============================================================================
@@ -380,14 +381,14 @@ mod tests {
     #[test]
     fn pwd_base64_matches_spec() {
         let pwd = format_password_base64(&master(), 21, 0).unwrap();
-        assert_eq!(pwd, "dKLoepugzdVJvdL56ogNV");
+        assert_eq!(&*pwd, "dKLoepugzdVJvdL56ogNV");
     }
 
     /// BIP-85 §"Test Vectors" — PWD BASE85 length 12 at index 0.
     #[test]
     fn pwd_base85_matches_spec() {
         let pwd = format_password_base85(&master(), 12, 0).unwrap();
-        assert_eq!(pwd, "_s`{TW89)i4`");
+        assert_eq!(&*pwd, "_s`{TW89)i4`");
     }
 
     /// BIP-85 v1.3.0 §"DICE" reference vector.
@@ -395,7 +396,59 @@ mod tests {
     #[test]
     fn dice_d6_10_rolls_matches_spec() {
         let rolls = format_dice_rolls(&master(), 6, 10, 0).unwrap();
-        assert_eq!(rolls, "1,0,0,2,0,1,5,5,2,4");
+        assert_eq!(&*rolls, "1,0,0,2,0,1,5,5,2,4");
+    }
+
+    // ========================================================================
+    // cycle-15t T1 — Slug-1 type-level fence: every `format_*` returns a
+    // `SecretString` (length-only redacting Debug), NOT a bare `String`.
+    // RED until the 7 returns flip; mirrors the bip85 lint type rows.
+    // ========================================================================
+
+    /// T1 — the 7 `format_*` fn pointers coerce to `-> Result<SecretString, _>`.
+    /// A bare-`String` return makes this fail to compile (RED), proving the
+    /// type-level fence rather than a runtime check.
+    #[test]
+    fn t1_format_fns_return_secret_string() {
+        use crate::secret_string::SecretString;
+        let _f1: fn(&Xpriv, u32, bip39::Language, u32, u32) -> Result<SecretString, ToolkitError> =
+            format_bip39_phrase;
+        let _f2: fn(&Xpriv, u32, NetworkKind) -> Result<SecretString, ToolkitError> =
+            format_hd_seed_wif;
+        let _f3: fn(&Xpriv, u32, NetworkKind) -> Result<SecretString, ToolkitError> =
+            format_xprv_child;
+        let _f4: fn(&Xpriv, u32, u32) -> Result<SecretString, ToolkitError> = format_hex_bytes;
+        let _f5: fn(&Xpriv, u32, u32) -> Result<SecretString, ToolkitError> =
+            format_password_base64;
+        let _f6: fn(&Xpriv, u32, u32) -> Result<SecretString, ToolkitError> =
+            format_password_base85;
+        let _f7: fn(&Xpriv, u32, u32, u32) -> Result<SecretString, ToolkitError> =
+            format_dice_rolls;
+    }
+
+    /// T2 — Debug-redaction: `{:?}` on a `format_*` output never leaks the
+    /// secret substring and DOES carry the redaction marker (proves the chosen
+    /// `SecretString`, not a bare `Zeroizing<String>` whose tuple Debug would
+    /// print the plaintext — the cycle-14 leak class). Mirrors
+    /// `secret_string.rs::debug_redacts_the_secret`.
+    #[test]
+    fn t2_format_outputs_debug_redacts() {
+        let pwd = format_password_base64(&master(), 21, 0).unwrap();
+        let dbg = format!("{pwd:?}");
+        assert!(
+            !dbg.contains("dKLoepugzdVJvdL56ogNV"),
+            "Debug leaked the derived password: {dbg}"
+        );
+        assert!(dbg.contains("redacted"), "Debug should mark redaction: {dbg}");
+
+        let wif = format_hd_seed_wif(&master(), 0, NetworkKind::Main).unwrap();
+        let wif_plain: String = (*wif).to_string();
+        let wif_dbg = format!("{wif:?}");
+        assert!(
+            !wif_dbg.contains(&wif_plain),
+            "Debug leaked the HD-seed WIF: {wif_dbg}"
+        );
+        assert!(wif_dbg.contains("redacted"));
     }
 
     // ========================================================================
