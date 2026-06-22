@@ -28,6 +28,8 @@ const FIX_MALFORMED: &str = "tests/fixtures/wallet_import/coldcard-ms-malformed-
 /// the `coldcard_multisig::tests::depth0_const_fingerprints_pinned` unit test).
 const XPUB_D0_A: &str = "xpub661MyMwAqRbcGQ5dEWgzwBWpcFA5Uc2TKjZy6gqBoHgMGBKn91Q7ooXXCk2cdjU6nh1GW5tF7ttjKiYg2RJ5ybBZscgMqLE7RevfHn4J1jS";
 const FP_D0_A: &str = "57ACB302";
+/// Second depth-0 master xpub (for divergent-path round-trip tests).
+const XPUB_D0_B: &str = "xpub661MyMwAqRbcF4AYTpoZvFuiLUyBtTmtVhoUVutzfJzeCFvNFjRcdtLLaWgDb7gwHmLBTV6gZf4T9rqSnxcu8hcmLigphSiFioYqVFcRSEZ";
 
 /// Run `mnemonic import-wallet --blob <path> --format coldcard-multisig`.
 fn run_explicit(path: &str) -> assert_cmd::assert::Assert {
@@ -315,4 +317,81 @@ fn coldcard_ms_autosniff_does_not_co_fire_with_bsms_or_core() {
     for fix in [FIX_2OF3_WITH_XFP, FIX_2OF3_NO_XFP, FIX_3OF5] {
         let _out = run_autosniff(fix).success();
     }
+}
+
+// ============================================================================
+// cycle-13a #16 (P4 / I-1) — round-trip-verify on a DIVERGENT-path blob passes
+// (the canonicalizer preserves per-cosigner paths instead of re-collapsing
+// onto cosigner-0's path → no spurious mismatch / false pass). The roundtrip
+// canonicalizer is invoked unconditionally; the `--json` envelope's
+// `roundtrip.semantic_match` reflects it. Depth-0 master xpubs carry no XFP
+// (no refusal at re-parse, M-1) under DISTINCT per-cosigner `Derivation:` lines.
+// ============================================================================
+
+#[test]
+fn roundtrip_verify_divergent_coldcard_multisig_passes() {
+    let blob = format!(
+        "Name: T\n\
+Policy: 1 of 2\n\
+Format: P2WSH\n\
+Derivation: m/48'/0'/0'/2'\n\
+{XPUB_D0_A}\n\
+Derivation: m/48'/0'/1'/2'\n\
+{XPUB_D0_B}\n"
+    );
+    // The divergent blob imports cleanly via the LIVE round-trip canonicalize
+    // dispatch (cmd/import_wallet.rs).
+    let json_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "coldcard-multisig",
+            "--json",
+        ])
+        .write_stdin(blob.clone())
+        .assert()
+        .success();
+    let jstdout = String::from_utf8(json_out.get_output().stdout.clone()).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&jstdout).expect("envelope is JSON");
+    let roundtrip = &v[0]["roundtrip"];
+    assert_eq!(
+        roundtrip["status"], "ok",
+        "divergent canonicalize must succeed; envelope: {jstdout}"
+    );
+
+    // CANONICAL-FORM fidelity: the canonical re-emit (the `output` side of the
+    // round-trip diff) must carry BOTH divergent `Derivation:` paths. Pre-P4
+    // the canonicalizer stamped cosigner-0's path on all cosigners, so the
+    // output side DROPPED `m/48'/0'/1'/2'` entirely → this is the RED. Parse
+    // the unified diff and reconstruct the output side (context ` ` lines +
+    // `+` additions, minus `-` removals).
+    let diff = roundtrip["diff"].as_str().expect("roundtrip diff present");
+    let output_side: String = diff
+        .lines()
+        .filter(|l| !l.starts_with("---") && !l.starts_with("+++") && !l.starts_with("@@"))
+        .filter(|l| !l.starts_with('-'))
+        .map(|l| l.strip_prefix(['+', ' ']).unwrap_or(l))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        output_side.contains("Derivation: m/48'/0'/0'/2'"),
+        "canonical output must preserve cosigner path m/48'/0'/0'/2'; output side:\n{output_side}"
+    );
+    assert!(
+        output_side.contains("Derivation: m/48'/0'/1'/2'"),
+        "canonical output must preserve the DISTINCT path m/48'/0'/1'/2' (NOT collapse to \
+         cosigner-0's path); output side:\n{output_side}"
+    );
+
+    // The resolved descriptor must likewise carry both per-cosigner origins.
+    let descriptor = v[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("descriptor present");
+    assert!(
+        descriptor.contains("/48'/0'/0'/2']") && descriptor.contains("/48'/0'/1'/2']"),
+        "both divergent cosigner paths must survive into the descriptor; got:\n{descriptor}"
+    );
 }

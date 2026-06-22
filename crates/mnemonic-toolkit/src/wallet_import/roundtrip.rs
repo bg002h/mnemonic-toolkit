@@ -349,10 +349,15 @@ pub(crate) fn canonicalize_coldcard(blob: &[u8]) -> Result<String, ToolkitError>
 /// 2. Parse via `coldcard_multisig::parse_text` to recover the typed
 ///    header fields + cosigner list (with effective per-cosigner XFPs
 ///    via the SPEC §11.4.1 truth table).
-/// 3. Re-emit in a deterministic canonical form: shared-derivation shape,
-///    cosigners sorted lex by xpub (mirrors the toolkit's emit at
-///    `wallet_export/coldcard.rs:339` sortedmulti rule), top-level XFP
-///    header DROPPED (redundant with per-cosigner `<XFP>: <xpub>` lines).
+/// 3. Re-emit in a deterministic canonical form: cosigners sorted lex by the
+///    formatted `<XFP>: <xpub>` line (mirrors the toolkit's emit at
+///    `wallet_export/coldcard.rs` sortedmulti rule), top-level XFP header
+///    DROPPED (redundant with per-cosigner `<XFP>: <xpub>` lines). When all
+///    cosigner origin paths agree → a single shared `Derivation:` line; when
+///    they DIVERGE → a per-cosigner `Derivation: <path>` line before each
+///    cosigner line, each path read from the SAME sorted slot as its xpub
+///    (cycle-13a H11-f, so H11's divergent exports survive round-trip-verify
+///    instead of being re-collapsed onto cosigner-0's path).
 ///
 /// The canonicalization is **semantic, not byte-exact**: two blobs that
 /// parse to the same wallet (regardless of cosigner ordering, comment
@@ -377,29 +382,35 @@ pub(crate) fn canonicalize_coldcard_multisig(blob: &[u8]) -> Result<String, Tool
         }
     };
 
-    // Effective per-cosigner XFP from parsed.cosigners (already applied
-    // the truth table). Sort by xpub lex (sortedmulti convention).
-    let mut cosigner_lines: Vec<String> = parsed
+    // Effective per-cosigner XFP + path from parsed.cosigners (already applied
+    // the truth table). cycle-13a H11-f (I-1): keep each cosigner's `<XFP>:
+    // <xpub>` line PAIRED with its OWN `m/...` derivation path through the sort,
+    // so divergent per-cosigner paths (which H11's divergent export now emits)
+    // survive canonicalization instead of being collapsed onto cosigner-0's
+    // path. Sort by the formatted cosigner line (mirrors the prior
+    // `cosigner_lines.sort()` xpub-lex convention); the per-cosigner path rides
+    // along in the SAME tuple so path↔xpub never scramble.
+    let mut paired: Vec<(String, String)> = parsed
         .cosigners
         .iter()
         .map(|c| {
-            format!(
+            let cosigner_line = format!(
                 "{xfp}: {xpub}",
                 xfp = c.fingerprint.to_string().to_uppercase(),
                 xpub = c.xpub
-            )
+            );
+            let path = format!("m{}", path_components_for_canonical(&c.path));
+            (cosigner_line, path)
         })
         .collect();
-    cosigner_lines.sort();
+    paired.sort_by(|a, b| a.0.cmp(&b.0));
 
-    // Shared derivation path: rebuild from the first cosigner's path
-    // (canonicalization ASSUMES homogeneous derivation; the parser already
-    // accepted heterogeneous paths but they would canonicalize awkwardly.
-    // For SPEC §11.4 the shared `Derivation:` field is the canonical form).
-    let derivation_str = format!(
-        "m{}",
-        path_components_for_canonical(&parsed.cosigners[0].path)
-    );
+    // Homogeneous derivation → single shared `Derivation:` line (the common
+    // case, byte-identical to the pre-cycle-13a canonical form). Heterogeneous
+    // → emit a per-cosigner `Derivation: <path>` line before each cosigner
+    // line. `windows(2).all(...)` on an empty/1-element slice is vacuously true
+    // (single shared form), matching the homogeneous branch.
+    let homogeneous = paired.windows(2).all(|w| w[0].1 == w[1].1);
 
     let format_str = match meta.script_format {
         ColdcardMsFormat::P2wsh => "P2WSH",
@@ -410,11 +421,26 @@ pub(crate) fn canonicalize_coldcard_multisig(blob: &[u8]) -> Result<String, Tool
     let mut out = String::new();
     out.push_str(&format!("Name: {}\n", meta.name));
     out.push_str(&format!("Policy: {} of {}\n", meta.policy.k, meta.policy.n));
-    out.push_str(&format!("Derivation: {}\n", derivation_str));
+    if homogeneous {
+        // Shared `Derivation:` from the (sorted) cosigners' common path. Use
+        // `paired[0].1` (all equal under the homogeneous branch); falls back to
+        // cosigner-0's typed path when there are no cosigners (unreachable —
+        // policy.n >= 1 is enforced upstream).
+        let shared = paired
+            .first()
+            .map(|p| p.1.clone())
+            .unwrap_or_else(|| format!("m{}", path_components_for_canonical(&parsed.cosigners[0].path)));
+        out.push_str(&format!("Derivation: {shared}\n"));
+    }
     out.push_str(&format!("Format: {}\n", format_str));
     out.push('\n');
-    for line in cosigner_lines {
-        out.push_str(&line);
+    for (cosigner_line, path) in &paired {
+        if !homogeneous {
+            // Per-cosigner `Derivation:` immediately before this cosigner's
+            // `<XFP>: <xpub>` line — both read from the SAME sorted tuple.
+            out.push_str(&format!("Derivation: {path}\n"));
+        }
+        out.push_str(cosigner_line);
         out.push('\n');
     }
     Ok(out)
@@ -1488,6 +1514,72 @@ B7F7DFEA: {xpub_c}\n"
             ToolkitError::ImportWalletParse(_) => {}
             other => panic!("expected ImportWalletParse, got: {other:?}"),
         }
+    }
+
+    // ===========================================================================
+    // cycle-13a P4 (H11-f / I-1) — canonicalizer preserves per-cosigner paths.
+    //
+    // Two genuine DEPTH-0 master xpubs (so the re-parse via parse_text does NOT
+    // refuse — no supplied XFP needed at depth 0; M-1) carried under DIVERGENT
+    // per-cosigner `Derivation:` lines. The canonicalizer must emit per-cosigner
+    // `Derivation:` lines rather than stamping cosigner-0's path on all.
+    // ===========================================================================
+
+    // Depth-0 master xpubs (pinned in coldcard_multisig::tests; both depth 0).
+    const D0_X: &str = "xpub661MyMwAqRbcGQ5dEWgzwBWpcFA5Uc2TKjZy6gqBoHgMGBKn91Q7ooXXCk2cdjU6nh1GW5tF7ttjKiYg2RJ5ybBZscgMqLE7RevfHn4J1jS";
+    const D0_Y: &str = "xpub661MyMwAqRbcF4AYTpoZvFuiLUyBtTmtVhoUVutzfJzeCFvNFjRcdtLLaWgDb7gwHmLBTV6gZf4T9rqSnxcu8hcmLigphSiFioYqVFcRSEZ";
+
+    /// #15 — divergent per-cosigner paths are PRESERVED through canonicalization
+    /// (per-cosigner `Derivation:` lines emitted, NOT cosigner-0's path on all),
+    /// and the canonical form is idempotent. RED before P4 (re-emits the shared
+    /// form from `cosigners[0].path`).
+    #[test]
+    fn canonicalize_coldcard_multisig_divergent_paths_preserves_per_cosigner() {
+        // Two depth-0 masters under DISTINCT paths (same coin-type 0).
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 2\n\
+Format: P2WSH\n\
+Derivation: m/48'/0'/0'/2'\n\
+{D0_X}\n\
+Derivation: m/48'/0'/1'/2'\n\
+{D0_Y}\n"
+        );
+        let canon = canonicalize_coldcard_multisig(blob.as_bytes()).unwrap();
+        // BOTH divergent paths must survive (not collapsed to one shared path).
+        assert!(
+            canon.contains("Derivation: m/48'/0'/0'/2'"),
+            "canonical form must preserve cosigner path m/48'/0'/0'/2'; got:\n{canon}"
+        );
+        assert!(
+            canon.contains("Derivation: m/48'/0'/1'/2'"),
+            "canonical form must preserve the DISTINCT cosigner path m/48'/0'/1'/2'; got:\n{canon}"
+        );
+        // Idempotent: canon(canon(blob)) == canon(blob).
+        let canon2 = canonicalize_coldcard_multisig(canon.as_bytes()).unwrap();
+        assert_eq!(canon, canon2, "divergent canonicalization must be idempotent");
+    }
+
+    /// #15 (companion) — the HOMOGENEOUS case is unchanged: a single shared
+    /// `Derivation:` line (the existing `_idempotent` baseline guards this too,
+    /// but assert it explicitly against a hand-built homogeneous blob).
+    #[test]
+    fn canonicalize_coldcard_multisig_homogeneous_stays_single_shared() {
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 2\n\
+Format: P2WSH\n\
+Derivation: m/48'/0'/0'/2'\n\
+{D0_X}\n\
+Derivation: m/48'/0'/0'/2'\n\
+{D0_Y}\n"
+        );
+        let canon = canonicalize_coldcard_multisig(blob.as_bytes()).unwrap();
+        let derivation_lines = canon.lines().filter(|l| l.starts_with("Derivation:")).count();
+        assert_eq!(
+            derivation_lines, 1,
+            "homogeneous blob must canonicalize to ONE shared Derivation line; got:\n{canon}"
+        );
     }
 
     // ===========================================================================
