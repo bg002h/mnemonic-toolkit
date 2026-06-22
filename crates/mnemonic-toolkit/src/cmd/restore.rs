@@ -1439,6 +1439,39 @@ pub(crate) fn complete_multisig_template<E: Write>(
         ));
     }
 
+    // --- L9: the SAME early refusals the non-template `run_multisig` path
+    // applies BEFORE reconstruction. Hoisted here (the SHARED completion core)
+    // so BOTH `restore` and `verify-bundle` refuse uniformly — matching the I-1
+    // own-account-max gate's placement.
+    //   (1) ANY hardened use-site (`/*h` wildcard or a hardened multipath
+    //       alternative, baseline OR per-`@N` override): watch-only cannot do
+    //       hardened public derivation (BIP-32), so a reconstructed descriptor
+    //       would silently render an unhardened `/*` and a derive attempt fails.
+    //       Refuse EARLY with the precise, actionable message instead of an
+    //       opaque downstream NO-MATCH.
+    //   (2) A TAPROOT override card OUTSIDE the restorable subset (#26): a
+    //       sortedmulti_a tap leaf, a non-NUMS trunk key, or a hardened use-site
+    //       — these route around the faithful per-`@N` arm and would mis-render.
+    //       The RESTORABLE subset — non-hardened tr(NUMS, multi_a) — is admitted.
+    // Named multisig templates are non-hardened today and never reach the
+    // taproot-override leg, so these are defense-in-depth / latent-form guards;
+    // a future bundle form emitting a hardened canonical multisig template gets
+    // the precise refusal instead of a confusing NO-MATCH.
+    if md_codec::to_miniscript::has_hardened_use_site(d) {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "this md1 uses a hardened use-site path (`/*h` wildcard or a hardened multipath alternative, baseline or per-cosigner) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened path. Faithful reconstruction is not supported. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
+        });
+    }
+    if taproot_override_card(d) && !restorable_taproot_override_card(d) {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "this taproot md1 carries per-cosigner use-site path overrides in a shape the toolkit cannot yet reconstruct faithfully (a sortedmulti_a tap leaf, or a non-NUMS internal/trunk key). Non-hardened tr(NUMS, multi_a(...)) override cards ARE restorable; other taproot override shapes route around the per-key reconstruction path and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-taproot-use-site-override-arm",
+        });
+    }
+
     // --- Parse `--cosigner`: unassigned (search) vs assigned `@N=` (explicit) -
     // (I-B) The phase-1 `@N=` parse read only the 65-byte key for a cross-check;
     // the template completion reads the mk1's ORIGIN too, and admits the
@@ -1545,7 +1578,30 @@ pub(crate) fn complete_multisig_template<E: Write>(
                  m/<purpose>'/<coin>'/<account>' for each own key.",
             )
         })?;
-        origin_path_to_derivation_path(&op)
+        let path = origin_path_to_derivation_path(&op)?;
+        // L8 — `canonical_origin(tree)` hardcodes the mainnet coin-type 0'
+        // (`m/<purpose>'/0'/acct'/...`), but the bundle EMITTER writes each
+        // cosigner origin at `network.coin_type()` (=1 for testnet/signet/
+        // regtest). In the all-own, no-`--cosigner`, no-`--origin` case this
+        // fallback is the ONLY origin source, so leaving coin at 0' on a
+        // non-mainnet wallet derives every own key at the wrong path → the
+        // search NEVER matches the bundle's coin-1 wallet-id (a silent
+        // NO-MATCH). Substitute the network coin-type into the COIN component
+        // (BIP-44/48 index 1, the second hardened element) — mirroring the
+        // emitter. On mainnet (coin 0') this is the identity. md-codec's
+        // `canonical_origin` is left network-agnostic (a public `.is_some()`
+        // canonicity discriminator used pervasively) — the coin-type is patched
+        // toolkit-side here.
+        let mut comps: Vec<ChildNumber> = path.into_iter().copied().collect();
+        if comps.len() >= 2 {
+            comps[1] = ChildNumber::from_hardened_idx(network.coin_type()).map_err(|_| {
+                bad(format!(
+                    "coin-type {} out of BIP-32 hardened range",
+                    network.coin_type()
+                ))
+            })?;
+        }
+        Ok(DerivationPath::from(comps))
     };
 
     // The own accounts: the `--account` LIST. (The `--own-account-max` range is
