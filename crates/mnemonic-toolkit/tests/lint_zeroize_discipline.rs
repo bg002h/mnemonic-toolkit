@@ -355,6 +355,13 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/wallet_import/overlay.rs",
         evidence: &["Zeroizing<Vec<u8>>", "Zeroizing::new"],
     },
+    // ---- slot_input.rs (v0.67.0 — L22: stdin/@env: secret no longer lingers
+    //      in a bare String; SlotInput.value is a SecretString) ----
+    ZeroizeRow {
+        label: "SlotInput value field is SecretString (Zeroizing<String> inner) — L22",
+        source_file: "src/slot_input.rs",
+        evidence: &["pub value: SecretString", "SecretString::new"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -440,16 +447,19 @@ const NON_ROW_SECRET_FILES: &[&str] = &[
     "src/slip39/feistel.rs", // CRYPTO-INTERNAL: SLIP-0039 Feistel L/R halves + round key (consumer slip39/mod.rs owns output)
     "src/nostr.rs", // PASS-THROUGH: decode_nostr_key hands the decoded INPUT upstream; cmd/nostr.rs owns the derived secret
     "src/secret_string.rs", // PRIMITIVE: the SecretString newtype DEFINITION, not an allocation site
+    "src/bundle_unified.rs", // TEST-ONLY: the sole SecretString::new is in a #[cfg(test)] s() helper that builds a SlotInput fixture (cycle-14 L22); no production secret-bearing allocation lives here — SlotInput.value's canonical row is src/slot_input.rs
 ];
 
-/// Persistent glob-cardinality floor. The partition is exactly 35
-/// secret-bearing src files @ 438de94 (30 ROWS-source ∪ 5 allowlist). The
+/// Persistent glob-cardinality floor. The partition is exactly 37
+/// secret-bearing src files @ v0.67.0 (31 ROWS-source ∪ 6 allowlist; cycle-14
+/// L22 added the slot_input.rs row + the bundle_unified.rs test-fixture
+/// allowlist entry). Was 35 (30 ∪ 5) @ 438de94. The
 /// floor fires only on the loss-of-coverage direction (count DROPS) — a
 /// broken glob/path-prefix change that enumerates nothing would otherwise
 /// make the scan vacuously pass. Deleting a secret-bearing file is a
 /// conscious security-adjacent choice, so requiring a deliberate floor edit
 /// is the correct friction. Mirrors the `ZEROIZE_ROWS.len()` count guard.
-const SECRET_FILE_FLOOR: usize = 35;
+const SECRET_FILE_FLOOR: usize = 37;
 
 /// Recursively collect every `*.rs` under `dir`, returning crate-root-relative
 /// forward-slash paths (matching `ZEROIZE_ROWS.source_file` form).

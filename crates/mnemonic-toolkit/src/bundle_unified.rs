@@ -118,13 +118,14 @@ pub fn pre_check_template_n(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secret_string::SecretString;
     use crate::slot_input::SlotSubkey;
 
     fn s(idx: u8, sk: SlotSubkey, v: &str) -> SlotInput {
         SlotInput {
             index: idx,
             subkey: sk,
-            value: v.to_string(),
+            value: SecretString::new(v.to_string()),
         }
     }
 

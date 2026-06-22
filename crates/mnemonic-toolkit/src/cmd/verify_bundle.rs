@@ -1530,7 +1530,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 let digits = slot_inputs
                     .iter()
                     .find(|s| s.subkey == crate::slot_input::SlotSubkey::Seedqr)
-                    .map(|s| s.value.as_str())
+                    .map(|s| &*s.value)
                     .expect("contains() asserts presence");
                 decoded_phrase = mnemonic_toolkit::seedqr::decode(digits).map_err(|e| {
                     crate::cmd::seedqr::map_seedqr_error(e, &format!("slot @{idx} decode"))
@@ -1540,7 +1540,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 slot_inputs
                     .iter()
                     .find(|s| s.subkey == crate::slot_input::SlotSubkey::Phrase)
-                    .map(|s| s.value.as_str())
+                    .map(|s| &*s.value)
                     .expect("contains() asserts presence")
             };
             let language = args.language.unwrap_or_default();
@@ -1568,7 +1568,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             let xpub_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Xpub)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let (xpub_str, _) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
             let xpub = BipXpub::from_str(&xpub_str)
@@ -1601,7 +1601,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             let entropy_hex = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Entropy)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             // SAFETY: third-party-blocked — `bip39::Mnemonic` + `Xpriv` have no
             // Drop+Zeroize. FOLLOWUPS: `rust-bip39-mnemonic-zeroize-upstream`,
@@ -1638,7 +1638,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             let value = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Ms1)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let res = crate::slot_ms1::resolve_ms1_slot(value, args.language, idx)?;
             let passphrase: zeroize::Zeroizing<String> =
@@ -1880,7 +1880,10 @@ fn resolve_env_sentinels(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, To
     for s in owned.slot.iter_mut() {
         if s.subkey.is_secret_bearing() {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
-            s.value = resolve_env_var_sentinel(&s.value, &flag)?;
+            // cycle-14 (L22): the @env: sentinel resolves to the ACTUAL secret
+            // phrase — re-wrap into SecretString so it scrubs on drop.
+            s.value =
+                crate::secret_string::SecretString::new(resolve_env_var_sentinel(&s.value, &flag)?);
         }
     }
     Ok(owned)

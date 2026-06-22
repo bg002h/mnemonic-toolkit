@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::io::Read;
 
 use crate::error::ToolkitError;
+use crate::secret_string::SecretString;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum SlotSubkey {
@@ -97,7 +98,11 @@ impl SlotSubkey {
 pub struct SlotInput {
     pub index: u8,
     pub subkey: SlotSubkey,
-    pub value: String,
+    /// cycle-14 (L22): a `SecretString` (`Zeroizing<String>` inner, redacting
+    /// Debug) so a stdin / `@env:` / literal secret stored here is scrubbed on
+    /// drop and never re-leaks via `{:?}`. `#[derive(PartialEq, Eq)]` above is
+    /// satisfied by `SecretString`'s plain (non-CT) impls.
+    pub value: SecretString,
 }
 
 impl SlotInput {
@@ -107,7 +112,7 @@ impl SlotInput {
     /// `path`/`master_xpub`) NEVER consume stdin even if their value is
     /// `-` — those values are public, no argv-leakage protection needed.
     pub fn is_stdin_sentinel(&self) -> bool {
-        self.subkey.is_secret_bearing() && self.value == "-"
+        self.subkey.is_secret_bearing() && &*self.value == "-"
     }
 }
 
@@ -182,7 +187,7 @@ pub fn parse_slot_input(s: &str) -> Result<SlotInput, ParseError> {
     Ok(SlotInput {
         index,
         subkey,
-        value: value.to_string(),
+        value: SecretString::new(value.to_string()),
     })
 }
 
@@ -222,7 +227,7 @@ pub fn apply_slot_stdin<R: Read + ?Sized>(
                     buf.pop();
                 }
             }
-            slots[stdin_idxs[0]].value = buf;
+            slots[stdin_idxs[0]].value = SecretString::new(buf);
             Ok(())
         }
         _ => Err(ToolkitError::BadInput(
@@ -380,7 +385,7 @@ mod tests {
         SlotInput {
             index,
             subkey,
-            value: value.to_string(),
+            value: SecretString::new(value.to_string()),
         }
     }
 
@@ -938,5 +943,54 @@ mod tests {
             ToolkitError::SlotInputViolation { kind, .. } => assert_eq!(kind, "conflict"),
             other => panic!("unexpected variant {other:?}"),
         }
+    }
+
+    // ---- cycle-14 (L22): SlotInput.value is SecretString (Zeroizing<String>
+    //      inner, redacting Debug) — the stdin `=-` secret no longer lingers
+    //      in a bare String. Type-level + no-behavior-change regression. ----
+
+    /// T1 — compile-fences the field migration: `SlotInput.value` must be
+    /// `SecretString`. RED until the field type flips.
+    #[test]
+    fn value_field_is_secret_string() {
+        fn _assert_value_is_secret_string(s: &SlotInput) -> &SecretString {
+            &s.value
+        }
+        let p = parse_slot_input("@0.phrase=correct horse").unwrap();
+        // Deref<Target=str> round-trip: the value reads back verbatim.
+        assert_eq!(&*p.value, "correct horse");
+        let _ = _assert_value_is_secret_string(&p);
+    }
+
+    /// T3 — `is_stdin_sentinel` still recognizes `@N.<secret>=-` after the
+    /// `self.value == "-"` → `&*self.value == "-"` rewrite. Secret-bearing
+    /// subkey + `-` literal → true; watch-only subkey → false.
+    #[test]
+    fn is_stdin_sentinel_after_secret_string_migration() {
+        assert!(parse_slot_input("@0.phrase=-")
+            .unwrap()
+            .is_stdin_sentinel());
+        assert!(!parse_slot_input("@0.xpub=-")
+            .unwrap()
+            .is_stdin_sentinel());
+    }
+
+    /// T4 — end-to-end stdin `=-` path is byte-identical to today: drive
+    /// `apply_slot_stdin` over `b"correct horse\n"` on a `@0.phrase=-` slot;
+    /// the resolved value Derefs to the newline-stripped phrase. Fences the
+    /// `slots[stdin_idxs[0]].value = SecretString::new(buf)` wrap.
+    #[test]
+    fn apply_slot_stdin_wraps_into_secret_string() {
+        use std::io::Cursor;
+        let mut slots = vec![parse_slot_input("@0.phrase=-").unwrap()];
+        let mut cursor = Cursor::new(b"correct horse\n".to_vec());
+        apply_slot_stdin(&mut slots, &mut cursor).unwrap();
+        assert_eq!(&*slots[0].value, "correct horse");
+        // Debug of a populated slot must NOT leak the secret (redacting Debug).
+        let dbg = format!("{:?}", slots[0]);
+        assert!(
+            !dbg.contains("correct horse"),
+            "SlotInput Debug leaked the stdin secret: {dbg}"
+        );
     }
 }

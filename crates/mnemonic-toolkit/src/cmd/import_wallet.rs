@@ -1230,7 +1230,11 @@ electrum|jade|sparrow|specter>"
         .slot
         .iter()
         .filter(|s| s.subkey == SlotSubkey::Phrase)
-        .map(|s| (s.index, s.value.clone()))
+        // cycle-14 (L22): `.value` is a SecretString; `.to_string()` restores
+        // the `Vec<(u8, String)>` overlay shape without regressing today's
+        // hygiene (the overlay phrase was already a bare String). Deeper wrap
+        // (Vec<(u8, SecretString)>) tracked by FOLLOWUP phrase-overlay-secretstring.
+        .map(|s| (s.index, s.value.to_string()))
         .collect();
     if !ms1_args.is_empty() || !phrase_overlays.is_empty() {
         apply_seed_overlay(
@@ -1393,7 +1397,10 @@ fn resolve_env_sentinels(args: &ImportWalletArgs) -> Result<ImportWalletArgs, To
     for s in owned.slot.iter_mut() {
         if s.subkey.is_secret_bearing() {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
-            s.value = resolve_env_var_sentinel(&s.value, &flag)?;
+            // cycle-14 (L22): the @env: sentinel resolves to the ACTUAL secret
+            // phrase — re-wrap into SecretString so it scrubs on drop.
+            s.value =
+                crate::secret_string::SecretString::new(resolve_env_var_sentinel(&s.value, &flag)?);
         }
     }
     Ok(owned)
@@ -2671,6 +2678,30 @@ fn round1_verification_to_json(v: &Round1Verification) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T4c (cycle-14, L22) — the `phrase_overlays` collection maps a
+    /// `SlotInput` (whose `.value` is now a `SecretString`) into the
+    /// `Vec<(u8, String)>` overlay shape via `.value.to_string()` (was
+    /// `.value.clone()` on a bare `String`). Asserts the overlay still carries
+    /// the phrase byte-identically. Fences the `.clone()` → `.to_string()` edit.
+    #[test]
+    fn phrase_overlay_collection_carries_phrase_via_to_string() {
+        use crate::slot_input::{parse_slot_input, SlotSubkey};
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon \
+                      abandon abandon abandon about";
+        let slots = [
+            parse_slot_input(&format!("@0.phrase={phrase}")).unwrap(),
+            parse_slot_input("@1.xpub=xpub-stub").unwrap(),
+        ];
+        // Mirrors the handler's phrase_overlays collection (import_wallet.rs:1229).
+        let phrase_overlays: Vec<(u8, String)> = slots
+            .iter()
+            .filter(|s| s.subkey == SlotSubkey::Phrase)
+            .map(|s| (s.index, s.value.to_string()))
+            .collect();
+        assert_eq!(phrase_overlays.len(), 1, "only the Phrase slot overlays");
+        assert_eq!(phrase_overlays[0], (0u8, phrase.to_string()));
+    }
 
     /// v0.32.1 — `is_encrypted_bsms_record` discriminates a plaintext
     /// 5-line Round-1 record (starts with `BSMS 1.0`) from an encrypted

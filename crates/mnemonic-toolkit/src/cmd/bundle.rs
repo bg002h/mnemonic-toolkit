@@ -547,7 +547,7 @@ pub(crate) fn resolve_slots(
                 let digits = slot_inputs
                     .iter()
                     .find(|s| s.subkey == SlotSubkey::Seedqr)
-                    .map(|s| s.value.as_str())
+                    .map(|s| &*s.value)
                     .expect("contains() asserts presence");
                 decoded_phrase = mnemonic_toolkit::seedqr::decode(digits).map_err(|e| {
                     crate::cmd::seedqr::map_seedqr_error(e, &format!("slot @{idx} decode"))
@@ -557,7 +557,7 @@ pub(crate) fn resolve_slots(
                 slot_inputs
                     .iter()
                     .find(|s| s.subkey == SlotSubkey::Phrase)
-                    .map(|s| s.value.as_str())
+                    .map(|s| &*s.value)
                     .expect("contains() asserts presence")
             };
             let lang = language.unwrap_or_default();
@@ -587,7 +587,7 @@ pub(crate) fn resolve_slots(
             let xpub_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Xpub)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
             let (xpub_str, input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
@@ -599,7 +599,7 @@ pub(crate) fn resolve_slots(
             let fp_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Fingerprint)
-                .map(|s| s.value.as_str());
+                .map(|s| &*s.value);
             let fingerprint = match fp_str {
                 Some(s) => Fingerprint::from_str(s).map_err(|e| {
                     ToolkitError::BadInput(format!("--slot @{idx}.fingerprint parse: {e}"))
@@ -654,7 +654,7 @@ pub(crate) fn resolve_slots(
             let entropy_hex = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Entropy)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let entropy_bytes = hex::decode(entropy_hex).map_err(|e| {
                 ToolkitError::BadInput(format!("--slot @{idx}.entropy hex-decode: {e}"))
@@ -706,7 +706,7 @@ pub(crate) fn resolve_slots(
             let value = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Ms1)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let res = crate::slot_ms1::resolve_ms1_slot(value, language, idx)?;
             let pass = passphrase.unwrap_or("");
@@ -757,7 +757,7 @@ pub(crate) fn resolve_slots(
             let wif_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == SlotSubkey::Wif)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let priv_key = bitcoin::PrivateKey::from_wif(wif_str)
                 .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.wif parse: {e}")))?;
@@ -1618,7 +1618,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let phrase = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Phrase)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let language = args.language.unwrap_or_default();
             let passphrase: zeroize::Zeroizing<String> =
@@ -1655,7 +1655,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let xpub_str = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Xpub)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             // SPEC v0.6.1 §11 — accept SLIP-0132 prefix variants on input.
             let (xpub_str, input_variant) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
@@ -1701,7 +1701,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let entropy_hex = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Entropy)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             // SAFETY: third-party-blocked — `bip39::Mnemonic` +
             // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
@@ -1742,7 +1742,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let value = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Ms1)
-                .map(|s| s.value.as_str())
+                .map(|s| &*s.value)
                 .expect("contains() asserts presence");
             let res = crate::slot_ms1::resolve_ms1_slot(value, args.language, idx)?;
             let passphrase: zeroize::Zeroizing<String> =
@@ -2100,7 +2100,9 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     // bundle's — see the asymmetry note after this loop.)
     for (i, user_ms1) in args.slot.iter().filter_map(|s| {
         if s.subkey == crate::slot_input::SlotSubkey::Phrase {
-            Some((s.index as usize, &s.value))
+            // cycle-14 (L22): `.value` is a SecretString; Deref to `&str` for
+            // the downstream bip39 parse (no AsRef<str> on &SecretString).
+            Some((s.index as usize, &*s.value))
         } else {
             None
         }
@@ -2626,7 +2628,10 @@ fn resolve_env_sentinels(args: &BundleArgs) -> Result<BundleArgs, ToolkitError> 
     for s in owned.slot.iter_mut() {
         if s.subkey.is_secret_bearing() {
             let flag = format!("--slot @{}.{}=", s.index, s.subkey.as_str());
-            s.value = resolve_env_var_sentinel(&s.value, &flag)?;
+            // cycle-14 (L22): the @env: sentinel resolves to the ACTUAL secret
+            // phrase — re-wrap into SecretString so it scrubs on drop.
+            s.value =
+                crate::secret_string::SecretString::new(resolve_env_var_sentinel(&s.value, &flag)?);
         }
     }
     Ok(owned)
@@ -2782,6 +2787,32 @@ mod self_check_ms1_tests {
         assert!(
             r.is_err(),
             "self-check MUST detect ms1 that round-trips to the wrong entropy; got {r:?}"
+        );
+    }
+
+    /// T4b (cycle-14, L22) — the `@env:` write-back resolves the sentinel to
+    /// the ACTUAL secret phrase and stores it into `SlotInput.value` (now a
+    /// `SecretString`), byte-identically to before. Fences the
+    /// `s.value = SecretString::new(resolve_env_var_sentinel(...)?)` re-wrap.
+    #[test]
+    fn env_sentinel_write_back_into_secret_string() {
+        use crate::slot_input::{parse_slot_input, SlotSubkey};
+        let var = "CYCLE14_BUNDLE_PHRASE_TEST";
+        // SAFETY: single-threaded test; unique var name; removed before return.
+        std::env::set_var(var, TREZOR_24);
+        let mut args = minimal_bundle_args();
+        args.slot = vec![parse_slot_input(&format!("@0.phrase=@env:{var}")).unwrap()];
+        let resolved = resolve_env_sentinels(&args).unwrap();
+        std::env::remove_var(var);
+        assert_eq!(resolved.slot.len(), 1);
+        assert_eq!(resolved.slot[0].subkey, SlotSubkey::Phrase);
+        // Deref<Target=str>: the resolved value is the env-var phrase verbatim.
+        assert_eq!(&*resolved.slot[0].value, TREZOR_24);
+        // Debug of the resolved slot must NOT leak the resolved secret.
+        let dbg = format!("{:?}", resolved.slot[0]);
+        assert!(
+            !dbg.contains(TREZOR_24),
+            "resolved @env: SlotInput Debug leaked the secret: {dbg}"
         );
     }
 }

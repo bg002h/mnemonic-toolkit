@@ -36,6 +36,21 @@ impl std::ops::Deref for SecretString {
     }
 }
 
+/// Plain (non-constant-time) structural equality. `SecretString` equality is
+/// used ONLY in tests (`assert_eq!` of parse output vs an expected literal)
+/// and in `SlotInput::is_stdin_sentinel`'s public `"-"` sentinel check — there
+/// is no auth / timing boundary where a compare leaks anything (cycle-14 D2).
+/// A constant-time compare here would be cargo-cult; the plain `String` `eq`
+/// is correct and keeps the zero `subtle`-dependency. Required so a struct
+/// `#[derive(PartialEq, Eq)]` keeps compiling with a `SecretString` field.
+impl PartialEq for SecretString {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl Eq for SecretString {}
+
 impl std::fmt::Display for SecretString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -109,6 +124,45 @@ mod tests {
         assert!(
             dbg.contains("redacted"),
             "Debug should mark redaction: {dbg}"
+        );
+    }
+
+    /// T2 (cycle-14, L22) — plain (non-constant-time) `PartialEq`/`Eq`.
+    /// Equality is test-only + the public `"-"` sentinel: no auth/timing
+    /// boundary (see BRAINSTORM D2), so a structural `String` compare is
+    /// correct. Required so `SlotInput`'s `#[derive(PartialEq, Eq)]` keeps
+    /// compiling once `SlotInput.value: SecretString`.
+    #[test]
+    fn partial_eq_and_eq_are_structural() {
+        assert_eq!(
+            SecretString::new("a".to_string()),
+            SecretString::new("a".to_string()),
+        );
+        assert_ne!(
+            SecretString::new("a".to_string()),
+            SecretString::new("b".to_string()),
+        );
+        // Used in equality-bearing collections / asserts; Eq is total.
+        fn _assert_eq<T: Eq>() {}
+        _assert_eq::<SecretString>();
+    }
+
+    /// T2 (cycle-14) — Debug-redaction proves the chosen `SecretString`
+    /// avoids option-(a)'s leak: a raw `Zeroizing<String>` derives a
+    /// NON-redacting tuple-struct Debug (`Zeroizing("secret")`), which would
+    /// surface the secret in `assert_eq!` failure output. `SecretString`'s
+    /// length-only Debug never does. (Distinct from `debug_redacts_the_secret`
+    /// in that it pins the equality-failure-print path specifically.)
+    #[test]
+    fn eq_failure_debug_does_not_leak() {
+        let a = SecretString::new("topsecretphrase".to_string());
+        let b = SecretString::new("differentvalue".to_string());
+        assert_ne!(a, b);
+        // The string that an `assert_eq!(a, b)` panic would print:
+        let printed = format!("left: {a:?}, right: {b:?}");
+        assert!(
+            !printed.contains("topsecretphrase") && !printed.contains("differentvalue"),
+            "equality-failure Debug leaked a secret: {printed}"
         );
     }
 }
