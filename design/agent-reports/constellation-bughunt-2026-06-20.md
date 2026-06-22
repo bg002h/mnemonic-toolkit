@@ -206,7 +206,8 @@ scratch next cycle.
 
 ## Confirmed — MEDIUM
 
-### - [ ] M1 · `export-wallet --from-import-json` drops the BIP-32 account for single-sig (origin forced to account 0)
+<!-- FIXED cycle-13 (toolkit v0.66.0) — import-wallet decodes the real BIP-32 account from the single-sig origin into bundle.account (was hardcoded 0); export re-emits m/.../<account>'. Multisig (per-slot origins) unaffected. Whole-diff review GREEN. -->
+### - [x] M1 · `export-wallet --from-import-json` drops the BIP-32 account for single-sig (origin forced to account 0)
 - **repo/class:** toolkit · **B-policy-collapse**
 - **id:** `from-import-json-singlesig-account-lost-wrong-origin-path`
 - **location(s):** `export_wallet.rs:825`; `wallet_export/electrum.rs:111`; `wallet_export/coldcard.rs:201`;
@@ -510,7 +511,8 @@ scratch next cycle.
 - **spec:** BIP-93/codex32 K-of-N Shamir over GF(32) (plain Lagrange, no integrity share); codex32-0.1.0
   `interpolate_at` checks only hrp/id/threshold/length.
 
-### - [ ] M7 · `bundle … --json` reports `multisig.threshold = N` (cosigner count) instead of the real K
+<!-- FIXED cycle-13 (toolkit v0.66.0) — bundle --json derives the real threshold K via extract_multisig_threshold (was cosigner count N) in descriptor/--import-json mode; path_family sub-claim already-fixed pre-cycle. --json wire-value (GUI paired-PR). Whole-diff review GREEN. -->
+### - [x] M7 · `bundle … --json` reports `multisig.threshold = N` (cosigner count) instead of the real K
 - **repo/class:** toolkit · **B-policy-collapse** · `w2-tk-bundle-template-emit-02`
 - **location(s):** `cmd/bundle.rs:915,922` (`threshold = args.threshold.unwrap_or(n)`); `:924`
   (`path_family` hardcoded `bip87`); `:1263` (card path correctly uses `extract_multisig_threshold`)
@@ -529,7 +531,8 @@ scratch next cycle.
 
 ## Confirmed — LOW (Wave 2)
 
-### - [ ] L8 · Multisig-template completion hardcodes mainnet coin-type 0' → testnet/signet/regtest all-own wallets unrestorable
+<!-- FIXED cycle-13 (toolkit v0.66.0) — all-own multisig-template completion substitutes network.coin_type() into the synthesized own origin's coin component; testnet/signet/regtest all-own now restore (was hardcoded 0' → silent NO-MATCH). Fail-safe (never wrong address); md-codec NO-BUMP. Whole-diff review GREEN. -->
+### - [x] L8 · Multisig-template completion hardcodes mainnet coin-type 0' → testnet/signet/regtest all-own wallets unrestorable
 - **repo/class:** toolkit · **A-wrong-address** · `w2-tk-restore-deep-01`
 - **location(s):** `cmd/restore.rs:1342-1346` (consumed `:1377-1382,1411-1416`);
   `md-codec/src/canonical_origin.rs:61,70` (hardcoded coin 0'); `synthesize.rs:1195-1197`
@@ -542,7 +545,8 @@ scratch next cycle.
   bundle emitter). Add a testnet all-own round-trip test. Fail-safe today (NO-MATCH, no wrong address).
 - **spec:** BIP-48 coin-type (mainnet 0' / testnet 1').
 
-### - [ ] L9 · `run_multisig_template_completion` omits the hardened-use-site / taproot-override refusals `run_multisig` applies
+<!-- FIXED cycle-13 (toolkit v0.66.0) — hoisted the has_hardened_use_site + unrestorable-taproot-override refusals into the shared complete_multisig_template core (covers restore + verify-bundle uniformly); precise early refusal instead of an opaque downstream error. Whole-diff review GREEN. -->
+### - [x] L9 · `run_multisig_template_completion` omits the hardened-use-site / taproot-override refusals `run_multisig` applies
 - **repo/class:** toolkit · **B-policy-collapse** · `w2-tk-restore-deep-02`
 - **location(s):** `cmd/restore.rs:1159-1585` (no guards) vs `:2581-2594,2639-2646` (`run_multisig`
   guards); `synthesize.rs:317,320,323` (use_site preserved verbatim)
@@ -712,7 +716,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
   with a loud warning.
 - **spec:** BIP-67 (these vendor formats are sortedmulti-only); miniscript `multi` ≠ `sortedmulti` script.
 
-### - [ ] H11 · Coldcard/Jade multisig export collapses divergent cosigner paths to a wrong global `m/0'/0'`
+<!-- FIXED cycle-13 (toolkit v0.66.0) — export emits a per-cosigner Derivation: line read from each cosigner's OWN sorted slot on divergent origins (sorted is the only reachable divergent case); shared line only when all agree; refuses rather than emitting m/0'/0'. Jade inherits via delegation. Independent whole-diff review GREEN (sorted-slot no-scramble verified). -->
+### - [x] H11 · Coldcard/Jade multisig export collapses divergent cosigner paths to a wrong global `m/0'/0'`
 - **repo/class:** toolkit · **B-policy-collapse** · `w3-tk-export-1`
 - **location(s):** `wallet_export/coldcard.rs:324-336`; `wallet_export/jade.rs:46`;
   `wallet_import/coldcard_multisig.rs:38-49` (per-cosigner shape proves a faithful form exists)
@@ -802,7 +807,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 
 ## Confirmed — LOW (Wave 3)
 
-### - [ ] L18 · Electrum import hard-refuses valid wallets with null `root_fingerprint`/`derivation` (watch-only xpub imports, re-saved exports)
+<!-- FIXED cycle-13 (toolkit v0.66.0) — Electrum import accepts null root_fingerprint (→ 00000000 + NOTICE) / null derivation (→ script-type from SLIP-132 prefix, canonical origin synthesized + NOTICE; key-origin metadata only, never affects address derivation). Protocol fact verified vs live Electrum keystore.py. Whole-diff review GREEN. -->
+### - [x] L18 · Electrum import hard-refuses valid wallets with null `root_fingerprint`/`derivation` (watch-only xpub imports, re-saved exports)
 - **repo/class:** toolkit · **E-panic-dos** (false reject) · `w3-tk-electrum-import-deep-01`
 - **location:** `wallet_import/electrum.rs:513-531` (singlesig), `:796-813` (multisig)
 - **bug:** both paths require `root_fingerprint`/`derivation` to be non-null strings (`.as_str().ok_or_else`).
@@ -991,7 +997,8 @@ recurring theme of the whole hunt.
 
 ## Confirmed — HIGH (Wave B)
 
-### - [ ] H14 · `coldcard-multisig` import uses the account xpub's own fingerprint (depth>0) as the master fingerprint → wrong `[fp/path]` on every cosigner
+<!-- FIXED cycle-13 (toolkit v0.66.0) — depth-gated master-fp matrix: depth>0 + no supplied XFP now REFUSES (master fp unrecoverable from an account key — was silently substituting the account fp); supplied XFP at depth>0 accepted without spurious warning; xpub.fingerprint() treated as master only at depth 0. Jade inherits. Independent whole-diff review GREEN (no account-fp-as-master leak). -->
+### - [x] H14 · `coldcard-multisig` import uses the account xpub's own fingerprint (depth>0) as the master fingerprint → wrong `[fp/path]` on every cosigner
 - **repo/class:** toolkit · **A-wrong-address** · `w4b-fp-01` (merges `w4b-fp-02`)
 - **location(s):** `wallet_import/coldcard_multisig.rs:358-360` (`computed_fp = xpub.fingerprint()`),
   `:363-399` (5-row truth table — Row 4 silent substitute, Row 2 spurious warning), `:415`

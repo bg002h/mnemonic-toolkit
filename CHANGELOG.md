@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.66.0] — 2026-06-21
+
+**SemVer-MINOR — the "fidelity tail": closes the final 7 findings of the constellation bug-hunt (cycle-13: H11 · H14 · L8 · L9 · M1 · M7 · L18). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / schema change → no GUI schema-mirror. Foreign-format manual prose + SPEC §11.4.1 updated (prose only, no flag-table change).**
+
+### Fixed
+
+- **H11 (export fidelity)** — `export-wallet` coldcard-multisig / jade no longer collapses divergent cosigner origins to a wrong global `m/0'/0'`. On divergent (collaborative-custody) paths it now emits a per-cosigner `Derivation:` line read from each cosigner's OWN sorted slot (sorted is the only reachable divergent case given the v0.62.0 unsorted-export refusal), keeping the single shared line only when all origins agree, and refusing rather than emitting a placeholder when an origin is un-emittable.
+- **H14 (import fidelity)** — `coldcard-multisig` / jade import applies a depth-gated master-fingerprint matrix: a depth>0 account xpub with no supplied XFP is now REFUSED (the master fingerprint is unrecoverable from an account key — previously the account's own fingerprint was silently substituted as the master fp); a supplied XFP at depth>0 is accepted as authoritative without a spurious "disagrees" warning; `xpub.fingerprint()` is treated as a master fp only at depth 0.
+- **H11+H14 round-trip** — the `<XFP>:` import parser arm now consumes a pending per-cosigner `Derivation:` path, and the round-trip-verify canonicalizer preserves per-cosigner paths, so a divergent export re-imports faithfully.
+- **L8 (restore availability)** — all-own multisig-template completion now substitutes the network coin-type into the synthesized own origin, so testnet/signet/regtest all-own wallets restore (previously hardcoded mainnet `0'` → silent NO-MATCH). Fail-safe (never a wrong address). md-codec unchanged.
+- **L9 (restore hardening)** — the multisig-template completion core now applies the same hardened-use-site / unrestorable-taproot-override refusals as `run_multisig`, giving restore + verify-bundle a precise early refusal instead of an opaque downstream error.
+- **M1 (import metadata)** — `import-wallet --json` decodes the real BIP-32 account from a single-sig origin into `bundle.account` (was hardcoded `0`), so `export-wallet --from-import-json` re-emits the correct `m/.../<account>'` instead of `m/.../0'`. Multisig (per-slot origins) unaffected.
+- **M7 (bundle metadata)** — `bundle … --json` reports the real multisig threshold K via `extract_multisig_threshold` (was the cosigner count N) in descriptor / `--import-json` mode. `--json` wire-value change (GUI consumer paired-PR concern); md1 wire + embedded descriptor were already correct.
+- **L18 (import robustness)** — Electrum import accepts watch-only "use a master key" wallets that emit null `root_fingerprint`/`derivation` (verified against live Electrum `keystore.py`): null fingerprint → `00000000` sentinel + NOTICE; null derivation → script-type inferred from the SLIP-132 xpub prefix and a canonical origin synthesized (key-origin metadata only — never affects address derivation) + NOTICE. Previously hard-refused.
+
 ## mnemonic-toolkit [0.65.2] — 2026-06-21
 
 **SemVer-PATCH — transitive md-codec pin bump `0.38` → `0.39` (constellation bug-hunt cycle-10).** No toolkit source change. Picks up md-codec v0.39.0: M3 `derive_address` chain-gate widening (change addresses derivable for `None`-baseline + per-`@N`-override wallets — a funds-availability fix), L14/L15 WalletPolicyId/WalletDescriptorTemplateId stability across origin elision + placeholder ordering (in-memory identity values only — NOT on the md1 wire; a toolkit-built explicit-origin descriptor now correctly matches an md-cli-elided card's id), and the L6 typed `DivergentPathCountMismatch` guard. The toolkit only ever builds explicit-origin / canonical-ordering descriptors, so its recorded in-memory ids are unchanged in practice; full `cargo test -p mnemonic-toolkit` GREEN against md-codec 0.39.0. No new flag/wire/variant → no GUI schema-mirror.
