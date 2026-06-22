@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.69.1] — 2026-06-22
+
+**SemVer-PATCH — bip85 encode/dice internal-scratch `Zeroizing` (cycle-15 Group A derived-output-sweep FOLLOWUP slug `bip85-encode-helper-internal-scratch-zeroizing`). Toolkit-only; no codec/GUI bump. No signature / clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Outputs byte-identical (BIP-85 KATs unchanged). PATCH (not MINOR) — the three wraps are function-local, reach no signature or public type.**
+
+### Changed (secret-memory hygiene — no observable behavior change)
+
+- **bip85 — encode/dice internal scratch wrapped in `Zeroizing`.** The seven `format_*` functions already return `SecretString` (Lane T, v0.68.0), but three internal locals materialized the derived secret in a bare heap allocation before the wrapped return, lingering un-scrubbed until function exit: the `format_password_base64` / `format_password_base85` full `encoded` String (only `encoded[..length]` was wrapped into the `SecretString` return; the full encode lingered) and the `format_dice_rolls` per-roll `out: Vec<String>` aggregate (the dice secret). All three now wrap in `Zeroizing` (`Vec<String>: Zeroize` via the blanket impl scrubs each String on drop). Ripple-free — `encoded[..length].to_string()` indexes through `Deref<Target=String>` and `out.push(…)` / `out.join(",")` go through `Deref`/`DerefMut`; no signature, lint, wire, or caller change; BIP-85 KATs byte-identical. The per-roll `buf` (raw SHAKE bytes, overwritten each iteration) and the encode-helper-internal `out: String` (moved out into the caller's now-`Zeroizing` `encoded`) are dispositioned out-of-scope. Closes FOLLOWUP `bip85-encode-helper-internal-scratch-zeroizing`.
+
 ## mnemonic-toolkit [0.69.0] — 2026-06-22
 
 **SemVer-MINOR — cycle-15 Group A: BSMS HMAC_KEY secret-memory-hygiene + zeroize-lint allowlist precision (2 derived-output-sweep FOLLOWUP slugs + 2 Lane T whole-diff-review nits). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Outputs byte-identical (BIP-129 TV-3 MAC/IV/round-trip unchanged). MINOR (not PATCH) per the v0.10.1 / v0.67.0 / 0.68.0 precedent for a `pub`-signature secret-type migration even when no public shape changes.**
