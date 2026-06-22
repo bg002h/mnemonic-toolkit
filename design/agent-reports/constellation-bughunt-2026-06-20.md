@@ -847,7 +847,8 @@ Seeded with W1+W2 verdicts; 0 refuted.
 - **fix:** refuse when `--bip38-passphrase` unset on this arm (funds-safe default), or emit a loud warning.
 - **spec:** BIP-38 (Scrypt over the passphrase) vs BIP-39 (PBKDF2) — distinct layers.
 
-### - [ ] L22 · `apply_slot_stdin` reads a stdin secret into an unscrubbed `String` (partly defeats the `@N.<secret>=-` argv-avoidance)
+### - [x] L22 · `apply_slot_stdin` reads a stdin secret into an unscrubbed `String` (partly defeats the `@N.<secret>=-` argv-avoidance)
+<!-- FIXED cycle-14 (toolkit v0.67.0 @db0bf583) — SlotInput.value (incl. the parse_slot_input ctor + apply_slot_stdin store) is now SecretString (Zeroizing<String> inner, length-only redacting Debug), so both the stdin `=-` AND the @env: write-back (bundle / import-wallet / verify-bundle) secret-residue paths scrub on drop and never re-leak via {:?}. The convert / restore / addresses handler-scope passphrase / --from / BIP-38 locals are wrapped in Zeroizing<String> (restore's TemplateSeed.passphrase field too). The stdin readers stay bare String (D1 — flipping them would make 14 already-wrapping callers illegal Zeroizing<Zeroizing<String>>). mlock pins preserved. No wire/behavior change. The downstream phrase_overlays Vec is NOT yet scrubbed (it copies the phrase via .to_string() — status-quo-preserving, no NEW residue) — deferred to FOLLOWUP phrase-overlay-secretstring. Whole-diff review pending (PE). -->
 - **repo/class:** toolkit · **D-secret-leak** (tracked Cycle-B) · `w3-tk-slot-input-friendly-1`
 - **location:** `slot_input.rs:203-232,96-101`; `cmd/convert.rs:747` (`read_stdin_passphrase` bare String)
 - **bug:** the `=-` sentinel keeps secrets off argv, but `apply_slot_stdin` reads stdin into a plain

@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.67.0] — 2026-06-21
+
+**SemVer-MINOR — closes L22, the constellation bug-hunt's final secret-memory-hygiene finding (cycle-14). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Defense-in-depth (heap residue) — no observable CLI/wire behavior change.**
+
+### Fixed
+
+- **L22 (SECRET / defense-in-depth) — a stdin / `@env:` secret read into a `@N.<secret>=-` slot no longer lingers un-scrubbed in a bare `String`.** The persistent secret-bearing field `SlotInput.value` migrates `String` → `SecretString` (`Zeroizing<String>` inner, length-only **redacting** `Debug`), so the secret zeroizes on drop and never re-leaks through `{:?}` (panic/`assert_eq!`/log output). A raw `Zeroizing<String>` would compile but its derived `Debug` LEAKS the secret (`zeroize 1.8.2`), so `SecretString` is the correct carrier; it gains plain (non-constant-time) `PartialEq`/`Eq` (equality is test-only + the public `"-"` sentinel — no auth/timing boundary). The same wrap **also closes the `@env:` write-back residue path** (`bundle` / `import-wallet` / `verify-bundle` resolve `@env:VAR` to the actual secret phrase and store it back into the field). The `convert` / `restore` / `addresses` handler-scope `passphrase` / `--from` / BIP-38 locals (mlock-pinned but previously un-scrubbed — mlock prevents swap-out, it does not zeroize) are wrapped in `Zeroizing<String>`; `restore`'s `TemplateSeed.passphrase` field is wrapped so the resolved passphrase scrubs end-to-end. The stdin readers stay bare `String` (flipping them would make 14 already-wrapping callers illegal `Zeroizing<Zeroizing<String>>`). mlock pins preserved. The zeroize-discipline lint gains the `slot_input.rs` canonical row + a `bundle_unified.rs` test-fixture allowlist entry; `SECRET_FILE_FLOOR` 35 → 37. Closes the toolkit's Cycle-B canonical "Site 1" scrub leg (the mlock leg shipped at v0.10.x). The downstream `phrase_overlays` Vec deep-wrap is deferred (FOLLOWUP `phrase-overlay-secretstring`).
+
 ## mnemonic-toolkit [0.66.0] — 2026-06-21
 
 **SemVer-MINOR — the "fidelity tail": closes the final 7 findings of the constellation bug-hunt (cycle-13: H11 · H14 · L8 · L9 · M1 · M7 · L18). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / schema change → no GUI schema-mirror. Foreign-format manual prose + SPEC §11.4.1 updated (prose only, no flag-table change).**
