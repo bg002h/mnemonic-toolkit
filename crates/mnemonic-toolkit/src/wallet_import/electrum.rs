@@ -361,8 +361,8 @@ impl WalletFormatParser for ElectrumParser {
         // Step 4a/4b: dispatch on classified wallet_type.
         let (descriptor_body, network, threshold, wallet_name, cosigners_count) = match wallet_type
         {
-            ElectrumWalletType::Standard => build_standard_descriptor(obj)?,
-            ElectrumWalletType::Multisig { k, n } => build_multisig_descriptor(obj, k, n)?,
+            ElectrumWalletType::Standard => build_standard_descriptor(obj, stderr)?,
+            ElectrumWalletType::Multisig { k, n } => build_multisig_descriptor(obj, k, n, stderr)?,
         };
 
         // Step 5: feed through pipeline + parse_descriptor.
@@ -502,6 +502,7 @@ type ElectrumDispatchResult = (String, bitcoin::Network, Option<u8>, Option<Stri
 /// wrapper inferred from the xpub SLIP-132 prefix and derivation purpose.
 fn build_standard_descriptor(
     obj: &serde_json::Map<String, Value>,
+    stderr: &mut dyn Write,
 ) -> Result<ElectrumDispatchResult, ToolkitError> {
     let keystore = obj
         .get("keystore")
@@ -522,31 +523,16 @@ fn build_standard_descriptor(
             )
         })?
         .to_string();
-    let derivation = keystore
-        .get("derivation")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ToolkitError::ImportWalletParse(
-                "import-wallet: electrum: parse error: keystore.derivation missing or not a string"
-                    .to_string(),
-            )
-        })?
-        .to_string();
-    let root_fingerprint = keystore
-        .get("root_fingerprint")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ToolkitError::ImportWalletParse(
-                "import-wallet: electrum: parse error: keystore.root_fingerprint missing or not a string"
-                    .to_string(),
-            )
-        })?;
-    // 8-hex validation (lowercase by Electrum emit convention; accept either).
-    if root_fingerprint.len() != 8 || !root_fingerprint.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: electrum: parse error: keystore.root_fingerprint must be 8 hex chars, got {root_fingerprint:?}"
-        )));
-    }
+    // L18 (cycle-13): Electrum emits `derivation`/`root_fingerprint` as JSON
+    // `null` for "use a master key" (xpub-import) watch-only wallets — verified
+    // against electrum/keystore.py: `BIP32_KeyStore.dump()` writes
+    // `get_derivation_prefix()`/`get_root_fingerprint()`, both `Optional[str]`,
+    // initialized to `None` by `from_xpub()` (empty-dict construction). A hard
+    // refusal on null is a false-reject; treat null as unknown-origin instead.
+    // `electrum_field_str` returns Some only for a present non-null string;
+    // null/missing → None (we no longer hard-error on either).
+    let derivation = electrum_field_str(keystore.get("derivation"));
+    let root_fingerprint_opt = electrum_field_str(keystore.get("root_fingerprint"));
     let label_opt = keystore
         .get("label")
         .and_then(|v| v.as_str())
@@ -568,8 +554,49 @@ fn build_standard_descriptor(
 
     // Wrapper inference: SLIP-132 prefix is the primary signal; fall back to
     // derivation purpose for neutral xpub (which is BIP-44 by convention but
-    // BIP-86 if the path purpose is 86').
-    let wrapper = standard_wrapper_for(slip132_variant, &derivation)?;
+    // BIP-86 if the path purpose is 86'). With null derivation the SLIP-132
+    // prefix is the only signal — `standard_wrapper_for` already returns the
+    // conservative default (`pkh`) for a neutral xpub with no/unknown purpose.
+    let wrapper = standard_wrapper_for(slip132_variant, derivation.as_deref().unwrap_or(""))?;
+
+    // L18: when `derivation` is null/absent, synthesize the canonical
+    // BIP-43 account-0 path for the inferred wrapper so the descriptor still
+    // carries a key-origin (the toolkit's origin regex REQUIRES a path
+    // component — a bare `[fp]xpub` does not parse). Emit a NOTICE.
+    let derivation = match derivation {
+        Some(d) => d,
+        None => {
+            let synthesized = canonical_singlesig_derivation(wrapper, network);
+            let _ = writeln!(
+                stderr,
+                "notice: import-wallet: electrum: keystore.derivation is null (watch-only \
+                 \"use a master key\" wallet); inferring purpose from the SLIP-132 xpub prefix \
+                 and synthesizing the canonical origin {synthesized}"
+            );
+            synthesized
+        }
+    };
+
+    // L18: null root_fingerprint → unknown-origin marker `00000000` + NOTICE.
+    let root_fingerprint = match root_fingerprint_opt {
+        Some(fp) => {
+            // 8-hex validation (lowercase by Electrum emit convention; accept either).
+            if fp.len() != 8 || !fp.chars().all(|c| c.is_ascii_hexdigit()) {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: keystore.root_fingerprint must be 8 hex chars, got {fp:?}"
+                )));
+            }
+            fp
+        }
+        None => {
+            let _ = writeln!(
+                stderr,
+                "notice: import-wallet: electrum: keystore.root_fingerprint is null (watch-only \
+                 \"use a master key\" wallet); using unknown-origin fingerprint 00000000"
+            );
+            "00000000".to_string()
+        }
+    };
 
     // Strip leading `m/` for bracket form.
     let deriv_no_m = derivation
@@ -585,6 +612,52 @@ fn build_standard_descriptor(
     };
 
     Ok((wrapped, network, None, label_opt, 1))
+}
+
+/// L18 (cycle-13) — read an Electrum keystore field as a present non-null
+/// string. Returns `None` for both JSON `null` AND an absent key (the two
+/// "no value" cases Electrum's `dump()` produces: `get_*()` → `None` →
+/// serialized `null`). A present-but-non-string value also maps to `None`
+/// (lenient: downstream synthesis handles the missing case). This replaces the
+/// former `.and_then(|v| v.as_str()).ok_or_else(...)` hard-refusal so a
+/// watch-only "use a master key" wallet imports with synthesized origin info.
+fn electrum_field_str(v: Option<&Value>) -> Option<String> {
+    v.and_then(|v| v.as_str()).map(String::from)
+}
+
+/// L18 — synthesize the canonical BIP-43 account-0 single-sig derivation for an
+/// inferred wrapper when Electrum's `keystore.derivation` is null. Coin-type
+/// follows the network (mainnet → 0', testnet → 1'). Mirrors the standard
+/// BIP-44/49/84/86 purpose-per-script-type mapping.
+fn canonical_singlesig_derivation(wrapper: StandardWrapper, network: bitcoin::Network) -> String {
+    let coin = if network == bitcoin::Network::Bitcoin {
+        0
+    } else {
+        1
+    };
+    let purpose = match wrapper {
+        StandardWrapper::Pkh => 44,
+        StandardWrapper::ShWpkh => 49,
+        StandardWrapper::Wpkh => 84,
+        StandardWrapper::Tr => 86,
+    };
+    format!("m/{purpose}'/{coin}'/0'")
+}
+
+/// L18 — synthesize the canonical BIP-48 cosigner derivation for a multisig
+/// variant class when a cosigner's `derivation` is null. The BIP-48 script-type
+/// index follows the variant class (1' = P2SH-P2WSH, 2' = P2WSH); P2SH-legacy
+/// has no canonical BIP-48 script index, so it reuses the BIP-48 shape with a
+/// 0' script index purely to keep a coin-type component (index 1) extractable
+/// for the network/uniformity checks (the xpub/addresses are unaffected by the
+/// synthesized origin). `coin` is 0 (mainnet) or 1 (testnet).
+fn canonical_multisig_derivation(variant: MultisigVariantClass, coin: u32) -> String {
+    let script_index = match variant {
+        MultisigVariantClass::P2sh => 0,
+        MultisigVariantClass::P2shP2wsh => 1,
+        MultisigVariantClass::P2wsh => 2,
+    };
+    format!("m/48'/{coin}'/0'/{script_index}'")
 }
 
 /// Inner enumeration: which wrapper to use for an Electrum singlesig descriptor.
@@ -673,6 +746,7 @@ fn build_multisig_descriptor(
     obj: &serde_json::Map<String, Value>,
     k: u8,
     n: u8,
+    stderr: &mut dyn Write,
 ) -> Result<ElectrumDispatchResult, ToolkitError> {
     if k == 0 || n == 0 || k > n {
         return Err(ToolkitError::ImportWalletParse(format!(
@@ -687,7 +761,7 @@ fn build_multisig_descriptor(
                 "import-wallet: electrum: parse error: multisig wallet_type \"{k}of{n}\" missing or non-object cosigner key `{key}`"
             ))
         })?;
-        cosigners.push(parse_multisig_cosigner(&key, sub)?);
+        cosigners.push(parse_multisig_cosigner(&key, sub, stderr)?);
     }
 
     // Uniformity-check #1: all cosigners share a SLIP-132 variant class.
@@ -795,6 +869,7 @@ enum MultisigVariantClass {
 fn parse_multisig_cosigner(
     key: &str,
     sub: &serde_json::Map<String, Value>,
+    stderr: &mut dyn Write,
 ) -> Result<MultisigCosigner, ToolkitError> {
     let xpub_str = sub
         .get("xpub")
@@ -805,29 +880,12 @@ fn parse_multisig_cosigner(
             ))
         })?
         .to_string();
-    let derivation = sub
-        .get("derivation")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: electrum: parse error: cosigner `{key}` missing or non-string `derivation`"
-            ))
-        })?
-        .to_string();
-    let root_fingerprint = sub
-        .get("root_fingerprint")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| {
-            ToolkitError::ImportWalletParse(format!(
-                "import-wallet: electrum: parse error: cosigner `{key}` missing or non-string `root_fingerprint`"
-            ))
-        })?
-        .to_string();
-    if root_fingerprint.len() != 8 || !root_fingerprint.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ToolkitError::ImportWalletParse(format!(
-            "import-wallet: electrum: parse error: cosigner `{key}` root_fingerprint must be 8 hex chars, got {root_fingerprint:?}"
-        )));
-    }
+    // L18 (cycle-13): null `derivation`/`root_fingerprint` on a cosigner is the
+    // "use a master key" (xpub-import) watch-only case (see electrum/keystore.py
+    // verification in `build_standard_descriptor`). Treat null as unknown-origin
+    // and synthesize the canonical BIP-48 path rather than hard-refuse.
+    let derivation_opt = electrum_field_str(sub.get("derivation"));
+    let root_fingerprint_opt = electrum_field_str(sub.get("root_fingerprint"));
     let label = sub
         .get("label")
         .and_then(|v| v.as_str())
@@ -860,27 +918,66 @@ fn parse_multisig_cosigner(
         }
     };
 
-    // BIP-43 coin-type extraction from derivation path.
-    let path = DerivationPath::from_str(&derivation).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!(
-            "import-wallet: electrum: parse error: cosigner `{key}` derivation-path parse: {e}"
-        ))
-    })?;
-    let comps: Vec<&ChildNumber> = path.into_iter().collect();
-    let coin_type = if comps.len() >= 2 {
-        match comps[1] {
-            ChildNumber::Hardened { index } => *index,
-            ChildNumber::Normal { index } => {
+    // L18: with a null derivation, infer coin-type from the xpub neutral prefix
+    // (xpub → mainnet/0, tpub → testnet/1) and synthesize the canonical BIP-48
+    // path for the variant class. With a present derivation, extract coin-type
+    // as before.
+    let (derivation, coin_type) = match derivation_opt {
+        Some(d) => {
+            let path = DerivationPath::from_str(&d).map_err(|e| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: electrum: parse error: cosigner `{key}` derivation-path parse: {e}"
+                ))
+            })?;
+            let comps: Vec<&ChildNumber> = path.into_iter().collect();
+            let coin_type = if comps.len() >= 2 {
+                match comps[1] {
+                    ChildNumber::Hardened { index } => *index,
+                    ChildNumber::Normal { index } => {
+                        return Err(ToolkitError::ImportWalletParse(format!(
+                            "import-wallet: electrum: parse error: cosigner `{key}` coin-type component {index} is not hardened"
+                        )));
+                    }
+                }
+            } else {
+                // Path too short to extract coin-type: default to 0 (mainnet) per
+                // the toolkit's network-default convention; downstream parse may
+                // still reject if xpub neutral prefix disagrees.
+                0
+            };
+            (d, coin_type)
+        }
+        None => {
+            let coin = u32::from(neutral_xpub.starts_with("tpub"));
+            let synthesized = canonical_multisig_derivation(variant_class, coin);
+            let _ = writeln!(
+                stderr,
+                "notice: import-wallet: electrum: cosigner `{key}` derivation is null (watch-only \
+                 \"use a master key\" cosigner); inferring coin-type from the xpub prefix and \
+                 synthesizing the canonical BIP-48 origin {synthesized}"
+            );
+            (synthesized, coin)
+        }
+    };
+
+    // L18: null root_fingerprint → unknown-origin marker `00000000` + NOTICE.
+    let root_fingerprint = match root_fingerprint_opt {
+        Some(fp) => {
+            if fp.len() != 8 || !fp.chars().all(|c| c.is_ascii_hexdigit()) {
                 return Err(ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: electrum: parse error: cosigner `{key}` coin-type component {index} is not hardened"
+                    "import-wallet: electrum: parse error: cosigner `{key}` root_fingerprint must be 8 hex chars, got {fp:?}"
                 )));
             }
+            fp
         }
-    } else {
-        // Path too short to extract coin-type: default to 0 (mainnet) per
-        // the toolkit's network-default convention; downstream parse may
-        // still reject if xpub neutral prefix disagrees.
-        0
+        None => {
+            let _ = writeln!(
+                stderr,
+                "notice: import-wallet: electrum: cosigner `{key}` root_fingerprint is null \
+                 (watch-only \"use a master key\" cosigner); using unknown-origin fingerprint 00000000"
+            );
+            "00000000".to_string()
+        }
     };
 
     Ok(MultisigCosigner {
