@@ -20,7 +20,8 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 // Two valid 12-word BIP-39 test seeds (distinct cosigners).
-const SEED_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const SEED_A: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const SEED_B: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
 /// `bundle --network regtest --account 0 --descriptor <d> --slot @N.phrase …`
@@ -61,7 +62,12 @@ fn cosigner_origins(v: &Value) -> Vec<String> {
         .as_array()
         .expect("multisig.cosigners array")
         .iter()
-        .map(|c| c["origin_path"].as_str().expect("origin_path str").to_string())
+        .map(|c| {
+            c["origin_path"]
+                .as_str()
+                .expect("origin_path str")
+                .to_string()
+        })
         .collect()
 }
 

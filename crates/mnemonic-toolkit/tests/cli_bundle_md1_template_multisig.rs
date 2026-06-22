@@ -15,12 +15,10 @@ use bitcoin::secp256k1::Secp256k1;
 use std::str::FromStr;
 
 // Two DISTINCT seed-sets so byte-identity must hold ACROSS keys.
-const SEED_A1: &str =
-    "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const SEED_A1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const SEED_A2: &str =
     "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
-const SEED_B1: &str =
-    "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+const SEED_B1: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
 const SEED_B2: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 

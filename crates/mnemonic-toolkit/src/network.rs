@@ -184,9 +184,21 @@ mod tests {
 
     #[test]
     fn network_kind_from_signet_regtest_is_test() {
-        assert_eq!(NetworkKind::from(bitcoin::Network::Signet), NetworkKind::Test);
-        assert_eq!(NetworkKind::from(bitcoin::Network::Regtest), NetworkKind::Test);
-        assert_eq!(NetworkKind::from(bitcoin::Network::Testnet), NetworkKind::Test);
-        assert_eq!(NetworkKind::from(bitcoin::Network::Bitcoin), NetworkKind::Main);
+        assert_eq!(
+            NetworkKind::from(bitcoin::Network::Signet),
+            NetworkKind::Test
+        );
+        assert_eq!(
+            NetworkKind::from(bitcoin::Network::Regtest),
+            NetworkKind::Test
+        );
+        assert_eq!(
+            NetworkKind::from(bitcoin::Network::Testnet),
+            NetworkKind::Test
+        );
+        assert_eq!(
+            NetworkKind::from(bitcoin::Network::Bitcoin),
+            NetworkKind::Main
+        );
     }
 }

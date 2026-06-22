@@ -667,8 +667,8 @@ fn non_row_secret_allowlist_is_non_empty_and_each_entry_still_bears_a_secret() {
 fn test_only_secret_files_confine_secret_patterns_to_cfg_test() {
     let root = crate_root();
     for entry in TEST_ONLY_SECRET_FILES {
-        let src = fs::read_to_string(root.join(entry))
-            .unwrap_or_else(|e| panic!("read {entry}: {e}"));
+        let src =
+            fs::read_to_string(root.join(entry)).unwrap_or_else(|e| panic!("read {entry}: {e}"));
         let boundary = first_cfg_test_line(&src).unwrap_or_else(|| {
             panic!("{entry} in TEST_ONLY_SECRET_FILES has no #[cfg(test)] marker")
         });

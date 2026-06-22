@@ -2455,9 +2455,13 @@ mod tests {
             md_codec::canonical_origin::canonical_origin(&descriptor.tree).is_some(),
             "wsh(sortedmulti) is a canonical wrapper"
         );
-        let bundle =
-            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
-                .unwrap();
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+        )
+        .unwrap();
         let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let decoded = md_codec::chunk::reassemble(&md1_refs).unwrap();
         // Origins elided to empty (Shared empty), yet decode succeeds.
@@ -2500,7 +2504,10 @@ mod tests {
         assert!(template_admissible(&wsm), "wsh(sortedmulti) admitted");
         // General policy — admitted.
         let (gp, _) = general_policy_fixture();
-        assert!(template_admissible(&gp), "wsh(or_d(...)) general policy admitted");
+        assert!(
+            template_admissible(&gp),
+            "wsh(or_d(...)) general policy admitted"
+        );
     }
 
     /// Build a keyed taproot multisig descriptor for `template` (TrMultiA /
@@ -2608,9 +2615,13 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        let bundle =
-            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
-                .unwrap();
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+        )
+        .unwrap();
         let md1_refs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let template = md_codec::chunk::reassemble(&md1_refs).unwrap();
 
@@ -2647,16 +2658,26 @@ mod tests {
             1,
         );
         // Slot language UNSET → run-level `--language` is the sole carrier.
-        assert!(cosigners[0].language.is_none(), "anchor: slot language unset");
+        assert!(
+            cosigners[0].language.is_none(),
+            "anchor: slot language unset"
+        );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
 
-        let bundle =
-            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::Spanish)
-                .expect("template single-sig emits");
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::Spanish,
+        )
+        .expect("template single-sig emits");
 
         let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
         match payload {
-            ms_codec::Payload::Mnem { language, entropy: e } => {
+            ms_codec::Payload::Mnem {
+                language,
+                entropy: e,
+            } => {
                 assert_eq!(
                     language, 3,
                     "Spanish run_language must emit wire code 3 (got {language})"
@@ -2681,17 +2702,30 @@ mod tests {
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
         );
-        assert!(cosigners[0].language.is_none(), "anchor: slot language unset");
+        assert!(
+            cosigners[0].language.is_none(),
+            "anchor: slot language unset"
+        );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
 
-        let bundle =
-            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::Spanish)
-                .expect("template multisig emits");
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::Spanish,
+        )
+        .expect("template multisig emits");
 
         let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
         match payload {
-            ms_codec::Payload::Mnem { language, entropy: e } => {
-                assert_eq!(language, 3, "multisig slot 0: Spanish wire code 3 (got {language})");
+            ms_codec::Payload::Mnem {
+                language,
+                entropy: e,
+            } => {
+                assert_eq!(
+                    language, 3,
+                    "multisig slot 0: Spanish wire code 3 (got {language})"
+                );
                 assert_eq!(e, entropy);
             }
             ms_codec::Payload::Entr(_) => {
@@ -2700,7 +2734,10 @@ mod tests {
             other => panic!("expected a Mnem ms1 payload, got {other:?}"),
         }
         // Watch-only slot 1 (entropy None) is still the "" sentinel.
-        assert_eq!(bundle.ms1[1], "", "watch-only slot keeps the empty sentinel");
+        assert_eq!(
+            bundle.ms1[1], "",
+            "watch-only slot keeps the empty sentinel"
+        );
     }
 
     /// COMPUTE-don't-hardcode master-fingerprint divergence (spec §1.3 / R0-M3).
@@ -2741,12 +2778,19 @@ mod tests {
         // The template path under Spanish run_language emits a mnem card; its
         // wire language reconstructs the Spanish mnemonic, whose master fp MUST
         // equal the test-computed Spanish fp (not the English one).
-        let bundle =
-            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::Spanish)
-                .expect("template single-sig emits");
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::Spanish,
+        )
+        .expect("template single-sig emits");
         let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
         let (wire_lang, decoded_entropy) = match payload {
-            ms_codec::Payload::Mnem { language, entropy: e } => (language, e),
+            ms_codec::Payload::Mnem {
+                language,
+                entropy: e,
+            } => (language, e),
             other => panic!("H8: expected a Mnem payload for a Spanish seed, got {other:?}"),
         };
         let recovered_lang = crate::language::wire_code_to_bip39(wire_lang).unwrap();
@@ -2777,9 +2821,13 @@ mod tests {
         );
         cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
 
-        let bundle =
-            synthesize_template_descriptor(&descriptor, &cosigners, false, bip39::Language::English)
-                .expect("template single-sig emits");
+        let bundle = synthesize_template_descriptor(
+            &descriptor,
+            &cosigners,
+            false,
+            bip39::Language::English,
+        )
+        .expect("template single-sig emits");
 
         let (_, payload) = ms_codec::decode(&bundle.ms1[0]).unwrap();
         match payload {
@@ -2802,17 +2850,11 @@ mod tests {
             );
             cosigners[0].entropy = Some(zeroize::Zeroizing::new(entropy.clone()));
 
-            let keyed = synthesize_descriptor(
-                &descriptor,
-                &cosigners,
-                false,
-                lang,
-                Md1Form::Policy,
-            )
-            .expect("keyed path emits");
-            let templated =
-                synthesize_template_descriptor(&descriptor, &cosigners, false, lang)
-                    .expect("template path emits");
+            let keyed =
+                synthesize_descriptor(&descriptor, &cosigners, false, lang, Md1Form::Policy)
+                    .expect("keyed path emits");
+            let templated = synthesize_template_descriptor(&descriptor, &cosigners, false, lang)
+                .expect("template path emits");
 
             assert_eq!(
                 keyed.ms1, templated.ms1,

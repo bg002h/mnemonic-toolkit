@@ -992,7 +992,10 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // 8) Compute outputs. cycle-14 (L22): Deref Zeroizing<String> → &str for
     // the compute_outputs &str params (no behavior change).
-    let pbkdf2_passphrase = effective_passphrase.as_deref().map(String::as_str).unwrap_or("");
+    let pbkdf2_passphrase = effective_passphrase
+        .as_deref()
+        .map(String::as_str)
+        .unwrap_or("");
     let bip38_passphrase = effective_bip38_passphrase.as_deref().map(String::as_str);
     let computed = compute_outputs(
         primary.node,

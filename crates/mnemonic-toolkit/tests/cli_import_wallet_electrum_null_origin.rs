@@ -130,7 +130,8 @@ fn electrum_multisig_null_cosigner_origin_imports_with_notice() {
         res.stderr
     );
     assert!(
-        res.stderr.contains("cosigner `x2/` root_fingerprint is null"),
+        res.stderr
+            .contains("cosigner `x2/` root_fingerprint is null"),
         "expected null-root_fingerprint cosigner NOTICE; stderr={}",
         res.stderr
     );
@@ -144,7 +145,11 @@ fn electrum_multisig_null_cosigner_origin_imports_with_notice() {
 #[test]
 fn electrum_singlesig_populated_origin_no_null_notice() {
     let res = import("electrum-standard-bip84-mainnet.json");
-    assert_eq!(res.code, 0, "populated wallet must import; stderr={}", res.stderr);
+    assert_eq!(
+        res.code, 0,
+        "populated wallet must import; stderr={}",
+        res.stderr
+    );
     assert!(
         !res.stderr.contains("is null"),
         "fully-populated wallet must NOT emit a null-origin NOTICE; stderr={}",

@@ -628,8 +628,14 @@ fn export_coldcard_multisig_divergent_paths_emits_per_cosigner_derivation() {
     }
     // The single-shared-Derivation collapse must be gone: there must be one
     // `Derivation:` per cosigner (3), not exactly one.
-    let derivation_lines = stdout.lines().filter(|l| l.starts_with("Derivation:")).count();
-    assert_eq!(derivation_lines, 3, "one Derivation line per cosigner; got:\n{stdout}");
+    let derivation_lines = stdout
+        .lines()
+        .filter(|l| l.starts_with("Derivation:"))
+        .count();
+    assert_eq!(
+        derivation_lines, 3,
+        "one Derivation line per cosigner; got:\n{stdout}"
+    );
 }
 
 /// #1b (load-bearing I-2 pairing test) — the xpub that sorts FIRST (C, at slot
@@ -728,7 +734,10 @@ fn export_jade_divergent_paths_inherits_per_cosigner() {
     let out = run_divergent_export("jade");
     assert!(out.status.success(), "jade divergent export must succeed");
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(!stdout.contains("m/0'/0'"), "jade must not emit m/0'/0'; got:\n{stdout}");
+    assert!(
+        !stdout.contains("m/0'/0'"),
+        "jade must not emit m/0'/0'; got:\n{stdout}"
+    );
     for path in ["m/48'/0'/0'/2'", "m/48'/0'/1'/2'", "m/48'/0'/2'/2'"] {
         assert!(
             stdout.contains(&format!("Derivation: {path}")),

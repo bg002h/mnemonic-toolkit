@@ -300,7 +300,11 @@ fn parse_literal_xpub(
     // rust-miniscript `Descriptor` (NOT an md-codec `Tag`), so detect taproot
     // directly (precedent: `wallet_import/bsms.rs`): Tr → 3' (P2TR), else 2'.
     // Pre-H12 the literal `2` put taproot cosigner keys in the wrong subtree.
-    let default_script_type = if matches!(parsed, MsDescriptor::Tr(_)) { 3 } else { 2 };
+    let default_script_type = if matches!(parsed, MsDescriptor::Tr(_)) {
+        3
+    } else {
+        2
+    };
     // Non-blocking consensus-masked older() advisory (Adapter B; post-from_str,
     // bit-31 unreachable). SPEC_older_timelock_advisory §4 / PLAN Task 10 3a.
     let adv = crate::timelock_advisory::older_advisories_descriptor(&parsed);
@@ -504,8 +508,11 @@ mod tests {
         );
         let intake = parse_literal_xpub(&desc, crate::network::CliNetwork::Mainnet, 0, &mut sink)
             .expect("origin-elided taproot multisig must parse");
-        let xpub_cosigners: Vec<&CosignerExtract> =
-            intake.cosigners.iter().filter(|c| c.xpub_65.is_some()).collect();
+        let xpub_cosigners: Vec<&CosignerExtract> = intake
+            .cosigners
+            .iter()
+            .filter(|c| c.xpub_65.is_some())
+            .collect();
         assert_eq!(xpub_cosigners.len(), 2, "two xpub cosigners");
         for c in xpub_cosigners {
             let p = c

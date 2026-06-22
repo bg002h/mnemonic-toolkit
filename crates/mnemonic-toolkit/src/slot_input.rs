@@ -967,12 +967,8 @@ mod tests {
     /// subkey + `-` literal → true; watch-only subkey → false.
     #[test]
     fn is_stdin_sentinel_after_secret_string_migration() {
-        assert!(parse_slot_input("@0.phrase=-")
-            .unwrap()
-            .is_stdin_sentinel());
-        assert!(!parse_slot_input("@0.xpub=-")
-            .unwrap()
-            .is_stdin_sentinel());
+        assert!(parse_slot_input("@0.phrase=-").unwrap().is_stdin_sentinel());
+        assert!(!parse_slot_input("@0.xpub=-").unwrap().is_stdin_sentinel());
     }
 
     /// T4 — end-to-end stdin `=-` path is byte-identical to today: drive

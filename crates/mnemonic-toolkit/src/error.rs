@@ -174,7 +174,9 @@ pub enum ToolkitError {
     /// Refuse, pointing to a faithful format (descriptor / bitcoin-core /
     /// sparrow). Exit 2. The `format` payload is the offending format name
     /// (`"electrum"` / `"coldcard"` / `"coldcard-multisig"` / `"jade"`).
-    ExportWalletUnsortedMultisigUnsupported { format: &'static str },
+    ExportWalletUnsortedMultisigUnsupported {
+        format: &'static str,
+    },
     FutureFormat {
         source: &'static str,
         detail: String,

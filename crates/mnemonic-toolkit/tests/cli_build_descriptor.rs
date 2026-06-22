@@ -1809,7 +1809,10 @@ fn m8_preset_single_sig_extra_suffix_refused_exit2() {
         "M8 refusal must not echo the key body to --json: {stdout}"
     );
     let v: Value = serde_json::from_str(&stdout).unwrap();
-    assert!(v["descriptor"].is_null(), "no descriptor in failure envelope");
+    assert!(
+        v["descriptor"].is_null(),
+        "no descriptor in failure envelope"
+    );
     let diags = v["diagnostics"].as_array().unwrap();
     assert!(
         diags.iter().any(|d| d["kind"] == "schema_field"
@@ -1907,10 +1910,7 @@ fn m8_preset_flag_provenance_per_archetype() {
     );
     // The path + message still name the offending key node regardless of flag.
     assert!(
-        quorum["node_path"]
-            .as_str()
-            .unwrap()
-            .contains("keys["),
+        quorum["node_path"].as_str().unwrap().contains("keys["),
         "quorum diagnostic path addresses the offending multi key: {quorum}"
     );
 }
@@ -1996,7 +1996,8 @@ fn m8_positive_control_normal_key_still_builds_both_paths() {
         .success();
 
     // (b) --spec JSON Pk with a bare xpub body
-    let spec = format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{{"pk":"{M8_BARE_XPUB}"}}}}"#);
+    let spec =
+        format!(r#"{{"schema_version":1,"wrapper":"wsh","root":{{"pk":"{M8_BARE_XPUB}"}}}}"#);
     bin()
         .args([
             "build-descriptor",
@@ -2059,13 +2060,11 @@ fn m8_multi_segment_and_hardened_suffix_refused_exit2() {
         assert!(v["descriptor"].is_null(), "no descriptor for tail {tail}");
         let diags = v["diagnostics"].as_array().unwrap();
         assert!(
-            diags
-                .iter()
-                .any(|d| d["kind"] == "schema_field"
-                    && d["message"]
-                        .as_str()
-                        .unwrap_or("")
-                        .contains("extra derivation path")),
+            diags.iter().any(|d| d["kind"] == "schema_field"
+                && d["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("extra derivation path")),
             "tail {tail} → schema_field extra-derivation refusal"
         );
     }

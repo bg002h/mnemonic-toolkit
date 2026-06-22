@@ -168,7 +168,9 @@ pub(crate) fn format_hex_bytes(
 ) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 128_169, &[num_bytes], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
-    Ok(SecretString::new(hex::encode(&entropy[..num_bytes as usize])))
+    Ok(SecretString::new(hex::encode(
+        &entropy[..num_bytes as usize],
+    )))
 }
 
 // ============================================================================
@@ -439,7 +441,10 @@ mod tests {
             !dbg.contains("dKLoepugzdVJvdL56ogNV"),
             "Debug leaked the derived password: {dbg}"
         );
-        assert!(dbg.contains("redacted"), "Debug should mark redaction: {dbg}");
+        assert!(
+            dbg.contains("redacted"),
+            "Debug should mark redaction: {dbg}"
+        );
 
         let wif = format_hd_seed_wif(&master(), 0, NetworkKind::Main).unwrap();
         let wif_plain: String = (*wif).to_string();

@@ -26,7 +26,8 @@ use serde_json::Value;
 // All-zero-entropy 12-word seed (its mainnet/regtest master fingerprint is
 // `73c5da0a`, read from the binary's own `master_fingerprint` JSON field — not
 // hard-coded as a load-bearing literal).
-const SEED_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const SEED_A: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 // A wrong fingerprint that does NOT match SEED_A's master fp.
 const WRONG_FP: &str = "deadbeef";
 

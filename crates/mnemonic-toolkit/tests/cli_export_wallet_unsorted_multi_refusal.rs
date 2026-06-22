@@ -98,7 +98,14 @@ fn template_sh_wsh_multi_refused_exit2_for_each_fieldless_vendor() {
 fn import_then_export(descriptor: &str, export_fmt: &str) -> assert_cmd::assert::Assert {
     let imp = Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["import-wallet", "--format", "descriptor", "--json", "--blob", "-"])
+        .args([
+            "import-wallet",
+            "--format",
+            "descriptor",
+            "--json",
+            "--blob",
+            "-",
+        ])
         .write_stdin(descriptor.to_string())
         .assert()
         .success();
@@ -106,7 +113,13 @@ fn import_then_export(descriptor: &str, export_fmt: &str) -> assert_cmd::assert:
 
     Command::cargo_bin("mnemonic")
         .unwrap()
-        .args(["export-wallet", "--from-import-json", "-", "--format", export_fmt])
+        .args([
+            "export-wallet",
+            "--from-import-json",
+            "-",
+            "--format",
+            export_fmt,
+        ])
         .write_stdin(envelope)
         .assert()
 }

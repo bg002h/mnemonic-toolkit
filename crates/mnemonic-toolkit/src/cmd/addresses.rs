@@ -148,14 +148,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Effective BIP-39 passphrase (stdin / @env: / inline).
     // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
     // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
-    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if args.passphrase_stdin {
-        read_stdin_passphrase(stdin)?
-    } else {
-        match args.passphrase.as_deref() {
-            Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-            None => String::new(),
-        }
-    });
+    let passphrase: zeroize::Zeroizing<String> =
+        zeroize::Zeroizing::new(if args.passphrase_stdin {
+            read_stdin_passphrase(stdin)?
+        } else {
+            match args.passphrase.as_deref() {
+                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+                None => String::new(),
+            }
+        });
 
     // Resolved `--from` value (stdin / @env: / literal).
     let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {

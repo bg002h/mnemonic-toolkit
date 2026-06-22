@@ -430,14 +430,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Effective BIP-39 passphrase (stdin / @env: / inline).
     // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
     // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
-    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if args.passphrase_stdin {
-        read_stdin_passphrase(stdin)?
-    } else {
-        match args.passphrase.as_deref() {
-            Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-            None => String::new(),
-        }
-    });
+    let passphrase: zeroize::Zeroizing<String> =
+        zeroize::Zeroizing::new(if args.passphrase_stdin {
+            read_stdin_passphrase(stdin)?
+        } else {
+            match args.passphrase.as_deref() {
+                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+                None => String::new(),
+            }
+        });
     let passphrase_applied = !passphrase.is_empty();
 
     // Resolved `--from` value (stdin / @env: / literal).
@@ -861,14 +862,15 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     }
 
     // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub; mlock-pinned).
-    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if args.passphrase_stdin {
-        read_stdin_passphrase(stdin)?
-    } else {
-        match args.passphrase.as_deref() {
-            Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-            None => String::new(),
-        }
-    });
+    let passphrase: zeroize::Zeroizing<String> =
+        zeroize::Zeroizing::new(if args.passphrase_stdin {
+            read_stdin_passphrase(stdin)?
+        } else {
+            match args.passphrase.as_deref() {
+                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+                None => String::new(),
+            }
+        });
     let passphrase_applied = !passphrase.is_empty();
 
     let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
@@ -1828,8 +1830,9 @@ pub(crate) fn complete_multisig_template<E: Write>(
         // assignment can fill the slots → NO-MATCH would be the only outcome.
         // Refuse early with an actionable message (s_opt == 0).
         let sorted = crate::synthesize::is_order_independent_shape(&d.tree);
-        let s = ps::s_opt(k_own, m_cosigners, n, sorted)
-            .ok_or_else(|| bad("multisig template: opt-in subset-search candidate space overflow"))?;
+        let s = ps::s_opt(k_own, m_cosigners, n, sorted).ok_or_else(|| {
+            bad("multisig template: opt-in subset-search candidate space overflow")
+        })?;
         if s == 0 {
             return Err(ToolkitError::ModeViolation {
                 mode: "restore",

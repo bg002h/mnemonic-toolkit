@@ -134,7 +134,10 @@ fn specter_consistent_mainnet_imports() {
 #[test]
 fn sparrow_xpub_on_coin_type_1_rejects() {
     assert_network_mismatch(
-        &run_fixture("sparrow", "sparrow-singlesig-mainnet-xpub-on-cointype1.json"),
+        &run_fixture(
+            "sparrow",
+            "sparrow-singlesig-mainnet-xpub-on-cointype1.json",
+        ),
         "sparrow",
     );
 }

@@ -84,7 +84,6 @@ pub mod secret_taxonomy;
 // v0.34.7: process-level argv-hardening (PR_SET_DUMPABLE). Unconditional —
 // the body is `#[cfg(target_os = "linux")]`-gated (no-op elsewhere), so this
 // compiles on the GUI's Windows lib consumption.
-pub mod process_hardening;
 /// Permutation-search engine — the funds-safety core of the multisig-template
 /// completion (#28 phase 2, P1). Standalone: the id/address computation is
 /// injected as a `CandidateEvaluator` predicate (real evaluators wire in
@@ -99,6 +98,7 @@ pub mod process_hardening;
 /// external-self path `mnemonic_toolkit::permutation_search::*` (the same path
 /// the bin already uses for `mnemonic_toolkit::mlock::*`).
 pub mod permutation_search;
+pub mod process_hardening;
 /// Serialize-transparent, zeroize-on-drop secret string for derived
 /// private-key material emitted via `--json` / text (silent-payment, nostr).
 pub mod secret_string;

@@ -1748,10 +1748,8 @@ mod tests {
         // now-`Result` `make_use_site_path`), and a clean `<0;1>` body must still
         // resolve. RED before fix: the lexer silently drops the `'` so a hardened
         // body resolves to a truncated [0] alt instead of rejecting.
-        let occs =
-            lex_placeholders("wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))").map(|o| {
-                resolve_placeholders(&o)
-            });
+        let occs = lex_placeholders("wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))")
+            .map(|o| resolve_placeholders(&o));
         match occs {
             // lex rejected outright — acceptable (reject fires at lex).
             Err(ToolkitError::DescriptorParse(_)) => {}
@@ -1780,12 +1778,8 @@ mod tests {
         // silently-collapsed bare-`/*` md1. The reject fires in
         // `lex_placeholders`/`resolve_placeholders` BEFORE `substitute_synthetic`
         // (call order parse_descriptor: lex → resolve → substitute_synthetic).
-        let err = parse_descriptor(
-            "wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))",
-            &[],
-            &[],
-        )
-        .unwrap_err();
+        let err =
+            parse_descriptor("wsh(multi(2,@0/<0';1'>/*,@1/<0';1'>/*))", &[], &[]).unwrap_err();
         assert!(
             matches!(err, ToolkitError::DescriptorParse(_)),
             "hardened multipath must reject through parse_descriptor, got: {err:?}"
@@ -1838,12 +1832,8 @@ mod tests {
     fn parse_descriptor_nonhardened_multipath_ok() {
         // CLEAN-NEGATIVE end-to-end: a non-hardened `<0;1>` multisig descriptor
         // still parses to a Descriptor (no over-reject).
-        let desc = parse_descriptor(
-            "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
-            &[],
-            &[],
-        )
-        .expect("non-hardened multipath must parse");
+        let desc = parse_descriptor("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))", &[], &[])
+            .expect("non-hardened multipath must parse");
         // Two cosigner slots.
         assert_eq!(desc.n, 2);
     }

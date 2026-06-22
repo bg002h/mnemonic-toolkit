@@ -534,8 +534,8 @@ mod tests {
     /// the electrum-side call sites.
     #[test]
     fn t4_guard_wordlists_normalize_electrum_unwidened() {
-        let src = std::fs::read_to_string("src/wordlists/mod.rs")
-            .expect("read src/wordlists/mod.rs");
+        let src =
+            std::fs::read_to_string("src/wordlists/mod.rs").expect("read src/wordlists/mod.rs");
         assert!(
             src.contains("pub(crate) fn normalize_electrum(s: &str) -> String"),
             "M-4: wordlists::normalize_electrum must keep `-> String` (cross-module helper)"

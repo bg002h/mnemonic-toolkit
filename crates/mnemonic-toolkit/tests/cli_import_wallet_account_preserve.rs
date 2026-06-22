@@ -61,7 +61,10 @@ fn export_from_envelope(envelope: &serde_json::Value, format: &str) -> String {
 
 #[test]
 fn import_singlesig_account_5_decodes_bundle_account() {
-    let env = import_envelope("coldcard-mk1-legacy-bip84-mainnet-account-5.json", "coldcard");
+    let env = import_envelope(
+        "coldcard-mk1-legacy-bip84-mainnet-account-5.json",
+        "coldcard",
+    );
     let bundle = &env[0]["bundle"];
     // Sanity: the origin path the import side recorded is account-5.
     assert_eq!(
@@ -84,7 +87,10 @@ fn import_singlesig_account_5_decodes_bundle_account() {
 
 #[test]
 fn export_from_import_json_singlesig_account_5_reemits_account_5_origin_sparrow() {
-    let env = import_envelope("coldcard-mk1-legacy-bip84-mainnet-account-5.json", "coldcard");
+    let env = import_envelope(
+        "coldcard-mk1-legacy-bip84-mainnet-account-5.json",
+        "coldcard",
+    );
     let out = export_from_envelope(&env, "sparrow");
     assert!(
         out.contains("84'/0'/5'"),
@@ -98,7 +104,10 @@ fn export_from_import_json_singlesig_account_5_reemits_account_5_origin_sparrow(
 
 #[test]
 fn export_from_import_json_singlesig_account_5_reemits_account_5_origin_electrum() {
-    let env = import_envelope("coldcard-mk1-legacy-bip84-mainnet-account-5.json", "coldcard");
+    let env = import_envelope(
+        "coldcard-mk1-legacy-bip84-mainnet-account-5.json",
+        "coldcard",
+    );
     let out = export_from_envelope(&env, "electrum");
     assert!(
         out.contains("84'/0'/5'"),

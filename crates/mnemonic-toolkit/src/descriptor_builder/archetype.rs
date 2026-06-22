@@ -361,8 +361,16 @@ pub fn validate_params(
                          that is already in the past ({}), so the final-key tier would be \
                          spendable immediately and the decay ladder collapses; use a future \
                          {} value, or author the policy with --spec",
-                        if is_height { "block height" } else { "Unix time" },
-                        if is_height { "block height" } else { "Unix timestamp" },
+                        if is_height {
+                            "block height"
+                        } else {
+                            "Unix time"
+                        },
+                        if is_height {
+                            "block height"
+                        } else {
+                            "Unix timestamp"
+                        },
                     ),
                 ));
             }

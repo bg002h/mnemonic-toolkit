@@ -426,10 +426,12 @@ pub(crate) fn canonicalize_coldcard_multisig(blob: &[u8]) -> Result<String, Tool
         // `paired[0].1` (all equal under the homogeneous branch); falls back to
         // cosigner-0's typed path when there are no cosigners (unreachable —
         // policy.n >= 1 is enforced upstream).
-        let shared = paired
-            .first()
-            .map(|p| p.1.clone())
-            .unwrap_or_else(|| format!("m{}", path_components_for_canonical(&parsed.cosigners[0].path)));
+        let shared = paired.first().map(|p| p.1.clone()).unwrap_or_else(|| {
+            format!(
+                "m{}",
+                path_components_for_canonical(&parsed.cosigners[0].path)
+            )
+        });
         out.push_str(&format!("Derivation: {shared}\n"));
     }
     out.push_str(&format!("Format: {}\n", format_str));
@@ -1557,7 +1559,10 @@ Derivation: m/48'/0'/1'/2'\n\
         );
         // Idempotent: canon(canon(blob)) == canon(blob).
         let canon2 = canonicalize_coldcard_multisig(canon.as_bytes()).unwrap();
-        assert_eq!(canon, canon2, "divergent canonicalization must be idempotent");
+        assert_eq!(
+            canon, canon2,
+            "divergent canonicalization must be idempotent"
+        );
     }
 
     /// #15 (companion) — the HOMOGENEOUS case is unchanged: a single shared
@@ -1575,7 +1580,10 @@ Derivation: m/48'/0'/0'/2'\n\
 {D0_Y}\n"
         );
         let canon = canonicalize_coldcard_multisig(blob.as_bytes()).unwrap();
-        let derivation_lines = canon.lines().filter(|l| l.starts_with("Derivation:")).count();
+        let derivation_lines = canon
+            .lines()
+            .filter(|l| l.starts_with("Derivation:"))
+            .count();
         assert_eq!(
             derivation_lines, 1,
             "homogeneous blob must canonicalize to ONE shared Derivation line; got:\n{canon}"

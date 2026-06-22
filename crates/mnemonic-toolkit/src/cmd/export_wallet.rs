@@ -940,7 +940,9 @@ mod h10_unsorted_multi_refusal_tests {
     use super::{emit_payload, CliExportFormat};
     use crate::network::CliNetwork;
     use crate::template::CliTemplate;
-    use crate::wallet_export::{BsmsForm, CheckedDescriptor, EmitInputs, TimestampArg, WalletScriptType};
+    use crate::wallet_export::{
+        BsmsForm, CheckedDescriptor, EmitInputs, TimestampArg, WalletScriptType,
+    };
 
     /// Build a minimal `EmitInputs` carrying a given template. The descriptor
     /// content is a placeholder — the H10 guard fires structurally on the
@@ -1023,10 +1025,7 @@ mod h10_unsorted_multi_refusal_tests {
     /// is that the H10 guard does NOT fire); a sorted-multi export succeeds.
     #[test]
     fn sorted_multi_not_refused_by_h10_guard() {
-        for tmpl in [
-            CliTemplate::WshSortedMulti,
-            CliTemplate::ShWshSortedMulti,
-        ] {
+        for tmpl in [CliTemplate::WshSortedMulti, CliTemplate::ShWshSortedMulti] {
             for fmt in FIELDLESS {
                 let res = emit_payload(&inputs_with_template(Some(tmpl)), fmt);
                 if let Err(e) = &res {
@@ -1086,10 +1085,7 @@ mod h10_unsorted_multi_refusal_tests {
             CliExportFormat::Sparrow,
             CliExportFormat::BitcoinCore,
         ] {
-            let res = emit_payload(
-                &inputs_with_template(Some(CliTemplate::WshMulti)),
-                fmt,
-            );
+            let res = emit_payload(&inputs_with_template(Some(CliTemplate::WshMulti)), fmt);
             if let Err(e) = &res {
                 assert_ne!(
                     e.kind(),

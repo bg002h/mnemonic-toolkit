@@ -368,8 +368,10 @@ fn verify_bundle_descriptor_slot_over_n_rejects_not_panics() {
         // Post-fix: clean typed DescriptorParse (exit 2), NOT a panic.
         .code(2)
         .stderr(
-            predicate::str::contains("descriptor has n=2 placeholders but --slot vec covers 3 slots")
-                .or(predicate::str::contains("n=2").and(predicate::str::contains("3 slots"))),
+            predicate::str::contains(
+                "descriptor has n=2 placeholders but --slot vec covers 3 slots",
+            )
+            .or(predicate::str::contains("n=2").and(predicate::str::contains("3 slots"))),
         );
 }
 

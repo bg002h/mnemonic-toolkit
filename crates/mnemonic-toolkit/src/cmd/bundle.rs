@@ -926,10 +926,7 @@ fn emit_unified<W: Write, E: Write>(
                     .ok()
                     .and_then(|d| extract_multisig_threshold(&d.tree))
             };
-            let threshold = args
-                .threshold
-                .or(descriptor_threshold)
-                .unwrap_or(n as u8);
+            let threshold = args.threshold.or(descriptor_threshold).unwrap_or(n as u8);
             // r1 review I-1 fix: derive path_family from --multisig-path-family
             // (defaults to bip87 when unset). Hardcoded "bip87" was wrong for
             // sh-wsh-* templates (which require bip48) and broke SPEC §5.6
@@ -3043,7 +3040,11 @@ mod self_check_mk1_xpub_binding_tests {
             last.value
         );
         // Full shape: m/48'/0'/0'/3' on mainnet, account 0.
-        let shape: Vec<(bool, u32)> = op.components.iter().map(|c| (c.hardened, c.value)).collect();
+        let shape: Vec<(bool, u32)> = op
+            .components
+            .iter()
+            .map(|c| (c.hardened, c.value))
+            .collect();
         assert_eq!(
             shape,
             vec![(true, 48), (true, 0), (true, 0), (true, 3)],
