@@ -514,6 +514,284 @@ pub fn total_candidates(n: usize, mode: SearchMode) -> Option<u128> {
     }
 }
 
+// ===========================================================================
+// P1 — own-account subset-search combinatorics (SPEC §3/§4).
+//
+// Pool-index CONVENTION (P2 MUST follow this): the search pool is laid out
+// OWN-FIRST — own-account candidates occupy indices `0..k_own`, cosigner cards
+// occupy indices `k_own..k_own+m`. Every generator below returns a
+// `Vec<usize>` whose i-th element is the FULL-pool index assigned to slot `i`
+// (slot → pool-index), in this same own-first layout. P2 builds its candidate
+// `key65`/origin pool in exactly this order so the returned indices address the
+// right keys.
+//
+// All cardinality helpers are overflow-checked → `Option<u128>`; `None` means
+// REFUSE (never panic — the #28 M1 lesson; e.g. `C(256,128)` is a 252-bit
+// number that cannot fit `u128`).
+// ===========================================================================
+
+/// `C(k, r)` (combinations / the binomial coefficient), overflow-checked. The
+/// combinatorial-number-system (CNS) stratum count. Returns:
+/// - `Some(0)` when `r > k` (no such subset),
+/// - `Some(1)` when `r == 0`,
+/// - `None` on `u128` overflow (e.g. `C(256, 128)` is 252-bit → refuse).
+///
+/// Computed via the multiplicative formula on the smaller of `r` / `k-r`
+/// (numerically exact, no factorial blow-up): each step multiplies then divides
+/// exactly (the running product `C(k, i)` is always integral), with a
+/// `checked_mul` so an overflow at any step refuses.
+pub fn c_choose(k: usize, r: usize) -> Option<u128> {
+    if r > k {
+        return Some(0);
+    }
+    // C(k,r) == C(k,k-r); pick the smaller to minimize the number of steps and
+    // keep intermediates small.
+    let r = r.min(k - r);
+    let mut acc: u128 = 1;
+    // acc holds C(k, i) after step i; C(k,i) = C(k,i-1) * (k-i+1) / i.
+    for i in 1..=r {
+        acc = acc.checked_mul((k - i + 1) as u128)?;
+        // Division is exact: acc was C(k,i-1)*(k-i+1) which is divisible by i.
+        acc /= i as u128;
+    }
+    Some(acc)
+}
+
+/// `P(pool, n)` — the count of injective placements of `n` of `pool` items into
+/// `n` ordered slots: `pool · (pool−1) · … · (pool−n+1)`. Overflow-checked
+/// (`None` on `u128` overflow). Returns `Some(0)` when `n > pool` (no injective
+/// placement exists). This is the cardinality of [`unrank_kperm`]'s domain.
+pub fn p_count(pool: usize, n: usize) -> Option<u128> {
+    if n > pool {
+        return Some(0);
+    }
+    let mut acc: u128 = 1;
+    for i in 0..n {
+        acc = acc.checked_mul((pool - i) as u128)?;
+    }
+    Some(acc)
+}
+
+/// The own-only enumerated count `S_own` (SPEC §3):
+/// - non-sorted: `C(K_own, j) · N!` where `N = j + m`,
+/// - sorted shape (order-independent): `C(K_own, j)` (drop the `N!` factor —
+///   one identity-ordered placement per subset).
+///
+/// Overflow at ANY step (`c_choose` or `factorial`) → `None` → the caller
+/// refuses. Collapses to `N!` (non-sorted) / `1` (sorted) at `K_own == j`
+/// (no over-supply; byte-identical to the v0.60.0 exact path's `N!`).
+pub fn s_own(k_own: usize, j: usize, m: usize, sorted: bool) -> Option<u128> {
+    let n = j.checked_add(m)?;
+    let combos = c_choose(k_own, j)?;
+    if sorted {
+        Some(combos)
+    } else {
+        combos.checked_mul(factorial(n)?)
+    }
+}
+
+/// The opt-in enumerated count `S_opt` (SPEC §4.3): the search ranges over
+/// `(own-subset, cosigner-subset, ordering)` for the supplied `K_own` own +
+/// `M_sup` cosigner candidates filling `N` slots with `j` own + `(N−j)`
+/// cosigner, summed over the valid `j`-strata:
+/// - non-sorted: `Σ_j C(K_own, j) · C(M_sup, N−j) · N!`,
+/// - sorted shape: `Σ_j C(K_own, j) · C(M_sup, N−j)`.
+///
+/// `j ∈ [1, min(K_own, N−1)]` (own ≥1 via `--from`, ≥1 cosigner). The strata are
+/// disjoint by own-slot-count `j` ⇒ no double-count. Every term AND the running
+/// sum is overflow-checked → `None` refuses.
+pub fn s_opt(k_own: usize, m_sup: usize, n: usize, sorted: bool) -> Option<u128> {
+    let nfact = if sorted { 1u128 } else { factorial(n)? };
+    let j_max = k_own.min(n.saturating_sub(1));
+    let mut sum: u128 = 0;
+    for j in 1..=j_max {
+        let need_cos = n - j; // n - j ≥ 1 since j ≤ n-1
+        if need_cos > m_sup {
+            continue; // not enough cosigner candidates for this stratum
+        }
+        let own = c_choose(k_own, j)?;
+        let cos = c_choose(m_sup, need_cos)?;
+        let term = own.checked_mul(cos)?.checked_mul(nfact)?;
+        sum = sum.checked_add(term)?;
+    }
+    Some(sum)
+}
+
+/// The total candidate count for a SUBSET search that drives exactly `s`
+/// candidate assignments (`s = S_own` / `S_own_sorted` / `S_opt`, per §3) —
+/// `s` for id-search, `s × outer_count` for address-search. `None` on overflow.
+/// This is the subset-mode analogue of [`total_candidates`] (which assumes the
+/// `n!` exact-pool count); P2 passes the realized `s` here.
+pub fn total_candidates_subset(mode: SearchMode, s: u128) -> Option<u128> {
+    match mode {
+        SearchMode::Id => Some(s),
+        SearchMode::Address(range) => s.checked_mul(u128::from(range.outer_count())),
+    }
+}
+
+/// Unrank a lexicographic INJECTIVE k-permutation: place `n` of `pool` items
+/// into `n` ordered slots, returning the `pool`-indices (slot → pool-index).
+/// `rank ∈ [0, P(pool, n))`. The order is lexicographic over the chosen
+/// pool-index tuples (rank 0 = `[0, 1, …, n−1]`).
+///
+/// Lehmer/factorial-number-system style: at slot `i` the remaining-pool size is
+/// `pool − i`, and there are `P(pool−1−i, n−1−i)` arrangements per choice of the
+/// current slot, so `digit = rank / that`, then reduce. Used by the OPT-IN /
+/// uniform path; the own-anchored generator composes `c_choose`-unrank with
+/// [`unrank_permutation`] instead (it must EXCLUDE cosigner-dropping
+/// placements, which a plain `unrank_kperm` over the whole pool would include).
+pub fn unrank_kperm(mut rank: u128, pool: usize, n: usize) -> Vec<usize> {
+    let mut elems: Vec<usize> = (0..pool).collect();
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let remaining = n - 1 - i;
+        // Number of ways to fill the REMAINING slots from the REMAINING pool
+        // after this pick: P(elems.len()-1, remaining).
+        let block = p_count(elems.len() - 1, remaining)
+            .expect("subset search domain is small; P(pool,n) fits u128");
+        let digit = (rank / block) as usize;
+        rank %= block;
+        out.push(elems.remove(digit));
+    }
+    out
+}
+
+/// Unrank a `combo_rank ∈ [0, C(k, r))` into the `rank`-th `r`-subset of
+/// `0..k`, as an ASCENDING `Vec<usize>` (the combinatorial-number-system
+/// unrank). Lexicographic over ascending subsets (rank 0 = `[0,1,…,r−1]`).
+///
+/// At each position we pick the smallest next element `x ≥ start` such that the
+/// number of completions with a SMALLER `x` has been skipped: the count of
+/// `(r−1−i)`-subsets of the elements above `x` is `C(k−1−x, r−1−i)`.
+fn unrank_combination(mut combo_rank: u128, k: usize, r: usize) -> Vec<usize> {
+    let mut out = Vec::with_capacity(r);
+    let mut x = 0usize;
+    let mut remaining = r;
+    while remaining > 0 {
+        // For candidate element `x`, completions choosing `x` then `remaining-1`
+        // from `x+1..k` number C(k-1-x, remaining-1).
+        let with_x =
+            c_choose(k - 1 - x, remaining - 1).expect("subset search domain is small; C fits u128");
+        if combo_rank < with_x {
+            out.push(x);
+            remaining -= 1;
+            x += 1;
+        } else {
+            combo_rank -= with_x;
+            x += 1;
+        }
+    }
+    out
+}
+
+/// The OWN-ANCHORED composed-rank generator (SPEC §3/§4.1). Returns the
+/// `rank`-th assignment in the `S_own` space as `Vec<slot→pool-index>` in the
+/// own-first pool layout (own `0..k_own`, cosigners `k_own..k_own+m`).
+///
+/// `rank ∈ [0, S_own)` where `S_own = s_own(k_own, j, m, sorted)`.
+///
+/// - **non-sorted:** `combo_rank = rank / N!`, `perm_rank = rank % N!`
+///   (`N = j+m`). `combo_rank` → the `j`-subset of own indices via
+///   [`unrank_combination`]; the `N` selected pool entries are `(j chosen own)
+///   ++ (all m cosigners, ascending k_own..k_own+m)`; `perm_rank →
+///   unrank_permutation(perm_rank, N)` orders the selected entries into the N
+///   slots. **Bijective onto exactly `S_own`** — every assignment uses exactly
+///   `j` own + ALL `m` cosigners, each once, nothing else (no cosigner-dropping
+///   placement).
+/// - **sorted:** drop `perm_rank` — emit each of the `C(k_own, j)` subsets ONCE
+///   in canonical identity order (selected entries as-is).
+pub fn own_anchored_unrank(
+    rank: u128,
+    k_own: usize,
+    j: usize,
+    m: usize,
+    sorted: bool,
+) -> Vec<usize> {
+    let n = j + m;
+    let (combo_rank, perm_rank) = if sorted {
+        (rank, 0u128)
+    } else {
+        let nfact = factorial(n).expect("subset search domain is small; N! fits u128");
+        (rank / nfact, rank % nfact)
+    };
+    let own_subset = unrank_combination(combo_rank, k_own, j);
+    // The N selected pool entries: j chosen own ++ all m cosigners (ascending).
+    let mut selected: Vec<usize> = own_subset;
+    for c in 0..m {
+        selected.push(k_own + c);
+    }
+    if sorted {
+        // Identity order — the selected entries as-is.
+        selected
+    } else {
+        // Order the N selected entries into the N slots by perm_rank.
+        let order = unrank_permutation(perm_rank, n);
+        order.into_iter().map(|p| selected[p]).collect()
+    }
+}
+
+/// The OPT-IN STRATIFIED generator (SPEC §4.3). Returns the `rank`-th assignment
+/// in the `S_opt` space as `Vec<slot→pool-index>` in the own-first pool layout
+/// (own `0..k_own`, cosigners `k_own..k_own+m_sup`).
+///
+/// `rank ∈ [0, S_opt)` where `S_opt = s_opt(k_own, m_sup, n, sorted)`.
+///
+/// The space is partitioned into disjoint `j`-strata (`j` = own-slot-count,
+/// `j ∈ [1, min(k_own, n−1)]`), each of size
+/// `C(k_own,j)·C(m_sup,n−j)·N!` (non-sorted) / `C(k_own,j)·C(m_sup,n−j)`
+/// (sorted). We locate `rank`'s stratum by cumulative size, then within the
+/// stratum compose `(own-combo CNS-unrank, cosigner-combo CNS-unrank,
+/// perm-unrank)`. Bijective onto `S_opt` by the §4.1 argument applied per
+/// stratum (disjoint ⇒ no double-count).
+pub fn opt_in_unrank(
+    mut rank: u128,
+    k_own: usize,
+    m_sup: usize,
+    n: usize,
+    sorted: bool,
+) -> Vec<usize> {
+    let nfact = if sorted {
+        1u128
+    } else {
+        factorial(n).expect("subset search domain is small; N! fits u128")
+    };
+    let j_max = k_own.min(n.saturating_sub(1));
+    for j in 1..=j_max {
+        let need_cos = n - j;
+        if need_cos > m_sup {
+            continue;
+        }
+        let own_combos = c_choose(k_own, j).expect("small domain; C fits u128");
+        let cos_combos = c_choose(m_sup, need_cos).expect("small domain; C fits u128");
+        // Stratum size: own_combos · cos_combos · nfact.
+        let stratum = own_combos * cos_combos * nfact;
+        if rank < stratum {
+            // Decompose the in-stratum rank as
+            // own_rank · (cos_combos·nfact) + cos_rank · nfact + perm_rank.
+            let perm_rank = rank % nfact;
+            let rest = rank / nfact; // ∈ [0, own_combos·cos_combos)
+            let cos_rank = rest % cos_combos;
+            let own_rank = rest / cos_combos;
+            let own_subset = unrank_combination(own_rank, k_own, j);
+            let cos_subset = unrank_combination(cos_rank, m_sup, need_cos);
+            let mut selected: Vec<usize> = own_subset;
+            for &c in &cos_subset {
+                selected.push(k_own + c);
+            }
+            return if sorted {
+                selected
+            } else {
+                let order = unrank_permutation(perm_rank, n);
+                order.into_iter().map(|p| selected[p]).collect()
+            };
+        }
+        rank -= stratum;
+    }
+    // rank ≥ S_opt — out of domain. Callers stay within [0, S_opt); a stray
+    // rank yields an empty assignment rather than a panic.
+    Vec::new()
+}
+
 /// A single match record (internal): the permutation rank + the outer
 /// address coordinate it matched at. Kept compact so the per-thread match
 /// buffers stay small.
@@ -548,14 +826,32 @@ struct Match {
 /// Determinism: the outcome is a pure function of the collected match COUNT
 /// (and, for `Unique`, the single match record), so parallel and
 /// single-threaded runs over the same input return identical outcomes.
+///
+/// **`early_exit` (SPEC §4.4 contract).** When `false` (the DEFAULT / every
+/// v0.60.0 call site, every id-search and prefix-id path) the engine retains
+/// the full-scan-with-2nd-match-ambiguity behavior described above — BYTE
+/// IDENTICAL to the pre-subset-search engine: it scans the whole space to
+/// certify uniqueness and only short-circuits at the SECOND match (→
+/// `Ambiguous`). When `true` the engine MAY stop at the FIRST match and return
+/// it as `Unique` (it sets the stop flag at match #1). This is ONLY funds-safe
+/// for a COLLISION-FREE address-search (full scriptPubKey ⇒ a match is provably
+/// unique — SPEC §4.4 §I-2); the over-supply address-search path opts in.
+/// Prefix-id NEVER gets `early_exit=true` (it would miss a 2nd-match ambiguity →
+/// silent-wrong-wallet). The caller is responsible for the gating; the engine
+/// just honors the flag.
 pub fn search<E: CandidateEvaluator>(
     n: usize,
     evaluator: &E,
     mode: SearchMode,
+    early_exit: bool,
 ) -> Result<SearchOutcome, SearchError> {
     if n == 0 {
         return Err(SearchError::EmptySearchSpace);
     }
+    // The global match count at which every thread stops scanning: 1 for
+    // first-match early-exit (collision-free address-search), 2 for the
+    // full-scan-with-2nd-match ambiguity certification (the v0.60.0 default).
+    let stop_at: usize = if early_exit { 1 } else { 2 };
     // M1: a hostile/garbage slot count whose `n!` overflows `u128` must REFUSE,
     // not panic. `factorial`/`total_candidates` return `None` on overflow; we
     // propagate it as a typed error (the realized multisig N never approaches
@@ -619,9 +915,11 @@ pub fn search<E: CandidateEvaluator>(
                             perm_rank,
                             address_index,
                         });
-                        // Bump the global counter; once ≥2 globally, signal stop.
+                        // Bump the global counter; once it reaches the stop
+                        // threshold (2 = ambiguity certification, the default;
+                        // 1 = first-match early-exit), signal stop.
                         let prior = global_matches.fetch_add(1, Ordering::Relaxed);
-                        if prior + 1 >= 2 {
+                        if prior + 1 >= stop_at {
                             stop.store(true, Ordering::Relaxed);
                             break;
                         }
@@ -635,6 +933,25 @@ pub fn search<E: CandidateEvaluator>(
     });
 
     let found = matches.into_inner().unwrap();
+    if early_exit {
+        // First-match early-exit (collision-free address-search per the §4.4
+        // contract): the caller guarantees ≤1 distinct match exists, so any
+        // match certifies the unique wallet. Because the threads race, several
+        // may each record the (same-wallet) hit before the stop flag
+        // propagates; we deterministically return the LOWEST-rank match as
+        // `Unique` (a pure function of the input → parallel == reference).
+        return match found.iter().min_by(|a, b| {
+            a.address_index
+                .cmp(&b.address_index)
+                .then(a.perm_rank.cmp(&b.perm_rank))
+        }) {
+            None => Ok(SearchOutcome::None),
+            Some(m) => Ok(SearchOutcome::Unique {
+                assignment: unrank_permutation(m.perm_rank, n),
+                address_index: m.address_index,
+            }),
+        };
+    }
     match found.len() {
         0 => Ok(SearchOutcome::None),
         1 => {
@@ -811,7 +1128,7 @@ mod tests {
     #[test]
     fn engine_resolves_unique_target_n5() {
         let target = vec![3, 1, 4, 0, 2];
-        let outcome = search(5, &target_eval(target.clone()), SearchMode::Id).unwrap();
+        let outcome = search(5, &target_eval(target.clone()), SearchMode::Id, false).unwrap();
         match outcome {
             SearchOutcome::Unique {
                 assignment,
@@ -827,7 +1144,7 @@ mod tests {
     #[test]
     fn engine_resolves_unique_target_n6() {
         let target = vec![5, 0, 3, 2, 4, 1];
-        let outcome = search(6, &target_eval(target.clone()), SearchMode::Id).unwrap();
+        let outcome = search(6, &target_eval(target.clone()), SearchMode::Id, false).unwrap();
         assert_eq!(
             outcome,
             SearchOutcome::Unique {
@@ -841,7 +1158,10 @@ mod tests {
     fn engine_no_match_is_none() {
         // Evaluator that never matches.
         let never = |_a: &[usize], _idx: u64| false;
-        assert_eq!(search(6, &never, SearchMode::Id).unwrap(), SearchOutcome::None);
+        assert_eq!(
+            search(6, &never, SearchMode::Id, false).unwrap(),
+            SearchOutcome::None
+        );
     }
 
     #[test]
@@ -849,7 +1169,10 @@ mod tests {
         let t1 = vec![0, 1, 2, 3, 4];
         let t2 = vec![4, 3, 2, 1, 0];
         let two = move |a: &[usize], _idx: u64| a == t1.as_slice() || a == t2.as_slice();
-        assert_eq!(search(5, &two, SearchMode::Id).unwrap(), SearchOutcome::Ambiguous);
+        assert_eq!(
+            search(5, &two, SearchMode::Id, false).unwrap(),
+            SearchOutcome::Ambiguous
+        );
     }
 
     #[test]
@@ -857,7 +1180,7 @@ mod tests {
         // n == 1: a single permutation [0]; matching evaluator → Unique.
         let always = |_a: &[usize], _idx: u64| true;
         assert_eq!(
-            search(1, &always, SearchMode::Id).unwrap(),
+            search(1, &always, SearchMode::Id, false).unwrap(),
             SearchOutcome::Unique {
                 assignment: vec![0],
                 address_index: 0
@@ -869,7 +1192,7 @@ mod tests {
     fn engine_n0_is_empty_search_space() {
         let always = |_a: &[usize], _idx: u64| true;
         assert_eq!(
-            search(0, &always, SearchMode::Id),
+            search(0, &always, SearchMode::Id, false),
             Err(SearchError::EmptySearchSpace)
         );
     }
@@ -880,7 +1203,7 @@ mod tests {
     fn parallel_matches_reference_unique() {
         let target = vec![4, 2, 6, 0, 5, 1, 3];
         let eval = target_eval(target.clone());
-        let par = search(7, &eval, SearchMode::Id).unwrap();
+        let par = search(7, &eval, SearchMode::Id, false).unwrap();
         let single = search_reference(7, &eval, SearchMode::Id).unwrap();
         assert_eq!(par, single);
         assert_eq!(
@@ -896,7 +1219,7 @@ mod tests {
     fn parallel_matches_reference_none_and_ambiguous() {
         let never = |_a: &[usize], _idx: u64| false;
         assert_eq!(
-            search(7, &never, SearchMode::Id).unwrap(),
+            search(7, &never, SearchMode::Id, false).unwrap(),
             search_reference(7, &never, SearchMode::Id).unwrap()
         );
 
@@ -904,7 +1227,7 @@ mod tests {
         let t2 = vec![5, 4, 3, 2, 1, 0];
         let two = move |a: &[usize], _idx: u64| a == t1.as_slice() || a == t2.as_slice();
         assert_eq!(
-            search(6, &two, SearchMode::Id).unwrap(),
+            search(6, &two, SearchMode::Id, false).unwrap(),
             SearchOutcome::Ambiguous
         );
         assert_eq!(
@@ -958,15 +1281,14 @@ mod tests {
             chains: ChainScope::Receive,
         }
         .flatten(3); // the 4th outer coordinate (index 3, receive).
-        let eval = move |a: &[usize], idx: u64| {
-            a == target_perm.as_slice() && idx == target_addr_idx
-        };
+        let eval =
+            move |a: &[usize], idx: u64| a == target_perm.as_slice() && idx == target_addr_idx;
         let range = AddressRange {
             min: 0,
             max: 20,
             chains: ChainScope::Receive,
         };
-        let outcome = search(3, &eval, SearchMode::Address(range)).unwrap();
+        let outcome = search(3, &eval, SearchMode::Address(range), false).unwrap();
         match outcome {
             SearchOutcome::Unique {
                 assignment,
@@ -1014,7 +1336,7 @@ mod tests {
         };
         assert_eq!(range.outer_count(), 0);
         assert_eq!(
-            search(3, &always, SearchMode::Address(range)).unwrap(),
+            search(3, &always, SearchMode::Address(range), false).unwrap(),
             SearchOutcome::None
         );
     }
@@ -1087,8 +1409,12 @@ mod tests {
         let d = cap_decision(7200, Duration::from_secs(1), Some(est)).unwrap();
         assert_eq!(d, CapDecision::RunWithProgress { estimate: est });
         // A larger override is also fine.
-        let d2 =
-            cap_decision(7200, Duration::from_secs(1), Some(Duration::from_secs(10_000))).unwrap();
+        let d2 = cap_decision(
+            7200,
+            Duration::from_secs(1),
+            Some(Duration::from_secs(10_000)),
+        )
+        .unwrap();
         assert_eq!(d2, CapDecision::RunWithProgress { estimate: est });
     }
 
@@ -1151,7 +1477,7 @@ mod tests {
         // (M1: `factorial(n)` is `?`-propagated, not `.expect()`-unwrapped).
         let always = |_a: &[usize], _idx: u64| true;
         assert_eq!(
-            search(35, &always, SearchMode::Id),
+            search(35, &always, SearchMode::Id, false),
             Err(SearchError::SearchSpaceTooLarge { n: 35 })
         );
         assert_eq!(
@@ -1168,7 +1494,7 @@ mod tests {
         // n = 34 → 34! is the largest factorial that fits u128; × the range
         // overflows the product → SearchSpaceTooLarge (the checked_mul leg).
         assert_eq!(
-            search(34, &always, SearchMode::Address(range)),
+            search(34, &always, SearchMode::Address(range), false),
             Err(SearchError::SearchSpaceTooLarge { n: 34 })
         );
     }
@@ -1214,6 +1540,558 @@ mod tests {
                     "k={k}: re-encode mismatch"
                 );
             }
+        }
+    }
+
+    // =======================================================================
+    // P1 — own-account subset-search engine (SPEC §3/§4, the combinatorics
+    // core). The make-or-break gate is the BIJECTION: every generator below is
+    // verified by an independent brute-force reference that builds the valid
+    // set from first principles, and we assert the generator's enumerated set
+    // EQUALS that reference set EXACTLY (each member once, no dup, no miss) and
+    // that the closed-form cardinality EQUALS the enumerated count.
+    // =======================================================================
+
+    // ---- Brute-force reference builders (first-principles oracles). --------
+
+    /// All injective placements of `n` of `pool` items into `n` ordered slots,
+    /// as `Vec<slot→pool-index>`. Independent of `unrank_kperm` — built by a
+    /// recursive choose-and-place so it is a true oracle.
+    fn bf_injective_placements(pool: usize, n: usize) -> Vec<Vec<usize>> {
+        fn go(
+            pool: usize,
+            n: usize,
+            used: &mut Vec<bool>,
+            cur: &mut Vec<usize>,
+            out: &mut Vec<Vec<usize>>,
+        ) {
+            if cur.len() == n {
+                out.push(cur.clone());
+                return;
+            }
+            for p in 0..pool {
+                if !used[p] {
+                    used[p] = true;
+                    cur.push(p);
+                    go(pool, n, used, cur, out);
+                    cur.pop();
+                    used[p] = false;
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if n <= pool {
+            let mut used = vec![false; pool];
+            let mut cur = Vec::new();
+            go(pool, n, &mut used, &mut cur, &mut out);
+        }
+        out
+    }
+
+    /// All `r`-subsets of `0..k` (each an ascending Vec). Independent oracle.
+    fn bf_combinations(k: usize, r: usize) -> Vec<Vec<usize>> {
+        fn go(k: usize, r: usize, start: usize, cur: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
+            if cur.len() == r {
+                out.push(cur.clone());
+                return;
+            }
+            for x in start..k {
+                cur.push(x);
+                go(k, r, x + 1, cur, out);
+                cur.pop();
+            }
+        }
+        let mut out = Vec::new();
+        if r <= k {
+            let mut cur = Vec::new();
+            go(k, r, 0, &mut cur, &mut out);
+        }
+        out
+    }
+
+    /// All permutations of the given `items` slice. Independent oracle (Heap-ish
+    /// recursive).
+    fn bf_permute(items: &[usize]) -> Vec<Vec<usize>> {
+        if items.is_empty() {
+            return vec![vec![]];
+        }
+        let mut out = Vec::new();
+        for i in 0..items.len() {
+            let mut rest: Vec<usize> = items.to_vec();
+            let x = rest.remove(i);
+            for mut p in bf_permute(&rest) {
+                let mut v = vec![x];
+                v.append(&mut p);
+                out.push(v);
+            }
+        }
+        out
+    }
+
+    /// Own-anchored valid-assignment ORACLE (SPEC §3). Pool-index convention:
+    /// own candidates are `0..k_own`, cosigners are `k_own..k_own+m`. A valid
+    /// assignment uses EXACTLY `j` own indices + ALL `m` cosigner indices, each
+    /// once, ordered into `N = j+m` slots (sorted ⇒ identity order only).
+    fn bf_own_anchored(k_own: usize, j: usize, m: usize, sorted: bool) -> Vec<Vec<usize>> {
+        let n = j + m;
+        let mut out = Vec::new();
+        for own_subset in bf_combinations(k_own, j) {
+            // The N selected pool indices: j chosen own ++ all m cosigners.
+            let mut selected: Vec<usize> = own_subset.clone();
+            for c in 0..m {
+                selected.push(k_own + c);
+            }
+            debug_assert_eq!(selected.len(), n);
+            if sorted {
+                // identity order: the selected set in its canonical (here:
+                // own-ascending then cosigners) order, exactly one placement.
+                out.push(selected);
+            } else {
+                for p in bf_permute(&selected) {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+
+    /// Opt-in valid-assignment ORACLE (SPEC §4.3). Pool: own `0..k_own`,
+    /// cosigners `k_own..k_own+m_sup`. For every valid `j ∈ [1, min(k_own,n-1)]`
+    /// choose `j` own + `(n-j)` cosigners, order into `n` slots (sorted ⇒
+    /// identity). Strata are disjoint by own-slot-count `j`.
+    fn bf_opt_in(k_own: usize, m_sup: usize, n: usize, sorted: bool) -> Vec<Vec<usize>> {
+        let mut out = Vec::new();
+        let j_min = 1usize;
+        let j_max = k_own.min(n.saturating_sub(1));
+        for j in j_min..=j_max {
+            let need_cos = n - j;
+            if need_cos > m_sup {
+                continue;
+            }
+            for own_subset in bf_combinations(k_own, j) {
+                for cos_subset in bf_combinations(m_sup, need_cos) {
+                    let mut selected: Vec<usize> = own_subset.clone();
+                    for &c in &cos_subset {
+                        selected.push(k_own + c);
+                    }
+                    debug_assert_eq!(selected.len(), n);
+                    if sorted {
+                        out.push(selected);
+                    } else {
+                        for p in bf_permute(&selected) {
+                            out.push(p);
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// Assert the generated set EQUALS the reference set EXACTLY (each member
+    /// once, no dup, no miss) and the closed-form `card` EQUALS both counts.
+    fn assert_bijects(generated: &[Vec<usize>], reference: &[Vec<usize>], card: u128, ctx: &str) {
+        use std::collections::HashSet;
+        let gen_set: HashSet<&Vec<usize>> = generated.iter().collect();
+        assert_eq!(
+            gen_set.len(),
+            generated.len(),
+            "{ctx}: generator emitted a DUPLICATE (|set| {} < |list| {})",
+            gen_set.len(),
+            generated.len()
+        );
+        let ref_set: HashSet<&Vec<usize>> = reference.iter().collect();
+        assert_eq!(
+            gen_set, ref_set,
+            "{ctx}: generated set != reference set (missing or extra members)"
+        );
+        assert_eq!(
+            generated.len() as u128,
+            card,
+            "{ctx}: enumerated count {} != closed-form cardinality {card}",
+            generated.len()
+        );
+        assert_eq!(
+            reference.len() as u128,
+            card,
+            "{ctx}: reference count {} != closed-form cardinality {card}",
+            reference.len()
+        );
+    }
+
+    // ---- c_choose / p_count / s_own / s_opt cardinality helpers. -----------
+
+    #[test]
+    fn c_choose_matches_known_values() {
+        assert_eq!(c_choose(0, 0), Some(1));
+        assert_eq!(c_choose(5, 0), Some(1));
+        assert_eq!(c_choose(5, 5), Some(1));
+        assert_eq!(c_choose(5, 6), Some(0)); // r > k → 0
+        assert_eq!(c_choose(5, 2), Some(10));
+        assert_eq!(c_choose(32, 4), Some(35_960));
+        assert_eq!(c_choose(52, 5), Some(2_598_960));
+        // symmetry C(n,r) == C(n,n-r)
+        assert_eq!(c_choose(40, 13), c_choose(40, 27));
+    }
+
+    #[test]
+    fn c_choose_overflows_to_none() {
+        // C(256,128) is a 252-bit number → cannot fit u128 → None (REFUSE,
+        // not panic). This is the §6-ceiling backstop (the #28 M1 lesson).
+        assert_eq!(c_choose(256, 128), None);
+    }
+
+    #[test]
+    fn p_count_matches_perm_count() {
+        // P(pool,n) = pool!/(pool-n)!. Cross-check against factorial ratios.
+        assert_eq!(p_count(5, 0), Some(1));
+        assert_eq!(p_count(5, 5), Some(120));
+        assert_eq!(p_count(7, 3), Some(210)); // 7·6·5
+        assert_eq!(p_count(39, 11), {
+            // P(39,11) = 39·38·…·29
+            let mut p = 1u128;
+            for x in 29..=39u128 {
+                p *= x;
+            }
+            Some(p)
+        });
+        assert_eq!(p_count(3, 5), Some(0)); // n > pool → 0 injective placements
+    }
+
+    #[test]
+    fn p_count_overflows_to_none() {
+        // A huge pool with a large n overflows u128 → None.
+        assert_eq!(p_count(usize::MAX, 40), None);
+    }
+
+    #[test]
+    fn s_own_closed_form() {
+        // Non-sorted: C(K_own,j)·N!.  Sorted: C(K_own,j).
+        // K_own=32, j=4, M=7 → N=11 → C(32,4)·11! = 35960·39916800.
+        let expect = 35_960u128 * 39_916_800u128;
+        assert_eq!(s_own(32, 4, 7, false), Some(expect));
+        assert_eq!(s_own(32, 4, 7, true), Some(35_960));
+        // Collapse: K_own == j (no over-supply) → C(j,j)·N! = N! (byte-identical
+        // to the v0.60.0 exact path).
+        assert_eq!(s_own(4, 4, 7, false), factorial(11));
+        assert_eq!(s_own(4, 4, 7, true), Some(1));
+    }
+
+    #[test]
+    fn s_own_overflows_to_none() {
+        // Force the factorial leg to overflow (N=35 → 35! overflows).
+        assert_eq!(s_own(40, 1, 34, false), None); // N = 35
+                                                   // Force the c_choose leg to overflow.
+        assert_eq!(s_own(256, 128, 0, false), None);
+    }
+
+    #[test]
+    fn s_opt_closed_form_matches_strata_sum() {
+        // S_opt = Σ_j C(K_own,j)·C(M_sup,N-j)·N!  (non-sorted)
+        //        = Σ_j C(K_own,j)·C(M_sup,N-j)     (sorted)
+        // small: K_own=4, M_sup=4, N=3 → j ∈ {1,2} (j_max = min(4,2)=2).
+        let nfact = factorial(3).unwrap();
+        let mut expect_ns = 0u128;
+        let mut expect_s = 0u128;
+        for j in 1..=2usize {
+            let term = c_choose(4, j).unwrap() * c_choose(4, 3 - j).unwrap();
+            expect_s += term;
+            expect_ns += term * nfact;
+        }
+        assert_eq!(s_opt(4, 4, 3, false), Some(expect_ns));
+        assert_eq!(s_opt(4, 4, 3, true), Some(expect_s));
+    }
+
+    // ---- unrank_kperm bijection. -------------------------------------------
+
+    #[test]
+    fn unrank_kperm_bijects_injective_placements() {
+        // For several small (pool, n) the SET of unrank_kperm(r,pool,n) over
+        // r ∈ [0, P(pool,n)) EQUALS the brute-force injective-placement set,
+        // each EXACTLY once.
+        for (pool, n) in [
+            (3usize, 2usize),
+            (4, 2),
+            (4, 3),
+            (5, 3),
+            (5, 5),
+            (1, 1),
+            (6, 1),
+        ] {
+            let card = p_count(pool, n).unwrap();
+            let generated: Vec<Vec<usize>> = (0..card).map(|r| unrank_kperm(r, pool, n)).collect();
+            let reference = bf_injective_placements(pool, n);
+            assert_bijects(
+                &generated,
+                &reference,
+                card,
+                &format!("unrank_kperm(pool={pool}, n={n})"),
+            );
+        }
+    }
+
+    #[test]
+    fn unrank_kperm_is_lexicographic() {
+        // The unrank order is lexicographic over the chosen pool-index tuples.
+        // P(4,2) = 12; rank 0 = [0,1], rank 1 = [0,2], …, rank 11 = [3,2].
+        assert_eq!(unrank_kperm(0, 4, 2), vec![0, 1]);
+        assert_eq!(unrank_kperm(1, 4, 2), vec![0, 2]);
+        assert_eq!(unrank_kperm(2, 4, 2), vec![0, 3]);
+        assert_eq!(unrank_kperm(3, 4, 2), vec![1, 0]);
+        assert_eq!(unrank_kperm(11, 4, 2), vec![3, 2]);
+    }
+
+    // ---- own-anchored generator bijection over S_own. ----------------------
+
+    #[test]
+    fn own_anchored_bijects_s_own_nonsorted() {
+        // Exhaustive small (k_own, j, m). The generated set EQUALS the oracle,
+        // count == C(k_own,j)·N!, and CRUCIALLY no cosigner-dropping placement
+        // (every assignment uses ALL m cosigner indices).
+        for (k_own, j, m) in [
+            (3usize, 1usize, 1usize),
+            (3, 2, 1),
+            (4, 2, 2),
+            (4, 1, 2),
+            (5, 2, 1),
+            (2, 2, 1), // collapse-ish: C(2,2)=1
+        ] {
+            let n = j + m;
+            let card = s_own(k_own, j, m, false).unwrap();
+            let generated: Vec<Vec<usize>> = (0..card)
+                .map(|r| own_anchored_unrank(r, k_own, j, m, false))
+                .collect();
+            let reference = bf_own_anchored(k_own, j, m, false);
+            let ctx = format!("own_anchored(k_own={k_own}, j={j}, m={m}, sorted=false)");
+            assert_bijects(&generated, &reference, card, &ctx);
+            // No cosigner-dropping: every assignment contains all m cosigner
+            // indices {k_own..k_own+m}.
+            for a in &generated {
+                for c in 0..m {
+                    assert!(
+                        a.contains(&(k_own + c)),
+                        "{ctx}: assignment {a:?} DROPS cosigner index {}",
+                        k_own + c
+                    );
+                }
+                assert_eq!(a.len(), n, "{ctx}: assignment {a:?} has wrong width");
+            }
+        }
+    }
+
+    #[test]
+    fn own_anchored_bijects_s_own_sorted() {
+        // Sorted shape: drop the perm_rank factor → C(k_own,j) identity-ordered
+        // subsets.
+        for (k_own, j, m) in [(4usize, 2usize, 2usize), (5, 3, 1), (3, 1, 2), (4, 1, 1)] {
+            let card = s_own(k_own, j, m, true).unwrap();
+            let generated: Vec<Vec<usize>> = (0..card)
+                .map(|r| own_anchored_unrank(r, k_own, j, m, true))
+                .collect();
+            let reference = bf_own_anchored(k_own, j, m, true);
+            let ctx = format!("own_anchored(k_own={k_own}, j={j}, m={m}, sorted=true)");
+            assert_bijects(&generated, &reference, card, &ctx);
+            // Each sorted placement is in identity (ascending own ++ cosigner)
+            // order — i.e. own portion ascending, cosigners in fixed order.
+            for a in &generated {
+                // own indices come first and are ascending; cosigners follow in
+                // ascending order k_own..k_own+m.
+                let own_part: Vec<usize> = a.iter().copied().filter(|&x| x < k_own).collect();
+                let mut own_sorted = own_part.clone();
+                own_sorted.sort_unstable();
+                assert_eq!(
+                    own_part, own_sorted,
+                    "{ctx}: own part not ascending in {a:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn own_anchored_collapses_to_nfact_at_k_own_eq_j() {
+        // When K_own == j (no over-supply) the own-anchored generator is exactly
+        // the v0.60.0 unrank_permutation(N): C(j,j)=1 subset, N! orderings, and
+        // the pool indices are 0..N (j own 0..j ++ m cosigners j..j+m == 0..N).
+        let (k_own, j, m) = (3usize, 3usize, 2usize);
+        let n = j + m;
+        let card = s_own(k_own, j, m, false).unwrap();
+        assert_eq!(card, factorial(n).unwrap());
+        for r in 0..card {
+            let got = own_anchored_unrank(r, k_own, j, m, false);
+            let want = unrank_permutation(r, n);
+            assert_eq!(
+                got, want,
+                "rank {r}: own-anchored != plain unrank_permutation"
+            );
+        }
+    }
+
+    // ---- opt-in stratified generator bijection over S_opt. -----------------
+
+    #[test]
+    fn opt_in_bijects_s_opt_nonsorted() {
+        for (k_own, m_sup, n) in [
+            (3usize, 3usize, 3usize),
+            (4, 4, 3),
+            (3, 2, 3),
+            (4, 3, 4),
+            (2, 3, 3),
+        ] {
+            let card = s_opt(k_own, m_sup, n, false).unwrap();
+            let generated: Vec<Vec<usize>> = (0..card)
+                .map(|r| opt_in_unrank(r, k_own, m_sup, n, false))
+                .collect();
+            let reference = bf_opt_in(k_own, m_sup, n, false);
+            let ctx = format!("opt_in(k_own={k_own}, m_sup={m_sup}, n={n}, sorted=false)");
+            assert_bijects(&generated, &reference, card, &ctx);
+            // Every assignment uses ≥1 own and ≥1 cosigner (j_min=1, ≥1 cosigner).
+            for a in &generated {
+                assert!(a.iter().any(|&x| x < k_own), "{ctx}: {a:?} has no own");
+                assert!(
+                    a.iter().any(|&x| x >= k_own),
+                    "{ctx}: {a:?} has no cosigner"
+                );
+                assert_eq!(a.len(), n, "{ctx}: {a:?} wrong width");
+            }
+        }
+    }
+
+    #[test]
+    fn opt_in_bijects_s_opt_sorted() {
+        for (k_own, m_sup, n) in [(4usize, 4usize, 3usize), (3, 3, 3), (4, 3, 4)] {
+            let card = s_opt(k_own, m_sup, n, true).unwrap();
+            let generated: Vec<Vec<usize>> = (0..card)
+                .map(|r| opt_in_unrank(r, k_own, m_sup, n, true))
+                .collect();
+            let reference = bf_opt_in(k_own, m_sup, n, true);
+            let ctx = format!("opt_in(k_own={k_own}, m_sup={m_sup}, n={n}, sorted=true)");
+            assert_bijects(&generated, &reference, card, &ctx);
+        }
+    }
+
+    // ---- total_candidates_subset. ------------------------------------------
+
+    #[test]
+    fn total_candidates_subset_passes_s_through() {
+        // Id-mode: drives exactly S candidates.
+        assert_eq!(total_candidates_subset(SearchMode::Id, 1000), Some(1000));
+        // Address-mode: S × outer_count.
+        let range = AddressRange {
+            min: 0,
+            max: 20,
+            chains: ChainScope::Both,
+        };
+        assert_eq!(
+            total_candidates_subset(SearchMode::Address(range), 1000),
+            Some(1000 * 40)
+        );
+        // Overflow → None.
+        assert_eq!(
+            total_candidates_subset(SearchMode::Address(range), u128::MAX),
+            None
+        );
+    }
+
+    // ---- early_exit knob: byte-invariance + first-match semantics. ----------
+
+    #[test]
+    fn early_exit_false_reproduces_v060_full_scan_outcomes() {
+        // early_exit=false MUST reproduce today's full-scan-with-2nd-match
+        // behavior IDENTICALLY (the v0.60.0 anchor): Unique / None / Ambiguous.
+        let target = vec![3, 1, 4, 0, 2];
+        assert_eq!(
+            search(5, &target_eval(target.clone()), SearchMode::Id, false).unwrap(),
+            SearchOutcome::Unique {
+                assignment: target,
+                address_index: 0
+            }
+        );
+        let never = |_a: &[usize], _idx: u64| false;
+        assert_eq!(
+            search(6, &never, SearchMode::Id, false).unwrap(),
+            SearchOutcome::None
+        );
+        let t1 = vec![0, 1, 2, 3, 4];
+        let t2 = vec![4, 3, 2, 1, 0];
+        let two = move |a: &[usize], _idx: u64| a == t1.as_slice() || a == t2.as_slice();
+        assert_eq!(
+            search(5, &two, SearchMode::Id, false).unwrap(),
+            SearchOutcome::Ambiguous
+        );
+        // And it must AGREE with the (unchanged) reference oracle.
+        assert_eq!(
+            search(5, &two, SearchMode::Id, false).unwrap(),
+            search_reference(5, &two, SearchMode::Id).unwrap()
+        );
+
+        // STRONGER ambiguity anchor (defeats the parallel race + perturbation):
+        // a MANY-match evaluator over a large space (every perm whose slot 0 maps
+        // to candidate 0 — there are 7!/7 = 720 such matches across 7! = 5040).
+        // With early_exit=false the engine MUST certify Ambiguous (≥2). A broken
+        // engine that stopped at the FIRST match (stop_at=1) would return Unique
+        // for at least one run; we assert Ambiguous across many runs so the race
+        // cannot mask the break, and that it always matches the full-scan oracle.
+        let many = |a: &[usize], _idx: u64| a.first() == Some(&0);
+        for _ in 0..64 {
+            assert_eq!(
+                search(7, &many, SearchMode::Id, false).unwrap(),
+                SearchOutcome::Ambiguous,
+                "early_exit=false must full-scan-certify Ambiguous over a many-match space"
+            );
+            assert_eq!(
+                search(7, &many, SearchMode::Id, false).unwrap(),
+                search_reference(7, &many, SearchMode::Id).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn early_exit_true_two_matches_may_report_unique_or_first() {
+        // With early_exit=true the engine MAY stop at the first match. Over a
+        // collision-free address-search the contract guarantees a single match,
+        // but if a synthetic evaluator DOES have 2 matches, early-exit is
+        // permitted to return one of them as Unique (it stops at the first).
+        // The funds-safety contract only USES early_exit where collisions are
+        // impossible — here we just assert it does not PANIC and returns a
+        // Unique carrying a real match (never Ambiguous, since it short-circuits).
+        let range = AddressRange {
+            min: 0,
+            max: 8,
+            chains: ChainScope::Receive,
+        };
+        let always = |_a: &[usize], _idx: u64| true;
+        let outcome = search(3, &always, SearchMode::Address(range), true).unwrap();
+        match outcome {
+            SearchOutcome::Unique { .. } => {}
+            other => panic!(
+                "early_exit=true over a matching space: expected Unique-on-first, got {other:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn early_exit_false_unique_still_full_scans_for_a_single_match() {
+        // A SINGLE match with early_exit=false is Unique (the full scan finds
+        // no 2nd match). Address mode, low-index target.
+        let range = AddressRange {
+            min: 0,
+            max: 20,
+            chains: ChainScope::Receive,
+        };
+        let target_perm = vec![2, 0, 1];
+        let target_addr_idx = range.flatten(3);
+        let eval =
+            move |a: &[usize], idx: u64| a == target_perm.as_slice() && idx == target_addr_idx;
+        let outcome = search(3, &eval, SearchMode::Address(range), false).unwrap();
+        match outcome {
+            SearchOutcome::Unique {
+                assignment,
+                address_index,
+            } => {
+                assert_eq!(assignment, vec![2, 0, 1]);
+                assert_eq!(address_index, target_addr_idx);
+            }
+            other => panic!("expected Unique, got {other:?}"),
         }
     }
 }

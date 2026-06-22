@@ -2009,7 +2009,10 @@ where
             );
         }
     }
-    ps::search(n, evaluator, mode).map_err(map_search_error)
+    // P1: `early_exit=false` retains the v0.60.0 full-scan-with-2nd-match
+    // ambiguity certification (byte-unchanged). The over-supply address-search
+    // path opts into `early_exit=true` in P2 (SPEC §4.4 contract).
+    ps::search(n, evaluator, mode, false).map_err(map_search_error)
 }
 
 /// Convert a candidate keyed `md_codec::Descriptor` to its watch-only miniscript
