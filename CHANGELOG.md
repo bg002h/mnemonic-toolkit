@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.69.0] — 2026-06-22
+
+**SemVer-MINOR — cycle-15 Group A: BSMS HMAC_KEY secret-memory-hygiene + zeroize-lint allowlist precision (2 derived-output-sweep FOLLOWUP slugs + 2 Lane T whole-diff-review nits). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Outputs byte-identical (BIP-129 TV-3 MAC/IV/round-trip unchanged). MINOR (not PATCH) per the v0.10.1 / v0.67.0 / 0.68.0 precedent for a `pub`-signature secret-type migration even when no public shape changes.**
+
+### Changed (secret-memory hygiene — no observable behavior change)
+
+- **BSMS / BIP-129 — `bsms_crypto::derive_hmac_key` returns `Zeroizing<[u8; 32]>`.** The HMAC_KEY (`= SHA256(ENCRYPTION_KEY)`) is secret-class (derived from the `Zeroizing` ENCRYPTION_KEY); its scrub obligation now lives in the return type so no present-or-future caller can leak it by forgetting to wrap. The signature change reaches no real consumer — the sole production caller (`import-wallet`), the in-module tests, and the one integration-test helper all compile and pass with ZERO edits (`Zeroizing`'s `Deref`/`AsRef` covers `hex::encode`, `compute_mac(&hmac_key, …)`, and the slice path). `compute_mac` stays a bare `[u8; 32]` (its output is a published BIP-129 authentication tag — first 16 bytes become the on-wire IV, compared against the untrusted `mac_recv` — not secret-class). Closes FOLLOWUP `bsms-derive-hmac-key-not-zeroizing`.
+
+### Internal (test/lint precision — no shipped-binary change)
+
+- **zeroize-completeness lint — `TEST_ONLY_SECRET_FILES` cfg(test)-confinement tier.** `src/bundle_unified.rs` (whose sole `SecretString::new` is the `#[cfg(test)] s()` SlotInput fixture) moves out of the whole-file `NON_ROW_SECRET_FILES` allowlist into a new `TEST_ONLY_SECRET_FILES` tier guarded by `test_only_secret_files_confine_secret_patterns_to_cfg_test`: every secret pattern in such a file must appear AFTER the file's first `#[cfg(test)]` line, so a future PRODUCTION secret allocation added above the marker is CAUGHT rather than silently masked. Both partition-scan consumers (the declared/allowlisted scan + the staleness tripwire) union the new tier; pure helpers (`first_cfg_test_line` / `production_secret_lines`) are unit-tested over synthetic strings. The `ZEROIZE_ROWS.len()` count-guard message was reworded to drop the decay-prone hardcoded counts (keeps the live `{n}` and the `18..=66` bound). Live partition stays 38; `SECRET_FILE_FLOOR` stays 37. Closes FOLLOWUP `bundle-unified-whole-file-allowlist-precision`.
+
 ## mnemonic-toolkit [0.68.0] — 2026-06-21
 
 **SemVer-MINOR — cycle-15 Lane T: derived-output secret-memory-hygiene sweep (3 toolkit FOLLOWUP slugs). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Defense-in-depth (heap residue) — behavior / text / `--json` byte-identical. MINOR (not PATCH) per the v0.10.1 precedent for a `pub mod`-touching secret-type migration even when nothing public changes shape.**

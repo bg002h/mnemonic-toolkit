@@ -4483,7 +4483,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **What:** the HMAC key is a stack `[u8;32]` derived from the (`Zeroizing`) ENCRYPTION_KEY, returned un-wrapped. The doc-comment (`:109-113`) explicitly justifies this: "short-lived stack value … an attacker who can read process stack already has access to ENCRYPTION_KEY." Under a first-class bar, an HMAC key derived from secret material is itself secret-class and the wrap is ~1 line. (`bsms_crypto.rs` is whole-file-allowlisted as CRYPTO-INTERNAL in the zeroize lint, so this would not trip the gate regardless.)
 - **Fix (direction):** if the decision flips, return `Zeroizing<[u8;32]>` from `derive_hmac_key` and wrap `compute_mac`'s `out`.
 - **Severity:** LOW (documented, defensible decision; filed as a **flag-for-decision**, not an auto-file — the existing rationale is sound).
-- **Status:** `open` (deliberate-by-doc — flag for decision, do NOT auto-implement without re-deciding the documented rationale).
+- **Status:** `resolved` (v0.69.0, cycle-15 Group A). The decision flipped to the first-class-hygiene bar: `derive_hmac_key` now returns `Zeroizing<[u8; 32]>` (the secret-class HMAC_KEY scrubs on drop; the doc that defended the bare return was rewritten). ZERO caller edits were needed (`Zeroizing` `Deref`/`AsRef`). `compute_mac` stays a bare `[u8; 32]` (deliberately — its output is a published BIP-129 auth tag / on-wire IV source, not secret-class; a clarifying doc note was added). BIP-129 TV-3 MAC/IV/round-trip bytes unchanged.
 - **Tier:** `decision` / `flag`.
 - **Companion:** none (toolkit-internal crypto helper). Adjacent to the 2026-06-21 secret-keymat sweep's library-layer leg.
 
@@ -4495,6 +4495,18 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **What:** the zeroize-completeness scan checks per-FILE (declared-or-allowlisted), not per-allocation. A future PR adding a PRODUCTION secret allocation to `bundle_unified.rs` would be silently masked by the whole-file allowlist. Current code is clean — a LATENT gate-precision risk, not a leak.
 - **Fix (direction):** narrow the allowlist to a test-only assertion, or split the `s()` test helper out so the file carries no `SecretString::new` and can drop off the allowlist entirely.
 - **Severity:** LOW.
-- **Status:** `open`.
+- **Status:** `resolved` (v0.69.0, cycle-15 Group A). `bundle_unified.rs` moved from the whole-file `NON_ROW_SECRET_FILES` allowlist into a new `TEST_ONLY_SECRET_FILES` tier, guarded by `test_only_secret_files_confine_secret_patterns_to_cfg_test`: every secret pattern in such a file must live AFTER the first `#[cfg(test)]` line, so a future PRODUCTION secret allocation added above it now FAILS the lint (the latent masking is closed). Both partition-scan consumers union the new tier (load-bearing — without it the partition scan goes RED with `bundle_unified.rs` undeclared); pure helpers `first_cfg_test_line` / `production_secret_lines` carry a synthetic-string negative unit test. Live partition stays 38, `SECRET_FILE_FLOOR` stays 37.
 - **Tier:** `lint-precision` / `next-cycle`.
 - **Companion:** none (toolkit-internal lint). Surfaced alongside the 2026-06-21 secret-keymat sweep (M1 whole-diff finding).
+
+### `bip85-encode-helper-internal-scratch-zeroizing` — bip85 base64/base85 password + dice helper-internal `String`/`Vec<String>` scratch is bare
+
+- **Surfaced:** 2026-06-22, the cycle-15 Lane T whole-diff review (carried forward into cycle-15 Group A as nit #3). Cites grep-verified vs the worktree base `a7188aca` (off `9b7c78a7` = v0.68.0).
+- **Secret type / gap class:** rendered BIP-85 child-secret intermediate (the full encoded password before truncation; per-roll dice scratch). Gap class 6 (derivation-output intermediate) — same class as the out-of-scope `compute_outputs` bare-`String` output Vec.
+- **Where:** `crates/mnemonic-toolkit/src/bip85.rs:189` (`let encoded = base64_standard(&entropy[..])` — the full base64 password `String` before `[..length]` truncation into `SecretString`) + `:204` (`let encoded = base85_btc(&entropy[..])`, the base85 equivalent) + `:252` (`format_dice_rolls`'s `let mut out: Vec<String> = Vec::with_capacity(rolls as usize)` per-roll scratch). The `base64_standard` / `base85_btc` encode helpers themselves return a bare `String`.
+- **What:** Lane T (v0.68.0) `SecretString`-wrapped the seven `format_*` RETURN values, but these helper-internal scratch intermediates (the full encoded password string before truncate, the dice per-roll Vec) remain bare un-scrubbed `String`/`Vec<String>` — a heap residue of the rendered child secret. Defense-in-depth only (the returns are already wrapped); no observable behavior.
+- **Fix (direction):** wrap the `encoded` base64/base85 intermediates in `Zeroizing<String>` (or have `base64_standard`/`base85_btc` return `Zeroizing<String>`); wrap `format_dice_rolls`'s `out` Vec so the per-roll strings scrub.
+- **Severity:** LOW (defense-in-depth heap residue; the public returns already scrub).
+- **Status:** `open`.
+- **Tier:** `polish` / `next-cycle`.
+- **Companion:** none (toolkit-internal). Companion to the constellation **derived-output & codec-internal secret-zeroize** program (`project_secret_keymat_sweep_2026_06_21`); same residue class as the deferred `compute_outputs` output-Vec leg.
