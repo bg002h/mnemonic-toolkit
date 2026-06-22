@@ -875,6 +875,292 @@ fn bitcoind_template_completion_differential() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// own-account-subset-search, P5 — OVER-SUPPLY subset-search corpus row.
+//
+// The template-completion rows above complete a wallet whose own account is 0
+// (passed via `--account 0`, exact `n!` ordering). THIS row exercises the
+// NET-NEW over-supply subset-search surface (P2): the operator's OWN key lives
+// at a NON-ZERO account and is NOT passed via `--account`; instead the search
+// resolves it out of an OVER-SUPPLIED own range (`--own-account-max K`, K > the
+// true own-slot count). The COMPLETED descriptor's addresses are asserted ==
+// Bitcoin Core `deriveaddresses` (the external C++ oracle), with the INDEPENDENT
+// rust-miniscript golden asserted BEFORE the Core compare (anti-vacuity).
+//
+// A canonical `wsh-sortedmulti` 2-of-2 with the operator at BIP-48 account 3
+// (cosigner SEED_B at account 0). `--own-account-max 5` over-supplies own@{0..4}
+// (5 candidates for 1 own slot ⇒ genuine S_own = C(5,1)·2! = 10 enumeration).
+//
+// Same CONNECT-ONLY contract; a DEFAULT-CI leg
+// (`subset_search_completion_anti_vacuity_leg`) runs the
+// completion↔independent-oracle equivalence UNCONDITIONALLY (no node).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// The subset-search corpus case: own@3, cosigner@0, completed via
+/// `--own-account-max`. The original concrete descriptor is the independent +
+/// Core source.
+struct SubsetCase {
+    label: &'static str,
+    /// The ORIGINAL concrete descriptor (independent-golden + Core source).
+    descriptor: String,
+    /// `bundle` argv prefix (form substituted: "template" → md1, "policy" → mk1).
+    bundle_args: Vec<String>,
+    /// The TRUE own account (resolved by the search, NOT passed to restore).
+    own_account: u32,
+    /// `--own-account-max` value (> own_account, over-supplying the own range).
+    own_account_max: u32,
+    /// Which slot indices are external cosigners (supplied as --cosigner).
+    cosigner_slots: Vec<usize>,
+}
+
+fn subset_corpus() -> Vec<SubsetCase> {
+    // Canonical wsh-sortedmulti 2-of-2 {A@3, B@0} at BIP-48. Own at NON-ZERO
+    // account 3; resolved via --own-account-max 5 (own@{0..4} candidates).
+    let own_path = "48'/0'/3'/2'";
+    let cosigner_path = "48'/0'/0'/2'";
+    let keys = [key_str(SEED_A, own_path), key_str(SEED_B, cosigner_path)];
+    let desc = format!("wsh(sortedmulti(2,{},{}))", keys[0], keys[1]);
+    let mut bundle: Vec<String> = vec![
+        "bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "wsh-sortedmulti".into(),
+        "--threshold".into(),
+        "2".into(),
+        "--md1-form".into(),
+        "FORM".into(),
+        "--group-size".into(),
+        "0".into(),
+        "--no-engraving-card".into(),
+    ];
+    for (idx, path) in [own_path, cosigner_path].iter().enumerate() {
+        let seed = if idx == 0 { SEED_A } else { SEED_B };
+        let (xpub, fp) = xpub_at(seed, path);
+        bundle.push("--slot".into());
+        bundle.push(format!("@{idx}.xpub={xpub}"));
+        bundle.push("--slot".into());
+        bundle.push(format!("@{idx}.fingerprint={fp}"));
+        bundle.push("--slot".into());
+        bundle.push(format!("@{idx}.path={path}"));
+    }
+    vec![SubsetCase {
+        label: "subset-wsh-sortedmulti-2of2-own@3",
+        descriptor: desc,
+        bundle_args: bundle,
+        own_account: 3,
+        own_account_max: 5,
+        cosigner_slots: vec![1],
+    }]
+}
+
+/// Run the (assert_cmd) `mnemonic` bundle for `case` with a given `--md1-form`.
+fn run_subset_bundle(case: &SubsetCase, form: &str) -> std::process::Output {
+    let mut args = case.bundle_args.clone();
+    for a in args.iter_mut() {
+        if a == "FORM" {
+            *a = form.to_string();
+        }
+    }
+    AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .expect("spawn mnemonic bundle")
+}
+
+/// Emit the template md1, the per-cosigner mk1s, and the recorded WalletPolicyId.
+fn emit_subset_template(case: &SubsetCase) -> (Vec<String>, Vec<Vec<String>>, String) {
+    let t = run_subset_bundle(case, "template");
+    assert!(
+        t.status.success(),
+        "subset template bundle failed for {}: {}",
+        case.label,
+        String::from_utf8_lossy(&t.stderr)
+    );
+    let t_stdout = String::from_utf8_lossy(&t.stdout).to_string();
+    let md1 = section_lines(&t_stdout, "# md1");
+    let id = String::from_utf8_lossy(&t.stderr)
+        .lines()
+        .find(|l| l.contains("wallet-id (hex)"))
+        .and_then(|l| l.split(':').next_back())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| panic!("no wallet-id (hex) for {}", case.label));
+    let p = run_subset_bundle(case, "policy");
+    assert!(
+        p.status.success(),
+        "subset policy bundle failed for {}",
+        case.label
+    );
+    let cosigners = mk1_groups(&String::from_utf8_lossy(&p.stdout));
+    (md1, cosigners, id)
+}
+
+/// Complete the keyless template via the OVER-SUPPLY OWN-ACCOUNT subset-search
+/// (`--own-account-max`, id-search; own account NOT passed via `--account`) →
+/// (reconstructed descriptor, reported receive addresses). Asserts success.
+fn complete_subset(case: &SubsetCase, count: u32) -> (String, Vec<String>) {
+    let (md1, cosigners, id) = emit_subset_template(case);
+    let mut args = vec!["restore".to_string(), "--network".into(), "mainnet".into()];
+    for c in &md1 {
+        args.push("--md1".into());
+        args.push(c.clone());
+    }
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        // The over-supply axis: own seed derived at 0..own_account_max-1; the true
+        // (non-zero) own account is RESOLVED by the search, never passed in.
+        "--own-account-max".into(),
+        case.own_account_max.to_string(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        count.to_string(),
+        "--json".into(),
+    ]);
+    for &slot in &case.cosigner_slots {
+        for c in &cosigners[slot] {
+            args.push("--cosigner".into());
+            args.push(c.clone());
+        }
+    }
+    let out = AssertCommand::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .expect("spawn mnemonic restore");
+    assert!(
+        out.status.success(),
+        "subset-search completion failed for {}: {}",
+        case.label,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let v: Value = serde_json::from_slice(&out.stdout).expect("restore --json");
+    let w = &v["wallets"][0];
+    let recon = w["descriptor"].as_str().expect("descriptor").to_string();
+    let addrs = w["first_addresses"]
+        .as_array()
+        .expect("first_addresses")
+        .iter()
+        .map(|x| x.as_str().unwrap().to_string())
+        .collect();
+    (recon, addrs)
+}
+
+/// DEFAULT-CI anti-vacuity leg (NOT `#[ignore]`): the COMPLETED subset-search
+/// restore address for each case == the INDEPENDENT rust-miniscript derivation of
+/// the ORIGINAL descriptor (own key at its TRUE non-zero account). Gates the
+/// completion↔independent-oracle equivalence WITHOUT a node — and is the same
+/// assertion the bitcoind row makes BEFORE the Core compare (so the gated row can
+/// never pass vacuously). Also proves non-vacuity along the SUBSET axis: the
+/// independent golden of the TRUE own account DIFFERS from any wrong account
+/// (`own@0`), so a passing match means the search resolved own@3, not own@0.
+#[test]
+fn subset_search_completion_anti_vacuity_leg() {
+    for case in subset_corpus() {
+        let independent = derive_receive(&case.descriptor, N + 1);
+        let (recon, reported) = complete_subset(&case, N + 1);
+        assert_eq!(
+            reported, independent,
+            "[{}] COMPLETED subset-search restore addresses must equal the INDEPENDENT \
+             rust-miniscript derivation of the original (own@{})\n  recon: {recon}",
+            case.label, case.own_account
+        );
+        // The reconstructed descriptor must itself derive identically.
+        let recon_independent = derive_receive(&recon, N + 1);
+        assert_eq!(
+            recon_independent, independent,
+            "[{}] the reconstructed descriptor must derive the SAME addresses as the original",
+            case.label
+        );
+        // SUBSET-AXIS anti-vacuity: the TRUE own account's golden DIFFERS from the
+        // wrong (own@0) golden — so the matched address genuinely resolves own@3,
+        // not own@0 (the over-supply search is non-vacuous along the own axis).
+        // NOTE: the origin annotation is OPAQUE metadata (derivation uses the
+        // xpub, not the origin path), so a wrong-account descriptor must RE-DERIVE
+        // the own key at account 0 (a genuinely different xpub), NOT just rewrite
+        // the origin string.
+        let wrong_own_key = key_str(SEED_A, "48'/0'/0'/2'");
+        let cosigner_key = key_str(SEED_B, "48'/0'/0'/2'");
+        let wrong_own_desc = format!("wsh(sortedmulti(2,{wrong_own_key},{cosigner_key}))");
+        let wrong_own_golden = derive_receive(&wrong_own_desc, 1);
+        assert_ne!(
+            reported[..1],
+            wrong_own_golden[..],
+            "[{}] the completed (own@3) address must DIFFER from the own@0 derivation — \
+             else the subset-search oracle is vacuous along the own axis",
+            case.label
+        );
+    }
+}
+
+/// End-to-end: keyless TEMPLATE → restore OVER-SUPPLY subset-search COMPLETION →
+/// Bitcoin Core `deriveaddresses` on the completed descriptor. `#[ignore]`/
+/// env-gated (same CONNECT-ONLY contract as `bitcoind_end_to_end_differential`).
+#[test]
+#[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
+fn bitcoind_subset_search_completion_differential() {
+    let Some(w) = read_wiring() else {
+        eprintln!(
+            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
+        );
+        return;
+    };
+    let info = bitcoin_cli(&w, &["getblockchaininfo"]);
+    assert_eq!(
+        info.get("chain").and_then(|c| c.as_str()),
+        Some("main"),
+        "bitcoind must be on -chain=main (got {info:?})"
+    );
+
+    let mut total_checks = 0usize;
+    for case in subset_corpus() {
+        // ANTI-VACUITY: the COMPLETED subset-search restore addrs == the
+        // INDEPENDENT rust-miniscript derivation of the original — BEFORE Core.
+        let independent = derive_receive(&case.descriptor, N + 1);
+        let (recon_desc, reported) = complete_subset(&case, N + 1);
+        assert_eq!(
+            reported, independent,
+            "[{}] anti-vacuity: subset-search completed addrs must equal the independent \
+             derivation BEFORE Core",
+            case.label
+        );
+
+        // Core on the COMPLETED (reconstructed) chain-0 descriptor.
+        let recon_c0 = single_chain_desc(&recon_desc, 0);
+        let core_recon = core_addresses(&w, &recon_c0);
+        for i in 0..=(N as usize) {
+            assert_eq!(
+                reported[i], core_recon[i],
+                "SUBSET-SEARCH COMPLETION ADDRESS DIVERGENCE (FUNDS-CRITICAL) [{}] idx{i}: \
+                 toolkit={} bitcoind={} desc={recon_c0}",
+                case.label, reported[i], core_recon[i]
+            );
+            total_checks += 1;
+        }
+
+        // Cross-check vs Core on the ORIGINAL descriptor (catches a completion
+        // that reconstructs a DIFFERENT-but-Core-valid wallet).
+        let orig_c0 = single_chain_desc(&case.descriptor, 0);
+        let core_orig = core_addresses(&w, &orig_c0);
+        for i in 0..=(N as usize) {
+            assert_eq!(
+                reported[i], core_orig[i],
+                "SUBSET-SEARCH RECONSTRUCTION MISMATCH [{}] idx{i}: \
+                 toolkit={} bitcoind(original)={}",
+                case.label, reported[i], core_orig[i]
+            );
+        }
+    }
+    eprintln!(
+        "toolkit bitcoind SUBSET-SEARCH-COMPLETION differential PASS: {} shapes, \
+         {total_checks} receive-address checks (+ original cross-check per shape), \
+         all byte-identical vs bitcoind v27.0",
+        subset_corpus().len()
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // H12 (cycle-1) — descriptor-mode taproot multisig defaults the BIP-48 origin
 // to script-type 3' (P2TR), not 2' (P2WSH).
 //
