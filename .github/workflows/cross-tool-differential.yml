@@ -40,10 +40,14 @@ jobs:
         # gate compares the toolkit walker against THIS md-cli's walker, so a
         # future md-cli tag must not silently move the comparison baseline.
         # `--features cli-compiler` matches scripts/install.sh:35's pin. The
-        # md-codec 0.35.0→0.35.1 skew is wire-neutral (the only delta is
-        # to_miniscript.rs, a render-direction tolerance), so it does not
-        # confound the walker-divergence signal.
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.6.2 md-cli --features cli-compiler
+        # md-cli v0.6.2→v0.7.1 skew is wire-neutral for THIS gate: md-cli's
+        # source is byte-identical across the tags (only the md-codec pin moves
+        # to =0.37.0, the #25 per-cosigner use-site funds-safety fix), and the
+        # differential compares encode-side ids (wallet_policy_id /
+        # wallet_descriptor_template_id), not derived addresses, over a corpus
+        # with NO divergent-per-cosigner-suffix rows — so the #25 fix has no
+        # behavioral trigger here and the walker-divergence signal is unmoved.
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.7.1 md-cli --features cli-compiler
 
       - name: Build mnemonic binary (debug)
         run: cargo build --bin mnemonic
