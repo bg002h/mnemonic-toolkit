@@ -26,5 +26,5 @@ mk1_fingerprint_match[2]: ok cosigner[2] fingerprint matches
 mk1_path_match[2]: ok cosigner[2] path matches
 md1_decode: ok decoded successfully
 md1_wallet_policy: ok wallet-policy mode confirmed
-md1_xpub_match: ok all 3 pubkeys match expected (multiset)
+md1_xpub_match: ok all 3 pubkeys match expected (multiset) and decoded policy (tree + use-site path) matches
 result: ok
