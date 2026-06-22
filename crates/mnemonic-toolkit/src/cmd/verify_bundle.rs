@@ -863,6 +863,9 @@ fn verify_multisig_template<W: Write, E: Write>(
         explicit_own_origin,
         cosigner_specs: &args.cosigner,
         own_account_max: None,
+        // P4 scope: verify-bundle exposes `--search-cosigner-subset` later; until
+        // then the opt-in path is OFF here (own-only / exact cosigners).
+        search_cosigner_subset: false,
         expect_wallet_id: args.expect_wallet_id.clone(),
         search_address: args.search_address.clone(),
         search_addr_min: args.search_addr_min,

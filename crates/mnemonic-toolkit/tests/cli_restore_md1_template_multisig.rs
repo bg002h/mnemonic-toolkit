@@ -1025,6 +1025,291 @@ fn own_account_max_short_id_prefix_refuses() {
 }
 
 // ===========================================================================
+// P3 — opt-in bounded cosigner-subset search (`--search-cosigner-subset`).
+// The operator over-supplies `--cosigner` cards (unsure which/how many cosigners
+// belong); the search resolves the correct cosigner subset too. realized_s =
+// s_opt (the stratified opt-in space, larger than the own-only s_own), §6
+// hard-ceilinged so an over-supplied pool can't DoS. Default OFF = own-only (P2).
+// ===========================================================================
+
+#[test]
+fn search_cosigner_subset_completes_with_extra_cosigner() {
+    // THE HEADLINE OPT-IN GATE. A 2-of-3 wallet {A@0, B@0, C@0}. The operator
+    // supplies their own seed (A) + the two REAL cosigners (B, C) + ONE EXTRA
+    // outsider card → 3 cosigner candidates for a wallet with 2 cosigner slots.
+    // `--search-cosigner-subset` must select the {B,C} subset (drop the outsider)
+    // and complete to the INDEPENDENT rust-miniscript golden.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 2);
+    // The two REAL cosigner cards (B@1, C@2) read off the real wallet template.
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+    // One EXTRA outsider card at the same canonical origin family (not a member).
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider = emit_cosigner_mk1("wsh-multi", "2", cos_outsider, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in mk1_b.iter().chain(&mk1_c).chain(&mk1_outsider) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "--search-cosigner-subset must select the correct cosigner subset (drop the outsider) \
+         and complete to the golden"
+    );
+}
+
+#[test]
+fn search_cosigner_subset_anti_vacuity_missing_true_cosigner_no_match() {
+    // Anti-vacuity for the headline: if the pool LACKS a true cosigner (here C is
+    // replaced by a second outsider), no cosigner subset reproduces the wallet →
+    // NO-MATCH refuse (never a silent wrong wallet).
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    // TWO outsider cards (C is missing) → the {B,C} subset is unreachable.
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider1 = emit_cosigner_mk1("wsh-multi", "2", cos_outsider, 1);
+    let cos_outsider2 = &[(SEED_A, 0u32), (SEED_C, 1u32)]; // C at a WRONG account
+    let mk1_outsider2 = emit_cosigner_mk1("wsh-multi", "2", cos_outsider2, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    for c in mk1_b.iter().chain(&mk1_outsider1).chain(&mk1_outsider2) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    // Exit 4 = a genuine search NO-MATCH (RestoreMismatch), NOT a parse/input
+    // error — the opt-in search ran the full space and found no reproducing
+    // subset (load-bearing: it must REACH the search, not refuse early).
+    let assert = mnemonic().args(&args).assert().code(4);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.to_uppercase().contains("NO MATCH"),
+        "a pool lacking a true cosigner must NO-MATCH under the opt-in search: {stderr}"
+    );
+}
+
+#[test]
+fn search_cosigner_subset_address_search_completes() {
+    // The early-exit (address-search) opt-in path: same over-supplied-cosigner
+    // 2-of-3 sortedmulti, resolved via --search-address. Collision-free ⇒
+    // early-exit on first match.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 3);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 2);
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider = emit_cosigner_mk1("wsh-sortedmulti", "2", cos_outsider, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--search-address".into(),
+        golden[0].clone(),
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    for c in mk1_b.iter().chain(&mk1_c).chain(&mk1_outsider) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "--search-cosigner-subset address-search (early-exit) must resolve the cosigner subset"
+    );
+}
+
+#[test]
+fn search_cosigner_subset_composes_with_own_account_max() {
+    // Opt-in over-supply on BOTH axes: own at account 2 (over-supplied via
+    // --own-account-max 4) AND an extra cosigner card over-supplied. The
+    // stratified search must resolve own@2 + the {B} cosigner subset. Exercises a
+    // real (own-subset, cosigner-subset) selection.
+    let cos = &[(SEED_A, 2u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider = emit_cosigner_mk1("wsh-multi", "2", cos_outsider, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "4".into(),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in mk1_b.iter().chain(&mk1_outsider) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "--search-cosigner-subset + --own-account-max must resolve own@2 + the cosigner subset"
+    );
+}
+
+#[test]
+fn search_cosigner_subset_hard_ceiling_refuses() {
+    // §6: an opt-in pool whose s_opt blows past the hard ceiling must refuse
+    // BEFORE cap calibration — no DoS, no panic. A 2-of-7 wallet (N=7) with the
+    // own range at the K_own=256 ceiling drives s_opt = Σ_j C(256,j)·C(M_sup,7−j)·7!
+    // far past 1e15 (the j=6 stratum alone, C(256,6)·C(2,1)·7! ≈ 3.7e15 > 1e15).
+    // 7 distinct cosigner keys via the 4 seeds at distinct accounts.
+    let cos = &[
+        (SEED_A, 0u32),
+        (SEED_B, 0u32),
+        (SEED_C, 0u32),
+        (SEED_A, 1u32),
+        (SEED_B, 1u32),
+        (SEED_C, 1u32),
+        (SEED_A, 2u32),
+    ];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    // Supply 2 cosigner cards (enough to reach a valid j-stratum; the ceiling
+    // refuse fires before any search).
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        // K_own = 256 (the max); the opt-in cosigner-subset stratification over the
+        // wide own range × N=7 pushes s_opt past 1e15.
+        "--own-account-max".into(),
+        "256".into(),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    for c in mk1_b.iter().chain(&mk1_c) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("ceiling") || low.contains("exceeds") || low.contains("overflow"),
+        "an opt-in space past the hard ceiling must refuse before calibration: {stderr}"
+    );
+    assert!(
+        !low.contains("panic"),
+        "the ceiling refusal must not panic: {stderr}"
+    );
+}
+
+#[test]
+fn search_cosigner_subset_weak_prefix_refuses() {
+    // A too-short --expect-wallet-id over the LARGER opt-in space (s_opt) must
+    // refuse for-weakness (prefix-strength sized to s_opt, not s_own / n!).
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let weak = id[..8].to_string(); // 4 bytes
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider = emit_cosigner_mk1("wsh-multi", "2", cos_outsider, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        // Widen both axes so s_opt is comfortably large enough that a 4-byte
+        // prefix is too weak.
+        "--own-account-max".into(),
+        "32".into(),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        weak,
+    ]);
+    for c in mk1_b.iter().chain(&mk1_c).chain(&mk1_outsider) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("prefix") || low.contains("weak") || low.contains("bytes"),
+        "a too-short id prefix over the opt-in space must refuse: {stderr}"
+    );
+}
+
+#[test]
+fn search_cosigner_subset_at_n_conflict() {
+    // §5: explicit `--cosigner @N=` assignment ⊕ --search-cosigner-subset →
+    // BadInput (explicit placement is incompatible with subset-search).
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let path = canonical_path("wsh-multi", 0);
+    let (xpub_b, _fp_b) = xpub_at(SEED_B, &path);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        "deadbeefdeadbeef".into(),
+        "--cosigner".into(),
+        format!("@1={xpub_b}"),
+    ]);
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("@n=") || low.contains("explicit") || low.contains("subset-search"),
+        "explicit @N= ⊕ --search-cosigner-subset must be a BadInput mutex: {stderr}"
+    );
+}
+
+// ===========================================================================
 // M-1 (P3a R0 fold): the own-origin deviation reproduces a DEFAULT-family
 // (BIP-87) wallet. The toolkit's multisig emit DEFAULTS to BIP-87
 // (`m/87'/coin'/acct'`), but `canonical_origin(tree)` ALWAYS returns the BIP-48

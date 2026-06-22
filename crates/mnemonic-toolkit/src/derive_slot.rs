@@ -269,7 +269,6 @@ pub fn derive_account_xpub_only(
 /// `ScrubbedXpriv` for the loop and scrubbed at fn exit. Equivalent to calling
 /// [`derive_account_xpub_only`] once per path (proven byte-identical by test),
 /// but derives the seed/master a single time.
-#[allow(dead_code)] // P0-additive; consumed by P2 (see ScrubbedXpriv note).
 pub fn derive_accounts_xpub_only(
     entropy: &[u8],
     passphrase: &str,

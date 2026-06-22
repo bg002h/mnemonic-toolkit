@@ -54,6 +54,13 @@ const ALL_SINGLE_SIG: [CliTemplate; 4] = [
 /// grows as `C(K, own-slots)·N!`.
 const OWN_ACCOUNT_MAX_CEILING: usize = 256;
 
+/// SPEC §6 (P3 open-item) — a sane hard ceiling on the supplied cosigner-
+/// candidate count `M_sup` under `--search-cosigner-subset` (opt-in over-supply).
+/// The `s_opt` ceiling already catches the combinatorial blow-up, but a concrete
+/// per-axis bound refuses an absurd pool early. Mirrors `OWN_ACCOUNT_MAX_CEILING`
+/// — the total pool (`K_own + M_sup`) stays bounded.
+const COSIGNER_SUBSET_MAX_CANDIDATES: usize = 256;
+
 /// SPEC §6 — the hard `realized_s` ceiling: refuse (before cap calibration,
 /// distinct from the time-cap) if the realized candidate count exceeds this.
 /// `1e15` is ~4000 days at the #28 benchmark's ~170M cand/min — clearly refuse;
@@ -144,6 +151,19 @@ pub struct RestoreArgs {
     /// passes; the `--account` default is ignored). `K ≤ 256`.
     #[arg(long = "own-account-max", conflicts_with = "account")]
     pub own_account_max: Option<u32>,
+
+    /// P3 — OPT-IN bounded cosigner-subset search. By default (OFF) a multisig
+    /// template completion requires the supplied `--cosigner` cards to be EXACT
+    /// (own-only — over-supplying cosigners refuses). With this flag the operator
+    /// MAY over-supply `--cosigner` cards (unsure which/how many cosigners belong);
+    /// the search resolves the correct cosigner subset too. The space grows to
+    /// `S_opt = Σ_j C(K_own,j)·C(M_sup,N−j)·N!`, so a LONGER `--expect-wallet-id`
+    /// prefix is needed (a too-short prefix refuses; `--search-address` is the
+    /// recommended collision-free mode for large opt-in pools). Bounded by the §6
+    /// hard ceiling + the adaptive time-cap. Mutually exclusive with `--cosigner
+    /// @N=` (explicit placement). Composes with `--own-account-max` / `--account`.
+    #[arg(long = "search-cosigner-subset")]
+    pub search_cosigner_subset: bool,
 
     /// #28 phase 2 — a known receive (or change) ADDRESS of the wallet; triggers
     /// ADDRESS-SEARCH for a multisig template completion. The search finds the
@@ -1149,6 +1169,13 @@ pub(crate) struct MultisigCompletionCtx<'a> {
     /// assignment over the enlarged (own-first) pool. Carried so BOTH restore +
     /// verify-bundle drive the subset-search uniformly. `K ≤ 256` (SPEC §6).
     pub own_account_max: Option<u32>,
+    /// P3 — `--search-cosigner-subset`: OPT-IN bounded cosigner-subset search.
+    /// When `true` the supplied `--cosigner` cards MAY exceed the wallet's true
+    /// cosigner count; the search ranges over the `(own-subset, cosigner-subset,
+    /// ordering)` opt-in space `S_opt` (SPEC §4.3) and resolves the correct
+    /// subset. When `false` (default) the cosigner cards must be EXACT (own-only).
+    /// Carried so BOTH restore + verify-bundle drive the opt-in path uniformly.
+    pub search_cosigner_subset: bool,
     /// The completion mode target — `--expect-wallet-id` (id-search).
     pub expect_wallet_id: Option<String>,
     /// The completion mode target — `--search-address` (address-search).
@@ -1387,6 +1414,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         explicit_own_origin,
         cosigner_specs: &args.cosigner,
         own_account_max: args.own_account_max,
+        search_cosigner_subset: args.search_cosigner_subset,
         expect_wallet_id: args.expect_wallet_id.clone(),
         search_address: args.search_address.clone(),
         search_addr_min: args.search_addr_min,
@@ -1577,14 +1605,15 @@ pub(crate) fn complete_multisig_template<E: Write>(
     }
 
     // §2 open-point 7 / SPEC §5: explicit `--cosigner @N=` assignment is
-    // MUTUALLY EXCLUSIVE with the over-supply subset-search (`--own-account-max`):
-    // the search PLACES keys, but @N= ASSERTS placements — combining them is a
-    // contradiction. Refuse up front (BadInput).
-    if any_assigned && own_account_max.is_some() {
+    // MUTUALLY EXCLUSIVE with EITHER subset-search mode — the own-account RANGE
+    // (`--own-account-max`) OR the opt-in cosigner-subset (`--search-cosigner-
+    // subset`): the search PLACES keys, but @N= ASSERTS placements — combining
+    // them is a contradiction. Refuse up front (BadInput).
+    if any_assigned && (own_account_max.is_some() || ctx.search_cosigner_subset) {
         return Err(bad(
-            "explicit @N= assignment cannot combine with subset-search (--own-account-max): \
-             @N= asserts the key→slot placement while the subset-search resolves it. \
-             Use one or the other.",
+            "explicit @N= assignment cannot combine with subset-search \
+             (--own-account-max / --search-cosigner-subset): @N= asserts the key→slot \
+             placement while the subset-search resolves it. Use one or the other.",
         ));
     }
 
@@ -1646,9 +1675,13 @@ pub(crate) fn complete_multisig_template<E: Write>(
 
     // The own accounts. EXACT path: the `--account` LIST. OVER-SUPPLY path
     // (`--own-account-max K`): the range `0..K` (the operator does not recall
-    // their own account; the subset-search resolves it). `over_supply` drives
-    // the cardinality / enumeration / early-exit gating below.
+    // their own account; the subset-search resolves it). `over_supply` (own-only)
+    // drives the own-anchored cardinality / enumeration; `opt_in`
+    // (`--search-cosigner-subset`, P3) drives the stratified opt-in space. Both
+    // build the own pool PUBLIC-ONLY and enable address-search early-exit. They
+    // compose: opt-in MAY also widen the own range via `--own-account-max`.
     let over_supply = own_account_max.is_some();
+    let opt_in = ctx.search_cosigner_subset;
     let own_accounts_storage: Vec<u32>;
     let own_accounts: &[u32] = if let Some(k) = own_account_max {
         own_accounts_storage = (0..k as u32).collect();
@@ -1695,13 +1728,14 @@ pub(crate) fn complete_multisig_template<E: Write>(
     };
 
     // --- Build the OWN candidate keys (one per own account) ------------------
-    // OVER-SUPPLY (`--own-account-max`): derive `K_own` own candidates via the
-    // PUBLIC-ONLY `derive_account_xpub_only` (P0, SPEC §4.5) — the loop holds
-    // only public xpubs and NEVER owns an `Xpriv` (else it would ship the
-    // `K_own`-fold un-scrubbed residue). EXACT (`--account` list): keep the
-    // bare `derive_bip32_from_entropy_at_path` byte-unchanged (the v0.60.0 path).
+    // SUBSET-SEARCH (`--own-account-max` over-supply OR `--search-cosigner-subset`
+    // opt-in): derive the `K_own` own candidates via the PUBLIC-ONLY
+    // `derive_accounts_xpub_only` (P0, SPEC §4.5) — the loop holds only public
+    // xpubs and NEVER owns an `Xpriv` (else it would ship the un-scrubbed
+    // residue). EXACT (`--account` list, no subset-search): keep the bare
+    // `derive_bip32_from_entropy_at_path` byte-unchanged (the v0.60.0 path).
     let mut own_keys: Vec<CandidateKey> = Vec::with_capacity(own_accounts.len());
-    if over_supply {
+    if over_supply || opt_in {
         // Resolve every own origin first (shared family), then derive the shared
         // master ONCE across the range via the fan-out (own candidates share the
         // path family). The returned material is PUBLIC-ONLY.
@@ -1744,8 +1778,8 @@ pub(crate) fn complete_multisig_template<E: Write>(
     }
 
     // ---- EXPLICIT mode (all `--cosigner @N=`, no search) --------------------
-    // (over_supply is mutually exclusive with @N= — gated above — so this only
-    // runs on the exact path.)
+    // (both subset-search modes are mutually exclusive with @N= — gated above —
+    // so this only runs on the exact path.)
     if any_assigned {
         return complete_explicit_assignment(d, &own_keys, &assigned_cosigners, stderr);
     }
@@ -1759,7 +1793,61 @@ pub(crate) fn complete_multisig_template<E: Write>(
     pool.extend(unassigned_cosigners);
 
     // --- §5a premise gates (own-only) / Floor 1(ii) every slot supplied ------
-    let realized_s: u128 = if over_supply {
+    let realized_s: u128 = if opt_in {
+        // OPT-IN cosigner-subset search (P3, SPEC §4.3). The cosigner count is
+        // UNCERTAIN: the pool is `k_own` own + `m_cosigners` supplied cosigner
+        // candidates (which MAY exceed the wallet's true M), and the search ranges
+        // over `(own-subset, cosigner-subset, ordering)` per the valid j-strata.
+        // `realized_s = s_opt(k_own, m_cosigners, n, sorted)` — NOT s_own, NOT n!.
+        // The own-only "refuse extra cosigners" §5a gate does NOT apply here
+        // (over-supplying cosigners is the whole point). §6 ceilings (refuse
+        // BEFORE cap calibration, so an over-supplied pool cannot DoS):
+        //   - `k_own ≤ 256` (the OWN_ACCOUNT_MAX_CEILING — enforced for
+        //     `--own-account-max` above, but an `--account`-list opt-in pool
+        //     reaches here without that gate, so re-assert on the realized count),
+        //   - `m_cosigners ≤ 256` (a sane per-axis cosigner-candidate bound),
+        //   - `s_opt ≤ REALIZED_S_MAX` (the combinatorial DoS bound),
+        //   - `s_opt` overflow (None) → refuse.
+        if k_own > OWN_ACCOUNT_MAX_CEILING {
+            return Err(bad(format!(
+                "--search-cosigner-subset: {k_own} own-account candidates exceeds the hard \
+                 ceiling of {OWN_ACCOUNT_MAX_CEILING}: narrow --account / --own-account-max."
+            )));
+        }
+        if m_cosigners > COSIGNER_SUBSET_MAX_CANDIDATES {
+            return Err(bad(format!(
+                "--search-cosigner-subset: {m_cosigners} supplied cosigner candidates exceeds \
+                 the hard ceiling of {COSIGNER_SUBSET_MAX_CANDIDATES}: narrow the --cosigner \
+                 cards (the opt-in space grows as Σ_j C(K_own,j)·C(M_sup,N−j)·N!)."
+            )));
+        }
+        // The opt-in space is non-empty only if SOME valid j-stratum exists:
+        // `j ∈ [1, min(k_own, n−1)]` with `(n − j) ≤ m_cosigners` cosigner
+        // candidates. The minimum cosigners needed is `n − min(k_own, n−1)`; if
+        // even the most-own stratum needs more cosigner cards than supplied, no
+        // assignment can fill the slots → NO-MATCH would be the only outcome.
+        // Refuse early with an actionable message (s_opt == 0).
+        let sorted = crate::synthesize::is_order_independent_shape(&d.tree);
+        let s = ps::s_opt(k_own, m_cosigners, n, sorted)
+            .ok_or_else(|| bad("multisig template: opt-in subset-search candidate space overflow"))?;
+        if s == 0 {
+            return Err(ToolkitError::ModeViolation {
+                mode: "restore",
+                flag: "--search-cosigner-subset",
+                message: "not enough keys to fill every slot under the opt-in cosigner-subset \
+                          search: the supplied own candidates + cosigner candidates cannot fill \
+                          all N slots (each assignment needs ≥1 own and ≥1 cosigner). Supply more \
+                          --cosigner cards, or raise --own-account-max.",
+            });
+        }
+        if s > REALIZED_S_MAX {
+            return Err(bad(format!(
+                "opt-in cosigner-subset search space ({s} candidates) exceeds the hard ceiling \
+                 of {REALIZED_S_MAX}: narrow --own-account-max or supply fewer --cosigner cards."
+            )));
+        }
+        s
+    } else if over_supply {
         // OWN-ONLY subset-search. The OWN slots are `j = N − M`; the cosigner
         // cards must be EXACT (own-only — over-supply cosigners needs the P3
         // `--search-cosigner-subset`). Premise-violation table (SPEC §5a):
@@ -1856,14 +1944,22 @@ pub(crate) fn complete_multisig_template<E: Write>(
     let sorted_shape = crate::synthesize::is_order_independent_shape(&d.tree);
 
     // --- The enumeration the engine ranks over (SPEC §4) ---------------------
-    // OVER-SUPPLY: the own-anchored subset space `s_own` (NOT n!). For a SORTED
-    // shape the over-supply generator drops the perm factor ENUMERATION-SIDE
-    // (each subset emitted ONCE in identity order, cardinality C(K_own,j)) — so
-    // the v0.60.0 evaluator identity-filter must NOT also run on the over-supply
+    // OPT-IN: the stratified opt-in space `s_opt` (own-subset × cosigner-subset ×
+    // ordering, SPEC §4.3). OVER-SUPPLY (own-only): the own-anchored subset space
+    // `s_own` (NOT n!). For a SORTED shape BOTH subset generators drop the perm
+    // factor ENUMERATION-SIDE (each subset emitted ONCE in identity order) — so
+    // the v0.60.0 evaluator identity-filter must NOT also run on either subset
     // path ("identity" is per-subset there; a verbatim skip would discard every
     // non-first subset, SPEC §3 R0-r1 I-1). EXACT: the FullPermutation space, and
     // the sorted evaluator-filter stays byte-unchanged.
-    let enumeration = if over_supply {
+    let enumeration = if opt_in {
+        ps::Enumeration::OptIn {
+            k_own,
+            m_sup: m_cosigners,
+            n,
+            sorted: sorted_shape,
+        }
+    } else if over_supply {
         let j = n - m_cosigners; // own slots (gated ≥1 above)
         ps::Enumeration::OwnAnchored {
             k_own,
@@ -1874,9 +1970,9 @@ pub(crate) fn complete_multisig_template<E: Write>(
     } else {
         ps::Enumeration::FullPermutation { n }
     };
-    // The sorted-collapse evaluator-filter applies ONLY on the EXACT path (the
-    // over-supply sorted shape already collapsed orderings enumeration-side).
-    let apply_identity_filter = sorted_shape && !over_supply;
+    // The sorted-collapse evaluator-filter applies ONLY on the EXACT path (both
+    // subset paths already collapsed orderings enumeration-side).
+    let apply_identity_filter = sorted_shape && !over_supply && !opt_in;
 
     // The fresh-descriptor builder shared by both evaluators: under an
     // assignment (slot → pool index) BUILD the keyed descriptor from the
@@ -1973,12 +2069,15 @@ pub(crate) fn complete_multisig_template<E: Write>(
             }
         };
         // address-search is collision-free (full scriptPubKey) ⇒ a match is
-        // provably unique ⇒ first-match early-exit is SAFE on the OVER-SUPPLY
-        // path (SPEC §4.4 contract). The EXACT path keeps `false` (byte-unchanged
-        // full-scan + 2nd-match-ambiguity certification — the I-5 regression
-        // guard). The sorted EXACT path also keeps `false` (it collapses to a
-        // single identity candidate, so full-scan is cheap and unchanged).
-        let early_exit = over_supply;
+        // provably unique ⇒ first-match early-exit is SAFE on EITHER subset path
+        // (own-only over-supply OR opt-in cosigner-subset) — distinct subsets ⇒
+        // distinct key SETS ⇒ distinct scriptPubKey (via the whole-pool
+        // distinct-keys floor, SPEC §4.4 contract). The EXACT path keeps `false`
+        // (byte-unchanged full-scan + 2nd-match-ambiguity certification — the I-5
+        // regression guard). The sorted EXACT path also keeps `false` (it
+        // collapses to a single identity candidate, so full-scan is cheap and
+        // unchanged).
+        let early_exit = over_supply || opt_in;
         run_capped_search(
             &evaluator,
             &enumeration,
