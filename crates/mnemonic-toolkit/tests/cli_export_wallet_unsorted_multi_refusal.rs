@@ -156,10 +156,12 @@ fn from_import_json_sorted_wsh_multi_still_exports() {
 }
 
 // ===========================================================================
-// 3. Direct `--descriptor 'wsh(multi(…))'` → refused, but by the EXISTING
-//    generic refusal (template resolves to None) — NOT the typed H10 error.
-//    (The typed-vs-generic kind() boundary is pinned in the unit module; here
-//    we only assert it is refused, never silently coerced.)
+// 3. Direct `--descriptor 'wsh(multi(…))'` → refused with the TYPED H10
+//    message (v0.70.1 Wave 1 — second arm of the guard now keys on the
+//    descriptor `script_type` + unsorted `multi(` for the `template == None`
+//    direct path, not just the resolved `--template`). Refused with exit 2,
+//    stderr names sortedmulti / a faithful format, never silently coerced.
+//    (The typed kind() boundary is also pinned in the unit module.)
 // ===========================================================================
 
 #[test]
@@ -167,7 +169,44 @@ fn direct_descriptor_unsorted_multi_refused_not_silently_coerced() {
     let desc = format!(
         "wsh(multi(2,[{A_FP}/48'/0'/0'/2']{A_XPUB}/<0;1>/*,[{B_FP}/48'/0'/0'/2']{B_XPUB}/<0;1>/*))"
     );
-    Command::cargo_bin("mnemonic")
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "electrum",
+            "--descriptor",
+            &desc,
+            "--output",
+            "-",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("UNSORTED") || stderr.contains("sortedmulti"),
+        "direct-descriptor unsorted multi must surface the typed unsorted-multi message; got: {stderr}"
+    );
+    assert!(
+        stderr.contains("descriptor")
+            || stderr.contains("bitcoin-core")
+            || stderr.contains("sparrow"),
+        "typed message must point to a faithful format; got: {stderr}"
+    );
+}
+
+/// v0.70.1 (Wave 1) no-change guard — a SORTED `sortedmulti(` direct
+/// descriptor to a field-less vendor is still refused (the descriptor path's
+/// per-emitter `--template`-required refusal), but NOT by the typed
+/// unsorted-multi message (which is specific to UNSORTED multi). Pins that the
+/// new second arm does not over-refuse the BIP-67-faithful sorted case.
+#[test]
+fn direct_descriptor_sorted_multi_not_typed_unsorted_message() {
+    let desc = format!(
+        "wsh(sortedmulti(2,[{A_FP}/48'/0'/0'/2']{A_XPUB}/<0;1>/*,[{B_FP}/48'/0'/0'/2']{B_XPUB}/<0;1>/*))"
+    );
+    let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "export-wallet",
@@ -180,6 +219,11 @@ fn direct_descriptor_unsorted_multi_refused_not_silently_coerced() {
         ])
         .assert()
         .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("UNSORTED multisig"),
+        "sorted-multi direct descriptor must NOT surface the typed unsorted-multi refusal; got: {stderr}"
+    );
 }
 
 // ===========================================================================

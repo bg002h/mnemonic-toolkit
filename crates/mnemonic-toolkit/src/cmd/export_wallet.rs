@@ -136,6 +136,36 @@ pub(crate) fn emit_payload(
         });
     }
 
+    // v0.70.1 (Wave 1) — SECOND ARM for the DIRECT-DESCRIPTOR path
+    // (`--descriptor 'wsh(multi(…))'`, `template == None`): the resolved-template
+    // guard above does not fire, so before this each field-less emitter refused
+    // with a generic `BadInput` ("requires --template"). Already funds-safe
+    // (refused, never coerced), but message-generic. Key on the descriptor
+    // `script_type` (`P2wshMulti` / `P2shP2wshMulti`) + an UNSORTED `multi(`
+    // (the `sortedmulti(`-as-substring idiom from `wallet_export/mod.rs`'s
+    // `template_from_descriptor`) to surface the typed unsorted-multi message
+    // (exit 2) instead. FOLLOWUP
+    // `export-wallet-direct-descriptor-unsorted-multi-generic-refusal`.
+    if inputs.template.is_none()
+        && matches!(
+            inputs.script_type,
+            WalletScriptType::P2wshMulti | WalletScriptType::P2shP2wshMulti
+        )
+        && matches!(
+            format,
+            CliExportFormat::Electrum
+                | CliExportFormat::Coldcard
+                | CliExportFormat::ColdcardMultisig
+                | CliExportFormat::Jade
+        )
+        && inputs.canonical_descriptor.contains("multi(")
+        && !inputs.canonical_descriptor.contains("sortedmulti(")
+    {
+        return Err(ToolkitError::ExportWalletUnsortedMultisigUnsupported {
+            format: format_name,
+        });
+    }
+
     match format {
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(inputs),
@@ -1096,21 +1126,50 @@ mod h10_unsorted_multi_refusal_tests {
         }
     }
 
-    /// The direct `--descriptor` path resolves `template == None`; the H10 guard
-    /// does NOT fire (and need not — it is already funds-safe). The field-less
-    /// emitter's OWN generic `BadInput` ("requires --template") refuses it. This
-    /// pins the typed-vs-generic boundary (§2.6 test 3): refused, but NOT by the
-    /// new typed kind.
+    /// v0.70.1 (Wave 1) — the direct `--descriptor` path resolves
+    /// `template == None`, but the SECOND ARM of the H10 guard now keys on
+    /// `script_type ∈ {P2wshMulti, P2shP2wshMulti}` + an unsorted `multi(`
+    /// descriptor + a field-less format, so the typed
+    /// `ExportWalletUnsortedMultisigUnsupported` refusal fires here too
+    /// (previously it fell through to each emitter's generic `BadInput`). The
+    /// fixture (`wsh(multi(2,…))`, `script_type = P2wshMulti`) is unsorted, so
+    /// every field-less vendor hits the typed kind, exit 2.
     #[test]
-    fn template_none_falls_through_to_generic_badinput_not_h10() {
+    fn template_none_hits_typed_h10_error() {
         for fmt in FIELDLESS {
             let err = emit_payload(&inputs_with_template(None), fmt)
                 .expect_err(&format!("{fmt:?} with template=None must refuse"));
-            assert_ne!(
+            assert_eq!(
                 err.kind(),
                 "ExportWalletUnsortedMultisigUnsupported",
-                "{fmt:?} template=None must be the generic refusal, NOT the typed H10 error"
+                "{fmt:?} template=None (unsorted wsh-multi) must be the typed H10 error, got {}",
+                err.kind()
             );
+            assert_eq!(err.exit_code(), 2, "{fmt:?} typed H10 error must exit 2");
+        }
+    }
+
+    /// v0.70.1 (Wave 1) no-change guard — a SORTED `sortedmulti(` direct
+    /// descriptor (`template == None`) to a field-less format still refuses
+    /// (the emitter requires a `--template`), but the SECOND ARM must NOT fire
+    /// for it: the typed unsorted error is specific to UNSORTED multi. A sorted
+    /// descriptor is faithfully representable by the BIP-67 file formats, so the
+    /// refusal here (if any) is the generic `--template`-required one, never the
+    /// typed unsorted-multi kind.
+    #[test]
+    fn template_none_sorted_multi_not_typed_unsorted_error() {
+        let mut inputs = inputs_with_template(None);
+        inputs.canonical_descriptor =
+            CheckedDescriptor::new("wsh(sortedmulti(2,xpubAAAA,xpubBBBB))#abcdefgh").unwrap();
+        for fmt in FIELDLESS {
+            let res = emit_payload(&inputs, fmt);
+            if let Err(e) = &res {
+                assert_ne!(
+                    e.kind(),
+                    "ExportWalletUnsortedMultisigUnsupported",
+                    "{fmt:?} sorted-multi direct descriptor must NOT hit the typed unsorted-multi error"
+                );
+            }
         }
     }
 

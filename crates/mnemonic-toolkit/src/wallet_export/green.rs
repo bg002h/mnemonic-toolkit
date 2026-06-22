@@ -16,7 +16,7 @@
 //! Multisig: REFUSE with pointer at Green's server-mediated multisig
 //! surface (FOLLOWUPS `green-native-multisig-pending-server-support`).
 
-use super::{EmitInputs, MissingField, WalletFormatEmitter};
+use super::{EmitInputs, MissingField, WalletFormatEmitter, WalletScriptType};
 use crate::error::ToolkitError;
 
 /// SPEC v0.8 §10 — `WalletFormatEmitter` impl for `--format green`.
@@ -37,6 +37,27 @@ impl WalletFormatEmitter for GreenEmitter {
             return Err(ToolkitError::BadInput(
                 "--format green does not support multisig — Blockstream Green's multisig setup is server-mediated (Green Multisig Shield) and not a file-import surface (tracked by FOLLOWUPS green-native-multisig-pending-server-support). Use --format bitcoin-core (descriptor) or --format sparrow for multisig watch-only.".into(),
             ));
+        }
+        // v0.70.1 (Wave 1) — a general taproot POLICY (tap-script tree) is
+        // classified P2tr but is not a Green-importable singlesig wallet.
+        // Distinguish keypath-only (BIP86, allow) from a tap-script-tree policy
+        // (refuse) STRUCTURALLY — a single-leaf tree renders without `,{`, so a
+        // substring probe is unsound. Mirrors the restore-side refusal
+        // (restore.rs ~:2767). FOLLOWUP
+        // `export-wallet-green-tr-policy-singlesig-emission`. P2trMulti is
+        // already caught by `is_multisig()` above; only P2tr can reach here.
+        if inputs.script_type == WalletScriptType::P2tr {
+            use miniscript::{Descriptor, DescriptorPublicKey};
+            use std::str::FromStr;
+            let parsed = Descriptor::<DescriptorPublicKey>::from_str(&inputs.canonical_descriptor)
+                .map_err(|e| ToolkitError::DescriptorParse(format!("green taproot probe: {e}")))?;
+            if let Descriptor::Tr(tr) = parsed {
+                if tr.tap_tree().is_some() {
+                    return Err(ToolkitError::BadInput(
+                        "--format green cannot emit a taproot policy descriptor — Green's file-import surface is singlesig-only, and this descriptor carries a tap-script-tree policy. Use --format bitcoin-core or --format descriptor for a watch-only import.".into(),
+                    ));
+                }
+            }
         }
         Ok(format!(
             "# Blockstream Green — Watch-only import (singlesig)\n# Help: https://help.blockstream.com/hc/en-us/articles/19340800530713-Set-up-watch-only-wallet\n{}",

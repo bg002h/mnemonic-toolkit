@@ -147,6 +147,120 @@ fn cell_4_green_descriptor_mode_multisig_refuses() {
     );
 }
 
+// ===========================================================================
+// v0.70.1 (Wave 1) — Green refuses a TAP-SCRIPT-TREE taproot POLICY.
+//
+// A general taproot policy (`tr(internal,{...})` with a tapscript tree) is
+// classified `WalletScriptType::P2tr` by `script_type_from_descriptor` (no
+// `multi_a(` / `sortedmulti_a(` substring) and is therefore NOT `is_multisig()`
+// → before this fix it fell through and emitted the 3-line file with the static
+// `(singlesig)` header (a wrong-LABEL, funds-adjacent mislabel). The fix adds a
+// STRUCTURAL refusal (`Tr::tap_tree().is_some()`) — a single-leaf taptree
+// renders WITHOUT `,{`, so a substring probe would be unsound. FOLLOWUP
+// `export-wallet-green-tr-policy-singlesig-emission`.
+// ===========================================================================
+
+const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+
+/// cell 5 — a BRANCH tap-script-tree policy (`tr(NUMS,{pk(A),pk(B)})`, the
+/// `,{` case) → refuse (exit 1, stderr cites `singlesig-only`).
+#[test]
+fn cell_5_green_general_taproot_refuses() {
+    let desc =
+        format!("tr({NUMS_HEX},{{pk({COSIGNER_A_XPUB}/<0;1>/*),pk({COSIGNER_B_XPUB}/<0;1>/*)}})");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "green",
+            "--descriptor",
+            &desc,
+            "--output",
+            "-",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("singlesig-only"),
+        "branch tap-script-tree policy must refuse citing singlesig-only; got: {stderr}"
+    );
+}
+
+/// cell 6 — a SINGLE-LEAF tap-script-tree policy (`tr(NUMS,pk(A))`, which
+/// renders WITHOUT `,{`) → refuse (exit 1). This is the test that proves the
+/// structural `tap_tree().is_some()` check beats the unsound `,{` substring
+/// draft: a substring probe would PASS-wrongly (emit a mislabeled card) here.
+#[test]
+fn cell_6_green_single_leaf_taproot_refuses() {
+    let desc = format!("tr({NUMS_HEX},pk({COSIGNER_A_XPUB}/<0;1>/*))");
+    assert!(
+        !desc.contains(",{"),
+        "fixture must be a single-leaf taptree (no `,{{`) to exercise the structural check"
+    );
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "green",
+            "--descriptor",
+            &desc,
+            "--output",
+            "-",
+        ])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("singlesig-only"),
+        "single-leaf tap-script-tree policy must refuse citing singlesig-only; got: {stderr}"
+    );
+}
+
+/// cell 7 — BEHAVIOR-PINNING / NO-REGRESSION guard (NOT a correctness claim
+/// that Green imports the file). A BIP-86 keypath-only single-sig taproot
+/// (`tr([fp/86'/0'/0']xpub/<0;1>/*)`) is also `WalletScriptType::P2tr` but has
+/// NO tap-script tree, so the structural refusal must NOT fire — the keypath
+/// emission is byte-unchanged from current behavior. Whether Green's file
+/// import actually accepts a `tr(KEY)` keypath descriptor is UNVERIFIED
+/// (tracked by FOLLOWUP `green-taproot-keypath-file-import-unverified`); this
+/// test only pins that the fix does not blanket-refuse all P2tr.
+#[test]
+fn cell_7_green_bip86_keypath_emission_unchanged() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "green",
+            "--template",
+            "bip86",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--output",
+            "-",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("tr("),
+        "bip86 keypath must still emit the tr(...) descriptor; got: {stdout}"
+    );
+    assert!(
+        stdout.contains("(singlesig)"),
+        "bip86 keypath must still carry the singlesig header; got: {stdout}"
+    );
+}
+
 /// SPEC §10 cell 3 — Green emits the canonical descriptor verbatim (includes
 /// `#checksum`). Cross-verifies that the singlesig file body matches the
 /// descriptor that bitcoin-core / specter would emit for the same inputs.
