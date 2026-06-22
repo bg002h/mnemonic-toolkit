@@ -396,22 +396,24 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // Effective BIP-39 passphrase (stdin / @env: / inline).
-    let passphrase: String = if args.passphrase_stdin {
+    // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
+    // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
+    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if args.passphrase_stdin {
         read_stdin_passphrase(stdin)?
     } else {
         match args.passphrase.as_deref() {
             Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
             None => String::new(),
         }
-    };
+    });
     let passphrase_applied = !passphrase.is_empty();
 
     // Resolved `--from` value (stdin / @env: / literal).
-    let from_value: String = if from_uses_stdin {
+    let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
         read_stdin_to_string(stdin)?
     } else {
         crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
-    };
+    });
 
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
 
@@ -426,7 +428,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         NodeType::Phrase => {
             let language = args.language.unwrap_or_default();
             let entropy = zeroize::Zeroizing::new(
-                Mnemonic::parse_in(language.into(), &from_value)
+                Mnemonic::parse_in(language.into(), &*from_value)
                     .map_err(ToolkitError::Bip39)?
                     .to_entropy(),
             );
@@ -826,21 +828,22 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         }
     }
 
-    let passphrase: String = if args.passphrase_stdin {
+    // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub; mlock-pinned).
+    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if args.passphrase_stdin {
         read_stdin_passphrase(stdin)?
     } else {
         match args.passphrase.as_deref() {
             Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
             None => String::new(),
         }
-    };
+    });
     let passphrase_applied = !passphrase.is_empty();
 
-    let from_value: String = if from_uses_stdin {
+    let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
         read_stdin_to_string(stdin)?
     } else {
         crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
-    };
+    });
 
     // Resolve the seed node → (entropy, derive_language). Mirrors the single-sig
     // `run` body.
@@ -853,7 +856,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         NodeType::Phrase => {
             let language = args.language.unwrap_or_default();
             let entropy = zeroize::Zeroizing::new(
-                Mnemonic::parse_in(language.into(), &from_value)
+                Mnemonic::parse_in(language.into(), &*from_value)
                     .map_err(ToolkitError::Bip39)?
                     .to_entropy(),
             );
@@ -1225,7 +1228,8 @@ fn own_origin_from_family(family: &DerivationPath, account: u32) -> Option<Deriv
 /// mlock pins live for the lifetime of this struct (held by the caller).
 pub(crate) struct TemplateSeed {
     pub entropy: zeroize::Zeroizing<Vec<u8>>,
-    pub passphrase: String,
+    // cycle-14 (L22): the resolved BIP-39 passphrase scrubs on drop.
+    pub passphrase: zeroize::Zeroizing<String>,
     pub derive_language: bip39::Language,
     _pin: Option<mnemonic_toolkit::mlock::PinnedPageRange>,
     _pin_pp: Option<mnemonic_toolkit::mlock::PinnedPageRange>,
@@ -1288,19 +1292,20 @@ pub(crate) fn resolve_template_completion_seed<E: Write>(
     // `stdin` is `&mut dyn Read` (unsized); reborrow as `&mut (&mut dyn Read)`
     // so the generic `<R: Read>` stdin helpers monomorphize over the sized
     // reference type.
-    let passphrase: String = if passphrase_stdin {
+    // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub).
+    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if passphrase_stdin {
         read_stdin_passphrase(&mut &mut *stdin)?
     } else {
         match passphrase {
             Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
             None => String::new(),
         }
-    };
-    let from_value: String = if from_uses_stdin {
+    });
+    let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
         read_stdin_to_string(&mut &mut *stdin)?
     } else {
         crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
-    };
+    });
     let (entropy, derive_language) = resolve_seed_entropy(&from.node, &from_value, language)?;
     let pin = Some(mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]));
     let pin_pp = (!passphrase.is_empty())
@@ -3041,19 +3046,21 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 );
             }
         }
-        let passphrase: String = if args.passphrase_stdin {
-            read_stdin_passphrase(stdin)?
-        } else {
-            match args.passphrase.as_deref() {
-                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-                None => String::new(),
-            }
-        };
-        let from_value: String = if from_uses_stdin {
+        // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub).
+        let passphrase: zeroize::Zeroizing<String> =
+            zeroize::Zeroizing::new(if args.passphrase_stdin {
+                read_stdin_passphrase(stdin)?
+            } else {
+                match args.passphrase.as_deref() {
+                    Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
+                    None => String::new(),
+                }
+            });
+        let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
             read_stdin_to_string(stdin)?
         } else {
             crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
-        };
+        });
         let (entropy, derive_language) =
             resolve_seed_entropy(&from.node, &from_value, args.language)?;
         let _pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);

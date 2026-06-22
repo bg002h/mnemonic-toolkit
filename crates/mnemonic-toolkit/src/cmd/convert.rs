@@ -850,25 +850,29 @@ pub fn run<R: Read, W: Write, E: Write>(
             "--passphrase-stdin and --bip38-passphrase-stdin cannot both be set (single stdin per invocation); pick the channel that needs the NULL-byte-preserving route".into(),
         ));
     }
-    let effective_passphrase: Option<String> = if args.passphrase_stdin {
-        Some(read_stdin_passphrase(stdin)?)
+    // cycle-14 (L22): wrap the stdin/argv passphrase secret in Zeroizing so it
+    // scrubs on drop (these handler-scope locals linger for the whole run() and
+    // are mlock-pinned below — mlock prevents swap-out but does NOT scrub).
+    let effective_passphrase: Option<zeroize::Zeroizing<String>> = if args.passphrase_stdin {
+        Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?))
     } else {
-        args.passphrase.clone()
+        args.passphrase.clone().map(zeroize::Zeroizing::new)
     };
 
     // SPEC v0.9.0 §1 item 1 — `--bip38-passphrase-stdin` populates the
     // BIP-38 Scrypt passphrase channel from stdin (preserves NULLs).
-    let effective_bip38_passphrase: Option<String> = if args.bip38_passphrase_stdin {
-        Some(read_stdin_passphrase(stdin)?)
-    } else {
-        args.bip38_passphrase.clone()
-    };
+    let effective_bip38_passphrase: Option<zeroize::Zeroizing<String>> =
+        if args.bip38_passphrase_stdin {
+            Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?))
+        } else {
+            args.bip38_passphrase.clone().map(zeroize::Zeroizing::new)
+        };
 
     // 2.b) Stdin if `--from <node>=-`.
-    let primary_value = if primary.value == "-" {
-        read_stdin_to_string(stdin)?
+    let primary_value: zeroize::Zeroizing<String> = if primary.value == "-" {
+        zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
-        primary.value.clone()
+        zeroize::Zeroizing::new(primary.value.clone())
     };
 
     // Cycle B Phase 3a Site 1 — pin secret-bearing heap pages for the
@@ -986,9 +990,10 @@ pub fn run<R: Read, W: Write, E: Write>(
         );
     }
 
-    // 8) Compute outputs.
-    let pbkdf2_passphrase = effective_passphrase.as_deref().unwrap_or("");
-    let bip38_passphrase = effective_bip38_passphrase.as_deref();
+    // 8) Compute outputs. cycle-14 (L22): Deref Zeroizing<String> → &str for
+    // the compute_outputs &str params (no behavior change).
+    let pbkdf2_passphrase = effective_passphrase.as_deref().map(String::as_str).unwrap_or("");
+    let bip38_passphrase = effective_bip38_passphrase.as_deref().map(String::as_str);
     let computed = compute_outputs(
         primary.node,
         &primary_value,
@@ -1022,7 +1027,9 @@ pub fn run<R: Read, W: Write, E: Write>(
                             .map(|s| s.to_string())
                             .collect()
                     } else {
-                        vec![primary_value.clone()]
+                        // cycle-14 (L22): Deref Zeroizing<String> → owned String
+                        // so both arms unify to Vec<String> (no behavior change).
+                        vec![primary_value.to_string()]
                     };
                     // try_repair_and_short_circuit is always-Err on
                     // repair-success; `?` propagates RepairShortCircuit

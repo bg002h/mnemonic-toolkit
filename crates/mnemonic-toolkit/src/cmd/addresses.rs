@@ -146,21 +146,23 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // Effective BIP-39 passphrase (stdin / @env: / inline).
-    let passphrase: String = if args.passphrase_stdin {
+    // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
+    // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
+    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if args.passphrase_stdin {
         read_stdin_passphrase(stdin)?
     } else {
         match args.passphrase.as_deref() {
             Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
             None => String::new(),
         }
-    };
+    });
 
     // Resolved `--from` value (stdin / @env: / literal).
-    let from_value: String = if from_uses_stdin {
+    let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
         read_stdin_to_string(stdin)?
     } else {
         crate::env_sentinel::resolve_env_var_sentinel(&from.value, "--from")?
-    };
+    });
 
     // Resolve the account xpub + effective network (+ the JSON `account` field).
     let (account_xpub, network, account_field): (Xpub, CliNetwork, Option<u32>) = match from.node {
@@ -197,7 +199,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             // I1: scrub the intermediate entropy (master secret) on drop, matching
             // convert's `Zeroizing<Vec<u8>>` convention (convert.rs:1147).
             let entropy: zeroize::Zeroizing<Vec<u8>> = zeroize::Zeroizing::new(match from.node {
-                NodeType::Phrase => Mnemonic::parse_in(language.into(), &from_value)
+                NodeType::Phrase => Mnemonic::parse_in(language.into(), &*from_value)
                     .map_err(ToolkitError::Bip39)?
                     .to_entropy(),
                 NodeType::Entropy => hex::decode(from_value.trim())
