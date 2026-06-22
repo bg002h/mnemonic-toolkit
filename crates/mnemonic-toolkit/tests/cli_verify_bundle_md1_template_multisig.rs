@@ -704,6 +704,315 @@ fn general_golden_addresses(desc: &str, count: u32) -> Vec<String> {
         .collect()
 }
 
+// ===========================================================================
+// P4 — verify-bundle exposes the own-account subset-search flags
+// (`--own-account-max` + `--search-cosigner-subset`), threaded into the SAME
+// shared `complete_multisig_template` engine restore uses. The make-or-break
+// gate is PARITY: the recomposed first address verify-bundle reports ==
+// restore's == an INDEPENDENT rust-miniscript golden (verify == restore, same
+// engine). The flag refusals mirror restore's (clap conflict, @N= mutex, the
+// §6 ceiling, wrong-cosigner NO-MATCH).
+// ===========================================================================
+
+/// Build the restore parity arg-vector matching a verify-bundle subset-search
+/// invocation: same md1, --from, the subset-search flags, --expect-wallet-id,
+/// and cosigners. (verify-bundle's `--account` is scalar; restore's is a list,
+/// so the over-supply tests use `--own-account-max` on BOTH — no `--account`.)
+/// `extra_flags` carries the subset-search flag(s) (`--own-account-max K` and/or
+/// `--search-cosigner-subset`) so restore drives the SAME engine path.
+fn restore_parity_args(
+    md1: &[String],
+    from_phrase: &str,
+    extra_flags: &[String],
+    id: &str,
+    cosigners: &[Vec<String>],
+) -> Vec<String> {
+    let mut rargs = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut rargs, md1);
+    rargs.push("--from".into());
+    rargs.push(format!("phrase={from_phrase}"));
+    rargs.extend(extra_flags.iter().cloned());
+    rargs.extend(["--expect-wallet-id".into(), id.to_string(), "--json".into()]);
+    push_cosigners(&mut rargs, cosigners);
+    rargs
+}
+
+#[test]
+fn verify_bundle_own_account_max_completes_at_nonzero_account() {
+    // P4 HEADLINE: a 2-of-2 where the operator's OWN key lives at account 3
+    // (NOT 0). verify-bundle with `--own-account-max 5` (NEW on verify-bundle)
+    // derives own@{0..4}, the subset-search selects own@3 + the cosigner, and
+    // the recomposed first address == the INDEPENDENT golden. PARITY: restore
+    // with the SAME inputs reports the SAME address.
+    let cos = &[(SEED_A, 3u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "5".into(),
+        "--expect-wallet-id".into(),
+        id.clone(),
+        "--json".into(),
+    ]);
+    push_cosigners(&mut args, &[mk1_b.clone()]);
+
+    let j = verify_json(&args);
+    assert_eq!(j["result"], "ok", "own-account-max verify envelope: {j}");
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        golden[0],
+        "verify-bundle --own-account-max must resolve a NON-ZERO own account to the golden"
+    );
+    let checks = j["checks"].as_array().unwrap();
+    assert!(
+        checks
+            .iter()
+            .any(|c| c["name"] == "md1_template_match" && c["passed"] == true),
+        "md1_template_match must pass: {j}"
+    );
+
+    // PARITY: restore the SAME inputs (own-only over-supply) → SAME address.
+    let extra = vec!["--own-account-max".to_string(), "5".to_string()];
+    let rargs = restore_parity_args(&md1, SEED_A, &extra, &id, &[mk1_b]);
+    let restore_addr = restore_first_address(&rargs);
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        restore_addr,
+        "verify-bundle and restore must report the SAME first address over the subset-search \
+         (verify == restore, same engine)"
+    );
+}
+
+#[test]
+fn verify_bundle_search_cosigner_subset_completes() {
+    // P4: verify-bundle with `--search-cosigner-subset` (NEW on verify-bundle) +
+    // an OVER-SUPPLIED cosigner pool (the 2 real cosigners + 1 outsider) must
+    // select the correct {B,C} subset and recompose to the INDEPENDENT golden,
+    // in PARITY with restore P3.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 1);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider = emit_cosigner_mk1("wsh-multi", "2", cos_outsider, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id.clone(),
+        "--json".into(),
+    ]);
+    push_cosigners(
+        &mut args,
+        &[mk1_b.clone(), mk1_c.clone(), mk1_outsider.clone()],
+    );
+
+    let j = verify_json(&args);
+    assert_eq!(
+        j["result"], "ok",
+        "search-cosigner-subset verify envelope: {j}"
+    );
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        golden[0],
+        "verify-bundle --search-cosigner-subset must select the correct cosigner subset and \
+         recompose to the golden"
+    );
+
+    // PARITY: restore with the SAME over-supplied pool reports the SAME address.
+    let extra = vec!["--search-cosigner-subset".to_string()];
+    let rargs = restore_parity_args(&md1, SEED_A, &extra, &id, &[mk1_b, mk1_c, mk1_outsider]);
+    let restore_addr = restore_first_address(&rargs);
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        restore_addr,
+        "verify-bundle --search-cosigner-subset must agree with restore (same engine)"
+    );
+}
+
+#[test]
+fn verify_bundle_own_account_max_alone_passes() {
+    // I-4 regression guard on verify-bundle: `--own-account-max K` ALONE (no
+    // explicit --account) must PASS clap (the scalar `--account` default_value
+    // must NOT trip the `conflicts_with` mutex). It completes a real own@0 2-of-2.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 1);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "3".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--json".into(),
+    ]);
+    push_cosigners(&mut args, &[mk1_b]);
+
+    let j = verify_json(&args);
+    assert_eq!(j["result"], "ok", "own-account-max-alone verify: {j}");
+    assert_eq!(
+        j["first_receive"].as_str().unwrap(),
+        golden[0],
+        "--own-account-max alone (no --account) must pass clap and complete on verify-bundle"
+    );
+}
+
+#[test]
+fn verify_bundle_account_and_own_account_max_conflict() {
+    // I-4: `--account N` + `--own-account-max K` together on verify-bundle → clap
+    // `conflicts_with` parse error (exit 64), BEFORE any work. (`--account` is
+    // SCALAR on verify-bundle — the conflict is the same.)
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--own-account-max".into(),
+        "5".into(),
+        "--expect-wallet-id".into(),
+        "deadbeef".into(),
+    ]);
+    let assert = mnemonic().args(&args).assert().code(64);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("cannot be used with") || low.contains("conflict"),
+        "--account + --own-account-max must be a clap conflict on verify-bundle: {stderr}"
+    );
+}
+
+#[test]
+fn verify_bundle_own_account_max_at_account_mutex_with_explicit_cosigner_assignment() {
+    // §2 open-point 7 (mirrored on verify-bundle): explicit `--cosigner @N=`
+    // assignment ⊕ subset-search (`--own-account-max`) → BadInput.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let path = canonical_path("wsh-multi", 0);
+    let (xpub_b, _fp_b) = xpub_at(SEED_B, &path);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "3".into(),
+        "--cosigner".into(),
+        format!("@1={xpub_b}"),
+    ]);
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("@n=") || low.contains("explicit") || low.contains("subset-search"),
+        "explicit @N= ⊕ --own-account-max must be a BadInput mutex on verify-bundle: {stderr}"
+    );
+}
+
+#[test]
+fn verify_bundle_own_account_max_ceiling_refuses() {
+    // §6 (mirrored on verify-bundle): K_own > 256 → BadInput (hard ceiling).
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "300".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    push_cosigners(&mut args, &[mk1_b]);
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("256") || low.contains("own-account-max"),
+        "K_own > 256 must refuse via the hard ceiling on verify-bundle: {stderr}"
+    );
+}
+
+#[test]
+fn verify_bundle_search_cosigner_subset_wrong_cosigner_no_match() {
+    // §5a anti-vacuity (mirrored on verify-bundle): an over-supplied pool that
+    // LACKS a true cosigner → NO-MATCH (exit ≠ 0), never a silent OK.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    // TWO outsider cards (C is missing) → the {B,C} subset is unreachable.
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider1 = emit_cosigner_mk1("wsh-multi", "2", cos_outsider, 1);
+    let cos_outsider2 = &[(SEED_A, 0u32), (SEED_C, 1u32)]; // C at a WRONG account
+    let mk1_outsider2 = emit_cosigner_mk1("wsh-multi", "2", cos_outsider2, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    push_cosigners(&mut args, &[mk1_b, mk1_outsider1, mk1_outsider2]);
+    let assert = mnemonic().args(&args).assert();
+    let out = assert.get_output();
+    assert_ne!(
+        out.status.code(),
+        Some(0),
+        "a pool lacking a true cosigner must never produce a silent OK on verify-bundle"
+    );
+    let stdout = String::from_utf8(out.stdout.clone()).unwrap();
+    assert!(
+        !stdout.contains("\"result\":\"ok\"") && !stdout.contains("\"result\": \"ok\""),
+        "no OK result for a pool lacking a true cosigner: {stdout}"
+    );
+}
+
 #[test]
 fn verify_bundle_general_policy_template_id_search_ok() {
     let slots = &[(SEED_A, 0u32), (SEED_B, 1u32), (SEED_C, 2u32)];

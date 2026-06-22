@@ -84,6 +84,31 @@ pub struct VerifyBundleArgs {
     #[arg(long = "expect-wallet-id")]
     pub expect_wallet_id: Option<String>,
 
+    /// P4 — RANGE fallback for the OWN seed's account when the exact account is
+    /// unknown: derive the own seed at every account in `0..K` and let the
+    /// multisig-template OWN-ACCOUNT SUBSET-SEARCH select the account actually
+    /// used (own-only — the `--cosigner` cards must be EXACT; over-supply
+    /// cosigners with `--search-cosigner-subset`). NEW on verify-bundle (mirrors
+    /// `restore --own-account-max`). Mutually exclusive with `--account` (clap
+    /// `conflicts_with` — `--own-account-max K` ALONE passes; the scalar
+    /// `--account` default is ignored). `K ≤ 256`. Threaded into the SAME shared
+    /// `complete_multisig_template` engine restore uses (verify == restore).
+    #[arg(long = "own-account-max", conflicts_with = "account")]
+    pub own_account_max: Option<u32>,
+
+    /// P4 — OPT-IN bounded cosigner-subset search. By default (OFF) a multisig
+    /// template completion requires the supplied `--cosigner` cards to be EXACT
+    /// (own-only — over-supplying cosigners refuses). With this flag the operator
+    /// MAY over-supply `--cosigner` cards (unsure which/how many cosigners
+    /// belong); the search resolves the correct cosigner subset too. NEW on
+    /// verify-bundle (mirrors `restore --search-cosigner-subset`). The space
+    /// grows, so a LONGER `--expect-wallet-id` prefix may be needed; bounded by
+    /// the §6 hard ceiling + the adaptive time-cap. Mutually exclusive with
+    /// `--cosigner @N=`. Threaded into the SAME shared completion engine restore
+    /// uses (verify == restore).
+    #[arg(long = "search-cosigner-subset")]
+    pub search_cosigner_subset: bool,
+
     /// #28 phase 2 — the operator's OWN seed for completing a keyless multisig
     /// (or general policy) TEMPLATE bundle (`bundle --md1-form=template`, n≥2).
     /// Same grammar and semantics as `restore --from` (an `ms1=`, `phrase=`,
@@ -862,10 +887,15 @@ fn verify_multisig_template<W: Write, E: Write>(
         own_accounts: vec![args.account],
         explicit_own_origin,
         cosigner_specs: &args.cosigner,
-        own_account_max: None,
-        // P4 scope: verify-bundle exposes `--search-cosigner-subset` later; until
-        // then the opt-in path is OFF here (own-only / exact cosigners).
-        search_cosigner_subset: false,
+        // P4 — verify-bundle now exposes `--own-account-max` / `--search-cosigner-
+        // subset` (both NEW NAMES here) and threads them into the SHARED
+        // `complete_multisig_template` engine restore uses, so verify == restore
+        // over the subset-search (own pool from `0..K`, the opt-in cosigner
+        // stratification, the ceilings, the §5a gates — all inherited).
+        // `--account` stays SCALAR on verify-bundle (own-only-via-range covers
+        // the over-supply there); `own_accounts` is still the single scalar.
+        own_account_max: args.own_account_max,
+        search_cosigner_subset: args.search_cosigner_subset,
         expect_wallet_id: args.expect_wallet_id.clone(),
         search_address: args.search_address.clone(),
         search_addr_min: args.search_addr_min,
@@ -4029,9 +4059,9 @@ mod helper_tests {
     // elision/canonicalization variance — bug-hunt L14). See
     // design/IMPLEMENTATION_PLAN_cycle1_critical_fixes.md §6.3 / R0 round-2.
 
-    use bitcoin::bip32::DerivationPath;
     use crate::parse::{CosignerSpec, MultisigPathFamily};
     use crate::synthesize::synthesize_multisig_watch_only;
+    use bitcoin::bip32::DerivationPath;
 
     /// Build N distinct cosigner specs at the canonical BIP-48 depth-4 path
     /// from N distinct mnemonics. The 65-byte md1 pubkeys derive ONLY from the
@@ -4269,7 +4299,8 @@ mod helper_tests {
         // pubkeys remain identical to `expected`.
         desc.tlv.fingerprints = None;
         desc.tlv.origin_path_overrides = None;
-        let supplied_md1 = md_codec::chunk::split(&desc).expect("re-encode origin-mutated descriptor");
+        let supplied_md1 =
+            md_codec::chunk::split(&desc).expect("re-encode origin-mutated descriptor");
         let c = h1_run(&expected, &supplied_md1);
         assert!(
             c.passed,
