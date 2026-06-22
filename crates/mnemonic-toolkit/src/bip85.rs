@@ -186,7 +186,7 @@ pub(crate) fn format_password_base64(
 ) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 707_764, &[length], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
-    let encoded = base64_standard(&entropy[..]);
+    let encoded = Zeroizing::new(base64_standard(&entropy[..]));
     Ok(SecretString::new(encoded[..length as usize].to_string()))
 }
 
@@ -201,7 +201,7 @@ pub(crate) fn format_password_base85(
 ) -> Result<SecretString, ToolkitError> {
     let entropy = derive_entropy(master, 707_785, &[length], index)?;
     let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
-    let encoded = base85_btc(&entropy[..]);
+    let encoded = Zeroizing::new(base85_btc(&entropy[..]));
     Ok(SecretString::new(encoded[..length as usize].to_string()))
 }
 
@@ -249,7 +249,7 @@ pub(crate) fn format_dice_rolls(
     let bits_per_roll = u32::BITS - (sides - 1).leading_zeros();
     let bytes_per_roll = bits_per_roll.div_ceil(8) as usize;
 
-    let mut out: Vec<String> = Vec::with_capacity(rolls as usize);
+    let mut out: Zeroizing<Vec<String>> = Zeroizing::new(Vec::with_capacity(rolls as usize));
     let mut buf = vec![0u8; bytes_per_roll];
     while out.len() < rolls as usize {
         reader.read(&mut buf);
@@ -527,5 +527,35 @@ mod tests {
         let a = derive_entropy(&master(), 39, &[0, 12], 0).unwrap();
         let b = derive_entropy(&master(), 39, &[0, 12], 0).unwrap();
         assert_eq!(&a[..], &b[..]);
+    }
+
+    /// Cycle-15t internal-scratch evidence — the three pre-return derived-secret
+    /// scratch locals in the encode/dice fns are `Zeroizing`-wrapped: the
+    /// `format_password_base64`/`base85` full `encoded` String (only `[..length]`
+    /// is wrapped into the `SecretString` return; the full encode lingers) and the
+    /// `format_dice_rolls` per-roll `out: Vec<String>` aggregate (the dice secret).
+    /// The anchors are assembled at runtime via `format!` so this test's own
+    /// source does NOT self-match the `src.contains(...)` checks (Lane T's T8
+    /// precedent in `seedqr.rs`).
+    #[test]
+    fn internal_encode_dice_scratch_is_zeroizing() {
+        let src = std::fs::read_to_string("src/bip85.rs").expect("read src/bip85.rs");
+        let zn = format!("{}::new", "Zeroizing");
+        // base64 encode scratch.
+        assert!(
+            src.contains(&format!("let encoded = {zn}(base64_standard(")),
+            "encode scratch: base64 `encoded` must be Zeroizing::new(base64_standard(...))"
+        );
+        // base85 encode scratch.
+        assert!(
+            src.contains(&format!("let encoded = {zn}(base85_btc(")),
+            "encode scratch: base85 `encoded` must be Zeroizing::new(base85_btc(...))"
+        );
+        // dice per-roll aggregate.
+        let zv = format!("{}<Vec<String>>", "Zeroizing");
+        assert!(
+            src.contains(&format!("out: {zv}")),
+            "dice scratch: `out` aggregate must be Zeroizing<Vec<String>>"
+        );
     }
 }
