@@ -792,6 +792,115 @@ pub fn opt_in_unrank(
     Vec::new()
 }
 
+/// The enumeration the [`search_enumerated`] engine ranks over (SPEC §4). It
+/// abstracts the per-rank assignment generator + its cardinality so the SAME
+/// sharded engine drives the v0.60.0 exact-pool space AND the new over-supply
+/// subset spaces — the only difference is the cardinality `S` the rank range
+/// `[0, S)` spans and the `unrank(rank) -> Vec<slot→pool-index>` map.
+///
+/// Pool-index CONVENTION (own-first; see the module header at the P1 banner):
+/// own candidates occupy pool indices `0..k_own`, cosigner cards
+/// `k_own..k_own+m` (`+m_sup` for the opt-in form). Every variant's `unrank`
+/// returns the full-pool index assigned to each slot, in this layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Enumeration {
+    /// The v0.60.0 EXACT-pool space: all `n!` full permutations of the `n` pool
+    /// entries (`pool.len() == n`). Cardinality `n!`; `unrank` is the legacy
+    /// [`unrank_permutation`]. The `search(n, …)` wrapper builds this so the
+    /// exact path stays BYTE-IDENTICAL.
+    FullPermutation {
+        /// The slot count (== the exact pool size).
+        n: usize,
+    },
+    /// The own-anchored over-supply space (SPEC §3): `k_own` own candidates,
+    /// `j = N − M` own slots, `m` exact cosigners, `N = j + m` slots.
+    /// Cardinality `s_own(k_own, j, m, sorted)`; `unrank` is
+    /// [`own_anchored_unrank`].
+    OwnAnchored {
+        /// Number of own candidates (pool `0..k_own`).
+        k_own: usize,
+        /// Number of own slots (`= N − M`).
+        j: usize,
+        /// Number of exact cosigner cards (pool `k_own..k_own+m`).
+        m: usize,
+        /// Order-independent shape (drop the `N!` ordering factor).
+        sorted: bool,
+    },
+    /// The opt-in over-supply space (SPEC §4.3): `k_own` own + `m_sup` cosigner
+    /// candidates filling `n` slots over the valid `j`-strata. Cardinality
+    /// `s_opt(k_own, m_sup, n, sorted)`; `unrank` is [`opt_in_unrank`]. (Wired by
+    /// P3; the engine already drives it.)
+    OptIn {
+        /// Number of own candidates (pool `0..k_own`).
+        k_own: usize,
+        /// Number of supplied cosigner candidates (pool `k_own..k_own+m_sup`).
+        m_sup: usize,
+        /// The slot count.
+        n: usize,
+        /// Order-independent shape (drop the `N!` ordering factor).
+        sorted: bool,
+    },
+}
+
+impl Enumeration {
+    /// The slot count `n` (the width of every `unrank` assignment / the
+    /// evaluator's expected assignment length).
+    pub fn n(&self) -> usize {
+        match *self {
+            Enumeration::FullPermutation { n } => n,
+            Enumeration::OwnAnchored { j, m, .. } => j + m,
+            Enumeration::OptIn { n, .. } => n,
+        }
+    }
+
+    /// The number of assignments this enumeration ranks over (`S`), i.e. the
+    /// PERMUTATION-space cardinality BEFORE the address-range multiplier.
+    /// Overflow-checked → `None` (the caller refuses; never panic — the #28 M1
+    /// lesson). **P1 M-1:** the per-rank `unrank` generators below carry internal
+    /// `.expect()`s that divide this same cardinality, so `unrank` MUST be
+    /// reached only after this returned `Some(_)` (the engine guards it).
+    pub fn cardinality(&self) -> Option<u128> {
+        match *self {
+            Enumeration::FullPermutation { n } => factorial(n),
+            Enumeration::OwnAnchored {
+                k_own,
+                j,
+                m,
+                sorted,
+            } => s_own(k_own, j, m, sorted),
+            Enumeration::OptIn {
+                k_own,
+                m_sup,
+                n,
+                sorted,
+            } => s_opt(k_own, m_sup, n, sorted),
+        }
+    }
+
+    /// Unrank `rank ∈ [0, cardinality())` into a `Vec<slot→pool-index>`
+    /// assignment (own-first pool layout). PRECONDITION: `cardinality()` was
+    /// proven `Some(_)` (the engine guards this — the generators' internal
+    /// `.expect()`s divide that already-validated cardinality, so they cannot
+    /// fire here; P1 M-1).
+    fn unrank(&self, rank: u128) -> Vec<usize> {
+        match *self {
+            Enumeration::FullPermutation { n } => unrank_permutation(rank, n),
+            Enumeration::OwnAnchored {
+                k_own,
+                j,
+                m,
+                sorted,
+            } => own_anchored_unrank(rank, k_own, j, m, sorted),
+            Enumeration::OptIn {
+                k_own,
+                m_sup,
+                n,
+                sorted,
+            } => opt_in_unrank(rank, k_own, m_sup, n, sorted),
+        }
+    }
+}
+
 /// A single match record (internal): the permutation rank + the outer
 /// address coordinate it matched at. Kept compact so the per-thread match
 /// buffers stay small.
@@ -845,6 +954,49 @@ pub fn search<E: CandidateEvaluator>(
     mode: SearchMode,
     early_exit: bool,
 ) -> Result<SearchOutcome, SearchError> {
+    // The v0.60.0 EXACT-pool path: rank the `n!` full permutations. This is a
+    // thin wrapper over [`search_enumerated`] driven by
+    // `Enumeration::FullPermutation { n }` — whose cardinality is `factorial(n)`
+    // and whose `unrank` is the legacy `unrank_permutation(perm_rank, n)`, so the
+    // exact path is BYTE-IDENTICAL to the pre-subset-search engine (the
+    // regression guard in §7 pins this).
+    search_enumerated(
+        &Enumeration::FullPermutation { n },
+        evaluator,
+        mode,
+        early_exit,
+    )
+}
+
+/// Search a candidate space defined by an [`Enumeration`] and return the
+/// funds-safe [`SearchOutcome`]. This is the generalized engine the over-supply
+/// subset-search (SPEC §4) drives: the rank space is `[0, S)` where
+/// `S = enumeration.cardinality()` (the SUBSET count `s_own`/`s_opt`, NOT `n!`),
+/// and the per-rank assignment comes from `enumeration.unrank(rank)` instead of
+/// the hardcoded `unrank_permutation`. The sharding, stop-flag, ambiguity
+/// certification, and `early_exit` semantics are IDENTICAL across all
+/// enumerations — only the cardinality + per-rank generator differ (P1 confirmed
+/// the shard logic is structure-agnostic: it needs only `S` + a bijective
+/// `unrank`). The `search(n, …)` wrapper drives the `FullPermutation` variant so
+/// every v0.60.0 call site is byte-unchanged.
+///
+/// **Funds-safety / `early_exit`:** see the [`search`] doc — the contract is
+/// unchanged. `early_exit=true` (first-match) is ONLY funds-safe for a
+/// collision-free address-search over a subset enumeration; prefix-id + the
+/// exact path always pass `false`.
+///
+/// **P1 M-1 (overflow → refuse):** the cardinality is computed up-front via
+/// `enumeration.cardinality()` and an overflow (`None`) REFUSES with
+/// [`SearchError::SearchSpaceTooLarge`] BEFORE any `unrank` runs — so the
+/// generators' internal `.expect()`s (which divide that same already-validated
+/// cardinality) can never fire on an unguarded overflow.
+pub fn search_enumerated<E: CandidateEvaluator>(
+    enumeration: &Enumeration,
+    evaluator: &E,
+    mode: SearchMode,
+    early_exit: bool,
+) -> Result<SearchOutcome, SearchError> {
+    let n = enumeration.n();
     if n == 0 {
         return Err(SearchError::EmptySearchSpace);
     }
@@ -852,12 +1004,14 @@ pub fn search<E: CandidateEvaluator>(
     // first-match early-exit (collision-free address-search), 2 for the
     // full-scan-with-2nd-match ambiguity certification (the v0.60.0 default).
     let stop_at: usize = if early_exit { 1 } else { 2 };
-    // M1: a hostile/garbage slot count whose `n!` overflows `u128` must REFUSE,
-    // not panic. `factorial`/`total_candidates` return `None` on overflow; we
-    // propagate it as a typed error (the realized multisig N never approaches
-    // `n > 34`). `unrank_permutation` below is only reached for the validated
-    // small `n`, so its internal `factorial(..).expect(..)` cannot fire.
-    let perms = factorial(n).ok_or(SearchError::SearchSpaceTooLarge { n })?;
+    // M1 / P1 M-1: a cardinality that overflows `u128` must REFUSE, not panic.
+    // `cardinality()` (factorial / s_own / s_opt) returns `None` on overflow; we
+    // propagate it as a typed error BEFORE any `unrank` (whose internal
+    // `.expect()`s divide this validated cardinality, so they cannot fire). For
+    // `FullPermutation` this is `factorial(n)`, identical to the legacy engine.
+    let perms = enumeration
+        .cardinality()
+        .ok_or(SearchError::SearchSpaceTooLarge { n })?;
     let outer = match mode {
         SearchMode::Id => 1u128,
         SearchMode::Address(range) => u128::from(range.outer_count()),
@@ -866,7 +1020,7 @@ pub fn search<E: CandidateEvaluator>(
         .checked_mul(outer)
         .ok_or(SearchError::SearchSpaceTooLarge { n })?;
     if total == 0 {
-        // Empty address range → no candidates → no match.
+        // Empty address range (or empty subset) → no candidates → no match.
         return Ok(SearchOutcome::None);
     }
 
@@ -877,7 +1031,9 @@ pub fn search<E: CandidateEvaluator>(
 
     // Shard the contiguous index space [0, total) into `nthreads` near-equal
     // chunks. Each thread unranks its slice (outer = idx / perms, perm_rank =
-    // idx % perms — address index OUTER) and evaluates.
+    // idx % perms — address index OUTER) and evaluates. `perms` is the
+    // PERMUTATION-space cardinality `S` (subset count for the over-supply modes,
+    // `n!` for the exact path).
     let chunk = total.div_ceil(nthreads as u128);
     std::thread::scope(|scope| {
         for t in 0..nthreads {
@@ -905,7 +1061,7 @@ pub fn search<E: CandidateEvaluator>(
                     }
                     let outer_k = (idx / perms) as u64;
                     let perm_rank = idx % perms;
-                    let assignment = unrank_permutation(perm_rank, n);
+                    let assignment = enumeration.unrank(perm_rank);
                     let address_index = match mode {
                         SearchMode::Id => 0,
                         SearchMode::Address(range) => range.flatten(outer_k),
@@ -947,7 +1103,7 @@ pub fn search<E: CandidateEvaluator>(
         }) {
             None => Ok(SearchOutcome::None),
             Some(m) => Ok(SearchOutcome::Unique {
-                assignment: unrank_permutation(m.perm_rank, n),
+                assignment: enumeration.unrank(m.perm_rank),
                 address_index: m.address_index,
             }),
         };
@@ -957,7 +1113,7 @@ pub fn search<E: CandidateEvaluator>(
         1 => {
             let m = found[0];
             Ok(SearchOutcome::Unique {
-                assignment: unrank_permutation(m.perm_rank, n),
+                assignment: enumeration.unrank(m.perm_rank),
                 address_index: m.address_index,
             })
         }
@@ -2092,6 +2248,166 @@ mod tests {
                 assert_eq!(address_index, target_addr_idx);
             }
             other => panic!("expected Unique, got {other:?}"),
+        }
+    }
+
+    // ---- search_enumerated: drive the over-supply spaces (P2-A). -------------
+
+    #[test]
+    fn search_full_permutation_equals_legacy_search() {
+        // `search` (the n! wrapper) MUST be byte-identical to driving
+        // `search_enumerated` with `Enumeration::FullPermutation { n }` — the
+        // wrapper is just the latter with the full-perm enumeration. Verified
+        // across Unique / None / Ambiguous.
+        let target = vec![3, 1, 4, 0, 2];
+        let enum_full = Enumeration::FullPermutation { n: 5 };
+        assert_eq!(
+            search_enumerated(
+                &enum_full,
+                &target_eval(target.clone()),
+                SearchMode::Id,
+                false
+            )
+            .unwrap(),
+            search(5, &target_eval(target.clone()), SearchMode::Id, false).unwrap(),
+        );
+        let never = |_a: &[usize], _idx: u64| false;
+        assert_eq!(
+            search_enumerated(&enum_full, &never, SearchMode::Id, false).unwrap(),
+            SearchOutcome::None
+        );
+        let t1 = vec![0, 1, 2, 3, 4];
+        let t2 = vec![4, 3, 2, 1, 0];
+        let two = move |a: &[usize], _idx: u64| a == t1.as_slice() || a == t2.as_slice();
+        assert_eq!(
+            search_enumerated(&enum_full, &two, SearchMode::Id, false).unwrap(),
+            SearchOutcome::Ambiguous
+        );
+    }
+
+    #[test]
+    fn search_own_anchored_resolves_a_nonzero_subset_assignment() {
+        // The OVER-SUPPLY own-anchored space: k_own=4 own candidates (indices
+        // 0..4), m=1 cosigner (index 4), j=1 own slot → N=2 slots. Only ONE own
+        // candidate (say index 2) is the real one. The evaluator matches the
+        // unique assignment that places own-index-2 + cosigner-index-4. The
+        // search MUST drive the s_own space (NOT n!) and resolve it.
+        let k_own = 4usize;
+        let j = 1usize;
+        let m = 1usize;
+        let enumeration = Enumeration::OwnAnchored {
+            k_own,
+            j,
+            m,
+            sorted: false,
+        };
+        // The target assignment: slot 0 → pool index 2 (the real own key), slot
+        // 1 → pool index 4 (the cosigner). (This is a valid own-anchored
+        // assignment: exactly j=1 own index <4 + all m=1 cosigner.)
+        let target = vec![2usize, 4usize];
+        let eval = move |a: &[usize], _idx: u64| a == target.as_slice();
+        let outcome = search_enumerated(&enumeration, &eval, SearchMode::Id, false).unwrap();
+        match outcome {
+            SearchOutcome::Unique { assignment, .. } => {
+                assert_eq!(assignment, vec![2, 4]);
+            }
+            other => panic!("expected Unique over the own-anchored space, got {other:?}"),
+        }
+        // The reference exactly enumerates s_own candidates, so a never-match is
+        // None over the SAME (subset) cardinality, not n!.
+        let never = |_a: &[usize], _idx: u64| false;
+        assert_eq!(
+            search_enumerated(&enumeration, &never, SearchMode::Id, false).unwrap(),
+            SearchOutcome::None
+        );
+    }
+
+    #[test]
+    fn search_own_anchored_only_enumerates_s_own_candidates() {
+        // The engine must enumerate EXACTLY the s_own set — never an n!-over-the-
+        // whole-pool placement that drops a cosigner. We assert this by counting
+        // the DISTINCT assignments the engine visits: a synthetic evaluator
+        // records every assignment it is handed; the recorded SET must equal the
+        // independently-generated own_anchored_unrank set (size s_own).
+        let k_own = 4usize;
+        let j = 2usize;
+        let m = 1usize;
+        let sorted = false;
+        let enumeration = Enumeration::OwnAnchored {
+            k_own,
+            j,
+            m,
+            sorted,
+        };
+        let s = s_own(k_own, j, m, sorted).unwrap();
+        let seen = std::sync::Mutex::new(std::collections::HashSet::new());
+        let recorder = |a: &[usize], _idx: u64| {
+            seen.lock().unwrap().insert(a.to_vec());
+            false // never match → full scan
+        };
+        let outcome = search_enumerated(&enumeration, &recorder, SearchMode::Id, false).unwrap();
+        assert_eq!(outcome, SearchOutcome::None);
+        let visited = seen.into_inner().unwrap();
+        // Independent expected set.
+        let expected: std::collections::HashSet<Vec<usize>> = (0..s)
+            .map(|r| own_anchored_unrank(r, k_own, j, m, sorted))
+            .collect();
+        assert_eq!(
+            visited, expected,
+            "the engine must visit EXACTLY the s_own assignment set (no cosigner-dropping placements)"
+        );
+        assert_eq!(visited.len() as u128, s);
+    }
+
+    #[test]
+    fn search_subset_overflow_refuses_not_panics() {
+        // A subset cardinality that overflows u128 → REFUSE (typed error), never
+        // panic. `OwnAnchored { k_own: 256, j: 128, .. }` → C(256,128) is 252-bit.
+        let enumeration = Enumeration::OwnAnchored {
+            k_own: 256,
+            j: 128,
+            m: 0,
+            sorted: false,
+        };
+        let never = |_a: &[usize], _idx: u64| false;
+        assert!(matches!(
+            search_enumerated(&enumeration, &never, SearchMode::Id, false),
+            Err(SearchError::SearchSpaceTooLarge { .. })
+        ));
+    }
+
+    #[test]
+    fn search_own_anchored_address_early_exit_resolves_unique() {
+        // Address-mode over the own-anchored space with early_exit=true: a unique
+        // (assignment, address_index) is found and returned as Unique-on-first.
+        let k_own = 3usize;
+        let j = 1usize;
+        let m = 1usize;
+        let enumeration = Enumeration::OwnAnchored {
+            k_own,
+            j,
+            m,
+            sorted: false,
+        };
+        let range = AddressRange {
+            min: 0,
+            max: 10,
+            chains: ChainScope::Receive,
+        };
+        let target = vec![1usize, 3usize]; // own index 1 + cosigner index 3
+        let target_addr = range.flatten(2);
+        let eval = move |a: &[usize], idx: u64| a == target.as_slice() && idx == target_addr;
+        let outcome =
+            search_enumerated(&enumeration, &eval, SearchMode::Address(range), true).unwrap();
+        match outcome {
+            SearchOutcome::Unique {
+                assignment,
+                address_index,
+            } => {
+                assert_eq!(assignment, vec![1, 3]);
+                assert_eq!(address_index, target_addr);
+            }
+            other => panic!("expected Unique over own-anchored address space, got {other:?}"),
         }
     }
 }

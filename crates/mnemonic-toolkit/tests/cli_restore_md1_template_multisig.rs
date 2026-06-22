@@ -464,6 +464,43 @@ fn wsh_multi_address_search_finds_nonzero_index() {
     );
 }
 
+#[test]
+fn exact_pool_address_search_byte_regression_guard() {
+    // I-5 regression guard: the v0.60.0 EXACT-pool (`pool.len()==n`)
+    // address-search path passes `early_exit=false` and MUST be byte-unchanged
+    // by the P2 early-exit gate. A 2-of-2 {A@0, B@0} resolved EXACTLY (via
+    // `--account 0`, no over-supply) → the n! path, full-scan. The completed
+    // addresses must equal the independent golden, proving the gate did not
+    // perturb the exact path.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 3);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--search-address".into(),
+        golden[0].clone(),
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "the v0.60.0 EXACT-pool address-search path must be byte-unchanged (early_exit=false)"
+    );
+}
+
 // ===========================================================================
 // Floor 1(i): --from REQUIRED — a no-seed multisig template completion refuses.
 // ===========================================================================
@@ -662,27 +699,167 @@ fn multi_account_own_resolves_both_slots() {
 }
 
 // ===========================================================================
-// I-1 (P3a R0 fold): the over-supply (`pool.len() > n`) is REFUSED LOUDLY at
-// input — the permutation engine enumerates only n! placements of the FIRST n
-// pool entries, so any pool index ≥ n is NEVER evaluated → a legitimate wallet
-// would silently NO-MATCH. The genuine `--own-account-max` subset-search is
-// deferred (FOLLOWUP `template-multisig-own-account-range-subset-search`); until
-// then the supported invariant is `pool.len() == n` (own keys from the
-// `--account` LIST + cosigners exactly fill the N slots). Both the `--account`
-// over-supply and the `--own-account-max` flag must refuse with an ACTIONABLE
-// message (NOT a confusing NO-MATCH, NOT an exit-via-search).
+// P2 (own-account subset-search): `--own-account-max K` over-supplies the OWN
+// candidates (own seed derived at accounts 0..K) and the engine resolves the
+// unique own-account→slot assignment over the enlarged pool. This SUPERSEDES
+// the I-1 (#28 P3a) "refuse --own-account-max" gate (the genuine subset-search
+// has landed). The make-or-break gate is COMPLETION to an INDEPENDENT
+// rust-miniscript golden — esp. when the operator's own account is NOT 0.
 // ===========================================================================
 
 #[test]
-fn own_account_max_flag_refuses_with_actionable_message() {
-    // A real 2-of-2 {A@0, B@0}; the operator passes `--own-account-max 3` (the
-    // only way to over-supply own keys). Before the fold this derived
-    // own@{0,1,2}+cosigner = pool of 4 into n=2 slots and silently NO-MATCHED;
-    // after the fold it must refuse LOUDLY at input, naming --account.
+fn own_account_max_completes_at_nonzero_account() {
+    // THE HEADLINE GATE. A 2-of-2 where the operator's OWN key lives at account
+    // 3 (NOT 0) and the cosigner is SEED_B@0. The operator does not recall their
+    // own account → `--own-account-max 5` derives own@{0,1,2,3,4} (5 own
+    // candidates) and the subset-search must select own@3 + the cosigner and
+    // complete to the INDEPENDENT golden.
+    let cos = &[(SEED_A, 3u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "5".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "--own-account-max subset-search must resolve a NON-ZERO own account to the golden"
+    );
+}
+
+#[test]
+fn own_account_max_address_search_finds_nonzero_account() {
+    // The early-exit (address-search) over-supply path: own@2 of a 2-of-2,
+    // resolved via --search-address over the own-anchored space.
+    let cos = &[(SEED_A, 2u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 3);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "4".into(),
+        "--search-address".into(),
+        golden[0].clone(),
+        "--count".into(),
+        "3".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "--own-account-max address-search (early-exit) must resolve a non-zero own account"
+    );
+}
+
+#[test]
+fn own_account_max_alone_passes() {
+    // I-4 regression guard: `--own-account-max K` ALONE (no explicit --account)
+    // must PASS clap parse (the `--account` default_value="0" must NOT trip the
+    // `conflicts_with` mutex — clap ignores the default). It completes a real
+    // own@0 2-of-2 over the over-supply space.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "3".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "--own-account-max alone (no --account) must pass clap and complete"
+    );
+}
+
+#[test]
+fn account_and_own_account_max_conflict() {
+    // I-4: `--account L` + `--own-account-max K` together → clap `conflicts_with`
+    // parse error (the toolkit maps clap usage errors to exit 64), BEFORE any
+    // work. `--own-account-max K` ALONE passes (own_account_max_alone_passes);
+    // the explicit `--account` is what trips the mutex.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0,1".into(),
+        "--own-account-max".into(),
+        "5".into(),
+        "--expect-wallet-id".into(),
+        "deadbeef".into(),
+    ]);
+    let assert = mnemonic().args(&args).assert().code(64);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("cannot be used with") || low.contains("conflict"),
+        "--account + --own-account-max must be a clap conflict: {stderr}"
+    );
+}
+
+// ===========================================================================
+// §5a premise-violation refusals (own-only) — all fail SAFE.
+// ===========================================================================
+
+#[test]
+fn own_only_over_supplied_cosigners_refuses() {
+    // §5a: own-only mode (default; no --search-cosigner-subset) with MORE
+    // cosigner cards than the wallet has (M'>M) → REFUSE UP FRONT, naming
+    // --search-cosigner-subset (the P3 flag). Distinct from the legacy
+    // pool>n refuse — this is the new own-only-needs-exact-cosigners gate.
     let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
     let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
     let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
     let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+    // an extra (outsider) cosigner card → over-supplied cosigners.
+    let cos_extra = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_extra = emit_cosigner_mk1("wsh-sortedmulti", "2", cos_extra, 1);
 
     let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
     push_md1(&mut args, &md1);
@@ -698,46 +875,6 @@ fn own_account_max_flag_refuses_with_actionable_message() {
         args.push("--cosigner".into());
         args.push(c.clone());
     }
-    let assert = mnemonic().args(&args).assert().failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    let low = stderr.to_lowercase();
-    assert!(
-        low.contains("own-account-max") && low.contains("--account"),
-        "the --own-account-max refusal must name the flag and point at --account: {stderr}"
-    );
-    assert!(
-        !low.contains("no match"),
-        "the refusal must be an actionable INPUT error, not a search NO-MATCH: {stderr}"
-    );
-}
-
-#[test]
-fn pool_larger_than_slots_refuses_with_actionable_message() {
-    // A real 2-of-2 {A@0, B@0}; the operator over-supplies THREE keys for two
-    // slots (own@0 + cosigner B + an extra cosigner C). The pool (3) > n (2);
-    // the engine can never place the 3rd → refuse LOUDLY at input.
-    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
-    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
-    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
-    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
-    // an extra (outsider) cosigner card → pool over-supply.
-    let cos_extra = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
-    let mk1_extra = emit_cosigner_mk1("wsh-sortedmulti", "2", cos_extra, 1);
-
-    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
-    push_md1(&mut args, &md1);
-    args.extend([
-        "--from".into(),
-        format!("phrase={SEED_A}"),
-        "--account".into(),
-        "0".into(),
-        "--expect-wallet-id".into(),
-        id,
-    ]);
-    for c in &mk1_b {
-        args.push("--cosigner".into());
-        args.push(c.clone());
-    }
     for c in &mk1_extra {
         args.push("--cosigner".into());
         args.push(c.clone());
@@ -746,15 +883,144 @@ fn pool_larger_than_slots_refuses_with_actionable_message() {
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     let low = stderr.to_lowercase();
     assert!(
-        low.contains("--account")
-            || low.contains("more keys")
-            || low.contains("over-supply")
-            || low.contains("exactly"),
-        "the over-supply refusal must be actionable: {stderr}"
+        low.contains("own-only") && low.contains("--search-cosigner-subset"),
+        "over-supplied cosigners in own-only must refuse naming --search-cosigner-subset: {stderr}"
     );
     assert!(
         !low.contains("no match"),
         "the refusal must be an INPUT error, not a search NO-MATCH: {stderr}"
+    );
+}
+
+#[test]
+fn own_only_under_supplied_cosigners_no_match() {
+    // §5a: under-supplied cosigners (M'<M) → NO-MATCH refuse (the engine cannot
+    // fill every slot). A 3-of-3 with only ONE cosigner card supplied + the
+    // over-supplied own range.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "3", cos);
+    let id = emit_template_wallet_id("wsh-multi", "3", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "3", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "3".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    // Only ONE cosigner (B); C is missing → under-supply.
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("cosigner") || low.contains("slot") || low.contains("no match"),
+        "under-supplied cosigners must refuse (NO-MATCH / not-enough-keys): {stderr}"
+    );
+}
+
+#[test]
+fn own_account_max_at_account_mutex_with_explicit_cosigner_assignment() {
+    // §2 open-point 7: explicit `--cosigner @N=` assignment ⊕ subset-search
+    // (`--own-account-max`) → BadInput.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let path = canonical_path("wsh-multi", 0);
+    let (xpub_b, _fp_b) = xpub_at(SEED_B, &path);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "3".into(),
+        "--cosigner".into(),
+        format!("@1={xpub_b}"),
+    ]);
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("@n=") || low.contains("explicit") || low.contains("subset-search"),
+        "explicit @N= ⊕ --own-account-max must be a BadInput mutex: {stderr}"
+    );
+}
+
+// ===========================================================================
+// §6 hard ceilings.
+// ===========================================================================
+
+#[test]
+fn own_account_max_ceiling_refuses() {
+    // §6: K_own > 256 → BadInput (hard ceiling).
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "300".into(),
+        "--expect-wallet-id".into(),
+        id,
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("256") || low.contains("own-account-max"),
+        "K_own > 256 must refuse via the hard ceiling: {stderr}"
+    );
+}
+
+#[test]
+fn own_account_max_short_id_prefix_refuses() {
+    // The worked prefix sizing: a too-short --expect-wallet-id over the LARGER
+    // over-supply space must refuse for-weakness. A 4-byte (8-hex) prefix that
+    // is accepted for an n!-space (the exact-pool floor_weak test uses the same)
+    // must be REJECTED for the larger s_own space.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let weak = id[..8].to_string(); // 4 bytes
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "32".into(),
+        "--expect-wallet-id".into(),
+        weak,
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let low = stderr.to_lowercase();
+    assert!(
+        low.contains("prefix") || low.contains("weak") || low.contains("bytes"),
+        "a too-short id prefix over the over-supply space must refuse: {stderr}"
     );
 }
 
