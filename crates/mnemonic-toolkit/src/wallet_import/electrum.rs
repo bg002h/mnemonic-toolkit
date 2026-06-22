@@ -570,7 +570,8 @@ fn build_standard_descriptor(
             let _ = writeln!(
                 stderr,
                 "notice: import-wallet: electrum: keystore.derivation is null (watch-only \
-                 \"use a master key\" wallet); inferring purpose from the SLIP-132 xpub prefix \
+                 \"use a master key\" wallet); inferring the script type from the xpub version \
+                 prefix (a neutral xpub falls back to the conservative BIP-44/P2PKH default) \
                  and synthesizing the canonical origin {synthesized}"
             );
             synthesized
