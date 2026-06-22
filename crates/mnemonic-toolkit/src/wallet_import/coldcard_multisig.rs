@@ -247,17 +247,23 @@ pub(super) fn parse_text(
                     pending_per_cosigner_path = Some(value);
                 }
                 cosigner_xfp_key if is_xfp_hex(cosigner_xfp_key) => {
-                    // Shared-derivation shape: `<XFP_hex>: <xpub>` cosigner line.
+                    // `<XFP_hex>: <xpub>` cosigner line. cycle-13a Q1: ALSO
+                    // consume any pending per-line `Derivation:` path so the
+                    // interleaved shape-2 form (`Derivation: <path>` then
+                    // `<XFP_master>: <xpub>`, which H11's divergent export
+                    // emits) round-trips the per-cosigner path. `.take()`
+                    // empties `pending_per_cosigner_path` (no separate clear).
+                    // This consumes ONLY the per-line pending — it MUST NOT
+                    // disturb `shared_derivation`, so cosigners with no
+                    // per-line `Derivation:` still fall back to the shared
+                    // path at the effective-path resolution step.
                     let fp =
                         parse_fingerprint_hex(cosigner_xfp_key, line_no, "cosigner XFP prefix")?;
                     cosigners_raw.push(RawCosigner {
                         xpub_str: value,
                         per_line_xfp: Some(fp),
-                        per_line_path: None,
+                        per_line_path: pending_per_cosigner_path.take(),
                     });
-                    // Per-cosigner staging is consumed only by bare-xpub
-                    // lines; clear it defensively if we mixed shapes.
-                    pending_per_cosigner_path = None;
                 }
                 unknown => {
                     dropped_fields.push(unknown.to_string());
@@ -1189,6 +1195,79 @@ XFP: DEADBEEF\n\
             p.cosigners[0].fingerprint.to_string().to_uppercase(),
             "DEADBEEF",
             "depth-0 mismatch uses supplied (header authoritative)"
+        );
+    }
+
+    // ====================================================================
+    // cycle-13a P2 (Q1) — `<XFP>:` arm consumes the pending per-line path
+    // without clearing `shared_derivation`.
+    // ====================================================================
+
+    /// #13 (Q1 condition ii, regression guard): one shared `Derivation:` +
+    /// 3 `<XFP>: <xpub>` lines (NO per-line `Derivation:`) → ALL 3 cosigners
+    /// resolve to the SHARED path. Proves the extended `<XFP>:` arm does NOT
+    /// clear `shared_derivation`, so cosigners 2..N still fall back to it.
+    /// GREEN both BEFORE and AFTER the arm change (it asserts an invariant the
+    /// change must preserve).
+    #[test]
+    fn import_coldcard_multisig_shared_derivation_3_cosigners_all_resolve_shared() {
+        // Depth-0 master xpubs with matching per-line XFPs → silent (H14-a/d
+        // not triggered; per-line XFP == computed). Shared Derivation precedes
+        // the 3 cosigner lines; none carries its own per-line `Derivation:`.
+        let blob = format!(
+            "Name: T\n\
+Policy: 2 of 3\n\
+Derivation: m/48'/0'/0'/2'\n\
+Format: P2WSH\n\
+\n\
+{FP_D0_A}: {XPUB_D0_A}\n\
+{FP_D0_B}: {XPUB_D0_B}\n\
+{FP_D0_C}: {XPUB_D0_C}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        for (i, cs) in p.cosigners.iter().enumerate() {
+            assert_eq!(
+                cs.path.to_string(),
+                "48'/0'/0'/2'",
+                "cosigner {i} must resolve to the SHARED derivation path"
+            );
+        }
+        assert!(
+            stderr.is_empty(),
+            "matching per-line XFPs at depth 0 must be silent; got: {:?}",
+            String::from_utf8_lossy(&stderr)
+        );
+    }
+
+    /// #13b (Q1 positive RED): interleaved per-line `Derivation:` + `<XFP>:`
+    /// pairs with DISTINCT paths → each cosigner resolves to its OWN per-line
+    /// path. RED before the arm change (the `<XFP>:` arm set `per_line_path:
+    /// None` + cleared pending → both fell back to the shared/first path).
+    /// GREEN after the arm consumes the pending per-line path. Depth-0 xpubs +
+    /// matching XFPs (M-3) so no incidental Row-2 warning muddies RED→GREEN.
+    #[test]
+    fn import_coldcard_multisig_per_line_derivation_plus_xfp_roundtrips_path() {
+        let blob = format!(
+            "Name: T\n\
+Policy: 1 of 2\n\
+Format: P2WSH\n\
+Derivation: m/48'/0'/0'/2'\n\
+{FP_D0_A}: {XPUB_D0_A}\n\
+Derivation: m/48'/0'/1'/2'\n\
+{FP_D0_B}: {XPUB_D0_B}\n"
+        );
+        let mut stderr = Vec::new();
+        let p = parse_text(blob.as_bytes(), &mut stderr).unwrap();
+        assert_eq!(
+            p.cosigners[0].path.to_string(),
+            "48'/0'/0'/2'",
+            "cosigner 0 must keep its per-line path m/48'/0'/0'/2'"
+        );
+        assert_eq!(
+            p.cosigners[1].path.to_string(),
+            "48'/0'/1'/2'",
+            "cosigner 1 must keep its DISTINCT per-line path m/48'/0'/1'/2'"
         );
     }
 
