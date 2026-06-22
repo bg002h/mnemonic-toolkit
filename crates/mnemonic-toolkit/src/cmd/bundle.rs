@@ -912,7 +912,24 @@ fn emit_unified<W: Write, E: Write>(
                     xpub: s.xpub.to_string(),
                 })
                 .collect();
-            let threshold = args.threshold.unwrap_or(n as u8);
+            // M7 (cycle-13): report the real multisig threshold K, not the
+            // cosigner count N. In descriptor / --import-json / concrete-
+            // descriptor mode `args.threshold` is None, so the old
+            // `args.threshold.unwrap_or(n)` fell back to N — wrong for a
+            // K-of-N where K < N. Read K from the descriptor body itself
+            // (same `extract_multisig_threshold(&tree)` the engraving card
+            // path uses at build_unified_card), falling back to args.threshold
+            // then N only when extraction yields nothing.
+            let descriptor_threshold: Option<u8> = {
+                let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
+                md_codec::chunk::reassemble(&md1_strs)
+                    .ok()
+                    .and_then(|d| extract_multisig_threshold(&d.tree))
+            };
+            let threshold = args
+                .threshold
+                .or(descriptor_threshold)
+                .unwrap_or(n as u8);
             // r1 review I-1 fix: derive path_family from --multisig-path-family
             // (defaults to bip87 when unset). Hardcoded "bip87" was wrong for
             // sh-wsh-* templates (which require bip48) and broke SPEC §5.6
