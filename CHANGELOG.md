@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.68.0] — 2026-06-21
+
+**SemVer-MINOR — cycle-15 Lane T: derived-output secret-memory-hygiene sweep (3 toolkit FOLLOWUP slugs). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Defense-in-depth (heap residue) — behavior / text / `--json` byte-identical. MINOR (not PATCH) per the v0.10.1 precedent for a `pub mod`-touching secret-type migration even when nothing public changes shape.**
+
+### Changed (secret-memory hygiene — no observable behavior change)
+
+- **bip85 / derive-child — rendered SPENDABLE BIP-85 child secrets carry as `SecretString`.** The seven `bip85::format_*` functions (BIP-39 phrase / HD-seed WIF / child xprv / hex / password-base64 / password-base85 / dice) now return `Result<SecretString, ToolkitError>` instead of bare `Result<String, _>`, and the single `derive-child` `output` emitter local is a `SecretString`. `SecretString` zeroizes on drop and has a length-only **redacting** `Debug` (a bare `Zeroizing<String>` would leak the secret through `{:?}` / panic / `assert_eq!` — `zeroize 1.8.2`). `Display`/`Deref` render verbatim, so the `writeln!("{output}")` text path is byte-identical; `derive-child` has no `--json`.
+- **electrum native-seed — entropy returned BY MOVE, normalize intermediates wrapped.** `electrum::phrase_to_entropy` returns `Zeroizing<Vec<u8>>` (`Ok(acc)`) instead of cloning the secret entropy out of the `Zeroizing` wrapper into a bare un-scrubbed `Vec` — the funds-relevant fix. The PBKDF2 normalize intermediates (the electrum-local `normalize_text_electrum` / `normalize_phrase_for_hmac` returns, the per-word and per-candidate phrase scratch) wrap in `Zeroizing<String>` at the consumption boundary. `entropy_to_phrase` keeps its `Result<String, _>` return (its caller type-unifies against bare-`String` arms); `wordlists::normalize_electrum` stays `-> String` (cross-module helper).
+- **seedqr — internal scratch wrapped in `Zeroizing`.** `decode` / `encode` / `encode_compact` / `decode_compact` wrap their internal secret scratch (raw-digit `stripped`, per-word `words` / `normalized` / `digits`, the `decode_compact` hex-decoded raw-entropy `bytes`) in `Zeroizing`. The four `pub fn` returns stay bare `String` (no SemVer break); the bare consumer-locals are a separate pre-existing residue class, out of scope.
+- **ms-codec pin `0.5` → `0.6`** (recompile-only; `Payload`/`decode` byte-stable 0.5.0→0.6.0, diff-confirmed). Re-resolves both lockfiles to ms-codec 0.6.0.
+- **zeroize-discipline lint** — `ZEROIZE_ROWS.len()` count-guard widened `(18..=60)` → `(18..=66)`; +6 canonical rows (bip85 `SecretString` returns, derive-child output, electrum move-out / norm-scratch / per-word wrap, and the new `src/seedqr.rs` `source_file` row). `SECRET_FILE_FLOOR` unchanged.
+
 ## mnemonic-toolkit [0.67.0] — 2026-06-21
 
 **SemVer-MINOR — closes L22, the constellation bug-hunt's final secret-memory-hygiene finding (cycle-14). Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Defense-in-depth (heap residue) — no observable CLI/wire behavior change.**

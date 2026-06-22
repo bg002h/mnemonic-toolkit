@@ -4447,7 +4447,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **What:** the 64-byte BIP-85 entropy buffer IS `Zeroizing` + mlock-pinned, but the *rendered* child secret — a full child seed phrase / WIF / xprv / password (full spending authority) — is a bare, un-scrubbed, un-pinned heap `String` that lingers until function exit. The handler emits `OutputClass::PrivateKeyMaterial` (it KNOWS the value is spendable) yet does not wrap it. This is the single highest-value un-wrapped secret-output site in the crate. Not a leak-to-disk/argv/log, so not Critical.
 - **Fix (direction):** flip the seven `format_*` returns + the `output` local to `SecretString` (serialize-transparent; `writeln!` via `Display` unchanged) and add lint rows — mirroring the in-repo precedent `cmd/silent_payment.rs:286-287` + `cmd/nostr.rs:235`, which already wrap their derived-priv output in `SecretString`.
 - **Severity:** HIGH/MED (defense-in-depth tier; full spending authority rendered to a bare heap `String`).
-- **Status:** `open`.
+- **Status:** `resolved` (cycle-15 Lane T, toolkit v0.68.0 — the 7 `format_*` returns + the `derive-child` `output` local flipped to `SecretString`; lint rows added). Behavior/text/`--json` byte-identical.
 - **Tier:** `polish` / `next-cycle`.
 - **Companion:** part of the constellation-wide "derived-output + codec-library-internal secret-`String`/`Vec` not zeroized" pattern surfaced by the 2026-06-21 secret-keymat sweep — siblings in `mnemonic-secret` (ms-codec `inspect`/`decode`/share-strings) and `mnemonic-gui` (app-level run-holders); see `design/agent-reports/sweep-keymat-*.md`. Cycle-14/L22 closed the clap-arg / handler-local / persistent-field leg; this is the remaining library/output leg.
 
@@ -4459,7 +4459,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **What:** the master-secret-equivalent phrase + passphrase materialize in ~6 un-scrubbed heap `String`s during derivation, and the secret entropy is `clone()`d out of its `Zeroizing` wrapper on return. `acc` was wrapped; the text intermediates and the returned clone were not. A normalized phrase copy is exactly the secret an attacker wants in swap/core.
 - **Fix (direction):** wrap the normalize helpers' returns + the two `norm_*` locals + the `phrase_to_entropy` return in `Zeroizing<String>` / `Zeroizing<Vec<u8>>`.
 - **Severity:** MED (defense-in-depth — the final 64-byte seed is `Zeroizing`; these are full copies of the highest-value secret sitting un-scrubbed during the derivation window). Distinct from the existing `electrum-native-seed-address-derivation` slug, which is about derivation correctness, not memory hygiene.
-- **Status:** `open`.
+- **Status:** `resolved` (cycle-15 Lane T, toolkit v0.68.0 — `phrase_to_entropy` returns `Zeroizing<Vec<u8>>` by move (no clone-out); `normalize_text_electrum`/`normalize_phrase_for_hmac` returns + per-word/per-candidate scratch wrapped in `Zeroizing<String>`. `entropy_to_phrase` keeps `-> String` (I-1); `wordlists::normalize_electrum` unwidened (M-4)). Behavior byte-identical.
 - **Tier:** `polish` / `next-cycle`.
 - **Companion:** part of the constellation-wide "derived-output + codec-library-internal secret-`String`/`Vec` not zeroized" pattern surfaced by the 2026-06-21 secret-keymat sweep — siblings in `mnemonic-secret` (ms-codec `inspect`/`decode`/share-strings) and `mnemonic-gui` (app-level run-holders); see `design/agent-reports/sweep-keymat-*.md`. Cycle-14/L22 closed the clap-arg / handler-local / persistent-field leg; this is the remaining library/output leg.
 
@@ -4471,7 +4471,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **What:** the SeedQR library functions build secret phrase/digits/entropy in bare `String`s and return bare. The `cmd/seedqr.rs` handler DOES re-wrap each return in `Zeroizing` immediately, so the lingering window is small (return-move + internal scratch), but the internal intermediates (`stripped`/`phrase`/`digits`/`normalized`) are never scrubbed.
 - **Fix (direction):** wrap the four return values + the scratch buffers in `Zeroizing<String>`.
 - **Severity:** MED/LOW (sibling of the electrum finding, same library-layer class, one notch lower because the consumer re-wraps the final value fast).
-- **Status:** `open`.
+- **Status:** `resolved` (cycle-15 Lane T, toolkit v0.68.0 — the internal scratch (`stripped` / per-word `words` / `normalized` / `digits` / `decode_compact` `bytes`) wrapped in `Zeroizing`; M-2 KEEPS the four `pub fn` returns bare `String` — no SemVer break — and the 8 bare consumer-locals stay out of scope). Behavior byte-identical.
 - **Tier:** `polish` / `next-cycle`.
 - **Companion:** part of the constellation-wide "derived-output + codec-library-internal secret-`String`/`Vec` not zeroized" pattern surfaced by the 2026-06-21 secret-keymat sweep — siblings in `mnemonic-secret` (ms-codec `inspect`/`decode`/share-strings) and `mnemonic-gui` (app-level run-holders); see `design/agent-reports/sweep-keymat-*.md`. Cycle-14/L22 closed the clap-arg / handler-local / persistent-field leg; this is the remaining library/output leg.
 
