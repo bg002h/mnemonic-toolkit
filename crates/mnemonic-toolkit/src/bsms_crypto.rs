@@ -105,16 +105,14 @@ pub fn derive_encryption_key(token_raw: &[u8]) -> Zeroizing<[u8; 32]> {
 /// Derive the HMAC_KEY from the ENCRYPTION_KEY per BIP-129 line 162:
 /// `HMAC_KEY = SHA256(ENCRYPTION_KEY)`.
 ///
-/// Returns `[u8; 32]` (NOT `Zeroizing`-wrapped). The HMAC_KEY is a
-/// short-lived stack value derived from the (already-zeroized)
-/// ENCRYPTION_KEY; its lifetime is bounded by the immediately-following
-/// [`compute_mac`] call. Threat model: an attacker who can read process
-/// stack already has access to ENCRYPTION_KEY. A caller retaining
-/// HMAC_KEY beyond the MAC compute should wrap manually.
-pub fn derive_hmac_key(encryption_key: &[u8; 32]) -> [u8; 32] {
+/// Returns `Zeroizing<[u8; 32]>` — the HMAC_KEY is secret-class (derived
+/// from the `Zeroizing` ENCRYPTION_KEY) and is scrubbed on drop. The scrub
+/// obligation lives in the return type so no caller can leak it by
+/// forgetting to wrap (cycle-15 Group A, first-class secret-hygiene).
+pub fn derive_hmac_key(encryption_key: &[u8; 32]) -> Zeroizing<[u8; 32]> {
     let mut hasher = Sha256::new();
     hasher.update(encryption_key);
-    let mut out = [0u8; 32];
+    let mut out = Zeroizing::new([0u8; 32]);
     out.copy_from_slice(&hasher.finalize());
     out
 }
@@ -131,7 +129,10 @@ pub fn derive_hmac_key(encryption_key: &[u8; 32]) -> [u8; 32] {
 /// asymmetry is intentional per BIP-129; see [P0 recon §A2 / foot-gun
 /// analysis](../../design/cycle-7-p0-recon.md).
 ///
-/// Returns the 32-byte HMAC-SHA256 output.
+/// Returns the 32-byte HMAC-SHA256 output as a bare `[u8; 32]`: the MAC is
+/// a published BIP-129 authentication tag (its first 16 bytes become the
+/// on-wire IV; it is compared against the untrusted `mac_recv`) — NOT
+/// secret-class, so it is deliberately un-wrapped.
 #[must_use]
 pub fn compute_mac(hmac_key: &[u8; 32], token_hex: &str, data: &[u8]) -> [u8; 32] {
     let mut mac =
@@ -185,6 +186,14 @@ pub fn encrypt(plaintext: &[u8], encryption_key: &[u8; 32], iv: &[u8; 16]) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn derive_hmac_key_returns_zeroizing() {
+        // Fn-pointer fence: return types are invariant, so this fails to COMPILE
+        // on the bare-[u8;32] signature and compiles only once derive_hmac_key
+        // returns Zeroizing<[u8;32]> (cycle-15 Group A first-class-hygiene).
+        let _f: fn(&[u8; 32]) -> zeroize::Zeroizing<[u8; 32]> = derive_hmac_key;
+    }
 
     // BIP-129 TV-3 (STANDARD encryption mode, Signer 1).
     // Source: github.com/bitcoin/bips/blob/master/bip-0129.mediawiki §Test Vectors
