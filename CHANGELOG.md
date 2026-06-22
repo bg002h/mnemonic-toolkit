@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.70.1] — 2026-06-22
+
+**SemVer-PATCH — open-followups maturity program, Wave 1: export-refusal hardening + reconcile. `export-wallet --format green` now refuses a taproot tap-script-tree POLICY (previously mislabeled it "(singlesig)" — a wrong-label, not wrong-address, defect); a direct `--descriptor 'wsh(multi(…))'` (unsorted) to field-less vendor formats now surfaces the typed unsorted-multisig refusal instead of a generic one. Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change.**
+
+### Changed (funds-adjacent labeling — refusal where it previously mislabeled)
+
+- **`export-wallet --format green` refuses a taproot tap-script-tree policy.** A general taproot policy (`tr(internal,{…})` carrying a tapscript tree) is classified `P2tr` and previously fell through the multisig guard, emitting Green's static `# … (singlesig)` header for a script-tree policy (the descriptor inside was faithful → wrong-LABEL, not wrong-address). It now refuses with a pointer to `--format bitcoin-core` / `--format descriptor`, mirroring the restore-side refusal (v0.55.1). Discrimination is STRUCTURAL via miniscript `Tr::tap_tree()` — a single-leaf tree (`tr(NUMS,pk(A))`) renders without `,{`, so a substring probe would be unsound. Keypath-only single-sig taproot (BIP86) emission is unchanged. Closes FOLLOWUP `export-wallet-green-tr-policy-singlesig-emission`. (Whether Green's file import accepts a `tr(KEY)` keypath descriptor is unverified upstream → tracked by new FOLLOWUP `green-taproot-keypath-file-import-unverified`.)
+
+### Changed (diagnostic message quality — no behavior change)
+
+- **Direct `--descriptor 'wsh(multi(…))'` (unsorted) to field-less vendor formats surfaces the typed unsorted-multisig refusal.** The direct-descriptor path (`template == None`) previously refused unsorted-multi exports to electrum/coldcard/jade with a generic `BadInput` ("requires --template"); a second arm of the H10 guard now returns the typed `ExportWalletUnsortedMultisigUnsupported` (exit 2 unchanged) — already funds-safe, now clearer. Closes FOLLOWUP `export-wallet-direct-descriptor-unsorted-multi-generic-refusal`.
+
+### Notes
+
+- **xpub-search md1 detection — DEFERRED.** `xpub-search-descriptor-md1-detection-bech32-validate` is deferred: md1 uses a custom BCH(93,80,8) checksum (target residue `md_codec::bch::MD_REGULAR_CONST`), so the proposed `bitcoin::bech32::decode` tightening would reject every valid md1 string (a funds-feature regression); the current intake is already loud-and-safe. The correct future primitive is `md_codec::bch::bch_verify_regular` (per-chunk).
+- **CI hygiene reconcile.** Flipped the already-resolved-in-CI vacuous flag-coverage lint FOLLOWUPs (`lint-md-flag-coverage-vacuous-with-md_bin-true`, `manual-yml-bind-real-mnemonic-bin`) → resolved.
+- **No codec/GUI bump.** All R0-GREEN (2 rounds) + post-impl whole-diff review — see `design/agent-reports/w1-export-refusals-r0-*`.
+
 ## mnemonic-toolkit [0.70.0] — 2026-06-22
 
 **SemVer-MINOR — own-account subset-search: `restore --own-account-max K` (re-enabled) over-supplies own-account candidates and resolves the unique multisig-template assignment via an own-anchored k-permutation search; opt-in `--search-cosigner-subset` extends it to over-supplied cosigner candidates (bounded).** Toolkit-only; md-codec / mk-codec / GUI NO-BUMP. New clap flags are documented in the manual in lockstep (`docs/manual/src/40-cli-reference/41-mnemonic.md`); the GUI schema-mirror is a paired-PR concern handled by the orchestrator.
