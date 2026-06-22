@@ -396,9 +396,18 @@ Vendor-specific details encoded here:
   cosigner lines per the Coldcard format, even though the toolkit
   accepts them on the slot input (and normalizes to BIP-32 internally).
 - **`Format:`.** `P2WSH` for `wsh-*` templates; `P2SH-P2WSH` for `sh-wsh-*`.
-- **`Derivation:`.** A single line whose value is the shared origin
-  path across cosigners (if all match); falls back to the Coldcard
-  convention `m/0'/0'` if cosigners disagree.
+- **`Derivation:`.** When all cosigners share one origin path, a single
+  `Derivation:` line carries it (the common case, shown above). When the
+  cosigner origin paths **diverge**, the export emits one `Derivation:
+  <path>` line per cosigner, immediately before that cosigner's
+  `<XFP>: <xpub>` line — the faithful per-cosigner form the toolkit (and
+  Coldcard / Jade) round-trip. Each per-cosigner `Derivation:` is read
+  from the SAME sorted cosigner slot as its xpub, so path↔xpub never
+  scramble under the `sortedmulti` xpub re-ordering. (cycle-13a replaced
+  the prior `m/0'/0'` collapse, which silently corrupted divergent
+  origins.) If any cosigner has an *empty* origin path, the export
+  **refuses** rather than substitute a placeholder origin into a steel
+  backup.
 - **`Name:` truncation.** Capped at 20 Unicode scalar values per the
   Coldcard reference format; non-ASCII names are truncated at
   codepoint granularity (not byte) so multi-byte sequences are not

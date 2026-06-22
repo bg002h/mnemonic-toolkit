@@ -554,3 +554,234 @@ fn export_wallet_coldcard_multisig_format_refuses_no_template() {
         .expect("mnemonic spawn");
     assert_ne!(out.status.code(), Some(0), "must refuse");
 }
+
+// ============================================================================
+// cycle-13a P3 (H11) — divergent per-cosigner `Derivation:` export.
+//
+// The 2-of-3 wsh-sortedmulti emit collapsed divergent cosigner origin paths
+// to the wrong global placeholder `m/0'/0'`. H11 emits a per-cosigner
+// `Derivation:` line read from the SAME sorted slot (NEVER `m/0'/0'`); the
+// all-agree case keeps the single shared `Derivation:` line byte-identical.
+// xpub-lex sort order of the three cosigners is [C, B, A] (slot order A,B,C),
+// so divergent paths exercise the sort≠slot pairing hazard.
+// ============================================================================
+
+/// Build a divergent SORTED 2-of-3 coldcard-multisig export with distinct
+/// per-slot paths. `format` is "coldcard" or "jade".
+fn run_divergent_export(format: &str) -> std::process::Output {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            format,
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/1'/2'",
+            "--slot",
+            &format!("@2.xpub={COSIGNER_C_XPUB}"),
+            "--slot",
+            &format!("@2.fingerprint={COSIGNER_C_FP}"),
+            "--slot",
+            "@2.path=m/48'/0'/2'/2'",
+            "--output",
+            "-",
+        ])
+        .output()
+        .expect("mnemonic spawn")
+}
+
+/// #1 — divergent paths emit a `Derivation:` line per cosigner with the real
+/// path; NEVER `m/0'/0'`; each cosigner line carries its real master fp.
+#[test]
+fn export_coldcard_multisig_divergent_paths_emits_per_cosigner_derivation() {
+    let out = run_divergent_export("coldcard");
+    assert!(out.status.success(), "divergent export must succeed");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        !stdout.contains("m/0'/0'"),
+        "divergent export must NEVER emit the m/0'/0' placeholder; got:\n{stdout}"
+    );
+    // All three real paths must appear as `Derivation:` lines.
+    for path in ["m/48'/0'/0'/2'", "m/48'/0'/1'/2'", "m/48'/0'/2'/2'"] {
+        assert!(
+            stdout.contains(&format!("Derivation: {path}")),
+            "missing per-cosigner Derivation line for {path}; got:\n{stdout}"
+        );
+    }
+    // The single-shared-Derivation collapse must be gone: there must be one
+    // `Derivation:` per cosigner (3), not exactly one.
+    let derivation_lines = stdout.lines().filter(|l| l.starts_with("Derivation:")).count();
+    assert_eq!(derivation_lines, 3, "one Derivation line per cosigner; got:\n{stdout}");
+}
+
+/// #1b (load-bearing I-2 pairing test) — the xpub that sorts FIRST (C, at slot
+/// @2 with path `2'`) must be paired with ITS OWN path, not a slot-order
+/// `derivations[i]`-indexed one. Reads each emitted `Derivation:`/`<XFP>: xpub`
+/// pair and asserts path↔xpub come from the SAME slot. RED today AND under a
+/// naive `derivations[i]` fix → forces H11-b's same-sorted-slot rule.
+#[test]
+fn export_coldcard_multisig_sort_order_ne_slot_order_pairs_correctly() {
+    let out = run_divergent_export("coldcard");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+
+    // Expected pairing (path belongs to the slot the xpub belongs to):
+    //   A @0 path 0'   B @1 path 1'   C @2 path 2'
+    let want = [
+        ("m/48'/0'/0'/2'", COSIGNER_A_XPUB),
+        ("m/48'/0'/1'/2'", COSIGNER_B_XPUB),
+        ("m/48'/0'/2'/2'", COSIGNER_C_XPUB),
+    ];
+
+    // Walk the emitted lines; each `Derivation: <path>` is immediately
+    // followed by `<XFP>: <xpub>`. Build the observed (path, xpub) pairs.
+    let lines: Vec<&str> = stdout.lines().collect();
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    for w in lines.windows(2) {
+        if let Some(path) = w[0].strip_prefix("Derivation: ") {
+            if let Some((_xfp, xpub)) = w[1].split_once(": ") {
+                pairs.push((path.to_string(), xpub.to_string()));
+            }
+        }
+    }
+    for (path, xpub) in want {
+        assert!(
+            pairs.iter().any(|(p, x)| p == path && x == xpub),
+            "path {path} must be paired with its OWN slot's xpub {xpub} (no scramble); \
+             observed pairs: {pairs:?}\n--- output ---\n{stdout}"
+        );
+    }
+}
+
+/// #2 — all-equal paths keep the single shared `Derivation:` line, byte-
+/// identical to the pre-cycle-13a emit (GREEN-preserving regression guard).
+#[test]
+fn export_coldcard_multisig_shared_path_unchanged() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--multisig-path-family",
+            "bip48",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            &format!("@0.fingerprint={COSIGNER_A_FP}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            &format!("@1.fingerprint={COSIGNER_B_FP}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
+            "--slot",
+            &format!("@2.xpub={COSIGNER_C_XPUB}"),
+            "--slot",
+            &format!("@2.fingerprint={COSIGNER_C_FP}"),
+            "--slot",
+            "@2.path=m/48'/0'/0'/2'",
+            "--output",
+            "-",
+        ])
+        .output()
+        .expect("mnemonic spawn");
+    assert!(out.status.success());
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let expected =
+        std::fs::read_to_string(FIXTURE_MULTISIG_2OF3_WSH).expect(FIXTURE_MULTISIG_2OF3_WSH);
+    assert_eq!(
+        stdout, expected,
+        "all-agree export must stay byte-identical to the pre-cycle-13a fixture"
+    );
+}
+
+/// #4 — Jade inherits the divergent per-cosigner emit via delegation.
+#[test]
+fn export_jade_divergent_paths_inherits_per_cosigner() {
+    let out = run_divergent_export("jade");
+    assert!(out.status.success(), "jade divergent export must succeed");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(!stdout.contains("m/0'/0'"), "jade must not emit m/0'/0'; got:\n{stdout}");
+    for path in ["m/48'/0'/0'/2'", "m/48'/0'/1'/2'", "m/48'/0'/2'/2'"] {
+        assert!(
+            stdout.contains(&format!("Derivation: {path}")),
+            "jade missing per-cosigner Derivation for {path}; got:\n{stdout}"
+        );
+    }
+}
+
+/// #5 / #12 (headline co-design proof) — export divergent → import-wallet
+/// --format coldcard-multisig → each cosigner's resolved `[fp/path]` equals
+/// the ORIGINAL (divergent path + master fp preserved). GREEN only with P1
+/// (H14-c silent accept) + P2 (per-line path parse) + P3 (per-cosigner emit).
+#[test]
+fn roundtrip_divergent_master_fp_and_paths_preserved() {
+    let exp = run_divergent_export("coldcard");
+    assert!(exp.status.success());
+    let blob = String::from_utf8(exp.stdout).unwrap();
+
+    let imp = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "coldcard-multisig",
+            "--json",
+        ])
+        .write_stdin(blob.clone())
+        .output()
+        .expect("import spawn");
+    assert!(
+        imp.status.success(),
+        "re-import of the divergent export must succeed; stderr: {}\n--- blob ---\n{blob}",
+        String::from_utf8_lossy(&imp.stderr)
+    );
+    let stdout = String::from_utf8(imp.stdout).unwrap();
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("envelope is JSON");
+    let descriptor = v[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("descriptor present");
+
+    // Each cosigner's ORIGINAL (master-fp, divergent-path, xpub) must survive
+    // the round-trip into the re-parsed descriptor's `[fp/path]xpub` form.
+    for (fp, path, xpub) in [
+        (COSIGNER_A_FP, "48'/0'/0'/2'", COSIGNER_A_XPUB),
+        (COSIGNER_B_FP, "48'/0'/1'/2'", COSIGNER_B_XPUB),
+        (COSIGNER_C_FP, "48'/0'/2'/2'", COSIGNER_C_XPUB),
+    ] {
+        let want = format!("[{fp}/{path}]{xpub}");
+        assert!(
+            descriptor.contains(&want),
+            "round-trip must preserve `{want}`; got descriptor:\n{descriptor}"
+        );
+    }
+}

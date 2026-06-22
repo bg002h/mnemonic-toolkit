@@ -306,9 +306,7 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     // is the user-intuitive "first 20 characters".
     let name: String = inputs.wallet_name.chars().take(20).collect();
 
-    // Derivation line: shared origin path if all cosigners agree;
-    // otherwise the `m/0'/0'` placeholder per Coldcard convention. The
-    // per-slot bare origin (v0.37.9 — `ResolvedSlot::origin_path_bare()`)
+    // Per-slot bare origin (v0.37.9 — `ResolvedSlot::origin_path_bare()`)
     // carries the user-supplied origin or template-derived default; both
     // forms are normalized to `m/...` here.
     let normalize_path = |p: &str| -> String {
@@ -321,21 +319,13 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
             format!("m/{p}")
         }
     };
-    let derivations: Vec<String> = inputs
-        .resolved_slots
-        .iter()
-        .map(|s| normalize_path(&s.origin_path_bare()))
-        .collect();
-    let derivation = if !derivations.is_empty()
-        && derivations.windows(2).all(|w| w[0] == w[1])
-        && !derivations[0].is_empty()
-    {
-        derivations[0].clone()
-    } else {
-        "m/0'/0'".to_string()
-    };
 
-    // SPEC §5.2: sortedmulti → lex-sort cosigners by xpub; multi → slot-index order.
+    // SPEC §5.2: sortedmulti → lex-sort cosigners by xpub; multi → slot-index
+    // order. cycle-13a H11-b (I-2 funds-safety pairing): build the SINGLE
+    // sorted slot vector here and read EACH cosigner's path / fingerprint /
+    // xpub from the SAME sorted slot below. NEVER index a separate slot-order
+    // `derivations[i]` vector against this sorted loop — that scrambles
+    // path↔xpub whenever sort-order ≠ slot-order (worse than `m/0'/0'`).
     let mut cosigners: Vec<&crate::synthesize::ResolvedSlot> =
         inputs.resolved_slots.iter().collect();
     if matches!(
@@ -345,22 +335,59 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
         cosigners.sort_by(|a, b| a.xpub.to_string().cmp(&b.xpub.to_string()));
     }
 
+    // cycle-13a H11-d (funds-safety): refuse rather than substitute a
+    // placeholder origin into a steel backup. Empty origin = no faithful
+    // per-cosigner export possible.
+    if cosigners
+        .iter()
+        .any(|s| normalize_path(&s.origin_path_bare()).is_empty())
+    {
+        return Err(ToolkitError::BadInput(
+            "--format coldcard multisig text: at least one cosigner has an empty origin \
+             derivation path — a faithful per-cosigner export is not possible. Supply each \
+             cosigner's origin path (`--slot @N.path=m/...`) so the exported `Derivation:` \
+             line is correct; the toolkit refuses to substitute a placeholder origin into a \
+             multisig wallet file."
+                .to_string(),
+        ));
+    }
+
+    // cycle-13a H11-a/b/c: emit a single shared `Derivation:` line when ALL
+    // cosigner origins agree (byte-identical to the pre-cycle-13a happy path);
+    // otherwise emit a per-cosigner `Derivation: <path>` immediately before
+    // each `<XFP_master>: <xpub>` line, each read from the SAME sorted slot.
+    let sorted_paths: Vec<String> = cosigners
+        .iter()
+        .map(|s| normalize_path(&s.origin_path_bare()))
+        .collect();
+    let homogeneous = sorted_paths.windows(2).all(|w| w[0] == w[1]);
+
     // Assemble the text. SPEC §5.2 line order:
     //   Name: ...
     //   Policy: K of N
-    //   Derivation: m/...
+    //   [Derivation: m/...]            (shared form only)
     //   Format: P2WSH | P2SH-P2WSH | P2SH
-    //   <XFP>: xpub6...   (one per cosigner)
+    //   [Derivation: m/...]            (per-cosigner form: before each xpub)
+    //   <XFP>: xpub6...                (one per cosigner)
     //
     // The trait emit contract is "return the text body; the call-site adds
     // exactly one trailing newline via `writeln!`". So we join lines with
     // `\n` and let the caller (`cmd::export_wallet::run`) terminate.
-    let mut lines: Vec<String> = Vec::with_capacity(4 + cosigners.len());
+    let mut lines: Vec<String> = Vec::with_capacity(4 + 2 * cosigners.len());
     lines.push(format!("Name: {name}"));
     lines.push(format!("Policy: {threshold} of {cosigner_count}"));
-    lines.push(format!("Derivation: {derivation}"));
+    if homogeneous {
+        // All agree → single shared `Derivation:` line (the common case).
+        lines.push(format!("Derivation: {}", sorted_paths[0]));
+    }
     lines.push(format!("Format: {format_str}"));
-    for cs in cosigners {
+    for (cs, path) in cosigners.iter().zip(sorted_paths.iter()) {
+        if !homogeneous {
+            // Divergent → emit this sorted slot's OWN path immediately before
+            // its xpub (H11-b same-sorted-slot pairing — `path` is the path of
+            // THIS `cs`, both read from the same zipped sorted slot).
+            lines.push(format!("Derivation: {path}"));
+        }
         // XFP uppercase 8-hex; xpub in BIP-32 base58 form (NOT SLIP-132 per
         // SPEC §5.2 bullet on cosigner-line shape).
         let xfp = cs.fingerprint.to_string().to_uppercase();
@@ -377,5 +404,83 @@ fn chain_string(network: crate::network::CliNetwork) -> &'static str {
         Mainnet => "BTC",
         Testnet | Signet => "XTN",
         Regtest => "XRT",
+    }
+}
+
+#[cfg(test)]
+mod cycle13a_h11_tests {
+    //! cycle-13a P3 (H11-d) — `emit_coldcard_multisig_text` refuses (never
+    //! substitutes a placeholder origin) when any cosigner has an empty origin
+    //! derivation path. This case is unreachable via the public CLI (the
+    //! multisig template family always assigns a path; descriptor import
+    //! refuses origin-less descriptors), so it is exercised at the emitter
+    //! boundary with hand-built pathless slots.
+
+    use super::emit_coldcard_multisig_text;
+    use crate::error::ToolkitError;
+    use crate::synthesize::ResolvedSlot;
+    use crate::template::CliTemplate;
+    use crate::wallet_export::{CheckedDescriptor, EmitInputs, TimestampArg, WalletScriptType};
+    use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
+    use std::str::FromStr;
+
+    const XPUB_A: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+    const XPUB_B: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
+    // A structurally-valid 2-of-2 wsh sortedmulti descriptor (the body is not
+    // re-validated against the slots by the emitter — it only needs the
+    // BIP-380 `#csum` suffix to satisfy `CheckedDescriptor`).
+    const DESC_2OF2: &str = "wsh(sortedmulti(2,xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))#dummycsm";
+
+    fn pathless_slot(xpub: &str) -> ResolvedSlot {
+        ResolvedSlot {
+            xpub: Xpub::from_str(xpub).unwrap(),
+            fingerprint: Fingerprint::from_str("deadbeef").unwrap(),
+            path: DerivationPath::default(), // empty origin → origin_path_bare() == ""
+            entropy: None,
+            master_xpub: None,
+            language: None,
+            _entropy_pin: None,
+        }
+    }
+
+    /// #3 — all slots have empty `origin_path_bare()` → refuse via `BadInput`
+    /// (exit 1); message names the empty-origin cause; NO `m/0'/0'` anywhere.
+    #[test]
+    fn export_coldcard_multisig_empty_origin_refuses() {
+        let slots = vec![pathless_slot(XPUB_A), pathless_slot(XPUB_B)];
+        let inputs = EmitInputs {
+            canonical_descriptor: CheckedDescriptor::new(DESC_2OF2).unwrap(),
+            resolved_slots: &slots,
+            template: Some(CliTemplate::WshSortedMulti),
+            script_type: WalletScriptType::P2wshMulti,
+            network: crate::network::CliNetwork::Mainnet,
+            account: 0,
+            threshold: Some(2),
+            threshold_user_supplied: true,
+            master_xpub_at_0: None,
+            wallet_name: "t",
+            wallet_name_is_non_default: false,
+            taproot_internal_key: None,
+            range: (0, 0),
+            timestamp: TimestampArg::Now,
+            bitcoin_core_version: 0,
+            bsms_form: Default::default(),
+        };
+        let err = emit_coldcard_multisig_text(&inputs).unwrap_err();
+        match &err {
+            ToolkitError::BadInput(msg) => {
+                assert!(
+                    msg.contains("empty origin"),
+                    "H11-d refusal must name the empty-origin cause; got: {msg}"
+                );
+                assert!(
+                    !msg.contains("m/0'/0'"),
+                    "H11-d must never emit the m/0'/0' placeholder; got: {msg}"
+                );
+            }
+            other => panic!("expected BadInput (exit 1), got: {other:?}"),
+        }
+        // Exit-code class: BadInput → exit 1.
+        assert_eq!(err.exit_code(), 1, "BadInput must map to exit 1");
     }
 }
