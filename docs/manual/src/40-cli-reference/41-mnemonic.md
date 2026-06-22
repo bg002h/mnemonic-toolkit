@@ -237,16 +237,63 @@ keys must fill all N slots), a strong `--expect-wallet-id` prefix, and an
 Per-slot origins are **built fresh** from the supplied keys — the origin
 carried in the template card is never loaded for derivation.
 
-`--own-account-max` (a range fallback for unknown own accounts) is
-**reserved/refused this cycle** — the own-account subset-search is deferred
-(FOLLOWUP `template-multisig-own-account-range-subset-search`); use the
-exact `--account <N[,N,…]>` list.
+When the exact own account(s) are unknown, **`--own-account-max K`**
+(v0.70.0) over-supplies the own candidates and the engine selects the
+subset actually used — see
+[Subset-search / over-supply completion](#subset-search-over-supply-completion)
+below.
 
 The same completion intake is available on
 [`verify-bundle`](#mnemonic-verify-bundle) (`--from` / `--cosigner` /
-`--search-address` + range + `--search-chain` / `--accept-search-time`),
-which verifies the card↔template-id binding and recomposes the wallet via
-the same engine.
+`--search-address` + range + `--search-chain` / `--accept-search-time`,
+plus `--own-account-max` / `--search-cosigner-subset`), which verifies the
+card↔template-id binding and recomposes the wallet via the same engine.
+
+#### Subset-search / over-supply completion {#subset-search-over-supply-completion}
+
+The exact-account path above assumes the operator knows precisely which
+account(s) the own seed is used at (`--account <list>`) and supplies
+exactly the right cosigner cards. When that knowledge is incomplete,
+**over-supply** the candidates and let the engine resolve the unique
+assignment by an **own-anchored k-permutation subset-search** (v0.70.0).
+
+- **Own-only by default — `--own-account-max K`.** The common case: the
+  operator does **not recall their account index**. Deriving the own seed
+  at every account `0..K-1` over-supplies `K` own candidates; the search
+  picks the subset actually placed in the template. The supplied
+  `--cosigner` cards are still matched **exactly** (own-only). Mutually
+  exclusive with `--account` (a fixed index needs no search). `K ≤ 256`.
+- **Opt-in cosigner subset — `--search-cosigner-subset`.** For uncertain
+  **cosigner** cards (the operator over-supplies `--cosigner` cards, unsure
+  which/how many belong), this opt-in flag extends the search to resolve
+  the cosigner subset too. Bounded (below). Mutually exclusive with
+  `--cosigner @N=` (explicit placement); composes with `--own-account-max`
+  / `--account`.
+
+Over-supply enlarges the search space, so the **strong-prefix requirement
+scales with it**: the realized space `realized_s` (`= S_own =
+C(K_own,j)·N!` for own-only, `= S_opt = Σ_j C(K_own,j)·C(M_sup,N−j)·N!`
+when cosigner-subset is engaged) sizes the `--expect-wallet-id` prefix the
+engine demands. A too-short prefix **refuses an ambiguous match** (never a
+silent wrong wallet). For large pools, **`--search-address` is recommended**
+(full-scriptPubKey match — collision-free, no prefix-length tuning).
+
+**Bounds (§6 ceilings).** Own pool `K_own ≤ 256`; the optional-cosigner
+search space `S_opt ≤ 1e15` (a hard ceiling); the adaptive **~1-hour**
+time-cap applies on top (override with `--accept-search-time`). Inputs that
+would exceed a ceiling **refuse** (exit ≠ 0) with a printed estimate rather
+than run unbounded. The own candidate pool is derived **public-only** (the
+own xpriv is scrubbed by-move, never lingering un-scrubbed). All refusals
+exit ≠ 0.
+
+```sh
+# 2-of-3 wsh(multi) template; operator does not recall their own account
+# index — over-supply own accounts 0..4 and id-search the result:
+mnemonic restore --md1 <template-md1> \
+    --from phrase=- --own-account-max 5 \
+    --cosigner <cosigner-mk1-A> --cosigner <cosigner-mk1-B> \
+    --expect-wallet-id <strong-id-prefix-from-stderr>
+```
 
 ```sh
 # 2-of-3 wsh(multi) template: own key at account 0, two cosigner stubs,
@@ -677,6 +724,8 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for a keyless single-sig template bundle. When set, verify-bundle recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a mismatch is a **failed check** (overall `mismatch`, exit 4). Only meaningful for a template bundle; ignored otherwise. **NOT** checked when `--origin` overrides the canonical account path (a different preimage). See [Template-only md1](#template-only-md1) |
 | `--from <FROM>` | (#28 phase 2) the operator's OWN seed for completing a keyless **multisig / general** TEMPLATE bundle (`bundle --md1-form=template`, n≥2). Same grammar + semantics as [`restore --from`](#mnemonic-restore) (`ms1=` / `phrase=` / `entropy=` / `seedqr=`; `@env:VAR` or stdin). REQUIRED to complete a multisig template; ignored for a single-sig template or keyed wallet-policy bundle. The own key is derived at `--account` (a single own account for verify) honoring `--origin`. See [Multisig template completion](#multisig-template-completion) |
 | `--cosigner <COSIGNER>` | (#28 phase 2) an UNASSIGNED cosigner key (`mk1` / xpub) for completing a keyless multisig / general TEMPLATE bundle; repeat per cosigner card. Same grammar + semantics as [`restore --cosigner`](#mnemonic-restore): the bare form is search-placed, `@N=<mk1\|xpub>` assigns it explicitly. Only meaningful with `--from` + a keyless multisig template. Distinct from `--mk1` (the engraved STUB cards the binding check validates) |
+| `--own-account-max <OWN_ACCOUNT_MAX>` | (v0.70.0; #28 phase 2) RANGE fallback for the OWN seed's account when the exact account is unknown: derive the own seed at every account in `0..K` and let the multisig-template **own-account subset-search** select the account actually used (own-only — the `--cosigner` cards must be EXACT; over-supply cosigners with `--search-cosigner-subset`). NEW on `verify-bundle` (mirrors [`restore --own-account-max`](#mnemonic-restore)). Mutually exclusive with `--account` (clap `conflicts_with` — `--own-account-max K` ALONE passes; the scalar `--account` default is ignored). `K ≤ 256`. Threaded into the SAME shared completion engine `restore` uses (verify == restore). See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
+| `--search-cosigner-subset` | (v0.70.0; #28 phase 2) **OPT-IN bounded cosigner-subset search.** By default (OFF) a multisig template completion requires the supplied `--cosigner` cards to be EXACT (own-only — over-supplying cosigners refuses). With this flag the operator MAY over-supply `--cosigner` cards (unsure which/how many cosigners belong); the search resolves the correct cosigner subset too. NEW on `verify-bundle` (mirrors [`restore --search-cosigner-subset`](#mnemonic-restore)). The space grows, so a LONGER `--expect-wallet-id` prefix may be needed; bounded by the §6 hard ceiling + the adaptive time-cap. Mutually exclusive with `--cosigner @N=`. Threaded into the SAME shared completion engine `restore` uses (verify == restore). See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
 | `--search-address <SEARCH_ADDRESS>` | (#28 phase 2) a known receive (or change) ADDRESS of the wallet; triggers **address-search** for a multisig-template completion (mirrors [`restore --search-address`](#mnemonic-restore)). Recommended over `--expect-wallet-id` (full-scriptPubKey match — collision-free) |
 | `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0; mirrors `restore`) |
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20; mirrors `restore`) |
@@ -935,7 +984,8 @@ channels that keep the seed off the argv.
 | `--account <ACCOUNT>` | BIP-32 account index(es) (default 0). Single-sig restore + single-sig template completion: one account (the first value). **(#28 phase 2) MULTISIG template completion**: the comma-separated LIST of accounts the OWN seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a 4-own-slot policy); the search places each own-derived key. See [Multisig template completion](#multisig-template-completion) |
 | `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default. Only meaningful for keyless single-sig template restore; ignored otherwise. See [Template-only md1](#template-only-md1) |
 | `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion (single-sig phase 1 **and** multisig phase 2 id-search). Restore recomputes the id from the completed, fully-keyed wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). For multisig the prefix must be **strong** (sized to the realized search space) or the search refuses an ambiguous match. **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
-| `--own-account-max <OWN_ACCOUNT_MAX>` | (#28 phase 2) RANGE fallback for the OWN seed's account(s) when the exact accounts are unknown. **NOT SUPPORTED YET** — the subset-search engine is deferred (FOLLOWUP `template-multisig-own-account-range-subset-search`); passing this flag **refuses** with a pointer to `--account <N[,N,…]>` (the exact-account path) |
+| `--own-account-max <OWN_ACCOUNT_MAX>` | (v0.70.0; #28 phase 2) RANGE fallback for the OWN seed's account(s) when the exact accounts are unknown: derive the own seed at **every** account in `0..K` and let the multisig-template **own-account subset-search** select the subset actually used. Own-only — the supplied `--cosigner` cards must be EXACT (over-supply cosigners with `--search-cosigner-subset`). Mutually exclusive with `--account` (clap `conflicts_with` — `--own-account-max K` ALONE passes; the `--account` default is ignored). `K ≤ 256`. The realized search space sizes the strong-prefix requirement, so a LONGER `--expect-wallet-id` prefix (or `--search-address`) is needed than for the exact-account path. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
+| `--search-cosigner-subset` | (v0.70.0; #28 phase 2) **OPT-IN bounded cosigner-subset search.** By default (OFF) a multisig template completion requires the supplied `--cosigner` cards to be EXACT (own-only — over-supplying cosigners refuses). With this flag the operator MAY over-supply `--cosigner` cards (unsure which/how many cosigners belong); the search resolves the correct cosigner subset too. The space grows to `S_opt = Σ_j C(K_own,j)·C(M_sup,N−j)·N!`, so a LONGER `--expect-wallet-id` prefix is needed (a too-short prefix refuses; `--search-address` is the recommended collision-free mode for large opt-in pools). Bounded by the §6 hard ceiling (`S_opt ≤ 1e15`) + the adaptive time-cap. Mutually exclusive with `--cosigner @N=` (explicit placement). Composes with `--own-account-max` / `--account`. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
 | `--search-address <SEARCH_ADDRESS>` | (#28 phase 2) a known receive (or change) ADDRESS of the wallet; triggers **address-search** for a multisig-template completion — the search finds the unique key→slot assignment whose scriptPubKey at some `(chain, index)` in the range equals this address's. Recommended over `--expect-wallet-id` (full-scriptPubKey match — collision-free). See [Multisig template completion](#multisig-template-completion) |
 | `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0) |
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20). Deepen (`0..20`, then `20..40`, …) if the target is not found; a narrow range expresses "I know the index" |

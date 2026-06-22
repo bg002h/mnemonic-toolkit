@@ -6,6 +6,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.70.0] — 2026-06-22
+
+**SemVer-MINOR — own-account subset-search: `restore --own-account-max K` (re-enabled) over-supplies own-account candidates and resolves the unique multisig-template assignment via an own-anchored k-permutation search; opt-in `--search-cosigner-subset` extends it to over-supplied cosigner candidates (bounded).** Toolkit-only; md-codec / mk-codec / GUI NO-BUMP. New clap flags are documented in the manual in lockstep (`docs/manual/src/40-cli-reference/41-mnemonic.md`); the GUI schema-mirror is a paired-PR concern handled by the orchestrator.
+
+### Added
+
+- **`restore --search-cosigner-subset`** — opt-in flag that extends the own-anchored subset-search to over-supplied **cosigner** candidate cards (more `--cosigner` mk1 cards than the template's cosigner slots), so a multisig template can be re-assembled when the operator supplies a superset of cosigner cards. Bounded (see Notes). Default OFF — cosigners are matched exactly when the flag is absent.
+- **`verify-bundle --own-account-max K`** — mirrors `restore --own-account-max`: over-supplies own-account candidates (the own seed derived at accounts `0..K-1`) and resolves the unique template assignment via the own-anchored k-permutation search, for verifying a bundle when the operator does not recall their account index.
+- **`verify-bundle --search-cosigner-subset`** — the `verify-bundle` mirror of `restore --search-cosigner-subset` (opt-in, bounded over-supplied-cosigner search).
+
+### Changed
+
+- **`restore --own-account-max` flips from refuse → subset-search.** Previously (v0.60.0 reserved/refused — deferred) this flag exited with an error; it now derives the own seed at accounts `0..K-1`, over-supplies those own-account candidates, and resolves the unique multisig-template assignment via the own-anchored k-permutation search. Mutually exclusive with `--account` (a fixed index needs no search). This lifts the #28-phase-2 P3a deferral.
+
+### Notes
+
+- **Own-only by default; cosigners exact.** Without `--search-cosigner-subset`, only the **own** account is over-supplied and searched; supplied cosigner cards are matched exactly. `--search-cosigner-subset` is opt-in and **bounded**: own pool `K_own ≤ 256`, optional-cosigner search space `S_opt ≤ 1e15` hard ceiling plus the adaptive time-cap; over-budget inputs refuse (exit ≠ 0) rather than run unbounded. Large pools should prefer address-search.
+- **Funds-safety.** `realized_s` (`= S_own` for own-only, `= S_opt` when cosigner-subset is engaged) sizes the strong prefix required over the (larger) search space, so an over-supplied search cannot accept a weak/ambiguous match. The own candidate pool is derived **public-only** (`derive_account_xpub_only` plus the move-only `ScrubbedXpriv` scrub, P0) — the own xpriv never lingers un-scrubbed. All refusals exit ≠ 0.
+- **No codec/GUI bump.** md-codec / mk-codec unchanged (NO-BUMP). P0–P5 all R0-GREEN — see `design/agent-reports/own-account-subset-search-*`.
+
 ## mnemonic-toolkit [0.69.1] — 2026-06-22
 
 **SemVer-PATCH — bip85 encode/dice internal-scratch `Zeroizing` (cycle-15 Group A derived-output-sweep FOLLOWUP slug `bip85-encode-helper-internal-scratch-zeroizing`). Toolkit-only; no codec/GUI bump. No signature / clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change. Outputs byte-identical (BIP-85 KATs unchanged). PATCH (not MINOR) — the three wraps are function-local, reach no signature or public type.**
