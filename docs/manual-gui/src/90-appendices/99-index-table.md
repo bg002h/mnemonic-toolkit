@@ -42,13 +42,20 @@ versa) fails the lint.
 | `mnemonic convert` | [`mnemonic convert`](#mnemonic-convert) |
 | `mnemonic decode-address` | [`mnemonic decode-address`](#mnemonic-decode-address) |
 | `mnemonic derive-child` | [`mnemonic derive-child`](#mnemonic-derive-child) |
+| `mnemonic electrum-decrypt` | [`mnemonic electrum-decrypt`](#mnemonic-electrum-decrypt) |
 | `mnemonic export-wallet` | [`mnemonic export-wallet`](#mnemonic-export-wallet) |
 | `mnemonic final-word` | [`mnemonic final-word`](#mnemonic-final-word) |
+| `mnemonic inspect` | [`mnemonic inspect`](#mnemonic-inspect) |
+| `mnemonic ms-shares-combine` | [`mnemonic ms-shares-combine`](#mnemonic-ms-shares-combine) |
+| `mnemonic ms-shares-split` | [`mnemonic ms-shares-split`](#mnemonic-ms-shares-split) |
 | `mnemonic nostr` | [`mnemonic nostr`](#mnemonic-nostr) |
+| `mnemonic repair` | [`mnemonic repair`](#mnemonic-repair) |
 | `mnemonic-gui` | [Glossary](#glossary) |
 | `mnemonic restore` | [`mnemonic restore`](#mnemonic-restore) |
 | `mnemonic seed-xor-combine` | [`mnemonic seed-xor-combine`](#mnemonic-seed-xor-combine) |
 | `mnemonic seed-xor-split` | [`mnemonic seed-xor-split`](#mnemonic-seed-xor-split) |
+| `mnemonic seedqr-decode` | [`mnemonic seedqr-decode`](#mnemonic-seedqr-decode) |
+| `mnemonic seedqr-encode` | [`mnemonic seedqr-encode`](#mnemonic-seedqr-encode) |
 | `mnemonic silent-payment` | [`mnemonic silent-payment`](#mnemonic-silent-payment) |
 | `mnemonic slip39-combine` | [`mnemonic slip39-combine`](#mnemonic-slip39-combine) |
 | `mnemonic slip39-split` | [`mnemonic slip39-split`](#mnemonic-slip39-split) |
