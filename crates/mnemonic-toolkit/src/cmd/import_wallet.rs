@@ -1222,19 +1222,23 @@ electrum|jade|sparrow|specter>"
     // the user's overlay-args index the canonical cosigner ordering.
     //
     // Build positional `ms1` vector — ms1[i] is Some(value) for cosigner i.
-    let mut ms1_args: Vec<Option<String>> = Vec::with_capacity(args.ms1.len());
+    // wave2 T3: `args.ms1` is clap-derived `Vec<String>` (master-secret-
+    // equivalent ms1 codec material); wrap each in `SecretString` so it scrubs
+    // on drop and never leaks via `{:?}`/panic (phrase-overlay-secretstring).
+    let mut ms1_args: Vec<Option<crate::secret_string::SecretString>> =
+        Vec::with_capacity(args.ms1.len());
     for v in &args.ms1 {
-        ms1_args.push(Some(v.clone()));
+        ms1_args.push(Some(crate::secret_string::SecretString::new(v.clone())));
     }
-    let phrase_overlays: Vec<(u8, String)> = args
+    // wave2 T3: `.value` is a SecretString; `.clone()` (SecretString: Clone)
+    // keeps the phrase inside the scrubbing newtype all the way to the bip39
+    // parse consumer (was `.to_string()` into a bare `Vec<(u8, String)>` at
+    // v0.67.0). Closes FOLLOWUP phrase-overlay-secretstring (Phrase arm).
+    let phrase_overlays: Vec<(u8, crate::secret_string::SecretString)> = args
         .slot
         .iter()
         .filter(|s| s.subkey == SlotSubkey::Phrase)
-        // cycle-14 (L22): `.value` is a SecretString; `.to_string()` restores
-        // the `Vec<(u8, String)>` overlay shape without regressing today's
-        // hygiene (the overlay phrase was already a bare String). Deeper wrap
-        // (Vec<(u8, SecretString)>) tracked by FOLLOWUP phrase-overlay-secretstring.
-        .map(|s| (s.index, s.value.to_string()))
+        .map(|s| (s.index, s.value.clone()))
         .collect();
     if !ms1_args.is_empty() || !phrase_overlays.is_empty() {
         apply_seed_overlay(
@@ -2679,13 +2683,16 @@ fn round1_verification_to_json(v: &Round1Verification) -> serde_json::Value {
 mod tests {
     use super::*;
 
-    /// T4c (cycle-14, L22) — the `phrase_overlays` collection maps a
-    /// `SlotInput` (whose `.value` is now a `SecretString`) into the
-    /// `Vec<(u8, String)>` overlay shape via `.value.to_string()` (was
-    /// `.value.clone()` on a bare `String`). Asserts the overlay still carries
-    /// the phrase byte-identically. Fences the `.clone()` → `.to_string()` edit.
+    /// T4c (cycle-14, L22 → wave2 T3) — the `phrase_overlays` collection maps a
+    /// `SlotInput` (whose `.value` is a `SecretString`) into the
+    /// `Vec<(u8, SecretString)>` overlay shape via `.value.clone()` — the phrase
+    /// NEVER leaves the scrubbing newtype (was `.to_string()` into a bare
+    /// `Vec<(u8, String)>` at v0.67.0). Asserts the overlay still carries the
+    /// phrase byte-identically (via Deref). Fences the wave2 `.to_string()` →
+    /// `.clone()` deep-wrap edit (`phrase-overlay-secretstring`).
     #[test]
-    fn phrase_overlay_collection_carries_phrase_via_to_string() {
+    fn phrase_overlay_collection_carries_phrase_via_secretstring() {
+        use crate::secret_string::SecretString;
         use crate::slot_input::{parse_slot_input, SlotSubkey};
         let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon \
                       abandon abandon abandon about";
@@ -2694,13 +2701,15 @@ mod tests {
             parse_slot_input("@1.xpub=xpub-stub").unwrap(),
         ];
         // Mirrors the handler's phrase_overlays collection (import_wallet.rs:1229).
-        let phrase_overlays: Vec<(u8, String)> = slots
+        let phrase_overlays: Vec<(u8, SecretString)> = slots
             .iter()
             .filter(|s| s.subkey == SlotSubkey::Phrase)
-            .map(|s| (s.index, s.value.to_string()))
+            .map(|s| (s.index, s.value.clone()))
             .collect();
         assert_eq!(phrase_overlays.len(), 1, "only the Phrase slot overlays");
-        assert_eq!(phrase_overlays[0], (0u8, phrase.to_string()));
+        assert_eq!(phrase_overlays[0].0, 0u8);
+        // SecretString has no (u8, &str) tuple-eq; compare via Deref<str>.
+        assert_eq!(&*phrase_overlays[0].1, phrase);
     }
 
     /// v0.32.1 — `is_encrypted_bsms_record` discriminates a plaintext

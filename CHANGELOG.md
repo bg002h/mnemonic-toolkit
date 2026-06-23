@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.71.0] — 2026-06-22
+
+**SemVer-MINOR — Wave-2 secret-memory-hygiene (T1–T4). Four owned-secret sites that lingered un-scrubbed (or in a leak-prone bare type) are migrated to the shipped scrub-on-drop / redacting newtypes. Toolkit-internal only; no codec/GUI bump. No clap-flag / subcommand / dropdown / `--json` wire-shape change → no GUI schema-mirror trip and no manual flag-mirror trip. The `convert --to xprv` output and the `inspect` output are BYTE-IDENTICAL (golden-pinned).**
+
+### Changed (secret-memory hygiene — no behavior / wire change)
+
+- **T1 — `DerivedAccount.account_xpriv` migrated `Xpriv` → `ScrubbedXpriv` (MINOR).** The account spending key was a bare `Xpriv` (`Copy`, dropped WITHOUT erase). It is now the move-only scrub-on-drop `ScrubbedXpriv` newtype (shipped v0.70.0). `DerivedAccount::into_parts` DROPPED its `Xpriv` tuple element entirely — the field stays in `self` and scrubs in place; all 8 callers discarded it. The single deliberate reader (`convert --to xprv`) goes through a new narrow, string-only `ScrubbedXpriv::expose_xprv_string(&self) -> SecretString` (length-only redacting Debug, scrub-on-drop) — no bare `Xpriv` handle escapes. `ScrubbedXpriv` gained a hand-written redacting `Debug` (NOT `#[derive]`, which would leak the inner key). `--to xprv` output byte-identical (golden `entropy_to_xprv_bip84_mainnet`). Closes FOLLOWUP `derive-slot-account-xpriv-scrub-confinement`.
+- **T2 — `self_check_bundle` + `inspect` no longer drop a decoded ms1 `Payload` (master-seed entropy) un-scrubbed.** Both sites now move the decoded entropy OUT of the bare `ms_codec::Payload` into a fn-local `Zeroizing<Vec<u8>>` (the `InspectPayload::Ms1` variant is reshaped to carry `Zeroizing<Vec<u8>>` + `PayloadKind` + `Option<u8>` language, read off the husk at decode time). Inspect text/JSON output byte-identical. Closes FOLLOWUP `self-check-ms1-decode-not-zeroizing` (both sites).
+- **T3 — `import-wallet` seed-overlay no longer copies the phrase / ms1 secret into a bare `String`.** `phrase_overlays` and `ms1_args` flip to `SecretString`; `apply_seed_overlay`'s signature + its fn-local `Source` enum carry `SecretString` end-to-end to the bip39/ms decode consumers. Closes FOLLOWUP `phrase-overlay-secretstring` (both the Phrase AND the ms1 arms).
+- **T4 — `read_stdin_to_string` / `read_stdin_passphrase` scrub their transient scratch buffer.** The internal `read_to_string` buffer is now `Zeroizing<String>`. The return type stays `String` (every secret-class caller already wraps the returned value; narrowing would double-wrap the reader call sites). Behavior byte-identical (same trimming / CRLF-strip). Closes FOLLOWUP `stdin-reader-transient-buf-zeroizing`.
+
+### Notes
+
+- **Zeroize-discipline lint:** `src/cmd/inspect.rs` is now a declared secret-bearing row; `SECRET_FILE_FLOOR` recomputed live and tightened 37 → 39 (the static 37 was already 1 below the live partition of 38 at authoring; +1 for inspect.rs).
+- **No codec/GUI bump.** R0 GREEN (0C/0I, 2 Minors folded) + post-impl whole-diff review — see `design/SPEC_wave2_secret_hygiene_toolkit.md` + `design/agent-reports/wave2-toolkit-r0-review.md`.
+
 ## mnemonic-toolkit [0.70.1] — 2026-06-22
 
 **SemVer-PATCH — open-followups maturity program, Wave 1: export-refusal hardening + reconcile. `export-wallet --format green` now refuses a taproot tap-script-tree POLICY (previously mislabeled it "(singlesig)" — a wrong-label, not wrong-address, defect); a direct `--descriptor 'wsh(multi(…))'` (unsorted) to field-less vendor formats now surfaces the typed unsorted-multisig refusal instead of a generic one. Toolkit-only; no codec/GUI bump. No clap-flag / dropdown / `--json` wire-shape change → no GUI schema-mirror; no manual change.**

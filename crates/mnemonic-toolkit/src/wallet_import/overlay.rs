@@ -36,6 +36,7 @@
 use super::ParsedImport;
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
+use crate::secret_string::SecretString;
 use bitcoin::bip32::Xpriv;
 use bitcoin::bip32::Xpub;
 use bitcoin::secp256k1::Secp256k1;
@@ -57,16 +58,19 @@ use zeroize::Zeroizing;
 /// §8.3 line "Seed overlay happens AFTER `WalletFormatParser::parse`".
 pub(crate) fn apply_seed_overlay(
     parsed: &mut [ParsedImport],
-    ms1_args: &[Option<String>],
-    phrase_overlays: &[(u8, String)],
+    ms1_args: &[Option<SecretString>],
+    phrase_overlays: &[(u8, SecretString)],
     language: CliLanguage,
     stderr: &mut dyn Write,
 ) -> Result<(), ToolkitError> {
     // Build a (cosigner_index → entropy-source) map. Mutually exclusive
     // forms; conflict → BadInput.
+    // wave2 T3: both arms hold a `SecretString` (Zeroizing<String> inner,
+    // redacting Debug) so the overlay ms1/phrase secret never lingers in a bare
+    // `String` or leaks via `{:?}` (phrase-overlay-secretstring).
     enum Source {
-        Ms1(String),
-        Phrase(String),
+        Ms1(SecretString),
+        Phrase(SecretString),
     }
     let mut by_index: Vec<Option<Source>> = Vec::new();
 
@@ -160,8 +164,13 @@ pub(crate) fn apply_seed_overlay(
                     }
                 }
                 Source::Phrase(phrase) => {
+                    // wave2 T3 (R0 M2): `parse_in<S: Into<Cow<str>>>` is a
+                    // GENERIC param — deref-coercion does NOT fire (and
+                    // SecretString impls neither Into<Cow<str>> nor AsRef<str>),
+                    // so `phrase: &SecretString` needs the explicit `&**phrase`
+                    // (vs the `decode(s)` arm above, whose `&str` param coerces).
                     let mnemonic =
-                        bip39::Mnemonic::parse_in(language.into(), phrase).map_err(|e| {
+                        bip39::Mnemonic::parse_in(language.into(), &**phrase).map_err(|e| {
                             ToolkitError::BadInput(format!(
                                 "import-wallet: --slot @{i}.phrase=: BIP-39 parse error: {e}"
                             ))

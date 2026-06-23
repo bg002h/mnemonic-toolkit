@@ -56,6 +56,15 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/derive.rs",
         evidence: &["pub entropy: zeroize::Zeroizing<Vec<u8>>"],
     },
+    // wave2 T1 (v0.71.0): the account-level Xpriv field migrated from a bare,
+    // un-scrubbed `Xpriv` (Copy, drops without erase) to the move-only
+    // scrub-on-drop `ScrubbedXpriv` newtype; `into_parts` DROPPED the Xpriv
+    // tuple element entirely (the field stays in `self` and scrubs in place).
+    ZeroizeRow {
+        label: "DerivedAccount account_xpriv field is ScrubbedXpriv (move-only scrub-on-drop) — wave2 T1",
+        source_file: "src/derive.rs",
+        evidence: &["pub account_xpriv: ScrubbedXpriv"],
+    },
     ZeroizeRow {
         label: "DerivedAccount::into_parts() consuming method (migration anchor)",
         source_file: "src/derive.rs",
@@ -163,6 +172,14 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         label: "bundle resolve_slots arms use into_parts (not direct field move)",
         source_file: "src/cmd/bundle.rs",
         evidence: &["acc.into_parts()"],
+    },
+    // wave2 T2 (v0.71.0): self_check_bundle's ms1-decode equality oracle moves
+    // the decoded entropy OUT of the bare `Payload` into a fn-local
+    // `Zeroizing<Vec<u8>>` before the compare (was dropped un-scrubbed).
+    ZeroizeRow {
+        label: "self_check_bundle ms1-decode oracle moves entropy into Zeroizing — wave2 T2 Site A",
+        source_file: "src/cmd/bundle.rs",
+        evidence: &["let self_check_entropy: zeroize::Zeroizing<Vec<u8>>"],
     },
     // ---- cmd/derive_child.rs ----
     ZeroizeRow {
@@ -401,6 +418,14 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/wallet_import/overlay.rs",
         evidence: &["Zeroizing<Vec<u8>>", "Zeroizing::new"],
     },
+    // wave2 T2 (v0.71.0): the `inspect` decode reshapes InspectPayload::Ms1 to
+    // carry the decoded entropy as a `Zeroizing<Vec<u8>>` (was a bare
+    // `ms_codec::Payload` held for the whole handler scope, dropped un-scrubbed).
+    ZeroizeRow {
+        label: "inspect InspectPayload::Ms1 carries decoded entropy as Zeroizing<Vec<u8>> — wave2 T2 Site B",
+        source_file: "src/cmd/inspect.rs",
+        evidence: &["entropy: zeroize::Zeroizing<Vec<u8>>", "Zeroizing::new"],
+    },
     // ---- slot_input.rs (v0.67.0 — L22: stdin/@env: secret no longer lingers
     //      in a bare String; SlotInput.value is a SecretString) ----
     ZeroizeRow {
@@ -505,16 +530,17 @@ const TEST_ONLY_SECRET_FILES: &[&str] = &[
     "src/bundle_unified.rs", // the sole SecretString::new is the #[cfg(test)] s() SlotInput fixture (cycle-14 L22); SlotInput.value's canonical row is src/slot_input.rs
 ];
 
-/// Persistent glob-cardinality floor. The partition is exactly 37
-/// secret-bearing src files @ v0.67.0 (31 ROWS-source ∪ 6 allowlist; cycle-14
-/// L22 added the slot_input.rs row + the bundle_unified.rs test-fixture
-/// allowlist entry). Was 35 (30 ∪ 5) @ 438de94. The
-/// floor fires only on the loss-of-coverage direction (count DROPS) — a
-/// broken glob/path-prefix change that enumerates nothing would otherwise
-/// make the scan vacuously pass. Deleting a secret-bearing file is a
-/// conscious security-adjacent choice, so requiring a deliberate floor edit
+/// Persistent glob-cardinality floor. The partition is exactly 39
+/// secret-bearing src files @ v0.71.0 (wave2 T2 added `src/cmd/inspect.rs` as a
+/// declared secret-bearing row). The static "37" recorded @ v0.67.0 was already
+/// 1 below the live partition (38) at authoring; wave2 recomputed the live count
+/// (38 pre-change) and set the tight floor to 39 after inspect.rs joins. Was 35
+/// (30 ∪ 5) @ 438de94. The floor fires only on the loss-of-coverage direction
+/// (count DROPS) — a broken glob/path-prefix change that enumerates nothing
+/// would otherwise make the scan vacuously pass. Deleting a secret-bearing file
+/// is a conscious security-adjacent choice, so requiring a deliberate floor edit
 /// is the correct friction. Mirrors the `ZEROIZE_ROWS.len()` count guard.
-const SECRET_FILE_FLOOR: usize = 37;
+const SECRET_FILE_FLOOR: usize = 39;
 
 /// Recursively collect every `*.rs` under `dir`, returning crate-root-relative
 /// forward-slash paths (matching `ZEROIZE_ROWS.source_file` form).

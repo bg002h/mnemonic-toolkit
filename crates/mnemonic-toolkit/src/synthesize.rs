@@ -1373,7 +1373,7 @@ mod tests {
         let acc = derive_full(TREZOR_24, "", CliLanguage::English, network, template, 0).unwrap();
         // v0.10.1: `into_parts` returns bare Vec<u8> per caller-wrap
         // contract (Zeroizing-drives-scrub semantics live on the field).
-        let (entropy, master_fingerprint, account_xpub, _xpriv, _path) = acc.into_parts();
+        let (entropy, master_fingerprint, account_xpub, _path) = acc.into_parts();
         (entropy, master_fingerprint, account_xpub)
     }
 

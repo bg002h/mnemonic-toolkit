@@ -571,7 +571,7 @@ pub(crate) fn resolve_slots(
             // canonical consuming-move path (returns bare Vec<u8> per the
             // caller-wrap contract — re-wrap below at the ResolvedSlot
             // ctor boundary).
-            let (entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let (entropy, fingerprint, xpub, path) = acc.into_parts();
             let entropy_pin = Some(Rc::new(pin_pages_for(&entropy[..])));
             out.push(ResolvedSlot {
                 xpub,
@@ -684,7 +684,7 @@ pub(crate) fn resolve_slots(
             // The derived `entropy` is discarded here (the user-supplied
             // `entropy_bytes` is the canonical buffer for this slot);
             // the Drop on `acc` will scrub the now-orphaned husk.
-            let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let (_acc_entropy, fingerprint, xpub, path) = acc.into_parts();
             let entropy_pin = Some(Rc::new(pin_pages_for(&entropy_bytes[..])));
             out.push(ResolvedSlot {
                 xpub,
@@ -730,7 +730,7 @@ pub(crate) fn resolve_slots(
             // Discard the derived-account entropy husk (the helper-supplied
             // `res.entropy` is the canonical buffer for this slot); the Drop
             // on `acc` scrubs it.
-            let (_acc_entropy, fingerprint, xpub, _xpriv, path) = acc.into_parts();
+            let (_acc_entropy, fingerprint, xpub, path) = acc.into_parts();
             // M4: bind the pin to a LOCAL before moving `res.entropy` — struct
             // fields eval left-to-right, `entropy:` precedes `_entropy_pin:`,
             // so an inline `pin_pages_for(&res.entropy[..])` would move-then-borrow.
@@ -1751,7 +1751,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 args.network,
                 &anno_path,
             )?;
-            let (_acc_entropy, master_fp, xpub, _xpriv, _path) = acc.into_parts();
+            let (_acc_entropy, master_fp, xpub, _path) = acc.into_parts();
             (
                 xpub,
                 master_fp,
@@ -2527,7 +2527,16 @@ pub fn self_check_bundle(
             card: format!("self-check[ms1_decode[{i}]]"),
             message: format!("{e:?}"),
         })?;
-        if payload.as_bytes() != expected_bytes {
+        // wave2 T2 Site A: move the decoded master-seed entropy OUT of the bare
+        // `Payload` husk into a fn-local `Zeroizing<Vec<u8>>` so it scrubs at
+        // the end of this iteration (was dropped un-scrubbed). The `_` arm
+        // covers `Payload`'s `#[non_exhaustive]` future variants.
+        let self_check_entropy: zeroize::Zeroizing<Vec<u8>> = match payload {
+            ms_codec::Payload::Entr(b) => zeroize::Zeroizing::new(b),
+            ms_codec::Payload::Mnem { entropy, .. } => zeroize::Zeroizing::new(entropy),
+            ref other => zeroize::Zeroizing::new(other.as_bytes().to_vec()),
+        };
+        if self_check_entropy.as_slice() != expected_bytes {
             return Err(ToolkitError::BundleMismatch {
                 card: format!("self-check[ms1_entropy[{i}]]"),
                 message: format!(
@@ -2868,7 +2877,7 @@ mod self_check_mk1_xpub_binding_tests {
             0,
         )
         .unwrap();
-        let (entropy, fp, xpub, _xpriv, _path) = acc.into_parts();
+        let (entropy, fp, xpub, _path) = acc.into_parts();
         let bundle = crate::synthesize::synthesize_full(
             &entropy,
             fp,

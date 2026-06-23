@@ -743,7 +743,12 @@ fn classify_edge(from: NodeType, to: NodeType) -> Option<ToolkitError> {
 // ============================================================================
 
 pub(crate) fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
-    let mut buf = String::new();
+    // wave2 T4: scrub the read_to_string SCRATCH buffer (it may hold secret
+    // material — phrase/entropy/passphrase piped via `=-`). Return type stays
+    // `String`: every secret-class caller already wraps the returned value, and
+    // narrowing to `Zeroizing<String>` would double-wrap / type-mismatch the 42
+    // reader call sites (stdin-reader-transient-buf-zeroizing).
+    let mut buf = zeroize::Zeroizing::new(String::new());
     stdin
         .read_to_string(&mut buf)
         .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
@@ -756,7 +761,11 @@ pub(crate) fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, Too
 /// including leading/trailing spaces, internal NULL (BIP-38 V3 spec passphrase),
 /// and tabs that may be intentional in the user's passphrase.
 pub(crate) fn read_stdin_passphrase<R: Read>(stdin: &mut R) -> Result<String, ToolkitError> {
-    let mut buf = String::new();
+    // wave2 T4: scrub the read_to_string SCRATCH buffer (passphrase material).
+    // The in-place CRLF-strip works through DerefMut; the final return clones
+    // the trimmed bytes into a fresh `String` (return type stays `String` so
+    // the wrapping callers don't double-wrap — stdin-reader-transient-buf-zeroizing).
+    let mut buf = zeroize::Zeroizing::new(String::new());
     stdin
         .read_to_string(&mut buf)
         .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
@@ -766,7 +775,7 @@ pub(crate) fn read_stdin_passphrase<R: Read>(stdin: &mut R) -> Result<String, To
             buf.pop();
         }
     }
-    Ok(buf)
+    Ok(buf.to_string())
 }
 
 // ============================================================================
@@ -1311,7 +1320,17 @@ fn compute_outputs(
                     }
                     Entropy => hex::encode(&entropy[..]),
                     Xpub => derived.as_ref().unwrap().account_xpub.to_string(),
-                    Xprv => derived.as_ref().unwrap().account_xpriv.to_string(),
+                    // wave2 T1: read through the controlled string-only escape
+                    // hatch (SecretString — redacting Debug, scrub-on-drop);
+                    // `.to_string()` yields the SAME bytes the old
+                    // `account_xpriv.to_string()` did (byte-identical golden:
+                    // tests/cli_convert_happy_paths.rs::entropy_to_xprv_bip84_mainnet).
+                    Xprv => derived
+                        .as_ref()
+                        .unwrap()
+                        .account_xpriv
+                        .expose_xprv_string()
+                        .to_string(),
                     Fingerprint => derived
                         .as_ref()
                         .unwrap()

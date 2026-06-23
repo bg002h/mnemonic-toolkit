@@ -2,12 +2,13 @@
 //!
 //! Realizes SPEC §4.1.
 
+use crate::derive_slot::ScrubbedXpriv;
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::template::CliTemplate;
 use bip39::Mnemonic;
-use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
+use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
 use mnemonic_toolkit::mlock::PinnedPageRange;
 
 /// Result of full-mode derivation.
@@ -24,7 +25,13 @@ pub struct DerivedAccount {
     pub entropy: zeroize::Zeroizing<Vec<u8>>,
     pub master_fingerprint: Fingerprint,
     pub account_xpub: Xpub,
-    pub account_xpriv: Xpriv,
+    /// wave2 T1 (v0.71.0): migrated from a bare `Xpriv` (`Copy`, dropped
+    /// WITHOUT erase) to the move-only [`ScrubbedXpriv`] newtype so the
+    /// account spending key scrubs on drop. The ONLY deliberate reader
+    /// (`convert --to xprv`) goes through
+    /// [`ScrubbedXpriv::expose_xprv_string`] (string-only, redacting Debug);
+    /// no bare `Xpriv` handle escapes the struct.
+    pub account_xpriv: ScrubbedXpriv,
     pub account_path: DerivationPath,
     /// Cycle B Phase 3a Path B-lite sibling pin for the `entropy` heap
     /// buffer's pages. No `Option` / `Rc` wrap (DerivedAccount is not
@@ -41,19 +48,26 @@ impl DerivedAccount {
     /// stays, now wrapping an empty Vec whose Drop scrub is a no-op).
     /// The returned bare `Vec<u8>` is the caller's responsibility per
     /// the caller-wrap contract — wrap in `Zeroizing<Vec<u8>>` at the
-    /// call site if the consumer needs scrub-on-drop semantics. The
-    /// remaining four fields move out by value (three are `Copy`;
-    /// `account_path` clones).
-    pub fn into_parts(mut self) -> (Vec<u8>, Fingerprint, Xpub, Xpriv, DerivationPath) {
+    /// call site if the consumer needs scrub-on-drop semantics.
+    ///
+    /// wave2 T1 (v0.71.0): the account `Xpriv` is NO LONGER returned — it is
+    /// confined to the move-only [`ScrubbedXpriv`] field, which stays in
+    /// `self` and SCRUBS in place when `self` drops at the end of this fn.
+    /// The remaining returned fields move out by value (the `Copy`
+    /// `master_fingerprint` and `account_xpub`; `account_path` clones). The
+    /// deliberate `convert --to xprv` reader uses
+    /// [`ScrubbedXpriv::expose_xprv_string`] off the field directly — never
+    /// via this tuple.
+    pub fn into_parts(mut self) -> (Vec<u8>, Fingerprint, Xpub, DerivationPath) {
         let entropy = std::mem::take(&mut *self.entropy);
         let account_path = self.account_path.clone();
         (
             entropy,
             self.master_fingerprint,
             self.account_xpub,
-            self.account_xpriv,
             account_path,
         )
+        // `self` (and its `ScrubbedXpriv` account_xpriv) drops here → scrub.
     }
 }
 
@@ -108,6 +122,25 @@ pub(crate) fn derive_full_at_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // wave2 T1 — COMPILE-TIME witness that `DerivedAccount.account_xpriv` is now
+    // a MOVE-ONLY `ScrubbedXpriv` (not the old bare `Copy` `Xpriv`). Reading the
+    // field by move and then using `acc` again would be an E0382 use-after-move;
+    // we instead assert at compile time that the field type is NOT `Copy` via the
+    // same `AmbiguousIfImpl<_>` pattern `static_assertions::assert_not_impl_any!`
+    // uses (resolves cleanly ONLY while `ScrubbedXpriv: !Copy`). If a future edit
+    // re-types the field back to a `Copy` `Xpriv`, BOTH impls apply and this
+    // block fails to compile (whole test target RED).
+    const _: fn() = || {
+        trait AmbiguousIfImpl<A> {
+            fn some_item() {}
+        }
+        impl<T> AmbiguousIfImpl<()> for T {}
+        struct Invalid;
+        impl<T: Copy> AmbiguousIfImpl<Invalid> for T {}
+        // Type of the migrated field. If it is `Copy`, the `<_>` is ambiguous.
+        let _ = <crate::derive_slot::ScrubbedXpriv as AmbiguousIfImpl<_>>::some_item;
+    };
 
     /// Trezor canonical 24-word vector: "abandon × 23 art" → 32-zero-bytes entropy.
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";

@@ -1653,7 +1653,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 args.network,
                 &anno_path,
             )?;
-            let (_acc_entropy, master_fp, xpub, _xpriv, _path) = acc.into_parts();
+            let (_acc_entropy, master_fp, xpub, _path) = acc.into_parts();
             (
                 xpub,
                 master_fp,
@@ -1683,7 +1683,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 args.network,
                 &anno_path,
             )?;
-            let (_acc_entropy, master_fp, xpub, _xpriv, _path) = acc.into_parts();
+            let (_acc_entropy, master_fp, xpub, _path) = acc.into_parts();
             (
                 xpub,
                 master_fp,

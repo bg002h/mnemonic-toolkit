@@ -156,10 +156,22 @@ pub fn run<R: Read, W: Write, E: Write>(
 }
 
 /// Decoded card payload (variant per kind).
+///
+/// wave2 T2 Site B (v0.71.0): the `Ms1` variant carries the decoded master-seed
+/// entropy as a `Zeroizing<Vec<u8>>` (was a bare `ms_codec::Payload` held for
+/// the whole handler scope and dropped un-scrubbed). The small display bits the
+/// emit fns need (`kind` / `language`) are read off the bare `Payload` at decode
+/// time, BEFORE the husk drops.
 pub enum InspectPayload {
     Ms1 {
         tag: ms_codec::Tag,
-        payload: ms_codec::Payload,
+        /// Decoded entropy bytes, scrub-on-drop. Raw `Zeroizing<Vec<u8>>` (not
+        /// `SecretString`) — these are raw entropy BYTES, never Debug-printed.
+        entropy: zeroize::Zeroizing<Vec<u8>>,
+        /// `PayloadKind` (Copy) — rendered `{:?}` as `payload_kind`.
+        kind: ms_codec::PayloadKind,
+        /// `Some(wire_lang_code)` for `Mnem`, `None` for `Entr`.
+        language: Option<u8>,
     },
     Mk1(mk_codec::KeyCard),
     Md1(md_codec::Descriptor),
@@ -169,7 +181,27 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
     match kind {
         CardKind::Ms1 => {
             let (tag, payload) = ms_codec::decode(chunks[0])?;
-            Ok(InspectPayload::Ms1 { tag, payload })
+            // Read the small display bits BEFORE moving the entropy out (the
+            // move-match consumes `payload`).
+            let payload_kind = payload.kind();
+            let language = match &payload {
+                ms_codec::Payload::Mnem { language, .. } => Some(*language),
+                _ => None,
+            };
+            // wave2 T2 Site B: move the entropy out of the bare `Payload` into a
+            // `Zeroizing<Vec<u8>>` so the decoded master-seed entropy scrubs on
+            // drop. The `_` arm covers `Payload`'s `#[non_exhaustive]` variants.
+            let entropy: zeroize::Zeroizing<Vec<u8>> = match payload {
+                ms_codec::Payload::Entr(b) => zeroize::Zeroizing::new(b),
+                ms_codec::Payload::Mnem { entropy, .. } => zeroize::Zeroizing::new(entropy),
+                ref other => zeroize::Zeroizing::new(other.as_bytes().to_vec()),
+            };
+            Ok(InspectPayload::Ms1 {
+                tag,
+                entropy,
+                kind: payload_kind,
+                language,
+            })
         }
         CardKind::Mk1 => Ok(InspectPayload::Mk1(mk_codec::decode(chunks)?)),
         CardKind::Md1 => Ok(InspectPayload::Md1(md_codec::reassemble(chunks)?)),
@@ -182,19 +214,20 @@ fn emit_inspect_text<W: Write>(
     stdout: &mut W,
 ) -> Result<(), ToolkitError> {
     match payload {
-        InspectPayload::Ms1 { tag, payload } => {
+        InspectPayload::Ms1 {
+            tag,
+            entropy,
+            kind,
+            language,
+        } => {
             let tag_str = std::str::from_utf8(tag.as_bytes()).unwrap_or("<non-utf8>");
-            let bytes = payload.as_bytes();
+            let bytes: &[u8] = entropy;
             let bit_strength = bytes.len() * 8;
             writeln!(stdout, "kind: ms1").map_err(ToolkitError::Io)?;
             writeln!(stdout, "tag: {tag_str}").map_err(ToolkitError::Io)?;
-            writeln!(stdout, "payload_kind: {:?}", payload.kind()).map_err(ToolkitError::Io)?;
+            writeln!(stdout, "payload_kind: {kind:?}").map_err(ToolkitError::Io)?;
             // ms mnem Phase 3 Step 6: surface language for mnem cards.
-            if let ms_codec::Payload::Mnem {
-                language: lang_code,
-                ..
-            } = payload
-            {
+            if let Some(lang_code) = language {
                 let lang_name = ms_codec::consts::MNEM_LANGUAGE_NAMES
                     .get(*lang_code as usize)
                     .copied()
@@ -297,20 +330,23 @@ fn emit_inspect_json<W: Write>(
     stdout: &mut W,
 ) -> Result<(), ToolkitError> {
     let body = match payload {
-        InspectPayload::Ms1 { tag, payload } => {
+        InspectPayload::Ms1 {
+            tag,
+            entropy,
+            kind,
+            language,
+        } => {
             let tag_str = std::str::from_utf8(tag.as_bytes()).unwrap_or("<non-utf8>");
-            let bytes = payload.as_bytes();
+            let bytes: &[u8] = entropy;
             // ms mnem Phase 3 Step 6: surface language name for mnem cards.
-            let language = if let ms_codec::Payload::Mnem { language: code, .. } = payload {
+            let language = (*language).and_then(|code| {
                 ms_codec::consts::MNEM_LANGUAGE_NAMES
-                    .get(*code as usize)
+                    .get(code as usize)
                     .copied()
-            } else {
-                None
-            };
+            });
             InspectJson::Ms1 {
                 tag: tag_str,
-                payload_kind: format!("{:?}", payload.kind()),
+                payload_kind: format!("{kind:?}"),
                 language,
                 byte_length: bytes.len(),
                 bit_strength: bytes.len() * 8,

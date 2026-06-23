@@ -7,6 +7,7 @@
 use crate::derive::DerivedAccount;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::network::CliNetwork;
+use crate::secret_string::SecretString;
 use crate::template::CliTemplate;
 use bip39::{Language as Bip39Language, Mnemonic};
 use bitcoin::bip32::{DerivationPath, Fingerprint, Xpriv, Xpub};
@@ -104,7 +105,10 @@ pub(crate) fn derive_bip32_from_entropy_at_path(
         entropy: Zeroizing::new(entropy_bytes),
         master_fingerprint,
         account_xpub,
-        account_xpriv,
+        // wave2 T1: confine the account Xpriv in the move-only scrub-on-drop
+        // newtype IMMEDIATELY (the `account_xpub`/network-guard reads above
+        // happen on the bare local before this wrap).
+        account_xpriv: ScrubbedXpriv::new(account_xpriv),
         account_path: path.clone(),
         _entropy_pin: entropy_pin,
     })
@@ -211,6 +215,28 @@ impl ScrubbedXpriv {
     /// Read the master/account fingerprint. `&self`-borrowing.
     pub fn fingerprint(&self, secp: &Secp256k1<All>) -> Fingerprint {
         self.0.fingerprint(secp)
+    }
+
+    /// CONTROLLED escape hatch for the DELIBERATE `convert --to xprv` emission
+    /// (`Xprv ∈ is_secret_bearing`). Returns the rendered xprv string wrapped in
+    /// [`SecretString`] (length-only redacting Debug + scrub-on-drop) so the
+    /// rendered secret never lingers un-scrubbed and never leaks via `{:?}`/
+    /// panic. String-only — NO `Xpriv` handle escapes; byte-identical to the
+    /// old `account_xpriv.to_string()` (`Xpriv::to_string`).
+    // DO NOT widen to expose the Xpriv handle (would re-open the Copy-escape).
+    pub fn expose_xprv_string(&self) -> SecretString {
+        SecretString::new(self.0.to_string())
+    }
+}
+
+// wave2 T1: REDACTING Debug — `DerivedAccount` derives `Debug` and now carries
+// a `ScrubbedXpriv` field, so the type needs a `Debug` impl. It MUST NOT be a
+// `#[derive(Debug)]` (that would render the inner `Xpriv`'s full secret into
+// `{:?}`/panic — the exact leak class this newtype confines). Length/identity-
+// free, like `SecretString`'s redacting Debug.
+impl std::fmt::Debug for ScrubbedXpriv {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ScrubbedXpriv(<redacted>)")
     }
 }
 
@@ -546,5 +572,45 @@ mod scrub_tests {
         assert_eq!(fp, master.fingerprint(&secp));
         // `scrubbed` drops here → private_key.non_secure_erase() + volatile
         // chain_code zero-write run. (Best-effort; see the impl SAFETY note.)
+    }
+
+    /// wave2 T1 — `ScrubbedXpriv::expose_xprv_string` (the CONTROLLED escape
+    /// hatch for the DELIBERATE `convert --to xprv` emission). The returned
+    /// `SecretString`:
+    ///  (a) renders VERBATIM via Display — byte-identical to the old
+    ///      `account_xpriv.to_string()` (`Xpriv::to_string`); this is the
+    ///      funds-fidelity guard for the convert.rs:1314 reader migration.
+    ///  (b) has a length-only REDACTING Debug — `{:?}` never leaks the xprv
+    ///      substring (so it cannot linger via a panic/log).
+    /// No `Xpriv` handle escapes — string only.
+    #[test]
+    fn expose_xprv_string_debug_is_redacting_and_display_is_verbatim() {
+        let seed = [9u8; 32];
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
+        // The canonical string the OLD bare-field reader produced.
+        let canonical = master.to_string();
+        assert!(canonical.starts_with("xprv"));
+
+        let scrubbed = ScrubbedXpriv::new(master);
+        let exposed = scrubbed.expose_xprv_string();
+
+        // (a) Display / to_string is BYTE-IDENTICAL to the bare Xpriv string.
+        assert_eq!(exposed.to_string(), canonical);
+        assert_eq!(&*exposed, canonical.as_str());
+
+        // (b) Debug is length-only redacted — never the xprv substring.
+        let dbg = format!("{exposed:?}");
+        assert!(
+            !dbg.contains(&canonical),
+            "expose_xprv_string Debug leaked the xprv: {dbg}"
+        );
+        assert!(
+            !dbg.contains("xprv"),
+            "expose_xprv_string Debug leaked an xprv prefix: {dbg}"
+        );
+        assert!(
+            dbg.contains("redacted"),
+            "Debug should mark redaction: {dbg}"
+        );
     }
 }
