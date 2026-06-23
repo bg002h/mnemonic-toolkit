@@ -1,0 +1,84 @@
+# `mk repair` {#mk-repair}
+
+BCH error-correct one or more corrupted `mk1`
+strings.\index{mk repair} Both BCH code variants are supported:
+the regular `BCH(93,80,8)` code for data-parts of 14–93 symbols
+(short `mk1` chunks) and the long `BCH(108,93,8)` code for
+data-parts of 96–108 symbols (the xpub-bearing first chunk of a
+typical chunked emission). Both correct up to four substitution
+errors per chunk (singleton bound `t=4`).
+
+`mk repair` is the per-codec sibling of the toolkit's `mnemonic
+repair`. The two share the same `RepairJson` envelope byte-exact;
+the differences are that `mk repair` operates exclusively on the
+`mk` HRP (no `--ms1`/`--mk1`/`--md1` selector) and emits no
+"did you mean" HRP suggestion (single-HRP context).
+
+[`mk decode`](#mk-decode) already performs internal BCH correction
+within the same `t=4` capacity during normal decode. `mk repair`
+is the explicit-fix-with-report counterpart: it surfaces which
+character positions were corrected — useful for salvaging a
+corroded engraving, a hand-copied card with a single typo, or
+sanity-checking a freshly engraved card before committing to
+steel.
+
+This subcommand operates on **public** key-card material only.
+The run-confirm modal does not fire.
+
+## `--json` {#mk-repair-json}
+
+Boolean. Emit a single JSON envelope on stdout (`kind` is `"mk1"`)
+instead of the text-form report. The schema byte-matches `mnemonic
+repair --json`'s `RepairJson` shape; the per-repair detail may
+carry a `code` field naming the BCH variant
+(`regular`/`long`). Default off.
+
+## Positional `mk1-strings`
+
+One or more `mk1` strings to attempt to repair. **Repeating**
+positional. The literal `-` reads one string per line from stdin
+until EOF.
+
+**Per-chunk atomic semantics:** when multiple strings are supplied
+(typical for chunked emissions), if ANY chunk exceeds the
+four-error capacity the WHOLE call fails with the offending chunk
+index named — partial repair of sibling chunks is NOT returned, to
+avoid surfacing a half-fixed card.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | all strings already valid (input echoed unchanged) |
+| `5` | at least one string corrected (`REPAIR_APPLIED`); stdout = report + corrected strings |
+| `2` | unrepairable (too many errors, HRP mismatch) |
+| `1` | I/O or other generic failure |
+
+The exit-`5` `REPAIR_APPLIED` code is uniform across all four CLIs
+(`mnemonic`/`mk`/`ms`/`md`) so wrapper scripts can branch on a
+single `exit == 5` signal.
+
+## Worked example
+
+:::danger
+The `mk1` below is public test material from the canonical
+all-`abandon` seed corpus. **Never fund the wallet it describes.**
+:::
+
+1. **mk** tab; pick **Repair (BCH error correction)**.
+2. Paste the corrupted `mk1` string(s) into the `mk1-strings`
+   field.
+3. Leave `--json` unchecked.
+4. **Run** (no run-confirm modal — `mk repair` operates on public
+   material).
+
+The output panel renders the repair report; the corrected string
+is on the LAST line. Exit code `5` signals a repair was applied.
+
+## Refusals
+
+| Trigger | Refusal |
+|---|---|
+| No positional `mk1-strings` provided AND stdin not used | clap-level `required` error |
+| Any chunk exceeds the four-error correction capacity | exit 2 with the offending chunk index named |
+| HRP is not `mk` | exit 2 — single-HRP context; no cross-HRP suggestion |

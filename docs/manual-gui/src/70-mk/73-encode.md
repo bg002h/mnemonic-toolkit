@@ -26,6 +26,8 @@ runtime UsageError surfaces if both are empty.
 
 ## Outline {#mk-encode-outline}
 
+- [`--group-size`](#mk-encode-group-size) — display grouping width, characters per group (default 5; 0 = unbroken)
+- [`--separator`](#mk-encode-separator) — display-grouping separator keyword (`space`|`hyphen`|`comma`; default `space`)
 - [`--xpub`](#mk-encode-xpub) — BIP-32 extended public key (required)
 - [`--origin-fingerprint`](#mk-encode-origin-fingerprint) — master fingerprint (XOR with `--privacy-preserving`)
 - [`--origin-path`](#mk-encode-origin-path) — BIP-32 derivation path (required)
@@ -35,6 +37,48 @@ runtime UsageError surfaces if both are empty.
 - [`--force-chunked`](#mk-encode-force-chunked) — force chunked output even when single-string would fit (reserved for v0.2)
 - [`--force-long-code`](#mk-encode-force-long-code) — force long-code BCH variant (reserved for v0.2)
 - [`--json`](#mk-encode-json) — emit a single JSON object instead of one mk1 string per line
+
+## `--group-size` {#mk-encode-group-size}
+
+Number widget (range 0–65535; default `5`). mstring display
+grouping: break each emitted `mk1` string into groups of N
+characters separated by [`--separator`](#mk-encode-separator).
+`0` emits an unbroken single line. **Cosmetic only** — intake
+strips separators, so a grouped card and an unbroken card both
+re-ingest identically on [`mk decode`](#mk-decode) / inspect /
+verify. Display grouping is suppressed under `--json`: the JSON
+`mk1_strings` field always carries the unbroken form.
+
+## `--separator` {#mk-encode-separator}
+
+Dropdown (`space`|`hyphen`|`comma`; default `space`). The grouping
+character inserted every [`--group-size`](#mk-encode-group-size)
+characters. Non-load-bearing — like `--group-size` it affects only
+the rendered card, not the decoded bytes. The CLI also accepts the
+literal `-` / `,` / space; the GUI narrows the surface to the three
+keyword values.
+
+### Outline {#mk-encode-separator-outline}
+
+- [`space`](#mk-encode-separator-space) — ASCII space (default)
+- [`hyphen`](#mk-encode-separator-hyphen) — ASCII hyphen `-`
+- [`comma`](#mk-encode-separator-comma) — ASCII comma `,`
+
+### `space` {#mk-encode-separator-space}
+
+ASCII space (`U+0020`). The default. Groups read as
+`mk1qp ydzkp qqsqu …`.
+
+### `hyphen` {#mk-encode-separator-hyphen}
+
+ASCII hyphen-minus (`U+002D`). Groups read as
+`mk1qp-ydzkp-qqsqu-…`. Useful when the card is copied into a
+context where runs of spaces collapse.
+
+### `comma` {#mk-encode-separator-comma}
+
+ASCII comma (`U+002C`). Groups read as
+`mk1qp,ydzkp,qqsqu,…`.
 
 ## `--xpub` {#mk-encode-xpub}
 

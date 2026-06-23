@@ -13,7 +13,7 @@ Pinned-banner format `Pinned: mk 0.9.0`.
 
 ## Subcommand index
 
-The five subcommands group into three families:
+The eight subcommands group into four families:
 
 - **Encode + decode.** Round-trip from xpub + origin metadata to
   `mk1` and back.
@@ -22,15 +22,26 @@ The five subcommands group into three families:
     one policy-id stub.
   - [`mk decode`](#mk-decode)\index{mk decode} — reassemble +
     decode one or more `mk1` strings to xpub + origin metadata.
-- **Inspect + verify.** Read structural fields with richer
-  commentary; check decode validity and optionally content-match
-  against expected fields.
+- **Inspect + verify + repair.** Read structural fields with
+  richer commentary; check decode validity and optionally
+  content-match against expected fields; BCH error-correct a
+  corroded or mis-copied card.
   - [`mk inspect`](#mk-inspect)\index{mk inspect} — decode plus
     structural commentary (per-component path breakdown, per-chunk
     BCH variant, xpub-derived fingerprint).
   - [`mk verify`](#mk-verify)\index{mk verify} — BCH-check the
     cards and optionally content-match the decoded fields against
     user-supplied expected values.
+  - [`mk repair`](#mk-repair)\index{mk repair} — BCH error-correct
+    up to four substitution errors per chunk, with a per-position
+    fix report.
+- **Read-only derivation.** Public-watch surfaces over the card's
+  xpub — no private keys, no signing.
+  - [`mk address`](#mk-address)\index{mk address} — render the
+    receive/change addresses controlled by the card's xpub.
+  - [`mk derive`](#mk-derive)\index{mk derive} — derive an
+    unhardened child xpub at a relative path (composable back into
+    `mk encode`).
 - **Maintainer tools.**
   - [`mk vectors`](#mk-vectors)\index{mk vectors} — print the
     SHA-pinned v0.1 test-vector corpus as JSON (typically used by
@@ -38,13 +49,13 @@ The five subcommands group into three families:
 
 ## Form shape
 
-All five subcommands follow the same form scaffolding described
+All eight subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
-`Pinned: mk 0.3.1` label + subcommand selector ComboBox +
+`Pinned: mk 0.9.0` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the mk-tab subcommands accept slot input
-(`allows_slots: false` for all 5).
+(`allows_slots: false` for all 8).
 
 The `mk` subcommands operate on **public** material throughout.
 None of the schema flags is `secret: true`. The run-confirm modal
