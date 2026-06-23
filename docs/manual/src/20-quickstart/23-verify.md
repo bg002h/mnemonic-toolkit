@@ -40,17 +40,8 @@ original `bundle` invocation are required so the verifier knows what
 
 ## Output
 
-```text
-ms1_decode: ok decoded successfully
-ms1_entropy_match: ok ms1 byte-identical
-mk1_decode: ok decoded successfully
-mk1_xpub_match: ok xpub matches
-mk1_fingerprint_match: ok fingerprint matches
-mk1_path_match: ok path matches
-md1_decode: ok decoded successfully
-md1_wallet_policy: ok wallet-policy mode confirmed
-md1_xpub_match: ok 65-byte xpub matches expected
-result: ok
+```{.text include="23-verify.out" lines="2-11"}
+PLACEHOLDER — generated from transcripts/23-verify.out lines 2-11 at build
 ```
 
 Each line is a discrete check. The four checks per card type are:

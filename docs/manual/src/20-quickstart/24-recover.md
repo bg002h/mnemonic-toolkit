@@ -88,8 +88,8 @@ md decode \
 
 Output:
 
-```text
-wpkh(@0/<0;1>/*)
+```{.text include="24-recover-md1.out" lines="1-1"}
+PLACEHOLDER — generated from transcripts/24-recover-md1.out line 1 at build
 ```
 
 For this BIP-84 single-sig bundle, the decoded wallet-policy template
