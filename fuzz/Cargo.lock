@@ -611,6 +611,7 @@ dependencies = [
 name = "ms-codec"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a249cc9a48f049ae3ac27abd642a20be1fc9a55cceb0c90b3c0014cdee44788"
 dependencies = [
  "getrandom 0.3.4",
  "zeroize",
