@@ -239,7 +239,7 @@ Encoder steps (`crates/ms-codec/src/encode.rs` → `envelope::package` → `Code
 
 Resulting card (matches SHA-pinned vector 1 in `ms vectors`):
 
-```text
+```{.text include="ms1-encode-12word-abandon-unbroken.out" lines="1-1"}
 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 ```
 
