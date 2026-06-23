@@ -6,7 +6,7 @@ compile from a higher-level sub-Miniscript-Policy expression via
 fingerprints to the template's `@i` placeholders and produces a
 chunked `md1` string suitable for engraving.
 
-The largest md-tab subcommand: 11 flags + 1 positional.
+The largest md-tab subcommand: 13 flags + 1 positional.
 Two-mode input: either the **`[TEMPLATE]` positional** OR
 **`--from-policy <expr>`** (mutually-required-one-of, mutually
 exclusive). The conditional-visibility engine at
@@ -18,6 +18,8 @@ is chosen).
 
 ## Outline {#md-encode-outline}
 
+- [`--group-size`](#md-encode-group-size) — display grouping: break the card into groups of N characters (default 5; 0 = unbroken)
+- [`--separator`](#md-encode-separator) — display-grouping separator keyword (`space` | `hyphen` | `comma`; default `space`)
 - [`--from-policy`](#md-encode-from-policy) — sub-Miniscript-Policy expression (XOR with `[TEMPLATE]` positional)
 - [`--context`](#md-encode-context) — script context for `--from-policy` (conditionally Required when `--from-policy` is set; Hidden when positional `[TEMPLATE]` is set)
 - [`--unspendable-key`](#md-encode-unspendable-key) — Tap-context fallback unspendable internal key (Disabled when `--context segwitv0`)
@@ -29,6 +31,48 @@ is chosen).
 - [`--force-long-code`](#md-encode-force-long-code) — force the long BCH code even when regular suffices
 - [`--policy-id-fingerprint`](#md-encode-policy-id-fingerprint) — print the freshly-computed PolicyId fingerprint after the phrase
 - [`--json`](#md-encode-json) — emit JSON output
+
+## `--group-size` {#md-encode-group-size}
+
+Display-grouping control: break the emitted `md1` card into groups
+of N characters. Number widget; range `0`–`65535`, default `5`;
+`0` = unbroken single line. The GUI renders a spin-box pre-filled
+with `5`.
+
+**Cosmetic only — non-load-bearing.** Intake strips separators, so
+a grouped card and an unbroken card both re-ingest identically on
+[`md decode`](#md-decode), [`md repair`](#md-repair), and every
+other md-tab consumer. `--json` output always stays unbroken
+regardless of this setting.
+
+The same display-grouping pair (`--group-size` + `--separator`)
+appears on [`mnemonic bundle`](#mnemonic-bundle-group-size) and the
+`ms` / `mk` encode surfaces with identical semantics.
+
+## `--separator` {#md-encode-separator}
+
+The grouping separator keyword used when `--group-size` is non-zero.
+Dropdown widget; 3 valid values; default `space`. Cosmetic and
+non-load-bearing — like `--group-size`, the choice never affects
+intake (separators are stripped on every consumer).
+
+### Outline {#md-encode-separator-outline}
+
+- [`space`](#md-encode-separator-space)
+- [`hyphen`](#md-encode-separator-hyphen)
+- [`comma`](#md-encode-separator-comma)
+
+### `space` {#md-encode-separator-space}
+
+Default. Insert a single space every `--group-size` characters.
+
+### `hyphen` {#md-encode-separator-hyphen}
+
+Insert a hyphen (`-`) every `--group-size` characters.
+
+### `comma` {#md-encode-separator-comma}
+
+Insert a comma (`,`) every `--group-size` characters.
 
 ## `--from-policy` {#md-encode-from-policy}
 

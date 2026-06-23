@@ -37,16 +37,19 @@ The subcommands group into five families:
   - [`md vectors`](#md-vectors)\index{md vectors} — regenerate
     the test-vector corpus (typically used by md-cli developers,
     not end users).
+  - [`md repair`](#md-repair)\index{md repair} — BCH
+    error-correct one or more `md1` strings (per-chunk repair
+    report; sibling of [`mnemonic repair`](#mnemonic-repair)).
 
 ## Form shape
 
-All eight subcommands follow the same form scaffolding described
+All nine subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form `Pinned:
-md 0.5.0` label + subcommand selector ComboBox + per-subcommand
+md 0.7.0` label + subcommand selector ComboBox + per-subcommand
 `?` help-icon; per-flag widgets; an action bar with **Copy
 command**, **Run** buttons; an always-on `Preview:` line. None of
 the md-tab subcommands accept slot input (`allows_slots: false`
-for all 8).
+for all 9).
 
 The `md` subcommands operate on **public** material throughout.
 None of the schema flags is `secret: true`. The run-confirm modal
