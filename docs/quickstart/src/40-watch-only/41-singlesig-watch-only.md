@@ -33,8 +33,7 @@ mnemonic convert \
 
 Output:
 
-```text
-xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
+```{.text include="qs-41-watch-only-xpub.out" lines="2-"}
 ```
 
 Hand-carry that xpub string to the bundle-building host (it is

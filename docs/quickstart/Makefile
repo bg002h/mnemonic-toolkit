@@ -42,6 +42,13 @@ MD_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/descriptor-m
 MS_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-secret/Cargo.toml -p ms-cli --bin ms --
 MK_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-key/Cargo.toml -p mk-cli --bin mk --
 
+# Cross-format-recipes fixture corpus. The QuickStart's transcripts/ is a SYMLINK
+# to the reference manual's transcripts dir (see .gitignore), so `verify-examples`
+# replays the FULL shared pool — including the manual's cross-format-recipes /
+# foreign-formats transcripts that reference $FIXTURES_DIR. Mirror the manual's
+# value so those transcripts resolve their fixtures (docs/manual/Makefile).
+FIXTURES_DIR ?= $(TOOLKIT_ROOT)/crates/mnemonic-toolkit/tests/fixtures/wallet_import
+
 # ---------------------------------------------------------------------------
 # Tools (override with PANDOC=/path/to/pandoc etc.)
 # ---------------------------------------------------------------------------
@@ -69,8 +76,20 @@ PDF_SRC := $(MD_SRC) $(SRC_DIR)/99-build-banner.md
 # Filter args
 # ---------------------------------------------------------------------------
 # `make md` runs strip-latex + primer-box(md mode); `make pdf*` runs primer-box(pdf mode) only.
-MD_FILTER_ARGS  := --lua-filter $(FILTERS_DIR)/strip-latex-from-md.lua --lua-filter $(FILTERS_DIR)/primer-box.lua
-PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/primer-box.lua
+# include-transcript.lua is PREPENDED (first) on both chains so a fenced block's
+# include="<stem>.out" body is materialised from the golden BEFORE any other
+# transform sees it. It resolves the transcript via TRANSCRIPTS_DIR (exported
+# below). The filter lives in the shared manual filter dir (pandoc/filters is a
+# symlink to ../../manual/pandoc/filters), so it is reachable as
+# $(FILTERS_DIR)/include-transcript.lua. See the manual Makefile + cycle-C P0a.
+MD_FILTER_ARGS  := --lua-filter $(FILTERS_DIR)/include-transcript.lua --lua-filter $(FILTERS_DIR)/strip-latex-from-md.lua --lua-filter $(FILTERS_DIR)/primer-box.lua
+PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/include-transcript.lua --lua-filter $(FILTERS_DIR)/primer-box.lua
+
+# Absolute path: pandoc may be invoked from any cwd; include-transcript.lua
+# resolves transcript paths via this env var, so a relative value would
+# silently mis-resolve (mirrors MERMAID_CACHE_DIR below). $(TRANSCRIPTS) is the
+# symlink ../manual/transcripts shared with the reference manual.
+export TRANSCRIPTS_DIR := $(TRANSCRIPTS)
 
 ifeq ($(MERMAID_FILTER),on)
 	PDF_FILTER_ARGS += --filter mermaid-filter
@@ -105,7 +124,7 @@ $(BUILD_DIR):
 .PHONY: md
 md: $(BUILD_DIR)/m-format-quickstart.md
 
-$(BUILD_DIR)/m-format-quickstart.md: $(MD_SRC) $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+$(BUILD_DIR)/m-format-quickstart.md: $(MD_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to gfm \
@@ -139,7 +158,7 @@ $(SRC_DIR)/99-build-banner.md: FORCE
 .PHONY: FORCE
 FORCE:
 
-$(BUILD_DIR)/m-format-quickstart.tex: $(PDF_SRC) $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex | $(BUILD_DIR)
+$(BUILD_DIR)/m-format-quickstart.tex: $(PDF_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to latex \
@@ -202,6 +221,7 @@ verify-examples:
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
 		MK_BIN="$(MK_BIN)" \
+		FIXTURES_DIR="$(FIXTURES_DIR)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
 
 # ---------------------------------------------------------------------------

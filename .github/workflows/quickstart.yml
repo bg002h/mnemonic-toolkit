@@ -70,11 +70,52 @@ jobs:
           sudo chmod +x /usr/local/bin/lychee
 
       - name: Install mk-cli
+        # Use package-name selector (`mk-cli`) instead of `--bin mk`: the
+        # mnemonic-key workspace ships multiple binaries (mk-codec's
+        # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
+        # against a multi-binary workspace.
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.10.2 mk-cli
 
+      - name: Install md-cli
+        # Mirrors the mk-cli install pattern above. Use package-name selector
+        # (`md-cli`); the descriptor-mnemonic workspace ships multiple binaries.
+        # `--features cli-compiler` matches scripts/install.sh's component pin.
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.9.2 md-cli --features cli-compiler
+
+      - name: Install ms-cli
+        # Mirrors the mk-cli + md-cli install patterns above.
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.11.0 ms-cli
+
+      - name: Build mnemonic binary (debug)
+        # Debug binary is sufficient for transcript-replay byte-comparison;
+        # behavior under test is identical between debug/release modulo
+        # panic-handler verbosity, and mnemonic never panics in normal flow.
+        run: cargo build --bin mnemonic
+
       - name: Lint quickstart
+        # Binary-independent flag-coverage / markdownlint / cspell / lychee.
+        # MNEMONIC_BIN=true MD_BIN=true MS_BIN=true are placeholders — the lint
+        # gate does not execute the CLIs; output fidelity is gated separately by
+        # the verify-examples step below.
         working-directory: docs/quickstart
         run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk
+
+      - name: Verify worked-example output fidelity (real binaries)
+        # Replays every committed transcript against the real installed CLIs and
+        # byte-compares against the golden .out (the include-transcript filter
+        # renders fenced blocks FROM these goldens). The QuickStart's transcripts/
+        # is a symlink to the manual's, so this replays the shared pool — hence
+        # FIXTURES_DIR is passed for the cross-format-recipes transcripts.
+        # All flag values are constants or $GITHUB_WORKSPACE (no untrusted
+        # github.event.* fields).
+        working-directory: docs/quickstart
+        run: |
+          make verify-examples \
+            MNEMONIC_BIN="$GITHUB_WORKSPACE/target/debug/mnemonic" \
+            MD_BIN=md \
+            MS_BIN=ms \
+            MK_BIN=mk \
+            FIXTURES_DIR="$GITHUB_WORKSPACE/crates/mnemonic-toolkit/tests/fixtures/wallet_import"
 
       - name: Build PDF
         working-directory: docs/quickstart

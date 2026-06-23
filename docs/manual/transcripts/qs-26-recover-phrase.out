@@ -1,0 +1,3 @@
+warning: secret material on argv (--from ms1=) — pipe via --from ms1=- to avoid /proc/$PID/cmdline exposure
+phrase: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

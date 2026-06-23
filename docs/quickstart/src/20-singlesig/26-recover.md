@@ -29,9 +29,7 @@ mnemonic convert \
 
 Output:
 
-```text
-phrase: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
-warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+```{.text include="qs-26-recover-phrase.out" lines="2-"}
 ```
 
 The phrase imports directly into any BIP-39 wallet. The `warning`
@@ -51,12 +49,7 @@ mk decode \
 
 Output:
 
-```text
-xpub:                xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
-origin_fingerprint:  73c5da0a
-origin_path:         m/84'/0'/0'
-policy_id_stubs:     deadbeef
-chunks:              2 (regular)
+```{.text include="qs-26-recover-mk1.out"}
 ```
 
 `mk decode` reassembles the two strings, verifies the BCH checksum
@@ -82,8 +75,7 @@ md decode \
 
 Output:
 
-```text
-wpkh(@0/<0;1>/*)
+```{.text include="qs-26-recover-md1.out"}
 ```
 
 `wpkh(@0/<0;1>/*)` is the BIP-388 wallet policy template for a

@@ -79,6 +79,15 @@ if [ ! -d "$TRANSCRIPTS" ]; then
   exit 0
 fi
 
+# Resolve TRANSCRIPTS to its physical path first. The reference manual passes a
+# real directory (no-op here), but the QuickStart's `transcripts` is a SYMLINK
+# to ../manual/transcripts — and GNU `find` does NOT descend into a symlinked
+# START point unless it is dereferenced. Without this, the QuickStart's
+# `make verify-examples` would silently find zero transcripts ("vacuous pass")
+# and gate nothing. `readlink -f` collapses the symlink so `find` traverses the
+# real tree on both books.
+TRANSCRIPTS="$(readlink -f "$TRANSCRIPTS")"
+
 # Recursive .cmd discovery. The `-not -path '*/cli-help/*'` predicate is a
 # re-introduction guard — the cli-help/ snapshot dir was removed (see the
 # header comment + FOLLOWUP `cli-help-golden-broad-staleness-not-gated`).
