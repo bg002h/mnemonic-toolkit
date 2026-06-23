@@ -40,6 +40,7 @@ TRANSCRIPTS    := $(QUICKSTART_DIR)/transcripts
 MNEMONIC_BIN ?= cargo run --quiet --manifest-path $(TOOLKIT_ROOT)/Cargo.toml -p mnemonic-toolkit --bin mnemonic --
 MD_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/descriptor-mnemonic/Cargo.toml -p md-cli --bin md --
 MS_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-secret/Cargo.toml -p ms-cli --bin ms --
+MK_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-key/Cargo.toml -p mk-cli --bin mk --
 
 # ---------------------------------------------------------------------------
 # Tools (override with PANDOC=/path/to/pandoc etc.)
@@ -200,6 +201,7 @@ verify-examples:
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
+		MK_BIN="$(MK_BIN)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
 
 # ---------------------------------------------------------------------------

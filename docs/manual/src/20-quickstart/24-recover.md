@@ -62,10 +62,8 @@ mnemonic convert \
 
 Output:
 
-```text
-xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
-fingerprint: 73c5da0a
-path: 84'/0'/0'
+```{.text include="24-recover-mk1.out" lines="2-4"}
+PLACEHOLDER — generated from transcripts/24-recover-mk1.out lines 2-4 at build
 ```
 
 The two mk1 strings are passed as a single space-separated value;

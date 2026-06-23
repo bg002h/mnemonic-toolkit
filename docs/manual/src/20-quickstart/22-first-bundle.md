@@ -48,27 +48,8 @@ or `--separator hyphen` to group with dashes instead. Intake (`restore`,
 `verify-bundle`, `convert`, `repair`) accepts any of these forms — the
 display separators are non-load-bearing.
 
-```text
-# ms1 (entropy, BCH-checksummed)
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
-
-# mk1 (xpub + origin)
-mk1qp rsqhp qqsq3 cqtsl eeutk s2qvz g3vs7 0mejh k622w s2kgd emj2c d8zwj 2skzx 2wq0q w70l4 q99vd yh5x0 z8v4y slsp8 qp3yx g3dpe 854wq 4
-mk1qp rsqhp p0f30 mtxzd 65mvw cur9u sdatw uqvq6 z70r9 nwrgk 6xn6l 8gy6n wa2n9 77sw6 zh34r ma0nh
-
-# md1 (wallet policy)
-md1fg dxlpq pqpm6 jzzqq vqpdq w0za5 zs4gy y55aq 4vsmn hy4s6 wyayp u34c7 raqu8 np
-md1fg dxlpq f2zcg efcpu pmel7 5q543 5j7se ugaj5 jr7qy ur6vt 76es5 cdeyr q7zdy 0d
-md1fg dxlpq 3xa2d k8vwp j7gx7 4hwqx qdp08 3jehp 5tdrf a0n5z dfkqc dlrvn h5r62 jn
-
-# === Wallet bundle: bip84, mainnet ===
-# ms1: 1c017
-# mk1: 1c017
-# fingerprint: 73c5da0a
-# origin path: m/84'/0'/0'
-# Template: bip84
-# md1: 1c01
-warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+```{.text include="22-first-bundle.out" lines="2-21"}
+PLACEHOLDER — generated from transcripts/22-first-bundle.out lines 2-21 at build
 ```
 
 ## Reading the output

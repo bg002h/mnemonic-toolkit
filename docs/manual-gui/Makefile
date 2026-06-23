@@ -232,6 +232,7 @@ verify-examples:
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
+		MK_BIN="$(MK_BIN)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
 
 # ---------------------------------------------------------------------------
