@@ -1,11 +1,13 @@
 # `mnemonic export-wallet` {#mnemonic-export-wallet}
 
 Emit watch-only wallet artifacts from the bundle's public material
-in a wallet-software-specific format. Eight target formats span
+in a wallet-software-specific format. Eleven target formats span
 the major Bitcoin wallets — Bitcoin Core's `importdescriptors`
 JSON, BIP-388 wallet policies for descriptor-aware tooling,
-Coldcard generic JSON, Blockstream Jade, Sparrow, Specter, the
-historical Electrum format, and Blockstream Green. Inputs are
+Coldcard generic JSON + the explicit Coldcard multisig text,
+Blockstream Jade, Sparrow, Specter, the historical Electrum format,
+Blockstream Green, BSMS Round-2 (BIP-129), and a bare BIP-380
+descriptor. Inputs are
 slot-shaped (same `--slot @N.<subkey>=<value>` grammar as bundle
 and verify-bundle); outputs are watch-only by design — secret-
 bearing slot subkeys are refused by the watch-only validator.
@@ -31,6 +33,9 @@ whatever shape your spending wallet imports.
 - [`--bitcoin-core-version`](#mnemonic-export-wallet-bitcoin-core-version) — `24` or `25` (default `25`)
 - [`--taproot-internal-key`](#mnemonic-export-wallet-taproot-internal-key) — `nums` or `@N` for tr-multi-a / tr-sortedmulti-a
 - [`--wallet-name`](#mnemonic-export-wallet-wallet-name) — wallet label (required for `sparrow` / `specter` / `electrum` / `green`)
+- [`--bsms-form`](#mnemonic-export-wallet-bsms-form) — BSMS Round-2 emit shape (`4-line` default / `2-line`)
+- [`--from-import-json`](#mnemonic-export-wallet-from-import-json) — emit from an `import-wallet --json` envelope
+- [`--from-import-json-index`](#mnemonic-export-wallet-from-import-json-index) — pick one entry from a multi-entry import envelope
 
 ## `--template` {#mnemonic-export-wallet-template}
 
@@ -253,11 +258,14 @@ covering the major spending-wallet ecosystems.
 - [`bitcoin-core`](#mnemonic-export-wallet-format-bitcoin-core)
 - [`bip388`](#mnemonic-export-wallet-format-bip388)
 - [`coldcard`](#mnemonic-export-wallet-format-coldcard)
+- [`coldcard-multisig`](#mnemonic-export-wallet-format-coldcard-multisig)
 - [`jade`](#mnemonic-export-wallet-format-jade)
 - [`sparrow`](#mnemonic-export-wallet-format-sparrow)
 - [`specter`](#mnemonic-export-wallet-format-specter)
 - [`electrum`](#mnemonic-export-wallet-format-electrum)
 - [`green`](#mnemonic-export-wallet-format-green)
+- [`bsms`](#mnemonic-export-wallet-format-bsms)
+- [`descriptor`](#mnemonic-export-wallet-format-descriptor)
 
 ### `bitcoin-core` {#mnemonic-export-wallet-format-bitcoin-core}
 
@@ -282,6 +290,13 @@ reference format; longer `--wallet-name` values are truncated to
 the first 20 codepoints (not bytes — non-ASCII names handled at
 codepoint granularity per the chapter notes in
 `docs/manual/src/40-cli-reference/41-mnemonic.md:170`).
+
+### `coldcard-multisig` {#mnemonic-export-wallet-format-coldcard-multisig}
+
+The Coldcard multisig text export, selected explicitly (the plain
+`coldcard` format auto-routes single-sig to JSON and multisig to this
+text shape; `coldcard-multisig` forces the multisig text form). Same
+20-codepoint `Name:` cap as `coldcard` / `jade`.
 
 ### `jade` {#mnemonic-export-wallet-format-jade}
 
@@ -315,6 +330,23 @@ Electrum 4.x watch-only wallets.
 
 Blockstream Green format. v0.13.0 ships this as a Phase-3 promoted
 format (no longer a stub).
+
+### `bsms` {#mnemonic-export-wallet-format-bsms}
+
+BSMS Round-2 (BIP-129) emit. The watch-only round-trip partner of
+[`import-wallet --format bsms`](#mnemonic-import-wallet-format-bsms):
+emits a BSMS Round-2 descriptor record from the bundle's public
+material. Pair with [`--bsms-form`](#mnemonic-export-wallet-bsms-form)
+to pick the `4-line` (default, BIP-129-canonical) or `2-line` (lenient
+excerpt) wire shape.
+
+### `descriptor` {#mnemonic-export-wallet-format-descriptor}
+
+A bare watch-only BIP-380 descriptor (the concrete `wsh(...)#checksum`
+/ `wpkh(...)#checksum` string), optionally with leading `#`-comment
+lines. The round-trip partner of
+[`import-wallet --format descriptor`](#mnemonic-import-wallet-format-descriptor):
+the emitted text is re-importable verbatim. Singlesig and multisig.
 
 ## `--output` {#mnemonic-export-wallet-output}
 
@@ -393,6 +425,54 @@ Wallet label. Optional for most formats (defaults to
 `--format sparrow`, `specter`, `electrum`, and `green`.
 20-codepoint cap for `coldcard` + `jade` multisig text formats
 (silently truncates longer names).
+
+## `--bsms-form` {#mnemonic-export-wallet-bsms-form}
+
+(v0.27.0) The BSMS Round-2 emit shape for
+[`--format bsms`](#mnemonic-export-wallet-format-bsms). Dropdown;
+default `4-line`. Ignored by every non-BSMS format per the per-format
+ignored-input contract. The GUI renders this flag with a `?` help-icon.
+
+### Outline {#mnemonic-export-wallet-bsms-form-outline}
+
+- [`2-line`](#mnemonic-export-wallet-bsms-form-2-line)
+- [`4-line`](#mnemonic-export-wallet-bsms-form-4-line)
+
+### `2-line` {#mnemonic-export-wallet-bsms-form-2-line}
+
+The lenient 2-line excerpt (`BSMS 1.0\n<descriptor>#<checksum>`),
+symmetric with the v0.26.0
+[`import-wallet --format bsms`](#mnemonic-import-wallet-format-bsms)
+parser's reduced form.
+
+### `4-line` {#mnemonic-export-wallet-bsms-form-4-line}
+
+The BIP-129-canonical 4-line shape. Default.
+
+## `--from-import-json` {#mnemonic-export-wallet-from-import-json}
+
+(v0.27.0) Emit a per-format wallet config from an
+[`import-wallet --json`](#mnemonic-import-wallet-json) envelope instead
+of from `--template` / `--descriptor`. The envelope's
+`bundle.descriptor` becomes the canonical descriptor, cosigner xpubs
+decode from `bundle.mk1`, and the network derives from
+`bundle.network`. Mutually exclusive with `--template` and
+`--descriptor`; `--account` is rejected (the envelope's
+`bundle.account` is authoritative). Since v0.37.0, for
+template-requiring file-import formats (`sparrow` / `coldcard` /
+`jade` / `electrum`) the `--template` is **auto-derived** from the
+envelope descriptor, so those now round-trip via `--from-import-json`
+(you still cannot pass `--template` explicitly — it remains mutually
+exclusive).
+
+Two value shapes: a filesystem path or `-` (stdin). The GUI renders
+this as a Path widget; `stdio_sentinel: true`.
+
+## `--from-import-json-index` {#mnemonic-export-wallet-from-import-json-index}
+
+(v0.27.0) Pick a specific entry from a multi-entry envelope array;
+required when the envelope has more than one entry. The GUI renders
+this as a Number widget; no `?` help-icon.
 
 ## Worked example — Bitcoin Core watch-only from canonical bundle
 

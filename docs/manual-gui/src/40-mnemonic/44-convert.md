@@ -25,6 +25,8 @@ when `--passphrase` / `--bip38-passphrase` is non-empty.
 
 ## Outline {#mnemonic-convert-outline}
 
+- [`--group-size`](#mnemonic-convert-group-size) — mstring display grouping width when emitting an `ms1`/`mk1` card (default 5)
+- [`--separator`](#mnemonic-convert-separator) — grouping separator for `--group-size` (default `space`)
 - [`--from`](#mnemonic-convert-from) — source node `<name>=<value>` (required; secrecy is value-dependent)
 - [`--to`](#mnemonic-convert-to) — destination node (required, repeating)
 - [`--network`](#mnemonic-convert-network) — Bitcoin network
@@ -42,6 +44,43 @@ when `--passphrase` / `--bip38-passphrase` is non-empty.
 - [`--electrum-language`](#mnemonic-convert-electrum-language) — Electrum wordlist (distinct from `--language`)
 - [`--script-type`](#mnemonic-convert-script-type) — script-type selector for `(Xpub, Address)` derivation
 - [`--json`](#mnemonic-convert-json) — emit JSON-shaped output
+
+## `--group-size` {#mnemonic-convert-group-size}
+
+mstring display grouping. When `convert` emits an `ms1` / `mk1` card
+(`--to ms1` / `--to mk1`), inserts a separator every N characters to
+ease engraving + read-aloud verification. `0` = unbroken; default `5`.
+Display only — `--json` output stays unbroken. The same flag (with
+`--separator`) is also accepted on
+[`bundle`](#mnemonic-bundle-group-size). Has no effect for non-card
+`--to` targets (e.g. `--to address`).
+
+The GUI renders this as a Number widget; no `?` help-icon.
+
+## `--separator` {#mnemonic-convert-separator}
+
+The grouping separator inserted by `--group-size`. Default `space`.
+Dropdown; same three values as
+[`bundle --separator`](#mnemonic-bundle-separator). The GUI renders
+this flag with a `?` help-icon.
+
+### Outline {#mnemonic-convert-separator-outline}
+
+- [`space`](#mnemonic-convert-separator-space)
+- [`hyphen`](#mnemonic-convert-separator-hyphen)
+- [`comma`](#mnemonic-convert-separator-comma)
+
+### `space` {#mnemonic-convert-separator-space}
+
+See [`bundle --separator space`](#mnemonic-bundle-separator-space).
+
+### `hyphen` {#mnemonic-convert-separator-hyphen}
+
+See [`bundle --separator hyphen`](#mnemonic-bundle-separator-hyphen).
+
+### `comma` {#mnemonic-convert-separator-comma}
+
+See [`bundle --separator comma`](#mnemonic-bundle-separator-comma).
 
 ## `--from` {#mnemonic-convert-from}
 
@@ -64,6 +103,7 @@ masking and no argv-leakage advisory.
 ### Outline {#mnemonic-convert-from-outline}
 
 - [`phrase`](#mnemonic-convert-from-phrase)
+- [`seedqr`](#mnemonic-convert-from-seedqr)
 - [`entropy`](#mnemonic-convert-from-entropy)
 - [`xpub`](#mnemonic-convert-from-xpub)
 - [`xprv`](#mnemonic-convert-from-xprv)
@@ -82,6 +122,16 @@ masking and no argv-leakage advisory.
 A BIP-39 mnemonic phrase. Secret-bearing. Length must be one of
 12 / 15 / 18 / 21 / 24 words, each in the `--language` wordlist;
 checksum must validate.
+
+### `seedqr` {#mnemonic-convert-from-seedqr}
+
+A SeedQR digit-string (input-only, v0.31.6+). Secret-bearing.
+`seedqr=<digits>` decodes a 48 / 60 / 72 / 84 / 96-digit SeedQR string
+to a BIP-39 phrase, then projects to any phrase-reachable target.
+`seedqr` is a valid `--from` node only — it is NOT a valid `--to`
+target (use the `mnemonic seedqr encode` subcommand to emit a
+SeedQR digit-string). The same conversion is reachable via
+`mnemonic seedqr decode --from seedqr=<digits>`.
 
 ### `entropy` {#mnemonic-convert-from-entropy}
 

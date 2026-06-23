@@ -25,10 +25,14 @@ longer the load-bearing element of the on-screen security model.
 
 ## Outline {#mnemonic-bundle-outline}
 
+- [`--group-size`](#mnemonic-bundle-group-size) — mstring display grouping width (default 5; `0` = unbroken)
+- [`--separator`](#mnemonic-bundle-separator) — grouping separator for `--group-size` (default `space`)
 - [`--network`](#mnemonic-bundle-network) — Bitcoin network for derivations + address encoding (required)
 - [`--template`](#mnemonic-bundle-template) — pre-built descriptor template (required unless `--descriptor*`)
 - [`--descriptor`](#mnemonic-bundle-descriptor) — user-supplied BIP-388 descriptor (XOR with `--descriptor-file`)
 - [`--descriptor-file`](#mnemonic-bundle-descriptor-file) — descriptor read from a single-line UTF-8 file
+- [`--import-json`](#mnemonic-bundle-import-json) — synthesize a bundle from an `import-wallet --json` envelope
+- [`--import-json-index`](#mnemonic-bundle-import-json-index) — pick one entry from a multi-entry import envelope
 - [`--language`](#mnemonic-bundle-language) — BIP-39 wordlist (default `english`)
 - [`--passphrase`](#mnemonic-bundle-passphrase) — BIP-39 mnemonic-extension passphrase (XOR with `--passphrase-stdin`)
 - [`--passphrase-stdin`](#mnemonic-bundle-passphrase-stdin) — read `--passphrase` from stdin (raw, NULL-byte preserving)
@@ -36,10 +40,51 @@ longer the load-bearing element of the on-screen security model.
 - [`--json`](#mnemonic-bundle-json) — emit envelope JSON (`ms1`/`mk1`/`md1` + metadata)
 - [`--no-engraving-card`](#mnemonic-bundle-no-engraving-card) — suppress the human-readable engraving-card panel
 - [`--multisig-path-family`](#mnemonic-bundle-multisig-path-family) — `bip48` or `bip87` (default `bip87`)
+- [`--md1-form`](#mnemonic-bundle-md1-form) — what the `md1` encodes: `policy` (keyed) or `template` (keyless)
 - [`--privacy-preserving`](#mnemonic-bundle-privacy-preserving) — suppress master fingerprint from `mk1` + engraving card
 - [`--self-check`](#mnemonic-bundle-self-check) — re-parse the emitted bundle and verify round-trip
 - [`--threshold`](#mnemonic-bundle-threshold) — multisig threshold K (1 ≤ K ≤ N ≤ 16)
 - [`--slot`](#mnemonic-bundle-slot) — repeating; `@N.<subkey>=<value>` (the input grammar; rendered by the slot editor)
+
+## `--group-size` {#mnemonic-bundle-group-size}
+
+mstring display grouping. Inserts a separator every N characters in
+the emitted `ms1` / `mk1` / `md1` card strings to make them easier to
+engrave and read aloud during verification. `0` = unbroken (single
+dense line); default `5`. **Display only** — the `--json` envelope and
+the forensic strings `verify-bundle` consumes always stay unbroken, so
+grouping never changes the wire payload. The same flag (with
+`--separator`) is also accepted on [`convert`](#mnemonic-convert-group-size)
+when emitting an `ms1` / `mk1` card.
+
+The GUI renders this as a Number widget (range 0..); no `?` help-icon
+(Number widgets are not in the help-icon class).
+
+## `--separator` {#mnemonic-bundle-separator}
+
+The grouping separator inserted by `--group-size`. Default `space`.
+Dropdown with three values; the GUI renders this flag with a `?`
+help-icon deep-linking here.
+
+### Outline {#mnemonic-bundle-separator-outline}
+
+- [`space`](#mnemonic-bundle-separator-space)
+- [`hyphen`](#mnemonic-bundle-separator-hyphen)
+- [`comma`](#mnemonic-bundle-separator-comma)
+
+### `space` {#mnemonic-bundle-separator-space}
+
+Group with an ASCII space (U+0020). Default. The dense,
+read-aloud-friendly grouping used by the engraving panel.
+
+### `hyphen` {#mnemonic-bundle-separator-hyphen}
+
+Group with a hyphen (`-`). Useful when the surrounding medium already
+uses spaces for other delimiters.
+
+### `comma` {#mnemonic-bundle-separator-comma}
+
+Group with a comma (`,`).
 
 ## `--network` {#mnemonic-bundle-network}
 
@@ -206,6 +251,29 @@ The GUI renders this flag as a Path widget; the OS file picker is
 not yet wired (FOLLOWUP `gui-file-picker-affordance`); the field
 is a plain Text widget that accepts a filesystem path string. No
 `?` help-icon.
+
+## `--import-json` {#mnemonic-bundle-import-json}
+
+Synthesize a bundle from an [`import-wallet --json`](#mnemonic-import-wallet-json)
+envelope instead of from `--template` / `--descriptor`. The envelope's
+`bundle.descriptor` carries the descriptor and the `bundle.mk1` chunks
+decode to per-cosigner xpubs + fingerprints + paths. Mutually exclusive
+with `--template`, `--descriptor`, and `--descriptor-file` (the
+conditional-visibility engine disables those when this has a value).
+A seed overlay (`--slot @N.phrase=`) applies to slots where the
+envelope's `ms1[N] == ""` (watch-only); supplying an overlay for an
+already-seeded slot is `BadInput`.
+
+Two value shapes: a filesystem path or `-` (stdin). The GUI renders
+this as a Path widget; `stdio_sentinel: true` (accepts `-`).
+
+## `--import-json-index` {#mnemonic-bundle-import-json-index}
+
+Pick a specific entry from a multi-entry envelope array (e.g. a Bitcoin
+Core `listdescriptors` export with multiple descriptors). Required when
+the envelope has more than one entry; an out-of-range index is
+`BadInput` (exit 2). The GUI renders this as a Number widget; no `?`
+help-icon.
 
 ## `--language` {#mnemonic-bundle-language}
 
@@ -392,6 +460,38 @@ conventions.
 
 Refused under descriptor mode (the descriptor specifies the
 path family directly).
+
+## `--md1-form` {#mnemonic-bundle-md1-form}
+
+What the engraved `md1` card encodes. Dropdown; default `policy`. The
+GUI renders this flag with a `?` help-icon deep-linking here.
+
+### Outline {#mnemonic-bundle-md1-form-outline}
+
+- [`policy`](#mnemonic-bundle-md1-form-policy)
+- [`template`](#mnemonic-bundle-md1-form-template)
+
+### `policy` {#mnemonic-bundle-md1-form-policy}
+
+The full **keyed** wallet-policy `md1` (the pre-#28 behavior).
+Identifies **this** specific wallet — every cosigner's public key is
+baked into the card. Default.
+
+### `template` {#mnemonic-bundle-md1-form-template}
+
+A **keyless**, fingerprint-stripped, origin-conditional template `md1`
+— a backup of the wallet **type**, byte-identical (for a canonical
+type) across all users of that type ("one engraving for thousands").
+Keys / accounts are supplied at restore (see
+[`restore --md1`](#mnemonic-restore-md1) and the template-completion
+flags); the specific wallet is identified out-of-band by the
+`WalletPolicyId` printed on **stderr**. Phase-1 (v0.59.0) covers
+canonical single-sig (`bip44` / `bip84` / `bip86`); phase-2 (v0.60.0)
+ALSO covers multisig (`wsh(multi/sortedmulti)`, `sh(wsh)`), general /
+thresh policies, and `tr(NUMS, multi_a)`, emitting one keyless template
+`md1` plus N keyless cosigner `mk1` stubs with a loud key-ordering
+warning. Still refused: `tr(sortedmulti_a)`, hardened use-sites, and
+`bip49` (nested-segwit) — use `policy` for those.
 
 ## `--privacy-preserving` {#mnemonic-bundle-privacy-preserving}
 

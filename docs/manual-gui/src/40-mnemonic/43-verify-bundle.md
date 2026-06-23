@@ -13,11 +13,14 @@ when the other has any value.
 :::danger
 The worked examples reuse the canonical all-`abandon` BIP-39 test
 vector. **Never engrave or fund** the wallets verified here — the
-phrase is public. The
-[§14 Defense 2](#secret-handling) cold-node operational warning
-applies to every secret-bearing slot row (the master `ms1` and
-any `--passphrase` field render in the run-confirm modal in
-plaintext at v0.3.0).
+phrase is public. The run-confirm modal redacts secret-bearing argv
+tokens — the master `ms1`, any `--passphrase`, any secret-bearing
+`--slot` row, and the `--from` own-seed — as a fixed `••••` sentinel,
+so the literal secret is never drawn on screen (see
+[§14 Defense 2](#secret-handling) for the masking semantics). The
+cold-node operational practice remains good hygiene for every
+secret-bearing verification, even though it is no longer the
+load-bearing element of the on-screen security model.
 :::
 
 ## Outline {#mnemonic-verify-bundle-outline}
@@ -30,6 +33,17 @@ plaintext at v0.3.0).
 - [`--passphrase`](#mnemonic-verify-bundle-passphrase) — BIP-39 mnemonic passphrase (XOR with `--passphrase-stdin`)
 - [`--passphrase-stdin`](#mnemonic-verify-bundle-passphrase-stdin) — read `--passphrase` from stdin
 - [`--account`](#mnemonic-verify-bundle-account) — BIP-32 account index (default 0)
+- [`--own-account-max`](#mnemonic-verify-bundle-own-account-max) — RANGE fallback for the own seed's account (multisig-template completion)
+- [`--origin`](#mnemonic-verify-bundle-origin) — explicit BIP-32 origin path for a keyless single-sig template bundle
+- [`--expect-wallet-id`](#mnemonic-verify-bundle-expect-wallet-id) — expected `WalletPolicyId` hex prefix (template bundle)
+- [`--from`](#mnemonic-verify-bundle-from) — own seed for completing a keyless multisig / general template bundle
+- [`--cosigner`](#mnemonic-verify-bundle-cosigner) — unassigned cosigner key for template completion (repeating)
+- [`--search-cosigner-subset`](#mnemonic-verify-bundle-search-cosigner-subset) — opt-in bounded cosigner-subset search
+- [`--search-address`](#mnemonic-verify-bundle-search-address) — a known address triggers address-search for template completion
+- [`--search-addr-min`](#mnemonic-verify-bundle-search-addr-min) — inclusive lower address index for `--search-address` (default 0)
+- [`--search-addr-max`](#mnemonic-verify-bundle-search-addr-max) — exclusive upper address index for `--search-address` (default 20)
+- [`--search-chain`](#mnemonic-verify-bundle-search-chain) — which BIP-32 change-chain `--search-address` scans
+- [`--accept-search-time`](#mnemonic-verify-bundle-accept-search-time) — override the adaptive search-time ceiling
 - [`--ms1`](#mnemonic-verify-bundle-ms1) — repeating; one ms1 card per slot (XOR with `--bundle-json`)
 - [`--mk1`](#mnemonic-verify-bundle-mk1) — repeating; one mk1 card per slot (XOR with `--bundle-json`; required without it)
 - [`--md1`](#mnemonic-verify-bundle-md1) — repeating; one md1 card per slot (XOR with `--bundle-json`; required without it)
@@ -222,12 +236,155 @@ BIP-32 account index (default 0). Range 0..2_147_483_647. Number
 widget; no `?` help-icon (Number widgets are not in the
 help-icon class).
 
+## `--own-account-max` {#mnemonic-verify-bundle-own-account-max}
+
+(v0.70.0; #28 phase 2) RANGE fallback for the **own seed's account**
+when the exact account is unknown: derive the own seed at every account
+in `0..K` and let the multisig-template **own-account subset-search**
+select the account actually used. Own-only — the supplied
+[`--cosigner`](#mnemonic-verify-bundle-cosigner) cards must be EXACT
+(over-supply cosigners with
+[`--search-cosigner-subset`](#mnemonic-verify-bundle-search-cosigner-subset)).
+NEW on `verify-bundle`, mirroring
+[`restore --own-account-max`](#mnemonic-restore-own-account-max), and
+threaded into the SAME shared completion engine `restore` uses
+(verify == restore). Mutually exclusive with `--account` (clap
+`conflicts_with` — `--own-account-max K` ALONE passes; the scalar
+`--account` default is ignored). `K ≤ 256`.
+
+The GUI renders this as a Number widget; no `?` help-icon.
+
+## `--origin` {#mnemonic-verify-bundle-origin}
+
+(#28) Explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for verifying +
+recomposing a **keyless single-sig template** bundle
+([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template));
+overrides the canonical `m/<purpose>'/<coin>'/<account>'` default,
+mirroring [`restore --origin`](#mnemonic-restore-origin). Only
+meaningful for a keyless single-sig template bundle; ignored otherwise.
+
+The GUI renders this as a Text widget; no `?` help-icon.
+
+## `--expect-wallet-id` {#mnemonic-verify-bundle-expect-wallet-id}
+
+(#28) Expected `WalletPolicyId` hex prefix for a keyless single-sig
+template bundle. When set, `verify-bundle` recomputes the id from the
+completed, fully-keyed, explicit-origin wallet and matches its leading
+bytes; a mismatch is a **failed check** (overall `mismatch`, exit 4).
+Only meaningful for a template bundle; ignored otherwise. **NOT**
+checked when `--origin` overrides the canonical account path (a
+different preimage). The GUI renders this as a Text widget.
+
+## `--from` {#mnemonic-verify-bundle-from}
+
+(#28 phase 2) The operator's **OWN seed** for completing a keyless
+**multisig / general** TEMPLATE bundle
+([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template),
+n≥2). Same grammar + semantics as
+[`restore --from`](#mnemonic-restore-from) (`ms1=` / `phrase=` /
+`entropy=` / `seedqr=`; `@env:VAR` or stdin). REQUIRED to complete a
+multisig template; ignored for a single-sig template or a keyed
+wallet-policy bundle. The own key is derived at `--account` (a single
+own account for verify) honoring `--origin`. Distinct from
+[`--ms1`](#mnemonic-verify-bundle-ms1) (the engraved cards the binding
+check validates).
+
+Schema-`secret: true` — the `--from` value is the master secret. The
+GUI renders this as a `SecretLineEdit`; any non-empty value triggers
+the run-confirm modal, where the secret token is masked as a fixed
+`••••` sentinel.
+
+## `--cosigner` {#mnemonic-verify-bundle-cosigner}
+
+(#28 phase 2) An UNASSIGNED cosigner key (`mk1` / xpub) for completing
+a keyless multisig / general TEMPLATE bundle; repeat per cosigner card.
+Same grammar + semantics as
+[`restore --cosigner`](#mnemonic-restore-cosigner): the bare form is
+search-placed, the `@N=<mk1|xpub>` form assigns it explicitly. Only
+meaningful with `--from` + a keyless multisig template. Distinct from
+[`--mk1`](#mnemonic-verify-bundle-mk1) (the engraved STUB cards the
+binding check validates).
+
+The GUI renders this as a Text widget with `repeating: true`. Cosigner
+keys are public material (`secret: false`); no run-confirm modal.
+
+## `--search-cosigner-subset` {#mnemonic-verify-bundle-search-cosigner-subset}
+
+(v0.70.0; #28 phase 2) **OPT-IN bounded cosigner-subset search.** By
+default (OFF) a multisig template completion requires the supplied
+`--cosigner` cards to be EXACT (own-only — over-supplying cosigners
+refuses). With this flag the operator MAY over-supply `--cosigner`
+cards (unsure which / how many cosigners belong); the search resolves
+the correct cosigner subset too. NEW on `verify-bundle`, mirroring
+[`restore --search-cosigner-subset`](#mnemonic-restore-search-cosigner-subset).
+The space grows, so a LONGER `--expect-wallet-id` prefix may be needed;
+bounded by the §6 hard ceiling + the adaptive time-cap. Mutually
+exclusive with `--cosigner @N=`. Threaded into the SAME shared
+completion engine `restore` uses (verify == restore).
+
+The GUI renders this as a Boolean toggle.
+
+## `--search-address` {#mnemonic-verify-bundle-search-address}
+
+(#28 phase 2) A known receive (or change) ADDRESS of the wallet;
+triggers **address-search** for a multisig-template completion (mirrors
+[`restore --search-address`](#mnemonic-restore-search-address)).
+Recommended over `--expect-wallet-id` (full-scriptPubKey match —
+collision-free). The GUI renders this as a Text widget.
+
+## `--search-addr-min` {#mnemonic-verify-bundle-search-addr-min}
+
+(#28 phase 2) Inclusive lower address index for `--search-address`
+(default 0; mirrors `restore`). The GUI renders this as a Number
+widget.
+
+## `--search-addr-max` {#mnemonic-verify-bundle-search-addr-max}
+
+(#28 phase 2) Exclusive upper address index for `--search-address`
+(default 20; mirrors `restore`). Deepen the range (`0..20`, then
+`20..40`, …) if the target is not found. The GUI renders this as a
+Number widget.
+
+## `--search-chain` {#mnemonic-verify-bundle-search-chain}
+
+(#28 phase 2) Which BIP-32 change-chain branch(es) `--search-address`
+scans. Dropdown; default `receive` (mirrors `restore`). The GUI
+renders this flag with a `?` help-icon.
+
+### Outline {#mnemonic-verify-bundle-search-chain-outline}
+
+- [`receive`](#mnemonic-verify-bundle-search-chain-receive)
+- [`change`](#mnemonic-verify-bundle-search-chain-change)
+- [`both`](#mnemonic-verify-bundle-search-chain-both)
+
+### `receive` {#mnemonic-verify-bundle-search-chain-receive}
+
+Scan the external (receive) chain — BIP-32 chain `0`. The default.
+
+### `change` {#mnemonic-verify-bundle-search-chain-change}
+
+Scan the internal (change) chain — BIP-32 chain `1`.
+
+### `both` {#mnemonic-verify-bundle-search-chain-both}
+
+Scan both the receive and change chains (doubles the per-index search
+cost).
+
+## `--accept-search-time` {#mnemonic-verify-bundle-accept-search-time}
+
+(#28 phase 2) Override the adaptive ~1-hour search-time ceiling for a
+multisig-template completion (mirrors
+[`restore --accept-search-time`](#mnemonic-restore-accept-search-time)).
+Must be ≥ the printed exhaustive-time estimate (a forced
+acknowledgment). Accepts a humantime duration (e.g. `2h`, `90min`).
+The GUI renders this as a Text widget.
+
 ## `--ms1` {#mnemonic-verify-bundle-ms1}
 
 Per-slot `ms1` card. Repeating flag — one occurrence per slot.
 Schema-`secret: true`. The card encodes the BIP-39 entropy plus a
-checksum; pasting the plaintext into a text field exposes it on
-screen at v0.3.0 (the run-confirm modal renders it verbatim).
+checksum; the run-confirm modal masks the token as a fixed `••••`
+sentinel so the secret is never drawn on screen.
 
 The empty string is the **watch-only sentinel** (`--ms1 ""` for
 schema-2/3 single-use and per-slot for schema-4 length-N): it

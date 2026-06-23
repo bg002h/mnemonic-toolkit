@@ -35,12 +35,14 @@ versa) fails the lint.
 | `mk inspect` | [`mk inspect`](#mk-inspect) |
 | `mk vectors` | [`mk vectors`](#mk-vectors) |
 | `mk verify` | [`mk verify`](#mk-verify) |
+| `mnemonic build-descriptor` | [`mnemonic build-descriptor`](#mnemonic-build-descriptor) |
 | `mnemonic bundle` | [`mnemonic bundle`](#mnemonic-bundle) |
 | `mnemonic convert` | [`mnemonic convert`](#mnemonic-convert) |
 | `mnemonic derive-child` | [`mnemonic derive-child`](#mnemonic-derive-child) |
 | `mnemonic export-wallet` | [`mnemonic export-wallet`](#mnemonic-export-wallet) |
 | `mnemonic final-word` | [`mnemonic final-word`](#mnemonic-final-word) |
 | `mnemonic-gui` | [Glossary](#glossary) |
+| `mnemonic restore` | [`mnemonic restore`](#mnemonic-restore) |
 | `mnemonic seed-xor-combine` | [`mnemonic seed-xor-combine`](#mnemonic-seed-xor-combine) |
 | `mnemonic seed-xor-split` | [`mnemonic seed-xor-split`](#mnemonic-seed-xor-split) |
 | `mnemonic slip39-combine` | [`mnemonic slip39-combine`](#mnemonic-slip39-combine) |
