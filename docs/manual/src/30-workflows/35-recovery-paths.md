@@ -49,13 +49,7 @@ printf '%s' "$seed" |
 Stdout leads with the verification line, then the descriptor + first
 address:
 
-```text
-master fingerprint: 73c5da0a  (passphrase: none)
-CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor.
-
-bip84 (native segwit P2WPKH):
-  descriptor: wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#hpg6d6w2
-  first recv: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+```{.text include="35-recovery-restore-fingerprint.out" lines="1-6"}
 ```
 
 If you do not know which wallet type you used, omit `--template` to emit
