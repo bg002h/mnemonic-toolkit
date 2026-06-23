@@ -107,8 +107,8 @@ The address/descriptor script type: `p2pkh` / `p2wpkh` /
 
 ## `--secret` {#mnemonic-nostr-secret}
 
-The secret key: `nsec1…` (NIP-19 bech32) or 64-hex scalar. Adds a WIF
-+ `electrum:` line (non-taproot script types only). Inline use emits
+The secret key: `nsec1…` (NIP-19 bech32) or 64-hex scalar. Adds a
+WIF + `electrum:` line (non-taproot script types only). Inline use emits
 the argv-leakage advisory; prefer `--secret-stdin` / `--secret-file`.
 One of the required key-source group. The GUI renders this as a masked
 `SecretLineEdit`.

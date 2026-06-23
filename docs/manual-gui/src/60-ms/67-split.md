@@ -3,9 +3,9 @@
 \index{ms split}Split a secret (a BIP-39 mnemonic or hex entropy)
 into **N BIP-93 codex32 K-of-N shares** (ms-cli v0.7.0+). Any K of
 the N shares recombine to the original secret via
-[`ms combine`](#ms-combine), using codex32's native `threshold(k)`
-+ `index` Shamir mechanism over `GF(32)`. Bounds:
-**2 ≤ K ≤ N ≤ 31**.
+[`ms combine`](#ms-combine), using codex32's native
+`threshold(k)` + `index` Shamir mechanism over `GF(32)`.
+Bounds: **2 ≤ K ≤ N ≤ 31**.
 
 The whole N-share **set is secret-equivalent** — recovering any K
 of them reconstructs the master secret — so the GUI treats each

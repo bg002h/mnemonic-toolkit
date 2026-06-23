@@ -26,13 +26,17 @@ versa) fails the lint.
 | `md decode` | [`md decode`](#md-decode) |
 | `md encode` | [`md encode`](#md-encode) |
 | `md inspect` | [`md inspect`](#md-inspect) |
+| `md repair` | [`md repair`](#md-repair) |
 | `md vectors` | [`md vectors`](#md-vectors) |
 | `md verify` | [`md verify`](#md-verify) |
 | `m-format constellation` | [Glossary](#glossary) |
 | `mk1` | [Glossary](#glossary) |
+| `mk address` | [`mk address`](#mk-address) |
 | `mk decode` | [`mk decode`](#mk-decode) |
+| `mk derive` | [`mk derive`](#mk-derive) |
 | `mk encode` | [`mk encode`](#mk-encode) |
 | `mk inspect` | [`mk inspect`](#mk-inspect) |
+| `mk repair` | [`mk repair`](#mk-repair) |
 | `mk vectors` | [`mk vectors`](#mk-vectors) |
 | `mk verify` | [`mk verify`](#mk-verify) |
 | `mnemonic addresses` | [`mnemonic addresses`](#mnemonic-addresses) |

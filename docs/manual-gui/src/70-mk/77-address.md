@@ -11,7 +11,7 @@ The address type is inferred from the origin-path purpose **at
 canonical single-sig account depth** (`m/44'`→`p2pkh`,
 `m/49'`→`p2sh-p2wpkh`, `m/84'`→`p2wpkh`, `m/86'`→`p2tr`) and is
 overridable with [`--address-type`](#mk-address-address-type). A
-card whose origin is *not* at a recognised account depth requires
+card whose origin is *not* at a recognized account depth requires
 the explicit flag (and the runtime prints a stderr advisory that
 addresses are derived relative to the card's xpub).
 
@@ -34,7 +34,7 @@ addresses`) for multisig.
 
 Dropdown — `p2pkh` · `p2sh-p2wpkh` · `p2wpkh` · `p2tr`. Optional.
 Overrides the account-depth purpose heuristic. **Required** when
-the card's origin path is not at a recognised single-sig account
+the card's origin path is not at a recognized single-sig account
 depth (otherwise the runtime cannot pick a script type and refuses
 with an advisory). The GUI presents this as a labelled dropdown;
 leaving it unset lets the heuristic choose.
@@ -98,7 +98,7 @@ chain (rows grouped `receive` then `change`).
 | Trigger | Refusal |
 |---|---|
 | No positional `mk1-strings` provided AND stdin not used | clap-level `required` error |
-| Origin path not at a recognised account depth AND `--address-type` omitted | exit ≠ 0 with an advisory that the script type is undetermined |
+| Origin path not at a recognized account depth AND `--address-type` omitted | exit ≠ 0 with an advisory that the script type is undetermined |
 | `m/48'` / `m/87'` multisig-cosigner origin | exit ≠ 0 — single-key addresses refused (use descriptor tooling) |
 | Both `--count` and `--range` supplied | exit 64 — mutually exclusive |
 | `--network` disagrees with the xpub's network kind | exit ≠ 0 — network mismatch |
