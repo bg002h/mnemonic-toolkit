@@ -76,43 +76,25 @@ requiring a deliberate click. This guards against:
 - Forms reloaded from disk that you'd forgotten contained a secret.
 - Unintentional invocations from a stuck **Run** button.
 
-The modal **redacts secret values**: every argv token that carries a
-secret (the BIP-39 phrase, `ms1` string, passphrase, `--share`, raw
-`minikey` / `xprv` / WIF, or a secret `--from <node>=<value>` token)
-renders as a fixed `••••` sentinel, not in plaintext. The literal
-secret is never drawn on screen in the confirmation modal. Internally
-the GUI builds a parallel display-mask alongside the real argv and
-substitutes the sentinel for each masked token; the *unredacted* argv
-is still what spawns when you click **Run**.
+:::danger
+**At `mnemonic-gui` v0.3.0 the run-confirm modal renders secret-bearing
+argv tokens in plaintext, NOT as `***` redactions.** This means the
+literal BIP-39 phrase, `ms1` string, or passphrase you typed into a
+secret-class field is briefly displayed on screen between the **Run**
+click and your **Run** confirmation in the modal. Anything that can
+read the screen during that interval — a screen-recording tool, a
+shoulder-surfer, a remote screen-share session, an OS-level screenshot
+hotkey, a smartphone camera pointed at the monitor — can capture the
+secret. The redaction gap is tracked at the GUI repo's
+`gui-run-confirm-modal-secret-redaction` FOLLOWUP and at this manual's
+companion `gui-run-confirm-modal-secret-redaction-manual-companion`
+FOLLOWUP; v1.1 of this manual will close the loop in lockstep with
+the GUI fix.
 
-**Residual exposure — flag names are still visible; only the secret
-VALUE is masked.** The modal shows e.g. `--passphrase ••••` or
-`--share ••••`: the flag NAME appears in cleartext, only its secret
-value is replaced by the sentinel. (For composite `--from
-<node>=<value>` tokens the entire `node=value` token is masked, so
-even the `phrase=` / `minikey=` prefix is hidden in that one case.)
-The presence of a secret-class flag — and therefore the *fact* that
-you are running a secret-bearing invocation — remains observable to
-anything that can read the screen, even though the secret bytes
-themselves do not. The mask is a *redaction* of the on-screen value,
-not proof the secret has left no other trace: it is still in process
-memory until the on-exit zeroize sweep runs (see Defense 3), and the
-*unredacted* argv is what is actually passed to the spawned subprocess
-— so on a shared or multi-user host the secret is briefly observable in
-that child's `/proc/<pid>/cmdline` (or `ps`) exactly as a direct CLI
-invocation would be. The modal redaction closes the *on-screen* exposure
-only; closing the spawned-argv exposure (rewriting secret values to an
-`@env:`-style channel) is tracked separately and not yet shipped.
-
-**General hygiene (no longer load-bearing).** With the modal redaction
-in place, running secret-bearing flows on a cold / airgapped machine is
-operational hygiene rather than the security model's load-bearing
-element — but it is still good practice, because it bounds the blast
-radius if any *other* secret surface (process memory, swap, a
-screenshot of a non-redacted field) is captured. A machine whose
-network connection is physically disabled or non-existent removes the
-on-screen-to-network exfiltration path entirely. Two cold-node
-patterns, if you choose to adopt one:
+**Operational mitigation: only enter secret-bearing values from a
+cold / airgapped machine** — one whose network connection is
+physically disabled or non-existent, and whose screen is in a
+controlled environment. Two recommended cold-node patterns:
 
 - A dedicated offline machine that never connects to the internet,
   with Bitcoin block updates delivered via sneakernet using
@@ -123,6 +105,13 @@ patterns, if you choose to adopt one:
   Blockstream Satellite receiver (the satellite link is
   receive-only at the radio layer; the node itself never speaks to
   the internet).
+
+Until the redaction gap is closed, treat the GUI as you would a CLI
+invocation that places the secret in `/proc/<pid>/cmdline` — the
+secret is briefly observable to anything with access to the screen,
+and your operational defenses must therefore include physical
+isolation of the screen.
+:::
 
 ## Defense 3 — on-exit zeroize sweep
 
