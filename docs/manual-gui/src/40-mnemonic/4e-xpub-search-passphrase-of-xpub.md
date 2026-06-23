@@ -250,13 +250,19 @@ path-lookup separately via [`path-of-xpub`](#mnemonic-xpub-search-path-of-xpub).
 3. Paste the target xpub (or `mk1` card) into `--target-xpub`.
 4. Click **Run** and confirm the modal.
 
-Stdout (text form, match):
+Stdout (text form, match) — captured against the pinned `mnemonic`
+binary using the canonical all-`abandon` vector with an empty
+passphrase:
 
-```text
+```{.text include="4e-xpub-search-passphrase-advisory.out" lines="1-3"}
 match: m/84'/0'/0'  (template=bip84, account=0)
-target-xpub: xpub6... (normalized from zpub; variant=zpub)
+target-xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
 searched: 140 candidate paths
 ```
+
+If the `--target-xpub` was supplied under a non-`xpub` SLIP-0132
+prefix (e.g. `zpub`), the `target-xpub:` line additionally notes the
+normalization (`… (normalized from zpub; variant=zpub)`).
 
 With `--passphrase-candidates-file`, the match line instead reports
 the matching file line (the passphrase itself only under `--json`):

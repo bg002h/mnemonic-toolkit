@@ -34,9 +34,22 @@ anchors removed, 0 chapters deleted.
   `--select-descriptor` enumerated-dropdown anchors/outline (it is a
   0-variant flag at v0.49.0) to clear the orphan-direction lint at the
   re-pin.
-- `.cspell.json`: added `exfiltration`, `sentinel`, `unredacted`.
-- **(P1–PE, in progress)** the +506 new schema anchors are authored
-  per-tab across the v1.1 modernization phases; gated GREEN at PE.
+- `.cspell.json`: added `exfiltration`, `nostr`, `sentinel`,
+  `unredacted`.
+- **Output-fidelity gating (P4).** 19 worked-example fences across the
+  `mnemonic`-tab chapters are wired to GUI-pinned golden transcripts
+  (`{.text/.json include="<stem>.out"}`, fail-closed via
+  `pandoc/filters/include-transcript.lua`) and re-run against the pinned
+  binaries by `make verify-examples` (17 transcripts) in CI — so the
+  documented argv/output for the gated forms is drift-checked, not just
+  the schema anchors.
+- **Modernization phases (P1–PE) complete.** The +506 new schema
+  anchors were authored per-tab across the v1.1 phases and gated GREEN:
+  `make lint` is 7/7 (0-missing / 0-orphan against the v0.49.0 GUI
+  schema), `verify-examples` GREEN against the pinned bins, and HTML +
+  PDF build clean. Closes FOLLOWUP
+  `gui-run-confirm-modal-secret-redaction-manual-companion` (the
+  redaction prose was blocked on this modernization).
 
 ## [1.0.2] - 2026-06-07
 

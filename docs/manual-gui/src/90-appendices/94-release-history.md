@@ -6,14 +6,14 @@ pinned against. The manual itself ships under
 Tags advance in lockstep when GUI surface (schema, conditional,
 help-icon URL) changes in a way that affects the manual.
 
-## v0.49.0 — `manual-gui-v1.1` (this manual)
+## `manual-gui-v1.1.0` — GUI pin `mnemonic-gui-v0.49.0` (this manual)
 
 **Release date**: 2026-06-23.
 
 **Highlights**:
 
 - GUI pin advanced `mnemonic-gui-v0.3.0` → `mnemonic-gui-v0.49.0`
-  (46 GUI releases of accumulated surface). Purely additive
+  (46 minor versions of accumulated surface). Purely additive
   documentation coverage: **+28 subcommand chapters/sections**,
   **+506 schema anchors** (459 → 965), **+69 outline targets**
   (59 → 128), 0 removed.
