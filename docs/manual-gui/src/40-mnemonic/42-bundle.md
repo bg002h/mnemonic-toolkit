@@ -13,12 +13,14 @@ stderr and an optional JSON envelope when `--json` is set.
 The worked examples in this chapter use the canonical all-`abandon`
 BIP-39 test vector. **Never engrave or fund** a wallet derived
 from this phrase — chain watchers have swept it continuously since
-2017. The [§14 Defense 2](#secret-handling) cold-node operational
-warning applies to every secret-bearing invocation under this
-subcommand: the GUI's v0.3.0 run-confirm modal renders
-secret-bearing argv tokens in plaintext, including pasted BIP-39
-phrases on the slot editor's secret-bearing rows. Operate on a
-cold/airgapped machine.
+2017. The run-confirm modal redacts secret-bearing argv tokens —
+including pasted BIP-39 phrases on the slot editor's secret-bearing
+rows — as a fixed `••••` sentinel, so the literal secret is never
+drawn on screen (see [§14 Defense 2](#secret-handling) for the exact
+masking semantics and the residual flag-name exposure). The
+cold/airgapped operational practice remains good hygiene for every
+secret-bearing invocation under this subcommand, even though it is no
+longer the load-bearing element of the on-screen security model.
 :::
 
 ## Outline {#mnemonic-bundle-outline}

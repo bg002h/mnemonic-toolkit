@@ -1,12 +1,14 @@
 # `mnemonic` — per-tab reference
 
 The `mnemonic` tab is the largest and most-used surface of the GUI:
-ten subcommands covering bundle emission, bundle verification, format
-conversion, watch-only wallet export, BIP-85 child derivation, BIP-39
-last-word completion, Coldcard-compatible seed-XOR splitting, and
-SLIP-0039 K-of-N share-splitting. The GUI exposes each subcommand as
-its own form on the same tab; the subcommand selector at the top of
-the form switches between them.
+30 subcommands covering bundle emission, bundle verification, format
+conversion, watch-only wallet export and import, descriptor building,
+xpub-search, address derivation, BIP-85 child derivation, BIP-39
+last-word completion, Coldcard-compatible seed-XOR splitting,
+SLIP-0039 K-of-N share-splitting, SeedQR encode/decode, nostr and
+silent-payment derivation, and message verification. The GUI exposes
+each subcommand as its own form on the same tab; the subcommand
+selector at the top of the form switches between them.
 
 ## Subcommand index
 
@@ -58,7 +60,7 @@ least one worked example.
 
 ## Form shape — what every subcommand has in common
 
-All ten subcommands render through the same form scaffolding
+All 30 subcommands render through the same form scaffolding
 described in chapter 31: a top-of-form `Pinned: mnemonic 0.13.0`
 label with a subcommand selector ComboBox and per-subcommand `?`
 help-icon; per-flag widgets (text fields, dropdowns, checkboxes,

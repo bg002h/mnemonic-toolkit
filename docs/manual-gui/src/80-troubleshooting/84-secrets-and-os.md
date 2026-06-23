@@ -11,14 +11,22 @@ covers the threat-model rationale; this chapter covers the
 operational symptoms that the GUI and the surrounding OS can
 expose.
 
-## Known limitations (v0.3.0)
+## Known limitations
 
 | Limitation | Cause | Mitigation |
 |---|---|---|
-| Run-confirm modal renders argv tokens **in plaintext** for the brief moment between **Run** click and confirmation | `mnemonic-gui` v0.3.0 has no per-flag redaction; the argv preview shows the entire constructed command line | Tracked at FOLLOWUP `gui-run-confirm-modal-secret-redaction` (GUI + manual lockstep). Recommended cold-node operational mitigation: run on an air-gapped machine with screenshot tooling disabled. |
 | Clipboard\index{clipboard} retains pasted phrases after **Copy command** | OS-level clipboard history (KDE Klipper, macOS Universal Clipboard, Windows Clipboard History) may persist the copied argv string | Clear the clipboard manually after **Copy command** finishes (`xsel -bc` on Linux, `pbcopy < /dev/null` on macOS, **Win+V → Clear all** on Windows). |
-| Multi-row text widgets (e.g., `--key @i=xpub`, `--share`) do not auto-mask repeating secret-bearing rows | The masking heuristic checks the schema's per-flag `secret: true`, which is whole-flag not per-row | Use single-row paste when possible; the row's content is still ephemeral, but visible during fill. |
+| Spawned-subprocess argv exposure | The **unredacted** argv is what actually spawns on **Run**; on a shared / multi-user host a secret-bearing value is briefly observable in the child's `/proc/<pid>/cmdline` (or `ps`), exactly as a direct CLI invocation would be | The run-confirm modal and the output-panel `argv:` echo are both **on-screen** masked (`••••` sentinel) — see [§14 Defense 2](#secret-handling) — but the on-screen redaction does not cover the spawned argv. Run secret-bearing flows on a single-user / cold node. (Rewriting secret values to an `@env:`-style channel before spawn is tracked separately and not yet shipped.) |
 | Bundle multisig conditional gap | `--multisig-path-family` + `--threshold` not disabled under single-sig templates | See [§83](#form-and-output); fill carefully or fall back to the CLI. |
+
+**Resolved since v0.39.0.** Earlier manual versions listed two limitations
+that no longer hold: (1) the run-confirm modal rendering argv tokens in
+plaintext — the modal (and the output-panel `argv:` echo) now redact each
+secret-bearing value as a fixed `••••` sentinel; and (2) multi-row / slot
+text widgets (`--slot @N.subkey=value`, repeating `--share`) not auto-masking
+repeating secret-bearing rows — slot and repeating-secret tokens now carry a
+per-row mask bit, so each secret row is masked individually in both the modal
+and the `argv:` echo.
 
 ## OS-level snapshot risks
 
@@ -29,7 +37,7 @@ at startup (per [§14 Defense 4](#secret-handling) and
 `mnemonic-gui/src/platform.rs::apply_window_capture_protection`):
 macOS via `NSWindowSharingType::NSWindowSharingNone`, Windows
 via `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`. Linux has
-no compositor-level analogue at v0.3.0 (tracked at FOLLOWUP
+no compositor-level analogue (still tracked at FOLLOWUP
 `gui-os-snapshot-secret-occlusion`); Linux users carry the full
 residual exposure surface.
 

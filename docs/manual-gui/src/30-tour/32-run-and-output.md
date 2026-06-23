@@ -93,8 +93,9 @@ abandon abandon abandon about`. This phrase is **public**: every
 wallet derived from it has been swept by chain watchers continuously
 since 2017 and is worth zero satoshis on every chain. **Do not type
 your real seed phrase into the GUI on this or any other walkthrough**
-— see [§14 Defense 2](#secret-handling) for the unredacted-modal
-operational warning that applies to every secret-bearing GUI run.
+— see [§14 Defense 2](#secret-handling) for the secret-redaction
+semantics (and the residual flag-name exposure) that apply to every
+secret-bearing GUI run.
 :::
 
 Fill in the form:
@@ -118,7 +119,7 @@ set, the GUI does NOT fire the subprocess immediately; instead the
 |   mnemonic                                                      |
 |   convert                                                       |
 |   --from                                                        |
-|   phrase=abandon abandon abandon abandon abandon abandon ...    |
+|   ••••                                                          |
 |   --to                                                          |
 |   ms1                                                           |
 | ----                                                            |
@@ -131,19 +132,19 @@ dismisses the modal and leaves the form unchanged. There is no
 Escape-key affordance — see [§14 Defense 2](#secret-handling) for
 the threat-model rationale.
 
-**At `mnemonic-gui` v0.3.0 the modal renders the secret-bearing
-argv tokens in plaintext** (the `phrase=abandon abandon ... about`
-line above is rendered verbatim, character by character, on screen).
-This is the v0.3.0 behavior the manual describes today. It is
-under-defended against the screen-observation threats listed in
-[§14 Defense 2](#secret-handling), and the linked operational
-mitigation — running the GUI only on a cold / airgapped node —
-applies to **every** secret-bearing GUI invocation, not just this
-walkthrough. The redaction gap is tracked at FOLLOWUP
-`gui-run-confirm-modal-secret-redaction` in the GUI repo and at
-companion `gui-run-confirm-modal-secret-redaction-manual-companion`
-in this repo; v1.1 of this manual will revise this section when
-the GUI fix lands.
+**The modal redacts the secret-bearing argv tokens** as a fixed
+`••••` sentinel (shown above in place of the `phrase=abandon ... about`
+token). The literal secret is never drawn on screen: the GUI builds a
+parallel display-mask alongside the real argv and substitutes the
+sentinel for each masked token, while the *unredacted* argv is what
+actually spawns when you click **Run**. For a composite
+`--from <node>=<value>` token the whole `node=value` token is masked,
+so even the `phrase=` prefix is hidden in that one case. The residual
+exposure — the flag NAME and the *fact* that a secret-bearing run is
+in progress — remains observable to anything that can read the screen;
+see [§14 Defense 2](#secret-handling) for the full masking semantics
+and the still-recommended (now general-hygiene, not load-bearing)
+cold-node operational practice.
 
 Click **Run** in the modal. The subprocess fires; the output panel
 updates with the `ms1` encoding of the test vector:
@@ -171,10 +172,12 @@ ms1` produces the same output as the CLI invocation it wraps.
   transcript, copy text out of the panel before re-running, or
   invoke the same argv from a shell where you control the
   scrollback.
-- It does not redact secrets in the `argv:` echo line. The
-  `argv:` line uses the same un-redacted assembled argv that the
-  modal showed. If you ran a secret-bearing form, the secret
-  remains visible in the output panel until the next **Run**.
+- It does **not** echo secrets in plaintext in the `argv:` line.
+  The output panel's `argv:` echo is masked with the same `••••`
+  sentinel the run-confirm modal uses, so a secret-bearing run does
+  not leave the literal secret visible in the panel. The flag NAMES
+  remain visible (the same residual exposure as the modal); only the
+  secret VALUE is masked.
 
 The next chapter (33) covers the `?` help-icons that deep-link
 into this manual.

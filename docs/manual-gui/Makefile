@@ -72,8 +72,20 @@ PDF_SRC := $(MD_SRC) $(SRC_DIR)/99-build-banner.md
 # Filter args
 # ---------------------------------------------------------------------------
 # `make md` runs strip-latex + primer-box(md mode); `make pdf*` runs primer-box(pdf mode) only.
-MD_FILTER_ARGS  := --lua-filter $(FILTERS_DIR)/strip-latex-from-md.lua --lua-filter $(FILTERS_DIR)/primer-box.lua
-PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/primer-box.lua --lua-filter $(FILTERS_DIR)/wrap-long-code.lua
+#
+# include-transcript.lua is PREPENDED (first) on both chains so a fenced block's
+# `include=` attribute is resolved into the captured transcript BEFORE any other
+# transform sees it. It resolves the transcript via TRANSCRIPTS_DIR (exported
+# below). Carried forward from the manual / quickstart Makefiles for P4's output
+# blocks; the manual-gui transcripts dir is .gitkeep-only until P4 fills it.
+# See pandoc/filters/include-transcript.lua + the cycle-C P0a spec.
+MD_FILTER_ARGS  := --lua-filter $(FILTERS_DIR)/include-transcript.lua --lua-filter $(FILTERS_DIR)/strip-latex-from-md.lua --lua-filter $(FILTERS_DIR)/primer-box.lua
+PDF_FILTER_ARGS := --lua-filter $(FILTERS_DIR)/include-transcript.lua --lua-filter $(FILTERS_DIR)/primer-box.lua --lua-filter $(FILTERS_DIR)/wrap-long-code.lua
+
+# Absolute path: pandoc may be invoked from any cwd; include-transcript.lua
+# resolves the transcript file via this env var, so a relative value would
+# silently miss-resolve.
+export TRANSCRIPTS_DIR := $(abspath $(TRANSCRIPTS))
 
 ifeq ($(MERMAID_FILTER),on)
 	PDF_FILTER_ARGS += --filter mermaid-filter
@@ -108,7 +120,7 @@ $(BUILD_DIR):
 .PHONY: md
 md: $(BUILD_DIR)/m-format-gui-manual.md
 
-$(BUILD_DIR)/m-format-gui-manual.md: $(MD_SRC) $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+$(BUILD_DIR)/m-format-gui-manual.md: $(MD_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to gfm \
@@ -141,7 +153,7 @@ $(SRC_DIR)/99-build-banner.md: FORCE
 .PHONY: FORCE
 FORCE:
 
-$(BUILD_DIR)/m-format-gui-manual.tex: $(PDF_SRC) $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex $(TEMPLATES_DIR)/manual.latex | $(BUILD_DIR)
+$(BUILD_DIR)/m-format-gui-manual.tex: $(PDF_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex $(TEMPLATES_DIR)/manual.latex | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to latex \
@@ -174,7 +186,7 @@ $(BUILD_DIR)/m-format-gui-manual.pdf: $(BUILD_DIR)/m-format-gui-manual.tex
 .PHONY: html
 html: $(BUILD_DIR)/m-format-gui-manual.html
 
-$(BUILD_DIR)/m-format-gui-manual.html: $(PDF_SRC) $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+$(BUILD_DIR)/m-format-gui-manual.html: $(PDF_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to html5 \

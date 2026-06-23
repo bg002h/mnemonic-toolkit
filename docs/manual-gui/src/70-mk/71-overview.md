@@ -1,15 +1,15 @@
 # `mk` — per-tab reference
 
-The `mk` tab covers the BIP-32-xpub CLI (`mk-cli`), five
+The `mk` tab covers the BIP-32-xpub CLI (`mk-cli`), eight
 subcommands that operate on `mk1` cards (the public-key card of
 the m-format constellation bundle). The `mk1` encodes an xpub
 plus origin metadata (master fingerprint, derivation path) plus
 one or more `policy_id_stub` bytes that bind the card to a
 matching `md1` wallet-policy template.
 
-The `mk` tab's pinned upstream version at v1.0 of this manual is
-`mk-cli v0.3.1` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: mk 0.3.1`.
+The `mk` tab's pinned upstream version at v1.1 of this manual is
+`mk-cli v0.9.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: mk 0.9.0`.
 
 ## Subcommand index
 

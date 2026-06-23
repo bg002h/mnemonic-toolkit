@@ -2,11 +2,45 @@
 
 Version history of the `mnemonic-gui` releases this manual is
 pinned against. The manual itself ships under
-`mnemonic-toolkit-v0.13.0+`; the GUI under `mnemonic-gui-v0.3.0+`.
+`mnemonic-toolkit-v0.70.0+`; the GUI under `mnemonic-gui-v0.49.0+`.
 Tags advance in lockstep when GUI surface (schema, conditional,
 help-icon URL) changes in a way that affects the manual.
 
-## v0.3.0 — `manual-gui-v1.0` (this manual)
+## v0.49.0 — `manual-gui-v1.1` (this manual)
+
+**Release date**: 2026-06-23.
+
+**Highlights**:
+
+- GUI pin advanced `mnemonic-gui-v0.3.0` → `mnemonic-gui-v0.49.0`
+  (46 GUI releases of accumulated surface). Purely additive
+  documentation coverage: **+28 subcommand chapters/sections**,
+  **+506 schema anchors** (459 → 965), **+69 outline targets**
+  (59 → 128), 0 removed.
+- New `mnemonic`-tab subcommand surfaces: `restore`,
+  `build-descriptor`, `import-wallet`, four `xpub-search-*` variants,
+  `addresses`, `ms-shares-split` / `ms-shares-combine`, `seedqr-encode`
+  / `seedqr-decode`, `nostr`, `silent-payment`, `verify-message`,
+  `decode-address`, `repair`, `inspect`, `electrum-decrypt`,
+  `compare-cost`.
+- New sibling-CLI subcommand surfaces: `ms split` / `combine` /
+  `derive` / `repair`; `mk address` / `derive` / `repair`;
+  `md repair`.
+- Secret-redaction prose synced to the GUI's shipped `••••` sentinel
+  (live since `mnemonic-gui-v0.39.0`): the run-confirm modal and the
+  output-panel `argv:` echo mask secret VALUES; multi-row / slot
+  secret rows mask per-row.
+- The four implied CLI pin tags advanced in lockstep:
+  `mnemonic-toolkit-v0.70.0`, `descriptor-mnemonic-md-cli-v0.7.0`,
+  `ms-cli-v0.8.0`, `mk-cli-v0.9.0`.
+
+**Schema changes since v0.3.0**: the display-grouping
+`--group-size` / `--separator` pair across the `encode` subcommands;
+the `bundle` / `verify-bundle` / `export-wallet` flag growth (template,
+import-json, BSMS-form, own-account-search); and the full set of new
+subcommands listed above.
+
+## v0.3.0 — `manual-gui-v1.0`
 
 **Release date**: 2026-05-15 (toolkit `manual-gui-v1` HEAD ships
 with the v0.3.0 GUI tag pinned).

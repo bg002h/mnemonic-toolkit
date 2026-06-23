@@ -6,6 +6,38 @@ The manual is a separate artifact from the CLI manual under
 (`manual-gui-v*` vs `manual-v*`) and track independent version
 numbers.
 
+## [1.1.0] - 2026-06-23
+
+**Minor — manual-gui v1.1 modernization (GUI pin `mnemonic-gui-v0.3.0`
+→ `mnemonic-gui-v0.49.0`).** Purely additive coverage: +28 subcommand
+chapters/sections, +506 schema anchors, +69 outline targets; 0 schema
+anchors removed, 0 chapters deleted.
+
+- **Pin bump.** `pinned-upstream.toml`: `[mnemonic-gui]` `v0.3.0` →
+  `v0.49.0`; the four implied CLI tags re-pinned to what the GUI tag
+  pins in its own schema-mirror map (`mnemonic-toolkit-v0.70.0`,
+  `descriptor-mnemonic-md-cli-v0.7.0`, `ms-cli-v0.8.0`, `mk-cli-v0.9.0`);
+  stale line-number comment rewritten.
+- **Secret-redaction prose sync (GUI `v0.39.0`+).** Chapters 11, 14,
+  32, 42, and 84 corrected from the v0.3.0-era "modal renders argv in
+  plaintext" framing to the shipped `••••`-sentinel redaction:
+  secret-bearing argv VALUES are masked in both the run-confirm modal
+  and the output-panel `argv:` echo; multi-row / slot secret rows carry
+  a per-row mask bit; the cold-node operational practice is demoted from
+  load-bearing to general hygiene. Residual flag-name exposure and the
+  spawned-argv (`/proc/<pid>/cmdline`) exposure preserved as
+  still-true caveats.
+- **Per-tab overview counts** corrected (mnemonic 10→30, md 8→9,
+  ms 5→9, mk 5→8) plus pinned-version labels.
+- **import-wallet orphan reconcile.** Renamed 5 prose/walkthrough
+  anchors out of the schema-shaped namespace (`iw-*`) and removed the
+  `--select-descriptor` enumerated-dropdown anchors/outline (it is a
+  0-variant flag at v0.49.0) to clear the orphan-direction lint at the
+  re-pin.
+- `.cspell.json`: added `exfiltration`, `sentinel`, `unredacted`.
+- **(P1–PE, in progress)** the +506 new schema anchors are authored
+  per-tab across the v1.1 modernization phases; gated GREEN at PE.
+
 ## [1.0.2] - 2026-06-07
 
 **Patch — prose sync with toolkit v0.47.3** (GUI pin unchanged at

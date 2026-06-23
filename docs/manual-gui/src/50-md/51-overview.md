@@ -1,14 +1,14 @@
 # `md` — per-tab reference
 
-The `md` tab covers the descriptor-mnemonic CLI (`md-cli`), eight
+The `md` tab covers the descriptor-mnemonic CLI (`md-cli`), nine
 subcommands that operate on `md1` cards (the descriptor card of
 the m-format constellation bundle). The `md1` encodes a BIP-388
 wallet-policy template plus the bound public-key references that
 the bundle's `mk1` cards carry.
 
-The `md` tab's pinned upstream version at v1.0 of this manual is
-`md-cli v0.5.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: md 0.5.0`.
+The `md` tab's pinned upstream version at v1.1 of this manual is
+`md-cli v0.7.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: md 0.7.0`.
 
 ## Subcommand index
 

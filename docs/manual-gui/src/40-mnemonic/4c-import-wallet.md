@@ -25,7 +25,7 @@ pointer.
 - [`--ms1`](#mnemonic-import-wallet-ms1) — repeating seed-overlay flag (positional cosigner-index)
 - [`--slot`](#mnemonic-import-wallet-slot) — per-slot seed-overlay flag (`@N.phrase=<value>` form only)
 - [`--json`](#mnemonic-import-wallet-json) — emit JSON envelope on stdout instead of engraving cards
-- [`--no-auto-repair`](#mnemonic-import-wallet-no-auto-repair) — global flag; skip auto-fire repair on decode failures
+- [`--no-auto-repair`](#iw-no-auto-repair) — global flag; skip auto-fire repair on decode failures
 
 ## `--blob` {#mnemonic-import-wallet-blob}
 
@@ -80,30 +80,22 @@ the CLI manual.
 
 Multi-descriptor selector. Applies to Bitcoin Core blobs only;
 BSMS blobs coerce non-default values to `all` with a stderr NOTICE.
+At v0.49.0 the schema kind is free-form `Text` (default `all`), not
+an enumerated dropdown — the toolkit accepts the union of an integer
+index and three named tags, which does not fit a fixed dropdown, so
+the GUI renders a single text field and CLI-side validation rejects
+out-of-union values:
 
-### Outline {#mnemonic-import-wallet-select-descriptor-outline}
-
-- [`all`](#mnemonic-import-wallet-select-descriptor-all) (default)
-- `<N>` (integer index)
-- [`active-receive`](#mnemonic-import-wallet-select-descriptor-active-receive)
-- [`active-change`](#mnemonic-import-wallet-select-descriptor-active-change)
-
-### `all` {#mnemonic-import-wallet-select-descriptor-all}
-
-Emit one bundle per descriptor entry in the input. Bundles are
-separated by a literal `\n;\n` line in the engraving-card output;
-the `--json` envelope is an array.
-
-### `active-receive` {#mnemonic-import-wallet-select-descriptor-active-receive}
-
-Filter to entries with `active: true, internal: false` (Core's
-external chain). Multiple matches emit multiple bundles; zero
-matches yields exit 1.
-
-### `active-change` {#mnemonic-import-wallet-select-descriptor-active-change}
-
-Filter to entries with `active: true, internal: true` (Core's
-internal / change chain). Same multi/zero handling.
+- `all` (default) — emit one bundle per descriptor entry in the
+  input. Bundles are separated by a literal `\n;\n` line in the
+  engraving-card output; the `--json` envelope is an array.
+- `<N>` (integer index) — select the N-th descriptor entry.
+- `active-receive` — filter to entries with
+  `active: true, internal: false` (Core's external chain). Multiple
+  matches emit multiple bundles; zero matches yields exit 1.
+- `active-change` — filter to entries with
+  `active: true, internal: true` (Core's internal / change chain).
+  Same multi/zero handling.
 
 The GUI renders this flag as a free-form text input pre-filled
 with `all`; the user types one of the named tags (`all`,
@@ -130,11 +122,11 @@ modal at paste time and opens the run-confirm modal before
 subprocess spawn. In v0.11.0 the run-confirm modal renders the
 assembled argv verbatim per
 `[[feedback-run-confirm-modal-renders-argv-verbatim]]`; see the
-[Env-var seed channel](#mnemonic-import-wallet-env-var-channel)
+[Env-var seed channel](#iw-env-var-channel)
 section below for the workaround until FOLLOWUP
 `gui-import-wallet-env-var-secret-channel` ships in v0.12.0+.
 
-### Env-var seed channel {#mnemonic-import-wallet-env-var-channel}
+### Env-var seed channel {#iw-env-var-channel}
 
 The v0.11.0 GUI emits user-typed values verbatim on argv; the
 toolkit-side resolves `@env:VAR` if the user types the sentinel
@@ -176,7 +168,7 @@ Default mode renders the diff to stderr.
 The GUI renders this as a Boolean toggle. The output panel
 auto-formats the JSON when this toggle is set.
 
-## `--no-auto-repair` {#mnemonic-import-wallet-no-auto-repair}
+## `--no-auto-repair` {#iw-no-auto-repair}
 
 Global flag. Skips auto-fire repair on decode failures and
 preserves the pre-v0.22 exit policy. The same flag is honored by
@@ -184,7 +176,7 @@ preserves the pre-v0.22 exit policy. The same flag is honored by
 `import-wallet`, auto-fire applies to BCH-correctable `mk1` chunks
 embedded in the descriptor's key sources.
 
-## Worked example — BSMS Round-2 decay-32768 import {#mnemonic-import-wallet-walkthrough-bsms}
+## Worked example — BSMS Round-2 decay-32768 import {#iw-walkthrough-bsms}
 
 1. **mnemonic** tab; pick **Import Wallet (watch-only)** from the
    subcommand combobox.
@@ -214,7 +206,7 @@ embedded in the descriptor's key sources.
 
 Screenshot: TODO post-v0.11.0-GUI tag.
 
-## Worked example — Bitcoin Core listdescriptors active-receive {#mnemonic-import-wallet-walkthrough-core}
+## Worked example — Bitcoin Core listdescriptors active-receive {#iw-walkthrough-core}
 
 Generate the blob (`bitcoin-cli listdescriptors > /tmp/core-export.json`
 — *do not* pass `true`; toolkit refuses `xprv` descriptors), pick
@@ -234,7 +226,7 @@ The full refusal + advisory matrix lives in the CLI manual at
 [`mnemonic import-wallet` refusals](#mnemonic-import-wallet). Key
 GUI-relevant behaviors: inline `--ms1 ms1xxx...` values appear in
 argv unless the user types the `@env:VAR` sentinel explicitly (see
-[§9.3](#mnemonic-import-wallet-env-var-channel)). The v0.11.0 GUI
+[§9.3](#iw-env-var-channel)). The v0.11.0 GUI
 emits typed values verbatim; auto-rewriting of literal seeds to
 per-cosigner `@env:MNEMONIC_MS1_<i>` sentinels is FOLLOWUP
 `gui-import-wallet-env-var-secret-channel` (v0.12.0+). Bitcoin

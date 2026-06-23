@@ -1,14 +1,14 @@
 # `ms` — per-tab reference
 
-The `ms` tab covers the BIP-39-entropy CLI (`ms-cli`), five
+The `ms` tab covers the BIP-39-entropy CLI (`ms-cli`), nine
 subcommands that operate on `ms1` cards (the secret card of the
 m-format constellation bundle). The `ms1` encodes the raw BIP-39
 entropy bytes in a BIP-93 / codex32 envelope — the seed card that
 recovers the wallet on its own.
 
-The `ms` tab's pinned upstream version at v1.0 of this manual is
-`ms-cli v0.2.1` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: ms 0.2.1`.
+The `ms` tab's pinned upstream version at v1.1 of this manual is
+`ms-cli v0.8.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: ms 0.8.0`.
 
 ## Subcommand index
 
