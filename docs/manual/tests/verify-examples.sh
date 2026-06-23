@@ -86,6 +86,20 @@ for cmd_file in "${cmd_files[@]}"; do
     continue
   fi
 
+  # Guard: transcripts MUST invoke the CLIs via $MNEMONIC_BIN/$MD_BIN/$MS_BIN/
+  # $MK_BIN — never a bare `mnemonic`/`md`/`ms`/`mk`. A bare name resolves off
+  # $PATH locally (so it passes a dev box where the bin is installed) but FAILS
+  # in CI, where only the env-var paths are provided (`mnemonic: command not
+  # found`). Catch it here, loudly, instead of one CI cycle later.
+  bare=$(grep -nE '(^|[|;&]|\$\()[[:space:]]*(mnemonic|md|ms|mk)[[:space:]]+[a-z-]' "$cmd_file" \
+           | grep -vE '\$(MNEMONIC|MD|MS|MK)_BIN|/(mnemonic|md|ms|mk)' || true)
+  if [ -n "$bare" ]; then
+    echo "[verify-examples] FAIL: $cmd_file invokes a BARE binary (use \$MNEMONIC_BIN/\$MD_BIN/\$MS_BIN/\$MK_BIN; bare names pass locally on \$PATH but fail in CI):" >&2
+    echo "$bare" | sed 's/^/    /' >&2
+    fail=1
+    continue
+  fi
+
   cmd_line=$(sed -e "s#\$MNEMONIC_BIN#$MNEMONIC_BIN#g" \
                  -e "s#\$MD_BIN#$MD_BIN#g" \
                  -e "s#\$MS_BIN#$MS_BIN#g" \
