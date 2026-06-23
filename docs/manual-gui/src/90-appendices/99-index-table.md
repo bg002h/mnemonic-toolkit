@@ -47,9 +47,13 @@ versa) fails the lint.
 | `mnemonic slip39-split` | [`mnemonic slip39-split`](#mnemonic-slip39-split) |
 | `mnemonic verify-bundle` | [`mnemonic verify-bundle`](#mnemonic-verify-bundle) |
 | `ms1` | [Glossary](#glossary) |
+| `ms combine` | [`ms combine`](#ms-combine) |
 | `ms decode` | [`ms decode`](#ms-decode) |
+| `ms derive` | [`ms derive`](#ms-derive) |
 | `ms encode` | [`ms encode`](#ms-encode) |
 | `ms inspect` | [`ms inspect`](#ms-inspect) |
+| `ms repair` | [`ms repair`](#ms-repair) |
+| `ms split` | [`ms split`](#ms-split) |
 | `ms vectors` | [`ms vectors`](#ms-vectors) |
 | `ms verify` | [`ms verify`](#ms-verify) |
 | `passphrase` | [Glossary](#glossary) |

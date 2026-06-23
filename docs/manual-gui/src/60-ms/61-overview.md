@@ -12,7 +12,7 @@ Pinned-banner format `Pinned: ms 0.8.0`.
 
 ## Subcommand index
 
-The five subcommands group into three families:
+The nine subcommands group into five families:
 
 - **Encode + decode.** Round-trip from BIP-39 entropy to `ms1` and
   back.
@@ -27,6 +27,18 @@ The five subcommands group into three families:
     checksum status).
   - [`ms verify`](#ms-verify)\index{ms verify} — exit-code-only
     validity (and optional `--phrase` round-trip).
+- **Derive + repair.** Public derivation + BCH error correction.
+  - [`ms derive`](#ms-derive)\index{ms derive} — read-only master
+    fingerprint and (with `--template`) an account xpub. No
+    private keys reach stdout.
+  - [`ms repair`](#ms-repair)\index{ms repair} — BCH error-correct
+    a single corrupted `ms1` (up to four substitutions).
+- **Shamir split + combine.** BIP-93 codex32 K-of-N share
+  splitting (ms-cli v0.7.0+).
+  - [`ms split`](#ms-split)\index{ms split} — split a secret into
+    N codex32 shares, any K of which recombine.
+  - [`ms combine`](#ms-combine)\index{ms combine} — recombine ≥K
+    shares back into the original secret.
 - **Maintainer tools.**
   - [`ms vectors`](#ms-vectors)\index{ms vectors} — print the
     SHA-pinned v0.1 test-vector corpus as JSON (typically used by
@@ -34,24 +46,36 @@ The five subcommands group into three families:
 
 ## Form shape
 
-All five subcommands follow the same form scaffolding described
+All nine subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
-`Pinned: ms 0.2.1` label + subcommand selector ComboBox +
+`Pinned: ms 0.8.0` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the ms-tab subcommands accept slot input
-(`allows_slots: false` for all 5).
+(`allows_slots: false` for all 9).
 
-Two of the five subcommands consume secret-bearing input:
-[`ms encode --phrase`](#ms-encode-phrase) and
-[`ms encode --hex`](#ms-encode-hex) (the mutually exclusive seed
-input pair), and [`ms verify --phrase`](#ms-verify-phrase) (the
-round-trip phrase). Any non-empty value in one of those three
-flag slots triggers the run-confirm modal at click-Run time per
-`mnemonic-gui/src/secrets.rs:should_confirm_run`. The threat-model
-warning in [§14 Defense 2](#secret-handling) about the v0.3.0
-modal-redaction gap and the recommended cold-node operational
-mitigation applies here too.
+Most of the nine subcommands consume secret-bearing input and
+fire the run-confirm modal on any non-empty secret value (per
+`mnemonic-gui/src/secrets.rs:should_confirm_run`):
+
+- [`ms encode --phrase`](#ms-encode-phrase) /
+  [`ms encode --hex`](#ms-encode-hex) — the mutually exclusive
+  seed-input pair.
+- [`ms verify --phrase`](#ms-verify-phrase) — the round-trip
+  phrase.
+- [`ms derive`](#ms-derive) — the `ms1` positional,
+  [`--hex`](#ms-derive-hex), [`--phrase`](#ms-derive-phrase), and
+  [`--passphrase`](#ms-derive-passphrase).
+- [`ms repair --ms1`](#ms-repair-ms1) — the corrupted seed card
+  (a deliberate GUI-side `secret: true` override).
+- [`ms split --phrase`](#ms-split-phrase) /
+  [`ms split --hex`](#ms-split-hex) — the secret being split.
+- [`ms combine`](#ms-combine) — the positional shares are
+  secret-equivalent (any K recover the secret).
+
+The threat-model warning in [§14 Defense 2](#secret-handling)
+about the modal-redaction history and the recommended cold-node
+operational mitigation applies to all of these.
 
 [`ms inspect`](#ms-inspect), [`ms decode`](#ms-decode), and
 [`ms vectors`](#ms-vectors) do not accept any `secret: true`

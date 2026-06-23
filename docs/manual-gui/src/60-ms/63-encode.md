@@ -21,11 +21,53 @@ hex path).
 
 ## Outline {#ms-encode-outline}
 
+- [`--group-size`](#ms-encode-group-size) — display-grouping chunk width for the emitted `ms1` (default `5`; `0` = unbroken)
+- [`--separator`](#ms-encode-separator) — display-grouping separator keyword (`space`|`hyphen`|`comma`; default `space`)
 - [`--phrase`](#ms-encode-phrase) — BIP-39 mnemonic input (XOR with `--hex`, secret-bearing)
 - [`--hex`](#ms-encode-hex) — raw hex entropy input (XOR with `--phrase`, secret-bearing)
 - [`--language`](#ms-encode-language) — BIP-39 wordlist for `--phrase` (default `english`; Hidden when `--hex` is set)
 - [`--no-engraving-card`](#ms-encode-no-engraving-card) — suppress the stderr engraving card
 - [`--json`](#ms-encode-json) — emit a single JSON object on stdout instead of multi-line text
+
+## `--group-size` {#ms-encode-group-size}
+
+Display-grouping chunk width. Number widget; range `0..=65535`,
+default `5`. The encoder breaks the emitted `ms1` string into
+groups of N characters separated by the
+[`--separator`](#ms-encode-separator) keyword; `0` emits the
+`ms1` as a single unbroken line.
+
+**Cosmetic — non-load-bearing.** ms1 intake strips separators, so
+a grouped card and an unbroken card re-ingest to the identical
+secret. The default `5`-char grouping matches the canonical
+chunked form printed below the single-string line. `--json` output
+always carries the unbroken `ms1` regardless of this flag.
+
+## `--separator` {#ms-encode-separator}
+
+Display-grouping separator keyword used between the
+[`--group-size`](#ms-encode-group-size) chunks. Dropdown widget;
+3 values, default `space`. **Cosmetic — non-load-bearing** (intake
+strips it, so any separator re-ingests).
+
+### Outline {#ms-encode-separator-outline}
+
+- [`space`](#ms-encode-separator-space)
+- [`hyphen`](#ms-encode-separator-hyphen)
+- [`comma`](#ms-encode-separator-comma)
+
+### `space` {#ms-encode-separator-space}
+
+ASCII-space (`U+0020`) between chunks — the default, matching the
+canonical chunked-card form.
+
+### `hyphen` {#ms-encode-separator-hyphen}
+
+ASCII hyphen-minus (`-`) between chunks.
+
+### `comma` {#ms-encode-separator-comma}
+
+ASCII comma (`,`) between chunks.
 
 ## `--phrase` {#ms-encode-phrase}
 
