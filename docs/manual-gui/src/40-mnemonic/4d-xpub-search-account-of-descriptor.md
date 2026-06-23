@@ -1,0 +1,281 @@
+# `mnemonic xpub-search account-of-descriptor` {#mnemonic-xpub-search-account-of-descriptor}
+
+Reverse-search a BIP-32 derivation graph: given a seed (BIP-39 phrase
+or `ms1` card) plus a wallet descriptor, identify which cosigner
+role(s) the seed plays in that descriptor and at which account index.
+The GUI exposes this as one form under the **mnemonic** tab's
+subcommand selector (one of the four `xpub-search` modes). The form
+takes a seed-intake group, a descriptor input, and the candidate-set
+range knobs; output is the matched cosigner index/path on stdout
+(text or JSON).
+\index{mnemonic xpub-search account-of-descriptor}
+
+This mode takes secret seed material. The GUI renders the secret
+inputs as masked `SecretLineEdit` widgets, and the run-confirm modal
+redacts secret-bearing argv tokens as a fixed `••••` sentinel — the
+literal seed is never drawn on screen (see
+[§14 Defense 2](#secret-handling) for the masking semantics and the
+residual flag-name exposure). Read-only search: **no private keys
+reach stdout and `mnemonic` never signs.**
+
+:::danger
+The worked example in this chapter uses the canonical all-`abandon`
+BIP-39 test vector. **Never engrave or fund** a wallet derived from
+this phrase — chain watchers have swept it continuously since 2017.
+:::
+
+## Outline {#mnemonic-xpub-search-account-of-descriptor-outline}
+
+- [`--phrase`](#mnemonic-xpub-search-account-of-descriptor-phrase) — master BIP-39 phrase (inline; XOR with the other seed-intake rows)
+- [`--phrase-stdin`](#mnemonic-xpub-search-account-of-descriptor-phrase-stdin) — read the master phrase from stdin
+- [`--ms1`](#mnemonic-xpub-search-account-of-descriptor-ms1) — `ms1` card carrying BIP-39 entropy (inline)
+- [`--ms1-stdin`](#mnemonic-xpub-search-account-of-descriptor-ms1-stdin) — read the `ms1` card from stdin
+- [`--passphrase`](#mnemonic-xpub-search-account-of-descriptor-passphrase) — optional BIP-39 passphrase (inline)
+- [`--passphrase-stdin`](#mnemonic-xpub-search-account-of-descriptor-passphrase-stdin) — read the passphrase from stdin
+- [`--descriptor`](#mnemonic-xpub-search-account-of-descriptor-descriptor) — wallet descriptor; shape auto-detected
+- [`--descriptor-from`](#mnemonic-xpub-search-account-of-descriptor-descriptor-from) — explicit shape override (`literal=`/`md1=`/`bip388=`; `-` for stdin)
+- [`--language`](#mnemonic-xpub-search-account-of-descriptor-language) — BIP-39 wordlist (default `english`)
+- [`--network`](#mnemonic-xpub-search-account-of-descriptor-network) — network selector (default `mainnet`)
+- [`--min-account`](#mnemonic-xpub-search-account-of-descriptor-min-account) — lower bound of account iteration (default `0`)
+- [`--number-of-accounts`](#mnemonic-xpub-search-account-of-descriptor-number-of-accounts) — window size (default `20`)
+- [`--max-account`](#mnemonic-xpub-search-account-of-descriptor-max-account) — optional upper bound
+- [`--add-path`](#mnemonic-xpub-search-account-of-descriptor-add-path) — additional path template (repeatable)
+- [`--json`](#mnemonic-xpub-search-account-of-descriptor-json) — emit JSON envelope instead of text
+
+## `--phrase` {#mnemonic-xpub-search-account-of-descriptor-phrase}
+
+The master BIP-39 phrase, supplied inline. Part of the seed-intake
+mutex — exactly one of `--phrase` / `--phrase-stdin` / `--ms1` /
+`--ms1-stdin` (or a positional `ms1`) is required. Inline use emits
+the argv-leakage advisory; prefer `--phrase-stdin`. The GUI renders
+this as a masked `SecretLineEdit`; schema-`secret: true`.
+
+## `--phrase-stdin` {#mnemonic-xpub-search-account-of-descriptor-phrase-stdin}
+
+Boolean flag. Read the master BIP-39 phrase from stdin (the phrase
+does not appear in argv). XOR with `--phrase` and the `--ms1*` rows.
+Single-stdin-per-invocation: mutually exclusive with `--ms1-stdin`
+and `--passphrase-stdin`.
+
+## `--ms1` {#mnemonic-xpub-search-account-of-descriptor-ms1}
+
+An `ms1` card carrying BIP-39 entropy, supplied inline. Inline use
+emits the argv-leakage advisory; prefer `--ms1-stdin`. Auto-fire BCH
+repair applies only to the `--ms1` decode-failure path (a BIP-39
+phrase parse failure routes a direct exit 1 — phrases have no BCH
+primitive). The GUI renders this as a masked `SecretLineEdit`.
+
+## `--ms1-stdin` {#mnemonic-xpub-search-account-of-descriptor-ms1-stdin}
+
+Boolean flag. Read the `ms1` card from stdin (single chunk). XOR
+with the other seed-intake rows; single-stdin-per-invocation.
+
+## `--passphrase` {#mnemonic-xpub-search-account-of-descriptor-passphrase}
+
+The optional BIP-39 mnemonic-extension passphrase ("25th word"),
+supplied inline. Inline use emits the argv-leakage advisory; prefer
+`--passphrase-stdin`. The GUI renders this as a masked
+`SecretLineEdit`; schema-`secret: true`.
+
+## `--passphrase-stdin` {#mnemonic-xpub-search-account-of-descriptor-passphrase-stdin}
+
+Boolean flag. Read the passphrase from stdin (NULL-byte-preserving;
+a single trailing newline is stripped). XOR with `--passphrase`;
+single-stdin-per-invocation.
+
+## `--descriptor` {#mnemonic-xpub-search-account-of-descriptor-descriptor}
+
+The wallet descriptor whose cosigner roles are searched. The shape
+is auto-detected by a tie-break order:
+
+- BIP-388 wallet-policy JSON — input begins with `{`.
+- `md1` card(s) — input begins with the `md1` HRP.
+- Toolkit `@N`-placeholder descriptor — **refused** (synthetic xpubs
+  are non-searchable; supply a literal-xpub descriptor, `md1` card,
+  or BIP-388 JSON instead).
+- External literal-xpub descriptor — else (parsed via
+  rust-miniscript).
+
+Literal-xpub descriptors with missing `[fp/path]` annotations on
+`@N` cosigners trigger silent BIP-48 default-path inference
+(`m/48'/<coin>'/<account>'/2'`) plus a stderr `info:` notice. A
+cosigner xpub matching the BIP-341 unspendable NUMS H point is
+skipped and reported in the JSON envelope's
+`unspendable_internal_keys` array. The GUI renders this as a Text
+widget.
+
+## `--descriptor-from` {#mnemonic-xpub-search-account-of-descriptor-descriptor-from}
+
+Explicit shape override for `--descriptor`, of the form
+`<node>=<value>` where `<node>` is one of `literal` / `md1` /
+`bip388` and `<value>` is a literal string or `-` for stdin. Use
+this to force a shape when auto-detection would be ambiguous. An
+unknown node is refused with
+`--descriptor-from: <node> must be one of literal / md1 / bip388`.
+The GUI renders this as a Text widget.
+
+## `--language` {#mnemonic-xpub-search-account-of-descriptor-language}
+
+The BIP-39 wordlist used to interpret `--phrase`. Optional; defaults
+to `english`. Same 10 allowed values as
+[`mnemonic bundle --language`](#mnemonic-bundle-language); the
+cross-tab naming convention applies (`simplifiedchinese` etc., no
+hyphen). The GUI renders this as a Dropdown widget.
+
+### Outline {#mnemonic-xpub-search-account-of-descriptor-language-outline}
+
+- [`english`](#mnemonic-xpub-search-account-of-descriptor-language-english)
+- [`simplifiedchinese`](#mnemonic-xpub-search-account-of-descriptor-language-simplifiedchinese)
+- [`traditionalchinese`](#mnemonic-xpub-search-account-of-descriptor-language-traditionalchinese)
+- [`czech`](#mnemonic-xpub-search-account-of-descriptor-language-czech)
+- [`french`](#mnemonic-xpub-search-account-of-descriptor-language-french)
+- [`italian`](#mnemonic-xpub-search-account-of-descriptor-language-italian)
+- [`japanese`](#mnemonic-xpub-search-account-of-descriptor-language-japanese)
+- [`korean`](#mnemonic-xpub-search-account-of-descriptor-language-korean)
+- [`portuguese`](#mnemonic-xpub-search-account-of-descriptor-language-portuguese)
+- [`spanish`](#mnemonic-xpub-search-account-of-descriptor-language-spanish)
+
+### `english` {#mnemonic-xpub-search-account-of-descriptor-language-english}
+
+The BIP-39 English wordlist (2048 entries). Default when `--language`
+is omitted.
+
+### `simplifiedchinese` {#mnemonic-xpub-search-account-of-descriptor-language-simplifiedchinese}
+
+BIP-39 Simplified Chinese wordlist. Cross-tab divergence with
+`ms encode --language chinese-simplified` is documented at
+[`ms encode --language`](#ms-encode-language).
+
+### `traditionalchinese` {#mnemonic-xpub-search-account-of-descriptor-language-traditionalchinese}
+
+BIP-39 Traditional Chinese wordlist.
+
+### `czech` {#mnemonic-xpub-search-account-of-descriptor-language-czech}
+
+BIP-39 Czech wordlist.
+
+### `french` {#mnemonic-xpub-search-account-of-descriptor-language-french}
+
+BIP-39 French wordlist.
+
+### `italian` {#mnemonic-xpub-search-account-of-descriptor-language-italian}
+
+BIP-39 Italian wordlist.
+
+### `japanese` {#mnemonic-xpub-search-account-of-descriptor-language-japanese}
+
+BIP-39 Japanese wordlist.
+
+### `korean` {#mnemonic-xpub-search-account-of-descriptor-language-korean}
+
+BIP-39 Korean wordlist.
+
+### `portuguese` {#mnemonic-xpub-search-account-of-descriptor-language-portuguese}
+
+BIP-39 Portuguese wordlist.
+
+### `spanish` {#mnemonic-xpub-search-account-of-descriptor-language-spanish}
+
+BIP-39 Spanish wordlist.
+
+## `--network` {#mnemonic-xpub-search-account-of-descriptor-network}
+
+The Bitcoin network selector for the searched derivations. Optional;
+defaults to `mainnet`. Determines the BIP-32 coin-type (0 mainnet; 1
+testnet/signet/regtest). The GUI renders this as a Dropdown widget.
+
+### Outline {#mnemonic-xpub-search-account-of-descriptor-network-outline}
+
+- [`mainnet`](#mnemonic-xpub-search-account-of-descriptor-network-mainnet)
+- [`testnet`](#mnemonic-xpub-search-account-of-descriptor-network-testnet)
+- [`signet`](#mnemonic-xpub-search-account-of-descriptor-network-signet)
+- [`regtest`](#mnemonic-xpub-search-account-of-descriptor-network-regtest)
+
+### `mainnet` {#mnemonic-xpub-search-account-of-descriptor-network-mainnet}
+
+Production Bitcoin mainnet. BIP-44 coin-type 0.
+
+### `testnet` {#mnemonic-xpub-search-account-of-descriptor-network-testnet}
+
+The legacy public test network. Coin-type 1. Funds are valueless.
+
+### `signet` {#mnemonic-xpub-search-account-of-descriptor-network-signet}
+
+The signature-secured test network. Coin-type 1. Funds are valueless.
+
+### `regtest` {#mnemonic-xpub-search-account-of-descriptor-network-regtest}
+
+A locally-controlled regression-test network. Coin-type 1.
+
+## `--min-account` {#mnemonic-xpub-search-account-of-descriptor-min-account}
+
+The lower bound of account-index iteration, inclusive. Default `0`.
+The GUI renders this as a Number widget.
+
+## `--number-of-accounts` {#mnemonic-xpub-search-account-of-descriptor-number-of-accounts}
+
+The window size of the account-index iteration, starting at
+`--min-account`. Default `20`. The GUI renders this as a Number
+widget.
+
+## `--max-account` {#mnemonic-xpub-search-account-of-descriptor-max-account}
+
+Optional upper bound on the account index. The effective end of the
+half-open range is
+`max(min_account + number_of_accounts, max_account + 1)`. The GUI
+renders this as a Number widget.
+
+## `--add-path` {#mnemonic-xpub-search-account-of-descriptor-add-path}
+
+An additional derivation-path template, repeatable. The literal token
+`account'` (or `account`) is substituted with each iterated account
+index; templates without an `account` token are searched once at the
+literal path. The search runs once per cosigner. The GUI renders this
+as a repeating Text input (one row per occurrence; the argv assembler
+emits one `--add-path` token per row).
+
+## `--json` {#mnemonic-xpub-search-account-of-descriptor-json}
+
+Boolean flag. Emit a versioned JSON envelope (schema `v1`,
+`tag = "mode"`, `mode: "account-of-descriptor"`) instead of the text
+report. The envelope carries `matched_cosigners[]` (each with
+`cosigner_index`, `path`, `template`, `account`), `cosigners_total`,
+`searched_count_per_cosigner`, `descriptor_shape`, and
+`unspendable_internal_keys[]`. The GUI renders this as a checkbox.
+
+## Worked example — find the seed's cosigner role in a 2-of-3
+
+1. Switch to the **mnemonic** tab; pick **xpub-search:
+   account-of-descriptor** in the subcommand selector.
+2. Set the seed-intake to **`--phrase-stdin`** (the seed flows via
+   stdin, never argv).
+3. Paste the 2-of-3 wallet descriptor (literal-xpub or `md1`) into
+   the `--descriptor` field.
+4. Leave the range knobs at their defaults (`--min-account 0`,
+   `--number-of-accounts 20`).
+5. Click **Run** and confirm the modal (the pasted phrase shows as
+   `••••`).
+
+Stdout (text form, multisig match):
+
+```text
+match: cosigner @0  m/48'/0'/0'/2'  (template=bip48-wsh, account=0)
+descriptor: wsh(sortedmulti(2, [fp1/48h/0h/0h/2h]xpub1.../0/*, ...))
+cosigners total: 3
+matched cosigner indices: [0]
+searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
+```
+
+A no-cosigner-match result exits 4 (`ToolkitError::XpubSearchNoMatch`);
+bad input (descriptor parse error, `@N` refusal, no-xpub-keys refusal)
+exits 1; a clap arg-parse error exits 64.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | At least one cosigner matched |
+| 1 | Bad input (descriptor parse error, toolkit-`@N` refusal, no-xpub-keys refusal, seed-intake error) |
+| 4 | No cosigner matched |
+| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated) |
+| 64 | Clap arg-parse error |
