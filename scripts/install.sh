@@ -35,13 +35,13 @@ component_info() {
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.7.1|yes|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.7.0|yes|"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.11.0|yes|"
             ;;
         mk)
-            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.8.0|yes|"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.10.2|yes|"
             ;;
         mnemonic-gui)
-            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.40.0|no|"
+            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.49.0|no|"
             ;;
         *)
             return 1

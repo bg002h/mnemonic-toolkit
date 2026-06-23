@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.7.0 --bin mk`.
+`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.10.2 --bin mk`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -386,7 +386,7 @@ mk vectors [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--pretty` | indent the JSON output for human readability (ignored when `--out` is set) |
+| `--pretty` | indent the JSON output for human readability (also applies to the per-fixture files written under `--out`) |
 | `--out <DIR>` | write one `<name>.json` per fixture into `<DIR>` instead of emitting to stdout |
 
 The corpus is `include_str!`-baked into the binary at build time, so

@@ -656,7 +656,7 @@ mk_codec::Error variant set (verified against `crates/mk-codec/src/error.rs`):
 | Variant | Routing | Message |
 |---|---|---|
 | `InvalidHrp(s)` | exit 2 | "wrong HRP: got `{s:?}`, expected \"mk\"" |
-| `MixedCase` | exit 2 | "mixed case in mk1 input string" |
+| `MixedCase` | exit 2 | "mk1 mixed case in input string" |
 | `InvalidStringLength(n)` | exit 1 | "mk1 data-part length `n` not valid (regular code: 14-93; long code: 95-108; the gap at 94 is reserved-invalid)" |
 | `InvalidChar { ch, position }` | exit 1 | "invalid character `ch` at position `position` (not in bech32 alphabet)" |
 | `BchUncorrectable(s)` | exit 1 | "mk1 BCH uncorrectable: `s` (engraving error or transcription typo)" |
