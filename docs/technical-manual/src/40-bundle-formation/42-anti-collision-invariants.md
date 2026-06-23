@@ -131,7 +131,7 @@ The simplest BIP-388 collision: a 2-of-2 multisig where both slots are the same 
 
 The full invocation, stderr, and exit code are captured at `transcripts/mnemonic-bundle-bip388-collision.cmd` / `.out`. Re-running via `tests/verify-examples.sh` produces the byte-exact one-line error and exit 2.
 
-```text
+```{.text include="mnemonic-bundle-bip388-collision.out" lines="3-3"}
 error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)
 ```
 
