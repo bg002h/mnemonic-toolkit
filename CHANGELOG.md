@@ -12,7 +12,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ### Changed
 
-- **Drop the direct `codex32 = "=0.1.0"` dependency.** It existed only so `friendly_ms_codec` could name the codex32 share-error variants (`ThresholdNotPassed` / `RepeatedIndex` / `Mismatched*` / `InvalidChecksum`) wrapped by `ms_codec::Error::Codex32(_)`. ms-codec 0.7.0 vendored codex32 inline, so the toolkit now reaches those types via `ms_codec::codex32::` — `friendly.rs`'s 16 `codex32::Error::*` / `codex32::Fe::*` sites are rewritten accordingly. Friendly message text is byte-identical (the prose tests assert on substrings).
+- **Drop the direct `codex32 = "=0.1.0"` dependency.** It existed only so `friendly_ms_codec` could name the codex32 share-error variants (`ThresholdNotPassed` / `RepeatedIndex` / `Mismatched*` / `InvalidChecksum`) wrapped by `ms_codec::Error::Codex32(_)`. ms-codec 0.7.0 vendored codex32 inline, so the toolkit now reaches those types via `ms_codec::codex32::` — `friendly.rs`'s 16 `codex32::Error::*` / `codex32::Fe::*` path-references across 15 sites (the `RepeatedIndex` line carries two: `Error::RepeatedIndex` + `Fe::Q`) are rewritten accordingly. Friendly message text is byte-identical (the prose tests assert on substrings).
 - **Re-pin `ms-codec` `"0.6"` → `"0.7"`** (consumes the breaking inner-type move of `ms_codec::Error::Codex32` from the extern `codex32::Error` to `ms_codec::codex32::Error`).
 
 ### Notes
