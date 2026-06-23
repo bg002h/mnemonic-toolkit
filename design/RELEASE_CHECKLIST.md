@@ -51,6 +51,11 @@ grep -oE '(mnemonic-toolkit|descriptor-mnemonic-md-cli|ms-cli|mk-cli|mnemonic-gu
   /scratch/code/shibboleth/mnemonic-toolkit/scripts/install.sh
 ```
 
+> The `mnemonic-gui` pin specifically is also watched continuously by
+> `.github/workflows/gui-pin-drift-check.yml` (warn-only, daily cron) —
+> it ::warning::s when `scripts/install.sh:44` lags the latest released
+> `mnemonic-gui-v*` tag. (md/ms/mk pins remain manual-audit-only.)
+
 If any pin LAGS the latest release tag for that component:
 
 1. Bump `scripts/install.sh` line 32 / 35 / 38 / 41 / 44 to the latest tag.

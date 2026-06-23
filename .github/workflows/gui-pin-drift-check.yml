@@ -1,0 +1,111 @@
+name: gui-pin-drift-check
+
+# Warn-only cross-repo drift check for the mnemonic-gui pin in
+# scripts/install.sh's component_info table (the `mnemonic-gui` arm,
+# currently scripts/install.sh:44). Compares the pinned tag against the
+# LATEST RELEASED mnemonic-gui-v* tag in the sibling repo and emits a
+# GitHub Actions ::warning:: on drift.
+#
+# Why warn-only (exit 0 even on drift): this is a CROSS-REPO NETWORK call
+# (gh release list -R bg002h/mnemonic-gui). GitHub API can be down /
+# rate-limited / the runner offline; that must NOT hard-fail unrelated
+# PRs. The install-pin-check.yml gate hard-fails because it is purely
+# LOCAL (install.sh self-pin vs the tag being built). This gate cannot
+# be local — the truth lives in another repo — so it advises, never
+# blocks. (Precedent for warn-not-fail: sibling-pin-check.yml emits
+# ::warning:: for unknown-url lines.)
+#
+# Why a schedule: the failure mode is "GUI moves, toolkit doesn't" — a
+# new mnemonic-gui release lands while this repo has no commits. A
+# push/PR-only trigger would never fire in that window, so a daily cron
+# catches drift even with zero toolkit activity.
+#
+# Why sort -V (version sort), not lexical tail: mnemonic-gui's tag set
+# lexically tails at mnemonic-gui-v0.9.0 (a "9" sorts after a "4"), but
+# the true latest is v0.49.0. `gh release list --limit 1` returns the
+# most-recent release by publish DATE (not lexical), which is correct;
+# the sort -V comparison below is the version-aware drift test.
+#
+# Scope: this gate is the systemic cross-repo leg of FOLLOWUP
+# `install-sh-gui-sibling-pin-staleness-ungated` (open remainder (a) /
+# "LANE-PIN-B"). The toolkit self-pin stays gated by install-pin-check.yml;
+# intra-repo install.sh<->docs consistency stays gated by
+# sibling-pin-check.yml. This adds the missing cross-repo CURRENCY check.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'scripts/install.sh'
+      - '.github/workflows/gui-pin-drift-check.yml'
+  pull_request:
+    paths:
+      - 'scripts/install.sh'
+      - '.github/workflows/gui-pin-drift-check.yml'
+  schedule:
+    # Daily at 06:17 UTC. Off-the-hour minute avoids the top-of-hour
+    # scheduler congestion GitHub warns about for cron workflows.
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gui-pin-drift:
+    name: install.sh mnemonic-gui pin vs latest release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Compare install.sh mnemonic-gui pin to latest released tag
+        run: |
+          set -eu
+
+          # Pinned tag from install.sh's component_info `mnemonic-gui` arm.
+          # The line format is:
+          #   echo "mnemonic-gui|<url>|mnemonic-gui-vX.Y.Z|no|"
+          # Anchor on `mnemonic-gui-v` so we never match the bare
+          # `mnemonic-gui|` package/url tokens.
+          PIN=$(grep -oE 'mnemonic-gui-v[0-9]+\.[0-9]+\.[0-9]+' scripts/install.sh | head -n1)
+          if [ -z "$PIN" ]; then
+            echo "::warning::could not extract a mnemonic-gui-v* pin from scripts/install.sh — skipping drift check"
+            exit 0
+          fi
+
+          # Latest released mnemonic-gui tag. `gh release list --limit 1`
+          # returns the most-recent release by publish DATE (releases are
+          # cut in version order, so this is the true latest — NOT a
+          # lexical tail). Read-only against the PUBLIC sibling repo; the
+          # default GITHUB_TOKEN can read public releases.
+          LATEST=$(gh release list -R bg002h/mnemonic-gui --limit 1 \
+                     --json tagName --jq '.[0].tagName' 2>/dev/null || true)
+          if [ -z "$LATEST" ]; then
+            echo "::warning::could not fetch the latest mnemonic-gui release (network/rate-limit/none) — skipping drift check"
+            exit 0
+          fi
+
+          echo "install.sh mnemonic-gui pin: $PIN"
+          echo "latest mnemonic-gui release: $LATEST"
+
+          if [ "$PIN" = "$LATEST" ]; then
+            echo "OK install.sh mnemonic-gui pin is current ($PIN)"
+            exit 0
+          fi
+
+          # Drifted. Determine direction with a VERSION-AWARE compare
+          # (sort -V): if PIN sorts strictly below LATEST, install.sh lags.
+          # Strip the shared `mnemonic-gui-v` prefix to dotted versions so
+          # sort -V sees pure X.Y.Z. (Equality is handled above.)
+          PIN_V=${PIN#mnemonic-gui-v}
+          LATEST_V=${LATEST#mnemonic-gui-v}
+          LOWER=$(printf '%s\n%s\n' "$PIN_V" "$LATEST_V" | sort -V | head -n1)
+          if [ "$LOWER" = "$PIN_V" ]; then
+            echo "::warning::install.sh mnemonic-gui pin '$PIN' LAGS the latest release '$LATEST'. Bump scripts/install.sh:44 and commit: chore(install): bump mnemonic-gui pin $PIN -> $LATEST"
+          else
+            echo "::warning::install.sh mnemonic-gui pin '$PIN' is AHEAD of the latest release '$LATEST' (unreleased GUI tag pinned?). Verify scripts/install.sh:44."
+          fi
+          # Warn-only: never block a PR on a cross-repo currency mismatch.
+          exit 0
