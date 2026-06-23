@@ -63,7 +63,6 @@ Single source of truth for items that surfaced during a review or implementation
 - **Where:** `crates/mnemonic-toolkit/src/unrestorable_advisory.rs:116-117` references `crate::cmd::restore::{taproot_override_card, restorable_taproot_override_card}`. `lib.rs` mounts `unrestorable_advisory` (and a set of bin-private modules) under `#[cfg(fuzzing)]` (`lib.rs:186`), but `cmd` is NOT mounted into the lib crate under `cfg(fuzzing)` → `error[E0433]: failed to resolve: could not find cmd in the crate root` → the WHOLE fuzz target set fails to compile (so fuzzing coverage is silently zero).
 - **What:** the P2.4 (#26) taproot-advisory block calls the two `cmd::restore` predicates for exact refuse⟺advise parity. They live in the bin-only `cmd::restore` module; the `cfg(fuzzing)` lib mount can reach only lib-crate items.
 - **Fix (options, NO-BUMP — fuzz-infra/src-only, no user-facing surface):** (a) move `taproot_override_card` / `restorable_taproot_override_card` to a lib-crate module (e.g. a `restore_predicates`/`classify` module) and re-export from `cmd::restore`, so both the bin path and the `cfg(fuzzing)` advisory reach them; or (b) mount the needed `cmd::restore` predicates under `#[cfg(fuzzing)]` in `lib.rs` alongside `unrestorable_advisory`; or (c) `#[cfg(not(fuzzing))]`-gate the taproot-advisory block (smallest, but drops the taproot branch from fuzz coverage). Prefer (a). Add a CI step that actually builds the fuzz targets so this cannot silently re-break.
-- **Status:** `open`. v0.60.0 SHIPPED with this latent (the release's real gates — full `cargo test -p`, clippy `-D warnings`, manual `make lint`, version-site consistency — are GREEN; the fuzz LOCKFILE version-site is synced to 0.60.0; only the instrumented `--cfg fuzzing` BUILD is broken, identically to v0.59.1/v0.59.0).
 - **Tier:** `infra` / `next-cycle`. **Companion:** none (toolkit-local).
 
 ### `mstar-prepolicy-key-backup` — no policy-independent (pre-wallet) public-key backup (companion; mk-codec is canonical)
@@ -447,7 +446,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Tags:** `restore` `wallet` `multisig` `export`
 - **Spawned FOLLOWUPs:** `restore-emit-dispatch-3way-dedup`.
 
-### `restore-emit-dispatch-3way-dedup` — the 11-arm `collect_missing`→`emit` `WalletFormatEmitter` dispatch now exists in 3 byte-identical copies
+### `restore-emit-dispatch-3way-dedup` — ✓ RESOLVED (toolkit v0.46.1) — the 11-arm `collect_missing`→`emit` `WalletFormatEmitter` dispatch now exists in 3 byte-identical copies
 
 - **Surfaced:** 2026-06-05, multisig restore `--format` cycle (toolkit v0.45.0) — R0 + advisor noted the duplication.
 - **Where:** `crates/mnemonic-toolkit/src/cmd/export_wallet.rs:506-560` (`run`), `crates/mnemonic-toolkit/src/cmd/restore.rs` single-sig `build_import_payload` (~`:587-660`), and the v0.45.0 multisig `build_multisig_import_payload` (~`:662-760`).
@@ -2607,7 +2606,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.22+-feature`
 - **Companion:** none.
 
-### `synthesize-descriptor-deduplicate-with-unified` — refactor synthesize_descriptor and synthesize_unified into a shared helper
+### `synthesize-descriptor-deduplicate-with-unified` — ✓ RESOLVED (toolkit v0.47.1) — refactor synthesize_descriptor and synthesize_unified into a shared helper
 
 - **Surfaced:** 2026-05-17, v0.21.0 cycle plan §1 D8 item 2.
 - **Where:** `crates/mnemonic-toolkit/src/synthesize.rs:200-275` (`synthesize_descriptor` body) + `crates/mnemonic-toolkit/src/synthesize.rs:709-774` (`synthesize_unified` body). After v0.21.0's per-slot ms1 emission fix, both functions now iterate `cosigners`/`slots` and emit ms1/mk1 the same way (cf. plan §2.2 mirror-comment at synthesize.rs:255-257 vs synthesize.rs:710-723).
@@ -2774,7 +2773,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Tier:** `v0.25.0`
 - **Companion:** none.
 
-### `cmd-repair-inspect-helper-duplication` — extract `count_dashes` / `expand_dashes` / `resolve_groups` shared between `cmd/repair.rs` and `cmd/inspect.rs`
+### `cmd-repair-inspect-helper-duplication` — ✓ RESOLVED (v0.25.0) — extract `count_dashes` / `expand_dashes` / `resolve_groups` shared between `cmd/repair.rs` and `cmd/inspect.rs`
 
 - **Surfaced:** 2026-05-17, v0.24.0 Tranche C.1 end-of-phase architect review (during the D34/I5 fold).
 - **Where:**
