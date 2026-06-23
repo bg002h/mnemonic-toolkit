@@ -1,0 +1,5 @@
+nostr key (public)
+  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
+  script-type: p2tr
+  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
+  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04

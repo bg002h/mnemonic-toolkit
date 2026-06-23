@@ -372,36 +372,8 @@ mnemonic bundle --network mainnet --account 0 \
 
 Stdout (the cards — under v0.21.0+ SPEC §5.8 per-slot emission, all three cosigners now get their own ms1 card when phrases are supplied for all three slots):
 
-```text
-# ms1[0] (entropy, BCH-checksummed)
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
-
-# ms1[1] (entropy, BCH-checksummed)
-ms10e ntrsq plh7l ml0al h7lml 0alh7 lml0a ls5cc lar2z mksh6
-
-# ms1[2] (entropy, BCH-checksummed)
-ms10e ntrsq zqgpq yqszq gpqyq szqgp qyqsz qqlfm 7mep8 4hunu
-
-# mk1[0] (cosigner 0 xpub + origin)
-mk1qp de47p qqspk u6l0a 4hxhm ldde4 7lmtn chdq5 pgy3z epu88 jjutt hgx8e gtq4p cwl6u 5p2us 6r6zs nl2rd 0q6gg hvalg y93vq 0lnvc lq0l7 g
-mk1qp de47p p8lph ut2hv vpp5w l4l0m n058n dxfl6 3kufy fsjwl t2vkk 2nlqm lvch5 n4shw f72vu lg50u 6y5fz a78g6 u4f
-
-# mk1[1] (cosigner 1 xpub + origin)
-mk1qp de4lp qqspk u6l0a 4hxhm ldde4 7lmdc dzxlz pgy3z epal7 ec5v6 wv58d a6c23 hjuw4 ypg96 ztz75 f8wrr ussm5 9fetn kdz9h jz3ha w476n f
-mk1qp de4lp pag0z r8gh9 upnju gr26j fvunv s35jv gdjkm 3kghw nt0qq ymzc0 utyzx yhny9 pu8en jm5qj mzgwp tzzmp cfh
-
-# mk1[2] (cosigner 2 xpub + origin)
-mk1qp de4up qqspk u6l0a 4hxhm ldde4 7lmfg v3gqv pgy3z epugv evsxp z2zll 50ju3 dcmgh txtfv 0y025 ltk2v c8a3e x8yqn c4sfy axwpv tgscz j
-mk1qp de4up prja8 93lkx up4z7 tw6q2 yvs4f k9pjh xf00s 49uge x8rue 307wd slgcj 5r8x9 t5jh2 96hyx 0h0x5 rthp2 pe4
-
-# md1 (multisig wallet policy)
-md1f0 6s0rq pqjtv yyy5q j5kxc qkuds qefnf dwqqq q0cpx d9ecq qqsqq qhesu 79mg9 xcskd 6lgms uz5kg
-md1f0 6s0rq vx3r0 33gv3 gqv90 puthg x8egt q4pcw l6u5p 2us6r 6zsnl 2rd0q 6gghv acapy yhuyg h2h0e
-md1f0 6s0rq hgy07 r0ck4 wcczr galt7 lhxlg 0x6vn l4rdc jgnpy a7k5e dv487 ph7e3 0g8cy 9la27 53uzh
-md1f0 6s0rq e8tpw unu5k nn9pm 0wkz5 duhr4 fq2pw sjch4 zfmsc lyyxa p2w2u a7583 psh3m vn8ut unz4f
-md1f0 6s0rp r5tj7 qeewy p4dfy kwfkg g6fxy xetdc mythf 4hsqz d3v87 9jprz tejzs 7q2an cf6n8 0dqdj
-md1f0 6s0rp t7zy5 9llgl 9ezm3 k3wkv kjc7g 74f7h v5es0 mrjvw gp8sw t5uk8 7cmsx 5gg8x n84km ldzt3
-md1f0 6s0rp nedmg pg3jz 4xc5x 2ue9a 7z5h3 rycu0 nx9le ekrar z2svu c4wj2 2s2uk c5u55 3ej
+```{.text include="41-bundle-inheritance-cards.out" lines="1-29"}
+PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.out lines 1-29 at build
 ```
 
 Each card type is printed once, in 5-character groups separated by
@@ -413,18 +385,8 @@ separators, so every form decodes back to the same payload.
 
 Stderr (info notice + bundle-summary engraving card):
 
-```text
-info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
-# === Wallet bundle: descriptor, mainnet ===
-# Threshold: 3 of 3
-# Cosigners:
-#   @0: ms1:6e6be,mk1:6e6be (73c5da0a @ m/48'/0'/0'/2')
-#   @1: ms1:6e6bf,mk1:6e6bf (b8688df1 @ m/48'/0'/0'/2')
-#   @2: ms1:6e6bc,mk1:6e6bc (28645006 @ m/48'/0'/0'/2')
-# Template: descriptor
-# md1: 6e6b
-# Recovery: any 3 of 3 signing keys + md1 (template card).
-# Language: english
+```{.text include="41-bundle-inheritance-cards.err" lines="4-14"}
+PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 4-14 at build
 ```
 
 The engraving-card block on stderr is a wallet-level summary the user
@@ -453,73 +415,8 @@ mnemonic bundle --network mainnet --account 0 \
 The resulting `/tmp/inheritance-bundle.json` envelope (pretty-printed
 via `python3 -m json.tool`):
 
-```json
-{
-  "schema_version": "4",
-  "mode": "full",
-  "network": "mainnet",
-  "template": null,
-  "descriptor": "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))",
-  "account": 0,
-  "origin_path": "m/48'/0'/0'/2'",
-  "origin_paths": null,
-  "master_fingerprint": null,
-  "ms1": [
-    "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
-    "ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6",
-    "ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu"
-  ],
-  "mk1": [
-    [
-      "mk1qp40rrpqqspsrg8ml5q6p7laqxs0hltnchdq5pgy3zepu88jjutthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvalgymxvy4lntk6efgf0",
-      "mk1qp40rrpp8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2vkk2nlqmlvch5n4shwf72fwktdlqfhxtswupfxql3"
-    ],
-    [
-      "mk1qpxj36pqqspsrg8ml5q6p7laqxs0hldcdzxlzpgy3zepal7ec5v6wv58da6c23hjuw4ypg96ztz75f8wrrussm59fetnkggq4j8pde6hkmw0",
-      "mk1qpxj36ppag0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8c56a5k72ndqgmdftljqt"
-    ],
-    [
-      "mk1qpl7wlpqqspsrg8ml5q6p7laqxs0hlfgv3gqvpgy3zepugvevsxpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqncct596tqv5z420v4",
-      "mk1qpl7wlpprja893lkxup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5j35p6p2c22v0s30tv0s2u"
-    ]
-  ],
-  "md1": [
-    "md1fu39yrq9qjtvyyy5jmppp9ykcggfgp9fskxcqkudsqefnfskhqqqq8uqnxnpwwqqqtggjse9txaz6v",
-    "md1fu39yrqfqqqp0npeutks2dcdzxlrzsezsqc27rchwsv0jskp2rsal4egz4ep5859pnmq8wpsfncwhr",
-    "md1fu39yrq3l4pkhsdyytkwl5z8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2v3d70kcz8a3r42",
-    "md1fu39yrqa4j5lcxlmx9ayav9mj0jj6wv58da6c23hjuw4ypg96ztz75f8wrrussm598ryfkw5ey8h6p",
-    "md1fu39yrpzw2ua7583pn5tj7qeewyp4dfykwfkgg6fxyxetdcmythf4hsqzd3v879jpmwaykdyahtr0v",
-    "md1fu39yrpgcj7vs58sls39p0l68ewgkud5t4n95k8j84204m9xvr7cunrjqfurja8939xk8j47ndpq63",
-    "md1fu39yrpha3hqdghjmksz3ry92d3gv4ejtmu9f0zxf3clxvtlnnv86xy4qee32ay5q0e3ty49zaan43"
-  ],
-  "multisig": {
-    "template": "descriptor",
-    "threshold": 3,
-    "cosigner_count": 3,
-    "path_family": "bip87",
-    "cosigners": [
-      {
-        "index": 0,
-        "master_fingerprint": "73c5da0a",
-        "origin_path": "m/48'/0'/0'/2'",
-        "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
-      },
-      {
-        "index": 1,
-        "master_fingerprint": "b8688df1",
-        "origin_path": "m/48'/0'/0'/2'",
-        "xpub": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"
-      },
-      {
-        "index": 2,
-        "master_fingerprint": "28645006",
-        "origin_path": "m/48'/0'/0'/2'",
-        "xpub": "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6"
-      }
-    ]
-  },
-  "privacy_preserving": false
-}
+```{.text include="41-bundle-inheritance-json.out"}
+PLACEHOLDER — generated from transcripts/41-bundle-inheritance-json.out at build
 ```
 
 Things to notice in the envelope:
@@ -598,12 +495,8 @@ mnemonic verify-bundle --network mainnet --account 0 \
 The preceding `bundle` and `verify-bundle` commands emit stderr
 disclosures alongside the JSON / stdout. From `bundle`:
 
-```text
-warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
-warning: secret material on argv (--slot @1.phrase=) — pipe via --slot @1.phrase=- to avoid /proc/$PID/cmdline exposure
-warning: secret material on argv (--slot @2.phrase=) — pipe via --slot @2.phrase=- to avoid /proc/$PID/cmdline exposure
-info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
-warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+```{.text include="41-inheritance.out" lines="1-5"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 1-5 at build
 ```
 
 The `info:` line is the v0.19.0 silent-default-with-stderr-notice
@@ -615,29 +508,8 @@ bundle-time and is now baked into the envelope).
 
 Expected output (one block per cosigner; final `result: ok`):
 
-```text
-ms1_decode[0]: ok cosigner[0] ms1 decoded
-ms1_entropy_match[0]: ok cosigner[0] ms1 byte-identical
-mk1_decode[0]: ok cosigner[0] mk1 decoded
-mk1_xpub_match[0]: ok cosigner[0] xpub matches
-mk1_fingerprint_match[0]: ok cosigner[0] fingerprint matches
-mk1_path_match[0]: ok cosigner[0] path matches
-ms1_decode[1]: ok cosigner[1] ms1 decoded
-ms1_entropy_match[1]: ok cosigner[1] ms1 byte-identical
-mk1_decode[1]: ok cosigner[1] mk1 decoded
-mk1_xpub_match[1]: ok cosigner[1] xpub matches
-mk1_fingerprint_match[1]: ok cosigner[1] fingerprint matches
-mk1_path_match[1]: ok cosigner[1] path matches
-ms1_decode[2]: ok cosigner[2] ms1 decoded
-ms1_entropy_match[2]: ok cosigner[2] ms1 byte-identical
-mk1_decode[2]: ok cosigner[2] mk1 decoded
-mk1_xpub_match[2]: ok cosigner[2] xpub matches
-mk1_fingerprint_match[2]: ok cosigner[2] fingerprint matches
-mk1_path_match[2]: ok cosigner[2] path matches
-md1_decode: ok decoded successfully
-md1_wallet_policy: ok wallet-policy mode confirmed
-md1_xpub_match: ok all 3 pubkeys match expected (multiset)
-result: ok
+```{.text include="41-inheritance.out" lines="9-30"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 9-30 at build
 ```
 
 Per SPEC §5.8 emission rule (v0.21.0+), descriptor mode populates
@@ -1035,13 +907,8 @@ printf '%s' "$seed" |
 
 Stdout:
 
-```text
-master fingerprint: 73c5da0a  (passphrase: none)
-CONFIRM: this fingerprint matches the wallet you are restoring before importing any descriptor.
-
-bip84 (native segwit P2WPKH):
-  descriptor: wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#hpg6d6w2
-  first recv: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
+```{.text include="41-restore-bip84.out"}
+PLACEHOLDER — generated from transcripts/41-restore-bip84.out at build
 ```
 
 Stderr carries the watch-only advisory (`note: stdout is watch-only —
@@ -1110,8 +977,8 @@ printf '%s' "$seed" |
 
 emits a single object:
 
-```json
-{"master_fingerprint":"73c5da0a","network":"mainnet","passphrase_applied":false,"verification":{"status":"verified"},"wallets":[{"descriptor":"wpkh([73c5da0a/84'/0'/0']xpub6CatW…/<0;1>/*)#hpg6d6w2","first_addresses":["bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"],"wallet_type":"bip84"}]}
+```{.text include="41-restore-bip84-json.out"}
+PLACEHOLDER — generated from transcripts/41-restore-bip84-json.out at build
 ```
 
 The seed is never echoed in any output mode (redacted by construction);
@@ -2448,8 +2315,8 @@ mnemonic seedqr decode --from seedqr=0000000000000000000000000000000000000000000
 
 Stdout:
 
-```text
-abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+```{.text include="41-seedqr-decode.out"}
+PLACEHOLDER — generated from transcripts/41-seedqr-decode.out at build
 ```
 
 JSON envelope form:
@@ -2461,15 +2328,8 @@ cat /tmp/decode.json
 
 `/tmp/decode.json` contents:
 
-```json
-{
-  "schema_version": "1",
-  "operation": "decode",
-  "variant": "standard",
-  "word_count": 12,
-  "phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-  "digits": "000000000000000000000000000000000000000000000003"
-}
+```{.text include="41-seedqr-decode-json.out"}
+PLACEHOLDER — generated from transcripts/41-seedqr-decode-json.out at build
 ```
 
 ### Worked example — encode
@@ -2480,8 +2340,8 @@ mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon ab
 
 Stdout:
 
-```text
-000000000000000000000000000000000000000000000003
+```{.text include="41-seedqr-encode.out"}
+PLACEHOLDER — generated from transcripts/41-seedqr-encode.out at build
 ```
 
 Pipe to a QR generator:
@@ -2501,8 +2361,8 @@ mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon ab
 
 Stdout:
 
-```text
-000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000102
+```{.text include="41-seedqr-encode-24.out"}
+PLACEHOLDER — generated from transcripts/41-seedqr-encode-24.out at build
 ```
 
 Round-tripping through `decode` yields the original 24-word phrase
@@ -2647,12 +2507,8 @@ mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8
 
 Stdout:
 
-```text
-nostr key (public)
-  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
-  script-type: p2tr
-  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
-  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
+```{.text include="41-nostr-npub.out"}
+PLACEHOLDER — generated from transcripts/41-nostr-npub.out at build
 ```
 
 The same key, all four script types:
@@ -2662,21 +2518,8 @@ mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8
   --all-script-types
 ```
 
-```text
-nostr key (public)
-  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
-  script-type: p2tr
-  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
-  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
-  script-type: p2wpkh
-  descriptor:  wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#qayh3r2k
-  address:     bc1qgyrepq5ukvwl7z7z5lk0066wx6vz75pn9ww6pv
-  script-type: p2sh-p2wpkh
-  descriptor:  sh(wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e))#kh0cqr4q
-  address:     3546dKS2XmpDUbyQrA7zmrbE2fayRvHWyJ
-  script-type: p2pkh
-  descriptor:  pkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#9xj4dc7r
-  address:     16vqz4S2bJ8F4r1rSrGU3RxkUReZYrr7X3
+```{.text include="41-nostr-npub-all.out"}
+PLACEHOLDER — generated from transcripts/41-nostr-npub-all.out at build
 ```
 
 Note that `p2tr` uses the bare x-only key, while `p2wpkh`, `p2sh-p2wpkh`,
@@ -2703,8 +2546,8 @@ nostr key (secret)
 
 Stderr:
 
-```text
-warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+```{.text include="41-nostr-nsec-stderr.out"}
+PLACEHOLDER — generated from transcripts/41-nostr-nsec-stderr.out at build
 ```
 
 (No argv warning because `--secret-stdin` was used.)
@@ -2739,8 +2582,8 @@ mnemonic nostr --secret-stdin <<< '000000000000000000000000000000000000000000000
 
 Stderr (in addition to the output-class advisory):
 
-```text
-notice: nostr: secret normalized to even-y (BIP-340) for address consistency
+```{.text include="41-nostr-evenY-stderr.out" lines="1-1"}
+PLACEHOLDER — generated from transcripts/41-nostr-evenY-stderr.out line 1 at build
 ```
 
 The emitted WIF and address correspond to the normalized (even-y) key,
@@ -2755,18 +2598,8 @@ mnemonic nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8
   --json
 ```
 
-```json
-{
-  "kind": "public",
-  "x_only": "7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e",
-  "outputs": [
-    {
-      "script_type": "p2tr",
-      "descriptor": "tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr",
-      "address": "bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04"
-    }
-  ]
-}
+```{.text include="41-nostr-json.out"}
+PLACEHOLDER — generated from transcripts/41-nostr-json.out at build
 ```
 
 For `nsec` inputs the object additionally carries `"wif": "<WIF>"` at the
@@ -2849,12 +2682,13 @@ mnemonic addresses --from <SOURCE> --address-type <T> [--account <N>] \
 
 ### Worked example
 
-```text
+```sh
 mnemonic addresses --from xpub=xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a \
   --address-type p2wpkh --count 3
-  0  bc1qfjxgzvdwrxh9ejp6jmdlr9tc6lfl6adcsx2z4f
-  1  bc1q399ww2924rlr6xn7j0fysjxnfjuy4p2v4769p3
-  2  bc1qtmra2ejp52grx486fr0nzndy8g7t4ee3amdht0
+```
+
+```{.text include="41-addresses-xpub.out"}
+PLACEHOLDER — generated from transcripts/41-addresses-xpub.out at build
 ```
 
 ### Output
@@ -3063,37 +2897,22 @@ mnemonic repair --ms1 ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 Stdout (the corrected chunk is on the LAST line; comment lines describe the fix):
 
-```text
-# Repair report
-#   ms1 chunk 0: 1 correction at position 17: 'z' -> 'q'
-ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+```{.text include="41-repair-ms1.out"}
+PLACEHOLDER — generated from transcripts/41-repair-ms1.out at build
 ```
 
 Stderr:
 
-```text
-repair: applied 1 correction across 1 chunk
-warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+```{.text include="41-repair-ms1.err"}
+PLACEHOLDER — generated from transcripts/41-repair-ms1.err at build
 ```
 
 Exit code: `5`.
 
 ### JSON output
 
-```json
-{
-  "schema_version": "1",
-  "kind": "ms1",
-  "corrected_chunks": ["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],
-  "repairs": [
-    {
-      "chunk_index": 0,
-      "original_chunk": "ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f",
-      "corrected_chunk": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
-      "corrected_positions": [{"position": 17, "was": "z", "now": "q"}]
-    }
-  ]
-}
+```{.text include="41-repair-ms1-json.out"}
+PLACEHOLDER — generated from transcripts/41-repair-ms1-json.out at build
 ```
 
 ### Per-chunk atomic semantics
@@ -3324,19 +3143,14 @@ mnemonic inspect --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 Stdout:
 
-```text
-kind: ms1
-tag: entr
-payload_kind: Entr
-byte_length: 16
-bit_strength: 128
-entropy_hex: <suppressed; pass --reveal-secret to print>
+```{.text include="41-inspect-ms1.out"}
+PLACEHOLDER — generated from transcripts/41-inspect-ms1.out at build
 ```
 
 Stderr:
 
-```text
-warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+```{.text include="41-inspect-ms1.err" lines="2-2"}
+PLACEHOLDER — generated from transcripts/41-inspect-ms1.err line 2 at build
 ```
 
 ### JSON output (v0.27.0)
@@ -3346,16 +3160,8 @@ stdout instead of the text-form report. The envelope carries a
 top-level `schema_version: "1"` field (v0.27.0 backfill via the new
 `InspectEnvelope` wrapper) followed by the kind-specific fields:
 
-```json
-{
-  "schema_version": "1",
-  "kind": "ms1",
-  "tag": "entr",
-  "payload_kind": "Entr",
-  "byte_length": 16,
-  "bit_strength": 128,
-  "entropy_hex": null
-}
+```{.text include="41-inspect-ms1-json.out"}
+PLACEHOLDER — generated from transcripts/41-inspect-ms1-json.out at build
 ```
 
 `schema_version` is currently pinned at `"1"`; future format changes
@@ -4009,17 +3815,8 @@ mnemonic compare-cost --miniscript 'or_b(pk(A),s:pk(B))' --feerate 25.0
 
 Stdout:
 
-```text
-Input: or_b(pk(A),s:pk(B))
-Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
-Feerate: 25.0 sat/vB
-
-Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
-----------+--------+-------+-------+----------+---------+-------
-A         |     60 |    84 |   +24 |     1500 |    2100 |   +600
-B         |     60 |    84 |   +24 |     1500 |    2100 |   +600
-
-note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+```{.text include="41-compare-cost-orb.out"}
+PLACEHOLDER — generated from transcripts/41-compare-cost-orb.out at build
 ```
 
 Either A or B can sign alone; both pay the same cost. tr costs `+24`
@@ -4034,17 +3831,8 @@ mnemonic compare-cost --miniscript 'or_d(pk(A),and_v(v:pk(B),older(144)))'
 
 Stdout:
 
-```text
-Input: or_d(pk(A),and_v(v:pk(B),older(144)))
-Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
-Feerate: 1.0 sat/vB
-
-Condition         | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
-------------------+--------+-------+-------+----------+---------+-------
-A                 |     60 |    85 |   +25 |       60 |      85 |    +25
-B + older(blocks) |     60 |    86 |   +26 |       60 |      86 |    +26
-
-note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+```{.text include="41-compare-cost-ord.out"}
+PLACEHOLDER — generated from transcripts/41-compare-cost-ord.out at build
 ```
 
 Two rows: A can sign at any time (no timelock needed); B can sign
@@ -4060,32 +3848,8 @@ echo 'wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)
 
 Stdout:
 
-```json
-{
-  "schema_version": 1,
-  "subcommand": "compare-cost",
-  "input": {
-    "form": "descriptor",
-    "value": "wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9))"
-  },
-  "extracted_miniscript": "pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)",
-  "feerate_sat_per_vb": 1.0,
-  "conditions": [
-    {
-      "label": "key[0]",
-      "wsh_vbytes": 60,
-      "tr_vbytes": 75,
-      "delta_vbytes": 15,
-      "wsh_sats": 60,
-      "tr_sats": 75,
-      "delta_sats": 15
-    }
-  ],
-  "notes": [
-    "per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct",
-    "input had concrete keys; cost is identical to the abstract case"
-  ]
-}
+```{.text include="41-compare-cost-json.out"}
+PLACEHOLDER — generated from transcripts/41-compare-cost-json.out at build
 ```
 
 The stdin path auto-classifies the input as a descriptor (top-level
@@ -4105,21 +3869,8 @@ mnemonic compare-cost --descriptor \
 
 Stdout:
 
-```text
-Input:     tr(f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9,pk(dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659))
-Extracted: pk(02dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659)
-Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
-Feerate: 25.0 sat/vB
-
-Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
-----------+--------+-------+-------+----------+---------+-------
-key[0]    |     60 |    75 |   +15 |     1500 |    1875 |   +375
-
-Keypath-spend (via IK f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9): 58 vB | 1450 sats
-
-note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
-note: input had concrete keys; cost is identical to the abstract case
-note: input had a non-NUMS internal key IK (f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9); this report compares script-path-only cost (tr modeled as tr(NUMS, {M})). Keyspend-via-IK costs ~58 vB total (under SIGHASH_DEFAULT) and is the cheapest spend if signing with IK is acceptable.
+```{.text include="41-compare-cost-tr-ik.out"}
+PLACEHOLDER — generated from transcripts/41-compare-cost-tr-ik.out at build
 ```
 
 The per-condition table compares `wsh(M)` against the script-path of

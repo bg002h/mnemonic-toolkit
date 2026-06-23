@@ -1,0 +1,2 @@
+notice: nostr: secret normalized to even-y (BIP-340) for address consistency
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

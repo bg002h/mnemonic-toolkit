@@ -1,0 +1,1 @@
+$MNEMONIC_BIN nostr --pubkey npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg

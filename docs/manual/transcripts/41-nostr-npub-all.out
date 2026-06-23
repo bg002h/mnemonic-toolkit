@@ -1,0 +1,14 @@
+nostr key (public)
+  x-only:      7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e
+  script-type: p2tr
+  descriptor:  tr(7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#548pk2gr
+  address:     bc1pvvymzaajnverlq90cqupmtwep2txzarvvwqfs4p8jfvkepqaws5scnww04
+  script-type: p2wpkh
+  descriptor:  wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#qayh3r2k
+  address:     bc1qgyrepq5ukvwl7z7z5lk0066wx6vz75pn9ww6pv
+  script-type: p2sh-p2wpkh
+  descriptor:  sh(wpkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e))#kh0cqr4q
+  address:     3546dKS2XmpDUbyQrA7zmrbE2fayRvHWyJ
+  script-type: p2pkh
+  descriptor:  pkh(027e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e)#9xj4dc7r
+  address:     16vqz4S2bJ8F4r1rSrGU3RxkUReZYrr7X3

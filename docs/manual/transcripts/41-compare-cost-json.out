@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "subcommand": "compare-cost",
+  "input": {
+    "form": "descriptor",
+    "value": "wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9))"
+  },
+  "extracted_miniscript": "pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)",
+  "feerate_sat_per_vb": 1.0,
+  "conditions": [
+    {
+      "label": "key[0]",
+      "wsh_vbytes": 60,
+      "tr_vbytes": 75,
+      "delta_vbytes": 15,
+      "wsh_sats": 60,
+      "tr_sats": 75,
+      "delta_sats": 15
+    }
+  ],
+  "keypath_spend": null,
+  "notes": [
+    "per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct",
+    "input had concrete keys; cost is identical to the abstract case"
+  ]
+}

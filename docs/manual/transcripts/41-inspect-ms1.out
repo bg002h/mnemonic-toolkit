@@ -1,0 +1,6 @@
+kind: ms1
+tag: entr
+payload_kind: Entr
+byte_length: 16
+bit_strength: 128
+entropy_hex: <suppressed; pass --reveal-secret to print>

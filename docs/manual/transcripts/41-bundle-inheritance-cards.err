@@ -1,0 +1,15 @@
+warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--slot @1.phrase=) — pipe via --slot @1.phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--slot @2.phrase=) — pipe via --slot @2.phrase=- to avoid /proc/$PID/cmdline exposure
+info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
+# === Wallet bundle: descriptor, mainnet ===
+# Threshold: 3 of 3
+# Cosigners:
+#   @0: ms1:6e6be,mk1:6e6be (73c5da0a @ m/48'/0'/0'/2')
+#   @1: ms1:6e6bf,mk1:6e6bf (b8688df1 @ m/48'/0'/0'/2')
+#   @2: ms1:6e6bc,mk1:6e6bc (28645006 @ m/48'/0'/0'/2')
+# Template: descriptor
+# md1: 6e6b
+# Recovery: any 3 of 3 signing keys + md1 (template card).
+# Language: english
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
