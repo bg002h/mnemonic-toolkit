@@ -11,8 +11,15 @@ name: technical-manual
 # airtight here: the trigger also fires on crates/mnemonic-toolkit/{src,tests}
 # so a toolkit-symbol rename re-runs symbol-ref-check, and a non-authoritative
 # chapter must fully-qualify toolkit refs (the `unqualified-toolkit` gate) so
-# they FAIL-on-rename rather than skip. No tag trigger (the technical manual
-# ships no release asset; manual.yml owns the manual-v* PDF release).
+# they FAIL-on-rename rather than skip.
+#
+# `paths` filters apply only to branch pushes / PRs; tag pushes matching
+# `tech-manual-v*` always trigger the workflow regardless of which files are in
+# the tag's commit. This is intentional — the release-asset upload step needs to
+# run on every tag push. Mirrors manual.yml's manual-v* PDF release: the
+# frontmatter (src/00-frontmatter.md) and release-history appendix promise the
+# rendered build/m-format-technical-manual.pdf ships as a GitHub release asset
+# under the tech-manual-vX.Y.Z tag.
 
 on:
   push:
@@ -25,6 +32,8 @@ on:
       # citation; fire so symbol-ref-check re-runs (toolkit-G2 in bare CI).
       - 'crates/mnemonic-toolkit/src/**'
       - 'crates/mnemonic-toolkit/tests/**'
+    tags:
+      - 'tech-manual-v*'
   pull_request:
     paths:
       - 'docs/technical-manual/**'
@@ -38,6 +47,10 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
         # Default checkout (NO `path:`): GitHub nests the repo at
@@ -127,3 +140,54 @@ jobs:
             MS_BIN=ms \
             MK_BIN=mk \
             EXAMPLES_DIR="$GITHUB_WORKSPACE/docs/technical-manual/examples"
+
+      # ---- PDF render + release asset (mirrors manual.yml's manual-v* path) ----
+      # The build + Verify + upload-artifact steps run on every workflow trigger
+      # (push / PR / tag); only the two release steps are tag-gated. The frontmatter
+      # promises build/m-format-technical-manual.pdf ships under tech-manual-vX.Y.Z.
+      - name: Install pandoc + texlive
+        # No chromium / mermaid-filter: the build runs MERMAID_FILTER=skip
+        # (the Makefile default) and consumes the checked-in figures/cache/.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pandoc \
+            texlive-xetex \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            texlive-extra-utils \
+            make
+
+      - name: Build PDF
+        # MERMAID_FILTER=skip is the Makefile default; explicit here for
+        # clarity. The build consumes the checked-in figures/cache/.
+        working-directory: docs/technical-manual
+        run: make pdf MERMAID_FILTER=skip
+
+      - name: Verify PDF
+        working-directory: docs/technical-manual
+        run: test -f build/m-format-technical-manual.pdf && ls -lh build/m-format-technical-manual.pdf
+
+      - name: Upload PDF as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m-format-technical-manual-pdf
+          path: docs/technical-manual/build/m-format-technical-manual.pdf
+
+      - name: Ensure GitHub release exists for this tag
+        if: startsWith(github.ref, 'refs/tags/tech-manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
+            gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+          fi
+
+      - name: Upload PDF to release (on tech-manual-v* tag)
+        if: startsWith(github.ref, 'refs/tags/tech-manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        working-directory: docs/technical-manual
+        run: gh release upload "$REF_NAME" build/m-format-technical-manual.pdf --clobber
