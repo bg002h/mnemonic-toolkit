@@ -1383,33 +1383,10 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
 
     crate::slot_input::validate_slot_set(&args.slot)?;
 
-    // cycle-11b L24 — exact-coverage bounds gate. `validate_slot_set` checks
-    // contiguity (`0..=max_idx`) only, NOT range-vs-`n`, so a contiguous slot set
-    // whose max index exceeds the descriptor's placeholder count `n` would reach
-    // the per-slot path-override loop below and OOB-write `new_paths[idx]` (panic).
-    // This mirrors `bundle.rs`'s gate byte-for-byte (iterating `args.slot` here vs
-    // bundle.rs's `slots`); it catches the over-`n` panic AND the under-`n` case.
-    // S-VERIFY (PLAN_constellation_bughunt_fix_program.md §292; FOLLOWUP
-    // `verify-bundle-bundle-rs-descriptor-mode-dedup`): this duplicates
-    // bundle.rs:1373-1388 — fold both into the shared descriptor-mode binding fn
-    // when that dedup lands (one gate, both callers).
-    if args
-        .slot
-        .iter()
-        .map(|s| s.index as usize + 1)
-        .max()
-        .unwrap_or(0)
-        != n
-    {
-        return Err(ToolkitError::DescriptorParse(format!(
-            "descriptor has n={n} placeholders but --slot vec covers {} slots",
-            args.slot
-                .iter()
-                .map(|s| s.index as usize + 1)
-                .max()
-                .unwrap_or(0)
-        )));
-    }
+    // Wave-4 L1: the cycle-11b L24 exact-coverage gate (formerly hand-copied
+    // here, carrying an S-VERIFY fold-comment citing this dedup) now lives
+    // inside the shared `bind_descriptor_mode_paths` called below — one gate,
+    // both callers, drift structurally impossible.
 
     // v0.19.0 SPEC §4.12 — canonicity-aware verify-bundle round-trip.
     // Mirror bundle.rs's descriptor-mode binding logic so default-inferred
@@ -1425,89 +1402,25 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     let is_non_canonical =
         md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
 
-    // Apply default-inference + slot-path-override mutations to path_decl
-    // (mirror of bundle.rs Phase 4 logic). Caller does NOT emit the stderr
-    // info notice — verify-bundle is read-only, the original bundle emit
-    // already produced the notice.
-    if is_non_canonical {
-        // H12 — taproot-aware default-origin script-type (mirror of bundle.rs).
-        // The verify side MUST agree with bundle, so it derives the BIP-48 leaf
-        // from the SAME canonicity-probe tree root `Tag` (Tr → 3', sh → 1',
-        // else 2'); otherwise verify-bundle would re-derive a taproot cosigner
-        // at 2' and spuriously reject a correct 3' bundle.
-        let default_script_type =
-            crate::template::bip48_script_type_for_root_tag(&canonicity_probe.tree.tag);
-        let default_path = crate::cmd::bundle::compute_default_origin_path(
-            args.network,
-            args.account,
-            default_script_type,
-        );
-        let mut new_paths: Vec<md_codec::origin_path::OriginPath> =
-            match &descriptor_resolved.path_decl.paths {
-                md_codec::origin_path::PathDeclPaths::Shared(op) => {
-                    if op.components.is_empty() {
-                        (0..n).map(|_| default_path.clone()).collect()
-                    } else {
-                        (0..n).map(|_| op.clone()).collect()
-                    }
-                }
-                md_codec::origin_path::PathDeclPaths::Divergent(v) => v
-                    .iter()
-                    .map(|op| {
-                        if op.components.is_empty() {
-                            default_path.clone()
-                        } else {
-                            op.clone()
-                        }
-                    })
-                    .collect(),
-            };
-        // Apply per-slot --slot @N.path= overrides for phrase-bearing slots.
-        let mut by_index_path: std::collections::BTreeMap<u8, &crate::slot_input::SlotInput> =
-            std::collections::BTreeMap::new();
-        for s in &args.slot {
-            if s.subkey == crate::slot_input::SlotSubkey::Path {
-                by_index_path.insert(s.index, s);
-            }
-        }
-        let mut by_index_subkeys: std::collections::BTreeMap<
-            u8,
-            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
-        > = std::collections::BTreeMap::new();
-        for s in &args.slot {
-            by_index_subkeys
-                .entry(s.index)
-                .or_default()
-                .insert(s.subkey);
-        }
-        for (idx, slot_path) in &by_index_path {
-            let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
-            // v0.31.3: Seedqr materializes to a phrase at slot-emit time;
-            // v0.41.0: Ms1 materializes to entropy at slot-emit time. Route the
-            // path override through the same branch.
-            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
-                && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
-                && !subkeys.contains(&crate::slot_input::SlotSubkey::Ms1)
-            {
-                continue;
-            }
-            let user_path = bitcoin::bip32::DerivationPath::from_str(&slot_path.value)
-                .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
-            new_paths[*idx as usize] = crate::cmd::bundle::derivation_path_to_origin(&user_path);
-        }
-        // F4 (v0.37.5): mirror bundle.rs's collapse of identical inferred paths
-        // to `Shared` so verify-bundle's `expected` md1 matches the bundle's
-        // emitted md1 byte-for-byte for elided-origin uniform-path descriptors.
-        // Benign today (md1_xpub_match is pubkey-only), but keeps the two
-        // symmetric default-inference sites consistent and future-proofs a
-        // tightened md1 comparison.
-        let all_same = new_paths.windows(2).all(|w| w[0] == w[1]);
-        descriptor_resolved.path_decl.paths = if all_same {
-            md_codec::origin_path::PathDeclPaths::Shared(new_paths[0].clone())
-        } else {
-            md_codec::origin_path::PathDeclPaths::Divergent(new_paths)
-        };
-    }
+    // Wave-4 L1: gate + default-inference + per-slot path-override + F4 collapse
+    // now run in the SHARED `bind_descriptor_mode_paths` (the same fn bundle's
+    // emit path calls), so the two sides cannot drift. `Verify` mode SKIPS the
+    // emit-only §6.6 row-19 path-mismatch refusal (verify is read-only — a
+    // genuine inline/slot conflict surfaces downstream as a md1 byte-mismatch,
+    // never as a refusal, preserving verify's accept-set). The returned
+    // `defaulted_indices` is discarded: verify-bundle emits no notice, and the
+    // sole consumed output (`path_decl.paths`) is byte-identical to the prior
+    // hand-copied block (only the discarded bookkeeping differs).
+    let _defaulted = crate::cmd::bundle::bind_descriptor_mode_paths(
+        crate::cmd::bundle::DescriptorBindMode::Verify,
+        &args.slot,
+        &mut descriptor_resolved.path_decl,
+        n,
+        is_non_canonical,
+        &canonicity_probe.tree.tag,
+        args.network,
+        args.account,
+    )?;
 
     // Per-slot descriptor-mode binding loop using mutated path_decl as the
     // per-`@N` anno_path source. Mirror of bundle.rs:939-1099.

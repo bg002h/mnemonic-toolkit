@@ -413,3 +413,372 @@ fn verify_bundle_descriptor_exact_coverage_path_override_does_not_over_fire() {
         "exact-coverage path-override over-fired the n/slot gate; got:\n{stderr}"
     );
 }
+
+// ============================================================================
+// Wave-4 L1 — bundle ↔ verify-bundle descriptor-mode path-derivation PARITY
+// matrix (SPEC_wave4_L1_verify_bundle_dedup.md §4). This is the regression
+// oracle for the `bind_descriptor_mode_paths` dedup: a desync between the emit
+// (bundle) and round-trip (verify-bundle) path derivation goes RED here — the
+// exact cycle-11b L24 drift class, now caught at the unit-of-derivation.
+//
+// Known-fixture DERIVED master fingerprints (mainnet, verified live):
+//   @0 = TREZOR_12_ZERO → 73c5da0a
+//   @1 = BIP39_TEST_2    → b8688df1
+// Inline-origin cells MUST embed each phrase slot's TRUE derived fp, or the
+// `bundle.rs` fp-mismatch refusal (`--slot @N.phrase derives master fingerprint
+// … but descriptor @N annotation specifies …`) false-REDs the cell before it
+// ever reaches the `is_non_canonical` binding the matrix means to exercise.
+// ============================================================================
+
+const FP0: &str = "73c5da0a"; // TREZOR_12_ZERO derived master fp
+const FP1: &str = "b8688df1"; // BIP39_TEST_2 derived master fp
+
+/// Emit a `bundle --json` for (descriptor, slots), then `verify-bundle` the
+/// SAME cards + descriptor + slots and return (result, all_checks_passed,
+/// n_checks). Card flattening follows the n≥2-NESTED-mk1 / every-`--ms1` shape
+/// (SPEC §4 Finding-2): for n=1 the bundle's `mk1` is a flat `[str,…]` array;
+/// for n≥2 it is `[[str,…],[str,…]]` (one inner per cosigner). This helper
+/// handles BOTH (per-element type check), so a single matrix can mix arities.
+/// A single-sig flat-mk1 harness would truncate per-cosigner continuation
+/// chunks for n≥2 and spuriously RED — see SPEC §4 Finding-2.
+fn parity_round_trips(descriptor: &str, slots: &[String]) -> (String, bool, usize) {
+    use serde_json::Value;
+
+    let mut emit_args: Vec<String> = vec![
+        "bundle".into(),
+        "--descriptor".into(),
+        descriptor.into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--json".into(),
+    ];
+    for s in slots {
+        emit_args.push("--slot".into());
+        emit_args.push(s.clone());
+    }
+    let emit = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&emit_args)
+        .assert()
+        .success();
+    let bundle: Value =
+        serde_json::from_slice(&emit.get_output().stdout).expect("valid bundle JSON");
+
+    let mut vargs: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--descriptor".into(),
+        descriptor.into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--json".into(),
+    ];
+    for s in slots {
+        vargs.push("--slot".into());
+        vargs.push(s.clone());
+    }
+    // Every ms1 entry (the ms1 array is length-N for phrase-slot bundles).
+    for e in bundle["ms1"].as_array().expect("ms1 array") {
+        vargs.push("--ms1".into());
+        vargs.push(e.as_str().expect("ms1 entry str").to_string());
+    }
+    // mk1: nested (n≥2) OR flat (n=1) — handle per-element.
+    for entry in bundle["mk1"].as_array().expect("mk1 array") {
+        match entry {
+            Value::Array(inner) => {
+                for chunk in inner {
+                    vargs.push("--mk1".into());
+                    vargs.push(chunk.as_str().expect("mk1 chunk str").to_string());
+                }
+            }
+            Value::String(s) => {
+                vargs.push("--mk1".into());
+                vargs.push(s.clone());
+            }
+            other => panic!("unexpected mk1 element shape: {other:?}"),
+        }
+    }
+    // md1 is always flat.
+    for chunk in bundle["md1"].as_array().expect("md1 array") {
+        vargs.push("--md1".into());
+        vargs.push(chunk.as_str().expect("md1 chunk str").to_string());
+    }
+
+    let verify = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&vargs)
+        .assert()
+        .success();
+    let out: Value =
+        serde_json::from_slice(&verify.get_output().stdout).expect("valid verify JSON");
+    let checks = out["checks"].as_array().expect("checks array");
+    let all_passed = checks.iter().all(|c| c["passed"] == true);
+    (
+        out["result"].as_str().unwrap_or("<none>").to_string(),
+        all_passed,
+        checks.len(),
+    )
+}
+
+/// SPEC §4 mandatory self-test (FIRST-landed cell): the parity harness MUST
+/// reproduce `result=ok` / all-checks-passed for the wsh n=2 all-elided cell
+/// ON CURRENT SOURCE. A green here proves the harness card-shape handling is
+/// correct; only then does a RED elsewhere implicate the dedup rather than a
+/// harness bug.
+#[test]
+fn parity_harness_self_test_wsh_n2_all_elided() {
+    let (result, all_passed, n) = parity_round_trips(
+        "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+        &[
+            format!("@0.phrase={TREZOR_12_ZERO}"),
+            format!("@1.phrase={BIP39_TEST_2}"),
+        ],
+    );
+    assert_eq!(result, "ok", "self-test harness desynced (result != ok)");
+    assert!(all_passed, "self-test harness: not all checks passed ({n})");
+}
+
+/// PARITY (wsh, leaf 2') — all-elided → BIP-48 default; shared-explicit (same
+/// inline path, correct fps) → Shared no-defaulting; divergent (different inline
+/// paths, correct fps) → Divergent no-defaulting; slot-override → override
+/// replaces default; mixed (@0 inline-correct-fp + @1 elided). Every cell MUST
+/// round-trip `ok` / all-passed — proving emit and verify agree byte-for-byte.
+#[test]
+fn parity_wsh_all_shapes_round_trip() {
+    let cases: Vec<(&str, Vec<String>)> = vec![
+        // all-elided
+        (
+            "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // shared-explicit (same path on both, correct per-slot fps)
+        (
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/0'/2']@1)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // divergent (different paths, correct per-slot fps)
+        (
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/7'/2']@1)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // slot-override (bare @0 + --slot @0.path= overrides the default)
+        (
+            "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                "@0.path=m/48'/0'/9'/2'".into(),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // mixed (@0 inline-correct-fp, @1 elided-defaulted)
+        (
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+    ];
+    for (desc, slots) in &cases {
+        let (result, all_passed, n) = parity_round_trips(desc, slots);
+        assert_eq!(result, "ok", "wsh parity cell desynced ({desc})");
+        assert!(all_passed, "wsh parity cell not all-passed ({n}): {desc}");
+    }
+    // Suppress the unused-const lint for the fp documentation anchors when this
+    // file's other cells don't reference them through the format! literals.
+    let _ = (FP0, FP1);
+}
+
+/// PARITY (sh-wsh, leaf 1') — H12 selects the sh-wsh BIP-48 leaf `1'`. The
+/// all-elided and slot-override shapes must round-trip, proving the shared fn's
+/// `root_tag`-derived `default_script_type` agrees emit↔verify for the sh root.
+#[test]
+fn parity_sh_wsh_round_trips() {
+    for (desc, slots) in [
+        (
+            "sh(wsh(andor(pkh(@0),after(12000000),pk(@1))))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        (
+            "sh(wsh(andor(pkh(@0),after(12000000),pk(@1))))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                "@0.path=m/48'/0'/4'/1'".into(),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+    ] {
+        let (result, all_passed, n) = parity_round_trips(desc, &slots);
+        assert_eq!(result, "ok", "sh-wsh parity cell desynced ({desc})");
+        assert!(
+            all_passed,
+            "sh-wsh parity cell not all-passed ({n}): {desc}"
+        );
+    }
+}
+
+/// PARITY (tr(NUMS), leaf 3', n=1) — H12 selects the taproot BIP-48 leaf `3'`.
+/// all-elided + slot-override. The n=1 bundle mk1 is FLAT (the harness handles
+/// it), so this also exercises the flat-mk1 arm of `parity_round_trips`.
+#[test]
+fn parity_tr_nums_round_trips() {
+    for (desc, slots) in [
+        (
+            "tr(NUMS,and_v(v:pk(@0),after(12000000)))",
+            vec![format!("@0.phrase={TREZOR_12_ZERO}")],
+        ),
+        (
+            "tr(NUMS,and_v(v:pk(@0),after(12000000)))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                "@0.path=m/48'/0'/3'/3'".into(),
+            ],
+        ),
+    ] {
+        let (result, all_passed, n) = parity_round_trips(desc, &slots);
+        assert_eq!(result, "ok", "tr parity cell desynced ({desc})");
+        assert!(all_passed, "tr parity cell not all-passed ({n}): {desc}");
+    }
+}
+
+// ============================================================================
+// Wave-4 L1 — characterization cells pinning the three divergences (D1/D2/D3).
+// These prove the dedup keeps the emit-only refusals/notice OUT of verify and
+// IN bundle. They are the tests that go RED if a future edit accidentally
+// imports the row-19 refusal into verify or drops it from bundle.
+// ============================================================================
+
+/// D2 — `bundle` RETAINS the §6.6 row-19 inline-vs-slot path-mismatch refusal
+/// post-dedup. `@0` carries an inline `[fp/path]@0` origin AND a `--slot
+/// @0.path=` that DISAGREES → refuse (exit ≠ 0), stderr names the conflict.
+/// (`@0` is NOT defaulted — it has an inline origin — and the slot path differs,
+/// so the row-19 `mode == Emit` arm fires.)
+#[test]
+fn bundle_retains_row19_inline_vs_slot_path_mismatch_refusal() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            // @0 inline path is .../0'/2'; --slot below says .../9'/2' → mismatch.
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/48'/0'/9'/2'",
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("path mismatch").and(predicate::str::contains("disagrees")),
+        );
+}
+
+/// D2 — `verify-bundle` does NOT acquire the row-19 refusal. The SAME
+/// inline-vs-slot-mismatch inputs fed to `verify-bundle` MUST NOT surface the
+/// `path mismatch`/`disagrees` refusal from the binding stage (verify is
+/// read-only; a genuine conflict surfaces downstream as a md1 mismatch, never as
+/// `SlotInputViolation{kind:"path-mismatch"}`). This is the cell that RED-flags
+/// accidentally importing the row-19 refusal into the verify path.
+#[test]
+fn verify_bundle_does_not_acquire_row19_refusal() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-bundle",
+            "--descriptor",
+            "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/48'/0'/9'/2'",
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            // Empty sentinels reach the binding (and the would-be row-19 site)
+            // BEFORE any expected-wire comparison; they fail md1 reassembly later.
+            "--mk1",
+            "",
+            "--md1",
+            "",
+        ])
+        .assert();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("path mismatch") && !stderr.contains("disagrees"),
+        "verify-bundle acquired the emit-only row-19 path-mismatch refusal; got:\n{stderr}"
+    );
+}
+
+/// D3 — `verify-bundle` still emits NO default-path-inference notice post-dedup
+/// (the notice is emit-only and stays at the bundle call site). The notice
+/// string is `emit_default_path_notice`'s `info: non-canonical descriptor;
+/// defaulting origin path …`. verify-bundle is read-only.
+#[test]
+fn verify_bundle_emits_no_default_path_notice() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-bundle",
+            "--descriptor",
+            "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+            "--mk1",
+            "",
+            "--md1",
+            "",
+        ])
+        .assert();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        !stderr.contains("info: non-canonical descriptor; defaulting origin path"),
+        "verify-bundle emitted the emit-only default-path notice; got:\n{stderr}"
+    );
+}
+
+/// Gate-re-order safety (SPEC §3.2 / §5 item 2): an over-`n` slot vec on a
+/// PARSE-FAILING descriptor still exits ≠ 0 after the dedup folds the gate AFTER
+/// the canonicity probe. Either refusal message is acceptable (the gate-vs-probe
+/// re-order flips WHICH surfaces); assert only the non-zero exit. (No existing
+/// test pins this precedence.)
+#[test]
+fn over_n_slot_vec_on_parse_failing_descriptor_still_refuses() {
+    // `wsh(@0)` is not a valid miniscript leaf (bare key under wsh w/o wrapper)
+    // → parse_descriptor probe errors; @0,@1 over-run n=1.
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            "wsh(@0)",
+            "--network",
+            "mainnet",
+            "--slot",
+            &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            &format!("@1.phrase={BIP39_TEST_2}"),
+        ])
+        .assert()
+        .failure();
+}

@@ -1384,22 +1384,14 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let mut resolved_placeholders = resolve_placeholders(&occs)?;
     let n = resolved_placeholders.n as usize;
 
-    if slots
-        .iter()
-        .map(|s| s.index as usize + 1)
-        .max()
-        .unwrap_or(0)
-        != n
-    {
-        return Err(ToolkitError::DescriptorParse(format!(
-            "descriptor has n={n} placeholders but --slot vec covers {} slots",
-            slots
-                .iter()
-                .map(|s| s.index as usize + 1)
-                .max()
-                .unwrap_or(0)
-        )));
-    }
+    // Wave-4 L1: the exact-coverage gate now lives inside the shared
+    // `bind_descriptor_mode_paths` (called below). Folding it there makes the
+    // cycle-11b L24 guard-drift (bundle had it, verify omitted it) structurally
+    // impossible. The gate runs AFTER the canonicity probe + the emit-only
+    // §4.12.g / §6.6-row-4 refusals — for doubly-malformed input (over-`n` slot
+    // vec AND a parse-failing descriptor / `--account != 0` on canonical / a
+    // row-4 conflict) this re-orders WHICH exit-≠0 refusal surfaces, no funds /
+    // accept-set / exit-class impact (SPEC §3.2 / §5 item 2).
 
     // v0.19.0 SPEC §4.12 — early canonicity classification. Probe-parse the
     // descriptor (empty keys/fingerprints — only the tree is consulted) so
@@ -1458,109 +1450,25 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // holds the descriptor's md-codec tree, whose root `Tag` selects the BIP-48
     // leaf (Tr → 3' P2TR, sh → 1', else wsh 2'). Pre-H12 this was hardcoded 2',
     // putting taproot cosigner keys in the wrong (un-cosignable) subtree.
+    // `default_script_type` is needed at the call site by
+    // `emit_default_path_notice` below; the shared fn recomputes it internally
+    // from `root_tag` (a cheap pure tag→u32 map) — SPEC §3.2 Open-Q resolution.
     let default_script_type =
         crate::template::bip48_script_type_for_root_tag(&canonicity_probe.tree.tag);
-    let mut defaulted_indices: Vec<u8> = Vec::new();
-    if is_non_canonical {
-        let default_path =
-            compute_default_origin_path(args.network, args.account, default_script_type);
-        let mut new_paths: Vec<md_codec::origin_path::OriginPath> =
-            match &resolved_placeholders.path_decl.paths {
-                PathDeclPaths::Shared(op) => {
-                    if op.components.is_empty() {
-                        // All slots default.
-                        defaulted_indices.extend(0..(n as u8));
-                        (0..n).map(|_| default_path.clone()).collect()
-                    } else {
-                        // Shared non-empty: no defaulting; lift to Divergent
-                        // for uniform downstream handling.
-                        (0..n).map(|_| op.clone()).collect()
-                    }
-                }
-                PathDeclPaths::Divergent(v) => v
-                    .iter()
-                    .enumerate()
-                    .map(|(i, op)| {
-                        if op.components.is_empty() {
-                            defaulted_indices.push(i as u8);
-                            default_path.clone()
-                        } else {
-                            op.clone()
-                        }
-                    })
-                    .collect(),
-            };
-
-        // Apply per-slot `--slot @N.path=` overrides (phrase slots only;
-        // the Xpub branch in the binding loop has its own path-override
-        // handling). Refuse on inline-vs-slot path mismatch (row 19).
-        let mut by_index_path: std::collections::BTreeMap<u8, &crate::slot_input::SlotInput> =
-            std::collections::BTreeMap::new();
-        for s in slots {
-            if s.subkey == crate::slot_input::SlotSubkey::Path {
-                by_index_path.insert(s.index, s);
-            }
-        }
-        let mut by_index_subkeys: std::collections::BTreeMap<
-            u8,
-            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
-        > = std::collections::BTreeMap::new();
-        for s in slots {
-            by_index_subkeys
-                .entry(s.index)
-                .or_default()
-                .insert(s.subkey);
-        }
-        for (idx, slot_path) in &by_index_path {
-            let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
-            // Only phrase-bearing slots route through this override path
-            // (incl. v0.31.3 Seedqr materialization which decodes to phrase,
-            // and v0.41.0 Ms1 which decodes to entropy). Xpub-bearing slots are
-            // handled by the per-slot binding loop's existing override logic at
-            // bundle.rs:1018-1029.
-            if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
-                && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
-                && !subkeys.contains(&crate::slot_input::SlotSubkey::Ms1)
-            {
-                continue;
-            }
-            let user_path = DerivationPath::from_str(&slot_path.value)
-                .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
-            let user_origin = derivation_path_to_origin(&user_path);
-            // Row 19: if inline `[fp/path]@N` AND `--slot @N.path=` both
-            // supplied AND non-empty AND differ → refuse.
-            if !defaulted_indices.contains(idx)
-                && !new_paths[*idx as usize].components.is_empty()
-                && new_paths[*idx as usize] != user_origin
-            {
-                let inline_path = origin_to_derivation_path(&new_paths[*idx as usize])?;
-                return Err(ToolkitError::SlotInputViolation {
-                    kind: "path-mismatch",
-                    message: format!(
-                        "slot @{idx} path mismatch: --slot says {user_path}, descriptor inline [.../{inline_path}] disagrees; supply consistent values or remove one source."
-                    ),
-                });
-            }
-            new_paths[*idx as usize] = user_origin;
-            // Slot-supplied path takes precedence; if it was a default,
-            // remove from the notice list.
-            defaulted_indices.retain(|i| i != idx);
-        }
-
-        // F4 fix: collapse identical inferred per-`@N` paths to `Shared` — the
-        // canonical form `parse_descriptor` (all_paths_same) and
-        // `synthesize_unified` (all_same || n==1) already use. Without this, an
-        // elided-origin descriptor emitted `Divergent([p,p,p])` while the
-        // explicit-origin / wallet-import path emitted `Shared(p)` for the SAME
-        // wallet → byte-different md1 (cross-start non-convergence). `new_paths`
-        // is non-empty (n >= 1 enforced upstream); a 1-element vec is all-same.
-        let all_same = new_paths.windows(2).all(|w| w[0] == w[1]);
-        resolved_placeholders.path_decl.paths = if all_same {
-            PathDeclPaths::Shared(new_paths[0].clone())
-        } else {
-            PathDeclPaths::Divergent(new_paths)
-        };
-    }
+    // Wave-4 L1: gate + H12 inference + new_paths build + per-slot override loop
+    // (incl. the emit-mode-gated §6.6 row-19 path-mismatch refusal) + F4 collapse
+    // now live in the SHARED `bind_descriptor_mode_paths`. `Emit` mode enforces
+    // row-19. Returns the `defaulted_indices` for the notice below.
+    let defaulted_indices = bind_descriptor_mode_paths(
+        DescriptorBindMode::Emit,
+        slots,
+        &mut resolved_placeholders.path_decl,
+        n,
+        is_non_canonical,
+        &canonicity_probe.tree.tag,
+        args.network,
+        args.account,
+    )?;
 
     // Resolve each @i slot using the per-@i annotation path from the descriptor.
     let secp = Secp256k1::new();
@@ -2244,6 +2152,192 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     }
 
     Ok(())
+}
+
+/// Distinguishes the emit (`bundle`) caller from the read-only round-trip
+/// (`verify-bundle`) caller of [`bind_descriptor_mode_paths`]. The ONLY
+/// behavioral difference inside the shared fn is the §6.6 row-19 inline-vs-slot
+/// path-mismatch refusal: emit refuses; verify-bundle is read-only and silently
+/// accepts (it later compares the re-derived md1 byte-for-byte, so a genuinely
+/// inconsistent inline/slot path surfaces as a md1 mismatch, not a refusal). All
+/// other emit-only refusals (§4.12.g `--account`, §6.6-row-4 `[Phrase,Path]`)
+/// and the stderr default-inference notice stay at the bundle CALL SITE and
+/// never enter the shared fn — importing any of them here would change
+/// verify-bundle's accept-set.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum DescriptorBindMode {
+    /// `bundle --descriptor` — emit; enforce the row-19 path-mismatch refusal.
+    Emit,
+    /// `verify-bundle --descriptor` — read-only round-trip; skip row-19.
+    Verify,
+}
+
+/// Wave-4 L1 SHARED descriptor-mode path binding for non-canonical `@N`
+/// descriptors, consumed by BOTH `bundle_run_unified_descriptor` (emit) and
+/// `verify_bundle::descriptor_mode_verify_run` (round-trip cross-check). Folds
+/// the cycle-11b L24 exact-coverage gate + H12 default-script-type inference +
+/// `new_paths` default-path build + per-slot `--slot @N.path=` override loop +
+/// F4 identical-path `Shared`-collapse into ONE site so the two callers can
+/// never drift (the L24 panic was exactly that drift: verify omitted the gate
+/// → OOB write).
+///
+/// MUTATES `path_decl.paths` in place (default-inference + overrides + F4
+/// collapse). RETURNS the `defaulted_indices` (the `@N` that received the
+/// default path) for the caller's use — `bundle` feeds it to
+/// `emit_default_path_notice`; `verify-bundle` discards it.
+///
+/// Inputs are already-resolved so each caller keeps its OWN error mapping for
+/// the lex/resolve/probe steps (bundle → `DescriptorParse`; verify-bundle →
+/// `DescriptorReparseFailed`) — those steps deliberately stay at the call site,
+/// which is why this takes `n` + `is_non_canonical` + `root_tag` rather than
+/// the descriptor string.
+///
+/// EMIT-ONLY concerns that do NOT belong here (caller-side): the §4.12.g
+/// `--account != 0` refusal, the §6.6-row-4 `[Phrase,Path]` refusal, and the
+/// stderr notice.
+///
+/// The arg count (8) is deliberate: passing already-resolved `n` /
+/// `is_non_canonical` / `root_tag` keeps the lex/resolve/probe steps (and their
+/// per-caller error mapping) at the call site, which is the whole point of the
+/// dedup boundary (SPEC §3.1). Bundling them into a struct would only relocate,
+/// not reduce, the coupling.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn bind_descriptor_mode_paths(
+    mode: DescriptorBindMode,
+    slots: &[crate::slot_input::SlotInput],
+    path_decl: &mut md_codec::origin_path::PathDecl,
+    n: usize,
+    is_non_canonical: bool,
+    root_tag: &md_codec::tag::Tag,
+    network: crate::network::CliNetwork,
+    account: u32,
+) -> Result<Vec<u8>, ToolkitError> {
+    use md_codec::origin_path::{OriginPath, PathDeclPaths};
+
+    // cycle-11b L24 — exact-coverage bounds gate. `validate_slot_set` checks
+    // contiguity (`0..=max_idx`) only, NOT range-vs-`n`; a contiguous slot set
+    // whose max index exceeds `n` would reach the per-slot override loop and
+    // OOB-write `new_paths[idx]` (panic). Folding the gate here makes the L24
+    // drift (verify omitted it) structurally impossible — one gate, both
+    // callers. Catches the over-`n` AND under-`n` cases.
+    let covered = slots
+        .iter()
+        .map(|s| s.index as usize + 1)
+        .max()
+        .unwrap_or(0);
+    if covered != n {
+        return Err(ToolkitError::DescriptorParse(format!(
+            "descriptor has n={n} placeholders but --slot vec covers {covered} slots"
+        )));
+    }
+
+    let mut defaulted_indices: Vec<u8> = Vec::new();
+    if !is_non_canonical {
+        // Canonical: no default-inference; the caller-side §4.12.g / §6.6-row-4
+        // guards already ran.
+        return Ok(defaulted_indices);
+    }
+
+    // H12 — taproot-aware default-origin script-type (Tr → 3', sh → 1',
+    // else wsh 2'). Derived from the SAME canonicity-probe root `Tag` both
+    // callers pass, so emit and verify agree on the BIP-48 leaf.
+    let default_script_type = crate::template::bip48_script_type_for_root_tag(root_tag);
+    let default_path = compute_default_origin_path(network, account, default_script_type);
+
+    let mut new_paths: Vec<OriginPath> = match &path_decl.paths {
+        PathDeclPaths::Shared(op) => {
+            if op.components.is_empty() {
+                // All slots default.
+                defaulted_indices.extend(0..(n as u8));
+                (0..n).map(|_| default_path.clone()).collect()
+            } else {
+                // Shared non-empty: no defaulting; lift to Divergent for
+                // uniform downstream handling.
+                (0..n).map(|_| op.clone()).collect()
+            }
+        }
+        PathDeclPaths::Divergent(v) => v
+            .iter()
+            .enumerate()
+            .map(|(i, op)| {
+                if op.components.is_empty() {
+                    defaulted_indices.push(i as u8);
+                    default_path.clone()
+                } else {
+                    op.clone()
+                }
+            })
+            .collect(),
+    };
+
+    // Apply per-slot `--slot @N.path=` overrides (phrase-bearing slots only;
+    // the Xpub branch in the binding loop has its own path-override handling).
+    let mut by_index_path: std::collections::BTreeMap<u8, &crate::slot_input::SlotInput> =
+        std::collections::BTreeMap::new();
+    for s in slots {
+        if s.subkey == crate::slot_input::SlotSubkey::Path {
+            by_index_path.insert(s.index, s);
+        }
+    }
+    let mut by_index_subkeys: std::collections::BTreeMap<
+        u8,
+        std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+    > = std::collections::BTreeMap::new();
+    for s in slots {
+        by_index_subkeys
+            .entry(s.index)
+            .or_default()
+            .insert(s.subkey);
+    }
+    for (idx, slot_path) in &by_index_path {
+        let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
+        // Only phrase-bearing slots route through this override path (incl.
+        // v0.31.3 Seedqr → phrase and v0.41.0 Ms1 → entropy). Xpub-bearing
+        // slots are handled by the per-slot binding loop's own override logic.
+        if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
+            && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
+            && !subkeys.contains(&crate::slot_input::SlotSubkey::Ms1)
+        {
+            continue;
+        }
+        let user_path = DerivationPath::from_str(&slot_path.value)
+            .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
+        let user_origin = derivation_path_to_origin(&user_path);
+        // §6.6 row 19 — EMIT-ONLY: inline `[fp/path]@N` AND `--slot @N.path=`
+        // both supplied, non-empty, and differ → refuse. verify-bundle skips
+        // it (read-only; a genuine conflict surfaces downstream as a md1
+        // byte-mismatch, never as a refusal — preserves its accept-set).
+        if mode == DescriptorBindMode::Emit
+            && !defaulted_indices.contains(idx)
+            && !new_paths[*idx as usize].components.is_empty()
+            && new_paths[*idx as usize] != user_origin
+        {
+            let inline_path = origin_to_derivation_path(&new_paths[*idx as usize])?;
+            return Err(ToolkitError::SlotInputViolation {
+                kind: "path-mismatch",
+                message: format!(
+                    "slot @{idx} path mismatch: --slot says {user_path}, descriptor inline [.../{inline_path}] disagrees; supply consistent values or remove one source."
+                ),
+            });
+        }
+        new_paths[*idx as usize] = user_origin;
+        // Slot-supplied path takes precedence; if it was a default, remove from
+        // the notice list.
+        defaulted_indices.retain(|i| i != idx);
+    }
+
+    // F4 — collapse identical inferred per-`@N` paths to `Shared` for
+    // cross-start byte-convergence with the explicit-origin / wallet-import
+    // path. `new_paths` is non-empty (n >= 1 enforced upstream); a 1-element
+    // vec is trivially all-same.
+    let all_same = new_paths.windows(2).all(|w| w[0] == w[1]);
+    path_decl.paths = if all_same {
+        PathDeclPaths::Shared(new_paths[0].clone())
+    } else {
+        PathDeclPaths::Divergent(new_paths)
+    };
+
+    Ok(defaulted_indices)
 }
 
 /// v0.19.0 SPEC §4.12.b — compute the default origin path
