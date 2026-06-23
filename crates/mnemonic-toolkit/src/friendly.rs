@@ -55,28 +55,28 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
         // dump (`ThresholdNotPassed { .. }`, `RepeatedIndex(Fe(0))`). The
         // generic `Codex32(_)` arm below stays as the fallback for the
         // non-share codex32 errors (parse/checksum/length/case/etc).
-        ms_codec::Error::Codex32(codex32::Error::ThresholdNotPassed {
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::ThresholdNotPassed {
             threshold,
             n_shares,
         }) => format!(
             "ms1 not enough shares: have {}, need {}",
             n_shares, threshold
         ),
-        ms_codec::Error::Codex32(codex32::Error::RepeatedIndex(fe)) => format!(
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::RepeatedIndex(fe)) => format!(
             "ms1 share index '{}' repeated (each share in a set must have a distinct index)",
             fe.to_char(),
         ),
-        ms_codec::Error::Codex32(codex32::Error::MismatchedLength(a, b)) => format!(
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedLength(a, b)) => format!(
             "ms1 share length mismatch: {} vs {} (all shares of one secret must share length)",
             a, b,
         ),
-        ms_codec::Error::Codex32(codex32::Error::MismatchedHrp(a, b)) => {
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedHrp(a, b)) => {
             format!("ms1 HRP mismatch among shares: {:?} vs {:?}", a, b)
         }
-        ms_codec::Error::Codex32(codex32::Error::MismatchedThreshold(a, b)) => {
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedThreshold(a, b)) => {
             format!("ms1 threshold mismatch among shares: {} vs {}", a, b)
         }
-        ms_codec::Error::Codex32(codex32::Error::MismatchedId(a, b)) => {
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedId(a, b)) => {
             format!("ms1 id mismatch among shares: {:?} vs {:?}", a, b)
         }
         // Leak-hardening (v0.53.4): InvalidChecksum embeds the FULL input
@@ -85,7 +85,10 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
         // UnknownHrp's: ms1 chars 9+ are payload, so any head-echo leaks
         // payload); the checksum kind + length stay (lets the user spot a
         // wrong-length card). FOLLOWUP `friendly-ms1-invalidchecksum-echoes-full-input`.
-        ms_codec::Error::Codex32(codex32::Error::InvalidChecksum { checksum, string }) => {
+        ms_codec::Error::Codex32(ms_codec::codex32::Error::InvalidChecksum {
+            checksum,
+            string,
+        }) => {
             format!(
                 "ms1 codex32: invalid {checksum} checksum ({} chars; input withheld)",
                 string.chars().count()
@@ -462,10 +465,12 @@ mod tests {
     #[test]
     fn ms_codec_invalid_checksum_withholds_input_string() {
         let secret = "ms10entrspqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
-        let m = friendly_ms_codec(&ms_codec::Error::Codex32(codex32::Error::InvalidChecksum {
-            checksum: "short",
-            string: secret.to_string(),
-        }));
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(
+            ms_codec::codex32::Error::InvalidChecksum {
+                checksum: "short",
+                string: secret.to_string(),
+            },
+        ));
         // The redaction pin: the embedded input must NOT appear in the message.
         assert!(
             !m.contains(secret),
@@ -492,7 +497,7 @@ mod tests {
     #[test]
     fn ms_codec_threshold_not_passed_renders_prose() {
         let m = friendly_ms_codec(&ms_codec::Error::Codex32(
-            codex32::Error::ThresholdNotPassed {
+            ms_codec::codex32::Error::ThresholdNotPassed {
                 threshold: 2,
                 n_shares: 1,
             },
@@ -509,9 +514,9 @@ mod tests {
 
     #[test]
     fn ms_codec_repeated_index_renders_prose() {
-        let m = friendly_ms_codec(&ms_codec::Error::Codex32(codex32::Error::RepeatedIndex(
-            codex32::Fe::Q,
-        )));
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(
+            ms_codec::codex32::Error::RepeatedIndex(ms_codec::codex32::Fe::Q),
+        ));
         assert!(m.contains("repeated"), "got: {m}");
         // No `RepeatedIndex(Fe(0))` opaque dump.
         assert!(!m.contains("Fe("), "Fe(..) leaked: {m}");
@@ -522,22 +527,25 @@ mod tests {
     fn ms_codec_mismatched_set_errors_render_prose() {
         for (e, needle) in [
             (
-                ms_codec::Error::Codex32(codex32::Error::MismatchedLength(50, 56)),
+                ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedLength(50, 56)),
                 "length mismatch",
             ),
             (
-                ms_codec::Error::Codex32(codex32::Error::MismatchedThreshold(2, 3)),
+                ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedThreshold(2, 3)),
                 "threshold mismatch",
             ),
             (
-                ms_codec::Error::Codex32(codex32::Error::MismatchedId(
+                ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedId(
                     "abcd".into(),
                     "efgh".into(),
                 )),
                 "id mismatch",
             ),
             (
-                ms_codec::Error::Codex32(codex32::Error::MismatchedHrp("ms".into(), "mk".into())),
+                ms_codec::Error::Codex32(ms_codec::codex32::Error::MismatchedHrp(
+                    "ms".into(),
+                    "mk".into(),
+                )),
                 "HRP mismatch",
             ),
         ] {
@@ -551,7 +559,9 @@ mod tests {
     fn ms_codec_non_share_codex32_falls_through_to_generic() {
         // A non-share codex32 error (e.g. a bad char) still hits the generic
         // fallback arm — the new share arms must not swallow it.
-        let m = friendly_ms_codec(&ms_codec::Error::Codex32(codex32::Error::InvalidChar('!')));
+        let m = friendly_ms_codec(&ms_codec::Error::Codex32(
+            ms_codec::codex32::Error::InvalidChar('!'),
+        ));
         assert!(m.starts_with("ms1 codex32:"), "got: {m}");
     }
 

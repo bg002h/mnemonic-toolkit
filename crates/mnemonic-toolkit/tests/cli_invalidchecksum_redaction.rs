@@ -1,4 +1,4 @@
-//! v0.53.4 — the friendly mapper's `codex32::Error::InvalidChecksum` arm must
+//! v0.53.4 — the friendly mapper's `ms_codec::codex32::Error::InvalidChecksum` arm must
 //! NOT echo the embedded full input on stderr (leak-hardening; FOLLOWUP
 //! `friendly-ms1-invalidchecksum-echoes-full-input`).
 //!

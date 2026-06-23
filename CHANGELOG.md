@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.72.0] — 2026-06-23
+
+**SemVer-MINOR — Cycle-B paired coordination: ms-codec vendored its codex32 dependency inline (shape A) and dropped the external `codex32` crate, so the toolkit drops its own direct `codex32 = "=0.1.0"` dep and names the codex32 share-error types via `ms_codec::codex32::`. End-user behavior UNCHANGED; no clap-flag / subcommand / dropdown / `--json` wire-shape change → no GUI schema-mirror trip and no manual flag-mirror trip. ms1 wire output is BYTE-IDENTICAL (the vendor is a byte-for-byte copy of the codex32 encoding paths).**
+
+### Changed
+
+- **Drop the direct `codex32 = "=0.1.0"` dependency.** It existed only so `friendly_ms_codec` could name the codex32 share-error variants (`ThresholdNotPassed` / `RepeatedIndex` / `Mismatched*` / `InvalidChecksum`) wrapped by `ms_codec::Error::Codex32(_)`. ms-codec 0.7.0 vendored codex32 inline, so the toolkit now reaches those types via `ms_codec::codex32::` — `friendly.rs`'s 16 `codex32::Error::*` / `codex32::Fe::*` sites are rewritten accordingly. Friendly message text is byte-identical (the prose tests assert on substrings).
+- **Re-pin `ms-codec` `"0.6"` → `"0.7"`** (consumes the breaking inner-type move of `ms_codec::Error::Codex32` from the extern `codex32::Error` to `ms_codec::codex32::Error`).
+
+### Notes
+
+- Companion to ms-codec 0.7.0 + ms-cli 0.12.0 (Cycle-B). Mirrors the ms-side `codex32-upstream-dormant-vendor-vs-accept-decision` resolution per the cross-repo follow-up rule.
+
 ## mnemonic-toolkit [0.71.0] — 2026-06-22
 
 **SemVer-MINOR — Wave-2 secret-memory-hygiene (T1–T4). Four owned-secret sites that lingered un-scrubbed (or in a leak-prone bare type) are migrated to the shipped scrub-on-drop / redacting newtypes. Toolkit-internal only; no codec/GUI bump. No clap-flag / subcommand / dropdown / `--json` wire-shape change → no GUI schema-mirror trip and no manual flag-mirror trip. The `convert --to xprv` output and the `inspect` output are BYTE-IDENTICAL (golden-pinned).**

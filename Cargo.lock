@@ -362,12 +362,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
-name = "codex32"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d230935faa4d0521349d228f39aba4ff489cf2a8bcab4d84e31f4cbd6fe918e9"
-
-[[package]]
 name = "colorchoice"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -724,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.71.0"
+version = "0.72.0"
 dependencies = [
  "aes",
  "assert_cmd",
@@ -735,7 +729,6 @@ dependencies = [
  "bitcoin",
  "cbc",
  "clap",
- "codex32",
  "crypto-bigint",
  "ctr",
  "flate2",
@@ -764,11 +757,9 @@ dependencies = [
 
 [[package]]
 name = "ms-codec"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "835040e2e149aff7b3ccf014abd1466769275ef68889be852fb3d5dbb9682a9c"
 dependencies = [
- "codex32",
  "getrandom 0.3.4",
  "zeroize",
 ]
