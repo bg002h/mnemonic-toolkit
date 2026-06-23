@@ -188,7 +188,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
 
 ### V.4.5.1 `BundleJson`\index{BundleJson}
 
-```json
+```{.json include="54-bundle-json-bip84-singlesig.out"}
 {
   "schema_version": "4",
   "mode": "full",
@@ -198,10 +198,19 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
   "account": 0,
   "origin_path": "m/84'/0'/0'",
   "origin_paths": null,
-  "master_fingerprint": "5436d724",
-  "ms1": ["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],
-  "mk1": ["mk1qprsqhpqqsq3c..."],
-  "md1": ["md1fgdxlpqpqpm6jzzq..."],
+  "master_fingerprint": "73c5da0a",
+  "ms1": [
+    "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"
+  ],
+  "mk1": [
+    "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4",
+    "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh"
+  ],
+  "md1": [
+    "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np",
+    "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d",
+    "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn"
+  ],
   "multisig": null,
   "privacy_preserving": false
 }
@@ -228,15 +237,20 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
 
 ### V.4.5.2 `VerifyBundleJson`\index{VerifyBundleJson}
 
-```json
+```{.json include="54-verify-bundle-json-bip84.out"}
 {
   "schema_version": "4",
   "result": "ok",
   "checks": [
-    {"name": "ms1_decode", "passed": true, "detail": "ms1[0] decoded as 16-byte entropy"},
-    {"name": "mk1_decode", "passed": true, "detail": "mk1[0] decoded; xpub matches descriptor"},
-    {"name": "md1_decode", "passed": true, "detail": "md1 reassembled and decoded"},
-    {"name": "md1_xpub_match", "passed": true, "detail": "md1 xpub matches expected"}
+    {"name": "ms1_decode", "passed": true, "detail": "decoded successfully"},
+    {"name": "ms1_entropy_match", "passed": true, "detail": "ms1 byte-identical"},
+    {"name": "mk1_decode", "passed": true, "detail": "decoded successfully"},
+    {"name": "mk1_xpub_match", "passed": true, "detail": "xpub matches"},
+    {"name": "mk1_fingerprint_match", "passed": true, "detail": "fingerprint matches"},
+    {"name": "mk1_path_match", "passed": true, "detail": "path matches"},
+    {"name": "md1_decode", "passed": true, "detail": "decoded successfully"},
+    {"name": "md1_wallet_policy", "passed": true, "detail": "wallet-policy mode confirmed"},
+    {"name": "md1_xpub_match", "passed": true, "detail": "65-byte xpub matches expected"}
   ]
 }
 ```
