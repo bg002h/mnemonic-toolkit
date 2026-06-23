@@ -50,6 +50,12 @@ MD_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/descriptor-m
 MS_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-secret/Cargo.toml -p ms-cli --bin ms --
 MK_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-key/Cargo.toml -p mk-cli --bin mk --
 
+# Absolute path to the cargo-example crate (md-codec-examples). The canonical
+# verify-examples runner executes each .cmd in a fresh `mktemp -d` cwd, so the
+# api-roundtrip transcripts reference $EXAMPLES_DIR/Cargo.toml (absolute) rather
+# than a relative `examples/Cargo.toml` that would not resolve from the tmpdir.
+EXAMPLES_DIR ?= $(MANUAL_DIR)/examples
+
 # ---------------------------------------------------------------------------
 # Tools (override with PANDOC=/path/to/pandoc etc.)
 # ---------------------------------------------------------------------------
@@ -231,6 +237,7 @@ verify-examples:
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
 		MK_BIN="$(MK_BIN)" \
+		EXAMPLES_DIR="$(EXAMPLES_DIR)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
 
 # ---------------------------------------------------------------------------

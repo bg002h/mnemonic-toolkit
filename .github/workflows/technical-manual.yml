@@ -84,3 +84,46 @@ jobs:
             MD_BIN=true \
             MS_BIN=true \
             MK_BIN=true
+
+      # ---- Real-bin output-fidelity gate (mirrors manual.yml's audit step) ----
+      # Cycle C P1a: the 15 technical-manual goldens (11 CLI + 4 cargo-example)
+      # are now CI-replayed against the CURRENT-release-tier pins. `make lint`
+      # above stays binary-independent; this adds the binary-dependent
+      # `verify-examples` leg the old workflow stubbed out with `=true`.
+      - name: Install mk-cli
+        # Package-name selector (multi-binary workspace; --bin refuses
+        # disambig). Current-release tier pin — mirrors manual.yml:79.
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.10.2 mk-cli
+
+      - name: Install md-cli
+        # `--features cli-compiler` matches scripts/install.sh's component pin
+        # (the technical-manual md1 transcripts exercise the compiler path).
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.9.2 md-cli --features cli-compiler
+
+      - name: Install ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.11.0 ms-cli
+
+      - name: Build mnemonic binary (debug)
+        # Debug binary is sufficient for transcript-replay byte comparison.
+        run: cargo build --bin mnemonic
+
+      - name: Pre-build cargo-example targets (md-codec-examples)
+        # The 4 api-roundtrip transcripts run `cargo run --manifest-path
+        # $EXAMPLES_DIR/Cargo.toml --example …`; pre-building keeps the first
+        # replay from emitting compile chatter into the captured output.
+        working-directory: docs/technical-manual/examples
+        run: cargo build --examples
+
+      - name: Verify technical-manual examples (real current-tier bins)
+        working-directory: docs/technical-manual
+        # MD/MS/MK resolve via $PATH to the cargo-installed ~/.cargo/bin
+        # binaries above (no md→mkdir alias in CI). EXAMPLES_DIR is absolute so
+        # the per-cmd mktemp -d cwd resolves the cargo manifest. All flag
+        # values are constants / controlled built-ins ($GITHUB_WORKSPACE).
+        run: |
+          make verify-examples \
+            MNEMONIC_BIN="$GITHUB_WORKSPACE/target/debug/mnemonic" \
+            MD_BIN=md \
+            MS_BIN=ms \
+            MK_BIN=mk \
+            EXAMPLES_DIR="$GITHUB_WORKSPACE/docs/technical-manual/examples"

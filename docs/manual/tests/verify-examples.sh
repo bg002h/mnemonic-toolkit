@@ -18,6 +18,13 @@
 #   $MS_BIN       — path to the ms binary
 #   $MK_BIN       — path to the mk binary
 #   $FIXTURES_DIR — directory holding cross-format-recipes fixtures
+#   $EXAMPLES_DIR — absolute path to a cargo-example crate root (technical
+#                   manual only: its api-roundtrip transcripts run
+#                   `cargo run --manifest-path $EXAMPLES_DIR/Cargo.toml …`;
+#                   each .cmd executes in a fresh mktemp -d cwd, so a relative
+#                   `examples/Cargo.toml` would not resolve. Books with no
+#                   cargo-example transcripts leave it unset → it substitutes
+#                   to the empty string and is never referenced.)
 #
 # Each .cmd runs in a fresh `mktemp -d` cwd so recipe side-effects
 # (intermediate `> envelope.json`, etc.) don't leak across transcripts.
@@ -44,6 +51,7 @@ for arg in "$@"; do
     MS_BIN=*)        MS_BIN="${arg#*=}" ;;
     MK_BIN=*)        MK_BIN="${arg#*=}" ;;
     FIXTURES_DIR=*)  FIXTURES_DIR="${arg#*=}" ;;
+    EXAMPLES_DIR=*)  EXAMPLES_DIR="${arg#*=}" ;;
     TRANSCRIPTS=*)   TRANSCRIPTS="${arg#*=}" ;;
   esac
 done
@@ -62,6 +70,9 @@ done
 : "${MS_BIN:?MS_BIN is required (path to ms binary)}"
 : "${MK_BIN:?MK_BIN is required (path to mk binary)}"
 : "${FIXTURES_DIR:=}"
+# Optional: only the technical-manual's cargo-example transcripts reference it.
+# Defaults to empty so books without such transcripts substitute a no-op.
+: "${EXAMPLES_DIR:=}"
 
 if [ ! -d "$TRANSCRIPTS" ]; then
   echo "[verify-examples] no transcript dir at $TRANSCRIPTS — vacuous pass"
@@ -105,6 +116,7 @@ for cmd_file in "${cmd_files[@]}"; do
                  -e "s#\$MS_BIN#$MS_BIN#g" \
                  -e "s#\$MK_BIN#$MK_BIN#g" \
                  -e "s#\$FIXTURES_DIR#$FIXTURES_DIR#g" \
+                 -e "s#\$EXAMPLES_DIR#$EXAMPLES_DIR#g" \
                  "$cmd_file")
 
   # Per-cmd tmpdir cwd so recipe side-effects don't leak across transcripts.
