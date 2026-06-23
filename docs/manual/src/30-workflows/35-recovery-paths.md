@@ -185,26 +185,38 @@ the cosigner xpubs and template are unchanged.
 
 ## Multisig wallet — partial card damage
 
-The BCH error-correction codec located damage to a small number of
-characters. The codec's error position diagnostic identifies *which*
-character is wrong:
+When an `ms1` card is transcribed with damage, `mnemonic convert`
+rejects it rather than silently decoding to the wrong seed. The
+**first** gate is length: a v0.1 `ms1` string is one of a fixed set
+of lengths, and a string off by even one character is rejected
+before the checksum is examined:
 
 ```sh
-mnemonic convert --from ms1=ms10entrsqqQqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f --to phrase
+echo "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f" \
+  | mnemonic convert --from ms1=- --to phrase
 ```
 
-Outputs (illustrative):
+Outputs (a 49-character string — one short of the canonical
+50-character 12-word length):
 
-```text
-error: ms1 BCH checksum failed
-  position 11: invalid character 'Q' (expected 'q')
+```{.text include="35-recovery-paths-ms1-length-reject.out"}
 ```
 
-Manually correct the character (the codec narrows the candidate set
-to typically 1-2 characters at the named position). For damage
-beyond the codec's correction radius (more than a few errors), the
-card is unrecoverable from itself — fall back to re-deriving from
-the seed (or other cosigners' cards in multisig).
+(The `--from ms1=-` form reads the string from stdin so it never
+lands in `/proc/$PID/cmdline`; passing it inline via
+`--from ms1=<string>` works too but prints a secret-on-argv
+warning.)
+
+If the length is correct but a character is wrong, the codex32
+checksum gate rejects it — an out-of-charset or wrong-case symbol
+surfaces as a case/charset error (e.g. `InvalidCase`), and an
+in-charset substitution surfaces as `invalid short checksum` with
+the input withheld. **The current binary does not emit a
+per-character "position N: invalid character" diagnostic**; it
+reports that the card is corrupt without pointing at the offending
+symbol. For damage beyond what you can correct by re-reading the
+plate, the card is unrecoverable from itself — fall back to
+re-deriving from the seed (or other cosigners' cards in multisig).
 
 ## Worst-case scenarios
 

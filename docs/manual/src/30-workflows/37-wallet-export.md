@@ -85,34 +85,55 @@ Output is the canonical BIP-388 JSON shape:
 paths. For Coldcard / SeedSigner / older-Sparrow compatibility, add
 `--multisig-path-family bip48` and the paths become `m/48'/0'/0'/2'`.)
 
-## Sparrow + Specter (currently via BIP-388)
+## Sparrow + Specter (native export)
 
-`--format sparrow` and `--format specter` are accepted by the
-binary but currently return a deferral stub:
+`--format sparrow` and `--format specter` emit each wallet's native
+import shape directly — no BIP-388 detour required.
 
-```text
-error: --format <sparrow> is deferred to a future release; use
---format bitcoin-core or --format bip388 instead.
-```
-
-For now, export as BIP-388 and import via the receiving wallet's
-BIP-388-aware path:
+`--format sparrow` produces a Sparrow wallet JSON: a `MULTI` /
+`P2WSH` policy with the miniscript template under `defaultPolicy`,
+and one `keystore` per cosigner carrying its master fingerprint,
+derivation, and watch-only extended public key (`source: SW_WATCH`):
 
 ```sh
 mnemonic export-wallet \
+  --format sparrow \
   --template wsh-sortedmulti \
   --threshold 2 \
+  --multisig-path-family bip48 \
+  --network mainnet \
+  --wallet-name "VaultColdStorage" \
   --slot @0.xpub=<xpub-0> \
+  --slot @0.fingerprint=<fp-0> \
+  --slot @0.path=m/48'/0'/0'/2' \
   --slot @1.xpub=<xpub-1> \
+  --slot @1.fingerprint=<fp-1> \
+  --slot @1.path=m/48'/0'/0'/2' \
   --slot @2.xpub=<xpub-2> \
-  --format bip388 \
-  --output wallet-policy.json
+  --slot @2.fingerprint=<fp-2> \
+  --slot @2.path=m/48'/0'/0'/2' \
+  --output sparrow-wallet.json
 ```
 
-Sparrow consumes wallet-policy JSON via *File → Import → Wallet
-Policy*. Specter accepts BIP-388 via the *Add Wallet → Import → Multisig*
-flow. Native Sparrow / Specter shapes will land if a future toolkit
-release lights up the format stubs.
+Output (`sparrow-wallet.json`):
+
+```{.text include="37-wallet-export-sparrow.out"}
+```
+
+Like every `export-wallet` format the payload is **watch-only** —
+public keys only, no secret material. When the JSON is written to
+stdout (omit `--output`) the binary prints a `note: stdout is
+watch-only — public keys only, cannot spend` line to stderr as a
+reminder; that note is suppressed when the payload is written to a
+file as above.
+
+Import into Sparrow via *File → Import Wallet → Sparrow → Import
+File* (or paste the JSON). `--format specter` likewise emits
+Specter's native single-object shape (`label`, `descriptor`,
+`devices`), imported via *Add Wallet → Import → Multisig*. The
+BIP-388 wallet-policy export (`--format bip388`, above) remains
+available for any wallet that prefers the portable wallet-policy
+shape.
 
 ## From a user-supplied descriptor
 
