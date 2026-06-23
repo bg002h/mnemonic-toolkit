@@ -3,3 +3,4 @@ origin_fingerprint:  aabbccdd
 origin_path:         48'/0'/0'/2'
 policy_id_stubs:     11223344
 chunks:              2 (long)
+note: stdout is watch-only — public keys only, cannot spend

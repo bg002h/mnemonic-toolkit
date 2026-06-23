@@ -19,7 +19,7 @@ struct BundleJson {
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Minimal realistic BIP-84 single-key (wpkh) BundleJson fixture; schema_version 4.
-    let json_fixture = r#"{"schema_version":"4","mode":"full","network":"mainnet","template":"bip84","descriptor":null,"account":0,"origin_path":"m/84'/0'/0'","origin_paths":null,"master_fingerprint":"5436d724","ms1":["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],"mk1":["mk1qprsqhpqqsq3c..."],"md1":["md1zsxdspqqqpm6jzzq..."],"multisig":null,"privacy_preserving":false}"#;
+    let json_fixture = r#"{"schema_version":"4","mode":"full","network":"mainnet","template":"bip84","descriptor":null,"account":0,"origin_path":"m/84'/0'/0'","origin_paths":null,"master_fingerprint":"5436d724","ms1":["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],"mk1":["mk1qprsqhpqqsq3c..."],"md1":["md1fgdxlpqpqpm6jzzq..."],"multisig":null,"privacy_preserving":false}"#;
     let bundle: BundleJson = serde_json::from_str(json_fixture)?;
     if bundle.schema_version != "4" {
         return Err(format!("unexpected schema_version: {}", bundle.schema_version).into());

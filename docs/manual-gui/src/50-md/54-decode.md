@@ -15,16 +15,20 @@ One or more `md1` strings. Required, repeating.
 ## Worked example
 
 1. **md** tab; pick **Decode (md1 → template)**.
-2. Paste the canonical first md1 into `strings`:
+2. Paste all three canonical md1 strings into `strings` (a
+   wallet-policy template spans every chunk, so the full set is
+   required to reassemble it):
 
    ```text
-   md1zsxdspqqqpm6jzzqqvqz6qu79mg9p2sgfff6p2eph8wftp5uf6gqnlgzqqqnymv0
+   md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np
+   md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d
+   md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn
    ```
 
 3. Click **Run**.
 
 The output panel renders the canonical template string on stdout
-(typically `wpkh(@0/<0;1>/*)` for a single-sig BIP-84 bundle).
+(`wpkh(@0/<0;1>/*)` for this single-sig BIP-84 bundle).
 Use this output as input to [`md verify`](#md-verify) or to
 external descriptor-aware tooling.
 

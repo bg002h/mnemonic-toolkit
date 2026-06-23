@@ -201,7 +201,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
   "master_fingerprint": "5436d724",
   "ms1": ["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],
   "mk1": ["mk1qprsqhpqqsq3c..."],
-  "md1": ["md1zsxdspqqqpm6jzzq..."],
+  "md1": ["md1fgdxlpqpqpm6jzzq..."],
   "multisig": null,
   "privacy_preserving": false
 }

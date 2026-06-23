@@ -1,1 +1,3 @@
+warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--slot @1.phrase=) — pipe via --slot @1.phrase=- to avoid /proc/$PID/cmdline exposure
 error: BIP-388 distinct-key violation: slot @0 and slot @1 resolve to identical (xpub, path)

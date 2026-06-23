@@ -3,3 +3,4 @@ origin_fingerprint:  (omitted, privacy-preserving mode)
 origin_path:         84'/0'/0'
 policy_id_stubs:     abcdef01
 chunks:              2 (long)
+note: stdout is watch-only — public keys only, cannot spend
