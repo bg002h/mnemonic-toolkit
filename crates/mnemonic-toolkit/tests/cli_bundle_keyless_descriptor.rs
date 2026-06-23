@@ -51,3 +51,29 @@ fn bundle_origin_less_key_keeps_origin_message() {
         .failure()
         .stderr(predicates::str::contains("must carry a key origin"));
 }
+
+/// `export-wallet-bundle-descriptor-md1-clearer-error`: an md1 CARD passed to
+/// `bundle --descriptor` gets a clear surface-pointing refusal, NOT the
+/// misleading classify_descriptor_form "keyless script" message.
+#[test]
+fn bundle_md1_card_on_descriptor_clear_refusal() {
+    let md1 = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    let out = bin()
+        .args(["bundle", "--descriptor", md1, "--network", "mainnet"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("md1 descriptor-mnemonic CARD"),
+        "stderr: {stderr:?}"
+    );
+    // Important R0 fold: gate the WORKING pointer (subcommand-qualified), not bare `xpub-search`.
+    assert!(
+        stderr.contains("xpub-search account-of-descriptor"),
+        "stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("keyless script"),
+        "must NOT be classify_descriptor_form's keyless msg: {stderr:?}"
+    );
+}

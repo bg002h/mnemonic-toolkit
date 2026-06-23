@@ -1050,3 +1050,38 @@ fn bsms_form_does_not_leak_into_non_bsms_format_output() {
         "--bsms-form must not influence --format bitcoin-core output"
     );
 }
+
+/// `export-wallet-bundle-descriptor-md1-clearer-error`: an md1 CARD passed to
+/// `--descriptor` gets a clear surface-pointing refusal, NOT an opaque
+/// rust-miniscript parse error.
+#[test]
+fn md1_card_on_descriptor_clear_refusal() {
+    let md1 = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "export-wallet",
+            "--descriptor",
+            md1,
+            "--network",
+            "mainnet",
+            "--format",
+            "descriptor",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("md1 descriptor-mnemonic CARD"),
+        "stderr: {stderr:?}"
+    );
+    // Important R0 fold: gate the WORKING pointer (subcommand-qualified), not bare `xpub-search`.
+    assert!(
+        stderr.contains("xpub-search account-of-descriptor"),
+        "must point at the REAL accepting surface (subcommand-qualified): {stderr:?}"
+    );
+    assert!(
+        !stderr.to_lowercase().contains("unexpected"),
+        "must NOT be the opaque miniscript msg: {stderr:?}"
+    );
+}

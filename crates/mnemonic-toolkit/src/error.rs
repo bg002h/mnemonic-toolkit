@@ -255,6 +255,12 @@ pub enum ToolkitError {
     /// v0.22.0 repair feature — std::io::Error from emit_repair_report
     /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
     Io(std::io::Error),
+    /// An md1 `descriptor-mnemonic` CARD was passed where a raw descriptor is
+    /// expected (`export-wallet`/`bundle` `--descriptor`). md1 is an engraved
+    /// card, not a descriptor — decode it first. `surface` names the CLI context.
+    Md1CardNotADescriptor {
+        surface: &'static str,
+    },
     MdCodec(md_codec::Error),
     MkCodec(mk_codec::Error),
     ModeViolation {
@@ -586,6 +592,7 @@ impl ToolkitError {
             ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
             ToolkitError::ImportWalletXprvForbidden => 2,
             ToolkitError::Io(_) => 1,
+            ToolkitError::Md1CardNotADescriptor { .. } => 2,
             ToolkitError::MdCodec(e) => md_codec_exit_code(e),
             ToolkitError::MkCodec(e) => mk_codec_exit_code(e),
             ToolkitError::ModeViolation { .. } => 2,
@@ -655,6 +662,7 @@ impl ToolkitError {
             ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
             ToolkitError::ImportWalletXprvForbidden => "ImportWalletXprvForbidden",
             ToolkitError::Io(_) => "Io",
+            ToolkitError::Md1CardNotADescriptor { .. } => "Md1CardNotADescriptor",
             ToolkitError::MdCodec(_) => "MdCodec",
             ToolkitError::MkCodec(_) => "MkCodec",
             ToolkitError::ModeViolation { .. } => "ModeViolation",
@@ -829,6 +837,13 @@ impl ToolkitError {
                     .to_string()
             }
             ToolkitError::Io(e) => format!("I/O error: {e}"),
+            ToolkitError::Md1CardNotADescriptor { surface } => format!(
+                "{surface}: this is an md1 descriptor-mnemonic CARD, not a raw descriptor. \
+                 md1 cards are not accepted on --descriptor. Decode the card first \
+                 (`md decode <md1…>` / `mnemonic restore --md1 <md1…>`), or to search an \
+                 xpub from the card use \
+                 `mnemonic xpub-search account-of-descriptor --descriptor <md1…>`."
+            ),
             ToolkitError::MdCodec(e) => crate::friendly::friendly_md_codec(e),
             ToolkitError::MkCodec(e) => crate::friendly::friendly_mk_codec(e),
             ToolkitError::ModeViolation { message, .. } => (*message).to_owned(),
@@ -1009,6 +1024,13 @@ mod tests {
         assert_eq!(ToolkitError::BadInput("x".into()).exit_code(), 1);
         assert_eq!(
             ToolkitError::DescriptorParse("descriptor parse failed: ...".into()).exit_code(),
+            2,
+        );
+        assert_eq!(
+            ToolkitError::Md1CardNotADescriptor {
+                surface: "export-wallet --descriptor"
+            }
+            .exit_code(),
             2,
         );
         assert_eq!(
@@ -1315,6 +1337,10 @@ mod tests {
     #[test]
     fn kind_strings_stable() {
         assert_eq!(ToolkitError::BadInput("x".into()).kind(), "BadInput");
+        assert_eq!(
+            ToolkitError::Md1CardNotADescriptor { surface: "x" }.kind(),
+            "Md1CardNotADescriptor",
+        );
         assert_eq!(
             ToolkitError::BundleMismatch {
                 card: "ms1".into(),

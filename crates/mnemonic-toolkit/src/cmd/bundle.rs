@@ -323,6 +323,12 @@ pub fn run<W: Write, E: Write>(
                 .to_string(),
             _ => unreachable!("DESCRIPTOR_AND_DESCRIPTOR_FILE guard above rules out both"),
         };
+        // md1 cards are engraved descriptor-mnemonic CARDS, not raw descriptors —
+        // refuse with a surface-pointing message instead of letting an md1 card
+        // fall into classify_descriptor_form's misleading "keyless script" arm
+        // (`export-wallet-bundle-descriptor-md1-clearer-error`). Covers both
+        // --descriptor and --descriptor-file (body already merged above).
+        crate::wallet_import::pipeline::reject_md1_card(&body, "bundle --descriptor")?;
         // BIP-388 wallet-policy JSON intake: expand to a concrete descriptor
         // BEFORE classify (a raw policy JSON trips classify's (true,true)
         // mixed-form error — its description_template matches the @N probe AND

@@ -485,6 +485,11 @@ pub fn run<W: Write, E: Write>(
     let mut bip388_policy_name: Option<String> = None;
 
     let canonical = if let Some(desc) = &args.descriptor {
+        // md1 cards are engraved descriptor-mnemonic CARDS, not raw descriptors —
+        // refuse with a surface-pointing message instead of the opaque miniscript
+        // parse error at MsDescriptor::from_str below
+        // (`export-wallet-bundle-descriptor-md1-clearer-error`).
+        crate::wallet_import::pipeline::reject_md1_card(desc, "export-wallet --descriptor")?;
         // BIP-388 wallet-policy JSON intake: expand to a concrete descriptor,
         // then fall into the existing concrete passthrough. MUST precede
         // is_at_n_form — a raw policy JSON matches the @N probe (its

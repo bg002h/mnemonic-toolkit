@@ -245,6 +245,29 @@ pub(crate) fn is_bip388_policy_shape(s: &str) -> bool {
     s.trim_start().starts_with('{')
 }
 
+/// True iff `s` is an md1 `descriptor-mnemonic` CARD (every whitespace-separated
+/// token, case-insensitively, begins with the `md1` HRP). Mirrors the md1 funnel
+/// in `cmd/xpub_search/descriptor_intake.rs::detect_shape` (case-insensitive PROBE;
+/// md-codec remains the case authority). MUST be checked BEFORE
+/// `is_bip388_policy_shape` / `is_at_n_form` / `classify_descriptor_form` on the
+/// `export-wallet`/`bundle` `--descriptor` intake so an md1 card gets a clear
+/// "decode it first" pointer instead of an opaque miniscript parse error
+/// (`export-wallet-bundle-descriptor-md1-clearer-error`).
+pub(crate) fn is_md1_card(s: &str) -> bool {
+    let tokens: Vec<&str> = s.split_whitespace().collect();
+    !tokens.is_empty() && tokens.iter().all(|t| t.to_lowercase().starts_with("md1"))
+}
+
+/// Refuse an md1 card on a raw-descriptor intake with a typed, surface-pointing
+/// error. Returns `Ok(())` for non-md1 input (callers proceed to their existing
+/// shape probes). `surface` is the human CLI name for the error text.
+pub(crate) fn reject_md1_card(s: &str, surface: &'static str) -> Result<(), ToolkitError> {
+    if is_md1_card(s) {
+        return Err(ToolkitError::Md1CardNotADescriptor { surface });
+    }
+    Ok(())
+}
+
 /// Expand a BIP-388 wallet-policy JSON `{name, description_template, keys_info}`
 /// into a concrete multipath descriptor STRING by substituting each `@N/**` →
 /// `keys_info[N] + "/<0;1>/*"`. Pure string-in/string-out (no network/account/
@@ -664,6 +687,20 @@ mod tests {
         assert!(is_bip388_policy_shape("  \n  {\"name\":\"x\"}")); // leading whitespace
         assert!(!is_bip388_policy_shape("wsh(multi(2,@0/**,@1/**))"));
         assert!(!is_bip388_policy_shape("md1qpwmxpzqqsrd"));
+    }
+
+    #[test]
+    fn is_md1_card_detects_md1_hrp_and_rejects_descriptors() {
+        assert!(is_md1_card(
+            "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np"
+        ));
+        assert!(is_md1_card("  MD1ABCDE  ")); // case-insensitive + trim
+        assert!(is_md1_card("md1aaa md1bbb")); // multi-token (chunked card)
+        assert!(!is_md1_card("")); // empty → not a card
+        assert!(!is_md1_card("wpkh([00000000/84h/0h/0h]xpub…/<0;1>/*)")); // concrete
+        assert!(!is_md1_card("{\"name\":\"x\"}")); // bip388 JSON
+        assert!(!is_md1_card("wpkh(@0/<0;1>/*)")); // @N template
+        assert!(!is_md1_card("md1abc wpkh(@0/**)")); // mixed → NOT all-md1
     }
 
     #[test]

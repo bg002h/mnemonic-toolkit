@@ -4096,7 +4096,7 @@ In GUI `v0.4.0`, retain the v0.3.3 `CANONICAL_FALLBACK_*` constants AND add a co
 - **Surfaced:** 2026-06-08, `bip388-wallet-policy-to-descriptor-expansion-not-surfaced` (v0.49.0) ship — out-of-scope fast-follow.
 - **Where:** `cmd/export_wallet.rs` / `cmd/bundle.rs` `--descriptor` intake (post the v0.49.0 `is_bip388_policy_shape` pre-check). The md1 HRP funnel is xpub-search-only; on export-wallet/bundle an md1 card passed to `--descriptor` falls through to `MsDescriptor::from_str` and fails with an opaque miniscript message.
 - **What:** Unlike xpub-search (which auto-detects md1 cards via `descriptor_intake::detect_shape`), export-wallet/bundle `--descriptor` neither expands an md1 card nor emits a clear "md1 cards are not accepted here; use …" pointer. A clearer typed refusal (or md1 acceptance via the same shared-helper pattern) would improve UX. Low priority.
-- **Status:** open
+- **Status:** resolved — Wave-4 L2 (`SPEC_wave4_L2_md1_clearer_error.md`, R0 GREEN). New typed `ToolkitError::Md1CardNotADescriptor { surface }` (exit 2) refusal on BOTH `export-wallet --descriptor` and `bundle --descriptor`/`--descriptor-file`, via the shared `wallet_import::pipeline::reject_md1_card` pre-check (mirrors `descriptor_intake::detect_shape`'s md1-HRP funnel). Message points at the real accepting surfaces (`md decode`, `restore --md1`, `xpub-search account-of-descriptor --descriptor`). REFUSAL only (no md1 acceptance — that remains a separate feature). NO-BUMP.
 - **Tier:** `v0.48+-feature`
 - **Companion:** none (toolkit-local).
 
