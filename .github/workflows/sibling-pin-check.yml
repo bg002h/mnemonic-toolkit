@@ -1,9 +1,16 @@
 name: sibling-pin-check
 
 # Fires on every push + PR + manual dispatch. Asserts that the
-# sibling-CLI `cargo install --git … --tag <pin>` lines in every
-# `.github/workflows/*.yml` file match the canonical pins in
-# `scripts/install.sh`'s `component_info` table.
+# sibling-CLI `cargo install --git … --tag <pin>` lines in the scan
+# set match the canonical pins in `scripts/install.sh`'s
+# `component_info` table.
+#
+# Scan set: every `.github/workflows/*.yml` file (except this gate
+# itself) PLUS every `docs/manual/src/**` and `docs/quickstart/src/**`
+# prose markdown file. Matching is URL-keyed (the canonical lookup
+# keys on the `--git <repo-url>`), which handles BOTH the workflow
+# `--tag <tag> <pkg>` form AND the prose `--tag <tag> --bin <bin>`
+# form without a bin↔pkg name map.
 #
 # Scope: sibling pins only (md-cli, ms-cli, mk-cli). The toolkit
 # self-pin is gated by `install-pin-check.yml`; GUI repo pins are
@@ -18,10 +25,14 @@ name: sibling-pin-check
 # — the parent fixed the symptom; this gate prevents recurrence.
 # Spec: `design/SPEC_sibling_pin_drift_gate.md`. R0 review:
 # `design/agent-reports/sibling-pin-drift-gate-R0-review.md`.
+# Prose-scan extension (FOLLOWUP
+# `sibling-pin-check-skips-manual-prose-install-commands`) added
+# 2026-06-23. Spec:
+# `design/SPEC_sibling_pin_check_prose_scan_extension.md`.
 #
-# Recovery if this fails: update the drifted workflow file's `--tag`
-# argument to match the canonical pin in `scripts/install.sh`, OR
-# (if the workflow's pin is intentionally newer) update install.sh's
+# Recovery if this fails: update the drifted file's `--tag` argument
+# to match the canonical pin in `scripts/install.sh`, OR (if the
+# file's pin is intentionally newer) update install.sh's
 # `component_info` arm to match, then re-push.
 
 on:
@@ -49,17 +60,24 @@ jobs:
           fi
 
           # Parse install.sh's `component_info` arms into a
-          # newline-separated `pkg|tag` table. Each canonical line has
+          # newline-separated `url|tag` table. Each canonical line has
           # the shape:
           #   echo "<pkg>|<repo-url>|<tag>|<bool>|<features-opt>"
           # The toolkit arm uses pkg=mnemonic-toolkit (the SELF-pin —
-          # excluded; gated by install-pin-check.yml). Sibling arms
-          # have pkg=md-cli|ms-cli|mk-cli today; the gate is
-          # forward-compatible (unknown pkg in a workflow yields a
-          # `::warning::`, not a failure — see below).
+          # excluded by field-1 name; gated by install-pin-check.yml).
+          # The table is keyed on the REPO-URL (field 2), not the pkg
+          # name, so the per-line scan can resolve both the workflow
+          # `--tag <tag> <pkg>` form AND the prose `--tag <tag> --bin
+          # <bin>` form by url alone (no bin↔pkg name map needed). The
+          # GUI arm (`mnemonic-gui|…`) is in this url-keyed table (the
+          # awk excludes only `mnemonic-toolkit`); this is neutral today
+          # (no scanned file carries a GUI `cargo install` line) and is
+          # latent enablement for a future GUI drift-check — NOT scope
+          # creep. Forward-compatible: an unknown repo-url in a scanned
+          # line yields a `::warning::`, not a failure (see below).
           CANONICAL=$(grep -oE 'echo "[a-z-]+\|https://[^"]+\|[^"|]+\|[^"|]*\|[^"]*"' "$INSTALL_SH" \
             | sed -e 's/^echo "//' -e 's/"$//' \
-            | awk -F'|' 'BEGIN{OFS="|"} $1 != "mnemonic-toolkit" {print $1, $3}')
+            | awk -F'|' 'BEGIN{OFS="|"} $1 != "mnemonic-toolkit" {print $2, $3}')
 
           if [ -z "$CANONICAL" ]; then
             echo "::error::sibling-pin-check: no sibling component_info arms parsed from $INSTALL_SH"
@@ -69,44 +87,65 @@ jobs:
           echo "Canonical sibling pins (from $INSTALL_SH):"
           echo "$CANONICAL" | sed 's/^/  /'
 
-          # Look up canonical tag for a pkg from the parsed table.
-          # Echoes the tag on stdout (empty if pkg not in table).
-          canonical_tag_for() {
-            local pkg="$1"
-            echo "$CANONICAL" | awk -F'|' -v p="$pkg" '$1 == p {print $2; exit}'
+          # Look up canonical tag for a repo-url from the parsed table.
+          # Echoes the tag on stdout (empty if url not in table).
+          canonical_tag_for_url() {
+            local url="$1"
+            echo "$CANONICAL" | awk -F'|' -v u="$url" '$1 == u {print $2; exit}'
           }
 
-          # Single-pass scan: process-substitution feeds the loop in
-          # the current shell so $FAIL mutations propagate.
-          FAIL=0
+          # Build the scan set: every workflow YAML (except this gate
+          # itself) + every manual/quickstart prose markdown file. Only
+          # the src/ trees are scanned (build output is git-ignored).
+          # Prose-scan extension (FOLLOWUP
+          # sibling-pin-check-skips-manual-prose-install-commands) added
+          # 2026-06-23. Spec:
+          # design/SPEC_sibling_pin_check_prose_scan_extension.md. Paths
+          # have no spaces in this repo, so word-splitting a space-joined
+          # list is safe here.
+          SCAN_FILES=""
           for wf in .github/workflows/*.yml; do
             case "$(basename "$wf")" in
               sibling-pin-check.yml) continue ;;
             esac
+            SCAN_FILES="$SCAN_FILES $wf"
+          done
+          for d in docs/manual/src docs/quickstart/src; do
+            [ -d "$d" ] || continue
+            mds=$(find "$d" -type f -name '*.md')
+            SCAN_FILES="$SCAN_FILES $mds"
+          done
+
+          # Single-pass scan: process-substitution feeds the loop in
+          # the current shell so $FAIL mutations propagate. The detector
+          # requires BOTH `--git <url>` AND `--tag <tag>` (so tagless
+          # illustrative prose never matches) but does NOT require a
+          # trailing bareword pkg — so it matches the workflow
+          # `--tag <tag> <pkg>` form AND the prose `--tag <tag> --bin
+          # <bin>` form. Canonical is resolved by url, sidestepping the
+          # bin↔pkg name map.
+          FAIL=0
+          for f in $SCAN_FILES; do
+            [ -f "$f" ] || continue
             while IFS=: read -r lineno line; do
-              # Extract `--tag <tag>` (the tag argument).
+              url=$(echo "$line" | grep -oE -- '--git +https?://[^ ]+' | awk '{print $2}')
               tag=$(echo "$line" | grep -oE -- '--tag +[^ ]+' | awk '{print $2}')
-              # Extract `<pkg>` — the bareword AFTER `--tag <tag>`.
-              # Limited to standard cargo pkg-name charset (lowercase
-              # alphanumeric + `-` + `_`).
-              pkg=$(echo "$line" | grep -oE -- '--tag +[^ ]+ +[a-z][a-z0-9_-]*' \
-                    | awk '{print $3}')
-              if [ -z "$tag" ] || [ -z "$pkg" ]; then
-                echo "::warning::sibling-pin-check: $wf:$lineno: could not extract pkg/tag from cargo-install line — skipped"
+              if [ -z "$url" ] || [ -z "$tag" ]; then
+                echo "::warning::sibling-pin-check: $f:$lineno: could not extract url/tag from cargo-install line — skipped"
                 continue
               fi
-              canonical=$(canonical_tag_for "$pkg")
+              canonical=$(canonical_tag_for_url "$url")
               if [ -z "$canonical" ]; then
-                echo "::warning::sibling-pin-check: $wf:$lineno: unknown sibling '$pkg'; add a component_info arm in $INSTALL_SH to gate this pin"
+                echo "::warning::sibling-pin-check: $f:$lineno: unknown repo-url '$url'; add a component_info arm in $INSTALL_SH to gate this pin"
                 continue
               fi
               if [ "$tag" != "$canonical" ]; then
-                echo "::error::sibling-pin-check: $wf:$lineno: $pkg pin '$tag' does not match $INSTALL_SH canonical '$canonical'"
+                echo "::error::sibling-pin-check: $f:$lineno: pin '$tag' (url $url) does not match $INSTALL_SH canonical '$canonical'"
                 FAIL=1
               else
-                echo "  OK $wf:$lineno: $pkg $tag"
+                echo "  OK $f:$lineno: $tag"
               fi
-            done < <(grep -nE 'cargo install --git +https?://[^ ]+ +--tag +[^ ]+ +[a-z][a-z0-9_-]*' "$wf" || true)
+            done < <(grep -nE 'cargo install --git +https?://[^ ]+ +--tag +[^ ]+' "$f" || true)
           done
 
           if [ "$FAIL" -ne 0 ]; then

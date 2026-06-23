@@ -200,6 +200,7 @@ fn md_cli_ids(md: &str, entry: &Entry) -> Option<Ids> {
     }
     args.push("--path".to_string());
     args.push(entry.md_path.to_string());
+    args.push("--force-chunked".to_string());
     args.push("--json".to_string());
 
     let (ok, stdout) = run(md, &args);

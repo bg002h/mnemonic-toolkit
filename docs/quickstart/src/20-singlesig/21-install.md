@@ -6,8 +6,9 @@ crates land on crates.io is `cargo install --git`.
 
 ## Pre-requisites
 
-A recent **Rust toolchain** (1.77 or newer). If you don't have one,
-the easiest install is:
+A recent **Rust toolchain** — the three CLIs build on `rustc` ≥ 1.85.
+(The optional GUI in the last section needs `rustc` ≥ 1.88.) If you
+don't have one, the easiest install is:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -53,5 +54,9 @@ GitHub release:
 You will still need the three CLIs installed (the GUI invokes them
 as subprocesses), so finish this chapter either way. The
 end-user manual's install chapter has the full details.
+
+Building the GUI from source requires `rustc` ≥ 1.88 (a newer MSRV
+than the CLIs' ≥ 1.85). The constellation installer auto-skips the
+GUI with a warning on an older toolchain.
 
 Onward: generate the entropy you'll feed into your first bundle.

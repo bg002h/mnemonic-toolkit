@@ -16,9 +16,11 @@ pin to crates.io directly.
 
 ## Pre-requisites
 
-You need a recent **Rust toolchain** — the `rust-toolchain.toml` in
-each repository pins `1.77+`. Install via `rustup` if you do not have
-it:
+You need a recent **Rust toolchain**. The four CLIs (`mnemonic`,
+`md`, `ms`, `mk`) build on `rustc` ≥ 1.85 (the toolkit MSRV). The
+optional `mnemonic-gui` overlay (Path D below) currently needs
+`rustc` ≥ 1.88 — its dependencies pin a newer MSRV. Install via
+`rustup` if you do not have it:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -117,6 +119,12 @@ deferred item.
 The GUI's source lives at `bg002h/mnemonic-gui`; a dedicated
 standalone paper covering the GUI in depth is planned separately.
 This manual continues with the CLI surface.
+
+Building the GUI from source requires `rustc` ≥ 1.88 (its
+dependencies' MSRV); the four CLIs build on `rustc` ≥ 1.85. The
+constellation installer (`scripts/install.sh`) auto-skips the GUI
+with a warning on an older toolchain and still installs the four
+CLIs — upgrade `rustc` and re-run to add the GUI.
 
 ## Verifying your install
 

@@ -14,5 +14,5 @@
     "https?://[^\\s)]+",
     "`[^`]+`"
   ],
-  "words": ["custodied", "pasteable", "PSBT", "rekt"]
+  "words": ["custodied", "MSRV", "pasteable", "PSBT", "rekt", "rustc"]
 }

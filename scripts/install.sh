@@ -32,7 +32,7 @@ component_info() {
             echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.71.0|no|"
             ;;
         md)
-            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.7.1|yes|cli-compiler"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.9.2|yes|cli-compiler"
             ;;
         ms)
             echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.11.0|yes|"
@@ -48,6 +48,16 @@ component_info() {
             ;;
     esac
 }
+
+# Minimum rustc minor for the mnemonic-gui overlay (its --locked deps'
+# MSRV; icu_*@2.2.0 / idna_adapter@1.2.2 / image@0.25.10 require
+# rustc >= 1.88). The 4 CLIs build on the lower toolkit MSRV
+# (rustc >= 1.85). Bump this one line when the GUI's dependency MSRV
+# rises. See README.md:33-36 and design/FOLLOWUPS.md
+# `install-sh-gui-sibling-pin-staleness-ungated`. Stored as the MINOR
+# integer (floor 1.88) so the guard compares integers, never dotted
+# strings.
+GUI_MIN_RUSTC_MINOR=88
 
 ALL="mnemonic md ms mk mnemonic-gui"
 
@@ -111,6 +121,10 @@ EXAMPLES:
 
 REQUIREMENTS:
     - cargo (Rust toolchain; rustup recommended: https://rustup.rs/)
+    - GUI only: rustc >= 1.88 (the mnemonic-gui overlay's dependency
+      MSRV; the 4 CLIs build on rustc >= 1.85). On an older toolchain
+      the installer auto-skips the GUI with a warning; pass --no-gui to
+      skip it explicitly.
     - git (cargo install --git uses git under the hood; --from-git only)
     - C toolchain (some transitive deps build C code: cc, pkg-config)
     - Linux only: a few system libs for the GUI's wgpu/egui graphics
@@ -227,6 +241,47 @@ validate_token() {
 
 [ -n "$ONLY" ]    && for_each_token "$ONLY" validate_token
 [ -n "$EXCLUDE" ] && for_each_token "$EXCLUDE" validate_token
+
+# ── GUI rustc-MSRV guard ────────────────────────────────────────────────
+# The mnemonic-gui overlay needs a newer rustc than the 4 CLIs (its
+# --locked deps' MSRV). On an older toolchain, skip the GUI WITH A CLEAR
+# WARNING rather than letting `cargo install` raw-exit-101 mid-loop — the
+# run still exits 0 with the 4 CLIs installed (matches README.md's
+# `--no-gui or upgrade rustc` contract). On any rustc-parse failure we
+# FALL THROUGH (attempt the install) — never block a capable user.
+# `--dry-run` is exempt so the full 5-component plan prints unchanged.
+if selected mnemonic-gui && [ -z "$DRY_RUN" ]; then
+    rustc_ver=$(rustc --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
+    rustc_major=$(printf '%s' "$rustc_ver" | cut -d. -f1)
+    rustc_minor=$(printf '%s' "$rustc_ver" | cut -d. -f2)
+    if [ -n "$rustc_major" ] && [ -n "$rustc_minor" ] && [ "$rustc_major" = "1" ] \
+       && [ "$rustc_minor" -lt "$GUI_MIN_RUSTC_MINOR" ] 2>/dev/null; then
+        echo "warning: mnemonic-gui needs rustc >= 1.$GUI_MIN_RUSTC_MINOR;" >&2
+        echo "         your rustc is $rustc_ver — skipping the GUI this run." >&2
+        echo "         The 4 CLIs install normally. Upgrade rustc and re-run" >&2
+        echo "         to add the GUI (or this is expected if you only want the CLIs)." >&2
+        # Drop mnemonic-gui from the selection on BOTH axes: appending to
+        # $EXCLUDE covers the default/`--exclude` set; `selected()` consults
+        # $ONLY first, so an `--only mnemonic-gui[,…]` run also needs the
+        # token removed from $ONLY (token-exact via for_each_token rebuild,
+        # not an unanchored sed — avoids clobbering a future mnemonic-gui-*
+        # token). If dropping the GUI empties a previously-set $ONLY (the
+        # user asked for ONLY the GUI), substitute a never-matching sentinel
+        # so `selected()` installs nothing — an empty $ONLY would otherwise
+        # flip to "install all (minus EXCLUDE)".
+        EXCLUDE="${EXCLUDE:+$EXCLUDE,}mnemonic-gui"
+        if [ -n "$ONLY" ]; then
+            NEW_ONLY=""
+            drop_gui_token() {
+                [ "$1" = "mnemonic-gui" ] && return 0
+                NEW_ONLY="${NEW_ONLY:+$NEW_ONLY,}$1"
+            }
+            for_each_token "$ONLY" drop_gui_token
+            [ -z "$NEW_ONLY" ] && NEW_ONLY="__none__"
+            ONLY="$NEW_ONLY"
+        fi
+    fi
+fi
 
 # ── Install loop ────────────────────────────────────────────────────────
 installed_count=0
