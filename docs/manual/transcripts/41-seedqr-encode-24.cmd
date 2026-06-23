@@ -1,0 +1,1 @@
+$MNEMONIC_BIN seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"

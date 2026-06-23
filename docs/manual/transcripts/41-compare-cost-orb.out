@@ -1,0 +1,10 @@
+Input: or_b(pk(A),s:pk(B))
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 25.0 sat/vB
+
+Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------+--------+-------+-------+----------+---------+-------
+A         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+B         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct

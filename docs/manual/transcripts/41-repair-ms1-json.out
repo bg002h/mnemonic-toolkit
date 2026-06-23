@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "kind": "ms1",
+  "corrected_chunks": [
+    "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"
+  ],
+  "repairs": [
+    {
+      "chunk_index": 0,
+      "original_chunk": "ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "corrected_chunk": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+      "corrected_positions": [
+        {
+          "position": 17,
+          "was": "z",
+          "now": "q"
+        }
+      ]
+    }
+  ]
+}

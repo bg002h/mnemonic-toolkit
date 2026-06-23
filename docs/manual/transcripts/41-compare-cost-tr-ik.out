@@ -1,0 +1,14 @@
+Input:     tr(f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9,pk(dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659))
+Extracted: pk(02dff1d77f2a671c5f36183726db2341be58feae1da2deced843240f7b502ba659)
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 25.0 sat/vB
+
+Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------+--------+-------+-------+----------+---------+-------
+key[0]    |     60 |    75 |   +15 |     1500 |    1875 |   +375
+
+Keypath-spend (via IK f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9): 58 vB | 1450 sats
+
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+note: input had concrete keys; cost is identical to the abstract case
+note: input had a non-NUMS internal key IK (f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9); this report compares script-path-only cost (tr modeled as tr(NUMS, {M})). Keyspend-via-IK costs ~58 vB total (under SIGHASH_DEFAULT) and is the cheapest spend if signing with IK is acceptable.

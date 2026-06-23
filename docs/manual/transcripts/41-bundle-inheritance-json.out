@@ -1,0 +1,66 @@
+{
+    "schema_version": "4",
+    "mode": "full",
+    "network": "mainnet",
+    "template": null,
+    "descriptor": "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))",
+    "account": 0,
+    "origin_path": "m/48'/0'/0'/2'",
+    "origin_paths": null,
+    "master_fingerprint": null,
+    "ms1": [
+        "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
+        "ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6",
+        "ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu"
+    ],
+    "mk1": [
+        [
+            "mk1qpde47pqqspku6l0a4hxhmldde47lmtnchdq5pgy3zepu88jjutthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvalgy93vq0lnvclq0l7g",
+            "mk1qpde47pp8lphut2hvvpp5wl4l0mn058ndxfl63kufyfsjwlt2vkk2nlqmlvch5n4shwf72vulg50u6y5fza78g6u4f"
+        ],
+        [
+            "mk1qpde4lpqqspku6l0a4hxhmldde47lmdcdzxlzpgy3zepal7ec5v6wv58da6c23hjuw4ypg96ztz75f8wrrussm59fetnkdz9hjz3haw476nf",
+            "mk1qpde4lppag0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8enjm5qjmzgwptzzmpcfh"
+        ],
+        [
+            "mk1qpde4upqqspku6l0a4hxhmldde47lmfgv3gqvpgy3zepugvevsxpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqnc4sfyaxwpvtgsczj",
+            "mk1qpde4upprja893lkxup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5jh296hyx0h0x5rthp2pe4"
+        ]
+    ],
+    "md1": [
+        "md1f06s0rqpqjtvyyy5qj5kxcqkudsqefnfdwqqqq0cpxd9ecqqqsqqqhesu79mg9xcskd6lgmsuz5kg",
+        "md1f06s0rqvx3r033gv3gqv90puthgx8egtq4pcwl6u5p2us6r6zsnl2rd0q6gghvacapyyhuygh2h0e",
+        "md1f06s0rqhgy07r0ck4wcczrgalt7lhxlg0x6vnl4rdcjgnpya7k5edv487ph7e30g8cy9la2753uzh",
+        "md1f06s0rqe8tpwunu5knn9pm0wkz5duhr4fq2pwsjch4zfmsclyyxap2w2ua7583psh3mvn8utunz4f",
+        "md1f06s0rpr5tj7qeewyp4dfykwfkgg6fxyxetdcmythf4hsqzd3v879jprztejzs7q2ancf6n80dqdj",
+        "md1f06s0rpt7zy59llgl9ezm3k3wkvkjc7g74f7hv5es0mrjvwgp8swt5uk87cmsx5gg8xn84kmldzt3",
+        "md1f06s0rpnedmgpg3jz4xc5x2ue9a7z5h3rycu0nx9leekrarz2svuc4wj22s2ukc5u553ej"
+    ],
+    "multisig": {
+        "template": "descriptor",
+        "threshold": 3,
+        "cosigner_count": 3,
+        "path_family": "bip87",
+        "cosigners": [
+            {
+                "index": 0,
+                "master_fingerprint": "73c5da0a",
+                "origin_path": "m/48'/0'/0'/2'",
+                "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+            },
+            {
+                "index": 1,
+                "master_fingerprint": "b8688df1",
+                "origin_path": "m/48'/0'/0'/2'",
+                "xpub": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"
+            },
+            {
+                "index": 2,
+                "master_fingerprint": "28645006",
+                "origin_path": "m/48'/0'/0'/2'",
+                "xpub": "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6"
+            }
+        ]
+    },
+    "privacy_preserving": false
+}

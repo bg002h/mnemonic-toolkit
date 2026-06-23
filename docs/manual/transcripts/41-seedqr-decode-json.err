@@ -1,0 +1,1 @@
+warning: secret material on argv (--from seedqr=) — pipe via --from seedqr=- to avoid /proc/$PID/cmdline exposure
