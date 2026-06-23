@@ -42,11 +42,15 @@ no CLI equivalent:
    not invoke the subprocess immediately.
    Instead a modal lists the full argv as it will be passed to the
    subprocess, and asks for explicit **Run** / **Cancel**
-   confirmation. **At v0.3.0 the modal renders secret-bearing argv
-   tokens in plaintext** — see [§14 Secret handling](#secret-handling)
-   Defense 2 for the full security implication and operational
-   mitigation. Even with that gap the modal still guards against
-   muscle-memory clicks on a form pre-populated from disk.
+   confirmation. **The modal redacts secret values**: each
+   secret-bearing argv token renders as a fixed `••••` sentinel
+   rather than in plaintext, so the literal phrase / `ms1` /
+   passphrase is never drawn on screen — the flag NAME stays visible,
+   only its secret value is masked. See
+   [§14 Secret handling](#secret-handling) Defense 2 for the exact
+   masking semantics and the residual (flag-name) exposure. The modal
+   also guards against muscle-memory clicks on a form pre-populated
+   from disk.
 3. **`?` help-icons that deep-link into THIS manual.** Every
    Dropdown / NodeValueComposite / TaggedOrIndexed / repeating-field
    flag in the GUI renders with a `?` button next to its label;
