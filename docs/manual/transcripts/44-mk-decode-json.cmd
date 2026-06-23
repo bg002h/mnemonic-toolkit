@@ -1,0 +1,4 @@
+$MK_BIN decode \
+  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
+  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx \
+  --json

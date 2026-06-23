@@ -53,19 +53,26 @@ mk encode \
   --xpub xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V \
   --origin-fingerprint 73c5da0a \
   --origin-path "m/84'/0'/0'" \
-  --from-md1 md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np
+  --policy-id-stub deadbeef
 ```
+
+(`--from-md1 <MD1-STRING>` is the alternative to `--policy-id-stub`: it
+derives the stub from a wallet-policy md1 string instead of taking the
+4-byte stub literally.)
 
 ### Output
 
 Text mode emits one mk1 string per line, one per chunk. JSON mode emits
+a `{ "schema_version", "mk1_strings", "chunk_count", "code_variant" }`
+object (the per-call `mk1_strings` values are elided here — `mk encode`
+randomizes the chunk-set identifier, so they differ run to run):
 
 ```json
 {
   "schema_version": 1,
   "mk1_strings": ["mk1...", "mk1..."],
   "chunk_count": 2,
-  "code_variant": "regular"
+  "code_variant": "long"
 }
 ```
 
@@ -121,20 +128,15 @@ from stdin.
 
 ```sh
 mk decode \
-  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
-  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
+  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
+  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx
 ```
 
 ### Output
 
 Text mode:
 
-```text
-xpub:                xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
-origin_fingerprint:  73c5da0a
-origin_path:         m/84'/0'/0'
-policy_id_stubs:     deadbeef
-chunks:              2 (regular)
+```{.text include="44-mk-decode-text.out"}
 ```
 
 `origin_fingerprint` reads `(omitted, privacy-preserving mode)` for
@@ -142,16 +144,7 @@ cards encoded under `--privacy-preserving`.
 
 JSON mode:
 
-```json
-{
-  "schema_version": 1,
-  "xpub": "xpub6...",
-  "origin_fingerprint": "73c5da0a",
-  "origin_path": "m/84'/0'/0'",
-  "policy_id_stubs": ["deadbeef"],
-  "chunks": 2,
-  "code_variant": "regular"
-}
+```{.json include="44-mk-decode-json.out"}
 ```
 
 `origin_fingerprint` is `null` for privacy-preserving cards.
@@ -181,15 +174,12 @@ mk inspect [OPTIONS] <MK1-STRING>...
 
 ### Output
 
-Text mode adds the following fields beyond `mk decode` text output:
+Text mode emits the full decode fields plus the structural commentary
+(`xpub_fingerprint` — the fingerprint *of the card's xpub*, distinct
+from the master `origin_fingerprint`; the spelled-out path components;
+and the per-chunk BCH variant):
 
-```text
-xpub_fingerprint:    73c5da0a
-  component[0]:       84h (hardened)
-  component[1]:       0h (hardened)
-  component[2]:       0h (hardened)
-  chunk[0]:           regular (BCH variant)
-  chunk[1]:           regular (BCH variant)
+```{.text include="44-mk-inspect-text.out"}
 ```
 
 JSON mode adds `xpub_fingerprint`, `origin_path_components` (array of
@@ -254,16 +244,13 @@ cycle, so wrapper scripts can use a uniform `exit == 5` signal.
 
 ```sh
 # A valid mk1 chunk with one character substituted at position 17:
-mk repair mk1qprsqhpqqsqzcqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+mk repair mk1qp0wrvpqqsqaatd7aqeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq
 ```
 
 Stdout (the corrected string is on the LAST line; comment lines
 describe the fix):
 
-```text
-# Repair report
-#   mk1 chunk 0: 1 correction at position 17: 'z' -> '3'
-mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+```{.text include="44-mk-repair-text.out"}
 ```
 
 Exit code: `5`.
@@ -273,20 +260,7 @@ Exit code: `5`.
 `mk repair --json` byte-matches toolkit's `RepairJson` envelope
 (`kind` is `"mk1"`):
 
-```json
-{
-  "schema_version": "1",
-  "kind": "mk1",
-  "corrected_chunks": ["mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4"],
-  "repairs": [
-    {
-      "chunk_index": 0,
-      "original_chunk": "mk1qprsqhpqqsqzcqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4",
-      "corrected_chunk": "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4",
-      "corrected_positions": [{"position": 17, "was": "z", "now": "3"}]
-    }
-  ]
-}
+```{.json include="44-mk-repair-json.out"}
 ```
 
 ### Stdin via `-`
@@ -362,8 +336,8 @@ mk verify \
   --xpub xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V \
   --origin-fingerprint 73c5da0a \
   --origin-path "m/84'/0'/0'" \
-  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
-  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
+  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
+  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx
 ```
 
 Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success, exits
@@ -438,8 +412,8 @@ Use `-` as a positional argument to read one mk1 string per line from stdin.
 
 ```sh
 mk address \
-  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
-  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
+  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
+  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx \
   --count 3
 ```
 
@@ -447,28 +421,14 @@ mk address \
 
 Text mode (receive chain):
 
-```text
-  0  bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu
-  1  bc1qnjg0jd8228aq7egyzacy8cys3knf9xvrerkf9g
-  2  bc1qp59yckz4ae5c4efgw2s5wfyvrz0ala7rgvuz8z
+```{.text include="44-mk-address-text.out"}
 ```
 
 With `--chain both`, rows are grouped by chain (`receive` then `change`).
 
-JSON mode:
+JSON mode (here with `--count 2`):
 
-```json
-{
-  "schema_version": 1,
-  "xpub": "xpub6...",
-  "origin_path": "m/84'/0'/0'",
-  "address_type": "p2wpkh",
-  "network": "mainnet",
-  "addresses": [
-    { "chain": 0, "index": 0, "address": "bc1q..." },
-    { "chain": 0, "index": 1, "address": "bc1q..." }
-  ]
-}
+```{.json include="44-mk-address-json.out"}
 ```
 
 ---
@@ -501,8 +461,8 @@ mk1 strings from stdin.
 
 ```sh
 mk derive \
-  mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
-  mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
+  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
+  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx \
   --path m/0/5
 ```
 
@@ -510,14 +470,7 @@ mk derive \
 
 Text mode:
 
-```text
-parent_xpub:          xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
-parent_origin_path:   m/84'/0'/0'
-relative_path:        m/0/5
-child_xpub:           xpub6FrCS2gWHvogpRtNtG8qfs9QjHU9qVPL418V59XRrBQaJ5byrvkSYSwdbMsiBCeRM8U4tiDSHu13W7jNRSZs9bnmW7gDbjgB1NHY3aoNx5X
-child_fingerprint:    98442048
-depth:                5
-network:              mainnet
+```{.text include="44-mk-derive-text.out"}
 ```
 
 JSON mode emits the same fields as a `{ "schema_version": 1, … }` object.
