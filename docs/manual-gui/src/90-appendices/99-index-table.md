@@ -35,17 +35,27 @@ versa) fails the lint.
 | `mk inspect` | [`mk inspect`](#mk-inspect) |
 | `mk vectors` | [`mk vectors`](#mk-vectors) |
 | `mk verify` | [`mk verify`](#mk-verify) |
+| `mnemonic addresses` | [`mnemonic addresses`](#mnemonic-addresses) |
 | `mnemonic bundle` | [`mnemonic bundle`](#mnemonic-bundle) |
+| `mnemonic compare-cost` | [`mnemonic compare-cost`](#mnemonic-compare-cost) |
 | `mnemonic convert` | [`mnemonic convert`](#mnemonic-convert) |
+| `mnemonic decode-address` | [`mnemonic decode-address`](#mnemonic-decode-address) |
 | `mnemonic derive-child` | [`mnemonic derive-child`](#mnemonic-derive-child) |
 | `mnemonic export-wallet` | [`mnemonic export-wallet`](#mnemonic-export-wallet) |
 | `mnemonic final-word` | [`mnemonic final-word`](#mnemonic-final-word) |
+| `mnemonic nostr` | [`mnemonic nostr`](#mnemonic-nostr) |
 | `mnemonic-gui` | [Glossary](#glossary) |
 | `mnemonic seed-xor-combine` | [`mnemonic seed-xor-combine`](#mnemonic-seed-xor-combine) |
 | `mnemonic seed-xor-split` | [`mnemonic seed-xor-split`](#mnemonic-seed-xor-split) |
+| `mnemonic silent-payment` | [`mnemonic silent-payment`](#mnemonic-silent-payment) |
 | `mnemonic slip39-combine` | [`mnemonic slip39-combine`](#mnemonic-slip39-combine) |
 | `mnemonic slip39-split` | [`mnemonic slip39-split`](#mnemonic-slip39-split) |
 | `mnemonic verify-bundle` | [`mnemonic verify-bundle`](#mnemonic-verify-bundle) |
+| `mnemonic verify-message` | [`mnemonic verify-message`](#mnemonic-verify-message) |
+| `mnemonic xpub-search account-of-descriptor` | [`mnemonic xpub-search account-of-descriptor`](#mnemonic-xpub-search-account-of-descriptor) |
+| `mnemonic xpub-search address-of-xpub` | [`mnemonic xpub-search address-of-xpub`](#mnemonic-xpub-search-address-of-xpub) |
+| `mnemonic xpub-search passphrase-of-xpub` | [`mnemonic xpub-search passphrase-of-xpub`](#mnemonic-xpub-search-passphrase-of-xpub) |
+| `mnemonic xpub-search path-of-xpub` | [`mnemonic xpub-search path-of-xpub`](#mnemonic-xpub-search-path-of-xpub) |
 | `ms1` | [Glossary](#glossary) |
 | `ms decode` | [`ms decode`](#ms-decode) |
 | `ms encode` | [`ms encode`](#ms-encode) |

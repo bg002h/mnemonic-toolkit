@@ -1,0 +1,85 @@
+# `mnemonic compare-cost` {#mnemonic-compare-cost}
+
+Compare the per-spending-condition cost of wrapping the same
+miniscript as `wsh(M)` (SegWit v0 native) versus `tr(NUMS, {M})`
+(Taproot, script-path-only, with the BIP-341 H-point as the
+unspendable internal key). For every minimal satisfying assignment of
+`M` — every distinct spending condition — the command emits one row
+showing the witness-bytes cost under each wrapper in virtual bytes, in
+sats at the user-supplied feerate, and the `Δ` between the two. The
+GUI exposes this as one form under the **mnemonic** tab's subcommand
+selector.
+\index{mnemonic compare-cost}
+
+This command takes no secret material — a miniscript or descriptor is
+public structure. Cost is key-agnostic; abstract labels (`pk(A)`,
+`pk(B)`) auto-substitute to deterministic dummy keys. Output is the
+aligned-column cost table on stdout (text or JSON).
+
+## Outline {#mnemonic-compare-cost-outline}
+
+- [`--miniscript`](#mnemonic-compare-cost-miniscript) — bare miniscript fragment (mutually exclusive with `--descriptor`)
+- [`--descriptor`](#mnemonic-compare-cost-descriptor) — full descriptor; the wrapper is stripped to recover `M`
+- [`--feerate`](#mnemonic-compare-cost-feerate) — decimal sats per virtual byte (default `1.0`)
+- [`--max-conditions`](#mnemonic-compare-cost-max-conditions) — hard cap on enumeration size (default `4096`)
+- [`--json`](#mnemonic-compare-cost-json) — emit JSON envelope instead of the aligned table
+
+## `--miniscript` {#mnemonic-compare-cost-miniscript}
+
+A bare miniscript fragment with abstract labels (`pk(A)`, `pk(B)`, …)
+or concrete hex pubkeys; cost is key-agnostic so abstract labels
+auto-substitute to deterministic dummy keys. Mutually exclusive with
+`--descriptor`. The GUI renders this as a Text widget.
+
+## `--descriptor` {#mnemonic-compare-cost-descriptor}
+
+A full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf
+`tr(IK, {M})` (v0.28.0). The wrapper is stripped to recover the inner
+miniscript `M` before the comparison. Multi-leaf
+`tr(IK, {M1, M2, ...})` and keypath-only `tr(IK)` are refused with
+exit `3`. Mutually exclusive with `--miniscript`. The GUI renders this
+as a Text widget. When neither `--miniscript` nor `--descriptor` is
+supplied and stdin is not a terminal, the first non-blank line of
+stdin is classified as a descriptor or miniscript by its top-level
+identifier.
+
+## `--feerate` {#mnemonic-compare-cost-feerate}
+
+Decimal sats per virtual byte for the sats columns; default `1.0`,
+max `10000.0`. Out-of-range values exit `64`. The GUI renders this as
+a Text widget (decimal value).
+
+## `--max-conditions` {#mnemonic-compare-cost-max-conditions}
+
+A hard cap on the raw enumeration size
+`n_abs × n_rel × 2^(|signers|+|preimages|)`; exceeding the cap exits
+`3` before any enumeration. Default `4096` (permits up to 10
+signers+preimages). When `>256`, a soft warn-trail entry appears in
+`notes[]` once 256 rows are produced. Min `1`. The GUI renders this as
+a Number widget.
+
+## `--json` {#mnemonic-compare-cost-json}
+
+Boolean flag. Emit a JSON envelope on stdout instead of the plaintext
+aligned-column table. For `--descriptor` input the
+`extracted_miniscript` field holds the wrapper-stripped inner
+miniscript `M`; the `input.form` field records the chosen path
+(descriptor vs miniscript). The GUI renders this as a checkbox.
+
+## Worked example — bare miniscript with a feerate
+
+1. Switch to the **mnemonic** tab; pick **compare-cost** in the
+   subcommand selector.
+2. Type a miniscript into `--miniscript`, e.g.
+   `or_b(pk(A),s:pk(B))`.
+3. Set `--feerate` to `25.0`.
+4. Click **Run** (no run-confirm modal — a miniscript is public).
+
+Each row is labeled by the minimal satisfying assignment that
+produces it (signers, preimages, absolute/relative timelocks joined by
+` + `). For `or_b(pk(A),s:pk(B))`, either A or B can sign alone and
+both pay the same cost; `tr` costs more per spend than `wsh` because
+the tr witness carries an extra 33-byte control block.
+
+See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+for the non-blocking `older()` advisory this command emits on intake.
