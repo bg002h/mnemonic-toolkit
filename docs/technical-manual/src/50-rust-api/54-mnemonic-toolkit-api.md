@@ -242,15 +242,51 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
   "schema_version": "4",
   "result": "ok",
   "checks": [
-    {"name": "ms1_decode", "passed": true, "detail": "decoded successfully"},
-    {"name": "ms1_entropy_match", "passed": true, "detail": "ms1 byte-identical"},
-    {"name": "mk1_decode", "passed": true, "detail": "decoded successfully"},
-    {"name": "mk1_xpub_match", "passed": true, "detail": "xpub matches"},
-    {"name": "mk1_fingerprint_match", "passed": true, "detail": "fingerprint matches"},
-    {"name": "mk1_path_match", "passed": true, "detail": "path matches"},
-    {"name": "md1_decode", "passed": true, "detail": "decoded successfully"},
-    {"name": "md1_wallet_policy", "passed": true, "detail": "wallet-policy mode confirmed"},
-    {"name": "md1_xpub_match", "passed": true, "detail": "65-byte xpub matches expected"}
+    {
+      "name": "ms1_decode",
+      "passed": true,
+      "detail": "decoded successfully"
+    },
+    {
+      "name": "ms1_entropy_match",
+      "passed": true,
+      "detail": "ms1 byte-identical"
+    },
+    {
+      "name": "mk1_decode",
+      "passed": true,
+      "detail": "decoded successfully"
+    },
+    {
+      "name": "mk1_xpub_match",
+      "passed": true,
+      "detail": "xpub matches"
+    },
+    {
+      "name": "mk1_fingerprint_match",
+      "passed": true,
+      "detail": "fingerprint matches"
+    },
+    {
+      "name": "mk1_path_match",
+      "passed": true,
+      "detail": "path matches"
+    },
+    {
+      "name": "md1_decode",
+      "passed": true,
+      "detail": "decoded successfully"
+    },
+    {
+      "name": "md1_wallet_policy",
+      "passed": true,
+      "detail": "wallet-policy mode confirmed"
+    },
+    {
+      "name": "md1_xpub_match",
+      "passed": true,
+      "detail": "65-byte xpub matches expected"
+    }
   ]
 }
 ```
