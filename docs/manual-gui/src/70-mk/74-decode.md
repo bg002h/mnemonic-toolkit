@@ -35,7 +35,7 @@ until EOF. The GUI renders this as a multi-row text field.
 
 The output panel emits on stdout:
 
-```text
+```{.text include="74-mk-decode.out"}
 xpub:                xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a
 origin_fingerprint:  deadbeef
 origin_path:         84'/0'/0'

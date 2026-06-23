@@ -119,7 +119,7 @@ The output panel renders the decoded entropy, phrase, and the
 language line (with the explicit-default annotation since
 `--language` was omitted):
 
-```text
+```{.text include="64-ms-decode.out"}
 entropy: 00000000000000000000000000000000
 phrase: abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 language: english (12 words, default — verify against your records)
@@ -127,7 +127,7 @@ language: english (12 words, default — verify against your records)
 
 Stderr adds the explicit-default diagnostic:
 
-```text
+```{.text include="64-ms-decode.err" lines="1-1"}
 note: --language defaulted to 'english'; if your wallet was created with a different wordlist, decode with --language <lang>.
 ```
 

@@ -229,7 +229,7 @@ renders this as a checkbox.
 Every invocation emits this advisory on stderr **before** the search
 starts (it does not gate on match / no-match):
 
-```text
+```{.text include="4e-xpub-search-passphrase-advisory.err" lines="1-1"}
 note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use `xpub-search path-of-xpub` to find the path first.
 ```
 

@@ -191,7 +191,7 @@ derived from it.
 
 The output panel emits the public derivation result on stdout:
 
-```text
+```{.text include="69-ms-derive-bip84.out"}
 master_fingerprint:  73c5da0a
 account_path:        m/84'/0'/0'
 account_xpub:        xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V

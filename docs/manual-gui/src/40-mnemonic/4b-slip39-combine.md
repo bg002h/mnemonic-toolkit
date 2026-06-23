@@ -175,7 +175,7 @@ is `00000000000000000000000000000000`).
 To recover the BIP-39 master phrase instead, set `--to` to
 `phrase` and pick `english` for `--language`. Output:
 
-```text
+```{.text include="4b-slip39-roundtrip.out"}
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 

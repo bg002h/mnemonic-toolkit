@@ -36,7 +36,7 @@ form.
 The output panel renders the verdict line and structured fields
 on stdout:
 
-```text
+```{.text include="62-ms-inspect.out"}
 OK: would decode v0.1
 
 hrp: ms
@@ -46,6 +46,7 @@ share_index: s
 prefix_byte: 0x00
 payload_bytes: 00000000000000000000000000000000
 checksum_valid: true
+kind: entr
 ```
 
 For an `ms1` that fails one or more validation rules, the verdict

@@ -1,0 +1,8 @@
+# === Wallet bundle: bip84, mainnet ===
+# ms1: 1c017
+# mk1: 1c017
+# fingerprint: 73c5da0a
+# origin path: m/84'/0'/0'
+# Template: bip84
+# md1: 1c01
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

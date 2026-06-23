@@ -576,13 +576,16 @@ walkthrough.
 
 Output panel stdout:
 
-```text
-ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+```{.text include="44-convert-phrase-to-ms1.out"}
+ms1: ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
 ```
 
-This matches the canonical `ms1` for the all-`abandon` vector
-(byte-identical to the bundle output and to the
-`docs/manual/src/40-cli-reference/43-ms.md:40` reference).
+The output is the canonical `ms1` for the all-`abandon` vector,
+emitted with the `ms1:` label prefix and the default 5-character
+display grouping (drop the grouping with `--group-size 0`). The
+underlying unbroken string `ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f`
+is byte-identical to the bundle output and to the
+`docs/manual/src/40-cli-reference/43-ms.md:40` reference.
 
 ## Worked example — multi-output (xpub → fingerprint + path + address)
 

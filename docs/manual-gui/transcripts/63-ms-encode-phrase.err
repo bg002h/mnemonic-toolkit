@@ -1,0 +1,4 @@
+word count: 12
+language: english (BIP-39 checksum valid)
+passphrase: not stored in ms1 (record separately if used)
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

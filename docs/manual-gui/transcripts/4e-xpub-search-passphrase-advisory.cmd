@@ -1,0 +1,1 @@
+printf %s "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" | $MNEMONIC_BIN xpub-search passphrase-of-xpub --phrase-stdin --passphrase "" --target-xpub xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V

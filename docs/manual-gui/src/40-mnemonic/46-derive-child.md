@@ -300,8 +300,8 @@ The output panel renders the child phrase on stdout (one phrase
 per line; for index 0 with `--length 12`, this is a deterministic
 child of the master):
 
-```text
-girl mad pet galaxy egg matter matrix prison refuse sense ordinary nose
+```{.text include="46-derive-child-bip39.out"}
+prosper short ramp prepare exchange stove life snack client enough purpose fold
 ```
 
 (The exact words are deterministic given the master + index +

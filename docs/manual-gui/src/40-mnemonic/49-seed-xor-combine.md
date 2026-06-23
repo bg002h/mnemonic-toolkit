@@ -134,7 +134,7 @@ The output panel renders the reconstructed master phrase on
 stdout. For shares produced from the canonical master, the output
 is exactly:
 
-```text
+```{.text include="49-seed-xor-roundtrip.out"}
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 

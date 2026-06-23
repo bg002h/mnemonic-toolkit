@@ -1,0 +1,2 @@
+note: --language defaulted to 'english'; if your wallet was created with a different wordlist, decode with --language <lang>.
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

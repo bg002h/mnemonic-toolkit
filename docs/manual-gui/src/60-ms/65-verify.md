@@ -130,7 +130,7 @@ stdin.
 
 The output panel emits the simple OK line on stdout and exit 0:
 
-```text
+```{.text include="65-ms-verify-bare.out"}
 OK: valid v0.1 entr (12 words, 50 chars)
 ```
 
@@ -150,7 +150,7 @@ OK: valid v0.1 entr (12 words, 50 chars)
 
 The output panel emits the round-trip OK line on stdout and exit 0:
 
-```text
+```{.text include="65-ms-verify-roundtrip.out"}
 OK: round-trip valid (12 words, language=english)
 ```
 

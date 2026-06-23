@@ -42,7 +42,7 @@ the deep-link helper `?` icon scrolls here.
 
 The output panel renders on stdout:
 
-```text
+```{.text include="72-mk-inspect.out"}
 xpub:                xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a
 origin_fingerprint:  deadbeef
 xpub_fingerprint:    ebc0ee0b

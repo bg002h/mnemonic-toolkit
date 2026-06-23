@@ -1,0 +1,2 @@
+note: --language defaulted to english; the master fingerprint and xpub depend on the wordlist language (record it alongside the backup)
+note: stdout is watch-only — public keys only, cannot spend

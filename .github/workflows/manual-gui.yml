@@ -106,6 +106,85 @@ jobs:
         run: make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=true
 
   # ---------------------------------------------------------------------------
+  # Job 1b — verify-examples (output-fidelity gate)
+  #
+  # Replays every worked-example transcript in docs/manual-gui/transcripts/
+  # against the GUI-PINNED CLI tier — the exact release tags the pinned
+  # mnemonic-gui (v0.49.0) ships and subprocess-runs — and byte-diffs each
+  # capture against the committed golden (`make verify-examples`). Drift =
+  # failure. This is the output-shaped analogue of the schema-coverage
+  # anchor gate in Job 1: Job 1 pins the GUI *schema* (flag names); this job
+  # pins the GUI *output* (worked-example stdout/stderr a GUI user sees).
+  #
+  # The four CLI tags below MUST equal pinned-upstream.toml's
+  # [manual-gui] *-tag-implied fields (toolkit-v0.70.0 / md-cli-v0.7.0 with
+  # --features cli-compiler / ms-cli-v0.8.0 / mk-cli-v0.9.0). A GUI-pin bump
+  # re-pins all four here in lockstep with that file (and with Job 1's
+  # schema clone).
+  #
+  # Bins are installed into an isolated --root so verify-examples receives
+  # ABSOLUTE MNEMONIC_BIN/MD_BIN/MS_BIN/MK_BIN paths (the runner's guard
+  # rejects bare binary names — a bare name resolves off $PATH locally but
+  # fails in CI).
+  # ---------------------------------------------------------------------------
+  verify-examples:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install make + python3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make python3
+
+      - name: Install GUI-pinned CLI tier (md / ms / mk) into an isolated root
+        # Package-name selectors (`md-cli` / `ms-cli` / `mk-cli`) instead of
+        # `--bin`: each upstream workspace ships multiple binaries and cargo
+        # refuses --bin disambiguation against a multi-binary workspace. The
+        # `--features cli-compiler` on md-cli matches the GUI-pinned tier (the
+        # md `compile` path the manual-gui documents). All four tags mirror
+        # pinned-upstream.toml [manual-gui].
+        env:
+          DOCBIN_ROOT: ${{ runner.temp }}/docbins
+        run: |
+          cargo install --root "$DOCBIN_ROOT" \
+            --git https://github.com/bg002h/descriptor-mnemonic \
+            --tag descriptor-mnemonic-md-cli-v0.7.0 md-cli --features cli-compiler
+          cargo install --root "$DOCBIN_ROOT" \
+            --git https://github.com/bg002h/mnemonic-secret \
+            --tag ms-cli-v0.8.0 ms-cli
+          cargo install --root "$DOCBIN_ROOT" \
+            --git https://github.com/bg002h/mnemonic-key \
+            --tag mk-cli-v0.9.0 mk-cli
+
+      - name: Install GUI-pinned mnemonic binary (toolkit v0.70.0)
+        # The `mnemonic` binary the GUI subprocess-runs on the mnemonic tab.
+        # mnemonic-toolkit-v0.70.0 is the toolkit tag the pinned GUI ships
+        # (pinned-upstream.toml [manual-gui] toolkit-tag-implied).
+        env:
+          DOCBIN_ROOT: ${{ runner.temp }}/docbins
+        run: |
+          cargo install --root "$DOCBIN_ROOT" \
+            --git https://github.com/bg002h/mnemonic-toolkit \
+            --tag mnemonic-toolkit-v0.70.0 mnemonic-toolkit
+
+      - name: Verify worked-example transcripts against the GUI-pinned tier
+        working-directory: docs/manual-gui
+        # All flag values are constants or controlled built-ins
+        # (${{ runner.temp }}); no untrusted github.event.* fields.
+        env:
+          DOCBIN_ROOT: ${{ runner.temp }}/docbins
+        run: |
+          make verify-examples \
+            MNEMONIC_BIN="$DOCBIN_ROOT/bin/mnemonic" \
+            MD_BIN="$DOCBIN_ROOT/bin/md" \
+            MS_BIN="$DOCBIN_ROOT/bin/ms" \
+            MK_BIN="$DOCBIN_ROOT/bin/mk"
+
+  # ---------------------------------------------------------------------------
   # Job 2 — build
   #
   # Runs `make pdf` + `make html` and uploads the PDF as a workflow artifact.

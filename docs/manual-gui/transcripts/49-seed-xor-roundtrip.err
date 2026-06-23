@@ -1,0 +1,5 @@
+warning: secret material on argv (--share phrase=) — pipe via --share phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--share phrase=) — pipe via --share phrase=- to avoid /proc/$PID/cmdline exposure
+warning: secret material on argv (--share phrase=) — pipe via --share phrase=- to avoid /proc/$PID/cmdline exposure
+warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet

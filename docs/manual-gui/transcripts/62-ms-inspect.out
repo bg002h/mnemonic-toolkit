@@ -1,0 +1,10 @@
+OK: would decode v0.1
+
+hrp: ms
+threshold: 0
+tag: entr
+share_index: s
+prefix_byte: 0x00
+payload_bytes: 00000000000000000000000000000000
+checksum_valid: true
+kind: entr

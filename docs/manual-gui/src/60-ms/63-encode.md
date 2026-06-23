@@ -209,18 +209,18 @@ per `crates/ms-cli/src/format.rs:40` and the
 3. Leave `--language` at default `english`.
 4. Click **Run**. The run-confirm modal fires; confirm to proceed.
 
-The output panel renders the canonical `ms1` and its chunked form
-on stdout:
+The output panel renders the canonical `ms1` in its default
+5-character display grouping on stdout (the unbroken form
+`ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f` is recovered
+by dropping the separators, or by re-encoding with `--group-size 0`):
 
-```text
-ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
-
+```{.text include="63-ms-encode-phrase.out"}
 ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
 ```
 
 The stderr engraving card adds:
 
-```text
+```{.text include="63-ms-encode-phrase.err" lines="1-3"}
 word count: 12
 language: english (BIP-39 checksum valid)
 passphrase: not stored in ms1 (record separately if used)
@@ -239,11 +239,9 @@ passphrase: not stored in ms1 (record separately if used)
 5. **Run**. The modal fires; confirm to proceed.
 
 Output (without engraving card; same canonical `ms1` as the phrase
-path):
+path, in the default 5-character display grouping):
 
-```text
-ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
-
+```{.text include="63-ms-encode-hex.out"}
 ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
 ```
 

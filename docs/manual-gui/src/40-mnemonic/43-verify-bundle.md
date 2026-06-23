@@ -513,7 +513,7 @@ The output panel renders the SPEC §5.4 9-element check schema on
 stdout (one line per named check, format `<name>: ok|fail [detail]`,
 plus a final `result: ok|mismatch` line):
 
-```text
+```{.text include="43-verify-bundle-singlesig.out"}
 ms1_decode: ok decoded successfully
 ms1_entropy_match: ok ms1 byte-identical
 mk1_decode: ok decoded successfully

@@ -1,0 +1,11 @@
+xpub:                xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a
+origin_fingerprint:  deadbeef
+xpub_fingerprint:    ebc0ee0b
+origin_path:         84'/0'/0'
+  component[0]:       84h (hardened)
+  component[1]:       0h (hardened)
+  component[2]:       0h (hardened)
+policy_id_stubs:     c0ffee00
+chunks:              2
+  chunk[0]:           long (BCH variant)
+  chunk[1]:           regular (BCH variant)

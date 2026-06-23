@@ -88,7 +88,7 @@ until EOF.
 
 The output panel emits exit 0 and stdout:
 
-```text
+```{.text include="75-mk-verify-bare.out"}
 OK: mk1 string(s) decode cleanly (and any --xpub / --origin-* / --policy-id-stub / --from-md1 inputs match)
 ```
 
