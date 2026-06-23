@@ -1,0 +1,120 @@
+# `mnemonic seedqr-encode` {#mnemonic-seedqr-encode}
+
+Encode a BIP-39 phrase as a SeedQR numeric payload — the open
+[SeedSigner](https://seedsigner.com/seedqr-instructions/) QR encoding
+where each English-wordlist index renders as a 4-digit zero-padded
+decimal (Standard variant) or as the raw BIP-39 entropy bytes
+(CompactSeedQR variant, surfaced on the CLI as lowercase hex). The
+GUI exposes the toolkit's `seedqr encode` sub-subcommand as a flat
+**SeedQR Encode** form on the `mnemonic` tab; its three form fields
+map to the three CLI flags below. Output is the SeedQR payload string
+on stdout (or a JSON envelope when `--json-out` is set).
+
+:::danger
+The worked example in this chapter uses the canonical all-`abandon`
+BIP-39 test vector. **Never engrave or fund** a wallet derived from
+this phrase — chain watchers have swept it continuously since 2017.
+The `--from phrase=` field is a secret-bearing input: pasting a real
+phrase into it produces a SeedQR that reconstructs the same wallet,
+so the QR payload is secret-equivalent to the seed. The run-confirm
+modal redacts the secret-bearing argv token as a fixed `••••`
+sentinel, so the literal phrase is never drawn on screen (see [§14
+Defense 2](#secret-handling)). Treat the emitted SeedQR string — and
+any QR rendered from it — as master-seed material.
+:::
+
+## Outline {#mnemonic-seedqr-encode-outline}
+
+- [`--from`](#mnemonic-seedqr-encode-from) — the BIP-39 phrase to encode (`phrase=<value-or->`; required)
+- [`--variant`](#mnemonic-seedqr-encode-variant) — SeedQR variant (`standard` default, or `compact`)
+- [`--json-out`](#mnemonic-seedqr-encode-json-out) — write a versioned JSON envelope to PATH instead of plain stdout
+
+## `--from` {#mnemonic-seedqr-encode-from}
+
+The BIP-39 phrase to encode. Required. The GUI renders this as a
+NodeValueComposite field: a node-type selector (fixed to `phrase`
+— SeedQR is defined only over BIP-39 phrases) plus a value editor.
+Grammar `phrase=<value>` inline or `phrase=-` to route the value
+through stdin. The toolkit refuses any non-`phrase` node type.
+
+Standard accepts 12 / 15 / 18 / 21 / 24-word phrases; Compact accepts
+only 12- or 24-word phrases (see [`--variant compact`](#mnemonic-seedqr-encode-variant-compact)).
+The value editor renders as a masked `SecretLineEdit` because the
+phrase is secret-bearing; any non-empty value triggers the run-confirm
+modal at click-Run time.
+
+### `phrase` {#mnemonic-seedqr-encode-from-phrase}
+
+The only accepted node type. The value is a space-separated BIP-39
+English mnemonic — SeedQR's open spec defines the encoding against the
+BIP-39 English wordlist, so the phrase must be English regardless of
+the wordlist the seed was originally generated under. Encode a
+non-English phrase by first converting it to its underlying entropy
+and re-deriving the English phrase if a SeedQR is required.
+
+## `--variant` {#mnemonic-seedqr-encode-variant}
+
+Dropdown. The SeedQR variant to emit (default `standard`). Two
+allowed values. The `?` help-icon deep-links here.
+
+### Outline {#mnemonic-seedqr-encode-variant-outline}
+
+- [`standard`](#mnemonic-seedqr-encode-variant-standard)
+- [`compact`](#mnemonic-seedqr-encode-variant-compact)
+
+### `standard` {#mnemonic-seedqr-encode-variant-standard}
+
+Standard SeedQR (default). Emits the decimal digit string — 4 digits
+per BIP-39 word index, zero-padded. Word counts 12 / 15 / 18 / 21 /
+24 are all supported (48 / 60 / 72 / 84 / 96 digits respectively).
+This is the payload rendered as a numeric-mode QR by SeedSigner and
+compatible signers.
+
+### `compact` {#mnemonic-seedqr-encode-variant-compact}
+
+CompactSeedQR. Emits the raw BIP-39 entropy bytes (the SeedSigner
+binary-mode QR payload), surfaced on the CLI as lowercase hex — 32
+hex chars (16 bytes) for a 12-word phrase, 64 hex chars (32 bytes)
+for a 24-word phrase. **Only 12- and 24-word phrases are supported**
+for compact, matching SeedSigner's `CompactSeedQrEncoder`; 15 / 18 /
+21-word inputs are refused. Pipe the hex through `xxd -r -p` to get
+the raw bytes for a byte-mode QR render.
+
+## `--json-out` {#mnemonic-seedqr-encode-json-out}
+
+Path widget. When set, the toolkit writes a versioned JSON envelope
+to the given filesystem path instead of emitting the SeedQR payload
+on stdout. The envelope's `variant` field reflects the selected
+variant; the `digits` field holds the payload (decimal for standard,
+hex for compact). The OS file picker is not yet wired (FOLLOWUP
+`gui-file-picker-affordance`); the field accepts a path string. The
+written file holds seed-equivalent material — emit it only to a path
+on encrypted, access-controlled storage.
+
+## Worked example — Standard encode from the canonical phrase
+
+1. Switch to the **mnemonic** tab; pick **SeedQR Encode** in the
+   subcommand selector.
+2. Leave `--variant` at its seeded default `standard`.
+3. In the `--from` field, keep the node selector at `phrase` and type
+   or paste the canonical phrase into the masked value editor:
+
+   ```text
+   abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+   ```
+
+4. The `Preview:` line resembles:
+
+   ```text
+   mnemonic seedqr encode --from "phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+   ```
+
+5. Click **Run**. The run-confirm modal appears with the secret-bearing
+   `--from` token redacted to `••••`. Click **Run** in the modal.
+
+The output panel renders the 48-digit Standard SeedQR payload on
+stdout (each group of four digits is one BIP-39 word index). Round-trip
+it with [`mnemonic seedqr-decode`](#mnemonic-seedqr-decode) to recover
+the same phrase.
+
+\index{mnemonic seedqr-encode}
