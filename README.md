@@ -43,6 +43,28 @@ current version pin, so it never goes stale):
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --only mnemonic
 ```
 
+## Man pages
+
+`mnemonic` and the sibling `md` / `ms` / `mk` CLIs ship man pages generated from their own clap definitions — the same source as `--help` — so they cannot drift from the binary. Three ways to install them:
+
+1. **Automatic (default).** The installer installs them alongside the binaries into `~/.local/share/man/man1` — no sudo, no system files:
+
+   ```sh
+   sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)"
+   ```
+
+   Then `man mnemonic` works (and `man mnemonic-<subcommand>` per subcommand; likewise `man md` / `man ms` / `man mk`). Pass `--no-man` to skip, or `--man-dir <dir>` to relocate.
+
+2. **By hand.** If you installed a binary directly (`cargo install`), emit its pages yourself:
+
+   ```sh
+   mnemonic gen-man --out ~/.local/share/man/man1
+   ```
+
+3. **Download.** Each release attaches a `<cli>-man.tar.gz` asset — extract it into your manpath.
+
+If `man mnemonic` can't find them (older `man-db`, or macOS/BSD `man` that doesn't auto-read `~/.local/share/man`): `man -M ~/.local/share/man mnemonic`.
+
 ## Subcommands
 
 The `mnemonic` subcommands, grouped below. Run any with `--help`, or see the
