@@ -4181,9 +4181,9 @@ man mnemonic            # if man does not find it: man -M ~/.local/share/man mne
 
 ### Notes
 
-- The global `--no-auto-repair` flag does **not** render in the generated
-  pages (a clap_mangen 0.3 renderer limitation); it remains discoverable via
-  `mnemonic --help`.
+- The global `--no-auto-repair` flag **does** render in every generated page's
+  `OPTIONS` section (clap_mangen surfaces the root command's global args on each
+  page); it is also discoverable via `mnemonic --help`.
 - The output carries **no** `*-help*.1` pages (the generator uses the bare
   `generate_to` call with no pre-`build()`).
 

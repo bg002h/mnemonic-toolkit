@@ -162,6 +162,37 @@ fn gen_man_includes_gen_man_and_gui_schema_pages() {
 }
 
 #[test]
+fn gen_man_root_page_renders_global_no_auto_repair_flag() {
+    // POSITIVE assertion (C-2): the sole `global = true` flag,
+    // `--no-auto-repair`, DOES render in the root page's `.SH OPTIONS` / `.TP`
+    // section. clap_mangen 0.3.0 surfaces the root command's global args on
+    // every (sub)command page — the SPEC's original "renders in ZERO pages"
+    // claim was empirically false. This pins the binary-faithful truth: the
+    // roff-escaped flag spelling `\-\-no\-auto\-repair` must appear in
+    // mnemonic.1's OPTIONS section (and, by clap_mangen's global-arg surfacing,
+    // in every generated page).
+    let tmp = tempfile::tempdir().unwrap();
+    let pages = generate_man_pages(tmp.path());
+    assert!(
+        pages.contains("mnemonic.1"),
+        "root page mnemonic.1 must exist; got {pages:?}"
+    );
+    let body = fs::read_to_string(tmp.path().join("mnemonic.1")).unwrap();
+    // roff escapes each hyphen as `\-`, so `--no-auto-repair` renders as
+    // `\-\-no\-auto\-repair`.
+    assert!(
+        body.contains(r"\-\-no\-auto\-repair"),
+        "root mnemonic.1 must render the global --no-auto-repair flag \
+         (roff-escaped `\\-\\-no\\-auto\\-repair`) in its OPTIONS section"
+    );
+    // It must live under an OPTIONS section header.
+    assert!(
+        body.contains(".SH OPTIONS"),
+        "root mnemonic.1 must carry a .SH OPTIONS section"
+    );
+}
+
+#[test]
 fn gen_man_negative_canary_no_help_shadow_pages() {
     // NEGATIVE canary (C-1 / I-2): the naive `generate_to` call (no pre-build)
     // emits ZERO `*-help*.1` pages. A future accidental pre-`.build()` would

@@ -17,13 +17,16 @@
 //! per-(sub)command set, zero help pages. The `cli_gen_man.rs` NEGATIVE canary
 //! is the regression tripwire for an accidental future pre-build.
 //!
-//! ## Global-flag limitation (C-2)
+//! ## Global-flag rendering (C-2)
 //!
-//! The toolkit's sole `global = true` flag, `--no-auto-repair`, renders in
-//! ZERO generated pages under clap_mangen 0.3.0 — its `Man` renderer does not
-//! surface global args at any level. The flag remains discoverable via
-//! `mnemonic --help`. This is an upstream renderer limitation, not a defect of
-//! this subcommand.
+//! The toolkit's sole `global = true` flag, `--no-auto-repair`, renders in the
+//! `.SH OPTIONS` / `.TP` section of EVERY generated page under clap_mangen
+//! 0.3.0 — its `Man` renderer surfaces the root command's global args on each
+//! (sub)command page (verified empirically: all 38 pages contain the
+//! roff-escaped `\-\-no\-auto\-repair`). The flag is also discoverable via
+//! `mnemonic --help`. (The SPEC's original C-2 claim that it renders in zero
+//! pages was empirically false; corrected here and pinned by a positive
+//! assertion in `cli_gen_man.rs`.)
 
 use crate::error::ToolkitError;
 use clap::{Args, Command};

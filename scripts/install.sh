@@ -407,9 +407,11 @@ echo "verify:"
 echo "    mnemonic --version       md --version"
 echo "    ms --version             mk --version"
 echo "    mnemonic-gui --version"
-if [ -z "$NO_MAN" ]; then
+if [ -z "$NO_MAN" ] && [ "$installed_count" -gt 0 ]; then
     echo
-    # Unconditional, cross-platform man hint. man-db on many Linux installs
+    # Cross-platform man hint — printed only when at least one CLI was actually
+    # installed (a run where everything was --exclude'd installs no binaries and
+    # emits no man pages, so the hint would be misleading). man-db on many Linux
     # pre-seeds ~/.local/share/man so `man <cli>` resolves immediately; but
     # older man-db builds, distros that strip the XDG default, and macOS/BSD
     # man do NOT auto-read it. The `-M` fallback is always correct.
