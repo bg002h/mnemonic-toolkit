@@ -77,6 +77,38 @@ on:
       image:
         description: "The BUILT, digest-pinned repro container (ghcr.io/<owner>/repro-musl@sha256:<BUILT-DIGEST>)."
         value: ${{ jobs.build-container.outputs.image }}
+  # Manual trigger — lets the WHOLE pipeline (build-container → gates) be
+  # exercised on a throwaway tag/branch BEFORE a real release relies on it.
+  # Same inputs as workflow_call, sensibly defaulted so a bare "Run workflow"
+  # click drives the x86_64-musl `mnemonic` POC end-to-end.
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Rust target triple to resolve/build (musl)."
+        type: string
+        required: false
+        default: x86_64-unknown-linux-musl
+      arch:
+        description: "Short arch label (x86_64 / aarch64) for artifact naming."
+        type: string
+        required: false
+        default: x86_64
+      crate:
+        description: "Workspace package to build."
+        type: string
+        required: false
+        default: mnemonic-toolkit
+      bin:
+        description: "Binary target to build."
+        type: string
+        required: false
+        default: mnemonic
+      cross_image:
+        description: >-
+          The digest-pinned `cross` runtime image for the aarch64 leg (P2).
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -132,6 +164,39 @@ jobs:
           echo "image=${image}" >> "$GITHUB_OUTPUT"
           echo "Resolved BUILT image by digest: ${image}"
 
+      # ── Make the GHCR package PUBLIC (best-effort) ──────────────────────────
+      # GHCR container packages are PRIVATE by default. The chosen provenance
+      # model (verify-reproducibility.md §3) REQUIRES the image to be PUBLIC so
+      # an EXTERNAL rebuilder can `docker pull <repo>@sha256:<digest>` without a
+      # token. This PATCHes the package visibility to public via `gh api`.
+      #
+      # ⚠️ ONE-TIME MANUAL SETUP MAY BE REQUIRED. The default `GITHUB_TOKEN`
+      # often LACKS the scope to flip package visibility (user-vs-org packages,
+      # and the org-package-creation policy both gate it). This call is therefore
+      # `|| true` — it MUST NOT hard-fail the build. If it cannot self-promote,
+      # an admin must set the `repro-musl` package's visibility to **Public**
+      # ONCE by hand: GitHub → (user/org) → Packages → repro-musl → Package
+      # settings → Danger Zone → Change visibility → Public. After that one-time
+      # flip the package stays public and external `docker pull @sha256` works.
+      - name: Make the repro-musl GHCR package public (best-effort)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          OWNER_TYPE: ${{ github.event.repository.owner.type }}
+        run: |
+          set -uxo pipefail
+          # User-owned vs org-owned packages live at different API paths.
+          if [ "$OWNER_TYPE" = "Organization" ]; then
+            gh api -X PATCH \
+              "/orgs/${OWNER}/packages/container/repro-musl/visibility" \
+              -f visibility=public || true
+          else
+            gh api -X PATCH \
+              "/user/packages/container/repro-musl/visibility" \
+              -f visibility=public || true
+          fi
+          echo "Attempted to set repro-musl visibility=public (best-effort; see step note if it failed)."
+
   # ── P0 GATE (carried): committed INERT vendor/ resolves a FULLY OFFLINE build─
   # in the digest-pinned container, activated job-scoped via the 3-block --config
   # overrides. PASS iff it builds with no network; the negative sub-check MUST
@@ -140,8 +205,19 @@ jobs:
     name: repro-substrate (${{ inputs.target }})
     needs: build-container
     runs-on: ubuntu-latest
+    # `packages: read` + container registry creds: the BUILT image lives in
+    # GHCR (private-by-default), so the runner MUST authenticate to pull it
+    # for the job-level `container:`. Without this the gate falsely REDs on a
+    # pull failure. (Job-level container ⇒ use container.credentials, not a
+    # per-step `docker login`.)
+    permissions:
+      contents: read
+      packages: read
     container:
       image: ${{ needs.build-container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -198,8 +274,16 @@ jobs:
     name: repro-x86_64-musl (${{ inputs.target }})
     needs: build-container
     runs-on: ubuntu-latest
+    # `packages: read` + container registry creds to pull the private-by-default
+    # GHCR BUILT image for this job-level `container:` (see repro-substrate).
+    permissions:
+      contents: read
+      packages: read
     container:
       image: ${{ needs.build-container.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       TARGET: ${{ inputs.target }}
       CRATE: ${{ inputs.crate }}

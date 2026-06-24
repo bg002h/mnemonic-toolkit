@@ -135,8 +135,14 @@ jobs:
     name: musl-binary (${{ matrix.target }})
     needs: repro
     runs-on: ubuntu-latest
+    # `contents: write` to upload release assets; `packages: read` so the
+    # x86_64 (musl_native) leg can authenticate to GHCR and `docker pull` the
+    # private-by-default BUILT repro image (the re-homed build runs INSIDE it).
+    # Without read perms + a `docker login`, the pull fails and the re-homed
+    # x86_64 artifact silently never publishes.
     permissions:
       contents: write
+      packages: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       REPRO_IMAGE: ${{ needs.repro.outputs.image }}
@@ -174,6 +180,17 @@ jobs:
             -cf - -C "target/${{ matrix.target }}/release" mnemonic \
             | gzip -n -9 > "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz"
           sha256sum "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz" > "SHA256SUMS.${{ matrix.arch }}"
+
+      # ── GHCR auth for the x86_64 leg's `docker pull` of the BUILT image ─────
+      # The repro image is GHCR private-by-default; the per-step `docker run`
+      # form (job-level `container:` is forbidden here per the matrix-scope
+      # constraint) needs an explicit `docker login` BEFORE the pull below.
+      - name: Log in to GHCR (for the re-homed image pull)
+        if: ${{ matrix.musl_native }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
       # ── x86_64 (native) leg — RE-HOMED inside the digest-pinned container ───
       # docker run --network=none mounts the host workspace at /build/src,
