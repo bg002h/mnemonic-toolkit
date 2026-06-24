@@ -230,7 +230,15 @@ jobs:
         run: |
           set -euxo pipefail
           owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
-          repo="ghcr.io/${owner}/repro-musl"
+          # PER-REPO package name: a calling repo's GITHUB_TOKEN can only push to
+          # packages owned by ITS repo, so a shared toolkit-owned `repro-musl` is
+          # denied (write_package) for codec callers. Suffix with the caller repo
+          # name so each repo pushes/owns its own `repro-musl-<repo>` package. The
+          # image content is identical (same digest-pinned Dockerfile) so
+          # reproducibility is preserved; only the package namespace differs.
+          reponame="$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')"
+          pkg="repro-musl-${reponame}"
+          repo="ghcr.io/${owner}/${pkg}"
           # Tag with the Dockerfile content hash so a re-run reuses the digest
           # iff the Dockerfile is unchanged (the image content is what matters;
           # the consumed reference is the digest, not the tag).
@@ -238,6 +246,7 @@ jobs:
           docker build -f toolkit/Dockerfile.repro -t "${repo}:${tag}" toolkit
           docker push "${repo}:${tag}"
           echo "repo=${repo}" >> "$GITHUB_OUTPUT"
+          echo "pkg=${pkg}"   >> "$GITHUB_OUTPUT"
           echo "tag=${tag}"   >> "$GITHUB_OUTPUT"
 
       - name: Resolve the pushed digest
@@ -267,24 +276,25 @@ jobs:
       # ONCE by hand: GitHub → (user/org) → Packages → repro-musl → Package
       # settings → Danger Zone → Change visibility → Public. After that one-time
       # flip the package stays public and external `docker pull @sha256` works.
-      - name: Make the repro-musl GHCR package public (best-effort)
+      - name: Make the repro container GHCR package public (best-effort)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           OWNER_TYPE: ${{ github.event.repository.owner.type }}
+          PKG: ${{ steps.build.outputs.pkg }}
         run: |
           set -uxo pipefail
           # User-owned vs org-owned packages live at different API paths.
           if [ "$OWNER_TYPE" = "Organization" ]; then
             gh api -X PATCH \
-              "/orgs/${OWNER}/packages/container/repro-musl/visibility" \
+              "/orgs/${OWNER}/packages/container/${PKG}/visibility" \
               -f visibility=public || true
           else
             gh api -X PATCH \
-              "/user/packages/container/repro-musl/visibility" \
+              "/user/packages/container/${PKG}/visibility" \
               -f visibility=public || true
           fi
-          echo "Attempted to set repro-musl visibility=public (best-effort; see step note if it failed)."
+          echo "Attempted to set ${PKG} visibility=public (best-effort; see step note if it failed)."
 
   # ── P0 GATE (carried): committed INERT vendor/ resolves a FULLY OFFLINE build─
   # in the digest-pinned container, activated job-scoped via the --config
