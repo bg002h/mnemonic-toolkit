@@ -1,0 +1,120 @@
+name: reproducible-musl-build
+
+# Reusable (`workflow_call`) workflow — the centralized recipe for the
+# reproducible-builds-musl cycle (task #23). F6: homed in mnemonic-toolkit,
+# callable by the codec CLI repos (md/ms/mk) once cross-repo workflow_call
+# wiring lands in P3.
+#
+# ── P0 SCOPE (substrate only) ───────────────────────────────────────────────
+# This file currently carries ONLY the `repro-substrate` validation job: it
+# proves the committed (INERT) `vendor/` tree resolves a FULLY OFFLINE build in
+# the digest-pinned container, activated JOB-SCOPED via the three-block
+# `cargo build --config 'source.*'` overrides (THE REFINEMENT — no committed
+# root `.cargo/config.toml [source]` block; `vendor/` is inert without these).
+# It produces NO reproducible binary and does NOT prove reproducibility — the
+# byte-identical / cc-validation / residue / gzip gates + the ENV-channel
+# --remap-path-prefix wiring land in P1+.
+#
+# ── THE JOB-SCOPED [source] ACTIVATION (copy-exact — brainstorm §3.12/§4/F4) ─
+# ALL THREE `cargo vendor`-emitted [source] blocks are MANDATORY (R0-r5-C1).
+# The two-block form (crates-io + vendored-sources, dropping the git-fork
+# `source."git+…rev=95fdd1c5…"` block) FAILS `--offline`: the miniscript
+# `[patch.crates-io]` git dep has its OWN `git+…?rev=…` source key not served
+# by `source.crates-io`, so cargo reaches the LIVE github host and errors
+# `can't checkout … offline mode`. Empirically verified on cargo 1.85.0
+# (POSITIVE 3-block → exit 0; NEGATIVE 2-block → exit 101).
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: "Rust target triple to resolve/build (musl)."
+        type: string
+        required: false
+        default: x86_64-unknown-linux-musl
+      arch:
+        description: "Short arch label (x86_64 / aarch64) for artifact naming."
+        type: string
+        required: false
+        default: x86_64
+      crate:
+        description: "Workspace package to build."
+        type: string
+        required: false
+        default: mnemonic-toolkit
+      bin:
+        description: "Binary target to build."
+        type: string
+        required: false
+        default: mnemonic
+      container_image:
+        description: >-
+          The BUILT, digest-pinned repro container to `docker pull` (NOT a
+          Dockerfile rebuild). Form: <registry>/repro-musl@sha256:<BUILT-DIGEST>.
+          Resolved + published in P1 (no Docker on the dev box at P0 authoring).
+        type: string
+        required: false
+        default: ""
+      cross_image:
+        description: >-
+          The digest-pinned `cross` runtime image for the aarch64 leg (P2):
+          ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:<CROSS-DIGEST>.
+        type: string
+        required: false
+        default: ""
+
+jobs:
+  # ── P0 GATE: the committed INERT vendor/ resolves a FULLY OFFLINE build in ─
+  # the digest-pinned container, activated job-scoped via the 3-block --config
+  # overrides. PASS iff it builds with no network; the negative sub-check (drop
+  # the vendored-sources.directory override) MUST RED.
+  repro-substrate:
+    name: repro-substrate (${{ inputs.target }})
+    runs-on: ubuntu-latest
+    # NOTE: the digest-pinned container is provided via `inputs.container_image`
+    # once P1 resolves+publishes <BUILT-DIGEST>. At P0 the input defaults to ""
+    # so this job is structurally present + actionlint-clean; CI invokes it with
+    # the resolved digest. The build runs INSIDE that container at /build/src
+    # with CARGO_HOME=/cargo (the Dockerfile.repro fixed layout).
+    container:
+      image: ${{ inputs.container_image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── POSITIVE: 3-block --config offline build resolves from vendor/ ──────
+      # PASS iff this builds with NO network. Proves (a) the committed vendor/
+      # tree is complete, (b) all THREE job-scoped --config overrides activate
+      # vendor/ INCLUDING the mandatory git-fork stanza, (c) the digest-pinned
+      # container carries a working musl-gcc.
+      - name: repro-substrate-positive (3-block --config, --offline)
+        env:
+          CARGO_HOME: /cargo
+        run: |
+          set -euxo pipefail
+          cargo build --locked --offline \
+            -p "${{ inputs.crate }}" --bin "${{ inputs.bin }}" \
+            --target "${{ inputs.target }}" \
+            --config 'source.crates-io.replace-with="vendored-sources"' \
+            --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"' \
+            --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"' \
+            --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"' \
+            --config 'source.vendored-sources.directory="vendor"'
+
+      # ── NEGATIVE sub-check (TDD): drop the vendored-sources.directory ───────
+      # override → vendor/ is NOT activated → --offline cannot resolve crates.io
+      # → the build MUST RED. Committed as proof the gate detects an unactivated
+      # offline tree (vendor/ is inert / activation-dependent). No filesystem
+      # mutation needed — vendor/ still exists; cargo simply isn't pointed at it.
+      - name: repro-substrate-negative (dropped vendored-sources.directory MUST RED)
+        env:
+          CARGO_HOME: /cargo
+        run: |
+          set -uxo pipefail
+          if cargo build --locked --offline \
+               -p "${{ inputs.crate }}" --bin "${{ inputs.bin }}" \
+               --target "${{ inputs.target }}" \
+               --config 'source.crates-io.replace-with="vendored-sources"'; then
+            echo "::error::NEGATIVE sub-check FAILED — build SUCCEEDED without the vendored-sources.directory activation; the gate is not detecting an unactivated offline tree."
+            exit 1
+          fi
+          echo "NEGATIVE sub-check OK — build RED as expected (vendor/ inert without the activation override)."

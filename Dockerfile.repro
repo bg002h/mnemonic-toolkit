@@ -1,0 +1,67 @@
+# Dockerfile.repro — hermetic, digest-pinned build container for the
+# reproducible-builds-musl cycle (task #23, P0 substrate).
+#
+# WHAT THIS IS. The build environment for the bit-for-bit reproducible
+# x86_64-unknown-linux-musl `mnemonic` binary. It layers the musl C toolchain
+# (`musl-gcc`, needed to compile the only C dependency — vendored libsecp256k1
+# in secp256k1-sys) onto the official Rust 1.85.0 image.
+#
+# ── PROVENANCE MODEL (READ THIS — brainstorm F1 / R0-r2-I3a) ────────────────
+# The BUILT, LAYERED image is the source of truth and is published BY DIGEST.
+# Rebuilders `docker pull <registry>/repro-musl@sha256:<BUILT-DIGEST>` rather
+# than rebuild this Dockerfile from apt — because the transitive `musl-tools`
+# apt deps are NOT pinned by the base image digest (apt resolves to whatever
+# the Debian mirror serves that day). The base-image digest below pins the
+# Rust toolchain + Debian base; the apt layer is pinned ONLY in the published
+# built image's digest. IF a rebuilder MUST build this Dockerfile from source,
+# they must additionally pin apt via snapshot.debian.org at a fixed timestamp
+# (see the commented recipe below).
+#
+# ── BASE IMAGE DIGEST (F1 — pin by sha256, NOT a floating tag) ──────────────
+# Resolved at adoption time (2026-06-24) via the Docker Hub registry manifest
+# API (host has no Docker; resolved with curl against registry-1.docker.io):
+#   docker.io/library/rust:1.85.0  multi-arch index (OCI image index) digest:
+#     sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+#   (the linux/amd64 sub-manifest of that index — the platform the x86_64-musl
+#    build runs on — is sha256:16a7f242108de02f10fe4a392991679bafa7694e59f5b40a54d5af1be9b40d03)
+# Pinning the INDEX digest is correct: Docker resolves the right per-arch
+# sub-manifest automatically from the index.
+FROM rust:1.85.0@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
+
+# ── musl C toolchain (x86_64 musl-gcc) ──────────────────────────────────────
+# When THIS Dockerfile is the build path (rather than `docker pull`ing the
+# published built image by digest), apt MUST be pinned through
+# snapshot.debian.org at a fixed timestamp + an exact `musl-tools=<version>`
+# so the layer is reproducible (R0-r2-I3a). The snapshot timestamp + the exact
+# musl-tools version are resolved at adoption time and recorded in
+# docs/verify-reproducibility.md (authored in P1). Placeholder form:
+#
+#   RUN printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/<YYYYMMDDThhmmssZ>/ <suite> main\n' \
+#         > /etc/apt/sources.list \
+#    && apt-get -o Acquire::Check-Valid-Until=false update \
+#    && apt-get install -y --no-install-recommends musl-tools=<EXACT-VERSION> \
+#    && rm -rf /var/lib/apt/lists/*
+#
+# Until the snapshot timestamp + exact musl-tools version are pinned in P1, the
+# canonical distribution channel is the published built-image digest (above),
+# NOT a from-Dockerfile rebuild. The unpinned apt install below is the
+# adoption-time layer whose RESULT is captured by <BUILT-DIGEST>:
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends musl-tools \
+ && rm -rf /var/lib/apt/lists/*
+
+# Add the musl Rust target so `cargo build --target x86_64-unknown-linux-musl`
+# works inside the container without a network fetch.
+RUN rustup target add x86_64-unknown-linux-musl
+
+# ── Fixed in-container layout (brainstorm R0-C2 enabler / §4) ───────────────
+# Source is mounted/copied to the FIXED /build/src; CARGO_HOME is the FIXED
+# /cargo. These fixed literals are what make the ENV-channel --remap-path-prefix
+# (/build/src=/build, /cargo=/cargo) correct (wired in P1, not here).
+ENV CARGO_HOME=/cargo
+WORKDIR /build/src
+
+# ── BUILT-IMAGE DIGEST (the published source of truth) ──────────────────────
+# Resolved when this image is first built+pushed in CI (no Docker on the dev
+# box). Recorded here + in docs/verify-reproducibility.md (P1) + the workflow:
+#   <BUILT-DIGEST> = <RESOLVE-IN-CI>   # docker build -f Dockerfile.repro … && docker push … && docker inspect → sha256:…

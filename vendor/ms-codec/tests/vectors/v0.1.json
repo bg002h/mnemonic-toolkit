@@ -1,0 +1,38 @@
+[
+  {
+    "description": "12-word abandon canonical (BIP-39 [0; 16])",
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+    "entropy_hex": "00000000000000000000000000000000",
+    "ms1": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"
+  },
+  {
+    "description": "15-word all-zero entropy (BIP-39 [0; 20])",
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon address",
+    "entropy_hex": "0000000000000000000000000000000000000000",
+    "ms1": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqke34pjrgn5p6k"
+  },
+  {
+    "description": "18-word all-zero entropy (BIP-39 [0; 24])",
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon agent",
+    "entropy_hex": "000000000000000000000000000000000000000000000000",
+    "ms1": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsqgw5k4rjyhy0"
+  },
+  {
+    "description": "21-word all-zero entropy (BIP-39 [0; 28])",
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon admit",
+    "entropy_hex": "00000000000000000000000000000000000000000000000000000000",
+    "ms1": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqkt649dq594pyz"
+  },
+  {
+    "description": "24-word abandon canonical (BIP-39 [0; 32])",
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+    "entropy_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+    "ms1": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqcwugpdxtfme2w"
+  },
+  {
+    "description": "15-word non-zero entropy (catches entropy-bit-ordering bugs zero-entropy vectors miss)",
+    "mnemonic": "abuse boss fly battle rubber wasp afraid hamster guide essence vibrant task banana pencil over",
+    "entropy_hex": "0123456789abcdef0123456789abcdef01234567",
+    "ms1": "ms10entrsqqqjx3t83x4ummcpydzk0zdtehhszg69vucrgd4pcjx3kkj"
+  }
+]

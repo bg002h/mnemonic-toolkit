@@ -1,0 +1,36 @@
+{
+  "n": 1,
+  "path_decl": {
+    "tag": "Shared",
+    "data": "m"
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Pkh",
+    "body": {
+      "kind": "KeyArg",
+      "data": {
+        "index": 0
+      }
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": null,
+    "pubkeys": null,
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}

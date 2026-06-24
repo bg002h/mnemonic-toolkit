@@ -1,0 +1,182 @@
+---   # rust-miniscript CI: If you edit this file please update README.md
+on:   # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - master
+      - 'test-ci/**'
+  pull_request:
+
+name: Continuous integration
+
+jobs:
+  Stable:                       # 2 jobs, one per lock file.
+    name: Test - stable toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [minimal, recent]
+    steps:
+      - name: "Checkout repo"
+        uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: stable
+      - name: "Run tests"
+        run: cargo rbmt test stable --lock-file ${{ matrix.dep }}
+
+  Nightly:                      # 2 jobs, one per lock file.
+    name: Test - nightly toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [minimal, recent]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: nightly
+      - name: "Run tests"
+        run: cargo rbmt test nightly --lock-file ${{ matrix.dep }}
+
+  MSRV:                         # 2 jobs, one per lock file.
+    name: Test - 1.63.0 toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [minimal, recent]
+    steps:
+      - uses: actions/checkout@v6
+      - name: "Free disk space"
+        uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: "1.63.0"
+      - name: "Run tests"
+        run: cargo rbmt test msrv --lock-file ${{ matrix.dep }}
+
+  Lint:
+    name: Lint - nightly toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dep: [recent]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: nightly
+          components: clippy
+      - name: "Run lint"
+        run: cargo rbmt lint
+
+  Docs:
+    name: Docs - stable toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: stable
+      - name: "Build docs"
+        run: cargo rbmt docs
+
+  Docsrs:
+    name: Docs - nightly toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: nightly
+      - name: "Build docs.rs docs"
+        run: cargo rbmt docsrs
+
+  Bench:
+    name: Bench - nightly toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: nightly
+      - name: "Run bench"
+        run: cargo rbmt bench
+
+  Format:                       #  1 job, run cargo fmt directly.
+    name: Format - nightly toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: nightly
+          components: rustfmt
+      - name: "Check formatting"
+        run: cargo fmt --all -- --check
+
+  Integration:                  # 1 job for each bitcoind version we support.
+    name: Integration tests - stable toolchain
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        feature:
+          [
+            "29_0",
+            "28_2",
+            "27_2",
+            "26_2",
+            "25_2",
+            "24_2",
+            "23_2",
+            "22_1",
+            "0_21_2",
+            "0_20_2",
+            "0_19_1",
+            "0_18_1",
+            "0_17_2",
+          ]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/prepare
+        with:
+          toolchain: stable
+      - name: "Run integration tests"
+        run: cargo rbmt integration
+
+  Embedded:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Set up QEMU
+        run: sudo apt update && sudo apt install -y qemu-system-arm gcc-arm-none-eabi
+      - name: Checkout Toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: rust-src
+          target: thumbv7m-none-eabi
+      - name: Run
+        env:
+          RUSTFLAGS: "-C link-arg=-Tlink.x"
+          CARGO_TARGET_THUMBV7M_NONE_EABI_RUNNER: "qemu-system-arm -cpu cortex-m3 -machine mps2-an385 -nographic -semihosting-config enable=on,target=native -kernel"
+        run: cd embedded && cargo run --target thumbv7m-none-eabi --release

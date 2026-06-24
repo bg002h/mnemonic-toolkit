@@ -1,0 +1,696 @@
+{
+  "family_token": "mk-codec 0.2",
+  "schema": 2,
+  "vectors": [
+    {
+      "description": "1-stub mainnet, BIP 48 segwit-v0 multisig (m/48'/0'/0'/2'), fingerprint present. Typical multisig recovery card.",
+      "expected": {
+        "canonical_bytecode_hex": "040111223344aabbccdd050488b21e10203001abababababababababababababababababababababababababababababababab031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpzg69pqqsq3zg3ngj4thnxaq5zg3vs7zqsrqqdt4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4vp3kx98j76m4mjlwphf",
+          "mk1qpzg69ppsnz4v7cjv3qfjhf76k4t5pt96u0psdrqfqvll8qh7h5athg837pmkf3dpug2mmjtfel6x"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 74565,
+        "network": "mainnet",
+        "origin_fingerprint": "aabbccdd",
+        "origin_path": "m/48'/0'/0'/2'",
+        "policy_id_stubs": [
+          "11223344"
+        ],
+        "xpub": "xpub6Den8YwXbKQvkwukmx7Uukicw4qDgMEPuuUkhMp3Rn557YSN2uVQnCMQNSfgDtennU9nES3Wbbmz1LAPBydhNpED8NU4mf1SFF41hM7vFrc"
+      },
+      "name": "V1_bip48_mainnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 84 native-segwit single-sig (m/84'/0'/0'), fingerprint present. Std-table indicator 0x03.",
+      "expected": {
+        "canonical_bytecode_hex": "0401c0ffee00deadbeef030488b21e10203002a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8a8024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpydzkpqqsqupllwqr02m0h0qvzg3vs7zqsrqq4g4z52329g4z52329g4z52329g4z52329g4z52329g4z52329g4qpy6m8lr3sdrxkguwax",
+          "mk1qpydzkppfdkdzdssxt9fh54wh8vsp2jdghv74kq2e9prxaxy2xnj2ng8vm68nf54c0vrdlfrgjzpd"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 144470,
+        "network": "mainnet",
+        "origin_fingerprint": "deadbeef",
+        "origin_path": "m/84'/0'/0'",
+        "policy_id_stubs": [
+          "c0ffee00"
+        ],
+        "xpub": "xpub6BmeGmRo4LosAcU21HDaGcvtaQ7GrqQcY48nBkE22qM6KVwQUjRJ1BGzk84SFVHgLcd61Vcnhr8petHexjjn5WbQ9PriVrRhphw4oCp2z6a"
+      },
+      "name": "V2_bip84_mainnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 48 testnet multisig (m/48'/1'/0'/2'), fingerprint present. Std-table indicator 0x15.",
+      "expected": {
+        "canonical_bytecode_hex": "0401778899aa1020304015043587cf10203003a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a902531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpx3t8pqqsqh0zye4ggzqvzqz5zrtp70zqsrqqaf4x56n2df4x56n2df4x56n2df4x56n2df4x56n2df4x56n2df4yp9xx3y0h0ccw664dfd",
+          "mk1qpx3t8pprlnqdqf52q7jwgcnxgnuseav37nvs0zn06dyfs79hk7uk8lrxlyw57x7v7rzx74tlflqh"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 214375,
+        "network": "testnet",
+        "origin_fingerprint": "10203040",
+        "origin_path": "m/48'/1'/0'/2'",
+        "policy_id_stubs": [
+          "778899aa"
+        ],
+        "xpub": "tpubDE2QenmnfFWFjr6TXWBdoZken4gKkeo3W3iCQjW64pqrtbVAP9DDmGhMRnnwwtgey511kwptHzGF5JKrrHzJJWB3ZAy4AYubz369CSz2dhS"
+      },
+      "name": "V3_bip48_testnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 84 (m/84'/0'/0'), fingerprint omitted (privacy-preserving mode; bytecode-header bit 2 cleared).",
+      "expected": {
+        "canonical_bytecode_hex": "0001abcdef01030488b21e10203004aeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeaeae03462779ad4aad39514614751a71085f2f10e1c7a593e4e030efb5b8721ce55b0b",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpg4ncpqqqq6hn00qypsfz9jrcgzqvqy46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46hqx3380xk55vxz9s95rk7jsdyt",
+          "mk1qpg4ncpp45u4z3s5w5d8zzzl9ugwr3a9j0jwqv80kku8y889tv9uttaemyjd5u8sp67lj8p"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 284280,
+        "network": "mainnet",
+        "origin_fingerprint": null,
+        "origin_path": "m/84'/0'/0'",
+        "policy_id_stubs": [
+          "abcdef01"
+        ],
+        "xpub": "xpub6BmeGmSNQzwjso6raQ8ea1aioo7PfaivP5sPryaBZT57AjX3eYRGTyc2T8stCLcQKnA4Pw3a5FA5iChz37gUuJbo5cwqvXdNebE5WBfWeHx"
+      },
+      "name": "V4_bip84_mainnet_1_stub_no_fp"
+    },
+    {
+      "description": "1-stub mainnet, explicit-path m/9999'/1234'/56'/7' (forces the 0xFE explicit-path codec), fingerprint present.",
+      "expected": {
+        "canonical_bytecode_hex": "04015566778801020304fe048fce808008d289808008b88080800887808080080488b21e10203005afafafafafafafafafafafafafafafafafafafafafafafafafafafafafafafaf0362c0a046dacce86ddd0343c6d3c7c79c2208ba0d9c9cf24a6d046d21d21f90f7",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qp2eufzqqsq42enh3qqsyqcylczgln5qsqyd9zvqsqyt3qyqsqyg0qyqsqyqfz9jrcgzqvq947h6lta047h6lta047h67xj4jt7g69atcpze",
+          "mk1qp2eufzp47h6lta047h6lta047h6lta047h6ltcrvtq2q3k6en5xmhgrg0rd8378ns3q3wsdnjw0yjndq3kjr5sljrm3ydu6j4m83w45h234",
+          "mk1qp2eufzzrscsjqdk69lrveg2fm"
+        ],
+        "total_chunks": 3
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 354185,
+        "network": "mainnet",
+        "origin_fingerprint": "01020304",
+        "origin_path": "m/9999'/1234'/56'/7'",
+        "policy_id_stubs": [
+          "55667788"
+        ],
+        "xpub": "xpub6Den8YxgJdggPygKKEv3wiQwQ6PSGUouW98xC4obAJAqvuWcBMHuxeuXHxyZtAJHLqE7U1JdEXrNwbNPNCn1F79n4ZuBTLnzF7mPbLR3ZvB"
+      },
+      "name": "V5_explicit_path_4_components_with_fp"
+    },
+    {
+      "description": "3-stub mainnet, BIP 48 multisig — exercises multi-stub listing that grows the bytecode by 2 × 4 bytes vs V1.",
+      "expected": {
+        "canonical_bytecode_hex": "0403dead0001dead0002dead0003f00dcafe050488b21e10203006acacacacacacacacacacacacacacacacacacacacacacacacacacacacacacacac03f006a18d5653c4edf5391ff23a61f03ff83d237e880ee61187fa9f379a028e0a",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpv7yspqqspaatgqq8026qqzm6ksqqlsph90upgy3zepuypqxqr2et9v4jk2et9v4jk2et9v4jk2et9v4jk2et9v4jk2cfr7h56h70u9lsha",
+          "mk1qpv7yspp4jk2et9v4splqp4p34t9838d75u3lu36v8crl7paydlgsrhxzxrl48ehngpguzk8j6a47h024849cnxk4n"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 424080,
+        "network": "mainnet",
+        "origin_fingerprint": "f00dcafe",
+        "origin_path": "m/48'/0'/0'/2'",
+        "policy_id_stubs": [
+          "dead0001",
+          "dead0002",
+          "dead0003"
+        ],
+        "xpub": "xpub6Den8YxxyxkcXmP7ygCeb7Bf1Ptqw1aQNa9iaigk6EPeoZHkeHmequH8aYiT3mUALmPo7ThDTZJf5cu5eziSYeW4fsbfdFubwdBgRetAhFa"
+      },
+      "name": "V6_3_stubs_mainnet_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, explicit-path at the 10-component cap (m/0'/1'/2'/3'/4'/5'/6'/7'/8'/9'), fingerprint omitted. Boundary case for path-cap validation (closure Q-3).",
+      "expected": {
+        "canonical_bytecode_hex": "000190919293fe0a80808080088180808008828080800883808080088480808008858080800886808080088780808008888080800889808080080488b21e10203007adadadadadadadadadadadadadadadadadadadadadadadadadadadadadadadad02989c0b76cb563971fdc9bef31ec06c3560f3249d6ee9e5d83c57625596e05f6f",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qp0zgpzqqqqepyvjj0lq4qyqszqq3qvqszqq3q5qszqq3quqszqq3pyqszqq3pvqszqq3p5qszqq3puqszqq3zyqszqqse9ppcgqls67s8nv",
+          "mk1qp0zgpzp3xqgpqqgqjyty8ssyqcq0tdd4kk6mtdd4kk6mtdd4kk6mtdd4kk6mtdd4kk6mtdd4kk6mtddq2vfczmkedtrj2rjl6la2h9ek48q",
+          "mk1qp0zgpzzw87un0hnrmqxcdtq7vjf6mhfuhvrc4mz2ktwqhm0qwv5qvsnckdz0yclv6ky"
+        ],
+        "total_chunks": 3
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 493825,
+        "network": "mainnet",
+        "origin_fingerprint": null,
+        "origin_path": "m/0'/1'/2'/3'/4'/5'/6'/7'/8'/9'",
+        "policy_id_stubs": [
+          "90919293"
+        ],
+        "xpub": "xpub6QwbHG5Nw7rYLo6utUHsXUqaaojc3YDdq84Ho7HV3mHuiJ1NNXB1GzUdBCMVph1HfRMMuRjW2VVVr8k5Fz7YGrKVGwVYPBcXr6dZKQenNqk"
+      },
+      "name": "V7_max_path_components_no_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 87 multisig (m/87'/0'/0'), fingerprint present. Std-table indicator 0x07 (the last mainnet entry of the closure-locked path dictionary).",
+      "expected": {
+        "canonical_bytecode_hex": "040187654321baddcafe070488b21e10203008a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a203f991f944d1e1954a7fc8b9bf62e0d78f015f4c07762d505e20e6c45260a3661b",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qp3yqjpqqsqcwe2ryxadmjh7quzg3vs7zqsrqz9z52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z5gplj3ftvt74m5y43cf6",
+          "mk1qp3yqjppj8u5f50pj498lj9eha3wp4u0q905cpmk94g9ug8xc3fxpgmxr0vuewy3yaf8muuvsjpyv"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 561170,
+        "network": "mainnet",
+        "origin_fingerprint": "baddcafe",
+        "origin_path": "m/87'/0'/0'",
+        "policy_id_stubs": [
+          "87654321"
+        ],
+        "xpub": "xpub6BmeGmTX8KDVHvTZuNUmLJ2t82Md7abNfb4DGD8ivFPnQo5gJn3TX5JMCC1GxeQNW7DpRrYaSW3goEADYFykhfic2iPHTjW6BquJqTdCbVu"
+      },
+      "name": "V8_bip87_mainnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 44 single-sig (m/44'/0'/0'), fingerprint present. Std-table indicator 0x01.",
+      "expected": {
+        "canonical_bytecode_hex": "040144444444c001cafe010488b21e10203009a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a30256b328b30c8bf5839e24058747879408bdb36241dc9c2e7c619faa12b2920967",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpngqjpqqsq5g3zygnqqrjh7qyzg3vs7zqsrqzdr5w368gar5w368gar5w368gar5w368gar5w368gar5w368gar5vp9vq3vqzr6nwtan08w",
+          "mk1qpngqjppkv5txryt7kpeufq9sarc09qghkekyswunsh8ccvl4gft9ysfvuzvl887v24fjwmgpy5h7"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 630802,
+        "network": "mainnet",
+        "origin_fingerprint": "c001cafe",
+        "origin_path": "m/44'/0'/0'",
+        "policy_id_stubs": [
+          "44444444"
+        ],
+        "xpub": "xpub6BmeGmTooeHReVcjsVUoL7d1Jqo1qVgr8yQ9miszNgq1dYa7REWdbS3tKiSx1zpyBKvcXE2hDn7HJytBjgynVDiY1XbpX5JPNFLQv6SGuyA"
+      },
+      "name": "V9_bip44_mainnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 49 nested-segwit single-sig (m/49'/0'/0'), fingerprint present. Std-table indicator 0x02.",
+      "expected": {
+        "canonical_bytecode_hex": "040149494949feedbeef020488b21e1020300aa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a003f76a39d05686e34a4420897e359371836145dd3973e3982568b60f8433adde6e",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qp4vfrpqqsq5jj2ff8lwm0h0qgzg3vs7zqsrqz4q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5qplw5ge9rrl0q75dye8",
+          "mk1qp4vfrppdguaq45xud9yggyf0c6exuvrv9za6wtnuwvz269kp7zr8tw7d6lsusyrycr6kwa9gprcn"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 700707,
+        "network": "mainnet",
+        "origin_fingerprint": "feedbeef",
+        "origin_path": "m/49'/0'/0'",
+        "policy_id_stubs": [
+          "49494949"
+        ],
+        "xpub": "xpub6BmeGmU6UyMN12TRCjZq2BjYdu75CVexi6hMd2mdDPQgSZTmanvBMhyU1XZ4uFmWYsSwowL4pWNEj9YPPbGEtoBPPSEsaERYzXjG6opdYHb"
+      },
+      "name": "V10_bip49_mainnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 86 taproot single-sig (m/86'/0'/0'), fingerprint present. Std-table indicator 0x04.",
+      "expected": {
+        "canonical_bytecode_hex": "04018686868686407005040488b21e1020300ba1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a102552c630b64b54bf50210c9e253d38bd4949c72e22873500f6285c2bede312a84",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qphs35pqqsqcdp5xs6ryquq9qszg3vs7zqsrqzap5xs6rgdp5xs6rgdp5xs6rgdp5xs6rgdp5xs6rgdp5xs6rgdp5yp929zyakgaehhhmxxf",
+          "mk1qphs35pp933ske94f06syyxfuffa8z75jjw89c3gwdgq7c59c2lduvf2sj3y7ckuwnpk6g2tmrswe"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 770612,
+        "network": "mainnet",
+        "origin_fingerprint": "86407005",
+        "origin_path": "m/86'/0'/0'",
+        "policy_id_stubs": [
+          "86868686"
+        ],
+        "xpub": "xpub6BmeGmUPAJRJMbcbArZs21KfpiYTvQkSBV3J8YWtfpqufJxChFPMS4j194122DGEaxJW2dGjLFwbcfLwZwGQrUeo41jDdAQg4AaTA4UW4m8"
+      },
+      "name": "V11_bip86_mainnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub mainnet, BIP 48 nested-segwit multisig (m/48'/0'/0'/1'), fingerprint omitted (privacy-preserving mode). Std-table indicator 0x06.",
+      "expected": {
+        "canonical_bytecode_hex": "000148480001060488b21e1020300ca6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6a6030f0fb9a244ad31a369ee02b7abfbbb0bfa3812b9a39ed93346d03d67d412d177",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpe569pqqqq5sjqqqyrqfz9jrcgzqvqv56n2df4x56n2df4x56n2df4x56n2df4x56n2df4x56n2df4x56nqxrc0hx3ygqvacpx5jv98tmwv",
+          "mk1qpe569pp45c6x60wq2m6h7amp0arsy4e5w0djv6x6q7k04qj69mux3uxmvchz6k3wuzwx5w"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 840517,
+        "network": "mainnet",
+        "origin_fingerprint": null,
+        "origin_path": "m/48'/0'/0'/1'",
+        "policy_id_stubs": [
+          "48480001"
+        ],
+        "xpub": "xpub6Den8Yzh3wAEcXYhLohkeFDgcGafSrvSZZpGAenxCHxyJnD88cQeyzbHkHr1daPAcBx6SsGXbuhNKMsXAkMLZiwNjCHKgW8WkPGvfz1dsHH"
+      },
+      "name": "V12_bip48_nested_segwit_mainnet_1_stub_no_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 44 single-sig (m/44'/1'/0'), fingerprint present. Std-table indicator 0x11 (testnet-bit-15 variant of 0x01).",
+      "expected": {
+        "canonical_bytecode_hex": "0401441100004411aabb11043587cf1020300da7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7022f1b310f4c065331bc0d79ba4661bb9822d67d7c4a1b0a1892e1fd0cd23aa68d",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpmezkpqqsq5gygqqpzpr24mzyzrtp70zqsrqrd857n60fa857n60fa857n60fa857n60fa857n60fa857n60fa85upz7em0u3yqhhfus492",
+          "mk1qpmezkpprvcs7nqx2vcmcrtehfrxrwucytt86lz2rv9p3yhpl5xdyw4x35hpsmj9a93jyyskxkkkh"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 910422,
+        "network": "testnet",
+        "origin_fingerprint": "4411aabb",
+        "origin_path": "m/44'/1'/0'",
+        "policy_id_stubs": [
+          "44110000"
+        ],
+        "xpub": "tpubDC9Go1JeEEWdLaSHCAU2XKJsPEeEiYZoa9NDAKvCYMKpFqCYwHER3Jis64itLNQZGcXcNSLX5bVYA9AwrnViRURnNqww1rYFP1rddXTwg1u"
+      },
+      "name": "V13_bip44_testnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 49 nested-segwit (m/49'/1'/0'), fingerprint present. Std-table indicator 0x12.",
+      "expected": {
+        "canonical_bytecode_hex": "0401491200004912ccdd12043587cf1020300ea4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a40299c2aa85d2b21a62f396907a802a58e521dafd5bddaccbd72786eea189bc4dc9",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpaat8pqqsq5jysqqpy39nxazgzrtp70zqsrqr4y5jj2ff9y5jj2ff9y5jj2ff9y5jj2ff9y5jj2ff9y5jj2ff9y5spfjsz6fruewan0ev25",
+          "mk1qpaat8ppc24gt54jrf30895s02qz5k89y8d06k7a4n9awfuxa6scn0zdex6aweslckphnhxnscagu"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 980327,
+        "network": "testnet",
+        "origin_fingerprint": "4912ccdd",
+        "origin_path": "m/49'/1'/0'",
+        "policy_id_stubs": [
+          "49120000"
+        ],
+        "xpub": "tpubDC9Go1JvuZaZh7GxXQZ4DPRQiHxJ5YXv9GfR1doqP3uV4r6D6qdxoaeSmqUT8RT8a8pEa2Vb4RSDcqWtBXEj7H7LYe47ouZXwGdmY2ekrNa"
+      },
+      "name": "V14_bip49_testnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 84 native-segwit (m/84'/1'/0'), fingerprint present. Std-table indicator 0x13.",
+      "expected": {
+        "canonical_bytecode_hex": "0401841300008413eeff13043587cf1020300fa5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5021a7a569e91dbf60581509c7fc946d1003b60c7dee85299538db6353538d59574",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qp7pncpqqsqcgycqqzzp8mhlzvzrtp70zqsrqra95kj6tfd95kj6tfd95kj6tfd95kj6tfd95kj6tfd95kj6tfd955pp5w2m838c0sevr5z8",
+          "mk1qp7pncpp0ftfaywm7czcz5yu0ly5d5gq8dsv0hhg22v48rdkx56n34v4wn4t29s99us25std48n5c"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 984696,
+        "network": "testnet",
+        "origin_fingerprint": "8413eeff",
+        "origin_path": "m/84'/1'/0'",
+        "policy_id_stubs": [
+          "84130000"
+        ],
+        "xpub": "tpubDC9Go1KDateW3gS8VXZ6DD1Xu7PgoTdPcf1MX9Z6qVLiHbaeDJ78swPyuQ8YQY19QjtrzkfkZSXwqCcb7XArtid1iLq8Vy55Ydfm4giZh6X"
+      },
+      "name": "V15_bip84_testnet_1_stub_with_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 86 taproot (m/86'/1'/0'), fingerprint omitted. Std-table indicator 0x14.",
+      "expected": {
+        "canonical_bytecode_hex": "00018614000014043587cf10203010babababababababababababababababababababababababababababababababa03a92c9b7cac68758de5783ed8e5123598e4ad137091e42987d3bad8a08e35bf3d",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpq9ufpqqqqcv9qqqq2qgdv8eugzqvqsh2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2at4w46h2aq82fvnd72cevyug8s5r2ehx3r",
+          "mk1qpq9ufppdp6cmetc8mvw2y34nrj26ymsj8jznp7nhtv2pr34hu7acqek9quq0rx9em85sqs"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 6025,
+        "network": "testnet",
+        "origin_fingerprint": null,
+        "origin_path": "m/86'/1'/0'",
+        "policy_id_stubs": [
+          "86140000"
+        ],
+        "xpub": "tpubDC9Go1KWGDiSQTBme389jmyaNjTkKxMfbLayKgaXNd3jZ24x4EtSWiHJG9C3XWpq6bftGc7mG9vaKGiWUf3gK918mUeZs7EVQ5Zowe4NwQp"
+      },
+      "name": "V16_bip86_testnet_1_stub_no_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 87 multisig (m/87'/1'/0'), fingerprint omitted. Std-table indicator 0x17 (closes the v0.1 std-table testnet coverage modulo the 0x16 BIP 48 nested-segwit gap; gap closed in v0.2.0 — see V18).",
+      "expected": {
+        "canonical_bytecode_hex": "00018717000017043587cf10203011bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb034f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpz2y6pqqqqcw9cqqqtsgdv8eugzqvq3hwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwamhwasxne4t0wtwx8s465nedpdq257",
+          "mk1qpz2y6ppes90w2808n8tjc2ajp5yhddjef0ctx4s7zmsgp6cwx4g4w3pyc5ujgswzuc63vr"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 75930,
+        "network": "testnet",
+        "origin_fingerprint": null,
+        "origin_path": "m/87'/1'/0'",
+        "policy_id_stubs": [
+          "87170000"
+        ],
+        "xpub": "tpubDC9Go1KnwYnNm2LwcA8BjbZhZYu93sT94ivuqCKnq4UxmmZPAhMcb52qPi8a1YQHPFGnQULHHRzzFstEAtizRTN7uT5KUosaeAxVpaECN3t"
+      },
+      "name": "V17_bip87_testnet_1_stub_no_fp"
+    },
+    {
+      "description": "1-stub testnet, BIP 48 nested-segwit multisig (m/48'/1'/0'/1'), fingerprint present. Std-table indicator 0x16 — added to mk1's path dictionary in v0.2.0 after md-codec v0.9.0 closed the parallel gap. Wire-additive: v0.1.x decoders reject this vector with Error::InvalidPathIndicator(0x16); v0.2+ decoders accept and resolve to the BIP 48 testnet nested-segwit path.",
+      "expected": {
+        "canonical_bytecode_hex": "04014816aabb4816ccdd16043587cf10203012b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8b8036360e856310ce5d294e8be33fc807077dc56ac80d95d9cd4ddbd21325eff73f7",
+        "decoder_correction": "clean",
+        "strings": [
+          "mk1qpywdtpqqsq5s942hdypdnxazczrtp70zqsrqy4chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chqpkx3fqlq4wep5x44pg",
+          "mk1qpywdtppvr59vvgvuhfff697x07gqurhm3t2eqxetkwdfhdayye9almn7lrn8z3755mak4fdpy3mj"
+        ],
+        "total_chunks": 2
+      },
+      "expected_error": null,
+      "input": {
+        "chunk_set_id": 145835,
+        "network": "testnet",
+        "origin_fingerprint": "4816ccdd",
+        "origin_path": "m/48'/1'/0'/1'",
+        "policy_id_stubs": [
+          "4816aabb"
+        ],
+        "xpub": "tpubDE2Qenr6qBXK1se4WMS4kLWYdagfrVNReHcQYttb83tubmckiGFfWqFD7HMUQn7BsBzMozYvq32AQaEbUzf9W7V4QcafQszJxt2WHWawg73"
+      },
+      "name": "V18_bip48_nested_segwit_testnet_1_stub_with_fp"
+    },
+    {
+      "description": "HRP `bt` is not the locked `mk` HRP; decoder rejects before any data-part processing.",
+      "expected_error": "invalid HRP: bt",
+      "input": {
+        "strings": [
+          "bt1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz"
+        ],
+        "why": "mk1 strings MUST start with HRP `mk` per SPEC §2.1; any other HRP is rejected."
+      },
+      "name": "N1_invalid_hrp_bt"
+    },
+    {
+      "description": "One ASCII char in the data part is uppercase; BIP 173 forbids mixed case to remove a class of transcription ambiguity.",
+      "expected_error": "mixed case in input string",
+      "input": {
+        "strings": [
+          "mk1qpZg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz"
+        ],
+        "why": "BIP 173 §3 prohibits mixed-case strings; mk-codec inherits the rule verbatim."
+      },
+      "name": "N2_mixed_case"
+    },
+    {
+      "description": "Data-part length 13 is below the BCH regular-code minimum of 14.",
+      "expected_error": "invalid data-part length: 13",
+      "input": {
+        "strings": [
+          "mk1qpzry9x8gf2tv"
+        ],
+        "why": "BIP 93 valid lengths: regular [14,93], long [96,108]; 13 is outside both ranges."
+      },
+      "name": "N3_invalid_string_length_too_short"
+    },
+    {
+      "description": "Data part contains `b`, which is not in the bech32 alphabet.",
+      "expected_error": "invalid character b at position 2",
+      "input": {
+        "strings": [
+          "mk1qpbg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz"
+        ],
+        "why": "Bech32 alphabet is `qpzry9x8gf2tvdw0s3jn54khce6mua7l`; 'b' is not in it."
+      },
+      "name": "N4_invalid_char_b"
+    },
+    {
+      "description": "5-symbol burst exceeds BCH `t=4` correction radius for both BCH(93,80,8) and BCH(108,93,8).",
+      "expected_error": "BCH uncorrectable: long code: more than 4 substitutions or pathological pattern",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqpqpqql46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz",
+          "mk1qpzg69ppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sgjqnpdlq0y74taw9wyd9vvg6cecl"
+        ],
+        "why": "BCH `t=4` covers up to 4 substitutions exactly; 5+ exceeds the correction radius and the decoder must surface BchUncorrectable."
+      },
+      "name": "N5_bch_uncorrectable_5_substitutions"
+    },
+    {
+      "description": "String-layer header `type` byte 0x02 is in the reserved range 0x02..=0x1F; decoders MUST reject (SPEC §2.5).",
+      "expected_error": "unsupported card type: 0x02",
+      "input": {
+        "strings": [
+          "mk1qzqqqqqqqqqqqqqvy5namurdhk04"
+        ],
+        "why": "Only types 0x00 (SingleString) and 0x01 (Chunked) are defined in v0.1; 0x02..=0x1F are reserved for future format extensions."
+      },
+      "name": "N6_unsupported_card_type_0x02"
+    },
+    {
+      "description": "5-bit payload symbols don't byte-align — trailing pad bits of the final symbol are non-zero.",
+      "expected_error": "malformed payload padding (5-bit symbols don't byte-align)",
+      "input": {
+        "strings": [
+          "mk1qqqqr396edwcs33vch"
+        ],
+        "why": "Conforming encoders zero-pad the final 5-bit symbol; a non-zero pad cannot have been produced by `bytes_to_5bit`."
+      },
+      "name": "N7_malformed_payload_padding"
+    },
+    {
+      "description": "Two-chunk input where chunk[0]'s chunk_set_id differs from chunk[1]'s; decoder rejects at reassembly.",
+      "expected_error": "chunk_set_id mismatch across chunks",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz",
+          "mk1qpv7ysppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sgjqnpdlq0y74taw0jknnt3rq6rs0"
+        ],
+        "why": "All chunks of one card share `chunk_set_id` (SPEC §2.5); cross-set splicing is detected by the reassembler."
+      },
+      "name": "N8_chunk_set_id_mismatch"
+    },
+    {
+      "description": "Chunked header declares `chunk_index = total_chunks` (out of range; valid range is `0..total_chunks`).",
+      "expected_error": "chunked-header malformed: chunk_index = 2 >= total_chunks = 2",
+      "input": {
+        "strings": [
+          "mk1qpzg69pzqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqdl6f9ay45dzs2k3"
+        ],
+        "why": "Per SPEC §4 rule 12, chunk_index MUST satisfy 0 ≤ chunk_index < total_chunks."
+      },
+      "name": "N9_chunk_index_out_of_range"
+    },
+    {
+      "description": "First string is SingleString-headed, second is Chunked; decoder rejects header-types-disagree.",
+      "expected_error": "mixed string-layer header types in input list",
+      "input": {
+        "strings": [
+          "mk1qqgfpyysjzgfpyye8l0dsnxv2v7s",
+          "mk1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz"
+        ],
+        "why": "v0.1.1 introduced `Error::MixedHeaderTypes` to disambiguate header-types-disagree from chunked-internal malformations."
+      },
+      "name": "N10_mixed_header_types_singlestring_then_chunked"
+    },
+    {
+      "description": "Last byte of the 4-byte cross-chunk hash is flipped; recomputed SHA-256 over reassembled bytecode disagrees with the recovered tail.",
+      "expected_error": "cross-chunk integrity hash mismatch",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz",
+          "mk1qpzg69ppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sgjqnpdlq0y74t63da7ac22u7at6k"
+        ],
+        "why": "SPEC §2.6 — `cross_chunk_hash = SHA-256(bytecode)[0..4]` is recomputed at reassembly and compared byte-for-byte against the stream's tail."
+      },
+      "name": "N11_cross_chunk_hash_mismatch"
+    },
+    {
+      "description": "Bytecode header has version=1; v0.1 only defines version=0.",
+      "expected_error": "unsupported version: 1",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqzqqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqc7yf5lnhne0dzrcq",
+          "mk1qpzg69ppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sgjqnpdlqdy6tf3ryu0radee8hqq6"
+        ],
+        "why": "SPEC §3.1 — version field bits 7..4 MUST be 0x0 in v0.1."
+      },
+      "name": "N12_unsupported_version_v1"
+    },
+    {
+      "description": "Bytecode header has bit 3 (reserved) set (header byte 0x08).",
+      "expected_error": "reserved bits set in bytecode header",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqpqqu4l46hcpsfz9jrcgzqv872329g4z52329g4z52329g4z52329g4z52329g4z52329g4z5232qyr8yw2h96c28fupyjez8keaj",
+          "mk1qpzg69pp3xf7wcy7unhn8v6y76uynxsjtym5hh6j37pzgzv9hupkfsdugqeyvntkzj588t7"
+        ],
+        "why": "SPEC §3.1 — bits 0, 1, 3 are reserved and MUST be 0 in v0.1."
+      },
+      "name": "N13_reserved_bits_set_bit3"
+    },
+    {
+      "description": "Bytecode declares stub_count=0; SPEC §4 rule 3 requires ≥ 1.",
+      "expected_error": "policy_id_stub_count must be >= 1",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqqqqxpygkg0pqgpsle29g4z52329g4z52329g4z52329g4z52329g4z52329g4z52329gqsvu3e2uhvfj0nkq6wdz2e58r5yqt2j",
+          "mk1qpzg69ppnmjw7vangnmtsjv6zfvnwj7l228cyfqfsklsx3fme00qx7wsqu9l4vpwk"
+        ],
+        "why": "Closure §4 rule 3 — every conforming mk1 KeyCard names ≥ 1 Policy ID stub."
+      },
+      "name": "N14_invalid_policy_id_stub_count_zero"
+    },
+    {
+      "description": "Bytecode declares path indicator 0x00 (reserved); valid std-table indicators are 0x01..=0x07 mainnet, 0x11..=0x17 testnet, plus 0xFE explicit-path escape.",
+      "expected_error": "invalid path indicator byte: 0x00",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqqqu4l46hcqqfz9jrcgzqv872329g4z52329g4z52329g4z52329g4z52329g4z52329g4z5232qyr8yw2h96fyy7xfz6vg5y8j6",
+          "mk1qpzg69pp3xf7wcy7unhn8v6y76uynxsjtym5hh6j37pzgzv9hupk53wd0sv3njltfwe4x4g"
+        ],
+        "why": "SPEC §3.5 reserved indicators include 0x00 and 0xFF."
+      },
+      "name": "N15_invalid_path_indicator_0x00"
+    },
+    {
+      "description": "Explicit-path count=11 exceeds the 10-component cap (closure Q-3).",
+      "expected_error": "path too deep: 11 components (max 10)",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqqqu4l46hmlqkqqpqgpsgpgxquyqjzsy3zepuypqxrl9g4z52329g4z52329g4z52329g4z52329g4z52329gads7x86vqrleax7",
+          "mk1qpzg69pp2329g4z52spqeerj4ewcnyl8vz0wfmenkdz0dwzfngf9jd6tmafglq3ypxzm7qaelpq7ust44a6v8nedys"
+        ],
+        "why": "Closure Q-3 capped explicit-path component count at 10 to bound bytecode size; encoders MUST reject any deeper path."
+      },
+      "name": "N16_path_too_deep_11_components"
+    },
+    {
+      "description": "Explicit path's LEB128 component overflows u32 (6 × 0x80 — every byte sets the continuation bit, exceeding the 5-byte BIP 32 child-number representation).",
+      "expected_error": "invalid path component: LEB128 overflow at shift 35",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqqqu4l46hmlqrqyqszqgpqqy3zepuypqxrl9g4z52329g4z52329g4z52329g4z52329g4z52329g4z52329g5urj9z0ctp4gfln",
+          "mk1qpzg69pp2spqeerj4ewcnyl8vz0wfmenkdz0dwzfngf9jd6tmafglq3ypxzm7q6cu96x70pe8sn3twnx8e"
+        ],
+        "why": "BIP 32 child numbers are 32-bit unsigned; a 6-byte LEB128 stream exceeds u32 capacity and decoders MUST reject with `InvalidPathComponent` per SPEC §4 rule 6."
+      },
+      "name": "N17_invalid_path_component_leb128_overflow"
+    },
+    {
+      "description": "xpub_compact's version prefix is 0xDEADBEEF, not a known mainnet/testnet xpub version.",
+      "expected_error": "invalid xpub version: 0xdeadbeef",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqsqu4l46hm02m0h0q002m0h0zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcn9789gzd4nfrxgr",
+          "mk1qpzg69ppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sgjqnpdlqdneql35awn5kv2hwqt8w"
+        ],
+        "why": "Compact-73 xpub form (closure Q-7) carries the BIP 32 version bytes verbatim; decoders validate against {xpub, tpub} prefixes."
+      },
+      "name": "N18_invalid_xpub_version_0xdeadbeef"
+    },
+    {
+      "description": "xpub_compact's public_key bytes are all zeros — not a valid compressed secp256k1 point.",
+      "expected_error": "invalid xpub public key: malformed public key",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52sqqqkssl0c04mked952",
+          "mk1qpzg69ppqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqps9ktnd2zzaqz97jrwev"
+        ],
+        "why": "secp256k1 compressed point validation rejects 33 zero bytes."
+      },
+      "name": "N19_invalid_xpub_public_key_all_zeros"
+    },
+    {
+      "description": "Bytecode truncated mid-xpub_compact; decoder hits end-of-stream before the 73 xpub bytes are consumed.",
+      "expected_error": "unexpected end of bytecode",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz",
+          "mk1qpzg69ppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sg5z5yx8yrezh5kcrgjdk"
+        ],
+        "why": "Decoder reads fields greedily; truncation at any point produces `UnexpectedEnd`."
+      },
+      "name": "N20_unexpected_end_truncated_xpub"
+    },
+    {
+      "description": "One extra byte (0xFF) follows the xpub_compact tail; decoder rejects after consuming the expected fields.",
+      "expected_error": "trailing bytes after xpub",
+      "input": {
+        "strings": [
+          "mk1qpzg69pqqsqu4l46hm02m0h0qvzg3vs7zqsrplj52329g4z52329g4z52329g4z52329g4z52329g4z52329g4z52spqcw0rafrc8fnsh6sz",
+          "mk1qpzg69ppu3e2uhvfj0nkp8hyauemx38khpye5yjexa9a7550sgjqnpdlq0lj8fwqmv9vjh5phk9marj"
+        ],
+        "why": "Conforming bytecode terminates exactly at the xpub_compact's 73-byte boundary; any tail content is rejected."
+      },
+      "name": "N21_trailing_bytes_one_extra"
+    },
+    {
+      "description": "Empty input string list; decoder rejects with ChunkedHeaderMalformed (covers the second call-site of that variant beyond N9's chunk-index-OOB form).",
+      "expected_error": "chunked-header malformed: empty input string list",
+      "input": {
+        "strings": [],
+        "why": "An empty `&[]` to `decode` has no chunks to process; this is the no-input-at-all case, distinct from header-types-disagree."
+      },
+      "name": "N23_empty_input"
+    }
+  ]
+}
