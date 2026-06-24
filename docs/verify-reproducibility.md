@@ -97,6 +97,7 @@ tree):
 docker run --rm --network=none \
   -v "$PWD":/build/src -w /build/src \
   -e CARGO_HOME=/cargo \
+  -e RUSTUP_TOOLCHAIN=1.85.0 \
   -e SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
   -e LC_ALL=C -e TZ=UTC \
   -e CARGO_BUILD_RUSTFLAGS="--remap-path-prefix=/build/src=/build --remap-path-prefix=/cargo=/cargo" \
