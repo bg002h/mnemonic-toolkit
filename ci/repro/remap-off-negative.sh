@@ -126,6 +126,9 @@ if [ "$BUILDER" = "cross" ]; then
   # internal mount) and $CARGO_HOME. With the remap OFF, that residue MUST survive
   # in .rodata — proving the remap is load-bearing. Zero residue here means the
   # remap is unnecessary → RED.
+  # m2 (P4 R1): the /project literal is cross v0.2.5's fixed mount point — a future
+  # cross-image digest bump MUST re-verify cross still bind-mounts the source to
+  # /project (same pin the positive scripts carry: double-build.sh / cc-validate.sh).
   RESIDUE_RE="${CROSS_INTERNAL_SRC}|${CARGO_HOME:-/cargo}/registry"
   if grep -aEo "$RESIDUE_RE" "$BINARY" | head -1 | grep -q .; then
     echo "  OK: no-remap cross build leaks the expected host-path residue:"
@@ -149,4 +152,18 @@ fi
 echo "  OK: the two no-remap binaries DIFFER (the absolute build-path leak returns when the remap is off)."
 echo "     cmp first-difference offset:"
 cmp "$WORK/out-a/$BIN" "$WORK/out-b/$BIN" || true
+
+# m1 (P4 R1) — DIFFER alone proves only "some" non-determinism between the legs;
+# it does NOT prove the divergence is SPECIFICALLY the build-path leak the remap
+# guards (an unrelated source of non-determinism would also make cmp differ and
+# would falsely GREEN this gate). Pin the cause: at least one no-remap leg MUST
+# carry its OWN build-root path substring (/build-a or /build-b) in .rodata — the
+# very leak --remap-path-prefix=${real_root}=/build collapses. Cheap (one grep/leg).
+if grep -aq "/build-a" "$WORK/out-a/$BIN" || grep -aq "/build-b" "$WORK/out-b/$BIN"; then
+  echo "  OK: a no-remap leg leaks its own build-root path substring (/build-a or /build-b) —"
+  echo "      the DIFFER is specifically the build-path leak, not unrelated non-determinism."
+else
+  echo "::error::remap-off NEGATIVE FAILED — the two no-remap binaries DIFFER but NEITHER leg leaks its own build-root path (/build-a / /build-b) into .rodata. The divergence is therefore NOT demonstrably the build-path leak the remap guards (it could be unrelated non-determinism), so this probe is no longer evidence --remap-path-prefix is load-bearing (m1 / P4 R1)." >&2
+  exit 1
+fi
 echo "== remap-off NEGATIVE PASSED: --remap-path-prefix IS load-bearing (it collapses this path divergence). =="

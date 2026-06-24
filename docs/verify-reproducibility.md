@@ -266,6 +266,33 @@ honest **between** releases:
   BUILDER=cross ci/repro/remap-off-negative.sh /build-a/src /build-b/src   # aarch64: no-remap build leaks /project
   ```
 
+### Why the drift gate does NOT explicitly assert `== published SHA256SUMS.<arch>`
+
+The two-distinct-path positive gate (§8) proves the rebuild is byte-identical to
+*itself*; it does **not** download the released `SHA256SUMS.<arch>` and assert the
+rebuilt `.tar.gz` SHA-256 equals the *published* hash. That explicit comparison is
+**intentionally deferred** from the drift gate, for two reasons:
+
+- **A HEAD-scheduled gate has no release peer to compare against.** The scheduled
+  re-proof runs against the toolkit's current `HEAD` (`github.sha`), which has no
+  published release artifact. A literal `== published` assertion would false-RED on
+  every schedule (and on every non-release commit), because there is nothing to
+  compare the rebuild to.
+- **The `== published` property is already satisfied *structurally* by the release
+  re-home.** The P1/P3 release path does not upload a *separately* built artifact and
+  hope it matches — it **publishes the exact canonical output of the same
+  double-build gate**. Publish and gate therefore share an identical *(commit SHA,
+  container digest, build recipe)* tuple, and the recipe is reproducible **by
+  construction** ⇒ the published artifact **is** the gate-verified binary. The
+  "rebuilt hash == published hash" closed loop holds not because a check asserts it,
+  but because the same byte-for-byte recipe produced both.
+
+An *explicit* per-release closed-loop check — a `release:`-published-triggered job
+that downloads the just-uploaded `SHA256SUMS.<arch>` and asserts equality against a
+**fresh, distinct-path** rebuild — is a worthwhile future addition (it would catch a
+hypothetical upload-path corruption that the structural argument assumes away). It is
+tracked as catalog FOLLOWUP `repro-explicit-published-hash-gate`.
+
 ## 9. aarch64-unknown-linux-musl (P2) — built via `cross` under QEMU
 
 The aarch64 binary has no native runner, so it is built with
