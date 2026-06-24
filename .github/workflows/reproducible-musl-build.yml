@@ -113,6 +113,14 @@ on:
 permissions:
   contents: read
 
+# The repro-substrate / repro-x86_64-musl gate jobs run with job-level
+# `container:`; GitHub executes inline `run:` blocks under the container's
+# /bin/sh (dash), which rejects `set -euxo pipefail` (`set: Illegal option`).
+# Force bash (present in the Debian-based repro image) for all run blocks.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   # ── build + push the repro container, RESOLVE the BUILT-DIGEST ──────────────
   # Builds Dockerfile.repro, pushes to GHCR, and emits the image BY DIGEST so
