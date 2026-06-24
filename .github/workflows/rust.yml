@@ -42,7 +42,7 @@ jobs:
   # invariant (see the "g6 invariant" job below): it must stay byte-equal
   # (modulo comments) to `crates/ms-cli/src/mlock.rs` in mnemonic-secret, and g6
   # tracks the canonical ms-cli tag read DYNAMICALLY from scripts/install.sh
-  # (field 3; currently `ms-cli-v0.13.0`), whose copy is
+  # (field 3; currently `ms-cli-v0.13.2`), whose copy is
   # NOT 1.95.0-formatted. So mlock.rs's format is pinned to that tag, NOT to
   # this formatter — a bare `cargo fmt --all` would re-wrap it and break g6.
   # The exemption is durably recorded in design/FOLLOWUPS.md (mlock-rs-fmt-exempt).

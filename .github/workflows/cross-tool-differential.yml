@@ -50,7 +50,7 @@ jobs:
         # harness therefore calls `md encode --force-chunked` (see
         # cli_cross_tool_differential.rs::md_cli_ids), which is what keeps this
         # gate GREEN at v0.9.2; without it every entry would ToolError.
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.0 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.2 md-cli --features cli-compiler
 
       - name: Build mnemonic binary (debug)
         run: cargo build --bin mnemonic
