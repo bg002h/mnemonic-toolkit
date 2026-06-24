@@ -3652,6 +3652,15 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         .map_err(ToolkitError::Io)?;
     }
 
+    // Cycle Y — LOUD funds-safety warning for a CUSTOM use-site on a
+    // tr(NUMS,multi_a) card. This shape RESTORES FAITHFULLY (#26, admitted at the
+    // restorable-taproot-override arm above) but has no known wallet precedent, so
+    // a misconfigured user risks PERMANENT LOSS OF FUNDS. Proceed-and-warn (NOT
+    // refuse): the reconstruction above is unchanged; `Ok(0)` below. Single-sourced
+    // via `custom_use_site_nums_taproot_card`, so engrave and restore cannot drift.
+    let fs = crate::unrestorable_advisory::funds_safety_advisories(&d);
+    crate::unrestorable_advisory::emit_funds_safety_advisories(&fs, stderr);
+
     crate::secret_advisory::emit_output_class_advisory(
         crate::secret_advisory::OutputClass::WatchOnly,
         stderr,

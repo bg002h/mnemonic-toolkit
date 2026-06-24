@@ -1324,6 +1324,10 @@ electrum|jade|sparrow|specter>"
         // (import-wallet engraves an md1 the same way bundle does).
         let unrest = crate::unrestorable_advisory::unrestorable_advisories(&p.descriptor);
         crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
+        // Cycle Y — LOUD funds-safety warning for a CUSTOM use-site on a
+        // tr(NUMS,multi_a) card (import-wallet engraves the same md1 as bundle).
+        let fs = crate::unrestorable_advisory::funds_safety_advisories(&p.descriptor);
+        crate::unrestorable_advisory::emit_funds_safety_advisories(&fs, stderr);
     }
 
     // Emit stdout.

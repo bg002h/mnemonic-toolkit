@@ -82,15 +82,49 @@ Both pending taproot legs are tracked by FOLLOWUP
 `restore-md1-taproot-use-site-override-arm`.
 
 Non-hardened **per-cosigner use-site path overrides** (cosigners with divergent
-derivation suffixes) are **reconstructed faithfully** and no longer advise for:
-non-taproot `wsh`/`sh` multisig (since v0.58.2), and NUMS-keyed single-leaf
-`tr(multi_a)` taproot cards (since v0.59.1) — both via md-codec 0.37.0's
-per-`@N` multipath reconstruction.
+derivation suffixes) are **reconstructed faithfully** and no longer fire the
+*unrestorable*-shape advisory for: non-taproot `wsh`/`sh` multisig (since
+v0.58.2), and NUMS-keyed single-leaf `tr(multi_a)` taproot cards (since v0.59.1)
+— both via md-codec 0.37.0's per-`@N` multipath reconstruction. The taproot one,
+however, now fires a separate **loud funds-safety warning** — see
+[Custom use-site on a NUMS-taproot card](#custom-use-site-nums-taproot) below.
 
 These are the shapes the [multisig-cosigner restore](#multisig-cosigner-restore)
 path refuses to reconstruct. The same advisory fires on
 [`mnemonic import-wallet`](#mnemonic-import-wallet) (the other surface that
 engraves an `md1` from a descriptor).
+
+### Custom use-site on a NUMS-taproot card {#custom-use-site-nums-taproot}
+
+A `tr(NUMS, multi_a)` multisig card with **custom per-cosigner use-site
+derivation paths** — divergent derivation suffixes per cosigner, e.g. `@0` on
+`/<0;1>/*` but `@1` on `/<2;3>/*` — **restores faithfully** (since v0.59.1; see
+above). Unlike the unrestorable shapes, this card is **not** refused at restore.
+
+But **no known wallet produces this shape**: every standard wallet uses one
+**uniform** `<0;1>/*` suffix across all cosigners. A user on this path has almost
+certainly misconfigured, and the reconstructed addresses will not match any
+standard wallet software — a funds-loss risk. So, rather than refuse (which would
+strand the rare legitimate user who deliberately chose divergent paths), the
+toolkit **reconstructs the card faithfully and warns loudly**. At engrave
+([`mnemonic bundle`](#mnemonic-bundle) and
+[`mnemonic import-wallet`](#mnemonic-import-wallet)) *and* at restore
+([`mnemonic restore --md1`](#mnemonic-restore)), it prints a non-blocking stderr
+line beginning:
+
+> `WARNING (funds-safety): this card is a tr(NUMS, multi_a) multisig with CUSTOM
+> per-cosigner use-site derivation paths …`
+
+— going on to state that no known wallet produces the shape, that the
+reconstructed addresses will **not** match your wallet software, that you risk
+**permanent loss of funds** if the divergence was unintended, and that you should
+**verify the descriptor against your wallet** before relying on the card. The
+operation still succeeds (exit 0) and the addresses are still emitted; if you
+*did* deliberately intend divergent per-cosigner paths the warning is benign.
+
+A **baseline** `tr(NUMS, multi_a)` card with the same uniform `<0;1>/*` suffix on
+every cosigner is **not** custom, so it carries **no** use-site overrides and
+fires **no** funds-safety warning.
 
 This list is about **keyed wallet-policy `md1` cards**. A **keyless
 multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`) is a

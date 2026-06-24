@@ -131,6 +131,77 @@ pub fn emit_advisories<E: Write>(advisories: &[UnrestorableAdvisory], stderr: &m
     }
 }
 
+// ── Cycle Y (v0.73.3): LOUD funds-safety advisory ────────────────────────────
+//
+// A SEPARATE advisory register from `UnrestorableAdvisory` above. The
+// `UnrestorableShape` messages are CALM ("the engraved card is a faithful
+// backup; keep the full descriptor to restore") because those shapes loudly
+// REFUSE at restore — the user is protected by the refusal. The funds-safety
+// advisory below is for a shape that RESTORES SUCCESSFULLY but that no known
+// wallet produces, so a misconfigured user would silently get non-matching
+// addresses and risk PERMANENT LOSS OF FUNDS. It is deliberately kept a distinct
+// enum + struct + collector + prefix (`WARNING (funds-safety):`, not
+// `advisory:`) so a future editor cannot soften the loud text to match the calm
+// siblings. (Cycle Y, FOLLOWUP `restore-md1-taproot-use-site-override-arm`
+// PARTIALLY-RESOLVED; this closes the missing-warning gap, NOT a reconstruction
+// gap.)
+
+/// Which funds-safety shape a descriptor carries (a RESTORABLE-but-no-precedent
+/// shape that warrants a LOUD warning rather than a calm keep-the-backup note).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FundsSafetyShape {
+    /// A `tr(NUMS, multi_a)` multisig with CUSTOM per-cosigner use-site
+    /// derivation paths (divergent suffixes per `@N`). Restores faithfully (#26)
+    /// but has no known wallet precedent — every standard wallet uses one
+    /// uniform `<0;1>/*` suffix across all cosigners.
+    CustomUseSiteNumsTaproot,
+}
+
+/// A collected funds-safety advisory (LOUD; the operation still proceeds).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FundsSafetyAdvisory {
+    pub shape: FundsSafetyShape,
+}
+
+impl FundsSafetyAdvisory {
+    /// The LOUD stderr advisory line. Prefix `WARNING (funds-safety):` (distinct
+    /// from the calm `advisory:`), uppercase `LOSS OF FUNDS`/`NOT`; conveys
+    /// no-precedent + addresses-will-not-match + LOSS OF FUNDS + verify.
+    pub fn message(&self) -> String {
+        match self.shape {
+            FundsSafetyShape::CustomUseSiteNumsTaproot => "WARNING (funds-safety): this card is a \
+                tr(NUMS, multi_a) multisig with CUSTOM per-cosigner use-site derivation paths \
+                (divergent suffixes per cosigner). No known wallet produces this shape — every \
+                standard wallet uses one uniform <0;1>/* suffix across all cosigners. If you did \
+                NOT deliberately intend divergent per-cosigner derivation paths, the addresses \
+                reconstructed from this card will NOT match your wallet software and you risk \
+                PERMANENT LOSS OF FUNDS. Verify the descriptor against your wallet before relying \
+                on this card."
+                .to_string(),
+        }
+    }
+}
+
+/// Collect the funds-safety advisories for a descriptor (single-sourced via the
+/// `taproot_override_classify` predicate, so engrave and restore cannot drift).
+pub fn funds_safety_advisories(desc: &md_codec::Descriptor) -> Vec<FundsSafetyAdvisory> {
+    let mut out = Vec::new();
+    if crate::taproot_override_classify::custom_use_site_nums_taproot_card(desc) {
+        out.push(FundsSafetyAdvisory {
+            shape: FundsSafetyShape::CustomUseSiteNumsTaproot,
+        });
+    }
+    out
+}
+
+/// Write each funds-safety advisory's message to `stderr` (best-effort; mirrors
+/// `emit_advisories`).
+pub fn emit_funds_safety_advisories<E: Write>(advisories: &[FundsSafetyAdvisory], stderr: &mut E) {
+    for a in advisories {
+        let _ = writeln!(stderr, "{}", a.message());
+    }
+}
+
 /// True iff `Tag::SortedMulti` appears in a position restore cannot reconstruct —
 /// i.e. anywhere other than one of md-codec's three accepted sole-child positions.
 /// Unit-testable on a bare `Node` (no full `md_codec::Descriptor` literal needed).
@@ -286,6 +357,42 @@ mod tests {
         assert!(
             m3.contains("advisory: restore --md1 cannot reconstruct")
                 && m3.contains("hardened use-site path")
+        );
+    }
+
+    #[test]
+    fn funds_safety_message_is_loud_and_funds_framed() {
+        let m = FundsSafetyAdvisory {
+            shape: FundsSafetyShape::CustomUseSiteNumsTaproot,
+        }
+        .message();
+        // LOUD prefix — textually distinct from the calm `advisory:` siblings.
+        assert!(
+            m.starts_with("WARNING (funds-safety):"),
+            "loud prefix required; got: {m}"
+        );
+        // Funds-safety framing: no-precedent + addresses-will-not-match + LOSS + verify.
+        assert!(m.contains("tr(NUMS, multi_a)"), "names the shape; got: {m}");
+        assert!(
+            m.contains("No known wallet produces this shape"),
+            "no-precedent phrasing; got: {m}"
+        );
+        assert!(
+            m.contains("PERMANENT LOSS OF FUNDS"),
+            "loss-of-funds phrasing; got: {m}"
+        );
+        assert!(
+            m.contains("will NOT match your wallet"),
+            "addresses-will-not-match phrasing; got: {m}"
+        );
+        assert!(
+            m.contains("Verify the descriptor against your wallet"),
+            "verify phrasing; got: {m}"
+        );
+        // NOT softened to the calm register.
+        assert!(
+            !m.contains("advisory: restore --md1 cannot reconstruct"),
+            "must NOT borrow the calm prefix; got: {m}"
         );
     }
 }

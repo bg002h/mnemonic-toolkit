@@ -1799,6 +1799,11 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // wildcard). The engraved card is still emitted (a faithful backup).
     let unrest = crate::unrestorable_advisory::unrestorable_advisories(&descriptor);
     crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
+    // Cycle Y (Site 1) — LOUD funds-safety warning for a RESTORABLE-but-no-precedent
+    // shape (a CUSTOM use-site on a tr(NUMS,multi_a) card). Distinct from the calm
+    // advisory above; the card still restores (proceed-and-warn).
+    let fs = crate::unrestorable_advisory::funds_safety_advisories(&descriptor);
+    crate::unrestorable_advisory::emit_funds_safety_advisories(&fs, stderr);
 
     emit_unified(
         args,
@@ -1845,6 +1850,10 @@ fn bundle_run_concrete_descriptor<W: Write, E: Write>(
     // C1 (Site 3) — non-blocking unrestorable-shape advisory (concrete-key path).
     let unrest = crate::unrestorable_advisory::unrestorable_advisories(&descriptor);
     crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
+    // Cycle Y (Site 3) — LOUD funds-safety warning for a CUSTOM use-site on a
+    // tr(NUMS,multi_a) card (concrete-key path).
+    let fs = crate::unrestorable_advisory::funds_safety_advisories(&descriptor);
+    crate::unrestorable_advisory::emit_funds_safety_advisories(&fs, stderr);
 
     // BIP-388 distinctness check — a pasted descriptor is untrusted, unlike
     // the mk1-sourced path in bundle_run_from_import_json.
@@ -2115,6 +2124,10 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     // C1 (Site 2) — non-blocking unrestorable-shape advisory (import-json path).
     let unrest = crate::unrestorable_advisory::unrestorable_advisories(&descriptor);
     crate::unrestorable_advisory::emit_advisories(&unrest, stderr);
+    // Cycle Y (Site 2) — LOUD funds-safety warning for a CUSTOM use-site on a
+    // tr(NUMS,multi_a) card (import-json path).
+    let fs = crate::unrestorable_advisory::funds_safety_advisories(&descriptor);
+    crate::unrestorable_advisory::emit_funds_safety_advisories(&fs, stderr);
 
     // Determine BundleMode from resolved_slots state.
     let any_secret = resolved_slots.iter().any(|s| s.entropy.is_some());
