@@ -67,3 +67,79 @@ jobs:
         env:
           REF_NAME: ${{ github.ref_name }}
         run: gh release upload "$REF_NAME" mnemonic-man.tar.gz --clobber
+
+  # Static, dependency-free `mnemonic` binaries for air-gapped / Alpine / musl
+  # deployments — the environment a self-custody steel-backup tool is most
+  # likely to run on (an offline, minimal box). Builds both musl targets and
+  # attaches a static tarball per arch + a per-arch SHA256SUMS to the SAME
+  # `mnemonic-toolkit-v*` release the man tarball lands on.
+  #
+  # crt-static is ON BY DEFAULT for musl, so `cargo build --target *-linux-musl
+  # --release` already yields a fully-static ELF. NEVER pass
+  # `-Ctarget-feature=-crt-static` (per rust#135244 it silently links host
+  # glibc and destroys the static deliverable). The only C dep is the vendored
+  # libsecp256k1 in `secp256k1-sys`: the native x86_64-musl row needs
+  # `musl-tools` (`musl-gcc`) + `CC_x86_64_unknown_linux_musl=musl-gcc` so cc-rs
+  # compiles it against musl; the aarch64-musl row uses `cross`, which bundles
+  # the musl cross C toolchain in its container (no apt step). Toolchain pinned
+  # `@1.85.0` (matches `rust-toolchain.toml`), NOT `@stable`.
+  #
+  # Per-arch `SHA256SUMS.<arch>` (each matrix job is independent + `gh release
+  # upload --clobber`-based, so a per-arch file avoids a clobber race on one
+  # combined file). The shipped guarantee is *static + checksummed*, not
+  # bit-for-bit reproducible.
+  #
+  # Security note: this job uses only GitHub-provided trusted context. No
+  # interpolation of untrusted user input.
+  musl-binaries:
+    name: musl-binary (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            musl_native: true
+            arch: x86_64
+          - target: aarch64-unknown-linux-musl
+            cross: true
+            arch: aarch64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: ${{ matrix.target }}
+      - if: ${{ matrix.musl_native }}
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - if: ${{ matrix.cross }}
+        run: cargo install --locked cross
+      - name: build-native
+        if: ${{ matrix.musl_native }}
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --target ${{ matrix.target }} -p mnemonic-toolkit --bin mnemonic
+      - name: build-cross
+        if: ${{ matrix.cross }}
+        run: cross build --release --target ${{ matrix.target }} -p mnemonic-toolkit --bin mnemonic
+      - name: package
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          VER="${REF_NAME##*-v}"
+          tar czf "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz" \
+            -C "target/${{ matrix.target }}/release" mnemonic
+          sha256sum "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz" > "SHA256SUMS.${{ matrix.arch }}"
+      - name: ensure-release
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: gh release view "$REF_NAME" >/dev/null 2>&1 || gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+      - name: upload
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          gh release upload "$REF_NAME" mnemonic-*-${{ matrix.arch }}-linux-musl.tar.gz --clobber
+          gh release upload "$REF_NAME" "SHA256SUMS.${{ matrix.arch }}" --clobber

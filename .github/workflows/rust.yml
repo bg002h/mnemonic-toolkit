@@ -313,3 +313,67 @@ jobs:
         # from invoking them. --include-ignored opts them in for this job
         # which DOES have both.
         run: cargo test -p mnemonic-toolkit --test mlock_g6_invariant -- --include-ignored
+
+  musl-build-test:
+    # musl target coverage (static air-gapped binary cycle). Both musl targets
+    # are Tier 2 with Host Tools and `unix` + Linux, so every `#[cfg(unix)]` /
+    # `#[cfg(target_os = "linux")]` path (mlock, process_hardening) compiles and
+    # is functional on musl with ZERO source change.
+    #
+    # Two rows, distinct treatment:
+    #   * x86_64-musl — built + FULLY TESTED natively on ubuntu. Unlike the
+    #     `lib cross-platform check` job (which is `--lib`-only because the
+    #     `mnemonic` bin is unix-only relative to *Windows*), musl IS unix, so
+    #     the bin builds and the WHOLE `cargo test -p mnemonic-toolkit` package
+    #     suite runs — argv/schema/version lints ride along (MEMORY lesson:
+    #     full package suite, not targeted targets). Needs `musl-tools`
+    #     (provides `musl-gcc`) + `CC_x86_64_unknown_linux_musl=musl-gcc` so
+    #     cc-rs builds the ONLY C dep — the vendored libsecp256k1 in
+    #     `secp256k1-sys` — against musl (else cc silently falls back to host
+    #     gcc → glibc-linked). Honors the `ulimit -l 65536` dance (mlock tests).
+    #   * aarch64-musl — `cross build`-only (cross bundles the musl cross C
+    #     toolchain; no apt step). Build coverage only; no emulated test run to
+    #     keep CI minutes bounded — mirrors the aarch64-gnu `lib-cross-platform`
+    #     posture.
+    #
+    # crt-static is left at its musl default (ON). NEVER pass
+    # `-Ctarget-feature=-crt-static` — per rust#135244 that silently links host
+    # glibc and destroys the static deliverable.
+    #
+    # Toolchain pinned `@1.85.0` (matches `rust-toolchain.toml` and the existing
+    # `lib-cross-platform` pin); do NOT float `@stable` here.
+    #
+    # Security note: this job uses only GitHub-provided trusted context. No
+    # interpolation of untrusted user input.
+    name: musl build+test (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            musl_native: true
+          - target: aarch64-unknown-linux-musl
+            cross: true
+    steps:
+      - uses: actions/checkout@v6
+      - name: install-rust pinned toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: install musl-tools (x86_64-musl native)
+        if: ${{ matrix.musl_native }}
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: install cross (aarch64-musl)
+        if: ${{ matrix.cross }}
+        run: cargo install --locked cross
+      - name: cargo test --target x86_64-musl (native, full package suite)
+        if: ${{ matrix.musl_native }}
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          ulimit -l 65536 || true
+          cargo test --target ${{ matrix.target }} -p mnemonic-toolkit
+      - name: cross build --target aarch64-musl (build-only)
+        if: ${{ matrix.cross }}
+        run: cross build --release --target ${{ matrix.target }} -p mnemonic-toolkit
