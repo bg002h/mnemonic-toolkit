@@ -387,6 +387,15 @@ jobs:
       - name: install cross (aarch64-musl)
         if: ${{ matrix.cross }}
         run: cargo install --locked cross
+      # Register QEMU/binfmt_misc for aarch64 so `cross test` tests that spawn
+      # the binary as a subprocess (raw std::Command) don't hit ENOEXEC
+      # ("Exec format error") — cross/QEMU only auto-translates the test
+      # harness, not children it forks, unless binfmt_misc is registered.
+      - name: register binfmt (qemu) for aarch64 subprocess exec
+        if: ${{ matrix.cross }}      # only the aarch64 cross leg, NOT x86_64-native
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
       - name: cargo test --target x86_64-musl (native, full package suite)
         if: ${{ matrix.musl_native }}
         env:
