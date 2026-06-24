@@ -125,11 +125,27 @@ jobs:
         working-directory: docs/quickstart
         run: test -f build/m-format-quickstart.pdf && ls -lh build/m-format-quickstart.pdf
 
+      - name: Build HTML
+        # Self-contained pandoc --standalone render (embedded CSS); opens in
+        # any browser with no server — the no-PDF-viewer release asset.
+        working-directory: docs/quickstart
+        run: make html MERMAID_FILTER=skip
+
+      - name: Verify HTML
+        working-directory: docs/quickstart
+        run: test -f build/m-format-quickstart.html && ls -lh build/m-format-quickstart.html
+
       - name: Upload PDF as workflow artifact
         uses: actions/upload-artifact@v7
         with:
           name: m-format-quickstart-pdf
           path: docs/quickstart/build/m-format-quickstart.pdf
+
+      - name: Upload HTML as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m-format-quickstart-html
+          path: docs/quickstart/build/m-format-quickstart.html
 
       - name: Ensure GitHub release exists for this tag
         if: startsWith(github.ref, 'refs/tags/quickstart-v')
@@ -146,3 +162,10 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         working-directory: docs/quickstart
         run: gh release upload "$REF_NAME" build/m-format-quickstart.pdf --clobber
+
+      - name: Upload HTML to release (on quickstart-v* tag)
+        if: startsWith(github.ref, 'refs/tags/quickstart-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        working-directory: docs/quickstart
+        run: gh release upload "$REF_NAME" build/m-format-quickstart.html --clobber

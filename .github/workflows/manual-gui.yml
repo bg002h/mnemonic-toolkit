@@ -294,6 +294,14 @@ jobs:
         working-directory: docs/manual-gui
         run: gh release upload "$REF_NAME" build/m-format-gui-manual.pdf --clobber
 
+      - name: Upload HTML asset to release
+        # The self-contained pandoc --standalone HTML (embedded CSS) is also
+        # published to gh-pages below; attaching it as a release asset gives a
+        # no-PDF-viewer user a direct, versioned browser-openable download
+        # (mirrors the PDF release asset). REF_NAME is set in the job env.
+        working-directory: docs/manual-gui
+        run: gh release upload "$REF_NAME" build/m-format-gui-manual.html --clobber
+
       - name: Configure git for gh-pages push
         run: |
           git config user.name "github-actions[bot]"

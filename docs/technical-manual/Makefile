@@ -6,6 +6,7 @@
 #
 # Targets:
 #   make md            — concatenated markdown to build/m-format-technical-manual.md
+#   make html          — self-contained HTML to build/m-format-technical-manual.html (pandoc --standalone; opens in any browser, no server)
 #   make pdf           — typeset PDF to build/m-format-technical-manual.pdf (needs pandoc + xelatex; consumes figures/cache/)
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
@@ -135,6 +136,28 @@ $(BUILD_DIR)/m-format-technical-manual.md: $(MD_SRC) $(FILTERS_DIR)/include-tran
 	$(PANDOC) \
 		--from markdown \
 		--to gfm \
+		--standalone \
+		--toc \
+		--toc-depth=3 \
+		$(MD_FILTER_ARGS) \
+		$(PANDOC_METADATA) \
+		--output $@ \
+		$(MD_SRC)
+
+# ---------------------------------------------------------------------------
+# HTML render path: --to html (self-contained --standalone; opens in any
+# browser with no server). Mirrors docs/manual/Makefile's html target: same
+# MD_FILTER_ARGS (include-transcript + strip-latex + primer-box) and metadata
+# as `make md`, so the worked-example output blocks materialise identically.
+# Output name matches the PDF (m-format-technical-manual.{html,pdf}).
+# ---------------------------------------------------------------------------
+.PHONY: html
+html: $(BUILD_DIR)/m-format-technical-manual.html
+
+$(BUILD_DIR)/m-format-technical-manual.html: $(MD_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+	$(PANDOC) \
+		--from markdown \
+		--to html \
 		--standalone \
 		--toc \
 		--toc-depth=3 \

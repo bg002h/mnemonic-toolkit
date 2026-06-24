@@ -170,11 +170,27 @@ jobs:
         working-directory: docs/technical-manual
         run: test -f build/m-format-technical-manual.pdf && ls -lh build/m-format-technical-manual.pdf
 
+      - name: Build HTML
+        # Self-contained pandoc --standalone render (embedded CSS); opens in
+        # any browser with no server — the no-PDF-viewer release asset.
+        working-directory: docs/technical-manual
+        run: make html MERMAID_FILTER=skip
+
+      - name: Verify HTML
+        working-directory: docs/technical-manual
+        run: test -f build/m-format-technical-manual.html && ls -lh build/m-format-technical-manual.html
+
       - name: Upload PDF as workflow artifact
         uses: actions/upload-artifact@v7
         with:
           name: m-format-technical-manual-pdf
           path: docs/technical-manual/build/m-format-technical-manual.pdf
+
+      - name: Upload HTML as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m-format-technical-manual-html
+          path: docs/technical-manual/build/m-format-technical-manual.html
 
       - name: Ensure GitHub release exists for this tag
         if: startsWith(github.ref, 'refs/tags/tech-manual-v')
@@ -191,3 +207,10 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         working-directory: docs/technical-manual
         run: gh release upload "$REF_NAME" build/m-format-technical-manual.pdf --clobber
+
+      - name: Upload HTML to release (on tech-manual-v* tag)
+        if: startsWith(github.ref, 'refs/tags/tech-manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        working-directory: docs/technical-manual
+        run: gh release upload "$REF_NAME" build/m-format-technical-manual.html --clobber

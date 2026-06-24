@@ -118,11 +118,31 @@ jobs:
         working-directory: docs/manual
         run: test -f build/m-format-manual.pdf && ls -lh build/m-format-manual.pdf
 
+      - name: Build HTML
+        # Self-contained pandoc --standalone render (embedded CSS); opens in
+        # any browser with no server — the no-PDF-viewer release asset.
+        # `make audit` above already builds this HTML (anchor-check consumes
+        # it), but this explicit `make html` keeps the asset present even if
+        # the audit prerequisite chain changes, and pairs the Verify step
+        # below. The target is idempotent (no rebuild if up to date).
+        working-directory: docs/manual
+        run: make html MERMAID_FILTER=skip
+
+      - name: Verify HTML
+        working-directory: docs/manual
+        run: test -f build/m-format-manual.html && ls -lh build/m-format-manual.html
+
       - name: Upload PDF as workflow artifact
         uses: actions/upload-artifact@v7
         with:
           name: m-format-manual-pdf
           path: docs/manual/build/m-format-manual.pdf
+
+      - name: Upload HTML as workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: m-format-manual-html
+          path: docs/manual/build/m-format-manual.html
 
       - name: Ensure GitHub release exists for this tag
         if: startsWith(github.ref, 'refs/tags/manual-v')
@@ -139,3 +159,10 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         working-directory: docs/manual
         run: gh release upload "$REF_NAME" build/m-format-manual.pdf --clobber
+
+      - name: Upload HTML to release (on manual-v* tag)
+        if: startsWith(github.ref, 'refs/tags/manual-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        working-directory: docs/manual
+        run: gh release upload "$REF_NAME" build/m-format-manual.html --clobber
