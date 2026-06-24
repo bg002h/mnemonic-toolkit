@@ -4143,3 +4143,53 @@ bip388` reproduces `build-descriptor --format bip388`.
 | success | `0` |
 | spec parse / IO error (bad JSON, unknown field, unsupported `schema_version`) | `2` |
 | validation-gate failure (field / type / sanity / over-envelope / secret-key) | `2` |
+
+## `mnemonic gen-man` (v0.73.0) {#mnemonic-gen-man}
+
+Emit roff man pages for the whole `mnemonic` CLI tree into a directory. The
+pages are generated directly from the compiled clap `Command` tree
+(`clap_mangen`), so they are **binary-faithful by construction** — the man page
+cannot drift from the binary's actual flag surface, and there is no
+hand-authored man content to maintain.
+
+One page is written per (nested) subcommand, named hyphen-joined parent→child:
+`mnemonic.1` (root), `mnemonic-bundle.1`, `mnemonic-seed-xor-split.1`,
+`mnemonic-xpub-search-path-of-xpub.1`, and so on. `scripts/install.sh` invokes
+this after `cargo install` to drop the pages into the user manpath (no sudo, no
+system files); see the install chapter.
+
+### Synopsis
+
+```sh
+mnemonic gen-man --out <DIR>
+```
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--out <DIR>` (required) | Directory to write the `*.1` man pages into. Created if absent (`mkdir -p` semantics). |
+| `--help` | Print help and exit. |
+
+### Worked example
+
+```sh
+mnemonic gen-man --out ~/.local/share/man/man1
+# → writes mnemonic.1 + one page per subcommand into that directory
+man mnemonic            # if man does not find it: man -M ~/.local/share/man mnemonic
+```
+
+### Notes
+
+- The global `--no-auto-repair` flag does **not** render in the generated
+  pages (a clap_mangen 0.3 renderer limitation); it remains discoverable via
+  `mnemonic --help`.
+- The output carries **no** `*-help*.1` pages (the generator uses the bare
+  `generate_to` call with no pre-`build()`).
+
+### Exit codes
+
+| Condition | Exit |
+|---|---|
+| success | `0` |
+| output-dir create / write I/O error | `1` |

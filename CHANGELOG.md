@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.73.0] — 2026-06-23
+
+**SemVer-MINOR — `mnemonic gen-man`: self-emit roff man pages. A new visible `gen-man --out <DIR>` subcommand generates a clap-faithful man page per (nested) subcommand directly from the compiled `clap::Command` tree (`clap_mangen::generate_to`, no pre-`build()`), so the pages cannot drift from the binary's flag surface. `scripts/install.sh` drops them into the XDG user manpath after `cargo install` (no sudo, no system files; `--no-man` / `--man-dir` overrides). Part of the constellation-wide man-pages cycle (sibling `md`/`ms`/`mk` ship `gen-man` in lockstep).**
+
+### Added
+
+- **`mnemonic gen-man --out <DIR>`** (`crates/mnemonic-toolkit/src/cmd/gen_man.rs`). Writes `mnemonic.1` + one `mnemonic-<sub>.1` page per (nested) subcommand (hyphen-joined parent→child, e.g. `mnemonic-seed-xor-split.1`) into `<DIR>` (created if absent). Visible subcommand; appears in `mnemonic --help` and `gui-schema` output. The output carries ZERO `*-help*.1` shadow pages (the bare `generate_to` call avoids the pre-`build()` help-shadow-tree poisoning). The global `--no-auto-repair` flag does not render in the generated pages (a clap_mangen 0.3 renderer limitation); it remains discoverable via `--help`.
+- **`scripts/install.sh` man step.** After each successful `cargo install`, the installed CLI self-emits its man pages into `${XDG_DATA_HOME:-$HOME/.local/share}/man/man1` via `<bin> gen-man --out`. New `--no-man` opt-out and `--man-dir <DIR>` override; `--dry-run` prints the invocation. The hook is `||`-guarded (non-fatal under `set -eu`) to tolerate the crates.io-latest-vs-pinned-tag rollout window (a sibling whose published latest lacks `gen-man`), read-only `MAN_DIR`, and disk-full. An unconditional tail hint prints the portable `man -M "$MAN_DIR" <cli>` fallback.
+
+### Changed
+
+- **`clap_mangen = "0.3"` dependency added** (requires clap ^4.0; the toolkit is clap 4.6.1 — no clap bump).
+- **`tests/cli_gui_schema.rs::gui_schema_lists_all_subcommands` golden vector** gains `"gen-man"` (between `final-word` and `import-wallet`); the subcommand-name count narrative moves 30 → 31. `gen-man` enters the `gui-schema` JSON whether visible or hidden (the emitter filters by name, never `is_hide_set()`).
+- **Manual mirror** (`docs/manual/`): `gen-man` sections added to all four CLI-reference chapters (`41`–`44`) and `<cli> gen-man` lines added to `tests/cli-subcommands.list`.
+- **`scripts/install.sh` sibling pins bumped** to `descriptor-mnemonic-md-cli-v0.11.0` / `ms-cli-v0.13.0` / `mk-cli-v0.11.0` (the sibling builds that carry `gen-man`).
+
 ## mnemonic-toolkit [0.72.0] — 2026-06-23
 
 **SemVer-MINOR — Cycle-B paired coordination: ms-codec vendored its codex32 dependency inline (shape A) and dropped the external `codex32` crate, so the toolkit drops its own direct `codex32 = "=0.1.0"` dep and names the codex32 share-error types via `ms_codec::codex32::`. End-user behavior UNCHANGED; no clap-flag / subcommand / dropdown / `--json` wire-shape change → no GUI schema-mirror trip and no manual flag-mirror trip. ms1 wire output is BYTE-IDENTICAL (the vendor is a byte-for-byte copy of the codex32 encoding paths).**

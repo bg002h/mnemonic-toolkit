@@ -21,6 +21,7 @@
     "bech",
     "bcrt",
     "mlock",
+    "mangen",
     "signmessage",
     "verifymessage",
     "scriptPubKey",

@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.10.2 --bin mk`.
+`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.11.0 --bin mk`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -511,3 +511,32 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 | 3 | FutureFormat — string is well-formed but its declared version is newer than this tool. Maps to `Error::UnsupportedVersion`. |
 | 4 | Verify content mismatch (only `mk verify` with expected-* flags emits this). |
 | 64 | CLI usage error per clap convention (unrecognized flag, missing required argument, etc.). |
+
+## `mk gen-man` (v0.11.0) {#mk-gen-man}
+
+Emit roff man pages for the whole `mk` CLI tree into a directory. The pages are
+generated directly from the compiled clap `Command` tree (`clap_mangen`), so
+they are binary-faithful by construction. One page per (nested) subcommand is
+written, hyphen-joined: `mk.1` (root), `mk-encode.1`, `mk-decode.1`, and so on.
+`scripts/install.sh` invokes this after `cargo install` to drop pages into the
+user manpath (no sudo).
+
+### Synopsis
+
+```sh
+mk gen-man --out <DIR>
+```
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--out <DIR>` (required) | Directory to write the `*.1` man pages into (created if absent). |
+| `--help` | Print help and exit. |
+
+### Exit codes
+
+| Condition | Exit |
+|---|---|
+| success | `0` |
+| output-dir create / write I/O error | `1` |

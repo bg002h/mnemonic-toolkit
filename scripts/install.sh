@@ -29,16 +29,16 @@ set -eu
 component_info() {
     case "$1" in
         mnemonic)
-            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.72.0|no|"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.73.0|no|"
             ;;
         md)
-            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.9.2|yes|cli-compiler"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.11.0|yes|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.11.0|yes|"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.13.0|yes|"
             ;;
         mk)
-            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.10.2|yes|"
+            echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.11.0|yes|"
             ;;
         mnemonic-gui)
             echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.49.0|no|"
@@ -68,6 +68,11 @@ FORCE=""
 DRY_RUN=""
 LOCKED="--locked"
 FROM_GIT=""
+# v0.73.0 man-page install: after a successful `cargo install`, each CLI
+# self-emits its roff man pages (`<bin> gen-man --out`) into the XDG user
+# manpath. No sudo / no system files (preserves the install.sh invariant).
+NO_MAN=""
+MAN_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/man/man1"
 
 # ── Help ────────────────────────────────────────────────────────────────
 usage() {
@@ -106,6 +111,11 @@ OPTIONS:
                       installed (cargo install --force)
     --no-locked       Do NOT pass --locked to cargo install
                       (default: --locked, for reproducibility)
+    --no-man          Do NOT emit/install man pages after install
+                      (default: each installed CLI self-emits its man
+                      pages into the XDG user manpath, no sudo)
+    --man-dir DIR     Directory to write man pages into
+                      (default: \${XDG_DATA_HOME:-\$HOME/.local/share}/man/man1)
     --dry-run         Print the cargo install commands without executing
     --list            Print the component table + sources and exit
     -h, --help        Show this help and exit
@@ -152,6 +162,13 @@ while [ $# -gt 0 ]; do
             EXCLUDE="${1#*=}"; shift ;;
         --no-gui|--cli-only)
             EXCLUDE="${EXCLUDE}${EXCLUDE:+,}mnemonic-gui"; shift ;;
+        --no-man)
+            NO_MAN="1"; shift ;;
+        --man-dir)
+            shift; [ $# -gt 0 ] || { echo "--man-dir requires an argument" >&2; exit 2; }
+            MAN_DIR="$1"; shift ;;
+        --man-dir=*)
+            MAN_DIR="${1#*=}"; shift ;;
         --from-git|--from-source)
             FROM_GIT="1"; shift ;;
         --force)
@@ -283,6 +300,35 @@ if selected mnemonic-gui && [ -z "$DRY_RUN" ]; then
     fi
 fi
 
+# ── Man-page post-install hook ──────────────────────────────────────────
+# After a SUCCESSFUL `cargo install`, the just-installed CLI self-emits its
+# roff man pages into $MAN_DIR via `<bin> gen-man --out`. Excludes the GUI
+# (it has no CLI man surface). Short-circuits under --no-man.
+#
+# PRECONDITION: only sibling builds that carry `gen-man` emit pages. The
+# md/ms/mk siblings default to crates.io-latest (not the pinned git tag); a
+# freshly-published toolkit may run against a sibling whose crates.io-latest
+# still lacks `gen-man` during the rollout window — that is tolerated, NOT
+# required. The invocation is `||`-guarded so a non-zero `gen-man` (missing
+# subcommand, read-only $MAN_DIR, disk full) is NON-FATAL under `set -eu` and
+# never aborts an otherwise-working install.
+install_man_pages() {
+    man_name="$1"
+    [ -n "$NO_MAN" ] && return 0
+    case "$man_name" in
+        mnemonic|md|ms|mk) ;;          # CLIs only — exclude the GUI
+        *) return 0 ;;
+    esac
+    bin="${CARGO_INSTALL_ROOT:-$HOME/.cargo/bin}/$man_name"
+    if [ -n "$DRY_RUN" ]; then
+        echo "  [dry-run] mkdir -p \"$MAN_DIR\" && \"$bin\" gen-man --out \"$MAN_DIR\""
+        return 0
+    fi
+    mkdir -p "$MAN_DIR" 2>/dev/null || true
+    "$bin" gen-man --out "$MAN_DIR" 2>/dev/null \
+        || echo "warning: man pages skipped for $man_name (needs a $man_name build with gen-man)" >&2
+}
+
 # ── Install loop ────────────────────────────────────────────────────────
 installed_count=0
 failed_count=0
@@ -322,9 +368,11 @@ for name in $ALL; do
         if [ -n "$DRY_RUN" ]; then
             echo "  [dry-run] cargo install $LOCKED $feat_args $FORCE $pkg"
             installed_count=$((installed_count + 1))
+            install_man_pages "$name"
         else
             if cargo install $LOCKED $feat_args $FORCE "$pkg"; then
                 installed_count=$((installed_count + 1))
+                install_man_pages "$name"
             else
                 echo "  FAILED" >&2
                 failed_count=$((failed_count + 1))
@@ -335,9 +383,11 @@ for name in $ALL; do
         if [ -n "$DRY_RUN" ]; then
             echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $feat_args $FORCE $pkg"
             installed_count=$((installed_count + 1))
+            install_man_pages "$name"
         else
             if cargo install $LOCKED --git "$url" --tag "$tag" $feat_args $FORCE "$pkg"; then
                 installed_count=$((installed_count + 1))
+                install_man_pages "$name"
             else
                 echo "  FAILED" >&2
                 failed_count=$((failed_count + 1))
@@ -357,3 +407,12 @@ echo "verify:"
 echo "    mnemonic --version       md --version"
 echo "    ms --version             mk --version"
 echo "    mnemonic-gui --version"
+if [ -z "$NO_MAN" ]; then
+    echo
+    # Unconditional, cross-platform man hint. man-db on many Linux installs
+    # pre-seeds ~/.local/share/man so `man <cli>` resolves immediately; but
+    # older man-db builds, distros that strip the XDG default, and macOS/BSD
+    # man do NOT auto-read it. The `-M` fallback is always correct.
+    echo "man pages installed to $MAN_DIR;"
+    echo 'if "man <cli>" does not find them, run: man -M "'"$MAN_DIR"'" <cli>'
+fi

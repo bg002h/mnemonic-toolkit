@@ -74,7 +74,11 @@ fn gui_schema_lists_all_subcommands() {
     // flattened to `ms-shares-split` + `ms-shares-combine`; total was 28.
     // v0.43.0 adds `restore` (watch-only single-sig restore document); total was 29.
     // v0.50.0 adds `build-descriptor` (JSON policy-tree → validated wsh(...)
-    // descriptor + BIP-388 policy); total is now 30.
+    // descriptor + BIP-388 policy); total was 30. v0.73.0 adds `gen-man`
+    // (roff man-page generation; sorts between `final-word` and
+    // `import-wallet`); total is now 31. NOTE: `build_schema` filters by NAME
+    // only (never `is_hide_set()`), so `gen-man` enters this vector whether
+    // visible or hidden.
     // gui-schema + help filtered out.
     assert_eq!(
         names,
@@ -89,6 +93,7 @@ fn gui_schema_lists_all_subcommands() {
             "electrum-decrypt",
             "export-wallet",
             "final-word",
+            "gen-man",
             "import-wallet",
             "inspect",
             "ms-shares-combine",
@@ -110,7 +115,7 @@ fn gui_schema_lists_all_subcommands() {
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 30 user-facing subcommands must appear (nested split/combine \
+        "all 31 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }

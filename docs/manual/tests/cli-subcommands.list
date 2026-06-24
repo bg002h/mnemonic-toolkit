@@ -38,6 +38,7 @@ mnemonic xpub-search account-of-descriptor
 mnemonic xpub-search address-of-xpub
 mnemonic xpub-search passphrase-of-xpub
 mnemonic build-descriptor
+mnemonic gen-man
 
 # md
 md encode
@@ -49,6 +50,7 @@ md compile
 md vectors
 md verify
 md repair
+md gen-man
 
 # ms
 ms encode
@@ -60,6 +62,7 @@ ms inspect
 ms verify
 ms vectors
 ms repair
+ms gen-man
 
 # mk
 mk encode
@@ -70,3 +73,4 @@ mk verify
 mk vectors
 mk address
 mk derive
+mk gen-man

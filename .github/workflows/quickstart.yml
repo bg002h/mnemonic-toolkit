@@ -74,17 +74,17 @@ jobs:
         # mnemonic-key workspace ships multiple binaries (mk-codec's
         # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
         # against a multi-binary workspace.
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.10.2 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.11.0 mk-cli
 
       - name: Install md-cli
         # Mirrors the mk-cli install pattern above. Use package-name selector
         # (`md-cli`); the descriptor-mnemonic workspace ships multiple binaries.
         # `--features cli-compiler` matches scripts/install.sh's component pin.
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.9.2 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.0 md-cli --features cli-compiler
 
       - name: Install ms-cli
         # Mirrors the mk-cli + md-cli install patterns above.
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.11.0 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.13.0 ms-cli
 
       - name: Build mnemonic binary (debug)
         # Debug binary is sufficient for transcript-replay byte-comparison;

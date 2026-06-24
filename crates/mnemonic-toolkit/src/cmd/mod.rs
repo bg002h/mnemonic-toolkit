@@ -10,6 +10,7 @@ pub mod derive_child;
 pub mod electrum_decrypt;
 pub mod export_wallet;
 pub mod final_word;
+pub mod gen_man;
 pub mod gui_schema;
 pub mod import_wallet;
 pub mod inspect;
