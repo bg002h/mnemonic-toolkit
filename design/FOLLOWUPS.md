@@ -187,6 +187,15 @@ Single source of truth for items that surfaced during a review or implementation
 - **Severity:** MINOR (release-hygiene / install-path freshness; the BSD `.1` arm is a secret-memory-hygiene parity fix and the musl `.2` arm is a static-asset availability gain — neither is a funds-safety or correctness regression in the toolkit binary itself, but the curl|install path ships siblings without them).
 - **Tier:** `cross-repo`.
 
+### `repro-explicit-published-hash-gate` — a `release:`-triggered job that asserts the just-uploaded `SHA256SUMS.<arch>` == a fresh distinct-path rebuild (explicit per-release closed-loop check)
+
+- **Surfaced:** 2026-06-24, the repro drift-gate P4 phase review (`design/agent-reports/repro-plan-phase-4-round-1-review.md`, I1). The R0 plan defined P4's positive gate as ALSO asserting each `.tar.gz` SHA-256 == the published `SHA256SUMS.<arch>`. The implemented P4 (negative probe + scheduled re-proof) does NOT add an explicit published-hash comparison.
+- **Why DESCOPED from P4 (adjudicated — architecture call, no user escalation):** (a) the scheduled gate runs at `github.sha` (HEAD), which has NO published release artifact to compare against — a literal `== published` would false-RED every schedule (and every non-release commit); (b) the closed loop is already satisfied **structurally** — the P1/P3 release re-home PUBLISHES the exact double-build canonical output, so publish and gate share an identical *(commit SHA, container digest, build recipe)* tuple and the recipe is reproducible by construction ⇒ the published artifact IS the gate-verified binary. Documented in `docs/verify-reproducibility.md` §8.1 ("Why the drift gate does NOT explicitly assert `== published`").
+- **What a future job would add:** a `release:`-published-triggered (not `schedule:`/`push:`) workflow leg that downloads the just-uploaded `SHA256SUMS.<arch>` and asserts byte-equality against a **fresh, distinct-path** rebuild in the digest-pinned container. This catches a hypothetical upload-path / asset-attachment corruption that the structural argument assumes away (the structural argument proves the recipe is deterministic, not that the upload was lossless). Both x86_64 and aarch64 legs. Cheap relative to the existing gate (it reuses the same double-build recipe + a `gh release download`).
+- **Status:** OPEN (catalog) — intentionally deferred; the structural guarantee covers the common case. File a paired entry only if a sibling codec's repro gate later adopts the same explicit check.
+- **Severity:** MINOR (defense-in-depth over the structural closed loop; not a funds-safety or correctness gap — the published binary is byte-identical to the gate-verified one by construction).
+- **Tier:** `ci`.
+
 ### `display-grouping-render-strip-v1` — ✓ RESOLVED (P5 GUI v0.41.0; reconciled 2026-06-22) — standardized mstring display-grouping across the constellation (toolkit + 3 sibling CLIs + GUI)
 
 - **Surfaced:** 2026-06-15, the user-requested cross-constellation **mstring display-grouping** cycle. Canonical spec: `design/SPEC_mstring_display_grouping.md` (R0 GREEN ×3). Standardizes `ms1`/`mk1`/`md1` display output across all four CLIs.

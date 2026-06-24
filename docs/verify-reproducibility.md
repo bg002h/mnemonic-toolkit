@@ -1,10 +1,11 @@
 # Verifying reproducibility of the `mnemonic` musl release binaries
 
-> **Scope (task #23, P1 + P2).** This document covers the
+> **Scope (task #23, P1 + P2 + P4).** This document covers the
 > **x86_64-unknown-linux-musl** (P1, §1–8) and **aarch64-unknown-linux-musl**
-> (P2, §9) `mnemonic` binaries. The three codec CLIs `md` / `ms` / `mk` (P3) get
-> their own sections as that phase lands. gnu, the GUI, and multi-builder signed
-> attestation are out of scope this cycle (catalog-only FOLLOWUPs).
+> (P2, §9) `mnemonic` binaries, plus the **continuous drift gate** (P4, §8.1).
+> The three codec CLIs `md` / `ms` / `mk` (P3) get their own sections as that
+> phase lands. gnu, the GUI, and multi-builder signed attestation are out of
+> scope this cycle (catalog-only FOLLOWUPs).
 
 ## 1. What reproducibility buys you — provenance, not just integrity
 
@@ -218,6 +219,80 @@ This is the SAME two-path shape the maintainer's CI drift gate (P4) runs against
 the published hash release-over-release. A rebuilder confirming *provenance* (not
 just *integrity*) should run the two-distinct-path build; a single-path rebuild
 only confirms the published hash, not that the remap is doing its job.
+
+## 8.1 The continuous drift gate (P4) — scheduled re-proof + the remap-off negative
+
+Reproducibility is not a one-time property: a runner-image bump, a pinned-container
+change, a `cross` image drift, or a toolchain change could silently re-introduce a
+build-path leak or a non-deterministic tarball. Two mechanisms keep the recipe
+honest **between** releases:
+
+- **Scheduled re-proof — `.github/workflows/repro-drift.yml`.** A weekly (Monday
+  06:00 UTC) + on-demand (`workflow_dispatch`) workflow re-runs the whole
+  reproducibility gate (`reproducible-musl-build.yml`) against the toolkit's
+  current `HEAD`, with **`run_aarch64: true`** so it exercises **both** the x86_64
+  **and** the aarch64 gates. This matters because the *release* path
+  (`man-pages.yml`) runs `run_aarch64: false` (the ~30-60min QEMU aarch64 build
+  would delay every release); without the scheduled gate, an **aarch64-only**
+  reproducibility regression could ship unnoticed between releases. The drift gate
+  closes that gap — environment / toolchain / base-image drift surfaces as a
+  recurring red check rather than at the next release. (Each codec CLI — `md` /
+  `ms` / `mk` — can add its own scheduled caller of the same reusable workflow
+  later; a catalog FOLLOWUP.)
+
+- **The remap-off negative — `ci/repro/remap-off-negative.sh`.** Byte-identity
+  *with* the remap (the positive gate) is necessary but not sufficient: if
+  `--remap-path-prefix` ever silently became a no-op (the path leak it guards no
+  longer present, or the flag dropped), the positive gate would *still* be green.
+  The negative probe runs the same two-distinct-path build with the remap
+  **disabled** (empty `CARGO_BUILD_RUSTFLAGS`, no `-ffile-prefix-map`) and asserts
+  the protection is **load-bearing**:
+  - **x86_64 (`cargo`):** the two no-remap binaries MUST **differ** (each leg's own
+    absolute path leaks into `.rodata`). If they are identical even without the
+    remap, the remap is hollow → the gate REDs.
+  - **aarch64 (`cross`):** `cross` collapses both legs to its fixed `/project`
+    mount, so an A/B-difference is structurally unsatisfiable (the same reason A/B
+    is weak aarch64 evidence). Instead the no-remap build MUST **leak** `/project`
+    (or `$CARGO_HOME`) host-path residue that the remap would strip. Zero residue
+    → the remap is hollow → the gate REDs.
+
+  This step runs inside both gate jobs (`repro-x86_64-musl` and
+  `repro-aarch64-musl`), so a regression that makes the remap unnecessary fails CI
+  loudly — the positive gate's green is only trusted because the negative proves
+  the remap is still doing real work (R0-r3-I1). To reproduce it yourself, inside
+  the container at the two distinct paths:
+
+  ```sh
+  ci/repro/remap-off-negative.sh /build-a/src /build-b/src   # x86_64: no-remap binaries DIFFER
+  BUILDER=cross ci/repro/remap-off-negative.sh /build-a/src /build-b/src   # aarch64: no-remap build leaks /project
+  ```
+
+### Why the drift gate does NOT explicitly assert `== published SHA256SUMS.<arch>`
+
+The two-distinct-path positive gate (§8) proves the rebuild is byte-identical to
+*itself*; it does **not** download the released `SHA256SUMS.<arch>` and assert the
+rebuilt `.tar.gz` SHA-256 equals the *published* hash. That explicit comparison is
+**intentionally deferred** from the drift gate, for two reasons:
+
+- **A HEAD-scheduled gate has no release peer to compare against.** The scheduled
+  re-proof runs against the toolkit's current `HEAD` (`github.sha`), which has no
+  published release artifact. A literal `== published` assertion would false-RED on
+  every schedule (and on every non-release commit), because there is nothing to
+  compare the rebuild to.
+- **The `== published` property is already satisfied *structurally* by the release
+  re-home.** The P1/P3 release path does not upload a *separately* built artifact and
+  hope it matches — it **publishes the exact canonical output of the same
+  double-build gate**. Publish and gate therefore share an identical *(commit SHA,
+  container digest, build recipe)* tuple, and the recipe is reproducible **by
+  construction** ⇒ the published artifact **is** the gate-verified binary. The
+  "rebuilt hash == published hash" closed loop holds not because a check asserts it,
+  but because the same byte-for-byte recipe produced both.
+
+An *explicit* per-release closed-loop check — a `release:`-published-triggered job
+that downloads the just-uploaded `SHA256SUMS.<arch>` and asserts equality against a
+**fresh, distinct-path** rebuild — is a worthwhile future addition (it would catch a
+hypothetical upload-path corruption that the structural argument assumes away). It is
+tracked as catalog FOLLOWUP `repro-explicit-published-hash-gate`.
 
 ## 9. aarch64-unknown-linux-musl (P2) — built via `cross` under QEMU
 

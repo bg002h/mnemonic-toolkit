@@ -481,6 +481,23 @@ jobs:
           set -euxo pipefail
           bash toolkit/ci/repro/cc-validate.sh /build-a/src
 
+      # REMAP-OFF NEGATIVE (P4) — proves --remap-path-prefix is LOAD-BEARING, not
+      # hollow. The positive double-build above proves byte-IDENTITY *with* the
+      # remap; this proves the two no-remap binaries DIFFER *without* it (the
+      # absolute build-path leak in .rodata returns across the two distinct paths).
+      # If a no-remap build were ALSO reproducible, the remap is a no-op and this
+      # step REDs — alerting that the positive gate's GREEN is no longer evidence
+      # the remap works (R0-r3-I1 / brainstorm §P4 remap-off negative). Runs in the
+      # SAME container at the SAME two trees; the canonical artifact (/build/canonical)
+      # was already copied out by the positive gate, so this rebuild does not
+      # perturb it. BUILDER defaults to cargo (x86_64) ⇒ the A/B-DIFFER assertion.
+      - name: remap-off NEGATIVE (no-remap build MUST differ / leak ⇒ remap proven load-bearing)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        run: |
+          set -euxo pipefail
+          bash toolkit/ci/repro/remap-off-negative.sh /build-a/src /build-b/src
+
       # Acceptance (vi): gzip header mtime zero + OS byte pinned.
       - name: gzip-residue (mtime zero + OS byte pinned)
         run: |
@@ -644,6 +661,20 @@ jobs:
         run: |
           set -euxo pipefail
           bash toolkit/ci/repro/cc-validate.sh /build-a/src
+
+      # REMAP-OFF NEGATIVE (P4), aarch64/cross variant. Under cross BOTH legs
+      # collapse to the fixed /project mount, so an A/B-DIFFER assertion is
+      # structurally unsatisfiable (the same reason A/B is weak aarch64 evidence,
+      # R0-I2). The script is ARCH-AWARE: with BUILDER=cross (set job-level above)
+      # it instead asserts the no-remap build LEAKS the /project host-path residue
+      # that the remap + -ffile-prefix-map would strip — proving the remap is
+      # load-bearing. Zero residue ⇒ the remap is hollow ⇒ this step REDs.
+      - name: remap-off NEGATIVE under cross (no-remap build MUST leak /project ⇒ remap proven load-bearing)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        run: |
+          set -euxo pipefail
+          bash toolkit/ci/repro/remap-off-negative.sh /build-a/src /build-b/src
 
       # Acceptance (vi): gzip header mtime zero + OS byte pinned.
       - name: gzip-residue (mtime zero + OS byte pinned)

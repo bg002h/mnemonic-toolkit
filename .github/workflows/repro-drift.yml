@@ -1,0 +1,78 @@
+name: repro-drift
+
+# ── THE SCHEDULED REPRODUCIBILITY DRIFT GATE (task #23, P4) ──────────────────
+# Continuously re-proves the `mnemonic` musl binaries are STILL bit-for-bit
+# reproducible — release-over-release AND between releases — by re-running the
+# centralized reproducibility gate (reproducible-musl-build.yml) on a SCHEDULE.
+#
+# WHY A SCHEDULE (the P2-review carry-forward this closes). The RELEASE path
+# (man-pages.yml → the `repro` caller) deliberately passes `run_aarch64: false`,
+# because the aarch64 leg builds under QEMU (~30-60min) and would delay EVERY
+# release-artifact publish by that long. That means aarch64 reproducibility is
+# NEVER exercised on the release path — an aarch64-ONLY reproducibility
+# regression (a cross-image drift, a passthrough-list rot, a toolchain change
+# that re-introduces a /project leak) could ship UNNOTICED between
+# workflow_dispatch runs. This scheduled gate calls the reusable workflow with
+# `run_aarch64: true` so it exercises BOTH the x86_64 AND the aarch64
+# reproducibility gates periodically — catching environment / toolchain /
+# base-image drift over time, and covering exactly the aarch64-on-schedule gap.
+#
+# WHAT IT PROVES (per gate run, x86_64 AND aarch64):
+#   * the two-distinct-path double-build is byte-identical (binary + .tar.gz +
+#     libsecp .o) — the remap is still doing its job;
+#   * the REMAP-OFF NEGATIVE step REDs the gate if --remap-path-prefix has
+#     silently become a no-op (proving the remap is still LOAD-BEARING, not
+#     hollow — R0-r3-I1 / brainstorm §P4);
+#   * cc-under-musl determinism (epoch load-bearing-or-benign) + zero
+#     __DATE__/host-path residue + gzip-header determinism still hold.
+# A drift in the runner image, the pinned container, the cross image, or the
+# toolchain that breaks any of these REDs this gate — surfacing the regression
+# as a recurring red check rather than at the next release.
+#
+# This caller targets THE TOOLKIT (`mnemonic`). Each codec CLI (md / ms / mk)
+# could add its own scheduled caller of the same reusable workflow later (a
+# catalog FOLLOWUP: `repro-drift-scheduled-per-codec-caller`) — passing its own
+# `crate`/`bin` + an EMPTY `miniscript_rev` to select the codec two-block
+# --config form (the codecs do not depend on the miniscript fork).
+
+on:
+  # Weekly — Monday 06:00 UTC. Cheap enough at weekly cadence (one x86_64 gate +
+  # one ~30-60min QEMU aarch64 gate); frequent enough to surface drift well
+  # before the next release relies on the published hash.
+  schedule:
+    - cron: "0 6 * * 1"
+  # Manual handle so a maintainer can re-prove on demand (e.g. after a runner
+  # image bump or a cross-image change) without waiting for the weekly tick.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Re-run the WHOLE centralized reproducibility gate with BOTH arches active.
+  drift:
+    name: repro-drift (x86_64 + aarch64)
+    uses: ./.github/workflows/reproducible-musl-build.yml
+    permissions:
+      contents: read
+      # `build-container` pushes the digest-pinned image to GHCR; the gate jobs
+      # `docker pull` it by digest. Same permission set as the release `repro`
+      # caller in man-pages.yml.
+      packages: write
+    secrets: inherit
+    with:
+      target: x86_64-unknown-linux-musl
+      arch: x86_64
+      # THE POINT OF THE SCHEDULE: exercise BOTH arches. The release path runs
+      # run_aarch64: false; this scheduled gate runs the slow aarch64 leg so the
+      # aarch64-only-regression gap is covered between releases (P2 carry-forward).
+      run_aarch64: true
+      # The toolkit depends on the miniscript [patch.crates-io] git fork ⇒ pass
+      # the toolkit rev so the gate stays THREE-block (the git-fork [source]
+      # stanza is MANDATORY; the two-block form FAILS --offline — R0-r5-C1). This
+      # is also the reusable workflow's default; passed explicitly for clarity.
+      miniscript_rev: "95fdd1c5773bd918c574d2225787973f63e16a66"
+      # Source the centralized recipe (ci/repro/*.sh, Dockerfile.repro, Cross.toml)
+      # from THIS commit — the exact toolkit HEAD the schedule runs against — so
+      # the recipe and the crate source are the same commit (byte-unchanged build).
+      toolkit_ref: ${{ github.sha }}
