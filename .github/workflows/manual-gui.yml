@@ -284,9 +284,9 @@ jobs:
         run: |
           if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
             if [ -f CHANGELOG.md ]; then
-              gh release create "$REF_NAME" --title "$REF_NAME" --notes-file CHANGELOG.md
+              gh release create "$REF_NAME" --title "$REF_NAME" --notes-file CHANGELOG.md || true
             else
-              gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes
+              gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes || true
             fi
           fi
 
