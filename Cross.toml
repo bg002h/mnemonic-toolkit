@@ -1,0 +1,62 @@
+# Cross.toml — digest-pinned `cross` runtime image + env passthrough for the
+# reproducible-builds-musl cycle (task #23, P2 — aarch64-unknown-linux-musl).
+#
+# WHY THIS FILE EXISTS.
+#   There is no native aarch64 GitHub runner, so the aarch64-musl `mnemonic`
+#   binary is built with `cross` under QEMU user-mode emulation. `cross` ships
+#   its OWN bundled aarch64-musl C toolchain inside a runtime container image —
+#   a DIFFERENT musl-gcc than the x86_64 leg's apt `musl-tools` (P1). Its
+#   reproducibility is therefore independently un-measured and is RE-VALIDATED by
+#   the `repro-aarch64-musl` gate (ci/repro/cc-validate.sh under this toolchain).
+#
+# ── 1. PIN THE CROSS RUNTIME IMAGE BY DIGEST (NOT a floating tag) ────────────
+# `cargo install --locked cross` pins only the cross CLI; the runtime IMAGE it
+# pulls (ghcr.io/cross-rs/aarch64-unknown-linux-musl:<cross-version>) is a
+# floating tag. To make the bundled C toolchain itself reproducible we pin the
+# IMAGE by sha256 — exactly as Dockerfile.repro pins the rust base image.
+#
+# Resolved at adoption time (2026-06-24) via the GHCR registry manifest API
+# (host has no Docker; resolved with curl against ghcr.io/v2/…):
+#   ghcr.io/cross-rs/aarch64-unknown-linux-musl  tag 0.2.5 (== `latest`; the
+#   version `cargo install --locked cross` resolves to) — OCI image INDEX digest:
+#     sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4
+#   (the linux/amd64 sub-manifest of that index — the platform the QEMU build
+#    host runs the cross container on — is
+#    sha256:53a761857a806b4f73b209a15bf71eacc38a82d5a02e05b166300c4794d7ad83)
+# Pinning the INDEX digest is correct: docker/cross resolve the right per-arch
+# sub-manifest from the index automatically (same rationale as Dockerfile.repro).
+[target.aarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4"
+
+# ── 2. ENV PASSTHROUGH (R0-I2 — REQUIRED, not optional) ─────────────────────
+# `cross` does NOT forward arbitrary host env into the container; any var the
+# build needs MUST be listed here. Without this list the determinism-bearing
+# mitigations (SOURCE_DATE_EPOCH neutralizing cc's __DATE__/__TIME__; the
+# -ffile-prefix-map CFLAGS stripping host paths from the libsecp objects; the
+# --remap-path-prefix rustflags; LC_ALL/TZ) would silently NEVER reach the
+# aarch64 compiler — the gate would A/B-match while still leaking host paths.
+# The `repro-aarch64-musl` TDD probe authors this RED-first: with `passthrough`
+# EMPTY the residue grep finds host-path/__DATE__ residue (mitigations didn't
+# reach the container); adding this list makes it GREEN.
+#
+# NOTE: `cross` itself sets CARGO_HOME inside its container; CARGO_HOME is
+# therefore NOT in this list (the isolated-$CARGO_HOME/config.toml [source]
+# fallback is unused — `cross` forwards the build command's `--config` flags to
+# the inner cargo, the chosen mechanism, see reproducible-musl-build.yml).
+#
+# PRECISION NOTE: `CARGO_BUILD_RUSTFLAGS` is listed explicitly below but is in
+# fact REDUNDANT — `cross` auto-forwards every `CARGO_`-prefixed var (via its
+# add_cargo_configuration_envvars, which skips only a fixed non-RUSTFLAGS set),
+# so the remap would reach the container even without this entry. It is kept for
+# legibility (the full determinism-var set in one place). The genuinely-required
+# entries are the NON-`CARGO_`-prefixed vars (SOURCE_DATE_EPOCH / CFLAGS /
+# CFLAGS_<triple> / LC_ALL / TZ), which cross does NOT auto-forward.
+[build.env]
+passthrough = [
+  "SOURCE_DATE_EPOCH",
+  "CFLAGS",
+  "CFLAGS_aarch64_unknown_linux_musl",
+  "LC_ALL",
+  "TZ",
+  "CARGO_BUILD_RUSTFLAGS",
+]

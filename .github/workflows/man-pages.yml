@@ -81,6 +81,15 @@ jobs:
   # PUBLISHED artifact is produced by the IDENTICAL container the gate measured
   # (R0-r1-I-release-rehome). The reusable workflow is the single source of the
   # recipe (F6).
+  #
+  # run_aarch64: false on the RELEASE path (P2). `musl-binaries needs: repro`
+  # blocks on the WHOLE reusable workflow, so enabling the ~30-60min QEMU aarch64
+  # gate here would delay EVERY release-artifact publish by that long. The
+  # aarch64 gate is instead exercised on demand via `workflow_dispatch`
+  # (run_aarch64 default true) and lands as the continuous P4 drift gate later.
+  # The PUBLISHED aarch64 artifact is STILL reproducible — the `musl-binaries`
+  # cross leg below is re-homed onto the digest-pinned Cross.toml recipe — it
+  # just is not byte-gated inline on the release tag in this phase.
   repro:
     uses: ./.github/workflows/reproducible-musl-build.yml
     permissions:
@@ -90,6 +99,7 @@ jobs:
     with:
       target: x86_64-unknown-linux-musl
       arch: x86_64
+      run_aarch64: false
 
   # Static, dependency-free `mnemonic` binaries for air-gapped / Alpine / musl
   # deployments — the environment a self-custody steel-backup tool is most
@@ -159,27 +169,78 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ── aarch64 (cross) leg — host runner, unchanged (P2 will digest-pin it ─
-      # via Cross.toml; NOT re-homed into repro-musl). Static + checksummed.
+      # ── aarch64 (cross) leg — RE-HOMED reproducible (task #23 P2) ───────────
+      # The aarch64 musl binary has no native runner, so it is built via `cross`
+      # under QEMU. P2 makes the PUBLISHED aarch64 artifact the REPRODUCIBLE one:
+      #   * the cross runtime IMAGE is DIGEST-PINNED via the committed Cross.toml
+      #     (cross reads it from the build CWD = the workspace root here), so the
+      #     bundled aarch64-musl toolchain is itself reproducible;
+      #   * the full reproducibility ENV reaches the QEMU container via Cross.toml
+      #     [build.env] passthrough — SOURCE_DATE_EPOCH (off the COMMIT SHA),
+      #     CFLAGS/CFLAGS_<triple> (-ffile-prefix-map), CARGO_BUILD_RUSTFLAGS
+      #     (--remap-path-prefix), LC_ALL/TZ;
+      #   * the remap FROM-side is cross's FIXED internal mount /project (cross
+      #     v0.2.5 bind-mounts the workspace to /project), NOT the host checkout
+      #     path — that is what the in-container compiler sees;
+      #   * --locked --offline + the 3-block job-scoped [source] activation
+      #     against committed vendor/ (the git-fork block is MANDATORY — the
+      #     two-block form FAILS offline; copy-exact from the gate scripts);
+      #   * gzip-pinned tar + a published PROVENANCE.aarch64.txt tuple.
+      # So the published aarch64 SHA256 IS the hash the repro-aarch64-musl gate
+      # measures. NOTE: the aarch64 leg is NOT a `docker run` re-home like x86_64
+      # — `cross` already runs the build in its own digest-pinned container; the
+      # host musl-tools / CC_*_musl that the x86_64 leg removed never applied here.
       - if: ${{ matrix.cross }}
         uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
       - if: ${{ matrix.cross }}
         run: cargo install --locked cross
-      - name: build-cross
-        if: ${{ matrix.cross }}
-        run: cross build --release --target ${{ matrix.target }} -p mnemonic-toolkit --bin mnemonic
-      - name: package-cross
+      - name: build+package-cross (reproducible, digest-pinned via Cross.toml)
         if: ${{ matrix.cross }}
         env:
           REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
         run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$PWD"
           VER="${REF_NAME##*-v}"
-          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
-            -cf - -C "target/${{ matrix.target }}/release" mnemonic \
-            | gzip -n -9 > "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz"
-          sha256sum "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz" > "SHA256SUMS.${{ matrix.arch }}"
+          EPOCH="$(git show -s --format=%ct HEAD)"
+          # The determinism-bearing env is EXPORTED so `cross` forwards it into
+          # the QEMU container via Cross.toml [build.env] passthrough. The remap
+          # from-side is cross's internal /project mount (NOT the host path).
+          REMAP="--remap-path-prefix=/project=/build --remap-path-prefix=/cargo=/cargo"
+          CFMAP="-ffile-prefix-map=/project=/build -ffile-prefix-map=/cargo=/cargo"
+          umask 022
+          env \
+            SOURCE_DATE_EPOCH="$EPOCH" \
+            LC_ALL=C TZ=UTC \
+            CARGO_BUILD_RUSTFLAGS="$REMAP" \
+            CFLAGS="$CFMAP" \
+            CFLAGS_aarch64_unknown_linux_musl="$CFMAP" \
+            cross build --locked --offline --release \
+              --target "$TARGET" -p mnemonic-toolkit --bin mnemonic \
+              --config 'source.crates-io.replace-with="vendored-sources"' \
+              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"' \
+              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"' \
+              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"' \
+              --config 'source.vendored-sources.directory="vendor"'
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$EPOCH" \
+            -cf - -C "target/${TARGET}/release" mnemonic \
+            | gzip -n -9 > "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz"
+          sha256sum "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz" > "SHA256SUMS.${ARCH}"
+          # Publish the provenance tuple (R0-r2-I2/I3). The cross runtime image
+          # digest is the canonical pin in Cross.toml.
+          CROSS_IMG="$(grep -E '^image *=' Cross.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          {
+            echo "artifact: mnemonic-${VER}-${ARCH}-linux-musl.tar.gz"
+            echo "sha256:  $(cut -d' ' -f1 < "SHA256SUMS.${ARCH}")"
+            echo "source_commit: $(git rev-parse HEAD)"
+            echo "source_date_epoch: ${EPOCH}"
+            echo "cross_image: ${CROSS_IMG}"
+          } > "PROVENANCE.${ARCH}.txt"
+          cat "PROVENANCE.${ARCH}.txt"
 
       # ── GHCR auth for the x86_64 leg's `docker pull` of the BUILT image ─────
       # The repro image is GHCR private-by-default; the per-step `docker run`

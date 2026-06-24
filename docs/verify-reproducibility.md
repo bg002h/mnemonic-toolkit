@@ -1,10 +1,10 @@
 # Verifying reproducibility of the `mnemonic` musl release binaries
 
-> **Scope (task #23, P1).** This document covers the **x86_64-unknown-linux-musl**
-> `mnemonic` binary. The aarch64-musl leg (P2) and the three codec CLIs
-> `md` / `ms` / `mk` (P3) get their own sections as those phases land. gnu, the
-> GUI, and multi-builder signed attestation are out of scope this cycle
-> (catalog-only FOLLOWUPs).
+> **Scope (task #23, P1 + P2).** This document covers the
+> **x86_64-unknown-linux-musl** (P1, §1–8) and **aarch64-unknown-linux-musl**
+> (P2, §9) `mnemonic` binaries. The three codec CLIs `md` / `ms` / `mk` (P3) get
+> their own sections as that phase lands. gnu, the GUI, and multi-builder signed
+> attestation are out of scope this cycle (catalog-only FOLLOWUPs).
 
 ## 1. What reproducibility buys you — provenance, not just integrity
 
@@ -217,3 +217,129 @@ This is the SAME two-path shape the maintainer's CI drift gate (P4) runs against
 the published hash release-over-release. A rebuilder confirming *provenance* (not
 just *integrity*) should run the two-distinct-path build; a single-path rebuild
 only confirms the published hash, not that the remap is doing its job.
+
+## 9. aarch64-unknown-linux-musl (P2) — built via `cross` under QEMU
+
+The aarch64 binary has no native runner, so it is built with
+[`cross`](https://github.com/cross-rs/cross) under QEMU user-mode emulation.
+`cross` ships its **own bundled aarch64-musl C toolchain** inside a runtime
+container image — a **different** `musl-gcc` than the x86_64 leg's apt
+`musl-tools`. That toolchain's determinism is therefore **re-validated
+independently** (the x86_64 cc result does not transfer); CI's
+`repro-aarch64-musl` gate proves it.
+
+### 9.1 The pinned cross toolchain — `Cross.toml`, by digest
+
+The cross runtime image is pinned **by sha256** in the committed `Cross.toml`
+(not a floating `cross`-version tag) — this is the real aarch64 toolchain pin:
+
+```toml
+[target.aarch64-unknown-linux-musl]
+image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:702154f52b2d8091671aa2c84d5582d849f949977228c735ff8462f93cc0e1e4"
+```
+
+(Resolved at adoption time, 2026-06-24, via the GHCR registry manifest API:
+`ghcr.io/cross-rs/aarch64-unknown-linux-musl` tag `0.2.5` == `latest` — the
+version `cargo install --locked cross` resolves to; the linux/amd64 sub-manifest
+of that index is
+`sha256:53a761857a806b4f73b209a15bf71eacc38a82d5a02e05b166300c4794d7ad83`.)
+
+`cross` does **not** forward host env into its container automatically, so the
+determinism-bearing vars are listed under `Cross.toml [build.env] passthrough`:
+
+```toml
+[build.env]
+passthrough = [
+  "SOURCE_DATE_EPOCH",
+  "CFLAGS",
+  "CFLAGS_aarch64_unknown_linux_musl",
+  "LC_ALL",
+  "TZ",
+  "CARGO_BUILD_RUSTFLAGS",
+]
+```
+
+Without this list the cc/rustflags mitigations would silently never reach the
+aarch64 compiler.
+
+### 9.2 The remap from-side is `/project`, not the host path
+
+`cross` bind-mounts the project to its **fixed internal path `/project`** inside
+the container (cross v0.2.5 `src/docker/local.rs`: `-v <host_root>:/project`),
+sets `CARGO_HOME=/cargo`, and `CARGO_TARGET_DIR=/target`. So the in-container
+compiler sees the source at `/project`, and the remap from-side is
+**`/project=/build`** (plus `/cargo=/cargo`) — **not** the host checkout path.
+
+A corollary: because both legs of a two-path build collapse to the same
+`/project` inside the container, **A/B-equality is weak evidence for aarch64**.
+The load-bearing aarch64 proof is the **direct** residue + `.comment`
+passthrough-effectiveness assertions (`ci/repro/cc-validate.sh`): the libsecp
+`.o` `.comment` must carry the expected pinned cross-toolchain producer string
+(`GCC:`), and the `.o` + binary must contain **zero** `/project`/host-path or
+`__DATE__` residue.
+
+### 9.3 The exact build command (release leg)
+
+Run from the repo root (where `Cross.toml` + `vendor/` are committed):
+
+```sh
+SOURCE_DATE_EPOCH=$(git show -s --format=%ct <tagged-commit-SHA>) \
+LC_ALL=C TZ=UTC \
+CARGO_BUILD_RUSTFLAGS="--remap-path-prefix=/project=/build --remap-path-prefix=/cargo=/cargo" \
+CFLAGS="-ffile-prefix-map=/project=/build -ffile-prefix-map=/cargo=/cargo" \
+CFLAGS_aarch64_unknown_linux_musl="-ffile-prefix-map=/project=/build -ffile-prefix-map=/cargo=/cargo" \
+cross build --locked --offline --release \
+  --target aarch64-unknown-linux-musl -p mnemonic-toolkit --bin mnemonic \
+  --config 'source.crates-io.replace-with="vendored-sources"' \
+  --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"' \
+  --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"' \
+  --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"' \
+  --config 'source.vendored-sources.directory="vendor"'
+
+tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
+  -cf - -C target/aarch64-unknown-linux-musl/release mnemonic \
+  | gzip -n -9 > mnemonic-<VER>-aarch64-linux-musl.tar.gz
+```
+
+The same three-block `[source]` activation, the same `--locked --offline`, the
+same gzip-pinned tar as the x86_64 leg. `cross` forwards the `--config` flags to
+the inner cargo; the committed `vendor/` (at `/project/vendor`) makes the build
+fully offline.
+
+### 9.4 Provenance tuple
+
+Each release attaches, for aarch64:
+
+- `mnemonic-<VER>-aarch64-linux-musl.tar.gz` — the static musl binary tarball.
+- `SHA256SUMS.aarch64` — its SHA-256.
+- `PROVENANCE.aarch64.txt`:
+
+  ```
+  artifact:          mnemonic-<VER>-aarch64-linux-musl.tar.gz
+  sha256:            <hash>
+  source_commit:     <full 40-char SHA>
+  source_date_epoch: <epoch>
+  cross_image:       ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:<CROSS-DIGEST>
+  ```
+
+The aarch64 provenance tuple cites the **`cross` image digest** (the toolchain
+pin) rather than the x86_64 leg's built repro-musl container digest — aarch64 is
+built by `cross` in its own digest-pinned image, not in the repro-musl container.
+
+### 9.5 Self-test (what the `repro-aarch64-musl` CI gate runs)
+
+```sh
+# Host: register binfmt (qemu) + install cross, then materialize two paths.
+docker run --privileged --rm tonistiigi/binfmt --install arm64   # or docker/setup-qemu-action
+cargo install --locked cross
+BUILDER=cross CROSS_COMMENT_EXPECT='GCC:' \
+  SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD) \
+  ci/repro/double-build.sh /build-a/src /build-b/src   # A/B (weak for aarch64) + libsecp .o
+BUILDER=cross CROSS_COMMENT_EXPECT='GCC:' \
+  SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD) \
+  ci/repro/cc-validate.sh /build-a/src                 # PRIMARY: residue + .comment passthrough
+ci/repro/gzip-residue.sh mnemonic-<VER>-aarch64-linux-musl.tar.gz 03
+qemu-aarch64 target/aarch64-unknown-linux-musl/release/mnemonic --version
+```
+
+The aarch64 QEMU build is **slow (~30-60min)** — expected for a gate.

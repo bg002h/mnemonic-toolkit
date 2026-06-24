@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
-# ci/repro/double-build.sh — the core reproducibility GATE (P1, task #23).
+# ci/repro/double-build.sh — the core reproducibility GATE (P1 x86_64; P2 aarch64).
 #
-# WHAT IT PROVES (brainstorm §5 / IMPLEMENTATION_PLAN P1).
+# WHAT IT PROVES (brainstorm §5 / IMPLEMENTATION_PLAN P1/P2).
 #   Builds the target binary at TWO DISTINCT absolute source paths, both remapped
 #   to the SAME logical /build via --remap-path-prefix, and ASSERTS the two
 #   outputs are byte-identical:
 #     (i)   the two `mnemonic` binaries,
 #     (ii)  the two `.tar.gz` packaged tarballs (gzip-pinned form),
 #     (iii) the two libsecp256k1 `.o` objects.
+#   BUILDER=cargo (x86_64, direct in the container) or BUILDER=cross (aarch64,
+#   under QEMU with cross's digest-pinned toolchain — Cross.toml).
 #
-# WHY TWO DISTINCT PATHS IS LOAD-BEARING (R0-r3-I1). The remap from-side only
-# VARIES — and the remap is only proven effective — when the two REAL paths
-# differ. A same-path A/B would match trivially WITHOUT exercising the remap, so
-# the gate could pass while --remap-path-prefix has silently regressed and the
-# shipped binary has resumed leaking $HOME. Hence /build-a/src vs /build-b/src.
+# WHY TWO DISTINCT PATHS IS LOAD-BEARING for x86_64 (R0-r3-I1). The remap
+# from-side only VARIES — and the remap is only proven effective — when the two
+# REAL paths differ. A same-path A/B would match trivially WITHOUT exercising the
+# remap, so the gate could pass while --remap-path-prefix has silently regressed
+# and the shipped binary has resumed leaking $HOME. Hence /build-a/src vs
+# /build-b/src.
+#
+# CAVEAT for aarch64/cross (R0-I2). `cross` bind-mounts BOTH host paths to its
+# FIXED internal /project (cross v0.2.5 src/docker/local.rs `-v <host_root>:
+# /project`), so the two legs collapse to the same in-container path and this
+# A/B is TRIVIALLY satisfied — WEAK evidence. The aarch64 load-bearing gate is
+# the DIRECT residue/.comment assertions in cc-validate.sh (passthrough took
+# effect; the pinned cross toolchain is in use; zero host-path/__DATE__ residue).
 #
 # THIS IS THE TEST (TDD). Authored + committed BEFORE the env wiring. Against the
 # UN-remapped baseline it MUST RED (binaries differ at byte ~41 — the absolute
@@ -56,6 +66,25 @@ ARCH="${ARCH:-x86_64}"
 VER="${VER:-0.0.0-repro}"
 : "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH must be set (pinned epoch)}"
 
+# BUILDER selects the compile front-end (P2): `cargo` (x86_64, direct in the
+# digest-pinned container) or `cross` (aarch64, under QEMU with cross's
+# digest-pinned bundled toolchain — Cross.toml). `cross` forwards the --config
+# [source] overrides to the inner cargo and mounts the project (committed vendor/
+# present); the determinism-bearing env reaches it ONLY via the Cross.toml
+# [build.env] passthrough list. The TWO-DISTINCT-PATHS shape STILL runs under
+# cross, but note (R0-I2): cross bind-mounts BOTH host paths to its FIXED
+# internal /project (verified: cross v0.2.5 src/docker/local.rs), so the two
+# legs collapse to the same in-container path → A/B-equality is TRIVIALLY
+# satisfied and is WEAK evidence for aarch64; the load-bearing aarch64 gate is
+# the direct residue/.comment assertions in cc-validate.sh, not this A/B.
+BUILDER="${BUILDER:-cargo}"
+# CROSS_INTERNAL_SRC — the FIXED path the cross container bind-mounts the project
+# to (cross v0.2.5: `-v <host_root>:/project`). For BUILDER=cross the remap
+# from-side MUST be this internal path, NOT the per-leg host path, because that
+# is what the in-container compiler actually sees. Empty for the cargo leg ⇒ the
+# per-leg host real path is used (the load-bearing variance for x86_64).
+CROSS_INTERNAL_SRC="${CROSS_INTERNAL_SRC:-/project}"
+
 if [ "$PATH_A" = "$PATH_B" ]; then
   echo "::error::double-build requires TWO DISTINCT paths (got identical '$PATH_A') — a same-path A/B does not exercise --remap-path-prefix (R0-r3-I1)." >&2
   exit 2
@@ -80,21 +109,33 @@ build_leg() {
   local real_root="$1" outdir="$2"
   mkdir -p "$outdir"
 
-  # The remap FROM-side is THIS leg's real path → /build (the only per-leg
-  # variance). $CARGO_HOME (/cargo) is already remapped to itself (fixed).
+  # The remap FROM-side is the path the COMPILER sees → /build.
+  #   * cargo (x86_64): THIS leg's REAL host path ($real_root) — the per-leg
+  #     variance that makes --remap-path-prefix load-bearing.
+  #   * cross (aarch64): cross's FIXED internal mount ($CROSS_INTERNAL_SRC,
+  #     /project) — both legs share it, so the remap does NOT vary per leg here;
+  #     that is why aarch64's load-bearing proof is the residue/.comment gate,
+  #     not this A/B (R0-I2).
+  # $CARGO_HOME (/cargo) is already remapped to itself (fixed; cross sets /cargo).
   # Prepend to any inherited CARGO_BUILD_RUSTFLAGS the caller set.
-  local leg_rustflags="--remap-path-prefix=${real_root}=/build --remap-path-prefix=${CARGO_HOME:-/cargo}=/cargo ${CARGO_BUILD_RUSTFLAGS:-}"
-  local leg_cflags="-ffile-prefix-map=${real_root}=/build -ffile-prefix-map=${CARGO_HOME:-/cargo}=/cargo"
+  local remap_src="$real_root"
+  if [ "$BUILDER" = "cross" ]; then
+    remap_src="$CROSS_INTERNAL_SRC"
+  fi
+  local leg_rustflags="--remap-path-prefix=${remap_src}=/build --remap-path-prefix=${CARGO_HOME:-/cargo}=/cargo ${CARGO_BUILD_RUSTFLAGS:-}"
+  local leg_cflags="-ffile-prefix-map=${remap_src}=/build -ffile-prefix-map=${CARGO_HOME:-/cargo}=/cargo"
 
   (
     cd "$real_root"
     umask 022
+    # For cross, these NAME=VALUE assignments land in the `cross` process env,
+    # which cross forwards into the QEMU container per Cross.toml passthrough.
     env \
       CARGO_BUILD_RUSTFLAGS="$leg_rustflags" \
       CFLAGS="$leg_cflags" \
       "CFLAGS_${TARGET//-/_}=$leg_cflags" \
       LC_ALL=C TZ=UTC \
-      cargo build --locked --offline --release \
+      "$BUILDER" build --locked --offline --release \
         --target "$TARGET" -p "$CRATE" --bin "$BIN" \
         "${SRC_CONFIG[@]}"
   )

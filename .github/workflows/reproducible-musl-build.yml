@@ -16,7 +16,17 @@ name: reproducible-musl-build
 #   * repro-x86_64-musl     — the reproducibility GATE: two-path double-build +
 #                             cc-under-musl validation + gzip-residue. All eight
 #                             §5 acceptance criteria.
-# The aarch64 leg (P2), the codec calls (P3) and the drift gate (P4) land later.
+# P2 adds (this file):
+#   * repro-aarch64-musl    — the aarch64 reproducibility GATE, built via `cross`
+#                             under QEMU using cross's DIGEST-PINNED bundled
+#                             toolchain (Cross.toml). RE-VALIDATES the aarch64
+#                             musl-gcc determinism independently (a DIFFERENT
+#                             compiler than x86_64's; P1's result does not
+#                             transfer) with DIRECT residue/.comment assertions
+#                             as the primary evidence (cross A/B is weak — both
+#                             legs collapse to cross's internal /project mount).
+#                             Gated by the `run_aarch64` input (default true).
+# The codec calls (P3) and the drift gate (P4) land later.
 #
 # ── HOW BUILT-DIGEST IS RESOLVED (the container-provenance model) ────────────
 # `build-container` runs `docker build -f Dockerfile.repro`, pushes the layered
@@ -70,9 +80,20 @@ on:
         description: >-
           The digest-pinned `cross` runtime image for the aarch64 leg (P2):
           ghcr.io/cross-rs/aarch64-unknown-linux-musl@sha256:<CROSS-DIGEST>.
+          Informational only — the canonical pin is committed in Cross.toml
+          (which cross reads from the build CWD); cross does NOT consume this
+          input. Retained for the verify-doc provenance tuple.
         type: string
         required: false
         default: ""
+      run_aarch64:
+        description: >-
+          Run the slow (~30-60min, QEMU) aarch64-musl reproducibility gate
+          (repro-aarch64-musl). Default true so the gate is active; a caller may
+          set false to run the x86_64 gate alone (e.g. a fast iteration).
+        type: boolean
+        required: false
+        default: true
     outputs:
       image:
         description: "The BUILT, digest-pinned repro container (ghcr.io/<owner>/repro-musl@sha256:<BUILT-DIGEST>)."
@@ -106,9 +127,16 @@ on:
       cross_image:
         description: >-
           The digest-pinned `cross` runtime image for the aarch64 leg (P2).
+          Informational only — the canonical pin is committed in Cross.toml.
         type: string
         required: false
         default: ""
+      run_aarch64:
+        description: >-
+          Run the slow (~30-60min, QEMU) aarch64-musl reproducibility gate.
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: read
@@ -366,6 +394,152 @@ jobs:
         run: |
           set -euxo pipefail
           # The remap MUST be the top-level flag (no -C). Grep the gate script.
+          if grep -nE '\-Cremap-path-prefix' src/ci/repro/double-build.sh; then
+            echo "::error::-Cremap-path-prefix found — that errors 'unknown codegen option' on 1.85.0; use the top-level --remap-path-prefix (R0-C1)." >&2
+            exit 1
+          fi
+          grep -nE '\-\-remap-path-prefix=' src/ci/repro/double-build.sh >/dev/null \
+            || { echo "::error::no top-level --remap-path-prefix in the gate recipe." >&2; exit 1; }
+          echo "OK: top-level --remap-path-prefix flag form confirmed."
+
+  # ── P2 GATE: reproducibility proof for aarch64-musl `mnemonic` ──────────────
+  # KEY DIFFERENCE FROM repro-x86_64-musl. There is NO native aarch64 runner, so
+  # the build runs via `cross` under QEMU. `cross` itself spawns a QEMU container
+  # (its DIGEST-PINNED runtime image, Cross.toml) and forwards the --config
+  # [source] overrides + the Cross.toml [build.env] passthrough vars into it.
+  # cross needs Docker on the HOST → this job runs on a bare `ubuntu-latest`
+  # runner with NO job-level `container:` (that would be docker-in-docker). The
+  # aarch64 build is SLOW under emulation (~30-60min); that is expected for a
+  # gate. cross reads Cross.toml from the build CWD (/build-a/src, /build-b/src),
+  # where the committed Cross.toml is present (cp -a src/. includes it).
+  #
+  # The aarch64 cross musl-gcc is a DIFFERENT, separately-versioned compiler than
+  # the x86_64 leg's apt musl-gcc — so its determinism is RE-VALIDATED here from
+  # scratch (P1's x86_64 cc result does NOT transfer). And because cross mounts
+  # BOTH host paths to its fixed internal /project, A/B-equality is WEAK evidence
+  # (both legs collapse to the same in-container path); the PRIMARY aarch64 gate
+  # is cc-validate.sh's direct residue + .comment passthrough-effectiveness
+  # assertions (R0-I2).
+  #
+  # CARGO_HOME is deliberately NOT set job-level: `cross` sets CARGO_HOME=/cargo
+  # INSIDE its container, and the gate scripts default the remap literal to
+  # /cargo (${CARGO_HOME:-/cargo}). Setting CARGO_HOME=/cargo on the HOST would
+  # break the host `cargo install cross` step.
+  repro-aarch64-musl:
+    name: repro-aarch64-musl (aarch64-unknown-linux-musl)
+    # NO `needs: build-container`: this leg builds via `cross` (its own
+    # digest-pinned QEMU image, Cross.toml), NOT inside the build-container
+    # image — so it is independent and starts in parallel (the ~30-60min QEMU
+    # build should not wait on the container push).
+    # Gated so a caller (workflow_dispatch checkbox, or a workflow_call `with:
+    # run_aarch64: false`) can run the x86_64 gate alone. Default true ⇒ active.
+    if: ${{ inputs.run_aarch64 }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TARGET: aarch64-unknown-linux-musl
+      CRATE: ${{ inputs.crate }}
+      BIN: ${{ inputs.bin }}
+      ARCH: aarch64
+      LC_ALL: C
+      TZ: UTC
+      BUILDER: cross
+      # The .comment substring proving the digest-pinned cross toolchain is the
+      # compiler in use (R0-I2 — PRIMARY aarch64 evidence). cross's
+      # aarch64-unknown-linux-musl image bundles a GCC cross-toolchain; its
+      # libsecp .o `.comment` carries a "GCC:" producer string. Asserting the
+      # generic "GCC:" substring proves a GCC toolchain compiled it (vs a missing
+      # /failed passthrough) without brittle-pinning a GCC point version that
+      # would churn on every cross image bump (the IMAGE itself is digest-pinned
+      # in Cross.toml — that is the real toolchain pin).
+      CROSS_COMMENT_EXPECT: "GCC:"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: install pinned rust toolchain + aarch64-musl target
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: aarch64-unknown-linux-musl
+
+      # Register QEMU/binfmt_misc so `cross` can execute aarch64 binaries (and
+      # any subprocesses the gate spawns, e.g. `mnemonic --version`) under
+      # emulation — same mechanism as rust.yml's aarch64 cross-test leg.
+      - name: register binfmt (qemu) for aarch64
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: install cross
+        run: cargo install --locked cross
+
+      - name: Resolve the pinned SOURCE_DATE_EPOCH (off the COMMIT SHA)
+        id: epoch
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "$PWD/src"
+          # Keyed off the COMMIT SHA, not the tag name (R0-r2-I2). HEAD on a PR
+          # build; the tagged commit on a release re-home.
+          epoch="$(git -C src show -s --format=%ct HEAD)"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_DATE_EPOCH=${epoch}"
+
+      # Two DISTINCT host paths (as for x86_64) — though cross collapses both to
+      # its internal /project, the same materialization keeps the gate uniform.
+      - name: Materialize source at two DISTINCT paths (/build-a/src, /build-b/src)
+        run: |
+          set -euxo pipefail
+          sudo mkdir -p /build-a /build-b
+          sudo chown "$USER" /build-a /build-b
+          cp -a src/. /build-a/src
+          cp -a src/. /build-b/src
+
+      # double-build under cross/QEMU (BUILDER=cross). Acceptance (i)/(ii)/(iii):
+      # binary + .tar.gz + libsecp .o byte-identical across the two legs. NOTE:
+      # for aarch64 this A/B is weak (both legs → /project); the load-bearing
+      # aarch64 proof is the cc-validate step below.
+      - name: double-build under cross/QEMU (two distinct paths → byte-identical)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+          REPRO_OUT_DIR: /build/canonical
+        run: |
+          set -euxo pipefail
+          sudo mkdir -p /build/canonical
+          sudo chown "$USER" /build /build/canonical
+          bash src/ci/repro/double-build.sh /build-a/src /build-b/src
+
+      # PRIMARY aarch64 gate (R0-I2): epoch load-bearing-or-benign under the cross
+      # toolchain + ZERO host-path/__DATE__ residue + the .comment proves the
+      # digest-pinned cross toolchain is the compiler (CROSS_COMMENT_EXPECT).
+      - name: cc-validate under cross (residue + .comment passthrough-effectiveness)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        run: |
+          set -euxo pipefail
+          bash src/ci/repro/cc-validate.sh /build-a/src
+
+      # Acceptance (vi): gzip header mtime zero + OS byte pinned.
+      - name: gzip-residue (mtime zero + OS byte pinned)
+        run: |
+          set -euxo pipefail
+          bash src/ci/repro/gzip-residue.sh \
+            /build/canonical/${{ inputs.bin }}-0.0.0-repro-aarch64-linux-musl.tar.gz 03
+
+      # Acceptance (vii): the aarch64 binary runs under QEMU user-mode emulation
+      # (binfmt registered above). qemu-aarch64 is provided by the setup-qemu
+      # binfmt registration; a bare exec of the aarch64 ELF is auto-translated.
+      - name: binary runs under QEMU (--version)
+        run: |
+          set -euxo pipefail
+          /build/canonical/${{ inputs.bin }} --version
+
+      # Acceptance (viii): the gate recipe uses the CORRECT top-level
+      # --remap-path-prefix flag form (no -C; R0-C1).
+      - name: assert top-level --remap-path-prefix flag form
+        run: |
+          set -euxo pipefail
           if grep -nE '\-Cremap-path-prefix' src/ci/repro/double-build.sh; then
             echo "::error::-Cremap-path-prefix found — that errors 'unknown codegen option' on 1.85.0; use the top-level --remap-path-prefix (R0-C1)." >&2
             exit 1
