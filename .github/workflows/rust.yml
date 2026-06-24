@@ -331,10 +331,30 @@ jobs:
     #     cc-rs builds the ONLY C dep — the vendored libsecp256k1 in
     #     `secp256k1-sys` — against musl (else cc silently falls back to host
     #     gcc → glibc-linked). Honors the `ulimit -l 65536` dance (mlock tests).
-    #   * aarch64-musl — `cross build`-only (cross bundles the musl cross C
-    #     toolchain; no apt step). Build coverage only; no emulated test run to
-    #     keep CI minutes bounded — mirrors the aarch64-gnu `lib-cross-platform`
-    #     posture.
+    #   * aarch64-musl — `cross test` under QEMU user-mode emulation (cross
+    #     bundles the musl cross C toolchain AND the qemu-aarch64 runner; no apt
+    #     step). This RUNS the package test suite on aarch64-Linux so the
+    #     md1/address golden vectors are output-verified for the shipped aarch64
+    #     binary — not merely compiled.
+    #
+    #     The mlock / page-pinning acceptance gates are SKIPPED here — they are
+    #     POSIX-`mlock(2)` syscall + runtime-page-size tests, not meaningfully
+    #     testable under QEMU (qemu-user forwards `mlock` to the host kernel
+    #     inside the cross Docker container, which can EPERM under the
+    #     container's RLIMIT_MEMLOCK; emulated page size / heap alignment can
+    #     also differ — `g4_a` asserts a 64-byte buf pins exactly 1 page), and
+    #     mlock behavior is not this job's target (the output goldens are). Two
+    #     `--skip` filters are needed because libtest matches a filter against
+    #     the per-test name WITHIN each binary, not the binary name:
+    #       - `--skip mlock` drops the lib unit tests `mlock::tests::*`
+    #         (incl. `g4_a_*`); the `#[ignore]`-gated `g2_*` fault-injection
+    #         tests are already skipped (no `--include-ignored`).
+    #       - `--skip g1_` drops the `tests/mlock_unit.rs` integration binary's
+    #         G1.x page-pinning gates (`g1_1`..`g1_4`) — their fn names lack the
+    #         "mlock" substring, so `--skip mlock` alone would NOT catch them.
+    #     The `lint_safety_first_party_mlock` binary is a pure SOURCE-TEXT scan
+    #     of `src/mlock.rs` (no syscall, no page math) and intentionally still
+    #     runs; every bundle/convert/md1 golden integration test runs too.
     #
     # crt-static is left at its musl default (ON). NEVER pass
     # `-Ctarget-feature=-crt-static` — per rust#135244 that silently links host
@@ -374,6 +394,14 @@ jobs:
         run: |
           ulimit -l 65536 || true
           cargo test --target ${{ matrix.target }} -p mnemonic-toolkit
-      - name: cross build --target aarch64-musl (build-only)
+      # Run the package test suite on aarch64-Linux under QEMU user-mode so the
+      # md1/address golden vectors are OUTPUT-verified for the shipped aarch64
+      # binary. `--skip mlock` drops the lib `mlock::tests::*` POSIX-syscall /
+      # page-size gates; `--skip g1_` drops the `tests/mlock_unit.rs` G1.x
+      # page-pinning integration gates (their fn names lack "mlock", so the
+      # first filter misses them) — both untestable-meaningfully under
+      # emulation. Every golden/integration test still runs. No
+      # `--include-ignored`, so the `g2_*` fault-injection tests stay skipped.
+      - name: cross test --target aarch64-musl (QEMU; output goldens, mlock skipped)
         if: ${{ matrix.cross }}
-        run: cross build --release --target ${{ matrix.target }} -p mnemonic-toolkit
+        run: cross test --release --target ${{ matrix.target }} -p mnemonic-toolkit -- --skip mlock --skip g1_
