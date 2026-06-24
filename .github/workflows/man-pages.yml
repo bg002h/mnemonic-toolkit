@@ -47,7 +47,14 @@ jobs:
           echo "canary ok: 0 *-help*.1 pages"
 
       - name: Tar man pages
-        run: tar czf mnemonic-man.tar.gz -C man .
+        # gzip-pinned form (R0-r2-I1). NOTE (R0-r4-m3): mnemonic-man.tar.gz is a
+        # published asset but is NOT hashed into any SHA256SUMS — pinning its
+        # gzip layer is determinism-HYGIENE-ONLY, not part of the provenance
+        # surface. This leg is NOT re-homed; mtime is pinned to 0 (epoch-zero)
+        # purely for a deterministic tar member layout, not provenance.
+        run: |
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
+            -cf - -C man . | gzip -n -9 > mnemonic-man.tar.gz
 
       - name: Upload man tarball as workflow artifact
         uses: actions/upload-artifact@v4
@@ -68,6 +75,22 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: gh release upload "$REF_NAME" mnemonic-man.tar.gz --clobber
 
+  # ── REPRODUCIBILITY: build + push the digest-pinned container, RESOLVE the ──
+  # BUILT-DIGEST, and run the byte-identical / cc-validation / gzip gates. The
+  # `musl-binaries` x86_64 leg below consumes `needs.repro.outputs.image` so the
+  # PUBLISHED artifact is produced by the IDENTICAL container the gate measured
+  # (R0-r1-I-release-rehome). The reusable workflow is the single source of the
+  # recipe (F6).
+  repro:
+    uses: ./.github/workflows/reproducible-musl-build.yml
+    permissions:
+      contents: read
+      packages: write
+    secrets: inherit
+    with:
+      target: x86_64-unknown-linux-musl
+      arch: x86_64
+
   # Static, dependency-free `mnemonic` binaries for air-gapped / Alpine / musl
   # deployments — the environment a self-custody steel-backup tool is most
   # likely to run on (an offline, minimal box). Builds both musl targets and
@@ -78,26 +101,45 @@ jobs:
   # --release` already yields a fully-static ELF. NEVER pass
   # `-Ctarget-feature=-crt-static` (per rust#135244 it silently links host
   # glibc and destroys the static deliverable). The only C dep is the vendored
-  # libsecp256k1 in `secp256k1-sys`: the native x86_64-musl row needs
-  # `musl-tools` (`musl-gcc`) + `CC_x86_64_unknown_linux_musl=musl-gcc` so cc-rs
-  # compiles it against musl; the aarch64-musl row uses `cross`, which bundles
-  # the musl cross C toolchain in its container (no apt step). Toolchain pinned
-  # `@1.85.0` (matches `rust-toolchain.toml`), NOT `@stable`.
+  # libsecp256k1 in `secp256k1-sys`.
+  #
+  # ── REPRODUCIBLE RE-HOME (task #23 P1, R0-r1-I-release-rehome) ──────────────
+  # The x86_64 leg's BUILD + PACKAGE now run INSIDE the digest-pinned repro
+  # container (needs.repro.outputs.image, a ghcr.io/<owner>/repro-musl@sha256:…)
+  # at the fixed /build/src with CARGO_HOME=/cargo and the full reproducibility
+  # ENV (--remap-path-prefix, SOURCE_DATE_EPOCH off the COMMIT SHA, CFLAGS, the
+  # 3-block job-scoped [source] activation, gzip -n -9). So the published SHA256
+  # IS the hash the gate measured (P4 can assert "== published SHA256SUMS").
+  #
+  # MATRIX-SCOPE CONSTRAINT (R0-r2-I-matrix-scope): this is a SINGLE combined
+  # x86_64+aarch64 matrix job; a JOB-LEVEL `container:` is forbidden (it would
+  # also wrap the aarch64 `cross` leg into docker-in-docker). The re-home is
+  # therefore a per-STEP `docker run --network=none <image>@sha256` on the
+  # x86_64 (`musl_native`) leg ONLY. The aarch64 (`cross`) leg stays on the host
+  # runner (it is digest-pinned via Cross.toml in P2, NOT re-homed here).
+  #
+  # NETWORK-ISOLATION BOUNDARY (R0-r2-I-network-boundary): `--network=none`
+  # wraps ONLY the in-container build+package (proving the committed-vendor/
+  # offline build touches no live host). actions/checkout, ensure-release, and
+  # gh release upload REMAIN host steps WITH network; they read the
+  # container-built .tar.gz + SHA256SUMS off the bind-mounted workspace.
   #
   # Per-arch `SHA256SUMS.<arch>` (each matrix job is independent + `gh release
   # upload --clobber`-based, so a per-arch file avoids a clobber race on one
-  # combined file). The shipped guarantee is *static + checksummed*, not
-  # bit-for-bit reproducible.
+  # combined file). The x86_64 guarantee is now *static + checksummed +
+  # bit-for-bit reproducible*; aarch64 stays *static + checksummed* until P2.
   #
   # Security note: this job uses only GitHub-provided trusted context. No
   # interpolation of untrusted user input.
   musl-binaries:
     name: musl-binary (${{ matrix.target }})
+    needs: repro
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPRO_IMAGE: ${{ needs.repro.outputs.image }}
     strategy:
       fail-fast: false
       matrix:
@@ -110,29 +152,86 @@ jobs:
             arch: aarch64
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85.0
+
+      # ── aarch64 (cross) leg — host runner, unchanged (P2 will digest-pin it ─
+      # via Cross.toml; NOT re-homed into repro-musl). Static + checksummed.
+      - if: ${{ matrix.cross }}
+        uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
-      - if: ${{ matrix.musl_native }}
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
       - if: ${{ matrix.cross }}
         run: cargo install --locked cross
-      - name: build-native
-        if: ${{ matrix.musl_native }}
-        env:
-          CC_x86_64_unknown_linux_musl: musl-gcc
-        run: cargo build --release --target ${{ matrix.target }} -p mnemonic-toolkit --bin mnemonic
       - name: build-cross
         if: ${{ matrix.cross }}
         run: cross build --release --target ${{ matrix.target }} -p mnemonic-toolkit --bin mnemonic
-      - name: package
+      - name: package-cross
+        if: ${{ matrix.cross }}
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
           VER="${REF_NAME##*-v}"
-          tar czf "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz" \
-            -C "target/${{ matrix.target }}/release" mnemonic
+          tar --sort=name --owner=0 --group=0 --numeric-owner --mtime='@0' \
+            -cf - -C "target/${{ matrix.target }}/release" mnemonic \
+            | gzip -n -9 > "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz"
           sha256sum "mnemonic-${VER}-${{ matrix.arch }}-linux-musl.tar.gz" > "SHA256SUMS.${{ matrix.arch }}"
+
+      # ── x86_64 (native) leg — RE-HOMED inside the digest-pinned container ───
+      # docker run --network=none mounts the host workspace at /build/src,
+      # builds with the full reproducibility env + the 3-block job-scoped
+      # [source] activation, packages with the gzip-pinned tar, and writes
+      # target/ + the .tar.gz + SHA256SUMS back to the host via the bind mount.
+      # SOURCE_DATE_EPOCH is keyed off the COMMIT SHA (R0-r2-I2). The split-brain
+      # host `apt-get install musl-tools` + `CC_x86_64_unknown_linux_musl` are
+      # REMOVED — the container's musl-gcc (pinned by the BUILT digest) is the
+      # only musl toolchain on this leg.
+      - name: build+package (re-homed, --network=none, in @${{ needs.repro.outputs.image }})
+        if: ${{ matrix.musl_native }}
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euxo pipefail
+          # These git ops run on the HOST runner (outside docker run); checkout@v4
+          # already marks the workspace safe, but add insurance for parity.
+          git config --global --add safe.directory "$PWD"
+          VER="${REF_NAME##*-v}"
+          EPOCH="$(git show -s --format=%ct HEAD)"
+          docker pull "$REPRO_IMAGE"
+          docker run --rm --network=none \
+            -v "$PWD":/build/src -w /build/src \
+            -e CARGO_HOME=/cargo \
+            -e SOURCE_DATE_EPOCH="$EPOCH" \
+            -e LC_ALL=C -e TZ=UTC \
+            -e CARGO_BUILD_RUSTFLAGS="--remap-path-prefix=/build/src=/build --remap-path-prefix=/cargo=/cargo" \
+            -e CFLAGS="-ffile-prefix-map=/build/src=/build -ffile-prefix-map=/cargo=/cargo" \
+            -e "CFLAGS_x86_64_unknown_linux_musl=-ffile-prefix-map=/build/src=/build -ffile-prefix-map=/cargo=/cargo" \
+            -e VER="$VER" -e ARCH="$ARCH" -e TARGET="$TARGET" \
+            "$REPRO_IMAGE" \
+            bash -euxo pipefail -c '
+              umask 022
+              cargo build --locked --offline --release \
+                --target "$TARGET" -p mnemonic-toolkit --bin mnemonic \
+                --config '"'"'source.crates-io.replace-with="vendored-sources"'"'"' \
+                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"'"'"' \
+                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"'"'"' \
+                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"'"'"' \
+                --config '"'"'source.vendored-sources.directory="vendor"'"'"'
+              tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
+                -cf - -C "target/$TARGET/release" mnemonic \
+                | gzip -n -9 > "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz"
+              sha256sum "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz" > "SHA256SUMS.${ARCH}"
+            '
+          # Publish the provenance tuple alongside the artifacts (R0-r2-I2/I3).
+          {
+            echo "artifact: mnemonic-${VER}-${ARCH}-linux-musl.tar.gz"
+            echo "sha256:  $(cut -d' ' -f1 < "SHA256SUMS.${ARCH}")"
+            echo "source_commit: $(git rev-parse HEAD)"
+            echo "source_date_epoch: ${EPOCH}"
+            echo "container_image: ${REPRO_IMAGE}"
+          } > "PROVENANCE.${ARCH}.txt"
+          cat "PROVENANCE.${ARCH}.txt"
+
       - name: ensure-release
         env:
           REF_NAME: ${{ github.ref_name }}
@@ -143,3 +242,6 @@ jobs:
         run: |
           gh release upload "$REF_NAME" mnemonic-*-${{ matrix.arch }}-linux-musl.tar.gz --clobber
           gh release upload "$REF_NAME" "SHA256SUMS.${{ matrix.arch }}" --clobber
+          if [ -f "PROVENANCE.${{ matrix.arch }}.txt" ]; then
+            gh release upload "$REF_NAME" "PROVENANCE.${{ matrix.arch }}.txt" --clobber
+          fi

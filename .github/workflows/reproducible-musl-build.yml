@@ -5,15 +5,32 @@ name: reproducible-musl-build
 # callable by the codec CLI repos (md/ms/mk) once cross-repo workflow_call
 # wiring lands in P3.
 #
-# ── P0 SCOPE (substrate only) ───────────────────────────────────────────────
-# This file currently carries ONLY the `repro-substrate` validation job: it
-# proves the committed (INERT) `vendor/` tree resolves a FULLY OFFLINE build in
-# the digest-pinned container, activated JOB-SCOPED via the three-block
-# `cargo build --config 'source.*'` overrides (THE REFINEMENT — no committed
-# root `.cargo/config.toml [source]` block; `vendor/` is inert without these).
-# It produces NO reproducible binary and does NOT prove reproducibility — the
-# byte-identical / cc-validation / residue / gzip gates + the ENV-channel
-# --remap-path-prefix wiring land in P1+.
+# ── P0+P1 SCOPE ─────────────────────────────────────────────────────────────
+# P0 stood up: the digest-pinned container (Dockerfile.repro), the committed
+# INERT vendor/ tree, and the `repro-substrate` validation job.
+#
+# P1 adds (this file):
+#   * build-container       — builds Dockerfile.repro, pushes to GHCR, and
+#                             RESOLVES the BUILT-DIGEST (job output consumed by
+#                             every downstream job + by man-pages.yml's re-home).
+#   * repro-x86_64-musl     — the reproducibility GATE: two-path double-build +
+#                             cc-under-musl validation + gzip-residue. All eight
+#                             §5 acceptance criteria.
+# The aarch64 leg (P2), the codec calls (P3) and the drift gate (P4) land later.
+#
+# ── HOW BUILT-DIGEST IS RESOLVED (the container-provenance model) ────────────
+# `build-container` runs `docker build -f Dockerfile.repro`, pushes the layered
+# image to GHCR (ghcr.io/<owner>/repro-musl), then reads the pushed manifest
+# digest with `docker buildx imagetools inspect` / `docker inspect` and emits it
+# as `outputs.image` = ghcr.io/<owner>/repro-musl@sha256:<BUILT-DIGEST>. Every
+# downstream job — and the re-homed release build in man-pages.yml — consumes
+# the image BY THAT DIGEST (`docker pull @sha256:…`), never the floating tag.
+# This is the published source of truth: external rebuilders `docker pull` the
+# same digest rather than rebuild Dockerfile.repro from apt (whose transitive
+# musl-tools deps are NOT pinned by the base digest). The apt-pin minor is
+# therefore resolved BY the built-image-by-digest model (primary); the
+# snapshot.debian.org recipe in Dockerfile.repro remains the from-source
+# fallback only.
 #
 # ── THE JOB-SCOPED [source] ACTIVATION (copy-exact — brainstorm §3.12/§4/F4) ─
 # ALL THREE `cargo vendor`-emitted [source] blocks are MANDATORY (R0-r5-C1).
@@ -22,7 +39,9 @@ name: reproducible-musl-build
 # `[patch.crates-io]` git dep has its OWN `git+…?rev=…` source key not served
 # by `source.crates-io`, so cargo reaches the LIVE github host and errors
 # `can't checkout … offline mode`. Empirically verified on cargo 1.85.0
-# (POSITIVE 3-block → exit 0; NEGATIVE 2-block → exit 101).
+# (POSITIVE 3-block → exit 0; NEGATIVE 2-block → exit 101). The single source of
+# truth for the build command + remap is ci/repro/double-build.sh; this workflow
+# only sets the fixed-path env and invokes those scripts.
 
 on:
   workflow_call:
@@ -47,14 +66,6 @@ on:
         type: string
         required: false
         default: mnemonic
-      container_image:
-        description: >-
-          The BUILT, digest-pinned repro container to `docker pull` (NOT a
-          Dockerfile rebuild). Form: <registry>/repro-musl@sha256:<BUILT-DIGEST>.
-          Resolved + published in P1 (no Docker on the dev box at P0 authoring).
-        type: string
-        required: false
-        default: ""
       cross_image:
         description: >-
           The digest-pinned `cross` runtime image for the aarch64 leg (P2):
@@ -62,22 +73,75 @@ on:
         type: string
         required: false
         default: ""
+    outputs:
+      image:
+        description: "The BUILT, digest-pinned repro container (ghcr.io/<owner>/repro-musl@sha256:<BUILT-DIGEST>)."
+        value: ${{ jobs.build-container.outputs.image }}
+
+permissions:
+  contents: read
 
 jobs:
-  # ── P0 GATE: the committed INERT vendor/ resolves a FULLY OFFLINE build in ─
-  # the digest-pinned container, activated job-scoped via the 3-block --config
-  # overrides. PASS iff it builds with no network; the negative sub-check (drop
-  # the vendored-sources.directory override) MUST RED.
+  # ── build + push the repro container, RESOLVE the BUILT-DIGEST ──────────────
+  # Builds Dockerfile.repro, pushes to GHCR, and emits the image BY DIGEST so
+  # every downstream job (and man-pages.yml's re-homed release build) consume
+  # the EXACT same hermetic environment. The published digest is the source of
+  # truth a rebuilder `docker pull`s (verify-reproducibility.md).
+  build-container:
+    name: build-container (resolve BUILT-DIGEST)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.digest.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      - name: Build + push the repro container
+        id: build
+        run: |
+          set -euxo pipefail
+          owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          repo="ghcr.io/${owner}/repro-musl"
+          # Tag with the Dockerfile content hash so a re-run reuses the digest
+          # iff the Dockerfile is unchanged (the image content is what matters;
+          # the consumed reference is the digest, not the tag).
+          tag="$(sha256sum Dockerfile.repro | cut -c1-16)"
+          docker build -f Dockerfile.repro -t "${repo}:${tag}" .
+          docker push "${repo}:${tag}"
+          echo "repo=${repo}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}"   >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the pushed digest
+        id: digest
+        run: |
+          set -euxo pipefail
+          repo="${{ steps.build.outputs.repo }}"
+          tag="${{ steps.build.outputs.tag }}"
+          # The pushed manifest digest (sha256) — the BUILT-DIGEST.
+          digest="$(docker buildx imagetools inspect "${repo}:${tag}" \
+                      --format '{{.Manifest.Digest}}')"
+          image="${repo}@${digest}"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "Resolved BUILT image by digest: ${image}"
+
+  # ── P0 GATE (carried): committed INERT vendor/ resolves a FULLY OFFLINE build─
+  # in the digest-pinned container, activated job-scoped via the 3-block --config
+  # overrides. PASS iff it builds with no network; the negative sub-check MUST
+  # RED. Now runs INSIDE the BUILT-DIGEST container resolved above.
   repro-substrate:
     name: repro-substrate (${{ inputs.target }})
+    needs: build-container
     runs-on: ubuntu-latest
-    # NOTE: the digest-pinned container is provided via `inputs.container_image`
-    # once P1 resolves+publishes <BUILT-DIGEST>. At P0 the input defaults to ""
-    # so this job is structurally present + actionlint-clean; CI invokes it with
-    # the resolved digest. The build runs INSIDE that container at /build/src
-    # with CARGO_HOME=/cargo (the Dockerfile.repro fixed layout).
     container:
-      image: ${{ inputs.container_image }}
+      image: ${{ needs.build-container.outputs.image }}
     steps:
       - uses: actions/checkout@v4
 
@@ -100,11 +164,14 @@ jobs:
             --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"' \
             --config 'source.vendored-sources.directory="vendor"'
 
-      # ── NEGATIVE sub-check (TDD): drop the vendored-sources.directory ───────
-      # override → vendor/ is NOT activated → --offline cannot resolve crates.io
-      # → the build MUST RED. Committed as proof the gate detects an unactivated
-      # offline tree (vendor/ is inert / activation-dependent). No filesystem
-      # mutation needed — vendor/ still exists; cargo simply isn't pointed at it.
+      # ── NEGATIVE sub-check (TDD) — ISOLATES the directory block (deliverable ─
+      # #8 / plan's literal intent). KEEP all 3 git blocks + source.crates-io
+      # .replace-with, drop ONLY `source.vendored-sources.directory`. With every
+      # OTHER block present, dropping just the directory leaves the replace-with
+      # redirects pointing at a `vendored-sources` source that has no directory →
+      # cargo cannot resolve `--offline` → MUST RED. This isolates the claim that
+      # the directory block is the load-bearing activation key. No filesystem
+      # mutation — vendor/ still exists; the directory pointer is simply absent.
       - name: repro-substrate-negative (dropped vendored-sources.directory MUST RED)
         env:
           CARGO_HOME: /cargo
@@ -113,8 +180,104 @@ jobs:
           if cargo build --locked --offline \
                -p "${{ inputs.crate }}" --bin "${{ inputs.bin }}" \
                --target "${{ inputs.target }}" \
-               --config 'source.crates-io.replace-with="vendored-sources"'; then
-            echo "::error::NEGATIVE sub-check FAILED — build SUCCEEDED without the vendored-sources.directory activation; the gate is not detecting an unactivated offline tree."
+               --config 'source.crates-io.replace-with="vendored-sources"' \
+               --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"' \
+               --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"' \
+               --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"'; then
+            echo "::error::NEGATIVE sub-check FAILED — build SUCCEEDED without the vendored-sources.directory activation; the directory block is not being shown load-bearing."
             exit 1
           fi
-          echo "NEGATIVE sub-check OK — build RED as expected (vendor/ inert without the activation override)."
+          echo "NEGATIVE sub-check OK — build RED as expected (vendored-sources has no directory → unresolvable offline)."
+
+  # ── P1 GATE: reproducibility proof for x86_64-musl `mnemonic` ───────────────
+  # In the BUILT-DIGEST container, materialize the source at TWO DISTINCT paths
+  # (/build-a/src, /build-b/src — both remapped to /build) and run the gate
+  # scripts. Asserts all eight §5 acceptance criteria. Network is allowed for
+  # checkout only; the builds are `--offline` against committed vendor/.
+  repro-x86_64-musl:
+    name: repro-x86_64-musl (${{ inputs.target }})
+    needs: build-container
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.build-container.outputs.image }}
+    env:
+      TARGET: ${{ inputs.target }}
+      CRATE: ${{ inputs.crate }}
+      BIN: ${{ inputs.bin }}
+      ARCH: ${{ inputs.arch }}
+      CARGO_HOME: /cargo
+      LC_ALL: C
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: src
+
+      - name: Resolve the pinned SOURCE_DATE_EPOCH (off the COMMIT SHA)
+        id: epoch
+        run: |
+          set -euxo pipefail
+          # Cheap insurance against git "dubious ownership" inside the container
+          # job (the checkout lands at ./src; mark it safe before any git op).
+          git config --global --add safe.directory "$PWD/src"
+          # Keyed off the COMMIT SHA, not the tag name (R0-r2-I2). On a PR build
+          # this is HEAD; on a release re-home it is the tagged commit.
+          epoch="$(git -C src show -s --format=%ct HEAD)"
+          echo "epoch=${epoch}" >> "$GITHUB_OUTPUT"
+          echo "SOURCE_DATE_EPOCH=${epoch}"
+
+      - name: Materialize source at two DISTINCT paths (/build-a/src, /build-b/src)
+        run: |
+          set -euxo pipefail
+          mkdir -p /build-a /build-b
+          cp -a src/. /build-a/src
+          cp -a src/. /build-b/src
+
+      # TDD: this is the test. Against an un-remapped baseline it REDs (binaries
+      # differ at byte ~41). The recipe (the remap inside double-build.sh) GREENs
+      # it. Acceptance (i)/(ii)/(iii): binary + .tar.gz + libsecp .o identical.
+      - name: double-build (two distinct paths → byte-identical)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+          REPRO_OUT_DIR: /build/canonical
+        run: |
+          set -euxo pipefail
+          bash src/ci/repro/double-build.sh /build-a/src /build-b/src
+
+      # Acceptance (iv)/(v): epoch load-bearing under musl-gcc + zero residue.
+      - name: cc-validate (epoch load-bearing + residue grep)
+        env:
+          SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+        run: |
+          set -euxo pipefail
+          bash src/ci/repro/cc-validate.sh /build-a/src
+
+      # Acceptance (vi): gzip header mtime zero + OS byte pinned.
+      - name: gzip-residue (mtime zero + OS byte pinned)
+        run: |
+          set -euxo pipefail
+          bash src/ci/repro/gzip-residue.sh \
+            /build/canonical/${{ inputs.bin }}-0.0.0-repro-${{ inputs.arch }}-linux-musl.tar.gz 03
+
+      # Acceptance (vii): the binary still runs.
+      - name: binary runs (--version)
+        run: |
+          set -euxo pipefail
+          /build/canonical/${{ inputs.bin }} --version
+
+      # Acceptance (viii): the committed config + workflow env COMPILE the
+      # release target with the CORRECT top-level --remap-path-prefix flag form
+      # (a -Cremap typo would error `unknown codegen option` — explicit guard so
+      # it cannot reach the verify doc, R0-C1). double-build already compiled
+      # with the remap; assert the flag form is the top-level one here.
+      - name: assert top-level --remap-path-prefix flag form
+        run: |
+          set -euxo pipefail
+          # The remap MUST be the top-level flag (no -C). Grep the gate script.
+          if grep -nE '\-Cremap-path-prefix' src/ci/repro/double-build.sh; then
+            echo "::error::-Cremap-path-prefix found — that errors 'unknown codegen option' on 1.85.0; use the top-level --remap-path-prefix (R0-C1)." >&2
+            exit 1
+          fi
+          grep -nE '\-\-remap-path-prefix=' src/ci/repro/double-build.sh >/dev/null \
+            || { echo "::error::no top-level --remap-path-prefix in the gate recipe." >&2; exit 1; }
+          echo "OK: top-level --remap-path-prefix flag form confirmed."

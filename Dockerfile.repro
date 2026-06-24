@@ -61,7 +61,21 @@ RUN rustup target add x86_64-unknown-linux-musl
 ENV CARGO_HOME=/cargo
 WORKDIR /build/src
 
-# ── BUILT-IMAGE DIGEST (the published source of truth) ──────────────────────
-# Resolved when this image is first built+pushed in CI (no Docker on the dev
-# box). Recorded here + in docs/verify-reproducibility.md (P1) + the workflow:
-#   <BUILT-DIGEST> = <RESOLVE-IN-CI>   # docker build -f Dockerfile.repro … && docker push … && docker inspect → sha256:…
+# ── BUILT-IMAGE DIGEST (the published source of truth) — RESOLVED IN CI ─────
+# The dev box has NO Docker (verified at P0+P1), so the built-image digest is
+# resolved in CI, not hand-pinned here. The `build-container` job in
+# .github/workflows/reproducible-musl-build.yml runs:
+#     docker build -f Dockerfile.repro -t ghcr.io/<owner>/repro-musl:<dockerfile-hash> .
+#     docker push  ghcr.io/<owner>/repro-musl:<dockerfile-hash>
+#     docker buildx imagetools inspect … --format '{{.Manifest.Digest}}'   # → <BUILT-DIGEST>
+# and emits `ghcr.io/<owner>/repro-musl@sha256:<BUILT-DIGEST>` as a job output.
+# Every downstream gate job AND the re-homed release build in man-pages.yml
+# consume the image BY THAT DIGEST (`docker pull @sha256:…`), never the tag.
+# Per-release the resolved digest is published in `PROVENANCE.<arch>.txt`
+# alongside the artifact's SHA256 + the source COMMIT SHA + SOURCE_DATE_EPOCH
+# (the provenance tuple). See docs/verify-reproducibility.md §3+§5.
+#
+# The apt-pin minor (R0-r2-I3a) is therefore resolved BY this
+# built-image-by-digest model: the published digest captures the exact
+# musl-tools layer, so rebuilders `docker pull` it rather than re-resolve apt.
+# The snapshot.debian.org recipe above remains the from-source fallback only.
