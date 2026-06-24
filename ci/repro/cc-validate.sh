@@ -85,12 +85,22 @@ else
   REMAP_SRC="$ROOT"
 fi
 
-MINISCRIPT_REV="95fdd1c5773bd918c574d2225787973f63e16a66"
+# PARAMETERIZED [source] activation (P3a) — see double-build.sh for the full
+# rationale. MINISCRIPT_REV UNSET ⇒ toolkit rev (THREE-block, pre-P3a behavior);
+# EMPTY ⇒ TWO-block (codec form); set ⇒ THREE-block keyed off that rev. Single-
+# dash default fires ONLY when UNSET so a codec caller's explicit empty is honored.
+MINISCRIPT_REV="${MINISCRIPT_REV-95fdd1c5773bd918c574d2225787973f63e16a66}"
 SRC_CONFIG=(
   --config 'source.crates-io.replace-with="vendored-sources"'
-  --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
-  --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
-  --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+)
+if [ -n "$MINISCRIPT_REV" ]; then
+  SRC_CONFIG+=(
+    --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
+    --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
+    --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+  )
+fi
+SRC_CONFIG+=(
   --config 'source.vendored-sources.directory="vendor"'
 )
 

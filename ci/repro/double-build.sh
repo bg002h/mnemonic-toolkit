@@ -90,16 +90,31 @@ if [ "$PATH_A" = "$PATH_B" ]; then
   exit 2
 fi
 
-# The job-scoped three-block [source] activation (THE REFINEMENT; R0-r5-C1 — the
-# git-fork block is MANDATORY: the two-block form FAILS --offline because the
-# miniscript [patch.crates-io] git dep has its own git+…?rev=… source key not
-# served by source.crates-io). Copy-EXACT; this is the authoritative recipe.
-MINISCRIPT_REV="95fdd1c5773bd918c574d2225787973f63e16a66"
+# The job-scoped [source] activation (THE REFINEMENT; R0-r5-C1). PARAMETERIZED by
+# MINISCRIPT_REV (P3a) so the SAME script serves the toolkit (THREE-block — the
+# git-fork block is MANDATORY because the miniscript [patch.crates-io] git dep has
+# its own git+…?rev=… source key not served by source.crates-io, so the two-block
+# form FAILS --offline) AND the codec CLIs (md/ms/mk), which do NOT depend on the
+# miniscript fork and need only the TWO-block form (crates-io + vendored-sources).
+#
+#   MINISCRIPT_REV  UNSET  ⇒ default to the toolkit rev (THREE-block — preserves
+#                            the exact pre-P3a standalone behavior, byte-identical).
+#   MINISCRIPT_REV  EMPTY  ⇒ TWO-block (no git-fork stanza) — the codec form.
+#   MINISCRIPT_REV  set    ⇒ THREE-block keyed off that rev.
+# (Single-dash `${VAR-default}` defaults ONLY when UNSET, so an explicit empty
+# value from a codec caller is honored as the two-block selector.)
+MINISCRIPT_REV="${MINISCRIPT_REV-95fdd1c5773bd918c574d2225787973f63e16a66}"
 SRC_CONFIG=(
   --config 'source.crates-io.replace-with="vendored-sources"'
-  --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
-  --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
-  --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+)
+if [ -n "$MINISCRIPT_REV" ]; then
+  SRC_CONFIG+=(
+    --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
+    --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
+    --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+  )
+fi
+SRC_CONFIG+=(
   --config 'source.vendored-sources.directory="vendor"'
 )
 

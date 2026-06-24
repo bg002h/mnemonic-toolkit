@@ -100,6 +100,13 @@ jobs:
       target: x86_64-unknown-linux-musl
       arch: x86_64
       run_aarch64: false
+      # The toolkit depends on the miniscript fork ⇒ pass the toolkit rev so the
+      # gate stays THREE-block (also the default; passed explicitly for clarity).
+      miniscript_rev: "95fdd1c5773bd918c574d2225787973f63e16a66"
+      # Source the centralized recipe (ci/repro/*.sh, Dockerfile.repro) from THIS
+      # tagged commit — identical content to the crate source the gate checks
+      # out, so the toolkit build is byte-unchanged vs pre-P3a.
+      toolkit_ref: ${{ github.sha }}
 
   # Static, dependency-free `mnemonic` binaries for air-gapped / Alpine / musl
   # deployments — the environment a self-custody steel-backup tool is most
