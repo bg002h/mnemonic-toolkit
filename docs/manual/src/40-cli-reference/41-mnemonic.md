@@ -67,10 +67,19 @@ the full descriptor to restore. The shapes are:
 - `sortedmulti()` **inside a combinator** (not the sole child of `wsh`/`sh`);
 - a **hardened use-site** — a hardened wildcard (`/*h`) on the shared suffix or
   inside a per-cosigner override (a hardened child cannot be derived from an xpub);
-- **per-cosigner use-site overrides on a `tr(sortedmulti_a)` card, or on a
-  taproot card with a non-NUMS internal key** — still pending (the
-  `tr(sortedmulti_a)` renderer rides the next rust-miniscript release; FOLLOWUP
-  `restore-md1-taproot-use-site-override-arm`).
+- **per-cosigner use-site overrides on a `tr(sortedmulti_a)` card** — the
+  `tr(sortedmulti_a)` reconstruction renderer is gated on the next rust-miniscript
+  release (`Terminal::SortedMultiA`, > 13.1.0); interim loud-refuse;
+- **per-cosigner use-site overrides on a taproot card whose internal key is a
+  real key (non-NUMS)** — the faithful override path (v0.59.1) covers only
+  NUMS-internal `tr(multi_a)`, so a non-NUMS internal key combined with
+  *divergent* per-cosigner suffixes is still refused. This is the **override**
+  case only: a **baseline** non-NUMS key-path taproot card (no divergent
+  per-cosigner suffixes) **is** restorable since v0.55.3 — see
+  [restore](#mnemonic-restore).
+
+Both pending taproot legs are tracked by FOLLOWUP
+`restore-md1-taproot-use-site-override-arm`.
 
 Non-hardened **per-cosigner use-site path overrides** (cosigners with divergent
 derivation suffixes) are **reconstructed faithfully** and no longer advise for:
