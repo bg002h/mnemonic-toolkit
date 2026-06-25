@@ -1,7 +1,7 @@
 # BRAINSTORM / SPEC — Engravable Word-Card encoding for `mk1` / `md1`
 
-- **Status:** Brainstorm spec — **R0 round-3 folded (0C/1I addressed); round-4 re-dispatch pending.** NOT approved for implementation.
-- **Date:** 2026-06-24 (R0 round-1 + round-2 + round-3 folds applied same day)
+- **Status:** Brainstorm spec — **R0 GREEN (0C/0I), converged at round 4 — clears the mandatory pre-implementation R0 gate.** Next artifact = the implementation plan-doc (its own R0 loop). NOT yet implemented.
+- **Date:** 2026-06-24 (R0 rounds 1–4 same day; round-4 = GREEN)
 - **Author:** brainstorm session (single author; in the mandatory opus R0 loop)
 - **Working name:** **Word Card (WC)** — provisional, rename welcome.
 - **Source SHAs (wire-format facts cited below were read at these revisions):**
@@ -64,6 +64,17 @@ math clean. Round-3 fold (a single propagation residual of the round-2 in-place 
   sub-section 8.5).
 - **Minor-2** (plan-time) remains tracked as §12-Q2: exhibit a concrete `(marker|index|
   parity)` 11-bit split per K-class.
+
+### R0 round-4 — GREEN / CONVERGED (2026-06-24)
+
+Round-4 verdict **GREEN — 0C/0I**; full review at `design/agent-reports/word-card-r0-round-4.md`.
+NEW-I-1 + Minor-1 + Nit-3 confirmed closed; the final whole-spec consistency pass found no
+contradiction, no dangling reference, all numbers reconcile (b=7→K′=62, ladder 62/69/82,
+corrects 3/10/23, appendable 1985, K=160→b=13), citations + core math intact. The reviewer
+loop converged: **3C/4I → 2C/3I → 0C/1I → 0C/0I.** This brainstorm spec **clears the
+mandatory pre-implementation R0 gate.** Next: the plan-doc begins its OWN R0 loop (resolving
+§12 — concrete 11-bit checkpoint split per K-class, header bit-layout, padding rule, frozen
+constants). **No code until the plan-doc is itself R0-GREEN.**
 
 ---
 
