@@ -361,8 +361,13 @@ full-package-suite), per-phase opus review persisted to `design/agent-reports/` 
   **`docs/manual/src/40-cli-reference/`** mirror; **binary-identical** doc output (fixed
   seeds); version-sites (§8); a **`wc-codec` fuzz target** (encode/decode round-trip +
   corrupt-input no-panic); the new **`word-card`/`recover --json` wire-shape** is NOT
-  schema_mirror-gated (names-only) ⇒ coordinate GUI consumers via the paired-PR rule. KAT:
-  `m*1 → word-card → recover → m*1` byte-identical.
+  schema_mirror-gated (names-only) ⇒ coordinate GUI consumers via the paired-PR rule.
+  **Requires the P0 codec accessors PUBLISHED** — cut `mk-codec 0.4.1` + `md-codec 0.39.1`
+  (PATCH, additive) to crates.io and bump the toolkit pins before wiring the adapter.
+  **KAT (reframed — P0-R0 finding):** the round-trip is asserted on the **recovered
+  payload / xpub / descriptor**, NOT the literal `m*1` string — `mk1` re-encode draws a
+  fresh CSPRNG `chunk_set_id` so its string is never byte-identical (the bytecode/xpub is);
+  `md1` is fully deterministic and *may* additionally assert literal-string identity.
 - **Post-impl:** mandatory independent adversarial whole-diff review (spec §"post-impl"),
   persisted, re-dispatched to GREEN before tag.
 
