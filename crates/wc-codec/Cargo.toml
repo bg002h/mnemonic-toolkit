@@ -1,0 +1,19 @@
+[package]
+name = "wc-codec"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Word-Card value engine (GF(2^11) field, BIP-39 symbol map, RS/RAID/sync) for the m-format constellation."
+
+[dependencies]
+# Single source of truth for the BIP-39 English wordlist (symbol value == 11-bit
+# index). The toolkit already deps `bip39 = "2"`; we reuse the same pin.
+bip39 = "2"
+# Integrity tag (SHA-256) — used from P4 onward; pinned now to match the toolkit.
+sha2 = "0.10"
+
+[dev-dependencies]
+proptest = "1"

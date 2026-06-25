@@ -1392,6 +1392,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wc-codec"
+version = "0.1.0"
+dependencies = [
+ "bip39",
+ "proptest",
+ "sha2",
+]
+
+[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

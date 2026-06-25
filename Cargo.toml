@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/mnemonic-toolkit"]
+members = ["crates/mnemonic-toolkit", "crates/wc-codec"]
 resolver = "2"
 
 [workspace.package]
