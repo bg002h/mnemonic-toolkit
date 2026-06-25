@@ -1,10 +1,10 @@
 # IMPLEMENTATION PLAN — Engravable Word-Card encoding (`mk1` / `md1`)
 
-- **Status:** Plan-doc — **R0 round-1 folded (2C/3I/5n addressed); round-2 re-dispatch pending.** NOT approved for implementation.
-- **Date:** 2026-06-24 (plan-R0 round-1 folds same day)
+- **Status:** Plan-doc — **R0 round-2 folded (0C/2I/4n addressed); round-3 re-dispatch pending.** NOT approved for implementation.
+- **Date:** 2026-06-24 (plan-R0 round-1 + round-2 folds same day)
 - **Spec (R0-GREEN):** `design/BRAINSTORM_word_card_encoding_2026-06-24.md` (commit `31109f8e`,
   R0 converged round-4; reviews `design/agent-reports/word-card-r0-round-{1,2,3,4}.md`).
-- **Source SHAs (grep-verified at write time):** toolkit `d08b0d51`, md-codec `7764145d`,
+- **Source SHAs (grep-verified at write time):** toolkit `a552a242`, md-codec `7764145d`,
   mk-codec `46631c6`, ms-codec `5c0335c`.
 - **Verified deps already present:** `crates/mnemonic-toolkit/Cargo.toml:47 sha2 = "0.10"`,
   `:49 bip39 = { version = "2", features = ["all-languages"] }`; workspace members =
@@ -36,6 +36,25 @@ The reviewer **machine-verified the field/RS/RAID algebra CORRECT** (primitive p
   M2 mod-8 aliasing bound KAT (§4.3); M3 array-id target + `P₂` exponent = H1 index (§3);
   M4 padding freeze at P1/P2 (§7); N5 SHA refresh; N6 `error.rs` placement (§6.2); +
   `wc-codec` fuzz target + `recover --json` wire-shape coordination (§9).
+
+### Plan-R0 round-2 fold log (2026-06-24)
+
+Round-2 verdict RED (0C/**2I**/4n); review `design/agent-reports/word-card-plan-r0-round-2.md`.
+Both round-1 Criticals machine-verified CLOSED (CRC-5 slot-independent `≤2⁻⁵`; global-validation
+collision `≤(b−1)·2⁻ᵗ≈2⁻⁴⁰`). Round-2 folds (all in the header wire-layout the round-1 folds
+rewrote):
+
+- **NEW-I1** — variable front ledger had no closed-form end (~6% payload-word-0 mislocate).
+  Now a **fixed `U`-slot reserved ledger** sized in CRC'd GEOM ⇒ deterministic
+  `payload_offset`; steel upgrades fill the next **blank reserved slot** (append-only, no
+  front mutation) (§4.2).
+- **NEW-I2** — H1 1-word `index-in-array(3)` capped the `P₂` exponent at 8, silently breaking
+  r=2 MDS for n>8. Now **H1 = 2 words** with full `index-in-array(5)`; reconciled `n≤32`
+  (§4.2, §3).
+- **M-1** §3 `P₂`-exponent now consistently = H1 index (was self-contradicting); **M-2** CRC
+  cannot prune a value-free deletion — reworded to the `(b−1)·2⁻ᵗ` global union bound +
+  linear multi-block path (§4.3); **M-3** concrete `|header|` formula (§4.2); **M-4** ledger
+  checksum coverage + `payload_len` 16-bit capacity (§4.2); **N-5** SHA `a552a242`.
 
 ---
 
@@ -106,8 +125,9 @@ All values are **frozen for recoverability**; P1/P2 KATs assert them.
   Encode = Newton/Lagrange interpolation + evaluation; decode = **Gao's algorithm** (partial
   GCD) with erasures handled by puncturing erased coordinates. Length cap `n = K′+m ≤ 2047`.
 - **RAID generator:** same `α`. `P₁[c] = Σᵢ xᵢ[c]` (weights `α⁰=1` ⇒ field-add = XOR);
-  `P₂[c] = Σᵢ αⁱ·xᵢ[c]` (`i` = stripe index, fixed by `array-id`). `[n+r, n]` MDS;
-  `ord(α)=2047 ≥ n_max=32`. **KAT:** recover any `r` of `n+r` erasures.
+  `P₂[c] = Σᵢ αⁱ·xᵢ[c]` where **`i` = the stripe's `index-in-array` field (header H1, §4.2)**,
+  full-range `0..n−1` (NOT array-id — M-1/NEW-I2). `[n+r, n]` MDS, distinct exponents over
+  `0..n−1`; `ord(α)=2047 ≥ n_max=32`. **KAT:** recover any `r` of `n+r` erasures, all `n≤32`.
 - **Integrity tag:** `SHA-256(canonical_payload)` truncated to the top `t` bits, default
   **`t = 44`** (4 words; residual `≤ 2⁻⁴⁴`), min `t = 33` (3 words). NON-LINEAR; a linear
   (BCH/CRC/XOR) tag is **forbidden** in-codeword (spec C1/NEW-C1).
@@ -150,24 +170,33 @@ implementation truth, and all phase KATs use it. The spec ladder stands as illus
 ### 4.2 Header (Q1) — fixed prefix + appendable ledger
 - **`H0`** (1 word, 11 bits): `version(4) │ source-kind(2: 00=mk1,01=md1) │ has-raid(1) │
   reserved(4)=0`.
-- **`H1`** (1 word, present iff `has-raid`): `n−1(5: 1..32) │ role(3: 0=solo,1=data,2=parityA,
-  3=parityB) │ index-in-array(3: 0..n−1 or parity index)`.
+- **`H1`** (**2 words = 22 bits**, present iff `has-raid` — NEW-I2): `n−1(5: 1..32) │
+  role(2: 0=data,1=parityA,2=parityB) │ index-in-array(5: 0..31) │ reserved(10)`. The full
+  **5-bit `index-in-array`** is the `P₂` α-exponent (§3), distinct over `0..n−1`, so r=2 MDS
+  holds for **all `n ≤ 32`** (the prior 1-word/3-bit index silently broke MDS for n>8).
 - **`array-id`** (2 words, present iff `has-raid`): top 22 bits of
   `SHA-256(concat of the n ordered cosigner master-fingerprints)`.
-- **`GEOM`** (geometry — I3 fix; read **POSITIONALLY before RS**): explicit `payload_len`
-  (2 words, up to 2¹⁶ B) `│ t(6) │ stride b(4)`, followed by a **`header-CRC`** word (CRC-11
-  over all positional header words). The cold decoder reads GEOM by position, verifies
-  header-CRC, then derives the whole geometry **in closed form with NO post-RS dependency:**
-  `K = ceil((8·payload_len + t)/11)`; `checkpoints = ceil(K/b)` (or 1 if `K<16`);
-  `K′ = |header| + K + checkpoints`; `m_present = words_present − K′ − |stop-sign| −
-  |ledger|`. **header-CRC fail ⇒ refuse-and-report** (the header is a few words the human
-  re-verifies); the header is also inside the big RS for correction on a clean re-read. This
-  breaks the chicken-and-egg: geometry never depends on a successful RS pass.
-- **`recorded-length LEDGER`** (append-only, front-anchored, §6.3): each entry is a **2-word**
-  `marker(4: 0b1110) │ cumulative-count(11: 0..2047) │ checksum(7)` — **exact**, reaching the
-  2047 cap (I1 fix; the prior ×16 capped at 2032 < 2047). Authoritative recorded length =
-  **max** over all ledger entries AND stop-signs (all exact 11-bit). A new 2-word entry is
-  appended on each stop/upgrade (front grows ~2 words/upgrade — acceptable).
+- **`GEOM`** (geometry — I3; read **POSITIONALLY before RS**, fixed **4 words**): words A+B =
+  `payload_len(16: ≤65535 B) │ t(6)`; word C = `stride b(4) │ U(3: reserved ledger slots) │
+  reserved(4)`; word D = `header-CRC(11)` = CRC-11 over all positional header words
+  (H0 │ H1? │ array-id? │ GEOM A–C). The cold decoder reads GEOM by position, verifies
+  header-CRC, then derives geometry **in closed form, NO post-RS dependency:**
+  `K = ceil((8·payload_len+t)/11)`; `checkpoints = ceil(K/b)` (or 1 if `K<16`);
+  `|header| = 1 (H0) + (4 if has-raid: H1 2 + array-id 2) + 4 (GEOM) + 2U (ledger)`;
+  `payload_offset = |header|`; `K′ = |header| + K + checkpoints`;
+  `m_present = words_present − K′ − |stop-sign|`. **header-CRC fail ⇒ refuse-and-report**
+  (the header is a handful of words the human re-verifies); it is also inside the big RS for
+  correction on a clean re-read. Geometry never depends on a successful RS pass.
+- **`recorded-length LEDGER`** (NEW-I1 — **`U` FIXED reserved 2-word slots** at the known
+  offset `|header|−2U`, NOT a variable run): each slot = `marker(4: 0b1110) │
+  cumulative-count(11: 0..2047) │ checksum(7 over the slot's marker+count)` — **exact**,
+  reaching the 2047 cap; an unfilled slot = the all-zero empty pattern. Because `U` is in the
+  CRC'd GEOM, `payload_offset` is **deterministic and CRC-covered**, so the decoder never
+  mis-locates payload word 0 (the prior variable marker-delimited run collided with payload
+  at ~6%). On **steel** an upgrade fills the **next blank reserved slot** (append-only
+  engraving — NO front mutation). Authoritative recorded length = **max** over filled slots
+  AND stop-signs (all exact 11-bit). Default `U=3` (creation + 2 upgrades); `U=1` for
+  never-upgrade / tiny templates.
 
 ### 4.3 Checkpoints (Layer B, Q2) — C1/C2 fold
 - Inserted after every `b` payload-data words, `b = round(√K)`. Count `≈ √K`.
@@ -184,10 +213,14 @@ implementation truth, and all phase KATs use it. The spec ladder stands as illus
 - **Indel pinpoint is GLOBAL, not local (C1 fix).** A block-length anomaly (`b∓1`) flags a
   deletion/insertion. The local reinsert-test **cannot** pinpoint a deletion — the missing
   value is a free unknown, so a single local check validates every candidate slot (reviewer-
-  measured 0% unique). Instead, for a **single** in-block deletion: reinsert a placeholder
-  erasure, enumerate the `≤b` candidate gap positions **pruned by the CRC-5**, and **validate
-  each by the GLOBAL RS-decode + non-linear integrity tag (§4.5)** — wrong alignments fail at
-  `≤ 2⁻ᵗ`, so a unique alignment recovers the deletion at **cost 1 erasure**.
+  measured 0% unique; the CRC-5 likewise **cannot prune** a value-free deletion, kernel `2⁶`).
+  Instead, for a **single** in-block deletion: reinsert a placeholder erasure, enumerate the
+  `≤b` candidate gap positions, and **validate each by the GLOBAL RS-decode + non-linear
+  integrity tag (§4.5)** — a wrong alignment passes only at `≤ 2⁻ᵗ`, so over `≤b` candidates
+  `P(ambiguity) ≤ (b−1)·2⁻ᵗ ≈ 2⁻⁴⁰`; the unique passing alignment recovers it at **cost 1
+  erasure**. **Single deletions in DIFFERENT blocks are independent** — each block's
+  checkpoint re-anchors, so it is a per-block search (**linear**, not a cross-block product);
+  ≥2 deletions in the SAME block ⇒ whole-block erasure.
 - **Fallback / bound:** ≥2 indels in one block, an ambiguous/too-large candidate search, or a
   run ⇒ **whole-block erasure (cost ≤ `b`)**; if the global candidate-alignment budget
   (capped per-decode) is exceeded ⇒ **refuse-and-report**. This is the spec §6.1 fallback,
@@ -286,12 +319,14 @@ full-package-suite), per-phase opus review persisted to `design/agent-reports/` 
   deletion)**/refuse-on-ambiguity; **CRC-5 single-substitution detection at the `2⁻⁵` floor
   (C2)**; **mod-8 aliasing bound (M2)**; **single in-block deletion uniquely recovered via the
   GLOBAL tag, not local pinpoint (C1)**.
-- **P4 — integrity tag + GEOM header + stop-sign + exact ledger + full pipeline.** KATs: full
-  round-trip; **miscorrection caught by the tag**; **near-2047 top-truncation flagged (I1)**;
-  **cold-decode-from-words-only via positional GEOM (I3)**; truncation flag on lost newest
-  tail; deliberate-stop NOT flagged; ledger durability.
+- **P4 — integrity tag + GEOM header + stop-sign + fixed-`U` ledger + full pipeline.** KATs:
+  full round-trip; **miscorrection caught by the tag**; **near-2047 top-truncation flagged
+  (I1)**; **cold-decode-from-words-only via positional GEOM + deterministic `payload_offset`
+  across `U`-slot fills (I3/NEW-I1)**; truncation flag on lost newest tail; deliberate-stop
+  NOT flagged; ledger durability; **header-CRC-fail ⇒ refuse**.
 - **P5 — RAID r=1/r=2.** striping/reconstruct; recover any r of n+r; `P₁` append-only
-  invariance; lone-parity-plate privacy KAT.
+  invariance; lone-parity-plate privacy KAT; **r=2 MDS for `n>8` (e.g. n=15) — NEW-I2
+  regression guard** (full 5-bit `index-in-array` exponent).
 - **P6 — toolkit integration.** canonical-payload adapter (P0 accessors); `word-card` +
   `recover` CLI; `ToolkitError::WordCard`; **GUI `schema_mirror`** update;
   **`docs/manual/src/40-cli-reference/`** mirror; **binary-identical** doc output (fixed
