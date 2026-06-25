@@ -1,7 +1,7 @@
 # BRAINSTORM / SPEC — Engravable Word-Card encoding for `mk1` / `md1`
 
-- **Status:** Brainstorm spec — **R0 round-1 folded (3C/4I addressed); round-2 re-dispatch pending.** NOT approved for implementation.
-- **Date:** 2026-06-24 (R0 round-1 folds applied same day)
+- **Status:** Brainstorm spec — **R0 round-2 folded (2C/3I addressed); round-3 re-dispatch pending.** NOT approved for implementation.
+- **Date:** 2026-06-24 (R0 round-1 + round-2 folds applied same day)
 - **Author:** brainstorm session (single author; in the mandatory opus R0 loop)
 - **Working name:** **Word Card (WC)** — provisional, rename welcome.
 - **Source SHAs (wire-format facts cited below were read at these revisions):**
@@ -32,6 +32,23 @@ privacy) confirmed sound. Folds applied:
   normative (§7.1). **I4** added the **Frozen Constants** section (§9.5).
 - Nits: N1 RS attribution (§6.2), N2 privacy wording (§7.3), N3 `K′≈61–62`, N4 lockstep
   version-sites (§10), N6 pre-chunking payload (§5.4).
+
+### R0 round-2 fold log (2026-06-24)
+
+Round-2 verdict RED (2C/3I); full review at `design/agent-reports/word-card-r0-round-2.md`.
+Round-1 folds C2/C3/I1/I2/I3/I4 + N1/N2/N4/N6 confirmed genuinely closed; citations and core
+math re-verified TRUE. Round-2 folds:
+
+- **NEW-C1** — integrity tag MUST be a **non-linear cryptographic hash**; a linear
+  (BCH/CRC/XOR) tag inside the linear RS codeword is self-satisfied by a miscorrection and is
+  **forbidden** in-codeword (§5.3, §9.5).
+- **NEW-C2** — checkpoints gain a **self-identifying marker** + a normative
+  **recognition/realignment** rule (bounded offset search validated by index-continuity;
+  ambiguous ⇒ refuse-and-report) + a compound-case lemma (§6.1, §9.5).
+- **I-A** — `declared-total-length` (double-meaning, false-flagged deliberate stops) replaced
+  by a single-meaning **front-anchored append-only `recorded-length` ledger** (§5.2, §6.3, §8).
+- **I-B/I-C** mirrored the two new primitives into §9.5. **Nit-1** stale `K′=61`→62 ladder
+  numbers (§6.4, §9.1); **Nit-2** N5 detection-all-`K` + small-`K` parity floor (§6.1).
 
 ---
 
@@ -129,16 +146,22 @@ how much of Layers C/D the user records. Only *repair* spends recorded budget.
      TLV tag `0x02`); keyless-template mode does not.
 2. **Header word(s).** Prepend a small self-describing header (exact bit layout = OPEN,
    §12): `{format-version, source-kind (mk1|md1), K-class, checkpoint stride b,
-   declared-total-length (monotone; §6.3), array-id, role}`. `array-id`/`role` are Layer-D
+   recorded-length ledger (append-only, front-anchored; §6.3), array-id, role}`.
+   `array-id`/`role` are Layer-D
    fields (§7); for a standalone `md1` they are degenerate (`role = solo`). **`array-id` is
    a plate-MATCHING aid only — NOT the integrity check** (C1): it travels inside the
    codeword and would move with a miscorrection.
-3. **Integrity tag (C1).** Append a dedicated **integrity tag** = a strong, *independent*
-   function of the canonical payload (the source `m*1` codec BCH residue, or a ≥32-bit
-   truncated hash). It is recomputed and cross-checked after RS decode (§8.5); an RS
-   *miscorrection* onto a valid-but-wrong payload survives only with probability `≤ 2⁻ᵗ`
-   (`t` = tag bits, default ≥32). This replaces the old `decode(encode(B))=B` round-trip,
-   which was an identity that caught only structural garbage.
+3. **Integrity tag (C1; NEW-C1 fold).** Append a dedicated **integrity tag** = a strong,
+   **NON-LINEAR** function of the canonical payload: a truncated **cryptographic hash**
+   (e.g. SHA-256 truncated to `t ≥ 32` bits). Recomputed and cross-checked after RS decode
+   (§8.5); an RS *miscorrection* onto a valid-but-wrong payload survives only with
+   probability `≤ 2⁻ᵗ`. **A LINEAR tag (BCH residue / CRC / XOR) is FORBIDDEN as the
+   in-codeword integrity check** — it lives in the same linear RS image, so a miscorrection
+   satisfies it by construction and the bound collapses. (A linear residue is admissible
+   only if carried as a fully *independent, out-of-codeword* check; the non-linear
+   in-codeword hash is the mandated default.) The tag words are themselves RS-protected and
+   the check runs *post-correction*, so a mere tag typo is repaired, not falsely rejected.
+   This replaces the old `decode(encode(B))=B` identity.
 4. **Regroup (N6).** Concatenate header ∥ payload ∥ integrity-tag bits and regroup **8→11**:
    `K = ceil(total_bits / 11)` **data words** (same mapping BIP-39 uses for entropy). Layer
    A consumes the codec's **PRE-chunking canonical payload** (the single logical
@@ -159,9 +182,20 @@ Approximate `K` (data words):
 ### 6.1 Sync (Layer B): interspersed checkpoints
 
 - **Block size `b ≈ √K`** (minimizes `checkpoint_overhead = K/b` + `run_slop ≈ b`; the
-  classic concatenation optimum). For `K=54`, `b≈7`; for `K=160`, `b≈12`.
-- After every `b` payload words, insert one **checkpoint word** carrying a **running block
-  index** + a **local parity** over its block. Count ≈ `K/b ≈ √K` checkpoints.
+  classic concatenation optimum). For `K=54`, `b≈7` (⌈54/7⌉=8 checkpoints ⇒ `K′=62`); for
+  `K=160`, `b≈13`.
+- After every `b` payload words, insert one **checkpoint word** carrying a **self-identifying
+  marker + running block index + local parity** over its block. Count ≈ `K/b ≈ √K`.
+- **Checkpoint recognition / realignment (NEW-C2 — NORMATIVE).** The sync pass must
+  *recognize* a checkpoint by content **before** RS runs; the marker bits provide that. After
+  a desync (deleted checkpoint, or a run), the decoder re-finds the next checkpoint by a
+  **bounded offset search** validated by (a) the marker and (b) **index-continuity across ≥2
+  consecutive checkpoints** + their local parity. A unique consistent alignment is accepted;
+  **ambiguous or no alignment ⇒ refuse-and-report** (custody-safe: never silently
+  mis-align). This is what makes the C2 bounded-desync invariant *demonstrated*, not asserted.
+- **Small-`K` (N5).** Detection is on for **any `K ≥ 1`** (≥1 checkpoint always present);
+  tiny `md1` templates (`K<10`) use a **fixed parity floor** (§9.1) + a degenerate single
+  checkpoint, so the √K rule never underflows.
 - **Indel trichotomy.** Each checkpoint `Cᵢ` is expected after exactly `i·b` payload words.
   The count of words since the previous checkpoint classifies the error:
 
@@ -187,6 +221,11 @@ Approximate `K` (data words):
   length (§6.3) guarantee every indel is localized to **at most block granularity**, so a
   single un-localized deletion can NEVER silently desync the whole codeword. This bound is
   what makes the two-pass decode (§8) well-founded.
+- **Compound-case lemma (C2 / NEW-C2).** A deleted checkpoint `Cᵢ` AND a data-word deletion
+  in block `i`: the merged span is detected when the next *recognizable* checkpoint arrives
+  with an index/stride mismatch; the merged span is erased (cost ≤ `2b`). If that next
+  checkpoint is itself unrecognizable, realignment fails ⇒ **refuse-and-report** (never a
+  silent mis-decode).
 
 ### 6.2 Error-correction (Layer C): append-only systematic RS
 
@@ -210,38 +249,38 @@ Approximate `K` (data words):
   position-agnostic, so a burst up to the erasure budget is absorbed regardless of where it
   lands.
 
-### 6.3 Stop-sign + monotone declared-length (soft-terminal) — C3
+### 6.3 Stop-sign + front length-ledger (soft-terminal) — C3 / I-A
 
 - A **stop-sign spans ≥2 words** (a single 11-bit word cannot hold a ~2047 word-count +
   marker + checksum). It carries the **cumulative total-word count** + a checksum.
-- The **front header (§5.2) carries a MONOTONE `declared-total-length`**, bumped on every
-  upgrade. Truncation/downgrade is detected by comparison, NOT by stop-sign presence alone:
-  - words physically present **<** `declared-total-length` ⇒ **truncation flag** (tail
-    chipped/lost), never a silent fall-back to an earlier (weaker) tier. This closes C3's
-    silent-protection-downgrade hole even when the entire newest tail+stop-sign is lost.
-  - The decoder takes the stop-sign with the **highest** count as authoritative and treats
-    earlier (now mid-stream) stop-signs as ordinary words.
-- **Append-only upgrade:** append parity words, write a new higher-count stop-sign, and bump
-  the header `declared-total-length`.
-- **Steel-medium constraint (impl detail, §12):** updating the front header on engraved
-  steel means either a **pre-committed** `declared-total-length` at creation (the user
-  declares the max tier they intend to reach) or a header region designed to be appended.
-  The plan pins the mechanism; the correctness invariant is that the declared max is
-  **monotone non-decreasing**, so any downgrade is always detectable.
+- The **front header carries a `recorded-length` LEDGER (append-only, front-anchored)**: at
+  creation and at *every* stop/upgrade the user appends the then-current cumulative word
+  count as a new ledger entry. Authoritative recorded length = the **highest** ledger entry.
+  There is exactly **ONE meaning** — "how many words were actually recorded" — which resolves
+  I-A: the old `declared-total-length` double-meaning is dropped, there is no
+  pre-committed-max, so a **deliberate early stop is NOT a false truncation**.
+- **Truncation/downgrade test:** words physically present **<** highest ledger entry ⇒
+  **truncation flag** (tail chipped/lost). Because the ledger is at the FRONT, it survives
+  losing the back tail — so even a wholly-lost newest tail+stop-sign is flagged (closes C3).
+  A deliberate stop wrote its own matching ledger entry ⇒ present == ledger ⇒ no false flag.
+- **Append-only upgrade:** append parity at the back, write a new higher-count stop-sign, AND
+  append the new cumulative count to the front ledger (the front grows one small entry per
+  upgrade — acceptable steel cost). The decoder takes the highest stop-sign as authoritative
+  and treats earlier mid-stream stop-signs as ordinary words.
 
 ### 6.4 Word-ladder (the per-string progressive UX)
 
 The mandatory prefix is data + checkpoints (`K′ ≈ K + √K` words). Legal stop points are
 **checkpoint boundaries**; each adds ≈ `b` words ≈ one tier. The toolkit prints a ladder at
 generation; `mnemonic recover` reports achieved strength at read-back. Example for a `mk1`
-xpub (`K≈54`, `K′≈61`):
+xpub (`K≈54`, 8 checkpoints ⇒ `K′≈62`):
 
 ```
-MANDATORY  words 1–61   the xpub + sync. Fewer = data loss.
-                        At 61: every missing/extra/swapped word DETECTED & PINPOINTED.
+MANDATORY  words 1–62   the xpub + sync. Fewer = data loss.
+                        At 62: every missing/extra/swapped word DETECTED & PINPOINTED.
 OPTIONAL ── stop at any ⟐ checkpoint:
-  ⟐ 68  ( 7 check)  repair  7 missing OR 3 wrong
-  ⟐ 81  (20 check)  repair 20 missing OR 10 wrong   ◀ ~50% "survive one lost line + typos"
+  ⟐ 69  ( 7 check)  repair  7 missing OR 3 wrong
+  ⟐ 82  (20 check)  repair 20 missing OR 10 wrong   ◀ ~50% "survive one lost line + typos"
   ⟐ … append-only, up to word ~2047 …
 ```
 
@@ -360,7 +399,7 @@ the honest worst case is `b` erasures per damaged block.
 
 - **Per-array survival** (`r` Recovery plates): lose any `r` of `n+r` plates.
 - **Append-only** on both axes, up to the GF(2048) length cap (`n ≤ 2047` words/string;
-  with `K′ ≈ 61–62` that is ~1980 appendable parity words — effectively unbounded).
+  with `K′ ≈ 62` that is ~1985 appendable parity words — effectively unbounded).
 - **Custody safety (C1 — corrected from an over-claim):** the design does **not** claim the
   decoder *never* miscorrects — a bounded-distance RS decoder can land on a valid-but-wrong
   codeword within `⌊m/2⌋`. That event is caught by the independent integrity tag
@@ -371,9 +410,9 @@ the honest worst case is `b` erasures per damaged block.
 
 | per-xpub overhead | sync | parity `m` | corrects | survives (single plate) |
 |---|---|---|---|---|
-| 25% | ~7 | ~7 | 3 wrong / 7 missing | scattered typos |
-| **~50%** | ~7 | ~20 | 10 wrong / 20 missing | **one lost line + several typos** |
-| 100% | ~7 | ~48 | 24 wrong / 48 missing | most of a plate |
+| 25% | ~8 | ~6 | 3 wrong / 6 missing | scattered typos |
+| **~50%** | ~8 | ~20 | 10 wrong / 20 missing | **one lost line + several typos** |
+| 100% | ~8 | ~46 | 23 wrong / 46 missing | most of a plate |
 
 Plate-level: `+ Recovery A` (r=1) ⇒ survive any 1 of 4 plates; `+ Recovery B` (r=2) ⇒
 survive any 2 of 5 plates. Default recommendation: **~50% word tails + Recovery A**.
@@ -389,8 +428,11 @@ the plan-doc assigns concrete values:
 - **Symbol map:** the canonical **BIP-39 English index map** (word ⇄ 11-bit value).
 - **RS evaluation sequence:** the ordered points `α₁, α₂, …` for the append-only tail (§6.2).
 - **RAID generator `α`:** with `ord(α) ≥ n_max` (REQUIRED for r=2 MDS; §7.1).
-- **Integrity tag:** function + bit-width `t` (§5.3).
-- **Stop-sign + checkpoint local-parity encodings:** field widths (§6.1, §6.3).
+- **Integrity tag (NEW-C1):** the **non-linear cryptographic hash family** + truncation
+  bit-width `t` (§5.3) — a linear tag is forbidden in-codeword.
+- **Checkpoint self-identifying marker + local-parity (NEW-C2):** the marker pattern + the
+  11-bit split (marker / index / parity) + the bounded-realignment search ceiling (§6.1).
+- **Stop-sign + front length-ledger encodings:** field widths + ledger-entry size (§6.3).
 - **Header bit-layout:** all fields, incl. `declared-total-length` (§5.2).
 - **Canonical fixed-width per-xpub payload** padding rule for RAID striping (§7.1).
 
@@ -445,8 +487,9 @@ the plan-doc assigns concrete values:
    **NORMATIVE** (§7.1, §9.5, I3 fold); remaining open = the exact padding rule.
 6. **Soft-terminal exactness** — stop-sign encoding (count + which checksum), and the rule
    for choosing "the last" stop-sign under tail corruption.
-7. **md1 size extremes** — fixed parity floor for tiny keyless templates; behavior of `√K`
-   sync when `K` is very small (`<10`).
+7. **md1 size extremes** — detection-all-`K` + a fixed parity floor + degenerate single
+   checkpoint for tiny templates is now **NORMATIVE** (§6.1, N5 fold); remaining open = the
+   exact floor value.
 8. **Optional interleaving** — only if runs dominate beyond a single codeword's budget
    (probably unnecessary; documented lever).
 9. **Beyond r=2** — construction already supports `r≥3`; confirm we cap surfaced stop
