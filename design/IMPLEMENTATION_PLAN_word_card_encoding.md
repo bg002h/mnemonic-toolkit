@@ -1,10 +1,10 @@
 # IMPLEMENTATION PLAN — Engravable Word-Card encoding (`mk1` / `md1`)
 
-- **Status:** Plan-doc — **R0 round-3 folded (0C/1I/1n addressed); round-4 re-dispatch pending.** NOT approved for implementation.
-- **Date:** 2026-06-24 (plan-R0 rounds 1–3 same day)
+- **Status:** Plan-doc — **R0 GREEN (0C/0I), converged round 4 — clears the mandatory pre-implementation gate. Implementation (P0→P6) MAY proceed per §7** (per-phase R0 + post-impl whole-diff review). Deferred at user request pending budget.
+- **Date:** 2026-06-24 (plan-R0 rounds 1–4 same day; round-4 = GREEN)
 - **Spec (R0-GREEN):** `design/BRAINSTORM_word_card_encoding_2026-06-24.md` (commit `31109f8e`,
   R0 converged round-4; reviews `design/agent-reports/word-card-r0-round-{1,2,3,4}.md`).
-- **Source SHAs (grep-verified at write time):** toolkit `352b1adf`, md-codec `7764145d`,
+- **Source SHAs (grep-verified at write time):** toolkit `813c8949`, md-codec `7764145d`,
   mk-codec `46631c6`, ms-codec `5c0335c`.
 - **Verified deps already present:** `crates/mnemonic-toolkit/Cargo.toml:47 sha2 = "0.10"`,
   `:49 bip39 = { version = "2", features = ["all-languages"] }`; workspace members =
@@ -66,6 +66,17 @@ Both round-2 Importants machine-verified CLOSED; the end-to-end cold-decode trac
   for the large md1 wallet-policies (≥325 B) the format admits. **`b` is now DERIVED, not
   stored** (`b = floor(√K + 0.5)`, frozen rounding) — removes the 4-bit field and the defect
   (§4.2, §4.3); added a `K≥241` large-payload boundary KAT (§7 P4). SHA refreshed `352b1adf`.
+
+### Plan-R0 round-4 — GREEN / CONVERGED (2026-06-24)
+
+Round-4 verdict **GREEN — 0C/0I**; review `design/agent-reports/word-card-plan-r0-round-4.md`.
+NEW-I3 confirmed fully closed (`b` derived, tie-free across `K∈1..2099` + boundary stress, 0
+mismatches). Final whole-plan pass: small (solo mk1: `K=58,b=8,K′=77,m_present=8`) AND large
+(md1 ~500 B: `K=368,b=19>15,K′=399`) cold-decode traces clean; all §1/§3/§4/§5/§6/§7/§8
+sections agree; field/RS/RAID/CRC-5 algebra untouched. The reviewer loop converged
+**2C/3I → 0C/2I → 0C/1I → 0C/0I.** The plan-doc **clears the mandatory pre-implementation R0
+gate**; implementation may proceed P0→P6 (per-phase R0 + mandatory post-impl whole-diff
+review). SHA refreshed to `813c8949`; rounding rule added to §3 frozen constants.
 
 ---
 
@@ -146,6 +157,9 @@ All values are **frozen for recoverability**; P1/P2 KATs assert them.
   generator `x⁵+x²+1` (5b) — uniform single-substitution miss `≤ 2⁻⁵` (§4.3, C2 fix).
   **Stop-sign marker** `0b1111`; **ledger marker** `0b1110` — all three distinct so the word
   classes never alias.
+- **Checkpoint stride:** `b = floor(√K + 0.5)` — DERIVED from `K`, frozen rounding (tie-free:
+  `4K=(2m+1)²` is even=odd, impossible, so `√K` is integer or irrational, never `.5`; pin an
+  integer-only `isqrt`-nearest implementation).
 - **array-id:** top 22 bits of `SHA-256(concat ordered master-fingerprints)`; collision
   target `≤ 2⁻²²` across a user's wallets (a *matching aid only*, never the integrity check).
   **The `P₂` stripe exponent `i` = header `H1`'s `index-in-array` field** (§4.2), NOT
