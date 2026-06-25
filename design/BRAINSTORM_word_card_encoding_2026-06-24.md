@@ -1,7 +1,7 @@
 # BRAINSTORM / SPEC — Engravable Word-Card encoding for `mk1` / `md1`
 
-- **Status:** Brainstorm spec — **R0 round-2 folded (2C/3I addressed); round-3 re-dispatch pending.** NOT approved for implementation.
-- **Date:** 2026-06-24 (R0 round-1 + round-2 folds applied same day)
+- **Status:** Brainstorm spec — **R0 round-3 folded (0C/1I addressed); round-4 re-dispatch pending.** NOT approved for implementation.
+- **Date:** 2026-06-24 (R0 round-1 + round-2 + round-3 folds applied same day)
 - **Author:** brainstorm session (single author; in the mandatory opus R0 loop)
 - **Working name:** **Word Card (WC)** — provisional, rename welcome.
 - **Source SHAs (wire-format facts cited below were read at these revisions):**
@@ -22,7 +22,7 @@ privacy) confirmed sound. Folds applied:
 
 - **C1** — removed the false "never silently miscorrects" claim + the self-referential
   re-encode check; added an **independent integrity tag outside the value-relation** (§5.3,
-  §8.5, §9) with a numeric residual bound `≤ 2⁻ᵗ`.
+  §8 step 5, §9) with a numeric residual bound `≤ 2⁻ᵗ`.
 - **C2** — promoted indel pinpointing to normative (§6.1); added the **bounded-desync
   invariant** + whole-block-erasure fallback (cost ≤ `b`); honest indel budget (§9).
 - **C3** — stop-sign now **≥2 words** + a **monotone `declared-total-length`** header field
@@ -49,6 +49,21 @@ math re-verified TRUE. Round-2 folds:
   by a single-meaning **front-anchored append-only `recorded-length` ledger** (§5.2, §6.3, §8).
 - **I-B/I-C** mirrored the two new primitives into §9.5. **Nit-1** stale `K′=61`→62 ladder
   numbers (§6.4, §9.1); **Nit-2** N5 detection-all-`K` + small-`K` parity floor (§6.1).
+
+### R0 round-3 fold log (2026-06-24)
+
+Round-3 verdict RED (0C/**1I**); full review at `design/agent-reports/word-card-r0-round-3.md`.
+Both round-2 Criticals confirmed genuinely closed; all nits self-consistent; citations + core
+math clean. Round-3 fold (a single propagation residual of the round-2 in-place I-A edit):
+
+- **NEW-I-1** — synced the remaining `declared-total-length` sites to §6.3's
+  **`recorded-length` ledger**: §8 step 1 (decoder truncation test), §8 step 2 + §6.1
+  (bounded-desync invariant), and §9.5 (removed the double-listed dropped name).
+- **Minor-1** — explicit ledger-durability note (RS-protected front header) in §6.3.
+- **Nit-3** — fixed the `§8.5` label → `§8 step 5` (the load-bearing C1 anchor; §8 has no
+  sub-section 8.5).
+- **Minor-2** (plan-time) remains tracked as §12-Q2: exhibit a concrete `(marker|index|
+  parity)` 11-bit split per K-class.
 
 ---
 
@@ -154,7 +169,7 @@ how much of Layers C/D the user records. Only *repair* spends recorded budget.
 3. **Integrity tag (C1; NEW-C1 fold).** Append a dedicated **integrity tag** = a strong,
    **NON-LINEAR** function of the canonical payload: a truncated **cryptographic hash**
    (e.g. SHA-256 truncated to `t ≥ 32` bits). Recomputed and cross-checked after RS decode
-   (§8.5); an RS *miscorrection* onto a valid-but-wrong payload survives only with
+   (§8 step 5); an RS *miscorrection* onto a valid-but-wrong payload survives only with
    probability `≤ 2⁻ᵗ`. **A LINEAR tag (BCH residue / CRC / XOR) is FORBIDDEN as the
    in-codeword integrity check** — it lives in the same linear RS image, so a miscorrection
    satisfies it by construction and the bound collapses. (A linear residue is admissible
@@ -217,8 +232,9 @@ Approximate `K` (data words):
 - **Fallback + bounded-desync invariant (C2).** When pinpointing fails — multiple indels in
   one block, or a **deleted checkpoint** (detected by index-discontinuity at the *next*
   checkpoint, whose declared index `i` arrives after `< i·b` words) — the affected block(s)
-  are marked as a **whole-block erasure (cost ≤ `b`)**. The running indices + fixed declared
-  length (§6.3) guarantee every indel is localized to **at most block granularity**, so a
+  are marked as a **whole-block erasure (cost ≤ `b`)**. The running indices + the
+  recorded-length ledger (§6.3) guarantee every indel is localized to **at most block
+  granularity**, so a
   single un-localized deletion can NEVER silently desync the whole codeword. This bound is
   what makes the two-pass decode (§8) well-founded.
 - **Compound-case lemma (C2 / NEW-C2).** A deleted checkpoint `Cᵢ` AND a data-word deletion
@@ -267,6 +283,10 @@ Approximate `K` (data words):
   append the new cumulative count to the front ledger (the front grows one small entry per
   upgrade — acceptable steel cost). The decoder takes the highest stop-sign as authoritative
   and treats earlier mid-stream stop-signs as ordinary words.
+- **Ledger durability (Minor-1).** The ledger lives in the **RS-protected front header**
+  (§5.2), so a corrupted entry is repaired before the truncation test; losing an *older*
+  entry is inert (authoritative = highest), and losing the *newest* requires front-header
+  loss, which fails loudly rather than silently downgrading.
 
 ### 6.4 Word-ladder (the per-string progressive UX)
 
@@ -355,14 +375,15 @@ A **wallet-policy `md1` card already embeds all `n` xpubs** (TLV `0x02`, md-code
 
 ## 8. Decoder algorithm (per string)
 
-1. Normalize case; map words → 11-bit symbols; read the front header's
-   `declared-total-length`; take the **highest-count stop-sign** as authoritative. **Flag
-   truncation when words-present < `declared-total-length`** (C3) — not merely when a
-   stop-sign is absent.
+1. Normalize case; map words → 11-bit symbols; read the front header's **`recorded-length`
+   ledger** and take its **highest entry** (= the highest-count stop-sign) as authoritative.
+   **Flag truncation when words-present < highest ledger entry** (C3 / I-A) — not merely when
+   a stop-sign is absent; a deliberate early stop wrote a matching ledger entry, so it is NOT
+   a false truncation.
 2. **Sync pass (Layer B):** walk checkpoints; classify each block (clean / substitution /
    deletion / insertion, §6.1); rebuild the full-length grid; mark erasures at pinpointed
    indels. **Bounded-desync invariant (C2):** every indel localizes to ≥ block granularity
-   (running indices + declared length); an indel that cannot be pinpointed to one slot
+   (running indices + the recorded-length ledger); an indel that cannot be pinpointed to one slot
    degrades to a **whole-block erasure (cost ≤ `b`)**, never an unbounded whole-codeword
    desync — which is what makes this two-pass decode well-founded.
 3. **RS pass (Layer C):** decode the systematic RS codeword over the grid (Welch–Berlekamp
@@ -403,7 +424,7 @@ the honest worst case is `b` erasures per damaged block.
 - **Custody safety (C1 — corrected from an over-claim):** the design does **not** claim the
   decoder *never* miscorrects — a bounded-distance RS decoder can land on a valid-but-wrong
   codeword within `⌊m/2⌋`. That event is caught by the independent integrity tag
-  (§5.3 / §8.5) with residual `≤ 2⁻ᵗ` (default ≤ 2⁻³²); only then is the result trusted.
+  (§5.3 / §8 step 5) with residual `≤ 2⁻ᵗ` (default ≤ 2⁻³²); only then is the result trusted.
   Beyond the correction budget the decoder refuses and reports the implicated words/plates.
 
 ### 9.1 Worked numbers — 3-key multisig (per-xpub `mk1`, `K≈54`)
@@ -433,7 +454,8 @@ the plan-doc assigns concrete values:
 - **Checkpoint self-identifying marker + local-parity (NEW-C2):** the marker pattern + the
   11-bit split (marker / index / parity) + the bounded-realignment search ceiling (§6.1).
 - **Stop-sign + front length-ledger encodings:** field widths + ledger-entry size (§6.3).
-- **Header bit-layout:** all fields, incl. `declared-total-length` (§5.2).
+- **Header bit-layout:** all fields (§5.2) — the `recorded-length` ledger is frozen by the
+  stop-sign/ledger bullet above; do NOT re-introduce the removed `declared-total-length`.
 - **Canonical fixed-width per-xpub payload** padding rule for RAID striping (§7.1).
 
 ## 10. Toolkit integration
