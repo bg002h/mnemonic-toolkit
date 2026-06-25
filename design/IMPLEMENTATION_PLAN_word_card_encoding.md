@@ -1,10 +1,10 @@
 # IMPLEMENTATION PLAN — Engravable Word-Card encoding (`mk1` / `md1`)
 
-- **Status:** Plan-doc — **R0 round-2 folded (0C/2I/4n addressed); round-3 re-dispatch pending.** NOT approved for implementation.
-- **Date:** 2026-06-24 (plan-R0 round-1 + round-2 folds same day)
+- **Status:** Plan-doc — **R0 round-3 folded (0C/1I/1n addressed); round-4 re-dispatch pending.** NOT approved for implementation.
+- **Date:** 2026-06-24 (plan-R0 rounds 1–3 same day)
 - **Spec (R0-GREEN):** `design/BRAINSTORM_word_card_encoding_2026-06-24.md` (commit `31109f8e`,
   R0 converged round-4; reviews `design/agent-reports/word-card-r0-round-{1,2,3,4}.md`).
-- **Source SHAs (grep-verified at write time):** toolkit `a552a242`, md-codec `7764145d`,
+- **Source SHAs (grep-verified at write time):** toolkit `352b1adf`, md-codec `7764145d`,
   mk-codec `46631c6`, ms-codec `5c0335c`.
 - **Verified deps already present:** `crates/mnemonic-toolkit/Cargo.toml:47 sha2 = "0.10"`,
   `:49 bip39 = { version = "2", features = ["all-languages"] }`; workspace members =
@@ -55,6 +55,17 @@ rewrote):
   cannot prune a value-free deletion — reworded to the `(b−1)·2⁻ᵗ` global union bound +
   linear multi-block path (§4.3); **M-3** concrete `|header|` formula (§4.2); **M-4** ledger
   checksum coverage + `payload_len` 16-bit capacity (§4.2); **N-5** SHA `a552a242`.
+
+### Plan-R0 round-3 fold log (2026-06-24)
+
+Round-3 verdict RED (0C/**1I**/1n); review `design/agent-reports/word-card-plan-r0-round-3.md`.
+Both round-2 Importants machine-verified CLOSED; the end-to-end cold-decode trace was clean
+(`K=58, |header|=11, K′=77, m_present=8`, no off-by-one). Round-3 fold:
+
+- **NEW-I3** — the M-3 fold pinned GEOM `stride b(4)` (max 15), but `b=round(√K)` reaches ~33
+  for the large md1 wallet-policies (≥325 B) the format admits. **`b` is now DERIVED, not
+  stored** (`b = floor(√K + 0.5)`, frozen rounding) — removes the 4-bit field and the defect
+  (§4.2, §4.3); added a `K≥241` large-payload boundary KAT (§7 P4). SHA refreshed `352b1adf`.
 
 ---
 
@@ -177,11 +188,12 @@ implementation truth, and all phase KATs use it. The spec ladder stands as illus
 - **`array-id`** (2 words, present iff `has-raid`): top 22 bits of
   `SHA-256(concat of the n ordered cosigner master-fingerprints)`.
 - **`GEOM`** (geometry — I3; read **POSITIONALLY before RS**, fixed **4 words**): words A+B =
-  `payload_len(16: ≤65535 B) │ t(6)`; word C = `stride b(4) │ U(3: reserved ledger slots) │
-  reserved(4)`; word D = `header-CRC(11)` = CRC-11 over all positional header words
+  `payload_len(16: ≤65535 B) │ t(6)`; word C = `U(3: reserved ledger slots) │
+  reserved(8)`; word D = `header-CRC(11)` = CRC-11 over all positional header words
   (H0 │ H1? │ array-id? │ GEOM A–C). The cold decoder reads GEOM by position, verifies
   header-CRC, then derives geometry **in closed form, NO post-RS dependency:**
-  `K = ceil((8·payload_len+t)/11)`; `checkpoints = ceil(K/b)` (or 1 if `K<16`);
+  `K = ceil((8·payload_len+t)/11)`; **`b = floor(√K + 0.5)` (DERIVED, not stored — NEW-I3;
+  frozen rounding)**; `checkpoints = ceil(K/b)` (or 1 if `K<16`);
   `|header| = 1 (H0) + (4 if has-raid: H1 2 + array-id 2) + 4 (GEOM) + 2U (ledger)`;
   `payload_offset = |header|`; `K′ = |header| + K + checkpoints`;
   `m_present = words_present − K′ − |stop-sign|`. **header-CRC fail ⇒ refuse-and-report**
@@ -199,7 +211,9 @@ implementation truth, and all phase KATs use it. The spec ladder stands as illus
   never-upgrade / tiny templates.
 
 ### 4.3 Checkpoints (Layer B, Q2) — C1/C2 fold
-- Inserted after every `b` payload-data words, `b = round(√K)`. Count `≈ √K`.
+- Inserted after every `b` payload-data words, **`b = floor(√K + 0.5)`, DERIVED from `K`
+  (not stored — NEW-I3; frozen rounding rule)**. Count `≈ √K`; valid for all `K` (no 4-bit
+  cap).
 - **11-bit split:** `marker(3)=0b101 │ block-index(3, mod 8) │ local-check(5)`.
 - **`local-check(5) = CRC-5`** over the block's payload-word bits, generator `x⁵+x²+1`
   (primitive). Uniform single-substitution miss `≤ 2⁻⁵≈3.1%` — **C2 fix**, replacing the
@@ -323,7 +337,8 @@ full-package-suite), per-phase opus review persisted to `design/agent-reports/` 
   full round-trip; **miscorrection caught by the tag**; **near-2047 top-truncation flagged
   (I1)**; **cold-decode-from-words-only via positional GEOM + deterministic `payload_offset`
   across `U`-slot fills (I3/NEW-I1)**; truncation flag on lost newest tail; deliberate-stop
-  NOT flagged; ledger durability; **header-CRC-fail ⇒ refuse**.
+  NOT flagged; ledger durability; **header-CRC-fail ⇒ refuse**; **large-md1 `K≥241` (derived
+  `b≈19–33`) boundary round-trip (NEW-I3)**.
 - **P5 — RAID r=1/r=2.** striping/reconstruct; recover any r of n+r; `P₁` append-only
   invariance; lone-parity-plate privacy KAT; **r=2 MDS for `n>8` (e.g. n=15) — NEW-I2
   regression guard** (full 5-bit `index-in-array` exponent).
