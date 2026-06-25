@@ -53,20 +53,20 @@ to whatever the Debian mirror serves that day).
 
 ```sh
 # From PROVENANCE.<arch>.txt:
-CONTAINER_IMAGE=ghcr.io/bg002h/repro-musl@sha256:<BUILT-DIGEST>
+CONTAINER_IMAGE=ghcr.io/bg002h/repro-musl-mnemonic-toolkit@sha256:<BUILT-DIGEST>
 docker pull "$CONTAINER_IMAGE"      # no auth needed — the package is PUBLIC
 ```
 
-> **Maintainer one-time setup — the `repro-musl` GHCR package MUST be Public.**
+> **Maintainer one-time setup — the `repro-musl-mnemonic-toolkit` GHCR package MUST be Public.**
 > GHCR container packages are **private by default**, and an external rebuilder
 > pulling by digest does so **without a token** — so the package has to be
 > public for this provenance model to work. CI (`reproducible-musl-build.yml` →
 > `build-container`) attempts to self-promote it to public via `gh api … -X PATCH
-> …/packages/container/repro-musl/visibility -f visibility=public`, but the
+> …/packages/container/repro-musl-mnemonic-toolkit/visibility -f visibility=public`, but the
 > default `GITHUB_TOKEN` often lacks the scope to flip visibility (it is
 > `|| true`, never hard-failing the build). If the self-promotion does not take,
 > an admin must set it **once** by hand: GitHub → (user/org) → **Packages** →
-> `repro-musl` → **Package settings** → Danger Zone → **Change visibility** →
+> `repro-musl-mnemonic-toolkit` → **Package settings** → Danger Zone → **Change visibility** →
 > **Public**. After that one-time flip the package stays public.
 
 - **Base image** (recorded in `Dockerfile.repro`): the official
@@ -169,7 +169,7 @@ Each release attaches, per arch:
   sha256:            <hash>
   source_commit:     <full 40-char SHA>
   source_date_epoch: <epoch>
-  container_image:   ghcr.io/bg002h/repro-musl@sha256:<BUILT-DIGEST>
+  container_image:   ghcr.io/bg002h/repro-musl-mnemonic-toolkit@sha256:<BUILT-DIGEST>
   ```
 
 ## 6. Compare
@@ -399,8 +399,8 @@ Each release attaches, for aarch64:
   ```
 
 The aarch64 provenance tuple cites the **`cross` image digest** (the toolchain
-pin) rather than the x86_64 leg's built repro-musl container digest — aarch64 is
-built by `cross` in its own digest-pinned image, not in the repro-musl container.
+pin) rather than the x86_64 leg's built repro-musl-mnemonic-toolkit container digest — aarch64 is
+built by `cross` in its own digest-pinned image, not in the repro-musl-mnemonic-toolkit container.
 
 ### 9.5 Self-test (what the `repro-aarch64-musl` CI gate runs)
 
