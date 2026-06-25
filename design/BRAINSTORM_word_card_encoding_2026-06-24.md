@@ -1,8 +1,8 @@
 # BRAINSTORM / SPEC — Engravable Word-Card encoding for `mk1` / `md1`
 
-- **Status:** Brainstorm spec — pre-R0. NOT approved for implementation.
-- **Date:** 2026-06-24
-- **Author:** brainstorm session (single author; awaiting mandatory opus R0 gate)
+- **Status:** Brainstorm spec — **R0 round-1 folded (3C/4I addressed); round-2 re-dispatch pending.** NOT approved for implementation.
+- **Date:** 2026-06-24 (R0 round-1 folds applied same day)
+- **Author:** brainstorm session (single author; in the mandatory opus R0 loop)
 - **Working name:** **Word Card (WC)** — provisional, rename welcome.
 - **Source SHAs (wire-format facts cited below were read at these revisions):**
   - `mnemonic-toolkit` @ `60af98dd`
@@ -13,6 +13,25 @@
 > This document is the output of a design dialogue. Per `CLAUDE.md` it MUST pass an
 > opus architect **R0 review to 0 Critical / 0 Important BEFORE any implementation**,
 > and the reviewer-loop continues after every fold. No code until GREEN.
+
+### R0 round-1 fold log (2026-06-24)
+
+Round-1 verdict RED (3C/4I); full review at `design/agent-reports/word-card-r0-round-1.md`.
+Wire-format citations all verified TRUE; core math (RS prefix-extensibility, RAID MDS,
+privacy) confirmed sound. Folds applied:
+
+- **C1** — removed the false "never silently miscorrects" claim + the self-referential
+  re-encode check; added an **independent integrity tag outside the value-relation** (§5.3,
+  §8.5, §9) with a numeric residual bound `≤ 2⁻ᵗ`.
+- **C2** — promoted indel pinpointing to normative (§6.1); added the **bounded-desync
+  invariant** + whole-block-erasure fallback (cost ≤ `b`); honest indel budget (§9).
+- **C3** — stop-sign now **≥2 words** + a **monotone `declared-total-length`** header field
+  so truncation/downgrade is always flagged (§5.2, §6.3).
+- **I1** split §9 into value-layer (MDS) vs indel-layer (sync-bounded). **I2** flipped §7.4
+  (RAID no longer auto-suppressed by an `md1`). **I3** elevated striping well-definedness to
+  normative (§7.1). **I4** added the **Frozen Constants** section (§9.5).
+- Nits: N1 RS attribution (§6.2), N2 privacy wording (§7.3), N3 `K′≈61–62`, N4 lockstep
+  version-sites (§10), N6 pre-chunking payload (§5.4).
 
 ---
 
@@ -110,11 +129,20 @@ how much of Layers C/D the user records. Only *repair* spends recorded budget.
      TLV tag `0x02`); keyless-template mode does not.
 2. **Header word(s).** Prepend a small self-describing header (exact bit layout = OPEN,
    §12): `{format-version, source-kind (mk1|md1), K-class, checkpoint stride b,
-   array-id, role}`. `array-id` and `role` are Layer-D fields (§7); for a standalone `md1`
-   they are degenerate (`role = solo`).
-3. **Regroup.** Concatenate header ∥ payload bits and regroup the bitstream **8→11**:
-   `K = ceil(total_bits / 11)` **data words**. (This is exactly how BIP-39 maps entropy to
-   words; here the "entropy" is the codec payload.)
+   declared-total-length (monotone; §6.3), array-id, role}`. `array-id`/`role` are Layer-D
+   fields (§7); for a standalone `md1` they are degenerate (`role = solo`). **`array-id` is
+   a plate-MATCHING aid only — NOT the integrity check** (C1): it travels inside the
+   codeword and would move with a miscorrection.
+3. **Integrity tag (C1).** Append a dedicated **integrity tag** = a strong, *independent*
+   function of the canonical payload (the source `m*1` codec BCH residue, or a ≥32-bit
+   truncated hash). It is recomputed and cross-checked after RS decode (§8.5); an RS
+   *miscorrection* onto a valid-but-wrong payload survives only with probability `≤ 2⁻ᵗ`
+   (`t` = tag bits, default ≥32). This replaces the old `decode(encode(B))=B` round-trip,
+   which was an identity that caught only structural garbage.
+4. **Regroup (N6).** Concatenate header ∥ payload ∥ integrity-tag bits and regroup **8→11**:
+   `K = ceil(total_bits / 11)` **data words** (same mapping BIP-39 uses for entropy). Layer
+   A consumes the codec's **PRE-chunking canonical payload** (the single logical
+   xpub/descriptor byte-string), NOT the chunked `mk1`/`md1` wire fragments.
 
 Approximate `K` (data words):
 
@@ -148,14 +176,24 @@ Approximate `K` (data words):
   A miswritten checkpoint is corrected by the global RS pass like any other word; its sync
   role is a *decode-time interpretation*, never an unprotected control channel. This closes
   the "what if the safety marker itself is wrong" hole.
-- A detected+localized deletion is reduced to a **known erasure** (re-insert a blank
-  placeholder at the pinpointed slot → global synchronization restored).
+- **Pinpointing is NORMATIVE (C2 — was open-Q2).** Each checkpoint's local parity MUST be
+  strong enough to pinpoint a **single** intra-block indel to one slot (reinsert-and-test:
+  try the `b` reinsertion positions, accept the one the local parity validates) → reduce it
+  to **one known erasure**.
+- **Fallback + bounded-desync invariant (C2).** When pinpointing fails — multiple indels in
+  one block, or a **deleted checkpoint** (detected by index-discontinuity at the *next*
+  checkpoint, whose declared index `i` arrives after `< i·b` words) — the affected block(s)
+  are marked as a **whole-block erasure (cost ≤ `b`)**. The running indices + fixed declared
+  length (§6.3) guarantee every indel is localized to **at most block granularity**, so a
+  single un-localized deletion can NEVER silently desync the whole codeword. This bound is
+  what makes the two-pass decode (§8) well-founded.
 
 ### 6.2 Error-correction (Layer C): append-only systematic RS
 
-- **Code:** systematic Reed–Solomon over GF(2048) in **evaluation form** (Reed's original
-  construction): parity words are independent evaluations at a **spec-frozen canonical
-  sequence** of points `α₁, α₂, …`. Consequence: **any prefix `P₁…Pₘ` is itself a valid
+- **Code:** systematic Reed–Solomon over GF(2048) in **evaluation form** (interpolation /
+  extended-evaluation "Vandermonde" systematic RS — NOT Reed's original *coefficient* form,
+  N1): parity words are independent evaluations at a **spec-frozen canonical sequence** of
+  points `α₁, α₂, …`. Consequence: **any prefix `P₁…Pₘ` is itself a valid
   `[K′+m, K′]` RS code with minimum distance `m+1`** (`K′` = data + checkpoints). This is
   what makes the tail append-only and progressive. (Generator-polynomial form is NOT
   prefix-extensible and MUST NOT be used.)
@@ -172,17 +210,24 @@ Approximate `K` (data words):
   position-agnostic, so a burst up to the erasure budget is absorbed regardless of where it
   lands.
 
-### 6.3 Stop-sign word (soft-terminal)
+### 6.3 Stop-sign + monotone declared-length (soft-terminal) — C3
 
-- The string ends in a **stop-sign word** = a terminal marker carrying a **total-word count
-  + checksum**. Semantics:
-  - Stop-sign present and consistent ⇒ the string is **whole**.
-  - Stop-sign absent at the end ⇒ the tail was **truncated** (end-of-string deletions);
-    flagged, never mistaken for an intentional stop.
-  - **Append-only upgrade:** to harden later, append more parity words then write a **new**
-    stop-sign after them. The decoder takes the **last** stop-sign as authoritative and
-    treats any earlier (now mid-stream) stop-sign as an ordinary word. ("Soft" = lenient to
-    leftover markers.)
+- A **stop-sign spans ≥2 words** (a single 11-bit word cannot hold a ~2047 word-count +
+  marker + checksum). It carries the **cumulative total-word count** + a checksum.
+- The **front header (§5.2) carries a MONOTONE `declared-total-length`**, bumped on every
+  upgrade. Truncation/downgrade is detected by comparison, NOT by stop-sign presence alone:
+  - words physically present **<** `declared-total-length` ⇒ **truncation flag** (tail
+    chipped/lost), never a silent fall-back to an earlier (weaker) tier. This closes C3's
+    silent-protection-downgrade hole even when the entire newest tail+stop-sign is lost.
+  - The decoder takes the stop-sign with the **highest** count as authoritative and treats
+    earlier (now mid-stream) stop-signs as ordinary words.
+- **Append-only upgrade:** append parity words, write a new higher-count stop-sign, and bump
+  the header `declared-total-length`.
+- **Steel-medium constraint (impl detail, §12):** updating the front header on engraved
+  steel means either a **pre-committed** `declared-total-length` at creation (the user
+  declares the max tier they intend to reach) or a header region designed to be appended.
+  The plan pins the mechanism; the correctness invariant is that the declared max is
+  **monotone non-decreasing**, so any downgrade is always detectable.
 
 ### 6.4 Word-ladder (the per-string progressive UX)
 
@@ -209,7 +254,13 @@ reconstructs a plate you've *lost entirely*.
 
 ### 7.1 Construction (progressive r=1 → r=2)
 
-`n` aligned xpub payloads are striped column-wise; add `r` parity stripes forming an
+**Prerequisite (I3 — NORMATIVE, was open-Q5):** each xpub is first normalized to a
+**canonical fixed-width per-xpub payload** (pad to the array-wide maximum; exact padding
+rule pinned in §9.5), so the column stripes are well-defined despite differing origin-path
+framing. The r=1/r=2 MDS math below **depends on** this alignment — it is a requirement, not
+an open question.
+
+The `n` aligned xpub payloads are striped column-wise; add `r` parity stripes forming an
 `[n+r, n]` MDS code at the plate level:
 
 - **r=1 — "Recovery A"** (RAID-5 / XOR): `P₁[j] = Σᵢ xᵢ[j]` (XOR = GF(2048) addition).
@@ -240,39 +291,53 @@ word-level ladder:
 
 ### 7.3 Privacy & distribution
 
-A single Recovery plate is one linear combination of `n` unknowns ⇒ **reveals nothing**
-about any individual xpub until combined with `n−1` real plates. Safe to store off-site /
-with a third party. Distribute so no location holds more than `r` plates to survive losing
-a whole location.
+Any set of **fewer than `n`** plates (data or parity) is information-theoretically
+uninformative about the full xpub set — in particular a **lone Recovery plate reveals
+nothing** (it is `r` linear combinations of `n` unknowns; for r=2 the two parity plates
+*together* are still only 2 of the `n` equations needed, N2). Safe to store off-site / with
+a third party. Distribute so no location holds more than `r` plates to survive losing a
+whole location.
 
 ### 7.4 Conditional emission (overlap with wallet-policy `md1`)
 
 A **wallet-policy `md1` card already embeds all `n` xpubs** (TLV `0x02`, md-codec @
 `7764145d`) — it is *already* a cross-plate xpub backup. Therefore:
 
-- If a wallet-policy `md1` Word Card is part of the same bundle ⇒ **do not auto-emit RAID**;
-  the `md1` card is the cross-plate recovery (toolkit says so).
-- If `md1` is **keyless-template**, or `mk1` is backed up standalone ⇒ RAID is the only
-  cross-plate recovery ⇒ **emit** (per chosen `r`).
-- RAID remains available as an **explicit opt-in** even when it overlaps `md1`.
+- **RAID is NOT auto-suppressed when a wallet-policy `md1` is present (I2 — flipped).** A
+  single `md1` plate is itself one point of failure: losing it **plus** one `mk1` plate is
+  unrecoverable, whereas Recovery-A survives **any** one plate lost. So RAID-A is retained
+  by default; the `md1` is noted as *additional* coverage, not a replacement.
+- Auto-suppression is offered only as an **explicit, coverage-verified opt-in** (the user
+  affirms the `md1` is independently backed up).
+- If `md1` is **keyless-template** or `mk1` is backed up standalone ⇒ RAID is the only
+  cross-plate recovery ⇒ always emit.
 
 ---
 
 ## 8. Decoder algorithm (per string)
 
-1. Normalize case; map words → 11-bit symbols; locate the authoritative **stop-sign**
-   (last one); flag truncation if absent.
+1. Normalize case; map words → 11-bit symbols; read the front header's
+   `declared-total-length`; take the **highest-count stop-sign** as authoritative. **Flag
+   truncation when words-present < `declared-total-length`** (C3) — not merely when a
+   stop-sign is absent.
 2. **Sync pass (Layer B):** walk checkpoints; classify each block (clean / substitution /
    deletion / insertion, §6.1); rebuild the full-length grid; mark erasures at pinpointed
-   indels.
+   indels. **Bounded-desync invariant (C2):** every indel localizes to ≥ block granularity
+   (running indices + declared length); an indel that cannot be pinpointed to one slot
+   degrades to a **whole-block erasure (cost ≤ `b`)**, never an unbounded whole-codeword
+   desync — which is what makes this two-pass decode well-founded.
 3. **RS pass (Layer C):** decode the systematic RS codeword over the grid (Welch–Berlekamp
-   / Gao), correcting substitutions and filling erasures within budget; **refuse** (no
-   silent miscorrect) if the error weight exceeds `⌊m/2⌋` + erasure budget.
+   / Gao), correcting substitutions + filling erasures within budget; **refuse** if the
+   error weight exceeds `⌊m/2⌋` + erasure budget. (Refusal handles *failure*; a
+   *miscorrection* within budget is handled by step 5, not here — see C1.)
 4. **Re-verify** the sync grid against the corrected symbols (catches a corrupted checkpoint
    that was repaired in step 3).
-5. Strip checkpoints + header; **regroup 11→8** to recover the source payload bytes;
-   re-encode through the codec and **assert the round-trip** matches the declared
-   `array-id`/payload (defends against an undetected-but-decodable corruption).
+5. Strip checkpoints + header; **regroup 11→8** to recover the source payload bytes.
+   **Integrity cross-check (C1 — replaces the old round-trip):** recompute the independent
+   integrity tag (§5.3) over the recovered payload and require equality with the stored tag.
+   An RS *miscorrection* onto a valid-but-wrong payload survives this only with probability
+   `≤ 2⁻ᵗ` (default ≤ 2⁻³²). The removed `decode(encode(B))=B` check was an identity that
+   caught structural garbage but never a structurally-valid wrong xpub.
 6. **RAID pass (Layer D)**, if reconstructing an array: gather available plates by
    `array-id`; if `≤ r` plates are missing, solve the `[n+r, n]` system for the missing
    stripes; each reconstructed stripe is a full Word-Card string for that xpub.
@@ -281,16 +346,26 @@ A **wallet-policy `md1` card already embeds all `n` xpubs** (TLV `0x02`, md-code
 
 ## 9. Guarantees & bounds
 
-- **Detection** of any missing / extra / swapped word: **always**, from the mandatory
-  prefix, independent of recorded parity.
-- **Per-string repair** (with `m` parity words): `2·(substitutions) + (erasures) ≤ m`;
-  located runs cost 1/word. This is the **MDS ceiling** — no code at this overhead does
-  better, and RS meets it.
+Two **DISTINCT** guarantees — do not conflate (I1):
+
+**(a) Value layer — MDS-optimal (substitutions + located erasures).** With `m` parity
+words: `2·(substitutions) + (erasures) ≤ m`. This is the **MDS ceiling** — no code at this
+overhead does better, and RS meets it.
+
+**(b) Indel layer — sync-bounded, NOT MDS.** Detection of any missing / extra / swapped word
+is **always on** (mandatory prefix, independent of `m`). *Repair* of an indel reduces it to
+erasure(s): **cost 1/word when pinpointed within its block, otherwise ≤ `b` per affected
+block (C2).** "Located runs cost 1/word" holds only under successful per-slot pinpointing;
+the honest worst case is `b` erasures per damaged block.
+
 - **Per-array survival** (`r` Recovery plates): lose any `r` of `n+r` plates.
 - **Append-only** on both axes, up to the GF(2048) length cap (`n ≤ 2047` words/string;
-  with `K′ ≈ 61` that is ~1980 appendable parity words — effectively unbounded).
-- **Custody-safe:** the decoder never silently miscorrects; beyond budget it refuses and
-  reports which words/plates are implicated.
+  with `K′ ≈ 61–62` that is ~1980 appendable parity words — effectively unbounded).
+- **Custody safety (C1 — corrected from an over-claim):** the design does **not** claim the
+  decoder *never* miscorrects — a bounded-distance RS decoder can land on a valid-but-wrong
+  codeword within `⌊m/2⌋`. That event is caught by the independent integrity tag
+  (§5.3 / §8.5) with residual `≤ 2⁻ᵗ` (default ≤ 2⁻³²); only then is the result trusted.
+  Beyond the correction budget the decoder refuses and reports the implicated words/plates.
 
 ### 9.1 Worked numbers — 3-key multisig (per-xpub `mk1`, `K≈54`)
 
@@ -305,6 +380,20 @@ survive any 2 of 5 plates. Default recommendation: **~50% word tails + Recovery 
 
 ---
 
+## 9.5 Frozen constants (normative — pin for 20-year recoverability) — I4
+
+These MUST be fixed by the spec and never changed (the top recoverability risk after C1);
+the plan-doc assigns concrete values:
+
+- **Field:** GF(2¹¹) with a named **primitive polynomial**.
+- **Symbol map:** the canonical **BIP-39 English index map** (word ⇄ 11-bit value).
+- **RS evaluation sequence:** the ordered points `α₁, α₂, …` for the append-only tail (§6.2).
+- **RAID generator `α`:** with `ord(α) ≥ n_max` (REQUIRED for r=2 MDS; §7.1).
+- **Integrity tag:** function + bit-width `t` (§5.3).
+- **Stop-sign + checkpoint local-parity encodings:** field widths (§6.1, §6.3).
+- **Header bit-layout:** all fields, incl. `declared-total-length` (§5.2).
+- **Canonical fixed-width per-xpub payload** padding rule for RAID striping (§7.1).
+
 ## 10. Toolkit integration
 
 - **New rendering**, NOT a replacement for `m*1`. Proposed surface (exact spelling = OPEN):
@@ -318,6 +407,12 @@ survive any 2 of 5 plates. Default recommendation: **~50% word tails + Recovery 
     (`docs/manual/tests/lint.sh`).
   - New `ToolkitError` variants + their exhaustive `match` arms: **alphabetical order**.
   - All doc CLI-output blocks must be **binary-generated/identical** (fixed seeds).
+  - `schema_mirror` gates flag-**NAMES** + dropdown **VALUE** enums, **not `--json`
+    wire-shape** (value-only adds ride the paired-PR rule).
+  - **Release version-sites (N4 — many NOT gate-enforced):** `CHANGELOG.md` (tag-gated
+    `changelog-check`), **both** READMEs, `fuzz/Cargo.lock`, `scripts/install.sh` sibling
+    pins, generated **man-pages** (`gen-man`). Re-run full suite + fuzz build after any
+    version bump, before tag.
 - **Where the code lives = OPEN** (§12): leaning toward a **new sibling crate**
   (`word-card` / `wc-codec`) consumed by the toolkit, mirroring the codec-per-format
   pattern, so `md`/`mk`/`ms` CLIs could each gain a word view independently.
@@ -339,15 +434,15 @@ survive any 2 of 5 plates. Default recommendation: **~50% word tails + Recovery 
 1. **Header bit layout** — exact fields/widths for `{version, source-kind, K-class, stride,
    array-id, role}`; how `array-id` is derived (hash of ordered fingerprints — which hash,
    truncated to how many words) and its collision target.
-2. **Local-parity scheme** inside each checkpoint word — how many of the 11 bits are index
-   vs parity; whether it can *pinpoint* a single intra-block deletion (reinsert-and-test)
-   vs only flag the block.
+2. **Local-parity scheme** inside each checkpoint word — *pinpoint-or-block-erasure* is now
+   **NORMATIVE** (§6.1, C2 fold); remaining open = the exact 11-bit split (index vs parity)
+   and the reinsert-and-test cost ceiling.
 3. **Crate boundary** — new sibling crate vs toolkit module vs per-codec extension. Who
    owns the RS/RAID engine (shared lib?).
 4. **Wordlist** — confirm BIP-39 English vs a confusion-minimized 2048-list; if the latter,
    sourcing + edit-distance criteria. (Default: BIP-39 English.)
-5. **Stripe alignment** for `mk1` arrays — canonical fixed-width per-xpub payload (padding
-   rules) so column striping is well-defined across differing origin-path lengths.
+5. **Stripe alignment** for `mk1` arrays — canonical fixed-width per-xpub payload is now
+   **NORMATIVE** (§7.1, §9.5, I3 fold); remaining open = the exact padding rule.
 6. **Soft-terminal exactness** — stop-sign encoding (count + which checksum), and the rule
    for choosing "the last" stop-sign under tail corruption.
 7. **md1 size extremes** — fixed parity floor for tiny keyless templates; behavior of `√K`
