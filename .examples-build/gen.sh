@@ -358,9 +358,9 @@ targets older Core. `restore` also emits `--format descriptor` (the bare
 
 \newpage
 
-# 5. Custom degrading-miniscript wallet (distinct keys per tier) + watch-only export
+# 5. Custom degrading-miniscript wallet -- the pathological example (distinct keys per tier) + watch-only export
 
-A four-tier vault. **Each tier uses its own distinct key set (no key reuse)**,
+A four-tier vault -- our **pathological example** wallet. **Each tier uses its own distinct key set (no key reuse)**,
 deliberately mixing all four Bitcoin timelock kinds:
 
 | Tier | Spend condition | Timelock kind |
@@ -478,7 +478,7 @@ secret word's preimage `X`.
 
 \newpage
 
-# 6. Taproot version of the degrading wallet
+# 6. Taproot version of the degrading wallet (the pathological example)
 
 `wsh(...)` reveals the whole policy on every spend. **Taproot** gives a
 cooperative **key-path** spend (cheap, private, looks like single-sig) and
