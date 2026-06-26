@@ -59,6 +59,9 @@ pub enum RsError {
         /// The offending value (`>= 2048`).
         value: u16,
     },
+    /// The error + erasure weight exceeds the `2t + s ≤ m` budget, or the
+    /// punctured system is underdetermined — the message cannot be recovered.
+    Uncorrectable,
     /// The requested `data_len` is inconsistent with the codeword (e.g.
     /// `data_len > codeword.len()`), making the geometry undefined.
     Underdetermined {
@@ -67,9 +70,6 @@ pub enum RsError {
         /// The codeword length available.
         codeword_len: usize,
     },
-    /// The error + erasure weight exceeds the `2t + s ≤ m` budget, or the
-    /// punctured system is underdetermined — the message cannot be recovered.
-    Uncorrectable,
 }
 
 impl core::fmt::Display for RsError {
@@ -94,6 +94,9 @@ impl core::fmt::Display for RsError {
                     "symbol {value} at index {index} is outside GF(2^11) (0..=2047)"
                 )
             }
+            RsError::Uncorrectable => {
+                write!(f, "error/erasure weight exceeds the RS budget (2t + s ≤ m)")
+            }
             RsError::Underdetermined {
                 data_len,
                 codeword_len,
@@ -101,9 +104,6 @@ impl core::fmt::Display for RsError {
                 f,
                 "data_len {data_len} is inconsistent with codeword length {codeword_len}"
             ),
-            RsError::Uncorrectable => {
-                write!(f, "error/erasure weight exceeds the RS budget (2t + s ≤ m)")
-            }
         }
     }
 }

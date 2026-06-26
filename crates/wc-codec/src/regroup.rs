@@ -11,9 +11,13 @@
 //! partial symbol is **low-bit-padded with zeros**; the inverse asserts those
 //! trailing pad bits are zero and rejects any non-zero pad.
 
-/// Errors from the regroup decode path.
+/// Errors from the regroup decode path. Variants are **alphabetical** (plan /
+/// `CLAUDE.md` convention; P4 folded the deferred P1-N1 reorder).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegroupError {
+    /// The trailing pad bits (between `total_bits` and `11 * symbols.len()`) were
+    /// not all zero, violating the frozen low-bit-zero-pad rule (plan §4.1).
+    NonZeroPad,
     /// `symbols_to_bits` was asked for more bits than the symbol stream carries
     /// (`11 * symbols.len() < total_bits`).
     NotEnoughBits {
@@ -29,14 +33,14 @@ pub enum RegroupError {
         /// The offending value.
         value: u16,
     },
-    /// The trailing pad bits (between `total_bits` and `11 * symbols.len()`) were
-    /// not all zero, violating the frozen low-bit-zero-pad rule (plan §4.1).
-    NonZeroPad,
 }
 
 impl core::fmt::Display for RegroupError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            RegroupError::NonZeroPad => {
+                write!(f, "regroup: trailing pad bits are non-zero (must be zero)")
+            }
             RegroupError::NotEnoughBits {
                 requested,
                 available,
@@ -46,9 +50,6 @@ impl core::fmt::Display for RegroupError {
             ),
             RegroupError::SymbolOutOfRange { index, value } => {
                 write!(f, "regroup: symbol[{index}] = {value} exceeds 11-bit range")
-            }
-            RegroupError::NonZeroPad => {
-                write!(f, "regroup: trailing pad bits are non-zero (must be zero)")
             }
         }
     }
