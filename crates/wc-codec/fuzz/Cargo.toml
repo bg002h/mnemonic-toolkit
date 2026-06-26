@@ -1,0 +1,46 @@
+# wc-codec fuzz workspace — Word-Card value-engine phase of the constellation
+# stress-fuzz program (P6). This is an OWN `[workspace]` so the repo root's
+# `cargo build` / `cargo test --workspace` / `cargo metadata --locked`
+# completely ignore it. NO-BUMP: infra + tests only; `wc-codec` itself is
+# UNCHANGED by adding this fuzz dir.
+[package]
+name = "wc-codec-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+rust-version = "1.85"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Own workspace so the root workspace never sees this crate.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+# The decode-never-panics target maps fuzz bytes → valid BIP-39 words; reuse the
+# same wordlist crate wc-codec deps (symbol value == English word index).
+bip39 = "2"
+
+[dependencies.wc-codec]
+path = ".."
+
+[profile.release]
+debug = 1
+
+# cargo-fuzz auto-discovers fuzz_targets/*.rs, but declaring the [[bin]]s
+# explicitly with test/doc/bench off keeps `cargo build`/`cargo test` in this
+# workspace from trying to build them as ordinary binaries.
+[[bin]]
+name = "wc_roundtrip"
+path = "fuzz_targets/wc_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "wc_decode_never_panics"
+path = "fuzz_targets/wc_decode_never_panics.rs"
+test = false
+doc = false
+bench = false

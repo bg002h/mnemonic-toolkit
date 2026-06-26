@@ -375,6 +375,17 @@ const FROM_ROUTES: &[Route] = &[
         source_file: "src/cmd/verify_bundle.rs",
         evidence: &["resolve_template_completion_seed", "=-"],
     },
+    // P6 (Word-Card): word-card --from {mk1,md1} encodes a PUBLIC-material card
+    // into a Word Card. NOT a secret route (mk1/md1 = xpub/descriptor, never
+    // entropy; ms1 is intentionally refused via UnknownHrp) — but the `--from`
+    // axis tracks EVERY --from-bearing subcommand for routing completeness. The
+    // `-` value reads the card list from stdin (`f == "-"`), the non-argv anchor.
+    Route {
+        subcommand: "word-card",
+        flag: "--from",
+        source_file: "src/cmd/word_card.rs",
+        evidence: &["== \"-\""],
+    },
 ];
 
 // ── Axis 3: `--slot` routes (4; slot-stdin / @env: / refusal) ──

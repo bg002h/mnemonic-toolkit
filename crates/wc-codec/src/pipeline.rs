@@ -72,8 +72,15 @@ const STOP_MARKER: u16 = 0b1111;
 pub const DEFAULT_INTEGRITY_BITS: u8 = 44;
 /// Minimum integrity-tag bit-width (plan §3 / §4.5): 33 bits (3 words).
 pub const MIN_INTEGRITY_BITS: u8 = 33;
-/// Maximum integrity-tag bit-width — SHA-256 truncation, capped at the digest.
-pub const MAX_INTEGRITY_BITS: u8 = 64;
+/// Maximum integrity-tag bit-width. Bounded by the **6-bit GEOM `t` field**
+/// (`build_geom` / `parse_header` pack `t` in 6 bits → max value 63), NOT by the
+/// SHA-256 digest. A larger `t` would overflow the field on encode (the low 6
+/// bits are stored, e.g. `64 → 0`) and then fail `parse_header`'s range check on
+/// decode — an `encode`-accepted-but-NEVER-decodable card (silent
+/// unrecoverability). 63 bits is the true field ceiling and still gives a
+/// residual `≤ 2⁻⁶³`. (P6 fuzz finding: `wc_roundtrip` over `t=64` surfaced the
+/// encode/decode asymmetry.)
+pub const MAX_INTEGRITY_BITS: u8 = 63;
 
 /// Default reserved ledger slots `U` (plan §4.2): creation + 2 upgrades.
 pub const DEFAULT_U_SLOTS: u8 = 3;

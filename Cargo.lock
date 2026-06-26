@@ -679,8 +679,6 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 [[package]]
 name = "md-codec"
 version = "0.39.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fe7832cf16a082573e8364d62a77e0f6071d07b6c6c05a8da08eed6913edabd"
 dependencies = [
  "bip39",
  "bitcoin",
@@ -717,8 +715,6 @@ dependencies = [
 [[package]]
 name = "mk-codec"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1247d41a895c0fe1019aed8158610f57845521709ff8349f266e46c1c335f679"
 dependencies = [
  "bech32",
  "bitcoin",
@@ -763,6 +759,7 @@ dependencies = [
  "similar",
  "tempfile",
  "unicode-normalization",
+ "wc-codec",
  "zeroize",
 ]
 

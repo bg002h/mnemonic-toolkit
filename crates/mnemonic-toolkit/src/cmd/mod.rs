@@ -24,4 +24,5 @@ pub mod silent_payment;
 pub mod slip39;
 pub mod verify_bundle;
 pub mod verify_message;
+pub mod word_card;
 pub mod xpub_search;

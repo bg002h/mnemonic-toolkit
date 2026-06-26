@@ -27,3 +27,14 @@ rust-version = "1.85"
 # (supersedes the historical `tr-sortedmulti-a-via-upstream`).
 [patch.crates-io]
 miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "95fdd1c5773bd918c574d2225787973f63e16a66" }
+# DEV-ONLY (P6) — remove + bump to mk-codec 0.4.1 / md-codec 0.39.1 at release.
+# The Word-Card P0 canonical-payload accessors (`KeyCard::canonical_payload_bytes`
+# / `KeyCard::from_canonical_payload_bytes`, `Descriptor::canonical_payload_bytes`
+# / `Descriptor::from_canonical_payload_bytes`) are on the sibling-codec MAINLINES
+# but NOT yet published to crates.io. These path overrides supply the
+# accessor-bearing local copies so the toolkit's `word_card_adapter` builds; the
+# declared `mk-codec`/`md-codec` version reqs in
+# `crates/mnemonic-toolkit/Cargo.toml` are left as-is. The orchestrator REMOVES
+# this block and bumps the published versions at the release seam.
+md-codec = { path = "/scratch/code/shibboleth/descriptor-mnemonic/crates/md-codec" }
+mk-codec = { path = "/scratch/code/shibboleth/mnemonic-key/crates/mk-codec" }
