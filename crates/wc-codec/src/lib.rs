@@ -30,6 +30,7 @@ pub mod field;
 pub mod pad;
 pub mod pipeline;
 mod poly;
+pub mod raid;
 pub mod regroup;
 pub mod rs;
 pub mod sync;
@@ -38,6 +39,7 @@ pub mod wordmap;
 pub use pipeline::{
     decode, encode, DEFAULT_INTEGRITY_BITS, DEFAULT_U_SLOTS, MAX_INTEGRITY_BITS, MIN_INTEGRITY_BITS,
 };
+pub use raid::{raid_encode, raid_reconstruct, PlateRole, RaidPlate, RaidRecovery};
 
 // ===========================================================================
 // Public API surface (plan §6.1) — the consolidated codec-agnostic types.
@@ -87,6 +89,22 @@ pub struct RepairSummary {
     pub erasures_filled: usize,
 }
 
+/// The RAID metadata a Word-Card plate carries (plan §4.2 H1 + array-id), exposed
+/// on [`Decoded::raid`] iff the plate's H0 `has-raid` bit was set (a RAID plate).
+/// A solo card decodes with `raid == None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RaidMeta {
+    /// The number of data plates `n` in the array (`2..=32`).
+    pub n: usize,
+    /// The plate's role in the array.
+    pub role: PlateRole,
+    /// The plate's `index-in-array` (`0..n−1`) — the `P₂` α-exponent (plan §3).
+    pub index: usize,
+    /// The 22-bit array-id (top 22 bits of `SHA-256(array_id_seed)`) — the
+    /// plate-matching aid that fixes stripe order (plan §3 / §4.2).
+    pub array_id: u32,
+}
+
 /// The result of a successful [`decode`] (plan §6.1).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Decoded {
@@ -101,6 +119,9 @@ pub struct Decoded {
     pub truncated: bool,
     /// A small repair summary (erasures filled).
     pub repair: RepairSummary,
+    /// The RAID plate metadata, present iff this card carried a RAID header
+    /// (H0 `has-raid = 1`); `None` for a solo card (plan §4.2).
+    pub raid: Option<RaidMeta>,
 }
 
 /// The public consolidated Word-Card error (plan §6.1). Variants are
@@ -123,6 +144,15 @@ pub enum WcError {
     /// the 33-bit floor, `u_slots == 0`, `payload_bits` exceeding the payload or
     /// the 16-bit GEOM capacity).
     InvalidParams,
+    /// During RAID reconstruct the supplied plates did not form a single coherent
+    /// array — mismatched array-ids (plates from two different wallets), or
+    /// inconsistent `n` / duplicate index / inconsistent stripe width. Refuse
+    /// rather than silently mix unrelated plates (plan §4.2 / §7 P5 KAT 6).
+    RaidArrayMismatch,
+    /// A RAID reconstruct had MORE than `r` plates missing — the MDS solve is
+    /// underdetermined, so refuse rather than emit a wrong xpub (plan §7 P5
+    /// KAT 8; the funds-safety net for the cross-plate layer).
+    RaidUnrecoverable,
     /// A field-layer (8↔11 regroup) error surfaced while packing/unpacking.
     Regroup(regroup::RegroupError),
     /// A value-layer (Reed–Solomon) error surfaced while encoding/decoding.
@@ -157,6 +187,14 @@ impl core::fmt::Display for WcError {
                 "word-card: integrity-tag mismatch (RS miscorrection / ambiguous) — refuse"
             ),
             WcError::InvalidParams => write!(f, "word-card: invalid encode/decode parameter"),
+            WcError::RaidArrayMismatch => write!(
+                f,
+                "word-card: RAID plates do not form one coherent array (mismatched array-id / n / index) — refuse"
+            ),
+            WcError::RaidUnrecoverable => write!(
+                f,
+                "word-card: RAID array has more than r plates missing — underdetermined, refuse"
+            ),
             WcError::Regroup(e) => write!(f, "word-card: {e}"),
             WcError::Rs(e) => write!(f, "word-card: {e}"),
             WcError::Sync(e) => write!(f, "word-card: {e}"),

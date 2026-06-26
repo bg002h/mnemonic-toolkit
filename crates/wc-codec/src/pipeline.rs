@@ -202,43 +202,113 @@ fn source_kind_from_code(code: u16) -> Option<SourceKind> {
 }
 
 /// Build the H0 word: `version(4) | source-kind(2) | has-raid(1) | reserved(4)`.
-fn build_h0(kind: SourceKind) -> u16 {
+/// `has_raid` is `true` for a RAID plate (P5) — it gates the H1 + array-id words.
+fn build_h0(kind: SourceKind, has_raid: bool) -> u16 {
     let mut w = BitWriter::new();
     w.push(H0_VERSION as u64, 4);
     w.push(source_kind_code(kind) as u64, 2);
-    w.push(0, 1); // has-raid = 0 (solo; RAID is P5)
+    w.push(has_raid as u64, 1); // has-raid bit (plan §4.2)
     w.push(0, 4); // reserved
     w.finish()[0]
 }
 
-/// The geometry derived from `(payload_bits, t)` — closed-form, no RS dependency.
+/// The fixed RAID header fields carried inside `K′` (plan §4.2 H1 + array-id),
+/// present iff the H0 `has-raid` bit is set. RS-protected + header-CRC-covered.
+///
+/// **H1** (2 words = 22 bits): `n−1(5: 1..32) | role(2) | index-in-array(5: 0..31)
+/// | reserved(10)`. The full **5-bit** `index-in-array` is the `P₂` α-exponent
+/// (plan §3 / NEW-I2), so r=2 MDS holds for all `n ≤ 32`. **array-id** (2 words):
+/// the top 22 bits of `SHA-256(array_id_seed)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct RaidHeaderFields {
+    /// Number of data plates `n` (`2..=32`).
+    pub n: usize,
+    /// The plate's role code (0 = Data, 1 = ParityA, 2 = ParityB) — plan §4.2.
+    pub role: u16,
+    /// The plate's `index-in-array` (0..31), the `P₂` α-exponent — plan §3.
+    pub index: usize,
+    /// The 22-bit array-id (top 22 bits of `SHA-256(array_id_seed)`).
+    pub array_id: u32,
+}
+
+/// Role codes (plan §4.2 H1): `0 = Data`, `1 = ParityA`, `2 = ParityB`.
+pub(crate) const RAID_ROLE_DATA: u16 = 0;
+pub(crate) const RAID_ROLE_PARITY_A: u16 = 1;
+pub(crate) const RAID_ROLE_PARITY_B: u16 = 2;
+
+/// The extra positional header words a RAID plate carries (H1 = 2 + array-id = 2).
+const RAID_HEADER_WORDS: usize = 4;
+
+/// Compute the 22-bit array-id from the caller-supplied seed (the concatenated
+/// ordered cosigner fingerprints): the **top 22 bits** of `SHA-256(seed)`
+/// (plan §3 / §4.2). wc-codec hashes the seed; the caller passes the raw seed.
+pub(crate) fn array_id_from_seed(seed: &[u8]) -> u32 {
+    let d = Sha256::digest(seed);
+    // Top 22 bits = the first 22 MSB-first bits of the digest.
+    let top = ((d[0] as u32) << 16) | ((d[1] as u32) << 8) | (d[2] as u32); // 24 bits
+    top >> 2 // drop the low 2 bits → top 22
+}
+
+/// Build the H1 two-word block: `n−1(5) | role(2) | index(5) | reserved(10)`.
+fn build_h1(n: usize, role: u16, index: usize) -> [u16; 2] {
+    let mut w = BitWriter::new();
+    w.push((n as u64) - 1, 5);
+    w.push(role as u64, 2);
+    w.push(index as u64, 5);
+    w.push(0, 10); // reserved
+    let v = w.finish();
+    [v[0], v[1]]
+}
+
+/// Build the array-id two-word block: the 22-bit array-id, MSB-first.
+fn build_array_id(array_id: u32) -> [u16; 2] {
+    let mut w = BitWriter::new();
+    w.push(array_id as u64, 22);
+    let v = w.finish();
+    [v[0], v[1]]
+}
+
+/// The geometry derived from `(payload_bits, t, has_raid)` — closed-form, no RS
+/// dependency.
 #[derive(Debug, Clone, Copy)]
 struct Geometry {
-    k: usize,           // data symbols carrying payload+tag
-    checkpoints: usize, // checkpoint words interspersed
-    kprime: usize,      // RS message length = 1 (H0) + 4 (GEOM) + K + checkpoints
+    k: usize,            // data symbols carrying payload+tag
+    checkpoints: usize,  // checkpoint words interspersed
+    header_words: usize, // positional header word count (5 solo, 9 raid)
+    kprime: usize,       // RS message length = header_words + K + checkpoints
+}
+
+/// The positional header word count: `H0(1) + [H1(2)+array-id(2) if raid] +
+/// GEOM(4)` = 5 solo, 9 raid (plan §4.2). These are the words that precede the
+/// interleave region and are part of the RS message `K′`.
+fn header_word_count(has_raid: bool) -> usize {
+    1 + if has_raid { RAID_HEADER_WORDS } else { 0 } + 4
 }
 
 /// Closed-form geometry recovery (plan §4.2). `K = ceil((payload_bits + t)/11)`;
 /// `checkpoint_count` via the P3 layout (which already encodes `b = floor(√K +
-/// 0.5)` and the small-K degenerate-single-checkpoint rule). `K′ = 1 + 4 + K +
-/// checkpoints` (header words inside the RS message; ledger is NOT).
-fn derive_geometry(payload_bits: usize, t: u8) -> Geometry {
+/// 0.5)` and the small-K degenerate-single-checkpoint rule). `K′ = header_words +
+/// K + checkpoints` (header words inside the RS message; ledger is NOT). With
+/// RAID the header carries 4 extra words (H1 + array-id) inside `K′`.
+fn derive_geometry(payload_bits: usize, t: u8, has_raid: bool) -> Geometry {
     let total_bits = payload_bits + t as usize;
     let k = total_bits.div_ceil(11);
     let layout = sync::checkpoint_layout(k);
     let checkpoints = layout.checkpoint_count;
-    let kprime = 1 + 4 + k + checkpoints;
+    let header_words = header_word_count(has_raid);
+    let kprime = header_words + k + checkpoints;
     Geometry {
         k,
         checkpoints,
+        header_words,
         kprime,
     }
 }
 
-/// The 4 GEOM words for `(payload_bits, t, u)`, given the already-built `h0`
-/// (needed for the header-CRC over `H0 ‖ GEOM-A ‖ GEOM-B ‖ GEOM-C`).
-fn build_geom(h0: u16, payload_bits: usize, t: u8, u: u8) -> [u16; 4] {
+/// The 4 GEOM words for `(payload_bits, t, u)`. The header-CRC (word D) covers
+/// ALL positional header words preceding GEOM-D — `prefix` = `[H0]` (solo) or
+/// `[H0, H1-a, H1-b, aid-a, aid-b]` (raid) — followed by GEOM-A..C (plan §4.2).
+fn build_geom(prefix: &[u16], payload_bits: usize, t: u8, u: u8) -> [u16; 4] {
     // words A+B = payload_bits(16) | t(6)  (22 bits → exactly 2 words)
     let mut ab = BitWriter::new();
     ab.push(payload_bits as u64, 16);
@@ -253,10 +323,37 @@ fn build_geom(h0: u16, payload_bits: usize, t: u8, u: u8) -> [u16; 4] {
     c.push(0, 8); // reserved
     let geom_c = c.finish()[0];
 
-    // word D = header-CRC(11) over H0 ‖ GEOM-A ‖ GEOM-B ‖ GEOM-C.
-    let geom_d = crc11(&[h0, geom_a, geom_b, geom_c]);
+    // word D = header-CRC(11) over (prefix ‖ GEOM-A ‖ GEOM-B ‖ GEOM-C).
+    let mut crc_input: Vec<u16> = Vec::with_capacity(prefix.len() + 3);
+    crc_input.extend_from_slice(prefix);
+    crc_input.extend_from_slice(&[geom_a, geom_b, geom_c]);
+    let geom_d = crc11(&crc_input);
 
     [geom_a, geom_b, geom_c, geom_d]
+}
+
+/// Build the full positional header (`[H0] [H1 2 + array-id 2]? [GEOM 4]`) for a
+/// solo or RAID plate, returning the word vector. The header-CRC covers all of
+/// `H0 ‖ (H1 ‖ array-id)? ‖ GEOM-A..C`.
+fn build_header(
+    kind: SourceKind,
+    payload_bits: usize,
+    t: u8,
+    u: u8,
+    raid: Option<RaidHeaderFields>,
+) -> Vec<u16> {
+    let h0 = build_h0(kind, raid.is_some());
+    let mut prefix: Vec<u16> = vec![h0];
+    if let Some(rf) = raid {
+        let h1 = build_h1(rf.n, rf.role, rf.index);
+        let aid = build_array_id(rf.array_id);
+        prefix.extend_from_slice(&h1);
+        prefix.extend_from_slice(&aid);
+    }
+    let geom = build_geom(&prefix, payload_bits, t, u);
+    let mut out = prefix;
+    out.extend_from_slice(&geom);
+    out
 }
 
 /// The parsed, CRC-verified header geometry.
@@ -266,33 +363,46 @@ struct ParsedHeader {
     payload_bits: usize,
     t: u8,
     u: u8,
+    /// The RAID header fields, present iff the H0 `has-raid` bit was set.
+    raid: Option<RaidHeaderFields>,
     geom: Geometry,
 }
 
-/// Read H0 + GEOM positionally from the engraved word stream and verify the
-/// header-CRC. Returns the parsed geometry, or a `WcError`.
+/// Read H0 (+ H1 + array-id if RAID) + GEOM positionally from the engraved word
+/// stream and verify the header-CRC. Returns the parsed geometry, or a `WcError`.
 fn parse_header(words: &[u16]) -> Result<ParsedHeader, WcError> {
-    // Need at least H0(1) + GEOM(4) words.
-    if words.len() < 5 {
+    // Need at least H0(1) to read the has-raid bit.
+    if words.is_empty() {
         return Err(WcError::Truncated);
     }
-    let h0 = words[0];
 
     // H0 fields.
     let mut hr = BitReader::new(&words[0..1]);
     let _version = hr.read(4).unwrap();
     let src_code = hr.read(2).unwrap() as u16;
-    let _has_raid = hr.read(1).unwrap();
+    let has_raid = hr.read(1).unwrap() != 0;
     let _reserved = hr.read(4).unwrap();
     let kind = source_kind_from_code(src_code).ok_or(WcError::HeaderCrcMismatch)?;
 
-    let geom_a = words[1];
-    let geom_b = words[2];
-    let geom_c = words[3];
-    let geom_d = words[4];
+    let header_words = header_word_count(has_raid);
+    if words.len() < header_words {
+        return Err(WcError::Truncated);
+    }
 
-    // Verify the header-CRC FIRST (over H0 ‖ GEOM-A ‖ GEOM-B ‖ GEOM-C).
-    let want = crc11(&[h0, geom_a, geom_b, geom_c]) & SYM_MASK;
+    // Positional prefix preceding GEOM: [H0] (+ [H1 2][array-id 2] if raid).
+    let geom_start = 1 + if has_raid { RAID_HEADER_WORDS } else { 0 };
+    let prefix = &words[0..geom_start];
+
+    let geom_a = words[geom_start];
+    let geom_b = words[geom_start + 1];
+    let geom_c = words[geom_start + 2];
+    let geom_d = words[geom_start + 3];
+
+    // Verify the header-CRC FIRST (over prefix ‖ GEOM-A ‖ GEOM-B ‖ GEOM-C).
+    let mut crc_input: Vec<u16> = Vec::with_capacity(prefix.len() + 3);
+    crc_input.extend_from_slice(prefix);
+    crc_input.extend_from_slice(&[geom_a, geom_b, geom_c]);
+    let want = crc11(&crc_input) & SYM_MASK;
     if (geom_d & SYM_MASK) != want {
         return Err(WcError::HeaderCrcMismatch);
     }
@@ -314,12 +424,48 @@ fn parse_header(words: &[u16]) -> Result<ParsedHeader, WcError> {
         return Err(WcError::HeaderCrcMismatch);
     }
 
-    let geom = derive_geometry(payload_bits, t);
+    // Parse the RAID header fields (H1 + array-id), if present. The CRC has
+    // already verified these words, so a successful parse here is trustworthy.
+    let raid = if has_raid {
+        let h1a = words[1];
+        let h1b = words[2];
+        let aida = words[3];
+        let aidb = words[4];
+        let h1 = [h1a, h1b];
+        let mut h1r = BitReader::new(&h1);
+        let n = h1r.read(5).unwrap() as usize + 1; // n−1 stored
+        let role = h1r.read(2).unwrap() as u16;
+        let index = h1r.read(5).unwrap() as usize;
+        let aid = [aida, aidb];
+        let mut ar = BitReader::new(&aid);
+        let array_id = ar.read(22).unwrap() as u32;
+        // Range sanity (CRC-verified, but a hostile list must never panic). For a
+        // DATA plate the `index` is the `P₂` α-exponent and MUST be `< n`; for a
+        // PARITY plate the index is a wire placeholder (role identifies it), so it
+        // is not exponent-constrained.
+        if !(2..=32).contains(&n) || role > RAID_ROLE_PARITY_B {
+            return Err(WcError::HeaderCrcMismatch);
+        }
+        if role == RAID_ROLE_DATA && index >= n {
+            return Err(WcError::HeaderCrcMismatch);
+        }
+        Some(RaidHeaderFields {
+            n,
+            role,
+            index,
+            array_id,
+        })
+    } else {
+        None
+    };
+
+    let geom = derive_geometry(payload_bits, t, has_raid);
     Ok(ParsedHeader {
         kind,
         payload_bits,
         t,
         u,
+        raid,
         geom,
     })
 }
@@ -488,12 +634,27 @@ fn build_data_symbols(payload: &[u8], payload_bits: usize, t: u8) -> Vec<u16> {
 
 /// Encode `(kind, payload, payload_bits)` into an engravable BIP-39 word stream
 /// (plan §5). `mk1` callers pass `payload_bits = 8 * payload.len()`; `md1`
-/// callers pass the exact bit-precise length.
+/// callers pass the exact bit-precise length. Produces a **solo** Word-Card
+/// (`has-raid = 0`); the RAID layer ([`crate::raid`]) drives [`encode_inner`]
+/// with the per-plate H1 / array-id fields.
 pub fn encode(
     kind: SourceKind,
     payload: &[u8],
     payload_bits: usize,
     opts: &EncodeOpts,
+) -> Result<Vec<&'static str>, WcError> {
+    encode_inner(kind, payload, payload_bits, opts, None)
+}
+
+/// The shared encode core (plan §5), parameterized on the optional RAID header
+/// (`raid = None` ⇒ solo card with `has-raid = 0`; `Some(..)` ⇒ a RAID plate
+/// with H1 + array-id inside `K′`). Each plate is a full, standalone Word-Card.
+pub(crate) fn encode_inner(
+    kind: SourceKind,
+    payload: &[u8],
+    payload_bits: usize,
+    opts: &EncodeOpts,
+    raid: Option<RaidHeaderFields>,
 ) -> Result<Vec<&'static str>, WcError> {
     // --- Validate options / sizes. --------------------------------------
     let t = opts.integrity_bits;
@@ -510,8 +671,24 @@ pub fn encode(
     if payload_bits > 0xFFFF {
         return Err(WcError::InvalidParams);
     }
+    if let Some(rf) = raid {
+        // Defensive: the RAID header fields must fit their bit-field ranges. The
+        // DATA-plate index is the `P₂` α-exponent (`< n`); a PARITY plate carries
+        // a wire-placeholder index (`< 32`, fits 5 bits) identified by its role.
+        if !(2..=32).contains(&rf.n)
+            || rf.role > RAID_ROLE_PARITY_B
+            || rf.index >= 32
+            || rf.array_id > 0x3F_FFFF
+        {
+            return Err(WcError::InvalidParams);
+        }
+        if rf.role == RAID_ROLE_DATA && rf.index >= rf.n {
+            return Err(WcError::InvalidParams);
+        }
+    }
 
-    let geom = derive_geometry(payload_bits, t);
+    let has_raid = raid.is_some();
+    let geom = derive_geometry(payload_bits, t, has_raid);
 
     // --- Layer A: payload+tag → K data symbols (8→11 regroup). ----------
     let data_symbols = build_data_symbols(payload, payload_bits, t);
@@ -521,12 +698,11 @@ pub fn encode(
     let interleaved = sync::interleave(&data_symbols);
     debug_assert_eq!(interleaved.len(), geom.k + geom.checkpoints);
 
-    // --- Build the RS message K′ = H0 ‖ GEOM ‖ interleave. --------------
-    let h0 = build_h0(kind);
-    let geom_words = build_geom(h0, payload_bits, t, opts.u_slots);
+    // --- Build the RS message K′ = header ‖ interleave. -----------------
+    let header_words = build_header(kind, payload_bits, t, opts.u_slots, raid);
+    debug_assert_eq!(header_words.len(), geom.header_words);
     let mut kprime_msg: Vec<u16> = Vec::with_capacity(geom.kprime);
-    kprime_msg.push(h0);
-    kprime_msg.extend_from_slice(&geom_words);
+    kprime_msg.extend_from_slice(&header_words);
     kprime_msg.extend_from_slice(&interleaved);
     debug_assert_eq!(kprime_msg.len(), geom.kprime);
 
@@ -534,8 +710,8 @@ pub fn encode(
     let parity = rs::rs_parity(&kprime_msg, opts.parity_words).map_err(WcError::from)?;
 
     // --- Assemble the engraved stream. ----------------------------------
-    // Final word count = H0(1) + GEOM(4) + ledger(2U) + interleave + parity +
-    // stop-sign(2). Equivalently kprime + 2U + parity + 2.
+    // Final word count = header + ledger(2U) + interleave + parity + stop-sign(2).
+    // Equivalently kprime + 2U + parity + 2.
     let total_words = geom.kprime + 2 * opts.u_slots as usize + parity.len() + 2;
     let count = total_words as u16; // ≤ 2047 enforced below.
     if total_words > sync_field_cap() {
@@ -552,10 +728,9 @@ pub fn encode(
     }
 
     // Stream so far (everything before the stop-sign), in engraved order:
-    //   [H0][GEOM 4][ledger 2U][interleave][parity]
+    //   [header][ledger 2U][interleave][parity]
     let mut stream: Vec<u16> = Vec::with_capacity(total_words);
-    stream.push(h0);
-    stream.extend_from_slice(&geom_words);
+    stream.extend_from_slice(&header_words);
     stream.extend_from_slice(&ledger);
     stream.extend_from_slice(&interleaved);
     stream.extend_from_slice(&parity);
@@ -605,10 +780,11 @@ pub fn decode(words: &[&str]) -> Result<Decoded, WcError> {
     let geom = header.geom;
     let u = header.u as usize;
 
-    // Engraved layout: [H0(1)][GEOM(4)][ledger(2U)][interleave][parity][stop(2)].
-    // K′ = H0 + GEOM + interleave; the ledger is spliced between GEOM and the
+    // Engraved layout: [header][ledger(2U)][interleave][parity][stop(2)], where
+    // header = H0(1) [+ H1(2) + array-id(2) if raid] + GEOM(4) = geom.header_words.
+    // K′ = header + interleave; the ledger is spliced between the header and the
     // interleave region and is NOT part of K′.
-    let ledger_start = 5usize;
+    let ledger_start = geom.header_words;
     let ledger_len = 2 * u;
     let interleave_start = ledger_start + ledger_len;
 
@@ -620,8 +796,8 @@ pub fn decode(words: &[&str]) -> Result<Decoded, WcError> {
     // --- Read the ledger (FIXED positions) + the tail stop-sign. --------
     // Authoritative recorded length = max over the VALID filled ledger slots AND
     // a VALID tail stop-sign (plan §4.2 / §4.4). The ledger is front-anchored at
-    // KNOWN positions `[5 .. 5+2U)` — we read it ONLY there (never scan), so a
-    // stray data word that happens to carry the `0b1110` marker can never inflate
+    // KNOWN positions `[header_words .. header_words+2U)` — we read it ONLY there
+    // (never scan), so a stray data word carrying the `0b1110` marker cannot inflate
     // the recorded length. The stop-sign is validated ONLY at the EXPECTED tail
     // position (the last 2 words) — scanning every position would give a 2⁻¹¹
     // false-positive PER position (≈ several % over a full card) and falsely flag
@@ -853,21 +1029,27 @@ fn rs_decode_and_check(
         return Err(WcError::Uncorrectable);
     }
 
-    // Rebuild H0 ‖ GEOM from the parsed header (canonical — the cold reader
-    // already trusts these via the header-CRC; they are also inside the RS msg).
-    let h0 = build_h0(header.kind);
-    let geom_words = build_geom(h0, header.payload_bits, header.t, header.u);
+    // Rebuild the positional header (H0 ‖ [H1 ‖ array-id]? ‖ GEOM) from the parsed
+    // header (canonical — the cold reader already trusts these via the header-CRC;
+    // they are also inside the RS message).
+    let header_words = build_header(
+        header.kind,
+        header.payload_bits,
+        header.t,
+        header.u,
+        header.raid,
+    );
+    debug_assert_eq!(header_words.len(), geom.header_words);
 
-    // RS message = [H0][GEOM 4][grid]; codeword = message ‖ parity.
+    // RS message = [header][grid]; codeword = message ‖ parity.
     let mut codeword: Vec<u16> = Vec::with_capacity(geom.kprime + parity.len());
-    codeword.push(h0);
-    codeword.extend_from_slice(&geom_words);
+    codeword.extend_from_slice(&header_words);
     codeword.extend_from_slice(grid);
     codeword.extend_from_slice(parity);
 
     // Shift the interleave-region erasure indices into codeword coordinates: the
-    // interleave region begins at offset 5 (1 H0 + 4 GEOM) in the K′ message.
-    let header_offset = 5usize;
+    // interleave region begins at offset `header_words` in the K′ message.
+    let header_offset = geom.header_words;
     let mut erasures: Vec<usize> = interleave_erasures
         .iter()
         .map(|&e| e + header_offset)
@@ -877,7 +1059,7 @@ fn rs_decode_and_check(
 
     let recovered_msg = rs::rs_decode(&codeword, geom.kprime, &erasures).map_err(WcError::from)?;
 
-    // Strip the header (first 5) → the interleave grid; then strip checkpoints.
+    // Strip the header → the interleave grid; then strip checkpoints.
     if recovered_msg.len() != geom.kprime {
         return Err(WcError::Uncorrectable);
     }
@@ -963,6 +1145,28 @@ fn extract_tag_bits(data_symbols: &[u16], payload_bits: usize, t: u8) -> Vec<boo
     bits
 }
 
+/// Map the internal [`RaidHeaderFields`] (role as a u16 code) to the public
+/// [`crate::RaidMeta`] (role as a [`crate::PlateRole`] enum). Role codes are
+/// CRC-validated upstream in `parse_header`, so the match is total.
+///
+/// The public `index` is the **logical position in the `n+r` plate sequence**:
+/// data plate `i` ⇒ `i`; ParityA ⇒ `n`; ParityB ⇒ `n+1`. (The H1 wire `index`
+/// field carries the `P₂` α-exponent for a data plate — equal to `i` — and a `0`
+/// placeholder for a parity plate, whose identity is its role.)
+fn raid_meta(rf: &RaidHeaderFields) -> crate::RaidMeta {
+    let (role, index) = match rf.role {
+        RAID_ROLE_PARITY_A => (crate::PlateRole::ParityA, rf.n),
+        RAID_ROLE_PARITY_B => (crate::PlateRole::ParityB, rf.n + 1),
+        _ => (crate::PlateRole::Data, rf.index),
+    };
+    crate::RaidMeta {
+        n: rf.n,
+        role,
+        index,
+        array_id: rf.array_id,
+    }
+}
+
 /// Build the public [`Decoded`] from a recovered payload.
 fn make_decoded(
     header: &ParsedHeader,
@@ -979,5 +1183,6 @@ fn make_decoded(
         repair: RepairSummary {
             erasures_filled: erasures.len() + extra_erasures,
         },
+        raid: header.raid.as_ref().map(raid_meta),
     }
 }
