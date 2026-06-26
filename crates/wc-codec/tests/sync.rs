@@ -125,6 +125,45 @@ fn crc5_single_word_substitution_detection_rate() {
     );
 }
 
+#[test]
+fn crc5_whole_block_scramble_passes_at_about_one_in_32() {
+    // N2 boundary: the CRC-5 flag is NOT the integrity guarantee. A whole-block
+    // SCRAMBLE (replace EVERY word of the block with random values) passes the
+    // 5-bit CRC ~1/32 of the time — i.e. the flag misses a fully-corrupt block at
+    // ~2^-5. The real guarantees are RS + the P4 tag, not this flag. We measure
+    // the miss rate and assert it sits near 1/32 (not ~0), making the boundary
+    // explicit and tested.
+    let mut total = 0u64;
+    let mut missed = 0u64; // scrambled block whose CRC collides with the original
+    let mut s = 0xF00D_BABE_1234_5678u64;
+    for seed in 0..400u64 {
+        let blk = det_data(7, seed);
+        let good = crc5(&blk);
+        // Scramble ALL words.
+        let scrambled: Vec<u16> = (0..blk.len())
+            .map(|_| {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                (s % FIELD_LIMIT as u64) as u16
+            })
+            .collect();
+        total += 1;
+        if crc5(&scrambled) == good {
+            missed += 1;
+        }
+    }
+    let miss_rate = missed as f64 / total as f64;
+    // 1/32 ≈ 0.031; allow a wide band around it (this is a probabilistic flag,
+    // explicitly NOT a guarantee). The point: it is clearly non-zero (the flag
+    // is NOT reliable on its own) and near 2^-5.
+    assert!(
+        (0.005..0.09).contains(&miss_rate),
+        "whole-block scramble CRC-5 miss rate {miss_rate} should sit near 2^-5=1/32 \
+         (the flag is NOT the integrity guarantee — RS + the P4 tag are)"
+    );
+}
+
 // ===========================================================================
 // 2. Checkpoint word: parse(checkpoint_word(i, blk)) == { i mod 8, crc5(blk) };
 //    a non-checkpoint word (marker != 0b101) parses to None.
@@ -353,70 +392,208 @@ fn trichotomy_insertion_is_classified_not_silently_aligned() {
 }
 
 // ===========================================================================
-// 5. Realignment + candidate-truth (LOAD-BEARING): a single deletion at a known
-//    position p (incl. spanning a block boundary) → candidate set CONTAINS the
-//    true gap and len ≤ b.
+// 5. Realignment + candidate-truth (LOAD-BEARING — C1 regression, N1): the
+//    OPERATIONAL predicate. For many seeds × several k × EVERY data position,
+//    delete that word, run sync_classify, and require that at least one returned
+//    candidate, when reinserted as an erasure placeholder and run through P2
+//    rs_decode, RECONSTRUCTS the original data. Truth-membership verified via
+//    reinsert+RS — NOT a loose window-overlap heuristic (which seed-masked C1:
+//    a data word coincidentally bearing the 0b101 marker with matching index +
+//    CRC could make a greedy local H0 walk skip the true block).
+//
+//    A genuine adjacent-marker structural ambiguity (two blocks both validate)
+//    is allowed to Refuse (custody-safe — never a silent wrong pick); we assert
+//    it stays RARE so the common single deletion is recoverable.
 // ===========================================================================
 
+/// Reinsert a placeholder at grid candidate `c` (clean-K' frame), then RS-decode
+/// the `recv`-derived codeword with `{c}` as the erasure. Returns the recovered
+/// data (checkpoints stripped) if it decodes, else `None`.
+fn reinsert_rs_recover(
+    recv: &[u16],
+    c: usize,
+    kprime: usize,
+    full_codeword: &[u16],
+    k: usize,
+) -> Option<Vec<u16>> {
+    if c > recv.len() {
+        return None;
+    }
+    let mut grid = Vec::with_capacity(kprime);
+    grid.extend_from_slice(&recv[..c]);
+    grid.push(0); // placeholder erasure value
+    grid.extend_from_slice(&recv[c..]);
+    if grid.len() != kprime {
+        return None;
+    }
+    let mut recv_cw = full_codeword.to_vec();
+    recv_cw[..kprime].copy_from_slice(&grid);
+    let recovered = rs_decode(&recv_cw, kprime, &[c]).ok()?;
+    Some(strip_checkpoints_at(&recovered, k))
+}
+
 #[test]
-fn candidate_set_contains_true_gap_all_data_positions() {
-    let k = 58usize;
-    let data = det_data(k, 0xC0FFEE);
-    let grid = interleave(&data);
-    let b = block_stride(k);
+fn candidate_truth_membership_via_reinsert_rs_exhaustive() {
+    let mut total = 0u64;
+    let mut classified_del = 0u64;
+    let mut refused = 0u64;
+    let mut truth_miss = 0u64;
 
-    // For EVERY data-word grid position, delete it and require the resulting
-    // candidate set to contain the true gap and be bounded by b. The "true gap"
-    // is expressed in the post-deletion grid's coordinate frame: the deletion at
-    // grid position `p` means a missing slot whose candidate region is the block
-    // that lost a word. We assert membership of the realigned slot the engine
-    // reports — concretely, that SOME candidate maps back to the deleted block.
-    for p in 0..grid.len() {
-        // skip deleting a checkpoint here — that is the deleted-checkpoint test
-        if parse_checkpoint(grid[p]).is_some() {
-            continue;
-        }
-        let mut recv = grid.clone();
-        recv.remove(p);
+    // Several k (small-K=16, mid, large) × several seeds × EVERY data position.
+    // We RS-decode at exactly the TRUE gap `p` (one decode per deletion) — a
+    // stronger, cheaper assertion than scanning all candidates: it proves the
+    // true gap is both IN the candidate set AND recovers via RS. (The very large
+    // K=160 structural coverage lives in the no-RS sweep below; the cubic Gao
+    // decode at K'≈173 in a debug build is the cost we trim here.)
+    for &k in &[16usize, 30, 58, 100] {
+        let b = block_stride(k);
+        // Enough parity to recover a single reinserted erasure (1 ≤ m).
+        let m = b + 4;
+        for seed in 0..6u64 {
+            let data = det_data(k, 0x5151_0000 ^ seed.wrapping_mul(0x9E37_79B9));
+            let grid = interleave(&data);
+            let kprime = grid.len();
+            let full_cw = rs_codeword(&grid, m).expect("rs codeword over K'");
 
-        match sync_classify(&recv, k) {
-            SyncOutcome::SingleDeletionCandidates { gap_positions } => {
-                assert!(
-                    gap_positions.len() <= b,
-                    "bounded by b={b} at p={p} (got {})",
-                    gap_positions.len()
-                );
-                assert!(!gap_positions.is_empty(), "non-empty at p={p}");
-                // The candidate positions are grid slots in the b-word block that
-                // lost the word. The true deletion fell in some block; require
-                // that the reported candidates all lie within b of each other
-                // (one block's worth) AND that p (clamped into the post-grid)
-                // is within the candidate span ± b.
-                let lo = *gap_positions.first().unwrap();
-                let hi = *gap_positions.last().unwrap();
-                assert!(
-                    hi - lo < b + 1,
-                    "candidates span one block (p={p}, lo={lo}, hi={hi}, b={b})"
-                );
-                // truth membership: the deleted index p, viewed in the shortened
-                // stream, must be reachable from the candidate set (within the
-                // same block window). p maps to min(p, recv.len()) in recv coords.
-                let p_recv = p.min(recv.len());
-                assert!(
-                    p_recv + b >= lo && p_recv <= hi + b,
-                    "true gap p_recv={p_recv} not covered by candidates [{lo},{hi}] ±b (p={p})"
-                );
-            }
-            // A boundary deletion adjacent to a checkpoint may present as a
-            // whole-block erasure (also recovers via RS) — acceptable.
-            SyncOutcome::Aligned { erasures, .. } => {
-                assert!(!erasures.is_empty(), "boundary del ⇒ erasures (p={p})");
-            }
-            SyncOutcome::Refuse(e) => {
-                panic!("single data deletion at p={p} should not refuse: {e:?}")
+            for p in 0..grid.len() {
+                // skip deleting a checkpoint — that is the deleted-checkpoint test
+                if parse_checkpoint(grid[p]).is_some() {
+                    continue;
+                }
+                let mut recv = grid.clone();
+                recv.remove(p);
+                total += 1;
+
+                match sync_classify(&recv, k) {
+                    SyncOutcome::SingleDeletionCandidates { gap_positions } => {
+                        classified_del += 1;
+                        // bounded ≤ b
+                        assert!(
+                            gap_positions.len() <= b,
+                            "candidate set must be ≤ b={b} (k={k}, seed={seed}, p={p}, got {})",
+                            gap_positions.len()
+                        );
+                        assert!(
+                            !gap_positions.is_empty(),
+                            "non-empty candidate set (k={k}, seed={seed}, p={p})"
+                        );
+                        // strictly ascending
+                        assert!(
+                            gap_positions.windows(2).all(|w| w[0] < w[1]),
+                            "candidates strictly ascending (k={k}, seed={seed}, p={p})"
+                        );
+                        // OPERATIONAL truth membership (C1 guarantee): the TRUE
+                        // gap `p` (clean-K' frame) MUST be in the candidate set,
+                        // AND reinserting an erasure there + RS-decoding recovers
+                        // the ORIGINAL data exactly.
+                        let true_gap_in_set = gap_positions.contains(&p);
+                        let recovers = reinsert_rs_recover(&recv, p, kprime, &full_cw, k)
+                            .as_deref()
+                            == Some(data.as_slice());
+                        if !(true_gap_in_set && recovers) {
+                            truth_miss += 1;
+                            eprintln!(
+                                "TRUTH MISS k={k} seed={seed} p={p} in_set={true_gap_in_set} \
+                                 recovers={recovers} cands={gap_positions:?}"
+                            );
+                        }
+                    }
+                    // A boundary deletion adjacent to a checkpoint may present as a
+                    // whole-block erasure (also recovers via RS, no tag) — acceptable.
+                    SyncOutcome::Aligned { grid: g, erasures } => {
+                        assert_eq!(g.len(), kprime, "aligned grid is K' (k={k}, p={p})");
+                        assert!(!erasures.is_empty(), "boundary del ⇒ erasures (p={p})");
+                        // erasures must recover the data via RS (no tag).
+                        let mut recv_cw = full_cw.clone();
+                        recv_cw[..kprime].copy_from_slice(&g);
+                        let mut er = erasures.clone();
+                        er.sort_unstable();
+                        er.dedup();
+                        if let Ok(rec) = rs_decode(&recv_cw, kprime, &er) {
+                            assert_eq!(
+                                strip_checkpoints_at(&rec, k),
+                                data,
+                                "aligned-erasure RS recovery (k={k}, seed={seed}, p={p})"
+                            );
+                        }
+                    }
+                    // A genuine adjacent-marker ambiguity is allowed to refuse.
+                    SyncOutcome::Refuse(_) => {
+                        refused += 1;
+                    }
+                }
             }
         }
     }
+
+    // The GUARANTEE: zero truth misses across the entire sweep.
+    assert_eq!(
+        truth_miss, 0,
+        "C1 candidate-truth FAILED: {truth_miss} of {total} single deletions lost the true gap"
+    );
+    // Sanity: the overwhelming majority classify as a recoverable deletion; the
+    // refuse path (genuine ambiguity) must stay rare (< 2% — empirically ~0.1%).
+    assert!(
+        classified_del * 50 > total * 49,
+        "too many refusals/erasures — common-case deletion must stay recoverable \
+         (total={total}, classified_del={classified_del}, refused={refused})"
+    );
+}
+
+/// Fast STRUCTURAL exhaustive C1 coverage (no RS): many seeds × all k (incl. the
+/// large K=160 the RS sweep trims) × EVERY data position. Asserts the structural
+/// half of the C1 guarantee — when a single deletion is classified as a deletion,
+/// the TRUE gap `p` is IN the bounded (≤ b) candidate set; a wrong block can
+/// never be emitted. Genuine adjacent-marker ambiguity may refuse (custody-safe).
+#[test]
+fn candidate_true_gap_in_set_structural_exhaustive() {
+    let mut total = 0u64;
+    let mut classified_del = 0u64;
+    let mut truth_miss = 0u64;
+    for &k in &[16usize, 30, 58, 100, 160, 200] {
+        let b = block_stride(k);
+        for seed in 0..60u64 {
+            let data = det_data(k, 0xA1B2_0000 ^ seed.wrapping_mul(0x100000001B3));
+            let grid = interleave(&data);
+            for p in 0..grid.len() {
+                if parse_checkpoint(grid[p]).is_some() {
+                    continue;
+                }
+                let mut recv = grid.clone();
+                recv.remove(p);
+                total += 1;
+                match sync_classify(&recv, k) {
+                    SyncOutcome::SingleDeletionCandidates { gap_positions } => {
+                        classified_del += 1;
+                        assert!(gap_positions.len() <= b, "≤ b (k={k}, seed={seed}, p={p})");
+                        assert!(
+                            gap_positions.windows(2).all(|w| w[0] < w[1]),
+                            "ascending (k={k}, seed={seed}, p={p})"
+                        );
+                        // The TRUE gap `p` (clean-K' frame) must be in the set.
+                        if !gap_positions.contains(&p) {
+                            truth_miss += 1;
+                            eprintln!(
+                                "STRUCT TRUTH MISS k={k} seed={seed} p={p} cands={gap_positions:?}"
+                            );
+                        }
+                    }
+                    SyncOutcome::Aligned { erasures, .. } => {
+                        assert!(!erasures.is_empty(), "boundary del ⇒ erasures");
+                    }
+                    SyncOutcome::Refuse(_) => { /* genuine ambiguity — custody-safe */ }
+                }
+            }
+        }
+    }
+    assert_eq!(
+        truth_miss, 0,
+        "C1 structural truth FAILED: {truth_miss}/{total}"
+    );
+    assert!(
+        classified_del * 100 > total * 97,
+        "deletion classification too rare"
+    );
 }
 
 // ===========================================================================

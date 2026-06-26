@@ -94,8 +94,13 @@ pub enum SyncOutcome {
     /// checkpoints). `grid` is the realigned `K'`-length symbol stream
     /// (checkpoints included); `erasures` are the **grid positions to erase**
     /// before feeding the RS pass: CRC-flagged corrupt blocks and known gaps
-    /// (multi-indel / smudged runs). With these erasures the truth is fully
-    /// recoverable by P2's `rs_decode(.., erasures)` (no tag needed).
+    /// (multi-indel / smudged runs). With these erasures the truth is recoverable
+    /// by P2's `rs_decode(.., erasures)` **given enough parity** — i.e. the
+    /// provisioned parity `m ≥ |erasures|` (the RS budget `2t + s ≤ m`, here with
+    /// `t = 0` located damage; N3). If fewer parity words were appended than the
+    /// erasure count, `rs_decode` correctly REFUSES (`RsError::Uncorrectable`) —
+    /// no silent miscorrection. No integrity tag is needed (erasures are
+    /// known-position).
     Aligned {
         /// The realigned `K'`-length grid (data + checkpoints).
         grid: Vec<u16>,
@@ -157,6 +162,17 @@ pub fn block_stride(k: usize) -> usize {
 /// C2). Returns a 5-bit value (`0..=31`). Bit-serial, MSB-first over each word's
 /// low 11 bits. Uniform single-substitution miss `≤ 2⁻⁵`; all single-bit errors
 /// detected (primitive generator, period 31).
+///
+/// **Boundary (N2): the checkpoint CRC-5 flag is NOT the integrity guarantee.**
+/// It is a cheap *block-corruption flag* and indel-recognition aid — a whole-block
+/// scramble (an arbitrary multi-word change) passes CRC-5 at ~`2⁻⁵ = 1/32`, and
+/// it CANNOT prune a value-free deletion (kernel `2⁶`). The real custody
+/// guarantees are downstream: the systematic **RS** layer (located damage → 1
+/// erasure each, refuses-rather-than-miscorrects beyond budget) and the **P4
+/// non-linear integrity tag** (catches any RS miscorrection at `≤ 2⁻ᵗ` and is the
+/// oracle that *selects* among single-deletion candidates). Never over-trust the
+/// CRC flag as proof a block is correct — only that a flagged block is *probably*
+/// corrupt (worth converting to a cheap erasure).
 pub fn crc5(block_words: &[u16]) -> u16 {
     // Canonical bit-serial polynomial division by `x⁵ + x² + 1`. The 5-bit
     // register holds the running remainder; each message bit is shifted in
@@ -391,68 +407,154 @@ pub fn sync_classify(received_message_region: &[u16], k: usize) -> SyncOutcome {
     classify_heavy(recv, &layout, b)
 }
 
-/// `len == K' − 1`: exactly one symbol is missing. We anchor checkpoints
-/// **positionally** left-to-right (collision-resistant: a data word matching the
-/// marker is ignored unless it sits at a plausible anchor with the right index +
-/// CRC). A data-word deletion makes exactly one block short by one — emit its
-/// bounded candidate set. A *checkpoint* deletion shifts the anchor chain — fall
-/// to the deleted-checkpoint path (erase the merged span) or refuse.
-fn classify_single_deletion(recv: &[u16], layout: &CheckpointLayout, b: usize) -> SyncOutcome {
-    // Left-to-right anchored walk. `start` is the current block's first data
-    // position in `recv`. For each expected block we test two hypotheses:
-    //   H0: the checkpoint is at `start + sz` (block intact, deletion is LATER)
-    //   H1: the checkpoint is at `start + sz - 1` (THIS block lost a data word)
-    // validated by the right index AND a CRC match over the candidate block.
-    let mut start = 0usize;
-    for (block_index, &sz) in layout.block_sizes.iter().enumerate() {
-        let want_idx = (block_index % 8) as u16;
+/// The clean-`K'`-frame grid geometry of one block: its data start, size, and
+/// checkpoint position.
+struct BlockGeom {
+    data_start: usize,
+    sz: usize,
+    cp_pos: usize,
+}
 
-        // H0 — intact block.
-        let cp0 = start + sz;
-        let h0_ok = cp0 < recv.len()
-            && parse_checkpoint(recv[cp0]).is_some_and(|cp| {
-                cp.index_mod8 == want_idx && crc5(&recv[start..start + sz]) == cp.crc5
-            });
+/// The per-block geometry of the clean `K'` grid (data positions + checkpoint
+/// position for each block), derived purely from the layout.
+fn block_geometry(layout: &CheckpointLayout) -> Vec<BlockGeom> {
+    let mut geom = Vec::with_capacity(layout.checkpoint_count);
+    let mut pos = 0usize;
+    for &sz in &layout.block_sizes {
+        let data_start = pos;
+        let cp_pos = pos + sz;
+        geom.push(BlockGeom {
+            data_start,
+            sz,
+            cp_pos,
+        });
+        pos = cp_pos + 1; // skip the checkpoint word
+    }
+    geom
+}
 
-        // H1 — this block is short by one (the deletion happened here).
-        let cp1 = if sz >= 1 { start + sz - 1 } else { usize::MAX };
-        let h1_ok = sz >= 1
-            && cp1 < recv.len()
-            && parse_checkpoint(recv[cp1]).is_some_and(|cp| cp.index_mod8 == want_idx);
-
-        if h0_ok {
-            // Block intact; continue past its checkpoint.
-            start = cp0 + 1;
+/// Global validator (C1 fix), **allocation-free**. Tests the hypothesis "the lone
+/// deletion fell inside block `except_block`" directly against `recv` (length
+/// `K' − 1`) WITHOUT materializing the reinserted grid:
+///
+/// - Blocks `i < except_block` are entirely BEFORE the deletion ⇒ at their clean
+///   positions in `recv` (`data_start_i .. cp_pos_i`).
+/// - Blocks `i > except_block` are entirely AFTER the deletion ⇒ shifted LEFT by
+///   one in `recv` (`data_start_i−1 .. cp_pos_i−1`).
+/// - Block `except_block` itself carries the gap (a free unknown) ⇒ its CRC is
+///   not checked, but its checkpoint WORD must still parse with the right index
+///   (a data-word deletion leaves the checkpoint intact). For `except_block`, the
+///   checkpoint sits at `cp_pos − 1` in `recv` (everything from the gap onward
+///   shifted left), so we read it there.
+///
+/// Returns `true` iff every checkpoint OUTSIDE the implicated block validates
+/// (marker + `index_mod8` + CRC) and the implicated block's checkpoint word
+/// parses with the right index. The TRUE implicated block always passes (it
+/// reproduces the original grid modulo the gap); a wrong block garbles the data
+/// between it and the true gap ⇒ some checkpoint fails.
+fn deletion_hypothesis_valid(recv: &[u16], geom: &[BlockGeom], except_block: usize) -> bool {
+    for (i, g) in geom.iter().enumerate() {
+        // The shift applied to this block's clean-K' positions to land in `recv`:
+        //   before the gap (i < except_block, or the implicated block's prefix): 0
+        //   from the implicated block's checkpoint onward (i >= except_block): −1
+        // The implicated block's DATA prefix is unshifted, but its checkpoint is
+        // shifted (the gap is somewhere in/at its data). Blocks after are shifted.
+        let cp_shift = if i >= except_block { 1usize } else { 0 };
+        if g.cp_pos < cp_shift {
+            return false;
+        }
+        let cp_pos = g.cp_pos - cp_shift;
+        if cp_pos >= recv.len() {
+            return false;
+        }
+        let Some(cp) = parse_checkpoint(recv[cp_pos]) else {
+            return false;
+        };
+        if cp.index_mod8 != (i % 8) as u16 {
+            return false;
+        }
+        if i == except_block {
+            // Implicated block: gap inside ⇒ CRC not checkable here.
             continue;
         }
-
-        if h1_ok {
-            // The deletion is in THIS block. The shortened block occupies grid
-            // positions `start..cp1` (sz-1 data words). The true missing slot is
-            // any of the `sz` interior positions — bounded by `b` (block width).
-            // We emit grid candidate positions `start..=cp1` (the sz slots where
-            // a word could have been removed: before each surviving data word and
-            // after the last).
-            let cands: Vec<usize> = (start..=cp1).collect();
-            if cands.len() > b {
-                // Should not happen (sz ≤ b), but stay safe.
-                return SyncOutcome::Refuse(SyncError::CandidateBudgetExceeded);
-            }
-            return SyncOutcome::SingleDeletionCandidates {
-                gap_positions: cands,
-            };
+        // Block data: unshifted for i < except_block, shifted −1 for i > except.
+        let data_shift = if i > except_block { 1usize } else { 0 };
+        if g.data_start < data_shift {
+            return false;
         }
+        let ds = g.data_start - data_shift;
+        if ds + g.sz > recv.len() {
+            return false;
+        }
+        if crc5(&recv[ds..ds + g.sz]) != cp.crc5 {
+            return false;
+        }
+    }
+    true
+}
 
-        // Neither hypothesis holds at this block ⇒ the anomaly is not a plain
-        // single-data-deletion (likely a deleted checkpoint, or heavier damage).
-        // Hand off to the deleted-checkpoint detector.
+/// `len == K' − 1`: exactly one symbol is missing.
+///
+/// **C1 fix — global-validate-each-candidate (plan §4.3 C1).** A locally-parsing
+/// checkpoint at `start+sz` is NOT trustworthy: a data word may coincidentally
+/// bear the `0b101` marker with a matching index AND a colliding low-5 CRC field
+/// (~2⁻¹¹/word), which would make a greedy H0-before-H1 walk skip the truly-short
+/// block and emit candidates for the WRONG block — excluding the truth. The
+/// deleted value is a free unknown, so the tie is unbreakable locally.
+///
+/// Instead we enumerate every reconstruction slot `p`, reinsert a placeholder at
+/// `p` to rebuild the `K'` grid, and accept `p` iff **every checkpoint OUTSIDE
+/// the block containing `p` validates** (marker + index + CRC). The TRUE gap
+/// always passes (it restores the original grid exactly, modulo the placeholder);
+/// a wrong `p` garbles the blocks between wrong-`p` and the true gap → some
+/// checkpoint fails. The passing set provably CONTAINS the truth.
+///
+/// If no `p` validates ⇒ the missing symbol was a *checkpoint* ⇒ defer to the
+/// deleted-checkpoint path. If the passing set spans more than one block, or
+/// exceeds the `b` bound ⇒ refuse (custody-safe).
+fn classify_single_deletion(recv: &[u16], layout: &CheckpointLayout, b: usize) -> SyncOutcome {
+    let geom = block_geometry(layout);
+
+    // For each block `j`, test the hypothesis "the lone deletion fell in block
+    // `j`" via the global validator (every OTHER checkpoint must validate). Since
+    // the reinsert position WITHIN block `j` does not change any other block's
+    // data, the hypothesis is validated ONCE per block (not per position) — and
+    // if it holds, EVERY one of block `j`'s data slots is a candidate gap.
+    let mut passing_blocks: Vec<usize> = Vec::new();
+    for j in 0..geom.len() {
+        if geom[j].sz == 0 {
+            continue; // an empty block cannot have lost a data word
+        }
+        if deletion_hypothesis_valid(recv, &geom, j) {
+            passing_blocks.push(j);
+        }
+    }
+
+    if passing_blocks.is_empty() {
+        // No data-deletion hypothesis validated ⇒ the missing word was a
+        // checkpoint (or heavier damage) ⇒ defer.
         return classify_deleted_checkpoint(recv, layout, b);
     }
 
-    // Walked every block without finding the short one — but the length is K'−1,
-    // so a symbol IS missing. It must be a checkpoint (the final one, or one we
-    // could not anchor). Defer to the deleted-checkpoint path.
-    classify_deleted_checkpoint(recv, layout, b)
+    // A single data deletion can validate at most ONE block (the true one). If two
+    // blocks both validate, that is a genuine adjacent-marker structural
+    // ambiguity — the deleted value is a free unknown, so we cannot break the tie
+    // ⇒ refuse (custody-safe; never silently pick a branch).
+    if passing_blocks.len() > 1 {
+        return SyncOutcome::Refuse(SyncError::AmbiguousRealignment);
+    }
+
+    // The candidate gap positions are the implicated block's `sz` data slots in
+    // the clean-K' frame (bounded by `b`). The TRUE gap is provably among them
+    // (the validator confirmed every other block aligns; the gap is somewhere in
+    // this block's data — any of its `sz` reinsertion points).
+    let j = passing_blocks[0];
+    let g = &geom[j];
+    let gap_positions: Vec<usize> = (g.data_start..g.data_start + g.sz).collect();
+    if gap_positions.len() > b {
+        return SyncOutcome::Refuse(SyncError::CandidateBudgetExceeded);
+    }
+    SyncOutcome::SingleDeletionCandidates { gap_positions }
 }
 
 /// `len == K' − 1` but a clean single-data-deletion shape was NOT found ⇒ the
