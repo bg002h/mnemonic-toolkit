@@ -223,6 +223,18 @@ implementation truth, and all phase KATs use it. The spec ladder stands as illus
   engraving — NO front mutation). Authoritative recorded length = **max** over filled slots
   AND stop-signs (all exact 11-bit). Default `U=3` (creation + 2 upgrades); `U=1` for
   never-upgrade / tiny templates.
+- **P4 RESOLUTION (latent tension fixed during implementation — supersedes the in-`K′` reading above).**
+  The mutable **ledger and stop-sign are OUTSIDE the RS codeword**; only the FIXED header
+  (`H0 ‖ GEOM`, plus `H1 ‖ array-id` when RAID) is inside the RS message. **`K′ (RS message) =
+  H0 ‖ GEOM ‖ interleave(payload+tag, checkpoints)`**; **RS codeword = `K′ ‖ parity(m)`**;
+  **engraved stream = `[H0][GEOM 4][ledger 2U][interleave][parity m][stop-sign 2]`**, the
+  decoder skipping the `2U` ledger region (size known once positional GEOM is read). Rationale:
+  if the ledger were in `K′`, filling a blank slot on upgrade would mutate `K′` and invalidate
+  already-engraved parity — **incompatible with append-only**. The ledger/stop-sign keep their
+  own checksums (not RS-corrected) + the cross-check; the header stays RS-correctable. The
+  `|header|`/`payload_offset` expressions above remain correct as **engraved-stream offsets**;
+  they are NOT the RS message. (Implemented + KAT-locked at P4 `master@8d29112a`; R0-GREEN —
+  append-only K′-invariance verified, >570k never-wrong-payload fuzz clean.)
 
 ### 4.3 Checkpoints (Layer B, Q2) — C1/C2 fold
 - Inserted after every `b` payload-data words, **`b = floor(√K + 0.5)`, DERIVED from `K`
