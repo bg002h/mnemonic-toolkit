@@ -14,14 +14,19 @@
 //! - [`rs`] (**P2**): the systematic evaluation-form Reed–Solomon value layer
 //!   — encode (interpolate + evaluate), decode (Gao partial-GCD with erasure
 //!   puncturing), append-only prefix-extensible parity (plan §3 / §4.1).
+//! - [`sync`] (**P3**): the structural sync / checkpoint layer — checkpoint word
+//!   codec (marker + block-index mod 8 + CRC-5), `interleave` (insert
+//!   checkpoints), and `sync_classify` (trichotomy + realignment + bounded
+//!   single-deletion candidates / whole-block erasures), plan §4.3.
 //!
-//! The sync layer (P3), header/integrity/stop-sign (P4), RAID (P5), and the
-//! toolkit adapter (P6) are intentionally NOT present yet. The toolkit crate
-//! does not depend on `wc-codec` until P6.
+//! The header/integrity/stop-sign (P4), RAID (P5), and the toolkit adapter (P6)
+//! are intentionally NOT present yet. The toolkit crate does not depend on
+//! `wc-codec` until P6.
 
 pub mod field;
 pub mod pad;
 mod poly;
 pub mod regroup;
 pub mod rs;
+pub mod sync;
 pub mod wordmap;
