@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "mk-codec"
-version = "0.4.0"
+version = "0.4.1"
 build = false
 autolib = false
 autobins = false
@@ -35,7 +35,7 @@ categories = [
     "cryptography::cryptocurrencies",
     "encoding",
 ]
-license = "MIT"
+license = "MIT OR Unlicense"
 repository = "https://github.com/bg002h/mnemonic-key"
 
 [features]
@@ -53,6 +53,10 @@ required-features = ["gen-vectors"]
 [[test]]
 name = "bch_adversarial"
 path = "tests/bch_adversarial.rs"
+
+[[test]]
+name = "canonical_payload"
+path = "tests/canonical_payload.rs"
 
 [[test]]
 name = "error_coverage"

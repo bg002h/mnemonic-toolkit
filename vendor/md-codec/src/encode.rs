@@ -50,6 +50,40 @@ impl Descriptor {
     pub fn is_wallet_policy(&self) -> bool {
         matches!(&self.tlv.pubkeys, Some(v) if !v.is_empty())
     }
+
+    /// Return the deterministic pre-chunking **canonical packed payload** of
+    /// this descriptor as a bit-precise `(bytes, total_bits)` pair, for a
+    /// downstream consumer that needs the raw, round-trippable byte payload
+    /// (without the codex32/`md1` string wrapper or chunk framing).
+    ///
+    /// This delegates to [`encode_payload`], which canonicalizes BIP 388
+    /// placeholder ordering internally (SPEC §6.1) before emitting bits — so
+    /// the output is **canonical for any valid input** descriptor (two inputs
+    /// that differ only in non-canonical placeholder numbering produce
+    /// byte-identical payloads).
+    ///
+    /// The payload is **bit-aligned**: the returned `bytes` are zero-padded to
+    /// a byte boundary, and `total_bits` is the exact unpadded bit count. The
+    /// final byte may carry up to 7 trailing zero-pad bits, so `total_bits` is
+    /// **load-bearing** — a consumer MUST round-trip with this exact bit count,
+    /// not `bytes.len() * 8`. Feed both values back to
+    /// [`Descriptor::from_canonical_payload_bytes`] to recover the descriptor.
+    pub fn canonical_payload_bytes(&self) -> Result<(Vec<u8>, usize), Error> {
+        encode_payload(self)
+    }
+
+    /// Reconstruct a [`Descriptor`] from a bit-precise canonical packed
+    /// payload previously produced by [`Descriptor::canonical_payload_bytes`].
+    ///
+    /// `bytes` may be zero-padded to a byte boundary; `total_bits` is the
+    /// exact payload bit count (the same value returned alongside the bytes).
+    /// Delegates to [`decode_payload`](crate::decode::decode_payload).
+    pub fn from_canonical_payload_bytes(
+        bytes: &[u8],
+        total_bits: usize,
+    ) -> Result<Descriptor, Error> {
+        crate::decode::decode_payload(bytes, total_bits)
+    }
 }
 
 /// Encode a [`Descriptor`] into the canonical payload bit stream and return

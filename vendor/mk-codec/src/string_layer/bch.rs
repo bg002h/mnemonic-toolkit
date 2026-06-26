@@ -178,10 +178,23 @@ pub const GEN_REGULAR: [u128; 5] = [
     0x07729a039cfc75f5a,
 ];
 
-/// Initial residue value for both the regular and long polymod algorithms (BIP 93).
+/// Constellation-internal initial residue that mk-codec's `ms32_polymod` and
+/// `ms32_long_polymod` seed before processing any input — shared byte-for-byte
+/// with md1 (`md-codec`'s `bch::POLYMOD_INIT`).
 ///
-/// Both `ms32_polymod` and `ms32_long_polymod` start with this residue before
-/// processing any input characters.
+/// It is deliberately **NOT** codex32/BIP-93's initial residue: the BIP-93
+/// reference `ms32_polymod` starts from `1`, not `0x23181b3`. Only `ms1` uses
+/// `1`, because its checksum must agree with the *external* rust-codex32
+/// engine. Sharing a non-`1` init with md1 is harmless: each of mk1's regular +
+/// long codes is self-contained (the same init seeds both checksum-create and
+/// verify), so the init's contribution cancels and a valid codeword's residue
+/// equals its per-HRP target at every length, for any fixed init. Domain
+/// separation is carried by the per-HRP target constants (`MK_REGULAR_CONST` /
+/// `MK_LONG_CONST`) + the HRP — never by this init. The reverted ms-codec
+/// v0.2.1 bug was a non-codex32 init *paired with* an empirically-miscalibrated
+/// target diverging from codex32 across lengths, not this value being
+/// intrinsically length-variant; see
+/// `mnemonic-secret/design/BUG_decode_with_correction_length_divergence.md`.
 pub const POLYMOD_INIT: u128 = 0x23181b3;
 
 /// Right-shift amount to extract the top 5 bits from a 65-bit regular-code residue.
