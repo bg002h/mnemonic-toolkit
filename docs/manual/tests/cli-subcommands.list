@@ -39,6 +39,7 @@ mnemonic xpub-search address-of-xpub
 mnemonic xpub-search passphrase-of-xpub
 mnemonic build-descriptor
 mnemonic gen-man
+mnemonic word-card
 
 # md
 md encode

@@ -4227,3 +4227,135 @@ man mnemonic            # if man does not find it: man -M ~/.local/share/man mne
 |---|---|
 | success | `0` |
 | output-dir create / write I/O error | `1` |
+
+---
+
+## `mnemonic word-card` (v0.74.0) {#mnemonic-word-card}
+
+Re-encode a **public** `mk1` xpub card or `md1` descriptor card as an engravable
+BIP-39 **Word Card** — a list of BIP-39 words that carries the same payload as
+the source `m*1` card, but rendered in the wordlist alphabet for hand-stamping
+onto a steel plate. The encoding layers progressive Reed–Solomon error-correction
+(`--parity-words` / `--parity-pct`), a non-linear integrity tag
+(`--integrity-bits`) that catches an RS miscorrection, and an optional
+cross-plate **RAID** layer (`--raid`) so a lost plate in an `mk1` xpub array can
+be reconstructed from the survivors. `--decode` (and `--decode-plate` for a RAID
+array) recovers the original `m*1` / xpub / descriptor.
+
+The source `mk1` / `md1` cards are **PUBLIC, watch-only** material (an xpub or a
+descriptor) — **not** spending secrets. So `--from` is not secret-classified, and
+the secret `ms1` entropy card is intentionally **not** word-card-able. The value
+engine lives in the in-workspace `wc-codec` crate; the toolkit bridges the
+sibling codecs to it via a canonical-payload adapter.
+
+### Synopsis
+
+```sh
+# encode (default): one solo Word Card per --from card
+mnemonic word-card --from <MK1|MD1> [--from <MK1|MD1>]... [OPTIONS]
+
+# encode an mk1 xpub array with RAID recovery plates
+mnemonic word-card --from <MK1> --from <MK1> [--from <MK1>]... --raid <1|2> [OPTIONS]
+
+# decode a single solo Word Card
+mnemonic word-card --decode <WORD>... [OPTIONS]
+
+# decode (RAID-reconstruct) an array from its surviving plates
+mnemonic word-card --decode --decode-plate "<WORDS>" --decode-plate "<WORDS>"... [OPTIONS]
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--from <MK1\|MD1>` | source `m*1` card to encode: an `mk1` xpub card or an `md1` descriptor card. Repeating flag (one per `mk1`/`md1`; multi-chunk cards may be passed joined or repeated — chunks auto-group by HRP). `-` reads one card per line from stdin. With `--raid 1\|2`, supply the `n` `mk1` data cards via repeated `--from`. PUBLIC material — not a secret |
+| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or `-`/stdin (whitespace-separated). For a RAID array, repeat `--decode-plate` once per surviving plate |
+| `--decode-plate <WORDS>` | one RAID plate's whitespace-separated word list for `--decode` reconstruction (repeating flag). Supply the surviving `≥ n` plates of an `n + r` array to reconstruct a lost data plate. Mutually exclusive with the positional `<WORD>...` single-card form |
+| `--parity-words <N>` | Reed–Solomon parity words `m` to append (the repair budget; corrects `⌊m/2⌋` substitutions / fills `m` erasures). Default `0` (detection only). Mutually exclusive with `--parity-pct` |
+| `--parity-pct <PCT>` | Reed–Solomon parity as a PERCENTAGE of the data-symbol count `K` (`m = ceil(K * pct / 100)`), an alternative to `--parity-words`. E.g. `--parity-pct 25` ≈ a 25% redundancy budget. Mutually exclusive with `--parity-words` |
+| `--raid <0\|1\|2>` | RAID recovery tier: `0` = no RAID (a single solo card; default), `1` = one XOR recovery plate (RAID-5, survives any 1 lost plate), `2` = two recovery plates (RAID-6, survives any 2). RAID requires `≥ 2` `mk1` data cards via repeated `--from`. Default `0` |
+| `--integrity-bits <BITS>` | integrity-tag bit width `t` (the non-linear SHA-256 truncation that catches an RS miscorrection at `≤ 2⁻ᵗ`). Default `44` (4 words); minimum `33` |
+| `--json` | emit a single JSON envelope on stdout instead of the text-form report (`schema_version: "1"`) |
+| `--no-auto-repair` | global flag; skip auto-fire repair on decode failures (see [`verify-bundle` auto-fire](#mnemonic-verify-bundle)) |
+| `--help` | print help and exit |
+
+### Worked example
+
+Encode a 2-chunk `mk1` xpub card as a solo Word Card (detection-only, no parity):
+
+```sh
+mnemonic word-card --from "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh"
+# →
+# # solo plate [0] (mk1, 88 words)
+# abandon actor airport gas forest thing license abandon abandon abandon … logic
+```
+
+Add an 8-word Reed–Solomon repair budget (corrects up to 4 mis-stamped words),
+then decode it back to the original xpub:
+
+```sh
+WORDS=$(mnemonic word-card --from "$MK1" --parity-words 8 | sed -n '2p')
+echo "$WORDS" | mnemonic word-card --decode -
+# →
+# source_kind: mk1
+# truncated: false
+# erasures_filled: 0
+# xpub: xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
+# policy_id_stub_count: 1
+# mk1: mk1qp02pcpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qdz9lrx0gj4nwfhg
+# mk1: …
+```
+
+Encode a 3-cosigner `mk1` xpub array with one XOR recovery plate (RAID-5), so any
+single lost plate can be reconstructed from the other three:
+
+```sh
+mnemonic word-card --from "$MK1_A" --from "$MK1_B" --from "$MK1_C" --raid 1
+# → 3 data plates + 1 recovery plate (each a labeled `# … plate [i]` header + word list)
+```
+
+Later, reconstruct a lost data plate from any three surviving plates:
+
+```sh
+mnemonic word-card --decode \
+  --decode-plate "$PLATE0_WORDS" \
+  --decode-plate "$PLATE2_WORDS" \
+  --decode-plate "$RECOVERY_WORDS"
+# → raid-reconstruct: n=3, reconstructed=[1]
+#     [0] xpub: …
+#     [1 *recovered] xpub: …
+#     [2] xpub: …
+```
+
+### Notes
+
+- **Public-only.** Only `mk1` (xpub) and `md1` (descriptor) cards can be
+  word-carded; the secret `ms1` entropy card is refused by construction (it
+  carries spending material). `--from` is intentionally absent from the
+  argv-secret taxonomy.
+- **`--parity-words` vs `--parity-pct`.** The two are mutually exclusive.
+  `--parity-words N` is an absolute symbol budget; `--parity-pct P` scales the
+  budget to the card size (`ceil(K · P / 100)`). With neither, the card is
+  detection-only (`0` parity) — a corrupted word is flagged but not auto-fixed.
+- **Integrity tag.** `--integrity-bits` sizes the non-linear SHA-256 truncation
+  appended to the payload; it bounds the probability that an RS *miscorrection*
+  (a confident-but-wrong repair) is silently accepted to `≤ 2⁻ᵗ`. The default
+  `44` is 4 words; the floor is `33`.
+- **RAID** (`--raid 1|2`) applies only to an array of `mk1` xpub cards (an
+  `md1` is a single descriptor — use `--raid 0`). `--raid 1` is a single XOR
+  parity plate (RAID-5); `--raid 2` adds an MDS recovery plate (RAID-6). Decode a
+  RAID array with one `--decode-plate` per surviving plate.
+- The Word Card is a re-rendering of **public** card material; it does not change
+  the underlying xpub / descriptor identity. The re-emitted `mk1` chunks on
+  decode may differ byte-for-byte from the input chunks (the `policy_id_stub` is
+  re-derived) while preserving the same xpub.
+- The `--json` wire-shape (`schema_version: "1"`) is **not** covered by the GUI
+  `schema_mirror` gate (which enforces clap flag-name parity only); GUI consumers
+  self-update via the paired-PR rule.
+
+### Exit codes
+
+| Condition | Exit |
+|---|---|
+| success (encode or decode) | `0` |
+| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, decode parse failure beyond the repair budget, I/O error) | `1` |
