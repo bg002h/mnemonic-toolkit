@@ -177,6 +177,13 @@
     "indel",
     "Indel",
     "Unrecoverable",
-    "btcrecover"
+    "btcrecover",
+    "RAID",
+    "Solomon",
+    "miscorrection",
+    "miscorrections",
+    "MDS",
+    "checkpointing",
+    "reencode"
   ]
 }

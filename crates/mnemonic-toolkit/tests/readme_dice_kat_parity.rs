@@ -11,6 +11,7 @@
 //!     (`assert_eq!(stdout, "1,0,0,2,0,1,5,5,2,4\n")`).
 //!   - `src/bip85.rs:401` — unit-level assert
 //!     (`assert_eq!(&*rolls, "1,0,0,2,0,1,5,5,2,4")`).
+//!
 //! The value is not exposed as a `pub const`, so the literal is duplicated here
 //! with those two cross-citations as the canonical pin. If the KAT value ever
 //! legitimately changes, update all three sites in lockstep.

@@ -10,6 +10,15 @@ fuzz/target/
 fuzz/artifacts/
 fuzz/coverage/
 
+# P6 wc-codec fuzz workspace (crates/wc-codec/fuzz/) — same convention:
+# Cargo.toml / Cargo.lock / rust-toolchain.toml / fuzz_targets/ ARE committed;
+# the libFuzzer-generated corpus/, target/, artifacts/ (crash repros) and
+# coverage/ are transient runtime output and are NOT tracked.
+crates/wc-codec/fuzz/target/
+crates/wc-codec/fuzz/artifacts/
+crates/wc-codec/fuzz/coverage/
+crates/wc-codec/fuzz/corpus/
+
 # Per-cycle scratch / session-handoff files (kickoff, handoff, phase0 artifact,
 # resume, plan stash). Each scratchpad's substantive content is captured by
 # the cycle's commits / agent-reports / design/FOLLOWUPS.md / memory entries;

@@ -37,6 +37,7 @@ mod unrestorable_advisory;
 mod verify_message;
 mod wallet_export;
 mod wallet_import;
+mod word_card_adapter;
 mod wordlists;
 
 use clap::{CommandFactory, Parser, Subcommand};
@@ -147,6 +148,8 @@ enum Command {
     Restore(cmd::restore::RestoreArgs),
     /// build a validated wsh(...) descriptor + BIP-388 policy from a JSON policy-tree spec
     BuildDescriptor(cmd::build_descriptor::BuildDescriptorArgs),
+    /// encode an mk1/md1 card as an engravable BIP-39 Word Card (+ optional RAID), or --decode one back
+    WordCard(cmd::word_card::WordCardArgs),
 }
 
 fn main() -> ExitCode {
@@ -219,6 +222,7 @@ fn main() -> ExitCode {
             cmd::restore::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
         Command::BuildDescriptor(args) => cmd::build_descriptor::run(args, stdin, stdout, stderr),
+        Command::WordCard(args) => cmd::word_card::run(args, stdin, stdout, stderr),
     };
 
     let exit = match result {

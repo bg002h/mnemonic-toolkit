@@ -1,0 +1,12 @@
+# Pinned nightly for the wc-codec fuzz workspace (cargo-fuzz requires nightly
+# for -Zsanitizer / the libFuzzer runtime). This file is SCOPED to
+# crates/wc-codec/fuzz/ — rustup resolves rust-toolchain.toml from cwd upward,
+# so it does not affect the repo root's 1.85 pin.
+#
+# Pinned to the same dated nightly as the toolkit `fuzz/` workspace and the
+# sibling codec fuzz dirs; the constellation-wide FOLLOWUP
+# `fuzz-nightly-quarterly-bump` tracks refreshing this quarterly.
+[toolchain]
+channel = "nightly-2026-04-27"
+components = ["rust-src"]
+profile = "minimal"

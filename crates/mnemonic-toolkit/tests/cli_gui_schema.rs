@@ -110,12 +110,13 @@ fn gui_schema_lists_all_subcommands() {
             "slip39-split",
             "verify-bundle",
             "verify-message",
+            "word-card",
             "xpub-search-account-of-descriptor",
             "xpub-search-address-of-xpub",
             "xpub-search-passphrase-of-xpub",
             "xpub-search-path-of-xpub",
         ],
-        "all 31 user-facing subcommands must appear (nested split/combine \
+        "all 32 user-facing subcommands must appear (nested split/combine \
          flattened to hyphenated names); gui-schema + help filtered out"
     );
 }

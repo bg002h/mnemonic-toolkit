@@ -351,6 +351,15 @@ pub enum ToolkitError {
     /// signature that simply does NOT verify is NOT this error — that path
     /// emits a structured `valid:false` result. Public-data, no secrets.
     VerifyMessage(String),
+    /// P6 `mnemonic word-card` — the Word-Card value engine (`wc-codec`)
+    /// refused to encode or decode. Wraps every [`wc_codec::WcError`] variant
+    /// (header-CRC / integrity-tag / RS-budget / sync / RAID refusals, unknown
+    /// word, truncation-beyond-repair, invalid params). Word Cards carry PUBLIC
+    /// material (xpub / descriptor) — no secrets. Exit 2: every `WcError` is a
+    /// format/structural refusal in the same class as the codec decode-rejects
+    /// (and the funds-safety nets — `IntegrityMismatch` / `Uncorrectable` —
+    /// MUST refuse with a non-zero exit, NEVER return a wrong payload).
+    WordCard(wc_codec::WcError),
     /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
     /// candidate set. Exit 4 (sibling to `BundleMismatch` /
     /// `Bip388VerifyDistinctness` — search-target mismatch class).
@@ -608,6 +617,7 @@ impl ToolkitError {
             ToolkitError::TemplateFormUnsupportedShape { .. } => 2,
             ToolkitError::UnknownHrp { .. } => 2,
             ToolkitError::VerifyMessage(_) => 1,
+            ToolkitError::WordCard(_) => 2,
             ToolkitError::XpubSearchNoMatch { .. } => 4,
             ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 4,
         }
@@ -678,6 +688,7 @@ impl ToolkitError {
             ToolkitError::TemplateFormUnsupportedShape { .. } => "TemplateFormUnsupportedShape",
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
             ToolkitError::VerifyMessage(_) => "VerifyMessage",
+            ToolkitError::WordCard(_) => "WordCard",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
             ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => {
                 "XpubSearchPassphraseCandidatesExhausted"
@@ -895,6 +906,9 @@ impl ToolkitError {
                 )
             }
             ToolkitError::VerifyMessage(m) => format!("verify-message: {m}"),
+            // `WcError`'s own Display already carries the `word-card: …` prefix
+            // and a refuse/repair-aware message; surface it verbatim.
+            ToolkitError::WordCard(e) => format!("{e}"),
             ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
                 "no match in searched set: mode={mode}, paths searched={searched}; \
                  widen the range with --max-account / --number-of-accounts, or supply \
@@ -1008,6 +1022,12 @@ impl From<md_codec::Error> for ToolkitError {
             },
             other => ToolkitError::MdCodec(other),
         }
+    }
+}
+
+impl From<wc_codec::WcError> for ToolkitError {
+    fn from(e: wc_codec::WcError) -> Self {
+        ToolkitError::WordCard(e)
     }
 }
 

@@ -526,9 +526,8 @@ dependencies = [
 
 [[package]]
 name = "md-codec"
-version = "0.39.0"
+version = "0.39.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fe7832cf16a082573e8364d62a77e0f6071d07b6c6c05a8da08eed6913edabd"
 dependencies = [
  "bip39",
  "bitcoin",
@@ -564,9 +563,8 @@ dependencies = [
 
 [[package]]
 name = "mk-codec"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1247d41a895c0fe1019aed8158610f57845521709ff8349f266e46c1c335f679"
 dependencies = [
  "bech32",
  "bitcoin",
@@ -576,7 +574,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.73.3"
+version = "0.74.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -607,6 +605,7 @@ dependencies = [
  "sha3",
  "similar",
  "unicode-normalization",
+ "wc-codec",
  "zeroize",
 ]
 
@@ -997,6 +996,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20064672db26d7cdc89c7798c48a0fdfac8213434a1186e5ef29fd560ae223d6"
 dependencies = [
  "wit-bindgen",
+]
+
+[[package]]
+name = "wc-codec"
+version = "0.1.0"
+dependencies = [
+ "bip39",
+ "sha2",
 ]
 
 [[package]]

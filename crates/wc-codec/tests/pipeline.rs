@@ -168,6 +168,55 @@ proptest! {
 }
 
 // ===========================================================================
+// REGRESSION — integrity-bits ceiling = 63 (the 6-bit GEOM `t` field).
+//
+// P6 fuzz finding (`wc_roundtrip` over `t=64`): the GEOM `t` field is 6 bits
+// (max 63), so `MAX_INTEGRITY_BITS` MUST be 63 — NOT 64. A `t=64` encode would
+// overflow the field (low 6 bits stored = 0) and then fail `parse_header`'s
+// range check on decode: an `encode`-accepted-but-NEVER-decodable card (silent
+// unrecoverability — a funds-safety hole). encode must REFUSE `t > 63`, and
+// every `t` it ACCEPTS must round-trip cleanly.
+// ===========================================================================
+
+#[test]
+fn integrity_bits_ceiling_is_field_capacity_63() {
+    use wc_codec::{MAX_INTEGRITY_BITS, MIN_INTEGRITY_BITS};
+    // The exported ceiling matches the 6-bit GEOM field capacity.
+    assert_eq!(MAX_INTEGRITY_BITS, 63);
+
+    let payload = det_bytes(16, 42);
+    let bits = payload.len() * 8;
+
+    // Every accepted t in [MIN, MAX] round-trips cleanly (the encode/decode
+    // asymmetry the fuzzer hit must not exist anywhere in-range).
+    for t in MIN_INTEGRITY_BITS..=MAX_INTEGRITY_BITS {
+        let opts = EncodeOpts {
+            parity_words: 4,
+            integrity_bits: t,
+            u_slots: 2,
+        };
+        let words = encode(SourceKind::Mk1Xpub, &payload, bits, &opts)
+            .unwrap_or_else(|e| panic!("encode t={t} must succeed: {e:?}"));
+        let refs: Vec<&str> = words.to_vec();
+        let d = decode(&refs).unwrap_or_else(|e| panic!("decode t={t} must succeed: {e:?}"));
+        assert_eq!(d.payload, payload, "round-trip t={t}");
+    }
+
+    // t = 64 (one past the ceiling) must be REFUSED at encode (InvalidParams),
+    // never produce an undecodable card.
+    let opts = EncodeOpts {
+        parity_words: 4,
+        integrity_bits: 64,
+        u_slots: 2,
+    };
+    assert_eq!(
+        encode(SourceKind::Md1Descriptor, &payload, bits, &opts),
+        Err(WcError::InvalidParams),
+        "t=64 overflows the 6-bit GEOM field; encode must refuse"
+    );
+}
+
+// ===========================================================================
 // KAT 9 — large-md1 K≥241 boundary round-trip (NEW-I3; derived b≈19–33).
 // ===========================================================================
 
