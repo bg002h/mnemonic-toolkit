@@ -1,0 +1,57 @@
+name: vendor-freshness
+
+# THE LEADING (PR-time) vendor-freshness gate.
+#
+# REDs iff the committed `vendor/` tree cannot satisfy the current `Cargo.lock`
+# under the reproducible build's `--offline --locked` source-replacement config.
+#
+# WHY THIS EXISTS. v0.74.0 shipped with NO reproducible musl binary: the
+# Word-Card cycle bumped the codec deps (md-codec 0.39.0 -> 0.39.1, mk-codec
+# 0.4.0 -> 0.4.1) — rewriting Cargo.lock — but did not re-run `cargo vendor`,
+# so the committed `vendor/` tree still held the old versions. The release
+# `repro` build (man-pages.yml, TAG-triggered) does `cargo build --locked
+# --offline` against `vendor/` and could not resolve the bumped deps ->
+# `failed to select a version for md-codec = "^0.39.1" ... directory source vendor`.
+# That gate is LAGGING — it fires only at the release tag. `rust.yml` already
+# runs `cargo metadata --locked` on every PR, but WITHOUT `--offline`/the
+# vendored source-replacement, so it resolves against live crates.io and never
+# consults `vendor/` — which is exactly why this slipped every PR gate.
+#
+# This is the missing OFFLINE-vendor variant of that established check: it makes
+# a forgotten re-vendor fail FAST on the PR (and on direct pushes to main/master
+# that skip a PR), not at the next release tag. It does NOT re-prove bit-for-bit
+# reproducibility — that stays with repro-drift.yml (scheduled) and the release
+# `repro` gate (tag). See design/SPEC_vendor_freshness_ci_guard.md.
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/**/Cargo.toml'
+      - 'vendor/**'
+      - 'ci/repro/vendor-freshness.sh'
+      - '.github/workflows/vendor-freshness.yml'
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/**/Cargo.toml'
+      - 'vendor/**'
+      - 'ci/repro/vendor-freshness.sh'
+      - '.github/workflows/vendor-freshness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  vendor-freshness:
+    name: vendor/ satisfies Cargo.lock (offline)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # `cargo metadata` resolution only — no compile, no musl target, no Docker.
+      - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Resolve Cargo.lock against committed vendor/ (offline, locked)
+        run: bash ci/repro/vendor-freshness.sh
