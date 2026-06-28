@@ -3157,9 +3157,12 @@ conversion. Per kind:
   stored wordlist language (e.g. `language: japanese`).
 - `mk1` — policy-id-stub count, origin fingerprint (or `<absent>`
   for the privacy-preserving emission mode), origin path, xpub.
-- `md1` — placeholder count (`n`), root-tree tag (`Wpkh` / `Tr` /
-  `Wsh` / …), wallet-policy-mode flag, path-decl shape (`Shared` vs
-  `Divergent`).
+- `md1` — the keyless BIP-388 `@N` wallet-policy template (the full
+  miniscript expression with `@N` key placeholders, e.g.
+  `wsh(or_i(and_v(v:pk(@0/<0;1>/*),after(1000000)),multi(2,@1/<0;1>/*,@2/<0;1>/*)))`;
+  rendered identically to `md decode`), placeholder count (`n`),
+  root-tree tag (`Wpkh` / `Tr` / `Wsh` / …), wallet-policy-mode flag,
+  path-decl shape (`Shared` vs `Divergent`).
 
 ### Synopsis
 
@@ -3200,17 +3203,23 @@ PLACEHOLDER — generated from transcripts/41-inspect-ms1.err line 2 at build
 
 When `--json` is supplied, `inspect` emits a single JSON envelope on
 stdout instead of the text-form report. The envelope carries a
-top-level `schema_version: "1"` field (v0.27.0 backfill via the new
-`InspectEnvelope` wrapper) followed by the kind-specific fields:
+top-level `schema_version: "2"` field (v0.27.0 backfill via the new
+`InspectEnvelope` wrapper; bumped `"1"`→`"2"` in v0.75.0 when the md1
+body gained the `template` field) followed by the kind-specific fields
+(the md1 body leads with `template`, the keyless `@N` wallet-policy
+expression):
 
 ```{.text include="41-inspect-ms1-json.out"}
 PLACEHOLDER — generated from transcripts/41-inspect-ms1-json.out at build
 ```
 
-`schema_version` is currently pinned at `"1"`; future format changes
-will bump the version with explicit migration notes in the SPEC. The
-same convention applies to `mnemonic repair`'s JSON output (which has
-shipped `schema_version: "1"` since v0.22.0).
+`schema_version` is the shared top-level envelope field, so the ms1 /
+mk1 / md1 envelopes all report `"2"` even though only the md1 body
+changed. It is currently pinned at `"2"` (v0.75.0); future format
+changes will bump the version with explicit migration notes in the
+SPEC. `mnemonic repair`'s JSON output carries its own, independent
+`schema_version` (still `"1"` since v0.22.0) — the inspect bump does
+not touch it.
 
 ### Auto-fire short-circuit
 
