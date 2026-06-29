@@ -264,6 +264,12 @@ fn emit_inspect_text<W: Write>(
             writeln!(stdout, "xpub: {}", card.xpub).map_err(ToolkitError::Io)?;
         }
         InspectPayload::Md1(d) => {
+            // v0.75.0: lead the md1 body with the canonical keyless `@N`
+            // wallet-policy template (md-inspect parity; `md_codec` and `md`
+            // share the renderer → byte-identical). N1 conscious trade-off —
+            // md1 uniquely leads with `template:` vs ms1/mk1 leading with `kind:`.
+            writeln!(stdout, "template: {}", md_codec::descriptor_to_template(d)?)
+                .map_err(ToolkitError::Io)?;
             writeln!(stdout, "kind: md1").map_err(ToolkitError::Io)?;
             writeln!(stdout, "placeholder_count: {}", d.n).map_err(ToolkitError::Io)?;
             writeln!(stdout, "tree_tag: {:?}", d.tree.tag).map_err(ToolkitError::Io)?;
@@ -284,11 +290,17 @@ fn path_decl_shape(d: &md_codec::Descriptor) -> &'static str {
 }
 
 /// v0.27.0 inspect-envelope schema. Bumped with each wire-shape change.
-pub const INSPECT_SCHEMA_VERSION: &str = "1";
+/// v0.75.0 → `"2"`: the md1 body gained a `template` field (the keyless `@N`
+/// wallet-policy template). `schema_version` is the SHARED top-level
+/// `InspectEnvelope` field, so ms1/mk1 `--json` envelopes also report `"2"`
+/// even though their bodies are unchanged (the inspect `--json` contract
+/// versions as a whole). `mnemonic repair` carries its OWN, independent
+/// `schema_version` (still `"1"`) — this bump does not touch it.
+pub const INSPECT_SCHEMA_VERSION: &str = "2";
 
-/// v0.27.0 top-level wrapper. Always emits `schema_version: "1"` at the top
-/// level; the per-kind body is `#[serde(flatten)]`'d so the resulting JSON
-/// has shape `{"schema_version":"1","kind":"<kind>",...}`. Mirrors
+/// v0.27.0 top-level wrapper. Always emits `schema_version` (now `"2"`, v0.75.0)
+/// at the top level; the per-kind body is `#[serde(flatten)]`'d so the resulting
+/// JSON has shape `{"schema_version":"2","kind":"<kind>",...}`. Mirrors
 /// `XpubSearchEnvelope` precedent (`crate::cmd::xpub_search::mod`).
 #[derive(serde::Serialize)]
 struct InspectEnvelope<'a> {
@@ -317,6 +329,11 @@ enum InspectJson<'a> {
         xpub: String,
     },
     Md1 {
+        /// v0.75.0: the canonical keyless `@N` wallet-policy template, rendered
+        /// by `md_codec::descriptor_to_template` (identical to the text-form
+        /// `template:` line and to `md decode`). Bumps the shared envelope's
+        /// `schema_version` to `"2"`.
+        template: String,
         placeholder_count: u8,
         tree_tag: String,
         wallet_policy_mode: bool,
@@ -364,6 +381,8 @@ fn emit_inspect_json<W: Write>(
             xpub: card.xpub.to_string(),
         },
         InspectPayload::Md1(d) => InspectJson::Md1 {
+            // v0.75.0: identical render to the text-form `template:` line.
+            template: md_codec::descriptor_to_template(d)?,
             placeholder_count: d.n,
             tree_tag: format!("{:?}", d.tree.tag),
             wallet_policy_mode: d.is_wallet_policy(),
@@ -403,7 +422,7 @@ mod inspect_envelope_tests {
             body,
         };
         let v = serde_json::to_value(&envelope).expect("serialize");
-        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["schema_version"], "2");
         assert_eq!(v["kind"], "ms1");
         assert_eq!(v["tag"], "entr");
         assert_eq!(v["byte_length"], 16);
@@ -424,7 +443,7 @@ mod inspect_envelope_tests {
             body,
         };
         let v = serde_json::to_value(&envelope).expect("serialize");
-        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["schema_version"], "2");
         assert_eq!(v["kind"], "mk1");
         assert_eq!(v["policy_id_stub_count"], 2);
         assert_eq!(v["origin_fingerprint"], "aabbccdd");
@@ -435,6 +454,7 @@ mod inspect_envelope_tests {
     #[test]
     fn inspect_envelope_md1_serializes_schema_version_and_flattens_body() {
         let body = InspectJson::Md1 {
+            template: "wpkh(@0/<0;1>/*)".to_string(),
             placeholder_count: 1,
             tree_tag: "Wpkh".to_string(),
             wallet_policy_mode: true,
@@ -445,8 +465,9 @@ mod inspect_envelope_tests {
             body,
         };
         let v = serde_json::to_value(&envelope).expect("serialize");
-        assert_eq!(v["schema_version"], "1");
+        assert_eq!(v["schema_version"], "2");
         assert_eq!(v["kind"], "md1");
+        assert_eq!(v["template"], "wpkh(@0/<0;1>/*)");
         assert_eq!(v["placeholder_count"], 1);
         assert_eq!(v["tree_tag"], "Wpkh");
         assert_eq!(v["wallet_policy_mode"], true);

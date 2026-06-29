@@ -16,8 +16,11 @@ Per card kind the report carries:
   cards also report the stored wordlist language.
 - **`mk1`** — policy-id-stub count, origin fingerprint (or `<absent>`
   for a privacy-preserving emission), origin path, xpub.
-- **`md1`** — placeholder count, root-tree tag (`Wpkh` / `Tr` / `Wsh` /
-  …), wallet-policy-mode flag, path-decl shape (`Shared` vs `Divergent`).
+- **`md1`** — the keyless BIP-388 `@N` wallet-policy template (the full
+  miniscript expression with `@N` key placeholders, rendered identically
+  to `md decode`), placeholder count, root-tree tag (`Wpkh` / `Tr` /
+  `Wsh` / …), wallet-policy-mode flag, path-decl shape (`Shared` vs
+  `Divergent`).
 
 :::danger
 The worked example uses a canonical zero-entropy `ms1` card. **Never

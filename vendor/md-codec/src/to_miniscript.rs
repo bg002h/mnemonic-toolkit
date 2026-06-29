@@ -29,10 +29,7 @@ use miniscript::{
 use std::str::FromStr;
 use std::sync::Arc;
 
-/// BIP-341 NUMS H-point x-only coordinate. Used as the internal key when
-/// `Body::Tr { is_nums: true, .. }`.
-const NUMS_H_POINT_X_ONLY_HEX: &str =
-    "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0";
+use crate::nums::NUMS_H_POINT_X_ONLY_HEX;
 
 /// Convert an md1 [`Descriptor`] AST to a
 /// `miniscript::Descriptor<DescriptorPublicKey>` for `chain` (the

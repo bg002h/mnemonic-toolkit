@@ -291,6 +291,17 @@ pub enum ToolkitError {
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
     NostrKeyParse(String),
+    /// v0.75.0 `mnemonic inspect <md1>` — the canonical
+    /// `md_codec::descriptor_to_template` renderer (relocated into md-codec
+    /// 0.40.0) refused to render the keyless `@N` wallet-policy template for a
+    /// decoded md1 `Descriptor`. A SEPARATE type from `md_codec::Error` (a
+    /// text-render failure is not a wire/decode error), so it does NOT touch the
+    /// exhaustive `md_codec_exit_code` match. The render `Err` arms are
+    /// structural guards that never fire on a decoder-produced `Descriptor`;
+    /// kept fail-closed. Display-only of PUBLIC descriptor material — no secret
+    /// surface. Exit 2 (render/format-refusal class, alongside the codec
+    /// decode-rejects). `details()` adds NO arm (`_ => None`).
+    Render(md_codec::RenderError),
     /// v0.22.0 repair feature — user-input class (exit 2). Wraps every
     /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
     /// UnparseableInput).
@@ -609,6 +620,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => 1,
             ToolkitError::NetworkMismatch { .. } => 2,
             ToolkitError::NostrKeyParse(_) => 1,
+            ToolkitError::Render(_) => 2,
             ToolkitError::Repair(_) => 2,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
             ToolkitError::RestoreMismatch { .. } => 4,
@@ -680,6 +692,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
+            ToolkitError::Render(_) => "Render",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
             ToolkitError::RestoreMismatch { .. } => "RestoreMismatch",
@@ -870,6 +883,9 @@ impl ToolkitError {
                  mainnet vs testnet/signet/regtest only)"
             ),
             ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
+            // `RenderError`'s Display already carries a structural-guard message
+            // ("malformed descriptor tree: …"); surface it via the source.
+            ToolkitError::Render(e) => format!("inspect: template render failed: {e}"),
             ToolkitError::Repair(e) => format!("{e}"),
             ToolkitError::RepairShortCircuit { .. } => {
                 // R2 I1: main.rs special-cases this variant to skip
@@ -1022,6 +1038,12 @@ impl From<md_codec::Error> for ToolkitError {
             },
             other => ToolkitError::MdCodec(other),
         }
+    }
+}
+
+impl From<md_codec::RenderError> for ToolkitError {
+    fn from(e: md_codec::RenderError) -> Self {
+        ToolkitError::Render(e)
     }
 }
 

@@ -26,8 +26,13 @@ pub mod encode;
 pub mod error;
 pub mod header;
 pub mod identity;
+mod nums;
 pub mod origin_path;
 pub mod phrase;
+// The `@N`-template renderer is pure AST string-walking (no miniscript/derive
+// dependency); it sources the NUMS H-point from the ungated `nums` module, so
+// it is unconditional — available with or without the `derive` feature.
+pub mod render;
 pub mod tag;
 pub mod test_vectors;
 pub mod tlv;
@@ -52,6 +57,7 @@ pub use identity::{
 };
 pub use origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 pub use phrase::Phrase;
+pub use render::{RenderError, descriptor_to_template};
 pub use tag::Tag;
 pub use tlv::TlvSection;
 #[cfg(feature = "derive")]

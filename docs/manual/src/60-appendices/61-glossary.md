@@ -250,8 +250,9 @@ failures in `convert` and `inspect`; opt out with the global
 A `mnemonic` subcommand introduced in v0.22.0 that decodes any
 `ms1` / `mk1` / `md1` card and prints a per-kind summary (tag /
 bit-strength for `ms1`; xpub / fingerprint / origin path for `mk1`;
-placeholder count / tree tag / wallet-policy mode for `md1`). Sensitive
-`ms1` entropy hex is suppressed by default; `--reveal-secret` opts in.
+the keyless `@N` wallet-policy template / placeholder count / tree tag /
+wallet-policy mode for `md1`). Sensitive `ms1` entropy hex is suppressed
+by default; `--reveal-secret` opts in.
 
 ## verify-bundle
 
