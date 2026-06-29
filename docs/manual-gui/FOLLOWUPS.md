@@ -172,3 +172,19 @@ mnemonic-gui Leg 1 (`gui-render` + egui_kittest faithfulness gate →
 `mnemonic-gui-v0.53.0`) + manual-gui Leg 2 (catch-up + renders + gate).
 Closes the **form-mockup leg** of
 `manual-gui-output-blocks-non-gateable-residual`.
+
+### `manual-gui-form-renders-dedicated-part` — RESOLVED 2026-06-29
+
+Consolidated the 61 generated GUI form renders (added by
+`manual-gui-generated-form-renders`) out of the per-subcommand chapters into a
+dedicated **Part `75-gui-forms/`** (4 per-tab chapters: mnemonic 32 / md 10 /
+ms 10 / mk 9), leaving a one-line cross-link in each subcommand chapter (its
+prose + flag anchors + `.out` CLI-output transcript unchanged). Added a new
+bidirectional fail-closed `gui-form-xref` gate (`tests/check_gui_form_xref.py`,
+`make lint` phase 8/8) so the 61 cross-links + gallery anchors are a gated
+invariant (lychee skips intra-doc fragments). Render-content-inert
+(`verify-examples-gui` 61/61 byte-identical; `gui-schema-coverage` unchanged at
+982/61 — the gallery uses prose-shaped `gui-form-*` anchors, schema-orphan
+exempt). The 3 conditional-`(required)` caveats (inspect/repair at-least-one;
+ms-encode exactly-one/XOR) retained + reworded to point at the cross-linked
+render. Full R0 pipeline GREEN (spec ×2 + plan ×2 + post-impl whole-diff).
