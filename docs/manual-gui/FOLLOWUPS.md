@@ -20,6 +20,18 @@ location, a What description, a Status (`open` | `resolved <commit>`
 
 ## Open items
 
+### `manual-gui-visual-screenshot-track` ⭐ IMPORTANT — scheduled week of 2026-07-06
+
+- **Surfaced:** 2026-06-29 (after the structural-render cycle + the dedicated GUI-Forms-Part restructuring shipped). **User-prioritized IMPORTANT, targeted for next week (week of 2026-07-06).**
+- **Where:** cross-repo — `mnemonic-gui` (the `egui_kittest` wgpu/snapshot render path) + `docs/manual-gui/` (embedding + gating the images).
+- **What:** add a **pixel-faithful visual layer** — actual PNG screenshots of the GUI forms (fonts / spacing / colour / layout / chrome) — as a complement to the existing **structural** text-renders. The shipped `gui-render` structural track deliberately avoids wgpu and gates only FORM STRUCTURE (field names / kinds / required-secret markers / visible-disabled state / `<masked>`); it canNOT show the visual presentation or answer "is this layout confusing." This track closes that.
+- **Approach (to be specced via the full R0 pipeline; cross-repo, mirrors the structural cycle's 2-leg shape):**
+  1. **GUI leg (feasibility-gated):** enable `egui_kittest`'s `wgpu` + `snapshot` features behind a headless **software** render path (llvmpipe/lavapipe — the structural track proved the form MODEL is egui-free, but PIXELS need a real wgpu raster; a P0 spike must confirm headless software rendering works in CI without a GPU). Emit one deterministic PNG per form (fixed fixtures, masked secrets — same hygiene bar; a screenshot must NOT render a real secret).
+  2. **Manual leg:** embed the PNGs (a `figures/gui/` set) in the GUI-Forms Part (alongside / toggleable-with the structural render) + a **snapshot-diff gate** (regenerate vs committed, fail-closed) — the visual analogue of `verify-examples-gui`.
+- **Also in scope (separable):** the *human* UX-review question — is the GUI itself confusing / does the layout/flow need work — which neither structural nor pixel renders answer (needs a person). May split into its own item.
+- **Risks/notes:** headless GPU-less wgpu rendering is the load-bearing feasibility unknown (the whole reason the shipped track chose structural); PNG snapshot-diffs are font/AA/platform-sensitive (pin the container + fonts, like the reproducible-build path); image bytes bloat the repo (consider git-lfs or a size budget). Secret-masking in a pixel render is a first-class bar.
+- **Status:** open. **Tier:** `cross-repo` / important (scheduled 2026-07-06 week).
+
 ### `gui-manual-html-mermaid-svg`
 
 - **Surfaced:** 2026-05-15 (M-P2.4 batch 2)
