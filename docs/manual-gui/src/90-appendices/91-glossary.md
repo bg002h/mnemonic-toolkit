@@ -193,3 +193,12 @@ OS-level window-capture facility. macOS and Windows builds of
 the GUI install OS-level capture exclusion at startup via
 `platform.rs::apply_window_capture_protection`; Linux has no
 compositor-level analogue at v0.3.0.
+
+## word-card\index{word-card}
+
+A steel-engravable BIP-39-word re-encoding of a **public** `mk1` or
+`md1` card, produced by `mnemonic word-card` (the `wc-codec` engine,
+toolkit v0.74.0+). Layers optional Reed–Solomon parity words for
+substitution/erasure repair and an optional cross-plate RAID array.
+The secret `ms1` seed card is excluded by design — a Word Card carries
+no spend capability. See [`mnemonic word-card`](#mnemonic-word-card).

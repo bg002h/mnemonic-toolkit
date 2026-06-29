@@ -1,0 +1,28 @@
+[ mnemonic > restore ]
+  --from                    text  (required) -> <empty>
+  --format                  dropdown[bitcoin-core,bip388,coldcard,coldcard-multisig,jade,sparrow,specter,electrum,green,bsms,descriptor]  -> bitcoin-core
+  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  -> bip44
+  --network                 dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --account                 number  -> <unset>
+  --count                   number  -> <unset>
+  --origin                  text  -> <empty>
+  --expect-wallet-id        text  -> <empty>
+  --expect-fingerprint      text  -> <empty>
+  --expect-xpub             text  -> <empty>
+  --allow-mismatch          checkbox  -> [ ] off
+  --passphrase              text  (secret) -> <masked>
+  --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
+  --output                  path(stdio)  -> -
+  --json                    checkbox  -> [ ] off
+  --md1                     text  (repeating) -> <empty>
+  --cosigner                text  (repeating) -> <empty>
+  --own-account-max         number  -> <unset>
+  --search-cosigner-subset  checkbox  -> [ ] off
+  --search-address          text  -> <empty>
+  --search-addr-min         number  -> <unset>
+  --search-addr-max         number  -> <unset>
+  --search-chain            dropdown[receive,change,both]  -> receive
+  --accept-search-time      text  -> <empty>
+  --no-auto-repair          checkbox  -> [ ] off
+  [ Run ]

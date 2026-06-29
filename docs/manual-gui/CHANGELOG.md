@@ -6,6 +6,61 @@ The manual is a separate artifact from the CLI manual under
 (`manual-gui-v*` vs `manual-v*`) and track independent version
 numbers.
 
+## [Unreleased]
+
+**Minor — generated, gated GUI form renders in the manual + a GUI pin
+catch-up (`mnemonic-gui-v0.49.0` → `mnemonic-gui-v0.53.0`), Leg 2 of the
+generated-GUI-form-renders cycle.** The manual now SHOWS the real GUI: a
+generated structural render of every one of the 61 GUI subcommand forms
+is embedded in its chapter and gated against drift — extending the
+manual's "prose == output by construction" discipline (today
+CLI-transcript-only) to the GUI surface. Plus the pin catch-up the bump
+to a `gui-render`-capable GUI tag required: additive coverage of +5
+newly-exposed subcommand sections, +17 schema anchors, +1 outline
+target; 0 removed.
+
+- **Pin bump.** `pinned-upstream.toml`: `[mnemonic-gui]` `v0.49.0` →
+  `v0.53.0`; the four implied CLI tags re-pinned to what the GUI tag
+  pins in its own schema-mirror map (`mnemonic-toolkit-v0.74.0`,
+  `descriptor-mnemonic-md-cli-v0.11.0`, `ms-cli-v0.13.0`,
+  `mk-cli-v0.11.0`). `.github/workflows/manual-gui.yml` `verify-examples`
+  job re-pinned the same four CLI install tags in lockstep.
+- **`mnemonic word-card`** — new full chapter
+  (`src/40-mnemonic/4n-word-card.md`): the toolkit-v0.74.0
+  steel-engravable BIP-39 word-card encoder/decoder (8 flags +
+  repeating decode positional), with its `### Outline`, glossary entry,
+  and index row.
+- **`gen-man`** — new stub sections on all four CLI tabs
+  (`src/40-mnemonic/4o-gen-man.md`, `src/50-md/5B-gen-man.md`,
+  `src/60-ms/6b-gen-man.md`, `src/70-mk/7a-gen-man.md`): the
+  `--out`-only roff man-page generator now exposed in each schema.
+- **Inventory hygiene.** `tests/expected_gui_schema_inventory.json`
+  regenerated from the v0.53.0 GUI schema source.
+- **61 generated GUI form renders (the headline, P5).** Each GUI
+  subcommand form is emitted as a deterministic ASCII structural render
+  (`transcripts/gui/<tab>-<sub>.gui`) by the pinned headless `gui-render`
+  binary (`mnemonic-gui-v0.53.0 --no-default-features`) and embedded in
+  its chapter via `include="gui/<tab>-<sub>.gui"`. Secret fields render a
+  fixed `<masked>` sentinel (the value is never sourced from form state);
+  the render seeds flag defaults exactly as the GUI does on load, so it
+  depicts the screen the user actually sees.
+- **`verify-examples-gui` fidelity gate (`tests/verify-examples-gui.sh` +
+  Makefile target + `manual-gui.yml` job 1c).** Regenerates the renders
+  with the pinned `gui-render` and `diff`s == committed (fail-closed),
+  plus a census (all 61) and an independent secret-unmask scan — so the
+  manual's GUI depiction can never silently drift from the real GUI. This
+  closes the **form-mockup leg** of
+  `manual-gui-output-blocks-non-gateable-residual`.
+- **Tour mockups replaced.** The two hand-drawn full-window form mockups
+  in `src/30-tour/31-first-launch.md` (which had silently DRIFTED from
+  the real GUI — e.g. `--template bip84` vs the real `bip44`, a stale
+  slot-row count) were swapped for the generated, gated renders. An
+  at-least-one `(required)` caveat was added to the three genuine
+  at-least-one forms (`inspect`, `repair`, `ms encode`).
+- `make lint` 7/7 GREEN (0-missing / 0-orphan against the v0.53.0 GUI
+  schema), `verify-examples` + `verify-examples-gui` GREEN against the
+  pinned bins, HTML + PDF build clean (renders appear, no empty fences).
+
 ## [1.1.0] - 2026-06-23
 
 **Minor — manual-gui v1.1 modernization (GUI pin `mnemonic-gui-v0.3.0`

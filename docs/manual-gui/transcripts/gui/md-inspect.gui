@@ -1,0 +1,4 @@
+[ md > inspect ]
+  --json       checkbox  -> [ ] off
+  md1-strings  positional...  (required) -> <empty>
+  [ Run ]

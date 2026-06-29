@@ -1,0 +1,6 @@
+[ mnemonic > final-word ]
+  --from            composite[phrase]  (required) -> phrase=<empty>
+  --language        dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --json-out        path  -> <empty>
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]

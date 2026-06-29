@@ -1,19 +1,19 @@
 # `mk` — per-tab reference
 
-The `mk` tab covers the BIP-32-xpub CLI (`mk-cli`), eight
+The `mk` tab covers the BIP-32-xpub CLI (`mk-cli`), nine
 subcommands that operate on `mk1` cards (the public-key card of
 the m-format constellation bundle). The `mk1` encodes an xpub
 plus origin metadata (master fingerprint, derivation path) plus
 one or more `policy_id_stub` bytes that bind the card to a
 matching `md1` wallet-policy template.
 
-The `mk` tab's pinned upstream version at v1.1 of this manual is
-`mk-cli v0.9.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: mk 0.9.0`.
+The `mk` tab's pinned upstream version is
+`mk-cli v0.11.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: mk 0.11.0`.
 
 ## Subcommand index
 
-The eight subcommands group into four families:
+The nine subcommands group into four families:
 
 - **Encode + decode.** Round-trip from xpub + origin metadata to
   `mk1` and back.
@@ -46,16 +46,18 @@ The eight subcommands group into four families:
   - [`mk vectors`](#mk-vectors)\index{mk vectors} — print the
     SHA-pinned v0.1 test-vector corpus as JSON (typically used by
     mk-cli developers, not end users).
+  - [`mk gen-man`](#mk-gen-man)\index{mk gen-man} — emit `roff`
+    man pages for the whole `mk` CLI tree into a directory.
 
 ## Form shape
 
-All eight subcommands follow the same form scaffolding described
+All nine subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
-`Pinned: mk 0.9.0` label + subcommand selector ComboBox +
+`Pinned: mk 0.11.0` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the mk-tab subcommands accept slot input
-(`allows_slots: false` for all 8).
+(`allows_slots: false` for all 9).
 
 The `mk` subcommands operate on **public** material throughout.
 None of the schema flags is `secret: true`. The run-confirm modal

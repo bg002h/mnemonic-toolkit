@@ -1,0 +1,9 @@
+[ mnemonic > ms-shares-combine ]
+  --group-size      number  -> <unset>
+  --separator       dropdown[space,hyphen,comma]  -> space
+  --share           text  (required, secret, repeating) -> <masked>
+  --to              dropdown[phrase,entropy,ms1]  -> phrase
+  --language        dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --json            checkbox  -> [ ] off
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]

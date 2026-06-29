@@ -1,0 +1,8 @@
+[ mnemonic > slip39-combine ]
+  --share             text  (required, secret, repeating) -> <masked>
+  --passphrase        text  (secret) -> <masked>
+  --passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
+  --to                dropdown[entropy,phrase]  -> entropy
+  --json-out          path  -> <empty>
+  --no-auto-repair    checkbox  -> [ ] off
+  [ Run ]

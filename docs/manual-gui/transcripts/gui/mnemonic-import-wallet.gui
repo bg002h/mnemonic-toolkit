@@ -1,0 +1,16 @@
+[ mnemonic > import-wallet ]
+  --blob                    path(stdio)  (required) -> <empty>
+  --format                  dropdown[bitcoin-core,bsms,coldcard,coldcard-multisig,descriptor,electrum,jade,sparrow,specter]  -> bitcoin-core
+  --select-descriptor       text  -> all
+  --ms1                     text  (secret, repeating) -> <masked>
+  --json                    checkbox  -> [ ] off
+  --bsms-encryption-token   path(stdio)  -> <empty>
+  --bsms-round1             path  (repeating) -> <empty>
+  --bsms-verify-strict      checkbox  -> [ ] off
+  --decrypt-password        text  (secret) -> <masked>
+  --decrypt-password-file   path  -> <empty>
+  --decrypt-password-stdin  checkbox  (secret) -> [ ] off [disabled]
+  --network                 dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --no-auto-repair          checkbox  -> [ ] off
+  [ slot editor: 0 rows ]
+  [ Run ]

@@ -1,0 +1,6 @@
+[ mnemonic > seedqr-encode ]
+  --from            composite[phrase]  (required) -> phrase=<empty>
+  --variant         dropdown[standard,compact]  -> standard
+  --json-out        path  -> <empty>
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]

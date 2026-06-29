@@ -25,6 +25,7 @@ versa) fails the lint.
 | `md compile` | [`md compile`](#md-compile) |
 | `md decode` | [`md decode`](#md-decode) |
 | `md encode` | [`md encode`](#md-encode) |
+| `md gen-man` | [`md gen-man`](#md-gen-man) |
 | `md inspect` | [`md inspect`](#md-inspect) |
 | `md repair` | [`md repair`](#md-repair) |
 | `md vectors` | [`md vectors`](#md-vectors) |
@@ -35,6 +36,7 @@ versa) fails the lint.
 | `mk decode` | [`mk decode`](#mk-decode) |
 | `mk derive` | [`mk derive`](#mk-derive) |
 | `mk encode` | [`mk encode`](#mk-encode) |
+| `mk gen-man` | [`mk gen-man`](#mk-gen-man) |
 | `mk inspect` | [`mk inspect`](#mk-inspect) |
 | `mk repair` | [`mk repair`](#mk-repair) |
 | `mk vectors` | [`mk vectors`](#mk-vectors) |
@@ -49,6 +51,7 @@ versa) fails the lint.
 | `mnemonic electrum-decrypt` | [`mnemonic electrum-decrypt`](#mnemonic-electrum-decrypt) |
 | `mnemonic export-wallet` | [`mnemonic export-wallet`](#mnemonic-export-wallet) |
 | `mnemonic final-word` | [`mnemonic final-word`](#mnemonic-final-word) |
+| `mnemonic gen-man` | [`mnemonic gen-man`](#mnemonic-gen-man) |
 | `mnemonic inspect` | [`mnemonic inspect`](#mnemonic-inspect) |
 | `mnemonic ms-shares-combine` | [`mnemonic ms-shares-combine`](#mnemonic-ms-shares-combine) |
 | `mnemonic ms-shares-split` | [`mnemonic ms-shares-split`](#mnemonic-ms-shares-split) |
@@ -65,6 +68,7 @@ versa) fails the lint.
 | `mnemonic slip39-split` | [`mnemonic slip39-split`](#mnemonic-slip39-split) |
 | `mnemonic verify-bundle` | [`mnemonic verify-bundle`](#mnemonic-verify-bundle) |
 | `mnemonic verify-message` | [`mnemonic verify-message`](#mnemonic-verify-message) |
+| `mnemonic word-card` | [`mnemonic word-card`](#mnemonic-word-card) |
 | `mnemonic xpub-search account-of-descriptor` | [`mnemonic xpub-search account-of-descriptor`](#mnemonic-xpub-search-account-of-descriptor) |
 | `mnemonic xpub-search address-of-xpub` | [`mnemonic xpub-search address-of-xpub`](#mnemonic-xpub-search-address-of-xpub) |
 | `mnemonic xpub-search passphrase-of-xpub` | [`mnemonic xpub-search passphrase-of-xpub`](#mnemonic-xpub-search-passphrase-of-xpub) |
@@ -74,6 +78,7 @@ versa) fails the lint.
 | `ms decode` | [`ms decode`](#ms-decode) |
 | `ms derive` | [`ms derive`](#ms-derive) |
 | `ms encode` | [`ms encode`](#ms-encode) |
+| `ms gen-man` | [`ms gen-man`](#ms-gen-man) |
 | `ms inspect` | [`ms inspect`](#ms-inspect) |
 | `ms repair` | [`ms repair`](#ms-repair) |
 | `ms split` | [`ms split`](#ms-split) |
@@ -85,3 +90,4 @@ versa) fails the lint.
 | `screenshot` | [Glossary](#glossary) |
 | `SecretLineEdit` | [Glossary](#glossary) |
 | `Wayland` | [Glossary](#glossary) |
+| `word-card` | [Glossary](#glossary) |

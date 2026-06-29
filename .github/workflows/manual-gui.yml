@@ -110,15 +110,15 @@ jobs:
   #
   # Replays every worked-example transcript in docs/manual-gui/transcripts/
   # against the GUI-PINNED CLI tier — the exact release tags the pinned
-  # mnemonic-gui (v0.49.0) ships and subprocess-runs — and byte-diffs each
+  # mnemonic-gui (v0.53.0) ships and subprocess-runs — and byte-diffs each
   # capture against the committed golden (`make verify-examples`). Drift =
   # failure. This is the output-shaped analogue of the schema-coverage
   # anchor gate in Job 1: Job 1 pins the GUI *schema* (flag names); this job
   # pins the GUI *output* (worked-example stdout/stderr a GUI user sees).
   #
   # The four CLI tags below MUST equal pinned-upstream.toml's
-  # [manual-gui] *-tag-implied fields (toolkit-v0.70.0 / md-cli-v0.7.0 with
-  # --features cli-compiler / ms-cli-v0.8.0 / mk-cli-v0.9.0). A GUI-pin bump
+  # [manual-gui] *-tag-implied fields (toolkit-v0.74.0 / md-cli-v0.11.0 with
+  # --features cli-compiler / ms-cli-v0.13.0 / mk-cli-v0.11.0). A GUI-pin bump
   # re-pins all four here in lockstep with that file (and with Job 1's
   # schema clone).
   #
@@ -152,24 +152,24 @@ jobs:
         run: |
           cargo install --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/descriptor-mnemonic \
-            --tag descriptor-mnemonic-md-cli-v0.7.0 md-cli --features cli-compiler
+            --tag descriptor-mnemonic-md-cli-v0.11.0 md-cli --features cli-compiler
           cargo install --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-secret \
-            --tag ms-cli-v0.8.0 ms-cli
+            --tag ms-cli-v0.13.0 ms-cli
           cargo install --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-key \
-            --tag mk-cli-v0.9.0 mk-cli
+            --tag mk-cli-v0.11.0 mk-cli
 
-      - name: Install GUI-pinned mnemonic binary (toolkit v0.70.0)
+      - name: Install GUI-pinned mnemonic binary (toolkit v0.74.0)
         # The `mnemonic` binary the GUI subprocess-runs on the mnemonic tab.
-        # mnemonic-toolkit-v0.70.0 is the toolkit tag the pinned GUI ships
+        # mnemonic-toolkit-v0.74.0 is the toolkit tag the pinned GUI ships
         # (pinned-upstream.toml [manual-gui] toolkit-tag-implied).
         env:
           DOCBIN_ROOT: ${{ runner.temp }}/docbins
         run: |
           cargo install --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-toolkit \
-            --tag mnemonic-toolkit-v0.70.0 mnemonic-toolkit
+            --tag mnemonic-toolkit-v0.74.0 mnemonic-toolkit
 
       - name: Verify worked-example transcripts against the GUI-pinned tier
         working-directory: docs/manual-gui
@@ -183,6 +183,80 @@ jobs:
             MD_BIN="$DOCBIN_ROOT/bin/md" \
             MS_BIN="$DOCBIN_ROOT/bin/ms" \
             MK_BIN="$DOCBIN_ROOT/bin/mk"
+
+  # ---------------------------------------------------------------------------
+  # Job 1c — verify-examples-gui (generated GUI form-render fidelity gate)
+  #
+  # Regenerates the 61 committed structural form renders
+  # (docs/manual-gui/transcripts/gui/<tab>-<sub>.gui — the ones the manual
+  # embeds via `include="gui/<stem>.gui"`) with the PINNED, headless,
+  # egui-free `gui-render` binary and byte-diffs == the committed tree
+  # (fail-closed), with a census (every subcommand in the pinned GUI schema
+  # has a render) and a secret-hygiene scan. This is the form-render analogue
+  # of Job 1b: Job 1 pins the GUI *schema* (flag-name anchors), Job 1b pins
+  # the GUI *worked-example output*, and this job pins the GUI *form renders*.
+  #
+  # The pinned mnemonic-gui tag is read from pinned-upstream.toml (same source
+  # the lint job clones) — a single version-site for the GUI pin. The binary
+  # is `cargo install`-ed into an isolated --root under `--no-default-features`
+  # (the egui-free build the manual is pinned to), so GUI_RENDER_BIN is an
+  # ABSOLUTE path. The toolkit repo-root rust-toolchain.toml pins rustc 1.85,
+  # BELOW the GUI's 1.88 MSRV — and that pin applies to cargo invoked from the
+  # repo cwd, so both the install and the gate set RUSTUP_TOOLCHAIN=stable to
+  # override it (matching the local `env RUSTUP_TOOLCHAIN=stable make
+  # verify-examples-gui` invocation; RUSTUP_TOOLCHAIN > rust-toolchain.toml).
+  # ---------------------------------------------------------------------------
+  verify-examples-gui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install make
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make
+
+      - name: Read pinned mnemonic-gui tag
+        id: pin
+        working-directory: docs/manual-gui
+        run: |
+          tag=$(grep -oE 'tag = "mnemonic-gui-v[^"]+"' pinned-upstream.toml \
+                  | head -1 \
+                  | sed -E 's/tag = "(.*)"/\1/')
+          if [ -z "$tag" ]; then
+            echo "ERROR: could not parse mnemonic-gui tag from pinned-upstream.toml" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Pinned mnemonic-gui tag: $tag"
+
+      - name: Install pinned gui-render (headless, --no-default-features)
+        # mnemonic-gui is a single package with two bins (mnemonic-gui +
+        # gui-render); --no-default-features drops the egui stack so only
+        # gui-render builds, and --bin gui-render installs just that binary.
+        env:
+          PINNED_TAG: ${{ steps.pin.outputs.tag }}
+          GUIBIN_ROOT: ${{ runner.temp }}/guibin
+          # Override the toolkit repo-root rust-toolchain.toml (1.85) — the GUI
+          # needs 1.88. RUSTUP_TOOLCHAIN takes precedence over rust-toolchain.toml.
+          RUSTUP_TOOLCHAIN: stable
+        run: |
+          cargo install --root "$GUIBIN_ROOT" \
+            --git https://github.com/bg002h/mnemonic-gui \
+            --tag "$PINNED_TAG" \
+            --no-default-features --bin gui-render
+
+      - name: Verify generated GUI form renders against the pinned gui-render
+        working-directory: docs/manual-gui
+        env:
+          GUIBIN_ROOT: ${{ runner.temp }}/guibin
+          # Same MSRV override, in case the gate falls back to a cargo invocation.
+          RUSTUP_TOOLCHAIN: stable
+        run: |
+          make verify-examples-gui GUI_RENDER_BIN="$GUIBIN_ROOT/bin/gui-render"
 
   # ---------------------------------------------------------------------------
   # Job 2 — build

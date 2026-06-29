@@ -1,0 +1,21 @@
+[ mnemonic > export-wallet ]
+  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  -> bip44
+  --descriptor              text  -> <empty> [disabled]
+  --threshold               number  -> <unset> [disabled]
+  --multisig-path-family    dropdown[bip48,bip87]  -> bip48 [disabled]
+  --network                 dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --account                 number  -> <unset>
+  --format                  dropdown[bitcoin-core,bip388,coldcard,coldcard-multisig,jade,sparrow,specter,electrum,green,bsms,descriptor]  -> bitcoin-core
+  --output                  path(stdio)  -> -
+  --range                   range  -> <unset>
+  --timestamp               timestamp  -> <unset>
+  --bitcoin-core-version    number  -> <unset>
+  --taproot-internal-key    tagged-or-indexed[nums]  -> <unset> [disabled]
+  --wallet-name             text  -> <empty>
+  --bsms-form               dropdown[2-line,4-line]  -> 4-line
+  --from-import-json        path(stdio)  -> <empty>
+  --from-import-json-index  number  -> <unset>
+  --no-auto-repair          checkbox  -> [ ] off
+  [ slot editor: 0 rows ]
+  [ Run ]

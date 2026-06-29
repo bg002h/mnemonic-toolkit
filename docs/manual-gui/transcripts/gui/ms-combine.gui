@@ -1,0 +1,5 @@
+[ ms > combine ]
+  --to    dropdown[phrase,entropy,ms1]  -> phrase
+  --json  checkbox  -> [ ] off
+  shares  positional...  (required, secret) -> <masked>
+  [ Run ]

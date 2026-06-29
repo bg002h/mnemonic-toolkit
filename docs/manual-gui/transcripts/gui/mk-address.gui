@@ -1,0 +1,9 @@
+[ mk > address ]
+  --address-type  dropdown[p2pkh,p2sh-p2wpkh,p2wpkh,p2tr]  -> p2pkh
+  --count         text  -> <empty>
+  --range         text  -> <empty>
+  --chain         dropdown[receive,change,both]  -> receive
+  --network       dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --json          checkbox  -> [ ] off
+  mk1-strings     positional...  -> <empty>
+  [ Run ]

@@ -1,0 +1,4 @@
+[ mk > vectors ]
+  --pretty  checkbox  -> [ ] off
+  --out     path  -> <empty>
+  [ Run ]

@@ -1,0 +1,4 @@
+[ mnemonic > gen-man ]
+  --out             path  (required) -> <empty>
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]

@@ -1,0 +1,12 @@
+[ mnemonic > word-card ]
+  --decode          checkbox  -> [ ] off
+  --decode-plate    text  -> <empty>
+  --from            text  -> <empty>
+  --integrity-bits  number  -> <unset>
+  --json            checkbox  -> [ ] off
+  --parity-pct      number  -> <unset>
+  --parity-words    number  -> <unset>
+  --raid            number  -> <unset>
+  --no-auto-repair  checkbox  -> [ ] off
+  words             positional...  -> <empty>
+  [ Run ]

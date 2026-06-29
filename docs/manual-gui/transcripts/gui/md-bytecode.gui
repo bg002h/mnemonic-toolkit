@@ -1,0 +1,4 @@
+[ md > bytecode ]
+  --json   checkbox  -> [ ] off
+  strings  positional...  (required) -> <empty>
+  [ Run ]

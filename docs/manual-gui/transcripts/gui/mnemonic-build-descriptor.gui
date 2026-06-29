@@ -1,0 +1,21 @@
+[ mnemonic > build-descriptor ]
+  [ build-descriptor mode selector: generic ]
+  --spec                path(stdio)  -> <empty>
+  --spec-schema         checkbox  -> [ ] off
+  --archetype           dropdown[(none),decaying-multisig,hashlock-gated,kofn-recovery,simple-timelocked-inheritance,tiered-recovery]  -> <empty>
+  --key                 text  (repeating) -> <empty>
+  --threshold           number  -> <unset>
+  --recovery-key        text  (repeating) -> <empty>
+  --recovery-threshold  number  -> <unset>
+  --final-key           text  -> <empty>
+  --older               number  -> <unset>
+  --recovery-older      number  -> <unset>
+  --after               number  -> <unset>
+  --hash                text  -> <empty>
+  --emit-spec           checkbox  -> [ ] off
+  --allow               dropdown[malleable,mixed-timelock,repeated-keys,resource-limit,sigless-branch]  (repeating) -> malleable
+  --format              dropdown[descriptor,bip388]  -> descriptor
+  --network             dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --json                checkbox  -> [ ] off
+  --no-auto-repair      checkbox  -> [ ] off
+  [ Run ]

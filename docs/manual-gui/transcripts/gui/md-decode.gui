@@ -1,0 +1,4 @@
+[ md > decode ]
+  --json   checkbox  -> [ ] off
+  strings  positional...  (required) -> <empty>
+  [ Run ]

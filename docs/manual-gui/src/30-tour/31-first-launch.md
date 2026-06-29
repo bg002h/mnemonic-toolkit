@@ -12,32 +12,24 @@ secret-bearing flow and the run-confirm modal; chapter 33 covers the
 ## Launch and the three-panel layout
 
 Run `mnemonic-gui` from a terminal (or your desktop launcher). On
-first launch the window opens with three panels:
+first launch the window opens with three panels — a top **tab strip**,
+a central **form**, and an **output panel** (each described below). The
+default tab is `mnemonic` with the `bundle` subcommand selected; the
+central form's generated structural render (from the pinned
+`gui-render`, secret fields masked) is:
 
-```text
-+--------------------------------------------------------+
-| mnemonic-gui  |  mnemonic ◀ |  md  |  ms  |  mk        |  ← top tab strip
-+--------------------------------------------------------+
-| Pinned: mnemonic 0.13.0  |  subcommand: bundle ▾  ?           |
-| ----                                                          |
-|   --network        [ mainnet ▾ ]                              |
-|   --template       [ bip84 ▾ ]                                |
-|   --account        [ 0    ]                                   |
-|   --multisig-path-family [ bip87 ▾ ]                          |  ← central form
-|   ...                                                          |
-|   Slot rows:  ?                                                |
-|     @ [0] . [ xpub ▾ ] = [             ] [×]                   |
-|     [ + Add slot ]                                             |
-|   ----                                                         |
-|   [ Copy command (POSIX) ] [ Copy command (Windows) ] [ Run ]  |
-|   Preview: mnemonic bundle --network mainnet --template ...    |
-+----------------------------------------------------------------+
-| ☐ show command-line  ☐ show stdout  ☐ show stderr              |
-| (no run yet)                                                   |  ← output panel
-+----------------------------------------------------------------+
+```{.text include="gui/mnemonic-bundle.gui"}
+(structural form render — generated from the pinned renderer at build time)
 ```
 
-The `Pinned: mnemonic 0.13.0` string is the runtime `--version`
+The live window frames this form with the tab strip above it and the
+output panel below it, and adds an action bar (**Copy command (POSIX)**,
+**Copy command (Windows)**, **Run**) plus an always-on `Preview:` line;
+those chrome elements are out of the generated form render and are
+described in prose below.
+
+The `Pinned: <cli> <version>` banner the GUI shows above each form
+(e.g. `Pinned: mnemonic 0.13.0`) is the runtime `--version`
 banner format that the GUI reads from each CLI binary at launch
 and displays for cross-reference. This is intentionally distinct
 from the git-tag form `mnemonic-toolkit-v0.13.0` that lives in
@@ -68,35 +60,27 @@ you click **Run** for the first time.
 ## Default-launch state
 
 The first time you open the GUI, the active tab is `mnemonic` and
-the subcommand selector is set to `bundle`. The bundle form is
-pre-seeded with a small set of demo defaults (`--network mainnet`,
-`--template bip84`, `--account 0`, `--multisig-path-family bip87`,
-plus one empty slot row with `xpub` selected as its subkey). These
-defaults are visible scaffolding so the form is not empty on first
-look; they are NOT a wallet you should fund. The bundle subcommand
-also requires a secret-class `--ms1` value to actually run, which is
-why we do not click **Run** here — chapter 32 picks that up.
+the subcommand selector is set to `bundle`. The bundle form opens on
+the seeded defaults shown in the render above — `--network mainnet`
+and a `bip44` single-sig `--template`, with the multisig-only
+`--multisig-path-family` (default `bip48`) and `--threshold` greyed
+out because the template is single-sig, `--account` left unset, and an
+empty slot editor (0 rows). These defaults are visible scaffolding so
+the form is not empty on first look; they are NOT a wallet you should
+fund. The bundle subcommand still needs a secret-class seed — supplied
+through the slot editor (e.g. `--slot @0.phrase=`) — to actually run,
+which is why we do not click **Run** here; chapter 32 picks that up.
 
 ## Pick a tab — switch to `mk`
 
 Click the **mk** button in the top tab strip. The tab strip now
 shows `mk ◀` and the central form re-renders for the `mk` CLI. The
 default `mk` subcommand is `inspect`, which has one flag (`--json`)
-and one repeating positional argument (`mk1-strings`).
+and one repeating positional argument (`mk1-strings`). Its generated
+form render is:
 
-```text
-+----------------------------------------------------------------+
-| mnemonic-gui  |  mnemonic |  md |  ms |  mk ◀                  |
-+----------------------------------------------------------------+
-| Pinned: mk 0.3.1  |  subcommand: inspect ▾  ?                  |
-| ----                                                           |
-|   ☐ --json                                                     |
-|   mk1-strings  ...                                             |
-|     [                                                          ]
-|   ----                                                         |
-|   [ Copy command (POSIX) ] [ Copy command (Windows) ] [ Run ]  |
-|   Preview: mk inspect                                          |
-+----------------------------------------------------------------+
+```{.text include="gui/mk-inspect.gui"}
+(structural form render — generated from the pinned renderer at build time)
 ```
 
 The subcommand selector's *closed* state shows the bare CLI name

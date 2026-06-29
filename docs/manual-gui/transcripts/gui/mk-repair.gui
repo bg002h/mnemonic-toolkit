@@ -1,0 +1,4 @@
+[ mk > repair ]
+  --json       checkbox  -> [ ] off
+  mk1-strings  positional...  -> <empty>
+  [ Run ]

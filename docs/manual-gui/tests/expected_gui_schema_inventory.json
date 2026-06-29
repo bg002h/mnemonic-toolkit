@@ -124,6 +124,22 @@
         "encode": {
           "flags": [
             {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
+            {
               "kind": "Text",
               "name": "--from-policy",
               "repeating": false,
@@ -204,7 +220,31 @@
             "--fingerprint"
           ]
         },
+        "gen-man": {
+          "flags": [
+            {
+              "kind": "Path",
+              "name": "--out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
         "inspect": {
+          "flags": [
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
+        "repair": {
           "flags": [
             {
               "kind": "Boolean",
@@ -270,6 +310,48 @@
     },
     "mk": {
       "subcommands": {
+        "address": {
+          "flags": [
+            {
+              "kind": "Dropdown",
+              "name": "--address-type",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--count",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--range",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--chain",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
         "decode": {
           "flags": [
             {
@@ -282,8 +364,48 @@
           "has_dropdown_or_composite": false,
           "repeating_flags": []
         },
+        "derive": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--path",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--index",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
         "encode": {
           "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
             {
               "kind": "Text",
               "name": "--xpub",
@@ -339,13 +461,37 @@
               "variants": []
             }
           ],
-          "has_dropdown_or_composite": false,
+          "has_dropdown_or_composite": true,
           "repeating_flags": [
             "--policy-id-stub",
             "--from-md1"
           ]
         },
+        "gen-man": {
+          "flags": [
+            {
+              "kind": "Path",
+              "name": "--out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
         "inspect": {
+          "flags": [
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
+        "repair": {
           "flags": [
             {
               "kind": "Boolean",
@@ -424,8 +570,245 @@
     },
     "mnemonic": {
       "subcommands": {
+        "addresses": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--from",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--address-type",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--count",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--range",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--chain",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "build-descriptor": {
+          "flags": [
+            {
+              "kind": "Path",
+              "name": "--spec",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--spec-schema",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--archetype",
+              "repeating": false,
+              "variants": [
+                "",
+                "decaying-multisig",
+                "hashlock-gated",
+                "kofn-recovery",
+                "simple-timelocked-inheritance",
+                "tiered-recovery"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--key",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--threshold",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--recovery-key",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--recovery-threshold",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--final-key",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--older",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--recovery-older",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--after",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--hash",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--emit-spec",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--allow",
+              "repeating": true,
+              "variants": [
+                "malleable",
+                "mixed-timelock",
+                "repeated-keys",
+                "resource-limit",
+                "sigless-branch"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--format",
+              "repeating": false,
+              "variants": [
+                "descriptor",
+                "bip388"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--key",
+            "--recovery-key",
+            "--allow"
+          ]
+        },
         "bundle": {
           "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
             {
               "kind": "Dropdown",
               "name": "--network",
@@ -463,6 +846,18 @@
             {
               "kind": "Path",
               "name": "--descriptor-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--import-json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--import-json-index",
               "repeating": false,
               "variants": []
             },
@@ -523,6 +918,15 @@
               ]
             },
             {
+              "kind": "Dropdown",
+              "name": "--md1-form",
+              "repeating": false,
+              "variants": [
+                "policy",
+                "template"
+              ]
+            },
+            {
               "kind": "Boolean",
               "name": "--privacy-preserving",
               "repeating": false,
@@ -552,14 +956,67 @@
             "--slot"
           ]
         },
+        "compare-cost": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--miniscript",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--descriptor",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--feerate",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--max-conditions",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
         "convert": {
           "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
             {
               "kind": "NodeValueComposite",
               "name": "--from",
               "repeating": false,
               "variants": [
                 "phrase",
+                "seedqr",
                 "entropy",
                 "xpub",
                 "xprv",
@@ -724,6 +1181,18 @@
             "--to"
           ]
         },
+        "decode-address": {
+          "flags": [
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
         "derive-child": {
           "flags": [
             {
@@ -811,6 +1280,42 @@
             }
           ],
           "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "electrum-decrypt": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--ciphertext",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--decrypt-password",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--decrypt-password-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--decrypt-password-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--json-out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
           "repeating_flags": []
         },
         "export-wallet": {
@@ -901,11 +1406,14 @@
                 "bitcoin-core",
                 "bip388",
                 "coldcard",
+                "coldcard-multisig",
                 "jade",
                 "sparrow",
                 "specter",
                 "electrum",
-                "green"
+                "green",
+                "bsms",
+                "descriptor"
               ]
             },
             {
@@ -943,6 +1451,27 @@
             {
               "kind": "Text",
               "name": "--wallet-name",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--bsms-form",
+              "repeating": false,
+              "variants": [
+                "2-line",
+                "4-line"
+              ]
+            },
+            {
+              "kind": "Path",
+              "name": "--from-import-json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--from-import-json-index",
               "repeating": false,
               "variants": []
             }
@@ -988,6 +1517,607 @@
           ],
           "has_dropdown_or_composite": true,
           "repeating_flags": []
+        },
+        "gen-man": {
+          "flags": [
+            {
+              "kind": "Path",
+              "name": "--out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
+        "import-wallet": {
+          "flags": [
+            {
+              "kind": "Path",
+              "name": "--blob",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--format",
+              "repeating": false,
+              "variants": [
+                "bitcoin-core",
+                "bsms",
+                "coldcard",
+                "coldcard-multisig",
+                "descriptor",
+                "electrum",
+                "jade",
+                "sparrow",
+                "specter"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--select-descriptor",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--slot",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--bsms-encryption-token",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--bsms-round1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--bsms-verify-strict",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--decrypt-password",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--decrypt-password-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--decrypt-password-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--ms1",
+            "--slot",
+            "--bsms-round1"
+          ]
+        },
+        "inspect": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--mk1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--md1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--reveal-secret",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": [
+            "--mk1",
+            "--md1"
+          ]
+        },
+        "ms-shares-combine": {
+          "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--share",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--to",
+              "repeating": false,
+              "variants": [
+                "phrase",
+                "entropy",
+                "ms1"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--share"
+          ]
+        },
+        "ms-shares-split": {
+          "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
+            {
+              "kind": "NodeValueComposite",
+              "name": "--from",
+              "repeating": false,
+              "variants": [
+                "phrase",
+                "entropy"
+              ]
+            },
+            {
+              "kind": "Number",
+              "name": "--threshold",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--shares",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "nostr": {
+          "flags": [
+            {
+              "kind": "Boolean",
+              "name": "--all-script-types",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--import",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--pubkey",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--script-type",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--secret",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--secret-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--secret-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--timestamp",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "repair": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--mk1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--md1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--max-indel",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--max-subst",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": [
+            "--mk1",
+            "--md1"
+          ]
+        },
+        "restore": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--from",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--format",
+              "repeating": false,
+              "variants": [
+                "bitcoin-core",
+                "bip388",
+                "coldcard",
+                "coldcard-multisig",
+                "jade",
+                "sparrow",
+                "specter",
+                "electrum",
+                "green",
+                "bsms",
+                "descriptor"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--template",
+              "repeating": false,
+              "variants": [
+                "bip44",
+                "bip49",
+                "bip84",
+                "bip86",
+                "wsh-multi",
+                "wsh-sortedmulti",
+                "sh-wsh-multi",
+                "sh-wsh-sortedmulti",
+                "tr-multi-a",
+                "tr-sortedmulti-a"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Number",
+              "name": "--account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--count",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--origin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--expect-wallet-id",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--expect-fingerprint",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--expect-xpub",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--allow-mismatch",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--output",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--md1",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--cosigner",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--own-account-max",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--search-cosigner-subset",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--search-address",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--search-addr-min",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--search-addr-max",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--search-chain",
+              "repeating": false,
+              "variants": [
+                "receive",
+                "change",
+                "both"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--accept-search-time",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--md1",
+            "--cosigner"
+          ]
         },
         "seed-xor-combine": {
           "flags": [
@@ -1082,6 +2212,143 @@
           ],
           "has_dropdown_or_composite": true,
           "repeating_flags": []
+        },
+        "seedqr-decode": {
+          "flags": [
+            {
+              "kind": "NodeValueComposite",
+              "name": "--from",
+              "repeating": false,
+              "variants": [
+                "seedqr"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--variant",
+              "repeating": false,
+              "variants": [
+                "standard",
+                "compact"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--digits",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--json-out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "seedqr-encode": {
+          "flags": [
+            {
+              "kind": "NodeValueComposite",
+              "name": "--from",
+              "repeating": false,
+              "variants": [
+                "phrase"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--variant",
+              "repeating": false,
+              "variants": [
+                "standard",
+                "compact"
+              ]
+            },
+            {
+              "kind": "Path",
+              "name": "--json-out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "silent-payment": {
+          "flags": [
+            {
+              "kind": "Number",
+              "name": "--account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--change-address",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--label",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--secret",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--secret-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--secret-stdin",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--label"
+          ]
         },
         "slip39-combine": {
           "flags": [
@@ -1289,6 +2556,76 @@
               "variants": []
             },
             {
+              "kind": "Number",
+              "name": "--own-account-max",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--origin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--expect-wallet-id",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--from",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--cosigner",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--search-cosigner-subset",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--search-address",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--search-addr-min",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--search-addr-max",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--search-chain",
+              "repeating": false,
+              "variants": [
+                "receive",
+                "change",
+                "both"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--accept-search-time",
+              "repeating": false,
+              "variants": []
+            },
+            {
               "kind": "Text",
               "name": "--ms1",
               "repeating": true,
@@ -1348,16 +2685,547 @@
           ],
           "has_dropdown_or_composite": true,
           "repeating_flags": [
+            "--cosigner",
             "--ms1",
             "--mk1",
             "--md1",
             "--slot"
+          ]
+        },
+        "verify-message": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--address",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--format",
+              "repeating": false,
+              "variants": [
+                "auto",
+                "legacy",
+                "bip322"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--message",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--message-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--message-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--signature",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
+        "word-card": {
+          "flags": [
+            {
+              "kind": "Boolean",
+              "name": "--decode",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--decode-plate",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--from",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--integrity-bits",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--parity-pct",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--parity-words",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--raid",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
+        "xpub-search-account-of-descriptor": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--phrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--phrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--ms1-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--descriptor",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--descriptor-from",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Number",
+              "name": "--min-account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--number-of-accounts",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--max-account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--add-path",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--add-path"
+          ]
+        },
+        "xpub-search-address-of-xpub": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--xpub",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--xpub-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--target-address",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--gap-limit",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--external-only",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--address-type",
+              "repeating": false,
+              "variants": [
+                "p2pkh",
+                "p2sh-p2wpkh",
+                "p2wpkh",
+                "p2tr"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--target-address"
+          ]
+        },
+        "xpub-search-passphrase-of-xpub": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--phrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--phrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--ms1-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Path",
+              "name": "--passphrase-candidates-file",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--target-xpub",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Number",
+              "name": "--min-account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--number-of-accounts",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--max-account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--add-path",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--add-path"
+          ]
+        },
+        "xpub-search-path-of-xpub": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--phrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--phrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--ms1-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--target-xpub",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "simplifiedchinese",
+                "traditionalchinese",
+                "czech",
+                "french",
+                "italian",
+                "japanese",
+                "korean",
+                "portuguese",
+                "spanish"
+              ]
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": [
+                "mainnet",
+                "testnet",
+                "signet",
+                "regtest"
+              ]
+            },
+            {
+              "kind": "Number",
+              "name": "--min-account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--number-of-accounts",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--max-account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--add-path",
+              "repeating": true,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": [
+            "--add-path"
           ]
         }
       }
     },
     "ms": {
       "subcommands": {
+        "combine": {
+          "flags": [
+            {
+              "kind": "Dropdown",
+              "name": "--to",
+              "repeating": false,
+              "variants": [
+                "phrase",
+                "entropy",
+                "ms1"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
         "decode": {
           "flags": [
             {
@@ -1387,8 +3255,95 @@
           "has_dropdown_or_composite": true,
           "repeating_flags": []
         },
+        "derive": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--hex",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--phrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--template",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--account",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--network",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--passphrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--passphrase-stdin",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "japanese",
+                "korean",
+                "spanish",
+                "chinese-simplified",
+                "chinese-traditional",
+                "french",
+                "italian",
+                "czech",
+                "portuguese"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
+          "repeating_flags": []
+        },
         "encode": {
           "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
             {
               "kind": "Text",
               "name": "--phrase",
@@ -1434,6 +3389,18 @@
           "has_dropdown_or_composite": true,
           "repeating_flags": []
         },
+        "gen-man": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--out",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
         "inspect": {
           "flags": [
             {
@@ -1444,6 +3411,93 @@
             }
           ],
           "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
+        "repair": {
+          "flags": [
+            {
+              "kind": "Text",
+              "name": "--ms1",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": false,
+          "repeating_flags": []
+        },
+        "split": {
+          "flags": [
+            {
+              "kind": "Number",
+              "name": "--group-size",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--separator",
+              "repeating": false,
+              "variants": [
+                "space",
+                "hyphen",
+                "comma"
+              ]
+            },
+            {
+              "kind": "Text",
+              "name": "--phrase",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Text",
+              "name": "--hex",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--threshold",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Number",
+              "name": "--shares",
+              "repeating": false,
+              "variants": []
+            },
+            {
+              "kind": "Dropdown",
+              "name": "--language",
+              "repeating": false,
+              "variants": [
+                "english",
+                "japanese",
+                "korean",
+                "spanish",
+                "chinese-simplified",
+                "chinese-traditional",
+                "french",
+                "italian",
+                "czech",
+                "portuguese"
+              ]
+            },
+            {
+              "kind": "Boolean",
+              "name": "--json",
+              "repeating": false,
+              "variants": []
+            }
+          ],
+          "has_dropdown_or_composite": true,
           "repeating_flags": []
         },
         "vectors": {

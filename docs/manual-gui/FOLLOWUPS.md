@@ -56,8 +56,10 @@ location, a What description, a Status (`open` | `resolved <commit>`
      checkboxes, `▾` dropdown carets, `◀` active-tab markers, `••••`
      redaction sentinels, `←`/`↑` annotation arrows). These render the
      GUI chrome, not CLI output, and have no binary to diff against:
-     - `30-tour/31-first-launch.md:17` (three-panel layout)
-     - `30-tour/31-first-launch.md:87` (mk-tab form)
+     - `30-tour/31-first-launch.md:17` (three-panel layout) — **RESOLVED
+       2026-06-29: now a gated `include="gui/mnemonic-bundle.gui"` render**
+     - `30-tour/31-first-launch.md:87` (mk-tab form) — **RESOLVED
+       2026-06-29: now a gated `include="gui/mk-inspect.gui"` render**
      - `30-tour/31-first-launch.md:116` (mk1 paste-field input echo)
      - `30-tour/31-first-launch.md:127` (live `Preview:` line)
      - `30-tour/32-run-and-output.md:20` (output-panel render — GUI
@@ -105,18 +107,64 @@ location, a What description, a Status (`open` | `resolved <commit>`
        `72-inspect.md` / `74-decode.md` paste-field input fences (the
        canonical ms1/mk1/phrase the step says to paste — these echo the
        INPUT; the matching OUTPUT fence in each chapter IS gated)
-  - The total = 46 output-shaped fences: 19 gated (P4), 27 residual
-    non-gateable (this entry).
-- **Status:** won't fix — these are GUI chrome, schema illustrations,
-  truncated examples, or input echoes by nature; gating them would
-  require either rendering the GUI (out of scope for a doc-build) or
-  fabricating deterministic goldens for non-deterministic / ellipsized
-  content. Re-triage only if a future cycle adds a GUI-render harness
-  (would let the `30-tour/*` mockups be screenshot-diffed).
+  - The total = 46 output-shaped fences: 19 gated (P4-output cycle),
+    **2 form mockups now gated as generated renders (2026-06-29, the
+    form-mockup leg — see Status)**, 25 residual non-gateable (this
+    entry; was 27).
+- **Status:** **partially RESOLVED (2026-06-29) — the FORM-MOCKUP leg is
+  closed.** The generated-GUI-form-renders cycle (Leg 2 P5) added a
+  headless `gui-render` + the `verify-examples-gui` gate, so the two
+  full-window FORM mockups (`30-tour/31-first-launch.md:17`, `:87`) are
+  now replaced by generated, gated structural renders — and every
+  subcommand form additionally carries its render, gated against drift.
+  (These mockups had silently DRIFTED from the real GUI before
+  replacement, vindicating the gate.) See
+  `manual-gui-generated-form-renders`. The REMAINDER is narrowed +
+  remains **won't fix** for now — the output-panel `argv:`/`exit:`/
+  `stdout:` framing, the run-confirm modal, the help-icon `?` snippets,
+  the ellipsized/truncated illustrations, the URL-formula, and the
+  input-paste reference blocks are NOT form structure, so `gui-render`
+  does not cover them; gating them would need an output-panel/chrome
+  render harness or deterministic goldens for non-deterministic content.
 - **Tier:** `v1.1+`
+
+### `gui-word-card-from-help-mislabels-secret-input` (CROSS-REPO → mnemonic-gui)
+
+- **Surfaced:** 2026-06-29 (generated-GUI-form-renders Leg-2 post-impl review).
+- **Where:** `mnemonic-gui/src/schema/mnemonic.rs` (the `word-card` `--from`
+  flag `help:` string; and `--decode-plate`).
+- **What:** the GUI schema's `word-card --from` help calls it a
+  **"BIP-39 mnemonic"** (`phrase=`/`ms1=`/`entropy=`…) and carries
+  `secret: false`. But `word-card` operates on **PUBLIC** material only —
+  `--from` takes an `mk1` (xpub) or `md1` (descriptor) card; the secret
+  `ms1` is **excluded** (verified against `mnemonic-toolkit` word-card
+  source: it re-encodes a public card). The mislabel invites a user to
+  paste a **seed phrase into an unmasked, no-run-confirm field** — a real
+  GUI secret-hygiene footgun. The manual (`4n-word-card.md`) correctly
+  documents the PUBLIC behavior and does NOT propagate this help string.
+- **Companion:** file the matching entry in `mnemonic-gui/`'s FOLLOWUPS;
+  the GUI-side fix (correct the `--from`/`--decode-plate` help) is a
+  separate mnemonic-gui cycle. When it ships, the GUI `schema_mirror`
+  surface changes → the manual's next GUI-pin bump re-gates.
+- **Status:** open (cross-repo, GUI-side). **Tier:** `secret-hygiene`.
 
 ---
 
 ## Resolved items
 
-(populated as items close)
+### `manual-gui-generated-form-renders` — RESOLVED 2026-06-29
+
+Generated, gated structural renders of all **61** GUI subcommand forms
+embedded in the manual. A headless `gui-render` binary (shipped in
+`mnemonic-gui-v0.53.0`, built `--no-default-features`) emits each form's
+ASCII structural render from the GUI's own `schema/` + `conditional()`
+(seeding defaults exactly as the GUI does on load); the renders are
+committed under `transcripts/gui/`, embedded via
+`include="gui/<tab>-<sub>.gui"`, and **gated** by `verify-examples-gui`
+(regenerate with the pinned `gui-render` + `diff` == committed +
+census 61 + secret-unmask scan, fail-closed; `manual-gui.yml` job 1c).
+Secret fields render a fixed `<masked>` sentinel. Cross-repo cycle:
+mnemonic-gui Leg 1 (`gui-render` + egui_kittest faithfulness gate →
+`mnemonic-gui-v0.53.0`) + manual-gui Leg 2 (catch-up + renders + gate).
+Closes the **form-mockup leg** of
+`manual-gui-output-blocks-non-gateable-residual`.

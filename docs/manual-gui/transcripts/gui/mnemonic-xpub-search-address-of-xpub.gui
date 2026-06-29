@@ -1,0 +1,11 @@
+[ mnemonic > xpub-search-address-of-xpub ]
+  --xpub            text  -> <empty>
+  --xpub-stdin      checkbox  -> [ ] off
+  --target-address  text  (required, repeating) -> <empty>
+  --gap-limit       number  -> <unset>
+  --external-only   checkbox  -> [ ] off
+  --address-type    dropdown[p2pkh,p2sh-p2wpkh,p2wpkh,p2tr]  -> p2pkh
+  --network         dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --json            checkbox  -> [ ] off
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]
