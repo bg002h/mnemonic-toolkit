@@ -16,6 +16,10 @@
 #      {#<flag>-outline}` with V bullets. Per SPEC §2.1 G2 / §2.3.)
 #   6. glossary-coverage (every defined term has a glossary entry)
 #   7. index bidirectional (\index{X} markers ↔ 99-index-table.md entries)
+#   8. gui-form-xref (every transcripts/gui/*.gui stem has exactly one
+#      `{#gui-form-<stem>}` gallery anchor in src/75-gui-forms/ AND
+#      exactly one `](#gui-form-<stem>)` cross-link in the subcommand
+#      chapters; no orphan gui-form-* token. Per SPEC §6.)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR                 — absolute path to src/
@@ -23,6 +27,9 @@
 #   TESTS_DIR               — absolute path to tests/
 #   MANUAL_GUI_UPSTREAM_ROOT — absolute path to mnemonic-gui repo checkout
 #                              at the pinned tag (per SPEC §2.5).
+#   TRANSCRIPTS_GUI         — absolute path to transcripts/gui/ (the
+#                              canonical *.gui stem list; threaded from
+#                              the Makefile, used by gui-form-xref).
 #   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings
 #                              (unused by gui-schema-coverage; reserved
 #                              for future GUI-side worked-example phases).
@@ -35,6 +42,7 @@ for arg in "$@"; do
     BUILD_DIR=*)                BUILD_DIR="${arg#*=}" ;;
     TESTS_DIR=*)                TESTS_DIR="${arg#*=}" ;;
     MANUAL_GUI_UPSTREAM_ROOT=*) MANUAL_GUI_UPSTREAM_ROOT="${arg#*=}" ;;
+    TRANSCRIPTS_GUI=*)          TRANSCRIPTS_GUI="${arg#*=}" ;;
     MNEMONIC_BIN=*)             MNEMONIC_BIN="${arg#*=}" ;;
     MD_BIN=*)                   MD_BIN="${arg#*=}" ;;
     MS_BIN=*)                   MS_BIN="${arg#*=}" ;;
@@ -53,7 +61,7 @@ warn() { printf '[lint] WARN: %s\n' "$1" >&2; }
 err()  { printf '[lint] FAIL: %s\n' "$1" >&2; fail=1; }
 
 # 1. markdownlint
-step "1/7 markdownlint"
+step "1/8 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
   markdownlint-cli2 "$SRC_DIR/**/*.md" || err "markdownlint reported issues"
 else
@@ -61,7 +69,7 @@ else
 fi
 
 # 2. cspell
-step "2/7 cspell"
+step "2/8 cspell"
 if command -v cspell >/dev/null; then
   # `--no-must-find-files` keeps cspell from exiting 1 when src/ is
   # empty (the baseline state at P1; SPEC §2.1 G3 says all three
@@ -73,7 +81,7 @@ else
 fi
 
 # 3. lychee
-step "3/7 lychee"
+step "3/8 lychee"
 if command -v lychee >/dev/null; then
   lychee --offline --no-progress "$SRC_DIR" || err "lychee reported issues"
 else
@@ -81,7 +89,7 @@ else
 fi
 
 # 4. gui-schema-coverage
-step "4/7 gui-schema-coverage"
+step "4/8 gui-schema-coverage"
 CHECKER="$TESTS_DIR/check_gui_schema_coverage.py"
 HTML="$BUILD_DIR/m-format-gui-manual.html"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
@@ -96,7 +104,7 @@ else
 fi
 
 # 5. outline-coverage
-step "5/7 outline-coverage"
+step "5/8 outline-coverage"
 OUTLINE_CHECKER="$TESTS_DIR/check_outline_coverage.py"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
   err "MANUAL_GUI_UPSTREAM_ROOT not a directory (see phase 4 above)"
@@ -110,7 +118,7 @@ else
 fi
 
 # 6. glossary-coverage
-step "6/7 glossary-coverage"
+step "6/8 glossary-coverage"
 # GUI manual appendices live under 90-appendices/ per SPEC §1.4 (the
 # numbering deviates from the CLI manual's 60-appendices/ scheme so
 # the two manuals never share an anchor namespace). Token list will
@@ -127,7 +135,7 @@ else
 fi
 
 # 7. index bidirectional
-step "7/7 index bidirectional"
+step "7/8 index bidirectional"
 INDEX_TABLE="$SRC_DIR/90-appendices/99-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
@@ -152,6 +160,20 @@ if [ -f "$INDEX_TABLE" ]; then
   done <<<"$tbl_terms"
 else
   warn "$INDEX_TABLE missing; skipping index bidirectional check"
+fi
+
+# 8. gui-form-xref
+step "8/8 gui-form-xref"
+XREF_CHECKER="$TESTS_DIR/check_gui_form_xref.py"
+if [ ! -d "${TRANSCRIPTS_GUI:-}" ]; then
+  err "TRANSCRIPTS_GUI not a directory: ${TRANSCRIPTS_GUI:-<unset>} (pass TRANSCRIPTS_GUI=...; the Makefile lint: target threads it from TRANSCRIPTS_GUI := \$(TRANSCRIPTS)/gui)"
+elif [ ! -f "$XREF_CHECKER" ]; then
+  err "$XREF_CHECKER missing"
+else
+  python3 "$XREF_CHECKER" \
+      --transcripts-gui "$TRANSCRIPTS_GUI" \
+      --src-dir "$SRC_DIR" \
+    || err "gui-form-xref reported missing/extra/orphan cross-references"
 fi
 
 if [ "$fail" -ne 0 ]; then
