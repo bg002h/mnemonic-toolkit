@@ -1,0 +1,74 @@
+# R0 review — SPEC_gui_forms_dedicated_part.md (round 1)
+
+**Reviewer:** opus architect (adversarial, mandatory pre-plan/pre-code gate)
+**Subject:** `design/SPEC_gui_forms_dedicated_part.md` — relocate the 61 generated GUI form renders out of per-subcommand chapters into a dedicated "GUI Forms Reference" Part (4 per-tab chapters), leaving a one-line cross-link in each subcommand chapter; keep all gates green.
+**Gate sources verified against (manual-gui @ toolkit master):** `tests/check_gui_schema_coverage.py`, `tests/extract_gui_schema.py`, `tests/check_outline_coverage.py`, `tests/lint.sh`, `tests/verify-examples-gui.sh`, `Makefile`, `pandoc/filters/include-transcript.lua`, `pandoc/metadata.yaml`, `pandoc/templates/manual.latex`, `pandoc/preamble.tex`, `src/40-mnemonic/42-bundle.md`, `src/30-tour/31-first-launch.md`, the full `src/**/*.md` glob, and `transcripts/gui/` (61 files).
+
+---
+
+## VERDICT: RED — 0 Critical / 1 Important
+
+The load-bearing **anchor convention (§3) is GREEN** — it provably survives the real `gui-schema-coverage` logic (analysis below). The render-removal is provably Direction-A-safe. **One Important finding blocks the gate:** the 61 new cross-links are not verified by any gate or build step, and the spec leans on "deterministic by construction" without mandating the mechanism that would make that true. Per the 0C/0I bar this is RED until closed; the remedy is cheap (one of two options below) and should re-pass R0 in round 2.
+
+---
+
+## Anchor-convention ruling (the make-or-break) — SURVIVES, GREEN
+
+The scheme uses prose-shaped gallery anchors `{#gui-form-<tab>-<sub>}`. Checked against `check_gui_schema_coverage.py` line-by-line:
+
+**Direction A (missing) — render removal is provably safe.**
+`build_expected()` (lines 66–88) derives `expected` purely from the mnemonic-gui schema; `collect_html_ids()` (lines 91–98) scrapes every `id="..."` from the built HTML; `missing = expected - found` (line 181). The schema anchors (`mnemonic-bundle`, `mnemonic-bundle-group-size`, …) live ONLY on the prose headings in the subcommand chapters (verified in `42-bundle.md`: `# … {#mnemonic-bundle}` line 1, `## --group-size {#mnemonic-bundle-group-size}` line 55, etc.). The render fence (`42-bundle.md:28`) carries NO `{#…}` and is plain code-fence text — pandoc emits zero `id=` attributes from a fence body. Therefore the renders contribute **zero** ids today; the gate being currently GREEN *proves* every schema anchor is already satisfied by prose alone. **Removing all 61 renders cannot drop a single expected id.** Airtight — not even a theoretical Direction-A regression.
+
+**Direction B (orphan) — `gui-form-` prefix is bulletproof-disjoint.**
+`is_schema_shaped(anchor, shapes)` (lines 101–115) is **prefix-anchored, not substring**: `anchor == shape or anchor.startswith(shape + "-")`, where `shapes` = every `<tab>-<sub>` string. For `gui-form-mnemonic-bundle` to be flagged it would have to equal, or start with `<shape>-`, for some real shape. Every tab ∈ {`mnemonic`,`md`,`ms`,`mk`}; **no shape begins with `gui`**, so no shape is a prefix of `gui-form-…`. The substring `mnemonic-bundle` inside `gui-form-mnemonic-bundle` is irrelevant because the matcher is `startswith`, and the string starts with `gui-form-`. So all 61 gallery anchors are **non-schema-shaped → exempt from the orphan check**. Confirmed: the spec's concern (b) — "could `gui-form-` still match if the matcher is substring/contains?" — is answered NO; it is a full prefix match.
+
+**Pandoc auto-id collision (the spec's #1 risk) — correctly identified, and partially gate-caught.**
+A gallery heading written as `## mnemonic bundle` WITHOUT the explicit `{#gui-form-…}` auto-derives `id="mnemonic-bundle"`. Since the subcommand chapter (doc-order earlier, `40-` < `75-`) already owns that id, pandoc suffixes the duplicate to `id="mnemonic-bundle-1"`. Direction A still finds the clean `mnemonic-bundle` (✓), but `mnemonic-bundle-1` `.startswith("mnemonic-bundle-")` → **schema-shaped, not in `expected` → ORPHAN → gate FAILS**. So the spec's mandate of explicit anchors on every heading is correct and necessary. With the explicit `{#gui-form-…}` present, pandoc uses it verbatim and the heading TEXT produces no secondary id — so no auto-collision is possible even if the heading text is `mnemonic bundle`. **Good news the spec doesn't state:** when the heading text is exactly `<tab> <sub>`, a *forgotten* anchor is **caught by the existing orphan gate** (fails closed). **Caveat:** that safety net only fires when the heading text auto-derives a schema-shaped id; if the plan titles a heading e.g. `## Bundle (emit 3-card)` and forgets the anchor, auto-id `bundle-emit-3-card` is NOT schema-shaped → no orphan → silently no `gui-form-bundle` anchor → the cross-link dangles uncaught. This is exactly why the cross-link gap (Important, below) matters.
+
+**Ruling:** the anchor convention is sound and survives the real logic with margin. The 61 `gui-form-*` anchors occupy a namespace provably disjoint from every schema shape. GREEN.
+
+---
+
+## Cross-link-verification ruling — HOLE (Important)
+
+**Nothing in the pipeline verifies the 61 cross-links resolve.**
+
+- **lychee does not check them.** `tests/lint.sh:78` invokes `lychee --offline --no-progress "$SRC_DIR"` with **no `--include-fragments`** and there is **no `.lychee.toml`** (confirmed: no config file present). lychee runs over the *separate* per-file `src/**/*.md`; a bare `#gui-form-mnemonic-bundle` fragment in `42-bundle.md` targets an anchor that lives in a *different* file (`75-gui-forms/751-mnemonic.md`) and only co-exists after pandoc concatenation. Without `--include-fragments` lychee skips fragment checks entirely; even *with* it, a bare same-file fragment would be checked against `42-bundle.md`'s own anchors (absent) — it cannot follow the cross-file concatenation. The existing manual already uses this idiom pervasively (e.g. `42-bundle.md` links `#help-icons-and-deep-links-into-this-manual`, defined in `33-help-icons-…md`), so cross-file fragments are **already unverified today** — but this spec adds 61 in one batch.
+- **The build does not fail on a dangling internal link.** pandoc emits a dangling `<a href="#…">` without error; LaTeX `\hyperref`/`\hyperlink` to an undefined target warns at most, never halts under `-halt-on-error`. `include-transcript.lua` fails closed on a bad `include=` *stem* (verified: `fatal()` → `os.exit(1)`), but that protects the `.gui` **includes**, NOT the cross-**link** fragments. markdownlint/cspell don't resolve anchors. `gui-schema-coverage` checks anchor *existence* and orphans, not that *links* point at real anchors.
+
+**Consequence:** a single typo on either side — `(#gui-form-mnemonic-bundel)` in the chapter, or `{#gui-form-mnmemonic-bundle}` in the gallery — ships a navigation-dead link that **no gate and no build step catches**. At 61 links × 2 ends = ~122 independent edit sites, the spec's stated guard ("resolves by construction … R0 spot-checks a few") samples ~3–5 and misses the rest. "Deterministic by construction" is only *true* if the implementation derives both the anchor and the link from a **single shared slug list**; the spec does not require that — it leaves it implicit. §6's wording ("the 61 cross-links … must pass") is misleading: they "pass" lychee only by being skipped, not by resolving.
+
+**Severity = Important (not Critical):** navigational/UX, not funds/secret/build-break, and consistent with the manual's existing (unverified) cross-link practice. But the spec's own gate-philosophy is *bidirectional everything*, the defect is *lagging and silent*, and the remedy is cheap. The R0 gate exists precisely to close this before 61 links are authored.
+
+**Remedy (pick one; either re-passes R0):**
+- **(a) Mandate single-source generation** — the plan derives the gallery heading anchor `{#gui-form-<stem>}` AND the chapter cross-link `(#gui-form-<stem>)` from the **same** `transcripts/gui/*.gui` stem list (the census source of truth), so the two ends cannot diverge by construction. State this as a build-step / scripted edit, not a hand-edit. **Plus** —
+- **(b) Add a ~15-line bidirectional `gui-form-xref` check** to `tests/lint.sh` (mirroring the house bidirectional style): collect every `#gui-form-*` link target in `src/` and every `{#gui-form-*}` heading anchor in `src/75-gui-forms/`; assert the two sets are equal (every link has a heading; every heading has ≥1 link). This is the durable closure and matches the existing schema/outline/index bidirectional gates. Recommended to do BOTH (a deterministic generator + a gate that proves it).
+
+---
+
+## Minor / Nit
+
+- **N1 — "Part" is prose framing, not a structural object.** Verified: the build uses `--top-level-division=chapter`; `pandoc/templates/manual.latex` and `pandoc/preamble.tex` have **no `\part` handling**, and no metadata declares Parts. The manual is a flat chapter sequence grouped only by numeric-prefix directories (`40-mnemonic`, `50-md`, …; each `…-overview.md` is just an H1 "per-tab reference" chapter). So §4's worry about breaking "Part-numbering / part-divider metadata" is **moot — there is none to break**, and `94-release-history` (under `90-appendices/`) is untouched by inserting `75-`. The spec should drop the implication that a Part divider must be created; the "new Part" is 4–5 new chapters in a new numbered dir. (Net: this makes the spec *safer*, but the terminology over-claims structure that doesn't exist.)
+- **N2 — placement `75-` is correct and non-breaking; `85-` equally fine.** Verified under `LC_ALL=C sort`: `src/70-mk/75-verify.md` < `src/75-gui-forms/750-overview.md` < `src/75-gui-forms/751-mnemonic.md` < `src/80-troubleshooting/81-overview.md` < `src/90-appendices/…`. No collision with the intra-`70-mk/` `75-verify.md`. Fragment cross-links are order-independent, so either `75-` (groups with the per-tab references — the spec default) or `85-` (after troubleshooting, beside the existing `92-flag-index`/`93-dropdown-reference` reference appendices) works. Free choice; lean `75-`. Not blocking.
+- **N3 — outline-coverage is provably unaffected; no miscount risk.** `check_outline_coverage.py::expected_outlines()` derives `<sub>-outline`/`<flag>-outline` anchors from the **schema**, independent of how many chapters mention a subcommand. The gallery adds `gui-form-*` headings (matched by `HEADING_RE` since `[a-z0-9-]+`, recorded in `found`, but never in `expected` → ignored). A gallery `## mnemonic bundle {#gui-form-…}` is NOT miscounted as a subcommand needing an outline. Removing the render + inserting a `>`-blockquote cross-link does not touch the bullet region under `{#…-outline}` (in `42-bundle.md` the render at L26–30 sits ABOVE `## Outline {#mnemonic-bundle-outline}` L32 and its 20 bullets L34–53). Bonus: outline-coverage *fail-closes* on accidental bullet deletion, so it back-stops the bulk edit. Confirm per-chapter that no chapter interleaves the render between an `-outline` heading and its bullets (gate catches it if so).
+- **N4 — verify-examples-gui + census stay green by file existence; tour double-include safe.** Verified `tests/verify-examples-gui.sh`: census + diff + secret-hygiene all scan `transcripts/gui/` and the regenerated temp dir — **never the chapters**. Moving `include=` sites changes nothing it reads. `mnemonic-bundle.gui` (tour L21 + gallery) and `mk-inspect.gui` (tour L82 + gallery) double-inclusion is safe: `include-transcript.lua` embeds file content with no uniqueness constraint; census gates the 61-file *count*, not inclusion count. Tour renders sit under `## Launch and the three-panel layout` (L12) and `## Pick a tab — switch to mk` (L74) — non-`gui-form` headings, no anchor collision. Confirmed §5.
+- **N5 — secret hygiene unchanged.** The `.gui` files already mask (`<masked>`/`[disabled]`, gate-enforced); relocation can't unmask (same file, same filter). The cross-link blockquote and 1-line leads carry no secret. The verify-examples-gui secret grep scans the render *files*, not prose. No seam. Confirmed §6.
+- **N6 — scope is realistic and exact.** Verified: **exactly one** `include="gui/…"` per non-tour subcommand chapter (61 chapters), and **only** `31-first-launch.md` carries 2 (the kept tour pair). No multi-render subcommand chapter exists, so each edit is uniformly "remove one fence + its render-specific lead-in, insert one cross-link blockquote." Per-tab counts match the spec EXACTLY: mnemonic 32, md 10, ms 10, mk 9 = 61 (no 61-vs-64-style miscount). O(61) mechanical.
+- **N7 — "exactly one id" framing (§3).** `gui-schema-coverage` enforces *presence* (set membership: `expected - found`) + orphan, not literal uniqueness — pandoc's auto-dedup guarantees HTML id uniqueness regardless. The spec's "exactly one" reasoning is really about avoiding the duplicate-id-suffix that would mis-route `#mnemonic-bundle` links; the `gui-form-` prefix avoids the duplicate, so there remains exactly one `id="mnemonic-bundle"`. Reasoning holds; wording is slightly loose.
+- **N8 — content-discipline (non-blocking).** New gallery prose must pass cspell (reuse existing vocabulary) and markdownlint (heading levels/line length), like the existing chapters. The §4 example link text uses `›` (U+203A) — fine for cspell/markdownlint. Before deleting per-chapter render lead-in prose, grep for inbound links into the removed lines (there are none today — the removed prose carries no `{#…}` — but confirm per-chapter).
+
+---
+
+## What the plan MUST guarantee (carry into the plan-doc R0)
+
+1. **Every one of the 61 gallery headings carries an explicit `{#gui-form-<stem>}`** (no reliance on auto-id). Ideally scripted from the `transcripts/gui/*.gui` stem list.
+2. **Close the cross-link gap** via remedy (a) single-source generation **and/or** (b) a bidirectional `gui-form-xref` lint phase. Do not ship 61 hand-paired links guarded only by spot-check.
+3. **Render removal stays Direction-A-clean** — only the fence + render-specific lead-in is removed; all `{#<tab>-<sub>…}` prose heading anchors stay. (Gate proves this, but state it.)
+4. **Per-chapter, do not perturb `-outline` bullet regions** (gate back-stops; state it).
+5. Keep the tour's 2 inline renders untouched.
+
+---
+
+## One-line summary
+
+Anchor scheme is **GREEN and bulletproof** (the `gui-form-` namespace is provably disjoint from every schema shape; render removal cannot regress Direction A; forgotten anchors fail closed as orphans when heading text == `<tab> <sub>`). The blocker is the **un-gated 61 cross-links**: lychee skips them, the build won't fail on dangling internal anchors, and "deterministic by construction" is asserted without the single-source mechanism that would make it so. Close with single-source generation + a bidirectional `gui-form-xref` check, then re-run R0. **0 Critical / 1 Important → RED.**
