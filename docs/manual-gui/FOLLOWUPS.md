@@ -56,8 +56,10 @@ location, a What description, a Status (`open` | `resolved <commit>`
      checkboxes, `▾` dropdown carets, `◀` active-tab markers, `••••`
      redaction sentinels, `←`/`↑` annotation arrows). These render the
      GUI chrome, not CLI output, and have no binary to diff against:
-     - `30-tour/31-first-launch.md:17` (three-panel layout)
-     - `30-tour/31-first-launch.md:87` (mk-tab form)
+     - `30-tour/31-first-launch.md:17` (three-panel layout) — **RESOLVED
+       2026-06-29: now a gated `include="gui/mnemonic-bundle.gui"` render**
+     - `30-tour/31-first-launch.md:87` (mk-tab form) — **RESOLVED
+       2026-06-29: now a gated `include="gui/mk-inspect.gui"` render**
      - `30-tour/31-first-launch.md:116` (mk1 paste-field input echo)
      - `30-tour/31-first-launch.md:127` (live `Preview:` line)
      - `30-tour/32-run-and-output.md:20` (output-panel render — GUI
@@ -105,8 +107,10 @@ location, a What description, a Status (`open` | `resolved <commit>`
        `72-inspect.md` / `74-decode.md` paste-field input fences (the
        canonical ms1/mk1/phrase the step says to paste — these echo the
        INPUT; the matching OUTPUT fence in each chapter IS gated)
-  - The total = 46 output-shaped fences: 19 gated (P4), 27 residual
-    non-gateable (this entry).
+  - The total = 46 output-shaped fences: 19 gated (P4-output cycle),
+    **2 form mockups now gated as generated renders (2026-06-29, the
+    form-mockup leg — see Status)**, 25 residual non-gateable (this
+    entry; was 27).
 - **Status:** **partially RESOLVED (2026-06-29) — the FORM-MOCKUP leg is
   closed.** The generated-GUI-form-renders cycle (Leg 2 P5) added a
   headless `gui-render` + the `verify-examples-gui` gate, so the two
