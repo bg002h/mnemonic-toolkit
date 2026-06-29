@@ -1,0 +1,9 @@
+[ mk > verify ]
+  --xpub                text  -> <empty>
+  --origin-fingerprint  text  -> <empty>
+  --origin-path         text  -> <empty>
+  --policy-id-stub      text  (repeating) -> <empty>
+  --from-md1            text  (repeating) -> <empty>
+  --json                checkbox  -> [ ] off
+  mk1-strings           positional...  -> <empty>
+  [ Run ]

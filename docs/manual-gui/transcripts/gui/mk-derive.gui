@@ -1,0 +1,6 @@
+[ mk > derive ]
+  --path       text  -> <empty>
+  --index      text  -> <empty>
+  --json       checkbox  -> [ ] off
+  mk1-strings  positional...  -> <empty>
+  [ Run ]

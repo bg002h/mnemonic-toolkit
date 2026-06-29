@@ -1,0 +1,4 @@
+[ ms > inspect ]
+  --json  checkbox  -> [ ] off
+  ms1     positional  (secret) -> <masked>
+  [ Run ]

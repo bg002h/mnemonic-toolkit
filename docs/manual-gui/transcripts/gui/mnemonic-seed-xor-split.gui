@@ -1,0 +1,8 @@
+[ mnemonic > seed-xor-split ]
+  --from                       composite[phrase]  (required) -> phrase=<empty>
+  --shares                     number  (required) -> <unset>
+  --language                   dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --deterministic-from-master  checkbox  -> [ ] off
+  --json-out                   path  -> <empty>
+  --no-auto-repair             checkbox  -> [ ] off
+  [ Run ]

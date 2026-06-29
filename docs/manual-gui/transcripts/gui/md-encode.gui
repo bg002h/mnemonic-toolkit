@@ -1,0 +1,16 @@
+[ md > encode ]
+  --group-size             number  -> <unset>
+  --separator              dropdown[space,hyphen,comma]  -> space
+  --from-policy            text  (required) -> <empty>
+  --context                dropdown[tap,segwitv0]  -> tap
+  --unspendable-key        text  -> <empty>
+  --path                   text  -> <empty>
+  --key                    text  (repeating) -> <empty>
+  --fingerprint            text  (repeating) -> <empty>
+  --network                dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --force-chunked          checkbox  -> [ ] off
+  --force-long-code        checkbox  -> [ ] off
+  --policy-id-fingerprint  checkbox  -> [ ] off
+  --json                   checkbox  -> [ ] off
+  template                 positional  -> <empty>
+  [ Run ]

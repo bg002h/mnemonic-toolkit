@@ -1,0 +1,12 @@
+[ md > address ]
+  --template     text  (required) -> <empty>
+  --key          text  (repeating) -> <empty>
+  --fingerprint  text  (repeating) -> <empty>
+  --network      dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --chain        number  -> <unset>
+  --change       checkbox  -> [ ] off
+  --index        number  -> <unset>
+  --count        number  -> <unset>
+  --json         checkbox  -> [ ] off
+  phrases        positional...  -> <empty>
+  [ Run ]

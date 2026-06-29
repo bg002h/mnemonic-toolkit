@@ -1,0 +1,13 @@
+[ mnemonic > silent-payment ]
+  --account           number  -> <unset>
+  --change-address    checkbox  -> [ ] off
+  --json              checkbox  -> [ ] off
+  --label             number  (repeating) -> <unset>
+  --network           dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --no-auto-repair    checkbox  -> [ ] off
+  --passphrase        text  (secret) -> <masked>
+  --passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
+  --secret            text  (secret) -> <masked>
+  --secret-file       path  -> <empty>
+  --secret-stdin      checkbox  (secret) -> [ ] off [disabled]
+  [ Run ]

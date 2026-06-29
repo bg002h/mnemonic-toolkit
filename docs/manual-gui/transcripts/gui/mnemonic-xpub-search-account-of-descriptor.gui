@@ -1,0 +1,18 @@
+[ mnemonic > xpub-search-account-of-descriptor ]
+  --phrase              text  (secret) -> <masked>
+  --phrase-stdin        checkbox  (secret) -> [ ] off [disabled]
+  --ms1                 text  (secret) -> <masked>
+  --ms1-stdin           checkbox  (secret) -> [ ] off [disabled]
+  --passphrase          text  (secret) -> <masked>
+  --passphrase-stdin    checkbox  (secret) -> [ ] off [disabled]
+  --descriptor          text  -> <empty>
+  --descriptor-from     text  -> <empty>
+  --language            dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --network             dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --min-account         number  -> <unset>
+  --number-of-accounts  number  -> <unset>
+  --max-account         number  -> <unset>
+  --add-path            text  (repeating) -> <empty>
+  --json                checkbox  -> [ ] off
+  --no-auto-repair      checkbox  -> [ ] off
+  [ Run ]

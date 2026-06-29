@@ -1,0 +1,13 @@
+[ mk > encode ]
+  --group-size          number  -> <unset>
+  --separator           dropdown[space,hyphen,comma]  -> space
+  --xpub                text  (required) -> <empty>
+  --origin-fingerprint  text  -> <empty>
+  --origin-path         text  (required) -> <empty>
+  --policy-id-stub      text  (repeating) -> <empty>
+  --from-md1            text  (repeating) -> <empty>
+  --privacy-preserving  checkbox  -> [ ] off
+  --force-chunked       checkbox  -> [ ] off
+  --force-long-code     checkbox  -> [ ] off
+  --json                checkbox  -> [ ] off
+  [ Run ]

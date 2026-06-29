@@ -1,0 +1,3 @@
+[ ms > gen-man ]
+  --out  text  (required) -> <empty>
+  [ Run ]

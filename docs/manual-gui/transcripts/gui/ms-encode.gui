@@ -1,0 +1,9 @@
+[ ms > encode ]
+  --group-size         number  -> <unset>
+  --separator          dropdown[space,hyphen,comma]  -> space
+  --phrase             text  (required, secret) -> <masked>
+  --hex                text  (required, secret) -> <masked>
+  --language           dropdown[english,japanese,korean,spanish,chinese-simplified,chinese-traditional,french,italian,czech,portuguese]  -> english
+  --no-engraving-card  checkbox  -> [ ] off
+  --json               checkbox  -> [ ] off
+  [ Run ]

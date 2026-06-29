@@ -1,0 +1,31 @@
+[ mnemonic > verify-bundle ]
+  --network                 dropdown[mainnet,testnet,signet,regtest]  (required) -> mainnet
+  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  (required) -> bip44
+  --descriptor              text  -> <empty>
+  --descriptor-file         path  -> <empty>
+  --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --passphrase              text  (secret) -> <masked>
+  --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
+  --account                 number  -> <unset>
+  --own-account-max         number  -> <unset>
+  --origin                  text  -> <empty>
+  --expect-wallet-id        text  -> <empty>
+  --from                    text  -> <empty>
+  --cosigner                text  (repeating) -> <empty>
+  --search-cosigner-subset  checkbox  -> [ ] off
+  --search-address          text  -> <empty>
+  --search-addr-min         number  -> <unset>
+  --search-addr-max         number  -> <unset>
+  --search-chain            dropdown[receive,change,both]  -> receive
+  --accept-search-time      text  -> <empty>
+  --ms1                     text  (secret, repeating) -> <masked>
+  --mk1                     text  (required, repeating) -> <empty>
+  --md1                     text  (required, repeating) -> <empty>
+  --bundle-json             path  -> <empty>
+  --json                    checkbox  -> [ ] off
+  --multisig-path-family    dropdown[bip48,bip87]  -> bip48
+  --privacy-preserving      checkbox  -> [ ] off
+  --threshold               number  -> <unset> [disabled]
+  --no-auto-repair          checkbox  -> [ ] off
+  [ slot editor: 0 rows ]
+  [ Run ]

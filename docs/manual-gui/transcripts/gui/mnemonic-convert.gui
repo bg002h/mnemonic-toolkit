@@ -1,0 +1,22 @@
+[ mnemonic > convert ]
+  --group-size              number  -> <unset>
+  --separator               dropdown[space,hyphen,comma]  -> space
+  --from                    composite[phrase,seedqr,entropy,xpub,xprv,wif,fingerprint,path,ms1,mk1,bip38,minikey,electrum-phrase,address]  (required) -> phrase=<empty>
+  --to                      dropdown[phrase,entropy,xpub,xprv,wif,fingerprint,path,ms1,mk1,bip38,minikey,electrum-phrase,address]  (required, repeating) -> phrase
+  --network                 dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  -> bip44 [disabled]
+  --path                    text  -> <empty> [disabled]
+  --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --passphrase              text  (secret) -> <masked>
+  --bip38-passphrase        text  (secret) -> <masked>
+  --bip38-passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
+  --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
+  --account                 number  -> <unset>
+  --fingerprint             text  -> <empty>
+  --xpub-prefix             text  -> <empty> [disabled]
+  --electrum-version        dropdown[standard,segwit]  -> standard [disabled]
+  --electrum-language       text  -> <empty> [disabled]
+  --script-type             dropdown[p2wpkh,p2sh-p2wpkh,p2tr]  -> p2wpkh [disabled]
+  --json                    checkbox  -> [ ] off
+  --no-auto-repair          checkbox  -> [ ] off
+  [ Run ]

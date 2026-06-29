@@ -1,0 +1,14 @@
+[ mnemonic > addresses ]
+  --from              text  (required) -> <empty>
+  --address-type      text  (required) -> <empty>
+  --account           number  -> <unset>
+  --count             number  -> <unset>
+  --range             text  -> <empty>
+  --chain             dropdown[receive,change,both]  -> receive
+  --network           dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --passphrase        text  (secret) -> <masked>
+  --passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
+  --language          dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
+  --json              checkbox  -> [ ] off
+  --no-auto-repair    checkbox  -> [ ] off
+  [ Run ]

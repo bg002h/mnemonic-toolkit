@@ -1,0 +1,8 @@
+[ mnemonic > inspect ]
+  --ms1             text  (required, secret) -> <masked>
+  --mk1             text  (required, repeating) -> <empty>
+  --md1             text  (required, repeating) -> <empty>
+  --json            checkbox  -> [ ] off
+  --reveal-secret   checkbox  -> [ ] off
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]

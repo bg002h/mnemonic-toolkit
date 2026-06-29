@@ -1,0 +1,10 @@
+[ mnemonic > verify-message ]
+  --address         text  (required) -> <empty>
+  --format          dropdown[auto,legacy,bip322]  -> auto
+  --json            checkbox  -> [ ] off
+  --message         text  -> <empty>
+  --message-file    path  -> <empty>
+  --message-stdin   checkbox  -> [ ] off
+  --no-auto-repair  checkbox  -> [ ] off
+  --signature       text  (required) -> <empty>
+  [ Run ]

@@ -1,0 +1,9 @@
+[ mnemonic > repair ]
+  --ms1             text  (required, secret) -> <masked>
+  --mk1             text  (required, repeating) -> <empty>
+  --md1             text  (required, repeating) -> <empty>
+  --json            checkbox  -> [ ] off
+  --max-indel       number  -> <unset>
+  --max-subst       number  -> <unset>
+  --no-auto-repair  checkbox  -> [ ] off
+  [ Run ]
