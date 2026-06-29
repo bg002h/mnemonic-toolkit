@@ -1,14 +1,14 @@
 # `md` — per-tab reference
 
-The `md` tab covers the descriptor-mnemonic CLI (`md-cli`), nine
+The `md` tab covers the descriptor-mnemonic CLI (`md-cli`), ten
 subcommands that operate on `md1` cards (the descriptor card of
 the m-format constellation bundle). The `md1` encodes a BIP-388
 wallet-policy template plus the bound public-key references that
 the bundle's `mk1` cards carry.
 
-The `md` tab's pinned upstream version at v1.1 of this manual is
-`md-cli v0.7.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: md 0.7.0`.
+The `md` tab's pinned upstream version is
+`md-cli v0.11.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: md 0.11.0`.
 
 ## Subcommand index
 
@@ -40,16 +40,18 @@ The subcommands group into five families:
   - [`md repair`](#md-repair)\index{md repair} — BCH
     error-correct one or more `md1` strings (per-chunk repair
     report; sibling of [`mnemonic repair`](#mnemonic-repair)).
+  - [`md gen-man`](#md-gen-man)\index{md gen-man} — emit `roff`
+    man pages for the whole `md` CLI tree into a directory.
 
 ## Form shape
 
-All nine subcommands follow the same form scaffolding described
+All ten subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form `Pinned:
-md 0.7.0` label + subcommand selector ComboBox + per-subcommand
+md 0.11.0` label + subcommand selector ComboBox + per-subcommand
 `?` help-icon; per-flag widgets; an action bar with **Copy
 command**, **Run** buttons; an always-on `Preview:` line. None of
 the md-tab subcommands accept slot input (`allows_slots: false`
-for all 9).
+for all 10).
 
 The `md` subcommands operate on **public** material throughout.
 None of the schema flags is `secret: true`. The run-confirm modal

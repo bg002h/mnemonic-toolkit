@@ -1,20 +1,21 @@
 # `mnemonic` — per-tab reference
 
 The `mnemonic` tab is the largest and most-used surface of the GUI:
-**30 subcommands** spanning bundle emission and verification, format
+**32 subcommands** spanning bundle emission and verification, format
 conversion, watch-only wallet export and import, descriptor building
 and restore, xpub-search, address derivation, BIP-85 child derivation,
 BIP-39 last-word completion, Coldcard-compatible seed-XOR splitting,
 SLIP-0039 and codex32 (BIP-93) K-of-N share-splitting, SeedQR
 encode/decode, Nostr and silent-payment derivation, message
-verification, address decoding, cost comparison, and card
+verification, address decoding, cost comparison, steel-engravable
+Word-Card encoding, man-page generation, and card
 inspection / repair / Electrum decryption. The GUI exposes each
 subcommand as its own form on the same tab; the subcommand selector at
 the top of the form switches between them.
 
 ## Subcommand index
 
-The 30 subcommands group naturally into eight families. Each entry
+The 32 subcommands group naturally into nine families. Each entry
 deep-links to the subcommand's chapter; read any chapter end-to-end
 for its form-shape diagram, per-flag reference, and worked example.
 
@@ -94,15 +95,21 @@ for its form-shape diagram, per-flag reference, and worked example.
     — decode a SeedQR payload back to its BIP-39 phrase.
   - [`mnemonic electrum-decrypt`](#mnemonic-electrum-decrypt)\index{mnemonic electrum-decrypt}
     — decrypt an Electrum field-encrypted secret to its plaintext.
+- **Engraving and documentation tools.**
+  - [`mnemonic word-card`](#mnemonic-word-card) — re-encode a public
+    `mk1` / `md1` card as an engravable BIP-39 Word Card (or decode one
+    back).
+  - [`mnemonic gen-man`](#mnemonic-gen-man) — emit `roff` man pages for
+    the whole `mnemonic` CLI tree.
 
-The eight families above describe what each subcommand *does*, not what
+The nine families above describe what each subcommand *does*, not what
 its form looks like in the GUI. Each subcommand is documented on its own
 with form-shape diagrams, per-flag reference, and at least one worked
 example.
 
 ## Form shape — what every subcommand has in common
 
-All 30 subcommands render through the same form scaffolding described in
+All 32 subcommands render through the same form scaffolding described in
 chapter 31: a top-of-form pinned-version label with a subcommand
 selector ComboBox and per-subcommand `?` help-icon; per-flag widgets
 (text fields, dropdowns, checkboxes, number spinners, path fields,

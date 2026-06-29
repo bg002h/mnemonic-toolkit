@@ -2,11 +2,22 @@
 
 Version history of the `mnemonic-gui` releases this manual is
 pinned against. The manual itself ships under
-`mnemonic-toolkit-v0.70.0+`; the GUI under `mnemonic-gui-v0.49.0+`.
+`mnemonic-toolkit-v0.74.0+`; the GUI under `mnemonic-gui-v0.53.0+`.
 Tags advance in lockstep when GUI surface (schema, conditional,
 help-icon URL) changes in a way that affects the manual.
 
-## `manual-gui-v1.1.0` — GUI pin `mnemonic-gui-v0.49.0` (this manual)
+## Unreleased — GUI pin `mnemonic-gui-v0.53.0`
+
+**In progress** (generated-GUI-form-renders cycle, Leg-2). Pin bump
+`mnemonic-gui-v0.49.0` → `mnemonic-gui-v0.53.0`; the four implied CLI
+tags advance in lockstep to `mnemonic-toolkit-v0.74.0`,
+`descriptor-mnemonic-md-cli-v0.11.0`, `ms-cli-v0.13.0`,
+`mk-cli-v0.11.0`. Purely additive coverage: the toolkit-v0.74.0
+`word-card` subcommand (a full `mnemonic`-tab chapter) plus the
+`gen-man` man-page generator now exposed on all four CLI tabs (stub
+sections). The concrete `manual-gui-v*` tag is assigned at release.
+
+## `manual-gui-v1.1.0` — GUI pin `mnemonic-gui-v0.49.0`
 
 **Release date**: 2026-06-23.
 

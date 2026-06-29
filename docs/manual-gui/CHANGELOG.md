@@ -6,6 +6,34 @@ The manual is a separate artifact from the CLI manual under
 (`manual-gui-v*` vs `manual-v*`) and track independent version
 numbers.
 
+## [Unreleased]
+
+**Minor — GUI pin catch-up (`mnemonic-gui-v0.49.0` →
+`mnemonic-gui-v0.53.0`), Leg-2 P4 of the generated-GUI-form-renders
+cycle.** Purely additive coverage: +5 newly-exposed subcommand sections,
++17 schema anchors, +1 outline target; 0 removed.
+
+- **Pin bump.** `pinned-upstream.toml`: `[mnemonic-gui]` `v0.49.0` →
+  `v0.53.0`; the four implied CLI tags re-pinned to what the GUI tag
+  pins in its own schema-mirror map (`mnemonic-toolkit-v0.74.0`,
+  `descriptor-mnemonic-md-cli-v0.11.0`, `ms-cli-v0.13.0`,
+  `mk-cli-v0.11.0`). `.github/workflows/manual-gui.yml` `verify-examples`
+  job re-pinned the same four CLI install tags in lockstep.
+- **`mnemonic word-card`** — new full chapter
+  (`src/40-mnemonic/4n-word-card.md`): the toolkit-v0.74.0
+  steel-engravable BIP-39 word-card encoder/decoder (8 flags +
+  repeating decode positional), with its `### Outline`, glossary entry,
+  and index row.
+- **`gen-man`** — new stub sections on all four CLI tabs
+  (`src/40-mnemonic/4o-gen-man.md`, `src/50-md/5B-gen-man.md`,
+  `src/60-ms/6b-gen-man.md`, `src/70-mk/7a-gen-man.md`): the
+  `--out`-only roff man-page generator now exposed in each schema.
+- **Inventory hygiene.** `tests/expected_gui_schema_inventory.json`
+  regenerated from the v0.53.0 GUI schema source.
+- `make lint` 7/7 GREEN (0-missing / 0-orphan against the v0.53.0 GUI
+  schema), `verify-examples` GREEN against the pinned bins, HTML + PDF
+  build clean.
+
 ## [1.1.0] - 2026-06-23
 
 **Minor — manual-gui v1.1 modernization (GUI pin `mnemonic-gui-v0.3.0`

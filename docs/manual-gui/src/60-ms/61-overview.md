@@ -1,18 +1,18 @@
 # `ms` — per-tab reference
 
-The `ms` tab covers the BIP-39-entropy CLI (`ms-cli`), nine
+The `ms` tab covers the BIP-39-entropy CLI (`ms-cli`), ten
 subcommands that operate on `ms1` cards (the secret card of the
 m-format constellation bundle). The `ms1` encodes the raw BIP-39
 entropy bytes in a BIP-93 / codex32 envelope — the seed card that
 recovers the wallet on its own.
 
-The `ms` tab's pinned upstream version at v1.1 of this manual is
-`ms-cli v0.8.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: ms 0.8.0`.
+The `ms` tab's pinned upstream version is
+`ms-cli v0.13.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: ms 0.13.0`.
 
 ## Subcommand index
 
-The nine subcommands group into five families:
+The ten subcommands group into five families:
 
 - **Encode + decode.** Round-trip from BIP-39 entropy to `ms1` and
   back.
@@ -43,18 +43,20 @@ The nine subcommands group into five families:
   - [`ms vectors`](#ms-vectors)\index{ms vectors} — print the
     SHA-pinned v0.1 test-vector corpus as JSON (typically used by
     ms-cli developers, not end users).
+  - [`ms gen-man`](#ms-gen-man)\index{ms gen-man} — emit `roff`
+    man pages for the whole `ms` CLI tree into a directory.
 
 ## Form shape
 
-All nine subcommands follow the same form scaffolding described
+All ten subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
-`Pinned: ms 0.8.0` label + subcommand selector ComboBox +
+`Pinned: ms 0.13.0` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the ms-tab subcommands accept slot input
-(`allows_slots: false` for all 9).
+(`allows_slots: false` for all 10).
 
-Most of the nine subcommands consume secret-bearing input and
+Most of the ten subcommands consume secret-bearing input and
 fire the run-confirm modal on any non-empty secret value (per
 `mnemonic-gui/src/secrets.rs:should_confirm_run`):
 
@@ -77,9 +79,10 @@ The threat-model warning in [§14 Defense 2](#secret-handling)
 about the modal-redaction history and the recommended cold-node
 operational mitigation applies to all of these.
 
-[`ms inspect`](#ms-inspect), [`ms decode`](#ms-decode), and
-[`ms vectors`](#ms-vectors) do not accept any `secret: true`
-schema flag and do not fire the modal.
+[`ms inspect`](#ms-inspect), [`ms decode`](#ms-decode),
+[`ms vectors`](#ms-vectors), and [`ms gen-man`](#ms-gen-man) do
+not accept any `secret: true` schema flag and do not fire the
+modal.
 
 ## Cross-tab language-token divergence
 
