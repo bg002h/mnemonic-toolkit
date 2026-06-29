@@ -1,0 +1,85 @@
+# R0 Review — IMPLEMENTATION_PLAN_generated_gui_form_renders.md (Round 1)
+
+**Reviewer:** opus architect (mandatory pre-implementation plan-R0 gate; 0C/0I required, BEFORE any code).
+**Artifact:** `mnemonic-toolkit/docs/manual-gui/design/IMPLEMENTATION_PLAN_generated_gui_form_renders.md`.
+**Spec:** `SPEC_generated_gui_form_renders.md` (R0-GREEN, 4 rounds — r4 GREEN 0C/0I).
+**Verified against:** mnemonic-gui `master` @ `01520a58ae29323bbdb29c6b2a6ee5e6712c67c0` (Cargo.toml v0.52.0; PR-#24 harness present) + manual-gui infra at toolkit `master`. Every code/line fact below is live-grep-confirmed at those SHAs.
+
+---
+
+## VERDICT: RED — 0 Critical / 2 Important / 7 Minor-Nit
+
+**Not converged.** The spec's load-bearing question (does the A1 refactor *build* under `--no-default-features`?) is settled and the plan inherits a sound extraction set — P1 is buildable, low rework. But two items force plan revision before coding:
+
+- **I1 (the balloon — P5).** The plan treats the `pinned-upstream.toml` GUI-pin bump (v0.49.0 → the new tag) as a one-line edit. It is not: the new tag is cut from `master`, and `master`'s schema is **+269 lines / 5 new subcommands** ahead of v0.49.0 (`gen-man` ×4 CLIs + `word-card` on mnemonic + ~18 new flags), **none of which the manual documents**. The existing **flag-level** `gui-schema-coverage` gate (`make lint`, a stated P5 gate) will RED on every undocumented subcommand/flag/dropdown-variant. P5 as scoped cannot go green without substantial net-new chapter authoring the plan budgets nowhere.
+
+- **I2 (the load-bearing fixture-source gap — P2↔P3).** The plan never pins a **single egui-free fixture source shared by the emit binary (P2) and the faithfulness render (P3)**. P2 says "relocate/share it egui-free, or re-derive"; P3 says only "reuse `render_whole_form`" with no statement that the render consumes the *same* state the emit emitted. If they diverge, `emit == render` is meaningless (false-diff thrash, or a vacuous gate). The brief flagged this as a top-2 rework risk; the plan is vague exactly where it must be precise.
+
+Neither requires redesign — A1 stands, the two-leg ordering stands. Fold I1 (budget/sequence the schema-coverage debt) + I2 (name one shared canonical-base fn), re-dispatch (a fold can introduce drift — the loop continues to GREEN). The 7 minors are recommended-but-non-blocking.
+
+---
+
+## CRITICAL (0)
+
+None. No funds/correctness sink. The architecture (A1 feature-gate + headless emit + egui_kittest faithfulness + manual regen-diff gate) is sound; the spec's r4 buildability sweep is correct and the plan inherits it.
+
+---
+
+## IMPORTANT (2)
+
+### I1 — P5 BALLOONS: the GUI-pin bump v0.49.0 → new-tag drags 5 undocumented new subcommands (+~18 flags) through the flag-level `gui-schema-coverage` gate. The plan budgets none of this. (Plan P5 line 37; spec §5.)
+
+The plan's P5 lists "`pinned-upstream.toml` bump to the new GUI tag + the 4 implied CLI pins in lockstep" as one bullet among five, and its gate is "`make lint` green." But:
+
+- **The pin must jump v0.49.0 → a tag cut from `master`.** `verify-examples-gui` builds the *pinned* `gui-render`, which only exists at the new tag, and the new tag is `master` (v0.52.0) + the refactor. There is no intermediate tag that has `gui-render` but not the v0.50–v0.52 schema growth.
+- **`master` is +269 schema lines / 5 new subcommands ahead of v0.49.0:** `git diff mnemonic-gui-v0.49.0..master -- src/schema/` = `269 insertions(+)`; the additions include subcommand `name: "gen-man"` in **all four** schema files and `name: "word-card"` in `mnemonic.rs`, plus word-card's flags (`--decode`, `--decode-plate`, `--integrity-bits`, `--json`, `--parity-pct`, `--parity-words`, `--raid`, `--out`, positional `words`) and inspect's new `--json`. (v0.49.0 = `eecdb275`, dated 2026-06-22, **predates** the man-pages cycle (gen-man, GUI v0.50.0, Jun 23) and the word-card cycle (GUI v0.52.0, Jun 26).)
+- **The manual documents none of it:** `grep -rilE 'word-card|gen-man' src/` in manual-gui = **zero hits**.
+- **The gate is FLAG-LEVEL and bidirectional, zero-tolerance:** `tests/check_gui_schema_coverage.py:77-87` emits an expected anchor for **every** subcommand name, **every** flag name, **every** dropdown variant, NodeValueComposite node, and TaggedOrIndexed tag; it "Exits 0 iff zero missing AND zero orphan." So the pin bump → many `missing: #mnemonic-word-card`, `#mnemonic-word-card-raid`, `#md-gen-man`, … → `make lint` RED. The committed `.gui` form-render blocks do **not** satisfy this — anchors come from markdown headers/spans (`{#mnemonic-word-card-raid}`), not from a fenced code block. Each new subcommand needs a full authored section + per-flag anchors, and `tests/expected_gui_schema_inventory.json` (authored at v0.49.0) must be regenerated.
+
+**Why Important, not Minor:** P5's own stated gate (`make lint` green) is unreachable as scoped; this is unbudgeted, non-mechanical chapter authoring (5 subcommands incl. word-card's RS-ECC/RAID dropdown surface), and "Any phase that balloons?" is exactly the failure mode this gate exists to catch. Conflating "document 5 new subcommands + ~18 flags" with "generate form renders" makes the cycle's size unpredictable.
+
+**Fold (choose one, state it):** (a) **Sequence it**: add a P4.5 (or a distinct prerequisite mini-cycle) that bumps the GUI pin v0.49.0 → the new tag, documents `gen-man`×4 + `word-card` + inspect `--json` + any other v0.50–v0.52 schema additions, and regenerates `expected_gui_schema_inventory.json` — turning `gui-schema-coverage` green *before* the form-render embed lands; **or** (b) **budget it inside P5** with realistic sizing and an explicit "document the v0.49.0→new schema delta" task. Either way, pre-measure the delta (the 5 subs + ~18 flags above) so the phase is sized honestly, and add the inventory regen + the third version-site (see m3) to the lockstep list.
+
+### I2 — The emit binary (P2) and the faithfulness render (P3) must consume ONE shared egui-free fixture source; the plan never pins it, so `emit == render` is undefined. (Plan P2 line 19, P3 line 23.)
+
+The faithfulness gate's entire meaning is "`gui-render`'s emit (over state S) == the actually-rendered form (over state S)" — for the **same S**. The plan does not establish a single source for S:
+
+- **P2** says the per-form fixture is "a minimal valid base (reuse the harness `sweep_candidate_bases` logic — relocate/share it egui-free, **or re-derive**)."
+- **P3** says "assert `gui-render`'s flag-grid emit == the ACTUAL rendered form (reuse the PR-#24 enumerator + `render_whole_form`)" — with **no** statement that `render_whole_form` is fed the identical fixture the bin emitted.
+
+`sweep_candidate_bases` lives in the **test** module `tests/ui_harness/mod.rs:647`, which imports egui at `:55` (`use egui::accesskit::…`) and is **unreachable from `src/bin/`**. Its transitive helpers (`base_from:632`, `seed:574`, `seed_composite:588`, `present_value:554`, `sub_of:130`, `flag_of:139`, `schema_for:119`) are all egui-free (they touch only `FormState` + `schema`), so relocation IS feasible — but if P2 relocates/re-derives one fixture path for the bin and P3 builds a *different* base for the render, the two legs diverge. For the 17 conditional subcommands a divergent base yields different visible/enabled projections → the faithfulness test either false-REDs (thrash until aligned) or is quietly aligned into a tautology. The brief named this load-bearing; the plan is silent on it.
+
+**Fold:** Pin a single **egui-free** `pub fn render_fixture(tab, sub_name) -> FormState` in `src/` (e.g. `schema/` or a new egui-free `form/render_fixture.rs`) and require **both** the `gui-render` emit AND the P3 faithfulness test to obtain S from it. Define the canonical base explicitly — note that `sweep_candidate_bases`'s first element is always `FormState::default()` (`tests/ui_harness/mod.rs:649`), and the spec §6 "generic/default-mode base" = exactly that blank-form state for all 61 forms; so `render_fixture` can simply be `FormState::default()` (plus an optional small per-form override table for any documented non-default screen). State that emit and render are *definitionally* over the same S. (This also resolves P2's "relocate or re-derive" ambiguity: the canonical render needs only `FormState::default()`, so relocating the whole `sweep_candidate_bases` cluster is not even required for the canonical screen.)
+
+---
+
+## MINOR / NIT (7 — recommended, non-blocking)
+
+- **m1 — `main.rs` gating must be `required-features = ["gui"]` on an explicit `[[bin]]`, not a bare `#[cfg(feature="gui")]`.** P1 (line 11) says "`main.rs` → behind `feature="gui"`." There is **no `[[bin]]`/`required-features` in Cargo.toml today** — `main.rs` is the auto-discovered package bin. If its body is merely `#[cfg]`-gated, `cargo build --no-default-features` tries to build that auto-bin, finds no `main`, and fails *"main function not found in crate"*. The spec already specifies the right mechanism ("it gates the 5 modules + `main.rs`'s **required-features**", r4 §confirmed-sound); the plan should name it: add `[[bin]] name = "mnemonic-gui" path = "src/main.rs" required-features = ["gui"]`. Self-corrects at the first P1 build, but naming it avoids a false-start. (Confirm the lib + a non-gated `gui-render` bin remain valid `--no-default-features` targets — they do: `lib.rs:7-16` is unconditional and `gui-render` is non-gated, so the crate always has a buildable target.)
+
+- **m2 — bin filename → hyphen.** `src/bin/gui_render.rs` produces a binary named `gui_render` (underscore), but the plan/spec/manual all write the CLI as `gui-render`. Name the file `src/bin/gui-render.rs` (cargo accepts hyphens in bin source filenames) or add `[[bin]] name = "gui-render"`, so the documented command and the installed binary match.
+
+- **m3 — the CI "in-pattern" mechanism is Job 1b's `cargo install`, not Job 1's source-clone; and there is a THIRD version-site.** Plan P5/spec §4 say "manual-gui.yml already clones the pinned GUI for `gui-schema-coverage`, so building `gui-render` there is in-pattern." Precisely: Job 1 (`lint`) `git clone`s the pinned tag for a **Python source parse** (`extract_gui_schema.py`) and installs **no Rust toolchain**; the real "build a pinned thing with cargo" precedent is **Job 1b (`verify-examples`)**, which `cargo install --git … --tag …` the pinned CLI tier (`.github/workflows/manual-gui.yml`, the `verify-examples` job). `verify-examples-gui` belongs alongside it: `cargo install --git https://github.com/bg002h/mnemonic-gui --tag <new> --no-default-features --bin gui-render` then regen+diff. Note the lockstep set is **three** version-sites, not one: (1) `pinned-upstream.toml` `[mnemonic-gui] tag` + the 4 `[manual-gui]` `*-tag-implied`; (2) the `verify-examples` job's **hardcoded** install tags (currently `descriptor-mnemonic-md-cli-v0.7.0`, `ms-cli-v0.8.0`, `mk-cli-v0.9.0`, `mnemonic-toolkit-v0.70.0`); (3) the new `gui-render` install tag. All must move together, and the 4 implied CLI pins must mirror **the new GUI tag's own** `pinned-upstream.toml`, not be guessed.
+
+- **m4 — define the faithfulness comparison as the tree-OBSERVABLE projection, not the full §2 ASCII.** P3 says "assert `gui-render`'s flag-grid emit == the ACTUAL rendered form," which over-reads as a full-ASCII diff. Several §2 columns are **schema-derived and legitimately NOT recoverable from the kittest tree**, so a literal ASCII compare would false-RED: `Path` and `Text` flags BOTH render `Role::TextInput` (the "kind" column's path-vs-text distinction is invisible to the render), the `required` marker has no distinct widget, and default/placeholder hint-text is not robustly exposed via AccessKit. The faithfulness test should therefore assert the projection `render_whole_form` can actually observe — **presence (→visible), `is_disabled()` (→enabled), input Role-class (→kind family text-like/number/dropdown/boolean), `Role::PasswordInput` (→secret)** + positional/action-bar presence — reusing the existing `label_present`/`label_disabled`/`eligible_for_label_check` machinery (`tests/ui_harness/mod.rs:525-547`). The *full* `.gui` (incl. required/path/default/`<masked>`) is gated end-to-end by `verify-examples-gui`'s byte-diff + the existing `schema_mirror`/`secret_taxonomy_pin` tests. (Flag **ordering** is fine: both emit and `render_whole_form:428` iterate `sub.flags` in declaration order.) State this scope so P3 builds the right comparator and doesn't thrash.
+
+- **m5 — relocating `default_flag_value_for_flag` must also relocate its fall-through helper.** `widget::default_flag_value_for_flag` (`widget.rs:415`) calls `default_flag_value_for` (`widget.rs:379`) for the no-declared-default / Unset-kind paths. Both are egui-free, but P1 (line 12) names only the former — relocate the pair (and `seeded_value_for` only if the emit needs it). Build-gate catches an omission, but name it.
+
+- **m6 — the relocation ripples back into the EXISTING harness.** If `sweep_candidate_bases` (+ its egui-free helpers) move to `src/`, the current consumers `tests/ui_harness/mod.rs` and `tests/ui_harness_sweep.rs:66-69` must re-point (or `ui_harness` re-exports from `src`). P1/P2 don't mention this ripple to the live PR-#24 harness; the "full existing suite green" gate (P1 line 15) backstops it, but call it out so the implementer expects the edit. (If I2's fold makes the canonical base just `FormState::default()`, this ripple largely vanishes.)
+
+- **m7 — secret hygiene + determinism are adequately specified; one nit.** P2's masked-sentinel reuse of `secrets::flag_is_secret` (egui-free, `secrets.rs:151`) + fixed public fixtures + no RNG/timestamp/PATH is correct and sufficient (fixtures are `FormState::default()`/public seeds → the diff cannot leak a secret). Nit: state that `gui-render --emit-all` writes with a stable byte encoding (LF newlines, trailing-newline policy matching `include-transcript.lua`'s `split_lines`, which strips exactly one trailing `\n`) so the P4-generated files and the P5 CI regen are byte-identical across machines.
+
+---
+
+## CONFIRMED SOUND (spot-checked; do NOT re-litigate)
+
+- **P1 buildability inherits the spec's r4 comprehensive sweep and holds.** The non-gated→gated egui-free edges are exactly `schema/mod.rs:293` (`FormState.slots: SlotState`), `:322` (`secret_widgets: …Vec<SecretLineEdit>`), `persistence.rs:30` (`SlotState`), `secrets.rs:137` (`SlotSubkey`) — all named in P1's extraction list. `slot_editor.rs`'s only egui coupling is `render(ui: &mut egui::Ui, …)` (`:237`) + `use eframe::egui` (`:11`); `secret_widget.rs`'s is `show`/`paste_warn_id` (`:78`/`:36`). `default_flag_value_for[_flag]` bodies (`widget.rs:379-440`) are pure `FlagKind→FlagValue` matches — egui-free, relocatable. `form/conditional.rs` (the emit's core) is non-gated and imports only `crate::schema`. The default-on `gui` feature keeps the normal GUI build unchanged. `cargo build --no-default-features` COMPILES is the right empirical completeness gate (P1 line 14).
+- **Versioning.** Leg-1 = GUI MINOR (new `gui-render` bin + behavior-preserving `gui` feature) — correct. No interaction with the GUI's `schema_mirror` (that test pins the *toolkit*'s `gui-schema` surface, unchanged here), `pin_coherence`/`readme_pin_coherence`, or `canonicity_drift`. `cargo install --locked --no-default-features` works (the lock is a superset of the reduced graph). Leg-2 = manual doc PR (no crate version). The GUI "PR+CI-before-tag" ritual is honored (LEG-1 RELEASE line 26).
+- **Phase/gating discipline.** Tests-first per phase (P1 = build+full-suite as the refactor's TDD analog; P2 = emit unit tests; P3 = the test itself; P4 = file/determinism gate; P5 = verify-examples-gui+census+lint+build). Two post-impl whole-diff reviews, **one per leg, before each merge** (lines 26, 40) — compliant with CLAUDE.md. Cross-repo ordering hard-dep (P4 needs the Leg-1 tag) is stated (line 47). FOLLOWUP filing (line 42-43) covers spec §7/§8. `verify-examples-gui` correctly SEPARATE from the symlinked `verify-examples.sh` (→ `../../manual/tests/verify-examples.sh`, confirmed a symlink) — m1 from spec r2 holds.
+- **`include-transcript.lua` reuse** is correct: it is content-agnostic + fail-closed (`docs/manual-gui/pandoc/filters/include-transcript.lua`), already wired first in `MD_FILTER_ARGS`/`PDF_FILTER_ARGS`, and `TRANSCRIPTS_DIR` is exported — `include="gui/<tab>-<sub>.gui"` drops in with no new filter.
+
+---
+
+## Gate
+
+**0 Critical / 2 Important → RED.** Fold **I1** (the P5 pin-bump balloon — sequence or budget the v0.49.0→new schema-coverage debt: `gen-man`×4 + `word-card` + ~18 flags + inventory regen + the third version-site) and **I2** (pin one shared egui-free `render_fixture(tab, sub)` consumed by both the `gui-render` emit and the P3 faithfulness render; canonical base = `FormState::default()`), then re-dispatch for round-2. The 7 minors are recommended polish; m1 (required-features) and m4 (faithfulness projection scope) are the highest-value of them. A1 and the two-leg ordering are correct and need no rework.
