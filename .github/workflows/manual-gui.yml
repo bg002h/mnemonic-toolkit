@@ -200,9 +200,11 @@ jobs:
   # the lint job clones) — a single version-site for the GUI pin. The binary
   # is `cargo install`-ed into an isolated --root under `--no-default-features`
   # (the egui-free build the manual is pinned to), so GUI_RENDER_BIN is an
-  # ABSOLUTE path (the toolkit repo-root rust-toolchain.toml pins a lower MSRV
-  # than the GUI, so building in-tree would fail; the standalone install uses
-  # the runner's default toolchain instead).
+  # ABSOLUTE path. The toolkit repo-root rust-toolchain.toml pins rustc 1.85,
+  # BELOW the GUI's 1.88 MSRV — and that pin applies to cargo invoked from the
+  # repo cwd, so both the install and the gate set RUSTUP_TOOLCHAIN=stable to
+  # override it (matching the local `env RUSTUP_TOOLCHAIN=stable make
+  # verify-examples-gui` invocation; RUSTUP_TOOLCHAIN > rust-toolchain.toml).
   # ---------------------------------------------------------------------------
   verify-examples-gui:
     runs-on: ubuntu-latest
@@ -238,6 +240,9 @@ jobs:
         env:
           PINNED_TAG: ${{ steps.pin.outputs.tag }}
           GUIBIN_ROOT: ${{ runner.temp }}/guibin
+          # Override the toolkit repo-root rust-toolchain.toml (1.85) — the GUI
+          # needs 1.88. RUSTUP_TOOLCHAIN takes precedence over rust-toolchain.toml.
+          RUSTUP_TOOLCHAIN: stable
         run: |
           cargo install --root "$GUIBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-gui \
@@ -248,6 +253,8 @@ jobs:
         working-directory: docs/manual-gui
         env:
           GUIBIN_ROOT: ${{ runner.temp }}/guibin
+          # Same MSRV override, in case the gate falls back to a cargo invocation.
+          RUSTUP_TOOLCHAIN: stable
         run: |
           make verify-examples-gui GUI_RENDER_BIN="$GUIBIN_ROOT/bin/gui-render"
 
