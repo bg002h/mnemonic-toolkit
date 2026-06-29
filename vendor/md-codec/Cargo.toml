@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "md-codec"
-version = "0.39.1"
+version = "0.40.0"
 build = false
 autolib = false
 autobins = false
@@ -109,6 +109,10 @@ path = "tests/proptest_roundtrip.rs"
 [[test]]
 name = "proptest_to_miniscript"
 path = "tests/proptest_to_miniscript.rs"
+
+[[test]]
+name = "render_template_snapshot"
+path = "tests/render_template_snapshot.rs"
 
 [[test]]
 name = "smoke"
