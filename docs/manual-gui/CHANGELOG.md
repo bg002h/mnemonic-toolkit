@@ -8,6 +8,29 @@ numbers.
 
 ## [Unreleased]
 
+**Minor — the 61 GUI form renders consolidated into a dedicated "GUI Forms"
+Part (restructuring; no render-content change).** The per-subcommand form
+renders (added the prior leg) are moved OUT of the 61 subcommand chapters
+INTO a new Part `75-gui-forms/` — 4 per-tab chapters (mnemonic 32 / md 10 /
+ms 10 / mk 9) — so all the GUI screens read as one dedicated reference. Each
+subcommand chapter keeps a one-line cross-link to its form (`> **GUI form:**
+see [GUI Forms › …]`); its prose, flag anchors, and CLI-output transcript are
+unchanged. The 3 forms with a conditional-`(required)` caveat (`inspect`/
+`repair` = at-least-one; `ms encode` = exactly-one/XOR) keep their caveat,
+reworded to point at the cross-linked render. The tour keeps its 2 inline
+renders.
+
+- **New gate `gui-form-xref`** (`tests/check_gui_form_xref.py`, `make lint`
+  phase 8/8): bidirectional, fail-closed — for each `transcripts/gui/*.gui`
+  stem, EXACTLY ONE `{#gui-form-<tab>-<sub>}` gallery anchor + EXACTLY ONE
+  `](#gui-form-…)` cross-link, no orphans. So the 61 cross-links are a gated
+  invariant, not a by-construction hope (lychee skips intra-doc fragments).
+- **Gate-inert by construction:** the `.gui` render files are UNCHANGED
+  (`verify-examples-gui` 61/61 byte-identical); `gui-schema-coverage` is
+  unchanged at 982 anchors / 61 subs (the gallery uses prose-shaped
+  `gui-form-*` anchors, exempt from the schema orphan check). `make lint` 8/8,
+  HTML/PDF build clean.
+
 **Minor — generated, gated GUI form renders in the manual + a GUI pin
 catch-up (`mnemonic-gui-v0.49.0` → `mnemonic-gui-v0.53.0`), Leg 2 of the
 generated-GUI-form-renders cycle.** The manual now SHOWS the real GUI: a
