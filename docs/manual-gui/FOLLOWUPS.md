@@ -146,7 +146,11 @@ location, a What description, a Status (`open` | `resolved <commit>`
   the GUI-side fix (correct the `--from`/`--decode-plate` help) is a
   separate mnemonic-gui cycle. When it ships, the GUI `schema_mirror`
   surface changes → the manual's next GUI-pin bump re-gates.
-- **Status:** open (cross-repo, GUI-side). **Tier:** `secret-hygiene`.
+- **Status:** ✓ **RESOLVED 2026-06-29** (mnemonic-gui PR #26, master `2914496c`).
+  The GUI `word-card` `--from`/`--decode`/`--decode-plate` help strings were
+  corrected to mirror the toolkit CLI: `--from` is PUBLIC `mk1`/`md1` (NOT a
+  secret / seed phrase). Help-text only (no flag-name/`secret` change →
+  `schema_mirror` unaffected); GUI suite 622/0. **Tier:** `secret-hygiene`.
 
 ---
 
