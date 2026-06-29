@@ -9,6 +9,7 @@
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
+#   make verify-examples-gui — regenerate the 61 GUI form renders with the pinned gui-render and diff == committed (census + secret-hygiene)
 #   make lint          — markdownlint + cspell + lychee + gui-schema-coverage + outline-coverage + glossary-coverage
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
@@ -246,6 +247,43 @@ verify-examples:
 		MS_BIN="$(MS_BIN)" \
 		MK_BIN="$(MK_BIN)" \
 		TRANSCRIPTS="$(TRANSCRIPTS)"
+
+# ---------------------------------------------------------------------------
+# Generated GUI form renders — fidelity + census gate (SEPARATE from the
+# symlinked verify-examples.sh above).
+# ---------------------------------------------------------------------------
+# The committed structural form renders the manual embeds via
+# `include="gui/<tab>-<sub>.gui"`. The gate regenerates them with the PINNED
+# `gui-render` (headless, egui-free `--no-default-features`) and byte-diffs
+# == the committed transcripts/gui/ tree (fail-closed), plus a census that
+# every subcommand in the pinned GUI schema has a committed render.
+#
+# GUI_RENDER_BIN default builds + runs gui-render straight from the pinned
+# mnemonic-gui checkout ($(MANUAL_GUI_UPSTREAM_ROOT), the same source the
+# lint's schema-coverage reads). `?=` so CI overrides it to an installed
+# pinned binary (`cargo install --git … --tag … --no-default-features
+# --bin gui-render`, manual-gui.yml verify-examples-gui job).
+#
+# `env RUSTUP_TOOLCHAIN=$(GUI_RENDER_TOOLCHAIN)`: this repo's root
+# rust-toolchain.toml pins rustc 1.85 (the toolkit MSRV), but mnemonic-gui's
+# MSRV is higher (1.88 at v0.53.0). rustup resolves rust-toolchain.toml from
+# the build cwd (inside this repo) upward, so an un-overridden `cargo run`
+# would pick the 1.85 pin and fail the GUI build. RUSTUP_TOOLCHAIN has top
+# priority and overrides the file pin; `stable` on any reasonably current
+# box is ≥ the GUI MSRV. CI overrides GUI_RENDER_BIN wholesale, so this only
+# affects the local default. EXPECTED_GUI_RENDER_COUNT is the pinned GUI's
+# subcommand total (census key; bumps in lockstep with the GUI pin).
+TRANSCRIPTS_GUI            := $(TRANSCRIPTS)/gui
+EXPECTED_GUI_RENDER_COUNT ?= 61
+GUI_RENDER_TOOLCHAIN      ?= stable
+GUI_RENDER_BIN            ?= env RUSTUP_TOOLCHAIN=$(GUI_RENDER_TOOLCHAIN) cargo run --quiet --manifest-path $(MANUAL_GUI_UPSTREAM_ROOT)/Cargo.toml --no-default-features --bin gui-render --
+
+.PHONY: verify-examples-gui
+verify-examples-gui:
+	@bash $(TESTS_DIR)/verify-examples-gui.sh \
+		GUI_RENDER_BIN="$(GUI_RENDER_BIN)" \
+		TRANSCRIPTS_GUI="$(TRANSCRIPTS_GUI)" \
+		EXPECTED_COUNT="$(EXPECTED_GUI_RENDER_COUNT)"
 
 # ---------------------------------------------------------------------------
 # Lint

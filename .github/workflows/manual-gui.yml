@@ -185,6 +185,73 @@ jobs:
             MK_BIN="$DOCBIN_ROOT/bin/mk"
 
   # ---------------------------------------------------------------------------
+  # Job 1c — verify-examples-gui (generated GUI form-render fidelity gate)
+  #
+  # Regenerates the 61 committed structural form renders
+  # (docs/manual-gui/transcripts/gui/<tab>-<sub>.gui — the ones the manual
+  # embeds via `include="gui/<stem>.gui"`) with the PINNED, headless,
+  # egui-free `gui-render` binary and byte-diffs == the committed tree
+  # (fail-closed), with a census (every subcommand in the pinned GUI schema
+  # has a render) and a secret-hygiene scan. This is the form-render analogue
+  # of Job 1b: Job 1 pins the GUI *schema* (flag-name anchors), Job 1b pins
+  # the GUI *worked-example output*, and this job pins the GUI *form renders*.
+  #
+  # The pinned mnemonic-gui tag is read from pinned-upstream.toml (same source
+  # the lint job clones) — a single version-site for the GUI pin. The binary
+  # is `cargo install`-ed into an isolated --root under `--no-default-features`
+  # (the egui-free build the manual is pinned to), so GUI_RENDER_BIN is an
+  # ABSOLUTE path (the toolkit repo-root rust-toolchain.toml pins a lower MSRV
+  # than the GUI, so building in-tree would fail; the standalone install uses
+  # the runner's default toolchain instead).
+  # ---------------------------------------------------------------------------
+  verify-examples-gui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install make
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends make
+
+      - name: Read pinned mnemonic-gui tag
+        id: pin
+        working-directory: docs/manual-gui
+        run: |
+          tag=$(grep -oE 'tag = "mnemonic-gui-v[^"]+"' pinned-upstream.toml \
+                  | head -1 \
+                  | sed -E 's/tag = "(.*)"/\1/')
+          if [ -z "$tag" ]; then
+            echo "ERROR: could not parse mnemonic-gui tag from pinned-upstream.toml" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Pinned mnemonic-gui tag: $tag"
+
+      - name: Install pinned gui-render (headless, --no-default-features)
+        # mnemonic-gui is a single package with two bins (mnemonic-gui +
+        # gui-render); --no-default-features drops the egui stack so only
+        # gui-render builds, and --bin gui-render installs just that binary.
+        env:
+          PINNED_TAG: ${{ steps.pin.outputs.tag }}
+          GUIBIN_ROOT: ${{ runner.temp }}/guibin
+        run: |
+          cargo install --root "$GUIBIN_ROOT" \
+            --git https://github.com/bg002h/mnemonic-gui \
+            --tag "$PINNED_TAG" \
+            --no-default-features --bin gui-render
+
+      - name: Verify generated GUI form renders against the pinned gui-render
+        working-directory: docs/manual-gui
+        env:
+          GUIBIN_ROOT: ${{ runner.temp }}/guibin
+        run: |
+          make verify-examples-gui GUI_RENDER_BIN="$GUIBIN_ROOT/bin/gui-render"
+
+  # ---------------------------------------------------------------------------
   # Job 2 — build
   #
   # Runs `make pdf` + `make html` and uploads the PDF as a workflow artifact.
