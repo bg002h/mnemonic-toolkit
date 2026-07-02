@@ -301,6 +301,18 @@ jobs:
           test -f build/m-format-gui-manual.html
           ls -lh build/m-format-gui-manual.pdf build/m-format-gui-manual.html
 
+      - name: Embed census — 61 figure PNGs are data-URI-embedded in the HTML
+        # pandoc exits 0 with a WARNING on a missing image, so a green
+        # `make html` proves nothing about embeds (visual-track plan I5);
+        # the positive census is the gate. `src="data:image/png` matches
+        # both pandoc 3.1.3 (apt: <img src="data:...) and >= 3.2.1
+        # (<img role="img" src="data:...).
+        working-directory: docs/manual-gui
+        run: |
+          count=$(grep -o 'src="data:image/png' build/m-format-gui-manual.html | wc -l)
+          echo "embed census: ${count} data-URI PNG figures (expect 61)"
+          test "${count}" -eq 61
+
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v7
         with:

@@ -32,7 +32,8 @@ verified pre-bump — arbitrates the pixels on the pinned rasterizer).
   guarded `\pandocbounded` shim covers pandoc ≥ 3.2.1. A green
   `make html` proves nothing about embeds (pandoc warns + exits 0 on a
   missing image) — the load-bearing check is the positive embed census:
-  61 `data:image/png` embeds in the built HTML.
+  61 `data:image/png` embeds in the built HTML (CI-enforced in the
+  `manual-gui.yml` build job).
 - **Pin bump is otherwise inert:** the v0.53.0 → v0.54.0 delta is the
   GUI-side snapshot suite + its permanent `snapshots` CI job (+ a
   Cargo.lock delta of exactly 12 dev-graph packages) and the PR-#26
