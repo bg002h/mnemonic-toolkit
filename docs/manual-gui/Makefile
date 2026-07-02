@@ -10,7 +10,7 @@
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
 #   make verify-examples-gui — regenerate the 61 GUI form renders with the pinned gui-render and diff == committed (census + secret-hygiene)
-#   make lint          — markdownlint + cspell + lychee + gui-schema-coverage + outline-coverage + glossary-coverage
+#   make lint          — markdownlint + cspell + lychee + gui-schema-coverage + outline-coverage + glossary-coverage + index + gui-form-xref + verify-figures-gui
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
 #
@@ -187,12 +187,23 @@ $(BUILD_DIR)/m-format-gui-manual.pdf: $(BUILD_DIR)/m-format-gui-manual.tex
 .PHONY: html
 html: $(BUILD_DIR)/m-format-gui-manual.html
 
+# --resource-path: the GUI-Forms gallery chapters reference their
+# screenshots FILE-relative (`../../figures/gui/<stem>.png` from
+# src/75-gui-forms/) so lychee's offline link check resolves them.
+# pandoc, however, resolves image resources against the CWD/resource
+# path — not the source file — so `--self-contained` embedding needs
+# `$(SRC_DIR)/75-gui-forms` on the resource path for the file-relative
+# form to resolve (`src/75-gui-forms/../../figures/gui/…` == the
+# committed figure). NOTE: pandoc exits 0 with a WARNING on a missing
+# image — a green `make html` proves nothing about embeds; the gate is
+# the positive embed census (grep -c 'img src="data:' == 61).
 $(BUILD_DIR)/m-format-gui-manual.html: $(PDF_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to html5 \
 		--standalone \
 		--self-contained \
+		--resource-path=.:$(SRC_DIR)/75-gui-forms \
 		--toc \
 		--toc-depth=3 \
 		--top-level-division=chapter \
@@ -292,6 +303,13 @@ verify-examples-gui:
 # Override via env var MANUAL_GUI_UPSTREAM_ROOT for CI / out-of-tree builds.
 MANUAL_GUI_UPSTREAM_ROOT ?= $(abspath $(WORKSPACE_ROOT)/mnemonic-gui)
 
+# FIGURES_GUI mirrors the TRANSCRIPTS_GUI threading pattern above: the
+# committed GUI-form screenshot corpus (figures/gui/<tab>-<sub>.png),
+# byte-compared by lint phase 9 (verify-figures-gui) against the pinned
+# mnemonic-gui checkout's tests/snapshots/forms/ — census
+# $(EXPECTED_GUI_RENDER_COUNT) both directions, fail-closed.
+FIGURES_GUI := $(FIGURES_DIR)/gui
+
 .PHONY: lint
 lint:
 	@bash $(TESTS_DIR)/lint.sh \
@@ -300,6 +318,8 @@ lint:
 		TESTS_DIR="$(TESTS_DIR)" \
 		MANUAL_GUI_UPSTREAM_ROOT="$(MANUAL_GUI_UPSTREAM_ROOT)" \
 		TRANSCRIPTS_GUI="$(TRANSCRIPTS_GUI)" \
+		FIGURES_GUI="$(FIGURES_GUI)" \
+		EXPECTED_GUI_RENDER_COUNT="$(EXPECTED_GUI_RENDER_COUNT)" \
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
