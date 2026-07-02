@@ -10,21 +10,24 @@
 # The four CLI-tag fields below mirror exactly what the pinned
 # mnemonic-gui tag (above) pins in its own pinned-upstream.toml
 # [mnemonic]/[md]/[ms]/[mk] tables. A cycle bumping the GUI tag must
-# re-pin all four in lockstep. Re-pinned for mnemonic-gui-v0.53.0
-# (generated-GUI-form-renders cycle, Leg-2 P4 catch-up): the GUI at that
-# tag pins mnemonic-toolkit-v0.74.0 (Cargo.toml [dependencies] +
+# re-pin all four in lockstep. Verified for mnemonic-gui-v0.54.0
+# (visual-screenshot-track cycle): the GUI at that tag pins
+# mnemonic-toolkit-v0.74.0 (Cargo.toml [dependencies] +
 # pinned-upstream.toml [mnemonic] table), descriptor-mnemonic-md-cli-v0.11.0,
-# ms-cli-v0.13.0, mk-cli-v0.11.0 (its pinned-upstream.toml schema-mirror map).
-# The v0.49.0 -> v0.53.0 bump exposes the toolkit-v0.74.0 `word-card`
-# subcommand and the man-page generator `gen-man` on all four CLIs; both
-# are documented in lockstep with this bump (gui-schema-coverage gate).
+# ms-cli-v0.13.0, mk-cli-v0.11.0 (its pinned-upstream.toml schema-mirror
+# map) — IDENTICAL to v0.53.0's, so the four fields below are unchanged.
+# The v0.53.0 -> v0.54.0 bump changes no CLI surface (the delta is the
+# egui_kittest form-snapshot suite + its CI `snapshots` job + the PR-#26
+# word-card help-text fix); it ships the 61-PNG snapshot corpus at
+# tests/snapshots/forms/ that figures/gui/ mirrors byte-exactly
+# (verify-figures-gui lint phase 9).
 #
 # Source-path resolution for the lint:
 #   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
 #   default `../mnemonic-gui` relative to docs/manual-gui/.
 
 [mnemonic-gui]
-tag = "mnemonic-gui-v0.53.0"
+tag = "mnemonic-gui-v0.54.0"
 
 [manual-gui]
 toolkit-tag-implied = "mnemonic-toolkit-v0.74.0"
