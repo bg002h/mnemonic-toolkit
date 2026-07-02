@@ -8,6 +8,42 @@ numbers.
 
 ## [Unreleased]
 
+**Minor — pixel screenshots of all 61 GUI forms + the `verify-figures-gui`
+byte-gate + GUI pin bump `mnemonic-gui-v0.53.0` → `mnemonic-gui-v0.54.0`
+(Leg 2 of the visual-screenshot track).** The GUI-Forms gallery now pairs
+every structural render with a **screenshot of the real GUI form**: each
+section in `75-gui-forms/751…754` opens with its
+`figures/gui/<tab>-<sub>.png` (61 total — dark theme, the GUI's on-launch
+default; 2x scale; egui content only, no OS titlebar; frame = flags +
+positionals + `Run`), copied **byte-for-byte** from the pinned GUI's
+`egui_kittest` snapshot corpus (`tests/snapshots/forms/` at
+`mnemonic-gui-v0.54.0`, whose tag-push `snapshots` CI run — GREEN,
+verified pre-bump — arbitrates the pixels on the pinned rasterizer).
+
+- **New gate `verify-figures-gui`** (`make lint` phase 9/9, banners
+  renumbered from /8): byte-compares every committed figure against the
+  pinned clone's snapshot corpus with a **both-direction census** at 61 —
+  an orphan manual figure, a missing figure, or any byte drift fails,
+  offending stems named, fail-closed.
+- **Image-path mechanics:** chapters reference figures FILE-relative
+  (`../../figures/gui/…`, the form lychee resolves); pandoc-HTML gets
+  `--resource-path`, xelatex gets `\graphicspath` + image-scaling Gin
+  defaults + non-floating `[H]` figures (61 floats would queue), and a
+  guarded `\pandocbounded` shim covers pandoc ≥ 3.2.1. A green
+  `make html` proves nothing about embeds (pandoc warns + exits 0 on a
+  missing image) — the load-bearing check is the positive embed census:
+  61 `data:image/png` embeds in the built HTML (CI-enforced in the
+  `manual-gui.yml` build job).
+- **Pin bump is otherwise inert:** the v0.53.0 → v0.54.0 delta is the
+  GUI-side snapshot suite + its permanent `snapshots` CI job (+ a
+  Cargo.lock delta of exactly 12 dev-graph packages) and the PR-#26
+  word-card help-text fix — no CLI-surface change. The tag's four
+  implied CLI pins are identical, so the manual's CLI pins and
+  `manual-gui.yml`'s verify-examples tags are untouched;
+  `gui-schema-coverage` unchanged at 982 anchors / 61 subcommands;
+  `verify-examples-gui` still 61/61 byte-identical (structural renders
+  untouched).
+
 **Minor — the 61 GUI form renders consolidated into a dedicated "GUI Forms"
 Part (restructuring; no render-content change).** The per-subcommand form
 renders (added the prior leg) are moved OUT of the 61 subcommand chapters

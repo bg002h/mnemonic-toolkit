@@ -20,6 +20,12 @@
 #      `{#gui-form-<stem>}` gallery anchor in src/75-gui-forms/ AND
 #      exactly one `](#gui-form-<stem>)` cross-link in the subcommand
 #      chapters; no orphan gui-form-* token. Per SPEC §6.)
+#   9. verify-figures-gui (every figures/gui/<stem>.png is BYTE-identical
+#      to the pinned mnemonic-gui checkout's
+#      tests/snapshots/forms/<stem>.png; census both directions — an
+#      extra manual figure (orphan baseline) fails, an upstream snapshot
+#      missing from the manual fails; fail-closed. The visual analogue
+#      of verify-examples-gui. Per the visual-screenshot-track SPEC §6.)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR                 — absolute path to src/
@@ -30,6 +36,12 @@
 #   TRANSCRIPTS_GUI         — absolute path to transcripts/gui/ (the
 #                              canonical *.gui stem list; threaded from
 #                              the Makefile, used by gui-form-xref).
+#   FIGURES_GUI             — absolute path to figures/gui/ (the committed
+#                              screenshot corpus; threaded from the
+#                              Makefile, used by verify-figures-gui).
+#   EXPECTED_GUI_RENDER_COUNT — the pinned GUI schema's subcommand total
+#                              (census key for verify-figures-gui; bumps
+#                              in lockstep with the GUI pin).
 #   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings
 #                              (unused by gui-schema-coverage; reserved
 #                              for future GUI-side worked-example phases).
@@ -43,6 +55,8 @@ for arg in "$@"; do
     TESTS_DIR=*)                TESTS_DIR="${arg#*=}" ;;
     MANUAL_GUI_UPSTREAM_ROOT=*) MANUAL_GUI_UPSTREAM_ROOT="${arg#*=}" ;;
     TRANSCRIPTS_GUI=*)          TRANSCRIPTS_GUI="${arg#*=}" ;;
+    FIGURES_GUI=*)              FIGURES_GUI="${arg#*=}" ;;
+    EXPECTED_GUI_RENDER_COUNT=*) EXPECTED_GUI_RENDER_COUNT="${arg#*=}" ;;
     MNEMONIC_BIN=*)             MNEMONIC_BIN="${arg#*=}" ;;
     MD_BIN=*)                   MD_BIN="${arg#*=}" ;;
     MS_BIN=*)                   MS_BIN="${arg#*=}" ;;
@@ -61,7 +75,7 @@ warn() { printf '[lint] WARN: %s\n' "$1" >&2; }
 err()  { printf '[lint] FAIL: %s\n' "$1" >&2; fail=1; }
 
 # 1. markdownlint
-step "1/8 markdownlint"
+step "1/9 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
   markdownlint-cli2 "$SRC_DIR/**/*.md" || err "markdownlint reported issues"
 else
@@ -69,7 +83,7 @@ else
 fi
 
 # 2. cspell
-step "2/8 cspell"
+step "2/9 cspell"
 if command -v cspell >/dev/null; then
   # `--no-must-find-files` keeps cspell from exiting 1 when src/ is
   # empty (the baseline state at P1; SPEC §2.1 G3 says all three
@@ -81,7 +95,7 @@ else
 fi
 
 # 3. lychee
-step "3/8 lychee"
+step "3/9 lychee"
 if command -v lychee >/dev/null; then
   lychee --offline --no-progress "$SRC_DIR" || err "lychee reported issues"
 else
@@ -89,7 +103,7 @@ else
 fi
 
 # 4. gui-schema-coverage
-step "4/8 gui-schema-coverage"
+step "4/9 gui-schema-coverage"
 CHECKER="$TESTS_DIR/check_gui_schema_coverage.py"
 HTML="$BUILD_DIR/m-format-gui-manual.html"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
@@ -104,7 +118,7 @@ else
 fi
 
 # 5. outline-coverage
-step "5/8 outline-coverage"
+step "5/9 outline-coverage"
 OUTLINE_CHECKER="$TESTS_DIR/check_outline_coverage.py"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
   err "MANUAL_GUI_UPSTREAM_ROOT not a directory (see phase 4 above)"
@@ -118,7 +132,7 @@ else
 fi
 
 # 6. glossary-coverage
-step "6/8 glossary-coverage"
+step "6/9 glossary-coverage"
 # GUI manual appendices live under 90-appendices/ per SPEC §1.4 (the
 # numbering deviates from the CLI manual's 60-appendices/ scheme so
 # the two manuals never share an anchor namespace). Token list will
@@ -135,7 +149,7 @@ else
 fi
 
 # 7. index bidirectional
-step "7/8 index bidirectional"
+step "7/9 index bidirectional"
 INDEX_TABLE="$SRC_DIR/90-appendices/99-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
@@ -163,7 +177,7 @@ else
 fi
 
 # 8. gui-form-xref
-step "8/8 gui-form-xref"
+step "8/9 gui-form-xref"
 XREF_CHECKER="$TESTS_DIR/check_gui_form_xref.py"
 if [ ! -d "${TRANSCRIPTS_GUI:-}" ]; then
   err "TRANSCRIPTS_GUI not a directory: ${TRANSCRIPTS_GUI:-<unset>} (pass TRANSCRIPTS_GUI=...; the Makefile lint: target threads it from TRANSCRIPTS_GUI := \$(TRANSCRIPTS)/gui)"
@@ -174,6 +188,63 @@ else
       --transcripts-gui "$TRANSCRIPTS_GUI" \
       --src-dir "$SRC_DIR" \
     || err "gui-form-xref reported missing/extra/orphan cross-references"
+fi
+
+# 9. verify-figures-gui
+step "9/9 verify-figures-gui"
+# Byte-compares the committed screenshot corpus (figures/gui/<stem>.png)
+# against the PINNED mnemonic-gui checkout's tests/snapshots/forms/ —
+# the egui_kittest snapshot corpus the GUI repo's `snapshots` CI job
+# arbitrates. Census runs BOTH directions, fail-closed:
+#   - a manual figure with no upstream snapshot = ORPHAN BASELINE (fail);
+#   - an upstream snapshot missing from the manual = COVERAGE GAP (fail);
+#   - any byte drift on a shared stem = STALE FIGURE (fail).
+# Reuses the same pinned clone the schema/outline phases read (lint.sh
+# already hard-requires MANUAL_GUI_UPSTREAM_ROOT); no rasterizer needed.
+SNAP_DIR="$MANUAL_GUI_UPSTREAM_ROOT/tests/snapshots/forms"
+if [ ! -d "${FIGURES_GUI:-}" ]; then
+  err "FIGURES_GUI not a directory: ${FIGURES_GUI:-<unset>} (pass FIGURES_GUI=...; the Makefile lint: target threads it from FIGURES_GUI := \$(FIGURES_DIR)/gui)"
+elif [ ! -d "$SNAP_DIR" ]; then
+  err "pinned snapshot corpus missing: $SNAP_DIR (MANUAL_GUI_UPSTREAM_ROOT must be a mnemonic-gui checkout at a pinned tag >= v0.54.0)"
+else
+  expected_figs="${EXPECTED_GUI_RENDER_COUNT:-61}"
+  fig_stems=$(find "$FIGURES_GUI" -maxdepth 1 -type f -name '*.png' | sed 's|.*/||; s/\.png$//' | sort)
+  snap_stems=$(find "$SNAP_DIR" -maxdepth 1 -type f -name '*.png' | sed 's|.*/||; s/\.png$//' | sort)
+  fig_count=$(printf '%s\n' "$fig_stems" | grep -c . || true)
+  snap_count=$(printf '%s\n' "$snap_stems" | grep -c . || true)
+  figs_fail=0
+  if [ "$fig_count" -ne "$expected_figs" ]; then
+    err "verify-figures-gui census: figures/gui has $fig_count PNGs, expected $expected_figs"
+    figs_fail=1
+  fi
+  if [ "$snap_count" -ne "$expected_figs" ]; then
+    err "verify-figures-gui census: pinned corpus has $snap_count PNGs, expected $expected_figs"
+    figs_fail=1
+  fi
+  only_fig=$(comm -23 <(printf '%s\n' "$fig_stems") <(printf '%s\n' "$snap_stems") | grep . || true)
+  only_snap=$(comm -13 <(printf '%s\n' "$fig_stems") <(printf '%s\n' "$snap_stems") | grep . || true)
+  if [ -n "$only_fig" ]; then
+    err "verify-figures-gui: manual figure(s) with NO pinned upstream snapshot (orphan baseline): $(echo $only_fig)"
+    figs_fail=1
+  fi
+  if [ -n "$only_snap" ]; then
+    err "verify-figures-gui: pinned upstream snapshot(s) MISSING from figures/gui: $(echo $only_snap)"
+    figs_fail=1
+  fi
+  drift=""
+  while IFS= read -r stem; do
+    [ -z "$stem" ] && continue
+    if ! cmp -s "$FIGURES_GUI/$stem.png" "$SNAP_DIR/$stem.png"; then
+      drift="$drift $stem"
+    fi
+  done < <(comm -12 <(printf '%s\n' "$fig_stems") <(printf '%s\n' "$snap_stems"))
+  if [ -n "$drift" ]; then
+    err "verify-figures-gui: byte drift vs the pinned corpus for stem(s):$drift"
+    figs_fail=1
+  fi
+  if [ "$figs_fail" -eq 0 ]; then
+    printf '[lint] verify-figures-gui: OK (%s/%s figures byte-identical to the pinned corpus; census clean both directions)\n' "$fig_count" "$expected_figs"
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then

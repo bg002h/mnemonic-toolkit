@@ -1,8 +1,10 @@
 # `mnemonic` GUI forms {#gui-forms-mnemonic}
 
-Structural form renders for all 32 subcommands on the **`mnemonic`** tab. See the [GUI Forms reference overview](#gui-forms-reference) for how to read a render and what `<masked>`, `(required)`, and `[disabled]` mean. Each form's prose, per-flag reference, and worked example live in its own subcommand chapter, reached from the `> **GUI form:**` cross-link there.
+Screenshots and structural form renders for all 32 subcommands on the **`mnemonic`** tab. See the [GUI Forms reference overview](#gui-forms-reference) for how to read a screenshot and a render and what `<masked>`, `(required)`, and `[disabled]` mean. Each form's prose, per-flag reference, and worked example live in its own subcommand chapter, reached from the `> **GUI form:**` cross-link there.
 
 ## `mnemonic addresses` {#gui-form-mnemonic-addresses}
+
+![mnemonic addresses — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-addresses.png)
 
 Structural render of the `mnemonic addresses` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -12,6 +14,8 @@ Structural render of the `mnemonic addresses` form — every flag and positional
 
 ## `mnemonic build-descriptor` {#gui-form-mnemonic-build-descriptor}
 
+![mnemonic build-descriptor — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-build-descriptor.png)
+
 Structural render of the `mnemonic build-descriptor` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-build-descriptor.gui"}
@@ -19,6 +23,8 @@ Structural render of the `mnemonic build-descriptor` form — every flag and pos
 ```
 
 ## `mnemonic bundle` {#gui-form-mnemonic-bundle}
+
+![mnemonic bundle — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-bundle.png)
 
 Structural render of the `mnemonic bundle` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -28,6 +34,8 @@ Structural render of the `mnemonic bundle` form — every flag and positional wi
 
 ## `mnemonic compare-cost` {#gui-form-mnemonic-compare-cost}
 
+![mnemonic compare-cost — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-compare-cost.png)
+
 Structural render of the `mnemonic compare-cost` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-compare-cost.gui"}
@@ -35,6 +43,8 @@ Structural render of the `mnemonic compare-cost` form — every flag and positio
 ```
 
 ## `mnemonic convert` {#gui-form-mnemonic-convert}
+
+![mnemonic convert — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-convert.png)
 
 Structural render of the `mnemonic convert` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -44,6 +54,8 @@ Structural render of the `mnemonic convert` form — every flag and positional w
 
 ## `mnemonic decode-address` {#gui-form-mnemonic-decode-address}
 
+![mnemonic decode-address — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-decode-address.png)
+
 Structural render of the `mnemonic decode-address` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-decode-address.gui"}
@@ -51,6 +63,8 @@ Structural render of the `mnemonic decode-address` form — every flag and posit
 ```
 
 ## `mnemonic derive-child` {#gui-form-mnemonic-derive-child}
+
+![mnemonic derive-child — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-derive-child.png)
 
 Structural render of the `mnemonic derive-child` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -60,6 +74,8 @@ Structural render of the `mnemonic derive-child` form — every flag and positio
 
 ## `mnemonic electrum-decrypt` {#gui-form-mnemonic-electrum-decrypt}
 
+![mnemonic electrum-decrypt — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-electrum-decrypt.png)
+
 Structural render of the `mnemonic electrum-decrypt` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-electrum-decrypt.gui"}
@@ -67,6 +83,8 @@ Structural render of the `mnemonic electrum-decrypt` form — every flag and pos
 ```
 
 ## `mnemonic export-wallet` {#gui-form-mnemonic-export-wallet}
+
+![mnemonic export-wallet — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-export-wallet.png)
 
 Structural render of the `mnemonic export-wallet` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -76,6 +94,8 @@ Structural render of the `mnemonic export-wallet` form — every flag and positi
 
 ## `mnemonic final-word` {#gui-form-mnemonic-final-word}
 
+![mnemonic final-word — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-final-word.png)
+
 Structural render of the `mnemonic final-word` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-final-word.gui"}
@@ -83,6 +103,8 @@ Structural render of the `mnemonic final-word` form — every flag and positiona
 ```
 
 ## `mnemonic gen-man` {#gui-form-mnemonic-gen-man}
+
+![mnemonic gen-man — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-gen-man.png)
 
 Structural render of the `mnemonic gen-man` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -92,6 +114,8 @@ Structural render of the `mnemonic gen-man` form — every flag and positional w
 
 ## `mnemonic import-wallet` {#gui-form-mnemonic-import-wallet}
 
+![mnemonic import-wallet — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-import-wallet.png)
+
 Structural render of the `mnemonic import-wallet` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-import-wallet.gui"}
@@ -99,6 +123,8 @@ Structural render of the `mnemonic import-wallet` form — every flag and positi
 ```
 
 ## `mnemonic inspect` {#gui-form-mnemonic-inspect}
+
+![mnemonic inspect — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-inspect.png)
 
 Structural render of the `mnemonic inspect` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -108,6 +134,8 @@ Structural render of the `mnemonic inspect` form — every flag and positional w
 
 ## `mnemonic ms-shares-combine` {#gui-form-mnemonic-ms-shares-combine}
 
+![mnemonic ms-shares-combine — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-ms-shares-combine.png)
+
 Structural render of the `mnemonic ms-shares-combine` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-ms-shares-combine.gui"}
@@ -115,6 +143,8 @@ Structural render of the `mnemonic ms-shares-combine` form — every flag and po
 ```
 
 ## `mnemonic ms-shares-split` {#gui-form-mnemonic-ms-shares-split}
+
+![mnemonic ms-shares-split — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-ms-shares-split.png)
 
 Structural render of the `mnemonic ms-shares-split` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -124,6 +154,8 @@ Structural render of the `mnemonic ms-shares-split` form — every flag and posi
 
 ## `mnemonic nostr` {#gui-form-mnemonic-nostr}
 
+![mnemonic nostr — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-nostr.png)
+
 Structural render of the `mnemonic nostr` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-nostr.gui"}
@@ -131,6 +163,8 @@ Structural render of the `mnemonic nostr` form — every flag and positional wit
 ```
 
 ## `mnemonic repair` {#gui-form-mnemonic-repair}
+
+![mnemonic repair — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-repair.png)
 
 Structural render of the `mnemonic repair` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -140,6 +174,8 @@ Structural render of the `mnemonic repair` form — every flag and positional wi
 
 ## `mnemonic restore` {#gui-form-mnemonic-restore}
 
+![mnemonic restore — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-restore.png)
+
 Structural render of the `mnemonic restore` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-restore.gui"}
@@ -147,6 +183,8 @@ Structural render of the `mnemonic restore` form — every flag and positional w
 ```
 
 ## `mnemonic seed-xor-combine` {#gui-form-mnemonic-seed-xor-combine}
+
+![mnemonic seed-xor-combine — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-seed-xor-combine.png)
 
 Structural render of the `mnemonic seed-xor-combine` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -156,6 +194,8 @@ Structural render of the `mnemonic seed-xor-combine` form — every flag and pos
 
 ## `mnemonic seed-xor-split` {#gui-form-mnemonic-seed-xor-split}
 
+![mnemonic seed-xor-split — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-seed-xor-split.png)
+
 Structural render of the `mnemonic seed-xor-split` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-seed-xor-split.gui"}
@@ -163,6 +203,8 @@ Structural render of the `mnemonic seed-xor-split` form — every flag and posit
 ```
 
 ## `mnemonic seedqr-decode` {#gui-form-mnemonic-seedqr-decode}
+
+![mnemonic seedqr-decode — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-seedqr-decode.png)
 
 Structural render of the `mnemonic seedqr-decode` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -172,6 +214,8 @@ Structural render of the `mnemonic seedqr-decode` form — every flag and positi
 
 ## `mnemonic seedqr-encode` {#gui-form-mnemonic-seedqr-encode}
 
+![mnemonic seedqr-encode — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-seedqr-encode.png)
+
 Structural render of the `mnemonic seedqr-encode` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-seedqr-encode.gui"}
@@ -179,6 +223,8 @@ Structural render of the `mnemonic seedqr-encode` form — every flag and positi
 ```
 
 ## `mnemonic silent-payment` {#gui-form-mnemonic-silent-payment}
+
+![mnemonic silent-payment — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-silent-payment.png)
 
 Structural render of the `mnemonic silent-payment` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -188,6 +234,8 @@ Structural render of the `mnemonic silent-payment` form — every flag and posit
 
 ## `mnemonic slip39-combine` {#gui-form-mnemonic-slip39-combine}
 
+![mnemonic slip39-combine — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-slip39-combine.png)
+
 Structural render of the `mnemonic slip39-combine` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-slip39-combine.gui"}
@@ -195,6 +243,8 @@ Structural render of the `mnemonic slip39-combine` form — every flag and posit
 ```
 
 ## `mnemonic slip39-split` {#gui-form-mnemonic-slip39-split}
+
+![mnemonic slip39-split — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-slip39-split.png)
 
 Structural render of the `mnemonic slip39-split` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -204,6 +254,8 @@ Structural render of the `mnemonic slip39-split` form — every flag and positio
 
 ## `mnemonic verify-bundle` {#gui-form-mnemonic-verify-bundle}
 
+![mnemonic verify-bundle — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-verify-bundle.png)
+
 Structural render of the `mnemonic verify-bundle` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-verify-bundle.gui"}
@@ -211,6 +263,8 @@ Structural render of the `mnemonic verify-bundle` form — every flag and positi
 ```
 
 ## `mnemonic verify-message` {#gui-form-mnemonic-verify-message}
+
+![mnemonic verify-message — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-verify-message.png)
 
 Structural render of the `mnemonic verify-message` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -220,6 +274,8 @@ Structural render of the `mnemonic verify-message` form — every flag and posit
 
 ## `mnemonic word-card` {#gui-form-mnemonic-word-card}
 
+![mnemonic word-card — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-word-card.png)
+
 Structural render of the `mnemonic word-card` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-word-card.gui"}
@@ -227,6 +283,8 @@ Structural render of the `mnemonic word-card` form — every flag and positional
 ```
 
 ## `mnemonic xpub-search-account-of-descriptor` {#gui-form-mnemonic-xpub-search-account-of-descriptor}
+
+![mnemonic xpub-search-account-of-descriptor — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-xpub-search-account-of-descriptor.png)
 
 Structural render of the `mnemonic xpub-search-account-of-descriptor` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
@@ -236,6 +294,8 @@ Structural render of the `mnemonic xpub-search-account-of-descriptor` form — e
 
 ## `mnemonic xpub-search-address-of-xpub` {#gui-form-mnemonic-xpub-search-address-of-xpub}
 
+![mnemonic xpub-search-address-of-xpub — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-xpub-search-address-of-xpub.png)
+
 Structural render of the `mnemonic xpub-search-address-of-xpub` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-xpub-search-address-of-xpub.gui"}
@@ -244,6 +304,8 @@ Structural render of the `mnemonic xpub-search-address-of-xpub` form — every f
 
 ## `mnemonic xpub-search-passphrase-of-xpub` {#gui-form-mnemonic-xpub-search-passphrase-of-xpub}
 
+![mnemonic xpub-search-passphrase-of-xpub — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-xpub-search-passphrase-of-xpub.png)
+
 Structural render of the `mnemonic xpub-search-passphrase-of-xpub` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
 ```{.text include="gui/mnemonic-xpub-search-passphrase-of-xpub.gui"}
@@ -251,6 +313,8 @@ Structural render of the `mnemonic xpub-search-passphrase-of-xpub` form — ever
 ```
 
 ## `mnemonic xpub-search-path-of-xpub` {#gui-form-mnemonic-xpub-search-path-of-xpub}
+
+![mnemonic xpub-search-path-of-xpub — GUI form screenshot (dark theme, 2x)](../../figures/gui/mnemonic-xpub-search-path-of-xpub.png)
 
 Structural render of the `mnemonic xpub-search-path-of-xpub` form — every flag and positional with its control kind and on-load default value (secret fields masked).
 
