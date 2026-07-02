@@ -1,6 +1,6 @@
 # SPEC — `hint_text` ghosting for schema-defaulted Text/Path fields (fix `gui-prefilled-default-text-appends-on-type`)
 
-- **Status:** DRAFT — awaiting R0 (0C/0I gate before any implementation).
+- **Status:** R0-GREEN (2 rounds, 2026-07-01); SHIPPED — GUI leg v0.55.0, manual leg this commit.
 - **Date:** 2026-07-01.
 - **Target repo (Leg 1):** `mnemonic-gui`, recon at `master @ 7e9dcca7b740b138e7133c44a9709c4f9010aa66` (v0.54.0 + 1 docs commit). All `mnemonic-gui` file:line cites below are against that SHA.
 - **Consumer repo (Leg 2):** `mnemonic-toolkit/docs/manual-gui/` (this manual; pin currently `mnemonic-gui-v0.54.0`, `pinned-upstream.toml:30`).

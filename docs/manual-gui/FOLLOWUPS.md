@@ -188,6 +188,14 @@ NOT closed by pixels — it still needs a person; the run-output panel /
 modal chrome remain the documented non-goal residual. Companion:
 `mnemonic-gui/FOLLOWUPS.md` entry `gui-form-snapshot-corpus-manual-consumer`.
 
+**Corpus-consumer contract re-exercised 2026-07-01** (hint-text-defaults
+cycle, manual leg): pin bump v0.54.0 → v0.55.0 (`538d1a89`; tag-push
+`snapshots` check-run = `success`, verified pre-bump per the contract's
+provenance-anchor step 0); 6/61 figures + 6/61 structural renders
+re-pinned (the `<hint:…>` ghost depiction for schema-defaulted Text/Path
+fields, `design/SPEC_gui_hint_text_defaults.md`); CLI pins again
+unchanged; `gui-schema-coverage` zero delta (982/61).
+
 ### `manual-gui-generated-form-renders` — RESOLVED 2026-06-29
 
 Generated, gated structural renders of all **61** GUI subcommand forms
