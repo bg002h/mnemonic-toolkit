@@ -13,7 +13,7 @@
   --allow-mismatch          checkbox  -> [ ] off
   --passphrase              text  (secret) -> <masked>
   --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
-  --output                  path(stdio)  -> -
+  --output                  path(stdio)  -> <hint:->
   --json                    checkbox  -> [ ] off
   --md1                     text  (repeating) -> <empty>
   --cosigner                text  (repeating) -> <empty>

@@ -2,7 +2,7 @@
   --hex               text  (secret) -> <masked>
   --phrase            text  (secret) -> <masked>
   --template          dropdown[bip44,bip49,bip84,bip86]  -> bip44
-  --account           text  -> 0
+  --account           text  -> <hint:0>
   --network           dropdown[mainnet,testnet]  -> mainnet
   --passphrase        text  (secret) -> <masked>
   --passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]

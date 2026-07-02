@@ -9,5 +9,5 @@
   --secret            text  (secret) -> <masked>
   --secret-file       path  -> <empty>
   --secret-stdin      checkbox  (secret) -> [ ] off [disabled]
-  --timestamp         text  -> 0
+  --timestamp         text  -> <hint:0>
   [ Run ]

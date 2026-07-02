@@ -38,8 +38,10 @@ is chosen).
 
 Display-grouping control: break the emitted `md1` card into groups
 of N characters. Number widget; range `0`–`65535`, default `5`;
-`0` = unbroken single line. The GUI renders a spin-box pre-filled
-with `5`.
+`0` = unbroken single line. The GUI renders the field unset with a
+`Set` button — leave it unset and the CLI applies its own default
+(`5`); clicking `Set` activates a spin-box (which starts at the
+range minimum, `0`) for an explicit value.
 
 **Cosmetic only — non-load-bearing.** Intake strips separators, so
 a grouped card and an unbroken card both re-ingest identically on

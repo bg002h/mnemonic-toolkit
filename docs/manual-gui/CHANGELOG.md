@@ -8,6 +8,42 @@ numbers.
 
 ## [Unreleased]
 
+**Patch — hint-text ghost depiction for schema-defaulted Text/Path fields +
+GUI pin bump `mnemonic-gui-v0.54.0` → `mnemonic-gui-v0.55.0` (the manual leg
+of the hint-text-defaults cycle, `design/SPEC_gui_hint_text_defaults.md`).**
+At v0.55.0 a Text/Path flag with a schema `default_value` no longer
+pre-fills its widget with the default as real editable text (typing used to
+APPEND — `--feerate` `1.0` + `5` → `1.05`); the field is now empty on load
+with the default shown as a dimmed `hint_text` ghost — typing replaces, and
+an empty field means "the CLI applies its own default" (argv byte-identical:
+at-default values were already suppressed by the assembler). The manual
+adopts the new depiction:
+
+- **6 of 61 structural renders regenerated** (`transcripts/gui/`): the
+  defaulted flag's value column gains the `<hint:…>` sentinel —
+  `mnemonic-compare-cost` (`--feerate` → `<hint:1.0>`),
+  `mnemonic-import-wallet` (`--select-descriptor` → `<hint:all>`),
+  `mnemonic-nostr` (`--timestamp` → `<hint:0>`),
+  `mnemonic-export-wallet` + `mnemonic-restore` (`--output` → `<hint:->`),
+  `ms-derive` (`--account` → `<hint:0>`). `verify-examples-gui` still
+  61/61 byte-identical against the pinned `gui-render`.
+- **6 of 61 figures re-copied byte-exactly** (`figures/gui/`) from the
+  v0.55.0 tag's snapshot corpus (`tests/snapshots/forms/`; the tag-push
+  `snapshots` CI run — the provenance anchor — verified `success`
+  pre-bump); `verify-figures-gui` census clean both directions at 61.
+- **Prose:** `import-wallet --select-descriptor` now documents the ghost
+  behavior (was "pre-filled with `all`"); `md encode --group-size` fixed
+  to the actual `Set`-affordance behavior (a pre-existing stale claim —
+  "spin-box pre-filled with `5`" — Number fields seed unset and never
+  pre-filled).
+- **Pin bump is otherwise inert:** no CLI-surface and no flag
+  name/kind/enum change at v0.55.0; the tag's four implied CLI pins are
+  identical, so the manual's CLI pins and `manual-gui.yml`'s
+  verify-examples tags are untouched; `gui-schema-coverage` unchanged at
+  982 anchors / 61 subcommands. GUI-side, the fix ships +11 tests
+  (append-regression, the all-61-subs never-prefill sweep, the AccessKit
+  empty-value ghost anchor, persisted at-default migration vectors).
+
 **Minor — pixel screenshots of all 61 GUI forms + the `verify-figures-gui`
 byte-gate + GUI pin bump `mnemonic-gui-v0.53.0` → `mnemonic-gui-v0.54.0`
 (Leg 2 of the visual-screenshot track).** The GUI-Forms gallery now pairs

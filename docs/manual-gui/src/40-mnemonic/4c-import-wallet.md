@@ -159,11 +159,12 @@ out-of-union values:
   `active: true, internal: true` (Core's internal / change chain).
   Same multi/zero handling.
 
-The GUI renders this flag as a free-form text input pre-filled
-with `all`; the user types one of the named tags (`all`,
-`active-receive`, `active-change`) or an integer N. CLI-side
-validation rejects invalid values with a clear error in the
-output pane.
+The GUI renders this flag as a free-form text input, empty on
+load, with `all` shown as dimmed placeholder (hint) text — leave
+it empty to accept the default; typing replaces the hint. The
+user types one of the named tags (`all`, `active-receive`,
+`active-change`) or an integer N. CLI-side validation rejects
+invalid values with a clear error in the output pane.
 
 ## `--ms1` {#mnemonic-import-wallet-ms1}
 

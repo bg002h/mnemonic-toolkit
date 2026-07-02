@@ -1,7 +1,7 @@
 [ mnemonic > compare-cost ]
   --miniscript      text  -> <empty>
   --descriptor      text  -> <empty>
-  --feerate         text  -> 1.0
+  --feerate         text  -> <hint:1.0>
   --max-conditions  number  -> <unset>
   --json            checkbox  -> [ ] off
   --no-auto-repair  checkbox  -> [ ] off
