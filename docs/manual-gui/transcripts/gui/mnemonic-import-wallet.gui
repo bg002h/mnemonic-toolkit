@@ -1,7 +1,7 @@
 [ mnemonic > import-wallet ]
   --blob                    path(stdio)  (required) -> <empty>
   --format                  dropdown[bitcoin-core,bsms,coldcard,coldcard-multisig,descriptor,electrum,jade,sparrow,specter]  -> bitcoin-core
-  --select-descriptor       text  -> all
+  --select-descriptor       text  -> <hint:all>
   --ms1                     text  (secret, repeating) -> <masked>
   --json                    checkbox  -> [ ] off
   --bsms-encryption-token   path(stdio)  -> <empty>

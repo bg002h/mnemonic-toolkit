@@ -7,7 +7,7 @@
   --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
   --account                 number  -> <unset>
   --format                  dropdown[bitcoin-core,bip388,coldcard,coldcard-multisig,jade,sparrow,specter,electrum,green,bsms,descriptor]  -> bitcoin-core
-  --output                  path(stdio)  -> -
+  --output                  path(stdio)  -> <hint:->
   --range                   range  -> <unset>
   --timestamp               timestamp  -> <unset>
   --bitcoin-core-version    number  -> <unset>

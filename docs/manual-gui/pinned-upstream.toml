@@ -10,24 +10,27 @@
 # The four CLI-tag fields below mirror exactly what the pinned
 # mnemonic-gui tag (above) pins in its own pinned-upstream.toml
 # [mnemonic]/[md]/[ms]/[mk] tables. A cycle bumping the GUI tag must
-# re-pin all four in lockstep. Verified for mnemonic-gui-v0.54.0
-# (visual-screenshot-track cycle): the GUI at that tag pins
+# re-pin all four in lockstep. Verified for mnemonic-gui-v0.55.0
+# (hint-text-defaults cycle): the GUI at that tag pins
 # mnemonic-toolkit-v0.74.0 (Cargo.toml [dependencies] +
 # pinned-upstream.toml [mnemonic] table), descriptor-mnemonic-md-cli-v0.11.0,
 # ms-cli-v0.13.0, mk-cli-v0.11.0 (its pinned-upstream.toml schema-mirror
-# map) — IDENTICAL to v0.53.0's, so the four fields below are unchanged.
-# The v0.53.0 -> v0.54.0 bump changes no CLI surface (the delta is the
-# egui_kittest form-snapshot suite + its CI `snapshots` job + the PR-#26
-# word-card help-text fix); it ships the 61-PNG snapshot corpus at
-# tests/snapshots/forms/ that figures/gui/ mirrors byte-exactly
-# (verify-figures-gui lint phase 9).
+# map) — IDENTICAL to v0.54.0's, so the four fields below are unchanged.
+# The v0.54.0 -> v0.55.0 bump changes no CLI surface and no flag
+# name/kind/enum (schema-coverage anchor set unchanged at 982/61); the
+# delta is the hint_text ghost fix for schema-defaulted Text/Path fields
+# (SPEC_gui_hint_text_defaults.md): 6 of the 61 forms change — the
+# defaulted field renders EMPTY with the default as a dimmed ghost
+# (`<hint:…>` in the structural renders), so 6 .gui transcripts + 6
+# figures/gui/ PNGs re-pin against the tag's tests/snapshots/forms/
+# corpus (verify-figures-gui lint phase 9).
 #
 # Source-path resolution for the lint:
 #   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
 #   default `../mnemonic-gui` relative to docs/manual-gui/.
 
 [mnemonic-gui]
-tag = "mnemonic-gui-v0.54.0"
+tag = "mnemonic-gui-v0.55.0"
 
 [manual-gui]
 toolkit-tag-implied = "mnemonic-toolkit-v0.74.0"
