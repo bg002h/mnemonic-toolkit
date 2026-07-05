@@ -1,5 +1,5 @@
 [ mnemonic > export-wallet ]
-  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  -> bip44
+  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a,(none)]  -> bip44
   --descriptor              text  -> <empty> [disabled]
   --threshold               number  -> <unset> [disabled]
   --multisig-path-family    dropdown[bip48,bip87]  -> bip48 [disabled]

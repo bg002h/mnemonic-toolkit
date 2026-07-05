@@ -1,0 +1,1 @@
+error: export-wallet script-type derive: taptree branch must have 2 children, but found 1

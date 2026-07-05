@@ -23,12 +23,18 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 1 — lint
   #
-  # Runs the 9-phase `make lint` against a fresh `make html` build (phase 4
+  # Runs the 12-phase `make lint` against a fresh `make html` build (phase 4
   # reads from the built HTML for the bidirectional schema-coverage check).
   # Clones `mnemonic-gui` at the pinned tag from pinned-upstream.toml so the
   # schema-coverage check operates against the exact source the manual was
-  # authored against — the same clone phase 9 (verify-figures-gui)
-  # byte-compares figures/gui/ against (its tests/snapshots/forms/).
+  # authored against — the SAME clone phase 9 (verify-figures-gui)
+  # byte-compares figures/gui/ against (its tests/snapshots/forms/) AND the
+  # new tutorial byte-gates read from: phase 10 (verify-tutorial-figures) and
+  # phase 11 (verify-tutorial-transcripts) byte-compare figures/tutorial/ +
+  # transcripts/tutorial/ against the clone's tests/snapshots/tutorial/,
+  # census-keyed on its tests/tutorial/manifest-stems.txt; phase 12
+  # (tutorial-xref) checks the tutorial-book embeds against that manifest.
+  # No extra clone needed — one pinned checkout anchors all three corpora.
   # ---------------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
@@ -288,18 +294,23 @@ jobs:
             texlive-science \
             make
 
-      - name: Build PDF + HTML
+      - name: Build PDF + HTML (reference manual + gui_example tutorial book)
         working-directory: docs/manual-gui
         run: |
           make pdf
           make html
+          make gui-example-pdf
+          make gui-example-html
 
       - name: Verify build artifacts
         working-directory: docs/manual-gui
         run: |
           test -f build/m-format-gui-manual.pdf
           test -f build/m-format-gui-manual.html
-          ls -lh build/m-format-gui-manual.pdf build/m-format-gui-manual.html
+          test -f build/gui_example.pdf
+          test -f build/gui_example.html
+          ls -lh build/m-format-gui-manual.pdf build/m-format-gui-manual.html \
+                 build/gui_example.pdf build/gui_example.html
 
       - name: Embed census — 61 figure PNGs are data-URI-embedded in the HTML
         # pandoc exits 0 with a WARNING on a missing image, so a green
@@ -313,11 +324,35 @@ jobs:
           echo "embed census: ${count} data-URI PNG figures (expect 61)"
           test "${count}" -eq 61
 
+      - name: Embed census — every tutorial figure is data-URI-embedded in gui_example.html
+        # Same positive-census discipline for the tutorial book. The
+        # expected count is the committed figures/tutorial PNG corpus,
+        # which the lint job's phase 10 (verify-tutorial-figures)
+        # byte-ties to the pinned manifest — so this build-job census +
+        # the lint-job byte-gate together pin the HTML embeds to the
+        # manifest without the build job needing the GUI clone.
+        working-directory: docs/manual-gui
+        run: |
+          expected=$(find figures/tutorial -maxdepth 1 -type f -name '*.png' | wc -l)
+          count=$(grep -o 'src="data:image/png' build/gui_example.html | wc -l)
+          echo "tutorial embed census: ${count} data-URI PNG figures (expect ${expected})"
+          test "${count}" -eq "${expected}"
+
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v7
         with:
           name: m-format-gui-manual-pdf
           path: docs/manual-gui/build/m-format-gui-manual.pdf
+
+      - name: Upload gui_example PDF artifact
+        # The tutorial book PDF is RELEASE-ATTACH ONLY (SPEC §3.2c amended
+        # 2026-07-05 — never committed). Uploading it as a build artifact
+        # makes it inspectable now; the P4 release-attach wiring consumes
+        # this artifact on `manual-gui-v*` tags.
+        uses: actions/upload-artifact@v7
+        with:
+          name: gui-example-pdf
+          path: docs/manual-gui/build/gui_example.pdf
 
       - name: Upload HTML artifact
         # Required by the release job (gh-pages publish step).
@@ -366,6 +401,14 @@ jobs:
           name: m-format-gui-manual-html
           path: docs/manual-gui/build/
 
+      - name: Download gui_example PDF artifact
+        # The tutorial book PDF (RELEASE-ATTACH ONLY — never committed). The
+        # build job uploaded it as `gui-example-pdf`; attach it below.
+        uses: actions/download-artifact@v8
+        with:
+          name: gui-example-pdf
+          path: docs/manual-gui/build/
+
       - name: Ensure GitHub release exists for this tag
         working-directory: docs/manual-gui
         run: |
@@ -380,6 +423,12 @@ jobs:
       - name: Upload PDF asset to release
         working-directory: docs/manual-gui
         run: gh release upload "$REF_NAME" build/m-format-gui-manual.pdf --clobber
+
+      - name: Upload gui_example tutorial PDF asset to release
+        # The standalone GUI worked-journeys tutorial (docs/manual-gui/tutorial/),
+        # release-attach-only — this is the sole distribution channel for it.
+        working-directory: docs/manual-gui
+        run: gh release upload "$REF_NAME" build/gui_example.pdf --clobber
 
       - name: Upload HTML asset to release
         # The self-contained pandoc --standalone HTML (embedded CSS) is also

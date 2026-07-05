@@ -26,6 +26,21 @@
 #      extra manual figure (orphan baseline) fails, an upstream snapshot
 #      missing from the manual fails; fail-closed. The visual analogue
 #      of verify-examples-gui. Per the visual-screenshot-track SPEC §6.)
+#  10. verify-tutorial-figures (every figures/tutorial/<name>.png is
+#      BYTE-identical to the pinned mnemonic-gui checkout's
+#      tests/snapshots/tutorial/<name>.png; census BOTH directions
+#      against the pinned tests/tutorial/manifest-stems.txt — orphan /
+#      gap / byte-drift = fail; fail-closed. The tutorial analogue of
+#      verify-figures-gui, census-keyed on the manifest, no hardcoded
+#      count. Per the gui_example SPEC §8.)
+#  11. verify-tutorial-transcripts (same byte + manifest-census
+#      discipline for transcripts/tutorial/<name>.{stdout,stderr,exit}.txt
+#      against the pinned tests/snapshots/tutorial/.)
+#  12. tutorial-xref (every manifest artifact is embedded exactly once in
+#      tutorial/*.md — figures as image embeds, transcripts as
+#      include-transcript.lua fenced includes — and every embed resolves
+#      to a manifest artifact. The tutorial analogue of gui-form-xref,
+#      keyed on manifest-stems.txt.)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR                 — absolute path to src/
@@ -42,6 +57,20 @@
 #   EXPECTED_GUI_RENDER_COUNT — the pinned GUI schema's subcommand total
 #                              (census key for verify-figures-gui; bumps
 #                              in lockstep with the GUI pin).
+#   FIGURES_TUTORIAL        — absolute path to figures/tutorial/ (the
+#                              committed tutorial screenshot corpus; used
+#                              by verify-tutorial-figures).
+#   TRANSCRIPTS_TUTORIAL    — absolute path to transcripts/tutorial/ (the
+#                              committed tutorial run transcripts; used by
+#                              verify-tutorial-transcripts).
+#   TUTORIAL_DIR            — absolute path to tutorial/ (the tutorial-book
+#                              chapter sources; used by tutorial-xref and
+#                              the phase 1-3 markdown scans). The tutorial
+#                              corpus census reads manifest-stems.txt
+#                              DIRECTLY from the pinned clone
+#                              ($MANUAL_GUI_UPSTREAM_ROOT/tests/tutorial/
+#                              manifest-stems.txt) — single source of
+#                              truth, no toolkit copy to drift.
 #   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings
 #                              (unused by gui-schema-coverage; reserved
 #                              for future GUI-side worked-example phases).
@@ -57,6 +86,9 @@ for arg in "$@"; do
     TRANSCRIPTS_GUI=*)          TRANSCRIPTS_GUI="${arg#*=}" ;;
     FIGURES_GUI=*)              FIGURES_GUI="${arg#*=}" ;;
     EXPECTED_GUI_RENDER_COUNT=*) EXPECTED_GUI_RENDER_COUNT="${arg#*=}" ;;
+    FIGURES_TUTORIAL=*)         FIGURES_TUTORIAL="${arg#*=}" ;;
+    TRANSCRIPTS_TUTORIAL=*)     TRANSCRIPTS_TUTORIAL="${arg#*=}" ;;
+    TUTORIAL_DIR=*)             TUTORIAL_DIR="${arg#*=}" ;;
     MNEMONIC_BIN=*)             MNEMONIC_BIN="${arg#*=}" ;;
     MD_BIN=*)                   MD_BIN="${arg#*=}" ;;
     MS_BIN=*)                   MS_BIN="${arg#*=}" ;;
@@ -74,36 +106,49 @@ step() { printf '\n[lint] === %s ===\n' "$1"; }
 warn() { printf '[lint] WARN: %s\n' "$1" >&2; }
 err()  { printf '[lint] FAIL: %s\n' "$1" >&2; fail=1; }
 
+# The tutorial-book chapter sources (tutorial/*.md) are linted by the
+# same three markdown phases as src/ — the glob/path is appended only
+# when TUTORIAL_DIR is set and exists (backward-compatible with callers
+# that predate the tutorial book).
+TUT_MD_GLOB=""
+TUT_PATH=""
+if [ -n "${TUTORIAL_DIR:-}" ] && [ -d "${TUTORIAL_DIR:-}" ]; then
+  TUT_MD_GLOB="$TUTORIAL_DIR/**/*.md"
+  TUT_PATH="$TUTORIAL_DIR"
+fi
+
 # 1. markdownlint
-step "1/9 markdownlint"
+step "1/12 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
-  markdownlint-cli2 "$SRC_DIR/**/*.md" || err "markdownlint reported issues"
+  markdownlint-cli2 "$SRC_DIR/**/*.md" ${TUT_MD_GLOB:+"$TUT_MD_GLOB"} \
+    || err "markdownlint reported issues"
 else
   warn "markdownlint-cli2 not on PATH; skipping"
 fi
 
 # 2. cspell
-step "2/9 cspell"
+step "2/12 cspell"
 if command -v cspell >/dev/null; then
   # `--no-must-find-files` keeps cspell from exiting 1 when src/ is
   # empty (the baseline state at P1; SPEC §2.1 G3 says all three
   # markdown phases must pass-clean on an empty manual).
-  cspell --no-progress --no-must-find-files "$SRC_DIR/**/*.md" \
+  cspell --no-progress --no-must-find-files "$SRC_DIR/**/*.md" ${TUT_MD_GLOB:+"$TUT_MD_GLOB"} \
     || err "cspell reported issues"
 else
   warn "cspell not on PATH; skipping"
 fi
 
 # 3. lychee
-step "3/9 lychee"
+step "3/12 lychee"
 if command -v lychee >/dev/null; then
-  lychee --offline --no-progress "$SRC_DIR" || err "lychee reported issues"
+  lychee --offline --no-progress "$SRC_DIR" ${TUT_PATH:+"$TUT_PATH"} \
+    || err "lychee reported issues"
 else
   warn "lychee not on PATH; skipping"
 fi
 
 # 4. gui-schema-coverage
-step "4/9 gui-schema-coverage"
+step "4/12 gui-schema-coverage"
 CHECKER="$TESTS_DIR/check_gui_schema_coverage.py"
 HTML="$BUILD_DIR/m-format-gui-manual.html"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
@@ -118,7 +163,7 @@ else
 fi
 
 # 5. outline-coverage
-step "5/9 outline-coverage"
+step "5/12 outline-coverage"
 OUTLINE_CHECKER="$TESTS_DIR/check_outline_coverage.py"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
   err "MANUAL_GUI_UPSTREAM_ROOT not a directory (see phase 4 above)"
@@ -132,7 +177,7 @@ else
 fi
 
 # 6. glossary-coverage
-step "6/9 glossary-coverage"
+step "6/12 glossary-coverage"
 # GUI manual appendices live under 90-appendices/ per SPEC §1.4 (the
 # numbering deviates from the CLI manual's 60-appendices/ scheme so
 # the two manuals never share an anchor namespace). Token list will
@@ -149,7 +194,7 @@ else
 fi
 
 # 7. index bidirectional
-step "7/9 index bidirectional"
+step "7/12 index bidirectional"
 INDEX_TABLE="$SRC_DIR/90-appendices/99-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
@@ -177,7 +222,7 @@ else
 fi
 
 # 8. gui-form-xref
-step "8/9 gui-form-xref"
+step "8/12 gui-form-xref"
 XREF_CHECKER="$TESTS_DIR/check_gui_form_xref.py"
 if [ ! -d "${TRANSCRIPTS_GUI:-}" ]; then
   err "TRANSCRIPTS_GUI not a directory: ${TRANSCRIPTS_GUI:-<unset>} (pass TRANSCRIPTS_GUI=...; the Makefile lint: target threads it from TRANSCRIPTS_GUI := \$(TRANSCRIPTS)/gui)"
@@ -191,7 +236,7 @@ else
 fi
 
 # 9. verify-figures-gui
-step "9/9 verify-figures-gui"
+step "9/12 verify-figures-gui"
 # Byte-compares the committed screenshot corpus (figures/gui/<stem>.png)
 # against the PINNED mnemonic-gui checkout's tests/snapshots/forms/ —
 # the egui_kittest snapshot corpus the GUI repo's `snapshots` CI job
@@ -245,6 +290,99 @@ else
   if [ "$figs_fail" -eq 0 ]; then
     printf '[lint] verify-figures-gui: OK (%s/%s figures byte-identical to the pinned corpus; census clean both directions)\n' "$fig_count" "$expected_figs"
   fi
+fi
+
+# The tutorial corpus (phases 10-12) is enumerated by the pinned clone's
+# tests/tutorial/manifest-stems.txt — the single source of truth both the
+# byte-gates and the xref gate read directly (no toolkit copy to drift).
+TUT_MANIFEST="$MANUAL_GUI_UPSTREAM_ROOT/tests/tutorial/manifest-stems.txt"
+TUT_SNAP_DIR="$MANUAL_GUI_UPSTREAM_ROOT/tests/snapshots/tutorial"
+
+# byte_census_against_manifest <phase-label> <committed-dir> <ext-regex>
+# Byte-compares every committed <committed-dir>/<name> against the pinned
+# <TUT_SNAP_DIR>/<name>, census BOTH directions vs the manifest artifacts
+# whose basename matches <ext-regex>. orphan / gap / drift = fail-closed.
+byte_census_against_manifest() {
+  local label="$1" committed="$2" ext_re="$3"
+  if [ ! -f "$TUT_MANIFEST" ]; then
+    err "$label: pinned manifest missing: $TUT_MANIFEST (MANUAL_GUI_UPSTREAM_ROOT must be a mnemonic-gui checkout at a pinned tag >= v0.56.0)"
+    return
+  fi
+  if [ ! -d "$TUT_SNAP_DIR" ]; then
+    err "$label: pinned tutorial snapshot corpus missing: $TUT_SNAP_DIR"
+    return
+  fi
+  if [ ! -d "$committed" ]; then
+    err "$label: committed dir not found: $committed"
+    return
+  fi
+  local manifest_set committed_set snap_set only_missing only_extra clone_mismatch drift
+  manifest_set=$(grep -E "$ext_re" "$TUT_MANIFEST" | sort -u || true)
+  committed_set=$(find "$committed" -maxdepth 1 -type f | sed 's|.*/||' | grep -E "$ext_re" | sort -u || true)
+  snap_set=$(find "$TUT_SNAP_DIR" -maxdepth 1 -type f | sed 's|.*/||' | grep -E "$ext_re" | sort -u || true)
+  local this_fail=0
+  # Committed copy vs manifest (both directions).
+  only_missing=$(comm -23 <(printf '%s\n' "$manifest_set") <(printf '%s\n' "$committed_set") | grep . || true)
+  only_extra=$(comm -13 <(printf '%s\n' "$manifest_set") <(printf '%s\n' "$committed_set") | grep . || true)
+  if [ -n "$only_missing" ]; then
+    err "$label: manifest artifact(s) MISSING from $committed (coverage gap): $(echo $only_missing)"; this_fail=1
+  fi
+  if [ -n "$only_extra" ]; then
+    err "$label: committed file(s) with NO manifest entry (orphan): $(echo $only_extra)"; this_fail=1
+  fi
+  # Pinned clone corpus vs its own manifest (pin sanity — the clone must be
+  # internally consistent, else the pin/clone is wrong).
+  clone_mismatch=$(comm -3 <(printf '%s\n' "$manifest_set") <(printf '%s\n' "$snap_set") | grep . || true)
+  if [ -n "$clone_mismatch" ]; then
+    err "$label: pinned clone corpus disagrees with its own manifest-stems.txt: $(echo $clone_mismatch)"; this_fail=1
+  fi
+  # Byte-drift on every shared artifact.
+  drift=""
+  while IFS= read -r name; do
+    [ -z "$name" ] && continue
+    if ! cmp -s "$committed/$name" "$TUT_SNAP_DIR/$name"; then
+      drift="$drift $name"
+    fi
+  done < <(comm -12 <(printf '%s\n' "$manifest_set") <(printf '%s\n' "$committed_set"))
+  if [ -n "$drift" ]; then
+    err "$label: byte drift vs the pinned corpus for:$drift"; this_fail=1
+  fi
+  if [ "$this_fail" -eq 0 ]; then
+    local n; n=$(printf '%s\n' "$committed_set" | grep -c . || true)
+    printf '[lint] %s: OK (%s artifacts byte-identical to the pinned corpus; census clean both directions)\n' "$label" "$n"
+  fi
+}
+
+# 10. verify-tutorial-figures
+step "10/12 verify-tutorial-figures"
+if [ -z "${FIGURES_TUTORIAL:-}" ]; then
+  err "FIGURES_TUTORIAL not set (pass FIGURES_TUTORIAL=...; the Makefile lint: target threads it from FIGURES_TUTORIAL := \$(FIGURES_DIR)/tutorial)"
+else
+  byte_census_against_manifest "verify-tutorial-figures" "$FIGURES_TUTORIAL" '\.png$'
+fi
+
+# 11. verify-tutorial-transcripts
+step "11/12 verify-tutorial-transcripts"
+if [ -z "${TRANSCRIPTS_TUTORIAL:-}" ]; then
+  err "TRANSCRIPTS_TUTORIAL not set (pass TRANSCRIPTS_TUTORIAL=...; the Makefile lint: target threads it from TRANSCRIPTS_TUTORIAL := \$(TRANSCRIPTS)/tutorial)"
+else
+  byte_census_against_manifest "verify-tutorial-transcripts" "$TRANSCRIPTS_TUTORIAL" '\.txt$'
+fi
+
+# 12. tutorial-xref
+step "12/12 tutorial-xref"
+XREF_TUT="$TESTS_DIR/check_tutorial_xref.py"
+if [ -z "${TUTORIAL_DIR:-}" ] || [ ! -d "${TUTORIAL_DIR:-}" ]; then
+  err "TUTORIAL_DIR not a directory: ${TUTORIAL_DIR:-<unset>} (pass TUTORIAL_DIR=...; the Makefile lint: target threads it from TUTORIAL_DIR := \$(MANUAL_DIR)/tutorial)"
+elif [ ! -f "$TUT_MANIFEST" ]; then
+  err "tutorial-xref: pinned manifest missing: $TUT_MANIFEST"
+elif [ ! -f "$XREF_TUT" ]; then
+  err "$XREF_TUT missing"
+else
+  python3 "$XREF_TUT" \
+      --manifest "$TUT_MANIFEST" \
+      --tutorial-dir "$TUTORIAL_DIR" \
+    || err "tutorial-xref reported missing/duplicated/orphan embeds"
 fi
 
 if [ "$fail" -ne 0 ]; then

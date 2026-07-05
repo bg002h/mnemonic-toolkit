@@ -1,0 +1,14 @@
+Input: or_i(and_v(v:older(65535),multi(2,A,B)),or_i(and_v(v:older(4255898),multi(1,C,D,E)),and_v(v:pk(F),ripemd160(06d05e2f02fb90ddf98d8cd95d806ba12b27aff4))))
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 1.0 sat/vB
+
+Condition             | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------------------+--------+-------+-------+----------+---------+-------
+A + B + older(blocks) |     79 |   147 |   +68 |       79 |     147 |    +68
+C + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+D + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+E + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+F + preimage(h0)      |     69 |   139 |   +70 |       69 |     139 |    +70
+
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)

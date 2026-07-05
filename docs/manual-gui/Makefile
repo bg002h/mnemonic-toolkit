@@ -10,7 +10,10 @@
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
 #   make verify-examples-gui — regenerate the 61 GUI form renders with the pinned gui-render and diff == committed (census + secret-hygiene)
-#   make lint          — markdownlint + cspell + lychee + gui-schema-coverage + outline-coverage + glossary-coverage + index + gui-form-xref + verify-figures-gui
+#   make gui-example-md    — gui_example tutorial book to build/gui_example.md
+#   make gui-example-html  — gui_example tutorial book to build/gui_example.html (embeds the tutorial figures as data-URIs)
+#   make gui-example-pdf   — gui_example tutorial book to build/gui_example.pdf (RELEASE-ATTACH ONLY; never committed)
+#   make lint          — markdownlint + cspell + lychee + gui-schema-coverage + outline-coverage + glossary-coverage + index + gui-form-xref + verify-figures-gui + verify-tutorial-figures + verify-tutorial-transcripts + tutorial-xref
 #   make clean         — remove build/ and LaTeX byproducts
 #   make help          — print this help
 #
@@ -36,6 +39,16 @@ FIGURES_DIR    := $(MANUAL_DIR)/figures
 TESTS_DIR      := $(MANUAL_DIR)/tests
 BUILD_DIR      := $(MANUAL_DIR)/build
 TRANSCRIPTS    := $(MANUAL_DIR)/transcripts
+
+# gui_example tutorial book (a sibling book inside manual-gui): its
+# chapter sources, the byte-copied figure/transcript corpora, and the
+# lexicographically-ordered source list the gui-example-* targets build.
+TUTORIAL_DIR         := $(MANUAL_DIR)/tutorial
+FIGURES_TUTORIAL     := $(FIGURES_DIR)/tutorial
+TRANSCRIPTS_TUTORIAL := $(TRANSCRIPTS)/tutorial
+GUI_EXAMPLE_SRC      := $(shell find $(TUTORIAL_DIR) -type f -name '*.md' 2>/dev/null | LC_ALL=C sort)
+GUI_EXAMPLE_TITLE    ?= The mnemonic-gui Tutorial — Worked Journeys
+GUI_EXAMPLE_SUBTITLE ?= Five end-to-end journeys through the mnemonic-gui desktop application
 
 # ---------------------------------------------------------------------------
 # CLI binary invocation strings (overrideable; CI overrides to pre-built bins)
@@ -297,6 +310,96 @@ verify-examples-gui:
 		EXPECTED_COUNT="$(EXPECTED_GUI_RENDER_COUNT)"
 
 # ---------------------------------------------------------------------------
+# gui_example tutorial book — its own md / html / pdf targets
+# ---------------------------------------------------------------------------
+# The tutorial book (chapters under $(TUTORIAL_DIR), figures under
+# $(FIGURES_TUTORIAL), transcripts under $(TRANSCRIPTS_TUTORIAL)) builds to
+# build/gui_example.{md,html,pdf} with the SAME pandoc→xelatex recipe as the
+# reference manual but its own title page. It reuses include-transcript.lua
+# (transcript fenced includes resolve via the exported TRANSCRIPTS_DIR, so
+# `include="tutorial/<name>"` -> transcripts/tutorial/<name>) and the shared
+# preamble/template. Figures are referenced FILE-relative from tutorial/*.md
+# as `../figures/tutorial/<name>.png`: (i) lychee --offline resolves them
+# file-relative; (ii) HTML embedding needs $(TUTORIAL_DIR) on the resource
+# path (pandoc resolves image resources against the resource path, not the
+# source file); (iii) the PDF resolves them at xelatex time (build/ is one
+# level under manual-gui, so `../figures/tutorial/…` from build/ is the
+# committed figure). Per the release-attach-only decision (SPEC §3.2c
+# amended 2026-07-05) the PDF is built+gated here and in CI but is NOT
+# committed; the manual-gui release job attaches it on `manual-gui-v*` tags.
+.PHONY: gui-example-md gui-example-html gui-example-pdf
+
+gui-example-md: $(BUILD_DIR)/gui_example.md
+$(BUILD_DIR)/gui_example.md: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/strip-latex-from-md.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+	$(PANDOC) \
+		--from markdown \
+		--to gfm \
+		--standalone \
+		--toc \
+		--toc-depth=2 \
+		$(MD_FILTER_ARGS) \
+		$(PANDOC_METADATA) \
+		--metadata title="$(GUI_EXAMPLE_TITLE)" \
+		--metadata subtitle="$(GUI_EXAMPLE_SUBTITLE)" \
+		--output $@ \
+		$(GUI_EXAMPLE_SRC)
+
+# --resource-path: figures are referenced `../figures/tutorial/<name>.png`
+# from tutorial/*.md; pandoc resolves image resources against the resource
+# path (not the source file), so $(TUTORIAL_DIR) must be on it for the
+# --self-contained data-URI embed to resolve. NOTE: pandoc exits 0 with a
+# WARNING on a missing image — the gate is the POSITIVE embed census in
+# manual-gui.yml (grep -c 'src="data:image/png' == the committed
+# figures/tutorial PNG count), not a green build.
+gui-example-html: $(BUILD_DIR)/gui_example.html
+$(BUILD_DIR)/gui_example.html: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
+	$(PANDOC) \
+		--from markdown \
+		--to html5 \
+		--standalone \
+		--self-contained \
+		--resource-path=.:$(TUTORIAL_DIR) \
+		--toc \
+		--toc-depth=2 \
+		--top-level-division=chapter \
+		$(PDF_FILTER_ARGS) \
+		$(PANDOC_METADATA) \
+		--metadata title="$(GUI_EXAMPLE_TITLE)" \
+		--metadata subtitle="$(GUI_EXAMPLE_SUBTITLE)" \
+		--output $@ \
+		$(GUI_EXAMPLE_SRC)
+
+gui-example-pdf: $(BUILD_DIR)/gui_example.pdf
+
+$(BUILD_DIR)/gui_example.tex: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex $(PANDOC_DIR)/preamble-tutorial.tex $(TEMPLATES_DIR)/manual.latex | $(BUILD_DIR)
+	$(PANDOC) \
+		--from markdown \
+		--to latex \
+		--standalone \
+		--toc \
+		--toc-depth=2 \
+		--top-level-division=chapter \
+		--template=$(TEMPLATES_DIR)/manual.latex \
+		-H $(PANDOC_DIR)/preamble.tex \
+		-H $(PANDOC_DIR)/preamble-tutorial.tex \
+		$(PDF_FILTER_ARGS) \
+		$(PANDOC_METADATA) \
+		--metadata title="$(GUI_EXAMPLE_TITLE)" \
+		--metadata subtitle="$(GUI_EXAMPLE_SUBTITLE)" \
+		--output $@ \
+		$(GUI_EXAMPLE_SRC)
+
+$(BUILD_DIR)/gui_example.pdf: $(BUILD_DIR)/gui_example.tex
+	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error gui_example.tex
+	cd $(BUILD_DIR) && if [ -f gui_example.idx ]; then \
+	    $(MAKEINDEX) gui_example.idx; \
+	else \
+	    echo '[pdf] no \\index{} markers in gui_example; skipping makeindex'; \
+	fi
+	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error gui_example.tex
+	cd $(BUILD_DIR) && $(XELATEX) -interaction=nonstopmode -halt-on-error gui_example.tex
+
+# ---------------------------------------------------------------------------
 # Lint
 # ---------------------------------------------------------------------------
 # Sibling-checkout default for the mnemonic-gui source the lint reads.
@@ -320,6 +423,9 @@ lint:
 		TRANSCRIPTS_GUI="$(TRANSCRIPTS_GUI)" \
 		FIGURES_GUI="$(FIGURES_GUI)" \
 		EXPECTED_GUI_RENDER_COUNT="$(EXPECTED_GUI_RENDER_COUNT)" \
+		FIGURES_TUTORIAL="$(FIGURES_TUTORIAL)" \
+		TRANSCRIPTS_TUTORIAL="$(TRANSCRIPTS_TUTORIAL)" \
+		TUTORIAL_DIR="$(TUTORIAL_DIR)" \
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \

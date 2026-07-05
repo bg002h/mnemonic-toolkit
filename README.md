@@ -86,6 +86,7 @@ The three cards engrave together as a coherent backup. Each card is independentl
 ## Documentation
 
 - **[`docs/manual/`](docs/manual/)** — the end-user manual: the single source of truth for the m-format constellation CLI surface (`mnemonic` / `md` / `ms` / `mk`), lint-gated against the live `--help` output. Tagged builds attach a PDF to the GitHub release.
+- **[`docs/manual-gui/`](docs/manual-gui/)** — the GUI end-user manual (the `mnemonic-gui` egui overlay over the four CLIs), plus a companion worked-journeys tutorial **`gui_example.pdf`** — the GUI counterpart to the CLI `Examples.pdf`, built from [`docs/manual-gui/tutorial/`](docs/manual-gui/tutorial/) and **attached to the `manual-gui-*` GitHub release** (its ~50 whole-window screenshots are not committed).
 - [`CHANGELOG.md`](CHANGELOG.md) — full release history.
 - [`design/`](design/) — SPECs, implementation plans, per-cycle architect reviews, and [`design/FOLLOWUPS.md`](design/FOLLOWUPS.md) (deferred-work tracker).
 

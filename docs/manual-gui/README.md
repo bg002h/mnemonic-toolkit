@@ -54,6 +54,25 @@ make lint     # markdownlint + cspell + lychee + gui-schema-coverage + outline-c
 make filter-smoke   # sanity check on the pandoc filter pipeline
 ```
 
+## The companion tutorial (`gui_example.pdf`)
+
+Beside this reference manual, a standalone **worked-journeys tutorial**
+walks all five `Examples.pdf` wallet journeys — single-sig card set,
+2-of-3 multisig, the 4-tier degrading vault, its taproot twin, and
+watch-only export — through the GUI, with whole-window screenshots and
+real, populated output panels. It builds from [`tutorial/`](tutorial/):
+
+```sh
+make gui-example-pdf    # build/gui_example.pdf   (RELEASE-ATTACH ONLY — never committed)
+make gui-example-html   # build/gui_example.html
+```
+
+The rendered PDF (~50 screenshots) is **not committed** — it is attached
+to the `manual-gui-*` GitHub release. Its screenshots and transcripts are
+byte-copied from the pinned `mnemonic-gui` tag and gated in `make lint`
+by `verify-tutorial-figures` / `verify-tutorial-transcripts` /
+`tutorial-xref`.
+
 ## Source layout
 
 | Range | Purpose |

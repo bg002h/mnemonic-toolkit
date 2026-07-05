@@ -25,15 +25,37 @@
 # figures/gui/ PNGs re-pin against the tag's tests/snapshots/forms/
 # corpus (verify-figures-gui lint phase 9).
 #
+# v0.55.0 -> v0.56.0 (gui_example tutorial cycle, Leg 2 / P2): the GUI
+# tag bumps to mnemonic-gui-v0.56.0, which pins mnemonic-toolkit-v0.75.0
+# (toolkit-tag-implied below bumps to match; VERIFIED against the tag's
+# own pinned-upstream.toml [mnemonic].tag). md/ms/mk are pin-NEUTRAL at
+# v0.56.0 — the tag's [md]/[ms]/[mk] tables still read
+# descriptor-mnemonic-md-cli-v0.11.0 / ms-cli-v0.13.0 / mk-cli-v0.11.0
+# (VERIFIED), so those three fields are unchanged. The only CLI-surface
+# delta is F1: the GUI-render-scoped export-wallet `--template` unset
+# affordance (a per-flag EXPORT_WALLET_TEMPLATES const APPENDING the
+# empty-string sentinel, rendered `(none)`; opts[0] stays `bip44`). It
+# re-pins EXACTLY ONE structural render — transcripts/gui/mnemonic-export-wallet.gui
+# (`--template … dropdown[…,tr-sortedmulti-a,(none)] -> bip44`, regenerated
+# by verify-examples-gui) — and adds one manual section
+# (`### (none) {#mnemonic-export-wallet-template-}` in
+# src/40-mnemonic/45-export-wallet.md) so gui-schema-coverage's
+# per-variant anchor stays satisfied; the 61-form gallery PNGs are
+# UNCHANGED (closed-form render, popup contents not depicted). This same
+# pin ALSO anchors the NEW tutorial corpus (figures/tutorial/ 50 PNGs +
+# transcripts/tutorial/ run transcripts), byte-compared against the tag's
+# tests/snapshots/tutorial/ by lint phases 10-11 (single coherent bump —
+# form gallery + .gui renders + tutorial corpus move in lockstep).
+#
 # Source-path resolution for the lint:
 #   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
 #   default `../mnemonic-gui` relative to docs/manual-gui/.
 
 [mnemonic-gui]
-tag = "mnemonic-gui-v0.55.0"
+tag = "mnemonic-gui-v0.56.0"
 
 [manual-gui]
-toolkit-tag-implied = "mnemonic-toolkit-v0.74.0"
+toolkit-tag-implied = "mnemonic-toolkit-v0.75.0"
 md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.11.0"
 ms-cli-tag-implied  = "ms-cli-v0.13.0"
 mk-cli-tag-implied  = "mk-cli-v0.11.0"

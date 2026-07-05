@@ -1,0 +1,19 @@
+# === Wallet bundle: descriptor, mainnet ===
+# Threshold: 3 of 11
+# Cosigners:
+#   @0: (no ms1; watch-only),mk1:5a703 (73c5da0a @ m/84'/0'/0')
+#   @1: (no ms1; watch-only),mk1:5a702 (73c5da0a @ m/84'/0'/1')
+#   @2: (no ms1; watch-only),mk1:5a701 (73c5da0a @ m/84'/0'/2')
+#   @3: (no ms1; watch-only),mk1:5a700 (73c5da0a @ m/84'/0'/3')
+#   @4: (no ms1; watch-only),mk1:5a707 (b8688df1 @ m/84'/0'/0')
+#   @5: (no ms1; watch-only),mk1:5a706 (b8688df1 @ m/84'/0'/1')
+#   @6: (no ms1; watch-only),mk1:5a705 (b8688df1 @ m/84'/0'/2')
+#   @7: (no ms1; watch-only),mk1:5a704 (b8688df1 @ m/84'/0'/3')
+#   @8: (no ms1; watch-only),mk1:5a70b (28645006 @ m/84'/0'/0')
+#   @9: (no ms1; watch-only),mk1:5a70a (28645006 @ m/84'/0'/1')
+#   @10: (no ms1; watch-only),mk1:5a709 (28645006 @ m/84'/0'/2')
+# Template: descriptor
+# md1: 5a70
+# Recovery: any 3 of 11 signing keys + md1 (template card).
+# Language: english
+note: stdout is watch-only — public keys only, cannot spend

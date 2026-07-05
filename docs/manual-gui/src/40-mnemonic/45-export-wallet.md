@@ -44,8 +44,15 @@ whatever shape your spending wallet imports.
 The descriptor template the bundle was emitted under. Mutually-
 required-one-of with `--descriptor` (the conditional-visibility
 engine marks both as `Required` when neither is set, and
-`Disabled` for the other when one has a value). Same 10 values
-as [`mnemonic bundle --template`](#mnemonic-bundle-template).
+`Disabled` for the other when one has a value). The same 10 values
+as [`mnemonic bundle --template`](#mnemonic-bundle-template), **plus**
+the GUI-only `(none)` unset sentinel below — export-wallet's dropdown
+appends an empty entry so the reader can clear `--template` and drive
+`--descriptor` instead. On a fresh form the dropdown materialises to
+`bip44` (the first option — `--template` has no schema default),
+so `--descriptor` starts `Disabled` and the reader chooses `(none)`
+to unlock it. `bundle`'s `--template` has no such sentinel — the
+11-vs-10 asymmetry is intended and export-wallet-scoped.
 
 ### Outline {#mnemonic-export-wallet-template-outline}
 
@@ -59,6 +66,7 @@ as [`mnemonic bundle --template`](#mnemonic-bundle-template).
 - [`sh-wsh-sortedmulti`](#mnemonic-export-wallet-template-sh-wsh-sortedmulti)
 - [`tr-multi-a`](#mnemonic-export-wallet-template-tr-multi-a)
 - [`tr-sortedmulti-a`](#mnemonic-export-wallet-template-tr-sortedmulti-a)
+- [`(none)`](#mnemonic-export-wallet-template-)
 
 ### `bip44` {#mnemonic-export-wallet-template-bip44}
 
@@ -99,6 +107,24 @@ See [`mnemonic bundle --template tr-multi-a`](#mnemonic-bundle-template-tr-multi
 ### `tr-sortedmulti-a` {#mnemonic-export-wallet-template-tr-sortedmulti-a}
 
 See [`mnemonic bundle --template tr-sortedmulti-a`](#mnemonic-bundle-template-tr-sortedmulti-a).
+
+### `(none)` {#mnemonic-export-wallet-template-}
+
+The empty-string unset sentinel — **no template selected**. Unlike
+[`build-descriptor --archetype`](#mnemonic-build-descriptor-archetype),
+where `(none)` is the Dropdown's *default*, here `(none)` is an
+**appended** entry the reader selects deliberately: export-wallet's
+`--template` still materialises to `bip44` on load, so choosing
+`(none)` clears `--template` from the assembled argv, flips
+`has_value("--template")` to false, and lets the conditional-visibility
+engine stop marking [`--descriptor`](#mnemonic-export-wallet-descriptor)
+as `Disabled` — the required/enabled field then becomes `--descriptor`.
+This is the honest "clear Template to unlock Descriptor" affordance the
+GUI presents; it emits no `--template` token and never leaks an empty
+string into the argv echo or the masked copy-command string. It is a
+GUI-render-scoped affordance only — the toolkit's projected conditional
+rules are unchanged (the `--descriptor` mutex simply does not fire when
+`--template` has no value).
 
 ## `--descriptor` {#mnemonic-export-wallet-descriptor}
 

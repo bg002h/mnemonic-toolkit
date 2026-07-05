@@ -8,6 +8,44 @@ numbers.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-05
+
+**Minor — the standalone `gui_example.pdf` GUI tutorial book + GUI pin bump
+`mnemonic-gui-v0.55.0` → `mnemonic-gui-v0.56.0`.** A new release-attached
+companion to the CLI `Examples.pdf`: a worked-journeys tutorial that walks all
+five Examples wallet journeys — single-sig card set, conventional 2-of-3
+multisig, the pathological four-tier degrading `wsh` vault, its taproot twin,
+and watch-only export — through the `mnemonic-gui` desktop application, with
+**whole-window screenshots** (tab bar + subcommand list + filled form + output
+panel) whose **output panels are genuinely populated by real pinned-CLI runs**.
+
+- **New tutorial book** under [`tutorial/`](tutorial/): 7 chapters (orientation
+  + the 5 journeys), ~6,800 words of prose, embedding **50 whole-window
+  screenshots** + 98 run transcripts. Byte-copied from the pinned
+  `mnemonic-gui-v0.56.0` snapshot corpus (its tag-push `tutorial-snapshots` +
+  `snapshots` CI runs — the provenance anchors — verified `success` pre-copy).
+- **Release-attach only.** The rendered `gui_example.pdf` (~50 screenshots) is
+  **never committed** — `make gui-example-pdf` builds it and the `manual-gui-v*`
+  release job attaches it (this release is its sole distribution channel).
+  Discoverability pointers added to the toolkit README + `docs/manual-gui/README.md`.
+- **Three new byte-gates** in `make lint` (`verify-tutorial-figures`,
+  `verify-tutorial-transcripts`, `tutorial-xref`): the committed
+  figures/transcripts are byte-identical to the pinned tag; every artifact is
+  embedded exactly once (no orphan, no dead include); fail-closed both directions.
+- **F1 structural ripple.** The GUI's export-wallet `--template` gained a
+  `(none)` unset sentinel at v0.56.0 (so the watch-only-export journey can clear
+  the template and drive `--descriptor`); the one affected structural render
+  (`mnemonic-export-wallet.gui`) + the required `(none)` reference section
+  (`45-export-wallet.md`) + the schema inventory are re-pinned. `gui-schema-coverage`
+  982 → **983 anchors**; `verify-figures-gui` 61/61 unchanged (append, not prepend).
+- **Pin bump otherwise inert:** v0.56.0 is pin-neutral for the four implied CLI
+  tags; no CLI-surface / flag name/kind/enum change.
+
+The v1.2.0 release also publishes the two prior manual cycles that merged to
+master but had not yet been tagged (batched into this release):
+
+---
+
 **Patch — hint-text ghost depiction for schema-defaulted Text/Path fields +
 GUI pin bump `mnemonic-gui-v0.54.0` → `mnemonic-gui-v0.55.0` (the manual leg
 of the hint-text-defaults cycle, `design/SPEC_gui_hint_text_defaults.md`).**
