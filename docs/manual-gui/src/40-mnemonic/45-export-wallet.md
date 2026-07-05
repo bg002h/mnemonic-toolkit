@@ -49,7 +49,7 @@ as [`mnemonic bundle --template`](#mnemonic-bundle-template), **plus**
 the GUI-only `(none)` unset sentinel below — export-wallet's dropdown
 appends an empty entry so the reader can clear `--template` and drive
 `--descriptor` instead. On a fresh form the dropdown materialises to
-`bip84` (the demo-seed default; `bip44` in the virgin schema render),
+`bip44` (the first option — `--template` has no schema default),
 so `--descriptor` starts `Disabled` and the reader chooses `(none)`
 to unlock it. `bundle`'s `--template` has no such sentinel — the
 11-vs-10 asymmetry is intended and export-wallet-scoped.
@@ -114,7 +114,7 @@ The empty-string unset sentinel — **no template selected**. Unlike
 [`build-descriptor --archetype`](#mnemonic-build-descriptor-archetype),
 where `(none)` is the Dropdown's *default*, here `(none)` is an
 **appended** entry the reader selects deliberately: export-wallet's
-`--template` still materialises to `bip84`/`bip44` on load, so choosing
+`--template` still materialises to `bip44` on load, so choosing
 `(none)` clears `--template` from the assembled argv, flips
 `has_value("--template")` to false, and lets the conditional-visibility
 engine stop marking [`--descriptor`](#mnemonic-export-wallet-descriptor)
