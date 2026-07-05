@@ -401,6 +401,14 @@ jobs:
           name: m-format-gui-manual-html
           path: docs/manual-gui/build/
 
+      - name: Download gui_example PDF artifact
+        # The tutorial book PDF (RELEASE-ATTACH ONLY — never committed). The
+        # build job uploaded it as `gui-example-pdf`; attach it below.
+        uses: actions/download-artifact@v8
+        with:
+          name: gui-example-pdf
+          path: docs/manual-gui/build/
+
       - name: Ensure GitHub release exists for this tag
         working-directory: docs/manual-gui
         run: |
@@ -415,6 +423,12 @@ jobs:
       - name: Upload PDF asset to release
         working-directory: docs/manual-gui
         run: gh release upload "$REF_NAME" build/m-format-gui-manual.pdf --clobber
+
+      - name: Upload gui_example tutorial PDF asset to release
+        # The standalone GUI worked-journeys tutorial (docs/manual-gui/tutorial/),
+        # release-attach-only — this is the sole distribution channel for it.
+        working-directory: docs/manual-gui
+        run: gh release upload "$REF_NAME" build/gui_example.pdf --clobber
 
       - name: Upload HTML asset to release
         # The self-contained pandoc --standalone HTML (embedded CSS) is also

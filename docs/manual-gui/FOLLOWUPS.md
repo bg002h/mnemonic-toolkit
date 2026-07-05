@@ -167,8 +167,8 @@ location, a What description, a Status (`open` | `resolved <commit>`
   `verify-tutorial-transcripts`, 12 `tutorial-xref`); the `tutorial/` chapter book +
   `gui-example-pdf`/`gui-example-html` Makefile targets + `manual-gui.yml` build
   wiring; then (P3) editorial prose + (P4) the `manual-gui-v*` release-attach.
-- **Status:** open (flips to RESOLVED in this repo's P4 shipping commit — status-flip
-  discipline). **Tier:** `cross-repo` (paired legs; GUI tag BEFORE the toolkit pin).
+- **Status:** RESOLVED 2026-07-05 — shipped as `manual-gui-v1.2.0` (P4 shipping
+  commit). **Tier:** `cross-repo` (paired legs; GUI tag BEFORE the toolkit pin).
 - **Companion:** mnemonic-gui `FOLLOWUPS.md::gui-example-tutorial-book` (GUI leg,
   filed at its P1.1) + toolkit `design/FOLLOWUPS.md::gui-example-tutorial-book`.
 
