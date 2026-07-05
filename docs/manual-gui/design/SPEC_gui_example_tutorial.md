@@ -286,17 +286,28 @@ from the pinned GUI clone, committed.
 
 **(c) Build:** extend `docs/manual-gui/Makefile` with `gui-example-pdf` /
 `gui-example-html` targets (same pandoc→xelatex recipe, own title page, resource
-paths adding `figures/tutorial` + `transcripts/tutorial`). Deliverable **committed at
-`docs/gui_example.pdf`** — the locked brief says "a `gui_example.pdf` artifact beside
-`docs/Examples.pdf`", and Examples.pdf is the committed-PDF precedent. Gates run on
-sources/figures/transcripts, never on PDF bytes (xelatex embeds timestamps). The PDF
-is also attached by the manual-gui release job, which is **tag-triggered on
-`manual-gui-v*`** (latest precedent: `manual-gui-v1.1.0`) — the attach stays dormant
-until P4 cuts the next `manual-gui-v*` tag (named in §9 P4; R0 I3). Documentation
-note, not a gate gap (R0 M4c): `manual-gui.yml`'s path filter does not include
-`docs/gui_example.pdf`, so PDF-only touches don't trigger the workflow — gates never
-gate PDF bytes anyway; P3 either adds the path to the filter or records this note
-where the workflow is wired.
+paths adding `figures/tutorial` + `transcripts/tutorial`). **Deliverable is
+RELEASE-ATTACH ONLY — `gui_example.pdf` is NOT committed to the repo. (AMENDED by
+USER DECISION, 2026-07-05, at plan-R0 I2.)** The original "committed at
+`docs/gui_example.pdf`" reading over-read the locked brief's "beside
+`docs/Examples.pdf`" (a location statement) into "commit", on a precedent that is
+not weight-comparable (Examples.pdf is a 215 KB text PDF; this book embeds 51
+whole-window PNGs ≈ ~16 MiB, re-committed per corpus change) — and the manual-gui
+stack's own book PDF (`m-format-gui-manual.pdf`) is release-attached, not
+committed. Instead: the PDF is **built + gated in CI** (build job + embed census)
+and **attached by the manual-gui release job**, which is **tag-triggered on
+`manual-gui-v*`** (latest precedent: `manual-gui-v1.1.0`) — the attach goes live
+when P4 cuts the next `manual-gui-v*` tag (named in §9 P4; R0 I3); "beside
+`docs/Examples.pdf`" is satisfied by a **committed README/docs POINTER** beside
+Examples.pdf linking the latest release asset. Gates run on
+sources/figures/transcripts, never on PDF bytes (xelatex embeds timestamps). The
+former R0-M4c path-filter note is MOOT (no committed PDF path exists to filter on;
+tag pushes bypass `paths` regardless). This amendment supersedes the "committed
+`docs/gui_example.pdf`" phrasing wherever else this spec restates it (the §3
+architecture diagram's "committed deliverable" box; §8's "committed
+`docs/gui_example.pdf` refreshed in the shipping PR" line; §9 P4's "committed
+`docs/gui_example.pdf`") — those lines are intentionally left un-rewritten per the
+surgical-amendment scope; §3.2(c) is authoritative.
 
 **(d) Gates** (new lint phases in `docs/manual-gui/tests/lint.sh`, wired into
 `manual-gui.yml`): see §8.
