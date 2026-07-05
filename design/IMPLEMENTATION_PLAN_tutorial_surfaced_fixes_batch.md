@@ -62,7 +62,11 @@ P1.5 whole-diff review → PR → CI → merge → release 0.57.0 → TAG mnemon
         │  (GUI tag MUST precede the toolkit pin — paired-PR/pin rule)
         ▼
 P2.1 pin bump v0.56.0→v0.57.0 → ONE toolkit-side regen from the FRESH TAG CLONE
-        (28 .gui re-pin [restore.gui carries BOTH deltas] + 28 gallery PNG re-copy
+        (28 .gui re-pin [restore.gui carries BOTH deltas] + 32 gallery PNG re-copy
+         [P1.2-R0 ASYMMETRIC correction: .gui STAYS 28 — the composite eye is NOT
+          depicted in emit — but PNGs = 32 = the 28 <masked>-emit forms ∪ the 4
+          composite-default-argv-secret forms final-word/seed-xor-split/seedqr-encode/
+          ms-shares-split, which mask-on-load visually only]
          + tutorial figure re-copy [moved subset of 50] + inventory regen; transcripts ZERO delta)
         ▼
 P2.2 prose (reference + tutorial) → make html → make lint 12/12 → gui_example rebuild + embed census
@@ -99,7 +103,7 @@ P2.3 whole-diff review → merge → CHANGELOG + FOLLOWUP flips → TAG manual-g
 8. Slot-arm isolation (`(Path, hint)` arm eye-free; eye only on `is_secret_bearing()` rows) + composite gating (eye tracks `is_secret_node`; node switch secret→non-secret removes the eye AND clears any stale latch for that Id).
 
 **Impl files:** `src/form/secret_widget.rs` (predicate replaces `.password(true)` at `:58`; **`ui.horizontal` wrap + stable per-field `egui::Id` via the TextEdit `Response.id`** — reveal-R0 M-6; call sites `app_window.rs:826`, `widget.rs:116`, `widget.rs:159` must stay layout-sane); `src/form/slot_editor.rs` (secret arm `:52` only, per-row Id); `src/form/widget.rs` (`:606`, predicate ∧ `is_secret_node`); the reveal key + clear-trigger wiring (Run dispatch path + tab handling in `app_window.rs`; `ctx.input(|i| i.focused)`); `src/form/render_emit.rs` (ASCII marker on `MASKED`-bearing rows — `flag_value_str` `:598-600`, positional `:667`; `project_form`/`control_class` `:439-460` gain the eye fact); `tests/gui_render_faithfulness.rs` (both sides + negative); `tests/gui_render_emit.rs` — re-pin exactly the exact-ASCII pins whose forms carry secret rows (expected: mnemonic-inspect, ms-inspect, the bundle reference; enumerate empirically, record in the phase report).
-**The ONE gallery re-pin (R-A):** `UPDATE_SNAPSHOTS=1 cargo test --test gui_form_snapshots` — the expected mover set is **census-derived, not a literal** (R0-m4): `moved-PNG-set == grep -rl '<masked>' docs/manual-gui/transcripts/gui/` (= 28 at `2ed3d369`; the number is the census output, and STOP-5 fires on ANY deviation rather than trusting the literal). export-wallet expected UNMOVED (`[ slot editor: 0 rows ]` on load). **P1.2 must explicitly confirm no composite form (`widget.rs:606`) renders an on-load eye** (R0-m6 watch-item — a composite whose on-load node defaults to a secret `node_type` would be the likely 29th-mover; verify each composite form's on-load node is non-secret). Any 29th mover or any unmoved expected-mover = STOP-5.
+**The ONE gallery re-pin (R-A):** `UPDATE_SNAPSHOTS=1 GUI_SNAPSHOTS=1 WGPU_BACKEND=gl LIBGL_ALWAYS_SOFTWARE=1 cargo test --test gui_form_snapshots` — **P1.2-R0-CORRECTED mover set = 32 PNGs** (R0-m4 rule falsified): `32 = the 28 <masked>-emit forms ∪ the 4 composite-default-argv-secret forms` (`final-word`, `seed-xor-split`, `seedqr-encode`, `ms-shares-split` — their `--from`/`--share` default node is secret → masked value field on load → visual eye; these have NO `.gui` delta, the composite eye is not emitted). export-wallet UNMOVED (0 slot rows on load). **Re-pin via a FULL UPDATE regen, NOT threshold-failure selection** — `mnemonic-addresses` is a SUB-THRESHOLD mover (its eye is under dify-0.6 on its wide `--language`-dropdown form, so threshold shows only 31; its bytes DO change and must be committed) — and **revert the ~2 GL-local noise forms** a regen perturbs (`mk-encode`, `xpub-search-address-of-xpub` — secretless, not real movers) to land a clean 32. Any 33rd real mover or any unmoved expected-mover = STOP-5.
 **Gates:** all new cells green; FULL suite `--jobs 2`; clippy both configs; `--no-default-features` build; `schema_mirror` / `gui_schema_conditional_drift` / partition / archetype gates untouched-green (the eye adds no schema surface — ruling 5). **Scoped post-impl review (opus)** → GREEN before P1.3.
 
 ### P1.3 — restore `RESTORE_TEMPLATES` (small, strictly after P1.2)
@@ -133,7 +137,7 @@ P2.3 whole-diff review → merge → CHANGELOG + FOLLOWUP flips → TAG manual-g
 | Surface | Expected |
 |---|---|
 | `transcripts/gui/*.gui` via `make verify-examples-gui` (`Makefile:305-307`) | **exactly 28 re-pins** (the masked-on-load set — eye marker on secret rows). `mnemonic-restore.gui` carries BOTH deltas: `:4` `--template dropdown[bip44,…,tr-sortedmulti-a,(none)] -> bip44` (format precedent: `mnemonic-export-wallet.gui:2`) AND the `:14` `--passphrase` marker row. |
-| `figures/gui/*.png` (phase 9 `verify-figures-gui`) | **28 byte-copies** from the pinned clone (same set). |
+| `figures/gui/*.png` (phase 9 `verify-figures-gui`) | **32 byte-copies** from the pinned clone (P1.2-R0 asymmetric: the 28 `.gui`-movers ∪ the 4 composite-visual-only movers `final-word`/`seed-xor-split`/`seedqr-encode`/`ms-shares-split`; `.gui` set is 28, PNG set is 32). |
 | `figures/tutorial/*.png` (phase 10) | re-copy all 50 from the pinned clone; git shows the moved subset (= the P1.4 report's list). Count stays 50; stems census green. |
 | `transcripts/tutorial/*` (phase 11) | **ZERO delta** (98 files byte-identical) — any delta = STOP-1. |
 | `tests/expected_gui_schema_inventory.json` via `extract_gui_schema.py` | restore `--template` (`:1949` block) gains trailing `""` — documentary/un-gated (grep-confirmed no `.rs`/lint consumer; shipped-review precedent), regen for hygiene. |
