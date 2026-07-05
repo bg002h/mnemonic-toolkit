@@ -1,6 +1,6 @@
 # SPEC — `gui_example.pdf`: a generated + gated GUI tutorial mirroring Examples.pdf's wallet journeys
 
-- **Status:** DRAFT — awaiting R0 architect review (MANDATORY gate; no implementation before GREEN 0C/0I).
+- **Status:** DRAFT — R0-GREEN (round 2, 2026-07-05; r1 RED 0C/3I+4M folded) — cleared for the P0 spike (MANDATORY gate; no implementation before GREEN 0C/0I).
 - **Cycle:** `gui_example_tutorial` (cross-repo: mnemonic-gui GUI leg + mnemonic-toolkit book leg).
 - **Author:** RECON + SPEC session, 2026-07-02.
 - **Source SHAs (all citations verified at write time against these):**
@@ -11,6 +11,13 @@
   - `gui-example-tutorial-recon-B-runner-pane.md` — runner + populated-pane (verdict: FEASIBLE-WITH-NORMALIZATION; note: its "recipe A BLOCKED" is unblocked by the A-extraction)
   - `gui-example-tutorial-recon-C-fixtures-journeys.md` — journeys/fixtures/masking (all journeys GUI-expressible; secrets = 3 published test phrases only)
   - `gui-example-tutorial-recon-DE-corpus-book.md` — corpus conventions + book build/gates (reusable-vs-new inventory)
+- **R0 reviews (persisted verbatim, this dir `agent-reports/`):**
+  - `gui-example-spec-r0-round-1.md` — RED 0C/3I (+4M); I1–I3 + M1–M4 folded into this
+    revision.
+- **Cite-nit record (R0 M4b — recon reports preserved verbatim; this spec's cites are
+  the verified ones):** recon DE cites `gen.sh:25` for the Examples version assert —
+  the correct line is `gen.sh:22` (the spec's cites were already correct and are
+  kept); recon A's modal-Run cite `main.rs:1108` is `:~1110` at HEAD.
 - **Dispatch note:** recon B's first final-report emission was lost to an API stream
   timeout; the agent was resumed and re-emitted from intact context. Flagged per the
   dispatch-failure convention; no silent inline substitution occurred.
@@ -170,6 +177,19 @@ update needed** (the paired-PR rule is satisfied vacuously — state this in the
   .with_pixels_per_point(2.0).build_state(|ctx, app| app.ui(ctx), app)` where `app =
   MnemonicGuiApp::new_headless(fixed_appstate_all_found(), None, None)`. **Fixed
   window size** (spike-ratified, §4) — no `fit_contents()`.
+- **`pinned-tier-version-gate` (HARD, named — the house's own `gen.sh:22` pattern
+  adopted; R0 I1).** Before ANY step renders, the harness probes `<cli> --version`
+  for every CLI the manifest will spawn and hard-fails on any mismatch with the
+  tutorial's pinned tier (expected strings derived from `pinned-upstream.toml` /
+  the schema `pinned_version` constant, `schema/mnemonic.rs:4620`). Rationale: the
+  window's `Pinned:` line renders a schema CONSTANT (`main.rs:518`), not a probed
+  value, and `spawn_and_capture` resolves bare argv[0] against the **real `$PATH`**
+  at click time (`path_detect::detect`, `main.rs:~1232`) — so without this gate a
+  wrong-tier local regen (`UPDATE_SNAPSHOTS` flow) would render honest-looking
+  panes + transcripts from the wrong binary, detectable only as an undiagnosed
+  downstream byte/pixel diff (or not at all when tiers agree). The gate makes a
+  wrong-tier render impossible and machine-guards the `Pinned:` label's honesty in
+  every shot. Also pinned in the determinism contract (§6 item 4).
 - Executes the **step manifest** (one `#[test]` fn, steps strictly sequential — this
   permits a single `set_current_dir` to the fixture dir so Path fields hold short
   display names like `policy.desc`, and permits intra-journey chaining):
@@ -180,6 +200,28 @@ update needed** (the paired-PR rule is satisfied vacuously — state this in the
   `Run` for secret steps, snapshotting `<stem>-modal.png` where the manifest says so);
   the subprocess completes **in-frame** (recon B §1); `harness.run()`; snapshot
   `<stem>-run.png`.
+- **`SAME-FRAME-COMPLETION` assertion (named per-step tripwire — R0 I2).**
+  Immediately after the Run-click frame (modal-Run frame for secret steps) and its
+  single `harness.run()` settle — BEFORE any further frames or the `-run.png`
+  snapshot — the harness asserts `app.last_run.is_some()` (or `last_run_error` for
+  a detect-fail step) with a failure message naming the invariant: *"runner must
+  complete in the Run-click frame — populated-pane contract, SPEC §6.5; any
+  async-runner change is a USER-decision downgrade"*. A future async runner
+  (spinner/cancel-button UX evolution) then surfaces as ONE named invariant breach,
+  not a confusing 25-file pixel diff — and the seeded-`last_run` "fix" someone
+  might reach for is precisely the downgrade the user reserved for themselves
+  (§4 STOP menu; weakening the populated-pane contract is a USER decision, never an
+  implementation choice). P1 also leaves a pointer comment at `spawn_and_capture`
+  citing this contract so a future refactorer finds it from the code side.
+- **No-shot transcript steps (`shots: 0`) — production path (R0 M1).** Steps marked
+  prose + transcript only in §5.3 (J2 devices-1/2 converts, the J4 NUMS
+  bundle/restore) and the `--json` bundle runs the J3/J4 restore chains consume are
+  ORDINARY manifest steps executed through the exact same GUI-driven Run path —
+  driven form, real click(s), real pinned-CLI execution, RunResult persisted and
+  byte-gated as `<stem>.stdout.txt`/`.stderr.txt`/`.exit.txt` — with a manifest
+  `shots: 0` (no PNG captured). Every gated transcript therefore satisfies the
+  "populated by a real pinned-CLI execution in the harness" contract, and the
+  transcript census stays manifest-derived (run count ≥ shot-bearing step count).
 - After each Run: persist the **full RunResult text** as corpus files
   `tests/snapshots/tutorial/<stem>.stdout.txt` (+ `.stderr.txt` when non-empty, +
   exit code in a one-line `.exit.txt`), byte-gated exactly like the PNGs
@@ -213,9 +255,22 @@ rationale as the snapshots job: the tag run is the book leg's provenance anchor)
 
 **(e) Pin bump + tag.** Bump `mnemonic-gui/pinned-upstream.toml` toolkit tier
 v0.74.0 → latest toolkit tag (v0.75.0) *early in P1* — this fires the `schema_mirror`
-drift gate by design (lagging-indicator discipline); resolve any accumulated delta
-before capture so the tutorial renders the current tier. Ship as
-`mnemonic-gui-v0.56.0` (GUI = PR + CI-before-tag per house release ritual).
+drift gate by design (lagging-indicator discipline); resolve the delta before capture
+so the tutorial renders the current tier. **Expected delta — verified at R0 round 1:
+ZERO flags.** Between the v0.74.0 and v0.75.0 tags the only
+`crates/mnemonic-toolkit/src` changes are `cmd/inspect.rs` + `error.rs` (the md1
+`template:` line + INSPECT_SCHEMA_VERSION 1→2): no clap-surface change, so the
+schema_mirror flag-name delta is zero and the sibling mirrors
+(`archetype_schema_mirror`, `spec_nodes_mirror` [pins spec_schema_version==1,
+untouched], `xpub_search_schema_mirror`, …) are unaffected; the GUI's real-CLI cells
+drive `decode-address`, not `inspect --json`, so the wire-shape bump is inert for GUI
+tests. The mandatory catch-up is exactly two edits: the pin line + the
+`pinned_version: "mnemonic 0.74.0"` schema string (`schema/mnemonic.rs:4620`) — a
+budgeted edit, not an open risk. That string renders ONLY in the real window
+(`main.rs:518`), NOT in the 61-form corpus or `.gui` renders, so the bump does not
+invalidate the existing corpora (§3.2(e)'s one-pin-anchors-three-corpora claim
+holds). Ship as `mnemonic-gui-v0.56.0` (GUI = PR + CI-before-tag per house release
+ritual).
 
 ### 3.2 Toolkit leg (book — zero `src/` changes)
 
@@ -235,7 +290,13 @@ paths adding `figures/tutorial` + `transcripts/tutorial`). Deliverable **committ
 `docs/gui_example.pdf`** — the locked brief says "a `gui_example.pdf` artifact beside
 `docs/Examples.pdf`", and Examples.pdf is the committed-PDF precedent. Gates run on
 sources/figures/transcripts, never on PDF bytes (xelatex embeds timestamps). The PDF
-is also attached to the manual-gui release job on tags.
+is also attached by the manual-gui release job, which is **tag-triggered on
+`manual-gui-v*`** (latest precedent: `manual-gui-v1.1.0`) — the attach stays dormant
+until P4 cuts the next `manual-gui-v*` tag (named in §9 P4; R0 I3). Documentation
+note, not a gate gap (R0 M4c): `manual-gui.yml`'s path filter does not include
+`docs/gui_example.pdf`, so PDF-only touches don't trigger the workflow — gates never
+gate PDF bytes anyway; P3 either adds the path to the filter or records this note
+where the workflow is wired.
 
 **(d) Gates** (new lint phases in `docs/manual-gui/tests/lint.sh`, wired into
 `manual-gui.yml`): see §8.
@@ -267,7 +328,11 @@ Spike questions (each with a measurable exit):
   `--descriptor-file`) — one click; (ii) secret (J1 `bundle` with one `@0.phrase`
   slot) — click Run → assert modal appears with masked argv → snapshot → click modal
   Run. Exit: pane populated same-frame; double-run byte-identical; argv echo shows
-  bare `mnemonic` argv[0]; stdout slice + exit badge as expected.
+  bare `mnemonic` argv[0]; stdout slice + exit badge as expected; **and the ComboBox
+  POPUP drive is an explicit exit criterion** — the subcommand-selection popup
+  renders on a separate egui layer, every tutorial step depends on selecting through
+  it in the whole-window context, so S2 must demonstrate the popup open + option
+  click explicitly, not implicitly (R0 M2i).
 - **S3 — scroll positioning.** Try in order: (i) kittest/AccessKit scroll actions,
   (ii) injected `egui::Event::MouseWheel`/scroll raw input, (iii) the guaranteed
   fallback — a scroll-offset seam on the extracted app (test-set field applied via
@@ -284,7 +349,14 @@ Spike questions (each with a measurable exit):
   target widgets inside the full window via AccessKit node lookup (label collisions
   across panels are the risk; ratify a lookup discipline, e.g. scoping queries to the
   central panel's subtree). Includes one repeating-row drive (`--md1`) and one
-  SlotEditor row drive.
+  SlotEditor row drive — the latter **starting from the fresh-app DEMO SEED**
+  (`main.rs:300-316`: a fresh app pre-fills `mnemonic:bundle` with
+  `--network=mainnet`/`--template=bip84`/`--account=0` plus one **empty Xpub slot
+  row**): the drive must flip that seeded row's subkey to `phrase` (the J1 path),
+  ratifying that the harness controls/accounts for the seeded baseline rather than
+  assuming empty forms — the same baseline the Chapter-0 orientation shot renders
+  (R0 M2ii). The ComboBox popup selection is likewise an S5 exit criterion (shared
+  with S2).
 
 **STOP condition.** If S1 or S2 cannot reach cross-env sub-threshold determinism
 (e.g. paneled-window rendering artifacts under lavapipe, or in-frame subprocess
@@ -343,7 +415,10 @@ marked; multi-scroll `-form2` shots excluded from this count, spike may add a fe
 
 Convert steps for devices 1/2 (J2) and the NUMS bundle/restore (J4) are prose +
 transcript only (no shots) to keep the corpus lean — the interaction is identical to
-the shot-bearing sibling step. External `bitcoin-cli` steps and Appendix B are prose
+the shot-bearing sibling step. These (and the `--json` chaining runs the J3/J4
+restores consume) are ordinary `shots: 0` manifest steps executed through the same
+GUI-driven Run path (§3.1b): their transcripts are gated real-harness executions
+like every other. External `bitcoin-cli` steps and Appendix B are prose
 callouts (§10).
 
 Corpus size estimate: 51 PNGs at the ratified fixed size (1840×1440–2560×1800
@@ -385,9 +460,18 @@ The corpus is deterministic given:
    sequential `#[test]` (stable frame sequence; no parallel-test cwd races).
 3. **Injected `AppState`** (all four CLIs `Found`) — no `$PATH`-dependent tab
    grey-out; `state_path = None` — no persisted-toggle interference (fresh-app
-   defaults show argv+exit+stdout+stderr, `main.rs:271`).
+   defaults show argv+exit+stdout+stderr, `main.rs:271`). The fresh-app baseline
+   INCLUDES the deterministic **demo seed** (`main.rs:300-316`: `mnemonic:bundle`
+   pre-filled `--network=mainnet` + `--template=bip84` + `--account=0` + one empty
+   Xpub slot row) — rendered as-is by the Chapter-0 orientation shot and mutated by
+   J1; any future change to the demo seed moves tutorial pixels and is understood as
+   a corpus-regenerating change (R0 M3).
 4. **Pinned CLI tier** on `$PATH` as bare names (tutorial-snapshots job installs the
-   `pinned-upstream.toml` tags). Pane argv echo is bare-`cli_name` argv[0] by
+   `pinned-upstream.toml` tags), **HARD-asserted by the `pinned-tier-version-gate`**
+   (§3.1b): before any render the harness probes each spawned CLI's `--version` and
+   hard-fails on tier mismatch (the `gen.sh:22` pattern) — a wrong-tier local regen
+   can never produce honest-looking corpus bytes, and the window's `Pinned:` label is
+   machine-guarded in every shot. Pane argv echo is bare-`cli_name` argv[0] by
    production construction (`invocation.rs:115-116`) — no path normalization needed on
    the click path. (The I4-style argv[0]-overwrite pattern is NOT used for shots.)
 5. **Deterministic commands only**: every journey command is a pure function of its
@@ -396,6 +480,11 @@ The corpus is deterministic given:
    timing-free; refusal steps pin exact non-zero exits). Runner env is inherited +
    `MNEMONIC_FORCE_TTY=1` (`runner.rs:199`) — output is captured in TTY mode,
    consistently for pane and transcript since both come from the same RunResult.
+   **Synchronous in-frame runner completion is a PINNED INVARIANT of the tutorial
+   corpus** — enforced per step by the named `SAME-FRAME-COMPLETION` assertion
+   (§3.1b) and cross-referenced by a pointer comment at `spawn_and_capture`;
+   weakening it (async runner, spinner, seeded `last_run`) is a USER-decision
+   downgrade of the populated-pane contract, never an implementation choice (R0 I2).
 6. **cwd pinned** to the fixture dir for the whole test (short relative display names
    in Path fields and argv echoes; runner inherits cwd, sets none itself — recon B §6).
 
@@ -441,10 +530,13 @@ The corpus is deterministic given:
 
 **New (GUI leg):**
 - `tutorial-snapshots` CI job = snapshots recipe + pinned-CLI install (§3.1d).
+- `pinned-tier-version-gate`: hard `--version` probe of every spawned CLI against the
+  pinned tier before any render (§3.1b, §6 item 4) — runs in local regen AND CI.
 - Dual census: shots (`.new.png` == manifest count 51) AND transcripts (regenerated
-  `.stdout.txt` byte-diff + count == run-step count).
-- Per-step exit-code + chaining + secret-allowlist + driven-field-visibility
-  assertions (§5.4, §7) — these run inside the same gated test.
+  `.stdout.txt` byte-diff + count == run-step count, incl. `shots: 0` steps).
+- Per-step exit-code + chaining + secret-allowlist + driven-field-visibility +
+  `SAME-FRAME-COMPLETION` assertions (§3.1b, §5.4, §7) — these run inside the same
+  gated test.
 
 **Reused unchanged (book leg):** markdownlint, cspell, lychee --offline, pandoc
 build + `src="data:image/png"` embed-census pattern, `include-transcript.lua`,
@@ -475,18 +567,28 @@ pinned-clone plumbing (`manual-gui.yml:41-63`), release/gh-pages job shape.
 - **P1 (GUI):** app-shell extraction (§3.1a) + invariants (byte-identical production
   behavior; `--no-default-features` builds; full `cargo test` suite green — house
   rule: full-package suite, not targeted); toolkit pin bump v0.74.0→v0.75.0 +
-  schema-mirror delta resolution; harness skeleton + Chapter 0/J1 pilot steps (5
+  the pre-scoped zero-flag delta catch-up (§3.1e); harness skeleton incl. the
+  `pinned-tier-version-gate` + the `SAME-FRAME-COMPLETION` assertion + the
+  `spawn_and_capture` pointer comment (§3.1b) + Chapter 0/J1 pilot steps (5
   shots) + `tutorial-snapshots` CI job live.
 - **P2 (GUI):** full manifest (25 steps / 51 shots + transcripts), chaining,
-  secret-hygiene + visibility assertions, corpus committed, censuses green →
+  secret-hygiene + visibility assertions, corpus committed, censuses green;
+  **`mnemonic-gui/CHANGELOG.md` entry** for the v0.56.0 leg (incl. the scroll-seam
+  test-only-surface doc if S3 ratifies fallback iii — §11) →
   release + tag `mnemonic-gui-v0.56.0` (PR + CI-before-tag).
 - **P3 (toolkit):** pin bump to v0.56.0; figures/transcripts byte-copies; chapters
   (prose adapted per recon C §5, version-skew callout, Chapter-0 conventions incl.
-  no-titlebar caveat); Makefile targets; lint phases 10–12; workflow wiring; local
-  full-gate run.
-- **P4 (toolkit):** committed `docs/gui_example.pdf` + release-attach wiring; README
-  pointers (both READMEs per release ritual if they reference doc artifacts);
-  FOLLOWUP filings/flips (§11); ship.
+  no-titlebar caveat); Makefile targets; lint phases 10–12; workflow wiring (incl.
+  the path-filter decision for `docs/gui_example.pdf`, §3.2c); start the
+  **`docs/manual-gui/CHANGELOG.md` entry**; local full-gate run.
+- **P4 (toolkit):** committed `docs/gui_example.pdf` + release-attach wiring; **cut
+  the `manual-gui-v*` tag that ships the attach** (`manual-gui-v1.2.0`;
+  `manual-gui.yml` is tag-triggered on `manual-gui-v*`, latest precedent
+  `manual-gui-v1.1.0`) — OR explicitly defer the attach to the next manual-gui tag
+  as a stated decision in the shipping PR, never an omission (R0 I3); finalize the
+  `docs/manual-gui/CHANGELOG.md` entry (BOTH CHANGELOG sites now covered — GUI-side
+  landed in P2); README pointers (both READMEs per release ritual if they reference
+  doc artifacts); FOLLOWUP filings/flips (§11); ship.
 
 Cross-repo ordering is strict: GUI tag before toolkit pin bump (checked-in-corpus +
 pin flow, recon E7). Toolkit leg has **zero `src/` changes** (no version-site ritual
@@ -542,7 +644,9 @@ mnemonic-gui `FOLLOWUPS.md` with cross-citing `Companion:` lines per house rule)
    tag; lychee/markdownlint/cspell green over the new book.
 2. All 25 steps / 51 shots render the REAL application window (post-extraction `ui()`
    loop) at one fixed size; every post-Run shot's pane was populated by a real pinned
-   CLI execution in the same test; refusal steps show real non-zero exit badges.
+   CLI execution in the same test — tier-verified up front by the
+   `pinned-tier-version-gate` and pinned per step by the `SAME-FRAME-COMPLETION`
+   assertion (§3.1b); refusal steps show real non-zero exit badges.
 3. Secret material in the entire pipeline ∈ {S0, S1, S2} (machine-asserted); every
    secret entry renders masked; argv echoes and modal shots contain `••••`, never
    plaintext.
