@@ -1,0 +1,1 @@
+error: --format bsms does not support taproot (P2trMulti); BIP-129 §1 prerequisites do not yet include BIP-386. Real emit support is tracked at FOLLOWUP `bsms-taproot-emit` and depends on a BIP-129 spec update. Use --format bitcoin-core (Core-importable) or --format sparrow (Sparrow JSON, taproot-capable) for taproot watch-only setup.

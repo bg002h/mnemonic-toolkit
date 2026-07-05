@@ -1,0 +1,89 @@
+# ms1 (omitted — descriptor watch-only mode)
+
+# mk1[0] (cosigner 0 xpub + origin)
+mk1qp qwu7z qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3w0za 5sl45 h3gq4 23m6z y
+mk1qp qwu7z pptlq 84yqs zqq3q yqszq q3pyq szqqs pygkg 08aue tmv44 hccjz 40ltk n8tds wlxkk 6gs50 wsfd6 vu4je v3ev6 gt373 lq8xh 8g6j9 3
+mk1qp qwu7z z046k gg44q g8y4m a0tcv s4652 m56zc jcvkm qtuj2 eeu8u ted94 rr4ry qzyds m82wd d7tsz g4zxg rcwzd 4x
+
+# mk1[1] (cosigner 1 xpub + origin)
+mk1qp qwulz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3w0za 5lhhr twwgv df54n d
+mk1qp qwulz ppgps fz9jr el0x2 7mfff 6p2ep h8wft p5uf6 f2zcg efcpu pmel7 5q543 5j7se ugaj5 jr7qy ur6vt 76esn w4xmr k0uqt 4cgg2 0799l 7
+mk1qp qwulz zrsvh jph4d mspsr gteuv kdcdz mg60t uaqn2 du9tt gvgsz ydlsp ucf78 a
+
+# mk1[2] (cosigner 2 xpub + origin)
+mk1qp qwuuz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3w0za 5w03n xxysw yg9yf k
+mk1qp qwuuz pptlq 84yqs zqq3q yqszq q3qvq szqqs pygkg 08aue tm0x5 x2chn kzzrn 7u6mu hgl2x tc2cm mpjvw pfedz 9a4lt 663dp h3hgq fqalu n
+mk1qp qwuuz zz6su 0pmgq f6hp5 cgek8 xvhwv 6up59 6qet8 r2ge4 xx85c 0w2q2 6w4vu 8rtuu umn3k s65su z44d4 qhrjk qm
+
+# mk1[3] (cosigner 3 xpub + origin)
+mk1qp qwuaz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3w0za 5p8ny 6ezch rs2tc l
+mk1qp qwuaz pptlq 84yqs zqq3q yqszq q3q5q szqqs pygkg 08aue tm0kk v6grn jlz9g ngvec edvca 6ym3x xxh6k gcc87 973le vvlpw ktl4d 0ddre 4
+mk1qp qwuaz zhpkq das8q gxyd2 0798u achng 45kcn jd6u6 j6f2c fufaq ts02s a6sf0 wj0c3 kustg zu6qn v8fum qzmpu zx
+
+# mk1[4] (cosigner 4 xpub + origin)
+mk1qp qwu6z qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3w0za 59ka6 uksf2 k2w05 f
+mk1qp qwu6z pptlq 84yqs zqq3q yqszq q3quq szqqs pygkg 08aue tmwht 4nvxl mukl3 538ae pq0kv 8dhm4 n4hvq z42yc yd837 u2nyc j3nyn 9x4x2 l
+mk1qp qwu6z z0xxz g0gsq tmwmy 87px3 u9mlm 3vvmn 3jaaf e7gyn y7hjq ysfhj fzfaf 5hs5j wzlk7 dersh h28f7 0kljt j7
+
+# mk1[5] (cosigner 5 xpub + origin)
+mk1qp qwumz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3hp5g 6ldwj l42nm zxawy r
+mk1qp qwumz p7yps fz9jr m49zl h9uwa c2yk6 kzchx txmn2 20g2j dqhe0 an26d u0jj6 pepd5 tvdqx mm7sy tadra 4txcr 8dsfr jhtp2 7p4jw ury50 9
+mk1qp qwumz zncxe hkwuw 3pthf 7jqgq g9ppq gfzj3 ytnj5 2grkt cdv9l 5l6qp c6ljx 3
+
+# mk1[6] (cosigner 6 xpub + origin)
+mk1qp qwucz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3hp5g 6w4gz jaqte t8vl7 c
+mk1qp qwucz p78lq 84yqs zqq3q yqszq q3qvq szqqs pygkg 0w55t 7u5jk ha82g zj56k z64ug nsusv x2fzg qaqsc 58nun w6crp kl45n ycwe6 0zf4e y
+mk1qp qwucz zeeed uttgq wj677 8e98h wxnx0 urlyv 537nt dqw0k ud9q6 6m3cu 0259d zuqkx cc7g6 t5rqg td7zc suhgm ha
+
+# mk1[7] (cosigner 7 xpub + origin)
+mk1qp qwuez qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3hp5g 6pa24 wzxrq vlrs0 3
+mk1qp qwuez p78lq 84yqs zqq3q yqszq q3q5q szqqs pygkg 0w55t 7ukwu za0x5 402cx h9mt7 uwa8e 0m8pw rwwsw yrng7 l5wv5 yjwq4 ycy5r wlvm5 z
+mk1qp qwuez zzhaw q5rzq grfxd vhs7f jqk8n yx9ar f5pwd plkfl zjsyf lyjc6 a9076 kngyt anlrl 0fkqq cxkc3 tdxun jx
+
+# mk1[8] (cosigner 8 xpub + origin)
+mk1qp qwukz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 3hp5g 6x75h 7rdq2 g6yhx a
+mk1qp qwukz p78lq 84yqs zqq3q yqszq q3quq szqqs pygkg 0w55t 7u5z7 yt5lw ze0l0 qp3zm 0jff4 cx67l 7ldg4 urze4 qwkvv y2zgh wnxv5 m6xvt y
+mk1qp qwukz zydpq 9tygq ghchr nn4tq nx95x g8r20 lnfly dtqcl j743y nhl29 kg23r 4kjzs 99f5a m2wqw txecn dsx94 rr
+
+# mk1[9] (cosigner 9 xpub + origin)
+mk1qp qwuhz qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 39pj9 q9w7l 778ay rv4tf 4
+mk1qp qwuhz pqcps fz9jr mgxrs svpqa 30fme mdzt6 xvuu5 f3tyn vx5gc zq5mf h37dy vgl8c pqndp 7xmq9 vlrva 3pv4c y9aqs wlhwt l57hy ngu92 j
+mk1qp qwuhz z80kz er6aw 9tks6 uukua 6eee0 6m9u7 vdje4 xy0sn q2v3k 9sne8 7u0jh l
+
+# mk1[10] (cosigner 10 xpub + origin)
+mk1qp qwu5z qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 39pj9 q5kc0 nkd9x 2dy6n w
+mk1qp qwu5z pqmlq 84yqs zqq3q yqszq q3qvq szqqs pygkg 0dqcw zpnuh l2rmx paqj6 ey0lv xj46t h52vv 3c3kj u0767 gfu9j w69s2 8dw9w 8pzcg 3
+mk1qp qwu5z zjf3u e8h7q vem79 qk7mr ps95u 6qvt2 h320p rj0sj t49sx fmnpv tp2ty m7uf0 x5qqn 8p7qp yulqs 3a2ry rq
+
+# mk1[11] (cosigner 11 xpub + origin)
+mk1qp qwu4z qqsxq 8w0zk ypmnc 43qwu 79vgr h83tz qaeu2 cs8w0 zkypm nc43q wu79v grh83 tzqae u2cs8 w0zky pmnc4 39pj9 qm76c 0ftdl d4t4z 8
+mk1qp qwu4z pqmlq 84yqs zqq3q yqszq q3q5q szqqs pygkg 0dqcw zpnnf 7n9z8 y7v6y pn235 vam58 em2v5 83vn4 e8sye 3c64t x6q8e 2kgms 23e68 q
+mk1qp qwu4z z7z4r a7j3q v8g7x cllj6 8z7zp lzdwl jzwrf l6tyv d5cgm jalm7 hwazr t30gy 6gs2u s84q5 adcnm 24949 rk
+
+# md1 (multisig wallet policy)
+md1f4 0gpvq 9zem6 jzwrh 4yypm 6jzxw 75sj3 m6jzt 802gg rh4yy vaafp 9rh4y ykw75 ss802 ggemc n9wrf 4m7m5 yt9
+md1f4 0gpvq 2jz2s qrqgy 2efnt vqq7s jqfnt k5ymn jqjat j0suc qg70h 4gdtk emje3 rw4fp 6rc6c nnxqh q4hnx 7rv
+md1f4 0gpvq sckmm q5mng y26gz zzg6v 6mwrd a3qzv 6a4px uusyh 2unu8 xqz8n aa2r2 akwuk vgm4g 7w7kd yafr0 5mf
+md1f4 0gpvq 6gws7 xkx9k 7c9xu 6pzkj qgj9v efnts qqpll lyqsh snxhq qgrcf 5gqzn 2cvas qu79c wuklt fwjcn ckn
+md1f4 0gpvp rg9pw 0za5z 3883w 6pgmn chdq5 3eutk s2twr g3hck hp5gm utms6 yd7x9 cdzxl ry5xg klamn 3a93x 43x
+md1f4 0gpvp g5qx5 2ry2q rt9pj 9qpsk ufqq4 4hccj z40lt kn8td swlxk k6gs5 0wsfd 6vu4j ev3eg qy8f0 nxndx a6x
+md1f4 0gpvp 56glt 4vs3t 2qswf th67h sept4 g4hf5 939se dkqhe y4nnc 0chj6 t2x82 xgqyg mpkvg 7cuw0 m7akf 723
+md1f4 0gpvp 622ws 2kgde mj2cd 8zwj2 skzx2 wq0qw 70l4q 99vdy h5x0z 8v4ys lsp8q 7nzlk kvyms vlrcu grdkj u72
+md1f4 0gpvz 9fkca 3cxte qm6ka cqcp5 9u7xt xux3d 5d847 wsf4x ev6se tz7wc ggw0m nt0ja rageg qfesk nkmce cqj
+md1f4 0gpvz 0ptr0 vxf3c 9895g hkha0 gk58r cw6qz w4cdx zxd3e n9mnx hqdpw sx2ec 6jxdf 33axq mwg8t zlv56 3mv
+md1f4 0gpvz nmjsz kn4t8 pc6l8 8xna4 nxjqu uhc32 y6rxw xttx8 w3xuf 33474 jxxpl 30507 ttsmq 84l46 0gcw0 g4u
+md1f4 0gpvz cx7cr syrzx 48lzn 7wute 526tv fexaw dfdy4 vy7y7 s9c84 gwagy hhf8u gmwft 46ekq d54ka 5c8c4 8mx
+md1f4 0gpvr r0a7t 0c6gn 7uss8 mxrkm a6e6m kqp24 zvzxn clw0x xzg0g sqtmw my87p x3u9m lm3vg d8s0y 6hvrr vud
+md1f4 0gpvr vmn3j aafe7 gyny7 hjqys fhjfz faf5h s5jwz h3mhp gjm2c tzuev mwdff ap2f5 zl9ls qqkg2 0rz8n j9q
+md1f4 0gpvr kdtfh 372tg 8y9k3 d35qm 006q3 0450k 4vmqv akpyw v7pkd anhr5 g2a60 5szqz pgggq szv9x r4h0a ctx
+md1f4 0gpvr 6zg55 fzuu4 z339d 06w5s 99f4v 94tc3 8peqc v5jys p6pp3 g08ex a4sxr 0889h 3ddqq nqhdl 2vm2e ucf
+md1f4 0gpvy p6ttm cly57 ac6ve ls0u3 jj86d d5pe7 m355r ttw8r 3a2s4 5tszc mrrem st4u6 j4atq ccq4m tqrtm 0ny
+md1f4 0gpvy g6uhd 0m3m5 l9lvu 9cde6 pcswd rm73e jss4l ts9qc szq6f nt9u8 jvs93 uep30 g6dqg 0k3hj 4xq9v 7xn
+md1f4 0gpvy nng0a j0c55 pz0ey kxhft lk456 pzlvc qh3za 8mskt lmcqv gkmuj 2dwpk hhlhm 290qc eu48z wwu53 5kp
+md1f4 0gpvy ckdgr 4nrpz xssz4 jyqyt ut3ee 64sfn z6ryr 348le 5ljx4 sv0e0 2cjfm l4zmy 9g36c 6spmu kzwf5 w5f
+md1f4 0gpv9 rfpgz jjzpm z7nhn k6yh5 veeeg nzkfx cdg3s ypfkn 0ru6g c370s zpx6r udkq2 e7xec rr560 mc7uy 987
+md1f4 0gpv9 tzzet sgt6p qua7c ty0t4 c4w6r tnjmn ht889 ltvhn e3ktx 5etuh l2rmx paqj6 ey0lg 6d4mp 5l9hj rne
+md1f4 0gpv9 5xj46 th52v v3c3k ju076 7gfu9 j0ynr ej00u qenhu 2pdak xrqtf e5qck 40z57 z8ylq ssej5 h2v92 9gq
+md1f4 0gpv9 eyh2t qvnhx zckz5 kfhac j7d2l xnax2 ywfue 5grx4 rgemh g0nk5 eg0ze 8tj0q fnr3s yntuj t2jgx 5pl
+md1f4 0gpvx 92k0c 250h6 2ypsa rcmrl 7tgut cg8uf 4m7gf cd8lf v33kn prwth l06am 5gdw9 aqnfq zkhq0 nhyzw eea
+

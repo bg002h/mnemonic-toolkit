@@ -1,0 +1,17 @@
+miniscript policy restore (11 cosigners)
+CONFIRM: verify each cosigner fingerprint against your records before importing the payload above.
+  descriptor: wsh(or_i(and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi(3,[73c5da0a/84'/0'/0']xpub661MyMwAqRbcFHMVYpCiBTXd2Caj7vZhNFHJSgE59Aue2yYkXSrz5q9GaQ4rRjJVhHZTsCiHWSzgMS5beaaTHWVmhpGC7SMdqMXHRXZi8as/<0;1>/*,[73c5da0a/84'/0'/1']xpub661MyMwAqRbcGaxoYcLaxHHXZqEgSRQmN2P5ung8MJ8MNE535mLuhq7zjnrMKyA5eX6ehicVbU1FFPU39LGXbY8PmLPLQxVRQmPFa3Q7spa/<0;1>/*,[73c5da0a/84'/0'/2']xpub661MyMwAqRbcGuXAHBK3oquZS1HJiz2fVZ2idNcK4GLGTXJyGZkPK7fviN6euv5GzY18JD3WBG3SoLat23TLAVjhQMxDVMAqymQNhg3RFT8/<0;1>/*))),or_i(and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi(2,[73c5da0a/84'/0'/3']xpub661MyMwAqRbcGHLCZcLjg25oG8wSyqSE5XNM9uMks6vrpH4pRDC8UmAynovThuKraidMeEKJ2FcqBw1eF76aeu1vrGtLJXUiJXr4r9N1TZQ/<0;1>/*,[b8688df1/84'/0'/0']xpub661MyMwAqRbcGowNgeNcLS8CgL2vnZybpJqtkbCmSQMdq2qzcDWqq3CXXg7x5BqvcNCSaNUw6nisoN7JFK2j3HfxV57nNm2RLKo2UzHgbs6/<0;1>/*,[b8688df1/84'/0'/1']xpub661MyMwAqRbcEv3U8uuxavsQA8LNNYwcNge8rT7SaMS5S8KiEwxoP72TQ8ARYjczPTtVQz6CxcaBTEE3XchmYvSiHcVbC9h17CmyfG7sVq9/<0;1>/*))),or_i(and_v(v:older(65535),multi(2,[b8688df1/84'/0'/2']xpub661MyMwAqRbcG7Xht9EwgNucA47Rmgg8Bn5bNmFdJMkotHQDXirpogQHkVNRcwAy6KwGnUYMUNBFCNaRq4WnsqWW2VNUDdW6ymHXfVpk4c3/<0;1>/*,[b8688df1/84'/0'/3']xpub661MyMwAqRbcEbqBvNkLuDtudGA2PHAbtWUuHKe3CKjZCaLjxLGSG8SJpwBCnXsj8xPGXaV9ZWL3j9ktbed8y1aeNVK95HrkgHfHGBXM5Eh/<0;1>/*)),and_v(v:older(4255898),multi(1,[28645006/84'/0'/0']xpub661MyMwAqRbcEdBofBaGbgnse74WRuyEbXRSmzq8jzthzutDnXTV2yNQPzgs3ubwuNp7yrSHnECoA5xHgnoEDH4HSGWqLtYdi6nWVZCfXPk/<0;1>/*,[28645006/84'/0'/1']xpub661MyMwAqRbcH2WNMbtz4pZ8wDtpxndYo6E4r5o8pXedve17srma1LCEjM8WcpVk67xsc36KpBNtYUdqo5dpcFMzRfzSZSa4C5DRty4eDNF/<0;1>/*,[28645006/84'/0'/2']xpub661MyMwAqRbcGqcAAnB9mhvQsdUx2fKasUoXT2gMpt2tFz94wRfAkhuLhZUJkjQ5pgnd9Ny9EwrgcHbAASVnQShCbfhnGsKAk2k6yGoWXAv/<0;1>/*))))))#jgulue7j
+  first recv: bc1q4g7564xxd9hj68hqwu5e558cqafhsklerkr0asfzqp6puq74veesrp6qss
+  cosigner @0: 73c5da0a [84'/0'/0']  from md1 (not independently verified)
+  cosigner @1: 73c5da0a [84'/0'/1']  from md1 (not independently verified)
+  cosigner @2: 73c5da0a [84'/0'/2']  from md1 (not independently verified)
+  cosigner @3: 73c5da0a [84'/0'/3']  from md1 (not independently verified)
+  cosigner @4: b8688df1 [84'/0'/0']  from md1 (not independently verified)
+  cosigner @5: b8688df1 [84'/0'/1']  from md1 (not independently verified)
+  cosigner @6: b8688df1 [84'/0'/2']  from md1 (not independently verified)
+  cosigner @7: b8688df1 [84'/0'/3']  from md1 (not independently verified)
+  cosigner @8: 28645006 [84'/0'/0']  from md1 (not independently verified)
+  cosigner @9: 28645006 [84'/0'/1']  from md1 (not independently verified)
+  cosigner @10: 28645006 [84'/0'/2']  from md1 (not independently verified)
+UNVERIFIED: no --from/--cosigner cross-check supplied; verify each cosigner fingerprint above against your records before importing
+note: stdout is watch-only — public keys only, cannot spend

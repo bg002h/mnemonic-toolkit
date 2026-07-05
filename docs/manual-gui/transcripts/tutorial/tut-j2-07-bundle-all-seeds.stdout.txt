@@ -1,0 +1,29 @@
+# ms1[0] (entropy, BCH-checksummed)
+ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+
+# ms1[1] (entropy, BCH-checksummed)
+ms10e ntrsq plh7l ml0al h7lml 0alh7 lml0a ls5cc lar2z mksh6
+
+# ms1[2] (entropy, BCH-checksummed)
+ms10e ntrsq zqgpq yqszq gpqyq szqgp qyqsz qqlfm 7mep8 4hunu
+
+# mk1[0] (cosigner 0 xpub + origin)
+mk1qp erpup qqspu 3s7de nyv8n wverp umnrn chdq5 pcy3z epa59 349dc gs5n5 stvpv k3v8x 4eqsd ngy2j l4wdd t5ac2 ptv4f ya76t preap yrdfq r
+mk1qp erpup pnq8k p6xcp qphr7 svxwk xx5ag 99s9z fyml9 v7tcq rexmp dj7jg qgmny 8rr0z 7vlj7 eqzv2 486xk kcftr zq8
+
+# mk1[1] (cosigner 1 xpub + origin)
+mk1qp erpap qqspu 3s7de nyv8n wverp umn9c dzxlz pcy3z epaqx afl63 0m4as 45q6f z4lts ntlue s3e3g ylcu6 jsa6j dz69h y0whc pg2f2 8j5aw u
+mk1qp erpap p02p3 qtffj qpxtu j95jz aevqs 7jqje 40324 vxlfw 0txsw awpxt e3zmh zp6lr pj3ga 2lw65 h2dd2 4cuer kpa
+
+# mk1[2] (cosigner 2 xpub + origin)
+mk1qp erp7p qqspu 3s7de nyv8n wverp umnpg v3gqv pcy3z epane cw97s n9g25 uukrg xca47 at8as 54xhd 0rkgx 57cs7 8mc8f k6507 cs8tn ugnpn f
+mk1qp erp7p pr4e5 9ef7u 5p038 j900y e439h sphez 506fr a5k3e ac5kg 0n7jh n3kpz pna6n 0lygd lpfeq 4a75l c2mrr z7f
+
+# md1 (multisig wallet policy)
+md1f5 przzs pq3m6 7zzqq vzrs3 pstuc w0za5 znwrg 3hcc5 xg5qx zhs7y yg2f6 g9kqk tgkrn 2spp6 tlfzp rv6ye
+md1f5 przzs wgyrv 6pz5h atnt2 a8wzs 2m92f fsrmq arvqs qm3lg xr8tr r2w5z jcz3y jdljk 0qf2g 9tn3u 5jtsz
+md1f5 przzs j7qq7 fkctv h5jqz xuepc cmchn 8u30m 4as45 q6fz4 ltsnt lues3 e3gyl cu6js asrwq tqpe4 mvjxf
+md1f5 przzs afx3d zmj02 p3qtf fjqpx tuj95 jzaev qs7jq je403 24vxl fw0tx swawp xte3z mspu3 5hx7l rg2t6
+md1f5 przz3 r3qa0 3segk px2s4 feevx sd3mt a6k0m pf2dw 678vs dfa3p u0hsw nvwhx sh98m jsqps z8xkj h9l6g
+md1f5 przz3 gzlz0 y277f ntzt0 qr0j9 gl5j8 mfdrn m3fvs l8a90 8rvzy r8m4x l7gs9 e2t6d yvjgv 4j
+
