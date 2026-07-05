@@ -1,4 +1,4 @@
-# Chapter 0 — Orientation
+# Orientation
 
 This chapter teaches you how to read the rest of the book: the anatomy
 of the application window, the two screenshots you get per step, why
@@ -154,7 +154,7 @@ The single step in this chapter, shown above, runs nothing: it is the
 launch window, the `(no run yet)` panel, and the demo-seed baseline the
 journeys build on. Turn the page to Journey 1 to fill it in.
 
-## 00 orientation {#tut-ch0-00-orientation}
+## The launch window {#tut-ch0-00-orientation}
 
 The launch window on the `mnemonic` tab, `bundle` selected — the
 demo-seed baseline described above, captured before any field is

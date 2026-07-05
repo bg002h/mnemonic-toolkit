@@ -1,4 +1,4 @@
-# Chapter 2 — Two-of-three multisignature (Journey 2)
+# Journey 2 — Two-of-three multisignature
 
 A real multisig never lets one machine see more than one seed. This
 journey builds a **2-of-3** `wsh(sortedmulti(...))` the safe way: each
@@ -29,7 +29,7 @@ spells out flags the form fills for you (`--network mainnet`,
 wallet is identical to the shorter `Examples.pdf` command, just written
 in full.
 
-## 02 convert fingerprint {#tut-j2-02-convert-fingerprint}
+## Convert the fingerprint {#tut-j2-02-convert-fingerprint}
 
 On cosigner 0's device, `convert` derives that cosigner's BIP-87
 multisig **fingerprint** from their seed alone. Select **Convert
@@ -68,7 +68,7 @@ masked everywhere on screen; only the *warning* differs.
 (captured transcript — included at build time)
 ```
 
-## 03 convert xpub {#tut-j2-03-convert-xpub}
+## Convert the xpub {#tut-j2-03-convert-xpub}
 
 Same form, same seed, **`--to`** set to `xpub`: this returns cosigner
 0's account **public** key,
@@ -100,7 +100,7 @@ carry out only the fingerprint and the xpub.
 (captured transcript — included at build time)
 ```
 
-## 04 canonicalise {#tut-j2-04-canonicalise}
+## Canonicalise the descriptor {#tut-j2-04-canonicalise}
 
 With all three cosigners' fingerprints and xpubs in hand, the
 coordinator assembles the 2-of-3 descriptor
@@ -138,7 +138,7 @@ their own records before trusting it.
 (captured transcript — included at build time)
 ```
 
-## 05 bsms {#tut-j2-05-bsms}
+## Export the BSMS record {#tut-j2-05-bsms}
 
 Re-run `export-wallet` on the same descriptor with **`--format`**
 switched to `bsms` (the Template stays on `(none)`, the descriptor
@@ -172,7 +172,7 @@ they built the same wallet.
 (captured transcript — included at build time)
 ```
 
-## 06 bundle watch only {#tut-j2-06-bundle-watch-only}
+## Bundle the watch-only card set {#tut-j2-06-bundle-watch-only}
 
 Now engrave the **shared** card set from the public descriptor. Switch
 to `bundle` and paste the descriptor straight into its **`--descriptor`**
@@ -209,7 +209,7 @@ each cosigner *additionally* backs up their own seed as a single-sig
 (captured transcript — included at build time)
 ```
 
-## 07 bundle all seeds {#tut-j2-07-bundle-all-seeds}
+## Bundle from all three seeds {#tut-j2-07-bundle-all-seeds}
 
 If instead you hold all three seeds yourself, one `bundle` run can emit
 the whole set. This is the **convenient but less-safe** path from
@@ -252,7 +252,7 @@ remains the per-device flow above.
 (captured transcript — included at build time)
 ```
 
-## 08 restore {#tut-j2-08-restore}
+## Restore from the card {#tut-j2-08-restore}
 
 Finally, prove the shared `md1` card alone rebuilds the wallet — no
 seeds needed. Select **Restore (re-derive a wallet export from a
@@ -297,12 +297,13 @@ exactly that).
 (captured transcript — included at build time)
 ```
 
-## dev1 convert fingerprint {#tut-j2-dev1-convert-fingerprint}
+## Device 1 — convert fingerprint {#tut-j2-dev1-convert-fingerprint}
 
 Cosigner 1 runs the identical `convert` interaction on their own device
 with their own seed. The transcript below is that run; it returns
 `fingerprint: b8688df1`. There is no separate screenshot — the form and
-gestures are exactly those of step 02, only the seed differs.
+gestures are exactly those of the convert-fingerprint step, only the
+seed differs.
 
 **Output (stdout):**
 
@@ -322,11 +323,11 @@ gestures are exactly those of step 02, only the seed differs.
 (captured transcript — included at build time)
 ```
 
-## dev1 convert xpub {#tut-j2-dev1-convert-xpub}
+## Device 1 — convert xpub {#tut-j2-dev1-convert-xpub}
 
 Cosigner 1's account **public** key,
 `xpub6CbhrPzY2z7NcCGCGjLAJLq8iRyjUfwmdXQs66MxTVUReKqb9DpLnVJ5D1qp…`,
-derived the same way as step 03. Transcript only.
+derived the same way as the convert-xpub step. Transcript only.
 
 **Output (stdout):**
 
@@ -346,7 +347,7 @@ derived the same way as step 03. Transcript only.
 (captured transcript — included at build time)
 ```
 
-## dev2 convert fingerprint {#tut-j2-dev2-convert-fingerprint}
+## Device 2 — convert fingerprint {#tut-j2-dev2-convert-fingerprint}
 
 Cosigner 2, same interaction again — the transcript returns
 `fingerprint: 28645006`. Transcript only.
@@ -369,12 +370,12 @@ Cosigner 2, same interaction again — the transcript returns
 (captured transcript — included at build time)
 ```
 
-## dev2 convert xpub {#tut-j2-dev2-convert-xpub}
+## Device 2 — convert xpub {#tut-j2-dev2-convert-xpub}
 
 Cosigner 2's account **public** key,
 `xpub6DB7HNqw6CZojxN85NuFTPWZhi2FagSnexPS1rv3nYQhngkmdHgb7iebYvTFm…`.
 These three fingerprints and xpubs are exactly what the coordinator
-combined in step 04. Transcript only.
+combined at the canonicalise step. Transcript only.
 
 **Output (stdout):**
 
@@ -394,9 +395,9 @@ combined in step 04. Transcript only.
 (captured transcript — included at build time)
 ```
 
-## restore feed bundle json {#tut-j2-restore-feed-bundle-json}
+## Restore — feed the bundle JSON {#tut-j2-restore-feed-bundle-json}
 
-This is the plumbing behind step 08: a `bundle --descriptor … --json`
+This is the plumbing behind the restore step: a `bundle --descriptor … --json`
 run whose JSON output carries the wallet's `md1` chunks. The harness
 parses them out and feeds them into the restore form's `--md1` rows —
 the point-and-click equivalent of `Examples.pdf`'s `jq -r ".md1[]" |

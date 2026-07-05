@@ -371,7 +371,7 @@ $(BUILD_DIR)/gui_example.html: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcr
 
 gui-example-pdf: $(BUILD_DIR)/gui_example.pdf
 
-$(BUILD_DIR)/gui_example.tex: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex $(TEMPLATES_DIR)/manual.latex | $(BUILD_DIR)
+$(BUILD_DIR)/gui_example.tex: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml $(PANDOC_DIR)/preamble.tex $(PANDOC_DIR)/preamble-tutorial.tex $(TEMPLATES_DIR)/manual.latex | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
 		--to latex \
@@ -381,6 +381,7 @@ $(BUILD_DIR)/gui_example.tex: $(GUI_EXAMPLE_SRC) $(FILTERS_DIR)/include-transcri
 		--top-level-division=chapter \
 		--template=$(TEMPLATES_DIR)/manual.latex \
 		-H $(PANDOC_DIR)/preamble.tex \
+		-H $(PANDOC_DIR)/preamble-tutorial.tex \
 		$(PDF_FILTER_ARGS) \
 		$(PANDOC_METADATA) \
 		--metadata title="$(GUI_EXAMPLE_TITLE)" \

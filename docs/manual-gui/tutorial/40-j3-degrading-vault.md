@@ -1,4 +1,4 @@
-# Chapter 3 — Four-tier degrading vault (Journey 3)
+# Journey 3 — Four-tier degrading vault
 
 This is the **pathological example**: a four-tier *degrading* vault
 that deliberately exercises every corner of the descriptor engine. Each
@@ -25,7 +25,7 @@ is `Examples.pdf` section 5.
 > All keys here are **public** watch-only xpubs derived from the demo
 > seeds; no secret is typed in this journey.
 
-## 09 build descriptor refusal {#tut-j3-09-build-descriptor-refusal}
+## Build-descriptor refusal {#tut-j3-09-build-descriptor-refusal}
 
 Start with the **guided builder** and watch it decline. `build-descriptor`
 runs a satisfiability and cost preview that it deliberately **bounds**
@@ -64,7 +64,7 @@ larger you hand the raw descriptor straight to `export-wallet` and
 (captured transcript — included at build time)
 ```
 
-## 10 canonicalise {#tut-j3-10-canonicalise}
+## Canonicalise the descriptor {#tut-j3-10-canonicalise}
 
 Validate the hand-written vault descriptor with `export-wallet`.
 Select the Template drop-down's **`(none)`** entry to unlock
@@ -98,7 +98,7 @@ Standard error confirms `watch-only — public keys only, cannot spend`.
 (captured transcript — included at build time)
 ```
 
-## 11 bsms {#tut-j3-11-bsms}
+## Export the BSMS record {#tut-j3-11-bsms}
 
 Switch **`--format`** to `bsms` on the same descriptor. The panel
 returns the BSMS 1.0 record and the vault's **first receive address**,
@@ -127,7 +127,7 @@ Remember this address — the restore step reproduces it exactly.
 (captured transcript — included at build time)
 ```
 
-## 12 engrave {#tut-j3-12-engrave}
+## Engrave the card set {#tut-j3-12-engrave}
 
 Because every one of the eleven keys is **distinct**, this is a valid
 BIP-388 wallet policy, so `bundle` will engrave it (a key-reusing
@@ -162,7 +162,7 @@ eleven cosigners with their `84'/0'/N'` origins.
 (captured transcript — included at build time)
 ```
 
-## 13 restore {#tut-j3-13-restore}
+## Restore from the card {#tut-j3-13-restore}
 
 The round-trip proof. Restore the vault from its `md1` chunks alone
 (chained from the previous `bundle --json` run into the **`--md1`**
@@ -171,11 +171,11 @@ filled form is below.
 
 The panel reconstructs the descriptor and its **first receive
 address** — `bc1q4g7564xxd9hj68hqwu5e558cqafhsklerkr0asfzqp6puq74veesrp6qss`,
-identical to the BSMS address in step 11. That match is the proof: the
+identical to the BSMS address from the BSMS step. That match is the proof: the
 `md1` card set round-trips this entire eleven-key, four-branch policy
 without loss. (The restore re-serialises each key as a depth-0
-`xpub661My…` master, so the descriptor *string* differs from step 10
-while the addresses are the same wallet.) Unlike the depth-2 Taproot
+`xpub661My…` master, so the descriptor *string* differs from the
+canonicalise step while the addresses are the same wallet.) Unlike the depth-2 Taproot
 tree in Journey 4, this degrading-multisig policy restores on the
 shipped binary with no experimental build.
 
@@ -201,9 +201,9 @@ shipped binary with no experimental build.
 (captured transcript — included at build time)
 ```
 
-## restore feed bundle json {#tut-j3-restore-feed-bundle-json}
+## Restore — feed the bundle JSON {#tut-j3-restore-feed-bundle-json}
 
-The plumbing behind step 13: the `bundle --descriptor … --json` run
+The plumbing behind the restore step: the `bundle --descriptor … --json` run
 whose `md1` array the restore consumes. Transcript only; the chunks are
 real per-run output.
 

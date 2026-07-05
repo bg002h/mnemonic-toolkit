@@ -1,4 +1,4 @@
-# Chapter 1 — Single-signature card set (Journey 1)
+# Journey 1 — Single-signature card set
 
 The first journey is the simplest: turn one seed phrase into a
 native-segwit (BIP-84, `m/84'/0'/0'`) **single-signature** three-card
@@ -11,7 +11,7 @@ demo-seed baseline the orientation chapter left us on.
 > BIP-39 test vector. Any wallet derived from it is swept. Never
 > engrave it; never fund it.
 
-## 01 bundle single sig {#tut-j1-01-bundle-single-sig}
+## Bundle the single-signature card set {#tut-j1-01-bundle-single-sig}
 
 Start from the demo-seed baseline: the `bundle` form already carries
 `--network mainnet` and `--template bip84` (the native-segwit

@@ -1,4 +1,4 @@
-# The `mnemonic-gui` Tutorial — Worked Journeys
+# Introduction
 
 This book walks five end-to-end **journeys** through the `mnemonic-gui`
 desktop application — from a single-signature card set to a four-tier
@@ -22,9 +22,9 @@ command-line tier, and byte-checked in CI. Nothing here is hand-drawn
 or hand-pasted; if the application changed, these pages would fail to
 build.
 
-Chapter 0 explains how to read the book — the window layout, the
-two-shots-per-step convention, the reproducibility guarantee, and the
-secret-hygiene rules. Chapters 1–5 are the journeys.
+The Orientation chapter explains how to read the book — the window
+layout, the two-shots-per-step convention, the reproducibility
+guarantee, and the secret-hygiene rules. The five journeys follow.
 
 ## The demo seed — never fund it
 
@@ -38,5 +38,5 @@ wallet derived from them has been swept by chain watchers.
 > seed into a networked machine.** They exist here only so the book —
 > and its CI corpus — is fully reproducible. When you run these
 > journeys for real, you substitute your own seed; the GUI masks it in
-> every field, preview, modal, and output line, exactly as Chapter 0
-> describes.
+> every field, preview, modal, and output line, exactly as the
+> Orientation chapter describes.

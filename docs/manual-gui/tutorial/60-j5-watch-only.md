@@ -1,4 +1,4 @@
-# Chapter 5 — Watch-only export (Journey 5)
+# Journey 5 — Watch-only export
 
 The final journey closes the loop: reconstruct the watch-only wallet
 from the **shared `md1` card alone** — no seeds — and export it in the
@@ -12,7 +12,7 @@ the app chaining each step's output into the next.
 > Everything in this journey is **public** watch-only material; no
 > secret is typed.
 
-## 22 bundle json {#tut-j5-22-bundle-json}
+## Bundle as JSON {#tut-j5-22-bundle-json}
 
 The watch-only export starts by producing the `md1` card in a
 machine-readable shape. On `bundle`, paste Journey 2's 2-of-3
@@ -44,12 +44,13 @@ one run stands in for `Examples.pdf`'s `bundle … --json | jq -r
 (captured transcript — included at build time)
 ```
 
-## 23 restore descriptor {#tut-j5-23-restore-descriptor}
+## Restore to a descriptor {#tut-j5-23-restore-descriptor}
 
 Reconstruct the wallet from that `md1` card and emit a **bare canonical
 descriptor**. Select **Restore …**, set **Template** to the wallet's
 `wsh-sortedmulti` family, set **`--format`** to `descriptor`, and let
-the `md1` chunks chain in from step 22's run. The filled form is below.
+the `md1` chunks chain in from the bundle-JSON step's run. The filled
+form is below.
 
 The panel returns `wsh(sortedmulti(2,…))#yjp7hj7w` on standard output —
 the plain descriptor other wallets import — and the restore summary
@@ -79,13 +80,13 @@ Journey 2's: same wallet, rebuilt from the card alone.
 (captured transcript — included at build time)
 ```
 
-## 24 restore core {#tut-j5-24-restore-core}
+## Restore for Bitcoin Core {#tut-j5-24-restore-core}
 
 The same restore with **`--format`** switched to `bitcoin-core` emits
 the ready-to-import `importdescriptors` array (external `.../0/*` and
 change `.../1/*` requests, each with an `"active": true` range). The
-filled form is below; the chained `md1` chunks are unchanged from step
-22.
+filled form is below; the chained `md1` chunks are unchanged from the
+bundle-JSON step.
 
 Loading this into Bitcoin Core is an external step, run against your own
 node and so not captured here: save the array, create a blank

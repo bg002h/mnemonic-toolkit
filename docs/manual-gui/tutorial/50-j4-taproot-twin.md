@@ -1,4 +1,4 @@
-# Chapter 4 — Taproot twin (Journey 4)
+# Journey 4 — Taproot twin
 
 `wsh(...)` reveals the whole policy on every spend. **Taproot** gives a
 cheap, private cooperative **key-path** spend and hides the fallbacks in
@@ -15,7 +15,7 @@ This is `Examples.pdf` section 6.
 > All keys here are **public** watch-only xpubs; no secret is typed in
 > this journey.
 
-## 14 depth2 refusal {#tut-j4-14-depth2-refusal}
+## Depth-2 refusal {#tut-j4-14-depth2-refusal}
 
 The tidiest Taproot layout is one tier per leaf — four leaves — but
 that is a **depth-2** taptree, and the shipped `rust-miniscript` pin
@@ -52,7 +52,7 @@ per leaf with `or_i`.
 (captured transcript — included at build time)
 ```
 
-## 15 canonicalise {#tut-j4-15-canonicalise}
+## Canonicalise the descriptor {#tut-j4-15-canonicalise}
 
 The depth-1 Taproot descriptor validates. It keeps the same four tiers
 but arranges them as two script leaves — Leaf A = tiers 1 or 2
@@ -90,7 +90,7 @@ primitive, in place of `wsh`'s `multi`.
 (captured transcript — included at build time)
 ```
 
-## 16 engrave {#tut-j4-16-engrave}
+## Engrave the card set {#tut-j4-16-engrave}
 
 Engrave the Taproot card set with `bundle --descriptor`. The filled
 form is below. Every key is distinct, so it engraves; with only public
@@ -119,7 +119,7 @@ xpubs the result is watch-only (no `ms1`, one `mk1` per key, one shared
 (captured transcript — included at build time)
 ```
 
-## 17 restore {#tut-j4-17-restore}
+## Restore from the card {#tut-j4-17-restore}
 
 Restore the Taproot vault from its `md1` chunks (Template set to the
 `tr-sortedmulti-a` family; chunks chained from the previous `bundle
@@ -153,7 +153,7 @@ Taproot feature — not an unspendable stand-in.
 (captured transcript — included at build time)
 ```
 
-## 18 core export {#tut-j4-18-core-export}
+## Export for Bitcoin Core {#tut-j4-18-core-export}
 
 Export the same Taproot wallet for Bitcoin Core. On `export-wallet`,
 Template **`(none)`**, load the depth-1 descriptor, set **`--format`**
@@ -183,7 +183,7 @@ to load into a blank Core descriptor wallet.
 (captured transcript — included at build time)
 ```
 
-## 19 bsms unsupported {#tut-j4-19-bsms-unsupported}
+## BSMS unsupported for Taproot {#tut-j4-19-bsms-unsupported}
 
 A second teaching refusal. Ask `export-wallet` for **`--format`** `bsms`
 on the Taproot descriptor and it declines with exit 2: `error: --format
@@ -216,7 +216,7 @@ below.
 (captured transcript — included at build time)
 ```
 
-## 20 compare cost {#tut-j4-20-compare-cost}
+## Compare cost {#tut-j4-20-compare-cost}
 
 `compare-cost` weighs the two wrappers for the same spending policy:
 `wsh(M)` versus `tr(NUMS, {M})`. Select **Compare Cost (wsh vs tr per
@@ -249,7 +249,7 @@ rows assume the spender can supply each preimage.
 (captured transcript — included at build time)
 ```
 
-## 21 nums export {#tut-j4-21-nums-export}
+## NUMS export {#tut-j4-21-nums-export}
 
 When a wallet has **no** cooperative signer, Taproot still applies: put
 a provably-unspendable **NUMS** point in the key-path so the only way to
@@ -283,7 +283,7 @@ key-path is disabled by construction.
 (captured transcript — included at build time)
 ```
 
-## nums feed bundle json {#tut-j4-nums-feed-bundle-json}
+## NUMS — feed the bundle JSON {#tut-j4-nums-feed-bundle-json}
 
 The plumbing behind the NUMS restore: a `bundle --descriptor … --json`
 run on the NUMS 2-of-3 whose `md1` chunks the next step consumes.
@@ -307,11 +307,12 @@ Transcript only.
 (captured transcript — included at build time)
 ```
 
-## nums restore {#tut-j4-nums-restore}
+## NUMS restore {#tut-j4-nums-restore}
 
 The NUMS Taproot multisig round-trips from its `md1` card, exactly like
 the cooperative-key vault (Template `tr-sortedmulti-a`; chunks chained
-from the feed above). Transcript only — the interaction mirrors step 17.
+from the feed above). Transcript only — the interaction mirrors the
+restore step.
 
 **Output (stdout):**
 
@@ -331,9 +332,9 @@ from the feed above). Transcript only — the interaction mirrors step 17.
 (captured transcript — included at build time)
 ```
 
-## restore feed bundle json {#tut-j4-restore-feed-bundle-json}
+## Restore — feed the bundle JSON {#tut-j4-restore-feed-bundle-json}
 
-The plumbing behind step 17: the `bundle --descriptor … --json` run on
+The plumbing behind the restore step: the `bundle --descriptor … --json` run on
 the depth-1 Taproot vault whose `md1` array the restore consumes.
 Transcript only.
 

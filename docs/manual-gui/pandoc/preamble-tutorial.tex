@@ -1,0 +1,24 @@
+% mnemonic-toolkit/docs/manual-gui/pandoc/preamble-tutorial.tex
+%
+% Tutorial-book-ONLY LaTeX preamble knob. Threaded into the
+% build/gui_example.tex build via a SECOND `-H` include (after the
+% shared preamble.tex) in the Makefile's gui-example .tex recipe ONLY;
+% the main `make pdf` recipe does NOT reference this file, so the
+% reference manual's numbering is byte-unaffected.
+%
+% Why: pandoc's LaTeX writer emits non-starred \chapter{}/\section{}
+% for every heading, and documentclass `book` numbers those by default
+% (secnumdepth=2). The tutorial chapters carry their own narrative
+% labels in the heading TEXT ("Journey N — …"), so LaTeX auto-numbering
+% would DOUBLE-number them ("Chapter 3 — Journey 2 — …", "3.1 Convert …").
+% The reference manual dodges this with clean heading text + LaTeX
+% numbers; the tutorial dodges it the other way — keep the "Journey N"
+% labels the prose references and turn LaTeX section auto-numbering OFF.
+%
+% \setcounter{secnumdepth}{-2}: a sectional unit is numbered only when
+% its level <= secnumdepth. In `book`, \chapter is level 0 and \section
+% level 1, so any secnumdepth <= -1 suppresses BOTH the "Chapter N"
+% head prefix (book.cls guards it behind `\ifnum\c@secnumdepth>\m@ne`)
+% AND every "N.M" section number, while ToC entries (governed by
+% tocdepth, not secnumdepth) and the headings themselves still render.
+\setcounter{secnumdepth}{-2}
