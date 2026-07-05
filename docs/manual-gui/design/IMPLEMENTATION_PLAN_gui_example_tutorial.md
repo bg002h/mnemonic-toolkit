@@ -179,6 +179,7 @@ Folds re-enter the loop (scoped convergence re-dispatch); if Agent-API dispatch 
 1. `SAME-FRAME-COMPLETION` fires anywhere (async-runner behavior surfaced) → STOP; the seeded-`last_run` "fix" is the reserved downgrade (spec §4/§6.5).
 2. Any toolkit `src/` edit pressure (variant (b), F2 mutex arm, `cmd/gui_schema.rs` projection changes) → STOP (breaks §12.4 + tag ordering; paired cross-repo item requires user sign-off).
 3. Corpus > 20 MiB after both trim levers → STOP (ALL-journeys lock vs budget).
+   - **RESOLVED 2026-07-05 (USER DECISION at the P1.5 budget STOP):** corpus measured 27.1 MiB (all 51 shots, 24 populated-pane shots); user chose RAISE THE CEILING and keep all 51 shots (over trim / GUI-only-fetch). The 20 MiB rationale (committed-PDF era) was already resolved by the release-attach-only decision. `BUDGET_HARD_MIB` = **32 MiB** (regen-drift headroom over 27.1). The trim levers stay documented but unused.
 4. F1 cannot satisfy the binding constraints (drift-gate ripple under every compliant shape) → STOP.
 5. Ballooned descriptor-text steps genuinely illegible at 920×720 → STOP (size is a P0 ratification; resizing is corpus-wide re-ratification).
 6. Cross-backend > 0.6 on a shot class after the remediation ladder → STOP with evidence + the spec-§4 fallback menu.
