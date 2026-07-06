@@ -174,7 +174,7 @@ the secret-on-argv narration (§3.4), `gen.sh:666` v0.49.1 attribution.
 ### P1.d — Appendix B → B-static (D4; LOCKED decision 1 + Q3)
 
 Delete the `if command -v mnemonic-depth2 … then … else … fi` runtime branch (`gen.sh:724` … `else` at `:764` …
-`fi` at `:775`) and emit Appendix B **unconditionally**:
+`fi` at `:774`) and emit Appendix B **unconditionally**:
 
 - **Keep as-is** (already unconditional, above the old `if`): the framing prose (`gen.sh:701-717`, reworded per
   P1.a items 9–10) + the `show` build-steps block (`gen.sh:719-722` — how a reader builds the twin themselves).
@@ -209,7 +209,7 @@ Under the locked Q1-(b) decision, freeze §6.6's Core capture the SAME way (zero
 - **Keep** the lead-in prose (`gen.sh:651-655`, "`restore` reports a `bc1p…`. Confirm it against Bitcoin Core's
   **independent C++** derivation: `deriveaddresses` on the receive (`.../0/*`) descriptor …") — stays true.
 - **Replace** the deleted block with a single labelled static heredoc emitting the exact captured pair
-  (baseline `Examples.md:1474-1476`): the `$ bitcoin-cli -chain=main deriveaddresses "tr(50929b74…sortedmulti_a(2,
+  (baseline `Examples.md:1474-1475`): the `$ bitcoin-cli -chain=main deriveaddresses "tr(50929b74…sortedmulti_a(2,
   …))#mk8vdqmt" "[0,0]"` command line + `["bc1p550zvnachy40z6hh8llka93mkm0c3635samp264ck6rfd0dcdc8s00n8c8"]`,
   followed by the existing "Byte-for-byte the same `bc1p…` that `restore` reported…" prose (`gen.sh:664-671`), with
   a label, e.g.:
@@ -454,7 +454,7 @@ toolkit release-version-sites checklist** (`project_toolkit_release_ritual_versi
 - Baseline `.examples-build/Examples.md` (gitignored build artifact, local, 111 575 B, byte-source of committed
   `docs/Examples.pdf` @ 215 270 B, same Jun-26 build): install leaks 98,109,111-115; `--list` toolkit pin 101;
   `--version` 143; `--help` 158-180 (no `gen-man`/`word-card`); §2 cards 225-246 (twice + md1 hyphens 244-246);
-  §6.6 `deriveaddresses` 1474-1476 (address `bc1p550…00n8c8`); depth-2 export refusal ~1191; mainline depth-2
+  §6.6 `deriveaddresses` 1474-1475 (address `bc1p550…00n8c8`); depth-2 export refusal ~1191; mainline depth-2
   refusal 1588-1589; depth2 static-capture transcript 1596-1617.
 - `.examples-build/.gitignore:1-13` (pin comment :5, `Examples.md` ignore :9).
 - `scripts/install.sh:75,322,324,327,336` (path-deriving lines).
