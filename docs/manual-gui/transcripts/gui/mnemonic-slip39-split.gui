@@ -1,6 +1,6 @@
 [ mnemonic > slip39-split ]
   --from                composite[phrase,entropy]  (required) -> phrase=<empty>
-  --passphrase          text  (secret) -> <masked>
+  --passphrase          text  (secret) -> <masked> [reveal]
   --passphrase-stdin    checkbox  (secret) -> [ ] off [disabled]
   --group-threshold     number  (required) -> <unset>
   --group               text  (required, repeating) -> <empty>

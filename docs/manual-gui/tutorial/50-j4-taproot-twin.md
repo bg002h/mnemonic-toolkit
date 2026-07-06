@@ -121,9 +121,11 @@ xpubs the result is watch-only (no `ms1`, one `mk1` per key, one shared
 
 ## Restore from the card {#tut-j4-17-restore}
 
-Restore the Taproot vault from its `md1` chunks (Template set to the
-`tr-sortedmulti-a` family; chunks chained from the previous `bundle
---json` run). The filled form is below.
+Restore the Taproot vault from its `md1` chunks (Template set to
+**`(none)`** — an `md1` restore needs no template, and `(none)` clears
+the form's default single-sig `bip84`, which would be refused in `--md1`
+mode; chunks chained from the previous `bundle --json` run). The filled
+form is below.
 
 The panel reconstructs the descriptor and its **first receive
 address**, `bc1p9stcwz5597fmkxae9343k8edzkcvdczf9qp65r6p447pg0et82yqst3d2c`
@@ -310,7 +312,7 @@ Transcript only.
 ## NUMS restore {#tut-j4-nums-restore}
 
 The NUMS Taproot multisig round-trips from its `md1` card, exactly like
-the cooperative-key vault (Template `tr-sortedmulti-a`; chunks chained
+the cooperative-key vault (Template `(none)`; chunks chained
 from the feed above). Transcript only — the interaction mirrors the
 restore step.
 

@@ -1,12 +1,12 @@
 [ ms > derive ]
-  --hex               text  (secret) -> <masked>
-  --phrase            text  (secret) -> <masked>
+  --hex               text  (secret) -> <masked> [reveal]
+  --phrase            text  (secret) -> <masked> [reveal]
   --template          dropdown[bip44,bip49,bip84,bip86]  -> bip44
   --account           text  -> <hint:0>
   --network           dropdown[mainnet,testnet]  -> mainnet
-  --passphrase        text  (secret) -> <masked>
+  --passphrase        text  (secret) -> <masked> [reveal]
   --passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
   --language          dropdown[english,japanese,korean,spanish,chinese-simplified,chinese-traditional,french,italian,czech,portuguese]  -> english
   --json              checkbox  -> [ ] off
-  ms1                 positional  (secret) -> <masked>
+  ms1                 positional  (secret) -> <masked> [reveal]
   [ Run ]

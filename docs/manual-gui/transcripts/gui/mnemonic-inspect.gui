@@ -1,5 +1,5 @@
 [ mnemonic > inspect ]
-  --ms1             text  (required, secret) -> <masked>
+  --ms1             text  (required, secret) -> <masked> [reveal]
   --mk1             text  (required, repeating) -> <empty>
   --md1             text  (required, repeating) -> <empty>
   --json            checkbox  -> [ ] off

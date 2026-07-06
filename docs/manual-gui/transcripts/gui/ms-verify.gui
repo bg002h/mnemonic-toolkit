@@ -1,6 +1,6 @@
 [ ms > verify ]
-  --phrase    text  (secret) -> <masked>
+  --phrase    text  (secret) -> <masked> [reveal]
   --language  dropdown[english,japanese,korean,spanish,chinese-simplified,chinese-traditional,french,italian,czech,portuguese]  -> english
   --json      checkbox  -> [ ] off
-  ms1         positional  (secret) -> <masked>
+  ms1         positional  (secret) -> <masked> [reveal]
   [ Run ]

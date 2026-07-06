@@ -1,5 +1,5 @@
 [ mnemonic > seed-xor-combine ]
-  --share           composite[phrase]  (required, secret, repeating) -> <masked>
+  --share           composite[phrase]  (required, secret, repeating) -> <masked> [reveal]
   --shares          number  (required) -> <unset>
   --language        dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
   --json-out        path  -> <empty>

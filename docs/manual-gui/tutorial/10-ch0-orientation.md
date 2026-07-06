@@ -99,7 +99,11 @@ Journey 1 shots:
 
 - **Masked fields.** A seed typed into a phrase slot or a `--from
   phrase=` composite renders as `••••` in the input box, never as
-  words.
+  words — unless you deliberately hold the **👁 reveal** button beside
+  the field to check what you typed (hold-to-reveal; it re-masks the
+  moment you release, click **Run**, switch fields, or leave the
+  window). Several filled-form shots in this book hold that toggle on
+  purpose (see *Revealed demo phrases* below).
 - **The masked preview.** The `Preview:` line shows the argument vector
   with the secret replaced by `••••` (for example `… --slot ••••`).
 - **The confirm modal.** The "Confirm secret-bearing run" dialog lists
@@ -122,6 +126,18 @@ Journey 2: because the GUI passes a phrase as an argument, the tool
 emits its own "secret material on argv" warning — a hint to prefer
 piping the seed on standard input, which the shell examples in
 `Examples.pdf` do.)
+
+## Revealed demo phrases in this book
+
+A few filled-form shots in Journeys 1 and 2 show the demo seed phrase in
+plaintext, not `••••`. That is deliberate: those steps hold the **👁
+reveal** toggle so you can see exactly what to type into the field. Every
+phrase shown that way is one of the three **public** test vectors — safe
+to print, never to fund. With your *own* seed, use the reveal only to
+verify against a paper backup, then release it (or Alt-Tab away) to
+re-mask before anyone can read the screen; the reveal is display-only, so
+the confirm modal, the `argv:` echo, and the saved session state stay
+masked no matter what.
 
 ## What the panel's `argv:` line really contains
 

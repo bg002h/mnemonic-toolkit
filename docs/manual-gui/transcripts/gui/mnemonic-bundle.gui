@@ -8,7 +8,7 @@
   --import-json           path(stdio)  -> <empty>
   --import-json-index     number  -> <unset>
   --language              dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
-  --passphrase            text  (secret) -> <masked>
+  --passphrase            text  (secret) -> <masked> [reveal]
   --passphrase-stdin      checkbox  (secret) -> [ ] off [disabled]
   --account               number  -> <unset>
   --json                  checkbox  -> [ ] off

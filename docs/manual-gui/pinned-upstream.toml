@@ -47,12 +47,39 @@
 # tests/snapshots/tutorial/ by lint phases 10-11 (single coherent bump —
 # form gallery + .gui renders + tutorial corpus move in lockstep).
 #
+# v0.56.0 -> v0.57.0 (tutorial-surfaced-fixes batch, Leg 2 / P2): the
+# GUI tag bumps to mnemonic-gui-v0.57.0. It is PIN-NEUTRAL — the tag's
+# own pinned-upstream.toml + Cargo.toml still pin
+# mnemonic-toolkit-v0.75.0 / descriptor-mnemonic-md-cli-v0.11.0 /
+# ms-cli-v0.13.0 / mk-cli-v0.11.0 (VERIFIED against the tag clone), so
+# the four *-tag-implied fields below are unchanged; the GUI's
+# schema-mirror job runs against the identical toolkit binary. Two
+# user-visible deltas ride the bump: (1) the secret-field reveal (eye)
+# toggle — a display-only hold-to-reveal / bounded-latch affordance that
+# adds a strictly-ASCII ` [reveal]` marker to the 28 masked-on-load
+# secret rows in the structural renders (28 .gui re-pin) and eye chrome
+# to 32 gallery PNGs (the 28 <masked>-emit forms plus 4 composite
+# default-argv-secret forms final-word/seed-xor-split/seedqr-encode/
+# ms-shares-split whose masked value field shows an eye on load, no .gui
+# delta); (2) the restore `--template` `(none)` unset affordance (the F1
+# mirror — a render-scoped RESTORE_TEMPLATES const appending the
+# empty-string sentinel; re-pins mnemonic-restore.gui's --template row,
+# which ALSO carries the reveal marker on its --passphrase row). The
+# tutorial corpus re-drives once: 26 of the 50 figures/tutorial/ PNGs
+# move (4 reveal-plaintext + 10 restore `(none)` + 12 eye-chrome);
+# transcripts/tutorial/ are BYTE-IDENTICAL (reveal is display-only,
+# `(none)` drops an inert flag — a gated transcript invariant). The
+# restore `(none)` variant adds one manual section
+# (`### (none) {#mnemonic-restore-template-}` in
+# src/40-mnemonic/4d-restore.md) so gui-schema-coverage's per-variant
+# anchor stays satisfied.
+#
 # Source-path resolution for the lint:
 #   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
 #   default `../mnemonic-gui` relative to docs/manual-gui/.
 
 [mnemonic-gui]
-tag = "mnemonic-gui-v0.56.0"
+tag = "mnemonic-gui-v0.57.0"
 
 [manual-gui]
 toolkit-tag-implied = "mnemonic-toolkit-v0.75.0"

@@ -187,6 +187,32 @@ location, a What description, a Status (`open` | `resolved <commit>`
 - **Companion:** toolkit `design/FOLLOWUPS.md::examples-pdf-un-ci-gated`;
   `design/SPEC_gui_example_tutorial.md` §11 (filing mandate).
 
+### `gui-secret-reveal-toggle` — toolkit-manual leg of the reveal (👁) + restore `(none)` batched cycle (tracking)
+
+- **Surfaced:** 2026-07-05, batched cycle `tutorial_surfaced_fixes_batch`
+  (`design/SPEC_gui_secret_reveal_toggle.md` + `design/SPEC_restore_template_none_affordance.md`,
+  both R0-GREEN 0C/0I; `design/IMPLEMENTATION_PLAN_tutorial_surfaced_fixes_batch.md`,
+  plan-R0 GREEN). Filed at the toolkit leg's P2.1 per the cross-repo mirror rule.
+- **What (this repo's leg, plan-P2.1/P2.2):** consume the two user-visible deltas that
+  rode `mnemonic-gui-v0.57.0` into `docs/manual-gui/` — pin bump v0.56.0 → v0.57.0
+  (pin-NEUTRAL: toolkit-implied stays v0.75.0, md/ms/mk unchanged); re-pin the 28 `.gui`
+  structural renders that gained the ` [reveal]` marker on their masked-on-load secret
+  rows (`mnemonic-restore.gui` carries BOTH deltas — the ` [reveal]` row AND the
+  `--template … ,(none)]` row); byte-copy the 32 moved gallery PNGs (the 28 `.gui`-movers
+  ∪ 4 composite-visual-only `final-word`/`seed-xor-split`/`seedqr-encode`/`ms-shares-split`)
+  + the 26 moved tutorial figures (4 reveal-plaintext + 10 restore `(none)` + 12 eye-chrome;
+  corpus stays 50, transcripts BYTE-IDENTICAL); regen `expected_gui_schema_inventory.json`
+  (restore `--template` gains the trailing `""` sentinel); add the REQUIRED restore `(none)`
+  reference section (`src/40-mnemonic/4d-restore.md`) + the reveal-toggle prose + the
+  tutorial rewrite (the six restore steps now teach the clean `(none)` md1 restore, not the
+  workaround; the four reveal steps note the demo phrase is now visible). **Toolkit leg has
+  ZERO `crates/` `src/` changes** (docs-only).
+- **Status:** open — discharged by this leg (P2.1 + P2.2); flips RESOLVED in the
+  `manual-gui-v1.3.0` shipping commit (P2.3). **Tier:** `cross-repo` (paired legs; GUI tag
+  BEFORE the toolkit pin).
+- **Companion:** mnemonic-gui `FOLLOWUPS.md::gui-secret-reveal-toggle` (GUI leg, RESOLVED
+  mnemonic-gui-v0.57.0) + toolkit `design/FOLLOWUPS.md::gui-secret-reveal-toggle`.
+
 ---
 
 ## Resolved items

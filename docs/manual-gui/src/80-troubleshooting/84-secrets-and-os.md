@@ -4,7 +4,9 @@ Secret-bearing inputs — BIP-39 phrases, `ms1` strings,
 passphrases, SLIP-39 shares, XOR shares — leave the GUI through
 two narrow channels: the
 **SecretLineEdit**\index{SecretLineEdit} widget masks them in
-the form, and the **run-confirm modal**\index{run-confirm
+the form (with a deliberate, hold-to-reveal 👁 toggle for
+verification — see [§14](#secret-reveal-toggle)), and the
+**run-confirm modal**\index{run-confirm
 modal} requires explicit confirmation before spawning the
 subprocess. The chapter [§14 Defense 2](#secret-handling)
 covers the threat-model rationale; this chapter covers the
@@ -65,18 +67,25 @@ residual exposure surface.
   password fields — most announce nothing or a generic
   "asterisk" per character, but configurable. Verify your
   specific screenreader does not announce the underlying
-  characters before trusting the threat model.
+  characters before trusting the threat model. The 👁 reveal
+  toggle ([§14](#secret-reveal-toggle)) latches for keyboard /
+  assistive-technology activation, so a revealed field
+  advertises its plaintext through AccessKit deliberately —
+  verify your screenreader's behavior on the revealed state too.
 - **Window-capture by other applications**: macOS Mission
   Control thumbnails and Windows Alt+Tab thumbnails are
   subject to the OS-level exclusion above (i.e. the thumbnail
   is suppressed or rendered black). On Linux, KDE
   `kwin_wayland`'s window-thumbnail feature and GNOME's
   switcher previews CAN surface a low-resolution snapshot of
-  the GUI window — the snapshot does not include
-  `SecretLineEdit` mask characters' underlying values (those
-  only exist in egui's internal buffer, not the rendered
-  frame), but adjacent form widgets (dropdowns, plain-text
-  fields) ARE visible.
+  the GUI window — the snapshot does not include a masked
+  `SecretLineEdit`'s underlying value (those characters only
+  exist in egui's internal buffer, not the rendered frame),
+  **unless the field is revealed via the 👁 toggle**, in which
+  case the plaintext is drawn to the frame and can be captured
+  like any other visible widget (re-mask before you look away);
+  adjacent form widgets (dropdowns, plain-text fields) ARE
+  visible regardless.
 
 ## Cold-node operational mitigation
 

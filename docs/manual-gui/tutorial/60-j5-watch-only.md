@@ -47,10 +47,11 @@ one run stands in for `Examples.pdf`'s `bundle … --json | jq -r
 ## Restore to a descriptor {#tut-j5-23-restore-descriptor}
 
 Reconstruct the wallet from that `md1` card and emit a **bare canonical
-descriptor**. Select **Restore …**, set **Template** to the wallet's
-`wsh-sortedmulti` family, set **`--format`** to `descriptor`, and let
-the `md1` chunks chain in from the bundle-JSON step's run. The filled
-form is below.
+descriptor**. Select **Restore …**, set **Template** to **`(none)`** (an
+`md1` restore needs no template — clearing the form's default `bip84`
+avoids the single-sig-template refusal in `--md1` mode), set
+**`--format`** to `descriptor`, and let the `md1` chunks chain in from
+the bundle-JSON step's run. The filled form is below.
 
 The panel returns `wsh(sortedmulti(2,…))#yjp7hj7w` on standard output —
 the plain descriptor other wallets import — and the restore summary
@@ -82,7 +83,8 @@ Journey 2's: same wallet, rebuilt from the card alone.
 
 ## Restore for Bitcoin Core {#tut-j5-24-restore-core}
 
-The same restore with **`--format`** switched to `bitcoin-core` emits
+The same restore (Template stays `(none)`) with **`--format`** switched
+to `bitcoin-core` emits
 the ready-to-import `importdescriptors` array (external `.../0/*` and
 change `.../1/*` requests, each with an `"active": true` range). The
 filled form is below; the chained `md1` chunks are unchanged from the
