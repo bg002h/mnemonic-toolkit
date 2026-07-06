@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generator for docs/Examples.pdf — emits Examples.md to stdout with EXACT,
-# verbatim command input + output captured from the real `mnemonic` v0.55.3
+# verbatim command input + output captured from the real `mnemonic` v0.75.0
 # binary. No eliding: every command is run and its full combined output shown.
 #
 # Prose is ASCII-only (the body roman font lacks math glyphs); real command
@@ -12,14 +12,36 @@
 #  hook-arrow + the literate glyph map that forces output unicode through DejaVu.)
 set -u
 
-REPO=/scratch/code/shibboleth/mnemonic-toolkit
+# Script-relative repo root (works from any checkout; CI's $GITHUB_WORKSPACE
+# clone resolves correctly). Override with REPO=... if needed.
+REPO="${REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
 BUILD="$REPO/.examples-build"
 WORK="$BUILD/work"
-export PATH="$HOME/.cargo/bin:$PATH"
+# Prepend EXAMPLES_BIN_DIR (CI sets it to $GITHUB_WORKSPACE/target/debug) so the
+# source-built binary wins over any stale cargo-installed one. PATH is resolved
+# from the REAL $HOME first, THEN the environment is scrubbed below.
+export PATH="${EXAMPLES_BIN_DIR:+$EXAMPLES_BIN_DIR:}$HOME/.cargo/bin:$PATH"
+
+# Pin the output-visible environment so captured install.sh paths + tool output
+# are a pure function of (repo tree, mnemonic binary) on any machine. install.sh
+# derives every path it prints from exactly these three (MAN_DIR from
+# XDG_DATA_HOME/HOME, install root from CARGO_INSTALL_ROOT/HOME); LC_ALL/LANG/TZ
+# pin the python3/jq/sed output. (Set AFTER PATH resolution — order matters.)
+unset XDG_DATA_HOME CARGO_INSTALL_ROOT
+export HOME=/home/user
+export LC_ALL=C LANG=C TZ=UTC
+
+# Strict preflight: fail loud BEFORE emitting so a missing tool can NEVER be
+# captured as "command not found" into the document body via run's eval … 2>&1.
+# (bitcoind/bitcoin-cli are no longer required — §6.6 is a static capture.)
+for _tool in jq python3 sed; do
+  command -v "$_tool" >/dev/null 2>&1 || {
+    echo "FATAL: required tool '$_tool' not found on PATH" >&2; exit 1; }
+done
 
 # Pin to the real, non-experimental shipped binary.
 VER=$(mnemonic --version 2>/dev/null)
-[ "$VER" = "mnemonic 0.55.3" ] || { echo "FATAL: expected mnemonic 0.55.3, got '$VER'" >&2; exit 1; }
+[ "$VER" = "mnemonic 0.75.0" ] || { echo "FATAL: expected mnemonic 0.75.0, got '$VER'" >&2; exit 1; }
 
 rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK" || exit 1
 
@@ -84,8 +106,8 @@ show() { printf '\n```\n'; for c in "$@"; do printf '$ %s\n' "$c"; done; printf 
 cat <<'MD'
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.55.3 -- worked examples (Linux), exact verbatim I/O"
-date: "2026-06-15"
+subtitle: "mnemonic-toolkit v0.75.0 -- worked examples (Linux), exact verbatim I/O"
+date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
 colorlinks: true
@@ -101,7 +123,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.55.3** on Linux and **both the command and its full output are
+`mnemonic` **v0.75.0** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -174,10 +196,11 @@ cat <<'MD'
 
 The installer carries the current version pins, so it never goes stale. Useful
 flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--from-git`, `--force`,
-`--dry-run`, `--list`. The pin table (`--list`) and a dry run are deterministic:
+`--dry-run`, `--list`. The pin table (`--list`) and a dry run are deterministic
+(`$REPO` = your clone root):
 MD
-run "sh '$REPO/scripts/install.sh' --list"
-run "sh '$REPO/scripts/install.sh' --no-gui --dry-run"
+run 'sh "$REPO/scripts/install.sh" --list'
+run 'sh "$REPO/scripts/install.sh" --no-gui --dry-run'
 cat <<'MD'
 
 Verify the install and list every subcommand:
@@ -206,8 +229,8 @@ MD
 run 'mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed0.txt'
 cat <<'MD'
 
-Each card is printed twice: once unbroken, once grouped into 5-character blocks
-(`ms10e ntrsq qqqqq ...`) -- the grouped form is what you punch or engrave. Add
+Each card is printed once, grouped into 5-character blocks
+(`ms10e ntrsq qqqqq ...`) -- exactly the form you punch or engrave. Add
 `--no-engraving-card` to suppress the stderr panel when piping into other tools.
 
 \newpage
@@ -528,7 +551,8 @@ the two script leaves; `after(...)` are the absolute (height/time) locks and
 
 Every key is distinct, so it engraves (watch-only). Take the md1 chunks and
 restore to read the first address (this round-trip also proves the **real
-internal key** at the trunk reconstructs -- the v0.55.3 non-NUMS feature). The
+internal key** at the trunk reconstructs -- the non-NUMS internal-key feature,
+shipped in v0.55.3). The
 descriptor file (shown again):
 MD
 run 'cat taproot.desc'
@@ -646,21 +670,20 @@ chunks alone:
 MD
 run 'mnemonic bundle --descriptor-file taproot-multi.desc --network mainnet --json | jq -r ".md1[]" > taproot-multi.md1'
 run 'mnemonic restore --network mainnet $(sed "s/^/--md1 /" taproot-multi.md1)'
-RECV=$(mnemonic restore --network mainnet $(sed "s/^/--md1 /" taproot-multi.md1) --format bitcoin-core 2>/dev/null | jq -r '.[0].desc')
 cat <<'MD'
 
 `restore` reports a `bc1p...` Taproot address. Confirm it against Bitcoin
 Core's **independent C++** derivation: `deriveaddresses` on the receive
 (`.../0/*`) descriptor (split from the `<0;1>` multipath, which Core rejects):
-MD
-if command -v bitcoind >/dev/null 2>&1 && command -v bitcoin-cli >/dev/null 2>&1; then
-  DD=$(mktemp -d)
-  bitcoind -chain=main -datadir="$DD" -rpcport=18998 -connect=0 -listen=0 -blocksonly=1 -daemon >/dev/null 2>&1
-  for _ in $(seq 1 30); do bitcoin-cli -chain=main -datadir="$DD" -rpcport=18998 getblockchaininfo >/dev/null 2>&1 && break; sleep 1; done
-  CORE=$(bitcoin-cli -chain=main -datadir="$DD" -rpcport=18998 deriveaddresses "$RECV" '[0,0]' 2>/dev/null | jq -r '.[0]')
-  bitcoin-cli -chain=main -datadir="$DD" -rpcport=18998 stop >/dev/null 2>&1; sleep 1; rm -rf "$DD"
-  printf '\n```\n$ bitcoin-cli -chain=main deriveaddresses "%s" "[0,0]"\n["%s"]\n```\n' "$RECV" "$CORE"
-  cat <<'MD'
+
+*(STATIC CAPTURE -- recorded from Bitcoin Core v27.0. `deriveaddresses` is a
+deterministic descriptor-to-address function of the fixed descriptor above;
+this line is NOT regenerated by `gen.sh` and needs no node in CI.)*
+
+```
+$ bitcoin-cli -chain=main deriveaddresses "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,sortedmulti_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/0/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/0/*,[28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/0/*))#mk8vdqmt" "[0,0]"
+["bc1p550zvnachy40z6hh8llka93mkm0c3635samp264ck6rfd0dcdc8s00n8c8"]
+```
 
 Byte-for-byte the same `bc1p...` that `restore` reported -- the toolkit's own
 derivation (which v0.49.1 routes *around* the codec for taproot) agrees with
@@ -669,14 +692,6 @@ render -- its pinned rust-miniscript fork has `sortedmulti_a`, the codec's
 crates.io build does not -- so this end-to-end check is the only place an
 external oracle sees it.
 MD
-else
-  show "bitcoin-cli -chain=main deriveaddresses \"$RECV\" '[0,0]'"
-  cat <<'MD'
-
-(Run against your own offline `-chain=main` node; Core returns the same `bc1p...`
-that `restore` reported.)
-MD
-fi
 cat <<'MD'
 
 \newpage
@@ -693,7 +708,7 @@ cat <<'MD'
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.55.3 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.75.0 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage
@@ -706,28 +721,21 @@ the authoritative per-flag reference.
 > rust-miniscript commit (the PR-#953 merge, in no crates.io release) to lift
 > the depth->=2 taptree cap. It is **not** part of any shipped release, is not
 > on the install path, and must never be used to secure real funds. The shipped
-> `mnemonic` v0.55.3 documented everywhere else in this guide deliberately
+> `mnemonic` v0.75.0 documented everywhere else in this guide deliberately
 > **refuses** depth->=2 (sections 6.1 and below); that refusal is the supported
 > behavior until a rust-miniscript release > 13.1.0 ships #953.
 
 Master refuses to *restore* a depth->=2 taptree because the shipped miniscript
 pin mis-formats nested taptrees. The POC bumps that pin and lifts the cap. Build
-it under a **distinct name** so it never overwrites your real `mnemonic` (both
-report the same version string `0.55.3`, so the command name is the only thing
-that tells them apart):
+it under a **distinct name** so it never overwrites your real `mnemonic`. The
+twin below was built from the 0.55.3-era experimental branch; the static
+reconstruction capture further down is from that build:
 MD
 show 'git clone https://github.com/bg002h/mnemonic-toolkit && cd mnemonic-toolkit' \
      'git checkout experimental/taproot-depth-ge2' \
      'cargo build --release --manifest-path crates/mnemonic-toolkit/Cargo.toml' \
      'cp target/release/mnemonic ~/.cargo/bin/mnemonic-depth2   # DISTINCT name'
 
-if command -v mnemonic-depth2 >/dev/null 2>&1 && [ "$(mnemonic-depth2 --version 2>/dev/null)" = "mnemonic 0.55.3" ]; then
-cat <<'MD'
-
-Same version string, different binaries -- tell them apart by command name:
-MD
-run 'mnemonic --version'
-run 'mnemonic-depth2 --version'
 cat <<'MD'
 
 Recall the depth-2 four-leaf descriptor from section 6.1 (one tier per leaf):
@@ -752,23 +760,37 @@ cat <<'MD'
 The experimental `mnemonic-depth2` reconstructs the very same card -- depth-2
 taptree and all -- and prints a loud EXPERIMENTAL advisory on stderr before the
 reconstructed descriptor and first address:
-MD
-run 'mnemonic-depth2 restore --network mainnet $(sed "s/^/--md1 /" depth2.md1)'
-cat <<'MD'
+
+*(STATIC CAPTURE -- recorded 2026-06-15 from the experimental `mnemonic-depth2`
+build at v0.55.3. This block is NOT regenerated by `gen.sh` and is not
+reproducible with a released binary or in CI; build the branch as shown above
+to reproduce it. Everything else in this document is live-captured and CI-gated.)*
+
+```
+$ mnemonic-depth2 restore --network mainnet $(sed "s/^/--md1 /" depth2.md1)
+EXPERIMENTAL: depth-≥2 taproot reconstruction relies on an UNRELEASED rust-miniscript commit (#953, in no crates.io release) — proof-of-concept only; do NOT use for real funds and do NOT merge. Rebuild when miniscript > 13.1.0 ships.
+miniscript policy restore (12 cosigners)
+CONFIRM: verify each cosigner fingerprint against your records before importing.
+  descriptor: tr([73c5da0a/84'/0'/4']xpub661MyMwAqRbcEyUKSqsBgaz1Lob8pCa1rM1SJ8CEzGCYyP9LisxZ2m1goDqj137XvHdY2nNkctqiE1ixaAFqYHf91CFpFpKicVb7TzvrGsE/<0;1>/*,{{and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub661MyMwAqRbcFHMVYpCiBTXd2Caj7vZhNFHJSgE59Aue2yYkXSrz5q9GaQ4rRjJVhHZTsCiHWSzgMS5beaaTHWVmhpGC7SMdqMXHRXZi8as/<0;1>/*,[73c5da0a/84'/0'/1']xpub661MyMwAqRbcGaxoYcLaxHHXZqEgSRQmN2P5ung8MJ8MNE535mLuhq7zjnrMKyA5eX6ehicVbU1FFPU39LGXbY8PmLPLQxVRQmPFa3Q7spa/<0;1>/*,[73c5da0a/84'/0'/2']xpub661MyMwAqRbcGuXAHBK3oquZS1HJiz2fVZ2idNcK4GLGTXJyGZkPK7fviN6euv5GzY18JD3WBG3SoLat23TLAVjhQMxDVMAqymQNhg3RFT8/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub661MyMwAqRbcGHLCZcLjg25oG8wSyqSE5XNM9uMks6vrpH4pRDC8UmAynovThuKraidMeEKJ2FcqBw1eF76aeu1vrGtLJXUiJXr4r9N1TZQ/<0;1>/*,[b8688df1/84'/0'/0']xpub661MyMwAqRbcGowNgeNcLS8CgL2vnZybpJqtkbCmSQMdq2qzcDWqq3CXXg7x5BqvcNCSaNUw6nisoN7JFK2j3HfxV57nNm2RLKo2UzHgbs6/<0;1>/*,[b8688df1/84'/0'/1']xpub661MyMwAqRbcEv3U8uuxavsQA8LNNYwcNge8rT7SaMS5S8KiEwxoP72TQ8ARYjczPTtVQz6CxcaBTEE3XchmYvSiHcVbC9h17CmyfG7sVq9/<0;1>/*)))},{and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub661MyMwAqRbcG7Xht9EwgNucA47Rmgg8Bn5bNmFdJMkotHQDXirpogQHkVNRcwAy6KwGnUYMUNBFCNaRq4WnsqWW2VNUDdW6ymHXfVpk4c3/<0;1>/*,[b8688df1/84'/0'/3']xpub661MyMwAqRbcEbqBvNkLuDtudGA2PHAbtWUuHKe3CKjZCaLjxLGSG8SJpwBCnXsj8xPGXaV9ZWL3j9ktbed8y1aeNVK95HrkgHfHGBXM5Eh/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub661MyMwAqRbcEdBofBaGbgnse74WRuyEbXRSmzq8jzthzutDnXTV2yNQPzgs3ubwuNp7yrSHnECoA5xHgnoEDH4HSGWqLtYdi6nWVZCfXPk/<0;1>/*,[28645006/84'/0'/1']xpub661MyMwAqRbcH2WNMbtz4pZ8wDtpxndYo6E4r5o8pXedve17srma1LCEjM8WcpVk67xsc36KpBNtYUdqo5dpcFMzRfzSZSa4C5DRty4eDNF/<0;1>/*,[28645006/84'/0'/2']xpub661MyMwAqRbcGqcAAnB9mhvQsdUx2fKasUoXT2gMpt2tFz94wRfAkhuLhZUJkjQ5pgnd9Ny9EwrgcHbAASVnQShCbfhnGsKAk2k6yGoWXAv/<0;1>/*))}})#5trrgdg0
+  first recv: bc1p6yc7kzttzsafprr6hwsaefuyqxvee4j48zdrqt4kl9ers68mhcestwvn66
+  cosigner @0: 73c5da0a [84'/0'/4']  from md1 (not independently verified)
+  cosigner @1: 73c5da0a [84'/0'/0']  from md1 (not independently verified)
+  cosigner @2: 73c5da0a [84'/0'/1']  from md1 (not independently verified)
+  cosigner @3: 73c5da0a [84'/0'/2']  from md1 (not independently verified)
+  cosigner @4: 73c5da0a [84'/0'/3']  from md1 (not independently verified)
+  cosigner @5: b8688df1 [84'/0'/0']  from md1 (not independently verified)
+  cosigner @6: b8688df1 [84'/0'/1']  from md1 (not independently verified)
+  cosigner @7: b8688df1 [84'/0'/2']  from md1 (not independently verified)
+  cosigner @8: b8688df1 [84'/0'/3']  from md1 (not independently verified)
+  cosigner @9: 28645006 [84'/0'/0']  from md1 (not independently verified)
+  cosigner @10: 28645006 [84'/0'/1']  from md1 (not independently verified)
+  cosigner @11: 28645006 [84'/0'/2']  from md1 (not independently verified)
+UNVERIFIED: no --from/--cosigner cross-check supplied; verify each cosigner fingerprint above against your records before importing
+note: stdout is watch-only — public keys only, cannot spend
+```
 
 The reconstructed descriptor is the genuine depth-2 shape `tr(Kint,{{A,B},{C,D}})`
 (four leaves, one tier each) -- the layout section 6.5 showed is cheaper to spend
 but that master cannot yet build. When a rust-miniscript release > 13.1.0 ships
 #953, this is rebuilt as a supported feature and this appendix retires.
 MD
-else
-cat <<'MD'
-
-*(The experimental `mnemonic-depth2` binary is not installed in this build
-environment, so the live reconstruction output is omitted. Build it from the
-branch as shown above to reproduce it: master `restore` refuses a depth->=2 card
-with "taproot tree depth >=2 ... not yet restorable", while `mnemonic-depth2
-restore` reconstructs the full `tr(Kint,{{A,B},{C,D}})` descriptor and prints an
-EXPERIMENTAL advisory on stderr.)*
-MD
-fi
