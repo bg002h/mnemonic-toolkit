@@ -207,9 +207,8 @@ location, a What description, a Status (`open` | `resolved <commit>`
   tutorial rewrite (the six restore steps now teach the clean `(none)` md1 restore, not the
   workaround; the four reveal steps note the demo phrase is now visible). **Toolkit leg has
   ZERO `crates/` `src/` changes** (docs-only).
-- **Status:** open — discharged by this leg (P2.1 + P2.2); flips RESOLVED in the
-  `manual-gui-v1.3.0` shipping commit (P2.3). **Tier:** `cross-repo` (paired legs; GUI tag
-  BEFORE the toolkit pin).
+- **Status:** **RESOLVED manual-gui-v1.3.0** — discharged by this leg (P2.1 regen + P2.2 prose +
+  P2.3 ship). **Tier:** `cross-repo` (paired legs; GUI tag BEFORE the toolkit pin).
 - **Companion:** mnemonic-gui `FOLLOWUPS.md::gui-secret-reveal-toggle` (GUI leg, RESOLVED
   mnemonic-gui-v0.57.0) + toolkit `design/FOLLOWUPS.md::gui-secret-reveal-toggle`.
 

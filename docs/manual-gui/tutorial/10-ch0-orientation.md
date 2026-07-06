@@ -130,8 +130,7 @@ piping the seed on standard input, which the shell examples in
 ## Revealed demo phrases in this book
 
 A few filled-form shots in Journeys 1 and 2 show the demo seed phrase in
-plaintext, not `••••`. That is deliberate: those steps hold the **
-reveal** toggle so you can see exactly what to type into the field. Every
+plaintext, not `••••`. That is deliberate: those steps hold the **reveal** toggle so you can see exactly what to type into the field. Every
 phrase shown that way is one of the three **public** test vectors — safe
 to print, never to fund. With your *own* seed, use the reveal only to
 verify against a paper backup, then release it (or Alt-Tab away) to
