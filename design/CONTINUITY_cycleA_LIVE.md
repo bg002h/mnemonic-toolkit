@@ -10,7 +10,20 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS (2026-07-06 session): ✅✅ BOTH R0 GATES GREEN (SPEC + PLAN). Ready for Phase-1 IMPLEMENTATION.
+## ⏸ PAUSED (user 2026-07-06) at: both R0 gates GREEN, implementation NOT started. Clean resume point.
+**Main tree:** master @ `9767b3aa` (all design artifacts committed; `git status` clean of tracked changes).
+**RESUME:** re-dispatch ONE Phase-1 implementer subagent (sonnet, `isolation: worktree`) with the exact prompt used
+this session — execute Phase 1 (ATOMIC) of `design/IMPLEMENTATION_PLAN_...md`: write all failing tests → residue
+check in `lex_placeholders` (re-grep: after the multipath validator ~:178, before `out.push` ~:183) → migrate ALL
+22 incumbent cells (Group A + `:898` assert-reject / Group B `<0;1>` swap / OOB fixture-swap; sweep is the checklist)
+→ FULL `cargo test -p mnemonic-toolkit` + `wc-codec` GREEN → opus per-phase R0 → integrate to master. Then P2 funds
+regressions, P3 ripples, P4 whole-diff review + MINOR-bump release. The first (stopped) implementer left a
+disposable partial worktree `.claude/worktrees/agent-aa7ece60b99e468d9` (branch `worktree-agent-aa7ece60b99e468d9`,
+uncommitted, ~started writing tests) — ignore/prune it; re-dispatch fresh.
+**Guardrails for the implementer:** TDD; keep `lex_bare_at_zero` unchanged (D1 deferred); NO `cargo fmt --all`
+(mlock.rs fmt-exempt — `cargo fmt -p` only); no version/README/CHANGELOG/manual/install.sh edits (later phases);
+stage explicitly; NEVER swap a Group-A or `:898` cell to `<0;1>` (no-weakening rule).
+### (superseded) ✅✅ BOTH R0 GATES GREEN (SPEC + PLAN). Ready for Phase-1 IMPLEMENTATION.
 PLAN R0 round 2 = GREEN (0C/0I); `cycleA-plan-r0-round-2.md`. m1 (SPEC §8 verify-variant) + m2 (plan citations
 `:853`/`:391`) tidied. NEXT = dispatch ONE implementer subagent in a git WORKTREE to execute the GREEN plan,
 Phase 1 (ATOMIC): write all failing tests → residue check in `lex_placeholders` (after :178, before :183) →
