@@ -10,7 +10,42 @@ never hold critical state only in conversation.
 
 ---
 
-## ⏸ PAUSED (user 2026-07-06) at: both R0 gates GREEN, implementation NOT started. Clean resume point.
+## STATUS: ✅ PHASE 1 DONE + INTEGRATED to master (`be280c00` impl + `38aa34ca` fold). NEXT = Phase 2 (funds regressions).
+Phase-1 per-phase R0: round 1 = 0C/1I → fold I-1/M-1 → round 2 = GREEN (0C/0I). Reviews: `cycleA-phase-1-r0-round-1.md`,
+`cycleA-phase-1-r0-round-2.md`. Suite on branch 3578 pass/0 fail; cherry-picked CLEAN onto master (code orthogonal
+to design commits). Impl worktree pruned. Master 5 ahead of origin (3 design + 2 impl), unpushed — push at ship.
+**Phase 2 (NEXT):** born-green funds regressions (per plan §Phase 2 / m3): 2a verify-bundle false-pass closure —
+CONCRETE `/0/*` descriptor verified vs any card → exit 2 / `DescriptorParse` PRIMARY (+ optional `@N`-template →
+exit 4 / `DescriptorReparseFailed`); 2b BIP-84 oracle — POSITIVE (correct `<0;1>/*` card restores
+`bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`) + NEGATIVE (`/0/*` rejects at encode, never the collapsed
+`bc1q8vph849...`). Then per-phase R0. Then P3 ripples (manual + CHANGELOG incl. `/**` + Core-interim; GUI none),
+P4 whole-diff review + MINOR bump + FOLLOWUPS + ship.
+### (superseded) Phase-1 R0 fold done → R0 round 2 (convergence).
+Fold commit `27f27bed` (parent `72e82d1c`) added 5 born-green reject tests: I-1 `--format descriptor` `/0/*`+`/**`
+(`descriptor_fixed_use_site_step_rejected...`, `descriptor_double_star_shorthand_rejected...`), M-1 specter/old-json-
+replay/BSMS single-branch. Suite 3578 pass/0 fail (+5); no src/fixture change; 0 deletions. R0 round 2 dispatched
+(opus, convergence: non-vacuous asserts + valid checksums + suite green) → persist `cycleA-phase-1-r0-round-2.md`.
+### (superseded) Phase-1 R0 round 1 = 0C/1I → folding I-1(+M-1).
+Phase-1 R0 round 1 (`cycleA-phase-1-r0-round-1.md`): NO-WEAKENING AUDIT CLEAN (Group A/`:898`/Group B/11-extra all
+correct; suite 3573+100 re-verified; fixtures valid; `:898` untouched). Deviation-1 (generic msg) ACCEPTABLE
+(full workaround → Phase 3 docs). 11 extra cells assert-reject CORRECT (false-green covering the bug; `<0;1>` swap
+would be WRONG — Core never exports combined). **1I blocker I-1:** missing end-to-end `import-wallet --format
+descriptor` reject tests for `/0/*` AND `/**` (highest-impact surface, zero CLI proof). **M-1:** add specter/old-json/
+BSMS single-branch `/0/*` reject cells too (before ship). FOLD = resume implementer a1c2bfd30353a5ba9 to add these
+born-green tests to branch `worktree-agent-a1c2bfd30353a5ba9` → full suite GREEN → commit → re-dispatch per-phase R0.
+M-2 (multisig canonicalize `--json`) DEFERRED to pair-merge follow-up; M-3 (msg) → Phase 3 docs.
+### (superseded) Phase-1 impl GREEN → per-phase R0.
+Phase-1 impl commit `72e82d1c` on branch `worktree-agent-a1c2bfd30353a5ba9` (worktree
+`.claude/worktrees/agent-a1c2bfd30353a5ba9`), based on `8c8b9183` (pure code diff — integrate to master by
+cherry-pick after R0 GREEN). Suite GREEN: `mnemonic-toolkit` 3573 pass/0 fail/16 ign, `wc-codec` 100/0. Invariants
+verified: `core-mainnet-receive-change-pair.json` UNTOUCHED, residue check at parse_descriptor.rs:202-207.
+**Impl flagged 2 deviations the R0 must rule:** (1) only the GENERIC surface-tagged reject message added, NOT
+SPEC §6's hand-written bitcoin-core-specific verbiage; (2) **11 EXTRA reject-now cells the static grep MISSED**
+(runtime-built blobs) — 6 `cli_import_wallet_roundtrip.rs::core_bundle_roundtrip_*` + 5
+`cli_wallet_cross_format_convergence.rs` (c1-c4, h_hop) — converted to assert-reject / bitcoin-core-excluded;
+R0 must audit no coverage silently dropped. Per-phase R0 dispatched (opus) → persist `cycleA-phase-1-r0-round-N.md`.
+### (superseded) ▶ RESUMED: Phase-1 implementer re-dispatched.
+## ⏸ (prior) PAUSED at: both R0 gates GREEN, implementation NOT started. Clean resume point.
 **Main tree:** master @ `9767b3aa` (all design artifacts committed; `git status` clean of tracked changes).
 **RESUME:** re-dispatch ONE Phase-1 implementer subagent (sonnet, `isolation: worktree`) with the exact prompt used
 this session — execute Phase 1 (ATOMIC) of `design/IMPLEMENTATION_PLAN_...md`: write all failing tests → residue
