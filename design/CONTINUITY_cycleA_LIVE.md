@@ -10,7 +10,28 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS: ✅ PHASE 1 DONE + INTEGRATED to master (`be280c00` impl + `38aa34ca` fold). NEXT = Phase 2 (funds regressions).
+## STATUS: ✅ PHASES 1+2 DONE + INTEGRATED (master @ `0de6e1f6`). NEXT = Phase 3 (docs ripples).
+Phase-2 per-phase R0 = GREEN (0C/0I); `cycleA-phase-2-r0-round-1.md`. Test 4 = genuine DIRECT first-recv address
+proof (`restore --md1` derives+emits `bc1qcr8te4...`). wc-codec reconciled = TRUE 100/0 (impl's 40 was partial).
+Phase 2 cherry-picked CLEAN → master `0de6e1f6`. Suite 3583+100 green. Worktree pruned.
+**Phase 3 (NEXT — docs, plan §3 minus CHANGELOG which moves to P4 w/ the version bump):** (3a) manual
+`docs/manual/src/40-cli-reference/` — document the import-wallet/`bundle --descriptor`/verify-bundle fixed-step
+reject + error text; the INTERIM bitcoin-core limitation (Core split imports hard-fail until pair-merge follow-up;
+workaround `<0;1>/*`+`--format descriptor`); the `/**` shorthand hard-fail (same workaround). Check CLI-ref `@N`
+examples for a fixed-step form (none expected). **STANDING RULE: any CLI-output shown in docs must be
+binary-generated/identical (verify-examples-style), NOT hand-written.** `make -C docs/manual lint` (no flag change).
+(3c) examples sweep `examples.yml`/`docs/Examples.pdf` (none expected). (3d) GUI NONE — confirm `mnemonic gui-schema`
+byte-unchanged (no flag/enum). Then per-phase R0 (docs). **CHANGELOG → Phase 4** (coupled w/ MINOR version bump).
+### (superseded) Phase 2 impl GREEN → per-phase R0.
+Phase-2 commit `ea0d3019` (branch `worktree-agent-a264febc9c385a6f2`, ff-merged master first then +1) = 5 born-green
+funds-proof tests in `tests/cli_cycleA_phase2_funds_proof.rs`, no src change: verify-bundle concrete `/0/*`→exit2
+`DescriptorParse` (before card compare) + `@N`-template→exit4 `DescriptorReparseFailed`; BIP-84 POSITIVE (`restore
+--md1` DIRECT first-recv = `bc1qcr8te4...`) + independent wrong-value confirm (`bc1q8vph849...`) + NEGATIVE (`/0/*`
+rejects at encode). Suite `mnemonic-toolkit` 3583 pass/0 fail. **wc-codec count discrepancy: 40 here vs 100 in
+Phase-1 R0 — R0 to RECONCILE (Cycle A doesn't touch wc-codec).** Trailer flag = FALSE ALARM (subagent on sonnet saw
+own prompt; trailer correctly = main session Opus 4.8 per env git instr). Per-phase R0 dispatched (opus). Integrate
+ea0d3019 to master after GREEN. Then P3 ripples, P4 whole-diff + MINOR bump + ship.
+### (superseded) PHASE 1 DONE + INTEGRATED. NEXT = Phase 2.
 Phase-1 per-phase R0: round 1 = 0C/1I → fold I-1/M-1 → round 2 = GREEN (0C/0I). Reviews: `cycleA-phase-1-r0-round-1.md`,
 `cycleA-phase-1-r0-round-2.md`. Suite on branch 3578 pass/0 fail; cherry-picked CLEAN onto master (code orthogonal
 to design commits). Impl worktree pruned. Master 5 ahead of origin (3 design + 2 impl), unpushed — push at ship.
