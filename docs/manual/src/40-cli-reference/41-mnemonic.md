@@ -134,6 +134,55 @@ completion](#multisig-template-completion)). Only `tr(sortedmulti_a)` and
 hardened use-sites are refused as templates (they are refused at *emit*
 time, so no such template card exists to restore).
 
+### Non-representable use-site steps {#non-representable-use-site-steps}
+
+md1's use-site path can only encode two shapes for the derivation steps
+that follow a key placeholder (an `@N` slot, or an inline
+`[fp/path]xpub` key): the BIP-389 **multipath** form `/<a;b>/*` (receive
+and change sharing one card), or a **bare** `/*` wildcard. A **fixed
+single step** — `/0/*`, `/0h/*`, or any other literal index in place of
+the multipath alternatives — is *not representable* in md1, and neither
+is the BIP-389 **combined-wildcard shorthand** `/**` (its wildcard match
+consumes only `/*`, leaving the leading `*` as unconsumed residue).
+
+A fixed step here used to be *silently dropped* rather than rejected:
+`@0/0/*` lexed identically to bare `@0`, so a receive-only (`/0/*`) and a
+change-only (`/1/*`) descriptor for the *same* key collapsed to a
+byte-identical wallet-policy card — a funds-loss bug, since the card
+derives a *different* address space than the wallet actually in use.
+This is now refused rather than silently collapsed: `mnemonic bundle
+--descriptor`, `mnemonic import-wallet` (every source format whose
+descriptor carries an `@N`/bracketed key — Sparrow is unaffected, see
+below), and `mnemonic verify-bundle` all **reject** (exit 2,
+`DescriptorParse`) a use-site path ending in a fixed step or the `/**`
+shorthand.
+
+**Remedy:** rewrite the use-site path as the explicit multipath form —
+e.g. replace separate `/0/*` (receive) and `/1/*` (change) entries for
+the same key with one `/<0;1>/*` entry (alternative order follows the
+receive/change convention: index 0 = receive, index 1 = change). The
+`/**` shorthand rewrites to the same explicit `/<0;1>/*` form.
+
+**Sparrow is unaffected.** Sparrow's own `@N/**` template placeholder is
+expanded to the multipath form internally before this check runs, so a
+normal Sparrow import is unaffected by this rule.
+
+**Bitcoin Core interim limitation.** `bitcoin-cli listdescriptors`
+exports the receive and change branches of an account as two *separate*
+descriptor entries (`/0/*` + `/1/*`), never as one combined multipath
+entry — so a standard Bitcoin Core export now hard-fails this check on
+each entry. See [Foreign wallet formats → Bitcoin Core](#bitcoin-core-listdescriptors)
+for the workaround and its interim status.
+
+**`verify-bundle`'s two intake paths differ.** A **concrete** descriptor
+(inline `[fp/path]xpub` keys) rejects at exit 2 (`DescriptorParse`)
+*before* comparing against the supplied cards — this closes a
+false-pass: previously, a `/0/*`-collapsed descriptor verified
+successfully against the *wrong* card, because both sides collapsed
+identically. An **`@N`-template** descriptor (keys supplied via
+`--slot`) instead rejects at exit 4 (`DescriptorReparseFailed`) when the
+completed wallet is re-parsed.
+
 ### Synopsis
 
 ```sh
@@ -162,7 +211,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
 | `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. |
-| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput` |
+| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
 
@@ -603,6 +652,7 @@ default per the inference rule above.
 | Phrase-derived fingerprint disagrees with inline `[Y/...]@N` | `error: slot @{N} phrase-derived fingerprint X does not match descriptor inline [Y/...]; verify the phrase or correct the descriptor.` |
 | `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
 | Canonical descriptor + `--slot @N.phrase= + --slot @N.path=` | `error: slot @{N} has both secret-bearing input and watch-only input; pick one per slot.` (the `{phrase, path}` pair is legal only in non-canonical mode) |
+| `@N`/key use-site path ends in a fixed step (`/0/*`, `/0h/*`) or the `/**` shorthand | refused, exit 2 (`DescriptorParse`) — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps) |
 
 ---
 
@@ -653,6 +703,17 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--md1 <STRING>` | repeating; one md1 card |
 | `--json` | JSON output |
 | `--help` | print help |
+
+### Non-representable use-site steps
+
+`verify-bundle` applies the same [use-site residue reject](#non-representable-use-site-steps)
+as `bundle` / `import-wallet` when re-parsing a `--descriptor` /
+`--descriptor-file` input, but the exit code differs by intake path: a
+**concrete** descriptor (inline keys) rejects at exit 2
+(`DescriptorParse`) *before* any comparison against the supplied cards
+runs, while an **`@N`-template** descriptor (keys supplied via `--slot`)
+rejects at exit 4 (`DescriptorReparseFailed`) when the completed wallet
+is re-parsed.
 
 ### Worked example
 
@@ -1184,7 +1245,14 @@ flag to obtain xpub-only output).
 Because import-wallet engraves an `md1` from the imported descriptor, it
 emits the same non-blocking advisories `bundle` does when the descriptor
 carries a [consensus-masked `older()`](#consensus-masked-relative-timelocks)
-or an [unrestorable shape](#unrestorable-shapes).
+or an [unrestorable shape](#unrestorable-shapes). It is also subject to
+the same [use-site residue reject](#non-representable-use-site-steps): a
+descriptor whose key placeholder is followed by a fixed derivation step
+(`/0/*`) or the `/**` shorthand — rather than the multipath `/<a;b>/*`
+(or bare `/*`) — is refused (exit 2) instead of silently collapsed.
+Bitcoin Core's receive/change split export is the main surface this
+affects in practice — see [foreign wallet formats](#foreign-wallet-formats)
+for the interim workaround.
 
 ### Synopsis
 
@@ -1380,6 +1448,7 @@ on stdout + the round-trip status on stderr.
 | Supplied `--ms1` derives a different xpub than declared at cosigner's path | exit 4 `ImportWalletSeedMismatch` (see template above) |
 | `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
 | Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
+| Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) or the `/**` shorthand | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). Bitcoin Core's separate receive/change entries hit this on every standard export — see [foreign wallet formats](#foreign-wallet-formats) |
 
 ### Advisories
 

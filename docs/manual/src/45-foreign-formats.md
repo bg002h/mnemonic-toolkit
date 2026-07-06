@@ -124,6 +124,14 @@ fields. This shape was added before v0.28.0 promoted the 4-line
 canonical parser to first-class status; it remains supported but
 emits a stderr DEPRECATION notice.
 
+Every shape's `<descriptor>` line is subject to the toolkit's
+[use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps):
+a key placeholder followed by a fixed derivation step (`/0/*`) or the
+`/**` shorthand — rather than the multipath `/<a;b>/*` (or bare `/*`) —
+is refused (exit 2) rather than silently collapsed. A canonical BSMS
+Round-2 descriptor is multipath by construction, so this only bites a
+non-standard single-branch export.
+
 ### Where it comes from
 
 Coordinators that emit BSMS Round-2 include Coldcard ("Multisig
@@ -254,6 +262,38 @@ The `--select-descriptor` flag (`all` / integer / `active-receive`
 the full enumeration. Under `--format bsms`, any non-default value
 emits stderr NOTICE (BSMS Round-2 carries a single descriptor) and
 is treated as `all`.
+
+### Receive/change split exports — interim hard-fail {#bitcoin-core-receive-change-hard-fail}
+
+`bitcoin-cli listdescriptors` exports the receive branch (`.../0/*`,
+`"internal": false`) and the change branch (`.../1/*`, `"internal":
+true`) of one account as **two separate descriptor entries** with
+otherwise-identical keys — Bitcoin Core has never emitted the combined
+BIP-389 multipath (`.../<0;1>/*`) form on export (only accepting it on
+*import*). Because each entry now goes through the toolkit's
+[use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps),
+a fixed single step like `/0/*` is refused rather than silently
+accepted — so importing a **standard** two-entry Core export hard-fails
+on each entry (exit 2).
+
+This is an *interim* limitation, not a permanent one: automatic
+receive/change recombination is planned as a follow-up cycle. Until it
+ships, the workaround is to combine the pair into ONE multipath
+descriptor by hand and import it through the [commented-descriptor](#commented-descriptor)
+door instead of the native `bitcoin-core` blob:
+
+1. Take the receive (`internal: false`) and change (`internal: true`)
+   entries for the same account — same keys, differing only in the
+   `/0/*` vs `/1/*` final step.
+2. Replace the differing final step with `/<0;1>/*` (index 0 = receive,
+   matching the `internal: false` entry; index 1 = change).
+3. Save the combined descriptor to a file (optionally preceded by
+   `#`-comment lines) and import it with
+   `mnemonic import-wallet --format descriptor --blob <file>`.
+
+A Core export where every entry is **already** BIP-389 multipath (some
+wallets combine legacy + segwit accounts this way) is unaffected — each
+multipath entry parses and imports normally.
 
 ## Sparrow Wallet (`--format sparrow`) {#sparrow-wallet}
 
@@ -425,6 +465,16 @@ mnemonic export-wallet --from-import-json envelope.json \
 `blockheight` is preserved in the provenance metadata but DROPPED on
 the canonicalize-side comparison (it's wallet-state, not key-state —
 analogous to Bitcoin Core's `timestamp` field).
+
+Specter's common "Export Wallet" share is **receive-only** — it carries
+no separate change-branch field, so it never had a pairable second entry
+to begin with. A receive-only descriptor is a fixed single step (`/0/*`,
+not multipath), so it now hits the same
+[use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps)
+as Bitcoin Core's split entries (exit 2) — there is no pair-merge
+possible here (no change branch is present in the blob to merge with).
+A Specter export whose `descriptor` field is already the multipath
+`/<0;1>/*` form is unaffected.
 
 ## Coldcard single-sig wallet.json (`--format coldcard`) {#coldcard-singlesig}
 
@@ -866,6 +916,11 @@ detect format", exactly as before). This mirrors the encrypted-BSMS
 - A file with **no** descriptor line (only comments/blanks) → refused.
 - A file with **two or more** descriptor lines → refused (supply one).
 - A **wrong** BIP-380 checksum → refused.
+- A key placeholder's use-site path ending in a fixed step (`/0/*`,
+  `/0h/*`) rather than the multipath `/<a;b>/*` form, or the `/**`
+  combined-wildcard shorthand → refused (exit 2); rewrite as the
+  explicit multipath form. See
+  [Non-representable use-site steps](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps).
 
 ## Round-trip discipline {#foreign-formats-roundtrip}
 
