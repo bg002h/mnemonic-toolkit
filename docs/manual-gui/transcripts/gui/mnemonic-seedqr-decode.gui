@@ -1,7 +1,7 @@
 [ mnemonic > seedqr-decode ]
   --from            composite[seedqr]  -> seedqr=<empty>
   --variant         dropdown[standard,compact]  -> standard
-  --digits          text  (secret) -> <masked>
+  --digits          text  (secret) -> <masked> [reveal]
   --json-out        path  -> <empty>
   --no-auto-repair  checkbox  -> [ ] off
   [ Run ]

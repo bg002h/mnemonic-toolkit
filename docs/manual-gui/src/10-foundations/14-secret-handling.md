@@ -161,6 +161,55 @@ It does **not** protect against:
   what your OS exposes).
 - Anyone with a camera looking at your monitor.
 
+## The reveal toggle — deliberate, display-only exposure {#secret-reveal-toggle}
+
+Every secret-class field masks its value on load (see Defense 2's
+"masked dots"). Since `mnemonic-gui-v0.57.0` each such field also carries
+a small **reveal button** so you can *deliberately* check what you
+typed — verifying a long BIP-39 phrase or passphrase against a paper
+backup is a real need, and forcing a re-type is worse UX than a bounded,
+opt-in reveal. In the structural form renders (the `.gui` gallery) the
+affordance shows as a trailing `[reveal]` marker on each masked secret
+row, e.g. `--passphrase text (secret) -> <masked> [reveal]`; that marker
+is the eye button, not part of the value.
+
+The reveal is **bounded and opt-in by construction**:
+
+- **Hold-to-reveal is the primary interaction.** Press and hold the eye
+  (pointer button down) to unmask; release to re-mask. A pointer **tap
+  does not latch** — reveal lasts only while you hold.
+- **A bounded latch backs keyboard / accessibility use.** Activating the
+  eye by keyboard or an assistive-technology click latches the reveal so
+  keyboard-only and screen-reader users are not required to hold a
+  pointer button. There is **no timeout** — the latch is released by the
+  auto-hide triggers below, not a timer.
+- **Exactly one field can be revealed at a time.** Revealing a second
+  field re-masks the first (a single-revealed-field invariant).
+- **Auto-hide is aggressive.** The reveal (hold or latch) clears the
+  moment you click **Run**, when the field loses focus, when the window
+  loses focus (you Alt-Tab away), or when you switch tab or subcommand.
+  There is a one-frame window on window-focus-loss where the field can
+  still read as revealed before the next repaint masks it; treat a
+  revealed field as on-screen until you have looked away and back.
+
+Crucially, the reveal is **display-only and never widens any other
+surface.** Regardless of whether a field is revealed:
+
+- the **run-confirm modal** (Defense 2) still renders every secret token
+  as `••••`;
+- the output panel's **`argv:` echo** and the **copy-command** string
+  stay masked (`••••`) in both shell flavors;
+- the **paste-warn** modal, the **never-persist** invariant (Defense 1),
+  and the **on-exit zeroize sweep** (Defense 3) are entirely unaffected —
+  the reveal state is transient UI chrome, not part of `FormState`, so it
+  cannot reach disk.
+
+The reveal appears on the primary masked-secret widgets — single-line
+secret fields, secret slot rows, and secret composite value fields. It is
+deliberately **not** wired to the build-descriptor tree key fields yet
+(those mask value-conditionally on an xprv-shaped key; tracked as a
+fast-follow), so a masked tree key has no eye at v0.57.0.
+
 ## Pasting secrets — the paste-warn modal
 
 When you paste into a secret-class text field for the first time in
@@ -182,9 +231,14 @@ forms).
 
 ## What the GUI deliberately does NOT do
 
-- The GUI does not **echo** typed secrets back to you in plaintext.
-  Secret text fields render as masked dots; the only confirmation
-  is the count of characters typed.
+- The GUI does not **echo** typed secrets back to you in plaintext by
+  default. Secret text fields render as masked dots; the passive
+  confirmation is the count of characters typed. The one exception is the
+  deliberate, opt-in [reveal toggle](#secret-reveal-toggle) — a
+  hold-to-reveal affordance you actuate on a single field; it is
+  display-only and never widens any other surface (the run-confirm modal,
+  the `argv:` echo / copy-command, persistence, and the exit sweep all
+  stay masked regardless).
 - The GUI does not log secrets. Tracing output to stderr (via
   `--debug` or `RUST_LOG`) strips secret values from log lines;
   the test suite verifies no secret literals survive the tracing

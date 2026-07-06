@@ -34,9 +34,11 @@ in full.
 On cosigner 0's device, `convert` derives that cosigner's BIP-87
 multisig **fingerprint** from their seed alone. Select **Convert
 (between formats)**, set the composite **`--from`** selector to
-`phrase` and type the demo phrase (masked `••••`), choose **`--to`**
-`fingerprint`, and set **`--template`** `wsh-sortedmulti` (which implies
-the `m/87'/0'/0'` path). The filled form is below; the run panel returns
+`phrase` and type the demo phrase (masked `••••` by default; the
+filled-form shot below holds the composite's **reveal** so you can
+read the public phrase), choose **`--to`** `fingerprint`, and set
+**`--template`** `wsh-sortedmulti` (which implies the `m/87'/0'/0'`
+path). The filled form is below; the run panel returns
 `fingerprint: 73c5da0a`.
 
 Note the standard-error line: because the GUI passes the phrase as an
@@ -44,7 +46,9 @@ argument, the tool prints a `secret material on argv (--from phrase=)`
 warning and suggests piping on standard input instead. `Examples.pdf`
 uses that safer stdin idiom (`< seed0.txt`) and so shows no warning; the
 wallet output — the fingerprint — is identical either way. The phrase is
-masked everywhere on screen; only the *warning* differs.
+masked everywhere on screen except where you deliberately reveal it — the
+confirm modal and the `argv:` echo stay `••••` regardless; only the
+*warning* differs.
 
 ![GUI form (screenshot)](../figures/tutorial/tut-j2-02-convert-fingerprint-form.png)
 
@@ -70,8 +74,9 @@ masked everywhere on screen; only the *warning* differs.
 
 ## Convert the xpub {#tut-j2-03-convert-xpub}
 
-Same form, same seed, **`--to`** set to `xpub`: this returns cosigner
-0's account **public** key,
+Same form, same seed (the **`--from`** phrase field is revealed in the
+shot again, as in the previous step), **`--to`** set to `xpub`: this
+returns cosigner 0's account **public** key,
 `xpub6DBjiYnc4ewKti13Q1L35…VqqzrXvicM`. Standard error repeats the
 argv warning and adds `stdout is watch-only — public keys only, cannot
 spend` — this xpub is safe to hand to the coordinator. In practice you
@@ -217,8 +222,11 @@ the whole set. This is the **convenient but less-safe** path from
 `wsh-sortedmulti` and **`--multisig-path-family`** `bip87`, click
 **`+ Add slot`** twice to reach three rows, set their `@N` indices to
 `0`, `1`, `2`, and set **`--threshold`** to `2`. Then flip each row's
-subkey to `phrase` and type the three demo seeds — all masked `••••`.
-The filled form is below.
+subkey to `phrase` and type the three demo seeds. In the filled-form
+shot below the **last** row holds its **reveal** so you can read that
+public seed; the other two rows stay masked `••••` — a live picture of
+the single-revealed-field rule, where revealing one secret field
+re-masks any other. The filled form is below.
 
 Clicking **Run** raises the same "Confirm secret-bearing run" modal as
 Journey 1 (three masked phrases this time); it runs through the confirm
@@ -258,11 +266,11 @@ Finally, prove the shared `md1` card alone rebuilds the wallet — no
 seeds needed. Select **Restore (re-derive a wallet export from a
 source)**. The `md1` chunks are chained automatically from the previous
 `bundle --json` run and typed into the repeating **`--md1`** rows; the
-**Template** drop-down is set to the wallet's `wsh-sortedmulti` family
-(a template is inert when restoring from an `md1` card — the card
-already carries the full policy — but the form pre-selects one, so we
-set it to the wallet's own family for consistency). The filled form is
-below.
+**Template** drop-down is set to **`(none)`** — restoring from an `md1`
+card needs no template (the card already carries the full policy), and
+`(none)` cleanly clears the form's default `bip44`, which as a
+*single-sig* template would be refused in `--md1` mode (exit 2). The
+filled form is below.
 
 The **`--format`** field materialises to its default, `bitcoin-core`,
 so the panel's standard output is a ready-to-import `importdescriptors`

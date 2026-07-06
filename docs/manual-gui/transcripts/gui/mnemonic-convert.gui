@@ -7,8 +7,8 @@
   --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  -> bip44 [disabled]
   --path                    text  -> <empty> [disabled]
   --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
-  --passphrase              text  (secret) -> <masked>
-  --bip38-passphrase        text  (secret) -> <masked>
+  --passphrase              text  (secret) -> <masked> [reveal]
+  --bip38-passphrase        text  (secret) -> <masked> [reveal]
   --bip38-passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
   --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
   --account                 number  -> <unset>

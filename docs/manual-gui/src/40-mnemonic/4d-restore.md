@@ -89,7 +89,10 @@ plain restore document. Dropdown; eleven values. For single-sig this
 REQUIRES a single `--template` (one-descriptor-in / one-out);
 `--format` with no `--template` → exit 2. For multisig (`--md1`) mode
 the payload class matches `export-wallet --template <multisig>
---format <X>`, built from the reconstructed cosigner keys + threshold.
+--format <X>`, built from the reconstructed cosigner keys + threshold —
+`--md1` mode needs NO `--template` for `--format` (the multisig shape
+comes from the card; a single-sig `--template` there is refused, so
+select [`(none)`](#mnemonic-restore-template-)).
 When set, the importable payload goes to stdout and the verification
 block goes to stderr so the payload pipes cleanly; with `--json` the
 payload is embedded as the `import_payload` field. The GUI renders this
@@ -173,11 +176,16 @@ A bare BIP-380 descriptor. See
 ## `--template` {#mnemonic-restore-template}
 
 Restrict single-sig restore to a single wallet type; omit to emit all
-four (`bip44` / `bip49` / `bip84` / `bip86`). A multisig template is
-refused (single-sig restore reconstructs multisig from `--md1`, not
-`--template`). Same 10 values as
-[`bundle --template`](#mnemonic-bundle-template); for restore only the
-four single-sig values are meaningful (a multisig value refuses). The
+four (`bip44` / `bip49` / `bip84` / `bip86`). In single-sig mode a
+multisig template is refused (single-sig restore reconstructs multisig
+from `--md1`, not `--template`). The same 10 values as
+[`bundle --template`](#mnemonic-bundle-template), **plus** the GUI-only
+`(none)` unset sentinel below; for restore only the four single-sig
+values are meaningful (a multisig value refuses in single-sig mode). On
+a fresh form the dropdown materialises to `bip44` (the first option —
+`--template` has no schema default), so the reader selects `(none)` to
+clear it. `bundle`'s `--template` has no such sentinel — export-wallet
+and restore carry it; bundle / verify-bundle / convert stay at 10. The
 GUI renders this flag with a `?` help-icon.
 
 ### Outline {#mnemonic-restore-template-outline}
@@ -192,6 +200,7 @@ GUI renders this flag with a `?` help-icon.
 - [`sh-wsh-sortedmulti`](#mnemonic-restore-template-sh-wsh-sortedmulti)
 - [`tr-multi-a`](#mnemonic-restore-template-tr-multi-a)
 - [`tr-sortedmulti-a`](#mnemonic-restore-template-tr-sortedmulti-a)
+- [`(none)`](#mnemonic-restore-template-)
 
 ### `bip44` {#mnemonic-restore-template-bip44}
 
@@ -238,6 +247,37 @@ Multisig — refused for single-sig restore. See
 
 Multisig — refused for single-sig restore. See
 [`bundle --template tr-sortedmulti-a`](#mnemonic-bundle-template-tr-sortedmulti-a).
+
+### `(none)` {#mnemonic-restore-template-}
+
+The empty-string unset sentinel — **no template selected**. Like
+[`export-wallet --template (none)`](#mnemonic-export-wallet-template-),
+it is an **appended** entry the reader selects deliberately: restore's
+`--template` still materialises to `bip44` on load, so choosing `(none)`
+clears `--template` from the assembled argv and flips
+`has_value("--template")` to false. Its restore semantics differ from
+export-wallet's, and depend on the restore mode:
+
+- **Single-sig restore** (`--from <seed>`, no `--md1`): `(none)` is the
+  honest "emit all four" affordance — with no `--template`, restore
+  emits the full `bip44` / `bip49` / `bip84` / `bip86` descriptor set
+  (the flag's own omit-to-emit-all default), rather than restricting to
+  one wallet type.
+- **Multisig-cosigner restore** (`--md1 <card>`): `(none)` **removes a
+  single-sig template the CLI refuses**. A single-sig `--template` in
+  `--md1` mode is a mode violation — `mnemonic restore --md1 … --template
+  bip84` **exits 2** — but the GUI form materialises `bip44` on load, so
+  a reader driving a multisig restore had to know to change it.
+  Selecting `(none)` clears the inert, refused flag so the multisig
+  restore runs cleanly from the `md1` card alone. This is the fix for
+  the papercut where the GUI's default single-sig template leaked into a
+  `--md1` restore (previously worked around by picking an arbitrary
+  multisig value "for consistency").
+
+Like export-wallet's, it is a GUI-render-scoped affordance only — the
+toolkit's projected conditional rules are unchanged; it emits no
+`--template` token and never leaks an empty string into the argv echo or
+the masked copy-command string.
 
 ## `--network` {#mnemonic-restore-network}
 

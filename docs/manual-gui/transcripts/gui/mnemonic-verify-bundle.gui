@@ -4,7 +4,7 @@
   --descriptor              text  -> <empty>
   --descriptor-file         path  -> <empty>
   --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
-  --passphrase              text  (secret) -> <masked>
+  --passphrase              text  (secret) -> <masked> [reveal]
   --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
   --account                 number  -> <unset>
   --own-account-max         number  -> <unset>
@@ -18,7 +18,7 @@
   --search-addr-max         number  -> <unset>
   --search-chain            dropdown[receive,change,both]  -> receive
   --accept-search-time      text  -> <empty>
-  --ms1                     text  (secret, repeating) -> <masked>
+  --ms1                     text  (secret, repeating) -> <masked> [reveal]
   --mk1                     text  (required, repeating) -> <empty>
   --md1                     text  (required, repeating) -> <empty>
   --bundle-json             path  -> <empty>

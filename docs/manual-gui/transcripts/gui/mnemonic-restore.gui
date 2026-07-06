@@ -1,7 +1,7 @@
 [ mnemonic > restore ]
   --from                    text  (required) -> <empty>
   --format                  dropdown[bitcoin-core,bip388,coldcard,coldcard-multisig,jade,sparrow,specter,electrum,green,bsms,descriptor]  -> bitcoin-core
-  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  -> bip44
+  --template                dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a,(none)]  -> bip44
   --network                 dropdown[mainnet,testnet,signet,regtest]  -> mainnet
   --language                dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
   --account                 number  -> <unset>
@@ -11,7 +11,7 @@
   --expect-fingerprint      text  -> <empty>
   --expect-xpub             text  -> <empty>
   --allow-mismatch          checkbox  -> [ ] off
-  --passphrase              text  (secret) -> <masked>
+  --passphrase              text  (secret) -> <masked> [reveal]
   --passphrase-stdin        checkbox  (secret) -> [ ] off [disabled]
   --output                  path(stdio)  -> <hint:->
   --json                    checkbox  -> [ ] off

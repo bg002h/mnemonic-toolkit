@@ -1,6 +1,6 @@
 [ mnemonic > electrum-decrypt ]
   --ciphertext              text  (required) -> <empty>
-  --decrypt-password        text  (secret) -> <masked>
+  --decrypt-password        text  (secret) -> <masked> [reveal]
   --decrypt-password-file   path  -> <empty>
   --decrypt-password-stdin  checkbox  (secret) -> [ ] off [disabled]
   --json-out                path  -> <empty>

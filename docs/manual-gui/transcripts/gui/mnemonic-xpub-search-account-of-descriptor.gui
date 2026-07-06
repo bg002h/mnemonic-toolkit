@@ -1,9 +1,9 @@
 [ mnemonic > xpub-search-account-of-descriptor ]
-  --phrase              text  (secret) -> <masked>
+  --phrase              text  (secret) -> <masked> [reveal]
   --phrase-stdin        checkbox  (secret) -> [ ] off [disabled]
-  --ms1                 text  (secret) -> <masked>
+  --ms1                 text  (secret) -> <masked> [reveal]
   --ms1-stdin           checkbox  (secret) -> [ ] off [disabled]
-  --passphrase          text  (secret) -> <masked>
+  --passphrase          text  (secret) -> <masked> [reveal]
   --passphrase-stdin    checkbox  (secret) -> [ ] off [disabled]
   --descriptor          text  -> <empty>
   --descriptor-from     text  -> <empty>

@@ -6,7 +6,7 @@
   --no-auto-repair    checkbox  -> [ ] off
   --pubkey            text  -> <empty>
   --script-type       text  -> <empty>
-  --secret            text  (secret) -> <masked>
+  --secret            text  (secret) -> <masked> [reveal]
   --secret-file       path  -> <empty>
   --secret-stdin      checkbox  (secret) -> [ ] off [disabled]
   --timestamp         text  -> <hint:0>

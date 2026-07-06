@@ -5,7 +5,7 @@
   --index             number  (required) -> <unset>
   --network           dropdown[mainnet,testnet,signet,regtest]  -> mainnet
   --language          dropdown[english,simplifiedchinese,traditionalchinese,czech,french,italian,japanese,korean,portuguese,spanish]  -> english
-  --passphrase        text  (secret) -> <masked>
+  --passphrase        text  (secret) -> <masked> [reveal]
   --passphrase-stdin  checkbox  (secret) -> [ ] off [disabled]
   --dice-sides        number  -> <unset>
   --no-auto-repair    checkbox  -> [ ] off

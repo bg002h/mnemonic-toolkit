@@ -1,4 +1,4 @@
 [ ms > repair ]
-  --ms1   text  (required, secret) -> <masked>
+  --ms1   text  (required, secret) -> <masked> [reveal]
   --json  checkbox  -> [ ] off
   [ Run ]

@@ -8,6 +8,15 @@ numbers.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-05
+
+**Minor — the tutorial-surfaced-fixes ripple + GUI pin bump `mnemonic-gui-v0.56.0` → `mnemonic-gui-v0.57.0`.** The `gui_example.pdf` tutorial (a usability-testing instrument) surfaced two real GUI defects; both are fixed at v0.57.0, and this manual leg re-pins the affected renders/figures and re-drives the tutorial to teach the *fixed* flows. **Pin-neutral** for the four CLIs.
+
+- **Secret-field reveal (👁) toggle** — the GUI gained a reveal affordance on every on-load-masked secret field (so a user can verify a typed seed, and the tutorial can show the reader what to type). Manual ripple: **28** structural `.gui` renders gain an ASCII ` [reveal]` marker on their masked secret rows; **32** gallery figures (`figures/gui/`) re-pin (the 28 emit-movers ∪ 4 composite-default-secret forms, visual only); a new reveal-toggle reference section (`14-secret-handling.md`); the OS-snapshot guidance (`84-secrets-and-os.md`) reconciled (a *revealed* field IS snapshot-capturable — re-mask before looking away).
+- **restore `--template` `(none)` unset** — restore's single-sig `--template` default (`bip44`) is rejected in multisig `--md1` mode (exit 2); `(none)` now lets the user clear it. New REQUIRED reference section `### (none) {#mnemonic-restore-template-}` in `4d-restore.md` (`gui-schema-coverage` 983 → **984**); the `TEMPLATES` dropdown appendix notes export-wallet + restore use the 11-value variant.
+- **Combined tutorial re-drive** — the 50-shot corpus re-copies its **26** moved figures: the 6 md1-restore steps now teach the clean `(none)` restore (dropping the multisig-template workaround); the 4 rule-derived secret steps **reveal their public demo phrase** so the reader sees exactly what to type; every other secret shot gains the 👁 chrome but stays masked. Tutorial transcripts byte-identical (zero delta); `gui_example.pdf` rebuilt + release-attached.
+- **Gates:** `make lint` 12/12 (gui-schema-coverage 984, verify-examples-gui 61/61, verify-figures-gui 61/61, verify-tutorial-figures 50, verify-tutorial-transcripts 98 zero-delta, tutorial-xref 50+98). Full R0 pipeline (Fable-authored batched plan → opus plan-R0 → per-phase R0 · Leg-2 post-impl + convergence) all GREEN.
+
 ## [1.2.0] - 2026-07-05
 
 **Minor — the standalone `gui_example.pdf` GUI tutorial book + GUI pin bump

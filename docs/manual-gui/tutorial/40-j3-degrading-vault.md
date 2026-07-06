@@ -166,8 +166,9 @@ eleven cosigners with their `84'/0'/N'` origins.
 
 The round-trip proof. Restore the vault from its `md1` chunks alone
 (chained from the previous `bundle --json` run into the **`--md1`**
-rows; Template set to the wallet's `wsh-sortedmulti` family). The
-filled form is below.
+rows; Template set to **`(none)`** — an `md1` restore needs no template,
+and `(none)` clears the form's default `bip44`, which as a single-sig
+template would be refused in `--md1` mode). The filled form is below.
 
 The panel reconstructs the descriptor and its **first receive
 address** — `bc1q4g7564xxd9hj68hqwu5e558cqafhsklerkr0asfzqp6puq74veesrp6qss`,

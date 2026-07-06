@@ -52,7 +52,9 @@ appends an empty entry so the reader can clear `--template` and drive
 `bip44` (the first option — `--template` has no schema default),
 so `--descriptor` starts `Disabled` and the reader chooses `(none)`
 to unlock it. `bundle`'s `--template` has no such sentinel — the
-11-vs-10 asymmetry is intended and export-wallet-scoped.
+11-vs-10 asymmetry is intended: **export-wallet and
+[restore](#mnemonic-restore-template-) carry the sentinel; bundle /
+verify-bundle / convert stay at 10.**
 
 ### Outline {#mnemonic-export-wallet-template-outline}
 

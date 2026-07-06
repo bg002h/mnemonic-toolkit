@@ -32,8 +32,12 @@ Used by [`mnemonic bundle`](#mnemonic-bundle-network) /
 
 Used by [`mnemonic bundle`](#mnemonic-bundle-template) /
 [`verify-bundle`](#mnemonic-verify-bundle-template) /
-[`convert`](#mnemonic-convert-template) /
-[`export-wallet`](#mnemonic-export-wallet-template) `--template`.
+[`convert`](#mnemonic-convert-template) `--template`.
+[`export-wallet`](#mnemonic-export-wallet-template) and
+[`restore`](#mnemonic-restore-template) `--template` use an **11-value
+variant** — the same 10 plus an appended GUI-only `(none)` unset sentinel
+(so the reader can clear the template and drive `--descriptor` / an `--md1`
+restore).
 
 - [`bip44`](#mnemonic-bundle-template-bip44)
 - [`bip49`](#mnemonic-bundle-template-bip49)
