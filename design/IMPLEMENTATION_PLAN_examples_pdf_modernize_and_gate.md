@@ -262,6 +262,8 @@ subset). Fold → persist verbatim → re-dispatch until 0C/0I.
 
 ### P2.a — `.github/workflows/examples.yml` (gate A, WIDE + REQUIRED)
 
+> **⚠ SUPERSEDED by the OQ1 architect ruling — `design/agent-reports/examples-pdf-branch-protection-ruling.md` §7 is the AUTHORITATIVE config.** The YAML below had a latent trap (a **path-filtered `pull_request`** trigger + a **required** check = docs-only PRs wedge forever at "Expected"). The ruling resolves it: **(1)** DROP the `pull_request` `paths:` filter so the `examples` job ALWAYS runs + reports on every PR (no wedge), and gate the heavy steps (build/regen/diff) behind a hand-rolled, fail-safe `git diff --name-only` **guard** (PR-event only; docs-only PR → guard false → seconds-long green no-op; code PR → full gate). Keep the `push:` path filter as-is. **(2)** Governance = minimal, byte-identical to the live GUI `snapshots` protection: `required_status_checks={strict:false, contexts:["examples"]}`, `enforce_admins:false` (admin direct-FF releases still work); do NOT enroll `rust.yml`. **(3)** The `push: [master]` run is LOAD-BEARING, not redundant — it's the sole gate for the toolkit's dominant direct-to-master pushes (which bypass PR checks). Implement §7's config block verbatim; the YAML below is retained only for the non-trigger scaffolding (build/regen/diff/attach steps).
+
 One job, modeled on `manual.yml` (debug binary build `manual.yml:92-96`; tag release-attach `manual.yml:147-168`;
 tag-triggers-ignore-paths comment `manual.yml:3-6`). **NO bitcoind** (Q1-(b) froze §6.6).
 
