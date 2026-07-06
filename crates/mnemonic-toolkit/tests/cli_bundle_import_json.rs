@@ -5,12 +5,23 @@
 //! `import-wallet --json` envelope and synthesizes a fresh bundle.
 
 use assert_cmd::Command;
+use miniscript::descriptor::checksum::Engine as ChecksumEngine;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn fixture_path(name: &str) -> PathBuf {
     PathBuf::from("tests/fixtures/wallet_import").join(name)
 }
+
+/// Compute BIP-380 checksum for a descriptor body (no trailing `#xxx`).
+fn checksum(desc_without_hash: &str) -> String {
+    let mut eng = ChecksumEngine::new();
+    eng.input(desc_without_hash).expect("ascii-only");
+    eng.checksum()
+}
+
+/// Mainnet BIP-84 account xpub (reused from `cli_import_wallet_descriptor.rs`).
+const A_XPUB: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
 
 /// Run `bundle --import-json <FILE> --network mainnet --json` and parse
 /// stdout as JSON.
@@ -880,5 +891,89 @@ fn bundle_import_json_clean_older_emits_no_advisory() {
     assert!(
         !stderr.contains("advisory: older"),
         "clean older(2016) must NOT emit an older() advisory; got stderr:\n{stderr}"
+    );
+}
+
+// ============================================================================
+// Cycle A residue-reject floor — old `--json` replay of a fixed-step envelope
+// (M-1 item 4)
+// ============================================================================
+
+/// A `bundle --import-json` replay of an envelope whose `bundle.descriptor`
+/// carries a FIXED use-site step (`/0/*`) — the shape a PRE-FIX toolkit
+/// version would have emitted after silently collapsing the step — must now
+/// HARD-REJECT rather than re-synthesize the wrong (collapsed) card
+/// (SPEC_cycleA_descriptor_use_site_collapse.md §1/§6). The replay re-parses
+/// the descriptor through `concrete_keys_to_placeholders` → `parse_descriptor`
+/// (bundle.rs `bundle_run_from_import_json`), so the shared residue-reject
+/// floor fires → `DescriptorParse` / exit 2 / "re-parse failed" + multipath
+/// remedy. Born-green.
+///
+/// Construction: generate a genuine `<0;1>/*` envelope via
+/// `import-wallet --format descriptor --json`, then rewrite ONLY its
+/// `bundle.descriptor` use-site to `/0/*` (recomputing the BIP-380 checksum so
+/// the reject fires at the residue floor, not the envelope checksum
+/// validator). The mk1/ms1 cards are left intact — the reject fires on the
+/// descriptor re-parse before any card cross-check, exactly as an old-envelope
+/// replay would hit it.
+#[test]
+fn bundle_import_json_fixed_step_descriptor_replay_rejects() {
+    // 1. Generate a real single-sig `<0;1>/*` envelope.
+    let good_desc = format!("wpkh([704c7836/84'/0'/0']{A_XPUB}/<0;1>/*)");
+    let imp = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "descriptor",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(format!("{good_desc}\n"))
+        .assert()
+        .success();
+    let envelope_json = String::from_utf8(imp.get_output().stdout.clone()).unwrap();
+    let mut envelope: serde_json::Value =
+        serde_json::from_str(&envelope_json).expect("import --json is valid JSON");
+
+    // 2. Rewrite the envelope descriptor use-site `/<0;1>/*` → `/0/*`, with a
+    //    freshly-recomputed BIP-380 checksum.
+    let fixed_body = format!("wpkh([704c7836/84'/0'/0']{A_XPUB}/0/*)");
+    let fixed_with_csum = format!("{fixed_body}#{}", checksum(&fixed_body));
+    envelope[0]["bundle"]["descriptor"] = serde_json::Value::String(fixed_with_csum);
+    let mutated = serde_json::to_string(&envelope).unwrap();
+
+    // 3. Replay via `bundle --import-json -` → must reject.
+    let assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            "-",
+            "--no-engraving-card",
+        ])
+        .write_stdin(mutated)
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "fixed-step envelope replay must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("re-parse failed") || stderr.contains("import-json"),
+        "reject must be scoped to the --import-json replay; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") && stderr.contains("<a;b>"),
+        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("/0/*"),
+        "reject must name the offending fixed-step residue; stderr: {stderr}"
     );
 }

@@ -18,6 +18,7 @@
 //! created during Phase P2B.
 
 use assert_cmd::Command;
+use miniscript::descriptor::checksum::Engine as ChecksumEngine;
 use std::path::PathBuf;
 
 fn fixture_path(name: &str) -> PathBuf {
@@ -27,6 +28,25 @@ fn fixture_path(name: &str) -> PathBuf {
 fn run_import(args: &[&str]) -> assert_cmd::assert::Assert {
     let mut cmd = Command::cargo_bin("mnemonic").unwrap();
     cmd.arg("import-wallet").args(args).assert()
+}
+
+/// Compute BIP-380 checksum for a descriptor body (no trailing `#xxx`) — the
+/// Specter parser validates the checksum BEFORE the `@N`-substitution pipeline,
+/// so an inline `/0/*` reject blob must carry a valid checksum to reach the
+/// residue floor rather than tripping the checksum validator first.
+fn checksum(desc_without_hash: &str) -> String {
+    let mut eng = ChecksumEngine::new();
+    eng.input(desc_without_hash).expect("ascii-only");
+    eng.checksum()
+}
+
+/// Run `import-wallet --format specter --blob -` with a stdin-piped blob.
+fn run_specter_stdin(blob: &str) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--format", "specter"])
+        .write_stdin(blob.to_string())
+        .assert()
 }
 
 // ============================================================================
@@ -422,5 +442,47 @@ fn specter_select_descriptor_non_all_emits_notice_and_coerces() {
     assert!(
         stdout.contains("cosigners=1"),
         "expected parse to succeed post-coerce; got: {stdout}"
+    );
+}
+
+// ============================================================================
+// Cycle A residue-reject floor — Specter receive-only `/0/*` (M-1 item 3)
+// ============================================================================
+
+/// Specter's common shared "Export Wallet" `account_map` QR/JSON carries a
+/// RECEIVE-ONLY `/0/*` descriptor (no change branch — verified vs
+/// specter-desktop v2.1.10; SPEC_cycleA_descriptor_use_site_collapse.md §6).
+/// That fixed use-site step is un-representable in md1, so the Specter surface
+/// now hard-rejects it at the shared residue-reject floor
+/// (`concrete_keys_to_placeholders` → `parse_descriptor`, specter.rs step 3b)
+/// — exit 2, scoped `import-wallet: specter:` message with the multipath
+/// remedy. Born-green (the lexer already rejects). The blob carries a valid
+/// BIP-380 checksum so the reject fires at the residue floor, not the
+/// checksum validator.
+#[test]
+fn specter_receive_only_fixed_step_rejected_with_multipath_remedy() {
+    let body = "wpkh([5436d724/84'/0'/0']xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9/0/*)";
+    let cs = checksum(body);
+    let blob = format!(
+        "{{\n  \"label\": \"Daily\",\n  \"blockheight\": 800000,\n  \"descriptor\": \"{body}#{cs}\",\n  \"devices\": [{{\"type\": \"coldcard\", \"label\": \"primary\"}}]\n}}\n"
+    );
+    let assertion = run_specter_stdin(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "Specter receive-only `/0/*` must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("specter"),
+        "reject must be scoped to the specter surface; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") && stderr.contains("<a;b>"),
+        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("/0/*"),
+        "reject must name the offending fixed-step residue; stderr: {stderr}"
     );
 }

@@ -150,3 +150,68 @@ fn bad_checksum_refused() {
         .failure()
         .stderr(predicates::str::contains("checksum"));
 }
+
+// ── Cycle A residue-reject floor (CRITICAL funds fix) ─────────────────────────
+//
+// I-1 (Phase-1 R0 fold): `import-wallet --format descriptor` is a lex-surface —
+// its concrete descriptor flows through `concrete_keys_to_placeholders` →
+// `parse_descriptor::parse_descriptor` (descriptor.rs step 3), so a FIXED
+// use-site step (`/0/*`) or the BIP-389 combined shorthand (`/**`) is
+// un-representable in md1 (SPEC_cycleA_descriptor_use_site_collapse.md §1/§6)
+// and rejects at the shared residue-reject floor. These cells lock the
+// per-surface CLI behavior + message (born-green — the lexer already rejects).
+
+/// A single `/0/*` descriptor (fixed use-site step) hard-rejects exit 2 with
+/// the multipath-remedy message. Checksum-LESS (the parser is tolerant), so
+/// the reject fires at the residue floor, not the checksum validator.
+#[test]
+fn descriptor_fixed_use_site_step_rejected_with_multipath_remedy() {
+    let blob = format!("wpkh([704c7836/84'/0'/0']{A}/0/*)\n");
+    let assertion = import_descriptor(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "fixed use-site step `/0/*` must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("descriptor"),
+        "reject must be scoped to the descriptor surface; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") && stderr.contains("<a;b>"),
+        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("/0/*"),
+        "reject must name the offending fixed-step residue; stderr: {stderr}"
+    );
+}
+
+/// The BIP-389 combined `/**` shorthand (HIGHEST-impact case — mainstream
+/// wallet export form) hard-rejects exit 2. The `wild` group eats only `/*`,
+/// leaving a stray residue → reject; the message must name the `/**` shorthand
+/// and the multipath remedy (plan-R0 I-D).
+#[test]
+fn descriptor_double_star_shorthand_rejected_with_multipath_remedy() {
+    let blob = format!("wpkh([704c7836/84'/0'/0']{A}/**)\n");
+    let assertion = import_descriptor(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "the `/**` shorthand must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("descriptor"),
+        "reject must be scoped to the descriptor surface; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("/**"),
+        "reject must name the `/**` shorthand explicitly; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") && stderr.contains("<a;b>"),
+        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+    );
+}

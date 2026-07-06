@@ -1092,6 +1092,46 @@ fn bsms_2line_mainnet_zpub_stdin_roundtrip_matches_blob_path() {
     assert_eq!(stdout_a, stdout_b);
 }
 
+// ============================================================================
+// Cycle A residue-reject floor — BSMS single-branch `/0/*` (M-1 item 5)
+// ============================================================================
+
+/// A self-produced BSMS file whose per-key suffix is the single receive
+/// branch `/0/*` (the `wallet_export/bsms.rs` receive-only emit arm) hard-
+/// rejects on re-import: the fixed use-site step is un-representable in md1
+/// (SPEC_cycleA_descriptor_use_site_collapse.md §6). The reject fires at the
+/// shared residue-reject floor (`concrete_keys_to_placeholders` →
+/// `parse_descriptor`, the same pipeline BSMS/Specter/Core share) — exit 2,
+/// scoped `import-wallet: bsms:` message with the multipath remedy.
+/// Born-green. `build_bsms_2line` supplies a valid BIP-380 checksum so the
+/// reject fires at the residue floor, not the checksum validator.
+#[test]
+fn bsms_single_branch_fixed_step_rejected_with_multipath_remedy() {
+    let desc = format!(
+        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*))"
+    );
+    let blob = build_bsms_2line(&desc);
+    let assertion = run_import_stdin(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "BSMS single-branch `/0/*` must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("bsms"),
+        "reject must be scoped to the bsms surface; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") && stderr.contains("<a;b>"),
+        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("/0/*"),
+        "reject must name the offending fixed-step residue; stderr: {stderr}"
+    );
+}
+
 mod shared {
     use std::process::Stdio;
     /// I18 helper — drives the sniff via the `mnemonic import-wallet --blob -`
