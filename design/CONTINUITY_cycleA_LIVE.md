@@ -10,7 +10,20 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS: ✅ PHASES 1+2 DONE + INTEGRATED (master @ `0de6e1f6`). NEXT = Phase 3 (docs ripples).
+## STATUS: ✅ PHASES 1+2+3 INTEGRATED (master @ `b59b7a47`). NEXT = Phase 4a WHOLE-DIFF REVIEW → release.
+Phase 3 (docs) integrated `b59b7a47`: manual `41-mnemonic.md` (authoritative non-representable-use-site anchor +
+verify-bundle exit2/exit4 split + refusal rows + --import-json note) + `45-foreign-formats.md` (Core interim
+hard-fail + hand-combine-to-`<0;1>` workaround [receive=0/change=1] + Specter/BSMS notes). Docs accuracy VERIFIED
+inline by orchestrator (workaround funds-safe; exit codes match impl). Examples sweep = NONE. GUI byte-unchanged
+(gui-schema md5 identical + schema_mirror 21/21). Manual lint PASS. No separate Phase-3 R0 (docs low-risk + inline-
+verified + covered by the Phase-4 whole-diff review). Full Cycle-A code+docs diff = 17 files +1378/-181.
+**Phase 4 (NEXT):** (4a) MANDATORY independent adversarial opus WHOLE-DIFF review over `8c8b9183..HEAD -- crates/ docs/`
+→ persist `cycleA-postimpl-whole-diff.md`; folds RE-ENTER the loop. THEN (4b) release ritual: MINOR version bump
+(confirm current — likely v0.75.0→v0.76.0) + BOTH READMEs + fuzz/Cargo.lock + install.sh SELF-pin (NOT md-cli
+sibling) + CHANGELOG (funds fix + Core interim + `/**` + D1 residual) + FOLLOWUPS (C1 RESOLVED; file
+`bitcoin-core-receive-change-pair-merge`, `concrete-nonranged-xpub-implied-wildcard`, `bip389-double-star-shorthand-support`)
+→ (4d) direct-FF + tag. md/mk/ms NO-BUMP. Master 8 ahead of origin, push at ship.
+### (superseded) PHASES 1+2 DONE. NEXT = Phase 3.
 Phase-2 per-phase R0 = GREEN (0C/0I); `cycleA-phase-2-r0-round-1.md`. Test 4 = genuine DIRECT first-recv address
 proof (`restore --md1` derives+emits `bc1qcr8te4...`). wc-codec reconciled = TRUE 100/0 (impl's 40 was partial).
 Phase 2 cherry-picked CLEAN → master `0de6e1f6`. Suite 3583+100 green. Worktree pruned.
