@@ -368,54 +368,86 @@ fn wrap_export_in_object_envelope(export_json: &str, wallet_name: &str) -> Strin
     serde_json::to_string(&envelope).unwrap()
 }
 
+// ============================================================================
+// Cycle A interim bitcoin-core limitation (found DURING Phase 1 gating, NOT
+// in the pre-implementation grep sweep — the descriptors below are
+// CONSTRUCTED AT RUNTIME by `export-wallet --format bitcoin-core`, so no
+// literal `/0/*`/`/1/*` text exists in this file's source for a static grep
+// to catch). `export-wallet --format bitcoin-core` is the toolkit's OWN
+// emitter, and it only ever produces Bitcoin Core's NATIVE shape: a split
+// receive(`/0/*`, internal:false) + change(`/1/*`, internal:true) pair
+// (verified upstream: multipath `<0;1>` is IMPORT-only for Core,
+// PR #22838 — Core never EXPORTS combined multipath descriptors). Under the
+// Cycle A residue-reject floor (SPEC_cycleA_descriptor_use_site_collapse.md
+// §1), that split is un-representable in md1 and hard-rejects on re-import
+// — closing the false "round-trip" these cells used to assert (the toolkit
+// would previously silently collapse each `/0/*`/`/1/*` entry to a bare
+// `/*`, i.e. the SAME funds-unsafe bug this cycle fixes). Every cell below
+// now asserts the interim reject + workaround message instead of a
+// round-trip; the round-trip itself is restored by the split-out
+// `bitcoin-core-receive-change-pair-merge` follow-up (combine to
+// `<0;1>/*` before re-import, or use `--format descriptor`).
+// ============================================================================
+
 #[test]
 fn core_bundle_roundtrip_bip84_single_sig() {
     let exported = export_core_bip84_single_sig();
     let wrapped = wrap_export_in_object_envelope(&exported, "test_bip84");
-    let out = run_import_stdin(&wrapped, "bitcoin-core").success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    // BIP-84 exports as 2 entries (receive + change after multipath split).
-    assert!(stdout.contains("bundles=2"), "stdout: {stdout}");
-    // Master fingerprint propagates through both bundles.
-    assert!(stdout.contains(TREZOR_BIP84_FP));
-    assert!(stdout.contains("network=mainnet"));
+    let assertion = run_import_stdin(&wrapped, "bitcoin-core").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "Core's own split receive/change export must reject on re-import (exit 2); stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("bitcoin-core"),
+        "expected bitcoin-core-scoped reject; stderr: {stderr}"
+    );
 }
 
 #[test]
 fn core_bundle_roundtrip_wsh_sortedmulti_2of2() {
     let exported = export_core_wsh_sortedmulti_2of2();
     let wrapped = wrap_export_in_object_envelope(&exported, "test_2of2");
-    let out = run_import_stdin(&wrapped, "bitcoin-core").success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    // wsh-sortedmulti emits as 2 multipath entries (receive + change).
-    assert!(stdout.contains("bundles=2"), "stdout: {stdout}");
-    // Cosigner fingerprints survive the round-trip.
-    assert!(stdout.contains(COSIGNER_A_FP), "stdout: {stdout}");
-    assert!(stdout.contains(COSIGNER_B_FP), "stdout: {stdout}");
-    assert!(stdout.contains("threshold=2"));
+    let assertion = run_import_stdin(&wrapped, "bitcoin-core").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "Core's own split multisig receive/change export must reject on re-import (exit 2); stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("bitcoin-core"),
+        "expected bitcoin-core-scoped reject; stderr: {stderr}"
+    );
 }
 
 #[test]
 fn core_bundle_roundtrip_export_blob_canonicalizes_against_self() {
-    // Sanity: the export emitter's output, when wrapped + parsed by the
-    // importer, has internally-consistent cosigner counts across both
-    // multipath splits. The importer normalizes both branches; the
-    // assertion is that each split bundle reports 1 cosigner.
+    // Formerly a canonicalization sanity check on the successful round-trip;
+    // that round-trip no longer exists pre-pair-merge (see file-header note).
+    // Re-purposed as another instance of the same reject assertion —
+    // the export blob is internally consistent in the sense that BOTH split
+    // entries hit the identical reject, at entry 0, before any bundle is
+    // built.
     let exported = export_core_bip84_single_sig();
     let wrapped = wrap_export_in_object_envelope(&exported, "self_check");
-    let out = run_import_stdin(&wrapped, "bitcoin-core").success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert_eq!(stdout.matches("cosigners=1").count(), 4,
-        "expected 2 bundle entries × (top-level alias + nested) = 4 `cosigners=1` lines; stdout: {stdout}");
+    let assertion = run_import_stdin(&wrapped, "bitcoin-core").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert_eq!(assertion.get_output().status.code().unwrap_or(-1), 2);
+    assert!(stderr.contains("bitcoin-core"), "stderr: {stderr}");
 }
 
 #[test]
 fn core_bundle_roundtrip_select_active_receive_filters_to_one() {
-    // Apply `--select-descriptor active-receive` to a 2-entry exported
-    // blob. The receive entry (`internal: false`) is filtered in.
+    // `--select-descriptor` filtering runs AFTER the full per-entry parse
+    // loop (`BitcoinCoreParser::parse` fails fast on entry 0 via `?`), so a
+    // fixed-step blob rejects before selection is ever reached — the
+    // `--select-descriptor` flag is inert on a rejecting blob.
     let exported = export_core_bip84_single_sig();
     let wrapped = wrap_export_in_object_envelope(&exported, "select_test");
-    let out = Command::cargo_bin("mnemonic")
+    let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "import-wallet",
@@ -428,41 +460,39 @@ fn core_bundle_roundtrip_select_active_receive_filters_to_one() {
         ])
         .write_stdin(wrapped)
         .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    // Only the receive (internal=false) entry survives.
-    assert!(stdout.contains("bundles=1"), "stdout: {stdout}");
-    assert!(stdout.contains("internal=false"), "stdout: {stdout}");
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "select-descriptor does not rescue a fixed-step blob; stderr: {stderr}"
+    );
 }
 
 #[test]
 fn core_bundle_roundtrip_export_blob_keys_present() {
-    // Cross-check: the toolkit's BIP-84 export uses Trezor xpub
-    // (TREZOR_BIP84_XPUB at m/84'/0'/0'). After round-trip, the
-    // import-side summary must report `network=mainnet` (coin-type 0')
-    // and the Trezor fingerprint.
+    // The EXPORT side is unaffected by Cycle A (export-wallet never touches
+    // `lex_placeholders`) — the exported blob still carries the fingerprint
+    // + xpub verbatim. Only the RE-IMPORT half is now a reject.
     let exported = export_core_bip84_single_sig();
     assert!(exported.contains(TREZOR_BIP84_FP));
     assert!(exported.contains(TREZOR_BIP84_XPUB));
     let wrapped = wrap_export_in_object_envelope(&exported, "key_check");
-    let out = run_import_stdin(&wrapped, "bitcoin-core").success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    assert!(stdout.contains(TREZOR_BIP84_FP), "stdout: {stdout}");
-    assert!(stdout.contains("network=mainnet"));
+    let assertion = run_import_stdin(&wrapped, "bitcoin-core").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert_eq!(assertion.get_output().status.code().unwrap_or(-1), 2);
+    assert!(stderr.contains("bitcoin-core"), "stderr: {stderr}");
 }
 
-/// v0.27.1 Phase 4 I19 — multisig round-trip asserts on
-/// `roundtrip.semantic_match == true` (and `byte_exact` if the wrapped
-/// export happens to canonicalize byte-identically). Prior multisig
-/// round-trip cells only verified fingerprint + count substrings; the
-/// `roundtrip` envelope block was unchecked, so a regression in
-/// `canonicalize_bitcoin_core` or `unified_diff` for multisig shapes
-/// would only surface as count-still-matches-but-bytes-don't.
+/// Formerly asserted `roundtrip.semantic_match == true` on a successful
+/// multisig round-trip envelope; that round-trip no longer exists
+/// pre-pair-merge (see file-header note). Now asserts the `--json`-mode
+/// import also rejects (exit 2), same as the non-`--json` cells above.
 #[test]
 fn core_bundle_roundtrip_wsh_sortedmulti_2of2_envelope_semantic_match() {
     let exported = export_core_wsh_sortedmulti_2of2();
     let wrapped = wrap_export_in_object_envelope(&exported, "test_2of2_semantic");
-    let out = Command::cargo_bin("mnemonic")
+    let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "import-wallet",
@@ -474,35 +504,12 @@ fn core_bundle_roundtrip_wsh_sortedmulti_2of2_envelope_semantic_match() {
         ])
         .write_stdin(wrapped)
         .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let val: serde_json::Value = serde_json::from_str(&stdout).expect("--json output must parse");
-    let arr = val.as_array().expect("envelope array");
-    assert!(
-        !arr.is_empty(),
-        "expected at least one envelope; got {stdout}"
+        .failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "multisig round-trip must reject exit 2 under --json too; stderr: {stderr}"
     );
-    // wsh-sortedmulti emits as 2 multipath entries (receive + change). Both
-    // must report semantic_match: true (canonicalize-equal modulo
-    // diff-bytes); status: ok.
-    for env in arr {
-        let rt = &env["roundtrip"];
-        assert_eq!(
-            rt["status"],
-            serde_json::Value::String("ok".to_string()),
-            "multisig roundtrip status must be ok; envelope: {env}"
-        );
-        assert_eq!(
-            rt["semantic_match"],
-            serde_json::Value::Bool(true),
-            "multisig roundtrip must report semantic_match:true; envelope: {env}"
-        );
-        // byte_exact may be true or false depending on canonical key-sort
-        // happening in the export emitter; we don't pin it here. The
-        // existence of the field is the regression guard.
-        assert!(
-            rt.get("byte_exact").is_some(),
-            "byte_exact field must be present; envelope: {env}"
-        );
-    }
+    assert!(stderr.contains("bitcoin-core"), "stderr: {stderr}");
 }

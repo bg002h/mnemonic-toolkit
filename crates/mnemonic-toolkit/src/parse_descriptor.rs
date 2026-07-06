@@ -180,6 +180,37 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
             .name("wild")
             .map(|m| m.as_str().ends_with('\'') || m.as_str().ends_with('h'))
             .unwrap_or(false);
+        // Cycle A (CRITICAL funds fix, SPEC_cycleA_descriptor_use_site_
+        // collapse.md §5): unconsumed-residue terminator check. The trailing
+        // optional groups above (`mpath`, `wild`) are the ONLY representable
+        // use-site shapes in md1 (`UseSitePath` is exactly
+        // `{multipath: Option<Vec<Alternative>>, wildcard_hardened}` —
+        // md_codec::use_site_path.rs:49-53). A FIXED use-site step after the
+        // placeholder (e.g. `/0` in `@0/0/*`, or the BIP-389 `/**` shorthand,
+        // whose `wild` group eats only `/*` and leaves a stray `*`) matches
+        // NONE of those groups, so without this check it is silently DROPPED
+        // — `@0/0/*` would lex identically to bare `@0`, encoding a bare
+        // `/*` use-site instead of the user's `/0/*` — a DIFFERENT wallet
+        // (wrong-address / funds-loss). Mirrors md-cli
+        // `descriptor-mnemonic/crates/md-cli/src/parse/template.rs:128-137`,
+        // ADAPTED: the toolkit regex has no bare-origin capture group (origin
+        // paths are recognized ONLY inside `[...]`), so a bare post-`@N` `/0`
+        // here is use-site residue, not an origin path — do NOT add one.
+        // Placed AFTER the multipath-body validator above so a malformed
+        // hardened `<...>` body keeps its byte-exact H13 reject (the
+        // validator's `.transpose()?` returns first via `?`).
+        let match_end = caps.get(0).map(|m| m.end()).unwrap_or(0);
+        if let Some(next) = descriptor[match_end..].chars().next() {
+            if !matches!(next, ')' | ',' | '}') && !next.is_whitespace() {
+                let residue: String = descriptor[match_end..].chars().take(24).collect();
+                return Err(ToolkitError::DescriptorParse(format!(
+                    "@{i}: derivation steps after the placeholder are not representable in md1; \
+                     the use-site path must be a multipath `/<a;b>/*` (or bare `/*`) as the final \
+                     step — a fixed single step like `/0/*` (or the `/**` shorthand) is \
+                     un-representable (found residue near `{residue}`)"
+                )));
+            }
+        }
         out.push(PlaceholderOccurrence {
             i,
             fingerprint_anno,
@@ -1613,6 +1644,186 @@ mod tests {
             msg.contains("@i index out of range") || msg.contains("@256"),
             "expected index-out-of-range message, got: {msg}"
         );
+    }
+
+    // ---- Cycle A: residue-reject floor (CRITICAL funds fix) ----
+    //
+    // `design/SPEC_cycleA_descriptor_use_site_collapse.md` §1: a FIXED
+    // use-site step after a placeholder (e.g. `/0/*` in `@0/0/*`) matched
+    // none of the lexer's trailing optional groups, so it was silently
+    // DROPPED — `@0/0/*` lexed identically to bare `@0`, and
+    // `make_use_site_path` then encoded a bare `/*` — a DIFFERENT wallet
+    // than the user's `/0/*`-derived addresses (wrong-address / funds-loss).
+    // The residue-reject floor closes this: after the multipath-body
+    // validator, any unconsumed character immediately following a matched
+    // occurrence that is not a legal terminator (`)` `,` `}` / whitespace /
+    // EOS) is a typed, fail-closed `DescriptorParse` reject — never a
+    // silent collapse.
+
+    fn assert_residue_reject(input: &str, must_contain: &[&str]) {
+        let err = lex_placeholders(input)
+            .expect_err(&format!("must reject as un-representable residue: {input}"));
+        assert!(
+            matches!(err, ToolkitError::DescriptorParse(_)),
+            "residue reject must be DescriptorParse, got: {err:?} for input {input}"
+        );
+        assert_eq!(err.exit_code(), 2, "DescriptorParse exit code for {input}");
+        let msg = err.message();
+        for needle in must_contain {
+            assert!(
+                msg.contains(needle),
+                "expected message to contain `{needle}` for input `{input}`, got: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn lex_rejects_fixed_step_bare() {
+        // `@0/0/*` — the canonical Bitcoin Core / Sparrow single-descriptor
+        // receive form. Pre-fix: silently collapsed to bare `/*`.
+        assert_residue_reject("wpkh(@0/0/*)", &["multipath", "<a;b>", "/0/*"]);
+    }
+
+    #[test]
+    fn lex_rejects_fixed_step_hardened_marker() {
+        // `@0/0h/*` — a hardened fixed step is equally un-representable.
+        assert_residue_reject("wpkh(@0/0h/*)", &["multipath", "/0/*"]);
+    }
+
+    #[test]
+    fn lex_rejects_fixed_step_with_bracketed_origin() {
+        // `@0[fp/path]/0/*` — the fixed step survives even with a full
+        // bracketed origin annotation present (H7 suffix form).
+        assert_residue_reject("wpkh(@0[deadbeef/84'/0'/0']/0/*)", &["multipath", "/0/*"]);
+    }
+
+    #[test]
+    fn lex_rejects_fixed_step_after_multipath() {
+        // trap #10 (post-multipath direction): `@0/<0;1>/0/*` — a valid
+        // multipath body followed by an extra fixed step. The H13 validator
+        // accepts the well-formed `<0;1>` body (returns via `.transpose()?`
+        // BEFORE this check would even run were it malformed), so this cell
+        // also proves placement-after-validator does not mask the residue.
+        assert_residue_reject("wpkh(@0/<0;1>/0/*)", &["multipath", "/0/*"]);
+    }
+
+    #[test]
+    fn lex_rejects_fixed_step_before_multipath() {
+        // trap #10 (pre-multipath direction): `@0/0/<0;1>/*` — a fixed step
+        // BEFORE the multipath delimiter. The mpath/wild optional groups only
+        // match when they immediately follow `@N`/`[...]`, so a leading `/0`
+        // prevents mpath from matching here at all; residue is the entire
+        // `/0/<0;1>/*` tail.
+        assert_residue_reject("wpkh(@0/0/<0;1>/*)", &["multipath"]);
+    }
+
+    #[test]
+    fn lex_rejects_bare_unbracketed_origin_residue() {
+        // M-6: a bare (unbracketed) origin path after `@N` is use-site
+        // residue, NOT an origin annotation — the toolkit regex captures
+        // origin paths ONLY inside `[...]` (unlike md-cli's bare-origin
+        // group 2, which this cycle deliberately does NOT add — adapt,
+        // don't copy). `@0/48h/0h/0h/<0;1>/*` must reject on the leading
+        // `/48h/0h/0h` residue.
+        assert_residue_reject("wpkh(@0/48h/0h/0h/<0;1>/*)", &["multipath"]);
+    }
+
+    #[test]
+    fn lex_rejects_double_star_shorthand() {
+        // trap #5 / plan-R0 I-D: BIP-389 `/**` shorthand. The `wild` group's
+        // `/\*(?:'|h)?` alternation eats only `/*`, leaving a stray `*`
+        // residue — reject, not a silent expansion to `<0;1>/*`. Message
+        // must name the `/**` shorthand explicitly (I-D).
+        assert_residue_reject("wpkh(@0[deadbeef/84'/0'/0']/**)", &["multipath", "/**"]);
+    }
+
+    #[test]
+    fn lex_rejects_fixed_step_non_first_multisig_slot() {
+        // The residue check applies per-occurrence — a clean @0 does not
+        // mask a dirty @1 later in the same descriptor.
+        let err = lex_placeholders("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/0/*))")
+            .expect_err("non-first-slot fixed step must reject");
+        assert!(matches!(err, ToolkitError::DescriptorParse(_)));
+        assert_eq!(err.exit_code(), 2);
+        assert!(err.message().contains("@1"), "got: {}", err.message());
+    }
+
+    // ---- Cycle A positive controls (must still lex-pass; over-rejection guards) ----
+
+    #[test]
+    fn lex_residue_floor_accepts_multipath_wildcard() {
+        let occs = lex_placeholders("wpkh(@0/<0;1>/*)").unwrap();
+        assert_eq!(occs.len(), 1);
+        assert_eq!(occs[0].multipath_alts, vec![0, 1]);
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_bare_wildcard() {
+        let occs = lex_placeholders("wpkh(@0/*)").unwrap();
+        assert_eq!(occs.len(), 1);
+        assert!(occs[0].multipath_alts.is_empty());
+        assert!(!occs[0].wildcard_hardened);
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_hardened_bare_wildcard() {
+        let occs = lex_placeholders("wpkh(@0/*h)").unwrap();
+        assert_eq!(occs.len(), 1);
+        assert!(occs[0].wildcard_hardened);
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_multipath_sans_wildcard() {
+        // `@0/<0;1>` with no trailing `/*` — the terminator immediately
+        // follows the multipath body; still lex-passes (D1-adjacent, but
+        // orthogonal: the residue floor does not itself mandate a wildcard).
+        let occs = lex_placeholders("wpkh(@0/<0;1>)").unwrap();
+        assert_eq!(occs.len(), 1);
+        assert_eq!(occs[0].multipath_alts, vec![0, 1]);
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_bare_at_n_d1_deferred() {
+        // D1 (deferred to FOLLOWUP `concrete-nonranged-xpub-implied-wildcard`):
+        // bare `@0` is the canonical keyless multisig-template form and MUST
+        // still lex-pass — `lex_bare_at_zero` (unchanged) already pins this;
+        // this cell re-confirms it survives the residue floor specifically.
+        let occs = lex_placeholders("wpkh(@0)").unwrap();
+        assert_eq!(occs.len(), 1);
+        assert!(occs[0].multipath_alts.is_empty());
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_keyless_multisig() {
+        let occs = lex_placeholders("wsh(sortedmulti(2,@0,@1))").unwrap();
+        assert_eq!(occs.len(), 2);
+        assert_eq!(occs[0].i, 0);
+        assert_eq!(occs[1].i, 1);
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_taproot_multi_a_divergent_multipath() {
+        let occs = lex_placeholders("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").unwrap();
+        assert_eq!(occs.len(), 2);
+        assert_eq!(occs[0].multipath_alts, vec![0, 1]);
+        assert_eq!(occs[1].multipath_alts, vec![2, 3]);
+    }
+
+    #[test]
+    fn lex_residue_floor_accepts_nested_sh_wsh_multi() {
+        let occs = lex_placeholders("sh(wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*)))").unwrap();
+        assert_eq!(occs.len(), 2);
+    }
+
+    #[test]
+    fn lex_residue_floor_hash_guard_checksum_suffix_not_lexed_as_residue() {
+        // `#`-guard: a trailing BIP-380 `#<csum>` after a CLEAN placeholder
+        // must NOT trip the residue check — the terminator `)` is consumed
+        // before the lexer ever reaches `#` (SPEC §2 M-4: `#` never directly
+        // follows a placeholder).
+        let occs = lex_placeholders("wpkh(@0/<0;1>/*)#csum").unwrap();
+        assert_eq!(occs.len(), 1);
+        assert_eq!(occs[0].multipath_alts, vec![0, 1]);
     }
 
     // ---- A.3: resolve_placeholders ----

@@ -238,75 +238,150 @@ fn walletfile_to_bundle(format: &str, blob: &str) -> Value {
 }
 
 // ===========================================================================
-// A4 — seed ≡ wallet-file (bitcoin-core single-sig). Per F1, bitcoin-core
-// carries the split `/0/*` descriptor, so the seed start uses that same
-// descriptor (honest scoped convergence).
+// A4 — POST-CYCLE-A: the bitcoin-core split `/0/*` descriptor is a FIXED
+// use-site step, un-representable in md1 (SPEC_cycleA_descriptor_use_site_
+// collapse.md — the residue-reject floor). Pre-fix, both legs silently
+// collapsed `/0/*` to a bare `/*` and "converged" on the WRONG wallet; this
+// cell is Group A (plan-R0 M-e / no-weakening rule) — it must assert the
+// reject on BOTH legs, NEVER swap to `<0;1>` (that would delete the funds
+// regression this cycle closes).
 // ===========================================================================
 #[test]
 fn a4_seed_vs_walletfile_bitcoin_core_singlesig_converge() {
     let (acct_xpub, fp) = derive_account_xpub(TREZOR_24, "m/84'/0'/0'");
+
+    // Leg 1 — the wallet-file leg: `import-wallet --format bitcoin-core`
+    // rejects at PARSE time (parse_descriptor runs per-entry, at import,
+    // not deferred to `bundle --import-json`).
     let blob = core_blob_receive_only(&acct_xpub, &fp);
-    let wf = walletfile_to_bundle("bitcoin-core", &blob);
-    // Seed start with the MATCHING split descriptor (F1: bitcoin-core = /0/*).
-    let seed = bundle_json(&[
-        "bundle",
-        "--network",
-        "mainnet",
-        "--descriptor",
-        &format!("wpkh(@0[{fp}/84'/0'/0']/0/*)"),
-        "--slot",
-        &format!("@0.phrase={TREZOR_24}"),
-        "--json",
-        "--no-engraving-card",
-    ]);
-    assert_cards_converge(
-        &seed,
-        &wf,
-        "A4 seed vs bitcoin-core wallet-file (split /0/* descriptor per F1)",
+    let imp_assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "bitcoin-core",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .failure();
+    let imp_stderr = String::from_utf8(imp_assertion.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        imp_assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "A4 wallet-file leg: bitcoin-core /0/* import must reject exit 2; stderr: {imp_stderr}"
+    );
+    assert!(
+        imp_stderr.contains("bitcoin-core"),
+        "A4 wallet-file leg: expected bitcoin-core-scoped reject; stderr: {imp_stderr}"
+    );
+
+    // Leg 2 — the direct-placeholder seed leg: `bundle --descriptor
+    // "wpkh(@0[fp/84'/0'/0']/0/*)"` rejects identically (same lexer).
+    let desc_assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            &format!("wpkh(@0[{fp}/84'/0'/0']/0/*)"),
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .failure();
+    let desc_stderr = String::from_utf8(desc_assertion.get_output().stderr.clone()).unwrap();
+    assert_eq!(
+        desc_assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "A4 seed leg: direct @0 /0/* placeholder must reject exit 2; stderr: {desc_stderr}"
+    );
+    assert!(
+        desc_stderr.contains("multipath"),
+        "A4 seed leg: expected multipath-remedy reject text; stderr: {desc_stderr}"
     );
 }
 
 // ===========================================================================
-// A5 — all-four transitive convergence on the bitcoin-core `/0/*` descriptor:
-// seed ≡ xpub ≡ descriptor(concrete) ≡ wallet-file.
+// A5 — POST-CYCLE-A: every start that used to route the bitcoin-core `/0/*`
+// fixed-step descriptor through the collapsing lexer now REJECTS instead of
+// silently converging on the wrong wallet. Group A (plan-R0 M-e): assert the
+// reject on every leg, never swap to `<0;1>`.
 // ===========================================================================
 #[test]
 fn a5_all_four_starts_converge_singlesig() {
     let (acct_xpub, fp) = derive_account_xpub(TREZOR_24, "m/84'/0'/0'");
     let placeholder_desc = format!("wpkh(@0[{fp}/84'/0'/0']/0/*)");
 
-    // (1) seed start
-    let seed = bundle_json(&[
-        "bundle",
-        "--network",
-        "mainnet",
-        "--descriptor",
-        &placeholder_desc,
-        "--slot",
-        &format!("@0.phrase={TREZOR_24}"),
-        "--json",
-        "--no-engraving-card",
-    ]);
-    // (2) xpub start (watch-only, same descriptor)
-    let xpub = bundle_json(&[
-        "bundle",
-        "--network",
-        "mainnet",
-        "--descriptor",
-        &placeholder_desc,
-        "--slot",
-        &format!("@0.xpub={acct_xpub}"),
-        "--json",
-        "--no-engraving-card",
-    ]);
-    // (3) wallet-file start (bitcoin-core /0/*)
-    let blob = core_blob_receive_only(&acct_xpub, &fp);
-    let wf = walletfile_to_bundle("bitcoin-core", &blob);
+    // (1) seed start — direct @N placeholder, fixed `/0/*` use-site.
+    let seed_assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            &placeholder_desc,
+            "--slot",
+            &format!("@0.phrase={TREZOR_24}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        seed_assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "A5 seed start must reject exit 2"
+    );
 
-    assert_cards_converge(&seed, &xpub, "A5 seed vs xpub");
-    assert_cards_converge(&seed, &wf, "A5 seed vs wallet-file");
-    // Transitive: xpub ≡ wallet-file follows, asserted explicitly for clarity.
-    assert_cards_converge(&xpub, &wf, "A5 xpub vs wallet-file");
+    // (2) xpub start (watch-only, same descriptor) — rejects identically.
+    let xpub_assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            &placeholder_desc,
+            "--slot",
+            &format!("@0.xpub={acct_xpub}"),
+            "--json",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .failure();
+    assert_eq!(
+        xpub_assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "A5 xpub start must reject exit 2"
+    );
+
+    // (3) wallet-file start (bitcoin-core /0/*) — rejects at import time.
+    let blob = core_blob_receive_only(&acct_xpub, &fp);
+    let wf_assertion = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "bitcoin-core",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .failure();
+    assert_eq!(
+        wf_assertion.get_output().status.code().unwrap_or(-1),
+        2,
+        "A5 wallet-file start must reject exit 2"
+    );
 }
 
 /// Three distinct BIP-39 seeds for the multisig cells. Mixed word-counts are

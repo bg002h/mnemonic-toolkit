@@ -285,11 +285,18 @@ fn bundle_seed_emits_private_key_material() {
 
 #[test]
 fn bundle_descriptor_emits_watch_only() {
+    // Cycle A Group B swap (plan-R0 M-a): `bundle --descriptor` (concrete
+    // form) runs through `concrete_keys_to_placeholders` → `lex_placeholders`
+    // (unlike `export-wallet --descriptor` above, which parses directly via
+    // `MsDescriptor::from_str` and never touches the lexer), so the
+    // incidental fixed `/0/*` step now rejects; swap to `<0;1>/*` — this
+    // cell's assertion is the watch-only-mode class, orthogonal to the
+    // now-separately-covered fixed-step reject.
     let o = mnemonic()
         .args([
             "bundle",
             "--descriptor",
-            "wpkh([704c7836/84h/0h/0h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*)",
+            "wpkh([704c7836/84h/0h/0h]tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*)",
             "--network",
             "testnet",
             "--no-engraving-card",

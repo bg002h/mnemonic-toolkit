@@ -162,8 +162,11 @@ fn fires_and_non_blocking_export_wallet() {
 #[test]
 fn fires_and_non_blocking_bundle_concrete_key() {
     // Single-key concrete descriptor: inline `[fp/path]xpub`, no `@N`, no
-    // `--slot`. Real tpub lifted from `cli_descriptor_concrete.rs`.
-    let descriptor = "wsh(and_v(v:pk([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*),older(65536)))";
+    // `--slot`. Real tpub lifted from `cli_descriptor_concrete.rs`. Cycle A
+    // Group B swap (plan-R0 M-a): the incidental fixed `/0/*` step is
+    // orthogonal to this cell's older()-advisory assertion; swap to `<0;1>/*`
+    // (the fixed-step reject is covered by dedicated Cycle A tests elsewhere).
+    let descriptor = "wsh(and_v(v:pk([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*),older(65536)))";
     let out = bin()
         .args([
             "bundle",
@@ -203,7 +206,9 @@ fn fires_and_non_blocking_bundle_concrete_key() {
 /// guard on `bundle_run_concrete_descriptor` specifically).
 #[test]
 fn clean_key_no_advisory_bundle_concrete_key() {
-    let descriptor = "wsh(and_v(v:pk([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/0/*),older(2016)))";
+    // Cycle A Group B swap (plan-R0 M-a): swap the incidental fixed `/0/*`
+    // step to `<0;1>/*`; unaffected by the clean-older() advisory assertion.
+    let descriptor = "wsh(and_v(v:pk([704c7836/48'/1'/3'/2']tpubDEgS9fUEpucKatmvKAv21v8nViHxR6rsV7ohMWK4YjsWd4EWT3w8YzMgMEvNrDfsUANbid74WRFpr3Gym8UHBSLnqg6b1Lzvibw87cLSctC/<0;1>/*),older(2016)))";
     let out = bin()
         .args([
             "bundle",

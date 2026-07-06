@@ -291,7 +291,18 @@ fn key_material(bundle: &Value) -> KeyMaterial {
 }
 
 // ===========================================================================
-// C2 (Phase-1 probe) — wsh-sortedmulti 2-of-3 converges across 7 formats.
+// C2 (Phase-1 probe) — wsh-sortedmulti 2-of-3 converges across 6 formats.
+//
+// Cycle A interim bitcoin-core limitation (SPEC_cycleA_descriptor_use_site_
+// collapse.md §6): `bitcoin-core` REMOVED from this convergence set. The
+// toolkit's own `export-wallet --format bitcoin-core` emitter always
+// produces Core's native split receive(`/0/*`)+change(`/1/*`) pair (Core
+// never exports combined multipath — verified upstream, PR #22838), which
+// the Cycle A residue-reject floor now hard-rejects on re-import — so
+// bitcoin-core can no longer participate in an export→reimport convergence
+// check. Restored by the split-out `bitcoin-core-receive-change-pair-merge`
+// follow-up. The dedicated reject is covered elsewhere (`cli_import_wallet_
+// bitcoin_core.rs`, `cli_cross_start_convergence.rs::a4/a5`).
 // ===========================================================================
 #[test]
 fn c2_multisig_sortedmulti_converges_across_formats() {
@@ -300,7 +311,6 @@ fn c2_multisig_sortedmulti_converges_across_formats() {
         .map(|p| derive(p, "m/48'/0'/0'/2'"))
         .collect();
     let formats = [
-        "bitcoin-core",
         "bsms",
         "coldcard-multisig",
         "electrum",
@@ -332,12 +342,15 @@ fn c2_multisig_sortedmulti_converges_across_formats() {
 }
 
 // ===========================================================================
-// C1 — single-sig bip84 wpkh converges across 5 formats.
+// C1 — single-sig bip84 wpkh converges across 4 formats.
+//
+// Cycle A interim bitcoin-core limitation — see C2's header comment above;
+// `bitcoin-core` REMOVED from this convergence set for the same reason.
 // ===========================================================================
 #[test]
 fn c1_singlesig_wpkh_converges_across_formats() {
     let (xpub, fp) = derive(TREZOR_24, "m/84'/0'/0'");
-    let formats = ["bitcoin-core", "coldcard", "electrum", "sparrow", "specter"];
+    let formats = ["coldcard", "electrum", "sparrow", "specter"];
     let anchor = key_material(&export_then_import_bundle(
         formats[0],
         &export_singlesig(formats[0], &xpub, &fp),
@@ -381,7 +394,10 @@ fn c_neg_different_wallet_does_not_converge() {
 }
 
 // ===========================================================================
-// C3 — sh-wsh-sortedmulti 2-of-3 converges across 7 formats (P2SH-P2WSH path).
+// C3 — sh-wsh-sortedmulti 2-of-3 converges across 6 formats (P2SH-P2WSH path).
+//
+// Cycle A interim bitcoin-core limitation — see C2's header comment above;
+// `bitcoin-core` REMOVED from this convergence set for the same reason.
 // ===========================================================================
 #[test]
 fn c3_multisig_sh_wsh_sortedmulti_converges_across_formats() {
@@ -390,7 +406,6 @@ fn c3_multisig_sh_wsh_sortedmulti_converges_across_formats() {
         .map(|p| derive(p, "m/48'/0'/0'/1'"))
         .collect();
     let formats = [
-        "bitcoin-core",
         "bsms",
         "coldcard-multisig",
         "electrum",
@@ -415,6 +430,9 @@ fn c3_multisig_sh_wsh_sortedmulti_converges_across_formats() {
 // ===========================================================================
 // C4 — wsh-MULTI (UNSORTED) 2-of-3: order-preserving formats converge WITH
 // declaration order; coldcard-multisig is probed for reorder/coercion.
+//
+// Cycle A interim bitcoin-core limitation — see C2's header comment above;
+// `bitcoin-core` REMOVED from this convergence set for the same reason.
 // ===========================================================================
 #[test]
 fn c4_unsorted_multi_order_preservation() {
@@ -422,7 +440,7 @@ fn c4_unsorted_multi_order_preservation() {
         .iter()
         .map(|p| derive(p, "m/48'/0'/0'/2'"))
         .collect();
-    let order_preserving = ["bitcoin-core", "bsms", "sparrow", "specter"];
+    let order_preserving = ["bsms", "sparrow", "specter"];
 
     let anchor_b = export_then_import_bundle(
         order_preserving[0],
@@ -549,7 +567,14 @@ fn h_hop_idempotence_multisig_pairs() {
         .map(|p| derive(p, "m/48'/0'/0'/2'"))
         .collect();
     let file = |f: &str| export_multisig(f, "wsh-sortedmulti", &cosigners);
-    assert_hop("bsms", "bitcoin-core", &file("bsms")); // H1 multipath-split seam (core as target)
+    // H1 (bsms→bitcoin-core, core as target) REMOVED — Cycle A interim
+    // bitcoin-core limitation (SPEC_cycleA_descriptor_use_site_collapse.md
+    // §6): `export-wallet --from-import-json --format bitcoin-core` still
+    // emits Core's native split receive/change pair, but the Cycle A
+    // residue-reject floor now hard-rejects that pair on the hop's final
+    // re-import (`export_then_import_bundle("bitcoin-core", ...)`), so this
+    // hop can no longer complete. Restored by the split-out
+    // `bitcoin-core-receive-change-pair-merge` follow-up.
     assert_hop("sparrow", "coldcard-multisig", &file("sparrow")); // H2 order/fp seam
                                                                   // H3 SLIP-132 seam: base58 xpub source → electrum Zpub. Uses sparrow (single
                                                                   // import entry); bitcoin-core can't be the SOURCE here because it splits the

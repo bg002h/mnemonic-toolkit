@@ -180,10 +180,16 @@ fn core_single_descriptor_hform_hardened_path_accepted() {
 #[test]
 fn core_multi_descriptor_emit_all() {
     // 4 entries: BIP-84 receive + change, BIP-49 receive + change.
-    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
-    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
-    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/0/*))");
-    let d3 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/1/*))");
+    // Cycle A: a FIXED use-site step (`/0/*`, `/1/*`) is un-representable in
+    // md1 and now rejects at lex (residue-reject floor). This cell's PURPOSE
+    // is the 4-entry emit-all count, which is orthogonal to the collapse
+    // regression (covered by dedicated reject tests) — swap to per-key-
+    // identical `<0;1>/*` multipath entries to preserve the entry count
+    // without relying on the fixed-step form (plan-R0 M-a).
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let d1 = d0.clone();
+    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/<0;1>/*))");
+    let d3 = d2.clone();
     let blob = build_core_multi(&[
         CoreEntry {
             desc: &d0,
@@ -217,10 +223,13 @@ fn core_multi_descriptor_emit_all() {
 
 #[test]
 fn core_select_descriptor_by_index() {
-    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
-    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
-    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/0/*))");
-    let d3 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/1/*))");
+    // Cycle A Group B swap (plan-R0 M-a): per-key-identical `<0;1>/*` entries
+    // preserve the 4-entry select-by-index coverage without the now-rejected
+    // fixed use-site step.
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let d1 = d0.clone();
+    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/<0;1>/*))");
+    let d3 = d2.clone();
     let blob = build_core_multi(&[
         CoreEntry {
             desc: &d0,
@@ -256,10 +265,13 @@ fn core_select_descriptor_by_index() {
 
 #[test]
 fn core_select_descriptor_active_receive() {
-    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
-    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
-    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/0/*))");
-    let d3 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/1/*))");
+    // Cycle A Group B swap (plan-R0 M-a): selection is driven by the
+    // per-entry `active`/`internal` JSON fields, not by descriptor content —
+    // per-key-identical `<0;1>/*` entries preserve this cell's assertion.
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let d1 = d0.clone();
+    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/<0;1>/*))");
+    let d3 = d2.clone();
     let blob = build_core_multi(&[
         CoreEntry {
             desc: &d0,
@@ -295,10 +307,13 @@ fn core_select_descriptor_active_receive() {
 
 #[test]
 fn core_select_descriptor_active_change() {
-    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
-    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
-    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/0/*))");
-    let d3 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/1/*))");
+    // Cycle A Group B swap (plan-R0 M-a): selection is driven by the
+    // per-entry `active`/`internal` JSON fields, not by descriptor content —
+    // per-key-identical `<0;1>/*` entries preserve this cell's assertion.
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/<0;1>/*)");
+    let d1 = d0.clone();
+    let d2 = format!("sh(wpkh([{MAINNET_FP_B}/49'/0'/0']{MAINNET_XPUB_B}/<0;1>/*))");
+    let d3 = d2.clone();
     let blob = build_core_multi(&[
         CoreEntry {
             desc: &d0,
@@ -333,8 +348,10 @@ fn core_select_descriptor_active_change() {
 
 #[test]
 fn core_multisig_wsh_sortedmulti_2_of_3() {
+    // Cycle A Group B swap (plan-R0 M-a): the incidental fixed `/0/*` step is
+    // orthogonal to this cell's multisig-parse assertion; swap to `<0;1>/*`.
     let desc = format!(
-        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*,[{MAINNET_FP_C}/48'/0'/0'/2']{MAINNET_XPUB_C}/0/*))"
+        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*,[{MAINNET_FP_C}/48'/0'/0'/2']{MAINNET_XPUB_C}/<0;1>/*))"
     );
     let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
     let out = run_core_stdin(&blob).success();
@@ -534,8 +551,11 @@ fn core_empty_descriptors_array_exit_2() {
 #[test]
 fn core_testnet_tpub_network_detected() {
     // All-tpub descriptors with BIP-48 coin_type=1' on the origin path.
+    // Cycle A Group B swap (plan-R0 M-a): swap the incidental fixed `/0/*`
+    // step to `<0;1>/*`; this cell's assertion is network detection, not the
+    // use-site shape.
     let desc = format!(
-        "wsh(sortedmulti(2,[{TESTNET_FP_A}/48'/1'/0'/2']{TESTNET_XPUB_A}/0/*,[{TESTNET_FP_B}/48'/1'/0'/2']{TESTNET_XPUB_B}/0/*))"
+        "wsh(sortedmulti(2,[{TESTNET_FP_A}/48'/1'/0'/2']{TESTNET_XPUB_A}/<0;1>/*,[{TESTNET_FP_B}/48'/1'/0'/2']{TESTNET_XPUB_B}/<0;1>/*))"
     );
     let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
     let out = run_core_stdin(&blob).success();
@@ -891,18 +911,35 @@ fn core_fixture_file_explicit_active_false_parses() {
 
 /// P10B.2 — `core-mainnet-receive-change-pair.json`: two-entry blob with
 /// `/0/*` (receive, active+!internal) + `/1/*` (change, active+internal)
-/// — the legacy Core shape pre-BIP-389-multipath. Pins parser acceptance
-/// of the non-multipath receive/change pair and the implicit promotion to
-/// `bundles=2` under `--select-descriptor all`.
+/// — the legacy Core shape pre-BIP-389-multipath.
+///
+/// Cycle A (plan-R0 I-C): a FIXED use-site step is un-representable in md1
+/// (residue-reject floor) — this legacy non-multipath receive/change pair now
+/// HARD-FAILS at entry 0 (`/0/*`) before selection ever runs, with the
+/// bitcoin-core interim-limitation workaround message (combine to `<0;1>/*`
+/// + `--format descriptor`; automatic recombination is the split-out
+/// `bitcoin-core-receive-change-pair-merge` follow-up). The fixture file
+/// itself is KEPT UNCHANGED — it is both the canonical legacy-split funds
+/// regression this cell now proves closed AND the future INPUT fixture for
+/// the pair-merge follow-up.
 #[test]
 fn core_fixture_file_mainnet_receive_change_pair_parses() {
     let p = fixture_path("core-mainnet-receive-change-pair.json");
-    let out = run_core_file_select(&p, "all").success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    // 2 entries → 2 bundles under `all`.
-    assert!(stdout.contains("bundles=2"), "stdout: {stdout}");
-    assert!(stdout.contains("network=mainnet"), "stdout: {stdout}");
-    assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
+    let assertion = run_core_file_select(&p, "all").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "legacy non-multipath receive/change pair must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("bitcoin-core"),
+        "expected bitcoin-core-scoped reject; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") || stderr.contains("<0;1>") || stderr.contains("<a;b>"),
+        "expected the multipath-remedy reject text; stderr: {stderr}"
+    );
 }
 
 /// P10B.3 — `core-multipath-receive-change-pair.json`: two-entry blob where
@@ -989,8 +1026,10 @@ fn core_fixture_file_empty_descriptors_array_sniff_no_match() {
 /// the non-blocking advisory on stderr while still succeeding (exit 0).
 #[test]
 fn core_masked_older_emits_advisory() {
+    // Cycle A Group B swap (plan-R0 M-a): the incidental fixed `/0/*` step is
+    // orthogonal to this cell's older()-advisory assertion; swap to `<0;1>/*`.
     let desc = format!(
-        "wsh(and_v(v:multi(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*),older(65536)))"
+        "wsh(and_v(v:multi(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*),older(65536)))"
     );
     let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
     let assert = run_core_stdin(&blob).success();
@@ -1006,8 +1045,10 @@ fn core_masked_older_emits_advisory() {
 /// still succeeds. Guards against the hook firing on clean operands.
 #[test]
 fn core_clean_older_emits_no_advisory() {
+    // Cycle A Group B swap (plan-R0 M-a): swap the incidental fixed `/0/*`
+    // step to `<0;1>/*`; unaffected by the clean-older() advisory assertion.
     let desc = format!(
-        "wsh(and_v(v:multi(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*),older(2016)))"
+        "wsh(and_v(v:multi(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/<0;1>/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/<0;1>/*),older(2016)))"
     );
     let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
     let assert = run_core_stdin(&blob).success();
@@ -1015,5 +1056,79 @@ fn core_clean_older_emits_no_advisory() {
     assert!(
         !stderr.contains("advisory: older"),
         "clean older(2016) must NOT emit an older() advisory; stderr: {stderr}"
+    );
+}
+
+// ============================================================================
+// Cycle A — residue-reject floor (CRITICAL funds fix): a bitcoin-core
+// single-entry blob carrying a FIXED use-site step (`/0/*`) is un-
+// representable in md1 (a fixed step silently collapsed to a bare `/*`,
+// encoding a DIFFERENT wallet — SPEC_cycleA_descriptor_use_site_collapse.md
+// §1). `parse_descriptor::lex_placeholders`'s residue-reject floor now
+// catches this at import time (`parse_entry` calls `parse_descriptor`
+// per-entry, `bitcoin_core.rs`), before any card is ever built. This is the
+// dedicated per-surface reject test (plan Phase 1a) — the sole coverage of
+// this reject shape, which is what licenses the Group-B `<0;1>/*` fixture
+// swaps elsewhere in this file (the collapse regression they used to
+// incidentally cover is proven here instead).
+// ============================================================================
+
+#[test]
+fn core_fixed_use_site_step_rejected_with_workaround() {
+    let desc = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
+    let assertion = run_core_stdin(&blob).failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "fixed use-site step `/0/*` must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("bitcoin-core"),
+        "expected the reject to be scoped to the bitcoin-core surface; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("multipath") && stderr.contains("<a;b>"),
+        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("/0/*"),
+        "expected the reject to name the offending residue; stderr: {stderr}"
+    );
+}
+
+/// Companion: Core's standard receive+change TWO-entry export (`/0/*` +
+/// `/1/*`, distinct `internal` flags) also rejects — both entries carry a
+/// fixed step, so entry 0 rejects before entry 1 (or selection) is ever
+/// reached. Distinct from `core_fixture_file_mainnet_receive_change_pair_parses`
+/// (fixture-file variant of the same shape) — this is the inline-blob
+/// stdin-driven twin.
+#[test]
+fn core_receive_change_pair_rejected_with_workaround() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "Core receive+change split pair must reject exit 2; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("bitcoin-core"),
+        "expected bitcoin-core-scoped reject; stderr: {stderr}"
     );
 }
