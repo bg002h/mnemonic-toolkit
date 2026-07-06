@@ -10,7 +10,31 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS (2026-07-06 session): ✅ SPEC R0 GREEN (0C/0I) round 2. Next = IMPLEMENTATION PLAN-DOC → its own R0 loop.
+## STATUS (2026-07-06 session): ✅✅ BOTH R0 GATES GREEN (SPEC + PLAN). Ready for Phase-1 IMPLEMENTATION.
+PLAN R0 round 2 = GREEN (0C/0I); `cycleA-plan-r0-round-2.md`. m1 (SPEC §8 verify-variant) + m2 (plan citations
+`:853`/`:391`) tidied. NEXT = dispatch ONE implementer subagent in a git WORKTREE to execute the GREEN plan,
+Phase 1 (ATOMIC): write all failing tests → residue check in `lex_placeholders` (after :178, before :183) →
+migrate ALL 22 incumbent cells (Group A + `:898` assert-reject / Group B `<0;1>` swap / OOB fixture-swap) → FULL
+`cargo test -p mnemonic-toolkit` + `wc-codec` GREEN → per-phase opus R0. Then P2 funds regressions, P3 ripples,
+P4 whole-diff review + MINOR-bump release. **Implementer must TDD, stage explicitly, NOT touch mlock.rs/fmt, and
+persist per-phase R0 to `design/agent-reports/cycleA-phase-N-r0-round-M.md`.**
+### (superseded) PLAN R0 round 1 = 0C/4I → folded (rev-2) → R0 round 2.
+PLAN rev-2 folds: I-A merge Phase1+2 ATOMIC (residue floor + full 22-cell migration → GREEN together, no red
+boundary); I-B verify-path per-path (concrete→`DescriptorParse`/exit2 PRIMARY, template→`DescriptorReparseFailed`/exit4);
+I-C `:898` assert-reject + KEEP `core-mainnet-receive-change-pair.json` (legacy-split regression + pair-merge input);
+I-D `/**` mainstream shorthand disclosure (CHANGELOG+manual) + CLI reject test + follow-up; M-a inline-literal swaps,
+M-b SPEC §8 export line superseded (STAYS exit 1), M-c sparrow discharge+positive-control, M-d MINOR bump, M-e a4/a5
+both legs. SPEC edited (D2 per-path verify variant, §8 export line, §10 MINOR); sweep `:898` re-bucketed.
+Plan R0 round 1 persisted: `cycleA-plan-r0-round-1.md`. NOW = R0 round 2 → persist `cycleA-plan-r0-round-2.md`.
+### (superseded) PLAN-DOC written → PLAN R0 gate round 1.
+PLAN = `design/IMPLEMENTATION_PLAN_cycleA_descriptor_use_site_collapse.md` (5 phases: P1 residue-reject floor,
+P2 reject-with-remediation + test migration [Group A assert-reject / Group B fixture-swap-to-`<0;1>`], P3 funds
+regressions [verify-bundle false-pass + BIP-84 oracle], P4 ripples, P5 whole-diff review + release). Sweep persisted:
+`design/agent-reports/cycleA-migration-sweep.md` (22 REJECTS-NOW / 19 STAYS-PASSING / 0 ambiguous). M-9(ii sparrow),
+M-9(iii `/**`) resolved (both in plan). PLAN R0 must rule the 4 open items (Group A/B no-weakening faithfulness;
+fixture-swap correctness; `/**` reject-not-expand; Phase1→2 RED-window / atomicity). Persist to
+`cycleA-plan-r0-round-N.md`; fold → re-dispatch until 0C/0I; THEN implement.
+### (superseded) ✅ SPEC R0 GREEN (0C/0I) round 2.
 SPEC = `design/SPEC_cycleA_descriptor_use_site_collapse.md` (rev-2, Part 1 floor + Part 3 reject-with-remediation;
 Part 2 pair-merge SPLIT to follow-up). R0 reviews persisted: `cycleA-spec-r0-round-1.md` (0C/2I),
 `cycleA-spec-r0-round-2.md` (GREEN). M-8 folded (cosmetic §-label). **M-9 carry-forwards the PLAN R0 must verify:**

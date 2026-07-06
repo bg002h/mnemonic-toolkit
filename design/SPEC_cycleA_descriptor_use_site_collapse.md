@@ -84,9 +84,12 @@ and import via `--format descriptor`).
   Orthogonal to the residue floor. **Keep `lex_bare_at_zero` unchanged; file the follow-up with explicit funds
   framing (M-1); disclose the residual in the CHANGELOG** so users of non-ranged single-key descriptors are warned.
 - **D2 — reuse `ToolkitError::DescriptorParse(String)`** (@:123, exit 2, kind `"DescriptorParse"`) on the
-  encode/import paths (H13 precedent :162-174). **On the VERIFY path** the lex reject is re-wrapped as
-  `ToolkitError::DescriptorReparseFailed{detail}` (`verify_bundle.rs:1375`), the `detail` carrying the pointed
-  message (M-3) — trap-#9 tests assert THAT shape on the verify path. No new variant, no schema/exit ripple.
+  encode/import paths (H13 precedent :162-174). **Verify-path error variant is PER-PATH** (plan-R0 I-B correction
+  to M-3): the **concrete-descriptor** verify fork (`verify_bundle.rs:1352-1357` → `descriptor_concrete_to_resolved_slots`,
+  `pipeline.rs:417-418`) re-wraps the lex reject as `DescriptorParse` → **exit 2** — this is the false-pass site
+  SPEC §1 names, so the primary verify regression asserts exit 2 / `DescriptorParse`. The `@N`-**template** verify
+  fork re-wraps as `DescriptorReparseFailed{detail}` (`verify_bundle.rs:1375`) → exit 4. No new variant, no
+  schema/exit ripple.
 
 ## 5. Part 1 — residue-reject floor (THE funds fix)
 
@@ -159,8 +162,9 @@ residue directions tested) → §8. **Moved to the pair-merge follow-up:** #1 (p
 - `#`-never-lexed guard test (M-4 backstop).
 **Funds regressions (CLI/integration):**
 - **verify-bundle false-pass closure (M-7 mechanism):** a bundle-encode from `/0/*` now rejects, so the test
-  CANNOT build a `/0/*` bundle post-fix. Instead: (a) verify a `/0/*` descriptor against any card and assert the
-  reparse rejects (exit≠0, `DescriptorReparseFailed`), and/or (b) load a pre-generated wrong-card fixture and
+  CANNOT build a `/0/*` bundle post-fix. Instead: (a) verify a CONCRETE `/0/*` descriptor against any card and
+  assert the reparse rejects (**exit 2 / `DescriptorParse`** — concrete verify fork, plan-R0 I-B/m1; the
+  `@N`-template fork is exit 4 / `DescriptorReparseFailed`), and/or (b) load a pre-generated wrong-card fixture and
   assert verify now fails. Prove the false-pass (was exit 0) is closed.
 - **BIP-84 oracle regression:** assert a correctly-encoded `<0;1>/*` card restores
   `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`; and that a `/0/*` input now rejects at encode rather than
@@ -175,7 +179,8 @@ Known cells to migrate to a reject: `cli_cross_start_convergence.rs` (a4/a5 — 
 "convergence"), `cli_import_wallet_bitcoin_core.rs` (all `/0/*` cells incl. `:898`
 `core_fixture_file_mainnet_receive_change_pair_parses`, which flips from `bundles=2 .success()` to reject),
 `cli_output_class.rs` (watch-only cells), `cli_older_advisory.rs` (concrete-key bundle cells),
-`cli_export_wallet.rs::descriptor_to_bip388_non_multipath_refused` (now rejects earlier, exit 2 not 1),
+`cli_export_wallet.rs::descriptor_to_bip388_non_multipath_refused` (STAYS-PASSING exit 1 — export-wallet parses via
+`MsDescriptor::from_str` and NEVER enters the `@N` lexer; plan-R0 M-b supersedes rev-1's wrong "exit 2 not 1"),
 `cli_compare_cost.rs::descriptor_wsh_wildcard_...`, `cli_descriptor_concrete.rs:174` (originless concrete `/0/*` —
 classify: rejects at classify vs residue?), `cli_import_wallet_sniff.rs:79`, `coldcard.rs:728` (BSMS `/0/*` sniff
 blob), `cli_import_wallet_bsms.rs`, Core fixtures `tests/fixtures/wallet_import/core-*.json`. **Must STAY passing
@@ -200,7 +205,9 @@ merge-negative-control for the pair-merge follow-up).
 
 ## 10. Release ritual (per `project_toolkit_release_ritual_version_sites`)
 
-Toolkit **PATCH** bump (behavior change, no CLI-surface add): version + BOTH READMEs + `fuzz/Cargo.lock` +
+Toolkit **MINOR** bump (plan-R0 M-d: this turns previously-accepted `/0/*`|`/**` imports into hard failures — a
+breaking, user-visible behavior change; under 0.x semver a breaking change is a MINOR bump, matching the prior
+funds-CRITICAL bughunt cycle which shipped MINOR): version + BOTH READMEs + `fuzz/Cargo.lock` +
 `install.sh` SELF-pin (NOT the frozen md-cli sibling pin) + re-vendor iff a dep bumps (none expected) + CHANGELOG
 (tag-gated) — the CHANGELOG MUST disclose (a) the funds fix, (b) the interim bitcoin-core-import limitation +
 workaround, (c) the deferred concrete-nonranged-xpub residual (M-1). Direct-FF + tag. File + flip a new FOLLOWUP
