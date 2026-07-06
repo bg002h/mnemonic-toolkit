@@ -1,0 +1,168 @@
+name: examples
+
+# Anti-rot gate for docs/Examples.pdf: regenerates the committed golden
+# `.examples-build/Examples.md` from the source-built `mnemonic` binary and
+# fails if it drifts. See design/IMPLEMENTATION_PLAN_examples_pdf_modernize_and_gate.md
+# and the AUTHORITATIVE config in
+# design/agent-reports/examples-pdf-branch-protection-ruling.md §7.
+#
+# Trigger shape (ruling §7):
+#   - pull_request: NO `paths:` filter. The single job `examples` ALWAYS runs
+#     and ALWAYS reports its context, so it is safe as a REQUIRED branch-
+#     protection check (a path-filtered required check wedges forever at
+#     "Expected — waiting for status"). A PR-event-only, fail-safe internal
+#     guard early-exits the heavy steps when no gated path changed, so a
+#     docs-only PR is a seconds-long green no-op instead of a wasted compile.
+#   - push (master/main): WITH a `paths:` filter. This run is LOAD-BEARING,
+#     not redundant — it is the sole gate for direct-to-master pushes (the
+#     toolkit's dominant change mode: releases + design docs), which bypass
+#     all PR checks. `paths` never filters tag pushes.
+#   - tags: examples-v*. Builds the PDF and attaches docs/Examples.pdf to the
+#     release (manual.yml:147-168 pattern). NO bitcoind — §6.6 is a static
+#     capture (Q1-(b)).
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - '.examples-build/**'
+      - 'docs/Examples.pdf'
+      - 'scripts/install.sh'
+      - 'crates/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'                 # root [patch.crates-io] miniscript rev (plan M2)
+      - '.github/workflows/examples.yml'
+    tags:
+      - 'examples-v*'
+  pull_request:                       # NO paths — a REQUIRED check must report on every PR
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write                 # release-asset upload on examples-v* tags
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changes (PR-event only)
+        id: guard
+        # Fail-SAFE guard: it may only ever err toward *running* the gate,
+        # never toward skipping it (a wrongly-skipped gate is a silent
+        # false-green — the dangerous failure). Two properties enforce this:
+        #   (a) the two-dot `git diff BASE HEAD` OVER-includes (it also picks
+        #       up base-side changes since the branch point) → at worst it
+        #       runs the gate unnecessarily; it can NEVER miss a PR-side edit
+        #       to a gated path.
+        #   (b) if the fetch/diff itself errors, the step exits non-zero under
+        #       the default `-eo pipefail` shell → the JOB FAILS (hard red),
+        #       never a false green.
+        # The gated path set MUST match the `push:` `paths:` filter above
+        # (incl. `.github/workflows/examples.yml`, so this workflow's own PR
+        # exercises the born-green gate rather than no-op'ing itself).
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
+          changed="$(git diff --name-only FETCH_HEAD HEAD)"
+          printf 'changed files:\n%s\n' "$changed"
+          if printf '%s\n' "$changed" | grep -qE \
+             '^(\.examples-build/|docs/Examples\.pdf$|scripts/install\.sh$|crates/|Cargo\.lock$|Cargo\.toml$|\.github/workflows/examples\.yml$)'; then
+            echo "relevant=true"  >> "$GITHUB_OUTPUT"
+            echo "Gated paths changed — running the full examples gate."
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No gated paths changed — examples gate is a no-op for this PR."
+          fi
+
+      - name: Install pandoc + texlive + DejaVu mono
+        # Monofont "DejaVu Sans Mono" (gen.sh:116) needs fonts-dejavu; jq is
+        # runner-preinstalled but pinned explicitly (gen.sh preflight requires
+        # it). No chromium/mermaid — Examples.pdf has no figures.
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pandoc \
+            texlive-xetex \
+            texlive-latex-recommended \
+            texlive-latex-extra \
+            texlive-fonts-recommended \
+            texlive-fonts-extra \
+            fonts-dejavu \
+            jq
+
+      - name: Install pinned Rust toolchain (1.85.0)
+        # Matches rust-toolchain.toml; gen.sh:167 requires rustc >= 1.85.
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        uses: dtolnay/rust-toolchain@1.85.0
+
+      - name: Rust build cache
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build mnemonic binary (debug)
+        # Debug binary is sufficient — gen.sh captures the same output as
+        # release modulo panic verbosity (mnemonic never panics in normal
+        # flow). Precedent: manual.yml:92-96.
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        run: cargo build --bin mnemonic
+
+      - name: Regenerate the golden Examples.md
+        # EXAMPLES_BIN_DIR wins over any cargo-installed mnemonic on PATH.
+        # gen.sh scrubs HOME/LC_ALL/LANG/TZ internally for byte-determinism
+        # and FATALs on a version mismatch or a missing preflight tool.
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        run: |
+          EXAMPLES_BIN_DIR="$GITHUB_WORKSPACE/target/debug" \
+            bash .examples-build/gen.sh > .examples-build/Examples.md || exit 1
+
+      - name: Gate — golden must match the freshly regenerated output
+        # Fail-closed: any drift between the committed golden and the fresh
+        # regen shows verbatim in the CI log and REDs the job. Scoped to the
+        # one golden path so the still-ignored preamble.tex / work/ / *.err
+        # can never false-positive.
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        run: git diff --exit-code -- .examples-build/Examples.md
+
+      - name: Build PDF (proves buildability; not byte-gated)
+        # The exact pandoc line from gen.sh:9-11 (cwd .examples-build; gen.sh
+        # has already written preamble.tex during the regen step above).
+        # xelatex output is not reproducible across texlive versions, so the
+        # PDF is NOT byte-gated — the golden .md is the gated artifact; this
+        # step only re-proves the PDF still builds cleanly.
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        working-directory: .examples-build
+        run: |
+          pandoc Examples.md --include-in-header=preamble.tex --listings \
+            --pdf-engine=xelatex -f markdown-smart -o Examples.pdf
+          test -s Examples.pdf
+
+      - name: Upload golden + PDF as workflow artifacts
+        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: examples
+          path: |
+            .examples-build/Examples.md
+            .examples-build/Examples.pdf
+
+      - name: Ensure GitHub release exists for this tag
+        if: startsWith(github.ref, 'refs/tags/examples-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$REF_NAME" >/dev/null 2>&1; then
+            gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes || true
+          fi
+
+      - name: Upload docs/Examples.pdf to release (on examples-v* tag)
+        # Attach the committed canonical PDF (Q4), not the freshly-built one:
+        # the committed copy is the reviewed artifact and matches what users
+        # find in-tree. Mirrors manual.yml:156-161.
+        if: startsWith(github.ref, 'refs/tags/examples-v')
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: gh release upload "$REF_NAME" docs/Examples.pdf --clobber
