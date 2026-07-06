@@ -266,7 +266,7 @@ export-wallet's, and depend on the restore mode:
 - **Multisig-cosigner restore** (`--md1 <card>`): `(none)` **removes a
   single-sig template the CLI refuses**. A single-sig `--template` in
   `--md1` mode is a mode violation — `mnemonic restore --md1 … --template
-  bip84` **exits 2** — but the GUI form materialises `bip84` on load, so
+  bip84` **exits 2** — but the GUI form materialises `bip44` on load, so
   a reader driving a multisig restore had to know to change it.
   Selecting `(none)` clears the inert, refused flag so the multisig
   restore runs cleanly from the `md1` card alone. This is the fix for

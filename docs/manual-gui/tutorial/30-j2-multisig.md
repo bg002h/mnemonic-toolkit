@@ -35,7 +35,7 @@ On cosigner 0's device, `convert` derives that cosigner's BIP-87
 multisig **fingerprint** from their seed alone. Select **Convert
 (between formats)**, set the composite **`--from`** selector to
 `phrase` and type the demo phrase (masked `••••` by default; the
-filled-form shot below holds the composite's **👁 reveal** so you can
+filled-form shot below holds the composite's **reveal** so you can
 read the public phrase), choose **`--to`** `fingerprint`, and set
 **`--template`** `wsh-sortedmulti` (which implies the `m/87'/0'/0'`
 path). The filled form is below; the run panel returns
@@ -223,7 +223,7 @@ the whole set. This is the **convenient but less-safe** path from
 **`+ Add slot`** twice to reach three rows, set their `@N` indices to
 `0`, `1`, `2`, and set **`--threshold`** to `2`. Then flip each row's
 subkey to `phrase` and type the three demo seeds. In the filled-form
-shot below the **last** row holds its **👁 reveal** so you can read that
+shot below the **last** row holds its **reveal** so you can read that
 public seed; the other two rows stay masked `••••` — a live picture of
 the single-revealed-field rule, where revealing one secret field
 re-masks any other. The filled form is below.
@@ -268,7 +268,7 @@ source)**. The `md1` chunks are chained automatically from the previous
 `bundle --json` run and typed into the repeating **`--md1`** rows; the
 **Template** drop-down is set to **`(none)`** — restoring from an `md1`
 card needs no template (the card already carries the full policy), and
-`(none)` cleanly clears the form's default `bip84`, which as a
+`(none)` cleanly clears the form's default `bip44`, which as a
 *single-sig* template would be refused in `--md1` mode (exit 2). The
 filled form is below.
 

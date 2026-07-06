@@ -161,11 +161,11 @@ It does **not** protect against:
   what your OS exposes).
 - Anyone with a camera looking at your monitor.
 
-## The reveal (👁) toggle — deliberate, display-only exposure {#secret-reveal-toggle}
+## The reveal toggle — deliberate, display-only exposure {#secret-reveal-toggle}
 
 Every secret-class field masks its value on load (see Defense 2's
 "masked dots"). Since `mnemonic-gui-v0.57.0` each such field also carries
-a small **👁 reveal button** so you can *deliberately* check what you
+a small **reveal button** so you can *deliberately* check what you
 typed — verifying a long BIP-39 phrase or passphrase against a paper
 backup is a real need, and forcing a re-type is worse UX than a bounded,
 opt-in reveal. In the structural form renders (the `.gui` gallery) the
@@ -234,7 +234,7 @@ forms).
 - The GUI does not **echo** typed secrets back to you in plaintext by
   default. Secret text fields render as masked dots; the passive
   confirmation is the count of characters typed. The one exception is the
-  deliberate, opt-in [reveal (👁) toggle](#secret-reveal-toggle) — a
+  deliberate, opt-in [reveal toggle](#secret-reveal-toggle) — a
   hold-to-reveal affordance you actuate on a single field; it is
   display-only and never widens any other surface (the run-confirm modal,
   the `argv:` echo / copy-command, persistence, and the exit sweep all

@@ -48,7 +48,7 @@ one run stands in for `Examples.pdf`'s `bundle … --json | jq -r
 
 Reconstruct the wallet from that `md1` card and emit a **bare canonical
 descriptor**. Select **Restore …**, set **Template** to **`(none)`** (an
-`md1` restore needs no template — clearing the form's default `bip84`
+`md1` restore needs no template — clearing the form's default `bip44`
 avoids the single-sig-template refusal in `--md1` mode), set
 **`--format`** to `descriptor`, and let the `md1` chunks chain in from
 the bundle-JSON step's run. The filled form is below.

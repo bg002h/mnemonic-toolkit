@@ -123,7 +123,7 @@ xpubs the result is watch-only (no `ms1`, one `mk1` per key, one shared
 
 Restore the Taproot vault from its `md1` chunks (Template set to
 **`(none)`** — an `md1` restore needs no template, and `(none)` clears
-the form's default single-sig `bip84`, which would be refused in `--md1`
+the form's default single-sig `bip44`, which would be refused in `--md1`
 mode; chunks chained from the previous `bundle --json` run). The filled
 form is below.
 

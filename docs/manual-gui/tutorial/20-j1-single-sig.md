@@ -19,7 +19,7 @@ single-sig template — the alternatives are `bip44`, `bip49`, and
 `bip86`). The only change is the seed. In the **Slot rows** block, flip
 the single row's subkey drop-down from `xpub` to `phrase` and type the
 demo phrase into its value box. The box masks it as `••••` by default;
-the filled-form shot below holds the row's **👁 reveal** toggle so you
+the filled-form shot below holds the row's **reveal** toggle so you
 can read the exact public phrase to type (it re-masks the instant you
 release, or click **Run**). Notice the `Preview:` line still reads
 `… --slot ••••` — the reveal is display-only and never unmasks the

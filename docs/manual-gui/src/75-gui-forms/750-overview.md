@@ -19,13 +19,13 @@ Each render is produced by the pinned headless `gui-render` (the egui-free `--no
 - `-> <unset>` / `-> <empty>` / `-> [ ] off` are the empty-number, empty-text, and unchecked-checkbox initial states.
 - `[disabled]` marks a control the conditional-visibility engine has greyed out for the default field combination.
 - `[ slot editor: N rows ]` appears for subcommands that accept the repeating `--slot` flag.
-- `[reveal]` trails a masked secret row (`… -> <masked> [reveal]`) and stands for the 👁 reveal button beside that field in the live GUI — it is a control, not part of the value.
+- `[reveal]` trails a masked secret row (`… -> <masked> [reveal]`) and stands for the reveal button beside that field in the live GUI — it is a control, not part of the value.
 
-## Secret fields are masked (with a deliberate 👁 reveal)
+## Secret fields are masked (with a deliberate reveal)
 
 A flag the schema classifies secret renders its value as `<masked>` — never the real bytes — so every render reproduced in this manual carries no live key material. The worked examples in the subcommand chapters use only the canonical all-`abandon` BIP-39 test vector, which must never be funded.
 
-Each masked secret row also carries a trailing `[reveal]` marker in the render (`--passphrase text (secret) -> <masked> [reveal]`). That marker depicts the **👁 reveal toggle** the live GUI draws beside every on-load-masked secret field: a deliberate, hold-to-reveal affordance for checking what you typed. It is display-only and does not change the masked default — see [Secret handling §14](#secret-reveal-toggle) for the full reveal model (hold-to-reveal, keyboard latch, auto-hide, and why every other surface stays masked regardless). The marker is the control's depiction; the value itself is still `<masked>`.
+Each masked secret row also carries a trailing `[reveal]` marker in the render (`--passphrase text (secret) -> <masked> [reveal]`). That marker depicts the **reveal toggle** the live GUI draws beside every on-load-masked secret field: a deliberate, hold-to-reveal affordance for checking what you typed. It is display-only and does not change the masked default — see [Secret handling §14](#secret-reveal-toggle) for the full reveal model (hold-to-reveal, keyboard latch, auto-hide, and why every other surface stays masked regardless). The marker is the control's depiction; the value itself is still `<masked>`.
 
 ## "(required)" is conditional-sourced
 
