@@ -72,8 +72,8 @@ Select the Template drop-down's **`(none)`** entry to unlock
 set **`--format`** `descriptor`. The filled form is below.
 
 The panel returns the full canonical descriptor — every `after`/`older`
-lock, the shared `sha256` hashlock, and all three `multi(...)`
-thresholds across the four `or_i` branches — with checksum `…#4ld0crxa`.
+lock, the shared `sha256` hashlock, and the `multi(...)` threshold in
+each of the four `or_i` branches — with checksum `…#4ld0crxa`.
 Standard error confirms `watch-only — public keys only, cannot spend`.
 
 ![GUI form (screenshot)](../figures/tutorial/tut-j3-10-canonicalise-form.png)

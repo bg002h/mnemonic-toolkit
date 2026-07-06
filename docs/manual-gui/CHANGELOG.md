@@ -8,6 +8,14 @@ numbers.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-05
+
+**Patch — `gui_example.pdf` tutorial prose-accuracy fixes** (no figure/transcript/code change; corpus + gates byte-unchanged). A prose-accuracy sweep against the byte-committed transcripts + figures — prompted by a user-caught error — found three un-gated narration mistakes (the output *blocks* are byte-verified, the prose describing them was not):
+
+- **J1 card output** (`20-j1`): "each card is printed twice — once unbroken, once grouped" → **printed once**, grouped into 5-char blocks (default `--group-size 5`). The "twice" form was a stale carry-over from the pre-`--group-size` (≤ v0.55.x) CLI; the tutorial renders current 0.75.0 output, which groups once.
+- **Modal-shot count** (`10-ch0`): "only two steps keep their modal shot (J1 + J2 all-seeds)" → **only one** (J1); only `tut-j1-01-…-modal.png` exists, and the claim contradicted J2-07's own prose.
+- **J3 canonical descriptor** (`40-j3`): "all three `multi(...)` thresholds across the four `or_i` branches" → the `multi(...)` threshold in **each of the four** branches (the descriptor has four `multi()` nodes: `multi(3)/multi(2)/multi(2)/multi(1)`).
+
 ## [1.3.0] - 2026-07-05
 
 **Minor — the tutorial-surfaced-fixes ripple + GUI pin bump `mnemonic-gui-v0.56.0` → `mnemonic-gui-v0.57.0`.** The `gui_example.pdf` tutorial (a usability-testing instrument) surfaced two real GUI defects; both are fixed at v0.57.0, and this manual leg re-pins the affected renders/figures and re-drives the tutorial to teach the *fixed* flows. **Pin-neutral** for the four CLIs.

@@ -51,10 +51,10 @@ moments:
 2. **The confirm modal** — *for secret-bearing steps only.* Any form
    carrying a seed phrase raises a "Confirm secret-bearing run" modal
    before it spawns anything; the shot shows the masked argument list
-   you are about to run. To keep the book lean, only two steps keep
-   their modal shot (Journey 1's single-sig bundle and Journey 2's
-   all-seeds bundle); every other secret step still passes through the
-   same modal, it just is not photographed twice.
+   you are about to run. To keep the book lean, only one step keeps
+   its modal shot (Journey 1's single-sig bundle); every other secret
+   step still passes through the same modal, it just is not photographed
+   twice.
 3. **The populated output panel** — after **Run** completes. The
    command line, exit code, standard output, and standard error, filled
    in by a real run of the pinned CLI.
