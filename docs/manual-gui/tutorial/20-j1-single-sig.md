@@ -35,8 +35,9 @@ secret"*. Confirm with the modal's **Run**.
 The populated panel (third shot) carries the three engraving cards on
 standard output: `ms1` (the BIP-39 entropy, BCH-checksummed), `mk1`
 (the account xpub plus its origin), and `md1` (the wallet policy). Each
-card is printed twice — once unbroken, once grouped into five-character
-blocks; the **grouped form is what you punch or engrave**. Standard
+card is printed once, grouped into five-character blocks — the default
+`--group-size 5`, the **form you punch or engrave** (pass `--group-size 0`
+for an unbroken single line instead). Standard
 error carries the human-readable engraving panel (fingerprint
 `73c5da0a`, origin path `m/84'/0'/0'`, template `bip84`), a
 `secret material on argv` warning, and the `stdout carries private key
