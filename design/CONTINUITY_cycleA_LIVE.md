@@ -10,7 +10,15 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS: ✅ v0.76.0 SHIPPED (tag @ `3d48cfff`). Post-tag CI cleanup: examples GREEN (`3b7dc01e`), manual fix IN PROGRESS.
+## ✅✅ CYCLE A COMPLETE — v0.76.0 SHIPPED, ALL CI GREEN (2026-07-06/07).
+Tag `mnemonic-toolkit-v0.76.0` @ `3d48cfff`. HEAD `120b13d1`. ALL gates GREEN: rust(clippy+test)@3d48cfff,
+examples@3b7dc01e (fable version-refresh), manual@120b13d1 (opus recipe-2 `<0;1>/*` workaround + transcript regen),
++ man-pages/changelog-check/sibling-pin-check/install-pin-check/vendor-freshness/cross-tool-diff/technical-manual/
+bitcoind-diff/fuzz-smoke/gui-pin-drift. `repro-drift` NOT mine (scheduled run on old `8c8b9183`). Funds fix verified
+correct via full R0 pipeline + whole-diff review; suite 3583+100. FOLLOWUPS filed: `bitcoin-core-receive-change-
+pair-merge` (restores Core import — high value), `concrete-nonranged-xpub-implied-wildcard`,
+`bip389-double-star-shorthand-support`. Memory: `project_cycleA_use_site_collapse_shipped`.
+### (superseded) v0.76.0 SHIPPED; post-tag CI cleanup.
 Ship: master pushed + tag `mnemonic-toolkit-v0.76.0` @ 3d48cfff. Most CI gates GREEN (changelog/sibling-pin/install-pin/
 vendor-freshness/cross-tool-diff/technical-manual/bitcoind-diff/fuzz; rust+man-pages finishing). **2 release-ritual gaps
 surfaced in CI** (NOT funds-code — the fix is correct): (1) `examples` = corpus version-pin lockstep → FABLE FIXED
