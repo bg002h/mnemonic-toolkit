@@ -2262,7 +2262,16 @@ fn emit_summary<W: Write>(stdout: &mut W, parsed: &[ParsedImport]) -> Result<(),
             .map_err(ToolkitError::Io)?;
         if let Some(m) = b.source_metadata() {
             writeln!(stdout, "bundles[{i}].active={}", m.active).map_err(ToolkitError::Io)?;
-            writeln!(stdout, "bundles[{i}].internal={}", m.internal).map_err(ToolkitError::Io)?;
+            // `internal` is `Option<bool>`: `None` means this bundle was
+            // produced by the receive/change pair-merge pre-pass and
+            // satisfies both chains (SPEC_bitcoin_core_receive_change_pair_
+            // merge.md §5; token `both` is LOCKED, R0-round-1 M7).
+            let internal_str = match m.internal {
+                Some(true) => "true",
+                Some(false) => "false",
+                None => "both",
+            };
+            writeln!(stdout, "bundles[{i}].internal={internal_str}").map_err(ToolkitError::Io)?;
         }
         for (j, c) in b.cosigners.iter().enumerate() {
             writeln!(

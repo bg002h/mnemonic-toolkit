@@ -959,6 +959,42 @@ fn core_fixture_file_multipath_receive_change_pair_parses() {
     // MAINNET_FP_B) surface in stdout.
     assert!(stdout.contains(MAINNET_FP_A), "stdout: {stdout}");
     assert!(stdout.contains(MAINNET_FP_B), "stdout: {stdout}");
+
+    // §8.13 STRENGTHEN (SPEC_bitcoin_core_receive_change_pair_merge.md §8.13,
+    // R0-round-1 I1) — REGRESSION-LOCK, not a red-first driver: this fixture's
+    // two entries are BOTH already-`<0;1>/*` multipath (distinct keys/scripts,
+    // MAINNET_FP_A wpkh vs MAINNET_FP_B sh(wpkh)) — never merge candidates,
+    // and never touched by the P1 pre-pass. `--select-descriptor
+    // active-receive` must return exactly the ONE `internal:false` entry
+    // (MAINNET_FP_A) and `active-change` exactly the ONE `internal:true`
+    // entry (MAINNET_FP_B). This proves `internal` provenance is read from
+    // the EXPLICIT per-entry field (`Some(bool)`), NOT inferred from the
+    // already-multipath `<0;1>/*` shape both entries share (which a
+    // shape-based-`None` implementation would conflate with a pre-pass-merged
+    // entry and therefore satisfy BOTH filters for BOTH entries).
+    let recv = run_core_file_select(&p, "active-receive").success();
+    let recv_stdout = String::from_utf8(recv.get_output().stdout.clone()).unwrap();
+    assert!(
+        recv_stdout.contains("bundles=1"),
+        "active-receive must return exactly one bundle; stdout: {recv_stdout}"
+    );
+    assert!(recv_stdout.contains(MAINNET_FP_A), "stdout: {recv_stdout}");
+    assert!(
+        !recv_stdout.contains(MAINNET_FP_B),
+        "active-receive must NOT include the internal:true entry; stdout: {recv_stdout}"
+    );
+
+    let chg = run_core_file_select(&p, "active-change").success();
+    let chg_stdout = String::from_utf8(chg.get_output().stdout.clone()).unwrap();
+    assert!(
+        chg_stdout.contains("bundles=1"),
+        "active-change must return exactly one bundle; stdout: {chg_stdout}"
+    );
+    assert!(chg_stdout.contains(MAINNET_FP_B), "stdout: {chg_stdout}");
+    assert!(
+        !chg_stdout.contains(MAINNET_FP_A),
+        "active-change must NOT include the internal:false entry; stdout: {chg_stdout}"
+    );
 }
 
 /// P10B.4 — `core-empty-descriptors-array.json`: NEGATIVE case. Top-level

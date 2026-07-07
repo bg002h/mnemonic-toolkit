@@ -352,7 +352,18 @@ impl ParsedImport {
 #[derive(Debug, Clone)]
 pub(crate) struct CoreSourceMetadata {
     pub(crate) active: bool,
-    pub(crate) internal: bool,
+    /// `Some(false)` = receive chain, `Some(true)` = change chain (a normal
+    /// passthrough Core entry). `None` = this entry was produced by the
+    /// `bitcoin-core-receive-change-pair-merge` parse-time pre-pass
+    /// (`bitcoin_core::merge_receive_change_pairs`) recombining a same-key
+    /// receive/change split pair into one `<a;b>/*` multipath entry — it
+    /// satisfies BOTH `--select-descriptor active-receive` and
+    /// `active-change` (SPEC_bitcoin_core_receive_change_pair_merge.md §5).
+    /// Threaded explicitly by the caller (`parse_entry`'s `internal` param);
+    /// NEVER inferred from the multipath shape of `desc` itself — a
+    /// pre-existing already-`<a;b>/*` Core entry (not pre-pass-merged) keeps
+    /// its explicit `Some(bool)` and unchanged `--select-descriptor` semantics.
+    pub(crate) internal: Option<bool>,
     pub(crate) range: Option<(u64, u64)>,
     pub(crate) dropped_fields: Vec<String>,
     /// SPEC §5.1 + Phase 3 R0 I2 fold: top-level `wallet_name` from the
@@ -380,10 +391,14 @@ pub(crate) enum SelectDescriptor {
 ///
 /// - `All`: pass-through.
 /// - `ByIndex(N)`: emit only `parsed[N]`; error exit 1 if out of range.
-/// - `ActiveReceive`: emit entries with `source_metadata.active && !internal`;
-///   error exit 1 if no matches.
-/// - `ActiveChange`: emit entries with `source_metadata.active && internal`;
-///   error exit 1 if no matches.
+/// - `ActiveReceive`: emit entries with `source_metadata.active && internal !=
+///   Some(true)` (i.e. `Some(false)` OR `None`); error exit 1 if no matches.
+/// - `ActiveChange`: emit entries with `source_metadata.active && internal !=
+///   Some(false)` (i.e. `Some(true)` OR `None`); error exit 1 if no matches.
+///
+/// A pre-pass-merged entry (`internal == None`, SPEC
+/// `bitcoin_core_receive_change_pair_merge.md` §5) satisfies BOTH filters —
+/// emitted once under each, never twice under either single invocation.
 ///
 /// Filter values that reference `source_metadata` operate only on entries
 /// carrying `Some(CoreSourceMetadata)`. BSMS entries (`source_metadata == None`)
@@ -413,7 +428,7 @@ pub(crate) fn apply_select_descriptor(
                 .into_iter()
                 .filter(|p| {
                     p.source_metadata()
-                        .map(|m| m.active && !m.internal)
+                        .map(|m| m.active && m.internal != Some(true))
                         .unwrap_or(false)
                 })
                 .collect();
@@ -429,7 +444,7 @@ pub(crate) fn apply_select_descriptor(
                 .into_iter()
                 .filter(|p| {
                     p.source_metadata()
-                        .map(|m| m.active && m.internal)
+                        .map(|m| m.active && m.internal != Some(false))
                         .unwrap_or(false)
                 })
                 .collect();
@@ -536,7 +551,7 @@ mod provenance_tests {
         // No Default impl; minimal valid construction.
         CoreSourceMetadata {
             active: false,
-            internal: false,
+            internal: Some(false),
             range: None,
             dropped_fields: Vec::new(),
             wallet_name: None,

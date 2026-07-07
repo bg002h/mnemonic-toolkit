@@ -205,9 +205,21 @@ impl WalletFormatParser for BitcoinCoreParser {
         }
 
         // SPEC §5.2 step 2: per-entry parse loop.
+        //
+        // `internal` provenance (SPEC_bitcoin_core_receive_change_pair_merge.md
+        // §5) is now threaded EXPLICITLY per entry rather than read inside
+        // `parse_entry` itself: a passthrough entry (this loop, P0) always
+        // carries `Some(parse_bool_field(eobj, "internal")?)`; only the P1
+        // merge pre-pass's synthesized entries carry `None`.
         let mut out: Vec<ParsedImport> = Vec::with_capacity(descriptors.len());
         for (i, entry) in descriptors.iter().enumerate() {
-            out.push(parse_entry(i, entry, wallet_name.clone())?);
+            let eobj = entry.as_object().ok_or_else(|| {
+                ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: bitcoin-core: parse error: descriptors[{i}] is not an object"
+                ))
+            })?;
+            let internal = Some(parse_bool_field(eobj, "internal")?);
+            out.push(parse_entry(i, entry, wallet_name.clone(), internal)?);
         }
         Ok(out)
     }
@@ -217,6 +229,7 @@ fn parse_entry(
     idx: usize,
     entry: &Value,
     wallet_name: Option<String>,
+    internal: Option<bool>,
 ) -> Result<ParsedImport, ToolkitError> {
     let eobj = entry.as_object().ok_or_else(|| {
         ToolkitError::ImportWalletParse(format!(
@@ -324,7 +337,10 @@ fn parse_entry(
     // found" — a misleading user-facing error. Mirrors `parse_range_field`'s
     // shape-strictness precedent.
     let active = parse_bool_field(eobj, "active")?;
-    let internal = parse_bool_field(eobj, "internal")?;
+    // `internal` is now threaded explicitly by the caller (see `parse`'s loop
+    // and, from P1, `merge_receive_change_pairs`) rather than read here —
+    // `Some(bool)` for a passthrough entry, `None` for a pre-pass-merged
+    // entry. NEVER inferred from the multipath shape of `desc` itself.
     let range = parse_range_field(eobj.get("range"))?;
 
     let mut dropped_fields: Vec<String> = Vec::new();
