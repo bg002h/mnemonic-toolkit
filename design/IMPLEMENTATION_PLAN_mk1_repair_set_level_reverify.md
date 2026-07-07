@@ -5,7 +5,7 @@ own opus plan-R0 loop to 0C/0I BEFORE any implementation (CLAUDE.md). Per-phase:
 per-phase opus R0 running the FULL `cargo test -p` suite + fold-reenter-loop until 0C/0I. Post-impl: mandatory
 whole-diff review over the whole cross-repo diff.
 
-**Status:** rev-2 — folded plan-R0-round-1 (0C/2I/3M: PI-1 tri-state `RepairOutcome` verdict discriminant + 3-caller short-circuit map + `repair_card`-owned csid-grouping/fold; PI-2 deterministic pinned corrupted-STRING seed; PM-1 existing-test audit + mk-repair-only golden scope; PM-2 search-cap; PM-3 leave-pin-put/no-re-vendor). Review `cycleE-plan-r0-round-1.md`. Pending plan-R0 round-2 to 0C/0I.
+**Status:** ✅ **plan-R0-GREEN (0C/0I) @ round 2** — rev-3 folded round-1 (PI-1 tri-state `RepairOutcome` verdict + 3-caller map + csid-fold; PI-2 pinned corrupted-STRING seed; PM-1/2/3) + round-2 Minors (PM-r2-1 Reject-not-indel-trigger; PM-r2-2 batch reject message; PM-r2-3 kind-agnostic verdict; PM-r2-4 optional json field). Reviews `cycleE-plan-r0-round-{1,2}.md`. **CLEARED for implementation** (CLAUDE.md phase-3: single implementer, TDD tests-before-src, worktree, per-phase R0 FULL suite, post-impl whole-diff).
 
 **Source SHAs:** toolkit `998654f5`; mk-cli/mk-codec `mnemonic-key main@85bca69`.
 **Target:** mk-cli MINOR + toolkit MINOR (`v0.80.0`); mk-codec/md-codec/ms-codec NO-BUMP.
@@ -58,6 +58,22 @@ Bless(exit 5) and Candidate(exit 4 + advisory) would collide in the `Ok` arm, an
 - **Ripple:** every existing `match` on `repair_card`'s return updates for the new discriminant (ms1/md1 =
   Blessed); the per-phase FULL `cargo test -p` catches any missed arm.
 
+**plan-R0-round-2 Minors (fold in P0 — message precision, non-gating):**
+- **PM-r2-1** — the Reject `RepairError` variant MUST NOT be in `is_indel_trigger` (`repair.rs:1105/1109`), OR
+  short-circuit Reject BEFORE the `--max-indel>=1` indel check (`cmd/repair.rs:143-144`) — else a full-set
+  miscorrection at `--max-indel>=1` routes through `recover_indel_card` and surfaces the generic "indel
+  unrecoverable" message instead of the intended "corrected each chunk but the set does not reassemble" (still
+  exit 2 / funds-safe, but wrong message). Prefer a dedicated Reject variant (e.g. `SetReassemblyMismatch`) not
+  in the indel-trigger set.
+- **PM-r2-2** — a batch that folds to a dominant Reject suppresses ALL output (fail-safe — a co-batched blessed
+  group is NOT emitted as recovered); the Reject message MUST name WHICH `chunk_set_id` group failed so the
+  user can re-run the good group alone.
+- **PM-r2-3 (wording)** — `repair_card` returns the kind-agnostic `Unverified` verdict; the exit-4 mapping is a
+  `mnemonic repair` CALLER concern — do NOT bake exit-4 into the shared engine.
+- **PM-r2-4 (optional)** — a `--json` Candidate is signalled by exit code + stderr advisory only; adding an
+  `unverified: true`/`set_verify` envelope field is a wire-shape change (consumers self-update, not gated) —
+  defer unless trivially free.
+
 ---
 
 ## Phase P0 (toolkit) — Mk1 tri-state re-verify + auto-repair wiring + funds/harness tests
@@ -101,9 +117,10 @@ Bless(exit 5) and Candidate(exit 4 + advisory) would collide in the `Ok` arm, an
 - Add the `GroupVerdict` classifier (parse headers via public mk_codec API; group by chunk_set_id;
   complete_and_consistent; decode → verdict).
 - `repair_card` `CardKind::Mk1` (`src/repair.rs:766-783`): after building `corrected_chunks`, run the classifier
-  over the supplied group(s); on **Reject** → return the repair-not-applied/error outcome (auto-repair does NOT
-  short-circuit); on **Candidate** → the VERIFY-ME (exit-4) candidate outcome + advisory; on **Bless** →
-  proceed as today. Do NOT change the ≤4 happy path's blessed behavior.
+  over the supplied group(s); on **Reject** → return `Err(RepairError)` (auto-repair does NOT short-circuit; the
+  variant is NOT an indel-trigger, per PM-r2-1); on **Candidate** → return `Ok{set_verify: Unverified}` + the
+  advisory reason (kind-agnostic — the exit-4 mapping is a `mnemonic repair` CALLER concern, PM-r2-3); on
+  **Bless** → `Ok{Blessed}` as today. Do NOT change the ≤4 happy path's blessed behavior.
 - `mnemonic repair` (`src/cmd/repair.rs:143-144` loop): fold per-group verdicts to the dominant invocation exit
   (reject > candidate > bless > clean).
 - Confirm all 4 auto-repair callers (convert/inspect/verify-bundle/xpub via `try_repair_and_short_circuit`)
