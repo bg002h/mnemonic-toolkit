@@ -1,133 +1,164 @@
 # SPEC — mk1-repair-set-level-reverify (F4 Cycle 1)
 
-**After a per-string BCH substitution-correction of an mk1 card set, RE-VERIFY the corrected set by
-reassembling it through `mk_codec::decode` (cross-chunk SHA-256 hash) before declaring the repair a success —
-so a bounded-distance decoder that aliased a >4-error chunk onto a DIFFERENT valid codeword (a "miscorrection")
-is caught, not blessed. Plus a seeded harness that MEASURES + PINS the real just-past-threshold miscorrection
-rate.**
+**When the FULL mk1 card set is present, RE-VERIFY a BCH substitution-correction by reassembling through
+`mk_codec::decode` (cross-chunk SHA-256 hash) before declaring success — so a >4-error miscorrection (a chunk
+aliased onto a DIFFERENT valid codeword) is REJECTED, not blessed as recovery of a different wallet. When only
+a PARTIAL set (a single plate) is supplied, per-plate repair is PRESERVED (it is the documented workflow) but
+returned as an UNVERIFIED candidate with an advisory. Plus a harness that MEASURES + pins the real
+miscorrection rate and a DETERMINISTIC pinned-seed proof that the re-verify catches a known misfit.**
 
-- **Author:** (this session) — single-author design per CLAUDE.md phase-2 convention.
-- **Source SHAs (grep-verified via recon):** toolkit `9866acc7`; mk-codec/mk-cli `mnemonic-key main@85bca69`; md-codec `descriptor-mnemonic main@ef1f3e71`.
-- **Finding:** constellation-eval **F4** (`design/agent-reports/constellation-eval-2026-07-06.md:101-124`). Recon: `cycle-prep-recon-f4-bch-repair-miscorrection.md` (2026-07-07). **User scope decision (2026-07-07): mk1 FIRST (mechanical); measure + pin the rate. ms1-advisory = separate Cycle F.**
-- **Target releases:** `mnemonic-toolkit` MINOR (`v0.80.0`) + `mk-cli` MINOR. **mk-codec / md-codec / ms-codec NO-BUMP** (mk-codec's `decode`/`reassemble_from_chunks` reused as-is; recon blast-radius map). Manual lockstep.
-- **Status:** DRAFT — pending opus-architect R0 loop to 0C/0I before any implementation (CLAUDE.md Conventions bullet 1).
+- **Author:** (this session). **Source SHAs (grep-verified):** toolkit `9866acc7`; mk-cli/mk-codec `mnemonic-key main@85bca69`; md-codec `descriptor-mnemonic main@ef1f3e71`.
+- **Finding:** constellation-eval **F4** (`design/agent-reports/constellation-eval-2026-07-06.md:101-124`). Recon `cycle-prep-recon-f4-bch-repair-miscorrection.md`. User scope (2026-07-07): mk1 FIRST + measure/pin the rate; ms1-advisory = separate Cycle F.
+- **Target:** `mnemonic-toolkit` MINOR (`v0.80.0`) + `mk-cli` MINOR. **mk-codec / md-codec / ms-codec NO-BUMP** (existing public API reused). Manual lockstep + mk-cli sibling-pin advance (§6).
+- **Status:** DRAFT rev-2 — folded SPEC-R0-round-1 (1C/3I/4M: C1 partial-set regression → tri-state; I1 count=1 reachability; I2 sibling-pin 5-ref; I3 non-vacuous harness; M1-M4). Pending R0 re-dispatch to 0C/0I.
 
 ## §0 — Scope
 
 **IN:**
-1. **mk1 set-level re-verify at BOTH mk1-repair sites** (the funds fix):
-   - toolkit auto-repair mk1 arm — `src/repair.rs` `repair_card` `CardKind::Mk1` branch (`:766-783`; loops `repair_chunk_one` building `corrected_chunks`, NO reassembly today).
-   - `mk repair` CLI — `mnemonic-key/mk-cli/src/cmd/repair.rs:63-90` (per-string `decode_string` loop, returns exit 5 on any correction, NO `reassemble_from_chunks`).
-2. **Measurement harness** (user-requested): a seeded, reproducible property/Monte-Carlo test that MEASURES the real just-past-threshold (5-substitution) mk1-regular-code miscorrection rate and PINS it below a bound, AND asserts the new re-verify CATCHES a miscorrection. Home in toolkit `tests/` (eval's proposed `prop_repair_never_wrong.rs`). Do NOT cite the eval's un-reproduced `~2⁻¹³·⁹`/`1800×` — cite the value THIS harness measures.
-3. **md1 regression-lock** (not a structural fix — recon §Cross-cutting 1: md1 is ALREADY protected by `md_codec::chunk::reassemble`'s 20-bit content-derived `chunk_set_id` check, run unconditionally incl. single-chunk): add a test asserting an md1 wrong-fit correction is already rejected, + a doc note, so no future reader re-discovers "does md1 need F4?".
-4. **Manual caveat** — `mk repair` chapter + auto-fire sections: a >4-error correction may alias to a different valid card; the set-level re-verify now rejects an mk1 wrong-fit, and BIP-93 recommends confirming a corrected codex32 string.
+1. **mk1 set-level re-verify (tri-state) at BOTH mk1-repair sites** — toolkit `src/repair.rs` `repair_card`
+   `CardKind::Mk1` (`:766-783`) AND `mk repair` CLI (`mnemonic-key/crates/mk-cli/src/cmd/repair.rs:63-90`).
+   `repair_card` is shared by toolkit auto-repair, the standalone `mnemonic repair` subcommand
+   (`src/cmd/repair.rs:143-144`), AND (mirrored) `mk repair` — all must behave per §2/§3.
+2. **PRESERVE per-plate (partial-set) repair** — mk1 chunks self-heal independently; `mk repair <one plate>` /
+   `mnemonic repair --mk1 <one plate>` is a documented terminal workflow (manual `44-mk-cli.md:247`, a live
+   verify-examples golden) and MUST keep working. (R0-round-1 C1 — the funds fix must NOT regress this.)
+3. **Measurement harness + deterministic catch-proof** (user-requested; §4).
+4. **md1 regression-lock** — md1 is ALREADY protected (`md_codec::chunk::reassemble`'s content-derived 20-bit
+   `chunk_set_id` check runs unconditionally for all counts, `chunk.rs:379-387`); add a test + doc note (no
+   structural change).
+5. **Manual caveat** — `mk repair` / `mnemonic repair` chapters + auto-fire sections: a >4-error correction may
+   alias to a different valid card; full-set repair now rejects an mk1 miscorrection; a single-plate correction
+   is UNVERIFIED until the full card is reassembled; BIP-93 recommends confirming a corrected codex32 string.
 
-**OUT (YAGNI / separate cycles):**
-1. **ms1 single-string demotion** — the highest-funds-risk leg, but design-heavy (no payload oracle for raw entropy → needs an advisory/exit-code UX decision). **Separate Cycle F** (user-sequenced after this).
-2. Any mk-codec / md-codec / ms-codec wire-format or API change (`decode`/`reassemble_from_chunks` already public + sufficient).
-3. Widening md1's 20-bit id to a 32-bit hash (optional hardening, not this cycle).
-4. Re-citing the eval's unverified numeric rate as established fact (recon §crypto — measure it instead).
+**OUT:** ms1 single-string demotion (separate Cycle F — design-heavy, no payload oracle); any codec wire-format/
+API change; widening md1's 20-bit id; re-citing the eval's unverified `~2⁻¹³·⁹` as established fact.
 
-## §1 — Problem (recon-confirmed; crypto verified vs BIP-93)
+## §1 — Problem (recon + BIP-93 verified; count=1 crux resolved)
 
-The codex32 BCH regular code corrects ≤4 substitutions (BIP-93: "adequate to correct 4 errors in up to 93
-characters"; long code likewise t=4 — verified vs `bitcoin/bips` master). Beyond t=4, bounded-distance decoding
-can land a corrupted chunk within the radius-4 ball of a **different** valid codeword (standard coding-theory
-consequence of distance-9; the code's own comment `mk-codec bch.rs:441` "Catches the 5+-error edge case"
-acknowledges the shape). The defensive re-verify `bch_verify_regular/long` (`bch.rs:442/:495`) is a **codeword-
-membership** test — it passes for ANY valid codeword, so it CANNOT distinguish the original from a wrong-fit
-alias. `mk repair` (mk-cli) and the toolkit mk1 auto-repair arm both return success (exit 5 / apply) after only
-the per-string correction, **skipping the cross-chunk SHA-256 hash that `mk decode` already enforces**
-(`mk_codec::string_layer::reassemble_from_chunks` → `Error::CrossChunkHashMismatch`). So a wrong-fit mk1 repair
-is blessed as a successful recovery of a **different wallet's key card**. Toolkit auto-repair fires by DEFAULT
-under a TTY (`resolve_no_auto_repair` = `no_auto_repair || !tty`) on `convert`/`inspect`/`verify-bundle`/xpub
-intake — so this can fire silently on real recovery. (BIP-93 normative: "implementations SHOULD NOT
-automatically proceed with a corrected codex32 string without user confirmation" — recon §primary-source.)
+codex32 BCH corrects ≤4 substitutions (BIP-93). Beyond t=4, bounded-distance decoding can land a chunk within
+the radius-4 ball of a DIFFERENT valid codeword (a miscorrection). The defensive `bch_verify_*` (`mk-codec
+bch.rs:442/495`) / toolkit `polymod_residue != 0` (`repair.rs:733`) are CODEWORD-MEMBERSHIP tests — they pass
+for a wrong-fit alias. `mk repair` + the toolkit mk1 auto-repair arm return success after only per-string
+correction, skipping the cross-chunk SHA-256 hash `mk decode` enforces (`mk_codec::string_layer::
+reassemble_from_chunks` → `Error::CrossChunkHashMismatch`, `chunk.rs:189-201`). So a wrong-fit FULL-set mk1
+repair is blessed as recovery of a different wallet's card. Toolkit auto-repair fires by default under a TTY
+(`resolve_no_auto_repair` = `no_auto_repair || !tty`) on convert/inspect/verify-bundle/xpub intake. (BIP-93
+normative: "implementations SHOULD NOT automatically proceed with a corrected codex32 string without user
+confirmation.")
 
-## §2 — Fix mechanism (mirror the existing indel oracle)
+**count=1 reachability (R0-round-1 I1 — resolved favorably):** min real mk1 bytecode ~80 B (a compact xpub is
+73 B; `pipeline.rs:161-168`) and `CHUNKED_FRAGMENT_LONG_BYTES=53` / `SINGLE_STRING_LONG_BYTES=56`
+(`consts.rs:33,39`) ⇒ **every real mk1 card is ≥2 chunks.** A single `Chunked` chunk (≤49 B) and a
+`SingleString` mk1 (≤56 B) are BOTH encoder-unreachable. A single `Chunked` chunk carries + verifies the 4-byte
+SHA unconditionally (`chunk.rs:66-70,189-201`) → strictly stronger; `SingleString` has no hash
+(`pipeline.rs:136-143`, ms1-class) but is unreachable and the fix is no-weaker there. **So the fix is
+no-weaker in every case, strictly stronger for all reachable cards.**
 
-The toolkit's INDEL recovery path ALREADY does exactly what F4 asks: `Mk1IndelOracle::validate`
-(`src/repair.rs:1036-1056`) calls `mk_codec::decode(&refs)` (full reassembly + cross-chunk hash) on the
-candidate-corrected chunk set and accepts ONLY if `decode` succeeds. The substitution-repair path sits in the
-same file and skips it. **The fix = apply the same idiom to the substitution path** (not a new mechanism):
+## §2 — Fix mechanism (TRI-STATE; mirror the indel oracle only for the full-set arm)
 
-- **toolkit `repair_card` `CardKind::Mk1`** — after building `corrected_chunks`, call `mk_codec::decode(&refs)`
-  (refs from the corrected chunks). If it **succeeds** → the corrections reassemble to a self-consistent card
-  → genuine repair, proceed. If it **fails** (`CrossChunkHashMismatch` or any decode error) → the per-string
-  corrections were a wrong-fit → **do NOT bless**: the repair is rejected (auto-repair does NOT short-circuit
-  with the miscorrected card; the caller sees "correction did not reassemble — could not repair", the original
-  un-repaired failure surfaces). Mirror `Mk1IndelOracle::validate`'s accept/reject exactly.
-- **`mk repair` CLI (mk-cli `repair.rs`)** — after the per-string loop, build `refs` from `corrected_chunks`
-  and call `mk_codec::decode(&refs)` (or `reassemble_from_chunks`). On success → exit 5 (REPAIR_APPLIED, as
-  today). On failure → the correction is a wrong-fit → return a NON-5 outcome (repair-failed / "corrected each
-  chunk but the set does not reassemble — likely >4 errors; re-read the plate", exit code per §3). This makes
-  `mk repair` no weaker than `mk decode`.
-- **Single-chunk mk1** (count=1): `mk_codec::decode` still applies (it validates the single reassembled chunk);
-  a single-chunk mk1 has less cross-chunk signal but the decode-layer checks still run — confirm the re-verify
-  is a no-weaker gate than today for count=1 (R0 focus §8).
+The INDEL path already reassembles: `Mk1IndelOracle::validate` (`src/repair.rs:1040-1056`) calls
+`mk_codec::decode(&refs)` and accepts only on `Ok` — BUT it is always built with the FULL set (`all_chunks`,
+`:1178-1181`), a guarantee the substitution path does NOT have (it loops over whatever the user passed).
+Therefore the substitution fix is a **tri-state on (supplied chunk count vs header `total_chunks`)**, NOT a
+binary bless/reject:
 
-**Funds property:** a corrected mk1 set is blessed as a successful repair IFF it reassembles through the same
-`mk_codec::decode` a normal `mk decode` uses — so a wrong-fit alias (which fails the cross-chunk hash with
-overwhelming probability) is rejected, never engraved/accepted as a different wallet.
+Group the supplied strings by `chunk_set_id`; read `total_chunks` from a chunk header. Then:
+1. **FULL set present (supplied == total_chunks) AND `mk_codec::decode(&refs)` succeeds** → genuine repair →
+   **BLESS** (mk repair exit 5; toolkit short-circuits with the repaired card). Unchanged from today.
+2. **FULL set present AND `decode` fails with `CrossChunkHashMismatch` / `ChunkSetIdMismatch`** → the
+   per-string corrections aliased to a wrong-fit → **REJECT** (mk repair → exit 2 via `CliError::Codec`;
+   toolkit auto-repair does NOT short-circuit — the caller's original un-repaired error surfaces). **This is the
+   actual funds fix.**
+3. **PARTIAL set (supplied < total_chunks; `decode` returns `ChunkedHeaderMalformed("received N … total M")`)**
+   → cannot set-verify → **PRESERVE per-plate repair**: emit the corrected chunk(s) with a LOUD advisory
+   ("correction UNVERIFIED — a >4-error correction can alias to a different card; reassemble the full card
+   (`mk decode` / import the full set) to confirm; BIP-93 recommends confirmation"). `mk repair` keeps **exit
+   5** (preserves the documented example); `mnemonic repair` maps to the existing **exit-4 VERIFY-ME candidate**
+   convention (`indel_exit_code`, `repair.rs:1118-1136`). Do NOT map a partial set to exit 2.
 
-## §3 — Exit-code / behavior semantics (R0 to finalize)
+**Discriminator:** the supplied-count-vs-`total_chunks` comparison is the RELIABLE signal (the error STRING
+`ChunkedHeaderMalformed` is overloaded — it also covers a genuinely-broken header). Match on the public
+`#[non_exhaustive]` `mk_codec::Error` variants (`CrossChunkHashMismatch`, `ChunkSetIdMismatch`,
+`ChunkedHeaderMalformed`, `MixedHeaderTypes`; `mk-codec/src/error.rs:19-98`) WITH a wildcard arm — no new codec
+API, so **codecs NO-BUMP holds** (R0-round-1 M1). Prefer computing `total_chunks` from the parsed header up
+front (rather than inferring from the error) so the tri-state is explicit.
 
-- **toolkit auto-repair:** on re-verify failure, `try_repair_and_short_circuit` must NOT short-circuit as
-  repaired — behave as "repair not applied" (the decode/inspect surfaces its normal un-repaired error). No new
-  exit code needed for the auto path (it simply doesn't claim success). Confirm no regression to the existing
-  exit-4 "VERIFY-ME"/`--max-subst` candidate convention (`indel_exit_code`, `repair.rs:1118-1136`).
-- **`mk repair` CLI:** today exit 5 = REPAIR_APPLIED, exit 0 = clean. On re-verify failure the correction is
-  provably invalid → **default = treat as repair-failed** (a non-5, non-0 error exit — R0 picks: reuse the
-  existing "could not repair" error exit, don't invent a new code unless mk-cli already has a "candidate"
-  convention to mirror). Do NOT return exit 5 for a set that fails reassembly.
-- This is a **breaking behavior change to the exit-code contract** (a previously-"exit 5 success" wrong-fit now
-  errors) → MINOR bump (§7). Manual + any `verify-examples` golden that pinned the old exit must update.
+**Residual partial-set exposure is bounded:** a miscorrected single plate is still caught by the cross-chunk
+hash at eventual full reassembly (`mk decode` / toolkit full-set intake); the advisory covers the
+engrave-before-reassemble gap. The auto-repair convert/inspect path is unaffected by the partial case (a
+partial card cannot convert anyway → the original error surfaces, already correct).
+
+## §3 — Exit-code semantics
+- **mk repair:** full-set miscorrection → **exit 2** (name it explicitly; `CrossChunkHashMismatch` →
+  `CliError::Codec` → 2, `mk-cli repair.rs:10-11`, `44-mk-cli.md:236`). Full-set clean-correct → exit 5.
+  Partial-set correct → exit 5 + advisory (unchanged exit). Clean → exit 0. No new mk-cli exit code.
+- **toolkit `mnemonic repair`:** full-set miscorrection → not-repaired (surfaces the decode error); partial-set
+  correct → exit-4 VERIFY-ME candidate + advisory (reuse `indel_exit_code`). Auto-repair (convert/inspect/
+  verify-bundle/xpub): on full-set miscorrection, `try_repair_and_short_circuit` does NOT short-circuit.
+- This is a breaking exit-code behavior change (a previously-exit-5 full-set wrong-fit now exits 2) → MINOR.
 
 ## §4 — Test / oracle matrix (TDD-first)
+1. **(FUNDS ANCHOR, DETERMINISTIC — R0-round-1 I3) full-set miscorrection REJECTED via a PINNED seed** — a
+   known 5-substitution corruption of a real ≥2-chunk mk1 card that `bch_correct` aliases to a valid-but-wrong
+   codeword, found ONCE by a bounded search and **pinned as a test constant** (NOT re-searched per run).
+   Assert `mk repair <full set>` → exit 2 (`CrossChunkHashMismatch`) and toolkit auto-repair does NOT
+   short-circuit. This is the non-vacuous proof the re-verify catches a real misfit.
+2. **(REGRESSION — R0-round-1 C1) partial-set per-plate repair STILL succeeds** — replay the manual example:
+   `mk repair <single chunk of a 2-chunk card>` → exit 5 + the advisory; `mnemonic repair --mk1 <one plate>` →
+   exit-4 candidate + advisory. Confirms the fix does NOT break the documented single-plate workflow.
+3. **Genuine ≤4-error FULL-set correction still blesses** — exit 5 + toolkit applies (reassembles).
+4. **Clean card** — exit 0 / no auto-repair.
+5. **toolkit convert/inspect auto-repair** on a full-set wrong-fit mk1 (the §4.1 seed) no longer silently emits
+   the wrong card.
+6. **md1 regression-lock (R0-round-1 M3)** — an md1 wrong-fit correction is already rejected by the content-id
+   check (assert reject); AND assert md1 has NO non-chunked decode path bypassing `reassemble` (mirror the
+   SingleString reachability note).
+7. **Reachability lock (R0-round-1 I1)** — assert the minimum-size real mk1 card produces ≥2 chunks and that
+   `SingleString` mk1 is not encoder-emitted (so a future encoder change that made it reachable trips this).
+8. **(HARNESS — rate) measure + pin** — seeded `StdRng` (NO `thread_rng`), fixed sample size N: random mk1
+   payload → encode → inject exactly 5 substitutions in the regular-code trailing chunk (BCH(93,80,8),
+   `pipeline.rs:281-299`) → `bch_correct`; record the alias-to-valid-≠-original rate. Pin a **Clopper-Pearson
+   UPPER confidence bound** (not the point estimate — avoids resampling flake). **Self-check: assert ≥1
+   miscorrection was observed** (else the run is vacuous). Cite the MEASURED bound in the CHANGELOG/manual, NOT
+   the eval's `2⁻¹³·⁹`.
+9. Determinism; full `cargo test -p` green in each touched repo (toolkit + mk-cli).
 
-1. **(FUNDS ANCHOR) mk1 wrong-fit correction is REJECTED** — construct/seed an mk1 multi-chunk card whose
-   corruption (≥5 substitutions in one chunk) makes `bch_correct` alias to a valid-but-wrong codeword (the
-   measurement harness §4.6 finds such a seed); assert `mk repair` returns NON-5 (not exit 5) AND the toolkit
-   auto-repair does NOT short-circuit (the miscorrected card is not accepted). Assert the message says the set
-   did not reassemble.
-2. **Genuine ≤4-error correction still succeeds** (regression) — a card with ≤4 substitutions in a chunk still
-   `mk repair` exit 5 + toolkit auto-repair applies (the corrected set reassembles).
-3. **Clean card unchanged** — no correction → exit 0 / no auto-repair.
-4. **toolkit `convert`/`inspect` auto-repair** on a wrong-fit mk1 no longer silently emits the wrong card
-   (drives the default-TTY path; asserts it does not short-circuit as repaired).
-5. **md1 regression-lock (§0.3)** — an md1 wrong-fit correction is ALREADY rejected by the cross-chunk
-   content-id check (assert reject); documents md1 is covered without a structural change.
-6. **(HARNESS, user-requested) measure + pin the mk1 miscorrection rate** — a seeded Monte-Carlo/property test
-   (`tests/prop_repair_never_wrong.rs`): random mk1 payload → encode → inject exactly 5 substitutions in the
-   regular-code trailing chunk → `bch_correct` → record how often it (a) returns a valid-but-≠-original
-   codeword AND (b) that codeword is now REJECTED by the §2 reassembly re-verify. Pin the measured
-   miscorrection rate ≤ a conservative bound; assert the re-verify catches ~100% of the misfits (any that
-   reassemble are, by the cross-chunk hash, astronomically unlikely — R0 to bound). Deterministic seed; cite
-   the MEASURED number in the CHANGELOG/manual (NOT the eval's `2⁻¹³·⁹`).
-7. Determinism; full `cargo test -p` green per repo touched.
-
-## §5 — Cross-source anchors (recon-verified @ the §-header SHAs)
-- `mnemonic-key/mk-cli/src/cmd/repair.rs:63-90` (loop, no reassembly) — the mk-cli fix site.
-- `mk-codec/src/string_layer/{chunk.rs:109 reassemble_from_chunks, mod.rs:38 pub use, bch.rs:442/:495 bch_verify_*, :173-179 GEN_REGULAR}` — primitives (reused, NOT changed).
-- toolkit `src/repair.rs`: `repair_card` Mk1 arm `:766-783`; `repair_chunk_one` defensive `polymod_residue` `:731-739`; `Mk1IndelOracle::validate` `:1036-1056` (the template); `resolve_no_auto_repair` `:411-418`; `indel_exit_code` `:1118-1136`.
-- toolkit auto-repair callers: `convert.rs:790-1051`, `inspect.rs:93-133`, `verify_bundle.rs` (×6), `xpub_search/seed_intake.rs:184`.
-- md1 already-protected: `md-codec/src/chunk.rs:306-386` (`reassemble` + `:379-386` cross-chunk-id check); toolkit `repair_via_md_codec` `:1219-1262`.
-- Manual: `docs/manual/src/40-cli-reference/41-mnemonic.md:2990-3037` (`## mnemonic repair`), `:739-751` (auto-fire); `44-mk-cli.md` (`mk repair`).
+## §5 — Cross-source anchors (recon + R0-round-1 verified)
+- **`mnemonic-key/crates/mk-cli/src/cmd/repair.rs:63-90`** (loop, exit 5, no reassembly; exit codes 0/5/2/1, NO exit-4 in mk-cli) — the mk-cli fix site (R0-round-1 M2: full `crates/` path).
+- mk-codec: `string_layer/chunk.rs:109` `reassemble_from_chunks`; **`:131-136` incomplete-set reject `ChunkedHeaderMalformed` BEFORE the hash** (the C1 crux — verified by running `mk decode` on the manual example); hash `:189-201`; `mk_codec::decode(strings:&[&str])->Result<KeyCard>` (`key_card.rs:158`); `error.rs:19-98` public `#[non_exhaustive]` variants; `consts.rs:33,39` chunk sizes; `bch.rs:442/495`.
+- toolkit `src/repair.rs`: Mk1 arm `:766-783`; `repair_chunk_one` `:731-739`; `Mk1IndelOracle::validate` `:1040-1056` (full-set only, `:1178-1181`); `resolve_no_auto_repair` `:411-418`; `indel_exit_code` `:1118-1136`; `mnemonic repair` `cmd/repair.rs:143-144`.
+- md1: `md-codec/src/chunk.rs:379-387` (content-id, all counts).
+- Manual: `docs/manual/src/40-cli-reference/{41-mnemonic.md:2990-3037, :739-751; 44-mk-cli.md:247/253 (example+golden)}`.
 
 ## §6 — Cross-repo coordination + release
-- **Changes:** mk-cli (`repair.rs` re-verify) + toolkit (Mk1 arm re-verify + harness + md1 test) + manual. **mk-codec/md-codec/ms-codec NO source change** (primitives reused). 
-- **SemVer:** mk-cli MINOR (exit-code behavior change); toolkit MINOR (`v0.80.0`). Codecs NO-BUMP.
-- **crates.io / pin lockstep:** mk-cli publishes its MINOR; the toolkit's `install.sh` FROZEN mk-cli sibling pin (currently mk-cli v0.11.x) must bump to the new mk-cli tag IN LOCKSTEP — **CAUTION** (memory: bumping a sibling pin without the matching release breaks `sibling-pin-check`; here we DO bump mk-cli, so the toolkit sibling pin bumps with it). The toolkit self-pin (line 32) bumps for the toolkit MINOR. R0 + the release ritual must sequence mk-cli release → toolkit sibling-pin bump.
-- **Order:** mk-cli change + release (tag + crates.io publish) FIRST; then toolkit (re-pin mk-cli sibling + self-bump + tag). (Toolkit's mk1 arm uses `mk_codec` the LIBRARY, unchanged — so the toolkit fix is independent of the mk-cli binary; but the sibling-pin lockstep + manual mirror couple them.)
-- **Manual lockstep:** mandatory (exit-code semantics change) — `41-mnemonic.md` + `44-mk-cli.md` repair chapters. **GUI:** likely no-op (exit codes aren't in `schema_mirror`'s flag surface; no new flag) — verify at plan time.
+- **Changes:** mk-cli (`crates/mk-cli/src/cmd/repair.rs` tri-state) + toolkit (Mk1 arm tri-state + harness + md1/reachability tests + manual) + manual. **mk-codec / md-codec / ms-codec NO source change** (existing public API reused; discrimination on existing public Error variants — R0-round-1 M1 defends NO-BUMP).
+- **SemVer:** mk-cli MINOR; toolkit MINOR (`v0.80.0`); codecs NO-BUMP.
+- **Sibling-pin decision (R0-round-1 I2 — RESOLVED = advance):** because we ship a NEW mk-cli with the funds
+  fix, `curl|sh` users should get it → **advance the mk-cli sibling pin, sequenced AFTER the mk-cli release
+  tag** (this is the ritual-consistent case: a pin advance WITH a matching release, unlike the frozen-baseline
+  no-release case a prior cycle reverted). `sibling-pin-check` enforces consistency across the WHOLE scan set,
+  so advance ALL FIVE mk-cli references in lockstep: `scripts/install.sh:41`, `.github/workflows/
+  {manual.yml:79, quickstart.yml:77, technical-manual.yml:109}`, `docs/manual/src/40-cli-reference/
+  44-mk-cli.md:12`. The toolkit SELF-pin (`install.sh:32`, v0.79.0→v0.80.0; gated by `install-pin-check`) bumps
+  regardless. (Note: the toolkit's own mk1 auto-repair arm uses `mk_codec` the LIBRARY (unchanged), so it is
+  NOT build-coupled to the mk-cli binary — the pin advance is purely so curl|sh delivers the fixed `mk repair`.)
+- **Release order:** mk-cli release (tag + crates.io publish) → toolkit (advance 5 mk-cli pin refs + self-bump
+  + tag). Verify `sibling-pin-check` + `install-pin-check` green.
+- **Manual lockstep:** mandatory (exit-code semantics) — `41-mnemonic.md` + `44-mk-cli.md` repair chapters +
+  the `44-mk-repair-text.out` golden if the partial-set example output changes (it should NOT — partial repair
+  keeps exit 5; confirm the golden is unaffected or regenerate). **GUI/schema_mirror:** no-op unless the
+  tri-state adds a CLI flag (it should not) — verify at plan time (R0-round-1 M4).
 
 ## §7 — Risks / R0 focus
-1. **The re-verify must be a no-weaker gate** — a GENUINE ≤4-error correction must still reassemble + succeed (no false-reject of a real repair); §4.2 pins it.
-2. **Single-chunk mk1 (count=1)** — confirm `mk_codec::decode` on a 1-chunk set is a meaningful re-verify (or at least no-weaker than today), and the fix doesn't regress single-chunk repair.
-3. **The measured rate + the re-verify catch-rate** — the harness must show the re-verify rejects the misfits (funds property), and pin a defensible bound; don't hard-code the eval's unverified figure.
-4. **Exit-code contract change** — enumerate every `verify-examples`/manual golden that pins `mk repair` exit 5 and update in lockstep.
-5. **Cross-repo release sequencing** — mk-cli release before toolkit sibling-pin bump; `sibling-pin-check` stays green.
-6. **Auto-repair callers** — all 4 toolkit surfaces (convert/inspect/verify-bundle/xpub) inherit the fix via `try_repair_and_short_circuit`; confirm none bypass it.
+1. **Partial-set per-plate repair preserved** (C1) — §4.2 pins it at both mk repair + mnemonic repair; the
+   tri-state discriminates on supplied-count vs total_chunks, NOT on the overloaded error string.
+2. **No false-reject of a genuine FULL-set ≤4 correction** (§4.3) — the re-verify only rejects on the cross-
+   chunk hash, which a real repair passes.
+3. **Non-vacuous funds proof** (I3) — §4.1 pinned known-miscorrection seed proves the catch; §4.8 measures the
+   rate with a confidence bound + observed-≥1 self-check.
+4. **count=1 reachability** (I1) — §4.7 locks min-≥2-chunks + SingleString-unreachable.
+5. **Cross-repo release sequencing** (I2) — mk-cli release before the 5-ref pin advance; both gates green.
+6. **Exit-code contract** — the `44-mk-repair-text.out` golden must stay valid (partial repair keeps exit 5).
 
 ---
 
