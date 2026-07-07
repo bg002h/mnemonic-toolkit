@@ -71,27 +71,46 @@ Goal: an existing Bitcoin Core `listdescriptors` JSON describes a
 single-sig BIP-84 wallet (`wpkh(...)`); you want to materialize the
 canonical m-format `ms1` / `mk1` / `md1` engraving cards.
 
-The Bitcoin Core JSON is descriptor-mode; `bundle --import-json` reads
-it and synthesizes the toolkit's canonical cards via
-`synthesize_descriptor`:
+Bitcoin Core exports the receive chain (`.../0/*`, `"internal": false`)
+and the change chain (`.../1/*`, `"internal": true`) as **two separate
+descriptor entries** — it has never emitted the combined BIP-389
+multipath (`.../<0;1>/*`) form on export. Because `md1`'s key use-site
+must be the multipath `/<0;1>/*` (or bare `/*`) form, importing a
+standard split Core export through `--format bitcoin-core` hard-fails on
+each fixed single step (`/0/*`, `/1/*`) with exit 2 — see
+[Receive/change split exports — interim hard-fail](../45-foreign-formats.md#bitcoin-core-receive-change-hard-fail).
+Automatic receive/change recombination is planned as a follow-up cycle
+(`bitcoin-core-receive-change-pair-merge`); until it ships, combine the
+pair into one multipath descriptor by hand and import it through the
+[commented-descriptor](../45-foreign-formats.md#commented-descriptor)
+door (`--format descriptor`):
 
 ```sh
 bitcoin-cli -rpcwallet=mywallet listdescriptors > wallet.json
 
-# Filter to active-receive only (drops the parallel `/1/*` change
-# descriptor — same wallet, just the change chain).
-mnemonic import-wallet --format bitcoin-core --blob wallet.json \
-  --select-descriptor active-receive --json \
+# Combine Core's split receive (/0/*) + change (/1/*) entries into ONE
+# BIP-389 multipath descriptor: same key, differing only in the final
+# step. Index 0 = receive (internal:false); index 1 = change.
+recv=$(jq -r '.descriptors[] | select(.internal == false) | .desc' wallet.json)
+printf '%s\n' "$recv" | sed -E 's,#[a-z0-9]+$,,; s,/0/\*\),/<0;1>/*),' > combined.desc
+# combined.desc:
+#   wpkh([b8688df1/84'/0'/0']xpub6FQya7z.../<0;1>/*)
+
+# Import the combined multipath descriptor, materialize the envelope.
+mnemonic import-wallet --format descriptor --blob combined.desc --json \
   > envelope.json
 
 # Synthesize ms1/mk1/md1 cards from the envelope.
 mnemonic bundle --network mainnet --import-json envelope.json
 ```
 
-The result is a watch-only bundle (`mode: "watch-only"`,
-`ms1: [""]`) carrying the wallet's xpub via `mk1` and the descriptor
-via `md1`. To attach a seed for the single cosigner (e.g., the wallet
-owner's BIP-39 phrase), supply `--slot @0.phrase=...`:
+Combining first is what makes the resulting `md1` correct: the card
+encodes the `/<0;1>/*` multipath use-site (both the receive and change
+chains), not a collapsed single chain. The result is a watch-only
+bundle (`mode: "watch-only"`, `ms1: [""]`) carrying the wallet's xpub
+via `mk1` and the descriptor via `md1`. To attach a seed for the single
+cosigner (e.g., the wallet owner's BIP-39 phrase), supply
+`--slot @0.phrase=...`:
 
 ```sh
 mnemonic bundle --network mainnet \
@@ -101,7 +120,9 @@ mnemonic bundle --network mainnet \
 
 The bundle synthesizer re-derives the xpub from the supplied phrase at
 the envelope's `m/84'/0'/0'` origin path and asserts equality against
-the blob's xpub. Mismatch returns exit 4 (`ImportWalletSeedMismatch`).
+the blob's xpub. Mismatch returns exit 4 (`ImportWalletSeedMismatch`) —
+the `abandon abandon … about` phrase above is a placeholder that does
+*not* match this wallet's key, so it deliberately trips the guard.
 
 ## Recipe 3 — BSMS Round-2 → BIP-388 wallet-policy
 

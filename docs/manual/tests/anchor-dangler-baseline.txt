@@ -1,5 +1,7 @@
 auto-fire-behavior-all-three-subcommands-v0250
 auto-fire-on-decode-failure-v0221
+bitcoin-core-receive-change-hard-fail
+commented-descriptor
 exporting-to-bitcoin-core-bip-388-sparrow-specter
 manual-coverage
 mnemonic-bundle
