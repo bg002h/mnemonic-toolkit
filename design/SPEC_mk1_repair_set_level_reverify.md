@@ -10,7 +10,7 @@ miscorrection rate and a DETERMINISTIC pinned-seed proof that the re-verify catc
 - **Author:** (this session). **Source SHAs (grep-verified):** toolkit `9866acc7`; mk-cli/mk-codec `mnemonic-key main@85bca69`; md-codec `descriptor-mnemonic main@ef1f3e71`.
 - **Finding:** constellation-eval **F4** (`design/agent-reports/constellation-eval-2026-07-06.md:101-124`). Recon `cycle-prep-recon-f4-bch-repair-miscorrection.md`. User scope (2026-07-07): mk1 FIRST + measure/pin the rate; ms1-advisory = separate Cycle F.
 - **Target:** `mnemonic-toolkit` MINOR (`v0.80.0`) + `mk-cli` MINOR. **mk-codec / md-codec / ms-codec NO-BUMP** (existing public API reused). Manual lockstep + mk-cli sibling-pin advance (§6).
-- **Status:** DRAFT rev-3 — folded R0-round-1 (1C/3I/4M) + round-2 (0C/1I/2M: I-r2-1 BLESS-iff-decode-Ok invariant + reject-on-ANY-Err + multi-group reject-dominant aggregation; M-r2-1 complete-and-consistent group; M-r2-2 harness N-sizing + re-pin message). Reviews `cycleE-spec-r0-round-{1,2}.md`. Pending R0 round-3 convergence to 0C/0I.
+- **Status:** ✅ **R0-GREEN (0C/0I) @ round 3** — rev-3 folded R0-round-1 (1C/3I/4M) + round-2 (0C/1I/2M) + round-3 editorial (M-r3-1 dup paragraph, M-r3-2 §7.2 wording). Reviews `cycleE-spec-r0-round-{1,2,3}.md`. **CLEARED for the IMPLEMENTATION_PLAN + plan-R0.**
 
 ## §0 — Scope
 
@@ -100,11 +100,6 @@ hash at eventual full reassembly (`mk decode` / toolkit full-set intake); the ad
 engrave-before-reassemble gap. The auto-repair convert/inspect path is unaffected by the partial case (a
 partial card cannot convert anyway → the original error surfaces, already correct).
 
-**Residual partial-set exposure is bounded:** a miscorrected single plate is still caught by the cross-chunk
-hash at eventual full reassembly (`mk decode` / toolkit full-set intake); the advisory covers the
-engrave-before-reassemble gap. The auto-repair convert/inspect path is unaffected by the partial case (a
-partial card cannot convert anyway → the original error surfaces, already correct).
-
 ## §3 — Exit-code semantics
 - **mk repair:** full-set miscorrection → **exit 2** (name it explicitly; `CrossChunkHashMismatch` →
   `CliError::Codec` → 2, `mk-cli repair.rs:10-11`, `44-mk-cli.md:236`). Full-set clean-correct → exit 5.
@@ -183,8 +178,8 @@ partial card cannot convert anyway → the original error surfaces, already corr
 ## §7 — Risks / R0 focus
 1. **Partial-set per-plate repair preserved** (C1) — §4.2 pins it at both mk repair + mnemonic repair; the
    tri-state discriminates on supplied-count vs total_chunks, NOT on the overloaded error string.
-2. **No false-reject of a genuine FULL-set ≤4 correction** (§4.3) — the re-verify only rejects on the cross-
-   chunk hash, which a real repair passes.
+2. **No false-reject of a genuine FULL-set ≤4 correction** (§4.3) — the re-verify rejects on any full-set
+   decode failure; a genuine ≤4 correction yields `mk_codec::decode == Ok` and is blessed, never rejected.
 3. **Non-vacuous funds proof** (I3) — §4.1 pinned known-miscorrection seed proves the catch; §4.8 measures the
    rate with a confidence bound + observed-≥1 self-check.
 4. **count=1 reachability** (I1) — §4.7 locks min-≥2-chunks + SingleString-unreachable.
