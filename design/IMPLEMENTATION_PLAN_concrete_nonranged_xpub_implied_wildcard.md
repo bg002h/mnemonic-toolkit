@@ -4,7 +4,7 @@
 
 - **Model (CLAUDE.md phase-3):** a SINGLE implementer subagent in a git worktree, TDD; per-phase opus R0 (FULL
   `cargo test -p mnemonic-toolkit`); mandatory post-impl whole-diff review.
-- **Status:** DRAFT — pending opus-architect R0 loop to 0C/0I BEFORE any implementer dispatch.
+- **Status:** ✅ **R0-GREEN (0C/0I) at round 1** (+5 test-precision Minor folds: M1 real-`[fp/path]xpub` fixture, M2 literal-`@N` template accept, M3 prefix-assertion scope, M4 message-anchor, M5 pre-existing-test caveat). Reviews: `design/agent-reports/cycleD-{spec,plan}-r0-round-1.md`. SPEC also R0-GREEN (rev-2). **Cleared for single-implementer TDD.**
 - **Target:** `mnemonic-toolkit-v0.79.0` (MINOR); codecs NO-BUMP; NO GUI/`schema_mirror`; NO manual lockstep.
 - **Branch:** `feature/concrete-nonranged-xpub-reject` off current `origin/master`, worktree.
 
@@ -62,6 +62,28 @@ module or cells:
   `tr([fp]xpub)` rejects + `tr([fp]xpub/<0;1>/*)` accepts; §6.10 existing concrete tests stay green.
 - **Message-prefix test:** assert the bundle/verify-bundle user-facing error does NOT contain a stray
   `import-wallet: bsms:` (i.e., the remap fired) and DOES name the key + remedy.
+
+**Test guard-rails (PLAN-R0 M1-M5 — get the cells right):**
+- **M1 — fixture:** every §6 cell MUST use a real `[fp/path]xpub` with ≥1 path component (`key_regex`'s path
+  group `(?:/\d+(?:'|h)?)+` is mandatory — a no-path `[deadbeef]xpub` does NOT match `key_regex`, so the check
+  never fires and a reject cell would pass for the WRONG reason "no [fp/path]xpub keys found"). Use the recon
+  fixture `[73c5da0a/84h/0h/0h]xpub6CatWdiZ…` (derive the seed/xpub as the recon did: `bundle --template bip84
+  --slot @0.phrase=<12-word abandon×11 about-vector>` then `inspect`; or reuse an existing with-path test
+  vector).
+- **M2 — §6.5 ACCEPT:** feed a hand-typed LITERAL `@N` descriptor (`wpkh(@0)`) — it routes via the AtN
+  direct-lex path and NEVER enters `concrete_keys_to_placeholders` (the invariant). Do NOT feed a concrete
+  descriptor with `--md1-form=template` (that correctly STILL rejects). Keep `lex_residue_floor_accepts_bare_at_n_d1_deferred`
+  green + unmodified.
+- **M3 — prefix assertion scope:** the "no `import-wallet: bsms:`" assertion applies ONLY to bundle/verify-bundle
+  (fully stripped → `DescriptorParse`). §6.8 `import-wallet --format bsms` LEGITIMATELY keeps `import-wallet:
+  bsms:`; `--format descriptor` → `import-wallet: descriptor:`. Do NOT write a blanket "no bsms: anywhere" test.
+- **M4 — §6.2 anchor on the MESSAGE:** assert the parse-reject TEXT ("@0 … no derivation suffix …"), not
+  merely exit 2 (a card-comparison failure also exits ≠0) — this is what proves the reject fired at re-parse
+  BEFORE `verify_emit_from_expected`.
+- **M5 — pre-existing test:** if the full suite surfaces a test asserting the OLD silent-accept, UPDATE the
+  test (it encoded the bug), do NOT weaken the fix. (Corpus grep found ZERO such tests — the one
+  concrete-non-ranged descriptor is an `xpub-search` `contains_at_n_placeholder` helper, off the choke-point
+  path.)
 
 **Gate:** full `cargo test -p mnemonic-toolkit` green; clippy clean; per-phase opus R0 (funds-weighted on the
 false-reject/false-accept boundary + the verify-bundle-false-pass-closed anchor + the bare-`@N`-template
