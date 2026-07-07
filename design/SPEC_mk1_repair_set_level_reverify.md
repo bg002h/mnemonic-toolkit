@@ -10,7 +10,7 @@ miscorrection rate and a DETERMINISTIC pinned-seed proof that the re-verify catc
 - **Author:** (this session). **Source SHAs (grep-verified):** toolkit `9866acc7`; mk-cli/mk-codec `mnemonic-key main@85bca69`; md-codec `descriptor-mnemonic main@ef1f3e71`.
 - **Finding:** constellation-eval **F4** (`design/agent-reports/constellation-eval-2026-07-06.md:101-124`). Recon `cycle-prep-recon-f4-bch-repair-miscorrection.md`. User scope (2026-07-07): mk1 FIRST + measure/pin the rate; ms1-advisory = separate Cycle F.
 - **Target:** `mnemonic-toolkit` MINOR (`v0.80.0`) + `mk-cli` MINOR. **mk-codec / md-codec / ms-codec NO-BUMP** (existing public API reused). Manual lockstep + mk-cli sibling-pin advance (§6).
-- **Status:** DRAFT rev-2 — folded SPEC-R0-round-1 (1C/3I/4M: C1 partial-set regression → tri-state; I1 count=1 reachability; I2 sibling-pin 5-ref; I3 non-vacuous harness; M1-M4). Pending R0 re-dispatch to 0C/0I.
+- **Status:** DRAFT rev-3 — folded R0-round-1 (1C/3I/4M) + round-2 (0C/1I/2M: I-r2-1 BLESS-iff-decode-Ok invariant + reject-on-ANY-Err + multi-group reject-dominant aggregation; M-r2-1 complete-and-consistent group; M-r2-2 harness N-sizing + re-pin message). Reviews `cycleE-spec-r0-round-{1,2}.md`. Pending R0 round-3 convergence to 0C/0I.
 
 ## §0 — Scope
 
@@ -62,26 +62,43 @@ The INDEL path already reassembles: `Mk1IndelOracle::validate` (`src/repair.rs:1
 Therefore the substitution fix is a **tri-state on (supplied chunk count vs header `total_chunks`)**, NOT a
 binary bless/reject:
 
-Group the supplied strings by `chunk_set_id`; read `total_chunks` from a chunk header. Then:
-1. **FULL set present (supplied == total_chunks) AND `mk_codec::decode(&refs)` succeeds** → genuine repair →
-   **BLESS** (mk repair exit 5; toolkit short-circuits with the repaired card). Unchanged from today.
-2. **FULL set present AND `decode` fails with `CrossChunkHashMismatch` / `ChunkSetIdMismatch`** → the
-   per-string corrections aliased to a wrong-fit → **REJECT** (mk repair → exit 2 via `CliError::Codec`;
-   toolkit auto-repair does NOT short-circuit — the caller's original un-repaired error surfaces). **This is the
-   actual funds fix.**
-3. **PARTIAL set (supplied < total_chunks; `decode` returns `ChunkedHeaderMalformed("received N … total M")`)**
-   → cannot set-verify → **PRESERVE per-plate repair**: emit the corrected chunk(s) with a LOUD advisory
-   ("correction UNVERIFIED — a >4-error correction can alias to a different card; reassemble the full card
-   (`mk decode` / import the full set) to confirm; BIP-93 recommends confirmation"). `mk repair` keeps **exit
-   5** (preserves the documented example); `mnemonic repair` maps to the existing **exit-4 VERIFY-ME candidate**
-   convention (`indel_exit_code`, `repair.rs:1118-1136`). Do NOT map a partial set to exit 2.
+**The INVARIANT (R0-round-2 I-r2-1 — BLESS iff decode Ok, NOT a named-variant allowlist):** a **confident
+BLESS** (mk repair exit 5 / toolkit short-circuits with the repaired card, chunks presented as RECOVERED with
+NO unverified caveat) occurs **IFF `mk_codec::decode` on the EXACT supplied corrected set returns `Ok`.** Any
+`Err` is NEVER a silent bless. Classify **per `chunk_set_id` GROUP** (parse `total_chunks`/`chunk_set_id` up
+front via the public API — `DecodedString::data()` (`bch.rs:604`) → `StringLayerHeader::from_5bit_symbols`
+(`header.rs:120`) → public `Chunked{chunk_set_id,total_chunks,chunk_index}` fields (`header.rs:45-53`); no new
+codec API → **NO-BUMP**):
+1. **`mk_codec::decode(&group_refs)` == `Ok`** → **BLESS** that group (exit 5). Unchanged from today.
+2. **Group is complete-and-consistent** (R0-round-2 M-r2-1: indices `0..total_chunks-1` each present exactly
+   once, consistent `total_chunks`/`chunk_set_id`) **AND `decode` == `Err` (ANY error** — `CrossChunkHashMismatch`,
+   `ChunkSetIdMismatch`, a header-region `ChunkedHeaderMalformed`/`MixedHeaderTypes`, OR a structural
+   `decode_bytecode` failure from a hash-colliding miscorrection) → the per-string corrections aliased to a
+   wrong-fit → **REJECT** (mk repair → exit 2 via `CliError::Codec`; toolkit auto-repair does NOT short-circuit
+   — the caller's original error surfaces). **The funds fix — reject on ANY `Err`, NOT a variant allowlist**
+   (the variant informs only the user message).
+3. **Group is INCOMPLETE** (supplied `<` `total_chunks`, or gaps/dupes → not complete-and-consistent) → cannot
+   set-verify → **UNVERIFIED-CANDIDATE**: emit the corrected chunk(s) with a LOUD advisory ("correction
+   UNVERIFIED — a >4-error correction can alias to a different card; reassemble the full card (`mk decode` /
+   import the full set) to confirm; BIP-93 recommends confirmation"). `mk repair` keeps **exit 5** (preserves
+   the documented per-plate example); `mnemonic repair` maps to the existing **exit-4 VERIFY-ME candidate**
+   (`indel_exit_code`, `repair.rs:1118-1136`). Do NOT map an incomplete group to exit 2.
 
-**Discriminator:** the supplied-count-vs-`total_chunks` comparison is the RELIABLE signal (the error STRING
-`ChunkedHeaderMalformed` is overloaded — it also covers a genuinely-broken header). Match on the public
-`#[non_exhaustive]` `mk_codec::Error` variants (`CrossChunkHashMismatch`, `ChunkSetIdMismatch`,
-`ChunkedHeaderMalformed`, `MixedHeaderTypes`; `mk-codec/src/error.rs:19-98`) WITH a wildcard arm — no new codec
-API, so **codecs NO-BUMP holds** (R0-round-1 M1). Prefer computing `total_chunks` from the parsed header up
-front (rather than inferring from the error) so the tri-state is explicit.
+**Multi-group / batch aggregation (R0-round-2 I-r2-1b):** `mk repair` + `mnemonic repair --mk1` accept a BATCH
+of strings (`read_mk1_strings` flat-collects; `resolve_groups` → one Vec; 44-mk-cli.md:226). Apply rules 1-3
+**per `chunk_set_id` group**; the invocation exit is the **DOMINANT** outcome across groups —
+**reject > candidate > bless > clean** — and a rejected group's chunks are **NOT** presented as recovered. A
+full-set miscorrection in ANY group must never ship under a batch success exit.
+
+**Header-corruption note:** a substitution corrupting `total_chunks` itself misclassifies the group as
+incomplete → downgrades to UNVERIFIED-CANDIDATE-with-advisory, NEVER a clean confident success (bounded — the
+user re-verifies at reassembly). Discriminate group-completeness from the parsed indices vs `total_chunks`, NOT
+from the overloaded error string (`ChunkedHeaderMalformed` covers both "incomplete" and "broken header").
+
+**Residual partial-set exposure is bounded:** a miscorrected single plate is still caught by the cross-chunk
+hash at eventual full reassembly (`mk decode` / toolkit full-set intake); the advisory covers the
+engrave-before-reassemble gap. The auto-repair convert/inspect path is unaffected by the partial case (a
+partial card cannot convert anyway → the original error surfaces, already correct).
 
 **Residual partial-set exposure is bounded:** a miscorrected single plate is still caught by the cross-chunk
 hash at eventual full reassembly (`mk decode` / toolkit full-set intake); the advisory covers the
@@ -95,14 +112,21 @@ partial card cannot convert anyway → the original error surfaces, already corr
 - **toolkit `mnemonic repair`:** full-set miscorrection → not-repaired (surfaces the decode error); partial-set
   correct → exit-4 VERIFY-ME candidate + advisory (reuse `indel_exit_code`). Auto-repair (convert/inspect/
   verify-bundle/xpub): on full-set miscorrection, `try_repair_and_short_circuit` does NOT short-circuit.
+- **Batch (multi-group) exit:** the DOMINANT outcome across all `chunk_set_id` groups (reject > candidate >
+  bless > clean; §2). A batch containing one full-set miscorrection group exits reject even if other groups
+  bless.
 - This is a breaking exit-code behavior change (a previously-exit-5 full-set wrong-fit now exits 2) → MINOR.
 
 ## §4 — Test / oracle matrix (TDD-first)
 1. **(FUNDS ANCHOR, DETERMINISTIC — R0-round-1 I3) full-set miscorrection REJECTED via a PINNED seed** — a
    known 5-substitution corruption of a real ≥2-chunk mk1 card that `bch_correct` aliases to a valid-but-wrong
    codeword, found ONCE by a bounded search and **pinned as a test constant** (NOT re-searched per run).
-   Assert `mk repair <full set>` → exit 2 (`CrossChunkHashMismatch`) and toolkit auto-repair does NOT
-   short-circuit. This is the non-vacuous proof the re-verify catches a real misfit.
+   Assert `mk repair <full set>` → exit 2 (any decode `Err` per §2) and toolkit auto-repair does NOT
+   short-circuit. This is the non-vacuous proof the re-verify catches a real misfit. **Maintainability
+   (R0-round-2 M-r2-2):** the pinned seed can be invalidated by a future mk-codec BCH change (the corruption
+   may no longer alias) — the test must, on such a change, fail with an EXPLICIT message ("the pinned F4
+   miscorrection seed no longer aliases to a wrong codeword — re-pin via the bounded search in <helper>"), NOT
+   a cryptic assertion.
 2. **(REGRESSION — R0-round-1 C1) partial-set per-plate repair STILL succeeds** — replay the manual example:
    `mk repair <single chunk of a 2-chunk card>` → exit 5 + the advisory; `mnemonic repair --mk1 <one plate>` →
    exit-4 candidate + advisory. Confirms the fix does NOT break the documented single-plate workflow.
@@ -110,6 +134,10 @@ partial card cannot convert anyway → the original error surfaces, already corr
 4. **Clean card** — exit 0 / no auto-repair.
 5. **toolkit convert/inspect auto-repair** on a full-set wrong-fit mk1 (the §4.1 seed) no longer silently emits
    the wrong card.
+5b. **(BATCH — R0-round-2 I-r2-1b) multi-group reject dominates** — a single `mk repair` / `mnemonic repair
+   --mk1` invocation with TWO `chunk_set_id` groups {one full-set miscorrection (the §4.1 seed), one clean or
+   partial group} exits **reject** (mk repair exit 2) and does NOT emit the miscorrected group's chunks as
+   recovered. Pins the aggregation (a batch success must never carry a miscorrection).
 6. **md1 regression-lock (R0-round-1 M3)** — an md1 wrong-fit correction is already rejected by the content-id
    check (assert reject); AND assert md1 has NO non-chunked decode path bypassing `reassemble` (mirror the
    SingleString reachability note).
@@ -118,9 +146,12 @@ partial card cannot convert anyway → the original error surfaces, already corr
 8. **(HARNESS — rate) measure + pin** — seeded `StdRng` (NO `thread_rng`), fixed sample size N: random mk1
    payload → encode → inject exactly 5 substitutions in the regular-code trailing chunk (BCH(93,80,8),
    `pipeline.rs:281-299`) → `bch_correct`; record the alias-to-valid-≠-original rate. Pin a **Clopper-Pearson
-   UPPER confidence bound** (not the point estimate — avoids resampling flake). **Self-check: assert ≥1
-   miscorrection was observed** (else the run is vacuous). Cite the MEASURED bound in the CHANGELOG/manual, NOT
-   the eval's `2⁻¹³·⁹`.
+   UPPER confidence bound** (not the point estimate — avoids resampling flake). **N-sizing (R0-round-2
+   M-r2-2):** either size N so `E[hits] ≫ 1` at the expected ~10⁻⁴-10⁻⁵ rate (e.g. N≈10⁶ → ~10-100 hits) so an
+   `observed-≥1` assertion is robust, OR keep N modest and make `observed-≥1` a SOFT warning (the HARD funds
+   proof is §4.1's pinned seed, so §4.8 need not gate on observing a hit). If N≈10⁶ is too slow for the default
+   suite, gate it behind `--ignored`/an env flag and run it in CI. Cite the MEASURED bound in the
+   CHANGELOG/manual, NOT the eval's `2⁻¹³·⁹`.
 9. Determinism; full `cargo test -p` green in each touched repo (toolkit + mk-cli).
 
 ## §5 — Cross-source anchors (recon + R0-round-1 verified)
