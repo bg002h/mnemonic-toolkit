@@ -18,7 +18,16 @@ use super::NUMS_XONLY_HEX;
 /// hex pubkeys are preserved; no abstract labels are detected (those only
 /// appear in `--miniscript` input).
 pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>), CompareCostError> {
-    let desc = Descriptor::<DescriptorPublicKey>::from_str(input)
+    // SPEC bip388-double-star-shorthand-support §0 item 6 — EQUIVALENCE-only:
+    // compare-cost has a pre-existing multipath limitation (rejects ALL
+    // `/<0;1>/*` multipath descriptors; FOLLOWUP
+    // `compare-cost-multipath-descriptor-unsupported`), so expanding a
+    // literal `/**` here does NOT yield acceptance — it makes `/**` reject
+    // IDENTICALLY to the explicit `/<0;1>/*` spelling instead of the pre-fix
+    // cryptic "invalid child number format", upholding the `/**` ≡
+    // `/<0;1>/*` invariant on every literal-descriptor surface.
+    let expanded_input = crate::parse_descriptor::expand_literal_double_star(input);
+    let desc = Descriptor::<DescriptorPublicKey>::from_str(expanded_input.as_ref())
         .map_err(|e| CompareCostError::Parse(format!("descriptor parse: {e}")))?;
 
     // Materialize wildcards to a concrete derivation index (cost is identical

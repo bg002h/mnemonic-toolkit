@@ -113,3 +113,23 @@ fn malformed_descriptor_exits_2_with_no_stdout() {
         .code(2)
         .stdout(predicate::str::is_empty());
 }
+
+/// SPEC bip388-double-star-shorthand-support §0 item 7 / §7.11 — a literal
+/// `/**` classifies identically to the explicit `/<0;1>/*` form (chokepoint-
+/// covered automatically via `parse_descriptor`'s own expansion — no
+/// separate wiring in `gui_schema.rs`).
+#[test]
+fn double_star_shorthand_classifies_same_as_explicit_multipath() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["gui-schema", "--classify-descriptor", "wpkh(@0/**)"])
+        .assert()
+        .success()
+        .stdout("canonical\n");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["gui-schema", "--classify-descriptor", "wpkh(@0/<0;1>/*)"])
+        .assert()
+        .success()
+        .stdout("canonical\n");
+}

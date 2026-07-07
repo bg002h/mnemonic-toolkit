@@ -39,7 +39,7 @@
 //!   descriptor body with `wpkh(...)` / `wsh(...)` / `sh(wsh(...))` / `tr(...)`
 //!   wrapping (Sparrow's emit at `wallet_export/sparrow.rs:185-220` builds the
 //!   wrapped form per `CliTemplate`). The script uses `@N/**` cosigner
-//!   placeholders (BIP-389 multipath shorthand) — NOT the
+//!   placeholders (BIP-388 combined-wildcard shorthand) — NOT the
 //!   `[fp/path]xpub/<0;1>/*` concrete-keys form.
 //! - For each `keystores[i]`, substitute `@i/**` with
 //!   `[fp/derivation_no_m_prefix]xpub/<0;1>/*` to produce a concrete-keys

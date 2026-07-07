@@ -156,10 +156,14 @@ fn bad_checksum_refused() {
 // I-1 (Phase-1 R0 fold): `import-wallet --format descriptor` is a lex-surface —
 // its concrete descriptor flows through `concrete_keys_to_placeholders` →
 // `parse_descriptor::parse_descriptor` (descriptor.rs step 3), so a FIXED
-// use-site step (`/0/*`) or the BIP-389 combined shorthand (`/**`) is
-// un-representable in md1 (SPEC_cycleA_descriptor_use_site_collapse.md §1/§6)
-// and rejects at the shared residue-reject floor. These cells lock the
-// per-surface CLI behavior + message (born-green — the lexer already rejects).
+// use-site step (`/0/*`) is un-representable in md1
+// (SPEC_cycleA_descriptor_use_site_collapse.md §1/§6) and rejects at the
+// shared residue-reject floor. The BIP-388 `/**` combined-wildcard shorthand
+// is DIFFERENT — Cycle C (SPEC bip388-double-star-shorthand-support) expands
+// it to the explicit `/<0;1>/*` form BEFORE the lexer ever sees it, so it now
+// ACCEPTS identically to `/<0;1>/*` (see
+// `descriptor_double_star_shorthand_accepted_equals_explicit_multipath`
+// below). These cells lock the per-surface CLI behavior + message.
 
 /// A single `/0/*` descriptor (fixed use-site step) hard-rejects exit 2 with
 /// the multipath-remedy message. Checksum-LESS (the parser is tolerant), so
@@ -186,32 +190,67 @@ fn descriptor_fixed_use_site_step_rejected_with_multipath_remedy() {
         stderr.contains("/0/*"),
         "reject must name the offending fixed-step residue; stderr: {stderr}"
     );
+    // SPEC §7.9 — the reworded message must NOT mention the (now-accepted)
+    // `/**` shorthand as an alternate un-representable exemplar.
+    assert!(
+        !stderr.contains("/**"),
+        "reworded message must not mention `/**`; stderr: {stderr}"
+    );
 }
 
-/// The BIP-389 combined `/**` shorthand (HIGHEST-impact case — mainstream
-/// wallet export form) hard-rejects exit 2. The `wild` group eats only `/*`,
-/// leaving a stray residue → reject; the message must name the `/**` shorthand
-/// and the multipath remedy (plan-R0 I-D).
+/// SPEC bip388-double-star-shorthand-support §7.2 — REPURPOSED (was
+/// `descriptor_double_star_shorthand_rejected_with_multipath_remedy`, pre-
+/// Cycle-C). The BIP-388 combined `/**` shorthand (HIGHEST-impact case —
+/// mainstream wallet export form) now SUCCEEDS (exit 0): the raw string is
+/// expanded to the explicit `/<0;1>/*` form BEFORE `concrete_keys_to_
+/// placeholders` → `parse_descriptor` ever sees it. Funds-equivalence oracle:
+/// the emitted bundle (mk1/md1/ms1 cards) is BYTE-IDENTICAL to the same
+/// import with the descriptor written out in the explicit `/<0;1>/*` form —
+/// `/**` is a pure synonym, never observably different (SPEC §6).
 #[test]
-fn descriptor_double_star_shorthand_rejected_with_multipath_remedy() {
-    let blob = format!("wpkh([704c7836/84'/0'/0']{A}/**)\n");
-    let assertion = import_descriptor(&blob).failure();
-    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
-    let code = assertion.get_output().status.code().unwrap_or(-1);
+fn descriptor_double_star_shorthand_accepted_equals_explicit_multipath() {
+    let blob_shorthand = format!("wpkh([704c7836/84'/0'/0']{A}/**)\n");
+    let blob_explicit = format!("wpkh([704c7836/84'/0'/0']{A}/<0;1>/*)\n");
+
+    let out_shorthand = bin()
+        .args([
+            "import-wallet",
+            "--format",
+            "descriptor",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(blob_shorthand)
+        .assert()
+        .success();
+    let out_explicit = bin()
+        .args([
+            "import-wallet",
+            "--format",
+            "descriptor",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(blob_explicit)
+        .assert()
+        .success();
+
+    let mut v_shorthand: Value =
+        serde_json::from_slice(&out_shorthand.get_output().stdout).expect("valid JSON");
+    let mut v_explicit: Value =
+        serde_json::from_slice(&out_explicit.get_output().stdout).expect("valid JSON");
+    // The envelope's `bundle.descriptor` field is a verbatim (checksum-
+    // refreshed) echo of the ORIGINAL user string, so it legitimately
+    // differs (`/**` vs `/<0;1>/*` spelling) — not part of the funds
+    // property. Every OTHER field (mk1/md1/ms1 cards, network, threshold,
+    // provenance) must be byte-identical.
+    v_shorthand[0]["bundle"]["descriptor"] = Value::Null;
+    v_explicit[0]["bundle"]["descriptor"] = Value::Null;
     assert_eq!(
-        code, 2,
-        "the `/**` shorthand must reject exit 2; stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("descriptor"),
-        "reject must be scoped to the descriptor surface; stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("/**"),
-        "reject must name the `/**` shorthand explicitly; stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("multipath") && stderr.contains("<a;b>"),
-        "expected the multipath `/<a;b>/*` remedy pointer; stderr: {stderr}"
+        v_shorthand, v_explicit,
+        "expanded `/**` envelope must equal the explicit `/<0;1>/*` envelope \
+         (modulo the raw-echo descriptor field)"
     );
 }

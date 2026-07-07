@@ -21,6 +21,7 @@ use md_codec::use_site_path::{Alternative, UseSitePath};
 use md_codec::{Descriptor as MdDescriptor, TlvSection};
 use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use regex::Regex;
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
 use std::str::FromStr;
 use std::sync::OnceLock;
@@ -186,9 +187,12 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
         // use-site shapes in md1 (`UseSitePath` is exactly
         // `{multipath: Option<Vec<Alternative>>, wildcard_hardened}` —
         // md_codec::use_site_path.rs:49-53). A FIXED use-site step after the
-        // placeholder (e.g. `/0` in `@0/0/*`, or the BIP-389 `/**` shorthand,
-        // whose `wild` group eats only `/*` and leaves a stray `*`) matches
-        // NONE of those groups, so without this check it is silently DROPPED
+        // placeholder (e.g. `/0` in `@0/0/*`) matches NONE of those groups
+        // (the BIP-388 `/**` combined-wildcard shorthand is no longer a
+        // residue path here — `expand_literal_double_star` rewrites it to
+        // `/<0;1>/*` before the string ever reaches this lexer; SPEC
+        // bip388-double-star-shorthand-support §5), so without this check it
+        // is silently DROPPED
         // — `@0/0/*` would lex identically to bare `@0`, encoding a bare
         // `/*` use-site instead of the user's `/0/*` — a DIFFERENT wallet
         // (wrong-address / funds-loss). Mirrors md-cli
@@ -206,8 +210,8 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                 return Err(ToolkitError::DescriptorParse(format!(
                     "@{i}: derivation steps after the placeholder are not representable in md1; \
                      the use-site path must be a multipath `/<a;b>/*` (or bare `/*`) as the final \
-                     step — a fixed single step like `/0/*` (or the `/**` shorthand) is \
-                     un-representable (found residue near `{residue}`)"
+                     step — a fixed single step like `/0/*` is un-representable (found residue \
+                     near `{residue}`)"
                 )));
             }
         }
@@ -375,6 +379,70 @@ pub fn substitute_nums_sentinel(input: &str) -> String {
     let re = RE.get_or_init(|| Regex::new(r"tr\(NUMS\b").expect("static regex compiles"));
     re.replace_all(input, format!("tr({NUMS_H_POINT_X_ONLY_HEX}").as_str())
         .into_owned()
+}
+
+/// SPEC `bip388-double-star-shorthand-support` §5 — rewrite a literal,
+/// final-use-site BIP-388 `/**` combined-wildcard shorthand to the explicit
+/// multipath form `/<0;1>/*` (receive=chain 0, change=chain 1). BIP-388
+/// defines `/**` as an EXACT synonym for `/<0;1>/*`; expanding it here, on the
+/// raw string, BEFORE it reaches `lex_placeholders` / `MsDescriptor::from_str`
+/// means no downstream consumer ever observes the shorthand at all — the
+/// former hard-reject (a stray `*` residue; `lex_placeholders`'s `wild` group
+/// only eats `/*`) is replaced by silent, byte-exact acceptance.
+///
+/// Call this at every production entry point that feeds RAW user descriptor
+/// text to a `/**`-rejecting parser (SPEC §0/§5): the top of
+/// `parse_descriptor`, the AtN direct-lex sites in `bundle`/`verify-bundle`,
+/// `xpub-search`'s `parse_literal_xpub`, the BSMS first-address check,
+/// `recanonicalize_descriptor`, `export-wallet --descriptor`, and
+/// `compare-cost --descriptor`.
+///
+/// **Precision (funds-adjacent):** a `/**` occurrence is rewritten ONLY when
+/// immediately followed by the residue-terminator set `)` `,` `}` whitespace
+/// `#` or end-of-string — the same terminator set `lex_placeholders`'s
+/// residue-reject floor already enforces (`parse_descriptor.rs` residue
+/// check, above). This EXCLUDES `/***` (next char `*`) and `/**'` (next char
+/// `'`), which are NOT the BIP-388 shorthand and keep their existing reject.
+/// Anchored on the `/**` + terminator boundary — NEVER a naive global
+/// `str::replace`. Per-key: every `/**` occurrence in a multisig expands
+/// independently (each is checked against its own following character).
+///
+/// **Idempotence:** a `/**`-free body (including a body already expanded by
+/// `expand_bip388_policy`, which emits `/<0;1>/*` and never re-introduces
+/// `/**`) is returned unchanged as a borrowed no-op — zero-cost, no
+/// double-expansion.
+pub fn expand_literal_double_star(desc: &str) -> Cow<'_, str> {
+    if !desc.contains("/**") {
+        return Cow::Borrowed(desc);
+    }
+    let mut out = String::with_capacity(desc.len() + 8);
+    let mut rest = desc;
+    let mut changed = false;
+    while let Some(pos) = rest.find("/**") {
+        // Byte length of the literal "/**" match is exactly 3 ASCII bytes,
+        // so `after` is always on a char boundary.
+        let after = pos + 3;
+        let is_terminator = match rest[after..].chars().next() {
+            None => true, // end-of-string
+            Some(c) => matches!(c, ')' | ',' | '}' | '#') || c.is_whitespace(),
+        };
+        out.push_str(&rest[..pos]);
+        if is_terminator {
+            out.push_str("/<0;1>/*");
+            changed = true;
+        } else {
+            // `/***` or `/**'` etc. — not the BIP-388 shorthand; copy through
+            // unchanged and keep scanning past it.
+            out.push_str("/**");
+        }
+        rest = &rest[after..];
+    }
+    out.push_str(rest);
+    if changed {
+        Cow::Owned(out)
+    } else {
+        Cow::Borrowed(desc)
+    }
 }
 
 /// v0.19.0 SPEC §6.6 row 16 — detect a bare `tr(<miniscript>)` (no internal
@@ -867,6 +935,17 @@ pub fn parse_descriptor(
     keys: &[ParsedKey],
     fingerprints: &[ParsedFingerprint],
 ) -> Result<MdDescriptor, ToolkitError> {
+    // SPEC bip388-double-star-shorthand-support §5 — expand a literal `/**`
+    // shorthand to `/<0;1>/*` BEFORE any other pre-pass. This is the single
+    // chokepoint for the ENTIRE concrete pipeline (every
+    // `concrete_keys_to_placeholders` caller funnels here) plus every direct
+    // `parse_descriptor` call site (bundle/verify-bundle canonicity probes +
+    // main parse, `gui-schema --classify-descriptor`). No-op when no literal
+    // `/**` is present (including input already expanded by
+    // `expand_bip388_policy`).
+    let double_star_expanded = expand_literal_double_star(input);
+    let input: &str = double_star_expanded.as_ref();
+
     // v0.19.0 SPEC §4.12.e — NUMS sentinel substitution + §6.6 row 16
     // bare-tr refusal. Both run BEFORE `lex_placeholders` and
     // `substitute_synthetic` so the rest of the pipeline sees the
@@ -1729,12 +1808,53 @@ mod tests {
     }
 
     #[test]
-    fn lex_rejects_double_star_shorthand() {
-        // trap #5 / plan-R0 I-D: BIP-389 `/**` shorthand. The `wild` group's
-        // `/\*(?:'|h)?` alternation eats only `/*`, leaving a stray `*`
-        // residue — reject, not a silent expansion to `<0;1>/*`. Message
-        // must name the `/**` shorthand explicitly (I-D).
-        assert_residue_reject("wpkh(@0[deadbeef/84'/0'/0']/**)", &["multipath", "/**"]);
+    fn lex_accepts_double_star_shorthand_expanded() {
+        // Cycle C (SPEC bip388-double-star-shorthand-support): the BIP-388
+        // `/**` combined-wildcard shorthand is no longer rejected here — the
+        // production pipeline runs `expand_literal_double_star` on the raw
+        // string BEFORE it ever reaches `lex_placeholders`, rewriting `/**`
+        // to the explicit `/<0;1>/*` form. This cell exercises that same
+        // pre-pass directly and asserts the lexed occurrences are IDENTICAL
+        // to lexing the explicit `/<0;1>/*` spelling — `/**` is a pure
+        // synonym, never observably different (SPEC §6, the funds property).
+        let via_shorthand =
+            expand_literal_double_star("wpkh(@0[deadbeef/84'/0'/0']/**)").into_owned();
+        let occs_shorthand =
+            lex_placeholders(&via_shorthand).expect("expanded `/**` must lex-accept, not reject");
+        let occs_explicit =
+            lex_placeholders("wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)").expect("control lexes");
+        assert_eq!(
+            occs_shorthand, occs_explicit,
+            "expanded `/**` occurrences must equal the explicit `/<0;1>/*` occurrences"
+        );
+    }
+
+    #[test]
+    fn lex_reject_message_no_longer_names_double_star_shorthand() {
+        // SPEC §7.9 — a genuinely un-representable fixed step (`/0/*`) still
+        // rejects exit-equivalent (DescriptorParse), but the message must NO
+        // LONGER mention the `/**` shorthand (it is accepted now, not an
+        // alternate un-representable exemplar) — only the `/0/*` exemplar
+        // remains.
+        let err = lex_placeholders("wpkh(@0/0/*)").expect_err("fixed step /0/* must still reject");
+        let msg = err.message();
+        assert!(
+            !msg.contains("/**"),
+            "reworded message must not mention the (now-accepted) `/**` shorthand: {msg}"
+        );
+        assert!(msg.contains("/0/*"), "still names the /0/* exemplar: {msg}");
+    }
+
+    #[test]
+    fn lex_rejects_leading_fixed_step_before_double_star_floor_not_weakened() {
+        // SPEC §7.10 (floor-not-weakened) — `/0/**` expands (via
+        // `expand_literal_double_star`) to `/0/<0;1>/*`, which STILL rejects:
+        // the leading fixed `/0` step remains un-representable (Cycle A
+        // floor). Proves the `/**` expander does not weaken the fixed-step
+        // floor for a fixed-step+shorthand composite.
+        let expanded = expand_literal_double_star("wpkh(@0/0/**)").into_owned();
+        assert_eq!(expanded, "wpkh(@0/0/<0;1>/*)", "sanity: expander output");
+        assert_residue_reject(&expanded, &["multipath"]);
     }
 
     #[test]
@@ -3419,6 +3539,101 @@ mod tests {
         let input = "wsh(NUMS,pk(@0))";
         let out = substitute_nums_sentinel(input);
         assert_eq!(out, input);
+    }
+
+    // ---- Cycle C: BIP-388 `/**` combined-wildcard shorthand expander ----
+    // SPEC bip388-double-star-shorthand-support §5/§7. `expand_literal_double_star`
+    // rewrites a literal, final-use-site `/**` to the explicit `/<0;1>/*` form
+    // BEFORE the string reaches `lex_placeholders` / `MsDescriptor::from_str`.
+
+    #[test]
+    fn expand_literal_double_star_expands_at_paren_terminator() {
+        let input = "wpkh([deadbeef/84h/0h/0h]@0/**)";
+        let expected = "wpkh([deadbeef/84h/0h/0h]@0/<0;1>/*)";
+        assert_eq!(expand_literal_double_star(input), expected);
+    }
+
+    #[test]
+    fn expand_literal_double_star_expands_concrete_xpub() {
+        let xpub = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+        let input = format!("wpkh([704c7836/84'/0'/0']{xpub}/**)");
+        let expected = format!("wpkh([704c7836/84'/0'/0']{xpub}/<0;1>/*)");
+        assert_eq!(expand_literal_double_star(&input), expected);
+    }
+
+    #[test]
+    fn expand_literal_double_star_expands_before_comma_terminator() {
+        // Non-final `/**` inside a multisig (terminator is `,`, not `)`).
+        let input = "wsh(sortedmulti(2,@0/**,@1/**))";
+        let expected = "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))";
+        assert_eq!(expand_literal_double_star(input), expected);
+    }
+
+    #[test]
+    fn expand_literal_double_star_expands_before_whitespace_and_eos() {
+        // Whitespace terminator (e.g. a descriptor-file line with a trailing
+        // newline) and bare end-of-string both count as valid terminators.
+        assert_eq!(expand_literal_double_star("@0/** \n"), "@0/<0;1>/* \n");
+        assert_eq!(expand_literal_double_star("@0/**"), "@0/<0;1>/*");
+    }
+
+    #[test]
+    fn expand_literal_double_star_expands_before_hash_terminator() {
+        // `#` (checksum-suffix terminator) — degenerate but part of the
+        // documented terminator set (SPEC §5).
+        assert_eq!(
+            expand_literal_double_star("@0/**#abcd1234"),
+            "@0/<0;1>/*#abcd1234"
+        );
+    }
+
+    #[test]
+    fn expand_literal_double_star_ignores_triple_star() {
+        // `/***` — the extra `*` is NOT a valid terminator, so this is left
+        // completely untouched (still un-representable downstream).
+        let input = "wpkh(@0/***)";
+        assert_eq!(expand_literal_double_star(input), input);
+    }
+
+    #[test]
+    fn expand_literal_double_star_ignores_hardened_quote_suffix() {
+        // `/**'` — next char is `'`, not a terminator; leave untouched.
+        let input = "wpkh(@0/**')";
+        assert_eq!(expand_literal_double_star(input), input);
+    }
+
+    #[test]
+    fn expand_literal_double_star_no_op_when_absent() {
+        // No `/**` substring anywhere → borrowed no-op (also exercises the
+        // idempotence contract with `expand_bip388_policy`'s output, which
+        // already emits `/<0;1>/*` and never re-introduces `/**`).
+        let input = "wpkh([704c7836/84'/0'/0']@0/<0;1>/*)";
+        match expand_literal_double_star(input) {
+            Cow::Borrowed(s) => assert_eq!(s, input),
+            Cow::Owned(s) => panic!("expected a borrowed no-op, got an owned copy: {s}"),
+        }
+    }
+
+    #[test]
+    fn expand_literal_double_star_multisig_expands_both_keys() {
+        // Per-key: every `/**` occurrence in a multisig expands independently.
+        let input = "wsh(sortedmulti(2,[704c7836/48'/0'/0'/2']K0/**,[97139860/48'/0'/0'/2']K1/**))";
+        let expected =
+            "wsh(sortedmulti(2,[704c7836/48'/0'/0'/2']K0/<0;1>/*,[97139860/48'/0'/0'/2']K1/<0;1>/*))";
+        assert_eq!(expand_literal_double_star(input), expected);
+    }
+
+    #[test]
+    fn expand_literal_double_star_leading_fixed_step_composite_still_expands_tail() {
+        // `/0/**` — the expander only rewrites the trailing `/**` token itself
+        // (terminator-anchored); it does NOT understand/strip a PRECEDING
+        // fixed step. The leading `/0` is untouched, so the expanded result
+        // `/0/<0;1>/*` still carries the un-representable fixed step — the
+        // residue-reject floor (Cycle A) catches it downstream (SPEC §7.10 —
+        // floor not weakened).
+        let input = "wpkh(@0/0/**)";
+        let expected = "wpkh(@0/0/<0;1>/*)";
+        assert_eq!(expand_literal_double_star(input), expected);
     }
 
     #[test]

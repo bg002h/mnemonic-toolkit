@@ -238,9 +238,17 @@ fn recanonicalize_descriptor(desc_with_csum: &str) -> Result<String, ToolkitErro
         None => desc_with_csum,
     };
 
-    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(body_no_csum).map_err(|e| {
-        ToolkitError::ImportWalletParse(format!("canonicalize: descriptor parse failed: {e}"))
-    })?;
+    // SPEC bip388-double-star-shorthand-support §0 item 4 — this single
+    // helper backs BOTH `canonicalize_bsms` (BSMS `--json` roundtrip; a
+    // literal `/**` here previously soft-failed the canonical envelope field
+    // with a bogus "canonicalize: parse failed", even though the main parse
+    // succeeded) and `canonicalize_bitcoin_core` (harmless no-op — Core never
+    // emits `/**`).
+    let body_no_csum = crate::parse_descriptor::expand_literal_double_star(body_no_csum);
+    let parsed =
+        MsDescriptor::<DescriptorPublicKey>::from_str(body_no_csum.as_ref()).map_err(|e| {
+            ToolkitError::ImportWalletParse(format!("canonicalize: descriptor parse failed: {e}"))
+        })?;
 
     let rendered = parsed.to_string();
     // miniscript's `Display` impl for `Descriptor` already includes a

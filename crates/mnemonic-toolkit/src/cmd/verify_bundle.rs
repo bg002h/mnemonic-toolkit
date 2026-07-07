@@ -1342,6 +1342,17 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         descriptor_str
     };
 
+    // SPEC bip388-double-star-shorthand-support §5 — single per-command
+    // chokepoint, placed AFTER the BIP-388 JSON expansion (which never
+    // re-introduces `/**`) and BEFORE the Concrete/AtN split just below, so
+    // both forks see the expanded string: the Concrete fork's
+    // `descriptor_concrete_to_resolved_slots` → `parse_descriptor` (already
+    // covered by parse_descriptor's own top-of-function expansion — this is
+    // belt-and-suspenders, idempotent) AND the AtN fork's direct
+    // `lex_placeholders` call below (NOT otherwise covered).
+    let descriptor_str =
+        crate::parse_descriptor::expand_literal_double_star(&descriptor_str).into_owned();
+
     // A1 P3b — bare-concrete fork: if the descriptor contains real xpubs (no
     // @N placeholders), route directly to the concrete-to-resolved-slots helper
     // and bypass the @N lex/resolve/slot-binding machinery entirely.

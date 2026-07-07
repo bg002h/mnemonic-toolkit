@@ -514,9 +514,16 @@ pub fn run<W: Write, E: Write>(
         // Descriptor passthrough: parse + canonicalize via miniscript.
         use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
         use std::str::FromStr;
-        let d = MsDescriptor::<DescriptorPublicKey>::from_str(desc).map_err(|e| {
-            ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
-        })?;
+        // SPEC bip388-double-star-shorthand-support §0 item 5 — a literal
+        // `/**` concrete descriptor genuinely ACCEPTS here (closing the
+        // import-accepts/export-rejects asymmetry); only the CONCRETE form
+        // reaches this point (the AtN `@0/**` form is already refused by the
+        // `is_at_n_form` gate above, by design).
+        let expanded_desc = crate::parse_descriptor::expand_literal_double_star(desc);
+        let d =
+            MsDescriptor::<DescriptorPublicKey>::from_str(expanded_desc.as_ref()).map_err(|e| {
+                ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
+            })?;
         let adv = crate::timelock_advisory::older_advisories_descriptor(&d);
         crate::timelock_advisory::emit_advisories(&adv, stderr);
         d.to_string()

@@ -1385,6 +1385,14 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             .to_string(),
         _ => unreachable!("clap conflicts_with rules out both / pre-checks rule out neither"),
     };
+    // SPEC bip388-double-star-shorthand-support §5 — this is the AtN
+    // direct-lex chokepoint (bypasses `parse_descriptor`'s own expansion at
+    // its top): expand a literal `/**` once here so it covers BOTH the
+    // `lex_placeholders` call below AND every subsequent `parse_descriptor`
+    // call in this function (idempotent — parse_descriptor re-expands a
+    // no-op).
+    let descriptor_str =
+        crate::parse_descriptor::expand_literal_double_star(&descriptor_str).into_owned();
 
     let occs = lex_placeholders(&descriptor_str)?;
     let mut resolved_placeholders = resolve_placeholders(&occs)?;

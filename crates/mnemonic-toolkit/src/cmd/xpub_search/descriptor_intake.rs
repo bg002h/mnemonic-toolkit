@@ -294,7 +294,12 @@ fn parse_literal_xpub(
     account: u32,
     stderr: &mut impl std::io::Write,
 ) -> Result<DescriptorIntake, ToolkitError> {
-    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(descriptor_str)
+    // SPEC bip388-double-star-shorthand-support §0/§5 — xpub-search is a
+    // structurally separate parser (bypasses `parse_descriptor`'s lexer
+    // entirely), so it needs its own expansion of a literal `/**` before
+    // `miniscript::Descriptor::from_str`.
+    let expanded = crate::parse_descriptor::expand_literal_double_star(descriptor_str);
+    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(expanded.as_ref())
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
     // H12 — taproot-aware default-origin script-type. `parsed` is a
     // rust-miniscript `Descriptor` (NOT an md-codec `Tag`), so detect taproot

@@ -296,8 +296,17 @@ impl WalletFormatParser for BsmsParser {
             // address derivation via `derive_first_address` is non-taproot
             // by contract; we therefore skip the WARNING for taproot.
             use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
+            // SPEC bip388-double-star-shorthand-support §0 item 4 (soft gap):
+            // this `from_str` re-parses the RAW concrete body directly (not
+            // the `@N`-placeholder form the main parse used), so a literal
+            // `/**` needs its own expansion here too — otherwise the `if let
+            // Ok` silently SKIPS the first-address check on `/**` input
+            // (the main parse above already accepts it via
+            // `parse_descriptor`'s chokepoint).
+            let expanded_body =
+                crate::parse_descriptor::expand_literal_double_star(descriptor_body_no_csum);
             if let Ok(parsed) =
-                MsDescriptor::<DescriptorPublicKey>::from_str(descriptor_body_no_csum)
+                MsDescriptor::<DescriptorPublicKey>::from_str(expanded_body.as_ref())
             {
                 let is_taproot = matches!(parsed, MsDescriptor::Tr(_));
                 if !is_taproot {
