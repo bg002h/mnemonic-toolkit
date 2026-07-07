@@ -339,6 +339,25 @@ pub(crate) fn concrete_keys_to_placeholders(
 
     for cap in re.captures_iter(descriptor) {
         let m = cap.get(0).expect("group 0 is always present");
+
+        // concrete-nonranged-xpub-implied-wildcard (v0.79.0): a concrete
+        // [fp/path]xpub with NO `/…` derivation suffix is un-representable in
+        // md1 (UseSitePath always wildcards) — silently ranging it to `@N/*`
+        // engraves a different wallet and verify-bundle false-passes. Reject
+        // fail-closed. (`/`-suffixed keys pass through: `/*`/`/<a;b>/*` are
+        // ranged+representable; a fixed step `/0/*` is caught by the Cycle-A
+        // residue floor downstream.) key_regex never matches a hand-typed
+        // `@N` template, so that canonical form is unaffected (structurally
+        // unreachable here).
+        if !descriptor[m.end()..].starts_with('/') {
+            return Err(ToolkitError::ImportWalletParse(format!(
+                "import-wallet: bsms: parse error: concrete key @{idx} has no derivation \
+                 suffix; a fixed xpub cannot be represented in md1 (which always encodes a \
+                 ranged use-site) — append `/*` (ranged) or `/<0;1>/*` (receive/change) to \
+                 intend a ranged wallet"
+            )));
+        }
+
         placeholder_form.push_str(&descriptor[last_end..m.start()]);
 
         let fp_hex = cap.get(1).expect("group 1 captured").as_str();
