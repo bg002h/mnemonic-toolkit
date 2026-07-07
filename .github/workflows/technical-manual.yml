@@ -106,7 +106,7 @@ jobs:
       - name: Install mk-cli
         # Package-name selector (multi-binary workspace; --bin refuses
         # disambig). Current-release tier pin — mirrors manual.yml:79.
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.11.2 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.12.0 mk-cli
 
       - name: Install md-cli
         # `--features cli-compiler` matches scripts/install.sh's component pin
