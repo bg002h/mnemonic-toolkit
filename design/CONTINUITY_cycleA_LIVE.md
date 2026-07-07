@@ -10,7 +10,21 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS: ✅ PHASES 1+2+3 INTEGRATED (master @ `b59b7a47`). NEXT = Phase 4a WHOLE-DIFF REVIEW → release.
+## STATUS: ✅ WHOLE-DIFF REVIEW GREEN (post-fold). NEXT = RELEASE RITUAL (MINOR v0.75.0→v0.76.0). Master @ `b59b7a47`+fold.
+Whole-diff review (`cycleA-postimpl-whole-diff.md`): 0C + funds-fix CONFIRMED correct/coherent/release-ready
+(residue floor fails closed on ALL 20+ callers; verify-bundle false-pass genuinely closed; migration STRENGTHENS
+coverage; fixtures+docs accurate; Sparrow unaffected verified in code). 1I = I-1 clippy `doc_lazy_continuation`
+(`cli_import_wallet_bitcoin_core.rs:920` `+ `-bullet) — FOLDED (`then import via `) + M-2 nit tightened. CONFIRMED
+`cargo clippy --all-targets -D warnings`=exit0, suite 3583/0 + wc-codec 100/0. **Whole-diff GREEN.**
+**RELEASE RITUAL (Phase 4b — NEXT):** current v0.75.0 → **MINOR v0.76.0** (breaking: previously-accepted `/0/*`|`/**`
+imports now hard-fail). Sites: `crates/mnemonic-toolkit/Cargo.toml` version; Cargo.lock; BOTH READMEs (root +
+crate); `fuzz/Cargo.lock`; `install.sh` SELF-pin (v0.75.0→v0.76.0; NOT the frozen md-cli sibling pin — breaks
+`sibling-pin-check`); CHANGELOG (funds fix C1 + Core interim + `/**` hard-fail + D1 residual disclosure); re-vendor
+iff dep bump (NONE). FOLLOWUPS: C1/this cycle RESOLVED; file `bitcoin-core-receive-change-pair-merge`,
+`concrete-nonranged-xpub-implied-wildcard`, `bip389-double-star-shorthand-support`. md/mk/ms NO-BUMP; do NOT touch
+md-codec. Then direct-FF push + tag `mnemonic-toolkit-v0.76.0`; verify sibling-pin-check + changelog-check + repro
+binary post-tag.
+### (superseded) PHASES 1+2+3 INTEGRATED. NEXT = Phase 4a WHOLE-DIFF REVIEW.
 Phase 3 (docs) integrated `b59b7a47`: manual `41-mnemonic.md` (authoritative non-representable-use-site anchor +
 verify-bundle exit2/exit4 split + refusal rows + --import-json note) + `45-foreign-formats.md` (Core interim
 hard-fail + hand-combine-to-`<0;1>` workaround [receive=0/change=1] + Specter/BSMS notes). Docs accuracy VERIFIED

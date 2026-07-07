@@ -917,7 +917,7 @@ fn core_fixture_file_explicit_active_false_parses() {
 /// (residue-reject floor) — this legacy non-multipath receive/change pair now
 /// HARD-FAILS at entry 0 (`/0/*`) before selection ever runs, with the
 /// bitcoin-core interim-limitation workaround message (combine to `<0;1>/*`
-/// + `--format descriptor`; automatic recombination is the split-out
+/// then import via `--format descriptor`; automatic recombination is the split-out
 /// `bitcoin-core-receive-change-pair-merge` follow-up). The fixture file
 /// itself is KEPT UNCHANGED — it is both the canonical legacy-split funds
 /// regression this cell now proves closed AND the future INPUT fixture for

@@ -965,7 +965,7 @@ fn bundle_import_json_fixed_step_descriptor_replay_rejects() {
         "fixed-step envelope replay must reject exit 2; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("re-parse failed") || stderr.contains("import-json"),
+        stderr.contains("import-json"),
         "reject must be scoped to the --import-json replay; stderr: {stderr}"
     );
     assert!(
