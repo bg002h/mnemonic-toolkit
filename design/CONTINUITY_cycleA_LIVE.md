@@ -10,7 +10,17 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS: ✅ WHOLE-DIFF REVIEW GREEN (post-fold). NEXT = RELEASE RITUAL (MINOR v0.75.0→v0.76.0). Master @ `b59b7a47`+fold.
+## STATUS: RELEASE-PREP DONE (v0.76.0), verified locally → committing + final suite → PUSH + TAG. Master @ 88691aad+release.
+Release-prep: 6 version sites → 0.76.0 (Cargo.toml, Cargo.lock, both READMEs, fuzz/Cargo.lock, install.sh SELF-pin);
+sibling pins FROZEN (md-cli v0.11.2 / ms-cli v0.13.2 / mk-cli v0.11.2 / gui v0.51.0). CHANGELOG [0.76.0] section
+(changelog-check ✓). FOLLOWUPS: `descriptor-use-site-collapse` RESOLVED + 3 new OPEN (`bitcoin-core-receive-change-
+pair-merge`, `concrete-nonranged-xpub-implied-wildcard`, `bip389-double-star-shorthand-support`). VERIFIED: cargo
+check builds; readme_version_current + help fixtures pass; changelog-check grep OK; examples.yml does NOT fire
+(no `.examples-build/` change, tag is `mnemonic-toolkit-v*` not `examples-v*`, direct-push no PR); NO dep bump → NO
+re-vendor. md/mk/ms NO-BUMP, no crates.io publish. **SHIP:** direct-FF push origin/master + tag
+`mnemonic-toolkit-v0.76.0`; then verify CI (rust clippy/test, changelog-check, sibling-pin-check, install-pin-check,
+manual.yml, musl/bsd) + repro binary post-tag.
+### (superseded) WHOLE-DIFF REVIEW GREEN. NEXT = RELEASE RITUAL.
 Whole-diff review (`cycleA-postimpl-whole-diff.md`): 0C + funds-fix CONFIRMED correct/coherent/release-ready
 (residue floor fails closed on ALL 20+ callers; verify-bundle false-pass genuinely closed; migration STRENGTHENS
 coverage; fixtures+docs accurate; Sparrow unaffected verified in code). 1I = I-1 clippy `doc_lazy_continuation`
