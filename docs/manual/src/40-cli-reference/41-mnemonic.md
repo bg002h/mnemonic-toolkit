@@ -167,12 +167,16 @@ receive/change convention: index 0 = receive, index 1 = change). The
 expanded to the multipath form internally before this check runs, so a
 normal Sparrow import is unaffected by this rule.
 
-**Bitcoin Core interim limitation.** `bitcoin-cli listdescriptors`
+**Bitcoin Core auto-recombination.** `bitcoin-cli listdescriptors`
 exports the receive and change branches of an account as two *separate*
 descriptor entries (`/0/*` + `/1/*`), never as one combined multipath
-entry — so a standard Bitcoin Core export now hard-fails this check on
-each entry. See [Foreign wallet formats → Bitcoin Core](#bitcoin-core-listdescriptors)
-for the workaround and its interim status.
+entry. Rather than hard-fail this check on each entry, `import-wallet
+--format bitcoin-core` **auto-recombines** a same-key receive/change
+pair into one `/<0;1>/*` multipath bundle at parse time (a
+receive/change-shaped pair whose keys differ is still refused —
+distinct keys are different wallets). See
+[Foreign wallet formats → Bitcoin Core](#bitcoin-core-listdescriptors)
+for the guard matrix.
 
 **`verify-bundle`'s two intake paths differ.** A **concrete** descriptor
 (inline `[fp/path]xpub` keys) rejects at exit 2 (`DescriptorParse`)
@@ -1251,8 +1255,10 @@ descriptor whose key placeholder is followed by a fixed derivation step
 (`/0/*`) or the `/**` shorthand — rather than the multipath `/<a;b>/*`
 (or bare `/*`) — is refused (exit 2) instead of silently collapsed.
 Bitcoin Core's receive/change split export is the main surface this
-affects in practice — see [foreign wallet formats](#foreign-wallet-formats)
-for the interim workaround.
+would affect — but `--format bitcoin-core` **auto-recombines** a
+same-key receive/change pair into one `/<0;1>/*` multipath bundle before
+this check runs, so a standard split Core export imports cleanly; see
+[foreign wallet formats](#foreign-wallet-formats) for the guard matrix.
 
 ### Synopsis
 
@@ -1399,38 +1405,47 @@ Exit code: `0`. Append `--ms1 <ms1-string>` (or `--slot
 derive the xpub at the declared origin path and assert match
 against the blob's xpub.
 
-### Worked example — Bitcoin Core `listdescriptors` multipath import
+### Worked example — Bitcoin Core `listdescriptors` split import
 
-Bitcoin Core 25+ emits `listdescriptors` output with the
-`<0;1>/*` multipath shape on the canonical receive/change pair.
-Importing this directly yields one bundle per descriptor entry
-(use `--select-descriptor active-receive` to filter to just the
-external chain).
+Bitcoin Core emits `listdescriptors` output as **two separate
+descriptor entries** for the canonical receive/change pair — `.../0/*`
+(`"internal": false`) and `.../1/*` (`"internal": true`) — never a
+combined `<0;1>/*` multipath (multipath is import-only for Core). The
+toolkit **auto-recombines** this same-key pair into **one** `<0;1>/*`
+multipath bundle at parse time, so a standard split export imports
+directly and yields a single merged bundle (not one-per-entry):
 
 ```sh
 bitcoin-cli listdescriptors > /tmp/core-export.json
-mnemonic import-wallet --blob /tmp/core-export.json --select-descriptor active-receive --json
+mnemonic import-wallet --blob /tmp/core-export.json --format bitcoin-core --json
 ```
 
-Stdout (one envelope per emitted bundle; `[...]` collapsed for
-brevity):
+Stdout — one merged envelope (`[...]` collapsed for brevity). The
+merged descriptor carries the `<0;1>/*` multipath use-site and a freshly
+recomputed BIP-380 checksum; its `source_metadata.internal` is `null`
+("both chains"), so the single bundle satisfies both
+`--select-descriptor active-receive` and `active-change`:
 
 ```json
 [
   {
     "bundle": {
       "cosigners": [{"fingerprint": "73c5da0a", "path_raw": "[73c5da0a/84h/0h/0h]", "xpub": "xpub6CatWdi...", "has_entropy": false}],
+      "descriptor": "wpkh([73c5da0a/84h/0h/0h]xpub6CatWdi.../<0;1>/*)#........",
       "network": "mainnet",
       "threshold": null
     },
     "source_format": "bitcoin-core",
-    "source_metadata": {"wallet_name": "mywallet", "active": true, "internal": false, "range": [0, 999]},
-    "roundtrip": {"byte_exact": true, "semantic_match": true, "diff": null, "status": "ok"}
+    "source_metadata": {"wallet_name": "mywallet", "active": true, "internal": null, "range": [0, 999]},
+    "roundtrip": {"byte_exact": false, "semantic_match": true, "diff": "...", "status": "ok"}
   }
 ]
 ```
 
-Stderr is silent under `--json` (the diff lives in the envelope).
+A receive/change-*shaped* pair whose keys or origins differ is **not**
+merged — it is refused (exit 2) with a distinct-key message, since
+distinct keys are different wallets. Stderr is silent under `--json`
+(the diff lives in the envelope).
 Re-run without `--json` to get the human-readable engraving card
 on stdout + the round-trip status on stderr.
 
@@ -1448,7 +1463,8 @@ on stdout + the round-trip status on stderr.
 | Supplied `--ms1` derives a different xpub than declared at cosigner's path | exit 4 `ImportWalletSeedMismatch` (see template above) |
 | `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
 | Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
-| Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) or the `/**` shorthand | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). Bitcoin Core's separate receive/change entries hit this on every standard export — see [foreign wallet formats](#foreign-wallet-formats) |
+| Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) or the `/**` shorthand | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
+| Bitcoin Core receive/change-shaped pair whose keys/origins differ | exit 2 `ImportWalletParse` — not merged (distinct keys are different wallets); see [foreign wallet formats](#foreign-wallet-formats) |
 
 ### Advisories
 

@@ -74,43 +74,33 @@ canonical m-format `ms1` / `mk1` / `md1` engraving cards.
 Bitcoin Core exports the receive chain (`.../0/*`, `"internal": false`)
 and the change chain (`.../1/*`, `"internal": true`) as **two separate
 descriptor entries** — it has never emitted the combined BIP-389
-multipath (`.../<0;1>/*`) form on export. Because `md1`'s key use-site
-must be the multipath `/<0;1>/*` (or bare `/*`) form, importing a
-standard split Core export through `--format bitcoin-core` hard-fails on
-each fixed single step (`/0/*`, `/1/*`) with exit 2 — see
-[Receive/change split exports — interim hard-fail](../45-foreign-formats.md#bitcoin-core-receive-change-hard-fail).
-Automatic receive/change recombination is planned as a follow-up cycle
-(`bitcoin-core-receive-change-pair-merge`); until it ships, combine the
-pair into one multipath descriptor by hand and import it through the
-[commented-descriptor](../45-foreign-formats.md#commented-descriptor)
-door (`--format descriptor`):
+multipath (`.../<0;1>/*`) form on export (it only *accepts* multipath on
+import). Because `md1`'s key use-site must be the multipath `/<0;1>/*`
+(or bare `/*`) form, the toolkit **auto-recombines** a same-key
+receive/change pair into one `/<0;1>/*` multipath bundle when you import
+a standard split Core export through `--format bitcoin-core` — no
+hand-combine step is needed (see
+[Receive/change split exports — auto-recombined](../45-foreign-formats.md#bitcoin-core-receive-change-hard-fail)):
 
 ```sh
 bitcoin-cli -rpcwallet=mywallet listdescriptors > wallet.json
 
-# Combine Core's split receive (/0/*) + change (/1/*) entries into ONE
-# BIP-389 multipath descriptor: same key, differing only in the final
-# step. Index 0 = receive (internal:false); index 1 = change.
-recv=$(jq -r '.descriptors[] | select(.internal == false) | .desc' wallet.json)
-printf '%s\n' "$recv" | sed -E 's,#[a-z0-9]+$,,; s,/0/\*\),/<0;1>/*),' > combined.desc
-# combined.desc:
-#   wpkh([b8688df1/84'/0'/0']xpub6FQya7z.../<0;1>/*)
-
-# Import the combined multipath descriptor, materialize the envelope.
-mnemonic import-wallet --format descriptor --blob combined.desc --json \
+# Import the split export directly. The toolkit recombines the same-key
+# /0/* (receive) + /1/* (change) pair into ONE /<0;1>/* multipath bundle
+# (index 0 = receive, index 1 = change), then materializes the envelope.
+mnemonic import-wallet --format bitcoin-core --blob wallet.json --json \
   > envelope.json
 
 # Synthesize ms1/mk1/md1 cards from the envelope.
 mnemonic bundle --network mainnet --import-json envelope.json
 ```
 
-Combining first is what makes the resulting `md1` correct: the card
-encodes the `/<0;1>/*` multipath use-site (both the receive and change
-chains), not a collapsed single chain. The result is a watch-only
-bundle (`mode: "watch-only"`, `ms1: [""]`) carrying the wallet's xpub
-via `mk1` and the descriptor via `md1`. To attach a seed for the single
-cosigner (e.g., the wallet owner's BIP-39 phrase), supply
-`--slot @0.phrase=...`:
+The recombined `md1` is correct by construction: the card encodes the
+`/<0;1>/*` multipath use-site (both the receive and change chains), not
+a collapsed single chain. The result is a watch-only bundle
+(`mode: "watch-only"`, `ms1: [""]`) carrying the wallet's xpub via `mk1`
+and the descriptor via `md1`. To attach a seed for the single cosigner
+(e.g., the wallet owner's BIP-39 phrase), supply `--slot @0.phrase=...`:
 
 ```sh
 mnemonic bundle --network mainnet \
@@ -123,6 +113,11 @@ the envelope's `m/84'/0'/0'` origin path and asserts equality against
 the blob's xpub. Mismatch returns exit 4 (`ImportWalletSeedMismatch`) —
 the `abandon abandon … about` phrase above is a placeholder that does
 *not* match this wallet's key, so it deliberately trips the guard.
+
+The recombination is **guarded**: only a *same-key* adjacent
+receive/change pair merges. A receive/change-*shaped* pair whose keys or
+origins differ is refused (exit 2) rather than merged — distinct keys
+are different wallets.
 
 ## Recipe 3 — BSMS Round-2 → BIP-388 wallet-policy
 

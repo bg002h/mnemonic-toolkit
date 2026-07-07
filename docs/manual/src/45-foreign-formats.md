@@ -263,37 +263,57 @@ the full enumeration. Under `--format bsms`, any non-default value
 emits stderr NOTICE (BSMS Round-2 carries a single descriptor) and
 is treated as `all`.
 
-### Receive/change split exports — interim hard-fail {#bitcoin-core-receive-change-hard-fail}
+### Receive/change split exports — auto-recombined {#bitcoin-core-receive-change-hard-fail}
 
 `bitcoin-cli listdescriptors` exports the receive branch (`.../0/*`,
 `"internal": false`) and the change branch (`.../1/*`, `"internal":
 true`) of one account as **two separate descriptor entries** with
 otherwise-identical keys — Bitcoin Core has never emitted the combined
 BIP-389 multipath (`.../<0;1>/*`) form on export (only accepting it on
-*import*). Because each entry now goes through the toolkit's
-[use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps),
-a fixed single step like `/0/*` is refused rather than silently
-accepted — so importing a **standard** two-entry Core export hard-fails
-on each entry (exit 2).
+*import*). Because `md1`'s key use-site must be the multipath `/<0;1>/*`
+(or bare `/*`) form — a fixed single step like `/0/*` is
+[un-representable](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps) —
+the toolkit **auto-recombines** a same-key receive/change pair into one
+`/<0;1>/*` multipath bundle at parse time, so importing a **standard**
+two-entry Core export through `--format bitcoin-core` "just works" and
+yields ONE merged bundle (not one-per-entry):
 
-This is an *interim* limitation, not a permanent one: automatic
-receive/change recombination is planned as a follow-up cycle. Until it
-ships, the workaround is to combine the pair into ONE multipath
-descriptor by hand and import it through the [commented-descriptor](#commented-descriptor)
-door instead of the native `bitcoin-core` blob:
+```sh
+mnemonic import-wallet --format bitcoin-core --blob wallet.json --json
+```
 
-1. Take the receive (`internal: false`) and change (`internal: true`)
-   entries for the same account — same keys, differing only in the
-   `/0/*` vs `/1/*` final step.
-2. Replace the differing final step with `/<0;1>/*` (index 0 = receive,
-   matching the `internal: false` entry; index 1 = change).
-3. Save the combined descriptor to a file (optionally preceded by
-   `#`-comment lines) and import it with
-   `mnemonic import-wallet --format descriptor --blob <file>`.
+The recombination reads the receive (`internal: false`) step as the
+first multipath alternative and the change (`internal: true`) step as
+the second (`/<0;1>/*`), then recomputes the BIP-380 checksum. Under
+`--select-descriptor`, the single merged bundle satisfies **both**
+`active-receive` and `active-change` (its `internal` provenance is
+`null`, i.e. "both chains").
+
+The merge is **maximally strict** — it fires only for a *provable*
+same-key adjacent pair: identical script/threshold and identical
+per-key `(fingerprint, origin, xpub)` (excluding the final step), each
+side a fixed single unhardened wildcard step, differing steps, and
+disagreeing `internal` flags. Anything else is left untouched:
+
+- A receive/change-*shaped* pair whose keys or origins **differ** is
+  refused (exit 2) with a distinct-key message rather than merged —
+  distinct keys are different wallets, never combined.
+- A lone fixed-step entry with no receive/change partner, a hardened
+  final step, three-or-more entries sharing a key, or a script-path
+  `tr` (tapscript leaves) all fall through to the ordinary
+  [use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps)
+  (exit 2).
 
 A Core export where every entry is **already** BIP-389 multipath (some
 wallets combine legacy + segwit accounts this way) is unaffected — each
-multipath entry parses and imports normally.
+multipath entry has no fixed step to recombine and imports normally.
+
+> **Manual `<0;1>/*` combine (aside).** If you prefer to combine the
+> split pair yourself, you can still rewrite the differing final step to
+> `/<0;1>/*` by hand and import the result through the
+> [commented-descriptor](#commented-descriptor) door
+> (`--format descriptor`). The automatic recombination above makes this
+> unnecessary for standard Core exports.
 
 ## Sparrow Wallet (`--format sparrow`) {#sparrow-wallet}
 
@@ -468,13 +488,14 @@ analogous to Bitcoin Core's `timestamp` field).
 
 Specter's common "Export Wallet" share is **receive-only** — it carries
 no separate change-branch field, so it never had a pairable second entry
-to begin with. A receive-only descriptor is a fixed single step (`/0/*`,
-not multipath), so it now hits the same
+to begin with. A receive-only descriptor is a lone fixed single step
+(`/0/*`, not multipath) with no change partner, so the
+[receive/change auto-recombination](#bitcoin-core-receive-change-hard-fail)
+cannot apply (there is no second chain in the blob to merge with) and it
+hits the
 [use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps)
-as Bitcoin Core's split entries (exit 2) — there is no pair-merge
-possible here (no change branch is present in the blob to merge with).
-A Specter export whose `descriptor` field is already the multipath
-`/<0;1>/*` form is unaffected.
+(exit 2). A Specter export whose `descriptor` field is already the
+multipath `/<0;1>/*` form is unaffected.
 
 ## Coldcard single-sig wallet.json (`--format coldcard`) {#coldcard-singlesig}
 
@@ -1015,8 +1036,10 @@ FOLLOWUP):
   Defines the descriptor checksum the toolkit re-computes during
   canonicalization. <https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki>
 - **BIP-389** — *Multipath descriptor expressions*. Defines the
-  `<0;1>/*` multipath shape Bitcoin Core 25+ emits by default in
-  `listdescriptors` output. <https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki>
+  `<0;1>/*` multipath shape. Bitcoin Core *accepts* it on import but
+  never *emits* it from `listdescriptors` (which exports the split
+  `/0/*` + `/1/*` pair); the toolkit auto-recombines that split pair
+  into this form. <https://github.com/bitcoin/bips/blob/master/bip-0389.mediawiki>
 - **rust-miniscript** — the library that backs the toolkit's
   descriptor parsing, canonicalization, and re-rendering paths.
   <https://github.com/rust-bitcoin/rust-miniscript>
