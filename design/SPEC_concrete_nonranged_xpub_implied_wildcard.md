@@ -9,7 +9,7 @@ different wallet.**
 - **FOLLOWUP slug:** `concrete-nonranged-xpub-implied-wildcard` (`design/FOLLOWUPS.md`; surfaced 2026-07-06, Cycle A design decision D1).
 - **Recon:** `cycle-prep-recon-concrete-nonranged-xpub-implied-wildcard.md` (2026-07-07, SHA `e092f679`) — verdict CLEAN, funds claim EMPIRICALLY CONFIRMED (6-step repro).
 - **Target release:** `mnemonic-toolkit-v0.79.0` (MINOR). md/ms/mk codecs **NO-BUMP**. No GUI/`schema_mirror` impact.
-- **Status:** DRAFT — pending opus-architect R0 loop to 0C/0I before any implementation (CLAUDE.md Conventions bullet 1).
+- **Status:** ✅ **R0-GREEN (0C/0I) at round 1** (rev-2, +5 Minor folds: M1 taproot cells, M2 CHANGELOG-new-not-rewrite, M3 FOLLOWUPS flip, M4 byte-exact-prefix acceptance, M5 completeness+placement notes). Review: `design/agent-reports/cycleD-spec-r0-round-1.md`. Cleared for the IMPLEMENTATION_PLAN R0 loop.
 
 ---
 
@@ -85,17 +85,28 @@ if !tail.starts_with('/') {
   (§2), so the canonical template form is unaffected. (Recon §Cross-cutting #6: the sibling case `xpub/0` — a
   fixed step, no wildcard — is ALREADY caught by the Cycle-A residue floor in `lex_placeholders`; this fix
   closes ONLY the remaining "immediate terminator / no `/` at all" gap.)
-- **Error:** reuse `ToolkitError::ImportWalletParse` with the function's existing `"import-wallet: bsms: parse
-  error: …"` prefix so the `descriptor_concrete_to_resolved_slots` caller (@411) remaps it to `DescriptorParse`
-  (exit 2) uniformly for `bundle`/`verify-bundle`, matching the Cycle-A floor's exit code. Message (funds-
-  framed): name the offending `@N`, state that a concrete xpub with no derivation suffix cannot be represented
-  in md1 (which always encodes a ranged use-site), and point at the remedy — append `/*` (ranged) or
-  `/<0;1>/*` (receive/change multipath) to intend a ranged wallet. **R0 to decide** whether a dedicated
-  alphabetically-ordered `ToolkitError` variant is warranted vs. reusing `ImportWalletParse`+remap; default =
-  reuse (matches Cycle-A, no new variant).
-- **Single choke point:** because `descriptor_concrete_to_resolved_slots` (verify-bundle/bundle concrete fork)
-  shares `concrete_keys_to_placeholders` (@411), this one check closes BOTH the encode silent-accept AND the
-  verify-bundle false-pass.
+- **Error:** reuse `ToolkitError::ImportWalletParse`. **Acceptance criterion (R0-round-1 M4):** the message MUST
+  begin **byte-exactly** with `import-wallet: bsms: parse error: ` so the `descriptor_concrete_to_resolved_slots`
+  remap (@413-414, strips exactly that prefix → `DescriptorParse` exit 2 for bundle/verify-bundle) and each
+  import-wallet parser's `.replacen("import-wallet: bsms:", "import-wallet: <fmt>:", 1)` both fire — a drifted
+  prefix would leak `bsms:` into a `descriptor`/`electrum`/… message. Both error kinds map to exit 2
+  (`error.rs:597,610`), so the remap is exit-neutral. Message (funds-framed): name the offending `@N`, state a
+  concrete xpub with no derivation suffix cannot be represented in md1 (which always encodes a ranged
+  use-site), and point at the remedy — append `/*` (ranged) or `/<0;1>/*` (receive/change multipath) to intend
+  a ranged wallet. Default = reuse `ImportWalletParse`+remap (matches Cycle-A, no new variant); a dedicated
+  alphabetically-ordered variant is NOT warranted.
+- **Placement side-effect (R0-round-1 M5b):** the check sits right after `let m = cap.get(0)…`, BEFORE the xpub
+  base58 decode (@351). So a key that is BOTH malformed-base58 AND non-ranged reports the "no derivation
+  suffix" reject, not "xpub decode failed" — harmless (both exit 2); noted so a test does NOT assert the decode
+  message on such an input.
+- **Single choke point + completeness (R0-round-1 M5a):** `concrete_keys_to_placeholders` is the ONLY toolkit
+  path that builds a `UseSitePath` from a concrete xpub — `export-wallet --descriptor` parses via rust-miniscript
+  `MsDescriptor::from_str` (`export_wallet.rs:803`, which faithfully preserves a non-ranged key → no md1 card,
+  no silent ranging) and `compare-cost --descriptor` is key-agnostic (`cost/strip.rs` / `compare_cost.rs:16`, no
+  `concrete_keys_to_placeholders`/`UseSitePath`). `descriptor_concrete_to_resolved_slots` (the verify-bundle/
+  bundle concrete fork) shares `concrete_keys_to_placeholders` (@411). So this one check closes BOTH the
+  encode silent-accept AND the verify-bundle false-pass, and there is no other concrete-xpub→`UseSitePath`
+  surface to miss.
 
 ## §6 — Test / oracle matrix (TDD-first; the funds anchor is the closed false-pass)
 
@@ -115,8 +126,12 @@ All against the toolkit CLI. Bold = funds oracle.
 7. **Fixed-step still rejects (unchanged floor)** — `wpkh([fp]xpub/0/*)` still rejects via the Cycle-A residue
    floor (confirm the new check doesn't interfere — it sees the `/` and passes through to the floor).
 8. **`import-wallet --format descriptor` / `bsms`** carrying a concrete non-ranged key → rejects (same choke
-   point; confirm the error surfaces with the right exit).
-9. No-op / determinism: existing concrete-descriptor tests stay green.
+   point; confirm the error surfaces with the right exit + byte-exact prefix remap per §5/M4).
+9. **Taproot key-position (R0-round-1 M1):** **REJECT `tr([fp/86h/0h/0h]xpub)`** (exit 2, names `@0`) +
+   **ACCEPT (regression) `tr([fp/86h/0h/0h]xpub/<0;1>/*)`** — the mechanism is script-agnostic (keyed on
+   `key_regex`, fires in any key position). (`tr(xpub)` with NO `[origin]` never matches `key_regex` → handled
+   by the pre-existing origin-required path, `classify_descriptor_form` rule 4 — no coverage needed there.)
+10. No-op / determinism: existing concrete-descriptor tests stay green.
 
 Full `cargo test -p mnemonic-toolkit` MUST be green per-phase.
 
@@ -127,8 +142,12 @@ Full `cargo test -p mnemonic-toolkit` MUST be green per-phase.
 - **Lockstep: none** — no clap flag/subcommand/dropdown change → no manual `40-cli-reference` mirror, no GUI
   `schema_mirror`. (Recon §4 confirmed zero manual/GUI mention of this residual.) If any manual prose or a
   `verify-examples` golden documents a concrete-non-ranged example, re-grep at impl and update; expected none.
-- **CHANGELOG:** replace the `CHANGELOG.md:48` "Deferred residual" line's disposition with a `[0.79.0]`
-  fixed-in-this-release entry.
+- **CHANGELOG (R0-round-1 M2):** add a NEW `## mnemonic-toolkit [0.79.0]` entry (funds-framed, `[funds]…`
+  style mirroring v0.77.0/v0.78.0). **LEAVE the shipped `[0.76.0]` "Deferred residual" line (`CHANGELOG.md:48`)
+  intact** — do NOT rewrite shipped history; optionally append "(RESOLVED in 0.79.0)" to it.
+- **FOLLOWUPS.md status flip (R0-round-1 M3; [[feedback_followup_status_discipline]]):** flip
+  `design/FOLLOWUPS.md` entry `concrete-nonranged-xpub-implied-wildcard` `OPEN → ✓ RESOLVED (v0.79.0)` **in the
+  shipping commit**.
 - **Release ritual (v0.77.0/v0.78.0 sequence):** Cargo.toml + workspace/fuzz Cargo.lock + both READMEs +
   `scripts/install.sh:32` self-pin (NOT frozen sibling pins) + `.examples-build/gen.sh` version-check +
   embedded strings + regen `Examples.md` + CHANGELOG. Re-vendor N/A (no dep bump). Direct-FF + tag.
