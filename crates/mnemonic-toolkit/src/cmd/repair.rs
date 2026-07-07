@@ -114,6 +114,12 @@ pub fn run<R: Read, W: Write, E: Write>(
     let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
     let mut ambiguous_seen = false;
     let mut substitution_seen = false;
+    // Cycle E (`mk1-repair-set-level-reverify`) — set to true when ANY
+    // group's `repair_card` outcome is `SetVerify::Unverified` (an
+    // incomplete corrected mk1 chunk_set_id group — a partial-plate
+    // repair, preserved but unverified). Folded into the exit-4 VERIFY-ME
+    // mapping alongside `ambiguous_seen` (SPEC §2 rule 3 / §3).
+    let mut candidate_seen = false;
 
     // No-op notice: --max-subst only takes effect when --max-indel >= 1.
     if args.max_subst >= 1 && args.max_indel == 0 {
@@ -149,6 +155,15 @@ pub fn run<R: Read, W: Write, E: Write>(
                     emit_repair_json(&outcome, stdout)?;
                 } else {
                     emit_repair_text(&outcome, stdout)?;
+                }
+                // Cycle E — an incomplete corrected mk1 chunk_set_id group
+                // (partial-plate repair) is preserved but UNVERIFIED; loud
+                // advisory + fold into the exit-4 VERIFY-ME mapping below
+                // (PM-r2-3: the exit-4 mapping is a `mnemonic repair`
+                // CALLER concern, not baked into the shared engine).
+                if let repair::SetVerify::Unverified { reason } = &outcome.set_verify {
+                    candidate_seen = true;
+                    writeln!(stderr, "repair: {reason}").ok();
                 }
             }
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
@@ -223,8 +238,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         writeln!(stderr, "repair: WARNING \u{2014} candidate(s) required a substitution and are NOT confirmed corrections; derive an address from each and verify it controls your funds before trusting any (some may be false positives)").ok();
     }
 
+    // Cycle E — an Unverified (partial-set) mk1 group folds into the same
+    // exit-4 VERIFY-ME precedence tier as an ambiguous indel recovery
+    // (SPEC §2 rule 3 / §3); `indel_exit_code` itself is unchanged.
     Ok(repair::indel_exit_code(
-        ambiguous_seen,
+        ambiguous_seen || candidate_seen,
         substitution_seen,
         total_repairs,
     ))

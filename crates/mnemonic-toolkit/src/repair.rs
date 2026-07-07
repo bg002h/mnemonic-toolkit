@@ -30,7 +30,8 @@ use mk_codec::string_layer::bch::{
     LONG_MASK, LONG_SHIFT, REGULAR_MASK, REGULAR_SHIFT,
 };
 use mk_codec::string_layer::bch_decode::{decode_long_errors, decode_regular_errors};
-use std::collections::BTreeSet;
+use mk_codec::string_layer::{decode_string, StringLayerHeader};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{IsTerminal, Read, Write};
 
 use crate::error::ToolkitError;
@@ -438,6 +439,29 @@ pub struct RepairOutcome {
     pub kind: CardKind,
     pub corrected_chunks: Vec<String>,
     pub repairs: Vec<RepairDetail>,
+    /// Cycle E (`mk1-repair-set-level-reverify`) — SPEC §2 tri-state
+    /// set-level re-verify discriminant. `Ms1` / `Md1` always report
+    /// `Blessed` (their sibling-codec delegates only ever return `Ok` on
+    /// full decode success already, so there is no behavior change for
+    /// those kinds). `Mk1` reports `Blessed` when every chunk_set_id group
+    /// that underwent a per-string correction reassembles cleanly via
+    /// `mk_codec::decode`; `Unverified` when such a group is INCOMPLETE (a
+    /// partial-plate repair — preserved, but cannot be set-verified until
+    /// the full card is reassembled). A **Reject** (a complete-and-
+    /// consistent corrected group whose `decode` fails — the funds fix) is
+    /// never `Ok` at all; it surfaces as
+    /// `RepairError::SetReassemblyMismatch` from `repair_card` instead.
+    pub set_verify: SetVerify,
+}
+
+/// See [`RepairOutcome::set_verify`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SetVerify {
+    /// Confident recovery — safe to treat as the real card.
+    Blessed,
+    /// A corrected chunk_set_id group is incomplete (a single-plate /
+    /// partial-set repair); `reason` is the loud user-facing advisory text.
+    Unverified { reason: String },
 }
 
 #[derive(Debug)]
@@ -485,6 +509,27 @@ pub enum RepairError {
     /// it. `detail` is the upstream codec's `Display`-rendered error.
     PostCorrectionDecodeFailed {
         chunk_index: Option<usize>,
+        detail: String,
+    },
+    /// Cycle E (`mk1-repair-set-level-reverify`) — SPEC §2 rule 2, the
+    /// FUNDS FIX. An mk1 chunk_set_id group is complete-and-consistent
+    /// (every index `0..total_chunks` present exactly once) after
+    /// per-string BCH correction, but the corrected group does NOT
+    /// reassemble through `mk_codec::decode` — the per-chunk correction(s)
+    /// aliased to a DIFFERENT valid codeword, not the original card.
+    /// **Deliberately NOT an indel-trigger** (`is_indel_trigger` excludes
+    /// it, plan-R0 PM-r2-1) — a set-reassembly mismatch is not a shape
+    /// `--max-indel` search can meaningfully act on, and routing it there
+    /// would replace this variant's precise message with the generic
+    /// "indel unrecoverable" one.
+    SetReassemblyMismatch {
+        /// Human-readable identifier of the failing group (e.g.
+        /// `"chunk_set_id 0x12345"` or `"single-string chunk 2"`), so a
+        /// batch invocation containing multiple groups tells the user
+        /// WHICH one failed (plan-R0 PM-r2-2) and lets them re-run the
+        /// good group alone.
+        group: String,
+        /// The underlying `mk_codec::decode` error's `Display` text.
         detail: String,
     },
 }
@@ -564,6 +609,10 @@ impl std::fmt::Display for RepairError {
                 Some(i) => write!(f, "repair: chunk {i} post-correction decode failed: {detail}"),
                 None => write!(f, "repair: post-correction decode failed: {detail}"),
             },
+            RepairError::SetReassemblyMismatch { group, detail } => write!(
+                f,
+                "repair: each chunk corrected individually, but the set does not reassemble ({group}): {detail} — the correction(s) may have aliased to a DIFFERENT valid card; this output is NOT trustworthy"
+            ),
         }
     }
 }
@@ -747,6 +796,278 @@ fn repair_chunk_one(
     }))
 }
 
+// ============================================================================
+// Cycle E (`mk1-repair-set-level-reverify`) — SPEC §2 tri-state set-level
+// re-verify classifier. Operates on the ALREADY per-string-corrected mk1
+// chunk strings (each is a valid BCH codeword by construction — its residue
+// was re-verified == 0 in `repair_chunk_one`), so header re-parsing here
+// never triggers a further BCH correction; it exists purely to recover the
+// `chunk_set_id` / `total_chunks` / `chunk_index` facts needed to group
+// chunks belonging to the same card and re-verify the group as a whole.
+// ============================================================================
+
+/// Per-`chunk_set_id`-group verdict (SPEC §2). Only ever computed for a
+/// group that had AT LEAST ONE chunk corrected — a set of chunks that were
+/// already fully valid carries no aliasing risk, so it is never classified
+/// (see `verify_mk1_set`'s `touched` gate) and is treated as `Bless`-
+/// equivalent by omission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GroupVerdict {
+    /// `mk_codec::decode` on the exact supplied group returned `Ok`.
+    Bless,
+    /// The group is complete-and-consistent (every index `0..total_chunks`
+    /// present exactly once, consistent `total_chunks`) but `decode`
+    /// returned `Err` — the per-chunk correction(s) aliased to a DIFFERENT
+    /// valid codeword. THE FUNDS FIX.
+    Reject,
+    /// The group is incomplete (a partial-set / single-plate repair) —
+    /// cannot set-verify; preserved as an unverified candidate.
+    Candidate,
+}
+
+/// Identifies one independent mk1 "card" within a `repair_card(Mk1, …)`
+/// batch invocation. `Chunked` groups by the wire `chunk_set_id`; each
+/// `SingleString`-headered chunk is its own singleton group (a `SingleString`
+/// mk1 is a complete card by itself — unreachable from real v0.1 encoders per
+/// SPEC §1 count=1 reachability, but handled uniformly rather than assumed
+/// away; using the chunk's own index as the key keeps multiple SingleString
+/// chunks in one batch from colliding into a single false group).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum GroupKey {
+    Chunked(u32),
+    SingleString(usize),
+}
+
+/// Human-readable identifier for a `GroupKey`, used in the `Reject` message
+/// (plan-R0 PM-r2-2 — name WHICH group failed so a batch invocation lets the
+/// user re-run the good group alone).
+fn describe_group_key(key: GroupKey) -> String {
+    match key {
+        GroupKey::Chunked(csid) => format!("chunk_set_id 0x{csid:05x}"),
+        GroupKey::SingleString(idx) => format!("single-string chunk {idx}"),
+    }
+}
+
+struct ParsedMk1Chunk {
+    key: GroupKey,
+    header: StringLayerHeader,
+}
+
+/// Re-parse an already-corrected mk1 chunk string's string-layer header via
+/// mk-codec's OWN decoder (`decode_string` → `StringLayerHeader::
+/// from_5bit_symbols`), so grouping semantics never drift from the library.
+/// The chunk is already a valid BCH codeword (residue verified == 0 by
+/// `repair_chunk_one`), so this never triggers a further correction —
+/// `corrections_applied` is always 0 for well-formed input; a failure here
+/// would indicate a toolkit/mk-codec residue-check divergence, surfaced as
+/// `PostCorrectionDecodeFailed` rather than silently mis-grouping.
+fn parse_mk1_group_key(chunk: &str, idx: usize) -> Result<ParsedMk1Chunk, RepairError> {
+    let decoded = decode_string(chunk).map_err(|e| RepairError::PostCorrectionDecodeFailed {
+        chunk_index: Some(idx),
+        detail: format!("set-reverify header re-parse failed: {e}"),
+    })?;
+    let (header, _consumed) =
+        StringLayerHeader::from_5bit_symbols(decoded.data()).map_err(|e| {
+            RepairError::PostCorrectionDecodeFailed {
+                chunk_index: Some(idx),
+                detail: format!("set-reverify header re-parse failed: {e}"),
+            }
+        })?;
+    let key = match header {
+        StringLayerHeader::Chunked { chunk_set_id, .. } => GroupKey::Chunked(chunk_set_id),
+        StringLayerHeader::SingleString { .. } => GroupKey::SingleString(idx),
+        // `StringLayerHeader` is `#[non_exhaustive]` — mk-codec's OWN
+        // `from_5bit_symbols` only ever constructs these two variants today
+        // (verified against the vendored source); a future third variant is
+        // rejected loudly here rather than silently mis-grouped.
+        _ => {
+            return Err(RepairError::PostCorrectionDecodeFailed {
+                chunk_index: Some(idx),
+                detail: "set-reverify: unrecognized mk1 string-layer header variant \
+                    (requires a toolkit update for this mk-codec version)"
+                    .to_string(),
+            })
+        }
+    };
+    Ok(ParsedMk1Chunk { key, header })
+}
+
+/// True iff `headers` (all members of ONE `GroupKey` group, in arbitrary
+/// order) form a complete, internally-consistent chunk set: every index
+/// `0..total_chunks` present EXACTLY once, with every member reporting the
+/// SAME `total_chunks`. Discriminates on the PARSED indices, never on the
+/// overloaded error string (SPEC §2 header-corruption note) — a substitution
+/// that corrupts `total_chunks` itself just misclassifies the group as
+/// incomplete, never as a false confident success.
+fn group_is_complete_and_consistent(headers: &[&StringLayerHeader]) -> bool {
+    match headers.first() {
+        Some(StringLayerHeader::SingleString { .. }) => headers.len() == 1,
+        Some(StringLayerHeader::Chunked { total_chunks, .. }) => {
+            let total = *total_chunks as usize;
+            if headers.len() > total {
+                return false; // more members than total_chunks declares
+            }
+            let mut seen = vec![false; total];
+            for h in headers {
+                match h {
+                    StringLayerHeader::Chunked {
+                        total_chunks: t,
+                        chunk_index,
+                        ..
+                    } => {
+                        if *t as usize != total {
+                            return false; // inconsistent total_chunks within one csid
+                        }
+                        let idx = *chunk_index as usize;
+                        if idx >= total || seen[idx] {
+                            return false; // out-of-range or duplicate index
+                        }
+                        seen[idx] = true;
+                    }
+                    // Unreachable by construction — GroupKey partitions
+                    // Chunked from SingleString — but handled defensively
+                    // (fail-closed: NOT complete-and-consistent) rather
+                    // than panicking on a future grouping change or a
+                    // future `#[non_exhaustive]` variant.
+                    _ => return false,
+                }
+            }
+            seen.iter().all(|&done| done)
+        }
+        // `None` (empty group) never occurs (built from ≥1 member); a future
+        // `#[non_exhaustive]` header variant fails closed (not complete).
+        _ => false,
+    }
+}
+
+/// Fold two `GroupVerdict`s to the dominant one across a multi-group batch
+/// (SPEC §2 — `reject > candidate > bless`).
+fn fold_verdict(acc: Option<GroupVerdict>, v: GroupVerdict) -> GroupVerdict {
+    match (acc, v) {
+        (Some(GroupVerdict::Reject), _) | (_, GroupVerdict::Reject) => GroupVerdict::Reject,
+        (Some(GroupVerdict::Candidate), _) | (_, GroupVerdict::Candidate) => {
+            GroupVerdict::Candidate
+        }
+        _ => GroupVerdict::Bless,
+    }
+}
+
+/// SPEC §2 tri-state re-verify over the FULL supplied mk1 `corrected_chunks`
+/// (already per-string BCH-corrected). Groups by `chunk_set_id`, classifies
+/// only the groups that had at least one chunk actually corrected (an
+/// all-already-valid group carries no aliasing risk — the task is
+/// specifically to re-verify a set AFTER a per-string correction, so an
+/// untouched group is left exactly as today: `Bless`-equivalent, no
+/// decode attempt, no advisory), then folds to the dominant outcome.
+///
+/// Returns `Ok(SetVerify::Blessed)` / `Ok(SetVerify::Unverified{..})` on
+/// Bless / Candidate; a dominant `Reject` returns `Err(RepairError::
+/// SetReassemblyMismatch)` — never `Ok` (plan-R0 PM-r2-2: a batch that folds
+/// to Reject suppresses ALL output, including any co-batched Bless group).
+fn verify_mk1_set(
+    corrected_chunks: &[String],
+    repairs: &[RepairDetail],
+) -> Result<SetVerify, RepairError> {
+    let touched: HashSet<usize> = repairs.iter().map(|r| r.chunk_index).collect();
+
+    // Parse each corrected chunk's header for grouping. A header-region
+    // parse failure (e.g. a reserved/invalid type byte, or a malformed
+    // total_chunks/chunk_index) on a chunk that WAS corrected is itself one
+    // of the decode-Err shapes SPEC §2 rule 2 explicitly covers ("a
+    // header-region ChunkedHeaderMalformed/MixedHeaderTypes... failure from
+    // a hash-colliding miscorrection") — a per-string BCH correction landed
+    // on a valid CHECKSUM whose interpreted header is nonetheless garbage.
+    // Fold that in as an immediate Reject signal for this chunk rather than
+    // hard-aborting the whole classify via `?` (which would surface the
+    // wrong, more primitive `PostCorrectionDecodeFailed` instead of the
+    // funds-relevant `SetReassemblyMismatch`). An UNTOUCHED (already-valid)
+    // chunk failing to parse should never occur for genuine encoder output
+    // — skip it (ungrouped) rather than reject on something the toolkit
+    // never corrected.
+    let mut parsed: Vec<Option<ParsedMk1Chunk>> = Vec::with_capacity(corrected_chunks.len());
+    let mut dominant: Option<GroupVerdict> = None;
+    let mut first_reject: Option<(String, String)> = None;
+    for (i, c) in corrected_chunks.iter().enumerate() {
+        match parse_mk1_group_key(c, i) {
+            Ok(p) => parsed.push(Some(p)),
+            Err(e) => {
+                parsed.push(None);
+                if touched.contains(&i) {
+                    if first_reject.is_none() {
+                        first_reject =
+                            Some((format!("chunk {i} (post-correction header)"), e.to_string()));
+                    }
+                    dominant = Some(fold_verdict(dominant, GroupVerdict::Reject));
+                }
+            }
+        }
+    }
+
+    // Group the well-formed parses by chunk_set_id, preserving first-seen
+    // order for deterministic messages regardless of HashMap iteration
+    // order.
+    let mut order: Vec<GroupKey> = Vec::new();
+    let mut members: HashMap<GroupKey, Vec<usize>> = HashMap::new();
+    for (i, p) in parsed.iter().enumerate() {
+        if let Some(p) = p {
+            members
+                .entry(p.key)
+                .or_insert_with(|| {
+                    order.push(p.key);
+                    Vec::new()
+                })
+                .push(i);
+        }
+    }
+
+    for key in &order {
+        let idxs = &members[key];
+        if !idxs.iter().any(|i| touched.contains(i)) {
+            // Untouched group — no aliasing risk, skip re-verify entirely.
+            continue;
+        }
+        let headers: Vec<&StringLayerHeader> = idxs
+            .iter()
+            .map(|&i| {
+                &parsed[i]
+                    .as_ref()
+                    .expect("grouped only from Some(..) parses")
+                    .header
+            })
+            .collect();
+        let verdict = if !group_is_complete_and_consistent(&headers) {
+            GroupVerdict::Candidate
+        } else {
+            let refs: Vec<&str> = idxs.iter().map(|&i| corrected_chunks[i].as_str()).collect();
+            match mk_codec::decode(&refs) {
+                Ok(_) => GroupVerdict::Bless,
+                Err(e) => {
+                    if first_reject.is_none() {
+                        first_reject = Some((describe_group_key(*key), e.to_string()));
+                    }
+                    GroupVerdict::Reject
+                }
+            }
+        };
+        dominant = Some(fold_verdict(dominant, verdict));
+    }
+
+    match dominant.unwrap_or(GroupVerdict::Bless) {
+        GroupVerdict::Bless => Ok(SetVerify::Blessed),
+        GroupVerdict::Candidate => Ok(SetVerify::Unverified {
+            reason: "correction UNVERIFIED — a >4-error correction can alias to a different card; \
+                reassemble the full card (`mk decode` / import the full set) to confirm; \
+                BIP-93 recommends confirmation"
+                .to_string(),
+        }),
+        GroupVerdict::Reject => {
+            let (group, detail) =
+                first_reject.expect("dominant Reject implies a recorded reject detail");
+            Err(RepairError::SetReassemblyMismatch { group, detail })
+        }
+    }
+}
+
 /// Primary entry point. Per-chunk atomic per D8: if ANY chunk fails, returns
 /// `Err` naming that chunk's index; partially-repaired sibling chunks are NOT
 /// returned.
@@ -775,10 +1096,17 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                     None => corrected_chunks.push(chunk.clone()),
                 }
             }
+            // Cycle E — SPEC §2 tri-state set-level re-verify (the funds
+            // fix). A dominant Reject short-circuits via `?` to an `Err`,
+            // discarding corrected_chunks/repairs entirely (plan-R0
+            // PM-r2-2 — a batch that folds to Reject suppresses ALL
+            // output, not just the failing group).
+            let set_verify = verify_mk1_set(&corrected_chunks, &repairs)?;
             Ok(RepairOutcome {
                 kind,
                 corrected_chunks,
                 repairs,
+                set_verify,
             })
         }
         CardKind::Ms1 => {
@@ -814,6 +1142,10 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                 kind,
                 corrected_chunks,
                 repairs,
+                // ms1 delegates entirely to ms_codec::decode_with_correction,
+                // which only ever returns `Ok` on full decode success — no
+                // behavior change from Cycle E.
+                set_verify: SetVerify::Blessed,
             })
         }
         CardKind::Md1 => {
@@ -1097,8 +1429,13 @@ impl IndelOracle for Md1IndelOracle {
 /// `is_indel_trigger` is ever reached, so the suggestion is always
 /// preserved at the default.
 ///
-/// Excluded: `EmptyInput | UnsupportedCodeVariant | IndelUnrecoverable`
-/// (no recoverable indel class; pass through to today's typed error).
+/// Excluded: `EmptyInput | UnsupportedCodeVariant | IndelUnrecoverable |
+/// SetReassemblyMismatch` (no recoverable indel class; pass through to
+/// today's typed error). `SetReassemblyMismatch` (Cycle E, plan-R0 PM-r2-1)
+/// is deliberately excluded: it names a set-reassembly funds-mismatch, not a
+/// transcription indel, and routing it into `--max-indel` search would
+/// replace its precise "does not reassemble" message with the generic
+/// "indel unrecoverable" one while adding no recovery capability.
 ///
 /// Implemented as an exhaustive `match` so a future new `RepairError` variant
 /// forces a compile-time decision here rather than silently defaulting.
@@ -1111,7 +1448,8 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
         | RepairError::ReservedInvalidLength { .. } => true,
         RepairError::EmptyInput
         | RepairError::UnsupportedCodeVariant { .. }
-        | RepairError::IndelUnrecoverable { .. } => false,
+        | RepairError::IndelUnrecoverable { .. }
+        | RepairError::SetReassemblyMismatch { .. } => false,
     }
 }
 
@@ -1226,6 +1564,10 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
                 kind: CardKind::Md1,
                 corrected_chunks,
                 repairs,
+                // md1 delegates atomically to md_codec::decode_with_correction
+                // (whole-set, per D28), which only ever returns `Ok` on full
+                // decode success — no behavior change from Cycle E.
+                set_verify: SetVerify::Blessed,
             })
         }
         Err(MdErr::TooManyErrors { chunk_index, bound }) => Err(RepairError::TooManyErrors {
@@ -1346,6 +1688,17 @@ pub fn try_repair_and_short_circuit<O: Write + ?Sized, E: Write + ?Sized>(
     // input was already valid — which shouldn't trigger auto-fire (caller
     // hit a different decode error, e.g., HRP or length). Fall through.
     if outcome.repairs.is_empty() {
+        return Ok(());
+    }
+
+    // Cycle E (`mk1-repair-set-level-reverify`) / plan-R0 G7 — auto-repair
+    // NEVER blesses an unverified (partial-set) mk1 correction. A dominant
+    // Reject already short-circuited to `Err` above (the first match arm);
+    // this arm only ever sees `Unverified` (an incomplete corrected
+    // chunk_set_id group). Fall through so the caller's original typed
+    // error surfaces — a partial card cannot convert/inspect/verify-bundle
+    // anyway (SPEC §2 residual-partial-set-exposure note).
+    if !matches!(outcome.set_verify, SetVerify::Blessed) {
         return Ok(());
     }
 
@@ -2377,6 +2730,13 @@ mod tests {
         assert!(!is_indel_trigger(&IndelUnrecoverable {
             hrp: "ms",
             max_indel: 1
+        }));
+        // Cycle E (plan-R0 PM-r2-1) — a set-reassembly mismatch must NEVER
+        // engage --max-indel search (it would replace the precise message
+        // with the generic "indel unrecoverable" one).
+        assert!(!is_indel_trigger(&SetReassemblyMismatch {
+            group: "chunk_set_id 0x00001".into(),
+            detail: "x".into()
         }));
     }
 
