@@ -10,7 +10,16 @@ never hold critical state only in conversation.
 
 ---
 
-## STATUS: RELEASE-PREP DONE (v0.76.0), verified locally → committing + final suite → PUSH + TAG. Master @ 88691aad+release.
+## STATUS: ✅ v0.76.0 SHIPPED (tag @ `3d48cfff`). Post-tag CI cleanup: examples GREEN (`3b7dc01e`), manual fix IN PROGRESS.
+Ship: master pushed + tag `mnemonic-toolkit-v0.76.0` @ 3d48cfff. Most CI gates GREEN (changelog/sibling-pin/install-pin/
+vendor-freshness/cross-tool-diff/technical-manual/bitcoind-diff/fuzz; rust+man-pages finishing). **2 release-ritual gaps
+surfaced in CI** (NOT funds-code — the fix is correct): (1) `examples` = corpus version-pin lockstep → FABLE FIXED
+(`3b7dc01e`, version-string-only diff, examples run success). (2) `manual` = verify-examples drift: recipe-2
+(bitcoin-core-to-bundle) imports Core `/0/*` split fixture → now rejects; Phase-3 added prose but didn't regen the
+worked-example transcript. FIX = rewrite recipe-2 to the combine-to-`<0;1>/*` + `--format descriptor` workaround +
+regen transcripts (opus agent dispatched, funds-adjacent). `repro-drift` NOT mine (scheduled run on old `8c8b9183`).
+Memory recorded: `project_cycleA_use_site_collapse_shipped` + MEMORY.md pointer + 2 gotchas.
+### (superseded) RELEASE-PREP DONE → PUSH + TAG.
 Release-prep: 6 version sites → 0.76.0 (Cargo.toml, Cargo.lock, both READMEs, fuzz/Cargo.lock, install.sh SELF-pin);
 sibling pins FROZEN (md-cli v0.11.2 / ms-cli v0.13.2 / mk-cli v0.11.2 / gui v0.51.0). CHANGELOG [0.76.0] section
 (changelog-check ✓). FOLLOWUPS: `descriptor-use-site-collapse` RESOLVED + 3 new OPEN (`bitcoin-core-receive-change-
