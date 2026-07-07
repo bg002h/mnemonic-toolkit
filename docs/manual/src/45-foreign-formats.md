@@ -126,10 +126,11 @@ emits a stderr DEPRECATION notice.
 
 Every shape's `<descriptor>` line is subject to the toolkit's
 [use-site residue reject](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps):
-a key placeholder followed by a fixed derivation step (`/0/*`) or the
-`/**` shorthand — rather than the multipath `/<a;b>/*` (or bare `/*`) —
-is refused (exit 2) rather than silently collapsed. A canonical BSMS
-Round-2 descriptor is multipath by construction, so this only bites a
+a key placeholder followed by a fixed derivation step (`/0/*`) — rather
+than the multipath `/<a;b>/*` (or bare `/*`, or the BIP-388 `/**`
+shorthand, which is expanded to `/<0;1>/*` and accepted) — is refused
+(exit 2) rather than silently collapsed. A canonical BSMS Round-2
+descriptor is multipath by construction, so this only bites a
 non-standard single-branch export.
 
 ### Where it comes from
@@ -938,9 +939,10 @@ detect format", exactly as before). This mirrors the encrypted-BSMS
 - A file with **two or more** descriptor lines → refused (supply one).
 - A **wrong** BIP-380 checksum → refused.
 - A key placeholder's use-site path ending in a fixed step (`/0/*`,
-  `/0h/*`) rather than the multipath `/<a;b>/*` form, or the `/**`
-  combined-wildcard shorthand → refused (exit 2); rewrite as the
-  explicit multipath form. See
+  `/0h/*`) rather than the multipath `/<a;b>/*` form → refused (exit 2);
+  rewrite as the explicit multipath form. The BIP-388 `/**`
+  combined-wildcard shorthand is **accepted** (expanded to `/<0;1>/*`),
+  not refused. See
   [Non-representable use-site steps](40-cli-reference/41-mnemonic.md#non-representable-use-site-steps).
 
 ## Round-trip discipline {#foreign-formats-roundtrip}
@@ -1035,6 +1037,11 @@ FOLLOWUP):
 - **BIP-380** — *Output Script Descriptors General Operation*.
   Defines the descriptor checksum the toolkit re-computes during
   canonicalization. <https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki>
+- **BIP-388** — *Wallet Policies for Descriptor Wallets*. Defines the
+  `@N` placeholder-template form and the `/**` combined-wildcard
+  shorthand (an exact synonym for `/<0;1>/*`); the toolkit expands a
+  literal `/**` to `/<0;1>/*` on every descriptor-intake surface.
+  <https://github.com/bitcoin/bips/blob/master/bip-0388.mediawiki>
 - **BIP-389** — *Multipath descriptor expressions*. Defines the
   `<0;1>/*` multipath shape. Bitcoin Core *accepts* it on import but
   never *emits* it from `listdescriptors` (which exports the split

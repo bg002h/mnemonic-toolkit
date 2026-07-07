@@ -141,27 +141,40 @@ that follow a key placeholder (an `@N` slot, or an inline
 `[fp/path]xpub` key): the BIP-389 **multipath** form `/<a;b>/*` (receive
 and change sharing one card), or a **bare** `/*` wildcard. A **fixed
 single step** — `/0/*`, `/0h/*`, or any other literal index in place of
-the multipath alternatives — is *not representable* in md1, and neither
-is the BIP-389 **combined-wildcard shorthand** `/**` (its wildcard match
-consumes only `/*`, leaving the leading `*` as unconsumed residue).
+the multipath alternatives — is *not representable* in md1.
 
-A fixed step here used to be *silently dropped* rather than rejected:
-`@0/0/*` lexed identically to bare `@0`, so a receive-only (`/0/*`) and a
-change-only (`/1/*`) descriptor for the *same* key collapsed to a
-byte-identical wallet-policy card — a funds-loss bug, since the card
-derives a *different* address space than the wallet actually in use.
-This is now refused rather than silently collapsed: `mnemonic bundle
---descriptor`, `mnemonic import-wallet` (every source format whose
-descriptor carries an `@N`/bracketed key — Sparrow is unaffected, see
-below), and `mnemonic verify-bundle` all **reject** (exit 2,
-`DescriptorParse`) a use-site path ending in a fixed step or the `/**`
-shorthand.
+The BIP-388 **combined-wildcard shorthand** `/**` is **accepted**: it is
+defined as an exact synonym for `/<0;1>/*` (receive = index 0, change =
+index 1), so a final-use-site `/**` is **rewritten to `/<0;1>/*` before
+the descriptor reaches the parser** and behaves byte-for-byte
+identically to the explicit multipath spelling. This happens on every
+literal-descriptor surface — `mnemonic bundle --descriptor`, `mnemonic
+verify-bundle --descriptor`, `mnemonic import-wallet` (every source
+format whose descriptor carries an `@N`/bracketed key), `mnemonic
+export-wallet --descriptor`, `mnemonic xpub-search
+account-of-descriptor`, and `mnemonic gui-schema
+--classify-descriptor`. (Only the *exact* `/**` is expanded; `/***` and
+`/**'` are not the shorthand and are left untouched.)
+
+A **fixed step** is a different matter. It used to be *silently dropped*
+rather than rejected: `@0/0/*` lexed identically to bare `@0`, so a
+receive-only (`/0/*`) and a change-only (`/1/*`) descriptor for the
+*same* key collapsed to a byte-identical wallet-policy card — a
+funds-loss bug, since the card derives a *different* address space than
+the wallet actually in use. This is now refused rather than silently
+collapsed: `mnemonic bundle --descriptor`, `mnemonic import-wallet`
+(every source format whose descriptor carries an `@N`/bracketed key —
+Sparrow is unaffected, see below), and `mnemonic verify-bundle` all
+**reject** (exit 2, `DescriptorParse`) a use-site path ending in a fixed
+step. (A fixed step *combined* with the shorthand, e.g. `/0/**`, still
+rejects: the `/**` expands to `/0/<0;1>/*`, whose leading `/0` fixed
+step is un-representable.)
 
 **Remedy:** rewrite the use-site path as the explicit multipath form —
 e.g. replace separate `/0/*` (receive) and `/1/*` (change) entries for
 the same key with one `/<0;1>/*` entry (alternative order follows the
-receive/change convention: index 0 = receive, index 1 = change). The
-`/**` shorthand rewrites to the same explicit `/<0;1>/*` form.
+receive/change convention: index 0 = receive, index 1 = change), or use
+the `/**` shorthand for the same thing.
 
 **Sparrow is unaffected.** Sparrow's own `@N/**` template placeholder is
 expanded to the multipath form internally before this check runs, so a
@@ -656,7 +669,7 @@ default per the inference rule above.
 | Phrase-derived fingerprint disagrees with inline `[Y/...]@N` | `error: slot @{N} phrase-derived fingerprint X does not match descriptor inline [Y/...]; verify the phrase or correct the descriptor.` |
 | `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
 | Canonical descriptor + `--slot @N.phrase= + --slot @N.path=` | `error: slot @{N} has both secret-bearing input and watch-only input; pick one per slot.` (the `{phrase, path}` pair is legal only in non-canonical mode) |
-| `@N`/key use-site path ends in a fixed step (`/0/*`, `/0h/*`) or the `/**` shorthand | refused, exit 2 (`DescriptorParse`) — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps) |
+| `@N`/key use-site path ends in a fixed step (`/0/*`, `/0h/*`) | refused, exit 2 (`DescriptorParse`) — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused |
 
 ---
 
@@ -1252,8 +1265,9 @@ carries a [consensus-masked `older()`](#consensus-masked-relative-timelocks)
 or an [unrestorable shape](#unrestorable-shapes). It is also subject to
 the same [use-site residue reject](#non-representable-use-site-steps): a
 descriptor whose key placeholder is followed by a fixed derivation step
-(`/0/*`) or the `/**` shorthand — rather than the multipath `/<a;b>/*`
-(or bare `/*`) — is refused (exit 2) instead of silently collapsed.
+(`/0/*`) — rather than the multipath `/<a;b>/*` (or bare `/*`, or the
+BIP-388 `/**` shorthand, which is expanded to `/<0;1>/*` and accepted) —
+is refused (exit 2) instead of silently collapsed.
 Bitcoin Core's receive/change split export is the main surface this
 would affect — but `--format bitcoin-core` **auto-recombines** a
 same-key receive/change pair into one `/<0;1>/*` multipath bundle before
@@ -1463,7 +1477,7 @@ on stdout + the round-trip status on stderr.
 | Supplied `--ms1` derives a different xpub than declared at cosigner's path | exit 4 `ImportWalletSeedMismatch` (see template above) |
 | `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
 | Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
-| Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) or the `/**` shorthand | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
+| Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused. Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
 | Bitcoin Core receive/change-shaped pair whose keys/origins differ | exit 2 `ImportWalletParse` — not merged (distinct keys are different wallets); see [foreign wallet formats](#foreign-wallet-formats) |
 
 ### Advisories
