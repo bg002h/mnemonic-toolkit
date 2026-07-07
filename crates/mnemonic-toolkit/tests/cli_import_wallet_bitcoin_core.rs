@@ -12,7 +12,9 @@
 
 use assert_cmd::Command;
 use miniscript::descriptor::checksum::Engine as ChecksumEngine;
+use miniscript::{DefiniteDescriptorKey, Descriptor, DescriptorPublicKey};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 // ---- mainnet fixtures (lifted from cli_export_wallet_jade.rs) ----
 
@@ -128,6 +130,131 @@ fn run_core_file_select(path: &PathBuf, select: &str) -> assert_cmd::assert::Ass
         .arg(path)
         .args(["--format", "bitcoin-core", "--select-descriptor", select])
         .assert()
+}
+
+// ============================================================================
+// bitcoin-core-receive-change-pair-merge (SPEC/PLAN §8) — shared oracle
+// helpers. The anti-C1 funds-safety oracle: independently derive addresses
+// from a descriptor via rust-miniscript directly (mirrors
+// `prop_backup_restore_roundtrip.rs::derive_receive`), NEVER by re-deriving
+// through the toolkit's own synthesis path (that would be tautological).
+// ============================================================================
+
+/// Derive `count` addresses at increasing indices from a NON-multipath,
+/// single-path descriptor (used against the ORIGINAL split `/N/*` entries,
+/// which are never multipath).
+fn derive_addresses(desc: &str, count: u32, network: bitcoin::Network) -> Vec<String> {
+    let d = Descriptor::<DescriptorPublicKey>::from_str(desc)
+        .unwrap_or_else(|e| panic!("descriptor must parse: {desc}: {e}"));
+    assert!(
+        !d.is_multipath(),
+        "derive_addresses expects a single-path descriptor: {desc}"
+    );
+    (0..count)
+        .map(|i| {
+            let def: Descriptor<DefiniteDescriptorKey> = if d.has_wildcard() {
+                d.clone().derive_at_index(i).unwrap()
+            } else {
+                Descriptor::<DefiniteDescriptorKey>::try_from(d.clone()).unwrap()
+            };
+            def.address(network).unwrap().to_string()
+        })
+        .collect()
+}
+
+/// Derive `count` addresses at increasing indices from chain `chain` (0 =
+/// external/receive, 1 = internal/change) of a MULTIPATH `<a;b>/*`
+/// descriptor (used against the MERGED bundle's `descriptor` field).
+fn derive_multipath_chain_addresses(
+    desc: &str,
+    chain: usize,
+    count: u32,
+    network: bitcoin::Network,
+) -> Vec<String> {
+    let d = Descriptor::<DescriptorPublicKey>::from_str(desc)
+        .unwrap_or_else(|e| panic!("descriptor must parse: {desc}: {e}"));
+    assert!(d.is_multipath(), "expected a multipath descriptor: {desc}");
+    let mut singles = d.into_single_descriptors().unwrap();
+    assert!(
+        chain < singles.len(),
+        "chain {chain} out of range ({} single descriptors): {desc}",
+        singles.len()
+    );
+    let single = singles.remove(chain);
+    (0..count)
+        .map(|i| {
+            let def: Descriptor<DefiniteDescriptorKey> = single.clone().derive_at_index(i).unwrap();
+            def.address(network).unwrap().to_string()
+        })
+        .collect()
+}
+
+/// Round-trip a (possibly-merged) descriptor through `bundle --descriptor`
+/// (concrete-descriptor mode, §4.3's `bundle_run_concrete_descriptor` path —
+/// accepts inline `[fp/path]xpub` keys with or without a trailing `#csum`)
+/// to synthesize md1/mk1 cards, then feeds those cards back through
+/// `verify-bundle --descriptor` and asserts `result: ok`. SPEC §8.4/§8.10 —
+/// a secondary regression net alongside (never a substitute for) the
+/// address-independent-derivation oracle above.
+fn assert_descriptor_verify_bundle_ok(descriptor_with_csum: &str, network: &str) {
+    let bundle_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--descriptor",
+            descriptor_with_csum,
+            "--network",
+            network,
+            "--json",
+        ])
+        .assert()
+        .success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&bundle_out.get_output().stdout).expect("valid bundle JSON");
+
+    let mut args: Vec<String> = vec![
+        "verify-bundle".into(),
+        "--descriptor".into(),
+        descriptor_with_csum.into(),
+        "--network".into(),
+        network.into(),
+    ];
+    for chunk in v["md1"].as_array().expect("md1 array") {
+        args.push("--md1".into());
+        args.push(chunk.as_str().unwrap().to_string());
+    }
+    // `mk1` is `MkField`: `Single(Vec<String>)` (flat chunk array, single-sig,
+    // n==1) or `Multi(Vec<Vec<String>>)` (array-of-arrays, one inner array per
+    // cosigner, n>=2) — untagged serde shape. Handle both uniformly.
+    for entry in v["mk1"].as_array().expect("mk1 array") {
+        match entry {
+            serde_json::Value::String(s) => {
+                args.push("--mk1".into());
+                args.push(s.clone());
+            }
+            serde_json::Value::Array(inner) => {
+                for chunk in inner {
+                    args.push("--mk1".into());
+                    args.push(chunk.as_str().expect("mk1 chunk is a string").to_string());
+                }
+            }
+            other => panic!("unexpected mk1 entry shape: {other}"),
+        }
+    }
+    args.push("--json".into());
+
+    let verify_out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .assert()
+        .success();
+    let verify_val: serde_json::Value =
+        serde_json::from_slice(&verify_out.get_output().stdout).expect("valid verify-bundle JSON");
+    assert_eq!(
+        verify_val["result"].as_str(),
+        Some("ok"),
+        "verify-bundle must return result=ok on the merged-pair bundle; got {verify_val}"
+    );
 }
 
 // ============================================================================
@@ -913,32 +1040,50 @@ fn core_fixture_file_explicit_active_false_parses() {
 /// `/0/*` (receive, active+!internal) + `/1/*` (change, active+internal)
 /// — the legacy Core shape pre-BIP-389-multipath.
 ///
-/// Cycle A (plan-R0 I-C): a FIXED use-site step is un-representable in md1
-/// (residue-reject floor) — this legacy non-multipath receive/change pair now
-/// HARD-FAILS at entry 0 (`/0/*`) before selection ever runs, with the
-/// bitcoin-core interim-limitation workaround message (combine to `<0;1>/*`
-/// then import via `--format descriptor`; automatic recombination is the split-out
-/// `bitcoin-core-receive-change-pair-merge` follow-up). The fixture file
-/// itself is KEPT UNCHANGED — it is both the canonical legacy-split funds
-/// regression this cell now proves closed AND the future INPUT fixture for
-/// the pair-merge follow-up.
+/// SPEC_bitcoin_core_receive_change_pair_merge.md §8.2 FLIP: this same-key
+/// receive/change pair now MERGES into one `<0;1>/*` multipath bundle via
+/// the parse-time pre-pass, restoring standard Bitcoin Core `listdescriptors`
+/// import. Was (Cycle A v0.76.0, pre-merge): exit-2 reject at entry 0 with
+/// the hand-combine-then-`--format descriptor` workaround message. The
+/// fixture file itself is KEPT UNCHANGED — it is both the canonical
+/// legacy-split shape this cell now proves auto-recombines AND the fixture
+/// the pair-merge FOLLOWUP always intended to consume.
 #[test]
 fn core_fixture_file_mainnet_receive_change_pair_parses() {
     let p = fixture_path("core-mainnet-receive-change-pair.json");
-    let assertion = run_core_file_select(&p, "all").failure();
-    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
-    let code = assertion.get_output().status.code().unwrap_or(-1);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob"])
+        .arg(&p)
+        .args([
+            "--format",
+            "bitcoin-core",
+            "--select-descriptor",
+            "all",
+            "--json",
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
     assert_eq!(
-        code, 2,
-        "legacy non-multipath receive/change pair must reject exit 2; stderr: {stderr}"
+        arr.len(),
+        1,
+        "receive+change pair must merge to ONE bundle; envelope: {stdout}"
     );
-    assert!(
-        stderr.contains("bitcoin-core"),
-        "expected bitcoin-core-scoped reject; stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("multipath") || stderr.contains("<0;1>") || stderr.contains("<a;b>"),
-        "expected the multipath-remedy reject text; stderr: {stderr}"
+    let desc = arr[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor must be present");
+    assert!(desc.contains("<0;1>/*"), "merged descriptor: {desc}");
+    assert!(desc.contains(MAINNET_FP_A), "merged descriptor: {desc}");
+    let (body, csum) = desc
+        .rsplit_once('#')
+        .expect("merged descriptor carries a checksum");
+    assert_eq!(
+        checksum(body),
+        csum,
+        "merged descriptor's checksum must itself validate: {desc}"
     );
 }
 
@@ -1135,15 +1280,73 @@ fn core_fixed_use_site_step_rejected_with_workaround() {
 }
 
 /// Companion: Core's standard receive+change TWO-entry export (`/0/*` +
-/// `/1/*`, distinct `internal` flags) also rejects — both entries carry a
-/// fixed step, so entry 0 rejects before entry 1 (or selection) is ever
-/// reached. Distinct from `core_fixture_file_mainnet_receive_change_pair_parses`
+/// `/1/*`, distinct `internal` flags) also MERGES (SPEC
+/// `bitcoin_core_receive_change_pair_merge.md` §8.3 FLIP) into one `<0;1>/*`
+/// bundle. Distinct from `core_fixture_file_mainnet_receive_change_pair_parses`
 /// (fixture-file variant of the same shape) — this is the inline-blob
-/// stdin-driven twin.
+/// stdin-driven twin. Renamed from `core_receive_change_pair_rejected_with_
+/// workaround` (the pre-flip name asserted the exit-2 reject; keeping that
+/// name after flipping the assertion to merge-accept would be misleading).
 #[test]
-fn core_receive_change_pair_rejected_with_workaround() {
+fn core_receive_change_pair_merges_inline_blob() {
     let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
     let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--select-descriptor",
+            "all",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
+    assert_eq!(
+        arr.len(),
+        1,
+        "receive+change pair must merge to ONE bundle; envelope: {stdout}"
+    );
+    let desc = arr[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor must be present");
+    assert!(desc.contains("<0;1>/*"), "merged descriptor: {desc}");
+}
+
+// ============================================================================
+// bitcoin-core-receive-change-pair-merge (SPEC_bitcoin_core_receive_change_
+// pair_merge.md §8) — the parse-time pre-pass that recombines a same-key
+// Core receive/change split pair into one `<a;b>/*` multipath entry.
+// ============================================================================
+
+/// §8.1 LINCHPIN funds oracle — distinct-key `/0/*` (FP_A) + `/1/*` (FP_B)
+/// looks receive/change-SHAPED (fixed step, steps differ, internal flags
+/// disagree) but the KEYS DIFFER — distinct keys are different wallets.
+/// MUST NOT merge; refused with the §7 differentiated near-miss message
+/// (exit 2), not a silent merge and not the generic floor-reject text.
+#[test]
+fn core_receive_change_distinct_keys_must_not_merge() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_B}/84'/0'/0']{MAINNET_XPUB_B}/1/*)");
     let blob = build_core_multi(&[
         CoreEntry {
             desc: &d0,
@@ -1161,10 +1364,544 @@ fn core_receive_change_pair_rejected_with_workaround() {
     let code = assertion.get_output().status.code().unwrap_or(-1);
     assert_eq!(
         code, 2,
-        "Core receive+change split pair must reject exit 2; stderr: {stderr}"
+        "distinct-key receive/change-shaped near-miss must reject exit 2; stderr: {stderr}"
     );
     assert!(
-        stderr.contains("bitcoin-core"),
-        "expected bitcoin-core-scoped reject; stderr: {stderr}"
+        stderr.contains("distinct keys are different wallets") || stderr.contains("keys/origins differ"),
+        "expected the §7 differentiated near-miss message, not a generic floor reject; stderr: {stderr}"
+    );
+}
+
+/// §8.4 ANTI-C1 ORACLE (non-tautological) — import the same-key `/0/*` +
+/// `/1/*` pair, merge to `<0;1>/*`, then INDEPENDENTLY derive addresses from
+/// the ORIGINAL split descriptors (external from `.../0/*`, internal from
+/// `.../1/*`) via rust-miniscript directly and assert they equal the merged
+/// bundle's chain-0 / chain-1 addresses for BOTH chains. Anchors on the
+/// pre-merge truth, not on a hand-authored `<0;1>` (which would be the same
+/// construction the merge itself performs — tautological). Plus:
+/// `verify-bundle` PASSES on the merged output.
+#[test]
+fn core_merged_pair_addresses_match_original_split() {
+    let orig_recv = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let orig_chg = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let expected_recv = derive_addresses(&orig_recv, 3, bitcoin::Network::Bitcoin);
+    let expected_chg = derive_addresses(&orig_chg, 3, bitcoin::Network::Bitcoin);
+
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &orig_recv,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &orig_chg,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
+    assert_eq!(
+        arr.len(),
+        1,
+        "receive+change pair must merge to ONE bundle; envelope: {stdout}"
+    );
+    let merged_desc = arr[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect(
+            "bundle.descriptor must be present -- the oracle must NOT fall back to a \
+             re-authored <0;1> when --json yields no descriptor",
+        )
+        .to_string();
+    assert!(
+        merged_desc.contains("<0;1>/*"),
+        "merged descriptor: {merged_desc}"
+    );
+
+    let got_recv = derive_multipath_chain_addresses(&merged_desc, 0, 3, bitcoin::Network::Bitcoin);
+    let got_chg = derive_multipath_chain_addresses(&merged_desc, 1, 3, bitcoin::Network::Bitcoin);
+    assert_eq!(
+        got_recv, expected_recv,
+        "merged chain-0 addresses must match the ORIGINAL /0/* split"
+    );
+    assert_eq!(
+        got_chg, expected_chg,
+        "merged chain-1 addresses must match the ORIGINAL /1/* split"
+    );
+
+    assert_descriptor_verify_bundle_ok(&merged_desc, "mainnet");
+}
+
+/// §8.5 — `--select-descriptor active-receive` AND `active-change` each
+/// return the ONE merged bundle (once each; no double-emit).
+#[test]
+fn core_merged_pair_select_receive_and_change_both_match() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+
+    let recv = run_core_stdin_select(&blob, "active-receive").success();
+    let recv_stdout = String::from_utf8(recv.get_output().stdout.clone()).unwrap();
+    assert!(
+        recv_stdout.contains("bundles=1"),
+        "active-receive must return the one merged bundle; stdout: {recv_stdout}"
+    );
+
+    let chg = run_core_stdin_select(&blob, "active-change").success();
+    let chg_stdout = String::from_utf8(chg.get_output().stdout.clone()).unwrap();
+    assert!(
+        chg_stdout.contains("bundles=1"),
+        "active-change must return the SAME one merged bundle; stdout: {chg_stdout}"
+    );
+}
+
+/// §8.6 — a single lone `/0/*` entry with no receive/change partner still
+/// hits the existing generic fixed-step floor reject (exit 2) — the merge
+/// pre-pass never touches an unpaired entry.
+#[test]
+fn core_lone_receive_fixed_step_still_rejects() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let blob = build_core_single(&d0, true, false, Some((0, 1000)), false);
+    let assertion = run_core_stdin(&blob).failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "lone fixed-step entry must still floor-reject");
+}
+
+/// §8.7 — two same-key entries with the IDENTICAL final step (cond. 4 fails:
+/// steps do not differ) do not pair; both are left unmerged and floor-reject.
+#[test]
+fn core_pair_same_step_does_not_merge() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = d0.clone();
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "same-step pair must not merge (cond. 4 fails)");
+}
+
+/// §8.8 — two same-key entries with differing steps but AGREEING `internal`
+/// flags (cond. 5 fails: both `false`) do not pair.
+#[test]
+fn core_pair_both_internal_false_does_not_merge() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: false,
+        },
+    ]);
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "internal-agreeing pair must not merge (cond. 5 fails)"
+    );
+}
+
+/// §8.9 — three same-key entries sharing the grouping key (cond. 6 fails:
+/// ambiguous, not exactly two) do not merge; a NOTICE names the ambiguity and
+/// all three fall through to the generic floor reject (exit 2, each still
+/// carries a fixed step).
+#[test]
+fn core_three_entries_sharing_key_ambiguous_no_merge() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let d2 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/2/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+        CoreEntry {
+            desc: &d2,
+            active: false,
+            internal: false,
+        },
+    ]);
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "3-way ambiguous share must still floor-reject; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("ambiguous"),
+        "expected the ambiguity NOTICE on stderr; stderr: {stderr}"
+    );
+}
+
+/// §8.10 — `wsh(sortedmulti(2,...))` all-keys `/0/*` + all-keys `/1/*` merges
+/// to a single multisig `<0;1>/*`; addresses independently derived from the
+/// original split multisig descriptors for both chains (guards a misfired
+/// per-key replacement). `verify-bundle` PASSES.
+#[test]
+fn core_multisig_receive_change_pair_merges() {
+    let orig_recv = format!(
+        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/0/*,[{MAINNET_FP_C}/48'/0'/0'/2']{MAINNET_XPUB_C}/0/*))"
+    );
+    let orig_chg = format!(
+        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/1/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/1/*,[{MAINNET_FP_C}/48'/0'/0'/2']{MAINNET_XPUB_C}/1/*))"
+    );
+    let expected_recv = derive_addresses(&orig_recv, 3, bitcoin::Network::Bitcoin);
+    let expected_chg = derive_addresses(&orig_chg, 3, bitcoin::Network::Bitcoin);
+
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &orig_recv,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &orig_chg,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
+    assert_eq!(arr.len(), 1, "envelope: {stdout}");
+    let merged_desc = arr[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor must be present")
+        .to_string();
+    assert!(
+        merged_desc.contains("<0;1>/*"),
+        "merged descriptor: {merged_desc}"
+    );
+
+    let got_recv = derive_multipath_chain_addresses(&merged_desc, 0, 3, bitcoin::Network::Bitcoin);
+    let got_chg = derive_multipath_chain_addresses(&merged_desc, 1, 3, bitcoin::Network::Bitcoin);
+    assert_eq!(
+        got_recv, expected_recv,
+        "chain-0 (receive) address mismatch"
+    );
+    assert_eq!(got_chg, expected_chg, "chain-1 (change) address mismatch");
+
+    assert_descriptor_verify_bundle_ok(&merged_desc, "mainnet");
+}
+
+/// §8.11 — within ONE entry, one key uses `/0/*` and another uses `/1/*`
+/// (per-key non-uniform step, cond. 7 fails). Never a merge candidate (no
+/// partner is even sought); the entry, still carrying fixed steps, hits the
+/// existing floor reject.
+#[test]
+fn core_multisig_partial_split_does_not_merge() {
+    let desc = format!(
+        "wsh(sortedmulti(2,[{MAINNET_FP_A}/48'/0'/0'/2']{MAINNET_XPUB_A}/0/*,[{MAINNET_FP_B}/48'/0'/0'/2']{MAINNET_XPUB_B}/1/*))"
+    );
+    let blob = build_core_single(&desc, true, false, Some((0, 1000)), false);
+    let assertion = run_core_stdin(&blob).failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "per-key non-uniform split within one entry must not merge and must floor-reject"
+    );
+}
+
+/// §8.12 — `--json` merged entry emits `source_metadata.internal: null`;
+/// text-summary prints `both`.
+#[test]
+fn core_merged_json_internal_null() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
+        .write_stdin(blob.clone())
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
+    assert_eq!(arr.len(), 1, "envelope: {stdout}");
+    assert_eq!(
+        arr[0]["source_metadata"]["internal"],
+        serde_json::Value::Null,
+        "merged entry's source_metadata.internal must serialize as null; envelope: {stdout}"
+    );
+
+    let text_out = run_core_stdin(&blob).success();
+    let text_stdout = String::from_utf8(text_out.get_output().stdout.clone()).unwrap();
+    assert!(
+        text_stdout.contains("internal=both"),
+        "text-summary must print `both` for a merged entry; stdout: {text_stdout}"
+    );
+}
+
+/// §8.14 — a `/5/*` + `/6/*` same-key pair merges to `<5;6>/*` — the ACTUAL
+/// step values, never hardcoded 0/1.
+#[test]
+fn core_nonstandard_steps_merge_uses_actual_values() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/5/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/6/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
+    assert_eq!(arr.len(), 1, "envelope: {stdout}");
+    let desc = arr[0]["bundle"]["descriptor"].as_str().unwrap();
+    assert!(desc.contains("<5;6>/*"), "merged descriptor: {desc}");
+}
+
+/// §8.15 (taproot, mandatory) — split `tr(key/0/*)` + `tr(key/1/*)` (single-
+/// key bip86, key-path-only) merges to `tr(key/<0;1>/*)`; P2TR addresses
+/// independently derived from the two originals for both chains.
+#[test]
+fn core_tr_bip86_receive_change_pair_merges() {
+    let orig_recv = format!("tr([{MAINNET_FP_A}/86'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let orig_chg = format!("tr([{MAINNET_FP_A}/86'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let expected_recv = derive_addresses(&orig_recv, 3, bitcoin::Network::Bitcoin);
+    let expected_chg = derive_addresses(&orig_chg, 3, bitcoin::Network::Bitcoin);
+
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &orig_recv,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &orig_chg,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "-",
+            "--format",
+            "bitcoin-core",
+            "--json",
+        ])
+        .write_stdin(blob)
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let envelope: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON envelope");
+    let arr = envelope.as_array().expect("envelope array");
+    assert_eq!(arr.len(), 1, "envelope: {stdout}");
+    let merged_desc = arr[0]["bundle"]["descriptor"]
+        .as_str()
+        .expect("bundle.descriptor must be present")
+        .to_string();
+    assert!(
+        merged_desc.starts_with("tr("),
+        "merged descriptor: {merged_desc}"
+    );
+    assert!(
+        merged_desc.contains("<0;1>/*"),
+        "merged descriptor: {merged_desc}"
+    );
+
+    let got_recv = derive_multipath_chain_addresses(&merged_desc, 0, 3, bitcoin::Network::Bitcoin);
+    let got_chg = derive_multipath_chain_addresses(&merged_desc, 1, 3, bitcoin::Network::Bitcoin);
+    assert_eq!(
+        got_recv, expected_recv,
+        "chain-0 (receive) P2TR address mismatch"
+    );
+    assert_eq!(
+        got_chg, expected_chg,
+        "chain-1 (change) P2TR address mismatch"
+    );
+}
+
+/// §8.15 (script-path `tr` out of scope) — a script-path `tr` (internal key +
+/// a tapscript leaf) split pair is OUT of scope (§0 / §4.2 cond. 7): the
+/// guard does NOT merge it; it falls to the floor reject (exit 2). LOCKED
+/// behavior, not contingent on fixture feasibility.
+#[test]
+fn core_tr_scriptpath_pair_does_not_merge() {
+    let orig_recv = format!(
+        "tr([{MAINNET_FP_A}/86'/0'/0']{MAINNET_XPUB_A}/0/*,pk([{MAINNET_FP_B}/86'/0'/0']{MAINNET_XPUB_B}/0/*))"
+    );
+    let orig_chg = format!(
+        "tr([{MAINNET_FP_A}/86'/0'/0']{MAINNET_XPUB_A}/1/*,pk([{MAINNET_FP_B}/86'/0'/0']{MAINNET_XPUB_B}/1/*))"
+    );
+    // Cheap insurance: both shapes must themselves be valid rust-miniscript
+    // (a parse failure would make this cell vacuous, not a real script-path
+    // `tr` refusal).
+    Descriptor::<DescriptorPublicKey>::from_str(&orig_recv).expect("script-path tr must parse");
+    Descriptor::<DescriptorPublicKey>::from_str(&orig_chg).expect("script-path tr must parse");
+
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &orig_recv,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &orig_chg,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "script-path tr receive/change pair is out of scope and must not merge"
+    );
+}
+
+/// §8.16 — a `/0'/*` (hardened final step) + `/1/*` shaped pair: cond. 3
+/// excludes the hardened side from candidacy entirely, so no merge is even
+/// attempted; both entries floor-reject.
+#[test]
+fn core_hardened_final_step_does_not_merge() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0'/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let blob = build_core_multi(&[
+        CoreEntry {
+            desc: &d0,
+            active: true,
+            internal: false,
+        },
+        CoreEntry {
+            desc: &d1,
+            active: true,
+            internal: true,
+        },
+    ]);
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(code, 2, "hardened-final-step shaped pair must not merge");
+}
+
+/// §8.17 — a mergeable-shaped pair where entry 0 carries a CORRUPT `#<csum>`
+/// is refused BEFORE merge (fail-closed, §4.4/M9) — never silently "repaired"
+/// by the checksum-recompute step. The corrupt entry's own re-validation in
+/// `parse_entry` surfaces the standard BIP-380 checksum error.
+#[test]
+fn core_corrupt_input_checksum_not_merged() {
+    let d0 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/0/*)");
+    let d1 = format!("wpkh([{MAINNET_FP_A}/84'/0'/0']{MAINNET_XPUB_A}/1/*)");
+    let cs0 = checksum(&d0);
+    let cs1 = checksum(&d1);
+    let bad_cs0: String = cs0.chars().rev().collect();
+    assert_ne!(bad_cs0, cs0, "corrupted checksum must actually differ");
+
+    let blob = format!(
+        "{{\n  \"descriptors\": [\n    {{\n      \"desc\": \"{d0}#{bad_cs0}\",\n      \"active\": true,\n      \"internal\": false\n    }},\n    {{\n      \"desc\": \"{d1}#{cs1}\",\n      \"active\": true,\n      \"internal\": true\n    }}\n  ]\n}}\n"
+    );
+    let assertion = run_core_stdin_select(&blob, "all").failure();
+    let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
+    let code = assertion.get_output().status.code().unwrap_or(-1);
+    assert_eq!(
+        code, 2,
+        "corrupt-checksum candidate must not be silently merged; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("BIP-380") || stderr.contains("checksum"),
+        "expected the standard BIP-380 checksum-validation error; stderr: {stderr}"
     );
 }

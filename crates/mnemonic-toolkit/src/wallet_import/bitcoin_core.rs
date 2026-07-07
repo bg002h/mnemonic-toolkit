@@ -48,9 +48,13 @@ use crate::error::ToolkitError;
 use crate::parse_descriptor;
 use crate::synthesize::{xpub_to_65, ResolvedSlot};
 use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+use miniscript::descriptor::{DescriptorType, Wildcard};
+use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use regex::Regex;
-use serde_json::Value;
+use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
+use std::str::FromStr;
 use std::sync::OnceLock;
 
 pub(crate) struct BitcoinCoreParser;
@@ -204,25 +208,412 @@ impl WalletFormatParser for BitcoinCoreParser {
             .map_err(ToolkitError::Io)?;
         }
 
+        // Parse-time pre-pass (SPEC_bitcoin_core_receive_change_pair_merge.md
+        // §4): recombine a same-key receive/change split pair into one
+        // `<a;b>/*` multipath entry BEFORE the per-entry parse loop. Must run
+        // AFTER the aggregate dropped-fields NOTICE above (§4.5 — that NOTICE
+        // needs to see the ORIGINAL per-entry field set) and BEFORE the
+        // per-entry parse loop below.
+        let prepared = merge_receive_change_pairs(descriptors.clone(), stderr)?;
+
         // SPEC §5.2 step 2: per-entry parse loop.
         //
         // `internal` provenance (SPEC_bitcoin_core_receive_change_pair_merge.md
-        // §5) is now threaded EXPLICITLY per entry rather than read inside
-        // `parse_entry` itself: a passthrough entry (this loop, P0) always
-        // carries `Some(parse_bool_field(eobj, "internal")?)`; only the P1
-        // merge pre-pass's synthesized entries carry `None`.
-        let mut out: Vec<ParsedImport> = Vec::with_capacity(descriptors.len());
-        for (i, entry) in descriptors.iter().enumerate() {
-            let eobj = entry.as_object().ok_or_else(|| {
-                ToolkitError::ImportWalletParse(format!(
-                    "import-wallet: bitcoin-core: parse error: descriptors[{i}] is not an object"
-                ))
-            })?;
-            let internal = Some(parse_bool_field(eobj, "internal")?);
-            out.push(parse_entry(i, entry, wallet_name.clone(), internal)?);
+        // §5) is threaded EXPLICITLY per entry: a passthrough entry always
+        // carries `Some(bool)` (computed inside `merge_receive_change_pairs`);
+        // a pre-pass-merged entry carries `None`.
+        let mut out: Vec<ParsedImport> = Vec::with_capacity(prepared.len());
+        for (i, p) in prepared.iter().enumerate() {
+            out.push(parse_entry(i, &p.value, wallet_name.clone(), p.internal)?);
         }
         Ok(out)
     }
+}
+
+/// One key's grouping-relevant signature (SPEC §4.1), EXCLUDING the final
+/// use-site step. Positional/ordered equality via `PartialEq` on the
+/// enclosing `Vec` — NOT set-based (a swapped-order `multi(...)` differs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MergeKeySig {
+    fingerprint: Fingerprint,
+    origin_path: DerivationPath,
+    xpub: String,
+}
+
+/// Grouping key for the merge pre-pass (§4.1) — everything about a candidate
+/// descriptor EXCEPT its final use-site step. Two entries merge only if this
+/// is equal (`PartialEq`) AND the §4.2 guard matrix holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MergeGroupKey {
+    desc_type: DescriptorType,
+    multi_keyword: Option<&'static str>,
+    threshold: Option<u8>,
+    keys: Vec<MergeKeySig>,
+}
+
+/// A `descriptors[i]` entry that qualifies as a merge CANDIDATE per §4.2
+/// cond. 3 (every key: fixed single unhardened wildcard final step) and
+/// cond. 7 (that step is uniform across all keys). Does NOT imply a partner
+/// exists — pairing/guard-matrix application happens in
+/// `merge_receive_change_pairs`.
+struct MergeCandidate {
+    idx: usize,
+    group: MergeGroupKey,
+    step: u32,
+    body_no_csum: String,
+    active: bool,
+    internal: bool,
+    range: Option<(u64, u64)>,
+}
+
+/// Output of the merge pre-pass: the (possibly-synthesized) entry `Value`
+/// plus its explicit `internal` provenance (SPEC §5) — `Some(bool)` for a
+/// passthrough entry, `None` for a pre-pass-merged entry.
+struct PreparedEntry {
+    value: Value,
+    internal: Option<bool>,
+}
+
+/// Grouping-key discriminant only (SPEC §4.1: `sortedmulti` vs `multi` are
+/// different template kinds and never group together). Pure text
+/// classification of the checksum-stripped body — NOT used to extract any
+/// security-relevant value (steps/origins/xpubs come from the rust-
+/// miniscript parse per §4.1). Longest-prefix-first ordering avoids
+/// "multi(" false-matching inside "sortedmulti(" / "multi_a(".
+fn multi_keyword_of(body_no_csum: &str) -> Option<&'static str> {
+    if body_no_csum.contains("sortedmulti_a(") {
+        Some("sortedmulti_a")
+    } else if body_no_csum.contains("sortedmulti(") {
+        Some("sortedmulti")
+    } else if body_no_csum.contains("multi_a(") {
+        Some("multi_a")
+    } else if body_no_csum.contains("multi(") {
+        Some("multi")
+    } else {
+        None
+    }
+}
+
+/// Re-render with a fresh BIP-380 checksum. 6th local copy per SPEC §6
+/// (mirrors `descriptor.rs:246`, `electrum.rs:1027`, `coldcard.rs:515`,
+/// `specter.rs:444`, `sparrow.rs:668`).
+fn recompute_descriptor_checksum(body_no_csum: &str) -> Result<String, ToolkitError> {
+    use miniscript::descriptor::checksum::Engine as ChecksumEngine;
+    let mut eng = ChecksumEngine::new();
+    eng.input(body_no_csum).map_err(|e| {
+        ToolkitError::ImportWalletParse(format!(
+            "import-wallet: bitcoin-core: checksum engine input rejected: {e}"
+        ))
+    })?;
+    let csum = eng.checksum();
+    Ok(format!("{body_no_csum}#{csum}"))
+}
+
+/// §4.3 — merged `range` is the union/widening of the two entries' ranges; a
+/// range difference never blocks the merge (receive/change legitimately carry
+/// different scan state). Absent+absent -> absent.
+fn union_range(a: Option<(u64, u64)>, b: Option<(u64, u64)>) -> Option<(u64, u64)> {
+    match (a, b) {
+        (None, None) => None,
+        (Some(x), None) => Some(x),
+        (None, Some(y)) => Some(y),
+        (Some((alo, ahi)), Some((blo, bhi))) => Some((alo.min(blo), ahi.max(bhi))),
+    }
+}
+
+/// Attempt to classify `body_no_csum` (already checksum-validated,
+/// checksum-stripped) as a merge CANDIDATE per §4.2 cond. 3 + cond. 7.
+/// Returns `None` for anything that doesn't qualify — including parse
+/// failure, script-path `tr` (§0 / cond. 7 taproot lock), non-xpub keys,
+/// already-multipath keys, hardened wildcards, non-single-component final
+/// steps, hardened final steps, or non-uniform final steps across multiple
+/// keys. A `None` here means "leave this entry alone" — it flows through
+/// unchanged and (if it truly carries a fixed step) hits the existing
+/// `lex_placeholders` floor reject downstream. NEVER an ad-hoc regex, and
+/// NEVER `lex_placeholders`/`concrete_keys_to_placeholders` for the final
+/// step (they reject the input) — extraction is via rust-miniscript's own
+/// parsed key fields (`derivation_path()`/`wildcard()`/`tap_tree()`).
+fn analyze_merge_candidate(body_no_csum: &str) -> Option<(MergeGroupKey, u32)> {
+    let d = MsDescriptor::<DescriptorPublicKey>::from_str(body_no_csum).ok()?;
+    // §4.2 cond. 7 / §0 taproot lock: a script-path `tr` (tapscript leaves
+    // present) is OUT of scope — never a merge candidate, always floor-reject.
+    if d.tap_tree().is_some() {
+        return None;
+    }
+    let desc_type = d.desc_type();
+    let multi_keyword = multi_keyword_of(body_no_csum);
+    let threshold = extract_threshold(body_no_csum).ok()?;
+
+    let mut keys: Vec<MergeKeySig> = Vec::new();
+    let mut steps: Vec<u32> = Vec::new();
+    for key in d.iter_pk() {
+        let DescriptorPublicKey::XPub(xk) = &key else {
+            // `Single` (raw pubkey, no wildcard) or `MultiXPub` (already
+            // multipath) — neither is a fixed-single-step candidate.
+            return None;
+        };
+        if xk.wildcard != Wildcard::Unhardened {
+            return None;
+        }
+        let comps: Vec<&ChildNumber> = (&xk.derivation_path).into_iter().collect();
+        if comps.len() != 1 {
+            return None;
+        }
+        let step = match comps[0] {
+            ChildNumber::Normal { index } => *index,
+            ChildNumber::Hardened { .. } => return None,
+        };
+        let (fingerprint, origin_path) = xk
+            .origin
+            .clone()
+            .unwrap_or_else(|| (key.master_fingerprint(), DerivationPath::from(vec![])));
+        keys.push(MergeKeySig {
+            fingerprint,
+            origin_path,
+            xpub: xk.xkey.to_string(),
+        });
+        steps.push(step);
+    }
+    if keys.is_empty() {
+        return None;
+    }
+    let first_step = steps[0];
+    if !steps.iter().all(|s| *s == first_step) {
+        // §4.2 cond. 7 uniformity violated (e.g. a partial per-key split
+        // WITHIN one entry) — not a candidate; the entry's own fixed step(s)
+        // will hit the existing floor reject downstream (§8.11).
+        return None;
+    }
+    Some((
+        MergeGroupKey {
+            desc_type,
+            multi_keyword,
+            threshold,
+            keys,
+        },
+        first_step,
+    ))
+}
+
+/// The parse-time pre-pass (SPEC_bitcoin_core_receive_change_pair_merge.md
+/// §4): recombine a same-key receive/change split pair (`.../0/*` +
+/// `.../1/*`) into one `<a;b>/*` multipath entry, restoring standard Bitcoin
+/// Core `listdescriptors` import.
+///
+/// Maximally-strict guard matrix (§4.2) — merges iff ALL of: identical
+/// grouping key (script/threshold/ordered per-key fp+origin+xpub, EXCLUDING
+/// the final step); each side a fixed single unhardened wildcard final step;
+/// steps differ; `internal` flags disagree; exactly two share the grouping
+/// key; multi-key uniformity. ANY deviation -> do not merge (leave both
+/// entries -> they hit the existing fixed-step floor reject downstream).
+///
+/// A receive/change-SHAPED near-miss (fixed-step, steps differ, internal
+/// flags disagree) whose grouping keys differ (distinct keys/scripts) is
+/// refused directly with a differentiated message (§7) rather than the
+/// generic per-entry floor reject — distinct keys are different wallets.
+fn merge_receive_change_pairs(
+    descriptors: Vec<Value>,
+    stderr: &mut dyn Write,
+) -> Result<Vec<PreparedEntry>, ToolkitError> {
+    // Pass 1: classify every entry that COULD be a merge candidate. Parse /
+    // shape / checksum failures here are swallowed (`None`) -- they simply
+    // opt the entry out of merge candidacy; the SAME failure surfaces with
+    // its normal diagnostic when the entry is later parsed for real via
+    // `parse_entry` (fail-closed: never silently "fix" a bad entry here).
+    let mut candidates: Vec<MergeCandidate> = Vec::new();
+    for (idx, entry) in descriptors.iter().enumerate() {
+        let Some(eobj) = entry.as_object() else {
+            continue;
+        };
+        let Some(desc_with_csum) = eobj.get("desc").and_then(|d| d.as_str()) else {
+            continue;
+        };
+        // §4.4 / M9 — validate the candidate's OWN BIP-380 checksum BEFORE
+        // consuming it; a corrupt checksum is simply not merge-eligible
+        // (§8.17) -- `parse_entry`'s own re-validation raises the real error
+        // downstream when this entry is (necessarily) left unmerged.
+        let Ok(body_no_csum) = miniscript::descriptor::checksum::verify_checksum(desc_with_csum)
+        else {
+            continue;
+        };
+        let Some((group, step)) = analyze_merge_candidate(body_no_csum) else {
+            continue;
+        };
+        let Ok(active) = parse_bool_field(eobj, "active") else {
+            continue;
+        };
+        let Ok(internal) = parse_bool_field(eobj, "internal") else {
+            continue;
+        };
+        let Ok(range) = parse_range_field(eobj.get("range")) else {
+            continue;
+        };
+        candidates.push(MergeCandidate {
+            idx,
+            group,
+            step,
+            body_no_csum: body_no_csum.to_string(),
+            active,
+            internal,
+            range,
+        });
+    }
+
+    // Bucket candidates by grouping key, first-seen order (linear scan --
+    // candidate counts are small; a HashMap would need `Hash` on
+    // `DerivationPath`/`Fingerprint`, not worth the API risk here).
+    let mut buckets: Vec<(MergeGroupKey, Vec<usize>)> = Vec::new();
+    for (ci, c) in candidates.iter().enumerate() {
+        if let Some(b) = buckets.iter_mut().find(|(g, _)| *g == c.group) {
+            b.1.push(ci);
+        } else {
+            buckets.push((c.group.clone(), vec![ci]));
+        }
+    }
+
+    // For each 2-member bucket satisfying cond. 4 (steps differ) + cond. 5
+    // (internal flags disagree), build the merged entry (§4.3). 3+-member
+    // buckets are ambiguous (cond. 6) -> NOTICE, no merge. 1-member buckets
+    // have no partner -> left alone.
+    struct Merge {
+        first_idx: usize,
+        second_idx: usize,
+        desc_with_csum: String,
+        active: bool,
+        range: Option<(u64, u64)>,
+    }
+    let mut merges: Vec<Merge> = Vec::new();
+    let mut merged_candidate_idx: HashSet<usize> = HashSet::new();
+
+    for (_group, member_cis) in &buckets {
+        if member_cis.len() >= 3 {
+            writeln!(
+                stderr,
+                "notice: import-wallet: bitcoin-core: {} descriptors share identical script/key material with differing use-site steps — ambiguous receive/change pairing, not merged",
+                member_cis.len()
+            )
+            .map_err(ToolkitError::Io)?;
+            continue;
+        }
+        if member_cis.len() != 2 {
+            continue;
+        }
+        let a = &candidates[member_cis[0]];
+        let b = &candidates[member_cis[1]];
+        if a.step == b.step || a.internal == b.internal {
+            // cond. 4 or cond. 5 failed -- ordinary (non-differentiated)
+            // reject via the existing floor once these are left unmerged.
+            continue;
+        }
+        let (recv, chg) = if !a.internal { (a, b) } else { (b, a) };
+        let recv_step_pat = format!("/{}/*", recv.step);
+        let merged_pat = format!("/<{};{}>/*", recv.step, chg.step);
+        // §4.3 uniformity precondition (verified by `analyze_merge_candidate`
+        // cond. 7) guarantees every key in `recv.body_no_csum` carries this
+        // EXACT suffix; the global replace is therefore all-keys-uniform by
+        // construction. Defensive: if the pattern is somehow absent, do NOT
+        // merge (fail closed) rather than emit a no-op / wrong descriptor.
+        if !recv.body_no_csum.contains(&recv_step_pat) {
+            continue;
+        }
+        let merged_body_no_csum = recv.body_no_csum.replace(&recv_step_pat, &merged_pat);
+        let merged_desc_with_csum = recompute_descriptor_checksum(&merged_body_no_csum)?;
+        merges.push(Merge {
+            first_idx: recv.idx.min(chg.idx),
+            second_idx: recv.idx.max(chg.idx),
+            desc_with_csum: merged_desc_with_csum,
+            active: recv.active || chg.active,
+            range: union_range(recv.range, chg.range),
+        });
+        merged_candidate_idx.insert(member_cis[0]);
+        merged_candidate_idx.insert(member_cis[1]);
+    }
+
+    // §7 differentiated near-miss: among candidates NOT consumed by a
+    // successful merge, any CROSS-GROUP pair with differing steps +
+    // disagreeing internal flags is receive/change-SHAPED but for DIFFERENT
+    // keys/scripts -- distinct keys are different wallets. Refuse the whole
+    // parse loudly rather than let it fall through to the generic per-entry
+    // floor reject.
+    for i in 0..candidates.len() {
+        if merged_candidate_idx.contains(&i) {
+            continue;
+        }
+        for j in (i + 1)..candidates.len() {
+            if merged_candidate_idx.contains(&j) {
+                continue;
+            }
+            let a = &candidates[i];
+            let b = &candidates[j];
+            if a.group == b.group {
+                continue; // same-group near-misses are ordinary cond.4/5 rejects
+            }
+            if a.step != b.step && a.internal != b.internal {
+                let lo = a.idx.min(b.idx);
+                let hi = a.idx.max(b.idx);
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: bitcoin-core: parse error: descriptors[{lo}]/[{hi}] look like a receive/change pair but their keys/origins differ — not merged (distinct keys are different wallets); a fixed single step like /{}/* is un-representable. If these ARE one wallet, combine them by hand to /<a;b>/* and import with --format descriptor.",
+                    a.step
+                )));
+            }
+        }
+    }
+
+    // Assembly (§4.4 Vec invariant): walk the ORIGINAL descriptors in order;
+    // a merged pair emits ONE synthesized entry at the first member's index
+    // and the second member's index is skipped entirely. Unpaired entries
+    // keep their relative order and an explicit `Some(bool)` internal
+    // provenance; a merged entry carries `None`.
+    let mut skip_second: HashSet<usize> = HashSet::new();
+    let mut merged_values: HashMap<usize, Value> = HashMap::new();
+    for m in &merges {
+        skip_second.insert(m.second_idx);
+        // §4.5 — union the `timestamp`/`next`/`next_index` dropped-field
+        // presence from BOTH original members into the synthesized entry so
+        // the per-entry `dropped_fields` provenance (computed later, inside
+        // `parse_entry`, by scanning `contains_key`) reflects the union.
+        let recv_eobj = descriptors[m.first_idx].as_object();
+        let chg_eobj = descriptors[m.second_idx].as_object();
+        let mut obj = serde_json::Map::new();
+        obj.insert("desc".to_string(), json!(m.desc_with_csum));
+        obj.insert("active".to_string(), json!(m.active));
+        if let Some((lo, hi)) = m.range {
+            obj.insert("range".to_string(), json!([lo, hi]));
+        }
+        for f in ["timestamp", "next", "next_index"] {
+            let v = recv_eobj
+                .and_then(|o| o.get(f))
+                .or_else(|| chg_eobj.and_then(|o| o.get(f)))
+                .cloned();
+            if let Some(v) = v {
+                obj.insert(f.to_string(), v);
+            }
+        }
+        merged_values.insert(m.first_idx, Value::Object(obj));
+    }
+
+    let mut out: Vec<PreparedEntry> = Vec::with_capacity(descriptors.len());
+    for (idx, entry) in descriptors.into_iter().enumerate() {
+        if skip_second.contains(&idx) {
+            continue;
+        }
+        if let Some(merged_value) = merged_values.remove(&idx) {
+            out.push(PreparedEntry {
+                value: merged_value,
+                internal: None,
+            });
+            continue;
+        }
+        let internal = match entry.as_object() {
+            Some(eobj) => Some(parse_bool_field(eobj, "internal")?),
+            None => None, // `parse_entry` raises "is not an object" downstream.
+        };
+        out.push(PreparedEntry {
+            value: entry,
+            internal,
+        });
+    }
+    Ok(out)
 }
 
 fn parse_entry(
@@ -611,5 +1002,33 @@ mod tests {
     fn sniff_false_on_entry_missing_desc() {
         let blob = br#"{"descriptors":[{"timestamp":42}]}"#;
         assert!(!BitcoinCoreParser::sniff(blob));
+    }
+
+    /// PLAN P1 "cheap insurance" — `Descriptor::<DescriptorPublicKey>::
+    /// from_str` must succeed on each in-scope merge-candidate shape (wpkh /
+    /// wsh(sortedmulti) / sh(wsh) / single-key bip86 tr) BEFORE
+    /// `analyze_merge_candidate` relies on parsed fields. A parse failure
+    /// here would silently degrade `analyze_merge_candidate` to `None`
+    /// (via `.ok()?`) for an entire in-scope shape class, making the merge
+    /// pre-pass vacuous for that shape without any test ever going RED.
+    #[test]
+    fn in_scope_merge_candidate_shapes_parse_via_rust_miniscript() {
+        let wpkh = "wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/0/*)";
+        let wsh_sortedmulti = "wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/0/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/0/*))";
+        let sh_wsh = "sh(wsh(sortedmulti(2,[b8688df1/48'/0'/0'/1']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/0/*,[28645006/48'/0'/0'/1']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/0/*)))";
+        let tr_bip86 = "tr([b8688df1/86'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/0/*)";
+        for (label, body) in [
+            ("wpkh", wpkh),
+            ("wsh(sortedmulti)", wsh_sortedmulti),
+            ("sh(wsh(sortedmulti))", sh_wsh),
+            ("tr bip86", tr_bip86),
+        ] {
+            MsDescriptor::<DescriptorPublicKey>::from_str(body)
+                .unwrap_or_else(|e| panic!("{label} must parse via rust-miniscript: {e}"));
+            assert!(
+                analyze_merge_candidate(body).is_some(),
+                "{label} must be classified as a merge candidate: {body}"
+            );
+        }
     }
 }
