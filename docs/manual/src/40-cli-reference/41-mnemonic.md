@@ -752,6 +752,20 @@ v0.22.1 D18 default). The behavior matrix:
 | no (pipe / redirected / CI) | no | Legacy VerifyCheck row + exit 4 (preserves automation contract) |
 | no | yes | Legacy VerifyCheck row + exit 4 |
 
+**mk1 set-level re-verify (Cycle E):** for an `--mk1` / `--bundle-json`
+mk1 payload, the "Auto-fire" outcome above (exit 5, corrected chunk
+applied to stdout) only occurs when the FULL `chunk_set_id` group is
+supplied AND the correction reassembles cleanly. If the correction
+would alias to a different card (a complete group whose reassembly
+fails), auto-fire does **not** apply it — the original decode error
+surfaces instead (the Legacy VerifyCheck row / `result: mismatch`
+outcome), never a silent short-circuit onto a wrong card. If only a
+partial group is supplied, auto-fire likewise does not blindly apply
+the correction (it cannot be set-verified); the original error
+surfaces the same way. See [mk1 set-level
+re-verify](#mnemonic-repair-mk1-set-level-reverify) under `mnemonic
+repair` below.
+
 The TTY gate exists so scripts that parse the `VerifyCheck` array (or
 the JSON envelope's `checks` field) don't see a single corrupted chunk
 silently short-circuit the entire check matrix. See the shared
@@ -3026,9 +3040,63 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
 | `5` | at least one chunk corrected (`REPAIR_APPLIED`), incl. a unique `--max-indel` recovery; stdout = repair report + corrected chunks |
-| `4` | ambiguous (multiple candidates) **or a candidate required ≥1 substitution** — verify each before trusting; all candidates are printed |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) |
+| `4` | ambiguous (multiple candidates), **or a candidate required ≥1 substitution**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified** — verify each before trusting; all candidates are printed. See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
 | `1` | I/O error or other generic failure |
+
+### mk1 set-level re-verify (Cycle E funds fix) {#mnemonic-repair-mk1-set-level-reverify}
+
+BCH correction is a best-fit operation: it returns the codeword within
+Hamming distance 4 of the corrupted input, and for a genuine ≤4-error
+corruption that is provably the originally-encoded chunk. Beyond that
+bound (5 or more substitution errors in one chunk), a correction can
+still *succeed* — the corrected chunk passes its own BCH check — while
+actually **aliasing to a different, valid-but-wrong codeword** rather
+than recovering the original. This distinction matters specifically for
+**mk1**, whose chunks are repaired and reported per-chunk: `ms1` is
+always a single chunk (no partial-set concept applies), and `md1`'s
+content-id check already rejects a full-set alias on its own (unchanged
+by this cycle — `md1` was never exposed to this gap).
+
+An empirically measured rate for this failure mode — a 5-substitution
+corruption of an mk1 regular-code chunk aliasing to a different, valid
+codeword — is on the order of **7.2 × 10⁻⁵** (a 95% Clopper-Pearson
+upper confidence bound, measured by a seeded, reproducible harness in
+the toolkit test suite; not a theoretical estimate). Small, but not
+zero — and the corrected chunk alone cannot distinguish the two cases;
+only reassembling the full card (its cross-chunk hash) can.
+
+`mnemonic repair --mk1` (and the auto-fire short-circuit on `convert` /
+`inspect` / `verify-bundle`, [above](#auto-fire-on-decode-failure-v0221))
+re-verify every full `chunk_set_id` group before reporting a confident
+fix:
+
+- **A COMPLETE group (every chunk of the card supplied) reassembles
+  cleanly** — reported as repaired, exit `5`, as before.
+- **A COMPLETE group's correction FAILS reassembly** — the per-chunk
+  correction has aliased to a different card. `mnemonic repair` REJECTS
+  it outright: the un-repaired decode error surfaces (exit `2`); no
+  corrected chunk is printed, and — critically — **auto-repair does NOT
+  apply the miscorrection either**; it falls through to the original
+  error. This is a breaking exit-code change from pre-Cycle-E behavior,
+  where such a miscorrection could be reported (or silently applied via
+  auto-fire) as a confident fix.
+- **An INCOMPLETE group is supplied** (a single plate of a multi-chunk
+  card, or otherwise fewer chunks than `total_chunks`) — reassembly
+  cannot be checked, because the other chunks aren't present.
+  `mnemonic repair` reports it as an exit-`4` VERIFY-ME candidate (the
+  same precedence tier as an ambiguous `--max-indel` recovery) with an
+  `UNVERIFIED` advisory: reassemble the full card (e.g. `mnemonic
+  inspect --mk1` for every chunk, or `mk decode`) before trusting the
+  correction. A batch call mixing an incomplete group with a fully-
+  reassembling group still reports the incomplete group's candidate —
+  but a batch containing a REJECTED (aliased) group fails the WHOLE
+  call (reject dominates candidate and bless; the rejected group's
+  chunks are never presented as recovered).
+
+BIP-93 itself recommends confirming a corrected codex32 string before
+relying on it; this advisory operationalizes that recommendation for
+the one case the re-verify cannot resolve on its own.
 
 ### Worked example
 

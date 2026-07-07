@@ -232,18 +232,70 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Code | Meaning |
 |---|---|
 | `0` | all strings already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one string corrected (`REPAIR_APPLIED`); stdout = repair report + corrected strings |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch) |
+| `5` | at least one string corrected (`REPAIR_APPLIED`); stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory — see [Set-level re-verify](#set-level-re-verify) below |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch) **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below) |
 | `1` | I/O error or other generic failure |
 
 The exit-5 `REPAIR_APPLIED` code is consistent across all four CLIs
 (`mnemonic`, `mk`, `ms`, `md`) per D26 of the v0.22.x follow-ups
 cycle, so wrapper scripts can use a uniform `exit == 5` signal.
 
+### Set-level re-verify {#set-level-re-verify}
+
+BCH correction is a best-fit operation: it returns the codeword within
+Hamming distance 4 of the corrupted input, and for a genuine ≤4-error
+corruption that is provably the originally-encoded chunk. Beyond that
+bound (5 or more substitution errors in one chunk), a correction can
+still *succeed* — the corrected chunk passes its own BCH check — while
+actually **aliasing to a different, valid-but-wrong codeword** rather
+than recovering the original. The corrected chunk alone cannot tell the
+two cases apart; only reassembling the FULL card (checking the
+cross-chunk hash that ties every chunk of a card together) can.
+
+An empirically measured rate for this failure mode — a 5-substitution
+corruption of the regular-code chunk aliasing to a different, valid
+codeword — is on the order of **7.2 × 10⁻⁵** (a 95% Clopper-Pearson
+upper confidence bound, measured by a seeded, reproducible harness in
+the toolkit test suite; not a theoretical estimate). Small, but not
+zero, and disproportionate in consequence: an aliased "correction"
+looks exactly like a confident fix.
+
+`mk repair` re-verifies every full `chunk_set_id` group it can before
+reporting a confident fix:
+
+- **A COMPLETE group (every chunk of the card supplied) reassembles
+  cleanly** — reported as repaired, exit `5`, as before.
+- **A COMPLETE group's correction FAILS reassembly** — the per-chunk
+  correction has aliased to a different card. `mk repair` REJECTS it
+  outright: exit `2` (`SetReassemblyMismatch`), no corrected string is
+  printed, no partial output. This is a breaking exit-code change from
+  pre-Cycle-E behavior, where such a miscorrection could be reported as
+  a confident fix.
+- **An INCOMPLETE group is supplied** (a single chunk of a multi-chunk
+  card, or otherwise fewer chunks than the card's `total_chunks` — the
+  documented per-plate recovery workflow in the worked example below) —
+  reassembly cannot be checked, because the other chunks aren't
+  present. `mk repair` still corrects and reports the chunk (exit `5`,
+  unchanged), but adds a loud `UNVERIFIED` advisory on stderr instructing
+  the operator to reassemble the full card before trusting the
+  correction.
+
+BIP-93 itself recommends confirming a corrected codex32 string before
+relying on it; this advisory operationalizes that recommendation for
+the one case `mk repair` cannot verify on its own. When in doubt,
+decode the full card (`mk decode` with every chunk of the set) — full
+reassembly's cross-chunk hash check is the authoritative confirmation
+that a correction recovered the true original card, not merely *a*
+valid one.
+
 ### Worked example
 
 ```sh
-# A valid mk1 chunk with one character substituted at position 17:
+# A valid mk1 chunk with one character substituted at position 17.
+# This is ONE chunk of a 2-chunk mk1 card — the documented single-plate
+# recovery workflow (only this plate is legible; the sibling chunk is
+# not being supplied) — so the group is INCOMPLETE and the correction
+# below is an UNVERIFIED candidate per Set-level re-verify above.
 mk repair mk1qp0wrvpqqsqaatd7aqeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq
 ```
 
@@ -253,12 +305,20 @@ describe the fix):
 ```{.text include="44-mk-repair-text.out"}
 ```
 
+Stderr (the `warning:` line is the [Set-level re-verify](#set-level-re-verify)
+advisory — this single chunk cannot be reassembled against its sibling,
+so reassemble the full card with `mk decode` before trusting the fix):
+
+```{.text include="44-mk-repair-text.err"}
+```
+
 Exit code: `5`.
 
 ### JSON output
 
 `mk repair --json` byte-matches toolkit's `RepairJson` envelope
-(`kind` is `"mk1"`):
+(`kind` is `"mk1"`). The `UNVERIFIED` advisory (same wording as the text
+mode above) is still emitted on stderr — `--json` only changes stdout:
 
 ```{.json include="44-mk-repair-json.out"}
 ```

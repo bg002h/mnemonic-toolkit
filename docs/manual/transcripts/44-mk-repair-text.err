@@ -1,1 +1,2 @@
+warning: correction UNVERIFIED — reassemble the full card (`mk decode`) to confirm; a >4-error correction can alias to a different card; BIP-93 recommends confirming a corrected codex32 string
 note: stdout is watch-only — public keys only, cannot spend
