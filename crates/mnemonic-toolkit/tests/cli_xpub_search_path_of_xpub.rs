@@ -493,8 +493,13 @@ fn path_of_xpub_invalid_xpub_exits_1() {
 }
 
 // ---------------------------------------------------------------------------
-// Cell 15 — corrupt ms1 + MNEMONIC_FORCE_TTY=1 → auto-fire short-circuit
-//   (exit 5).
+// Cell 15 (Cycle F `ms1-repair-demote-to-candidate` FLIP — SPEC §5.3): a
+// corrupted ms1 no longer short-circuits under xpub-search's auto-repair —
+// the candidate correction is demoted, so the ORIGINAL decode error
+// surfaces (`ms_codec::Error::Codex32` invalid-checksum ⇒ `ms_codec_exit_code`
+// ⇒ exit 1, via `ToolkitError::Bip39`/`MsCodec` mapping), NOT exit 5, NOT
+// exit 4/2 — plus the standalone-inline I2 advisory on stderr. Confirmed by
+// running the binary.
 // ---------------------------------------------------------------------------
 #[test]
 fn path_of_xpub_ms1_decode_failure_auto_fires() {
@@ -535,8 +540,12 @@ fn path_of_xpub_ms1_decode_failure_auto_fires() {
             &target,
         ])
         .assert()
-        .code(5)
-        .stdout(predicate::str::contains("# Repair report"));
+        .code(1)
+        .stdout(predicate::str::contains("# Repair report").not())
+        .stderr(predicate::str::contains(
+            "candidate correction exists but a seed card cannot be self-verified",
+        ))
+        .stderr(predicate::str::contains("mnemonic repair --ms1"));
 }
 
 // ---------------------------------------------------------------------------

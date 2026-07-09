@@ -42,23 +42,44 @@ fn flip_at(chunk: &str, pos: usize) -> String {
     out
 }
 
-/// Cell 9: text-form ms1 happy-path.
+/// Cell 9 (Cycle F `ms1-repair-demote-to-candidate` FLIP — was exit 5):
+/// text-form ms1 happy-path — SPEC §5.1 funds-anchor. A touched ms1
+/// substitution-correction is now a demoted exit-4 VERIFY-ME candidate
+/// (never a silent exit-5 "recovered"); the corrected string is still
+/// presented on stdout (nothing is withheld — the operator must inspect it)
+/// alongside the "correction UNVERIFIED" / BIP-93 advisory on stderr.
 #[test]
-fn cell_9_text_form_ms1_happy_path_exit_5_with_report() {
+fn cell_9_text_form_ms1_happy_path_exit_4_candidate_with_report() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["repair", "--ms1", &bad])
         .assert()
-        .code(5)
+        .code(4)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "ms1 chunk 0: 1 correction at position 17",
         ))
-        .stdout(predicate::str::contains(VALID_MS1));
+        .stdout(predicate::str::contains(VALID_MS1))
+        .stderr(predicate::str::contains("UNVERIFIED"))
+        .stderr(predicate::str::contains("BIP-93"));
 }
 
-/// Cell 10: --json ms1 happy-path.
+/// Cell 9b (Cycle F `ms1-repair-demote-to-candidate` — SPEC §5.1): a clean
+/// (already-valid) ms1 stays exit 0 — the demotion is scoped strictly to
+/// TOUCHED corrections.
+#[test]
+fn cell_9b_clean_ms1_stays_exit_0() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--ms1", VALID_MS1])
+        .assert()
+        .code(0)
+        .stderr(predicate::str::contains("UNVERIFIED").not());
+}
+
+/// Cell 10 (Cycle F FLIP — was exit 5): --json ms1 happy-path; `verdict`
+/// (SPEC §5.9/M1/M4) is `"candidate"` for a touched correction.
 #[test]
 fn cell_10_json_form_ms1_happy_path_envelope_shape() {
     let bad = flip_at(VALID_MS1, 17);
@@ -66,7 +87,7 @@ fn cell_10_json_form_ms1_happy_path_envelope_shape() {
         .unwrap()
         .args(["repair", "--json", "--ms1", &bad])
         .assert()
-        .code(5)
+        .code(4)
         .get_output()
         .stdout
         .clone();
@@ -74,11 +95,29 @@ fn cell_10_json_form_ms1_happy_path_envelope_shape() {
     let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
     assert_eq!(v["schema_version"], "1");
     assert_eq!(v["kind"], "ms1");
+    assert_eq!(v["verdict"], "candidate");
     assert_eq!(v["corrected_chunks"][0], VALID_MS1);
     assert_eq!(v["repairs"][0]["chunk_index"], 0);
     assert_eq!(v["repairs"][0]["corrected_positions"][0]["position"], 17);
     assert_eq!(v["repairs"][0]["original_chunk"], bad);
     assert_eq!(v["repairs"][0]["corrected_chunk"], VALID_MS1);
+}
+
+/// Cell 10b (Cycle F SPEC §5.9/M4): `verdict` is `"blessed"` for a clean
+/// (0-correction) ms1 decode.
+#[test]
+fn cell_10b_json_form_clean_ms1_verdict_blessed() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--json", "--ms1", VALID_MS1])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let s = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
+    assert_eq!(v["verdict"], "blessed");
 }
 
 /// Cell 11: already-valid input → exit 0, no report.
@@ -135,13 +174,15 @@ fn cell_12b_ms1_repair_works_for_all_entropy_lengths() {
             .stdout(predicate::str::contains("# Repair report").not())
             .stdout(predicate::str::contains(valid.as_str()));
 
-        // 1-error longer seed → exit 5 (repaired back to the original). (Pre-0.2.1: exit 2.)
+        // 1-error longer seed → exit 4 candidate (repaired back to the
+        // original, but demoted per Cycle F `ms1-repair-demote-to-candidate`
+        // — was exit 5 pre-Cycle-F). (Pre-0.2.1: exit 2.)
         let bad = flip_at(&valid, 5);
         Command::cargo_bin("mnemonic")
             .unwrap()
             .args(["repair", "--ms1", &bad])
             .assert()
-            .code(5)
+            .code(4)
             .stdout(predicate::str::contains("# Repair report"))
             .stdout(predicate::str::contains(valid.as_str()));
     }
@@ -181,7 +222,8 @@ fn cell_14_stdin_form_ms1_dash_reads_from_stdin() {
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{bad}\n"))
         .assert()
-        .code(5)
+        // Cycle F FLIP — was exit 5.
+        .code(4)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(VALID_MS1));
 }
@@ -206,13 +248,14 @@ fn cell_14_stdin_form_ms1_dash_reads_from_stdin() {
 /// lockstep, surfacing R3 redundantly.
 #[test]
 fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
-    // Scenario 9: text-form ms1 happy-path.
+    // Scenario 9 (Cycle F FLIP — was exit 5): text-form ms1 happy-path is
+    // now a demoted exit-4 candidate.
     let bad_ms1 = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["repair", "--ms1", &bad_ms1])
         .assert()
-        .code(5)
+        .code(4)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "ms1 chunk 0: 1 correction at position 17",
@@ -338,7 +381,9 @@ fn repair_inline_ms1_fires_secret_in_argv_advisory() {
         .unwrap()
         .args(["repair", "--ms1", &bad])
         .assert()
-        .code(5)
+        // Cycle F FLIP — was exit 5; a touched ms1 correction is now a
+        // demoted exit-4 candidate. The argv advisory is unaffected.
+        .code(4)
         .get_output()
         .clone();
     let stderr = String::from_utf8(out.stderr).unwrap();
@@ -381,7 +426,8 @@ fn repair_ms1_stdin_dash_does_not_fire_argv_advisory() {
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{bad}\n"))
         .assert()
-        .code(5)
+        // Cycle F FLIP — was exit 5; see repair_inline_ms1_fires_secret_in_argv_advisory.
+        .code(4)
         .get_output()
         .clone();
     let stderr = String::from_utf8(out.stderr).unwrap();

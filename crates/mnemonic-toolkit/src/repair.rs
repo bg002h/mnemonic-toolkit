@@ -439,12 +439,19 @@ pub struct RepairOutcome {
     pub kind: CardKind,
     pub corrected_chunks: Vec<String>,
     pub repairs: Vec<RepairDetail>,
-    /// Cycle E (`mk1-repair-set-level-reverify`) — SPEC §2 tri-state
-    /// set-level re-verify discriminant. `Ms1` / `Md1` always report
-    /// `Blessed` (their sibling-codec delegates only ever return `Ok` on
-    /// full decode success already, so there is no behavior change for
-    /// those kinds). `Mk1` reports `Blessed` when every chunk_set_id group
-    /// that underwent a per-string correction reassembles cleanly via
+    /// Cycle E (`mk1-repair-set-level-reverify`) / Cycle F
+    /// (`ms1-repair-demote-to-candidate`) — SPEC §2 tri-state set-level
+    /// re-verify discriminant. `Ms1` reports `Unverified` whenever ANY
+    /// substitution-correction touched the (single-chunk) card — a
+    /// bounded-distance BCH correction spends the checksum's error-
+    /// detection budget and can alias to a DIFFERENT valid seed
+    /// undetectably, so ms1 has no self-oracle and every touched
+    /// correction is demoted to a VERIFY-ME candidate; `Blessed` only for
+    /// a clean (0-correction) decode. `Md1` always reports `Blessed` (its
+    /// sibling-codec delegate only ever returns `Ok` on full decode
+    /// success already, so there is no behavior change for that kind).
+    /// `Mk1` reports `Blessed` when every chunk_set_id group that
+    /// underwent a per-string correction reassembles cleanly via
     /// `mk_codec::decode`; `Unverified` when such a group is INCOMPLETE (a
     /// partial-plate repair — preserved, but cannot be set-verified until
     /// the full card is reassembled). A **Reject** (a complete-and-
@@ -459,8 +466,11 @@ pub struct RepairOutcome {
 pub enum SetVerify {
     /// Confident recovery — safe to treat as the real card.
     Blessed,
-    /// A corrected chunk_set_id group is incomplete (a single-plate /
-    /// partial-set repair); `reason` is the loud user-facing advisory text.
+    /// Either (a) a corrected mk1 chunk_set_id group is incomplete (a
+    /// single-plate / partial-set repair), or (b) an ms1 substitution
+    /// correction touched the card (Cycle F — the BCH correction spent
+    /// the checksum's error-detection budget with no self-oracle
+    /// available); `reason` is the loud user-facing advisory text.
     Unverified { reason: String },
 }
 
@@ -1138,14 +1148,32 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                     None => corrected_chunks.push(chunk.clone()),
                 }
             }
+            // Cycle F (`ms1-repair-demote-to-candidate`) SPEC §2 — Option B:
+            // touched ⇒ Unverified. ms1 is a single-string bearer secret with
+            // no cross-chunk hash and no internal redundancy beyond the BCH
+            // checksum itself; a bounded-distance substitution-correction
+            // spends that checksum's error-detection budget, so a >4-error
+            // "repair" can alias to a DIFFERENT valid seed undetectably.
+            // `repairs` non-empty ⇔ ms-codec applied ≥1 correction (⇔ the
+            // decoded residue was non-zero, plus ms-codec's own defensive
+            // post-correction re-verify) — so this never false-Blesses a
+            // touched correction, and a clean (0-correction) decode still
+            // reports `Blessed` (exit 0 unchanged).
+            let set_verify = if repairs.is_empty() {
+                SetVerify::Blessed
+            } else {
+                SetVerify::Unverified {
+                    reason: "correction UNVERIFIED — a corrected seed card cannot be \
+                        self-verified; confirm the derived address/xpub against a known-good \
+                        copy before use; BIP-93 recommends confirming a corrected codex32 string"
+                        .to_string(),
+                }
+            };
             Ok(RepairOutcome {
                 kind,
                 corrected_chunks,
                 repairs,
-                // ms1 delegates entirely to ms_codec::decode_with_correction,
-                // which only ever returns `Ok` on full decode success — no
-                // behavior change from Cycle E.
-                set_verify: SetVerify::Blessed,
+                set_verify,
             })
         }
         CardKind::Md1 => {
@@ -1694,11 +1722,29 @@ pub fn try_repair_and_short_circuit<O: Write + ?Sized, E: Write + ?Sized>(
     // Cycle E (`mk1-repair-set-level-reverify`) / plan-R0 G7 — auto-repair
     // NEVER blesses an unverified (partial-set) mk1 correction. A dominant
     // Reject already short-circuited to `Err` above (the first match arm);
-    // this arm only ever sees `Unverified` (an incomplete corrected
-    // chunk_set_id group). Fall through so the caller's original typed
-    // error surfaces — a partial card cannot convert/inspect/verify-bundle
-    // anyway (SPEC §2 residual-partial-set-exposure note).
+    // this arm sees `Unverified` for either an incomplete corrected mk1
+    // chunk_set_id group, OR (Cycle F) any touched ms1 substitution-
+    // correction. Fall through so the caller's original typed error
+    // surfaces — a partial mk1 card cannot convert/inspect/verify-bundle
+    // anyway (SPEC §2 residual-partial-set-exposure note), and an
+    // unverified ms1 candidate is never silently applied.
     if !matches!(outcome.set_verify, SetVerify::Blessed) {
+        // Cycle F I2 — the verify-bundle ms1 sites bypass this helper
+        // entirely (a direct `repair_card` call feeds the ground-truth
+        // compare instead), so the only Ms1 callers reaching this
+        // fall-through are the standalone-inline auto-repair sites
+        // (convert / inspect / xpub-search) where a complete-but-withheld
+        // candidate would otherwise be silently invisible. Kind-gated:
+        // does NOT alter the shipped mk1 partial-set fall-through (no
+        // advisory there).
+        if matches!(kind, CardKind::Ms1) {
+            writeln!(
+                stderr,
+                "repair: a candidate correction exists but a seed card cannot be \
+                    self-verified — run `mnemonic repair --ms1 …` to inspect it"
+            )
+            .ok();
+        }
         return Ok(());
     }
 
@@ -1908,6 +1954,17 @@ mod tests {
         assert_eq!(result.repairs[0].chunk_index, 0);
         assert_eq!(result.repairs[0].corrected_positions.len(), 1);
         assert_eq!(result.repairs[0].corrected_positions[0].0, 10);
+        // Cycle F (`ms1-repair-demote-to-candidate`) SPEC §2 / G1 — a
+        // touched ms1 substitution-correction is demoted to Unverified
+        // (never Blessed); the reason text names both the confirmation
+        // remedy and BIP-93.
+        match &result.set_verify {
+            SetVerify::Unverified { reason } => {
+                assert!(reason.contains("BIP-93"), "reason: {reason}");
+                assert!(reason.contains("self-verified"), "reason: {reason}");
+            }
+            SetVerify::Blessed => panic!("a touched ms1 correction must NOT be Blessed"),
+        }
     }
 
     #[test]
@@ -1917,6 +1974,13 @@ mod tests {
         assert!(
             result.repairs.is_empty(),
             "no corrections applied for valid input"
+        );
+        // Cycle F G1 — a clean (0-correction) ms1 decode stays Blessed; the
+        // demotion is scoped strictly to TOUCHED corrections.
+        assert_eq!(
+            result.set_verify,
+            SetVerify::Blessed,
+            "a clean ms1 decode must stay Blessed (exit 0 unchanged)"
         );
     }
 
@@ -2842,5 +2906,88 @@ mod tests {
             }
             other => panic!("expected HrpMismatch, got {other:?}"),
         }
+    }
+
+    // ========================================================================
+    // Cycle F (`ms1-repair-demote-to-candidate`) — SPEC §0.3/§2 I2 fall-through
+    // advisory + kind-gate. `try_repair_and_short_circuit` is exercised
+    // directly here (rather than only via the CLI) to pin the helper's
+    // contract: an Ms1 Unverified outcome falls through WITH the one-line
+    // stderr advisory; an Mk1 Unverified (partial-set) outcome falls through
+    // WITHOUT it (the shipped Cycle E behavior must not change).
+    // ========================================================================
+
+    #[test]
+    fn try_repair_and_short_circuit_ms1_unverified_falls_through_with_advisory() {
+        let bad = flip_at(VALID_MS1, 10);
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let result =
+            try_repair_and_short_circuit(CardKind::Ms1, &[bad], &mut stdout, &mut stderr, false);
+        assert!(
+            result.is_ok(),
+            "an Unverified ms1 candidate must fall through (no short-circuit), got {result:?}"
+        );
+        assert!(
+            stdout.is_empty(),
+            "no repair report on the fall-through path"
+        );
+        let stderr_s = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr_s.contains("candidate correction exists"),
+            "stderr: {stderr_s:?}"
+        );
+        assert!(
+            stderr_s.contains("mnemonic repair --ms1"),
+            "stderr: {stderr_s:?}"
+        );
+    }
+
+    #[test]
+    fn try_repair_and_short_circuit_ms1_clean_decode_falls_through_silently() {
+        // A clean (already-valid) ms1 has repairs.is_empty() → falls through
+        // at the EARLIER empty-repairs gate, before the set_verify check —
+        // no advisory (nothing was corrected, so there is no candidate to
+        // flag).
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let result = try_repair_and_short_circuit(
+            CardKind::Ms1,
+            &[VALID_MS1.to_string()],
+            &mut stdout,
+            &mut stderr,
+            false,
+        );
+        assert!(result.is_ok());
+        assert!(stdout.is_empty());
+        assert!(
+            String::from_utf8(stderr).unwrap().is_empty(),
+            "a clean decode must not emit the candidate advisory"
+        );
+    }
+
+    #[test]
+    fn try_repair_and_short_circuit_mk1_partial_set_unverified_no_advisory() {
+        // Regression guard (SPEC §0.3 — "do NOT change shipped mk1
+        // behavior"): an Unverified mk1 (partial-plate) outcome falls
+        // through WITHOUT the ms1-specific advisory text.
+        const MK1_CHUNK1: &str =
+            "mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh";
+        let bad_chunk1 = flip_at(MK1_CHUNK1, 25);
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let result = try_repair_and_short_circuit(
+            CardKind::Mk1,
+            &[bad_chunk1],
+            &mut stdout,
+            &mut stderr,
+            false,
+        );
+        assert!(result.is_ok(), "partial-set mk1 must fall through");
+        let stderr_s = String::from_utf8(stderr).unwrap();
+        assert!(
+            !stderr_s.contains("candidate correction exists"),
+            "the ms1-only advisory must not fire for mk1: {stderr_s:?}"
+        );
     }
 }

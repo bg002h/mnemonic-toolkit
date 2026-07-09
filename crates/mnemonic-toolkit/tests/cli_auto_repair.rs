@@ -46,8 +46,14 @@ fn flip_at(chunk: &str, pos: usize) -> String {
     out
 }
 
-/// Cell 19: convert --from ms1=<1-error> --to phrase → exit 5 + repair
-/// report on stdout + corrected ms1 emitted.
+/// Cell 19 (Cycle F `ms1-repair-demote-to-candidate` FLIP — was exit 5 +
+/// repair report): convert --from ms1=<1-error> --to phrase no longer
+/// short-circuits — an ms1 substitution-correction is now a demoted
+/// candidate, so `try_repair_and_short_circuit` falls through and the
+/// caller's ORIGINAL decode error surfaces (`ms_codec::Error::Codex32` →
+/// `ms_codec_exit_code` ⇒ exit 1), NOT exit 4, NOT exit 2. The one-line
+/// standalone-inline advisory fires on stderr (SPEC §0.3 I2). Confirmed by
+/// running the binary (not just read from the plan).
 #[test]
 fn cell_19_convert_auto_fire_ms1_one_substitution() {
     let bad = flip_at(VALID_MS1, 17);
@@ -59,15 +65,13 @@ fn cell_19_convert_auto_fire_ms1_one_substitution() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
         .assert()
-        .code(5)
-        .stdout(predicate::str::contains("# Repair report"))
-        .stdout(predicate::str::contains(
-            "ms1 chunk 0: 1 correction at position 17",
-        ))
-        .stdout(predicate::str::contains(VALID_MS1))
+        .code(1)
+        .stdout(predicate::str::contains("# Repair report").not())
         .stderr(predicate::str::contains(
-            "repair: applied 1 correction across 1 chunk",
-        ));
+            "candidate correction exists but a seed card cannot be self-verified",
+        ))
+        .stderr(predicate::str::contains("mnemonic repair --ms1"))
+        .stderr(predicate::str::contains("invalid short checksum"));
 }
 
 /// Cell 20a: layering note for mk1 auto-fire.
@@ -137,8 +141,9 @@ fn cell_20b_inspect_auto_fire_md1_one_substitution() {
         .stdout(predicate::str::contains(VALID_MD1_CHUNK0));
 }
 
-/// Cell 18b: inspect auto-fire on corrupted ms1 (formerly cell 18 in §4.3,
-/// now lives here since auto-fire wiring is Phase 5).
+/// Cell 18b (Cycle F FLIP — was exit 5 + repair report): inspect auto-fire
+/// on corrupted ms1 no longer short-circuits — same demotion as cell 19;
+/// the original decode error surfaces (exit 1) + the I2 advisory on stderr.
 #[test]
 fn cell_18b_inspect_auto_fire_on_corrupted_ms1() {
     let bad = flip_at(VALID_MS1, 17);
@@ -150,12 +155,12 @@ fn cell_18b_inspect_auto_fire_on_corrupted_ms1() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["inspect", "--ms1", &bad])
         .assert()
-        .code(5)
-        .stdout(predicate::str::contains("# Repair report"))
-        .stdout(predicate::str::contains(VALID_MS1))
+        .code(1)
+        .stdout(predicate::str::contains("# Repair report").not())
         .stderr(predicate::str::contains(
-            "repair: applied 1 correction across 1 chunk",
-        ));
+            "candidate correction exists but a seed card cannot be self-verified",
+        ))
+        .stderr(predicate::str::contains("invalid short checksum"));
 }
 
 /// Cell 22: --no-auto-repair suppresses auto-fire on both convert and inspect.
@@ -225,10 +230,14 @@ fn cell_23_bundle_self_check_does_not_auto_fire() {
 // v0.22.1 D20 — JSON-context auto-fire output cells
 // ============================================================================
 
-/// Cell 24: convert --json + corrupted ms1 → auto-fire emits a JSON
-/// envelope on stdout (NOT text-form) with the D20 discriminator fields.
+/// Cell 24 (Cycle F FLIP — was: auto-fire emits a D20 JSON envelope,
+/// exit 5): a demoted ms1 candidate no longer short-circuits AT ALL, so
+/// `--json` on `convert` (which only shapes the SUCCESS-path output) never
+/// reaches the D20 envelope; the original decode error surfaces on stderr
+/// as plain text (exit 1), with NO stdout and NO
+/// `"auto_repair_short_circuit"` marker anywhere in the output.
 #[test]
-fn cell_24_convert_json_context_auto_fire_emits_json_envelope() {
+fn cell_24_convert_json_context_ms1_no_longer_short_circuits() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -243,25 +252,23 @@ fn cell_24_convert_json_context_auto_fire_emits_json_envelope() {
             "phrase",
         ])
         .assert()
-        .code(5)
+        .code(1)
         .get_output()
-        .stdout
         .clone();
-    let s = String::from_utf8(out).unwrap();
-    // Should NOT contain text-form report markers.
+    let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
-        !s.contains("# Repair report"),
-        "JSON context must not emit text-form headers; got: {s}"
+        stdout.is_empty(),
+        "no JSON envelope / stdout on the demoted-candidate error path; got: {stdout}"
     );
-    // Should parse as a single JSON envelope.
-    let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
-    assert_eq!(v["schema_version"], "1");
-    assert_eq!(v["auto_repair_short_circuit"], true);
-    assert_eq!(v["exit_code"], 5);
-    assert_eq!(v["kind"], "ms1");
-    assert_eq!(v["corrected_chunks"][0], VALID_MS1);
-    assert_eq!(v["repairs"][0]["chunk_index"], 0);
-    assert_eq!(v["repairs"][0]["corrected_positions"][0]["position"], 17);
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        !stderr.contains("auto_repair_short_circuit"),
+        "the D20 envelope must be unreachable for a demoted ms1 candidate; stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("candidate correction exists but a seed card cannot be self-verified"),
+        "stderr: {stderr}"
+    );
 }
 
 /// Cell 25: inspect --json + corrupted md1 → auto-fire emits a JSON
@@ -302,24 +309,31 @@ fn cell_25_inspect_json_context_auto_fire_emits_json_envelope() {
     assert_eq!(v["repairs"][0]["corrected_positions"][0]["position"], 20);
 }
 
-/// Cell 26: D20 schema pin. Verify full envelope structure (all 6
-/// top-level fields present with the documented types) for a known-shape
-/// invocation. Distinct from cells 24/25 which assert specific FIELD
-/// values — this cell asserts the SCHEMA itself stays stable.
+/// Cell 26 (Cycle F fixture-swap — schema pin unaffected): D20 schema pin.
+/// Verify full envelope structure (all 6 top-level fields present with the
+/// documented types) for a known-shape invocation. Distinct from cells
+/// 24/25 which assert specific FIELD values — this cell asserts the SCHEMA
+/// itself stays stable. Post-Cycle-F, an ms1 substitution-correction no
+/// longer reaches the D20 envelope AT ALL (see cell 24), so this cell's
+/// fixture switches to a corrupted md1 chunk (same short-circuit-eligible
+/// kind as cell 25) — the D20 schema itself is kind-agnostic and unaffected
+/// by the ms1 demotion.
 #[test]
 fn cell_26_d20_json_envelope_schema_v1_pin() {
-    let bad = flip_at(VALID_MS1, 17);
+    let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
-        // v0.25.0 §2.B — convert's auto-fire is now TTY-gated; force on.
+        // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated; force on.
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
-            "convert",
+            "inspect",
             "--json",
-            "--from",
-            &format!("ms1={bad}"),
-            "--to",
-            "phrase",
+            "--md1",
+            &bad_chunk0,
+            "--md1",
+            VALID_MD1_CHUNK1,
+            "--md1",
+            VALID_MD1_CHUNK2,
         ])
         .assert()
         .code(5)
@@ -465,9 +479,15 @@ fn write_temp_json(body: &str) -> std::path::PathBuf {
     path
 }
 
-/// Cell 27: verify-bundle auto-fire happy-path under TTY. The corrupted
-/// ms1[0] chunk triggers the D18 TTY-gated auto-fire; output is the D20
-/// JSON envelope (we use --json to also exercise that pairing).
+/// Cell 27 (Cycle F FLIP — was: D18 TTY-gated auto-fire short-circuit,
+/// exit 5 + repair report). Post-Cycle-F the 2 verify-bundle ms1 sites
+/// bypass `try_repair_and_short_circuit` entirely (C1 ground-truth
+/// compare): `synth_corrupted_bundle_json` corrupts the SAME seed's own
+/// ms1 card, so the auto-repaired candidate byte-matches
+/// `expected.ms1[0]` — a MATCH (SPEC §5.4) — and the `ms1_decode` /
+/// `ms1_entropy_match` checks PASS with a "recovered … confirmed" note;
+/// overall exit 0 (no short-circuit, no repair report). Confirmed by
+/// running the binary.
 #[test]
 fn cell_27_verify_bundle_auto_fire_happy_path_tty() {
     let bad_json = synth_corrupted_bundle_json(17);
@@ -487,11 +507,15 @@ fn cell_27_verify_bundle_auto_fire_happy_path_tty() {
             path.to_str().unwrap(),
         ])
         .assert()
-        .code(5)
-        .stdout(predicate::str::contains("# Repair report"))
+        .code(0)
+        .stdout(predicate::str::contains("# Repair report").not())
         .stdout(predicate::str::contains(
-            "ms1 chunk 0: 1 correction at position 17",
-        ));
+            "ms1_decode: ok recovered via auto-repair, confirmed against expected seed",
+        ))
+        .stdout(predicate::str::contains(
+            "ms1_entropy_match: ok recovered via auto-repair, confirmed against expected seed",
+        ))
+        .stdout(predicate::str::contains("result: ok"));
 }
 
 /// Cell 28: --no-auto-repair hard override even under TTY. Falls back to
@@ -550,9 +574,12 @@ fn cell_29_verify_bundle_piped_preserves_legacy() {
         .stdout(predicate::str::contains("ms1_decode: fail"));
 }
 
-/// Cell 30: --json + TTY + corrupted bundle → D20 JSON envelope (NOT the
-/// VerifyBundleJson check-array envelope; the auto-fire envelope short-
-/// circuits before the verify check array is built).
+/// Cell 30 (Cycle F FLIP — was: D20 auto-fire envelope short-circuits
+/// before the check array is built, exit 5). Post-Cycle-F the D20
+/// short-circuit envelope is UNREACHABLE for ms1 (M2 — the ground-truth
+/// compare replaces it): `--json` now emits the ordinary `VerifyBundleJson`
+/// check-array envelope, with the ms1 checks passing (MATCH — same-seed
+/// corruption per `synth_corrupted_bundle_json`) and overall exit 0.
 #[test]
 fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
     let bad_json = synth_corrupted_bundle_json(17);
@@ -573,26 +600,35 @@ fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
             path.to_str().unwrap(),
         ])
         .assert()
-        .code(5)
+        .code(0)
         .get_output()
         .stdout
         .clone();
     let s = String::from_utf8(out).unwrap();
     let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
-    // Auto-fire envelope discriminators (D20).
-    assert_eq!(v["schema_version"], "1");
-    assert_eq!(v["auto_repair_short_circuit"], true);
-    assert_eq!(v["exit_code"], 5);
-    assert_eq!(v["kind"], "ms1");
-    // Should NOT be the VerifyBundleJson schema (which has `result`+`checks`).
+    // Must be the ordinary VerifyBundleJson schema now — NOT the D20
+    // auto-fire discriminators (which are unreachable for ms1 post-Cycle-F).
     assert!(
-        v["result"].is_null(),
-        "should not be VerifyBundleJson envelope"
+        v["auto_repair_short_circuit"].is_null(),
+        "the D20 envelope must be unreachable for a ms1 ground-truth MATCH"
     );
-    assert!(
-        v["checks"].is_null(),
-        "should not be VerifyBundleJson envelope"
-    );
+    assert_eq!(v["schema_version"], "4");
+    assert_eq!(v["result"], "ok");
+    let checks = v["checks"].as_array().expect("VerifyBundleJson.checks");
+    let ms1_decode = checks
+        .iter()
+        .find(|c| c["name"] == "ms1_decode")
+        .expect("ms1_decode check present");
+    assert_eq!(ms1_decode["passed"], true);
+    assert!(ms1_decode["detail"]
+        .as_str()
+        .unwrap()
+        .contains("recovered via auto-repair, confirmed against expected seed"));
+    let ms1_match = checks
+        .iter()
+        .find(|c| c["name"] == "ms1_entropy_match")
+        .expect("ms1_entropy_match check present");
+    assert_eq!(ms1_match["passed"], true);
 }
 
 // ============================================================================

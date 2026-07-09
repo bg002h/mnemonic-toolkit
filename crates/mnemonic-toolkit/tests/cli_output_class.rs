@@ -670,21 +670,35 @@ const AUTO_REPAIR_MD1_C2: &str =
     "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
 const T_LINE: &str = "note: stdout is a keyless descriptor template (no keys)";
 
-/// Auto-repair short-circuit (inspect, 1-char-corrupt ms1) → exit 5,
-/// repaired ms1 on stdout → PrivateKeyMaterial (P) advisory line.
+/// Cycle F (`ms1-repair-demote-to-candidate`) FLIP — was: auto-repair
+/// short-circuit (inspect, 1-char-corrupt ms1) → exit 5, repaired ms1 on
+/// stdout → PrivateKeyMaterial (P) advisory line. An ms1 substitution
+/// correction is now a demoted candidate — `try_repair_and_short_circuit`
+/// falls through, so the ORIGINAL decode error surfaces (exit 1) BEFORE
+/// anything reaches stdout; consequently NO output-class advisory fires at
+/// all (nothing was written to stdout to classify). ms1's P-classification
+/// on the auto-repair path is no longer reachable via inspect/convert; it
+/// remains covered by the STANDALONE `repair --ms1` path
+/// (`repair_ms1_emits_private_key_material`, which still emits the
+/// corrected card at exit 4).
 #[test]
-fn auto_repair_short_circuit_ms1_emits_private_key_material() {
+fn auto_repair_short_circuit_ms1_no_longer_applies_after_cycle_f_demotion() {
     let bad = flip_bech32_p3(AUTO_REPAIR_MS1, 17);
     let o = mnemonic()
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["inspect", "--ms1", &bad])
         .output()
         .unwrap();
-    assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "expected exit 1 (demoted candidate, no short-circuit): {}",
+        stderr(&o)
+    );
     let s = stderr(&o);
     assert!(
-        s.contains(P_LINE),
-        "ms1 auto-repair must emit P advisory: {s}"
+        !s.contains(P_LINE),
+        "no output-class advisory should fire — nothing was written to stdout: {s}"
     );
 }
 
@@ -714,21 +728,29 @@ fn auto_repair_short_circuit_md1_emits_template() {
     );
 }
 
-/// Auto-repair short-circuit (convert, 1-char-corrupt ms1) → exit 5,
-/// repaired ms1 on stdout → PrivateKeyMaterial advisory line.
+/// Cycle F FLIP (mirrors the inspect cell above) — was: auto-repair
+/// short-circuit (convert, 1-char-corrupt ms1) → exit 5, repaired ms1 on
+/// stdout → PrivateKeyMaterial advisory line. Now: demoted candidate falls
+/// through, the original decode error surfaces (exit 1), no stdout, no
+/// output-class advisory.
 #[test]
-fn auto_repair_short_circuit_convert_ms1_emits_private_key_material() {
+fn auto_repair_short_circuit_convert_ms1_no_longer_applies_after_cycle_f_demotion() {
     let bad = flip_bech32_p3(AUTO_REPAIR_MS1, 17);
     let o = mnemonic()
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
         .output()
         .unwrap();
-    assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "expected exit 1 (demoted candidate, no short-circuit): {}",
+        stderr(&o)
+    );
     let s = stderr(&o);
     assert!(
-        s.contains(P_LINE),
-        "ms1 convert auto-repair must emit P advisory: {s}"
+        !s.contains(P_LINE),
+        "no output-class advisory should fire — nothing was written to stdout: {s}"
     );
 }
 

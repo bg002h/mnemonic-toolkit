@@ -52,7 +52,8 @@ fn flip_at(chunk: &str, pos: usize) -> String {
 // ============================================================================
 
 /// Single-HRP positional: `mnemonic repair ms1xxx` → routes to ms1, emits
-/// the corrected chunk (exit 5).
+/// the corrected chunk (Cycle F FLIP — was exit 5; a touched ms1
+/// substitution-correction is now a demoted exit-4 candidate).
 #[test]
 fn repair_positional_single_ms1_routes_correctly() {
     let bad = flip_at(VALID_MS1, 17);
@@ -60,7 +61,7 @@ fn repair_positional_single_ms1_routes_correctly() {
         .unwrap()
         .args(["repair", &bad])
         .assert()
-        .code(5)
+        .code(4)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "ms1 chunk 0: 1 correction at position 17",
@@ -111,7 +112,8 @@ fn repair_mixed_positional_and_flag_combined_routing() {
         .unwrap()
         .args(["repair", "--ms1", &bad_ms1, VALID_MK1_CHUNK0])
         .assert()
-        .code(5)
+        // Cycle F FLIP — was exit 5; the candidate (ms1) OR-folds to exit 4.
+        .code(4)
         .stdout(predicate::str::contains(VALID_MS1))
         .stdout(predicate::str::contains(VALID_MK1_CHUNK0))
         .stdout(predicate::str::contains(

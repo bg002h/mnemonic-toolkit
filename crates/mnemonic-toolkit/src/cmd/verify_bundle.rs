@@ -1993,6 +1993,46 @@ pub struct SuppliedCards<'a> {
     pub md1: &'a [String],
 }
 
+/// Cycle F (`ms1-repair-demote-to-candidate`) C1 — ground-truth compare.
+///
+/// On a supplied-ms1 decode failure, attempt a PURE (non-advisory)
+/// substitution-correction via a DIRECT `repair_card` call — deliberately
+/// bypassing `try_repair_and_short_circuit`, which would either short-
+/// circuit the whole run (pre-Cycle-F ms1 semantics) or (post-Cycle-F) emit
+/// the standalone-inline I2 advisory; neither is appropriate here, since the
+/// candidate is surfaced via the `ms1_decode`/`ms1_entropy_match` check rows
+/// instead (SPEC §0.3).
+///
+/// Returns `Some(true)` when a correction was applied AND it byte-matches
+/// `expected_ms1` (the user's TYPED seed — the ground truth: recovered,
+/// confirmed). Returns `Some(false)` when a correction was applied but does
+/// NOT match (the wrong-bundle case — SPEC §5.5 funds anchor: the candidate
+/// must NOT be blessed). Returns `None` when no correction could be applied
+/// (uncorrectable, or the failure wasn't a repair-class error) — the caller
+/// falls back to the original decode-error check rows unchanged.
+///
+/// The corrected string is held in `Zeroizing` (secret-hygiene, proactive —
+/// SPEC §8 risk 6 / G5) even though it is only ever compared, never emitted.
+fn ms1_ground_truth_compare(supplied_ms1: &str, expected_ms1: &str) -> Option<bool> {
+    let outcome =
+        crate::repair::repair_card(crate::repair::CardKind::Ms1, &[supplied_ms1.to_string()])
+            .ok()?;
+    if outcome.repairs.is_empty() {
+        // Decoded-and-clean is unreachable from the caller (which only
+        // invokes this after `ms_codec::decode` already failed), but guard
+        // defensively rather than assume — fall back to the original error.
+        return None;
+    }
+    let corrected = zeroize::Zeroizing::new(
+        outcome
+            .corrected_chunks
+            .first()
+            .cloned()
+            .unwrap_or_default(),
+    );
+    Some(corrected.as_str() == expected_ms1)
+}
+
 /// SPEC §5.7 verify-bundle check emission. Returns the 9-check array (single-sig)
 /// or 3+6N (multisig) per the SPEC's check-name ordering. Forensic fields
 /// populated per SPEC §5.7 rules: pass → all None; string-mismatch → expected/
@@ -2074,31 +2114,76 @@ pub fn emit_verify_checks(
                 }
             }
             Err(e) => {
-                // v0.22.1 Phase 4 site #1 — auto-fire on supplied ms1 decode-fail.
-                if !no_auto_repair {
-                    crate::repair::try_repair_and_short_circuit(
-                        crate::repair::CardKind::Ms1,
-                        &[supplied_ms1.to_string()],
-                        stdout,
-                        stderr,
-                        json_context,
-                    )?;
+                // v0.22.1 Phase 4 site #1 → Cycle F C1 (SPEC §0.4/§3) — a
+                // direct, non-advisory `repair_card` call replaces the
+                // short-circuiting helper here: the corrected candidate is
+                // compared against the user's TYPED seed (`expected_ms1`)
+                // and surfaced via the check rows, never silently applied.
+                let ground_truth = if !no_auto_repair {
+                    ms1_ground_truth_compare(supplied_ms1, expected_ms1)
+                } else {
+                    None
+                };
+                match ground_truth {
+                    Some(true) => {
+                        // Match — the repair recovered the right card,
+                        // confirmed by the ground truth the user typed.
+                        checks.push(VerifyCheck {
+                            name: "ms1_decode".into(),
+                            passed: true,
+                            detail: "recovered via auto-repair, confirmed against expected seed"
+                                .into(),
+                            ..Default::default()
+                        });
+                        checks.push(VerifyCheck {
+                            name: "ms1_entropy_match".into(),
+                            passed: true,
+                            detail: "recovered via auto-repair, confirmed against expected seed"
+                                .into(),
+                            ..Default::default()
+                        });
+                    }
+                    Some(false) => {
+                        // Mismatch (SPEC §5.5 funds anchor / wrong-bundle
+                        // attack) — a failed check row, full table, exit 4.
+                        // REDACTED: no seed bytes, diff_byte_offset pinned
+                        // None (G5 — the offset would leak positional info
+                        // about two secret strings).
+                        checks.push(VerifyCheck {
+                            name: "ms1_decode".into(),
+                            passed: true,
+                            detail: "recovered via auto-repair (unconfirmed)".into(),
+                            ..Default::default()
+                        });
+                        checks.push(VerifyCheck {
+                            name: "ms1_entropy_match".into(),
+                            passed: false,
+                            detail: "auto-repair candidate did not match the expected seed — \
+                                this card is not a card for this seed"
+                                .into(),
+                            ..Default::default()
+                        });
+                    }
+                    None => {
+                        // Uncorrectable, or auto-repair disabled — original
+                        // decode-error behavior, unchanged.
+                        let err_msg = format!("{:?}", e);
+                        checks.push(VerifyCheck {
+                            name: "ms1_decode".into(),
+                            passed: false,
+                            detail: err_msg.clone(),
+                            decode_error: Some(err_msg),
+                            ..Default::default()
+                        });
+                        checks.push(VerifyCheck {
+                            name: "ms1_entropy_match".into(),
+                            passed: true,
+                            detail: "ms1 decode failed; entropy match cannot run".into(),
+                            decode_error: Some("skipped: ms1 decode failed".into()),
+                            ..Default::default()
+                        });
+                    }
                 }
-                let err_msg = format!("{:?}", e);
-                checks.push(VerifyCheck {
-                    name: "ms1_decode".into(),
-                    passed: false,
-                    detail: err_msg.clone(),
-                    decode_error: Some(err_msg),
-                    ..Default::default()
-                });
-                checks.push(VerifyCheck {
-                    name: "ms1_entropy_match".into(),
-                    passed: true,
-                    detail: "ms1 decode failed; entropy match cannot run".into(),
-                    decode_error: Some("skipped: ms1 decode failed".into()),
-                    ..Default::default()
-                });
             }
         }
     }
@@ -2498,35 +2583,82 @@ fn emit_multisig_checks(
                     }
                 }
                 Err(e) => {
-                    // v0.22.1 Phase 4 site #7 — auto-fire on per-cosigner supplied ms1 decode-fail.
-                    if !no_auto_repair {
-                        crate::repair::try_repair_and_short_circuit(
-                            crate::repair::CardKind::Ms1,
-                            &[s.to_string()],
-                            stdout,
-                            stderr,
-                            json_context,
-                        )?;
+                    // v0.22.1 Phase 4 site #7 → Cycle F C1 — per-cosigner
+                    // ground-truth compare (mirrors the single-sig site
+                    // above; see `ms1_ground_truth_compare` doc-comment).
+                    let ground_truth = if !no_auto_repair {
+                        ms1_ground_truth_compare(s, exp_ms1)
+                    } else {
+                        None
+                    };
+                    match ground_truth {
+                        Some(true) => {
+                            checks.push(VerifyCheck {
+                                name: format!("ms1_decode[{}]", i),
+                                passed: true,
+                                detail: format!(
+                                    "cosigner[{}] recovered via auto-repair, confirmed against \
+                                        expected seed",
+                                    i
+                                ),
+                                ..Default::default()
+                            });
+                            checks.push(VerifyCheck {
+                                name: format!("ms1_entropy_match[{}]", i),
+                                passed: true,
+                                detail: format!(
+                                    "cosigner[{}] recovered via auto-repair, confirmed against \
+                                        expected seed",
+                                    i
+                                ),
+                                ..Default::default()
+                            });
+                        }
+                        Some(false) => {
+                            // Mismatch (SPEC §5.5 multisig analogue) — REDACTED
+                            // (G5): no seed bytes, diff_byte_offset pinned None.
+                            checks.push(VerifyCheck {
+                                name: format!("ms1_decode[{}]", i),
+                                passed: true,
+                                detail: format!(
+                                    "cosigner[{}] recovered via auto-repair (unconfirmed)",
+                                    i
+                                ),
+                                ..Default::default()
+                            });
+                            checks.push(VerifyCheck {
+                                name: format!("ms1_entropy_match[{}]", i),
+                                passed: false,
+                                detail: format!(
+                                    "cosigner[{}] auto-repair candidate did not match the \
+                                        expected seed — this card is not a card for this seed",
+                                    i
+                                ),
+                                ..Default::default()
+                            });
+                        }
+                        None => {
+                            // Case 3: full-mode, supplied present, decodes Err.
+                            let err_msg = format!("{:?}", e);
+                            checks.push(VerifyCheck {
+                                name: format!("ms1_decode[{}]", i),
+                                passed: false,
+                                detail: err_msg.clone(),
+                                decode_error: Some(err_msg),
+                                ..Default::default()
+                            });
+                            checks.push(VerifyCheck {
+                                name: format!("ms1_entropy_match[{}]", i),
+                                passed: true,
+                                detail: format!(
+                                    "cosigner[{}] ms1 decode failed; entropy match cannot run",
+                                    i
+                                ),
+                                decode_error: Some("skipped: ms1 decode failed".into()),
+                                ..Default::default()
+                            });
+                        }
                     }
-                    // Case 3: full-mode, supplied present, decodes Err.
-                    let err_msg = format!("{:?}", e);
-                    checks.push(VerifyCheck {
-                        name: format!("ms1_decode[{}]", i),
-                        passed: false,
-                        detail: err_msg.clone(),
-                        decode_error: Some(err_msg),
-                        ..Default::default()
-                    });
-                    checks.push(VerifyCheck {
-                        name: format!("ms1_entropy_match[{}]", i),
-                        passed: true,
-                        detail: format!(
-                            "cosigner[{}] ms1 decode failed; entropy match cannot run",
-                            i
-                        ),
-                        decode_error: Some("skipped: ms1 decode failed".into()),
-                        ..Default::default()
-                    });
                 }
             }
         } else {
@@ -3460,7 +3592,14 @@ mod helper_tests {
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
     fn synth_full_bundle() -> Bundle {
-        let m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        synth_full_bundle_for(TREZOR_24)
+    }
+
+    /// Cycle F — parameterized variant of `synth_full_bundle` for building a
+    /// SECOND, DISTINCT wallet's bundle (the §5.5 wrong-bundle fixtures need
+    /// two independently-derived bundles).
+    fn synth_full_bundle_for(phrase: &str) -> Bundle {
+        let m = Mnemonic::parse_in(bip39::Language::English, phrase).unwrap();
         let entropy = m.to_entropy();
         let seed = m.to_seed("");
         let secp = Secp256k1::new();
@@ -4230,5 +4369,202 @@ mod helper_tests {
             c.passed,
             "origin-divergent-but-policy-equal md1 must PASS md1_xpub_match (origins EXCLUDED)"
         );
+    }
+
+    // ========================================================================
+    // Cycle F (`ms1-repair-demote-to-candidate`) — C1 ground-truth compare
+    // (SPEC §0.4/§3/§5.4/§5.5/§8.6). Unit-level coverage of
+    // `emit_verify_checks`'s ms1 decode-failure branch, complementing the
+    // CLI-level cells in `tests/cli_ms1_repair_demote.rs` and the flipped
+    // `tests/cli_auto_repair.rs::cell_27`/`cell_30`.
+    // ========================================================================
+
+    /// Deterministically flip the bech32 char at data-part index `pos` (mirrors
+    /// the `flip_at` helper duplicated across the integration test suite).
+    fn cycle_f_flip_at(chunk: &str, pos: usize) -> String {
+        const ALPHABET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+        let sep = chunk.rfind('1').unwrap();
+        let (prefix, rest) = chunk.split_at(sep + 1);
+        let mut chars: Vec<char> = rest.chars().collect();
+        let was = chars[pos];
+        let was_idx = ALPHABET.find(was).unwrap();
+        chars[pos] = ALPHABET.chars().nth((was_idx + 1) % 32).unwrap();
+        let mut out = String::from(prefix);
+        for c in chars {
+            out.push(c);
+        }
+        out
+    }
+
+    /// §5.4 MATCH — a decode-failing ms1 whose auto-repair correction
+    /// byte-matches `expected.ms1[0]` (the SAME wallet's own card) → both
+    /// `ms1_decode` and `ms1_entropy_match` PASS, noted as recovered +
+    /// confirmed against the expected seed; no forensic fields populated.
+    #[test]
+    fn cycle_f_ms1_ground_truth_match_recovers_and_confirms() {
+        let expected = synth_full_bundle();
+        let clean_ms1 = expected.ms1[0].clone();
+        let supplied_ms1: Vec<String> = vec![cycle_f_flip_at(&clean_ms1, 17)];
+        let supplied_mk1 = match &expected.mk1 {
+            MkField::Single(v) => v.clone(),
+            MkField::Multi(_) => panic!("expected single-sig"),
+        };
+        let supplied_md1 = expected.md1.clone();
+        let supplied = SuppliedCards {
+            ms1: &supplied_ms1,
+            mk1: &supplied_mk1,
+            md1: &supplied_md1,
+        };
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            false,
+            false,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
+        let ms1_decode = checks.iter().find(|c| c.name == "ms1_decode").unwrap();
+        let ms1_match = checks
+            .iter()
+            .find(|c| c.name == "ms1_entropy_match")
+            .unwrap();
+        assert!(ms1_decode.passed, "{ms1_decode:?}");
+        assert!(ms1_match.passed, "{ms1_match:?}");
+        assert!(ms1_decode
+            .detail
+            .contains("recovered via auto-repair, confirmed against expected seed"));
+        assert!(ms1_match
+            .detail
+            .contains("recovered via auto-repair, confirmed against expected seed"));
+        assert!(ms1_match.expected.is_none());
+        assert!(ms1_match.actual.is_none());
+        assert!(ms1_match.diff_byte_offset.is_none());
+    }
+
+    /// §5.5 (FUNDS ANCHOR) MISMATCH — a decode-failing ms1 whose auto-repair
+    /// correction resolves to a DIFFERENT wallet's clean card (NOT
+    /// `expected.ms1[0]`) → `ms1_decode` reports "recovered (unconfirmed)"
+    /// but `ms1_entropy_match` FAILS with the redacted detail — never
+    /// blessed merely because the candidate happens to decode.
+    #[test]
+    fn cycle_f_ms1_ground_truth_mismatch_fails_and_redacts() {
+        let expected = synth_full_bundle(); // wallet E (TREZOR_24)
+        let other = synth_full_bundle_for(
+            "legal winner thank year wave sausage worth useful legal winner thank yellow",
+        ); // wallet A — a DIFFERENT seed
+        let other_ms1 = other.ms1[0].clone();
+        let supplied_ms1: Vec<String> = vec![cycle_f_flip_at(&other_ms1, 17)];
+        // mk1/md1 are irrelevant to this assertion (ms1 check is independent
+        // of the mk1/md1 checks) — reuse `expected`'s own so decode succeeds
+        // and doesn't distract from the ms1 assertions.
+        let supplied_mk1 = match &expected.mk1 {
+            MkField::Single(v) => v.clone(),
+            MkField::Multi(_) => panic!("expected single-sig"),
+        };
+        let supplied_md1 = expected.md1.clone();
+        let supplied = SuppliedCards {
+            ms1: &supplied_ms1,
+            mk1: &supplied_mk1,
+            md1: &supplied_md1,
+        };
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            false,
+            false,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
+        let ms1_match = checks
+            .iter()
+            .find(|c| c.name == "ms1_entropy_match")
+            .unwrap();
+        assert!(
+            !ms1_match.passed,
+            "a candidate that does not match the typed seed must NOT be blessed"
+        );
+        assert!(ms1_match
+            .detail
+            .contains("this card is not a card for this seed"));
+        // §8.6/G5 secret-hygiene redaction: no seed bytes, no offset.
+        assert!(ms1_match.expected.is_none(), "{ms1_match:?}");
+        assert!(ms1_match.actual.is_none(), "{ms1_match:?}");
+        assert!(ms1_match.diff_byte_offset.is_none(), "{ms1_match:?}");
+        for c in &checks {
+            assert!(
+                !c.detail.contains(&other_ms1),
+                "leaked corrected seed: {c:?}"
+            );
+            assert!(
+                !c.detail.contains(&expected.ms1[0]),
+                "leaked expected seed: {c:?}"
+            );
+            if let Some(e) = &c.expected {
+                assert!(!e.contains(&other_ms1) && !e.contains(&expected.ms1[0]));
+            }
+            if let Some(a) = &c.actual {
+                assert!(!a.contains(&other_ms1) && !a.contains(&expected.ms1[0]));
+            }
+        }
+        // Overall run-level property: a mismatch is a failed CHECK ROW, not
+        // an abort — the full check array still emits (G3).
+        assert_eq!(
+            checks.len(),
+            9,
+            "mismatch must not truncate the check table"
+        );
+    }
+
+    /// §5.8 — `no_auto_repair: true` suppresses the ground-truth compare
+    /// entirely: a decode-failing ms1 (even one that WOULD recover to the
+    /// expected seed) falls back to the legacy decode-error check rows.
+    #[test]
+    fn cycle_f_no_auto_repair_suppresses_ground_truth_compare() {
+        let expected = synth_full_bundle();
+        let clean_ms1 = expected.ms1[0].clone();
+        let supplied_ms1: Vec<String> = vec![cycle_f_flip_at(&clean_ms1, 17)];
+        let supplied_mk1 = match &expected.mk1 {
+            MkField::Single(v) => v.clone(),
+            MkField::Multi(_) => panic!("expected single-sig"),
+        };
+        let supplied_md1 = expected.md1.clone();
+        let supplied = SuppliedCards {
+            ms1: &supplied_ms1,
+            mk1: &supplied_mk1,
+            md1: &supplied_md1,
+        };
+        let mut _test_so: Vec<u8> = Vec::new();
+        let mut _test_se: Vec<u8> = Vec::new();
+        // no_auto_repair = true.
+        let checks = emit_verify_checks(
+            &expected,
+            &supplied,
+            false,
+            true,
+            false,
+            &mut _test_so,
+            &mut _test_se,
+        )
+        .unwrap();
+        let ms1_decode = checks.iter().find(|c| c.name == "ms1_decode").unwrap();
+        let ms1_match = checks
+            .iter()
+            .find(|c| c.name == "ms1_entropy_match")
+            .unwrap();
+        assert!(!ms1_decode.passed, "{ms1_decode:?}");
+        assert!(
+            ms1_decode.decode_error.is_some(),
+            "legacy decode-error path must populate decode_error when auto-repair is disabled"
+        );
+        assert!(!ms1_decode.detail.contains("recovered"), "{ms1_decode:?}");
+        assert!(ms1_match.passed, "skipped-vacuously: {ms1_match:?}");
     }
 }

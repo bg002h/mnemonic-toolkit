@@ -280,6 +280,14 @@ fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result
 struct RepairJson<'a> {
     schema_version: &'static str,
     kind: &'static str,
+    /// Cycle F (`ms1-repair-demote-to-candidate`) M1/M4 — `"blessed"` for a
+    /// clean (or confidently-recovered) card, `"candidate"` for a
+    /// touched-but-unverified correction (currently only reachable for ms1
+    /// substitution-corrections and an incomplete mk1 partial-plate group;
+    /// see [`crate::repair::SetVerify`]). Fixed position right after `kind`
+    /// — ms-cli's `RepairJson` (Phase P1) must byte-match this field order
+    /// (D27/D9).
+    verdict: &'static str,
     corrected_chunks: &'a [String],
     repairs: Vec<RepairJsonDetail<'a>>,
 }
@@ -303,6 +311,7 @@ fn emit_repair_json<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result
     let envelope = RepairJson {
         schema_version: "1",
         kind: kind_str(outcome.kind),
+        verdict: verdict_str(&outcome.set_verify),
         corrected_chunks: &outcome.corrected_chunks,
         repairs: outcome
             .repairs
@@ -334,6 +343,15 @@ fn kind_str(kind: CardKind) -> &'static str {
         CardKind::Ms1 => "ms1",
         CardKind::Mk1 => "mk1",
         CardKind::Md1 => "md1",
+    }
+}
+
+/// Cycle F M1/M4 — `RepairJson.verdict` wire value from the engine's
+/// tri-state re-verify discriminant (`repair::SetVerify`).
+fn verdict_str(set_verify: &repair::SetVerify) -> &'static str {
+    match set_verify {
+        repair::SetVerify::Blessed => "blessed",
+        repair::SetVerify::Unverified { .. } => "candidate",
     }
 }
 
