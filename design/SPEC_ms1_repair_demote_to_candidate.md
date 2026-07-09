@@ -11,7 +11,7 @@ loud failed check row ⇒ exit 4.**
 - **Source SHAs (recon + R0-verified):** toolkit `4c554295` (v0.80.0); ms-codec/ms-cli `mnemonic-secret master@c2fd4eb`; mk-codec `mnemonic-key main@1c9fbf7`.
 - **Finding:** constellation-eval **F4**, ms1 leg (`FOLLOWUPS.md` `bch-repair-miscorrection-set-level-reverify`, Status(ms1)). Recon `cycle-prep-recon-f4-cycle2-ms1-demote.md`.
 - **Target:** `mnemonic-toolkit` MINOR (`v0.81.0`) + `ms-cli` MINOR (`0.13.2`→`0.14.0`). **ms-codec / mk-codec / md-codec / md-cli / mk-cli NO-BUMP.** No GUI/`schema_mirror` (no clap surface change).
-- **Status:** DRAFT rev-2 — folded SPEC-R0-round-1 (1C/3I/3M): C1 (oracle → compare corrected-ms1 vs `expected.ms1[i]`, NOT a derived xpub vs the supplied mk1 — closes a wrong-bundle false-Bless + removes ~100-200 LOC); I1 (scope the `--max-indel` path — keep exit-5 for a unique full-checksum indel recovery, justified); I2 (stderr advisory at the ms1 auto-repair fall-through); I3 (mismatch = failed check row → exit 4, no new typed error); M1/M2/M3. Review `cycleF-spec-r0-round-1.md`. Pending R0 round-2 to 0C/0I.
+- **Status:** DRAFT rev-3 — folded R0-round-1 (1C/3I/3M: C1 ground-truth compare; I1 indel carve-out; I2 advisory; I3 check-row-not-typed-error) + round-2 (0C/1I/2M: I-R2-1 indel is `mnemonic repair --max-indel` ONLY → 3 §4 cells `n/a` + §3 scoped; M-R2-1 advisory NOT at verify-bundle sites; M-R2-2 indel uses `IndelJson` not `RepairJson.verdict`). Reviews `cycleF-spec-r0-round-{1,2}.md`. Pending R0 round-3 convergence to 0C/0I.
 
 ## §0 — Scope
 
@@ -25,11 +25,15 @@ loud failed check row ⇒ exit 4.**
 2. **`ms repair` (ms-cli) demotion:** `crates/ms-cli/src/cmd/repair.rs` — demote the binary
    `if any_correction {5} else {0}` (@:123-124) so any correction → **exit 4** (Candidate) + a stderr advisory;
    clean → exit 0; uncorrectable → exit 2 (already wired via `?`→`TooManyErrors`→`FormatViolation`).
-3. **Auto-repair fall-through ADVISORY (R0 I2):** at the ms1 `Unverified` fall-through in
-   `try_repair_and_short_circuit` (`repair.rs:1690-1703` — today a silent `Ok(())` with NO output), emit a
-   one-line stderr advisory ("a candidate correction exists but a seed card cannot be self-verified — run
+3. **Auto-repair fall-through ADVISORY (R0 I2 / M-R2-1):** at the ms1 `Unverified` fall-through for the
+   **standalone-inline sites ONLY** (`convert`/`inspect`/`xpub-search` — today a silent `Ok(())` with NO output),
+   emit a one-line stderr advisory ("a candidate correction exists but a seed card cannot be self-verified — run
    `mnemonic repair --ms1 …` to inspect it") so the complete-but-withheld candidate is not silently invisible.
-   Kind-gated to ms1 (do NOT change shipped mk1 partial-set fall-through behavior).
+   **NOT at the 2 verify-bundle ms1 sites** — there the candidate is surfaced via the `ms1_decode`/
+   `ms1_entropy_match` check rows (§0.4), so an advisory would contradict a passing MATCH. Cleanest impl: the
+   verify-bundle C1 wiring obtains the corrected string via a direct `repair_card` call, NOT via the
+   advisory-emitting `try_repair_and_short_circuit` helper. Kind-gated to ms1 (do NOT change shipped mk1
+   partial-set fall-through behavior).
 4. **verify-bundle ground-truth comparison (R0 C1 — replaces the derived-xpub oracle):** at the 2 ms1
    auto-repair sites (`verify_bundle.rs` single-sig `:2079`, multisig per-cosigner `:2503`), the user's TYPED
    seed is already synthesized into `expected.ms1[i]` (non-empty by construction wherever these sites fire — the
@@ -88,9 +92,15 @@ seed). **Mismatch ⇒ `ms1_entropy_match` fails, full table, exit 4.** No deriva
 error. `expected.ms1[i]` is present by construction wherever the site fires (a watch-only slot skips the site),
 so there is no "no ground truth available" branch to handle — a decisive simplification over the rev-1 oracle.
 
-**Indel path (R0 I1 — carve-out, keep exit-5, justified):** `--max-indel≥1` routes length-mismatched ms1 through
-the indel recovery (`cmd/repair.rs:169-224`), which enumerates candidates and RE-VALIDATES the FULL BCH checksum
-on each (does NOT spend the correction budget), returning exit 5 only for a UNIQUE checksum-valid candidate
+**Indel path (R0 I1/I-R2-1 — carve-out, keep exit-5, justified; `mnemonic repair --max-indel` ONLY):** indel
+recovery is reachable ONLY from `mnemonic repair --max-indel≥1` (`cmd/repair.rs:64,170`). `ms repair` (ms-cli
+`RepairArgs={ms1,json}`) has NO indel flag, and NO auto-repair inline site (convert/inspect/xpub/verify-bundle)
+has indel plumbing — they route through `repair_card` (substitution-only); a length-corrupted ms1 hits
+`Err(_)→Ok(())` fall-through, never indel. So this exit-5 carve-out is scoped to `mnemonic repair --ms1` alone
+(the §4 table marks the other three surfaces `n/a — no indel path`). `--max-indel≥1` routes length-mismatched
+ms1 through the indel recovery (`cmd/repair.rs:169-224`), which enumerates candidates and RE-VALIDATES the FULL
+BCH checksum on each (does NOT spend the correction budget), returning exit 5 only for a UNIQUE checksum-valid
+candidate
 (multi-hit → `Ambiguous` → exit 4). A unique full-checksum indel candidate is trustworthy to ~2⁻(checksum bits)
 — cryptographically stronger than the 32-bit cross-chunk hash on which we ALREADY bless mk1/md1 — so it is a
 genuine self-verification, NOT the spend-the-checksum aliasing the substitution demotion targets. **Decision:
@@ -103,10 +113,10 @@ override. Default = keep-5-justified.)*
 
 | Surface | clean | substitution correction | corrected==expected (verify only) | corrected≠expected (verify only) | unique full-checksum indel | uncorrectable |
 |---|---|---|---|---|---|---|
-| `ms repair` | exit 0 | **exit 4 + advisory** | n/a | n/a | exit 5 (§3 indel) | exit 2 |
-| `mnemonic repair --ms1` | exit 0 | **exit 4 + advisory** | n/a | n/a | exit 5 (§3 indel) | exit 2 |
-| toolkit auto-repair (convert/inspect/xpub) | pass | no short-circuit + **stderr advisory** (I2) | n/a | n/a | applies (exit 5) | error |
-| **verify-bundle** ms1 | pass | ms1 checks evaluated vs expected ↓ | **ms1 checks PASS** (verify proceeds) | **`ms1_entropy_match` FAILS → exit 4** (full table) | applies | error |
+| `ms repair` | exit 0 | **exit 4 + advisory** | n/a | n/a | n/a — no indel path | exit 2 |
+| `mnemonic repair --ms1` | exit 0 | **exit 4 + advisory** | n/a | n/a | exit 5 (§3 indel; `--max-indel` only) | exit 2 |
+| toolkit auto-repair (convert/inspect/xpub) | pass | no short-circuit + **stderr advisory** (I2) | n/a | n/a | n/a — no indel path | error |
+| **verify-bundle** ms1 | pass | ms1 checks evaluated vs expected ↓ | **ms1 checks PASS** (verify proceeds) | **`ms1_entropy_match` FAILS → exit 4** (full table) | n/a — no indel path | error |
 | `mk repair` (unchanged, Cycle E) | exit 0 | exit 5 + advisory | — | — | — | exit 2 |
 
 **Principled distinction (codify in manual — R0 M2):** exit-5 "REPAIR_APPLIED" = **verified now** (mk1/md1
@@ -146,10 +156,12 @@ phrase exit-5 as "an oracle verified it" (false for mk1 single-plate).
 - `43-ms.md` `ms repair` chapter: exit 0/4/2 + the advisory + the no-self-verification caveat.
 - verify-bundle chapter: the ms1 corrected-vs-expected comparison (pass on match, `ms1_entropy_match` fail →
   exit 4 on mismatch).
-- **`--json` `verdict` (M1):** specify the envelope(s) — standalone `emit_repair_json` (`cmd/repair.rs:279`) has
-  reachable `{blessed(0-corr/indel), candidate(subst)}`; ms1 reject is not an envelope (it's a verify-bundle
-  check-row). Add `verdict: "blessed"|"candidate"`; note wire-shape (consumers self-update, not schema_mirror-
-  gated). Regen any ms1 repair transcript whose stderr/exit changes.
+- **`--json` `verdict` (M1/M-R2-2):** specify the envelope(s) — standalone `emit_repair_json` (`cmd/repair.rs:279`,
+  `RepairJson`) has reachable `{blessed(clean 0-corr), candidate(subst)}` for ms1 (ms1 reject is not an envelope
+  — it's a verify-bundle check-row). **Indel does NOT emit via `RepairJson`** — it uses the separate `IndelJson`
+  envelope (`cmd/repair.rs:350-365`, `confident:bool`, no `verdict`), so do NOT attribute an indel value to
+  `RepairJson.verdict`. Add `verdict: "blessed"|"candidate"` to `RepairJson`; note wire-shape (consumers
+  self-update, not schema_mirror-gated). Regen any ms1 repair transcript whose stderr/exit changes.
 
 ## §7 — Cross-repo coordination + release
 - **Changes:** toolkit (`repair.rs` Ms1 arm + fall-through advisory + `verify_bundle.rs` corrected-vs-expected
