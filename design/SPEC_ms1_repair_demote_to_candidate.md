@@ -11,7 +11,7 @@ loud failed check row ⇒ exit 4.**
 - **Source SHAs (recon + R0-verified):** toolkit `4c554295` (v0.80.0); ms-codec/ms-cli `mnemonic-secret master@c2fd4eb`; mk-codec `mnemonic-key main@1c9fbf7`.
 - **Finding:** constellation-eval **F4**, ms1 leg (`FOLLOWUPS.md` `bch-repair-miscorrection-set-level-reverify`, Status(ms1)). Recon `cycle-prep-recon-f4-cycle2-ms1-demote.md`.
 - **Target:** `mnemonic-toolkit` MINOR (`v0.81.0`) + `ms-cli` MINOR (`0.13.2`→`0.14.0`). **ms-codec / mk-codec / md-codec / md-cli / mk-cli NO-BUMP.** No GUI/`schema_mirror` (no clap surface change).
-- **Status:** DRAFT rev-3 — folded R0-round-1 (1C/3I/3M: C1 ground-truth compare; I1 indel carve-out; I2 advisory; I3 check-row-not-typed-error) + round-2 (0C/1I/2M: I-R2-1 indel is `mnemonic repair --max-indel` ONLY → 3 §4 cells `n/a` + §3 scoped; M-R2-1 advisory NOT at verify-bundle sites; M-R2-2 indel uses `IndelJson` not `RepairJson.verdict`). Reviews `cycleF-spec-r0-round-{1,2}.md`. Pending R0 round-3 convergence to 0C/0I.
+- **Status:** ✅ **R0-GREEN (0C/0I) @ round 3 (Fable).** rev-3 folded R0-round-1 (1C/3I/3M) + round-2 (0C/1I/2M). Reviews `cycleF-spec-r0-round-{1,2,3}.md`. **CLEARED for the IMPLEMENTATION_PLAN + plan-R0.** Two advisory notes for the plan: (1) secret-hygiene at the C1 mismatch check row (echo-vs-redact the seed strings — §8.6); (2) `ms1_decode` `--json` wire-value can now be `pass`-after-auto-repair (consumers self-update).
 
 ## §0 — Scope
 
