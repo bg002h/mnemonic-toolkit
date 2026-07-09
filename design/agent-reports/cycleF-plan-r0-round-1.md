@@ -1,0 +1,36 @@
+# PLAN R0 review — ms1-repair-demote-to-candidate — round 1
+
+**Verdict: NOT GREEN (0 Critical / 2 Important / 4 Minor)**
+**Reviewer:** Fable architect (funds-weighted, read-only), per user directive. Plan @ toolkit `b20e3ce7`; ms `c2fd4eb`.
+**Dispatched:** 2026-07-09 (Cycle F, plan-R0 loop round 1). Persisted verbatim per CLAUDE.md.
+
+Core mechanism verified sound + implementable at every cited site. The two Importants are plan-completeness gaps (un-inventoried breaking-test surface across the P0/P1 boundary; three §5 cells homed nowhere), both cheaply foldable.
+
+## Verification (evidence)
+1. **P1 "direct `repair_card` call" — SOUND.** `repair_card` (`repair.rs:1081`) is pure — zero `write!`/`writeln!` in body (:1081-1171) → a direct call cannot emit the P0 advisory. `RepairOutcome.corrected_chunks` supplies the corrected string. Both sites have inputs live: single-sig :2079 (`supplied_ms1`/`expected_ms1` @:2046-2047), multisig :2503 (`s`/`exp_ms1` @:2449-2451). Only these 2 of 9 sites pass `CardKind::Ms1` in verify-bundle → after P1 removes the 2 helper calls, remaining Ms1 `try_repair_and_short_circuit` callers = convert/inspect/xpub only → the standalone-only advisory property EMERGES from P1 (plan implies, doesn't state → I1).
+2. **P0 demotion — CORRECT.** Ms1 arm hardcodes `Blessed` @:1148; `Unverified{reason}` exists @:459. `cmd/repair.rs:164-167` sets `candidate_seen` + prints `repair:{reason}` stderr; `indel_exit_code` @:1462 → 4 on `ambiguous||candidate`. `IndelJson` @:350 separate from `RepairJson` @:279 → do-not-touch correct.
+3. **P1 compare — IMPLEMENTABLE both sites.** Failed-row→exit-4 exists: `Ok(if any_fail {4} else {0})` @:547/:805/:1015/:1757 → no `?`-abort needed (G3). Watch-only skip @:2027-2030/:2449-2454 → `expected.ms1[i]` non-empty by construction (no spurious branch). Redaction concrete/testable; pre-existing supplied-case rows DO echo full seeds @:2069-2070/:2493-2494 → "not widened here" accurate + load-bearing. Case-safe: `apply_ms_corrections` lowercases @:1230, expected is lowercase.
+4. **P2 ms-cli — CONFIRMED.** `Ok(if any_correction {5} else {0})` @`ms-cli/src/cmd/repair.rs:123-124`. **ms-cli HAS a `--json` `RepairJson` envelope** @:204-210 with a **D27 byte-match invariant** to toolkit's ("Field order is part of the schema" :200-203) → `verdict` addition is REQUIRED at the identical field position (M4). v0.13.2 + ms-codec 0.7.0 confirmed.
+5. **TDD mapping — INCOMPLETE** → I2.
+6. **Release — COMPLETE.** 4-site pin list is the complete gate-relevant set (`sibling-pin-check.yml` URL-keyed, scans workflows+docs prose, single-line `cargo install --tag` only). `install.sh:38`+`quickstart.yml:87`+`technical-manual.yml:117`+`manual.yml:90` @ v0.13.2; prose has 0 ms-cli lines; `manual-gui.yml:163-165` (v0.13.0) multi-line form → scanner can't match → exclusion gate-safe + policy-correct. All 4 in the SAME commit. Re-vendor N/A. mnemonic-secret freebsd gate pinned `@1.85.0` (`rust.yml:261-292`) → the `@master`-drift watch is a harmless no-op. ms-codec-no-publish correct.
+7. **G1-G8 sufficient** for funds/secret properties; residual gaps below, none funds-bearing.
+
+## IMPORTANT-1 — un-inventoried existing-test flips + P0→P1 double-flip of verify-bundle ms1 cells
+Pre-existing tests pin OLD ms1 semantics + MUST change (plan mandates FULL `cargo test -p` green per phase but never mentions them):
+- `cli_repair.rs:47` cell_9 ms1 happy-path exit-5 → **5→4** (P0).
+- `cli_auto_repair.rs:52` cell_19 (convert ms1 auto-fire exit 5) → **the original typed decode error, exit 2** + advisory — NOT exit 4 (SPEC §4 row "error"/no-short-circuit) (P0).
+- `cli_auto_repair.rs:143` cell_18b (inspect), `:228` cell_24 (convert `--json` D20 `kind=ms1`) → same class (P0).
+- `cli_auto_repair.rs:472` cell_27 (verify-bundle TTY `code(5)`+"# Repair report") & `:557` cell_30 (D20 `auto_repair_short_circuit:true, exit_code:5`) → flip **TWICE**: P0-end (helper falls through on `Unverified` @:1701 → failed `ms1_decode` row → exit 4; + a transient advisory at verify-bundle IF implemented at the helper fall-through — contradicting "only standalone-inline"); then P1-end (`synth_corrupted_bundle_json` corrupts the same seed's own card → corrected==expected → MATCH → **exit 0**, VerifyBundleJson, "recovered" note).
+3 drift traps: cell_19 target 2-not-4; cell_27 final target 0-not-4; P0 advisory site-gating can't be literally true at P0-end. **Fix:** add a flip inventory to P0/P1 with per-phase expected semantics; state (a) advisory at the `try_repair_and_short_circuit` fall-through kind-gated Ms1, (b) standalone-only property COMPLETED by P1's helper-call removal, (c) cells 27/30 pinned transient exit-4 in P0, rewritten final MATCH (exit 0) in P1. *(Coordinator note: MERGING P0+P1 into one toolkit phase eliminates the transient double-flip + the advisory-at-P0-end contradiction entirely — the cleaner fold.)*
+
+## IMPORTANT-2 — SPEC §5 cells 5.6/5.7/5.8 homed in no phase
+§5.6 (indel unique keep-5 + multi-hit→Ambiguous→4 — the SOLE automated guard behind G6, SPEC §3 mandates the pin), §5.7 (mixed-kind `--ms1 <corrupted> --mk1 <clean>` → 4 dominates), §5.8 (`--no-auto-repair` suppresses BOTH advisory and compare) appear in no phase. **Fix:** home §5.6/§5.7 in the toolkit phase (`mnemonic repair` standalone; §5.6 must be CLI-level over a REAL single-indel ms1, not the unit-level `indel_exit_code_precedence` @:2689). Split §5.8: advisory-suppression (P0/toolkit), no-`repair_card`-call (P1/verify-bundle, extend cell_28 `cli_auto_repair.rs:500` asserting the direct call stays inside the `if !no_auto_repair` guard). §5.10 discharged by the FULL-suite requirement.
+
+## Minors
+- **M1** — redaction precision: pin `diff_byte_offset: None` on the C1 mismatch row (constructor @:2064/:2488 computes it; an offset isn't seed bytes but pins reviewer churn); the §8.6 cell scans stdout+stderr+`--json` for BOTH corrected AND expected ms1 substrings; optionally hold the corrected string in `Zeroizing` (proactive secret-hygiene; `corrected_chunks` is plain `Vec<String>`).
+- **M2** — wire-shape: post-P0 the D20 auto-fire short-circuit JSON envelope (`auto_repair_short_circuit:true`) becomes UNREACHABLE for ms1 on every surface (bigger `--json` change than "ms1_decode can be pass") → add to the wire note + CHANGELOG; sweep D20-for-ms1 prose (`41-mnemonic.md:756/:777`). P3: enumerate `41-mnemonic.md:3042` (exit-code table "5…incl ms1") + `:3105` worked example (flips 5→4).
+- **M3** — stale plan citations: "leave `[0.76.0]` intact" → head entry is `[0.80.0]` (CHANGELOG.md:9); `rust.yml:45` comment cites "currently ms-cli-v0.13.2" (comment-only optional same-commit touch-up).
+- **M4** — P2 firmness: ms-cli HAS the envelope (@:204-210) → `verdict` REQUIRED at the identical field position (specify, e.g. after `kind`, in both structs). Update `RepairOutcome::set_verify` doc-comment (`repair.rs:443-444`, "Ms1/Md1 always Blessed") + Ms1-arm comment (:1145-1147) — both become false.
+
+## Bottom line
+No Critical: the funds mechanism (demotion→candidate; pure `repair_card`→corrected-vs-`expected.ms1[i]`→failed row→exit 4) is implementable exactly as planned at every cited line; release ritual complete vs live gates. Fold I1 (flip inventory / merge P0+P1) + I2 (home §5.6/5.7/5.8) + M1-M4; re-dispatch round 2.
