@@ -6,11 +6,10 @@ fold" + CLAUDE.md). Per-phase: TDD (tests before src) + per-phase Fable R0 runni
 + fold-on-Opus-reenter-loop until 0C/0I. Post-impl: mandatory Fable whole-diff review over the whole cross-repo
 diff.
 
-**Status:** rev-2 — folded plan-R0-round-1 (0C/2I/4M): **I1 → MERGED the two toolkit phases into one P0** (so the
-verify-bundle ms1 cells flip ONCE to final semantics + the advisory is standalone-only from the start — no P0→P1
-transient) + added the **test-flip inventory**; I2 → homed §5.6/§5.7/§5.8; M1 (redaction precision + Zeroizing);
-M2 (D20-short-circuit-envelope unreachable wire note + prose sweep); M3 (CHANGELOG head is `[0.80.0]`); M4 (ms-cli
-`RepairJson.verdict` REQUIRED at identical field position + stale doc-comments). Review `cycleF-plan-r0-round-1.md`.
+**Status:** rev-3 — folded plan-R0-round-1 (0C/2I/4M: I1 merge + flip inventory; I2 homed §5.6/5.7/5.8; M1-M4) +
+round-2 (0C/1I: cell_19/cell_18b flip target corrected **exit 2 → exit 1** — `Codex32` invalid-checksum →
+`ms_codec_exit_code`⇒1, live-verified; §5.3 parenthetical likewise). Reviews `cycleF-plan-r0-round-{1,2}.md`.
+Pending plan-R0 round-3 to 0C/0I.
 
 **Source SHAs:** toolkit `b20e3ce7`; ms-codec/ms-cli `mnemonic-secret master@c2fd4eb`.
 **Target:** toolkit MINOR (`v0.81.0`) + ms-cli MINOR (`0.13.2`→`0.14.0`); ms-codec/mk-codec/md* NO-BUMP.
@@ -26,7 +25,8 @@ One phase so the verify-bundle ms1 cells flip ONCE (no transient double-flip). *
 **TDD — tests first (SPEC §5.1,5.3-5.9,§8.6):**
 - **§5.1 (funds anchor)** `mnemonic repair --ms1 <subst-corrupted>` → exit 4 + advisory (NOT 5); clean → exit 0.
 - **§5.3** auto-repair on a corrected ms1 at `convert`/`inspect`/`xpub-search` (default-TTY via `MNEMONIC_FORCE_TTY`)
-  → NO short-circuit + one-line stderr advisory; the caller's ORIGINAL decode error surfaces (exit 2), NOT exit 4
+  → NO short-circuit + one-line stderr advisory; the caller's ORIGINAL decode error surfaces (**exit 1** for a
+  single-substitution `Codex32` invalid-checksum ms1 — `ms_codec_exit_code`⇒1, `error.rs:434-436`), NOT exit 4
   (per the flip inventory — cell_19 class).
 - **§5.4 (verify-bundle MATCH)** subst-corrupted ms1 whose correction == `expected.ms1[i]` → `ms1_decode` +
   `ms1_entropy_match` PASS (verify proceeds), "recovered via auto-repair, confirmed against expected seed"; NO
@@ -49,8 +49,8 @@ One phase so the verify-bundle ms1 cells flip ONCE (no transient double-flip). *
 | Test | Old | New (P0-final) |
 |---|---|---|
 | `cli_repair.rs:47` cell_9 (ms1 happy-path) | exit 5 + report | **exit 4** + advisory (Candidate) |
-| `cli_auto_repair.rs:52` cell_19 (convert ms1 auto-fire) | exit 5 | **exit 2** (original decode error surfaces) + advisory — NOT 4 |
-| `cli_auto_repair.rs:143` cell_18b (inspect) | exit 5 | **exit 2** + advisory |
+| `cli_auto_repair.rs:52` cell_19 (convert ms1 auto-fire) | exit 5 | **exit 1** (`Codex32` invalid-checksum → `ms_codec_exit_code`⇒1, `error.rs:434-436`; original decode error surfaces) + advisory — NOT 4, NOT 2 |
+| `cli_auto_repair.rs:143` cell_18b (inspect) | exit 5 | **exit 1** (same `Codex32`⇒1 path) + advisory |
 | `cli_auto_repair.rs:228` cell_24 (convert `--json`, D20 `kind=ms1`) | short-circuit envelope | **no short-circuit** (original error) + advisory |
 | `cli_auto_repair.rs:472` cell_27 (verify-bundle TTY) | `code(5)` + "# Repair report" | **exit 0** MATCH (`synth_corrupted_bundle_json` corrupts the same seed's own card → corrected==expected), "recovered" note |
 | `cli_auto_repair.rs:557` cell_30 (verify-bundle D20 envelope) | `auto_repair_short_circuit:true, exit_code:5` | **VerifyBundleJson**, ms1 checks pass, exit 0 (D20 short-circuit envelope now UNREACHABLE for ms1 — M2) |
