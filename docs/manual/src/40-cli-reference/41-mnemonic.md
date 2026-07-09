@@ -756,7 +756,10 @@ v0.22.1 D18 default). The behavior matrix:
 `REPAIR_APPLIED` means a correction is **verified now** (an mk1/md1
 cross-chunk reassembly hash; a unique full-checksum `--max-indel`
 recovery) **or verifiable-by-reassembly later** (an mk1 single-plate
-chunk, once the rest of its set is supplied). exit-4 `VERIFY-ME` means a
+chunk under the standalone `mk repair` codec CLI, once the rest of its
+set is supplied — note that `mnemonic repair` *itself* instead demotes an
+incomplete mk1 group to exit-4, per the Cycle-E note below). exit-4
+`VERIFY-ME` means a
 bounded-distance BCH SUBSTITUTION correction spent the checksum's
 error-detection budget and has **no self-oracle** — this is ms1's case
 always, an incomplete mk1 `chunk_set_id` group, or an ambiguous
@@ -3286,9 +3289,11 @@ search for that indel. The search covers the data-part (delete-and-validate
 for too-long; BCH-solve the omitted symbol for too-short) and the `ms1`/`mk1`
 prefix; it also considers indels split across **both** the prefix and the
 data-part simultaneously (tagged `cross-region`), within the `--max-indel`
-budget. Outcomes: a unique recovery prints the corrected string (exit 5, like
-any repair); multiple equally-valid candidates print all of them (exit 4 —
-choose manually); none within the budget exits 2. `ms1` candidates are secret
+budget. Outcomes: a unique recovery prints the corrected string (exit 5 — a
+unique indel candidate re-validates the full checksum, so it self-verifies,
+unlike a substitution-correction which is demoted to an exit-4 candidate);
+multiple equally-valid candidates print all of them (exit 4 — choose
+manually); none within the budget exits 2. `ms1` candidates are secret
 material (the usual stderr advisory applies). `md1` (chunked) recovers
 per-chunk like mk1, with cross-chunk reassembly validation. Default `0`
 disables the search (behavior unchanged).

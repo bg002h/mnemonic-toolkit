@@ -241,8 +241,11 @@ A `mnemonic` subcommand introduced in v0.22.0 that uses the BIP-93
 codex32 BCH code family to fix up to four substitution errors per
 chunk in any `ms1` / `mk1` / `md1` card. Documented in chapter
 *`mnemonic` reference*, section *`mnemonic repair`*. Also fires
-automatically (`auto-fire short-circuit`, exit code `5`) on decode
-failures in `convert` and `inspect`; opt out with the global
+automatically on decode failures in `convert` and `inspect` (an
+`auto-fire short-circuit` applies a confidently-verified mk1/md1
+correction at exit code `5`; since Cycle F an `ms1` substitution-
+correction is instead a VERIFY-ME candidate — it is NOT auto-applied but
+falls through with an advisory); opt out with the global
 `--no-auto-repair` flag.
 
 ## inspect (card-contents summary)

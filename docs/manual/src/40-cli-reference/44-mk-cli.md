@@ -197,12 +197,15 @@ typical mk1 emissions). Both correct up to four substitution errors
 per chunk (singleton bound `t=4`).
 
 `mk repair` is the per-codec sibling of toolkit's `mnemonic repair`
-(see `41-mnemonic.md` `## mnemonic repair`). The two surfaces share
-the same `RepairJson` envelope schema byte-exact (cross-CLI parser
-reuse — D27 of the toolkit v0.22.x follow-ups cycle plan); the only
-differences are that `mk repair` operates exclusively on the `mk` HRP
-(no `--ms1`/`--mk1`/`--md1` selector flag) and emits no Levenshtein-1
-"did you mean" suggestion on HRP mismatch (single-HRP context).
+(see `41-mnemonic.md` `## mnemonic repair`). The two surfaces share the
+`RepairJson` envelope's fields (cross-CLI parser reuse — D27 of the
+toolkit v0.22.x follow-ups cycle plan). Since Cycle F, toolkit's
+`RepairJson` is a strict **superset**: it carries an extra `verdict`
+field (inserted after `kind`) that the NO-BUMP `mk repair` envelope does
+not; a shared-field parser still reads both. Beyond that, `mk repair`
+operates exclusively on the `mk` HRP (no `--ms1`/`--mk1`/`--md1`
+selector flag) and emits no Levenshtein-1 "did you mean" suggestion on
+HRP mismatch (single-HRP context).
 
 Note that `mk decode` already performs internal BCH correction within
 the same `t=4` capacity during normal decode. `mk repair` is the
@@ -224,7 +227,7 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Flag | Purpose |
 |---|---|
 | `[MK1_STRINGS]...` | one or more mk1 strings to attempt to repair; use `-` to read one string per line from stdin |
-| `--json` | emit a single JSON envelope on stdout instead of the text-form report; schema byte-matches `mnemonic repair --json`'s `RepairJson` shape |
+| `--json` | emit a single JSON envelope on stdout instead of the text-form report; shares the `RepairJson` fields with `mnemonic repair --json` (whose toolkit envelope is a superset since Cycle F — see above) |
 | `--help` | print help |
 
 ### Exit codes
@@ -331,9 +334,12 @@ Exit code: `5`.
 
 ### JSON output
 
-`mk repair --json` byte-matches toolkit's `RepairJson` envelope
-(`kind` is `"mk1"`). The `UNVERIFIED` advisory (same wording as the text
-mode above) is still emitted on stderr — `--json` only changes stdout:
+`mk repair --json` emits the shared `RepairJson` fields (`kind` is
+`"mk1"`); toolkit's `mnemonic repair --mk1 --json` is a superset of this
+since Cycle F (it adds a `verdict` field after `kind` that this NO-BUMP
+envelope omits — shared-field-parser compatible). The `UNVERIFIED`
+advisory (same wording as the text mode above) is still emitted on
+stderr — `--json` only changes stdout:
 
 ```{.json include="44-mk-repair-json.out"}
 ```
