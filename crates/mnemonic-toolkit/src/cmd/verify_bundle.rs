@@ -2119,6 +2119,12 @@ pub fn emit_verify_checks(
                 // short-circuiting helper here: the corrected candidate is
                 // compared against the user's TYPED seed (`expected_ms1`)
                 // and surfaced via the check rows, never silently applied.
+                // Invariant (SPEC §3/§8.1): this site is only reached for a
+                // non-watch-only slot, so the typed-seed ground truth is present.
+                debug_assert!(
+                    !expected_ms1.is_empty(),
+                    "verify-bundle ms1 compare reached with empty ground truth (watch-only must skip)"
+                );
                 let ground_truth = if !no_auto_repair {
                     ms1_ground_truth_compare(supplied_ms1, expected_ms1)
                 } else {
@@ -2586,6 +2592,12 @@ fn emit_multisig_checks(
                     // v0.22.1 Phase 4 site #7 → Cycle F C1 — per-cosigner
                     // ground-truth compare (mirrors the single-sig site
                     // above; see `ms1_ground_truth_compare` doc-comment).
+                    // Invariant (SPEC §3/§8.1): non-watch-only cosigner slot →
+                    // the typed-seed ground truth for this index is present.
+                    debug_assert!(
+                        !exp_ms1.is_empty(),
+                        "verify-bundle multisig ms1 compare reached with empty ground truth (watch-only must skip)"
+                    );
                     let ground_truth = if !no_auto_repair {
                         ms1_ground_truth_compare(s, exp_ms1)
                     } else {

@@ -11,7 +11,11 @@
 //!
 //! Exit codes:
 //!   - 0 — all chunks already valid (no repair applied)
-//!   - 5 — at least one correction applied (REPAIR_APPLIED)
+//!   - 4 — VERIFY-ME candidate: a correction was applied but cannot be
+//!         self-verified (ms1 substitution-correction — Cycle F; mk1
+//!         partial-set / ambiguous indel — Cycle E)
+//!   - 5 — REPAIR_APPLIED, confidently: a blessed correction (mk1/md1
+//!         full-set reassembly-confirmed) or a unique full-checksum indel
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
