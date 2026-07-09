@@ -223,7 +223,9 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
-    // 1) Resolve seed (mutex + parse + ms1 auto-fire short-circuit).
+    // 1) Resolve seed (mutex + parse + ms1 auto-fire attempt). Cycle F: a
+    //    touched ms1 correction no longer short-circuits here — it falls
+    //    through to the original decode error, with a stderr advisory.
     let mnemonic = resolve_seed(args, stdin, stdout, stderr, no_auto_repair)?;
 
     // 2) Resolve passphrase. Inline emits argv-leak advisory. Wrapped in

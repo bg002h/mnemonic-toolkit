@@ -236,9 +236,24 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch) **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below) |
 | `1` | I/O error or other generic failure |
 
-The exit-5 `REPAIR_APPLIED` code is consistent across all four CLIs
-(`mnemonic`, `mk`, `ms`, `md`) per D26 of the v0.22.x follow-ups
-cycle, so wrapper scripts can use a uniform `exit == 5` signal.
+**Asymmetry vs. the toolkit (read before relying on `exit == 5`
+uniformly):** this standalone `mk repair` binary reports exit `5` for
+ANY correction — including an INCOMPLETE `chunk_set_id` group, where it
+adds the `UNVERIFIED` advisory above but does NOT change the exit code.
+`mnemonic repair --mk1` (the toolkit's own copy of this same engine)
+instead **demotes** that identical incomplete-group case to exit `4`
+`VERIFY-ME` (see `41-mnemonic.md`'s [mk1 set-level
+re-verify](#mnemonic-repair-mk1-set-level-reverify)) — the two surfaces
+diverge on this one case; both share every other exit code. The
+principled rule across all four CLIs (D26 of the v0.22.x follow-ups
+cycle, refined by Cycle E + Cycle F): exit-5 `REPAIR_APPLIED` means a
+correction is **verified now** (a complete, cleanly-reassembling
+`chunk_set_id` group) **or verifiable-by-reassembly later** (this
+binary's own incomplete-group case, above) — never "an oracle verified
+it" standing alone. Exit-4 `VERIFY-ME` means a substitution correction
+that spent the checksum's error-detection budget and has **no
+self-oracle** — always true for `ms1` (see `43-ms.md`), and true for an
+incomplete `mk1` group specifically in `mnemonic repair --mk1`.
 
 ### Set-level re-verify {#set-level-re-verify}
 

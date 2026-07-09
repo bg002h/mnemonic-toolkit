@@ -34,8 +34,10 @@ pub trait SeedIntakeArgs {
 
 /// Resolve the seed-intake mutex + parse the chosen value into a
 /// `bip39::Mnemonic`. Emits argv-leak advisory when inline `--phrase` /
-/// `--ms1` are used. On `--ms1` decode failure, route through the BCH
-/// auto-fire short-circuit (TTY-gated).
+/// `--ms1` are used. On `--ms1` decode failure, attempt the BCH auto-fire
+/// (TTY-gated) — since Cycle F (`ms1-repair-demote-to-candidate`) a
+/// touched correction never short-circuits; it falls through to the
+/// original decode error with a stderr advisory (never a silent apply).
 pub fn resolve_seed<A, R, E>(
     args: &A,
     stdin: &mut R,
@@ -179,8 +181,11 @@ where
                     let effective_no_auto_repair =
                         crate::repair::resolve_no_auto_repair(no_auto_repair);
                     if !effective_no_auto_repair {
-                        // Single-chunk repair attempt; emits exit-5 short-circuit
-                        // via Err(RepairShortCircuit) when correction succeeds.
+                        // Single-chunk repair attempt. Since Cycle F, a
+                        // touched ms1 correction never emits
+                        // Err(RepairShortCircuit) — it falls through
+                        // (Ok(())) with a stderr advisory, and the original
+                        // `decode_err` below still surfaces.
                         crate::repair::try_repair_and_short_circuit(
                             CardKind::Ms1,
                             &[card.as_str().to_string()],

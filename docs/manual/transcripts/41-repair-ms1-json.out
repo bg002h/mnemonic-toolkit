@@ -1,6 +1,7 @@
 {
   "schema_version": "1",
   "kind": "ms1",
+  "verdict": "candidate",
   "corrected_chunks": [
     "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"
   ],

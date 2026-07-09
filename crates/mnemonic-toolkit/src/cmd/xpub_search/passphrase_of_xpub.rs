@@ -271,7 +271,9 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
     //    if stderr is unreachable the user already has bigger problems.
     let _ = writeln!(stderr, "{STDERR_ADVISORY}");
 
-    // 1) Resolve seed (mutex + parse + ms1 auto-fire short-circuit).
+    // 1) Resolve seed (mutex + parse + ms1 auto-fire attempt). Cycle F: a
+    //    touched ms1 correction no longer short-circuits here — it falls
+    //    through to the original decode error, with a stderr advisory.
     let mnemonic = resolve_seed(args, stdin, stdout, stderr, no_auto_repair)?;
 
     // 1b) (R0-r1 I1) `--passphrase-candidates-file` scan dispatch — BEFORE the

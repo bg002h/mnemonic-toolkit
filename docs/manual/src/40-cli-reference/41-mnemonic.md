@@ -747,10 +747,22 @@ v0.22.1 D18 default). The behavior matrix:
 
 | TTY? | `--no-auto-repair`? | Outcome |
 |---|---|---|
-| yes | no | Auto-fire (exit 5 + repair report on stderr; corrected chunk on stdout) |
+| yes | no | Auto-fire attempts a correction: **mk1** (a full `chunk_set_id` group that reassembles cleanly) / **md1** — exit 5 + repair report on stderr, corrected chunk on stdout. **ms1** (Cycle F) — NO short-circuit; the corrected candidate is instead compared to the expected (typed) seed via the `ms1_decode` / `ms1_entropy_match` check rows below |
 | yes | yes | Legacy VerifyCheck row + `result: mismatch` + exit 4 |
 | no (pipe / redirected / CI) | no | Legacy VerifyCheck row + exit 4 (preserves automation contract) |
 | no | yes | Legacy VerifyCheck row + exit 4 |
+
+**Principled distinction across all four CLIs (SPEC §4):** exit-5
+`REPAIR_APPLIED` means a correction is **verified now** (an mk1/md1
+cross-chunk reassembly hash; a unique full-checksum `--max-indel`
+recovery) **or verifiable-by-reassembly later** (an mk1 single-plate
+chunk, once the rest of its set is supplied). exit-4 `VERIFY-ME` means a
+bounded-distance BCH SUBSTITUTION correction spent the checksum's
+error-detection budget and has **no self-oracle** — this is ms1's case
+always, an incomplete mk1 `chunk_set_id` group, or an ambiguous
+`--max-indel` recovery. Exit-5 is never "an oracle verified it" — that
+phrasing is false for the mk1 single-plate case, which is merely *not
+yet* falsified.
 
 **mk1 set-level re-verify (Cycle E):** for an `--mk1` / `--bundle-json`
 mk1 payload, the "Auto-fire" outcome above (exit 5, corrected chunk
@@ -765,6 +777,29 @@ the correction (it cannot be set-verified); the original error
 surfaces the same way. See [mk1 set-level
 re-verify](#mnemonic-repair-mk1-set-level-reverify) under `mnemonic
 repair` below.
+
+**ms1 ground-truth compare (Cycle F funds fix):** ms1 is a single-string
+bearer secret with no cross-chunk hash and no internal redundancy beyond
+the BCH checksum itself, so — unlike mk1/md1 — a substitution-correction
+can never be confirmed by reassembly; every other surface demotes it to
+an unverified Candidate (see [ms1 substitution-correction
+demotion](#mnemonic-repair-ms1-substitution-demotion) under `mnemonic
+repair` below). Here, uniquely, the user's own TYPED seed
+(`--slot @N.phrase=…` / `--slot @N.ms1=…`) is already the ground truth,
+so `verify-bundle` feeds the corrected candidate into the existing
+`ms1_decode` / `ms1_entropy_match` check-row comparison against it
+instead of emitting a stderr advisory: **match** ⇒ both checks PASS
+("recovered via auto-repair, confirmed against expected seed") and the
+run can still finish `exit 0`; **mismatch** ⇒ `ms1_entropy_match` FAILS
+("auto-repair candidate did not match the expected seed — this card is
+not a card for this seed"), the full check table is still emitted, and
+the run exits `4` — never a silent "recovered", never an abort. This
+closes the wrong-bundle attack a derived-xpub oracle could not: a
+corroded `--ms1` that happens to correct to a DIFFERENT wallet's seed is
+caught by the comparison rather than accepted. No mk1/xpub derivation is
+involved, and the compare is skipped identically to the mk1/md1 paths
+when the corresponding slot is watch-only (no typed seed to compare
+against).
 
 The TTY gate exists so scripts that parse the `VerifyCheck` array (or
 the JSON envelope's `checks` field) don't see a single corrupted chunk
@@ -815,9 +850,12 @@ v0.25.0:
 
 | Subcommand | Trigger | TTY-positive default | TTY-negative default |
 |---|---|---|---|
-| `convert` | `ms_codec` / `mk_codec` decode failure on `--from ms1=…` or `--from mk1=…` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
-| `inspect` | `ms_codec` / `mk_codec` / `md_codec` decode failure on any `--ms1` / `--mk1` / `--md1` input | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
-| `verify-bundle` | as above, plus the `--bundle-json` intake path | Auto-fire (exit 5 + repair report; corrected chunk on stdout) | Legacy VerifyCheck row + exit 4 |
+| `convert` | `mk_codec` decode failure on `--from mk1=…` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `convert` | `ms_codec` decode failure on `--from ms1=…` (Cycle F) | **NO short-circuit** — the original decode error surfaces (its own exit code) + a one-line stderr advisory pointing at `mnemonic repair --ms1` | Typed decode error (no advisory) |
+| `inspect` | `mk_codec` / `md_codec` decode failure on `--mk1` / `--md1` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `inspect` | `ms_codec` decode failure on `--ms1` (Cycle F) | **NO short-circuit** — same advisory-and-fall-through as `convert` above | Typed decode error (no advisory) |
+| `verify-bundle` | `mk_codec` / `md_codec` decode failure (as above, plus the `--bundle-json` intake path) | Auto-fire (exit 5 + repair report; corrected chunk on stdout) | Legacy VerifyCheck row + exit 4 |
+| `verify-bundle` | `ms_codec` decode failure (as above, plus `--bundle-json`) (Cycle F) | `ms1_decode` / `ms1_entropy_match` check-row compare against the typed seed — PASS on match, `ms1_entropy_match` fail → exit 4 on mismatch (see [ms1 ground-truth compare](#auto-fire-on-decode-failure-v0221) above); NO stderr advisory on this path | Legacy VerifyCheck row + exit 4 |
 
 The TTY gate exists so scripts that parse the typed error envelope
 (or, for `verify-bundle`, the `VerifyCheck` array / JSON envelope's
@@ -3039,8 +3077,8 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 | Code | Meaning |
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one chunk corrected (`REPAIR_APPLIED`), incl. a unique `--max-indel` recovery; stdout = repair report + corrected chunks |
-| `4` | ambiguous (multiple candidates), **or a candidate required ≥1 substitution**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified** — verify each before trusting; all candidates are printed. See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
+| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / md1 (content-id check passes), incl. a unique full-checksum `--max-indel` recovery for any kind; stdout = repair report + corrected chunks |
+| `4` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified** — verify each before trusting; all candidates are printed |
 | `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
 | `1` | I/O error or other generic failure |
 
@@ -3052,11 +3090,16 @@ corruption that is provably the originally-encoded chunk. Beyond that
 bound (5 or more substitution errors in one chunk), a correction can
 still *succeed* — the corrected chunk passes its own BCH check — while
 actually **aliasing to a different, valid-but-wrong codeword** rather
-than recovering the original. This distinction matters specifically for
-**mk1**, whose chunks are repaired and reported per-chunk: `ms1` is
-always a single chunk (no partial-set concept applies), and `md1`'s
-content-id check already rejects a full-set alias on its own (unchanged
-by this cycle — `md1` was never exposed to this gap).
+than recovering the original. This PARTIAL-SET failure mode matters
+specifically for **mk1**, whose chunks are repaired and reported
+per-chunk: `md1`'s content-id check already rejects a full-set alias on
+its own (unchanged by this cycle — `md1` was never exposed to this
+gap). `ms1` has no chunk-set at all (it is always a single string), so
+this particular partial-set gap never applied to it — but ms1 has a
+**worse, undetectable variant** of the same underlying substitution-
+aliasing risk with no self-oracle whatsoever; see [ms1
+substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion)
+below.
 
 An empirically measured rate for this failure mode — a 5-substitution
 corruption of an mk1 regular-code chunk aliasing to a different, valid
@@ -3098,6 +3141,57 @@ BIP-93 itself recommends confirming a corrected codex32 string before
 relying on it; this advisory operationalizes that recommendation for
 the one case the re-verify cannot resolve on its own.
 
+### ms1 substitution-correction demotion (Cycle F funds fix) {#mnemonic-repair-ms1-substitution-demotion}
+
+`ms1` encodes raw BIP-39 entropy as a SINGLE codex32 string — a bearer
+secret with no cross-chunk hash, no fingerprint, and no internal
+redundancy beyond the BCH checksum itself. A bounded-distance (≤4-error)
+BCH substitution-correction is provably the original chunk, but beyond
+that bound the "correction" can still *succeed* while **aliasing to a
+DIFFERENT, valid-but-wrong seed** — and unlike mk1/md1, there is no
+cross-chunk hash or content-id to catch it. A miscorrection *presents*
+as an ordinary small correction; the BCH code cannot distinguish a
+genuine ≤4-error fix from a longer-distance aliasing event at the same
+apparent edit distance.
+
+Every `ms1` substitution-correction is therefore demoted to an
+exit-`4` **VERIFY-ME Candidate** — **never** a silent exit-`5`
+"recovered" — across every surface that touches it:
+
+- **`mnemonic repair --ms1`** (and **`ms repair`**, ms-cli's standalone
+  binary): any touched correction reports the corrected string as a
+  Candidate, exit `4`, plus a stderr advisory recommending the user
+  confirm the derived address/xpub against a known-good copy before
+  trusting it. A clean (already-valid) decode is unaffected: exit `0`.
+- **Auto-fire on `convert` / `inspect` / `xpub-search`:** a corrected
+  `ms1` no longer short-circuits (no silent apply). The caller's
+  ORIGINAL decode error surfaces unchanged, plus a one-line stderr
+  advisory ("a candidate correction exists but a seed card cannot be
+  self-verified — run `mnemonic repair --ms1 …` to inspect it") so the
+  withheld candidate is not silently invisible.
+- **`verify-bundle`:** the one surface with an actual ground truth
+  available — the user's own TYPED seed. See [ms1 ground-truth
+  compare](#auto-fire-on-decode-failure-v0221) above: match against the
+  expected seed ⇒ checks pass; mismatch ⇒ `ms1_entropy_match` fails ⇒
+  exit `4`.
+
+**The one carve-out — indel recovery keeps exit `5`:** `mnemonic repair
+--ms1 --max-indel <N>` (standalone only; `ms repair` has no `--max-indel`
+flag, and no auto-fire site has indel plumbing) is a DIFFERENT
+mechanism: it enumerates candidate insert/delete edits and RE-VALIDATES
+the FULL BCH checksum on each, rather than spending the checksum's
+substitution budget. A UNIQUE full-checksum indel candidate is
+trustworthy to within the checksum's own false-accept rate —
+cryptographically stronger than the reassembly hash mk1/md1 are ALREADY
+blessed on — so it remains a genuine self-verification and stays exit
+`5`. A multi-hit (ambiguous) indel recovery is not unique and falls to
+exit `4` like any other ambiguous candidate.
+
+BIP-93 itself recommends against automatically proceeding with a
+corrected codex32 string without user confirmation; this demotion
+operationalizes that recommendation for the one card kind with no
+self-oracle at all.
+
 ### Worked example
 
 ```sh
@@ -3117,9 +3211,18 @@ Stderr:
 PLACEHOLDER — generated from transcripts/41-repair-ms1.err at build
 ```
 
-Exit code: `5`.
+Exit code: `4` (Candidate — see [ms1 substitution-correction
+demotion](#mnemonic-repair-ms1-substitution-demotion) above; the
+corrected string is printed, but a seed card cannot self-verify, so it
+is never a confident exit-`5` "recovered").
 
 ### JSON output
+
+The `verdict` field (Cycle F) is `"blessed"` for a clean or confidently-
+recovered card, `"candidate"` for a touched-but-unverified correction —
+currently reachable for every `ms1` substitution-correction and an
+incomplete mk1 partial-plate group. `ms-cli`'s standalone `ms repair
+--json` byte-matches this field's position.
 
 ```{.text include="41-repair-ms1-json.out"}
 PLACEHOLDER — generated from transcripts/41-repair-ms1-json.out at build
@@ -3245,7 +3348,15 @@ the codec's own message — NOT this suggestion.
 
 When auto-fire fires under any `--json` calling context (`convert
 --json`, `inspect --json`, `verify-bundle --json`), the stdout is a
-structured JSON envelope instead of the text-form repair report. Schema:
+structured JSON envelope instead of the text-form repair report. Schema
+(the `kind: "ms1"` value below illustrates the field SHAPE only — since
+Cycle F, an `ms1` substitution-correction can no longer produce this
+envelope; it always falls through to the original decode error plus a
+stderr advisory instead, see [ms1 substitution-correction
+demotion](#mnemonic-repair-ms1-substitution-demotion). The only kinds
+that can still emit `auto_repair_short_circuit: true` / `exit_code: 5`
+are `mk1` — a full, cleanly-reassembling `chunk_set_id` group — and
+`md1`):
 
 ```json
 {
@@ -3391,19 +3502,25 @@ not touch it.
 ### Auto-fire short-circuit
 
 When a corrupted card is supplied to `inspect`, the sibling-codec
-decode fails and v0.22.0 auto-fire kicks in: instead of surfacing the
-typed decode error, the toolkit attempts BCH correction and — on
-success — prints the corrected card and exits with code `5`. Pass
-the global `--no-auto-repair` flag to opt out and restore the
-pre-v0.22 behavior (typed sibling-codec error, exit `1` or `2`).
+decode fails and v0.22.0 auto-fire kicks in. For `md1`, instead of
+surfacing the typed decode error, the toolkit attempts BCH correction
+and — on success — prints the corrected card and exits with code `5`.
+For **`ms1` (Cycle F)**, auto-fire no longer short-circuits: a
+substitution-correction is a Candidate with no self-oracle (see [ms1
+substitution-correction
+demotion](#mnemonic-repair-ms1-substitution-demotion)), so the
+ORIGINAL typed decode error surfaces unchanged, plus a one-line stderr
+advisory pointing at `mnemonic repair --ms1` to inspect the withheld
+candidate. Pass the global `--no-auto-repair` flag to suppress even
+that advisory and restore the pre-v0.22 behavior verbatim.
 
 For `mk1` specifically, the toolkit's auto-fire is essentially
 redundant: `mk-codec` performs INTERNAL BCH correction at the same
 `t=4` capacity inside `mk_codec::decode`, so corrupted `mk1` chunks
 within capacity are silently fixed before reaching the auto-fire
-boundary. Auto-fire is the user-visible repair path for `ms1`
-(codex32-delegated; no internal correction) and `md1` (no internal
-correction in `md-codec`).
+boundary. Auto-fire (the exit-`5` short-circuit) is reachable only for
+`md1` (no internal correction in `md-codec`); `ms1` (codex32-delegated;
+no internal correction) never short-circuits per the above.
 
 ### Refusals
 
@@ -3537,10 +3654,15 @@ No-match shape:
 | Code | Meaning |
 |---|---|
 | 0 | Match found |
-| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure outside the auto-fire path, ms1 decode failure with `--no-auto-repair` or on no-TTY) |
+| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
 | 4 | No match in searched set (`ToolkitError::XpubSearchNoMatch`) |
-| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated; same contract as `convert` / `inspect` / `verify-bundle`) |
 | 64 | Clap arg-parse error |
+
+Exit `5` is **not reachable** by this subcommand (Cycle F): the seed's
+`--ms1` intake previously auto-fired a short-circuit on TTY-positive
+decode failure; it now always falls through to the typed decode error
+(exit `1`) plus the advisory above. See [ms1 substitution-correction
+demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 #### Refusals
 
@@ -3650,10 +3772,12 @@ searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
 | Code | Meaning |
 |---|---|
 | 0 | At least one cosigner matched |
-| 1 | Bad input (descriptor parse error, toolkit-@N refusal, no-xpub-keys refusal, seed-intake error) |
+| 1 | Bad input (descriptor parse error, toolkit-@N refusal, no-xpub-keys refusal, seed-intake error — since Cycle F an `--ms1` decode failure always surfaces here, with a stderr advisory when a candidate correction exists) |
 | 4 | No cosigner matched (`ToolkitError::XpubSearchNoMatch`) |
-| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure |
 | 64 | Clap arg-parse error |
+
+Exit `5` is **not reachable** here (Cycle F) — see [ms1
+substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 #### Refusals
 
@@ -3937,10 +4061,12 @@ path, so that envelope is byte-unchanged:
 | Code | Meaning |
 |---|---|
 | 0 | Match found (this passphrase produces the target xpub at one of the searched paths) |
-| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure outside the auto-fire path, ms1 decode failure with `--no-auto-repair` or on no-TTY) |
+| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
 | 4 | No match — single passphrase (`XpubSearchNoMatch`), OR no candidate in `--passphrase-candidates-file` produced the target (`XpubSearchPassphraseCandidatesExhausted`, with the count of candidates tried; an all-blank/empty file gets a tailored "no candidates" note) |
-| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated; same contract as `convert` / `inspect` / `verify-bundle`) |
 | 64 | Clap arg-parse error (missing/duplicate passphrase source — exactly one of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file`) |
+
+Exit `5` is **not reachable** by this subcommand (Cycle F) — see [ms1
+substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 #### Refusals
 
