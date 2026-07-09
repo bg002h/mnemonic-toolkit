@@ -6,10 +6,9 @@ fold" + CLAUDE.md). Per-phase: TDD (tests before src) + per-phase Fable R0 runni
 + fold-on-Opus-reenter-loop until 0C/0I. Post-impl: mandatory Fable whole-diff review over the whole cross-repo
 diff.
 
-**Status:** rev-3 — folded plan-R0-round-1 (0C/2I/4M: I1 merge + flip inventory; I2 homed §5.6/5.7/5.8; M1-M4) +
-round-2 (0C/1I: cell_19/cell_18b flip target corrected **exit 2 → exit 1** — `Codex32` invalid-checksum →
-`ms_codec_exit_code`⇒1, live-verified; §5.3 parenthetical likewise). Reviews `cycleF-plan-r0-round-{1,2}.md`.
-Pending plan-R0 round-3 to 0C/0I.
+**Status:** ✅ **plan-R0-GREEN (0C/0I) @ round 3 (Fable)** — converged r1(0C/2I/4M)→r2(0C/1I)→r3(0C/0I). rev-3
+folded the merge + flip inventory + §5.6/5.7/5.8 homing + M1-M4 + the cell_19/18b exit-2→1 correction. Reviews
+`cycleF-plan-r0-round-{1,2,3}.md`. **CLEARED for P0 implementation** (per-phase TDD + Fable per-phase R0 + Fable whole-diff).
 
 **Source SHAs:** toolkit `b20e3ce7`; ms-codec/ms-cli `mnemonic-secret master@c2fd4eb`.
 **Target:** toolkit MINOR (`v0.81.0`) + ms-cli MINOR (`0.13.2`→`0.14.0`); ms-codec/mk-codec/md* NO-BUMP.
