@@ -51,6 +51,7 @@ use crate::pipeline::{
 };
 use crate::regroup;
 use crate::{decode, EncodeOpts, SourceKind, WcError};
+use sha2::{Digest, Sha256};
 
 /// A RAID plate's role in the array (plan §4.2 H1 role field). `Data` plates
 /// carry the `n` xpub stripes; `ParityA` = `P₁` (RAID-5, r≥1); `ParityB` = `P₂`
@@ -201,13 +202,65 @@ fn parity_b(stripes: &[Vec<u16>], width: usize) -> Vec<u16> {
 }
 
 // ===========================================================================
+// Array-id derivation (plan §3 / §4.2; F2 payload-digest fold).
+// ===========================================================================
+
+/// The **FROZEN, INJECTIVE** canonical serialization of an array's payloads for
+/// the array-id digest (constellation-eval **F2** §1a — this layout is engraved
+/// into steel via `array_id`, so it MUST NEVER change):
+///
+/// ```text
+/// u32-BE n ‖ for each payload in index order:
+///     u16-BE payload_bits ‖ exactly ceil(payload_bits/8) payload bytes
+/// ```
+///
+/// The exact minimal byte count is load-bearing for INJECTIVITY (a non-minimal
+/// `payload.len()` is rejected upstream in [`raid_encode`]); with a variable byte
+/// count a naive `payload_bits ‖ bytes` serialization would be ambiguous. `bits`
+/// fits `u16` (validated `≤ 0xFFFF` upstream).
+fn array_id_canonical(payloads: &[(Vec<u8>, usize)]) -> Vec<u8> {
+    let mut c = Vec::new();
+    c.extend_from_slice(&(payloads.len() as u32).to_be_bytes());
+    for (bytes, bits) in payloads {
+        c.extend_from_slice(&(*bits as u16).to_be_bytes());
+        let n_bytes = bits.div_ceil(8);
+        c.extend_from_slice(&bytes[..n_bytes]);
+    }
+    c
+}
+
+/// Derive the 22-bit array-id (F2): `top22(SHA-256(seed ‖ SHA-256(canonical)))`
+/// where `seed` is the ordered cosigner fingerprints and `canonical` is
+/// [`array_id_canonical`]. Folding the payload digest in gives two DIFFERENT
+/// wallets sharing a cosigner set DIFFERENT ids, so a cross-array plate mix is
+/// caught by the reconstruct equality gate instead of silently emitting a wrong
+/// xpub. **Excludes `r`** (so the append-only `P₁` stays byte-identical for r=1
+/// vs r=2). `top22` reuses [`array_id_from_seed`] over `seed ‖ digest`.
+fn derive_array_id(seed: &[u8], payloads: &[(Vec<u8>, usize)]) -> u32 {
+    let digest = Sha256::digest(array_id_canonical(payloads));
+    let mut input = Vec::with_capacity(seed.len() + digest.len());
+    input.extend_from_slice(seed);
+    input.extend_from_slice(&digest);
+    array_id_from_seed(&input)
+}
+
+// ===========================================================================
 // Public API — encode (plan §6.1 / §7 P5).
 // ===========================================================================
 
 /// Encode `n` xpub payloads into `n` data plates + `r` recovery plates (plan §3 /
 /// §4.6 / §7 P5). `payloads[i] = (payload_bytes, payload_bits)`; `array_id_seed`
-/// = the concatenated ordered cosigner fingerprints (wc-codec hashes it to the
-/// 22-bit array-id). `r ∈ {1,2}`, `2 ≤ n ≤ 32`, `r < n`.
+/// = the concatenated ordered cosigner fingerprints. The 22-bit array-id is
+/// `top22(SHA-256(array_id_seed ‖ SHA-256(canonical)))` where `canonical` is the
+/// injective payload serialization (see [`array_id_canonical`]) — folding the
+/// payload digest into the id so two DIFFERENT wallets sharing a cosigner set get
+/// DIFFERENT array-ids (constellation-eval **F2**: prevents a same-quorum plate
+/// mix from silently reconstructing a valid-but-wrong xpub). `r ∈ {1,2}`,
+/// `2 ≤ n ≤ 32`, `r < n`.
+///
+/// Each payload's byte count MUST be exactly minimal (`ceil(payload_bits/8)`) —
+/// the frozen array-id digest layout depends on this for injectivity, so a
+/// non-minimal `payload.len()` is rejected ([`WcError::InvalidParams`]).
 ///
 /// Returns the plates in order: `n` data plates (index `0..n−1`), then ParityA
 /// (if `r ≥ 1`), then ParityB (if `r = 2`). Each plate is a full standalone
@@ -230,12 +283,25 @@ pub fn raid_encode(
         return Err(WcError::InvalidParams);
     }
     for (bytes, bits) in payloads {
-        if *bits > bytes.len() * 8 || *bits > 0xFFFF {
+        if *bits > 0xFFFF {
+            return Err(WcError::InvalidParams);
+        }
+        // M-C (F2): the payload byte count MUST be exactly minimal —
+        // `ceil(payload_bits/8)`. The frozen array-id digest layout (§1a)
+        // serializes exactly `ceil(bits/8)` bytes per payload; a non-minimal
+        // `bytes.len()` (too few OR too many) would break the digest's
+        // injectivity. Unreachable from the real mk1 caller (byte-aligned
+        // minimal), but pinned here since the derivation freezes into engraved
+        // steel. (Subsumes the old `bits > bytes.len()*8` lower-bound check.)
+        if bytes.len() != bits.div_ceil(8) {
             return Err(WcError::InvalidParams);
         }
     }
 
-    let array_id = array_id_from_seed(array_id_seed);
+    // (a, F2) Fold a deterministic digest of the payloads into the array-id so a
+    // same-quorum different-payload array gets a DIFFERENT id (validated above:
+    // each payload is minimal, so `array_id_canonical` is injective).
+    let array_id = derive_array_id(array_id_seed, payloads);
 
     // --- Build the data stripes; derive the array-wide width W. ----------
     let unpadded: Vec<Vec<u16>> = payloads
@@ -421,8 +487,8 @@ pub fn raid_reconstruct(plates: &[Vec<&str>]) -> Result<RaidRecovery, WcError> {
     let recovered_stripes =
         solve_missing(&present_data, &missing, p1.as_deref(), p2.as_deref(), width)?;
 
-    // --- Read each data stripe's length-prefix → exact payload. ----------
-    let mut payloads: Vec<(Vec<u8>, usize)> = Vec::with_capacity(n);
+    // --- Assemble the full set of n data stripes (present ∪ solved). ------
+    let mut full: Vec<Vec<u16>> = Vec::with_capacity(n);
     for (i, slot) in present_data.iter().enumerate() {
         let stripe = match slot {
             Some(s) => s.clone(),
@@ -431,7 +497,39 @@ pub fn raid_reconstruct(plates: &[Vec<&str>]) -> Result<RaidRecovery, WcError> {
                 .cloned()
                 .ok_or(WcError::RaidUnrecoverable)?,
         };
-        payloads.push(stripe_to_payload(&stripe)?);
+        full.push(stripe);
+    }
+
+    // --- (b, F2) Spare-parity consistency oracle. ------------------------
+    // When we hold MORE parity plates than we had missing data plates, at least
+    // one parity equation was NOT consumed by the MDS solve. Re-derive each
+    // present parity stripe over the FULL reconstructed set and require it to
+    // match the engraved parity. The equations the solve consumed hold by
+    // construction (exact GF arithmetic), so this re-check can ONLY fail on a
+    // genuine inconsistency: a same-quorum chimera whose plates carry equal
+    // array-id / n / width (so they pass the coarse equality gate) but come from
+    // DIFFERENT wallets sharing a cosigner set (the legacy F2 collision, for
+    // plates engraved before the (a) payload-digest fold). A genuine array ALWAYS
+    // passes — never over-rejected (G3). Accepted residual (SPEC §1b): a 0-missing
+    // pure-data chimera with NO parity plate presented has no equation to check
+    // and is info-theoretically undetectable in-band.
+    if r_available > missing.len() {
+        if let Some(p1) = p1.as_deref() {
+            if parity_a(&full, width).as_slice() != p1 {
+                return Err(WcError::RaidArrayMismatch);
+            }
+        }
+        if let Some(p2) = p2.as_deref() {
+            if parity_b(&full, width).as_slice() != p2 {
+                return Err(WcError::RaidArrayMismatch);
+            }
+        }
+    }
+
+    // --- Read each data stripe's length-prefix → exact payload. ----------
+    let mut payloads: Vec<(Vec<u8>, usize)> = Vec::with_capacity(n);
+    for stripe in &full {
+        payloads.push(stripe_to_payload(stripe)?);
     }
 
     Ok(RaidRecovery {

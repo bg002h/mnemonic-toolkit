@@ -225,7 +225,9 @@ fn build_h0(kind: SourceKind, has_raid: bool) -> u16 {
 /// **H1** (2 words = 22 bits): `n−1(5: 1..32) | role(2) | index-in-array(5: 0..31)
 /// | reserved(10)`. The full **5-bit** `index-in-array` is the `P₂` α-exponent
 /// (plan §3 / NEW-I2), so r=2 MDS holds for all `n ≤ 32`. **array-id** (2 words):
-/// the top 22 bits of `SHA-256(array_id_seed)`.
+/// `top22(SHA-256(array_id_seed ‖ SHA-256(payload-canonical)))` — the payload
+/// digest is folded in so two DIFFERENT wallets sharing a cosigner set get
+/// DIFFERENT ids (constellation-eval **F2**; derivation in [`crate::raid`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RaidHeaderFields {
     /// Number of data plates `n` (`2..=32`).
@@ -234,7 +236,8 @@ pub(crate) struct RaidHeaderFields {
     pub role: u16,
     /// The plate's `index-in-array` (0..31), the `P₂` α-exponent — plan §3.
     pub index: usize,
-    /// The 22-bit array-id (top 22 bits of `SHA-256(array_id_seed)`).
+    /// The 22-bit array-id — `top22(SHA-256(array_id_seed ‖ SHA-256(payload-
+    /// canonical)))` (the payload digest is folded in — F2; see [`crate::raid`]).
     pub array_id: u32,
 }
 
@@ -246,11 +249,13 @@ pub(crate) const RAID_ROLE_PARITY_B: u16 = 2;
 /// The extra positional header words a RAID plate carries (H1 = 2 + array-id = 2).
 const RAID_HEADER_WORDS: usize = 4;
 
-/// Compute the 22-bit array-id from the caller-supplied seed (the concatenated
-/// ordered cosigner fingerprints): the **top 22 bits** of `SHA-256(seed)`
-/// (plan §3 / §4.2). wc-codec hashes the seed; the caller passes the raw seed.
-pub(crate) fn array_id_from_seed(seed: &[u8]) -> u32 {
-    let d = Sha256::digest(seed);
+/// The 22-bit array-id primitive: the **top 22 bits** of `SHA-256(bytes)`
+/// (plan §3 / §4.2). The RAID encoder ([`crate::raid::raid_encode`]) calls this
+/// with `array_id_seed ‖ SHA-256(payload-canonical)` — the payload digest is
+/// folded in so two same-cosigner different-payload arrays get DIFFERENT ids
+/// (constellation-eval **F2**), NOT the bare seed alone.
+pub(crate) fn array_id_from_seed(bytes: &[u8]) -> u32 {
+    let d = Sha256::digest(bytes);
     // Top 22 bits = the first 22 MSB-first bits of the digest.
     let top = ((d[0] as u32) << 16) | ((d[1] as u32) << 8) | (d[2] as u32); // 24 bits
     top >> 2 // drop the low 2 bits → top 22

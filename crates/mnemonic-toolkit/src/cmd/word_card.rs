@@ -32,11 +32,27 @@ use wc_codec::{EncodeOpts, SourceKind};
 
 use crate::word_card_adapter::{canonical_to_recovered, string_to_canonical, RecoveredCard};
 
+/// The always-on advisory attached to a `*recovered` (MDS-solved) RAID plate
+/// (constellation-eval **F2** part (c)). A plate reconstructed from RAID parity
+/// carries NO integrity tag of its own (the tag died with the lost plate), so a
+/// same-quorum plate mix that slips past the array-id / spare-parity guards
+/// cannot ALWAYS be caught in-band (legacy arrays, r=1-with-1-missing). The human
+/// must independently confirm the reconstructed xpub. Fires ONLY on MDS-solved
+/// plates — never on an all-present decode (G4).
+const RECOVERED_XPUB_ADVISORY: &str =
+    "reconstructed from RAID parity — independently verify this xpub against your \
+     other records before trusting it (it carries no integrity tag of its own)";
+
 /// The `--json` schema version for the `word-card` envelope. Bumped on any
 /// wire-shape change. NOTE (lockstep): the `word-card` `--json` wire-shape is NOT
 /// `schema_mirror`-gated (that gate is clap-flag-NAME parity only) — GUI
 /// consumers self-update via the paired-PR rule (plan §7 P6 / `CLAUDE.md`).
-pub const WORD_CARD_SCHEMA_VERSION: &str = "1";
+///
+/// - `"1"`: initial P6 shape.
+/// - `"2"` (F2): a `verify_advisory` string is added to each RAID-decode plate
+///   that was reconstructed via the MDS solve (`reconstructed: true`) — a loud
+///   "independently verify this reconstructed xpub" mitigation.
+pub const WORD_CARD_SCHEMA_VERSION: &str = "2";
 
 #[derive(Args, Debug)]
 pub struct WordCardArgs {
@@ -282,10 +298,10 @@ fn run_decode<R: Read, W: Write, E: Write>(
     args: &WordCardArgs,
     stdin: &mut R,
     stdout: &mut W,
-    _stderr: &mut E,
+    stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     if !args.decode_plate.is_empty() {
-        run_decode_raid(args, stdin, stdout)
+        run_decode_raid(args, stdin, stdout, stderr)
     } else {
         run_decode_solo(args, stdin, stdout)
     }
@@ -324,10 +340,11 @@ fn run_decode_solo<R: Read, W: Write>(
 }
 
 /// RAID-reconstruct an array from the surviving `--decode-plate` word lists.
-fn run_decode_raid<R: Read, W: Write>(
+fn run_decode_raid<R: Read, W: Write, E: Write>(
     args: &WordCardArgs,
     _stdin: &mut R,
     stdout: &mut W,
+    stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     // Each --decode-plate value is one plate's whitespace-separated words.
     let plate_word_sets: Vec<Vec<String>> = args
@@ -348,7 +365,13 @@ fn run_decode_raid<R: Read, W: Write>(
         let rc = canonical_to_recovered(SourceKind::Mk1Xpub, bytes, *bits)?;
         let mut j = recovered_json(&rc);
         j.array_index = Some(i);
-        j.reconstructed = Some(recovery.reconstructed.contains(&i));
+        let was_reconstructed = recovery.reconstructed.contains(&i);
+        j.reconstructed = Some(was_reconstructed);
+        // (c, F2) MDS-solved plates carry the loud verify-this-xpub advisory —
+        // never an all-present plate (G4).
+        if was_reconstructed {
+            j.verify_advisory = Some(RECOVERED_XPUB_ADVISORY.to_string());
+        }
         recovered_cards.push(j);
     }
 
@@ -375,19 +398,34 @@ fn run_decode_raid<R: Read, W: Write>(
         )
         .map_err(ToolkitError::Io)?;
         for p in &report.plates {
+            let recovered = p.reconstructed == Some(true);
             writeln!(
                 stdout,
                 "  [{}{}] xpub: {}",
                 p.array_index.unwrap_or(0),
-                if p.reconstructed == Some(true) {
-                    " *recovered"
-                } else {
-                    ""
-                },
+                if recovered { " *recovered" } else { "" },
                 p.xpub.as_deref().unwrap_or("<none>"),
             )
             .map_err(ToolkitError::Io)?;
+            // (c, F2) loud advisory directly under each *recovered plate.
+            if recovered {
+                writeln!(stdout, "      ! verify: {RECOVERED_XPUB_ADVISORY}")
+                    .map_err(ToolkitError::Io)?;
+            }
         }
+    }
+
+    // (c, F2) A single loud stderr advisory whenever ANY plate was MDS-solved,
+    // regardless of --json (so a piped-JSON consumer's operator still sees it).
+    if !report.reconstructed.is_empty() {
+        writeln!(
+            stderr,
+            "word-card: WARNING — plate(s) {:?} were reconstructed from RAID parity; \
+             independently verify each *recovered xpub against your other records \
+             before trusting it.",
+            report.reconstructed
+        )
+        .map_err(ToolkitError::Io)?;
     }
     Ok(0)
 }
@@ -515,6 +553,11 @@ struct RecoveredJson {
     /// RAID: `true` iff this plate was reconstructed via the MDS solve.
     #[serde(skip_serializing_if = "Option::is_none")]
     reconstructed: Option<bool>,
+    /// RAID (F2, schema `"2"`): present ONLY on a `*recovered` (MDS-solved) plate
+    /// — a loud "independently verify this reconstructed xpub" advisory. Absent on
+    /// an all-present decode (G4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verify_advisory: Option<String>,
 }
 
 fn recovered_json(rc: &RecoveredCard) -> RecoveredJson {
@@ -530,6 +573,7 @@ fn recovered_json(rc: &RecoveredCard) -> RecoveredJson {
             descriptor: None,
             array_index: None,
             reconstructed: None,
+            verify_advisory: None,
         },
         RecoveredCard::Md1 { descriptor, md1 } => RecoveredJson {
             kind: "md1",
@@ -543,6 +587,7 @@ fn recovered_json(rc: &RecoveredCard) -> RecoveredJson {
             descriptor: Some(format!("{:?}", descriptor.tree.tag)),
             array_index: None,
             reconstructed: None,
+            verify_advisory: None,
         },
     }
 }

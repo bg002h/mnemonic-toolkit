@@ -100,8 +100,11 @@ pub struct RaidMeta {
     pub role: PlateRole,
     /// The plate's `index-in-array` (`0..n−1`) — the `P₂` α-exponent (plan §3).
     pub index: usize,
-    /// The 22-bit array-id (top 22 bits of `SHA-256(array_id_seed)`) — the
-    /// plate-matching aid that fixes stripe order (plan §3 / §4.2).
+    /// The 22-bit array-id — `top22(SHA-256(array_id_seed ‖ SHA-256(payload-
+    /// canonical)))`. The plate-matching aid that fixes stripe order (plan §3 /
+    /// §4.2); the payload digest is folded in so two DIFFERENT wallets sharing a
+    /// cosigner set get DIFFERENT ids, refusing a same-quorum plate mix instead
+    /// of silently reconstructing a wrong xpub (constellation-eval **F2**).
     pub array_id: u32,
 }
 
@@ -146,8 +149,11 @@ pub enum WcError {
     InvalidParams,
     /// During RAID reconstruct the supplied plates did not form a single coherent
     /// array — mismatched array-ids (plates from two different wallets), or
-    /// inconsistent `n` / duplicate index / inconsistent stripe width. Refuse
-    /// rather than silently mix unrelated plates (plan §4.2 / §7 P5 KAT 6).
+    /// inconsistent `n` / duplicate index / inconsistent stripe width, OR a
+    /// reconstructed set whose SPARE parity equation is inconsistent (a
+    /// same-quorum chimera of plates from two DIFFERENT wallets sharing a cosigner
+    /// set — the legacy F2 collision, caught by the spare-parity oracle). Refuse
+    /// rather than silently mix unrelated plates (plan §4.2 / §7 P5 KAT 6; F2).
     RaidArrayMismatch,
     /// A RAID reconstruct had MORE than `r` plates missing — the MDS solve is
     /// underdetermined, so refuse rather than emit a wrong xpub (plan §7 P5
@@ -189,7 +195,7 @@ impl core::fmt::Display for WcError {
             WcError::InvalidParams => write!(f, "word-card: invalid encode/decode parameter"),
             WcError::RaidArrayMismatch => write!(
                 f,
-                "word-card: RAID plates do not form one coherent array (mismatched array-id / n / index) — refuse"
+                "word-card: RAID plates do not form one coherent array (mismatched array-id / n / index, or inconsistent parity) — refuse"
             ),
             WcError::RaidUnrecoverable => write!(
                 f,

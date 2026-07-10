@@ -191,19 +191,67 @@ fn raid1_reconstructs_one_dropped_data_plate() {
     for p in surviving {
         cmd.args(["--decode-plate", &plate_words(p)]);
     }
-    let out = cmd.assert().success().get_output().stdout.clone();
+    let assert = cmd.assert().success();
+    let output = assert.get_output();
+    let out = output.stdout.clone();
     let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
 
+    assert_eq!(v["schema_version"], "2");
     assert_eq!(v["n"], 3);
     assert_eq!(v["reconstructed"], serde_json::json!([0]));
     // The recovered array's xpubs match the originals in order.
-    let xpubs: Vec<&str> = v["plates"]
-        .as_array()
-        .unwrap()
+    let plates_json = v["plates"].as_array().unwrap();
+    let xpubs: Vec<&str> = plates_json
         .iter()
         .map(|p| p["xpub"].as_str().unwrap())
         .collect();
     assert_eq!(xpubs, vec![RAID_MK1_XPUB, RAID_MK2_XPUB, RAID_MK3_XPUB]);
+
+    // (c, F2) the reconstructed plate [0] carries the verify advisory; the
+    // present plates [1], [2] do NOT (G4 — advisory only on MDS-solved plates).
+    assert!(
+        plates_json[0]["verify_advisory"]
+            .as_str()
+            .unwrap()
+            .contains("independently verify"),
+        "the *recovered plate must carry a verify advisory"
+    );
+    assert!(plates_json[1]["verify_advisory"].is_null());
+    assert!(plates_json[2]["verify_advisory"].is_null());
+    // The loud stderr advisory fires even in --json mode.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("WARNING") && stderr.contains("reconstructed from RAID parity"),
+        "a loud stderr advisory must fire on reconstruction; got: {stderr}"
+    );
+}
+
+#[test]
+fn full_present_raid_decode_has_no_recovery_advisory() {
+    // (c, F2 / G4) Supply ALL plates (no drop) → nothing is MDS-solved → NO plate
+    // carries a verify advisory and NO stderr warning fires.
+    let plates = raid_encode(1);
+    let surviving = [&plates[0], &plates[1], &plates[2], &plates[3]];
+    let mut cmd = mnemonic();
+    cmd.args(["word-card", "--decode", "--json"]);
+    for p in surviving {
+        cmd.args(["--decode-plate", &plate_words(p)]);
+    }
+    let assert = cmd.assert().success();
+    let output = assert.get_output();
+    let v: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(v["reconstructed"], serde_json::json!([]));
+    for p in v["plates"].as_array().unwrap() {
+        assert!(
+            p["verify_advisory"].is_null(),
+            "no advisory on an all-present decode"
+        );
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("WARNING"),
+        "no stderr advisory when nothing was reconstructed; got: {stderr}"
+    );
 }
 
 #[test]
@@ -324,7 +372,7 @@ fn encode_json_envelope_shape_is_stable() {
         .stdout
         .clone();
     let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
-    assert_eq!(v["schema_version"], "1");
+    assert_eq!(v["schema_version"], "2");
     assert_eq!(v["mode"], "encode");
     assert_eq!(v["raid"], 0);
     let card = &v["cards"][0];
@@ -354,7 +402,7 @@ fn decode_json_envelope_shape_is_stable() {
         .stdout
         .clone();
     let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
-    assert_eq!(v["schema_version"], "1");
+    assert_eq!(v["schema_version"], "2");
     assert_eq!(v["mode"], "decode");
     assert_eq!(v["source_kind"], "mk1");
     assert!(v["erasures_filled"].is_u64());
@@ -362,6 +410,8 @@ fn decode_json_envelope_shape_is_stable() {
     assert!(v["recovered"]["mstring"].is_array());
     // mk1 recovered surfaces the policy-stub count.
     assert!(v["recovered"]["policy_id_stub_count"].is_u64());
+    // (c, F2 / G4) a SOLO (all-present) decode is never MDS-solved, so no advisory.
+    assert!(v["recovered"]["verify_advisory"].is_null());
 }
 
 #[test]

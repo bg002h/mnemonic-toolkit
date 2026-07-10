@@ -362,8 +362,9 @@ fn each_plate_is_a_valid_standalone_word_card() {
     let seed = seed_of(n, 7);
     let plates = raid_encode(&orig, &seed, r, &opts()).expect("encode");
 
-    // The expected array-id is fixed by the seed (top 22 bits of SHA-256(seed)).
-    // Decode every plate and check its RAID metadata matches what raid_encode set.
+    // The expected array-id is fixed by the seed AND the payload digest (F2):
+    // top22(SHA-256(seed ‖ SHA-256(canonical))). Decode every plate and check its
+    // RAID metadata matches what raid_encode set.
     for p in &plates {
         let refs: Vec<&str> = p.words.to_vec();
         let decoded = decode(&refs).expect("each plate decodes standalone");
@@ -394,12 +395,28 @@ fn each_plate_is_a_valid_standalone_word_card() {
         aids.windows(2).all(|w| w[0] == w[1]),
         "every plate carries the same array-id; got {aids:?}"
     );
-    // And it is the value raid_encode derives from the seed.
+    // And it is the value raid_encode derives from the seed + payload digest.
+    // (a) determinism pin — re-derive the FROZEN canonical layout (SPEC §1a):
+    //   canonical = u32-BE n ‖ for each payload in index order:
+    //               u16-BE payload_bits ‖ exactly ceil(payload_bits/8) payload bytes
+    //   array_id  = top22(SHA-256(seed ‖ SHA-256(canonical)))
+    let mut canonical: Vec<u8> = Vec::new();
+    canonical.extend_from_slice(&(orig.len() as u32).to_be_bytes());
+    for (bytes, bits) in &orig {
+        canonical.extend_from_slice(&(*bits as u16).to_be_bytes());
+        let nb = bits.div_ceil(8);
+        canonical.extend_from_slice(&bytes[..nb]);
+    }
+    let payload_digest = <sha2::Sha256 as sha2::Digest>::digest(&canonical);
     let mut h = <sha2::Sha256 as sha2::Digest>::new();
     sha2::Digest::update(&mut h, &seed);
+    sha2::Digest::update(&mut h, payload_digest);
     let d = sha2::Digest::finalize(h);
     let expected = (((d[0] as u32) << 16) | ((d[1] as u32) << 8) | (d[2] as u32)) >> 2;
-    assert_eq!(aids[0], expected, "array-id = top 22 bits of SHA-256(seed)");
+    assert_eq!(
+        aids[0], expected,
+        "array-id = top22(SHA-256(seed ‖ SHA-256(canonical)))"
+    );
 }
 
 // ===========================================================================
@@ -562,6 +579,230 @@ fn n_and_r_out_of_range_errors_no_panic() {
 // Proptest — random n, r, payload lengths, and a random ≤r removal set always
 // either recovers exactly or refuses; never panics, never returns wrong bytes.
 // ===========================================================================
+
+// ===========================================================================
+// KAT 12 (F2) — same-quorum array-id collision (mixed-plate wrong-xpub).
+//
+// Two arrays sharing a cosigner-fingerprint seed but carrying DIFFERENT payloads
+// used to collide on array_id = top22(SHA-256(seed)) (network / account / script-
+// type independent). Mixing n-1 data of one with a parity of the other (1 missing)
+// silently returned a valid-but-WRONG xpub at exit 0 (constellation-eval F2).
+//
+// The fix has three parts:
+//   (a) fold a deterministic payload digest into array_id so two DIFFERENT wallets
+//       get DIFFERENT ids → the coarse equality gate refuses a FRESH cross-mix;
+//   (b) a spare-parity consistency oracle that catches a LEGACY same-id chimera
+//       whenever a spare parity equation exists.
+//
+// RED-proof (pre-(a), against the old derivation) reproduced Ok(wrong bytes):
+//   `got2 = [116, 80, 84, 222, 213, 18, 226, 233]` — neither array's true payload.
+// See design/SPEC_f2_wc_codec_raid_array_id_collision.md.
+// ===========================================================================
+
+// --- (a) A FRESH cross-mix now refuses at the equality gate. ----------------
+#[test]
+fn f2a_fresh_same_seed_diff_payload_cross_mix_refuses() {
+    // Two r=2 n=3 arrays: SAME array-id seed, DIFFERENT payloads (equal length).
+    let shared_seed = seed_of(3, 900);
+    let orig_a = xpub_payloads(3, 5551); // 73-B xpub-shaped
+    let orig_b = xpub_payloads(3, 7771);
+    let a = raid_encode(&orig_a, &shared_seed, 2, &opts()).expect("encode A");
+    let b = raid_encode(&orig_b, &shared_seed, 2, &opts()).expect("encode B");
+
+    // (a) makes the two ids DIFFER even though the seed is identical.
+    let aid_a = decode(&a[0].words).unwrap().raid.unwrap().array_id;
+    let aid_b = decode(&b[0].words).unwrap().raid.unwrap().array_id;
+    assert_ne!(
+        aid_a, aid_b,
+        "the payload digest must differentiate two same-seed different-payload arrays"
+    );
+
+    // n-1 data of A + a parity of B, 1 missing. Pre-(a) this returned Ok(wrong
+    // bytes) at exit 0 (the F2 bug); post-(a) the mismatched ids refuse.
+    let wa = all_words(&a);
+    let wb = all_words(&b);
+    let mix = vec![wa[0].clone(), wa[1].clone(), wb[3].clone()]; // A0, A1, B parityA
+    let refs = as_refs(&mix);
+    assert_eq!(
+        raid_reconstruct(&refs),
+        Err(WcError::RaidArrayMismatch),
+        "a fresh same-quorum cross-mix must refuse, never emit a wrong xpub"
+    );
+}
+
+// --- (a) determinism + privacy-mode differentiation. ------------------------
+#[test]
+fn f2a_array_id_is_deterministic_and_payload_sensitive() {
+    let seed = seed_of(3, 42);
+    let orig = xpub_payloads(3, 12345);
+    let id1 = decode(&raid_encode(&orig, &seed, 1, &opts()).unwrap()[0].words)
+        .unwrap()
+        .raid
+        .unwrap()
+        .array_id;
+    // Same inputs ⇒ same id (repro-safe).
+    let id2 = decode(&raid_encode(&orig, &seed, 2, &opts()).unwrap()[0].words)
+        .unwrap()
+        .raid
+        .unwrap()
+        .array_id;
+    assert_eq!(id1, id2, "array_id is deterministic and r-independent");
+
+    // Privacy-mode bonus: two all-privacy-card arrays (seed = 0^{4n}) with DIFFERENT
+    // payloads used to collide with probability 1; the payload digest separates them.
+    let zero_seed = vec![0u8; 12];
+    let a = decode(&raid_encode(&xpub_payloads(3, 1), &zero_seed, 1, &opts()).unwrap()[0].words)
+        .unwrap()
+        .raid
+        .unwrap()
+        .array_id;
+    let b = decode(&raid_encode(&xpub_payloads(3, 2), &zero_seed, 1, &opts()).unwrap()[0].words)
+        .unwrap()
+        .raid
+        .unwrap()
+        .array_id;
+    assert_ne!(
+        a, b,
+        "privacy-mode arrays with different payloads must differ"
+    );
+}
+
+// --- (a) an identical-payload re-issue is a harmless no-op mix. -------------
+#[test]
+fn f2a_identical_payload_reissue_still_groups() {
+    // Same seed AND same payloads ⇒ same id (a re-issue). Mixing is a no-op: the
+    // stripes are identical, so any cross-mix reconstructs the SAME payloads.
+    let seed = seed_of(3, 77);
+    let orig = xpub_payloads(3, 999);
+    let a = raid_encode(&orig, &seed, 1, &opts()).expect("A");
+    let b = raid_encode(&orig, &seed, 1, &opts()).expect("B (re-issue)");
+    let wa = all_words(&a);
+    let wb = all_words(&b);
+    // A0, A1 + B's parityA (identical payloads ⇒ identical stripes ⇒ harmless).
+    let mix = vec![wa[0].clone(), wa[1].clone(), wb[3].clone()];
+    assert_recovers(&mix, &orig);
+}
+
+// ---------------------------------------------------------------------------
+// (b) LEGACY FIXTURES — plates engraved under the OLD colliding derivation.
+//
+// GENERATED at the pre-(a) checkpoint by `raid_encode` on the OLD binary from:
+//   shared_seed = seed_of(3, 900);
+//   orig_a = payloads(&[8,8,8], 901);  orig_b = payloads(&[8,8,8], 902);  r = 2.
+// Post-(a) the encoder can no longer emit colliding-id plates, so these pinned
+// word-lists are the ONLY way to exercise (b)'s oracle. `decode`/`raid_reconstruct`
+// never RE-derive array_id, so the pinned old plates pass the coarse equality gate
+// exactly as they did in the field — the oracle then catches the chimera.
+// ---------------------------------------------------------------------------
+const LEGACY_A_DATA0: &str = "acoustic avoid abandon month lumber able sheriff gas purity then trial abandon abandon abandon abandon able abandon achieve coast place topic park logic exotic hat ocean proud pear usual timber";
+const LEGACY_A_DATA1: &str = "acoustic avoid length month lumber able sheriff gas distance then trial abandon abandon abandon abandon able abandon fresh cave slot delay trick metal post system rough tragic pear usual under";
+const LEGACY_B_DATA2: &str = "acoustic awake abandon month lumber able sheriff gas minor then trial abandon abandon abandon abandon able abandon dice click dust upon delay lottery silk angry solution amateur pattern usual unable";
+const LEGACY_B_PARITY_A: &str = "acoustic bamboo abandon month lumber able sheriff gas october then trial abandon abandon abandon abandon able abandon citizen melt fury item gravity kitchen merit kid farm fat peasant usual uniform";
+const LEGACY_B_PARITY_B: &str = "acoustic beef abandon month lumber able sheriff gas school then trial abandon abandon abandon abandon achieve abandon decade manual image scheme gate kitten father educate transfer entry pencil usual truth";
+
+fn split(s: &str) -> Vec<&str> {
+    s.split_whitespace().collect()
+}
+
+/// The payloads that generated the legacy fixtures (regenerated deterministically;
+/// unaffected by the (a) array_id change).
+fn legacy_orig_a() -> Vec<(Vec<u8>, usize)> {
+    payloads(&[8usize, 8, 8], 901)
+}
+fn legacy_orig_b() -> Vec<(Vec<u8>, usize)> {
+    payloads(&[8usize, 8, 8], 902)
+}
+
+// --- (b) legacy r=2 cross-mix, 1 missing ⇒ the SPARE parity equation catches. -
+#[test]
+fn f2b_legacy_r2_cross_mix_spare_parity_refuses() {
+    // Sanity: the pinned plates still collide on array_id (they must, or the
+    // equality gate — not the oracle — would catch them, invalidating the KAT).
+    let aid = |s: &str| decode(&split(s)).unwrap().raid.unwrap().array_id;
+    assert_eq!(aid(LEGACY_A_DATA0), aid(LEGACY_B_PARITY_A));
+    assert_eq!(aid(LEGACY_A_DATA0), aid(LEGACY_B_PARITY_B));
+
+    // A0, A1 (data 0,1 from A) + B's BOTH parity plates, data 2 missing. The solve
+    // uses B's parityA to fill data 2; B's parityB is the SPARE equation → it is
+    // re-derived over the full set and does NOT match (A's data vs B's parity).
+    let mix: Vec<Vec<&str>> = vec![
+        split(LEGACY_A_DATA0),
+        split(LEGACY_A_DATA1),
+        split(LEGACY_B_PARITY_A),
+        split(LEGACY_B_PARITY_B),
+    ];
+    assert_eq!(
+        raid_reconstruct(&mix),
+        Err(WcError::RaidArrayMismatch),
+        "the spare parity equation must catch a legacy same-quorum chimera"
+    );
+}
+
+// --- (b) legacy 0-data-missing chimera WITH ≥1 parity ⇒ refuse. -------------
+#[test]
+fn f2b_legacy_zero_missing_chimera_with_parity_refuses() {
+    // A0, A1 (from A), B2 (from B) — a full 3-data chimera — plus B's parityA. No
+    // data missing, but a parity plate is present, so the oracle verifies it over
+    // the reconstructed set: recomputed P1 = A0⊕A1⊕B2 ≠ B0⊕B1⊕B2 = engraved P1.
+    let mix: Vec<Vec<&str>> = vec![
+        split(LEGACY_A_DATA0),
+        split(LEGACY_A_DATA1),
+        split(LEGACY_B_DATA2),
+        split(LEGACY_B_PARITY_A),
+    ];
+    assert_eq!(
+        raid_reconstruct(&mix),
+        Err(WcError::RaidArrayMismatch),
+        "a 0-missing chimera with a parity plate present must refuse"
+    );
+}
+
+// --- (b) ACCEPTED RESIDUAL: 0-missing pure-data chimera, NO parity ⇒ undetectable.
+#[test]
+fn f2b_legacy_zero_missing_pure_data_chimera_no_parity_is_undetectable() {
+    // A0, A1 (from A), B2 (from B) — 3 data plates, NO parity plate presented.
+    // array_id / n / width all match, there is NO parity equation, and no plate is
+    // MDS-solved (so the (c) advisory never fires either). This chimera is
+    // info-theoretically undetectable IN-BAND for legacy plates — it returns each
+    // plate's genuine standalone payload. Documented, NOT a bug (SPEC §1b): the
+    // honest mitigation is "include a parity plate when decoding a card set".
+    let mix: Vec<Vec<&str>> = vec![
+        split(LEGACY_A_DATA0),
+        split(LEGACY_A_DATA1),
+        split(LEGACY_B_DATA2),
+    ];
+    let rec = raid_reconstruct(&mix).expect("no parity equation ⇒ not caught (residual)");
+    let a = legacy_orig_a();
+    let b = legacy_orig_b();
+    assert_eq!(rec.reconstructed, Vec::<usize>::new(), "nothing MDS-solved");
+    assert_eq!(
+        rec.payloads,
+        vec![a[0].clone(), a[1].clone(), b[2].clone()],
+        "each plate's genuine standalone payload is returned (the accepted residual)"
+    );
+}
+
+// --- (b) G3: the oracle must NOT over-reject a GENUINE array. ---------------
+#[test]
+fn f2b_spare_parity_oracle_does_not_over_reject_genuine() {
+    // A genuine r=2 array: drop ONE data plate but keep BOTH parity plates, so the
+    // spare-parity check runs (r_available=2 > missing=1) and MUST pass.
+    let n = 4;
+    let orig = xpub_payloads(n, 606);
+    let seed = seed_of(n, 61);
+    let plates = raid_encode(&orig, &seed, 2, &opts()).expect("encode");
+    let full = all_words(&plates);
+
+    // Drop data plate 1 (keep data 0,2,3 + parityA + parityB).
+    let mut set = full.clone();
+    set.remove(1);
+    let rec = assert_recovers(&set, &orig);
+    assert!(rec.reconstructed.contains(&1));
+
+    // Also: a full 0-missing r=2 decode runs the spare check on BOTH parity plates
+    // and must still pass exactly.
+    assert_recovers(&full, &orig);
+}
 
 proptest! {
     #![proptest_config(ProptestConfig { cases: 40, ..ProptestConfig::default() })]

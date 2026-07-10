@@ -4582,7 +4582,7 @@ mnemonic word-card --decode --decode-plate "<WORDS>" --decode-plate "<WORDS>"...
 | `--parity-pct <PCT>` | Reed–Solomon parity as a PERCENTAGE of the data-symbol count `K` (`m = ceil(K * pct / 100)`), an alternative to `--parity-words`. E.g. `--parity-pct 25` ≈ a 25% redundancy budget. Mutually exclusive with `--parity-words` |
 | `--raid <0\|1\|2>` | RAID recovery tier: `0` = no RAID (a single solo card; default), `1` = one XOR recovery plate (RAID-5, survives any 1 lost plate), `2` = two recovery plates (RAID-6, survives any 2). RAID requires `≥ 2` `mk1` data cards via repeated `--from`. Default `0` |
 | `--integrity-bits <BITS>` | integrity-tag bit width `t` (the non-linear SHA-256 truncation that catches an RS miscorrection at `≤ 2⁻ᵗ`). Default `44` (4 words); minimum `33` |
-| `--json` | emit a single JSON envelope on stdout instead of the text-form report (`schema_version: "1"`) |
+| `--json` | emit a single JSON envelope on stdout instead of the text-form report (`schema_version: "2"`) |
 | `--no-auto-repair` | global flag; skip auto-fire repair on decode failures (see [`verify-bundle` auto-fire](#mnemonic-verify-bundle)) |
 | `--help` | print help and exit |
 
@@ -4631,8 +4631,19 @@ mnemonic word-card --decode \
 # → raid-reconstruct: n=3, reconstructed=[1]
 #     [0] xpub: …
 #     [1 *recovered] xpub: …
+#       ! verify: reconstructed from RAID parity — independently verify this xpub against your other records before trusting it (it carries no integrity tag of its own)
 #     [2] xpub: …
+# (stderr) word-card: WARNING — plate(s) [1] were reconstructed from RAID parity; independently verify each *recovered xpub against your other records before trusting it.
 ```
+
+A `*recovered` plate is one whose value came from the RAID parity solve, not its
+own engraving — so it carries no per-plate integrity tag of its own. The always-on
+`! verify:` advisory (text + `stderr`, and a `verify_advisory` field on the plate
+in `--json`) fires ONLY for such MDS-solved plates; an all-present decode carries
+no advisory. **When decoding a card SET, include a parity plate** — a mixed-vintage
+chimera of plates from two different wallets that share a cosigner set is then
+turned into a loud `RaidArrayMismatch` refusal by the spare-parity consistency
+check, instead of silently returning a wrong xpub (constellation-eval F2).
 
 ### Notes
 
@@ -4651,12 +4662,20 @@ mnemonic word-card --decode \
 - **RAID** (`--raid 1|2`) applies only to an array of `mk1` xpub cards (an
   `md1` is a single descriptor — use `--raid 0`). `--raid 1` is a single XOR
   parity plate (RAID-5); `--raid 2` adds an MDS recovery plate (RAID-6). Decode a
-  RAID array with one `--decode-plate` per surviving plate.
+  RAID array with one `--decode-plate` per surviving plate. **Include a parity
+  plate when decoding a card set** so the spare-parity consistency check can turn
+  a mixed-vintage chimera (plates from two different wallets that share a cosigner
+  set) into a loud `RaidArrayMismatch` refusal (constellation-eval F2).
+- **Verify a `*recovered` xpub.** A plate reconstructed from RAID parity carries
+  no integrity tag of its own, so decode emits an always-on `! verify:` advisory
+  (text + `stderr`; a `verify_advisory` field in `--json`) for every MDS-solved
+  plate. Independently confirm the reconstructed xpub against your other records
+  before trusting it. The advisory never fires on an all-present decode.
 - The Word Card is a re-rendering of **public** card material; it does not change
   the underlying xpub / descriptor identity. The re-emitted `mk1` chunks on
   decode may differ byte-for-byte from the input chunks (the `policy_id_stub` is
   re-derived) while preserving the same xpub.
-- The `--json` wire-shape (`schema_version: "1"`) is **not** covered by the GUI
+- The `--json` wire-shape (`schema_version: "2"`) is **not** covered by the GUI
   `schema_mirror` gate (which enforces clap flag-name parity only); GUI consumers
   self-update via the paired-PR rule.
 
@@ -4665,4 +4684,5 @@ mnemonic word-card --decode \
 | Condition | Exit |
 |---|---|
 | success (encode or decode) | `0` |
-| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, decode parse failure beyond the repair budget, I/O error) | `1` |
+| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, I/O error) | `1` |
+| decode / reconstruct refusal (parse failure beyond the repair budget, integrity-tag or header-CRC mismatch, unknown BIP-39 word, `ms1` / unknown HRP, RAID array-id or parity mismatch, RAID underdetermined — more than `r` plates missing) | `2` |
