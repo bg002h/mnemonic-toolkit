@@ -9,7 +9,7 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
 - **Source SHA (recon-verified):** toolkit `f4461c07` (= `mnemonic-toolkit-v0.81.0`). Recon `cycle-prep-recon-zeroization-and-compare-cost-multipath.md`.
 - **FOLLOWUPs:** `repair-engine-outcome-zeroization` (filed Cycle F) + `compare-cost-multipath-descriptor-unsupported` (filed Cycle C).
 - **Target:** `mnemonic-toolkit` **MINOR (`v0.82.0`)** (the zeroization is a secret-type migration = MINOR per the standing sweep ruling; the batched cycle takes the higher bump). md/mk/ms NO-BUMP; no GUI/`schema_mirror` (no clap surface change); no crates.io publish (toolkit).
-- **Status:** DRAFT — pending Fable R0 loop to 0C/0I BEFORE implementation (CLAUDE.md).
+- **Status:** DRAFT rev-2 — folded SPEC-R0-round-1 (0C/1I/6M): I1 (compare-cost existing test is `wpkh`=UnsupportedWrapper regardless of multipath → UPDATE it to assert the new wrapper error, ADD `wsh` acceptance tests); M1 full migration surface (2nd wire struct AutoFireRepairJson + verify_mk1_set + `&*`); M2 verify-bundle no-`Default` compare; M3 stale comments; M4 malformed-multipath fixture; M5 split-first-mirror-prior-art; M6 slice-serialize unit. Compare-cost SemVer R0-ruled MINOR. Review `cycleG-spec-r0-round-1.md`. Pending Fable R0 round-2 to 0C/0I.
 
 ## §0 — Scope
 
@@ -44,11 +44,20 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
   `Zeroizing<String>` (which lacks the redacting Debug). Confirms secret-hygiene: zeroize-on-drop + redacting
   Debug + (the value is deliberately emitted on stdout in the repair UX, so transparent Serialize is correct, not
   a leak).
-- **Migration surface:** the 3 fields above + their construction sites in `repair.rs` (`repair_card`,
-  `repair_via_ms_codec`/`_mk_codec`/`_md_codec`, `apply_ms_corrections`, the indel path) + readers. Callers that
-  do `&outcome.corrected_chunks[i]` / `.as_str()` keep working via `Deref`; the `--json`/text emitters
-  (`cmd/repair.rs`) serialize transparently (verify byte-identical output). The verify-bundle
-  `ms1_ground_truth_compare` local `Zeroizing` clone (Cycle F) can consume the `SecretString` directly.
+- **Migration surface (M1 — complete list):** the 3 fields above + construction in `repair.rs` (`repair_card`,
+  `repair_via_ms_codec`/`_mk_codec`/`_md_codec`, `apply_ms_corrections`, the indel path). BOTH wire structs
+  widen `corrected_chunks: &'a [String]` → `&'a [SecretString]`: `RepairJson` (`cmd/repair.rs:288-302`) AND the
+  auto-fire `AutoFireRepairJson` (`repair.rs:1884-1900`) + `AutoFireRepairJsonDetail` (:1897-1898); the
+  `*Detail.original_chunk`/`corrected_chunk` can stay `&'a str` (field-init deref-coerces). `verify_mk1_set`
+  (`repair.rs:978`, `corrected_chunks: &[String]`) + its `.as_str()` @:1051 → use `&*` (NOT `.as_str()`, which
+  may not resolve through `Deref<str>` at MSRV). Readers doing `&outcome.corrected_chunks[i]` keep working via
+  `Deref`; the `--json`/text emitters serialize/`Display` transparently (verify byte-identical output).
+- **M2 — verify-bundle `ms1_ground_truth_compare` call site (`verify_bundle.rs:2026-2032`):** it currently wraps
+  a clone in `Zeroizing` + `.unwrap_or_default()` — the latter would need `SecretString: Default` (absent). Do
+  NOT add `Default`; instead DROP the redundant `Zeroizing` wrap AND the `Option` fallback (the
+  `outcome.repairs.is_empty()` guard @:2020-2025 already guarantees `corrected_chunks` non-empty) → compare via
+  `outcome.corrected_chunks.first().is_some_and(|c| &**c == expected_ms1)` (or equivalent). Consume the
+  `SecretString` directly.
 - **Tests:** add `PartialEq<str>` to `SecretString`; the ~11 `assert_eq!(outcome.corrected_chunks[i], "…")`
   sites compile against it. Add a redaction unit test: `format!("{:?}", outcome)` contains NO seed substring.
   Confirm `--json` + text repair output BYTE-IDENTICAL (no wire change) via the existing golden/CLI tests.
@@ -56,21 +65,36 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
   outlier v0.53.6 that predates the ruling).
 
 ## §2 — Item 2: compare-cost multipath
-- **Fix:** `translate_descriptor` — `if descriptor.is_multipath() { let single =
-  descriptor.clone().into_single_descriptors()?.remove(0); … } else { <today's path> }`, then `derive_at_index(0)`
-  on the single-path descriptor. Mirror `derive_address.rs:26-66` (its `into_single_descriptors()` +
-  first-branch pattern) for error handling (empty-branches guard). Cost is chain-index-independent → the receive
-  branch is representative.
-- **Test:** the existing regression test asserting `compare-cost --descriptor "…/<0;1>/*"` REJECTS must be
-  INVERTED to assert it now succeeds with the same cost as the equivalent single-path `…/0/*` descriptor. Add a
-  `/**` cell (equivalence: `/**` costs identically to `/<0;1>/*` and `/0/*`). A genuinely-malformed multipath
-  still errors.
-- **SemVer (R0 FOCUS — recon flagged debatable):** MINOR recommended (closest precedent v0.78.0 = MINOR for a
-  descriptor-acceptance broadening; a previously-erroring input now succeeds = a new capability). PATCH
-  counter-argument: compare-cost is a non-funds cost-analysis convenience. **R0 to rule.** Either way the batched
-  cycle is ≥MINOR (item 1). 
-- **Manual:** an optional non-gating note in the `compare-cost` chapter that multipath/`/**` descriptors are now
-  accepted (costed on the receive branch). Add if low-effort; not a lockstep gate (no flag change).
+- **Fix (M5 — mirror the prior-art structure EXACTLY):** in `translate_descriptor`, split FIRST when
+  `descriptor.is_multipath()` — `let single = descriptor.clone().into_single_descriptors()?;` + an
+  `is_empty()` guard, `let d = single.remove(0);` — mirroring `derive_address.rs:34-42`, THEN feed the
+  single-path `d` into the EXISTING derivation/wrapper path (`derive_at_index(0)` + the `has_wildcard`/`TryFrom`/
+  wrapper-match logic). Split-first-then-existing-path handles the non-wildcard-multipath edge (`…/<0;1>` with no
+  trailing `/*`) for free, unlike a bolted-on `if/else`. Cost is chain-index-independent (R0-confirmed: receive
+  vs change differ only in one child index; same-size keys → identical templates/vbytes) → the receive branch
+  (index 0) is representative.
+- **IMPORTANT — compare-cost only supports miniscript-WRAPPING descriptors (`wsh`/`tr`), NOT `wpkh`/`pkh`/bare**
+  (`strip.rs:59-63` → `UnsupportedWrapper`). The multipath fix gets a descriptor PAST the derivation error, but a
+  `wpkh(...)` multipath STILL fails with `UnsupportedWrapper` (a separate, correct rejection). So acceptance
+  tests MUST use a supported wrapper (`wsh`).
+- **Tests (R0 I1 — the existing test is `wpkh`, CANNOT invert-to-success):**
+  1. **UPDATE (rename, NOT invert)** `compare_cost_double_star_rejects_identically_to_explicit_multipath`
+     (`tests/cli_bip388_double_star_shorthand.rs:377-414`, `wpkh` fixture): both spellings (`/**` and
+     `/<0;1>/*`) now fail IDENTICALLY with the NEW `UnsupportedWrapper` error — assert the stderr NO LONGER
+     contains "multipath key cannot be a DerivedDescriptorKey" (pins that multipath now gets PAST derivation) and
+     that `/**`≡`/<0;1>/*` still holds on this surface.
+  2. **ADD** acceptance tests on a `wsh` wrapper (e.g. `wsh(multi(2,…/<0;1>/*,…))` or `wsh(pk(…/<0;1>/*))`):
+     succeeds + cost byte-identical to the single-path `…/0/*` equivalent; `/**` cost == `/<0;1>/*` == `/0/*`
+     (equivalence cell).
+  3. Malformed multipath (inconsistent branch counts across keys — M4) still errors cleanly via the
+     `into_single_descriptors()` error path (no panic).
+- **M3 — update the now-false stale comments same-PR:** the Cycle-C block `strip.rs:21-28` ("rejects ALL
+  /<0;1>/*") + the test-file comment `:379-384`.
+- **SemVer: MINOR (R0-ruled).** A previously-erroring `--descriptor` now succeeding = an observable capability
+  addition on the public CLI surface (precedent v0.78.0); the PATCH counter (v0.65.1) was panic→clean-error, not
+  accept-widening. Moot for the release number (item 1 independently forces MINOR).
+- **Manual:** optional non-gating note in the `compare-cost` chapter (multipath/`/**` now accepted, costed on
+  the receive branch); add if low-effort.
 
 ## §3 — Cross-source anchors (recon-verified @ f4461c07)
 - `src/repair.rs`: `RepairOutcome` `:437-462` (`corrected_chunks: Vec<String>`), `RepairDetail` `:424-432`
@@ -84,13 +108,21 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
 
 ## §4 — Test / risk matrix
 1. Zeroization redaction: `{:?}` of `RepairOutcome`/`RepairDetail` leaks NO seed (unit).
-2. Zeroization no-wire-change: `mnemonic repair --ms1/--mk1/--md1` text + `--json` output byte-identical to
-   v0.81.0 (existing goldens/CLI tests stay green).
-3. `PartialEq<str>` on `SecretString` — the ~11 `assert_eq!` sites compile + pass.
-4. compare-cost multipath ACCEPT: `--descriptor "wsh(...xpub.../<0;1>/*)"` → succeeds, cost == the single-path
-   `…/0/*` equivalent; `/**` == `/<0;1>/*` == `/0/*` (equivalence cell); the INVERTED prior rejection test.
-5. compare-cost regression: single-path descriptors unchanged; a malformed multipath still errors.
-6. Full `cargo test -p mnemonic-toolkit` green.
+2. Zeroization no-wire-change: `mnemonic repair --ms1/--mk1/--md1` text + `--json` byte-identical to v0.81.0
+   (existing goldens/CLI tests stay green); the auto-fire `AutoFireRepairJson` path likewise.
+3. `PartialEq<str>`/`PartialEq<&str>` on `SecretString` — the 8 string-element `assert_eq!` sites compile + pass.
+4. **compare-cost multipath ACCEPT — SUPPORTED `wsh` wrapper (I1):** `--descriptor "wsh(multi(2,…/<0;1>/*,…))"`
+   (or `wsh(pk(…/<0;1>/*))`) → succeeds, cost byte-identical to the single-path `…/0/*` equivalent; `/**` cost ==
+   `/<0;1>/*` == `/0/*` (equivalence cell).
+5. **compare-cost wpkh test UPDATED (I1 — not inverted):** the existing `wpkh` `/**`≡`/<0;1>/*` test now asserts
+   BOTH fail IDENTICALLY with the NEW `UnsupportedWrapper` error (stderr NO LONGER "multipath key cannot be a
+   DerivedDescriptorKey") — pins multipath got past derivation; wpkh still unsupported.
+6. **compare-cost malformed multipath (M4):** inconsistent branch counts across keys (`/<0;1>/*` on one key,
+   `/<0;1;2>/*` on another in one `wsh(multi(...))`) → errors cleanly via `into_single_descriptors()` (no panic).
+   Single-path descriptors unchanged.
+7. **M6 slice-serialize unit** (`secret_string.rs`): `Vec<SecretString>` serializes byte-identical to
+   `Vec<String>` (the `RepairJson.corrected_chunks` shape).
+8. Full `cargo test -p mnemonic-toolkit` green.
 
 ## §5 — Cross-repo / release
 - **Toolkit only.** md/mk/ms NO-BUMP; no GUI/`schema_mirror` (no clap flag/subcommand/dropdown change — verify).
