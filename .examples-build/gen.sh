@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generator for docs/Examples.pdf — emits Examples.md to stdout with EXACT,
-# verbatim command input + output captured from the real `mnemonic` v0.83.0
+# verbatim command input + output captured from the real `mnemonic` v0.84.0
 # binary. No eliding: every command is run and its full combined output shown.
 #
 # Prose is ASCII-only (the body roman font lacks math glyphs); real command
@@ -41,7 +41,7 @@ done
 
 # Pin to the real, non-experimental shipped binary.
 VER=$(mnemonic --version 2>/dev/null)
-[ "$VER" = "mnemonic 0.83.0" ] || { echo "FATAL: expected mnemonic 0.83.0, got '$VER'" >&2; exit 1; }
+[ "$VER" = "mnemonic 0.84.0" ] || { echo "FATAL: expected mnemonic 0.84.0, got '$VER'" >&2; exit 1; }
 
 rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK" || exit 1
 
@@ -106,7 +106,7 @@ show() { printf '\n```\n'; for c in "$@"; do printf '$ %s\n' "$c"; done; printf 
 cat <<'MD'
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.83.0 -- worked examples (Linux), exact verbatim I/O"
+subtitle: "mnemonic-toolkit v0.84.0 -- worked examples (Linux), exact verbatim I/O"
 date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
@@ -123,7 +123,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.83.0** on Linux and **both the command and its full output are
+`mnemonic` **v0.84.0** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -708,7 +708,7 @@ cat <<'MD'
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.83.0 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.84.0 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage
@@ -721,7 +721,7 @@ the authoritative per-flag reference.
 > rust-miniscript commit (the PR-#953 merge, in no crates.io release) to lift
 > the depth->=2 taptree cap. It is **not** part of any shipped release, is not
 > on the install path, and must never be used to secure real funds. The shipped
-> `mnemonic` v0.83.0 documented everywhere else in this guide deliberately
+> `mnemonic` v0.84.0 documented everywhere else in this guide deliberately
 > **refuses** depth->=2 (sections 6.1 and below); that refusal is the supported
 > behavior until a rust-miniscript release > 13.1.0 ships #953.
 

@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.83.0"
+version = "0.84.0"
 dependencies = [
  "aes",
  "base64 0.22.1",
@@ -1002,7 +1002,7 @@ dependencies = [
 
 [[package]]
 name = "wc-codec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bip39",
  "sha2",

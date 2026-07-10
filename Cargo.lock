@@ -728,7 +728,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.83.0"
+version = "0.84.0"
 dependencies = [
  "aes",
  "assert_cmd",
@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "wc-codec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bip39",
  "proptest",

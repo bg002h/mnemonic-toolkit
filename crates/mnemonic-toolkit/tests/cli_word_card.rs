@@ -255,6 +255,53 @@ fn full_present_raid_decode_has_no_recovery_advisory() {
 }
 
 #[test]
+fn raid1_text_mode_prints_verify_advisory_on_recovered_plate() {
+    // (c, F2 / whole-diff M-1) Text mode (no --json): a *recovered plate carries
+    // the `! verify:` advisory on stdout + a loud stderr WARNING; an all-present
+    // decode carries NEITHER (G4 — advisory only on MDS-solved plates). Closes
+    // the text-path coverage gap the post-impl review flagged.
+    let plates = raid_encode(1);
+    let surviving = [&plates[1], &plates[2], &plates[3]]; // drop data[0]
+    let mut cmd = mnemonic();
+    cmd.args(["word-card", "--decode"]); // NO --json → text mode
+    for p in surviving {
+        cmd.args(["--decode-plate", &plate_words(p)]);
+    }
+    let assert = cmd.assert().success();
+    let output = assert.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stdout.contains("! verify:") && stdout.contains("independently verify"),
+        "text mode must print the `! verify:` advisory under the recovered plate; got: {stdout}"
+    );
+    assert!(
+        stderr.contains("WARNING") && stderr.contains("reconstructed from RAID parity"),
+        "text mode must fire the loud stderr advisory; got: {stderr}"
+    );
+
+    // All-present text decode → NO advisory anywhere.
+    let all = [&plates[0], &plates[1], &plates[2], &plates[3]];
+    let mut cmd2 = mnemonic();
+    cmd2.args(["word-card", "--decode"]);
+    for p in all {
+        cmd2.args(["--decode-plate", &plate_words(p)]);
+    }
+    let out2 = cmd2.assert().success();
+    let output2 = out2.get_output();
+    let stdout2 = String::from_utf8_lossy(&output2.stdout);
+    let stderr2 = String::from_utf8_lossy(&output2.stderr);
+    assert!(
+        !stdout2.contains("! verify:"),
+        "no advisory on an all-present text decode; got: {stdout2}"
+    );
+    assert!(
+        !stderr2.contains("WARNING"),
+        "no stderr WARNING on an all-present text decode; got: {stderr2}"
+    );
+}
+
+#[test]
 fn raid2_reconstructs_two_dropped_data_plates() {
     let plates = raid_encode(2);
     // 3 data + recovery-a + recovery-b.
