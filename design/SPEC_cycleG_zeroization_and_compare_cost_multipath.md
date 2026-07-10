@@ -9,7 +9,7 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
 - **Source SHA (recon-verified):** toolkit `f4461c07` (= `mnemonic-toolkit-v0.81.0`). Recon `cycle-prep-recon-zeroization-and-compare-cost-multipath.md`.
 - **FOLLOWUPs:** `repair-engine-outcome-zeroization` (filed Cycle F) + `compare-cost-multipath-descriptor-unsupported` (filed Cycle C).
 - **Target:** `mnemonic-toolkit` **MINOR (`v0.82.0`)** (the zeroization is a secret-type migration = MINOR per the standing sweep ruling; the batched cycle takes the higher bump). md/mk/ms NO-BUMP; no GUI/`schema_mirror` (no clap surface change); no crates.io publish (toolkit).
-- **Status:** DRAFT rev-2 — folded SPEC-R0-round-1 (0C/1I/6M): I1 (compare-cost existing test is `wpkh`=UnsupportedWrapper regardless of multipath → UPDATE it to assert the new wrapper error, ADD `wsh` acceptance tests); M1 full migration surface (2nd wire struct AutoFireRepairJson + verify_mk1_set + `&*`); M2 verify-bundle no-`Default` compare; M3 stale comments; M4 malformed-multipath fixture; M5 split-first-mirror-prior-art; M6 slice-serialize unit. Compare-cost SemVer R0-ruled MINOR. Review `cycleG-spec-r0-round-1.md`. Pending Fable R0 round-2 to 0C/0I.
+- **Status:** DRAFT rev-3 — folded SPEC-R0-round-1 (0C/1I/6M): I1 (compare-cost existing test is `wpkh`=UnsupportedWrapper regardless of multipath → UPDATE it to assert the new wrapper error, ADD `wsh` acceptance tests); M1 full migration surface (2nd wire struct AutoFireRepairJson + verify_mk1_set + `&*`); M2 verify-bundle no-`Default` compare; M3 stale comments; M4 malformed-multipath fixture; M5 split-first-mirror-prior-art; M6 slice-serialize unit. Compare-cost SemVer R0-ruled MINOR. + round-2 (0C/1I/2M: I1(r2) §0-scope-line harmonized to UPDATE-not-invert; M1(r2) count 8-not-~11; M2(r2) producer-local note). Reviews `cycleG-spec-r0-round-{1,2}.md`. Pending Fable R0 round-3 to 0C/0I.
 
 ## §0 — Scope
 
@@ -21,7 +21,7 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
    `SecretString` already provides a REDACTING `Debug` (so a `RepairOutcome` debug-print can't leak the seed) and
    a **transparent `Serialize`** (so the deliberate D9 UX — the corrected chunk on stdout / in the `--json`
    `RepairJson` envelope — is byte-preserved; NO wire change). Keep caller edits near-zero via `Deref<Target=str>`
-   coercion; add a `PartialEq<str>`/`PartialEq<&str>` impl on `SecretString` (it has none today) for the ~11
+   coercion; add a `PartialEq<str>`/`PartialEq<&str>` impl on `SecretString` (it has none today) for the 8 string-element
    test `assert_eq!` sites (recon). This is defense-in-depth (the values already transit argv/stdout by design in
    the repair UX) — [[feedback_secret_hygiene_first_class_bar]].
 2. **compare-cost multipath** (`compare-cost-multipath-descriptor-unsupported`): in
@@ -29,8 +29,10 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
    a comment block), when the parsed descriptor `is_multipath()`, split via `.into_single_descriptors()` and cost
    the **receive branch** (index 0) — cost is chain-index-independent — instead of calling `derive_at_index(0)`
    directly (which errors "multipath key cannot be a DerivedDescriptorKey"). Mirror the shipped prior-art
-   `derive_address.rs:26-66`. INVERT the existing regression test that asserts multipath rejection → assert
-   acceptance + the correct cost. `/**` inherits this for free (it pre-expands to `/<0;1>/*` upstream, Cycle C).
+   `derive_address.rs:26-66`. UPDATE the existing (`wpkh`) rejection test to assert the NEW `UnsupportedWrapper`
+   error — multipath now gets PAST derivation, NOT to acceptance, since compare-cost rejects `wpkh` regardless
+   (see §2) — and ADD `wsh`-wrapper acceptance tests asserting the correct cost (see §2/§4). `/**` inherits this
+   for free (it pre-expands to `/<0;1>/*` upstream, Cycle C).
 
 **OUT:**
 1. `gui-manual-repair-exit-code-lockstep` — the 3rd burndown item, a SEPARATE GUI-manual docs pass (different
@@ -58,8 +60,9 @@ multipath `/<0;1>/*` (and the `/**` shorthand) by splitting to the receive branc
   `outcome.repairs.is_empty()` guard @:2020-2025 already guarantees `corrected_chunks` non-empty) → compare via
   `outcome.corrected_chunks.first().is_some_and(|c| &**c == expected_ms1)` (or equivalent). Consume the
   `SecretString` directly.
-- **Tests:** add `PartialEq<str>` to `SecretString`; the ~11 `assert_eq!(outcome.corrected_chunks[i], "…")`
-  sites compile against it. Add a redaction unit test: `format!("{:?}", outcome)` contains NO seed substring.
+- **Tests:** add `PartialEq<str>` to `SecretString`; the 8 string-element `assert_eq!(outcome.corrected_chunks[i], "…")`
+  sites compile against it (the producer locals `let mut corrected_chunks: Vec<String>` @`repair.rs:1098/1126/1660`
+  push `.clone()` → `SecretString::new(...)`, compile-enforced). Add a redaction unit test: `format!("{:?}", outcome)` contains NO seed substring.
   Confirm `--json` + text repair output BYTE-IDENTICAL (no wire change) via the existing golden/CLI tests.
 - **SemVer:** MINOR (secret-type migration; precedents v0.71.0 T1, v0.67.0 L22 — overrides the older PATCH
   outlier v0.53.6 that predates the ruling).
