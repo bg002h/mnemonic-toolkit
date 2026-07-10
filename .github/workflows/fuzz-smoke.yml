@@ -32,12 +32,16 @@ on:
       - "fuzz/**"
       - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
       - "crates/mnemonic-toolkit/src/lib.rs"
+      - "crates/wc-codec/fuzz/**"
+      - "crates/wc-codec/src/**"
       - ".github/workflows/fuzz-smoke.yml"
   pull_request:
     paths:
       - "fuzz/**"
       - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
       - "crates/mnemonic-toolkit/src/lib.rs"
+      - "crates/wc-codec/fuzz/**"
+      - "crates/wc-codec/src/**"
       - ".github/workflows/fuzz-smoke.yml"
   schedule:
     # Daily at 07:17 UTC (off the hour to avoid the cron thundering herd).
@@ -71,6 +75,12 @@ jobs:
         # musl host triple, and ASan is incompatible with musl's static libc
         # ("sanitizer is incompatible with statically linked libc").
         run: cargo +nightly-2026-04-27 fuzz build --target x86_64-unknown-linux-gnu
+      - name: Build the wc-codec fuzz targets
+        # wc-codec's fuzz dir is a SEPARATE nested workspace
+        # (crates/wc-codec/fuzz, own Cargo.lock); --fuzz-dir points cargo-fuzz
+        # at it from the repo root. Compile gate for wc_roundtrip +
+        # wc_decode_never_panics (eval §2 #2 — these never ran in CI before).
+        run: cargo +nightly-2026-04-27 fuzz build --fuzz-dir crates/wc-codec/fuzz --target x86_64-unknown-linux-gnu
 
   smoke:
     name: cargo fuzz run (60s smoke)
@@ -101,4 +111,18 @@ jobs:
         with:
           name: fuzz-crash-descriptor_parse
           path: fuzz/artifacts/descriptor_parse/
+          if-no-files-found: ignore
+      - name: Smoke-run wc_roundtrip
+        # wc-codec fuzzers (nested workspace via --fuzz-dir). The
+        # forced-cross-codeword-miscorrection-refused / never-wrong-payload
+        # property harnesses (eval §2 #2). cron/dispatch only, like above.
+        run: cargo +nightly-2026-04-27 fuzz run --fuzz-dir crates/wc-codec/fuzz wc_roundtrip --target x86_64-unknown-linux-gnu -- -max_total_time=60
+      - name: Smoke-run wc_decode_never_panics
+        run: cargo +nightly-2026-04-27 fuzz run --fuzz-dir crates/wc-codec/fuzz wc_decode_never_panics --target x86_64-unknown-linux-gnu -- -max_total_time=60
+      - name: Upload wc-codec crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-crash-wc-codec
+          path: crates/wc-codec/fuzz/artifacts/
           if-no-files-found: ignore

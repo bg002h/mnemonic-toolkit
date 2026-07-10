@@ -19,11 +19,13 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/rust.yml'
   pull_request:
-    paths:
-      - 'crates/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/rust.yml'
+    # NO paths — this workflow's `test`/`clippy` contexts are REQUIRED status
+    # checks (branch protection), and a path-filtered required check wedges a
+    # docs-only PR forever at "Expected — waiting for status" (mirror
+    # examples.yml's ruling). Running the full matrix on a docs-only PR is
+    # green (unchanged code) — the cost is CI minutes, not correctness. The
+    # push-side path filter above keeps code-push efficiency; docs-only DIRECT
+    # pushes to master are covered by admin bypass (enforce_admins:false).
 
 jobs:
   # Dedicated rustfmt gate, pinned to a CANONICAL formatter version (1.95.0,
@@ -102,14 +104,18 @@ jobs:
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
           fi
-          cargo build --tests -p mnemonic-toolkit
+          cargo build --tests --workspace
 
       - name: cargo test (default tests; G2.1 #[ignore]-gated)
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
           fi
-          cargo test -p mnemonic-toolkit
+          # --workspace covers mnemonic-toolkit + wc-codec (the 2 members);
+          # the nested crates/wc-codec/fuzz/ is its OWN workspace, invisible
+          # here. Anti-recurrence: a future member is auto-covered (eval #2
+          # existed because wc-codec was a member never `-p`'d in CI).
+          cargo test --workspace
 
       - name: G2.1 eperm fault injection (fresh subprocess; env set before cargo)
         # Per SPEC §4 P2 + plan P2.T2: cfg(test) FAIL_MODE injection is only
