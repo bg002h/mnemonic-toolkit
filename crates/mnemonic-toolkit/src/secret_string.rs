@@ -51,6 +51,25 @@ impl PartialEq for SecretString {
 
 impl Eq for SecretString {}
 
+/// Cycle G (`repair-engine-outcome-zeroization`) — compare a `SecretString`
+/// against a bare `str` / `&str` literal. Test-ergonomics only (the repair
+/// engine's `assert_eq!(outcome.corrected_chunks[i], "…")` sites); no
+/// production comparison relies on either impl (production code that needs
+/// to compare a `SecretString`'s content derefs explicitly, e.g. `&**c ==
+/// expected`). Same plain-structural rationale as `impl PartialEq for
+/// SecretString` above — no auth/timing boundary crosses these comparisons.
+impl PartialEq<str> for SecretString {
+    fn eq(&self, other: &str) -> bool {
+        self.0.as_str() == other
+    }
+}
+
+impl PartialEq<&str> for SecretString {
+    fn eq(&self, other: &&str) -> bool {
+        self.0.as_str() == *other
+    }
+}
+
 impl std::fmt::Display for SecretString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -163,6 +182,41 @@ mod tests {
         assert!(
             !printed.contains("topsecretphrase") && !printed.contains("differentvalue"),
             "equality-failure Debug leaked a secret: {printed}"
+        );
+    }
+
+    /// Cycle G (`repair-engine-outcome-zeroization`) SPEC §1/§4.3 —
+    /// `PartialEq<str>` / `PartialEq<&str>` ergonomics, added so the
+    /// repair-engine's `assert_eq!(outcome.corrected_chunks[i], "…")` test
+    /// sites keep compiling once `corrected_chunks` is `Vec<SecretString>`.
+    /// Exercises BOTH impls (the bare-`str` comparison via a deref'd
+    /// operand, and the `&str` comparison via a literal).
+    #[test]
+    fn partial_eq_str_and_ref_str() {
+        let s = SecretString::new("abc123".to_string());
+        // PartialEq<&str> — the common `assert_eq!(secret, "literal")` shape.
+        assert_eq!(s, "abc123");
+        assert_ne!(s, "xyz789");
+        // PartialEq<str> — an unsized bare-`str` operand.
+        assert!(s == *"abc123");
+        assert!(s != *"xyz789");
+    }
+
+    /// M6 (Cycle G) SPEC §4.7 — a `Vec<SecretString>` field serializes
+    /// byte-identically to a `Vec<String>` field. Extends
+    /// `serializes_byte_identically_to_string` (T-B1, scalar) to the
+    /// Vec-of-secrets shape actually used by the repair engine's wire types
+    /// (`RepairOutcome.corrected_chunks` / `RepairJson.corrected_chunks`).
+    #[test]
+    fn vec_serializes_byte_identically_to_vec_string() {
+        let secrets = vec![
+            SecretString::new("ms1aaa".to_string()),
+            SecretString::new("ms1bbb".to_string()),
+        ];
+        let plain = vec!["ms1aaa".to_string(), "ms1bbb".to_string()];
+        assert_eq!(
+            serde_json::to_string(&secrets).unwrap(),
+            serde_json::to_string(&plain).unwrap(),
         );
     }
 }

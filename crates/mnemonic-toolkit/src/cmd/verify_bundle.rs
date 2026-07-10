@@ -2011,8 +2011,9 @@ pub struct SuppliedCards<'a> {
 /// (uncorrectable, or the failure wasn't a repair-class error) — the caller
 /// falls back to the original decode-error check rows unchanged.
 ///
-/// The corrected string is held in `Zeroizing` (secret-hygiene, proactive —
-/// SPEC §8 risk 6 / G5) even though it is only ever compared, never emitted.
+/// The corrected candidate is carried in the repair engine's `SecretString`
+/// (zeroize-on-drop + redacting Debug; secret-hygiene — SPEC §8 risk 6 / G5)
+/// even though it is only ever compared here, never emitted.
 fn ms1_ground_truth_compare(supplied_ms1: &str, expected_ms1: &str) -> Option<bool> {
     let outcome =
         crate::repair::repair_card(crate::repair::CardKind::Ms1, &[supplied_ms1.to_string()])
@@ -2023,14 +2024,15 @@ fn ms1_ground_truth_compare(supplied_ms1: &str, expected_ms1: &str) -> Option<bo
         // defensively rather than assume — fall back to the original error.
         return None;
     }
-    let corrected = zeroize::Zeroizing::new(
+    // `outcome.repairs.is_empty()` already guarded non-empty above, so
+    // `corrected_chunks` (len() == input chunk count, SPEC §1) is guaranteed
+    // non-empty here — no `SecretString: Default` fallback needed.
+    Some(
         outcome
             .corrected_chunks
             .first()
-            .cloned()
-            .unwrap_or_default(),
-    );
-    Some(corrected.as_str() == expected_ms1)
+            .is_some_and(|c| &**c == expected_ms1),
+    )
 }
 
 /// SPEC §5.7 verify-bundle check emission. Returns the 9-check array (single-sig)

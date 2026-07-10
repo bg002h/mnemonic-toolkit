@@ -433,6 +433,22 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/slot_input.rs",
         evidence: &["pub value: SecretString", "SecretString::new"],
     },
+    // ---- repair.rs (Cycle G `repair-engine-outcome-zeroization`) ----
+    // The repair engine's owned corrected-/original-secret buffers migrated
+    // from bare `String` to the redacting, zeroize-on-drop `SecretString`
+    // (defense-in-depth — the values transit stdout/`--json` by design, D9
+    // UX; `SecretString`'s transparent Serialize/Display keep the wire
+    // byte-identical while its Debug redacts).
+    ZeroizeRow {
+        label: "RepairDetail.original_chunk/corrected_chunk fields are SecretString — Cycle G",
+        source_file: "src/repair.rs",
+        evidence: &["pub original_chunk: SecretString", "pub corrected_chunk: SecretString"],
+    },
+    ZeroizeRow {
+        label: "RepairOutcome.corrected_chunks field is Vec<SecretString> — Cycle G",
+        source_file: "src/repair.rs",
+        evidence: &["pub corrected_chunks: Vec<SecretString>"],
+    },
 ];
 
 fn crate_root() -> &'static Path {
@@ -530,17 +546,20 @@ const TEST_ONLY_SECRET_FILES: &[&str] = &[
     "src/bundle_unified.rs", // the sole SecretString::new is the #[cfg(test)] s() SlotInput fixture (cycle-14 L22); SlotInput.value's canonical row is src/slot_input.rs
 ];
 
-/// Persistent glob-cardinality floor. The partition is exactly 39
-/// secret-bearing src files @ v0.71.0 (wave2 T2 added `src/cmd/inspect.rs` as a
-/// declared secret-bearing row). The static "37" recorded @ v0.67.0 was already
-/// 1 below the live partition (38) at authoring; wave2 recomputed the live count
-/// (38 pre-change) and set the tight floor to 39 after inspect.rs joins. Was 35
-/// (30 ∪ 5) @ 438de94. The floor fires only on the loss-of-coverage direction
-/// (count DROPS) — a broken glob/path-prefix change that enumerates nothing
-/// would otherwise make the scan vacuously pass. Deleting a secret-bearing file
-/// is a conscious security-adjacent choice, so requiring a deliberate floor edit
+/// Persistent glob-cardinality floor. The partition is exactly 40
+/// secret-bearing src files @ Cycle G (`repair-engine-outcome-zeroization`
+/// added `src/repair.rs` as a declared secret-bearing row — the repair
+/// engine's corrected/original chunks migrated `String` → `SecretString`).
+/// Was 39 @ v0.71.0 (wave2 T2 added `src/cmd/inspect.rs`). The static "37"
+/// recorded @ v0.67.0 was already 1 below the live partition (38) at
+/// authoring; wave2 recomputed the live count (38 pre-change) and set the
+/// tight floor to 39 after inspect.rs joins. Was 35 (30 ∪ 5) @ 438de94. The
+/// floor fires only on the loss-of-coverage direction (count DROPS) — a
+/// broken glob/path-prefix change that enumerates nothing would otherwise
+/// make the scan vacuously pass. Deleting a secret-bearing file is a
+/// conscious security-adjacent choice, so requiring a deliberate floor edit
 /// is the correct friction. Mirrors the `ZEROIZE_ROWS.len()` count guard.
-const SECRET_FILE_FLOOR: usize = 39;
+const SECRET_FILE_FLOOR: usize = 40;
 
 /// Recursively collect every `*.rs` under `dir`, returning crate-root-relative
 /// forward-slash paths (matching `ZEROIZE_ROWS.source_file` form).

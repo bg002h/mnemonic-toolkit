@@ -18,17 +18,36 @@ use super::NUMS_XONLY_HEX;
 /// hex pubkeys are preserved; no abstract labels are detected (those only
 /// appear in `--miniscript` input).
 pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>), CompareCostError> {
-    // SPEC bip388-double-star-shorthand-support §0 item 6 — EQUIVALENCE-only:
-    // compare-cost has a pre-existing multipath limitation (rejects ALL
-    // `/<0;1>/*` multipath descriptors; FOLLOWUP
-    // `compare-cost-multipath-descriptor-unsupported`), so expanding a
-    // literal `/**` here does NOT yield acceptance — it makes `/**` reject
-    // IDENTICALLY to the explicit `/<0;1>/*` spelling instead of the pre-fix
-    // cryptic "invalid child number format", upholding the `/**` ≡
-    // `/<0;1>/*` invariant on every literal-descriptor surface.
+    // Cycle G (`compare-cost-multipath-descriptor-unsupported`) — SPEC §2:
+    // expand the BIP-388 `/**` shorthand to `/<0;1>/*` (Cycle C), then split
+    // multipath FIRST — mirroring `derive_address.rs::derive_first_address`
+    // EXACTLY (`into_single_descriptors()` + `is_empty()` guard +
+    // `remove(0)`) — before feeding the result into the existing
+    // `has_wildcard`/`TryFrom`/wrapper-match path below. Cost is
+    // chain-index-independent (receive vs change differ only in one child
+    // index; same-size keys → identical templates/vbytes), so the receive
+    // branch (index 0) is representative. Split-first also handles the
+    // non-wildcard `…/<0;1>` edge (no trailing `/*`) for free, unlike a
+    // bolted-on multipath special-case in the wildcard branch below. `/**`
+    // inherits acceptance for free since it pre-expands to `/<0;1>/*` before
+    // this point.
     let expanded_input = crate::parse_descriptor::expand_literal_double_star(input);
     let desc = Descriptor::<DescriptorPublicKey>::from_str(expanded_input.as_ref())
         .map_err(|e| CompareCostError::Parse(format!("descriptor parse: {e}")))?;
+    let desc = if desc.is_multipath() {
+        let mut parts = desc
+            .clone()
+            .into_single_descriptors()
+            .map_err(|e| CompareCostError::Parse(format!("multipath split failed: {e}")))?;
+        if parts.is_empty() {
+            return Err(CompareCostError::Parse(
+                "multipath split produced no branches".to_string(),
+            ));
+        }
+        parts.remove(0)
+    } else {
+        desc
+    };
 
     // Materialize wildcards to a concrete derivation index (cost is identical
     // across child indices for a given descriptor shape; index 0 is fine).

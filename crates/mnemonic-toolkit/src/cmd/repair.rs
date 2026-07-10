@@ -21,6 +21,7 @@
 use crate::error::ToolkitError;
 use crate::indel::{IndelCandidate, IndelDirection, IndelOutcome, IndelRegion};
 use crate::repair::{self, CardArgs, CardKind, RepairError, RepairOutcome};
+use crate::secret_string::SecretString;
 use clap::{ArgGroup, Args};
 use std::io::{Read, Write};
 
@@ -297,7 +298,7 @@ struct RepairJson<'a> {
     /// — ms-cli's `RepairJson` (Phase P1) must byte-match this field order
     /// (D27/D9).
     verdict: &'static str,
-    corrected_chunks: &'a [String],
+    corrected_chunks: &'a [SecretString],
     repairs: Vec<RepairJsonDetail<'a>>,
 }
 

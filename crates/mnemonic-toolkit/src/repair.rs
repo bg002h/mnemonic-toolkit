@@ -35,6 +35,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{IsTerminal, Read, Write};
 
 use crate::error::ToolkitError;
+use crate::secret_string::SecretString;
 
 // Per-HRP × per-code target-residue NUMS constants. mk imported from
 // mk-codec. (v0.23.0: ms/md constants deleted per D29 migration; their
@@ -424,8 +425,8 @@ pub(crate) fn resolve_no_auto_repair(no_auto_repair: bool) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RepairDetail {
     pub chunk_index: usize,
-    pub original_chunk: String,
-    pub corrected_chunk: String,
+    pub original_chunk: SecretString,
+    pub corrected_chunk: SecretString,
     /// (position, was, now) — `position` is 0-indexed into the data-part
     /// (chars after the HRP + `1` separator).
     pub corrected_positions: Vec<(usize, char, char)>,
@@ -437,7 +438,7 @@ pub struct RepairDetail {
 #[derive(Debug, Clone)]
 pub struct RepairOutcome {
     pub kind: CardKind,
-    pub corrected_chunks: Vec<String>,
+    pub corrected_chunks: Vec<SecretString>,
     pub repairs: Vec<RepairDetail>,
     /// Cycle E (`mk1-repair-set-level-reverify`) / Cycle F
     /// (`ms1-repair-demote-to-candidate`) — SPEC §2 tri-state set-level
@@ -800,8 +801,8 @@ fn repair_chunk_one(
     let corrected_chunk = encode_chunk(hrp, &corrected);
     Ok(Some(RepairDetail {
         chunk_index,
-        original_chunk: chunk.to_string(),
-        corrected_chunk,
+        original_chunk: SecretString::new(chunk.to_string()),
+        corrected_chunk: SecretString::new(corrected_chunk),
         corrected_positions,
     }))
 }
@@ -975,7 +976,7 @@ fn fold_verdict(acc: Option<GroupVerdict>, v: GroupVerdict) -> GroupVerdict {
 /// SetReassemblyMismatch)` — never `Ok` (plan-R0 PM-r2-2: a batch that folds
 /// to Reject suppresses ALL output, including any co-batched Bless group).
 fn verify_mk1_set(
-    corrected_chunks: &[String],
+    corrected_chunks: &[SecretString],
     repairs: &[RepairDetail],
 ) -> Result<SetVerify, RepairError> {
     let touched: HashSet<usize> = repairs.iter().map(|r| r.chunk_index).collect();
@@ -1048,7 +1049,7 @@ fn verify_mk1_set(
         let verdict = if !group_is_complete_and_consistent(&headers) {
             GroupVerdict::Candidate
         } else {
-            let refs: Vec<&str> = idxs.iter().map(|&i| corrected_chunks[i].as_str()).collect();
+            let refs: Vec<&str> = idxs.iter().map(|&i| &*corrected_chunks[i]).collect();
             match mk_codec::decode(&refs) {
                 Ok(_) => GroupVerdict::Bless,
                 Err(e) => {
@@ -1095,7 +1096,7 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
 
     match kind {
         CardKind::Mk1 => {
-            let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
+            let mut corrected_chunks: Vec<SecretString> = Vec::with_capacity(chunks.len());
             let mut repairs: Vec<RepairDetail> = Vec::new();
             for (i, chunk) in chunks.iter().enumerate() {
                 match repair_chunk_one(kind, i, chunk)? {
@@ -1103,7 +1104,7 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                         corrected_chunks.push(detail.corrected_chunk.clone());
                         repairs.push(detail);
                     }
-                    None => corrected_chunks.push(chunk.clone()),
+                    None => corrected_chunks.push(SecretString::new(chunk.clone())),
                 }
             }
             // Cycle E — SPEC §2 tri-state set-level re-verify (the funds
@@ -1123,7 +1124,7 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
             // ms1 is single-chunk per codex32 spec, but `repair_card` is
             // kind-agnostic across chunk-count — preserve the per-chunk loop
             // by calling the sibling-codec helper once per supplied chunk.
-            let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
+            let mut corrected_chunks: Vec<SecretString> = Vec::with_capacity(chunks.len());
             let mut repairs: Vec<RepairDetail> = Vec::new();
             for (i, chunk) in chunks.iter().enumerate() {
                 // Pre-gate via parse_chunk to preserve the toolkit's
@@ -1145,7 +1146,7 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                         corrected_chunks.push(detail.corrected_chunk.clone());
                         repairs.push(detail);
                     }
-                    None => corrected_chunks.push(chunk.clone()),
+                    None => corrected_chunks.push(SecretString::new(chunk.clone())),
                 }
             }
             // Cycle F (`ms1-repair-demote-to-candidate`) SPEC §2 — Option B:
@@ -1221,8 +1222,8 @@ fn repair_via_ms_codec(
             let (corrected_chunk, corrected_positions) = apply_ms_corrections(chunk, &corrections);
             Ok(Some(RepairDetail {
                 chunk_index,
-                original_chunk: chunk.to_string(),
-                corrected_chunk,
+                original_chunk: SecretString::new(chunk.to_string()),
+                corrected_chunk: SecretString::new(corrected_chunk),
                 corrected_positions,
             }))
         }
@@ -1648,7 +1649,7 @@ fn parse_md_chunk_index(detail: &str) -> Option<usize> {
 fn apply_md_corrections(
     chunks: &[String],
     corrections: &[md_codec::CorrectionDetail],
-) -> (Vec<String>, Vec<RepairDetail>) {
+) -> (Vec<SecretString>, Vec<RepairDetail>) {
     // Index corrections by chunk_index for O(N+M) assembly.
     let mut per_chunk: Vec<Vec<&md_codec::CorrectionDetail>> = vec![Vec::new(); chunks.len()];
     for c in corrections {
@@ -1657,11 +1658,11 @@ fn apply_md_corrections(
         }
     }
 
-    let mut corrected_chunks: Vec<String> = Vec::with_capacity(chunks.len());
+    let mut corrected_chunks: Vec<SecretString> = Vec::with_capacity(chunks.len());
     let mut repairs: Vec<RepairDetail> = Vec::new();
     for (i, chunk) in chunks.iter().enumerate() {
         if per_chunk[i].is_empty() {
-            corrected_chunks.push(chunk.clone());
+            corrected_chunks.push(SecretString::new(chunk.clone()));
             continue;
         }
         // Apply this chunk's corrections.
@@ -1680,11 +1681,11 @@ fn apply_md_corrections(
         for ch in chars {
             corrected.push(ch);
         }
-        corrected_chunks.push(corrected.clone());
+        corrected_chunks.push(SecretString::new(corrected.clone()));
         repairs.push(RepairDetail {
             chunk_index: i,
-            original_chunk: chunk.clone(),
-            corrected_chunk: corrected,
+            original_chunk: SecretString::new(chunk.clone()),
+            corrected_chunk: SecretString::new(corrected),
             corrected_positions: positions,
         });
     }
@@ -1887,7 +1888,7 @@ struct AutoFireRepairJson<'a> {
     auto_repair_short_circuit: bool,
     exit_code: u8,
     kind: &'static str,
-    corrected_chunks: &'a [String],
+    corrected_chunks: &'a [SecretString],
     repairs: Vec<AutoFireRepairJsonDetail<'a>>,
 }
 
@@ -2988,6 +2989,39 @@ mod tests {
         assert!(
             !stderr_s.contains("candidate correction exists"),
             "the ms1-only advisory must not fire for mk1: {stderr_s:?}"
+        );
+    }
+
+    // ========================================================================
+    // Cycle G (`repair-engine-outcome-zeroization`) SPEC §1/§4.1 — the
+    // repair engine's owned secret-bearing `RepairOutcome`/`RepairDetail`
+    // fields now carry `SecretString` (redacting Debug + transparent
+    // Serialize), not bare `String`.
+    // ========================================================================
+
+    /// SPEC §4.1 redaction cell: `format!("{:?}", ..)` of `RepairOutcome` /
+    /// `RepairDetail` must NOT leak the corrected seed now that
+    /// `corrected_chunks` / `original_chunk` / `corrected_chunk` are carried
+    /// in `SecretString`. Uses an ms1 fixture (seed-bearing, private-key-
+    /// material class) — a pre-migration `Vec<String>`/`String` field would
+    /// print the seed verbatim via the derived Debug.
+    #[test]
+    fn repair_outcome_debug_does_not_leak_corrected_ms1_seed() {
+        let bad = flip_at(VALID_MS1, 10);
+        let outcome = repair_card(CardKind::Ms1, &[bad]).expect("repair Ok");
+        let outcome_dbg = format!("{outcome:?}");
+        assert!(
+            !outcome_dbg.contains(VALID_MS1),
+            "RepairOutcome Debug leaked the corrected seed: {outcome_dbg}"
+        );
+        assert!(
+            outcome_dbg.contains("redacted"),
+            "RepairOutcome Debug should show the redaction marker: {outcome_dbg}"
+        );
+        let detail_dbg = format!("{:?}", outcome.repairs[0]);
+        assert!(
+            !detail_dbg.contains(VALID_MS1),
+            "RepairDetail Debug leaked the corrected seed: {detail_dbg}"
         );
     }
 }

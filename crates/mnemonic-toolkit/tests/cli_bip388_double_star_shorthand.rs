@@ -375,13 +375,16 @@ fn export_wallet_double_star_equals_explicit_multipath() {
 }
 
 #[test]
-fn compare_cost_double_star_rejects_identically_to_explicit_multipath() {
-    // EQUIVALENCE-only (SPEC §0 item 6 / FOLLOWUP
-    // `compare-cost-multipath-descriptor-unsupported`): compare-cost rejects
-    // ALL multipath `/<0;1>/*` descriptors (pre-existing limitation), so
-    // `/**` does NOT gain acceptance here — it must reject IDENTICALLY
-    // (same stderr + exit code) to the explicit `/<0;1>/*` spelling, and
-    // that error must differ from the PRE-FIX raw miniscript parse error.
+fn compare_cost_double_star_wpkh_rejects_identically_as_unsupported_wrapper() {
+    // Cycle G (`compare-cost-multipath-descriptor-unsupported`) UPDATE (NOT
+    // invert — SPEC §2 I1): the split-first fix gets a multipath descriptor
+    // PAST derivation, but compare-cost still rejects `wpkh` regardless of
+    // multipath (unsupported wrapper — `strip.rs` only supports
+    // `wsh`/`sh(wsh)`/single-leaf `tr`). So `/**` and `/<0;1>/*` now fail
+    // IDENTICALLY with the NEW `UnsupportedWrapper` error, NOT the OLD
+    // "multipath key cannot be a DerivedDescriptorKey" derivation error —
+    // pinning that multipath now gets past derivation while wpkh stays
+    // unsupported. The `/**` ≡ `/<0;1>/*` equivalence still holds.
     let shorthand = format!("wpkh([{FP_A}/84'/0'/0']{A}/**)");
     let explicit = format!("wpkh([{FP_A}/84'/0'/0']{A}/<0;1>/*)");
 
@@ -403,13 +406,78 @@ fn compare_cost_double_star_rejects_identically_to_explicit_multipath() {
     );
     let stderr_str = String::from_utf8_lossy(&stderr_shorthand);
     assert!(
-        stderr_str.contains("multipath key cannot be a DerivedDescriptorKey"),
-        "expected the pre-existing multipath-limitation error, got: {stderr_str}"
+        !stderr_str.contains("multipath key cannot be a DerivedDescriptorKey"),
+        "multipath must now get PAST derivation (pins the split-first fix), got: {stderr_str}"
+    );
+    assert!(
+        stderr_str.contains("unsupported wrapper"),
+        "expected the wpkh UnsupportedWrapper rejection, got: {stderr_str}"
     );
     assert!(
         !stderr_str.contains("invalid child number format"),
         "must NOT be the pre-fix raw miniscript parse error (that would mean `/**` \
          is still unexpanded): {stderr_str}"
+    );
+}
+
+/// Cycle G SPEC §2/§4.4 — a `wsh`-wrapped multipath descriptor is ACCEPTED
+/// (split to the receive branch, index 0, before derivation — mirroring
+/// `derive_address.rs`), and its cost is byte-identical to the single-path
+/// `/0/*` equivalent. `/**` inherits acceptance for free (it pre-expands to
+/// `/<0;1>/*` upstream, Cycle C) — all three spellings must cost identically.
+#[test]
+fn compare_cost_wsh_multipath_accepted_and_cost_equals_singlepath() {
+    let fetch_conditions = |desc: &str| -> Value {
+        let out = bin()
+            .args(["compare-cost", "--descriptor", desc, "--json"])
+            .assert()
+            .success();
+        let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+        v["conditions"].clone()
+    };
+
+    let multipath = format!("wsh(pk([{FP_A}/84'/0'/0']{A}/<0;1>/*))");
+    let doublestar = format!("wsh(pk([{FP_A}/84'/0'/0']{A}/**))");
+    let singlepath = format!("wsh(pk([{FP_A}/84'/0'/0']{A}/0/*))");
+
+    let conds_multipath = fetch_conditions(&multipath);
+    let conds_doublestar = fetch_conditions(&doublestar);
+    let conds_singlepath = fetch_conditions(&singlepath);
+
+    assert_eq!(
+        conds_multipath, conds_singlepath,
+        "explicit `/<0;1>/*` multipath compare-cost must equal the single-path `/0/*` cost"
+    );
+    assert_eq!(
+        conds_doublestar, conds_singlepath,
+        "`/**` shorthand compare-cost must equal the single-path `/0/*` cost"
+    );
+}
+
+/// Cycle G SPEC §2/§4.6 (M4) — malformed multipath (inconsistent branch
+/// counts across keys within one `wsh(multi(...))`) errors cleanly, no
+/// panic. rust-miniscript's descriptor-string PARSE step itself rejects a
+/// mismatched multipath (`Error::MultipathDescLenMismatch`) BEFORE
+/// `is_multipath()` / `into_single_descriptors()` are ever reached, so this
+/// surfaces via the pre-existing `CompareCostError::Parse` path (exit 2).
+#[test]
+fn compare_cost_malformed_multipath_inconsistent_branch_counts_errors_cleanly() {
+    let desc =
+        format!("wsh(multi(2,[{FP_A}/84'/0'/0']{A}/<0;1>/*,[{FP_B}/84'/0'/0']{B}/<0;1;2>/*))");
+    let out = bin()
+        .args(["compare-cost", "--descriptor", &desc])
+        .output()
+        .unwrap();
+    assert!(
+        !out.status.success(),
+        "a mismatched-branch-count multipath descriptor must be rejected, not silently \
+         truncated to the shorter key's branch count"
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "expected the CompareCostError::Parse exit code; stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
     );
 }
 
