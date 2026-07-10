@@ -5,7 +5,9 @@ already carries the precise migration surface + fix + test plan per item; this p
 guard-rails + release. Subject to its own **Fable plan-R0** to 0C/0I BEFORE implementation. Per-phase: TDD +
 Fable per-phase R0 (FULL `cargo test -p`) + fold-on-Opus. Post-impl: Fable whole-diff.
 
-**Source SHA:** toolkit `267f938c` (v0.81.0 line + Cycle G design). **Target:** MINOR `v0.82.0`; md/mk/ms
+**Status:** ✅ plan-R0-GREEN (0C/0I, Fable round 1) — 4 non-blocking Minors folded (M1 cite the value/key-order assert sites not "goldens"; M2 the `verify_bundle.rs:2014-2015` stale `Zeroizing` comment; M3 gen.sh ~6 version occurrences → bump globally; M4 SHA). Review `cycleG-plan-r0-round-1.md`. CLEARED for implementation.
+
+**Source SHA:** toolkit `46b2ec4d` (v0.81.0 line + Cycle G design). **Target:** MINOR `v0.82.0`; md/mk/ms
 NO-BUMP; no GUI/`schema_mirror`; no crates.io publish. **Worktree:** one `mnemonic-toolkit` worktree (branch
 `feature/cycleG-zeroization-compare-cost`). Single implementer, sequential (P0 then P1 — zero file overlap, so
 order is free; do P0 first). The two items are INDEPENDENT.
@@ -17,12 +19,15 @@ order is free; do P0 first). The two items are INDEPENDENT.
 `:978` param + `&*` @`:1051`; the auto-fire `AutoFireRepairJson`/`AutoFireRepairJsonDetail` `:1884-1900`);
 `src/cmd/repair.rs` (`RepairJson.corrected_chunks: &'a [String]`→`&'a [SecretString]`); `src/secret_string.rs`
 (add `PartialEq<str>` + `PartialEq<&str>`; a slice-serialize unit test); `src/cmd/verify_bundle.rs:2026-2032`
-(drop `Zeroizing`+`Option`/`unwrap_or_default`; `.first().is_some_and(|c| &**c==expected_ms1)`).
+(drop `Zeroizing`+`Option`/`unwrap_or_default`; `.first().is_some_and(|c| &**c==expected_ms1)`) + update the
+now-false `:2014-2015` doc-comment ("held in `Zeroizing` … §8 risk 6 / G5") — M2.
 
 **TDD — tests first (SPEC §4.1/4.2/4.3/4.7):**
 - Redaction unit: `format!("{:?}", outcome)` / `RepairDetail` debug contains NO seed substring.
-- No-wire-change: the existing `mnemonic repair --ms1/--mk1/--md1` text + `--json` goldens/CLI tests stay green
-  (byte-identical), incl. the auto-fire `AutoFireRepairJson` path.
+- No-wire-change (M1 — these are value + raw-key-ORDER asserts, NOT raw golden files): the existing JSON
+  value/key-order pins `cli_repair.rs:99-103` + the auto-fire `cli_auto_repair.rs:307`/`:424-425` stay green
+  (byte-identical output; a silent redaction fails them immediately). Optionally add one raw-string envelope
+  comparison. The auto-fire `AutoFireRepairJson` path is covered by the latter.
 - `PartialEq<str>`/`<&str>` on `SecretString` — the 8 string-element `assert_eq!` sites compile + pass.
 - `secret_string.rs` slice-serialize unit: `Vec<SecretString>` serializes byte-identical to `Vec<String>`.
 
@@ -60,8 +65,9 @@ Persist `cycleG-postimpl-whole-diff-review.md`.
 
 ## Release ritual (only after whole-diff GREEN) — toolkit v0.82.0
 Standard toolkit (no sibling/publish): version sites (Cargo.toml + workspace/fuzz Cargo.lock + both READMEs +
-install.sh:32 self-pin `v0.81.0`→`v0.82.0`) + `.examples-build` corpus (gen.sh version pin `0.81.0`→`0.82.0`;
-only version strings move — no repair/cost content change expected, verify the non-version diff is empty) +
+install.sh:32 self-pin `v0.81.0`→`v0.82.0`) + `.examples-build` corpus (gen.sh — bump ALL ~6 `0.81.0`
+occurrences `:3/:44/:109/:126/:711/:724`, M3; only version strings move — no repair/cost content change expected,
+verify the non-version diff is empty) +
 CHANGELOG `[0.82.0]` (leave prior intact) + flip BOTH FOLLOWUPs (`repair-engine-outcome-zeroization` +
 `compare-cost-multipath-descriptor-unsupported`) → RESOLVED in the shipping commit + regen Examples.md + NO
 re-vendor (no dep change) + NO sibling-pin change (md/mk/ms FROZEN — do NOT touch). Build; full suite; FF master
