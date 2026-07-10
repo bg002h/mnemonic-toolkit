@@ -101,7 +101,7 @@ COMPONENT       CARGO_PACKAGE        DEFAULT      FEATURES       GIT_TAG
 ---------       -------------        -------      --------       -------
 mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.82.0
 md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.11.2
-ms              ms-cli               crates.io    (none)         ms-cli-v0.14.0
+ms              ms-cli               crates.io    (none)         ms-cli-v0.14.1
 mk              mk-cli               crates.io    (none)         mk-cli-v0.12.0
 mnemonic-gui    mnemonic-gui         git (only)   (none)         mnemonic-gui-v0.51.0
 ```

@@ -426,7 +426,23 @@ mod tests {
         let mut v: Vec<u8> = vec![0xAAu8; 64];
         assert_eq!(v[0], 0xAA);
         let pin = pin_pages_for(&v);
-        assert_eq!(pin.page_count, 1, "64-byte buf pins exactly one page");
+        // page_count is a function of the buffer's ALLOCATION ADDRESS, not its
+        // length: a 64-byte buffer touches 1 page when page-internal but 2 when
+        // it straddles a page boundary. Both are correct (pin_pages_for pins
+        // every page the range touches). Assert the actual contract — the pin
+        // covers exactly the pages round_to_pages says the buffer touches, and
+        // a sub-page buffer touches 1 or 2 pages — NOT a hardcoded 1, which is a
+        // fragile allocator-placement assumption that flips under Miri's
+        // deterministic allocator on any lib-layout change (g4a FOLLOWUP).
+        let expected = round_to_pages(v.as_ptr() as usize, v.len(), page_size()).1;
+        assert_eq!(
+            pin.page_count, expected,
+            "pin covers exactly the pages the buffer touches"
+        );
+        assert!(
+            (1..=2).contains(&pin.page_count),
+            "a 64-byte buf touches 1 or 2 pages"
+        );
         v.zeroize();
         assert_eq!(v.len(), 0, "zeroize clears Vec len after scrubbing");
         drop(pin); // munlock after zeroize — strictest threat-model ordering
