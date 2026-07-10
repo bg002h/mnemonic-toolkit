@@ -114,7 +114,7 @@ jobs:
         run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.2 md-cli --features cli-compiler
 
       - name: Install ms-cli
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.13.2 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.14.0 ms-cli
 
       - name: Build mnemonic binary (debug)
         # Debug binary is sufficient for transcript-replay byte comparison.

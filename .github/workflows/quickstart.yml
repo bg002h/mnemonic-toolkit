@@ -84,7 +84,7 @@ jobs:
 
       - name: Install ms-cli
         # Mirrors the mk-cli + md-cli install patterns above.
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.13.2 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.14.0 ms-cli
 
       - name: Build mnemonic binary (debug)
         # Debug binary is sufficient for transcript-replay byte-comparison;
