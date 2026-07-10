@@ -32,6 +32,17 @@ const COSIGNER_C_FP: &str = "5436d724";
 const COSIGNER_D_XPUB: &str = "xpub6Bv8ayijom26yJ1wZ62h4X1smfYBfNeNtGujxw6vaY4zq4Tw4cn2oV8qZmjnuVxh56oSe21r7V8r9LjZjArFh3QRZQbgzgLcfjVikZNa86W";
 const COSIGNER_D_FP: &str = "16a93ed0";
 
+// cycle-H F3 (E4/`assert_network_agrees`): the `--network testnet` cell below
+// used to pair with the MAINNET-prefixed `COSIGNER_{A,B,C}_XPUB` consts above
+// — that combination is now correctly refused fail-closed (a wrong-network
+// mint, the exact hazard the guard closes). These are the SAME cosigner keys
+// re-labeled with the testnet version bytes (offline version-byte swap, same
+// key material — not a CLI network re-label, which the guard itself refuses)
+// so the testnet cell exercises network-consistent watch-only input.
+const COSIGNER_A_XPUB_TESTNET: &str = "tpubDFnc6MoxQh6V2NoQKZmq4a9HFuNxMD2cR785reRSe54JwcYH6KK5NQjAspMUmQp5qXdscseFqD4H3VuRVvNhizP4Ku87N5BfuBUQJGrfe1Y";
+const COSIGNER_B_XPUB_TESTNET: &str = "tpubDE9rhca81b8zga4T9czxb4wjy1ZjbXtPnto2orq74XiVkLAtDDDTQrFppdVcVk7WHz8PmTsdLAjEeQTLsBBLWscv1cdYHCtXUe3FjRgWdjS";
+const COSIGNER_C_XPUB_TESTNET: &str = "tpubDCHbTPBTK2GJLWMnad9HaY3Q2XUZNas1RmyQeJNENUA4FS9KNoF7k3kzfFCvYxR3CJgLRfgASq7zsX2SZjn1y6t5QGXzzy5ua6SJLqkY4A5";
+
 /// Helper: run `mnemonic export-wallet --format bsms ...` with the supplied
 /// extra args; returns (stdout, stderr) on success.
 fn run_bsms(extra_args: &[&str]) -> (String, String) {
@@ -117,19 +128,19 @@ fn bsms_4line_emit_2of3_wsh_multi_testnet() {
         "--network",
         "testnet",
         "--slot",
-        &format!("@0.xpub={COSIGNER_A_XPUB}"),
+        &format!("@0.xpub={COSIGNER_A_XPUB_TESTNET}"),
         "--slot",
         &format!("@0.fingerprint={COSIGNER_A_FP}"),
         "--slot",
         "@0.path=m/48'/1'/0'/2'",
         "--slot",
-        &format!("@1.xpub={COSIGNER_B_XPUB}"),
+        &format!("@1.xpub={COSIGNER_B_XPUB_TESTNET}"),
         "--slot",
         &format!("@1.fingerprint={COSIGNER_B_FP}"),
         "--slot",
         "@1.path=m/48'/1'/0'/2'",
         "--slot",
-        &format!("@2.xpub={COSIGNER_C_XPUB}"),
+        &format!("@2.xpub={COSIGNER_C_XPUB_TESTNET}"),
         "--slot",
         &format!("@2.fingerprint={COSIGNER_C_FP}"),
         "--slot",

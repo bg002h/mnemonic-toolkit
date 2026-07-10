@@ -109,6 +109,32 @@ impl WalletFormatEmitter for BsmsEmitter {
                             ))
                         })?;
 
+                // cycle-H F3 (R0-round-2-Important-A / R0-round-3-Important-D):
+                // the E4 slot-guard is inert for this arm's `--descriptor`
+                // caller (empty `resolved_slots`) — a concrete tpub descriptor
+                // + default mainnet would mint a mainnet line-4 address from a
+                // testnet key. Walk every extended key (`xkey_network()` is
+                // `Some` for both `XPub` AND the BIP-389 `MultiXPub` multipath
+                // form; `None` for a raw-hex `Single`, which is skipped) and
+                // fail closed on the first disagreement, BEFORE deriving.
+                let mut mismatch: Option<bitcoin::NetworkKind> = None;
+                parsed.for_each_key(|k| {
+                    if let Some(decoded) = k.xkey_network() {
+                        if decoded != inputs.network.network_kind() {
+                            mismatch = Some(decoded);
+                            return false;
+                        }
+                    }
+                    true
+                });
+                if let Some(decoded) = mismatch {
+                    crate::network::assert_network_agrees(
+                        decoded,
+                        inputs.network.network_kind(),
+                        "export: bsms first-address",
+                    )?;
+                }
+
                 let line3 = path_restrictions_line(&parsed);
                 let line4 = derive_first_address(&parsed, network_to_bitcoin(inputs.network))?;
 

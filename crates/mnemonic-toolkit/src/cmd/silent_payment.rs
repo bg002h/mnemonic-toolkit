@@ -131,6 +131,16 @@ fn resolve_master_xpriv<E: Write>(
             )
             .map_err(ToolkitError::Io)?;
         }
+        // cycle-H F3: `--network` is always asserted here (non-Optional
+        // CliNetwork, default mainnet) — cross-check it against the xprv/tprv's
+        // OWN embedded network before it drives coin_type()/sp_hrp(). The
+        // ms1/phrase/entropy branches below mint the master AT `--network`
+        // (no embedded bytes to contradict) and stay unguarded.
+        crate::network::assert_network_agrees(
+            xpriv.network,
+            network.network_kind(),
+            "silent-payment: xprv/tprv master",
+        )?;
         return Ok(xpriv);
     }
     // 2. ms1 → entropy (unambiguous bech32 `ms` HRP). Case-insensitive

@@ -211,10 +211,20 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
     };
 
     // 5) Network resolution: explicit --network wins; else inferred from the
-    //    xpub version byte.
-    let network = args
-        .network
-        .unwrap_or_else(|| crate::address_render::network_from_xpub(&xpub));
+    //    xpub version byte. cycle-H F3: an explicit --network must agree with
+    //    the xpub's own version bytes; the inference arm (no --network) stays
+    //    unguarded (network.rs precondition).
+    let network = match args.network {
+        Some(n) => {
+            crate::network::assert_network_agrees(
+                xpub.network,
+                n.network_kind(),
+                "xpub-search address-of-xpub",
+            )?;
+            n
+        }
+        None => crate::address_render::network_from_xpub(&xpub),
+    };
 
     // 6) Scan.
     let secp = Secp256k1::verification_only();

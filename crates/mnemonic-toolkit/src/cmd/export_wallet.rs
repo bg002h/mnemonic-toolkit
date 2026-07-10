@@ -671,6 +671,29 @@ pub fn run<W: Write, E: Write>(
     // ResolvedSlot retains them for future per-cosigner needs).
     let master_xpub_at_0 = resolved_slots_ref.first().and_then(|s| s.master_xpub);
 
+    // cycle-H F3 (R0-Important-1): the `--template`/`--slot` path resolves
+    // slots via `resolve_slots` but — unlike the `--from-import-json` arm's
+    // guard just above `envelope_to_resolved_slots` — never cross-checked each
+    // slot's xpub network against the asserted `--network` (which fires on
+    // the clap DEFAULT, no explicit flag needed) before the electrum/coldcard
+    // emitters rewrite the xpub's version bytes via `apply_xpub_prefix`. Fail
+    // closed BEFORE any re-emit. Inert (empty `resolved_slots_ref`) for the
+    // `--descriptor` concrete-keys arm — no over-rejection there.
+    for slot in resolved_slots_ref {
+        crate::network::assert_network_agrees(
+            slot.xpub.network,
+            args.network.network_kind(),
+            "export: --template/--slot",
+        )?;
+        if let Some(mx) = slot.master_xpub {
+            crate::network::assert_network_agrees(
+                mx.network,
+                args.network.network_kind(),
+                "export: --template/--slot master_xpub",
+            )?;
+        }
+    }
+
     let inputs = EmitInputs {
         canonical_descriptor: crate::wallet_export::CheckedDescriptor::new(&canonical)?,
         resolved_slots: resolved_slots_ref,

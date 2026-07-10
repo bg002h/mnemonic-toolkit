@@ -1521,9 +1521,20 @@ fn compute_outputs(
                         let child = xpub
                             .derive_pub(&secp, &path)
                             .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
-                        let net = args
-                            .network
-                            .unwrap_or_else(|| crate::address_render::network_from_xpub(&xpub));
+                        // cycle-H F3: an explicit --network must agree with the
+                        // xpub's own version bytes; the inference arm (no
+                        // --network) stays unguarded (network.rs precondition).
+                        let net = match args.network {
+                            Some(n) => {
+                                crate::network::assert_network_agrees(
+                                    xpub.network,
+                                    n.network_kind(),
+                                    "convert: xpub→address",
+                                )?;
+                                n
+                            }
+                            None => crate::address_render::network_from_xpub(&xpub),
+                        };
                         crate::address_render::render_address_from_xpub(
                             &secp,
                             &child,
