@@ -8,9 +8,13 @@ code's `t=4` capacity (up to four substitution errors per chunk).
 
 `md repair` is the per-codec sibling of the toolkit's
 [`mnemonic repair`](#mnemonic-repair); the two share the same
-`RepairJson` envelope schema byte-exact, and the exit-5
-`REPAIR_APPLIED` signal is uniform across all four CLIs
-(`mnemonic`, `mk`, `ms`, `md`).
+`RepairJson` envelope schema fields. Since ms-cli v0.14.0 / toolkit
+v0.81.0's ms1 demotion, the toolkit's `RepairJson` is a strict
+superset (an extra `verdict` field, `"blessed"`/`"candidate"`) that
+this NO-BUMP `md repair` envelope does not carry; a shared-field
+parser still reads both. `md1` is exit-5 `REPAIR_APPLIED` on every
+correction — but that is **not** a uniform constant across the four
+m-format CLIs; see Exit codes below.
 
 The repair form is the smallest md-tab form: one positional
 (`md1-strings`, repeating, required) plus a single optional
@@ -42,9 +46,11 @@ single-string code domain) AND non-chunked single-string `md1`
 ## `--json` {#md-repair-json}
 
 Boolean. Emit a single JSON envelope on stdout instead of the
-text-form report. Default off. The envelope's schema byte-matches
-[`mnemonic repair --json`](#mnemonic-repair-json)'s `RepairJson`
-shape, so a wrapper that already parses one parses the other.
+text-form report. Default off. The envelope shares the `RepairJson`
+fields with [`mnemonic repair --json`](#mnemonic-repair-json); since
+toolkit v0.81.0 the toolkit's envelope is a strict superset (adds a
+`verdict` field this NO-BUMP `md repair` envelope does not carry; see
+the intro above), so a wrapper reading the shared fields parses both.
 
 ## Per-chunk atomic semantics
 
@@ -64,8 +70,15 @@ data for the failing chunk.
 | `2` | atomic-fail: any chunk exceeding BCH `t=4` capacity (or a structural wire-format error) aborts the whole call; the failing chunk index is named on stderr; NO partial output. |
 | `1` | I/O error or other generic failure. |
 
-The exit-5 `REPAIR_APPLIED` code is consistent across all four
-CLIs, so wrapper scripts can use a uniform `exit == 5` signal.
+**`md1` is unaffected by later cycles.** Its content-id check already
+rejects a full-set alias on its own, so a correction is always
+**verified now** and stays exit `5`, unlike `mk1` (an incomplete
+`chunk_set_id` group demotes to exit `4` in `mnemonic repair --mk1`;
+see [`mk repair`](#mk-repair)) or `ms1` (every substitution correction
+demotes to exit `4`; see [`ms repair`](#ms-repair)). Wrapper scripts
+must NOT branch on a single `exit == 5` constant across the four
+binaries — `md1` is the one surface where that shortcut happens to
+hold.
 
 ## Worked example — repair a single-chunk `md1`
 

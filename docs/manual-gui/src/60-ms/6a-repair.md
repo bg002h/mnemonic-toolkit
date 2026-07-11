@@ -44,13 +44,42 @@ text-form report; the envelope schema byte-matches
 | Code | Meaning |
 |---|---|
 | `0` | input already valid; no correction applied; echoed unchanged |
-| `5` | `REPAIR_APPLIED` — at least one substitution corrected; stdout = repair report + corrected string |
+| `4` | **`VERIFY-ME` Candidate** (as of `ms-cli v0.14.0`) — at least one substitution corrected; stdout = repair report + corrected string; stderr carries a `repair: correction UNVERIFIED …` advisory. `ms repair` has no `--max-indel` flag, so exit `5` is unreachable from this binary. |
 | `2` | unrepairable (> 4 substitution errors, or a structural `ms1` error before correction could run) |
 | `1` | I/O error or other generic failure |
 
-The exit-5 `REPAIR_APPLIED` code is uniform across all four CLIs
-(`mnemonic` / `mk` / `ms` / `md`), so wrapper scripts can branch on
-`exit == 5`.
+**No self-verification, no exit 5.** `ms1` encodes raw BIP-39 entropy
+as a single codex32 string — a bearer secret with no cross-chunk hash,
+no fingerprint, and no internal redundancy beyond the BCH checksum
+itself. A bounded-distance (≤4-error) substitution correction is
+provably the original string, but beyond that bound the correction can
+still *succeed* while **aliasing to a DIFFERENT, valid seed** — and
+unlike `mk1`/`md1`, there is nothing else to catch it. `ms repair`
+therefore **always** demotes a touched correction to an exit-`4`
+Candidate, with a stderr advisory recommending the user confirm the
+derived address/xpub against a known-good copy before trusting it.
+BIP-93 recommends confirming a corrected codex32 string before relying
+on it; this demotion puts that recommendation into practice.
+
+**A per-surface model, not a single uniform code.** Each of the four
+m-format CLIs applies the same principled rule (refined by Cycle E +
+Cycle F): exit-`5` `REPAIR_APPLIED` means a correction is **verified
+now** or **verifiable-by-reassembly later** (`mk1`/`md1`'s cross-chunk
+structure); exit-`4` `VERIFY-ME` means a substitution correction spent
+the checksum's error-detection budget with **no self-oracle** —
+`ms1`'s case, always. Wrapper scripts must NOT branch on a single
+`exit == 5` constant across the four binaries; see [`mnemonic
+repair`](#mnemonic-repair) and [`mk repair`](#mk-repair) for the other
+two surfaces' own exit-code tables.
+
+**Version scoping.** This demotion ships in **`ms-cli v0.14.0`**;
+before that release `ms repair` reported ANY substitution correction
+as a confident exit-`5` `REPAIR_APPLIED`, with no UNVERIFIED advisory.
+**This manual is pinned to `ms-cli v0.13.0`** (`pinned-upstream.toml`)
+— PRE-demote — so a build at the manual's own pinned tag still exits
+`5` for the worked example below, unlike the exit-`4` behavior
+documented above and in the worked example, which describes a current
+(`v0.14.0`+) `ms` binary.
 
 ## Worked example — one-character repair
 
@@ -72,10 +101,16 @@ derived from it.
    `--ms1`); confirm to proceed.
 
 The output panel renders the repair report with the corrected
-`ms1` on the last line; exit code `5`. Because the corrected output
-carries the `ms1` (BIP-39 entropy), the D9 secret-on-stdout
-advisory fires on stderr — pipe the output to a file or an
-encryption tool to avoid scrollback exposure.
+`ms1` on the last line; exit code `4` (`VERIFY-ME` Candidate, as of
+`ms-cli v0.14.0` — see Exit codes above; the manual's pinned `v0.13.0`
+build exits `5` instead, with no advisory). A
+`repair: correction UNVERIFIED — a corrected seed card cannot be
+self-verified; confirm the derived address/xpub against a known-good
+copy before use; BIP-93 recommends confirming a corrected codex32
+string` advisory fires on stderr. Because the corrected output also
+carries the `ms1` (BIP-39 entropy), the D9 secret-on-stdout advisory
+fires alongside it — pipe the output to a file or an encryption tool
+to avoid scrollback exposure.
 
 ## Refusals
 
