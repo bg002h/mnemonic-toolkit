@@ -1,0 +1,29 @@
+# SPEC — FOLLOWUP burndown, GUI batch (#4 + #6) — mnemonic-gui, NO-BUMP tests
+
+**Repo:** `mnemonic-gui` ONLY. Recon: `design/RECON_followup_burndown.md`. **NO-BUMP** (test-only; the GUI ships via PR+CI). Two independent test additions, disjoint files.
+
+## S1 (#4) — `gui-canonicity-suffix-origin-h-fixture`
+**Gap:** the T5 h-notation fixture grid (`tests/canonicity_drift.rs`) covers prefix-origin/use-site/wrapper rows but NOT the suffix `@N[fp/path]` bracket group — a residual h-notation blind spot in the suffix-origin classifier path.
+**Fix (test):** add ONE fixture row `wpkh(@0[deadbeef/84h/0h/0h]/<0;1>/*)` to `FIXTURES` — empirically `canonical` at the pinned `mnemonic 0.75.0` (R0 re-confirmed live: exit 0; green against unmutated source). Use the existing `Expect` machinery. Update the fixture-count trailer (`canonicity_drift.rs:176`) 25→26 (M2).
+**RED-proof (R0 I1 — the mutation is `h?`-ONLY, NOT `'?h?`):** drop ONLY `h?` (keep `'?`) from the SUFFIX-origin bracket group — `src/form/conditional.rs:110/112/114`, the second `(?:/\d+'?h?)*` after `@\d+`. A FULL `'?h?` drop REDs the existing suite (the L12 apostrophe suffix-origin row at `canonicity_drift.rs:119` already covers the `'` half), so it can't isolate the blind spot; only `h?`-only does. R0-verified: under `h?`-only-suffix all 26 classifier-touching tests stay green + the new row REDs.
+**Empirical-capture:** re-run `MNEMONIC_BIN gui-schema --classify-descriptor "<STR>"` to confirm the Expect before pinning.
+
+## S2 (#6) — `schema-mirror-defaults-drift-md-ms-mk-extension`
+**Gap:** the shipped `tests/schema_mirror_defaults_drift.rs` (eval #13) pins hand-mirrored `default_value`/`choices` vs live `gui-schema` JSON for the **`mnemonic`** CLI ONLY (docstring `:28-31` scopes it there as "a bounded add"). md/ms/mk mirrors aren't gated.
+**Fix (test) — R0 C1 RESCOPE: CHOICES-ONLY for md/ms/mk.** Their `gui-schema` is **version 1** (ZERO `default_value` fields; only `mnemonic` emits v5). A two-sided defaults gate for md/ms/mk is INFEASIBLE NOW — it would spurious-RED 13 correct mirror entries (mirror=`Some`, JSON=`None`) AND be blind to 7 real mirror omissions that compare `None==None` GREEN (the F6 silent-materialization class). So:
+- (a) **Extend the `choices` gate to md/ms/mk** (`json_flag_choices` per `cli_name`) — their JSON DOES carry non-null `choices` for dropdowns; day-one choices drift = **ZERO** (R0-verified). This is the genuine, feasible half.
+- (b) **Add a ONE-SIDED defaults guard:** for md/ms/mk assert "IF the JSON carries a `default_value`, it must equal the mirror" — vacuously green today (JSON=None everywhere), but **self-arms** the moment the siblings emit v5. Do NOT assert the reverse (mirror-present → JSON-present): that's the producer gap, not drift.
+- **Allowlist keying (R0 I2):** the existing `DEFAULT_VALUE_ALLOWLIST` (`tests/schema_mirror_defaults_drift.rs:48-53`) is keyed `(subcommand, flag)` — subcommand names COLLIDE across CLIs (md/ms/mk all have `encode`; md+mnemonic both `repair`). Any extension MUST key `(cli, subcommand, flag)` or per-CLI consts. (Moot under choices-only — 0 day-one drift → 0 new entries — but state it.)
+- **Per-CLI resolver (R0 M1):** the bin resolver (`resolvable()`, `defaults_drift.rs:83-91`) is hardcoded to `mnemonic` — the per-CLI variant lives IN `tests/` (mirror `tests/schema_mirror.rs:47 resolve_bin`), NOT `src/schema_check.rs` (that would violate NO-BUMP acceptance #3). All three siblings expose `gui-schema` (M5 — drop the stray "`--schema`").
+**RED-proof:** mutate a mirrored md/ms/mk `choices` value → the extended CHOICES gate REDs (it doesn't today). (The one-sided defaults guard cannot RED today — vacuous — so it is a self-arming net, not a mutation-gated cell; note this honestly.)
+**STOP-clause — THREE categories (R0 C1):** the extension may reveal (i) a REAL drift = mirror value ≠ the binary's `--help` `[default:]`/`[possible values:]` → STOP + report (funds-adjacent); (ii) a MISSING gate → the extension IS the fix; (iii) a PRODUCER-CAPABILITY gap = JSON lacks the field while `--help` shows a default (the day-one state: 13 defaults + 7 omissions, **0 real drift**) → NOT a drift; handle via the choices-only + one-sided-guard rescope — do NOT allowlist or strip mirrors.
+**Cross-repo FOLLOWUP (file it):** `sibling-gui-schema-v5-default-value-emission` — md/ms/mk-cli should emit v5-style `default_value` in `gui-schema` so a two-sided md/ms/mk defaults gate becomes possible (needs sibling releases + a GUI pin bump → a future cross-repo cycle); the 7 mirror-default backfills (`md encode/verify/address --network`, `md address --chain/--index/--count`, `ms encode --language`) ride that.
+
+## Acceptance
+1. S1 fixture RED under the `h?`-only suffix-group regex mutation (existing suite survives); Expect empirically captured; fixture-count trailer 25→26. S2 CHOICES gate RED under a mirrored-`choices`-value mutation for each of md/ms/mk (md/ms/mk defaults are choices-only + a self-arming one-sided guard, per C1 — NOT a two-sided defaults gate).
+2. Full `cargo test --workspace` (with `MNEMONIC_BIN`/`MD_BIN`/`MS_BIN`/`MK_BIN` = pinned binaries) green; clippy `-D warnings` (default + `--no-default-features`); **NO `cargo fmt`** (GUI has no fmt gate); no lavapipe/kittest (both are subprocess/schema tests).
+3. **NO-BUMP** — test-only; no `src/`/schema-source change; the GUI toolkit pin unchanged.
+4. Per-phase + post-impl R0. STOP-clause is THREE-category (R0 C1): real drift (mirror ≠ `--help` default/possible-values) → STOP+report (funds-adjacent); missing gate → the extension IS the fix; producer-capability gap (JSON lacks the field) → the choices-only+one-sided rescope, NOT fix-the-mirror. Cross-repo FOLLOWUP `sibling-gui-schema-v5-default-value-emission` filed.
+
+## Phasing
+Single implementer (both in `tests/`, disjoint files). GUI = PR+CI-before-tag. Per CLAUDE.md R0 gate. Fully parallel with the toolkit burndown batch (disjoint repo).

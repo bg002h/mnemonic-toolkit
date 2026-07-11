@@ -676,13 +676,25 @@ fn cell_4_6_md1_already_rejects_wrong_fit_correction() {
         .code(2);
 }
 
-/// Reachability note mirrored for md1: `md_codec::decode_with_correction`
-/// has no non-chunked (single-string) bypass around `reassemble`'s
-/// content-id check — the delegate is the SAME function regardless of
-/// chunk count, so there is no code path that skips the check for a
-/// 1-chunk md1. (md1 chunking always includes the content-derived id per
-/// `chunk.rs:379-387`; there is no md1 "SingleString" format variant at all,
-/// unlike mk1's defined-but-unreachable `SingleString` header.)
+/// Reachability note mirrored for md1 — UPDATED v0.86.0 (`toolkit-v0860-
+/// demote`): the claim below was accurate only through md-codec 0.34.x.
+/// `md_codec::decode_with_correction` DOES have a non-chunked (single-
+/// string) bypass around `reassemble`'s content-id check, added in
+/// md-codec 0.35.0 (`vendor/md-codec/src/chunk.rs:615-631`): when the
+/// corrected single string's chunked-flag bit is 0, decode routes
+/// straight to `decode_md1_string`, skipping `reassemble` (and its
+/// content-id check, `chunk.rs:379-387`) entirely. This is exactly the
+/// oracle-less shape the toolkit's v0.86.0 non-chunked-md1 demote
+/// (`repair.rs::repair_via_md_codec` / `is_non_chunked_md1`) now targets
+/// — see `prop_repair_never_wrong.rs`'s `f4_c` (non-chunked, demoted) and
+/// `f4_e` (chunked-of-1, stays Blessed) for the live coverage. md1 still
+/// has no distinct "SingleString" WIRE-FORMAT VARIANT the way mk1 does
+/// (`StringLayerHeader::SingleString`) — every md1 string carries the
+/// SAME 37-bit chunk header with `chunked` bit 0 or 1 — but the DECODE-
+/// PATH bypass for `chunked == 0` is real and reachable via plain `md
+/// encode` for a small-enough payload (the fixture below reassembles
+/// cleanly BECAUSE it is genuinely 3-chunk / chunked, not because md1 has
+/// no bypass at all).
 #[test]
 fn cell_4_6b_md1_no_non_chunked_bypass_of_reassemble() {
     // The 3-chunk fixture must reassemble cleanly (sanity precondition for
@@ -731,3 +743,22 @@ const _: () = assert!(
     the tri-state re-verify's SingleString handling would need live (not \
     just defensive) coverage"
 );
+
+// v0.86.0 (`toolkit-v0860-demote` M3) — `verify_mk1_set`'s `GroupKey::
+// SingleString` branch now demotes a touched, complete-and-consistent,
+// successfully-`mk_codec::decode`-d SingleString singleton to
+// `GroupVerdict::Candidate` (mirrors the md1 non-chunked demote: a lone
+// SingleString has no cross-chunk reassembly oracle either). This is
+// DEFENSIVE / DOCUMENTED-UNTESTED, not merely "no encoder emits it today":
+// the const-assertion above proves NO real `KeyCard`'s bytecode can EVER
+// fit the SingleString envelope (a 73-byte compact xpub alone exceeds the
+// 56-byte cap), so `mk_codec::decode(&[a_singlestring])` can never return
+// `Ok(_)` for genuine card content — the `Ok(_) if SingleString` arm this
+// demote adds is structurally unreachable by ANY input, not just by
+// today's encoder policy. A hand-forged SingleString payload (mk-codec's
+// own `synthetic_singlestring` test helper, private to its crate) round-
+// trips the HEADER but not a decodable `KeyCard` — `decode_bytecode` would
+// still fail parsing the (absent) 73-byte xpub field out of a ≤56-byte
+// payload. No live fixture can therefore reach `Ok(_)` here at all; the
+// demote is kept for defense-in-depth / documentation symmetry with the
+// md1 fix, not for test coverage.

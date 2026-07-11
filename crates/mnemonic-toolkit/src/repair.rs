@@ -441,17 +441,25 @@ pub struct RepairOutcome {
     pub corrected_chunks: Vec<SecretString>,
     pub repairs: Vec<RepairDetail>,
     /// Cycle E (`mk1-repair-set-level-reverify`) / Cycle F
-    /// (`ms1-repair-demote-to-candidate`) — SPEC §2 tri-state set-level
-    /// re-verify discriminant. `Ms1` reports `Unverified` whenever ANY
+    /// (`ms1-repair-demote-to-candidate`) / v0.86.0
+    /// (`toolkit-v0860-demote`) — SPEC §2 tri-state set-level re-verify
+    /// discriminant. `Ms1` reports `Unverified` whenever ANY
     /// substitution-correction touched the (single-chunk) card — a
     /// bounded-distance BCH correction spends the checksum's error-
     /// detection budget and can alias to a DIFFERENT valid seed
     /// undetectably, so ms1 has no self-oracle and every touched
     /// correction is demoted to a VERIFY-ME candidate; `Blessed` only for
-    /// a clean (0-correction) decode. `Md1` always reports `Blessed` (its
-    /// sibling-codec delegate only ever returns `Ok` on full decode
-    /// success already, so there is no behavior change for that kind).
-    /// `Mk1` reports `Blessed` when every chunk_set_id group that
+    /// a clean (0-correction) decode. `Md1` reports `Blessed` for a
+    /// CHUNKED correction — multi-chunk reassembly, or a chunked-of-1
+    /// single string (`count == 1`, chunked-flag bit == 1) — because
+    /// either shape re-derives and compares the content-id
+    /// (`vendor/md-codec/src/chunk.rs:379-387`); a TOUCHED **non-chunked**
+    /// single-string correction (chunked-flag bit == 0) reports
+    /// `Unverified` instead, because the v0.35.0 single-string bypass
+    /// (`chunk.rs:615-631`) routes straight to `decode_md1_string`,
+    /// SKIPPING that check entirely — no cross-chunk/content-id oracle
+    /// exists for that shape. See `repair_via_md_codec`. `Mk1` reports
+    /// `Blessed` when every chunk_set_id group that
     /// underwent a per-string correction reassembles cleanly via
     /// `mk_codec::decode`; `Unverified` when such a group is INCOMPLETE (a
     /// partial-plate repair — preserved, but cannot be set-verified until
@@ -467,11 +475,17 @@ pub struct RepairOutcome {
 pub enum SetVerify {
     /// Confident recovery — safe to treat as the real card.
     Blessed,
-    /// Either (a) a corrected mk1 chunk_set_id group is incomplete (a
-    /// single-plate / partial-set repair), or (b) an ms1 substitution
-    /// correction touched the card (Cycle F — the BCH correction spent
-    /// the checksum's error-detection budget with no self-oracle
-    /// available); `reason` is the loud user-facing advisory text.
+    /// (a) a corrected mk1 chunk_set_id group is incomplete (a
+    /// single-plate / partial-set repair) — or, defensively, the
+    /// encoder-UNREACHABLE mk1 `SingleString` singleton (v0.86.0; no
+    /// v0.1 encoder ever emits `SingleString` — see `verify_mk1_set`);
+    /// (b) an ms1 substitution correction touched the card (Cycle F — the
+    /// BCH correction spent the checksum's error-detection budget with no
+    /// self-oracle available); or (c) a **non-chunked** single-string md1
+    /// correction touched the card (v0.86.0 — the v0.35.0 bypass around
+    /// `reassemble`'s content-id check leaves that shape with no cross-
+    /// chunk/content-id oracle either — see `repair_via_md_codec`).
+    /// `reason` is the loud user-facing advisory text.
     Unverified { reason: String },
 }
 
@@ -704,6 +718,26 @@ fn parse_chunk(
     };
 
     Ok((values, code))
+}
+
+/// v0.86.0 (`toolkit-v0860-demote`) — read the md1 chunked-flag bit exactly
+/// as md-codec's own decoder does (`vendor/md-codec/src/chunk.rs:622`:
+/// `symbols.first().map(|s| s & 0x01)`): bit 0 of the first data-part 5-bit
+/// symbol; `0` = non-chunked (no reassembly oracle), `1` = chunked
+/// (chunked-of-1 or a member of a multi-chunk set — has the oracle).
+///
+/// `corrected` is the SAME string `md_codec::decode_with_correction` just
+/// proved BCH-valid (identical length to the pre-gated original, since BCH
+/// correction never changes length — so `parse_chunk`'s regular/long
+/// dispatch is unchanged), so the `Err`/empty-values branches below are
+/// unreachable in practice. They default to `true` (treat as non-chunked →
+/// demote) rather than `false`, so an unreachable failure fails CLOSED
+/// (never silently leaves an unreadable card `Blessed`).
+fn is_non_chunked_md1(corrected: &str) -> bool {
+    match parse_chunk(corrected, 0, CardKind::Md1) {
+        Ok((values, _code)) => values.first().is_none_or(|v| v & 0x01 == 0),
+        Err(_) => true,
+    }
 }
 
 /// Compute polymod residue for a parsed chunk + per-HRP + per-code target.
@@ -1051,6 +1085,24 @@ fn verify_mk1_set(
         } else {
             let refs: Vec<&str> = idxs.iter().map(|&i| &*corrected_chunks[i]).collect();
             match mk_codec::decode(&refs) {
+                // v0.86.0 (`toolkit-v0860-demote`) — a `GroupKey::
+                // SingleString` singleton has no cross-chunk reassembly
+                // oracle either (mirrors the md1 non-chunked demote):
+                // `mk_codec::decode` on a lone SingleString never touches
+                // chunk_set_id / cross-chunk hashing, so a >4-error
+                // correction could alias to a DIFFERENT valid card
+                // undetectably. DEFENSIVE / encoder-UNREACHABLE in v0.1:
+                // every real `KeyCard`'s bytecode carries a 73-byte
+                // compact xpub (`mk_codec::XPUB_COMPACT_BYTES`), which
+                // ALONE exceeds the 56-byte SingleString envelope
+                // (`mk_codec::SINGLE_STRING_LONG_BYTES` — locked by the
+                // `cell_4_7`-adjacent const-assertion in
+                // `cli_mk1_repair_reverify.rs`), so `Ok(_)` can never
+                // actually be reached here for a genuine card — no live
+                // fixture can hit this arm. Kept for defense-in-depth /
+                // documentation symmetry with the md1 fix, not for test
+                // coverage (SPEC `toolkit-v0860-demote` M3).
+                Ok(_) if matches!(key, GroupKey::SingleString(_)) => GroupVerdict::Candidate,
                 Ok(_) => GroupVerdict::Bless,
                 Err(e) => {
                     if first_reject.is_none() {
@@ -1589,14 +1641,44 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
     match md_codec::decode_with_correction(&refs) {
         Ok((_descriptor, corrections)) => {
             let (corrected_chunks, repairs) = apply_md_corrections(chunks, &corrections);
+            // v0.86.0 (`toolkit-v0860-demote`, funds-adjacent) — md1
+            // delegates atomically to md_codec::decode_with_correction
+            // (whole-set, per D28), which returns `Ok` on TWO structurally
+            // different shapes: a genuine chunked reassembly (multi-chunk,
+            // OR chunked-of-1 with count==1) — which ALWAYS re-derives and
+            // compares the content-id (`vendor/md-codec/src/chunk.rs:
+            // 379-387`) — and a single NON-CHUNKED payload (`chunks.len()
+            // == 1` and the corrected string's chunked-flag bit == 0),
+            // which the v0.35.0 bypass (`chunk.rs:615-631`) routes
+            // straight to `decode_md1_string`, SKIPPING that check
+            // entirely. Only the latter shape lacks the oracle a TOUCHED
+            // correction needs to be trustworthy — demote ONLY that case;
+            // an untouched (already-valid) decode, a multi-chunk decode,
+            // and a chunked-of-1 decode (e.g. the `mnemonic bundle` /
+            // `--md1-form=template` emission — always chunked-of-1, never
+            // non-chunked) all stay `Blessed` exactly as before.
+            let set_verify = if chunks.len() == 1
+                && !repairs.is_empty()
+                && corrected_chunks
+                    .first()
+                    .is_some_and(|c| is_non_chunked_md1(c))
+            {
+                SetVerify::Unverified {
+                    reason: "correction UNVERIFIED — a non-chunked single-string md1 has no \
+                        cross-chunk/content-id oracle (the v0.35.0 single-string decode path \
+                        skips it); a >4-error correction can alias to a DIFFERENT valid \
+                        descriptor undetectably — re-derive the wallet/address to confirm \
+                        before trusting this correction"
+                        .to_string(),
+                }
+            } else {
+                SetVerify::Blessed
+            };
             Ok(RepairOutcome {
                 kind: CardKind::Md1,
                 corrected_chunks,
                 repairs,
-                // md1 delegates atomically to md_codec::decode_with_correction
-                // (whole-set, per D28), which only ever returns `Ok` on full
-                // decode success — no behavior change from Cycle E.
-                set_verify: SetVerify::Blessed,
+                set_verify,
             })
         }
         Err(MdErr::TooManyErrors { chunk_index, bound }) => Err(RepairError::TooManyErrors {
@@ -1730,21 +1812,38 @@ pub fn try_repair_and_short_circuit<O: Write + ?Sized, E: Write + ?Sized>(
     // anyway (SPEC §2 residual-partial-set-exposure note), and an
     // unverified ms1 candidate is never silently applied.
     if !matches!(outcome.set_verify, SetVerify::Blessed) {
-        // Cycle F I2 — the verify-bundle ms1 sites bypass this helper
-        // entirely (a direct `repair_card` call feeds the ground-truth
-        // compare instead), so the only Ms1 callers reaching this
-        // fall-through are the standalone-inline auto-repair sites
-        // (convert / inspect / xpub-search) where a complete-but-withheld
-        // candidate would otherwise be silently invisible. Kind-gated:
-        // does NOT alter the shipped mk1 partial-set fall-through (no
-        // advisory there).
-        if matches!(kind, CardKind::Ms1) {
-            writeln!(
-                stderr,
-                "repair: a candidate correction exists but a seed card cannot be \
-                    self-verified — run `mnemonic repair --ms1 …` to inspect it"
-            )
-            .ok();
+        // Cycle F I2, widened v0.86.0 (`toolkit-v0860-demote` I4) — the
+        // verify-bundle ms1 sites bypass this helper entirely (a direct
+        // `repair_card` call feeds the ground-truth compare instead), so
+        // the only Ms1/Md1 callers reaching this fall-through are the
+        // standalone-inline auto-repair sites (convert / inspect /
+        // xpub-search / verify-bundle's mk1-shaped md1 sites) where a
+        // complete-but-withheld candidate would otherwise be silently
+        // invisible. An `Md1` `Unverified` outcome here is, by
+        // construction, the non-chunked demote case (`repair_via_md_codec`
+        // only ever reports `Unverified` for a touched non-chunked
+        // single-string correction — every chunked shape stays `Blessed`),
+        // so kind + set_verify alone discriminates correctly; no extra
+        // parsing needed. Kind-gated: does NOT alter the shipped mk1
+        // partial-set fall-through (no advisory there).
+        match kind {
+            CardKind::Ms1 => {
+                writeln!(
+                    stderr,
+                    "repair: a candidate correction exists but a seed card cannot be \
+                        self-verified — run `mnemonic repair --ms1 …` to inspect it"
+                )
+                .ok();
+            }
+            CardKind::Md1 => {
+                writeln!(
+                    stderr,
+                    "repair: a candidate correction exists but a non-chunked descriptor \
+                        cannot be self-verified — run `mnemonic repair --md1 …` to inspect it"
+                )
+                .ok();
+            }
+            CardKind::Mk1 => {}
         }
         return Ok(());
     }
@@ -2989,6 +3088,40 @@ mod tests {
         assert!(
             !stderr_s.contains("candidate correction exists"),
             "the ms1-only advisory must not fire for mk1: {stderr_s:?}"
+        );
+    }
+
+    /// v0.86.0 (`toolkit-v0860-demote` I4) — the auto-fire fall-through
+    /// advisory widens from Ms1-only to `(Ms1 OR non-chunked-Md1)`: a
+    /// touched non-chunked md1 correction (Unverified) falls through
+    /// WITH a `--md1`-pointer stderr advisory, mirroring the ms1 case
+    /// (`try_repair_and_short_circuit_ms1_unverified_falls_through_with_advisory`
+    /// above), so a withheld candidate is not silently invisible under
+    /// `convert` / `inspect` / `xpub-search` / `verify-bundle`.
+    #[test]
+    fn try_repair_and_short_circuit_md1_non_chunked_unverified_falls_through_with_advisory() {
+        const VALID_SINGLE_MD1: &str = "md1yqpqqxqq8xtwhw4xwn4qh";
+        let bad = flip_at(VALID_SINGLE_MD1, 3);
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
+        let result =
+            try_repair_and_short_circuit(CardKind::Md1, &[bad], &mut stdout, &mut stderr, false);
+        assert!(
+            result.is_ok(),
+            "an Unverified non-chunked md1 candidate must fall through (no short-circuit), got {result:?}"
+        );
+        assert!(
+            stdout.is_empty(),
+            "no repair report on the fall-through path"
+        );
+        let stderr_s = String::from_utf8(stderr).unwrap();
+        assert!(
+            stderr_s.contains("candidate correction exists"),
+            "stderr: {stderr_s:?}"
+        );
+        assert!(
+            stderr_s.contains("mnemonic repair --md1"),
+            "stderr: {stderr_s:?}"
         );
     }
 

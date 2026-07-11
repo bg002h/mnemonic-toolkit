@@ -66,9 +66,13 @@ bsms-round1: 3 record(s) processed
 Lenient default behavior on **failure** (per record): one **stderr
 NOTICE** is emitted and the record's stdout line shows `verified=false`
 plus the `failure_reason` field is populated; the toolkit continues
-processing remaining records. Strict mode (`--bsms-verify-strict`,
-below) flips failure to fatal `BsmsSignatureMismatch` exit 2 on the
-first failing record.
+processing remaining records. **Since v0.85.0, the invocation's own
+exit code now reflects this**: if ANY record failed to verify, the
+full report/envelope is still printed but the process exits **4**
+(VERIFY-ME — do not trust), not `0`; `$?`-gated scripts that treated
+exit `0` as "all signatures verified" must check for exit `4` instead.
+Strict mode (`--bsms-verify-strict`, below) flips failure to fatal
+`BsmsSignatureMismatch` exit 2 on the first failing record.
 
 ## Strict mode (`--bsms-verify-strict`)
 

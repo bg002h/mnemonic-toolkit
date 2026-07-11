@@ -74,9 +74,12 @@ pub enum Slip39Error {
     UnknownWord { share_idx: usize, word_idx: usize },
 
     /// 4-byte `HMAC-SHA256(key=R, msg=decrypted-S)` mismatch — the
-    /// reconstructed master secret failed digest verification. Most
-    /// commonly: wrong passphrase, or a substituted share whose
-    /// metadata matches but value bytes diverge.
+    /// reconstructed master secret failed digest verification. This
+    /// check runs on the Feistel-encrypted master secret BEFORE
+    /// passphrase decryption (v0.85.0 M2 wording, `cmd/slip39.rs`): it
+    /// catches share substitution / corruption / a wrong secret, and
+    /// does NOT verify `--passphrase` — a wrong passphrase still
+    /// decrypts to a different, incorrect master and exits 0.
     DigestVerificationFailed,
 
     /// Insufficient shares for the group at `group_idx`: need
@@ -175,8 +178,9 @@ impl std::fmt::Display for Slip39Error {
             ),
             Self::DigestVerificationFailed => write!(
                 f,
-                "slip39: reconstructed master digest mismatch (wrong passphrase or \
-                 substituted share)"
+                "slip39: reconstructed master digest mismatch — a share was substituted, \
+                 corrupted, or the shares do not reconstruct the intended secret; this check \
+                 runs BEFORE passphrase decryption and does NOT verify --passphrase"
             ),
             Self::InsufficientShares {
                 group_idx,

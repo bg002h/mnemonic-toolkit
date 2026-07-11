@@ -747,25 +747,27 @@ v0.22.1 D18 default). The behavior matrix:
 
 | TTY? | `--no-auto-repair`? | Outcome |
 |---|---|---|
-| yes | no | Auto-fire attempts a correction: **mk1** (a full `chunk_set_id` group that reassembles cleanly) / **md1** — exit 5 + repair report on stderr, corrected chunk on stdout. **ms1** (Cycle F) — NO short-circuit; the corrected candidate is instead compared to the expected (typed) seed via the `ms1_decode` / `ms1_entropy_match` check rows below |
+| yes | no | Auto-fire attempts a correction: **mk1** (a full `chunk_set_id` group that reassembles cleanly) / **md1 chunked** (multi-chunk, or chunked-of-1 — e.g. the `mnemonic bundle` / `--md1-form=template` shape) — exit 5 + repair report on stderr, corrected chunk on stdout. **md1 non-chunked** (v0.86.0 — the plain `md encode` single-string form; no cross-chunk/content-id oracle, see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below) and **ms1** (Cycle F) — NO short-circuit. The md1 non-chunked candidate falls through with a one-line stderr advisory pointing at `mnemonic repair --md1`; the ms1 corrected candidate is instead compared to the expected (typed) seed via the `ms1_decode` / `ms1_entropy_match` check rows below |
 | yes | yes | Legacy VerifyCheck row + `result: mismatch` + exit 4 |
 | no (pipe / redirected / CI) | no | Legacy VerifyCheck row + exit 4 (preserves automation contract) |
 | no | yes | Legacy VerifyCheck row + exit 4 |
 
 **Principled distinction across all four CLIs (SPEC §4):** exit-5
-`REPAIR_APPLIED` means a correction is **verified now** (an mk1/md1
-cross-chunk reassembly hash; a unique full-checksum `--max-indel`
-recovery) **or verifiable-by-reassembly later** (an mk1 single-plate
-chunk under the standalone `mk repair` codec CLI, once the rest of its
-set is supplied — note that `mnemonic repair` *itself* instead demotes an
-incomplete mk1 group to exit-4, per the Cycle-E note below). exit-4
-`VERIFY-ME` means a
-bounded-distance BCH SUBSTITUTION correction spent the checksum's
-error-detection budget and has **no self-oracle** — this is ms1's case
-always, an incomplete mk1 `chunk_set_id` group, or an ambiguous
-`--max-indel` recovery. Exit-5 is never "an oracle verified it" — that
-phrasing is false for the mk1 single-plate case, which is merely *not
-yet* falsified.
+`REPAIR_APPLIED` means a correction is **verified now** (an mk1/**chunked**
+md1 cross-chunk reassembly hash or content-id check; a unique
+full-checksum `--max-indel` recovery) **or verifiable-by-reassembly
+later** (an mk1 single-plate chunk under the standalone `mk repair` codec
+CLI, once the rest of its set is supplied — note that `mnemonic repair`
+*itself* instead demotes an incomplete mk1 group to exit-4, per the
+Cycle-E note below). exit-4 `VERIFY-ME` means a bounded-distance BCH
+SUBSTITUTION correction spent the checksum's error-detection budget and
+has **no self-oracle** — this is ms1's case always, a **non-chunked**
+md1 single-string correction (v0.86.0 — see [md1 non-chunked
+demotion](#mnemonic-repair-md1-non-chunked-demotion) below), an
+incomplete mk1 `chunk_set_id` group, or an ambiguous `--max-indel`
+recovery. Exit-5 is never "an oracle verified it" — that phrasing is
+false for the mk1 single-plate case, which is merely *not yet*
+falsified.
 
 **mk1 set-level re-verify (Cycle E):** for an `--mk1` / `--bundle-json`
 mk1 payload, the "Auto-fire" outcome above (exit 5, corrected chunk
@@ -783,8 +785,11 @@ repair` below.
 
 **ms1 ground-truth compare (Cycle F funds fix):** ms1 is a single-string
 bearer secret with no cross-chunk hash and no internal redundancy beyond
-the BCH checksum itself, so — unlike mk1/md1 — a substitution-correction
-can never be confirmed by reassembly; every other surface demotes it to
+the BCH checksum itself, so — unlike mk1/**chunked** md1 — a
+substitution-correction can never be confirmed by reassembly (a
+**non-chunked** md1 shares ms1's structural gap here; see [md1
+non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below,
+v0.86.0); every other surface demotes it to
 an unverified Candidate (see [ms1 substitution-correction
 demotion](#mnemonic-repair-ms1-substitution-demotion) under `mnemonic
 repair` below). Here, uniquely, the user's own TYPED seed
@@ -855,9 +860,11 @@ v0.25.0:
 |---|---|---|---|
 | `convert` | `mk_codec` decode failure on `--from mk1=…` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
 | `convert` | `ms_codec` decode failure on `--from ms1=…` (Cycle F) | **NO short-circuit** — the original decode error surfaces (its own exit code) + a one-line stderr advisory pointing at `mnemonic repair --ms1` | Typed decode error (no advisory) |
-| `inspect` | `mk_codec` / `md_codec` decode failure on `--mk1` / `--md1` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `inspect` | `mk_codec` decode failure on `--mk1`, or `md_codec` decode failure on a **chunked** `--md1` (multi-chunk, or chunked-of-1) | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `inspect` | `md_codec` decode failure on a **non-chunked** `--md1` (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below) | **NO short-circuit** — same advisory-and-fall-through shape as ms1 below, pointing at `mnemonic repair --md1` | Typed decode error (no advisory) |
 | `inspect` | `ms_codec` decode failure on `--ms1` (Cycle F) | **NO short-circuit** — same advisory-and-fall-through as `convert` above | Typed decode error (no advisory) |
-| `verify-bundle` | `mk_codec` / `md_codec` decode failure (as above, plus the `--bundle-json` intake path) | Auto-fire (exit 5 + repair report; corrected chunk on stdout) | Legacy VerifyCheck row + exit 4 |
+| `verify-bundle` | `mk_codec` decode failure, or `md_codec` decode failure on a **chunked** md1 (as above, plus the `--bundle-json` intake path) | Auto-fire (exit 5 + repair report; corrected chunk on stdout) | Legacy VerifyCheck row + exit 4 |
+| `verify-bundle` | `md_codec` decode failure on a **non-chunked** md1 (v0.86.0, plus `--bundle-json`) | **NO short-circuit** — falls through to the Legacy VerifyCheck row + a one-line stderr advisory pointing at `mnemonic repair --md1` | Legacy VerifyCheck row + exit 4 |
 | `verify-bundle` | `ms_codec` decode failure (as above, plus `--bundle-json`) (Cycle F) | `ms1_decode` / `ms1_entropy_match` check-row compare against the typed seed — PASS on match, `ms1_entropy_match` fail → exit 4 on mismatch (see [ms1 ground-truth compare](#auto-fire-on-decode-failure-v0221) above); NO stderr advisory on this path | Legacy VerifyCheck row + exit 4 |
 
 The TTY gate exists so scripts that parse the typed error envelope
@@ -1418,7 +1425,7 @@ auto-rewriting).
 | NOTICE (exit 0) | `notice: import-wallet: bitcoin-core: dropped wallet-state fields <fields>: not preserved in bundle output (key-state only)` |
 | NOTICE (exit 0) | `notice: import-wallet: electrum: wallet is encrypted (use_encryption=true); importing watch-only material only (encrypted seed/xprv/passphrase/keypairs fields ignored). To extract the encrypted seed, use 'electrum --decrypt-wallet' out-of-band then re-import the plaintext wallet.` |
 | NOTICE (exit 0) | `notice: import-wallet: bsms: BIP-129 encrypted Round-2 envelope decrypted (token width <N> hex chars; MAC verified)` |
-| NOTICE (exit 0) | `notice: import-wallet: --bsms-round1: BIP-129 encrypted Round-1 record <i> decrypted (token width <N> hex chars; MAC verified)` (v0.32.1) |
+| NOTICE (decrypt succeeded; overall exit is 0 or 4 — v0.85.0) | `notice: import-wallet: --bsms-round1: BIP-129 encrypted Round-1 record <i> decrypted (token width <N> hex chars; MAC verified)` (v0.32.1). This NOTICE only reports that the record's ENCRYPTION layer decrypted and MAC-verified; it says nothing about the record's own BIP-322 SIGNATURE. Since v0.85.0, if that signature then fails to verify (lenient mode), the overall invocation exits `4` despite this NOTICE having fired — see the `--bsms-round1` exit-code row above. |
 | NOTICE (exit 0) | `notice: import-wallet: electrum: BIE1 user-password storage decrypted` (v0.33.2) |
 | NOTICE (exit 0) | `notice: import-wallet: no BIE1 storage-encrypted wallet detected; --decrypt-password* ignored` (v0.33.2; emitted when a `--decrypt-password*` flag is supplied for a non-encrypted wallet) |
 | Error (exit 2) | `error: import-wallet: bsms: BIP-129 MAC verification failed (token width <N> hex chars; wrong token or tampered ciphertext)` |
@@ -3080,8 +3087,8 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 | Code | Meaning |
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / md1 (content-id check passes), incl. a unique full-checksum `--max-indel` recovery for any kind; stdout = repair report + corrected chunks |
-| `4` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified** — verify each before trusting; all candidates are printed |
+| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks |
+| `4` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **every non-chunked `--md1` single-string correction (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below)**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified** — verify each before trusting; all candidates are printed |
 | `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
 | `1` | I/O error or other generic failure |
 
@@ -3095,12 +3102,16 @@ still *succeed* — the corrected chunk passes its own BCH check — while
 actually **aliasing to a different, valid-but-wrong codeword** rather
 than recovering the original. This PARTIAL-SET failure mode matters
 specifically for **mk1**, whose chunks are repaired and reported
-per-chunk: `md1`'s content-id check already rejects a full-set alias on
-its own (unchanged by this cycle — `md1` was never exposed to this
-gap). `ms1` has no chunk-set at all (it is always a single string), so
-this particular partial-set gap never applied to it — but ms1 has a
-**worse, undetectable variant** of the same underlying substitution-
-aliasing risk with no self-oracle whatsoever; see [ms1
+per-chunk: a **chunked** `md1` (multi-chunk, or chunked-of-1) always
+carries the content-id and rejects a full-set alias on its own
+(unchanged by this cycle). A **non-chunked** `md1` single-string card
+has no such check to fall back on at all — see [md1 non-chunked
+demotion](#mnemonic-repair-md1-non-chunked-demotion) below (v0.86.0)
+for that card's own, structurally-analogous-to-ms1 gap. `ms1` has no
+chunk-set at all (it is always a single string), so this particular
+partial-set gap never applied to it — but ms1 has a **worse,
+undetectable variant** of the same underlying substitution-aliasing
+risk with no self-oracle whatsoever; see [ms1
 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion)
 below.
 
@@ -3151,8 +3162,10 @@ secret with no cross-chunk hash, no fingerprint, and no internal
 redundancy beyond the BCH checksum itself. A bounded-distance (≤4-error)
 BCH substitution-correction is provably the original chunk, but beyond
 that bound the "correction" can still *succeed* while **aliasing to a
-DIFFERENT, valid-but-wrong seed** — and unlike mk1/md1, there is no
-cross-chunk hash or content-id to catch it. A miscorrection *presents*
+DIFFERENT, valid-but-wrong seed** — and unlike mk1/**chunked** md1, there
+is no cross-chunk hash or content-id to catch it (a **non-chunked** md1
+shares this exact gap — v0.86.0, see [md1 non-chunked
+demotion](#mnemonic-repair-md1-non-chunked-demotion) below). A miscorrection *presents*
 as an ordinary small correction; the BCH code cannot distinguish a
 genuine ≤4-error fix from a longer-distance aliasing event at the same
 apparent edit distance.
@@ -3185,15 +3198,73 @@ mechanism: it enumerates candidate insert/delete edits and RE-VALIDATES
 the FULL BCH checksum on each, rather than spending the checksum's
 substitution budget. A UNIQUE full-checksum indel candidate is
 trustworthy to within the checksum's own false-accept rate —
-cryptographically stronger than the reassembly hash mk1/md1 are ALREADY
-blessed on — so it remains a genuine self-verification and stays exit
-`5`. A multi-hit (ambiguous) indel recovery is not unique and falls to
-exit `4` like any other ambiguous candidate.
+cryptographically stronger than the reassembly/content-id check mk1 /
+chunked md1 are ALREADY blessed on — so it remains a genuine
+self-verification and stays exit `5`. A multi-hit (ambiguous) indel
+recovery is not unique and falls to exit `4` like any other ambiguous
+candidate.
 
 BIP-93 itself recommends against automatically proceeding with a
 corrected codex32 string without user confirmation; this demotion
 operationalizes that recommendation for the one card kind with no
 self-oracle at all.
+
+### md1 non-chunked demotion (v0.86.0 funds fix) {#mnemonic-repair-md1-non-chunked-demotion}
+
+`md1` has TWO wire shapes sharing the same 37-bit chunk header: a
+**chunked** form (multi-chunk, or **chunked-of-1** — `count == 1` with
+the chunked-flag bit set, the shape `mnemonic bundle` /
+`--md1-form=template` always emits via `md_codec::chunk::split`) and a
+**non-chunked** single-string form (the chunked-flag bit clear — the
+compact form plain `md encode` emits for a small-enough payload). Both
+decode through the SAME `md_codec::decode_with_correction` delegate, but
+only the chunked form re-derives and compares the content-id
+(`vendor/md-codec/src/chunk.rs:379-387`) — md-codec 0.35.0 added a
+bypass (`chunk.rs:615-631`) that routes a non-chunked single string
+straight to `decode_md1_string`, skipping that check entirely. A
+non-chunked md1 therefore has the SAME structural gap as `ms1` (above):
+a bounded-distance (≤4-error) correction is provably the original
+payload, but beyond that bound it can still *succeed* while **aliasing
+to a DIFFERENT, valid-but-wrong descriptor**, with no cross-chunk hash
+or content-id to catch it.
+
+From v0.86.0, every TOUCHED non-chunked md1 correction is therefore
+demoted to an exit-`4` **VERIFY-ME Candidate** — **never** a silent
+exit-`5` "recovered" — mirroring the ms1 treatment exactly:
+
+- **`mnemonic repair --md1`:** any touched correction on a non-chunked
+  single string reports the corrected string as a Candidate, exit `4`,
+  plus a stderr `UNVERIFIED` advisory recommending the user re-derive
+  the wallet/address to confirm before trusting it. A clean
+  (already-valid) decode, and any CHUNKED correction (multi-chunk or
+  chunked-of-1), are unaffected: still exit `0` / exit `5` respectively.
+- **Auto-fire on `convert`\* / `inspect` / `verify-bundle`:** a
+  corrected non-chunked md1 no longer short-circuits (no silent apply).
+  The caller's ORIGINAL decode error surfaces unchanged, plus a
+  one-line stderr advisory ("a candidate correction exists but a
+  non-chunked descriptor cannot be self-verified — run `mnemonic repair
+  --md1 …` to inspect it") so the withheld candidate is not silently
+  invisible. \*`convert` has no `--from md1=…` target, so this applies
+  to `inspect` / `verify-bundle` only.
+- md1 has no `--max-indel` carve-out distinct from the above. A
+  `--max-indel` recovery re-validates the whole checksum **by
+  reassembly**, so it succeeds (and correctly stays exit 5) only for a
+  **chunked** md1 (chunked-of-1 or multi-chunk); a **non-chunked** md1
+  indel cannot reassemble and is not recoverable at all (exit 2), so
+  this substitution-correction demotion leaves the md1 indel path
+  untouched (see [Recovering an incorrect-length
+  card](#mnemonic-repair-max-indel) below).
+
+**Sibling-CLI divergence:** the standalone `md repair` (md-cli, see
+`42-md.md`) does NOT yet apply this demotion — it still reports exit
+`5` for every correction, chunked or not. `mnemonic repair --md1` and
+`md repair` therefore currently disagree on a non-chunked md1's exit
+code; see FOLLOWUP `md-cli-non-chunked-single-string-repair-demote`.
+
+BIP-93 itself recommends against automatically proceeding with a
+corrected codex32 string without user confirmation; this demotion
+closes the one md1 shape where the earlier content-id-based reasoning
+did not actually apply.
 
 ### Worked example
 
@@ -3223,9 +3294,11 @@ is never a confident exit-`5` "recovered").
 
 The `verdict` field (Cycle F) is `"blessed"` for a clean or confidently-
 recovered card, `"candidate"` for a touched-but-unverified correction —
-currently reachable for every `ms1` substitution-correction and an
-incomplete mk1 partial-plate group. `ms-cli`'s standalone `ms repair
---json` byte-matches this field's position.
+reachable for every `ms1` substitution-correction, an incomplete mk1
+partial-plate group, and (v0.86.0) every non-chunked `md1` single-string
+correction (see [md1 non-chunked
+demotion](#mnemonic-repair-md1-non-chunked-demotion) above). `ms-cli`'s
+standalone `ms repair --json` byte-matches this field's position.
 
 ```{.text include="41-repair-ms1-json.out"}
 PLACEHOLDER — generated from transcripts/41-repair-ms1-json.out at build

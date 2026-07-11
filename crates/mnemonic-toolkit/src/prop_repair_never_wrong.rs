@@ -230,7 +230,10 @@ proptest! {
 
     /// md1: real 3-chunk card, ≤4 substitutions PER CHUNK → repair (atomic via
     /// `md_codec::decode_with_correction`) MUST emit exactly all three original
-    /// chunks; md1 delegate is always `Blessed`.
+    /// chunks; a CHUNKED (here, multi-chunk) md1 delegate stays `Blessed` —
+    /// its content-id/cross-chunk check runs and passes. A non-chunked
+    /// single-string md1 has separate coverage (v0.86.0 demote — see
+    /// `f4_c` below) since it has no such oracle.
     #[test]
     fn prop_md1_multichunk_le_t_substitution_recovers_exact_original(seed in any::<u64>()) {
         let mut rng = StdRng::seed_from_u64(seed);
@@ -429,16 +432,25 @@ fn f4_b_mk1_doctored_multichunk_set_reassembly_mismatch_rejects() {
     }
 }
 
-/// (c) single-string fully-valid alias — DOCUMENTED RESIDUAL KAT. A
-/// single-string (non-chunked) md1 has NO cross-chunk hash and its delegate
-/// (`md_codec::decode_with_correction`) is always-`Blessed`, so a corrected
-/// single-string card is Blessed today even though a >4-error miscorrection
-/// COULD alias to a different valid card. We pin the CURRENT `Blessed`
-/// behavior (we do NOT assert it never blesses — that would RED vs. master).
-/// Flips RED-first when FOLLOWUP `repair-single-string-fully-valid-alias-
-/// second-oracle` adds a payload-derived second oracle / demotion.
+/// (c) single-string non-chunked demotion — v0.86.0 FIX
+/// (`toolkit-v0860-demote`). A single-string (non-chunked, chunked-flag
+/// bit == 0) md1 has NO cross-chunk/content-id hash — the v0.35.0 bypass
+/// (`vendor/md-codec/src/chunk.rs:615-631`) routes it straight to
+/// `decode_md1_string`, skipping `reassemble`'s content-id check entirely
+/// — so a TOUCHED correction is now demoted to `Unverified`, closing the
+/// residual a >4-error miscorrection could otherwise alias to a different
+/// valid card undetectably. `VALID_SINGLE_MD1`'s data-part starts `'y'`
+/// (codex32 value 4 → bit 0 == 0), confirming it is genuinely non-chunked.
+/// Formerly pinned the opposite (`Blessed`) as a DOCUMENTED RESIDUAL under
+/// FOLLOWUP `repair-single-string-fully-valid-alias-second-oracle`, now
+/// resolved by this demote.
+///
+/// RED-proof: revert the demote at `repair_via_md_codec` (drop the
+/// `chunks.len() == 1 && !repairs.is_empty() && is_non_chunked_md1(..)`
+/// gate back to unconditional `SetVerify::Blessed`) — the `Unverified`
+/// arm then panics.
 #[test]
-fn f4_c_single_string_md1_correction_blesses_documented_residual() {
+fn f4_c_single_string_non_chunked_md1_correction_is_unverified() {
     let bad = flip_at(VALID_SINGLE_MD1, 3); // single substitution within t≤4
     let outcome = repair_card(CardKind::Md1, &[bad]).expect("repair Ok");
     assert!(
@@ -446,11 +458,46 @@ fn f4_c_single_string_md1_correction_blesses_documented_residual() {
         "fixture must actually be corrected (touched)"
     );
     assert_eq!(&*outcome.corrected_chunks[0], VALID_SINGLE_MD1);
+    match outcome.set_verify {
+        SetVerify::Unverified { .. } => {}
+        SetVerify::Blessed => {
+            panic!("a touched non-chunked md1 correction must be Unverified (v0.86.0 demote)")
+        }
+    }
+}
+
+/// (e) chunked-of-1 BOUNDARY test — the oracle boundary this cycle's demote
+/// hinges on. A chunked-of-1 md1 (chunked-flag bit == 1, count == 1 — the
+/// shape `mnemonic bundle` / `--md1-form=template` emits via
+/// `md_codec::chunk::split`) DOES retain the content-id oracle (it falls
+/// through to `reassemble`, `chunk.rs:632-636`), so a TOUCHED correction
+/// MUST stay `Blessed` — demoting on `count == 1` alone (rather than the
+/// chunked-flag bit) would have wrongly caught this shape too.
+///
+/// RED-proof: change the demote predicate from reading the chunked-flag bit
+/// to testing `chunks.len() == 1` alone (the wrong, over-broad predicate) —
+/// this chunked-of-1 fixture would then wrongly demote to `Unverified`.
+#[test]
+fn f4_e_chunked_of_1_md1_correction_stays_blessed() {
+    let descriptor =
+        md_codec::decode_md1_string(VALID_SINGLE_MD1).expect("decode non-chunked fixture");
+    let chunked = md_codec::chunk::split(&descriptor).expect("split into chunked-of-1");
+    assert_eq!(
+        chunked.len(),
+        1,
+        "fixture descriptor must be small enough to split to exactly 1 chunk"
+    );
+    let original = &chunked[0];
+    let bad = flip_at(original, 3); // single substitution within t≤4
+    let outcome = repair_card(CardKind::Md1, &[bad]).expect("repair Ok");
+    assert!(
+        !outcome.repairs.is_empty(),
+        "fixture must actually be corrected (touched)"
+    );
+    assert_eq!(&*outcome.corrected_chunks[0], original.as_str());
     assert_eq!(
         outcome.set_verify,
         SetVerify::Blessed,
-        "DOCUMENTED RESIDUAL: a single-string md1 correction is Blessed today \
-         (no payload-derived second oracle); see FOLLOWUP \
-         repair-single-string-fully-valid-alias-second-oracle"
+        "a chunked-of-1 md1 retains the content-id oracle — must stay Blessed, not demoted"
     );
 }
