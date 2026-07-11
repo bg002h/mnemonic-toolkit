@@ -40,6 +40,13 @@ mod wallet_import;
 mod word_card_adapter;
 mod wordlists;
 
+// T2-a (#6) — never-wrong-payload property harness for the repair engine.
+// In-crate `#[cfg(test)]` module (repair/indel are binary-private): direct
+// private access to `repair_card` / `recover_indel` incl. the mock-oracle
+// ambiguity path. TEST-only, NO-BUMP (compiles only under `cargo test`).
+#[cfg(test)]
+mod prop_repair_never_wrong;
+
 use clap::{CommandFactory, Parser, Subcommand};
 use error::ToolkitError;
 use std::io::{self, Write};
