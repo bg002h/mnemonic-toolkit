@@ -216,6 +216,23 @@ mod tests {
         // (8*(len-1), 8*len] (the final byte carries 1..8 real bits).
         assert!(cp.payload_bits <= cp.bytes.len() * 8);
         assert!(cp.payload_bits > (cp.bytes.len().saturating_sub(1)) * 8);
+        // T3-c (test-hardening mutation-gap close, NOT a bugfix — see
+        // `design/SPEC_test_hardening_T3_wire_goldens.md` T3-c): the two range
+        // asserts above alone do NOT catch a regression from `total_bits` to
+        // `bytes.len() * 8` at `md1_to_canonical`'s `payload_bits: total_bits`
+        // (this fn's `:108`) — that regression is `<= cp.bytes.len() * 8`
+        // (equality) and vacuously `> (len-1)*8`, so both survive undetected.
+        // Pin the EXACT bit count as an independent-of-this-adapter oracle:
+        // `md bytecode <MD1> --json` (descriptor-mnemonic `md-cli`,
+        // `crates/md-cli/src/cmd/bytecode.rs:15,27`) reports `"payload_bits"`
+        // by calling `encode_payload` directly (a separate CLI invocation path
+        // from this adapter). Run once (2026-07-10) against the MD1 fixture
+        // above: `md bytecode <MD1 chunks> --json` → `"payload_bits": 644`
+        // (md-cli 0.11.3 binary / md-codec 0.41.0 source at
+        // descriptor-mnemonic `b9662e5f`; cross-checked against this
+        // workspace's own md-codec 0.40.0 dep, which computes the identical
+        // 644 via `Descriptor::canonical_payload_bytes()` for this fixture).
+        assert_eq!(cp.payload_bits, 644);
     }
 
     #[test]
