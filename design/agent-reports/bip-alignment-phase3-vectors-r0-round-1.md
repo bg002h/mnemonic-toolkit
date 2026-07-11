@@ -1,0 +1,21 @@
+# Per-phase R0 — Phase 3 (test vectors + BIP §Test-Vectors sync), md1 + mk1 — Fable, adversarial, read-only
+
+**Persisted verbatim per CLAUDE.md.** Suites (full, both repos): descriptor-mnemonic `md-codec+md-cli` = **685 passed / 0 failed** (fmt 1.85 clean, clippy clean); mnemonic-key `mk-codec+mk-cli` = **284 passed / 0 failed** (fmt 1.95.0 clean, clippy clean).
+
+## Verified GREEN
+**md1:** pre-existing vectors byte-identical (zero modified corpus files; `vectors_output_matches_committed_corpus` = recursive diff of a full regen vs committed, passes). New vectors live-reproduced with the real binary: `tr_with_leaf`, `nums_taproot` (`is_nums=true` in `--json`), `sh_wpkh` (elided, F-A1 arm), `single_string_boundary` (95 chars), `wsh_sortedmulti_2chunk` (chunk-set-id 0xe492f, both chunk strings reproduce + reassemble-decode). Runner wiring (`cmd/vectors.rs:44-47`) line-identical to `cmd/encode.rs`'s `--path`. Two-threshold prose (400-bit `wrap_payload` cap vs 320-bit `split` budget) matches code.
+**mk1:** V1–V18 byte-identical (JSON diff = `family_token` line + appended V19); on-disk SHA-256 = `V0_1_SHA256` re-pin. F-A6 init narrative correct vs BIP-93 (0x23181b3 IS ms32_polymod init; equivalence note kept; consistent with md-codec bch.rs). F-A7 token rolled at every sanctioned site. V19 depth-0: `fe00` count-0 escape, base58check-decoded to depth=0/child=0, round-trips.
+
+## IMPORTANT (2 — documentation only; corpus itself sound)
+**IMP-1 (md).** `wsh_sortedmulti_2chunk` BIP row (`:1191`) + 2 manifest comments (`test_vectors.rs:58,89`) misdescribe it: the payload is 376 bits, BELOW the 400-bit single-string cap, so it only chunks WITH `--force-chunked` — but the row omits the `force_chunked` marker and the comments falsely say "past the single-string cap"/"past the 320-bit single-string cap" (320 is the *split chunk-sizing budget*, not a cap). Failure: an implementer reproduces the template → gets a single string → thinks they diverge; or infers a bogus 320-bit chunk trigger and ships a non-interoperable encoder for the 321–400-bit band. Fix: label `force_chunked` + correct both comments.
+**IMP-2 (mk).** "minimum distance 8" in the new `error.rs` doc AND the committed mk BIP (`:275`, `:281`) is mathematically false: correcting t=4 + detecting 8 requires minimum distance ≥9 (a d=8 code corrects only 3, detects 7). Failure: an implementer derives t=⌊(8−1)/2⌋=3 → ships a 3-error corrector → a 4-error-damaged card becomes unrecoverable (plausible-but-wrong crypto fact — the "1 valid last word" class). Fix: "detection radius 8; minimum distance ≥9; both correct t=4" at all sites.
+
+## MINOR (3)
+- **M-1 (mk):** V19's xpub carries a nonzero parent fingerprint (0x10203013) at depth 0; BIP-32 mandates 0x00000000 for master serializations. rust-bitcoin 0.32 accepts + round-trips, but stricter parsers may refuse. Regenerating with parent_fp 0 churns only V19 + the SHA pin.
+- **M-2 (md, pre-existing):** `chunk.rs:213-221` doc on `SINGLE_STRING_PAYLOAD_BIT_LIMIT` calls 320 the "threshold above which chunking is required" (false — 400 is) with garbled symbol accounting. Root cause of IMP-1's comments.
+- **M-3 (mk, pre-adjudicated):** BIP §Test-Vectors uses a floating SHA reference, not the literal digest (Phase-1 R0 accepted). Pre-submission FOLLOWUP.
+
+**VERDICT: OPEN — 0 Critical / 2 Important / 3 Minor.** Both Importants are one-sitting doc/comment folds (no wire/vector-byte/behavior change; every pinned string was independently reproduced + decoded).
+
+---
+**FOLD STATUS (opus, 2026-07-10):** IMP-1 folded (md BIP `:1191` row → "force_chunked; 376 bits fits a single string; split's 320-bit budget → 2 chunks"; both `test_vectors.rs` comments corrected). IMP-2 folded (mk `error.rs` + BIP `:275`/`:281` → "detection radius 8; minimum distance ≥9; correct t=4"; also dropped the ambiguous `,8)` param from `BCH(93,80,8)`→`BCH(93,80)` at `:277`). M-2 folded (chunk.rs doc rewritten: 320 = per-chunk sizing budget, NOT the single-string threshold [400]). **M-1 + M-3 DEFERRED** as pre-submission nits (non-gating; avoid another vector-regen/SHA-repin churn) → FOLLOWUP `mk1-bip-presubmission-nits` (V19 master parent-fp + literal-SHA-in-BIP), filed at release. Both repos re-verified: fmt clean (md 1.85 / mk 1.95), suites green, builds clean. Scoped convergence review re-dispatched.
