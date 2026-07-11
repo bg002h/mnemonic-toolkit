@@ -4885,3 +4885,22 @@ The v0.74.0 reproducible-musl release published NO binary: the Word-Card codec b
 - **Surfaced:** 2026-07-10, test-hardening T5 post-impl R0 (Minor M1, proven by targeted mutation). The shipped h-notation fixture grid in `canonicity_drift.rs` covers prefix-origin / use-site / wrapper-prefix rows; the reviewer showed by execution that dropping `'?h?` from ONLY the suffix `@N[fp/path]` bracket group of the GUI classifier regexes leaves the entire suite GREEN — a residual blind spot (the L12 suffix row is apostrophe-only/all-hardened).
 - **Fix (if pursued):** add one fixture row `wpkh(@0[deadbeef/84h/0h/0h]/<0;1>/*)` (empirically `canonical` at pinned mnemonic 0.75.0, R0-verified) to `canonicity_drift.rs`'s `FIXTURES`, closing the suffix-origin-h gap. Small; verified Expect available.
 - **Status:** OPEN. **Tier:** `gui` (mnemonic-gui test-only).
+
+### `slip39-library-layer-passphrase-message-sweep` — the SLIP-39 library-layer error message still falsely implies passphrase verification (one layer below the M2 CLI fix)
+
+- **Surfaced:** 2026-07-11, v0.85.0 M2 post-impl R0 (Minor 1). M2 fixed the CLI-facing `DigestVerificationFailed` message (`cmd/slip39.rs:757`), but `src/slip39/error.rs:76-79` (doc comment "Most commonly: wrong passphrase, …") + `:176-179` (library `Display`: "wrong passphrase or substituted share") STILL carry the falsified claim. Per SLIP-0039 the digest runs pre-decryption → it can never detect a wrong passphrase.
+- **Impact/why-deferred:** the R0 verified this is **CLI-UNREACHABLE** — there is no `From<Slip39Error>` impl and every CLI path routes through `map_slip39_error` (`cmd/slip39.rs:513/641/647`); `ms_shares.rs`/`main.rs` don't format it. So zero user-facing impact today; the M2 SPEC deliberately scoped only `:757`. But the library layer now CONTRADICTS the CLI layer, which is untidy + a trap if a future caller ever surfaces the library string.
+- **Fix (if pursued):** sweep `slip39/error.rs:76-79`/`:176-179` to the M2 wording (digest catches share substitution/corruption/wrong-secret; does NOT verify passphrase; runs pre-decryption).
+- **Status:** OPEN. **Tier:** `hardening` / toolkit. **Severity:** Low (CLI-unreachable).
+
+### `bsms-round1-lenient-exit4-workflow-doc` — the BSMS Round-1 workflow chapter doesn't mention the new v0.85.0 lenient-failure exit 4
+
+- **Surfaced:** 2026-07-11, v0.85.0 M4 post-impl R0 (Minor 2). M4 made `import-wallet --bsms-round1` lenient mode exit 4 on any Round-1 signature-verify failure (both standalone + combined). The flag-reference (`41-mnemonic.md`) documents it, but the workflow chapter `docs/manual/src/30-workflows/3A-bsms-round1-verify.md` (~:65-96) discusses lenient-vs-strict WITHOUT stating the lenient-failure exit code — a reader of that chapter alone won't learn about exit 4. Not factually wrong, just incomplete.
+- **Fix (if pursued):** one-line addition to 3A's lenient-vs-strict section noting lenient-failure = exit 4 (report still printed) since v0.85.0.
+- **Status:** OPEN. **Tier:** `docs` / toolkit. **Severity:** Low.
+
+### `mnemonic-stderr-template-encrypted-notice-label` — `41-mnemonic.md`'s stderr-templates row labels the encrypted-Round-1 decrypt NOTICE "(exit 0)"
+
+- **Surfaced:** 2026-07-11, v0.85.0 M4 post-impl R0 (Minor 3, pre-existing). `41-mnemonic.md:1421` labels the encrypted-Round-1 decrypt NOTICE "(exit 0)"; post-M4 that notice (decrypt-OK) can co-occur with an exit-4 invocation (decrypt-OK + sig-fail). The label describes the notice's own class, and the sig-fail NOTICE was never in the table (pre-existing gap) — cosmetic.
+- **Fix (if pursued):** drop/qualify the "(exit 0)" label on that row + optionally add the sig-fail NOTICE row.
+- **Status:** OPEN. **Tier:** `docs` / toolkit. **Severity:** Low (cosmetic).

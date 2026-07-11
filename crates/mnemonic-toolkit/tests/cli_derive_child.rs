@@ -532,9 +532,31 @@ fn bip39_japanese_diverges_from_english() {
     );
 }
 
+/// M3 (v0.85.0) — BIP-85 §"Application: BIP39" assigns Portuguese path code
+/// `9'` (immediately after Czech `8'`); the prior refusal was a factual
+/// error. Mirrors `bip39_japanese_diverges_from_english`: derive English vs
+/// Portuguese at the same master + index → outputs differ + the Portuguese
+/// output is valid BIP-39 Portuguese wordlist membership. Unlike Japanese,
+/// the Portuguese wordlist is ALL-ASCII, so no `!is_ascii()` assertion here
+/// (that check would spurious-RED for this language).
 #[test]
-fn bip39_portuguese_refused_no_bip85_code() {
-    let out = Command::cargo_bin("mnemonic")
+fn bip39_portuguese_diverges_from_english() {
+    let english = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "derive-child",
+            "--from",
+            &format!("xprv={MASTER_XPRV}"),
+            "--application",
+            "bip39",
+            "--length",
+            "12",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success();
+    let portuguese = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "derive-child",
@@ -550,13 +572,16 @@ fn bip39_portuguese_refused_no_bip85_code() {
             "portuguese",
         ])
         .assert()
-        .failure()
-        .code(1);
-    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    assert!(
-        stderr.contains("portuguese is not assigned a BIP-85 path code"),
-        "stderr did not mention BIP-85 code refusal: {stderr:?}",
-    );
+        .success();
+    let en_out = String::from_utf8(english.get_output().stdout.clone()).unwrap();
+    let pt_out = String::from_utf8(portuguese.get_output().stdout.clone()).unwrap();
+    assert_ne!(en_out, pt_out);
+    // Sanity check that the Portuguese output is valid BIP-39 Portuguese —
+    // every word parses against the Portuguese wordlist.
+    let pt_phrase = pt_out.trim();
+    bip39::Mnemonic::parse_in(bip39::Language::Portuguese, pt_phrase).unwrap_or_else(|e| {
+        panic!("expected a valid BIP-39 Portuguese mnemonic; got {pt_phrase:?}: {e}")
+    });
 }
 
 // ============================================================================

@@ -754,7 +754,7 @@ fn map_slip39_error(e: Slip39Error) -> ToolkitError {
         UnknownWord { share_idx, word_idx } => format!(
             "slip39 combine: share at position {share_idx}: word at index {word_idx} not in SLIP-39 wordlist"
         ),
-        DigestVerificationFailed => "slip39 combine: reconstructed master digest mismatch — wrong --passphrase OR a share was substituted".to_string(),
+        DigestVerificationFailed => "slip39 combine: reconstructed master digest mismatch — a share was substituted, corrupted, or the shares do not reconstruct the intended secret; this check runs BEFORE passphrase decryption and does NOT verify --passphrase (a wrong --passphrase still exits 0 with a different, incorrect master)".to_string(),
         InsufficientShares {
             group_idx,
             needed,

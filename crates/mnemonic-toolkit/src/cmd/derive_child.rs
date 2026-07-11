@@ -337,8 +337,7 @@ fn reject_length(length: u32) -> Result<(), ToolkitError> {
 /// | 6    | French                 |
 /// | 7    | Italian                |
 /// | 8    | Czech                  |
-///
-/// Portuguese (BIP-39 wordlist, but no BIP-85 code assigned) is refused.
+/// | 9    | Portuguese             |
 fn resolve_bip85_language(lang: CliLanguage) -> Result<(u32, bip39::Language), ToolkitError> {
     Ok(match lang {
         CliLanguage::English => (0, bip39::Language::English),
@@ -350,11 +349,7 @@ fn resolve_bip85_language(lang: CliLanguage) -> Result<(u32, bip39::Language), T
         CliLanguage::French => (6, bip39::Language::French),
         CliLanguage::Italian => (7, bip39::Language::Italian),
         CliLanguage::Czech => (8, bip39::Language::Czech),
-        CliLanguage::Portuguese => {
-            return Err(ToolkitError::BadInput(
-                "--language portuguese is not assigned a BIP-85 path code; only english, japanese, korean, spanish, simplified-chinese, traditional-chinese, french, italian, czech are supported for --application bip39".into(),
-            ))
-        }
+        CliLanguage::Portuguese => (9, bip39::Language::Portuguese),
     })
 }
 

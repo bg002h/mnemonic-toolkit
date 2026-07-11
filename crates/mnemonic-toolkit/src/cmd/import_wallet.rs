@@ -415,7 +415,18 @@ pub fn run<R: Read, W: Write, E: Write>(
             // mode emits a pass/fail verification verdict + the record's public
             // signer pubkey (no key material), analogous to verify-bundle.
             // No advisory line (SPEC §3 resolving principles b + c).
-            return Ok(0);
+            // v0.85.0 (M4) — lenient mode still prints the full per-record
+            // report above, but a `$?`-gated caller must NOT see exit 0 when
+            // any record's signature failed to verify. Report/envelope is
+            // unaffected; only the exit code changes (VERIFY-ME idiom,
+            // consistent with `ImportWalletSeedMismatch`/`BundleMismatch`/
+            // `RestoreMismatch` — toolkit-wide exit 4 = "mismatch, do not
+            // trust"). Strict mode (`--bsms-verify-strict`) is unaffected —
+            // it already aborts fatally (exit 2) before this point.
+            let any_failed = round1_verifications
+                .iter()
+                .any(|v| matches!(v.status, Round1VerificationStatus::Failed { .. }));
+            return Ok(if any_failed { 4 } else { 0 });
         }
     };
 
@@ -1360,7 +1371,16 @@ electrum|jade|sparrow|specter>"
         crate::secret_advisory::OutputClass::WatchOnly
     };
     crate::secret_advisory::emit_output_class_advisory(cls, stderr);
-    Ok(0)
+    // v0.85.0 (M4) — same `any(Failed)` → exit 4 rule as the standalone
+    // early-return above, applied to the combined `--blob` + `--bsms-round1`
+    // path: the import + card synthesis above still runs and the full
+    // report/envelope (including `bsms_round1_verifications`) is still
+    // emitted; only the exit code flips so `$?`-gated automation cannot
+    // mistake an unverified Round-1 signature for success.
+    let any_round1_failed = round1_verifications
+        .iter()
+        .any(|v| matches!(v.status, Round1VerificationStatus::Failed { .. }));
+    Ok(if any_round1_failed { 4 } else { 0 })
 }
 
 /// Parse the `--select-descriptor` flag value into a SelectDescriptor variant.

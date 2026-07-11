@@ -333,7 +333,7 @@ fn refusal_row_11_digest_verification_failed() {
     assert_eq!(exit, 1, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
-            "slip39 combine: reconstructed master digest mismatch — wrong --passphrase OR a share was substituted"
+            "slip39 combine: reconstructed master digest mismatch — a share was substituted, corrupted, or the shares do not reconstruct the intended secret; this check runs BEFORE passphrase decryption and does NOT verify --passphrase (a wrong --passphrase still exits 0 with a different, incorrect master)"
         ),
         "expected row 11 stem; got: {stderr}"
     );

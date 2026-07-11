@@ -423,7 +423,8 @@ fn round1_plaintext_still_verifies_no_misclassify() {
 fn round1_encrypted_decrypt_ok_but_sig_fail() {
     // R0 M2 — an encrypted Round-1 record that decrypts + MAC-verifies OK
     // but whose plaintext has a corrupted BIP-322 signature: lenient mode
-    // → NOTICE + Failed status (exit 0); --bsms-verify-strict → fatal.
+    // → NOTICE + Failed status (exit 4, v0.85.0 M4 — was exit 0);
+    // --bsms-verify-strict → fatal.
     let plaintext = tv3_decrypted_plaintext();
     // Corrupt the base64 SIG (last line): flip its first char to a
     // different valid base64 char (keeps the 5-line shape + valid base64).
@@ -441,7 +442,7 @@ fn round1_encrypted_decrypt_ok_but_sig_fail() {
     std::fs::write(tmp.path(), wire_hex.as_bytes()).unwrap();
     let token = fixture_path("bsms-encrypted-standard-tv3-token.hex");
 
-    // Lenient: decrypt OK, NOTICE, verify-failed status, exit 0.
+    // Lenient: decrypt OK, NOTICE, verify-failed status, exit 4 (v0.85.0 M4).
     let lenient = mnemonic()
         .args(["import-wallet", "--bsms-round1"])
         .arg(tmp.path())
@@ -449,7 +450,7 @@ fn round1_encrypted_decrypt_ok_but_sig_fail() {
         .arg(&token)
         .args(["--json"])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(lenient.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("record 0 decrypted") && stderr.contains("signature verification failed"),

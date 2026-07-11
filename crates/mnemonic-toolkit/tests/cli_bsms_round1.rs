@@ -15,7 +15,7 @@
 //!   2. TV-2 xpub happy path (verified=true; xpub's OWN embedded pubkey)
 //!   3. TV-3 STANDARD encryption happy path (verified=true; token-in-signed-body)
 //!   4. --bsms-verify-strict on verified record (exit 0; no NOTICE)
-//!   5. flipped-SIG lenient default → stderr NOTICE + verified=false
+//!   5. flipped-SIG lenient default → stderr NOTICE + verified=false + exit 4 (v0.85.0 M4)
 //!   6. flipped-SIG --bsms-verify-strict → exit 2 BsmsSignatureMismatch
 //!   7. flipped-TOKEN --bsms-verify-strict → exit 2
 //!   8. malformed line-count → exit 2 BsmsRound1Malformed
@@ -105,7 +105,9 @@ fn cell_4_verify_strict_on_verified_record_succeeds_silently() {
         .stderr(predicate::str::contains("notice:").not());
 }
 
-/// Cell 5 — flipped SIG lenient default: stderr NOTICE + envelope verified=false.
+/// Cell 5 — flipped SIG lenient default: stderr NOTICE + envelope
+/// verified=false + exit 4 (v0.85.0 M4 — `any(Failed)` in lenient mode now
+/// exits 4 "VERIFY-ME", not 0; the report/envelope is still fully emitted).
 #[test]
 fn cell_5_flipped_sig_lenient_default_emits_notice_and_verified_false() {
     let tmp = tempfile::NamedTempFile::new().unwrap();
@@ -123,7 +125,7 @@ fn cell_5_flipped_sig_lenient_default_emits_notice_and_verified_false() {
             "--json",
         ])
         .assert()
-        .code(0)
+        .code(4)
         .stdout(predicate::str::contains("\"signature_verified\":false"))
         .stderr(predicate::str::contains(
             "notice: import-wallet: --bsms-round1: signature verification failed",
@@ -359,6 +361,48 @@ fn cell_15_record_index_propagates_in_multi_record_error() {
         stderr.contains("record 1"),
         "record_index 1 must appear in error; got: {stderr}"
     );
+}
+
+/// v0.85.0 M4 — combined `--blob` + `--bsms-round1` mode, lenient default,
+/// with a Failed record: the `:1363` tail return must apply the SAME
+/// `any(Failed)` → exit 4 rule as the standalone early-return (cell 5).
+/// Without this test the combined-mode arm ships untested — cell 13 (below)
+/// uses a verified record, so a revert of the `:1363` check would still
+/// pass the rest of the suite. Blob = cell 13's fixture (BSMS 1-of-1
+/// singlesig); Round-1 record = cell 5's flipped-SIG TV1 tempfile.
+#[test]
+fn combined_blob_round1_lenient_failed_exits_4() {
+    let tmp = tempfile::NamedTempFile::new().unwrap();
+    let fixture = std::fs::read_to_string(TV1_FIXTURE).unwrap();
+    let bad = fixture.replace("q0s6im4=", "q0s6im5=");
+    std::fs::write(tmp.path(), bad).unwrap();
+
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--blob",
+            "tests/fixtures/wallet_import/bsms-1of1-singlesig.txt",
+            "--bsms-round1",
+            tmp.path().to_str().unwrap(),
+            "--json",
+        ])
+        .assert()
+        .code(4)
+        .get_output()
+        .stdout
+        .clone();
+    let body = String::from_utf8(out).unwrap();
+    let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+    let arr = v.as_array().unwrap();
+    assert_eq!(arr.len(), 1);
+    // The parsed bundle envelope is still fully emitted (lenient mode does
+    // not abort import) — only the exit code changed.
+    assert!(arr[0]["bundle"].is_object());
+    assert_eq!(arr[0]["source_format"], "bsms");
+    let verifications = arr[0]["bsms_round1_verifications"].as_array().unwrap();
+    assert_eq!(verifications.len(), 1);
+    assert_eq!(verifications[0]["signature_verified"], false);
 }
 
 /// Helper: silence unused-import warnings on `Write` import.
