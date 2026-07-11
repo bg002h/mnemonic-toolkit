@@ -1,0 +1,28 @@
+# Post-impl whole-diff review — md1 BIP-alignment Phase 2 (F-A1/A2/A3/A4/A5/A8/A9) — Fable, adversarial, read-only
+
+**Persisted verbatim per CLAUDE.md.** Target: working tree of `descriptor-mnemonic` on `main` (uncommitted), 375 ins / 37 del, 12 modified + 2 untracked.
+**Suites (full packages):** `cargo test -p md-codec` = 425 passed / 0 failed (incl. `vectors_output_matches_committed_corpus` + all corpus round-trips). `cargo test -p md-cli` = 259 passed / 0 failed. `cargo clippy -p md-codec -p md-cli --all-targets -- -D warnings` clean.
+**Process disclosure:** reviewer accidentally ran `git stash`, immediately `git stash pop`, verified byte-identical (`git diff | md5sum = 9588425c9d32ebf43c6a8893997a37a3`, all files intact). No content altered.
+
+## Recovery-safety (axis 1) — all GREEN
+**F-A1 (`canonical_origin.rs:70-72`)** strictly additive, verified 4 ways: grep-enumerated ALL production consumers = exactly the 3 spec'd (`validate.rs:222` gate no-ops on Some; `canonicalize.rs:466`; `identity.rs:216`) — no render/encoder consumer, so no card's decode output or wire bytes change. Live: elided `sh(wpkh(@0/<0;1>/*))` still encodes byte-identical `md1yqpqqxpsq258xsks3kh0ye`; that pre-fix dead card now decodes; explicit-49' card still has the path on-wire (no collapse) + decodes. Guard requires `Sh→Children(1)→Wpkh+KeyArg` — can't match sh(wsh)/sh(multi)/non-single-key. Policy-id equality test non-tautological (`compute_wallet_policy_id` hashes the canonical-filled origin-path bits; a wrong 48' fill would differ).
+**F-A2 (`decode.rs:101-104`)** peek `(bytes[0]>>3)&1` verified vs both writers: ChunkHeader emits `[v3..v0][chunked=1]` (byte-0 bit3 = chunked); single-payload Header `[divergent][v3..v0]` bit3 = v0, and Header::read accepts only version 4 (even ⇒ v0=0) — no valid single-payload string diverted. No recursion (reassemble→decode_payload). Stray chunk-i-of-N → `ChunkSetIncomplete` (chunk.rs:352-357). Live-verified chunked single-string round-trip.
+**F-A8 (`tlv.rs:224/304/324-337`)** check at BOTH break points; `reject_non_zero_pad` peek-and-restore cursor-neutral (cursor restored to entry_start before the call at rollback break; first break <5 by its guard). Only caller `decode_payload:46`, no reads after. Encoder always zero-pads ⇒ no corpus card newly fails (full-suite + corpus green). Both negative tests genuinely RED pre-fix (pre-fix silently `Ok(empty)`).
+
+## Correctness (axis 2)
+F-A3 hard error before output, exit 2, exact message, flag kept (but see IMP-1). F-A4 keys on script TYPE, both text + `--json` branches (`:87,125`), stderr only; live-verified fires on sh(sortedmulti), silent on wsh(multi)/wpkh/pkh/tr/sh(wsh). F-A5: reviewer independently re-derived — folding bech32 init 1 over `hrp_expand("ms")=[3,3,0,13,19]` yields `0x23181b3` = BIP-93's ms32_polymod start; GEN_REGULAR byte-identical to ms-codec ref; rewrite correct (see Minor-1). F-A9 states t=4, `bound:8` still asserted (`bch_decode.rs:242,375`), RED-first. F-A8 variant `MalformedPayloadPadding` appended at END of insertion-ordered enum (`error.rs:476`). BIP placeholder finalized (in-scope Phase 2c).
+
+## Test quality (axis 3) / Scope (axis 4)
+Every behavioral test targets an exact pre-fix flip (structurally RED-first); the 2 regression pins (explicit-49' byte-stability, zero-pad acceptance) are green-both-sides recovery guards. Only intended files; `test_vectors.rs` comment-only; no corpus/vendor/toolkit changes; BIP edit = pre-approved error-name finalization only.
+
+## Findings
+**IMPORTANT-1 — F-A3 stale clap help text.** `md-cli/src/main.rs:117-119` still reads "Force the long BCH code even when the regular code suffices" while the flag hard-errors. In a code-honesty cycle the `--help` surface is left dishonest, and the manual (which MUST mirror `--help`) would describe a mode its own transcript shows erroring. Fix: one doc-comment line + manual ripple.
+**IMPORTANT-2 — CI fmt gate red.** `ci.yml:49-59` runs `cargo fmt --all --check`; 9 diff-introduced sites (error.rs:421 over-long `#[error]`, sh_wpkh_canonical.rs:9/32/106, cli_encode_advisory.rs:12/33, cmd_decode.rs:82/96, cmd_encode.rs:176). Release-blocking. Fix: `cargo fmt -p md-codec -p md-cli`.
+**Minor-1** — bch.rs "share this init byte-for-byte" imprecise for ms1 (ms-codec literal is `0x1` + `hrp_expand("ms")` prepend, equivalent). One parenthetical immunizes against a cross-repo constant-diff re-raising the myth. (mk-codec bch.rs:186 still carries the old wrong narrative — companion mk A6, out of this diff's scope.)
+**Minor-2** — no test pins the stray-chunk path through the new dispatch (`decode_md1_string(<chunk 1-of-N>)` → ChunkSetIncomplete); source-verified, a one-liner would pin it.
+**Minor-3** — `advisory_does_not_perturb_stdout` compares two identical runs (determinism), not with/without baseline; adequate (single-line + no-"warning" asserts carry the contract).
+
+**VERDICT: RED (0 Critical / 2 Important, 3 Minor)** — both Importants mechanical + localized; fold and re-dispatch a scoped convergence review per the post-impl-folds rule.
+
+---
+**FOLD STATUS (opus, 2026-07-10):** IMP-1 folded (main.rs force_long_code doc-comment → "Removed in v0.12.0; now a hard error…"). IMP-2 folded (`cargo fmt -p md-codec -p md-cli` → fmt --check clean). Minor-1 folded (bch.rs parenthetical: ms1 uses equivalent 0x1+hrp_expand("ms"); raw constant-diff vs ms-codec 0x1 is not a discrepancy). Minor-2 folded (new `decode_md1_string_lone_chunk_of_multi_is_incomplete` test, passes). Minor-3 left as adequate. Suites re-run green (md-codec + md-cli), fmt clean, clippy clean. Scoped convergence review re-dispatched. Manual `--help` ripple = toolkit-side, tracked for Phase 3 manual.yml MD_BIN bump.
