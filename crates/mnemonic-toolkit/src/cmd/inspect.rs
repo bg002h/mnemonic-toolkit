@@ -105,6 +105,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     let groups = repair::resolve_groups(args, "inspect", stdin, stderr, false)?;
     let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
 
+    // P2.3 (pathless partial-decode): the unresolved-origin `@N` indices of the
+    // most-recent partial md1 card, if any. A non-empty value forces exit 4
+    // (VERIFY-ME) + a stderr note after the loop.
+    let mut partial_indices: Option<Vec<u8>> = None;
+
     // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic
     // output regardless of CLI arg ordering.
     for (kind, chunks) in &groups {
@@ -139,6 +144,16 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
         };
 
+        // P2.3: record an unresolved-origin md1 (dead card) for the exit-4 +
+        // stderr-note handling below. Computed BEFORE the emit borrow so the
+        // marker/JSON render (which re-queries `d`) stays in the emit fns.
+        if let InspectPayload::Md1(d) = &payload {
+            let unres = d.unresolved_origin_indices();
+            if !unres.is_empty() {
+                partial_indices = Some(unres);
+            }
+        }
+
         if args.json {
             emit_inspect_json(&payload, args.reveal_secret, stdout)?;
         } else {
@@ -150,6 +165,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Supersedes D9 ms1-only gate: mk1→WatchOnly, md1→Template, ms1→PrivateKeyMaterial.
     if let Some(c) = crate::secret_advisory::worst_class_on_stdout(&kinds) {
         crate::secret_advisory::emit_output_class_advisory(c, stderr);
+    }
+
+    // P2.3: a dead md1 card partial-decoded — emit the stderr note (mirrors
+    // md-cli's `md inspect`) + exit 4 (VERIFY-ME). The template + marker are
+    // already on stdout; the origin is genuinely unspecified on this backup.
+    if let Some(unres) = &partial_indices {
+        crate::cmd::md1_partial::emit_partial_stderr_note(unres, stderr);
+        return Ok(4);
     }
 
     Ok(0)
@@ -204,7 +227,20 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
             })
         }
         CardKind::Mk1 => Ok(InspectPayload::Mk1(mk_codec::decode(chunks)?)),
-        CardKind::Md1 => Ok(InspectPayload::Md1(md_codec::reassemble(chunks)?)),
+        // P2.3 (pathless partial-decode): opt the md1 decode into the
+        // partial-allowing entry. A `canonical_origin == None` card with an
+        // elided-and-unresolvable origin (a "dead card") now decodes Ok (with
+        // non-empty `unresolved_origin_indices()`) instead of hard-rejecting
+        // `MissingExplicitOrigin` — the render path then marks the origin
+        // unspecified + exits 4 (see `emit_inspect_*`). Every other decode
+        // check (per-chunk BCH, cross-chunk content-id oracle) stays enforced.
+        // Intake is CHUNK-FORM only (unchanged); a plain single-string md1 still
+        // hits the pre-existing `unsupported version 2` gap (FOLLOWUP
+        // `toolkit-inspect-nonchunked-md1-intake-gap`).
+        CardKind::Md1 => Ok(InspectPayload::Md1(md_codec::reassemble_with_opts(
+            chunks,
+            md_codec::DecodeOpts::partial(),
+        )?)),
     }
 }
 
@@ -270,6 +306,18 @@ fn emit_inspect_text<W: Write>(
             // md1 uniquely leads with `template:` vs ms1/mk1 leading with `kind:`.
             writeln!(stdout, "template: {}", md_codec::descriptor_to_template(d)?)
                 .map_err(ToolkitError::Io)?;
+            // P2.3 (partial only): a dead card renders its (origin-independent)
+            // template PLUS an explicit unspecified-origin marker — NEVER a fake
+            // `m/` path. Byte-identical to `md decode`/`md inspect` (cross-binary
+            // parity). Placed right after `template:`, mirroring md-cli.
+            if !d.unresolved_origin_indices().is_empty() {
+                writeln!(
+                    stdout,
+                    "{}",
+                    crate::cmd::md1_partial::ORIGIN_UNSPECIFIED_MARKER
+                )
+                .map_err(ToolkitError::Io)?;
+            }
             writeln!(stdout, "kind: md1").map_err(ToolkitError::Io)?;
             writeln!(stdout, "placeholder_count: {}", d.n).map_err(ToolkitError::Io)?;
             writeln!(stdout, "tree_tag: {:?}", d.tree.tag).map_err(ToolkitError::Io)?;
@@ -338,6 +386,11 @@ enum InspectJson<'a> {
         tree_tag: String,
         wallet_policy_mode: bool,
         path_decl_shape: &'static str,
+        /// P2.3 (pathless partial-decode): present ONLY on a dead card (elided,
+        /// unresolvable origin). Additive — omitted on canonical/explicit-origin
+        /// cards so their JSON stays byte-identical (schema_version unchanged).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        partial: Option<crate::format::PartialDecodeInfo>,
     },
 }
 
@@ -380,14 +433,20 @@ fn emit_inspect_json<W: Write>(
             origin_path: format!("m/{}", card.origin_path),
             xpub: card.xpub.to_string(),
         },
-        InspectPayload::Md1(d) => InspectJson::Md1 {
-            // v0.75.0: identical render to the text-form `template:` line.
-            template: md_codec::descriptor_to_template(d)?,
-            placeholder_count: d.n,
-            tree_tag: format!("{:?}", d.tree.tag),
-            wallet_policy_mode: d.is_wallet_policy(),
-            path_decl_shape: path_decl_shape(d),
-        },
+        InspectPayload::Md1(d) => {
+            let unres = d.unresolved_origin_indices();
+            InspectJson::Md1 {
+                // v0.75.0: identical render to the text-form `template:` line.
+                template: md_codec::descriptor_to_template(d)?,
+                placeholder_count: d.n,
+                tree_tag: format!("{:?}", d.tree.tag),
+                wallet_policy_mode: d.is_wallet_policy(),
+                path_decl_shape: path_decl_shape(d),
+                // P2.3: additive partial marker on a dead card only.
+                partial: (!unres.is_empty())
+                    .then(|| crate::format::PartialDecodeInfo::missing_explicit_origin(unres)),
+            }
+        }
     };
     let envelope = InspectEnvelope {
         schema_version: INSPECT_SCHEMA_VERSION,
@@ -459,6 +518,7 @@ mod inspect_envelope_tests {
             tree_tag: "Wpkh".to_string(),
             wallet_policy_mode: true,
             path_decl_shape: "Shared",
+            partial: None,
         };
         let envelope = InspectEnvelope {
             schema_version: INSPECT_SCHEMA_VERSION,

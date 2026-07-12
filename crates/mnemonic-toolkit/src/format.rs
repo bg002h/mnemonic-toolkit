@@ -110,6 +110,28 @@ pub struct BundleJson {
     pub privacy_preserving: bool,
 }
 
+/// Additive partial-decode descriptor (pathless/dead-card partial-decode,
+/// P2.2/P2.3). Emitted ONLY on the partial case (`inspect --json` on a dead
+/// card; `verify-bundle --json` when `result == "partial"`). Mirrors md-cli's
+/// `--json` `partial` object shape (`reason` + `unresolved_indices`).
+#[derive(Debug, Clone, Serialize)]
+pub struct PartialDecodeInfo {
+    /// Always `"missing_explicit_origin"` (the only partial-decode reason).
+    pub reason: &'static str,
+    /// Ascending unresolved-origin `@N` indices.
+    pub unresolved_indices: Vec<u8>,
+}
+
+impl PartialDecodeInfo {
+    /// Construct from the unresolved-origin indices (non-empty on partial).
+    pub fn missing_explicit_origin(unresolved_indices: Vec<u8>) -> Self {
+        Self {
+            reason: "missing_explicit_origin",
+            unresolved_indices,
+        }
+    }
+}
+
 /// Verify-bundle JSON output schema (SPEC §5.4). Field order is part of the schema.
 #[derive(Debug, Serialize)]
 pub struct VerifyBundleJson {

@@ -14,6 +14,7 @@ pub mod gen_man;
 pub mod gui_schema;
 pub mod import_wallet;
 pub mod inspect;
+pub mod md1_partial;
 pub mod ms_shares;
 pub mod nostr;
 pub mod repair;
