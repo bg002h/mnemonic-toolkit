@@ -106,7 +106,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     let mut kinds: Vec<crate::secret_advisory::OutputClass> = Vec::new();
 
     // P2.3 (pathless partial-decode): the unresolved-origin `@N` indices of the
-    // most-recent partial md1 card, if any. A non-empty value forces exit 4
+    // md1 card if it decodes partial. `resolve_groups` collapses all `--md1`
+    // values into a SINGLE md1 group, so there is at most one md1 card per
+    // invocation (no multi-card ambiguity). A non-empty value forces exit 4
     // (VERIFY-ME) + a stderr note after the loop.
     let mut partial_indices: Option<Vec<u8>> = None;
 

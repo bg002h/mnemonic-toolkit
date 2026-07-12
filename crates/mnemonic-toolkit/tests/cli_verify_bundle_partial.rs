@@ -203,17 +203,39 @@ fn verify_bundle_mismatch_beats_partial() {
 // ── funds-critical: doctored content-id dead card REJECTS (oracle intact) ────
 
 #[test]
-fn verify_bundle_doctored_content_id_dead_card_is_not_partial() {
+fn verify_bundle_doctored_content_id_dead_card_verdicts_mismatch_oracle_intact() {
     let doctored = elide_doctored(MULTI_MD1_ORIGIN);
     let mut args = multi_base();
     push_md1(&mut args, &doctored);
     args.push("--no-auto-repair".into());
     let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
-    assert_ne!(
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Funds-load-bearing: the cross-chunk content-id oracle stays enforced UNDER
+    // partial. `elide_doctored` flips a pubkey byte in chunk[1] so its derived
+    // content-id diverges from chunk[0] → `reassemble_with_opts(.., partial())`
+    // rejects with `ChunkSetInconsistent` → the `md1_decode` check fails →
+    // verdict `mismatch`/exit 4, NEVER a false `ok`/`partial` (the v0.86.0
+    // aliasing funds-loss mode). Pin the EXACT funds-safe verdict — `!= "partial"`
+    // alone would also pass on a false `ok`, the very mode we must exclude (R0
+    // M-1). Asserting `md1_decode: fail` pins the ORACLE as the rejecting check,
+    // so a regression that disabled the oracle but kept some other failing check
+    // would not silently satisfy this test (R0 M-2; oracle-in-isolation is also
+    // covered at the md-codec layer by descriptor-mnemonic's partial_decode tests).
+    assert_eq!(
         result_line(&out.stdout),
-        "partial",
-        "a doctored-content-id dead card must NOT verdict `partial` (oracle intact); stdout={}",
-        String::from_utf8_lossy(&out.stdout)
+        "mismatch",
+        "a doctored-content-id dead card must verdict `mismatch` (oracle intact), never `ok`/`partial`; stdout={stdout}"
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(4),
+        "doctored dead card must exit 4 (mismatch verdict); stdout={stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("md1_decode:") && l.contains("fail")),
+        "the content-id oracle must surface as a failing `md1_decode` check; stdout={stdout}"
     );
 }
 
