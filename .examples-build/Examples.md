@@ -103,7 +103,7 @@ mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolki
 md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.11.2
 ms              ms-cli               crates.io    (none)         ms-cli-v0.14.1
 mk              mk-cli               crates.io    (none)         mk-cli-v0.12.0
-mnemonic-gui    mnemonic-gui         git (only)   (none)         mnemonic-gui-v0.58.0
+mnemonic-gui    mnemonic-gui         git (only)   (none)         mnemonic-gui-v0.59.0
 ```
 
 ```
