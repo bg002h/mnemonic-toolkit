@@ -1,0 +1,51 @@
+{
+  "n": 3,
+  "path_decl": {
+    "tag": "Shared",
+    "data": "m/48'/0'/0'/2'"
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Tr",
+    "body": {
+      "kind": "Tr",
+      "data": {
+        "is_nums": true,
+        "key_index": 0,
+        "tree": {
+          "tag": "MultiA",
+          "body": {
+            "kind": "MultiKeys",
+            "data": {
+              "k": 2,
+              "indices": [
+                0,
+                1,
+                2
+              ]
+            }
+          }
+        }
+      }
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": null,
+    "pubkeys": null,
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}

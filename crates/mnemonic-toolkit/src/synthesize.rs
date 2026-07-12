@@ -48,8 +48,12 @@ impl Bundle {
 ///   byte-identical across all users of that type ("one engraving for
 ///   thousands"). Binding stub roots on the key-stable
 ///   `WalletDescriptorTemplateId`. REQUIRES `descriptor.n == 1 &&
-///   canonical_origin(&tree).is_some()` (pkh/wpkh/tr-keypath single-sig);
-///   every other shape is refused with `TemplateFormUnsupportedShape`.
+///   cli_template_from_tree(&tree).is_some()` (the three origin-elidable
+///   pkh/wpkh/tr-keypath single-sig types); every other shape is refused with
+///   `TemplateFormUnsupportedShape`. NB (md-codec 0.41.0+):
+///   `canonical_origin(&tree).is_some()` is necessary-but-not-sufficient — it now
+///   also admits bip49 `sh(wpkh)`, which `cli_template_from_tree` (no `Sh` arm)
+///   still rejects — so `cli_template_from_tree` is the actual admissibility gate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum, Default)]
 pub enum Md1Form {
     /// Full keyed wallet-policy md1 (default; identifies this wallet).
@@ -346,16 +350,22 @@ pub(crate) fn is_order_independent_shape(tree: &md_codec::tree::Node) -> bool {
 }
 
 /// #28 phase 1 — map a canonical single-sig descriptor TREE to its
-/// `CliTemplate` (the type the keyless template encodes). Mirrors the shape
-/// dispatch of `md_codec::canonical_origin::canonical_origin`, but emits a
-/// `CliTemplate` (NOT the inverse of `script_type_from_template`). Returns the
-/// type only for the three canonical-origin-elidable single-sig shapes —
-/// `pkh(@0)` → bip44, `wpkh(@0)` → bip84, `tr(@0)` key-path (no TapTree) →
-/// bip86.
+/// `CliTemplate` (the type the keyless template encodes). Returns the type only
+/// for the three ORIGIN-ELIDABLE single-sig template shapes — `pkh(@0)` → bip44,
+/// `wpkh(@0)` → bip84, `tr(@0)` key-path (no TapTree) → bip86 (NOT the inverse
+/// of `script_type_from_template`).
 ///
-/// Everything else (multisig, bip49 `sh(wpkh)`, taproot-with-tree, bare wsh, …)
-/// returns `None` — exactly the shapes `--md1-form=template` refuses at emit,
-/// so this never has to invent a type for a non-template md1.
+/// **Intentional divergence from `canonical_origin` (md-codec 0.41.0+):** this
+/// once MIRRORED `md_codec::canonical_origin::canonical_origin`'s shape
+/// dispatch, but 0.41.0 flipped `canonical_origin(sh(wpkh))` `None`→`Some(49')`.
+/// `canonical_origin(&tree).is_some()` is now NECESSARY-BUT-NOT-SUFFICIENT for
+/// template-admissibility; THIS function is the real gate. It deliberately keeps
+/// NO `Sh` arm, so bip49 `sh(wpkh)` — now canonical — still returns `None` and
+/// is still refused at template emit (the refusal is UNCHANGED; only
+/// `canonical_origin`'s classification moved). Everything else (multisig,
+/// taproot-with-tree, bare wsh, …) likewise returns `None` — exactly the shapes
+/// `--md1-form=template` refuses at emit, so this never has to invent a type for
+/// a non-template md1.
 pub fn cli_template_from_tree(tree: &md_codec::tree::Node) -> Option<CliTemplate> {
     use md_codec::tag::Tag;
     use md_codec::tree::Body;
@@ -1104,11 +1114,15 @@ pub fn synthesize_unified(
 ///       (b) it has NO hardened use-site (`has_hardened_use_site` — #25; an xpub
 ///           cannot derive a hardened public child → unrestorable).
 ///   - **n == 1 (single-sig — UNCHANGED from phase 1):** admit ONLY the three
-///     canonical-origin-elidable types — `cli_template_from_tree(tree).is_some()`
+///     ORIGIN-ELIDABLE template types — `cli_template_from_tree(tree).is_some()`
 ///     (pkh/bip44, wpkh/bip84, tr-keypath/bip86). This keeps bip49 `sh(wpkh)`
 ///     and a degenerate nested-multi/sortedmulti 1-of-1 (R0 I1) REFUSED, as
 ///     phase 1 pinned them — they are not "standard single-sig template" types
-///     and route to `--md1-form=policy`.
+///     and route to `--md1-form=policy`. NB (md-codec 0.41.0+): bip49 `sh(wpkh)`
+///     is now `canonical_origin=Some`, so this gate CANNOT key off
+///     `canonical_origin` — `cli_template_from_tree` (no `Sh` arm) is what still
+///     refuses it. The refusal is unchanged; only `canonical_origin`'s verdict
+///     moved (intentional divergence).
 ///
 /// Refusals → `TemplateFormUnsupportedShape`.
 ///

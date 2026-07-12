@@ -402,6 +402,13 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
             "md1 string has {} symbols; the codex32 regular code caps a string at {}",
             symbols, max,
         ),
+        // md-codec 0.41.0 F-A8: the shared TLV parser now rejects a non-zero
+        // trailing-pad tail (≤7 bits) — the reference encoder always zero-pads
+        // to the symbol boundary, so a non-zero pad is non-canonical wire.
+        E::MalformedPayloadPadding { bits } => format!(
+            "md1 non-zero trailing padding: the final {} pad bit(s) must be zero",
+            bits,
+        ),
     }
 }
 

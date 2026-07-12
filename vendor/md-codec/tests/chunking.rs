@@ -171,6 +171,47 @@ fn multi_chunk_descriptor_splits_and_reassembles() {
     assert_eq!(d, d2);
 }
 
+/// F-A2: `decode_md1_string` must auto-dispatch a chunked single-string
+/// (chunked-flag set on the first symbol) through the chunk-reassembly path
+/// instead of the single-payload primitive. Before the fix this returned
+/// `WireVersionMismatch { got: 9 }` (the version field misread across the
+/// chunk-header layout); after the fix it round-trips.
+#[test]
+fn decode_md1_string_auto_dispatches_single_chunk() {
+    let d = small_descriptor();
+    let chunks = split(&d).unwrap();
+    assert_eq!(chunks.len(), 1, "fixture must be a single chunk");
+    let decoded =
+        md_codec::decode::decode_md1_string(&chunks[0]).expect("chunked single string decodes");
+    assert_eq!(decoded, d, "chunked single-string decode must round-trip");
+}
+
+/// F-A2 recovery-safety: a non-chunked single-string still decodes via the
+/// single-payload path (chunked-flag = 0 for the all-even usable version set
+/// {4,8,12}); the dispatch never diverts a currently-decoding input.
+#[test]
+fn decode_md1_string_non_chunked_unchanged() {
+    let d = small_descriptor();
+    let s = md_codec::encode::encode_md1_string(&d).expect("single-string encodes");
+    let decoded = md_codec::decode::decode_md1_string(&s).expect("non-chunked decodes");
+    assert_eq!(decoded, d);
+}
+
+/// F-A2 (post-impl Minor-2): a lone chunk `i`-of-`N` (N≥2) fed to the
+/// single-string entry point must dispatch and then fail closed as an
+/// incomplete set — never silently decode a partial payload.
+#[test]
+fn decode_md1_string_lone_chunk_of_multi_is_incomplete() {
+    let d = multi_chunk_descriptor();
+    let chunks = split(&d).unwrap();
+    assert!(chunks.len() >= 2, "fixture must be multi-chunk");
+    let err = md_codec::decode::decode_md1_string(&chunks[1]).unwrap_err();
+    assert!(
+        matches!(err, md_codec::Error::ChunkSetIncomplete { .. }),
+        "lone chunk-of-N must yield ChunkSetIncomplete, got {err:?}"
+    );
+}
+
 fn near_cap_descriptor() -> Descriptor {
     // Push toward 64 chunks via a giant unknown TLV. The wire-format
     // encoder preserves unknown TLVs verbatim, so we can synthesize a

@@ -210,13 +210,17 @@ mod chunk_set_id_tests {
 
 use crate::encode::Descriptor;
 
-/// Threshold (in payload bits) above which chunking is required. Derived from
-/// codex32 *regular*-form's 80-char data-part limit (per BIP 93): 3 HRP + 1
-/// separator + 64 data + 13 checksum (see `codex32::REGULAR_CHECKSUM_SYMBOLS`).
-/// Long-form codex32 was dropped in v0.12.0, so the legal data-symbol budget
-/// per chunk is 64 = 320 bits.
-/// Encoders attempt single-string emit first; if the codex32 wrapping reports
-/// "too long", split into N chunks.
+/// Per-chunk payload *sizing* budget (in payload bits) that [`split`] uses to
+/// choose the chunk count: `count = ceil(padded_payload_bits / 320)`. It is 64
+/// data symbols (64 × 5 = 320 bits), deliberately BELOW the codex32 regular
+/// single-string data cap of 80 symbols / 400 bits (enforced by
+/// [`crate::codex32::wrap_payload`]), so each chunk's 37-bit header fits
+/// alongside the fragment inside one regular-code codeword.
+///
+/// NOTE: this is the chunk-*sizing* budget, NOT the single-string threshold.
+/// A payload that fits ≤ 400 bits is emitted as ONE string; only a payload
+/// exceeding the 400-bit single-string cap (or an explicit `--force-chunked`)
+/// is split — and once split, chunks are sized by this 320-bit budget.
 pub const SINGLE_STRING_PAYLOAD_BIT_LIMIT: usize = 64 * 5;
 
 /// Split a [`Descriptor`] into N codex32 md1 strings, each carrying a chunk

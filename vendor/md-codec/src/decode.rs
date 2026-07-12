@@ -83,8 +83,25 @@ pub fn decode_payload(bytes: &[u8], total_bits: usize) -> Result<Descriptor, Err
 /// Uses the symbol-aligned bit count returned by `unwrap_string` (5 × symbol_count),
 /// which is exact at the codex32 layer with ≤4 bits of trailing zero-padding —
 /// well within the v11 decoder's TLV-rollback tolerance.
+///
+/// F-A2: in-band auto-dispatch per SPEC v0.30 §2.3. The chunked-flag lives in
+/// bit 0 (LSB) of the first 5-bit symbol (`[v3][v2][v1][v0][chunked]` for a
+/// chunk header vs `[divergent][v3][v2][v1][v0]` for a single payload). When
+/// set, the string is a chunk-form md1 and MUST route through the
+/// chunk-reassembly path (a 1-element set) rather than the single-payload
+/// primitive `decode_payload` — mirroring `decode_with_correction`'s
+/// single-string auto-dispatch. The usable single-payload version set {4,8,12}
+/// is all-even ⇒ every currently-valid single-payload string has first-symbol
+/// LSB = 0, so this dispatch never diverts an input that decodes today. No
+/// recursion cycle: `reassemble` → `decode_payload`, never back to here.
 pub fn decode_md1_string(s: &str) -> Result<Descriptor, Error> {
     let (bytes, symbol_aligned_bit_count) = crate::codex32::unwrap_string(s)?;
+    // The first symbol occupies the top 5 bits of byte 0 (MSB-first packing),
+    // so its LSB (the chunked-flag) is bit 3 of byte 0.
+    let chunked_flag = bytes.first().map(|b| (b >> 3) & 0x01).unwrap_or(0);
+    if chunked_flag == 1 {
+        return crate::chunk::reassemble(&[s]);
+    }
     decode_payload(&bytes, symbol_aligned_bit_count)
 }
 

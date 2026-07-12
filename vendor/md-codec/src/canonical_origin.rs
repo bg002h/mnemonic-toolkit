@@ -12,6 +12,7 @@
 //! | `pkh(@N)` single-key                   | `m/44'/0'/0'`         |
 //! | `wpkh(@N)` single-key                  | `m/84'/0'/0'`         |
 //! | `tr(@N)` key-path only (no TapTree)    | `m/86'/0'/0'`         |
+//! | `sh(wpkh(@N))` single-key nested segwit| `m/49'/0'/0'`         |
 //! | `wsh(multi/sortedmulti)`               | `m/48'/0'/0'/2'`      |
 //! | `sh(wsh(multi/sortedmulti))`           | `m/48'/0'/0'/1'`      |
 //! | `sh(sortedmulti)` legacy P2SH multi    | `None` (forced explicit) |
@@ -60,10 +61,15 @@ pub fn canonical_origin(tree: &Node) -> Option<OriginPath> {
         {
             Some(mk_origin(&[(true, 48), (true, 0), (true, 0), (true, 2)]))
         }
+        // sh(wpkh(@N)) single-key nested segwit → m/49'/0'/0' (BIP49).
         // sh(wsh(multi/sortedmulti)) → m/48'/0'/0'/1'
         // sh(sortedmulti) legacy → None (handled by the catch-all below)
         (Tag::Sh, Body::Children(children)) if children.len() == 1 => {
             let inner = &children[0];
+            // F-A1: standard BIP49 nested-segwit single-sig.
+            if inner.tag == Tag::Wpkh && matches!(inner.body, Body::KeyArg { .. }) {
+                return Some(mk_origin(&[(true, 49), (true, 0), (true, 0)]));
+            }
             if inner.tag == Tag::Wsh {
                 if let Body::Children(grand) = &inner.body {
                     if grand.len() == 1 && is_wsh_inner_multi(grand[0].tag) {
@@ -198,6 +204,14 @@ mod tests {
             got,
             mk_origin(&[(true, 48), (true, 0), (true, 0), (true, 2)])
         );
+    }
+
+    #[test]
+    fn sh_wpkh_single_key_returns_bip49_origin() {
+        // F-A1: sh(wpkh(@N)) is standard BIP49 nested single-sig segwit →
+        // m/49'/0'/0'. Previously returned None (self-rejecting elided card).
+        let got = canonical_origin(&sh_of(wpkh_at(0))).unwrap();
+        assert_eq!(got, mk_origin(&[(true, 49), (true, 0), (true, 0)]));
     }
 
     #[test]

@@ -342,11 +342,15 @@ pub enum ToolkitError {
     },
     /// #28 phase 1 — `bundle --md1-form=template` was requested for a
     /// descriptor shape the keyless single-sig template form does not support:
-    /// either `descriptor.n > 1` (multisig) or `canonical_origin(&tree)` is
-    /// `None` (a non-canonical wrapper / custom origin, e.g. bip49 nested
-    /// segwit, bare wsh, or a baked custom path). The keyless template MUST be
-    /// origin-elidable and single-sig to be byte-shareable. Use
-    /// `--md1-form=policy` for these shapes. Exit 2.
+    /// either `descriptor.n > 1` (multisig) or the shape is not one of the three
+    /// origin-elidable single-sig template types (`cli_template_from_tree(&tree)`
+    /// is `None` — a non-canonical wrapper, a custom origin, bare wsh, or bip49
+    /// nested segwit `sh(wpkh)`). The keyless template MUST be origin-elidable and
+    /// single-sig to be byte-shareable. NB (md-codec 0.41.0+): bip49 `sh(wpkh)` is
+    /// now `canonical_origin=Some`, so `canonical_origin` alone no longer
+    /// classifies it — `cli_template_from_tree` (no `Sh` arm) is the gate that
+    /// still refuses it (intentional divergence). Use `--md1-form=policy` for
+    /// these shapes. Exit 2.
     TemplateFormUnsupportedShape {
         message: String,
     },
@@ -555,6 +559,13 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         // v0.34.0 BCH-error-correction variant (Phase B.2): uncorrectable chunk
         // → exit 2 (Repair error class, matches RepairError::TooManyErrors).
         | md_codec::Error::TooManyErrors { .. }
+        // md-codec 0.41.0 F-A8: the shared TLV parser now rejects a non-zero
+        // trailing-pad tail (`reject_non_zero_pad`, ≤7 bits) that pre-0.41.0
+        // silently accepted (`break;`). A non-zero pad is non-canonical /
+        // adversarial wire (our encoders always zero-pad) → decode-reject
+        // class, exit 2, same routing as the sibling structural/TLV rejects
+        // (sibling precedent: mk_codec::Error::MalformedPayloadPadding → 2).
+        | md_codec::Error::MalformedPayloadPadding { .. }
         // cycle-4 (md-codec 0.38.0) length-cap rejects on the codex32 regular
         // code (93-symbol bounded). H6 = encode-side over-80-data-symbol reject;
         // M4 = correcting-decode over-93-symbol chunk reject; I1 = non-correcting
@@ -1266,6 +1277,27 @@ mod tests {
             .exit_code(),
             2,
         );
+    }
+
+    /// md-codec 0.41.0 (F-A8) added ONE new `Error` variant —
+    /// `MalformedPayloadPadding { bits }`, the non-zero trailing-pad decode
+    /// reject fired by the shared TLV parser (`reject_non_zero_pad`). Pin its
+    /// routing: it is a decode-reject-class error → MdCodec → exit 2 +
+    /// kind() == "MdCodec" (NOT the exit-3 FutureFormat interception, which is
+    /// reserved for WireVersionMismatch). Mirrors
+    /// `md_codec_v0_30_new_variant_routing`.
+    #[test]
+    fn md_codec_v0_41_new_variant_routing() {
+        // Direct MdCodec wrap → exit 2 + "MdCodec".
+        let e = ToolkitError::MdCodec(md_codec::Error::MalformedPayloadPadding { bits: 3 });
+        assert_eq!(e.exit_code(), 2);
+        assert_eq!(e.kind(), "MdCodec");
+
+        // Via `From` (the production path): a non-WireVersionMismatch variant
+        // routes to MdCodec, NOT FutureFormat — so still exit 2 / "MdCodec".
+        let tk: ToolkitError = md_codec::Error::MalformedPayloadPadding { bits: 7 }.into();
+        assert_eq!(tk.exit_code(), 2);
+        assert_eq!(tk.kind(), "MdCodec");
     }
 
     #[test]

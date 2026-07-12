@@ -526,9 +526,9 @@ dependencies = [
 
 [[package]]
 name = "md-codec"
-version = "0.40.0"
+version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd0a75b506b04d7941593509331db98e5cd366538b906d3923d634d69065605d"
+checksum = "2749bf36a31f6b9423c514f682eb527e34156322b5ba6f0f8adcda239d14907d"
 dependencies = [
  "bip39",
  "bitcoin",
@@ -576,7 +576,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.86.0"
+version = "0.87.0"
 dependencies = [
  "aes",
  "base64 0.22.1",

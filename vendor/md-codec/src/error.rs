@@ -412,18 +412,26 @@ pub enum Error {
         max: u8,
     },
 
-    /// BCH correction capacity exceeded: a chunk's syndrome pattern
-    /// indicated more than `t = 4` errors (BCH(93, 80, 8) singleton
-    /// bound `2t = 8`), so a unique correction cannot be derived.
-    /// v0.34.0 introduced; raised by [`crate::decode_with_correction`].
-    /// Atomic per plan §1 D28: any chunk failing this check fails the
-    /// whole multi-chunk call without partial output.
-    #[error("chunk {chunk_index} has more than {bound} errors; uncorrectable")]
+    /// BCH correction capacity exceeded: a chunk's syndrome pattern indicated
+    /// more errors than the BCH(93, 80, 8) code can correct. F-A9: the
+    /// *correction* capacity is `t = 4` substitution errors; the code's
+    /// `2t = 8` figure is its *detection* radius (the singleton bound), NOT the
+    /// number of correctable errors — the two must not be conflated. A pattern
+    /// beyond `t = 4` has no unique correction. v0.34.0 introduced; raised by
+    /// [`crate::decode_with_correction`]. Atomic per plan §1 D28: any chunk
+    /// failing this check fails the whole multi-chunk call without partial
+    /// output.
+    #[error(
+        "chunk {chunk_index} exceeds the BCH correction capacity of t=4 substitution errors; uncorrectable"
+    )]
     TooManyErrors {
         /// 0-indexed position of the offending chunk in the caller's
         /// `&[&str]` slice.
         chunk_index: usize,
-        /// The BCH singleton bound `2t = 8` (i.e. 4 correctable errors).
+        /// The BCH singleton (detection) bound `2t = 8`. Note this is the
+        /// detection radius, not the `t = 4` correction capacity stated in the
+        /// user-facing message; the field is retained for callers/tests that
+        /// pin the code's `2t` parameter.
         bound: u8,
     },
 
@@ -476,6 +484,20 @@ pub enum Error {
         /// The maximum legal codeword length (93).
         max: usize,
     },
+
+    /// F-A8: the ≤7 trailing bits after the last TLV entry (or after the tree
+    /// when no TLVs are present) are byte-padding bits that the reference
+    /// encoder ALWAYS emits as zero (BitWriter + `wrap_payload` zero-pad to the
+    /// next byte boundary). A non-zero trailing pad is a malformed / hand-forged
+    /// wire, never produced by our encoders; the TLV rollback rejects it
+    /// (fail-closed) instead of silently discarding the non-zero bits. This is
+    /// the real error variant the BIP's §Padding rule cites for a non-zero
+    /// trailing pad (F-A8 / DG-5).
+    #[error("malformed payload padding: {bits} trailing pad bit(s) were not all zero")]
+    MalformedPayloadPadding {
+        /// Number of trailing pad bits inspected (1..=7).
+        bits: usize,
+    },
 }
 
 #[cfg(test)]
@@ -505,5 +527,25 @@ mod tests {
         let s = Error::NUMSSentinelConflict.to_string();
         assert!(s.contains("§7"), "Display must cite SPEC §7: {s}");
         assert!(s.contains("§11"), "Display must cite SPEC §11: {s}");
+    }
+
+    /// F-A9: `TooManyErrors` Display must state the correction capacity
+    /// `t = 4`, not conflate it with the `2t = 8` detection radius. The old
+    /// "more than 8 errors" text read as if 8 substitutions were correctable.
+    #[test]
+    fn too_many_errors_message_states_correction_capacity() {
+        let s = Error::TooManyErrors {
+            chunk_index: 0,
+            bound: 8,
+        }
+        .to_string();
+        assert!(
+            s.contains("t=4") || s.contains("t = 4"),
+            "Display must state correction capacity t=4: {s}"
+        );
+        assert!(
+            !s.contains("more than 8"),
+            "Display must not conflate the 2t=8 detection radius with correction: {s}"
+        );
     }
 }

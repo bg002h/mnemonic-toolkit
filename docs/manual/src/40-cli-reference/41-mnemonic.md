@@ -415,13 +415,13 @@ mnemonic restore --md1 <template-md1> \
 
 ### Non-canonical descriptor mode
 
-A descriptor is **canonical** when it matches one of the five wrapper
+A descriptor is **canonical** when it matches one of the six wrapper
 shapes md-codec's `canonical_origin` table recognises — `pkh(@N)`,
-`wpkh(@N)`, `tr(@N)` key-path-only, `wsh(multi/sortedmulti(...))`, or
-`sh(wsh(multi/sortedmulti(...)))`. Anything else — bare `wsh(@N)`,
-miniscript bodies like `wsh(andor(...))`, taproot trees with leaves
-(`tr(@N, <TapTree>)`), legacy `sh(sortedmulti(...))` — is
-**non-canonical**.
+`wpkh(@N)`, `sh(wpkh(@N))`, `tr(@N)` key-path-only,
+`wsh(multi/sortedmulti(...))`, or `sh(wsh(multi/sortedmulti(...)))`.
+Anything else — bare `wsh(@N)`, miniscript bodies like
+`wsh(andor(...))`, taproot trees with leaves (`tr(@N, <TapTree>)`),
+legacy `sh(sortedmulti(...))` — is **non-canonical**.
 
 Non-canonical descriptors typically lack per-`@N` origin paths in the
 descriptor string itself. The toolkit handles this two ways:

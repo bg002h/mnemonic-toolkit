@@ -300,10 +300,17 @@ pub fn run<R: Read, W: Write, E: Write>(
     // `--md1` present → md1-driven reconstruction. Two ingest routes:
     //
     //   (1) #28 phase 1 — a KEYLESS SINGLE-SIG TEMPLATE md1 (`--md1-form=template`
-    //       output): `!is_wallet_policy() && n==1 && canonical_origin().is_some()`.
+    //       output): `!is_wallet_policy() && n==1 && canonical_origin().is_some()
+    //       && cli_template_from_tree().is_some()` (the 4-clause code below).
     //       The template carries the script type + use-site; the seed (`--from`,
     //       REQUIRED here) provides the key; `--account`/`--origin` the origin.
-    //       Routed to the NEW single-sig template completion below.
+    //       Routed to the NEW single-sig template completion below. NB
+    //       (md-codec 0.41.0+): the `cli_template_from_tree` conjunct is
+    //       load-bearing, NOT redundant with `canonical_origin` — bip49
+    //       `sh(wpkh)` is now `canonical_origin=Some` yet has no `Sh` arm, so
+    //       this conjunct is the ONLY thing keeping a keyless sh(wpkh) template
+    //       out of single-sig completion (funds guard; see
+    //       `tests/cli_shwpkh_canonical_flip.rs`).
     //   (2) everything else (a keyed wallet-policy md1, OR a keyless MULTISIG
     //       template) → today's multisig reconstruction. run_multisig's
     //       keyless-md1 gate then correctly catches a keyless *multisig* template.

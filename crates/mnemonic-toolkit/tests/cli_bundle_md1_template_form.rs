@@ -236,7 +236,10 @@ fn template_form_refuses_multisig_template() {
 
 #[test]
 fn template_form_refuses_bip49_nested_segwit() {
-    // bip49 = sh(wpkh(@0)) → canonical_origin returns None → refused.
+    // bip49 = sh(wpkh(@0)). Post-md-codec-0.41.0 `canonical_origin(sh(wpkh))` is
+    // `Some(49')` (canonical), yet `cli_template_from_tree` has no `Sh` arm →
+    // template-admissibility FALSE → still refused (intentional divergence; the
+    // refusal is UNCHANGED, only canonical_origin's verdict moved).
     let assert = mnemonic()
         .args([
             "bundle",

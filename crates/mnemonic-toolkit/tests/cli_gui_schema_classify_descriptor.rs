@@ -73,6 +73,22 @@ fn canonical_sh_wsh_sortedmulti_returns_canonical() {
         .stdout("canonical\n");
 }
 
+/// sh(wpkh) canonical re-pin cycle (md-codec 0.41.0 F-A1) — `sh(wpkh(@0))`
+/// (bip49 nested-segwit single-sig) now returns `canonical\n`. Pre-0.41.0
+/// `canonical_origin(sh(wpkh))` was `None` → this printed `non-canonical`; the
+/// 0.41.0 flip makes it `Some(m/49'/0'/0')` → `canonical`. The GUI's
+/// `classify_descriptor_canonicity()` regex table (`conditional.rs`) lags this
+/// until its next toolkit pin bump (mnemonic-gui FOLLOWUP companion).
+#[test]
+fn canonical_sh_wpkh_returns_canonical() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["gui-schema", "--classify-descriptor", "sh(wpkh(@0))"])
+        .assert()
+        .success()
+        .stdout("canonical\n");
+}
+
 /// Cell 11 — non-canonical `wsh(andor(...))` returns `non-canonical\n`.
 #[test]
 fn non_canonical_wsh_andor_returns_non_canonical() {

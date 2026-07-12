@@ -217,7 +217,12 @@ impl TlvSection {
             // actually trailing codex32-padding (≤7 bits of zeros).
             let entry_start = r.save_position();
             if r.remaining_bits() < 5 {
-                break; // not enough bits for even a tag — clean end-of-stream
+                // Fewer than 5 bits remain — trailing codex32 byte-padding.
+                // F-A8: the reference encoder always zero-pads, so a non-zero
+                // trailing bit is a malformed wire. Reject rather than silently
+                // discard it (fail-closed).
+                reject_non_zero_pad(r)?;
+                break; // clean end-of-stream
             }
             // Try to parse a complete TLV entry. Any failure (truncated read,
             // ordering violation, empty-entry-by-spec, length exceeds remaining)
@@ -294,6 +299,9 @@ impl TlvSection {
                     // Padding tolerance: ≤7 bits of trailing zeros after the
                     // last real TLV (or after the tree if no TLVs were emitted).
                     if remaining_at_entry_start <= 7 {
+                        // F-A8: the trailing pad MUST be all-zero (the encoder
+                        // always zero-pads); a non-zero pad is malformed.
+                        reject_non_zero_pad(r)?;
                         break;
                     }
                     // More than 7 bits remained but the parse still failed —
@@ -304,6 +312,28 @@ impl TlvSection {
         }
         Ok(section)
     }
+}
+
+/// F-A8: verify the remaining ≤7 trailing bits of `r` are all zero, WITHOUT
+/// advancing the cursor (peek-and-restore). The reference encoder always
+/// zero-pads to the next byte boundary (BitWriter + `wrap_payload`), so any
+/// non-zero trailing bit is a malformed / hand-forged wire. Called at both
+/// TLV-loop break points (clean end-of-stream and parse-failure rollback)
+/// before accepting the tail as padding. Cursor-neutral so it does not perturb
+/// the `bit_position == bit_len` post-read invariant callers rely on.
+fn reject_non_zero_pad(r: &mut BitReader) -> Result<(), Error> {
+    let bits = r.remaining_bits();
+    if bits == 0 {
+        return Ok(());
+    }
+    debug_assert!(bits <= 7, "pad-tolerance band is ≤7 bits");
+    let saved = r.save_position();
+    let pad = r.read_bits(bits)?;
+    r.restore_position(saved);
+    if pad != 0 {
+        return Err(Error::MalformedPayloadPadding { bits });
+    }
+    Ok(())
 }
 
 /// Read one sparse `(idx, ...)` index header field: a `key_index_width`-bit
@@ -818,5 +848,59 @@ mod tests {
             "trailing slack must be rejected, got {:?}",
             result
         );
+    }
+
+    // ─── F-A8: non-zero trailing-pad rejection ───────────────────────────
+
+    /// A TLV section with fewer than 5 trailing bits that are NOT all zero is
+    /// a malformed pad and must be rejected (the reference encoder always
+    /// zero-pads). Covers the "clean end-of-stream" break point (< 5 bits).
+    #[test]
+    fn non_zero_trailing_pad_under_5_bits_rejected() {
+        let mut w = BitWriter::new();
+        w.write_bits(0b101, 3); // 3 non-zero pad bits, no real TLV
+        let total = w.bit_len();
+        let bytes = w.into_bytes();
+        let mut r = BitReader::with_bit_limit(&bytes, total);
+        let result = TlvSection::read(&mut r, 2, 3);
+        assert!(
+            matches!(result, Err(Error::MalformedPayloadPadding { bits: 3 })),
+            "expected MalformedPayloadPadding {{ bits: 3 }}, got {result:?}"
+        );
+    }
+
+    /// A non-zero pad in the 5..=7-bit band (the parse-failure rollback break
+    /// point) is likewise rejected. 6 bits = `0b100000`: a phantom tag=16
+    /// (unknown) whose varint read truncates → rollback with 6 bits remaining.
+    #[test]
+    fn non_zero_trailing_pad_5_to_7_bits_rejected() {
+        let mut w = BitWriter::new();
+        w.write_bits(0b100000, 6);
+        let total = w.bit_len();
+        let bytes = w.into_bytes();
+        let mut r = BitReader::with_bit_limit(&bytes, total);
+        let result = TlvSection::read(&mut r, 2, 3);
+        assert!(
+            matches!(result, Err(Error::MalformedPayloadPadding { bits: 6 })),
+            "expected MalformedPayloadPadding {{ bits: 6 }}, got {result:?}"
+        );
+    }
+
+    /// All-zero trailing pad (any width ≤7) is accepted — the reference
+    /// encoder's normal output.
+    #[test]
+    fn zero_trailing_pad_accepted() {
+        for pad in 1..=7usize {
+            let mut w = BitWriter::new();
+            w.write_bits(0, pad);
+            let total = w.bit_len();
+            let bytes = w.into_bytes();
+            let mut r = BitReader::with_bit_limit(&bytes, total);
+            let result = TlvSection::read(&mut r, 2, 3);
+            assert!(
+                matches!(&result, Ok(s) if s.is_empty()),
+                "{pad}-bit zero pad must be accepted, got {result:?}"
+            );
+        }
     }
 }

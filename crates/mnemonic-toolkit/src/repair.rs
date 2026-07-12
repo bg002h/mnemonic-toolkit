@@ -3126,6 +3126,90 @@ mod tests {
     }
 
     // ========================================================================
+    // md-codec 0.41.0 F-A8 (S2, M2/M3) — the shared TLV parser now rejects a
+    // non-zero trailing-pad tail (`reject_non_zero_pad`, ≤7 bits) that
+    // pre-0.41.0 silently accepted. These two cells prove the toolkit SURFACES
+    // that reject on BOTH the direct decode path (→ MdCodec/exit 2) and the
+    // repair path (a mid-repair occurrence degrades via `repair_via_md_codec`'s
+    // wildcard → `PostCorrectionDecodeFailed`). A BCH-corrected-onto-non-zero-
+    // pad codeword is not deterministically constructible (M2), so we hand-
+    // forge a checksum-VALID non-zero-pad payload directly.
+    // ========================================================================
+
+    /// Build a checksum-VALID single (non-chunked) md1 STRING whose trailing
+    /// symbol-pad tail is non-zero. `codex32::wrap_payload` re-derives the
+    /// codex32 BCH checksum via `bch::bch_create_checksum_regular`, so the
+    /// string parses cleanly through the checksum gate and reaches the TLV
+    /// pad check; self-validating (asserts the reject actually fires) to guard
+    /// against bit-arithmetic drift.
+    fn forged_non_zero_pad_md1() -> String {
+        const VALID_SINGLE_MD1: &str = "md1yqpqqxqq8xtwhw4xwn4qh";
+        let desc = md_codec::decode_md1_string(VALID_SINGLE_MD1).expect("decode base md1");
+        let (bytes, bit_len) = md_codec::encode_payload(&desc).expect("encode payload");
+        // Extend the payload by ONE bit past its real end and set that bit
+        // non-zero. On decode, `unwrap_string` reports the symbol-aligned bit
+        // count (bit_len rounded up to the next 5-bit symbol boundary, ≤4 more
+        // bits), the TLV reader consumes exactly `bit_len` real bits, and the
+        // remaining pad tail is now non-zero → `reject_non_zero_pad` fires.
+        let bit_count = bit_len + 1;
+        let mut b = bytes;
+        while b.len() * 8 < bit_count {
+            b.push(0);
+        }
+        b[bit_len / 8] |= 1 << (7 - (bit_len % 8)); // MSB-first: set the first pad bit
+        let s = md_codec::codex32::wrap_payload(&b, bit_count).expect("wrap payload");
+        assert!(
+            matches!(
+                md_codec::decode_md1_string(&s),
+                Err(md_codec::Error::MalformedPayloadPadding { .. })
+            ),
+            "forged md1 did not surface MalformedPayloadPadding (bit-arithmetic drift?)"
+        );
+        s
+    }
+
+    /// Direct decode-path cell (S2): a checksum-VALID non-zero-pad md1 decodes
+    /// to `MalformedPayloadPadding`, and the toolkit routes it to exit 2 (the
+    /// decode-reject class) with kind() == "MdCodec".
+    #[test]
+    fn non_zero_pad_md1_surfaces_malformed_payload_padding_exit_2() {
+        let s = forged_non_zero_pad_md1();
+        let err = md_codec::decode_md1_string(&s).unwrap_err();
+        assert!(
+            matches!(err, md_codec::Error::MalformedPayloadPadding { .. }),
+            "expected MalformedPayloadPadding, got {err:?}"
+        );
+        let tk: crate::error::ToolkitError = err.into();
+        assert_eq!(
+            tk.exit_code(),
+            2,
+            "non-zero-pad reject is the decode-reject class"
+        );
+        assert_eq!(tk.kind(), "MdCodec");
+    }
+
+    /// Repair-path cell (S2, M2): the SAME checksum-valid non-zero-pad md1 fed
+    /// to `repair_card` (→ `repair_via_md_codec` → `decode_with_correction`)
+    /// surfaces the reject as a MID-repair occurrence — BCH sees residue 0 (no
+    /// correction) but the post-decode pad check fires — and the wildcard at
+    /// `repair_via_md_codec` degrades it to `PostCorrectionDecodeFailed`.
+    #[test]
+    fn non_zero_pad_md1_repair_degrades_to_post_correction_decode_failed() {
+        let s = forged_non_zero_pad_md1();
+        let err = repair_card(CardKind::Md1, &[s]).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                RepairError::PostCorrectionDecodeFailed {
+                    chunk_index: None,
+                    ..
+                }
+            ),
+            "expected PostCorrectionDecodeFailed {{ chunk_index: None, .. }}, got {err:?}"
+        );
+    }
+
+    // ========================================================================
     // Cycle G (`repair-engine-outcome-zeroization`) SPEC §1/§4.1 — the
     // repair engine's owned secret-bearing `RepairOutcome`/`RepairDetail`
     // fields now carry `SecretString` (redacting Debug + transparent

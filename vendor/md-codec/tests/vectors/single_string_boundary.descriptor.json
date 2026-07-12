@@ -1,0 +1,88 @@
+{
+  "n": 9,
+  "path_decl": {
+    "tag": "Shared",
+    "data": "m"
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Wsh",
+    "body": {
+      "kind": "Children",
+      "data": [
+        {
+          "tag": "SortedMulti",
+          "body": {
+            "kind": "MultiKeys",
+            "data": {
+              "k": 2,
+              "indices": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": [
+      [
+        0,
+        "01020304"
+      ],
+      [
+        1,
+        "02030405"
+      ],
+      [
+        2,
+        "03040506"
+      ],
+      [
+        3,
+        "04050607"
+      ],
+      [
+        4,
+        "05060708"
+      ],
+      [
+        5,
+        "06070809"
+      ],
+      [
+        6,
+        "0708090a"
+      ],
+      [
+        7,
+        "08090a0b"
+      ]
+    ],
+    "pubkeys": null,
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}
