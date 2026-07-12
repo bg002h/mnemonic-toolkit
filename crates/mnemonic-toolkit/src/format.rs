@@ -136,7 +136,12 @@ impl PartialDecodeInfo {
 #[derive(Debug, Serialize)]
 pub struct VerifyBundleJson {
     pub schema_version: &'static str,
-    pub result: &'static str, // "ok" | "mismatch"
+    pub result: &'static str, // "ok" | "mismatch" | "partial"
+    /// Pathless/dead-card partial-decode (P2.2): present ONLY when
+    /// `result == "partial"` (additive; omitted otherwise so the non-partial
+    /// wire-shape is byte-identical to pre-P2.2). `schema_version` unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub partial: Option<PartialDecodeInfo>,
     pub checks: Vec<VerifyCheck>,
 }
 

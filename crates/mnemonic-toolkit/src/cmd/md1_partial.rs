@@ -37,3 +37,27 @@ pub(crate) fn emit_partial_stderr_note<W: std::io::Write>(unres: &[u8], w: &mut 
          the intended path out-of-band before restoring funds from this backup"
     );
 }
+
+/// Decode the supplied md1 chunk-form card under PARTIAL opts and return its
+/// unresolved-origin `@N` indices — the ONLY signal the `verify-bundle` verdict
+/// gate (P2.2) uses to downgrade an otherwise-`ok` verdict to `partial`/exit 4.
+///
+/// Funds-load-bearing invariant: a non-empty return means the card decodes
+/// cleanly EXCEPT that its origin is elided-and-unresolvable. It returns `[]`
+/// on:
+///   - a canonical / explicit-origin card (resolves — never partial);
+///   - NO md1 supplied;
+///   - ANY decode error, INCLUDING a doctored cross-chunk content-id. The
+///     content-id oracle stays enforced under partial (`reassemble_with_opts`
+///     rejects a mismatched chunk set), so a doctored dead card errors here →
+///     `[]` → NOT treated as partial (it fails `md1_decode` → `mismatch`
+///     instead). Partial mode relaxes ONLY the origin gate, never the oracle.
+pub(crate) fn supplied_md1_unresolved_indices(md1: &[String]) -> Vec<u8> {
+    if md1.is_empty() {
+        return Vec::new();
+    }
+    let refs: Vec<&str> = md1.iter().map(String::as_str).collect();
+    md_codec::chunk::reassemble_with_opts(&refs, md_codec::DecodeOpts::partial())
+        .map(|d| d.unresolved_origin_indices())
+        .unwrap_or_default()
+}

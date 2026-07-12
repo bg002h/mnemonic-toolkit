@@ -522,12 +522,36 @@ pub fn run<W: Write, E: Write>(
     }
 
     let any_fail = checks.iter().any(|c| !c.passed);
-    let result = if any_fail { "mismatch" } else { "ok" };
+    // P2.2 (pathless partial-decode) — funds-critical verdict gate. Precedence:
+    // mismatch > partial > ok (M-1). A FAILED structural check ⇒ `mismatch`
+    // WINS (a structurally-wrong dead card must never read as merely partial).
+    // Otherwise, if the supplied md1 decodes cleanly EXCEPT for an unresolved
+    // origin, downgrade the otherwise-`ok` verdict to `partial`/exit 4 (never a
+    // pass — the origin is genuinely unspecified on this backup). The gate is
+    // NOT delegated to `expand` (verify-bundle's compares exclude origin and it
+    // never calls `expand` on the supplied card).
+    let partial_indices = if any_fail {
+        Vec::new()
+    } else {
+        crate::cmd::md1_partial::supplied_md1_unresolved_indices(&args.md1)
+    };
+    let partial = !partial_indices.is_empty();
+    let result = if any_fail {
+        "mismatch"
+    } else if partial {
+        "partial"
+    } else {
+        "ok"
+    };
 
     if args.json {
         let json = VerifyBundleJson {
             schema_version: "4",
             result,
+            partial: partial
+                .then(|| crate::format::PartialDecodeInfo::missing_explicit_origin(
+                    partial_indices.clone(),
+                )),
             checks,
         };
         serde_json::to_writer(&mut *stdout, &json).ok();
@@ -543,8 +567,11 @@ pub fn run<W: Write, E: Write>(
         }
         writeln!(stdout, "result: {}", result).ok();
     }
+    if partial {
+        crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
+    }
 
-    Ok(if any_fail { 4 } else { 0 })
+    Ok(if any_fail || partial { 4 } else { 0 })
 }
 
 /// #28 phase 1 — verify + recompose a keyless SINGLE-SIG TEMPLATE bundle.
@@ -1734,11 +1761,30 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     )?;
 
     let any_fail = checks.iter().any(|c| !c.passed);
-    let result_str = if any_fail { "mismatch" } else { "ok" };
+    // P2.2 (pathless partial-decode) — the descriptor-mode verdict gate; SAME
+    // funds-critical precedence as the template-mode `run` site: mismatch >
+    // partial > ok. (Both descriptor forks — @N and bare-concrete — funnel here.)
+    let partial_indices = if any_fail {
+        Vec::new()
+    } else {
+        crate::cmd::md1_partial::supplied_md1_unresolved_indices(&args.md1)
+    };
+    let partial = !partial_indices.is_empty();
+    let result_str = if any_fail {
+        "mismatch"
+    } else if partial {
+        "partial"
+    } else {
+        "ok"
+    };
     if args.json {
         let json = VerifyBundleJson {
             schema_version: "4",
             result: result_str,
+            partial: partial
+                .then(|| crate::format::PartialDecodeInfo::missing_explicit_origin(
+                    partial_indices.clone(),
+                )),
             checks,
         };
         serde_json::to_writer(&mut *stdout, &json).ok();
@@ -1754,7 +1800,10 @@ fn verify_emit_from_expected<W: Write, E: Write>(
         }
         writeln!(stdout, "result: {}", result_str).ok();
     }
-    Ok(if any_fail { 4 } else { 0 })
+    if partial {
+        crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
+    }
+    Ok(if any_fail || partial { 4 } else { 0 })
 }
 
 /// Returns true if any two slots share the same (xpub, path) pair.
@@ -2446,8 +2495,21 @@ fn emit_multisig_checks(
 
     // Decode supplied.md1 once for cosigner-mapping by tlv.pubkeys.
     // v0.22.1 Phase 4 site #6 — auto-fire on supplied md1 (multisig) decode-fail.
+    // P2.2 (pathless partial-decode): opt this SUPPLIED-card decode into the
+    // partial-allowing entry. A `canonical_origin == None` supplied card with an
+    // elided-and-unresolvable origin (a "dead card") now decodes Ok (its
+    // `tlv.pubkeys` stay available for correct cosigner-mapping) instead of
+    // erroring — so (a) the auto-repair trigger below does NOT fire on an intact
+    // dead card (M-3b clean fall-through: `is_err()` is false), and (b) the
+    // origin-excluding structural checks can pass, letting the verdict gate
+    // (run/verify_emit_from_expected) downgrade an otherwise-`ok` verdict to
+    // `partial`/exit 4. Every other decode check — per-chunk BCH, cross-chunk
+    // content-id oracle — stays enforced under partial: a doctored-content-id
+    // dead card still errors here → `md1_decode` fails → `mismatch` (NOT a
+    // false-pass, NOT `partial`).
     let supplied_md1_strs: Vec<&str> = supplied.md1.iter().map(|s| s.as_str()).collect();
-    let supplied_md_decoded = md_codec::chunk::reassemble(&supplied_md1_strs);
+    let supplied_md_decoded =
+        md_codec::chunk::reassemble_with_opts(&supplied_md1_strs, md_codec::DecodeOpts::partial());
     if supplied_md_decoded.is_err() && !no_auto_repair {
         let chunks: Vec<String> = supplied.md1.to_vec();
         crate::repair::try_repair_and_short_circuit(
@@ -3042,7 +3104,15 @@ fn emit_md1_checks(
     stderr: &mut dyn std::io::Write,
 ) -> Result<(), ToolkitError> {
     let supplied_md1: Vec<&str> = supplied.md1.iter().map(|s| s.as_str()).collect();
-    match md_codec::chunk::reassemble(&supplied_md1) {
+    // P2.2 (pathless partial-decode): opt the SUPPLIED single-sig md1 decode
+    // into the partial-allowing entry (symmetric with the multisig site). A dead
+    // card decodes Ok (origin-excluding `md1_xpub_match` can then pass) so the
+    // verdict gate downgrades `ok` → `partial`/exit 4; the auto-repair trigger in
+    // the `Err` arm below does NOT fire on an intact dead card (M-3b). The
+    // content-id oracle stays enforced (a doctored dead card still errors here →
+    // `md1_decode` fails → `mismatch`). Expected-card decode (`:exp_desc`) stays
+    // STRICT — the synthesized expected always carries an explicit origin.
+    match md_codec::chunk::reassemble_with_opts(&supplied_md1, md_codec::DecodeOpts::partial()) {
         Ok(desc) => {
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
