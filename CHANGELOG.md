@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.89.0] — 2026-07-11
+
+**SemVer-MINOR (additive intake) — `mnemonic inspect --md1` now accepts a plain NON-chunked single-string md1 (the bare `md encode` form), which previously failed `unsupported version 2` / exit 3. Closes the inspect leg of `toolkit-inspect-nonchunked-md1-intake-gap`. No clap/JSON/schema change (schema-mirror unaffected).**
+
+- **[expressiveness] non-chunked single-string md1 intake for `inspect`.** `inspect.rs::decode_card`'s `CardKind::Md1` arm now length-dispatches: a single (`[single]`) → `md_codec::decode_md1_string_with_opts(single, DecodeOpts::partial())`; multi-chunk (`len > 1`) → `reassemble_with_opts` (verbatim, byte-identical). The codec's IN-BAND chunked-flag discriminator (bit 3 of byte 0) — BCH-verified BEFORE the flag is read, so corruption can never re-route — routes a chunked-of-1 string internally back to `reassemble_with_opts` (byte-identical to the multi-chunk path) and a genuine non-chunked single to `decode_payload_with_opts`'s full validator gauntlet. A valid non-chunked single renders its `template:` at exit 0; a non-chunked **dead card** (no canonical origin + elided-unresolvable origin) partial-decodes to `template:` + the `origin: «unspecified — supply on restore»` marker + exit 4 (VERIFY-ME), byte-identical to the chunked partial path. `partial()` threads so `EmptyOriginOverride` stays fatal-in-partial; the cross-chunk content-id oracle stays UNCONDITIONAL for chunked cards (a single non-chunked payload has no cross-chunk oracle by construction — its integrity is the codex32 BCH checksum + `decode_payload`'s validators).
+- **[scope] inspect-ONLY; verify-bundle intake NOT broadened.** `verify-bundle`'s single-sig template path compares RAW strings (`expected.md1 == args.md1`) against chunk-form synthesized cards, so broadening intake alone can't make a non-chunked template verify (it needs a comparison-canonicalization change with its own funds review). That residual stays on the FOLLOWUP (`toolkit-inspect-nonchunked-md1-intake-gap`, verify-bundle leg). `repair` already handles non-chunked md1 (v0.86.0 demote).
+
+### Migration / dispositions
+
+- **No breaking change.** Only a previously-rejected (exit 3) non-chunked single now decodes; every existing input is byte-identical. A codex32-valid-but-structurally-invalid same-version single moves from the misleading exit-3 `FutureFormat` to `decode_payload`'s specific error (exit 2) — a correction, not a regression; genuine future-version singles keep exit 3.
+- **R0:** full pipeline GREEN — SPEC R0 + plan R0 + post-impl whole-diff R0, all 0C/0I (the funds invariants INV-1..4 verified in the compiled md-codec 0.42.0; a 20-position corruption fuzz proved corruption can never re-route; chunked path byte-identical). Suite 3749/0. FOLLOWUP `toolkit-inspect-nonchunked-md1-intake-gap` → RESOLVED (inspect leg; verify-bundle residual carved).
+
 ## mnemonic-toolkit [0.88.0] — 2026-07-11
 
 **SemVer-MINOR, funds-adjacent (expressiveness, fail-safe) — pathless/dead-card PARTIAL-DECODE. Re-pins `md-codec` 0.41.0 → 0.42.0. A "dead card" (an `md1` whose shape has no canonical origin AND whose per-`@N` origin is elided-and-unresolvable) is now PARTIAL-DECODED by `mnemonic inspect` + `verify-bundle` instead of hard-rejected: template rendered, origin honestly flagged `«unspecified»`, exit 4 (VERIFY-ME). Embodies "expressive on output, permissive on input — BOUNDED by never silently misrepresent." No clap-surface change (schema-mirror unaffected).**

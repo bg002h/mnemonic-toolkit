@@ -3553,8 +3553,11 @@ on input — never silently misrepresent" contract: the template is shown, but t
 origin is honestly flagged as unknown, so it is never mistaken for a derivable
 wallet. A **corrupted** dead card (cross-chunk content-id mismatch) is *not*
 partial-decoded — the content-id oracle stays enforced, so it fails to decode
-(exit 2), exactly as before. `inspect` reads chunk-form `md1` only (a plain
-non-chunked single-string `md1` is a separate, pre-existing intake limitation).
+(exit 2), exactly as before. Since **v0.89.0** `inspect` accepts both a
+chunk-form `md1` and a plain non-chunked single-string `md1` (the bare
+`md encode` form) — a valid single renders its `template:` at exit 0, a
+non-chunked dead card partial-decodes at exit 4 exactly like the chunked path.
+(`verify-bundle` intake is still chunk-form only for this class.)
 
 ### Synopsis
 
