@@ -769,6 +769,24 @@ recovery. Exit-5 is never "an oracle verified it" — that phrasing is
 false for the mk1 single-plate case, which is merely *not yet*
 falsified.
 
+**Pathless (dead-card) partial verdict (v0.88.0).** When the SUPPLIED `md1` is a
+**dead card** — no canonical origin *and* an elided-and-unresolvable per-`@N`
+origin (see [inspect](#mnemonic-inspect)) — that would otherwise verify `ok`,
+`verify-bundle` returns `result: partial` and exits **4** instead of `ok`/exit 0.
+All structural checks (which already exclude origin) still run; the verdict
+precedence is **mismatch > partial > ok** — a dead card that ALSO fails any
+structural check reports `mismatch` (exit 4) as before, and a *corrupted* dead
+card (content-id oracle failure) fails `md1_decode` → `mismatch`, never
+`partial`. The partial verdict downgrades only an otherwise-clean `ok`, honestly
+signalling that the origin on this backup is unspecified and must be confirmed
+out-of-band before restoring funds. The `--json` envelope gains an additive
+`partial` field on the partial verdict (`schema_version` unchanged; a
+non-partial verdict's JSON is byte-identical). The strict template route
+(`--template`) and `restore` are unaffected — they stay fail-closed. GUI
+consumers of the `--json` verdict must handle the new `partial` value (tracked
+follow-up; the clap flag surface is unchanged, so the schema mirror is not
+affected).
+
 **mk1 set-level re-verify (Cycle E):** for an `--mk1` / `--bundle-json`
 mk1 payload, the "Auto-fire" outcome above (exit 5, corrected chunk
 applied to stdout) only occurs when the FULL `chunk_set_id` group is
@@ -3519,6 +3537,24 @@ conversion. Per kind:
   rendered identically to `md decode`), placeholder count (`n`),
   root-tree tag (`Wpkh` / `Tr` / `Wsh` / …), wallet-policy-mode flag,
   path-decl shape (`Shared` vs `Divergent`).
+
+**Pathless (dead-card) partial decode (v0.88.0).** An `md1` whose card shape
+has no canonical origin *and* whose per-`@N` origin is elided-and-unresolvable —
+a **dead card** — is now **partial-decoded** rather than rejected. `inspect`
+still renders the always-available `template:` line, but replaces the
+`origin_fingerprint:` / `origin_path:` lines with an explicit
+`origin: «unspecified — supply on restore»` marker (never a fabricated `m/`
+path), prints a `VERIFY-ME` note on stderr, and exits **4**. The `--json`
+envelope gains an additive `partial` object (unresolved `@N` indices);
+`schema_version` is unchanged and a non-partial card's JSON is byte-identical to
+before. The marker and note are byte-identical to `md decode` (a human reads the
+same bytes on both binaries). This embodies the "expressive on output, permissive
+on input — never silently misrepresent" contract: the template is shown, but the
+origin is honestly flagged as unknown, so it is never mistaken for a derivable
+wallet. A **corrupted** dead card (cross-chunk content-id mismatch) is *not*
+partial-decoded — the content-id oracle stays enforced, so it fails to decode
+(exit 2), exactly as before. `inspect` reads chunk-form `md1` only (a plain
+non-chunked single-string `md1` is a separate, pre-existing intake limitation).
 
 ### Synopsis
 
