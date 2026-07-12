@@ -166,7 +166,10 @@ fn inspect_md1_dead_card_json_has_partial_field_and_schema_unchanged() {
             "[{name}] unresolved_indices non-empty; got {v}"
         );
         // template still present.
-        assert!(v["template"].is_string(), "[{name}] template present; got {v}");
+        assert!(
+            v["template"].is_string(),
+            "[{name}] template present; got {v}"
+        );
     }
 }
 
@@ -180,7 +183,11 @@ fn inspect_md1_canonical_card_stays_exit_0_no_marker() {
         .args(inspect_args(&chunks, false))
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(0), "canonical card must stay exit 0");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "canonical card must stay exit 0"
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
         stdout.contains(&format!("template: {CANONICAL_TEMPLATE}")),
@@ -241,16 +248,26 @@ fn inspect_md1_multi_chunk_keyed_dead_card_partial_renders_exit_4() {
     // Sanity substrate: the KEYED multi-chunk dead card partial-renders (exit 4)
     // so the doctored negative below is a meaningful contrast.
     let chunks = keyed_dead_chunks();
-    assert!(chunks.len() >= 2, "fixture must be multi-chunk; got {chunks:?}");
+    assert!(
+        chunks.len() >= 2,
+        "fixture must be multi-chunk; got {chunks:?}"
+    );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args(inspect_args(&chunks, false))
         .arg("--no-auto-repair")
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(4), "keyed multi-chunk dead card → exit 4");
+    assert_eq!(
+        out.status.code(),
+        Some(4),
+        "keyed multi-chunk dead card → exit 4"
+    );
     let stdout = String::from_utf8(out.stdout).unwrap();
-    assert!(stdout.contains(ORIGIN_MARKER), "marker missing; got {stdout:?}");
+    assert!(
+        stdout.contains(ORIGIN_MARKER),
+        "marker missing; got {stdout:?}"
+    );
 }
 
 #[test]
@@ -265,7 +282,10 @@ fn inspect_md1_doctored_content_id_dead_card_does_not_partial_render() {
     }
     let clean = keyed_dead_chunks();
     let foreign = md_codec::chunk::split(&foreign_d).expect("split foreign");
-    assert!(clean.len() >= 2 && foreign.len() >= 2, "need multi-chunk to mix set-ids");
+    assert!(
+        clean.len() >= 2 && foreign.len() >= 2,
+        "need multi-chunk to mix set-ids"
+    );
     // clean chunks + one foreign chunk substituted at index 1.
     let mut doctored = clean.clone();
     doctored[1] = foreign[1].clone();
@@ -328,7 +348,11 @@ fn inspect_md1_cross_binary_template_parity_with_md_decode() {
             .args(inspect_args(&chunks, false))
             .output()
             .unwrap();
-        assert_eq!(mn_out.status.code(), Some(4), "[{name}] mnemonic inspect exit 4");
+        assert_eq!(
+            mn_out.status.code(),
+            Some(4),
+            "[{name}] mnemonic inspect exit 4"
+        );
         let mn_stdout = String::from_utf8(mn_out.stdout).unwrap();
         let mn_template = mn_stdout
             .lines()

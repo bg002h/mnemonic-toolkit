@@ -548,10 +548,9 @@ pub fn run<W: Write, E: Write>(
         let json = VerifyBundleJson {
             schema_version: "4",
             result,
-            partial: partial
-                .then(|| crate::format::PartialDecodeInfo::missing_explicit_origin(
-                    partial_indices.clone(),
-                )),
+            partial: partial.then(|| {
+                crate::format::PartialDecodeInfo::missing_explicit_origin(partial_indices.clone())
+            }),
             checks,
         };
         serde_json::to_writer(&mut *stdout, &json).ok();
@@ -1781,10 +1780,9 @@ fn verify_emit_from_expected<W: Write, E: Write>(
         let json = VerifyBundleJson {
             schema_version: "4",
             result: result_str,
-            partial: partial
-                .then(|| crate::format::PartialDecodeInfo::missing_explicit_origin(
-                    partial_indices.clone(),
-                )),
+            partial: partial.then(|| {
+                crate::format::PartialDecodeInfo::missing_explicit_origin(partial_indices.clone())
+            }),
             checks,
         };
         serde_json::to_writer(&mut *stdout, &json).ok();

@@ -60,7 +60,8 @@ const SS_MK1: &[&str] = &[
 /// a keyed DEAD card (`unresolved_origin_indices()` non-empty). Returns the
 /// chunk-form strings.
 fn elide(md1_with_origin: &[&str]) -> Vec<String> {
-    let mut d = md_codec::chunk::reassemble(md1_with_origin).expect("decode keyed card WITH origin");
+    let mut d =
+        md_codec::chunk::reassemble(md1_with_origin).expect("decode keyed card WITH origin");
     d.path_decl.paths = PathDeclPaths::Shared(OriginPath { components: vec![] });
     md_codec::chunk::split(&d).expect("split elided (dead) card")
 }
@@ -75,7 +76,10 @@ fn elide_doctored(md1_with_origin: &[&str]) -> Vec<String> {
     foreign.path_decl.paths = PathDeclPaths::Shared(OriginPath { components: vec![] });
     let foreign_chunks = md_codec::chunk::split(&foreign).expect("split foreign");
     let mut clean = elide(md1_with_origin);
-    assert!(clean.len() >= 2 && foreign_chunks.len() >= 2, "need multi-chunk");
+    assert!(
+        clean.len() >= 2 && foreign_chunks.len() >= 2,
+        "need multi-chunk"
+    );
     clean[1] = foreign_chunks[1].clone();
     clean
 }
@@ -160,8 +164,16 @@ fn verify_bundle_multisig_original_md1_stays_ok_exit_0() {
     let mut args = multi_base();
     push_md1(&mut args, &orig);
     args.push("--no-auto-repair".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
-    assert_eq!(out.status.code(), Some(0), "original bundle must stay ok/exit 0");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "original bundle must stay ok/exit 0"
+    );
     assert_eq!(result_line(&out.stdout), "ok");
 }
 
@@ -190,7 +202,11 @@ fn verify_bundle_mismatch_beats_partial() {
     push_flag(&mut args, "--ms1", MULTI_MS1);
     push_flag(&mut args, "--mk1", MULTI_MK1);
     push_md1(&mut args, &dead);
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
     assert_eq!(
         result_line(&out.stdout),
         "mismatch",
@@ -208,7 +224,11 @@ fn verify_bundle_doctored_content_id_dead_card_verdicts_mismatch_oracle_intact()
     let mut args = multi_base();
     push_md1(&mut args, &doctored);
     args.push("--no-auto-repair".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
     let stdout = String::from_utf8_lossy(&out.stdout);
     // Funds-load-bearing: the cross-chunk content-id oracle stays enforced UNDER
     // partial. `elide_doctored` flips a pubkey byte in chunk[1] so its derived
@@ -248,14 +268,21 @@ fn verify_bundle_json_partial_field_present_on_partial() {
     args.push("--json".into());
     push_md1(&mut args, &dead);
     args.push("--no-auto-repair".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
     assert_eq!(out.status.code(), Some(4));
     let stdout = String::from_utf8(out.stdout).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(v["schema_version"], "4");
     assert_eq!(v["result"], "partial");
     assert_eq!(v["partial"]["reason"], "missing_explicit_origin");
-    assert!(!v["partial"]["unresolved_indices"].as_array().unwrap().is_empty());
+    assert!(!v["partial"]["unresolved_indices"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
@@ -265,11 +292,18 @@ fn verify_bundle_json_no_partial_field_on_ok() {
     args.push("--json".into());
     push_md1(&mut args, &orig);
     args.push("--no-auto-repair".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
     let stdout = String::from_utf8(out.stdout).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert_eq!(v["result"], "ok");
-    assert!(v.get("partial").is_none(), "ok verdict must NOT carry `partial`; got {v}");
+    assert!(
+        v.get("partial").is_none(),
+        "ok verdict must NOT carry `partial`; got {v}"
+    );
 }
 
 // ── descriptor mode (single-sig, :3045 / emit_md1_checks + verify_emit_from_expected) ──
@@ -289,7 +323,11 @@ fn verify_bundle_descriptor_singlesig_elided_md1_is_partial_exit_4() {
     ];
     push_flag(&mut args, "--mk1", SS_MK1);
     push_md1(&mut args, &dead);
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
     assert_eq!(
         out.status.code(),
         Some(4),
@@ -314,8 +352,16 @@ fn verify_bundle_descriptor_singlesig_original_md1_stays_ok() {
     ];
     push_flag(&mut args, "--mk1", SS_MK1);
     push_md1(&mut args, &orig);
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
-    assert_eq!(out.status.code(), Some(0), "descriptor-mode original → ok/exit 0");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "descriptor-mode original → ok/exit 0"
+    );
     assert_eq!(result_line(&out.stdout), "ok");
 }
 
@@ -327,7 +373,11 @@ fn restore_md1_refuses_the_same_dead_card() {
     let mut args = vec!["restore".to_string()];
     push_md1(&mut args, &dead);
     args.push("--no-auto-repair".into());
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).output().unwrap();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
     assert_ne!(
         out.status.code(),
         Some(0),
