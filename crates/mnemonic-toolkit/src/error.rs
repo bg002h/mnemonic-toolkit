@@ -548,6 +548,14 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::ChunkSetIdMismatch { .. }
         | md_codec::Error::VarintOverflow { .. }
         | md_codec::Error::MissingExplicitOrigin { .. }
+        // md-codec 0.42.0 (partial-decode P0.3): a use-site override that
+        // resolves to an EMPTY origin. The unconditional pre-canonical reject
+        // that partial-decode's `allow_unresolved_origin` must NOT swallow (only
+        // `MissingExplicitOrigin` is fatal-in-partial-suppressible) — an empty
+        // override is malformed/adversarial wire our encoders never emit →
+        // decode-reject class, exit 2, same routing as the sibling origin/TLV
+        // rejects above. See design/SPEC_pathless_partial_decode.md (SPEC-R0 I1).
+        | md_codec::Error::EmptyOriginOverride { .. }
         | md_codec::Error::InvalidPresenceByte { .. }
         | md_codec::Error::InvalidXpubBytes { .. }
         | md_codec::Error::MissingPubkey { .. }
@@ -1296,6 +1304,27 @@ mod tests {
         // Via `From` (the production path): a non-WireVersionMismatch variant
         // routes to MdCodec, NOT FutureFormat — so still exit 2 / "MdCodec".
         let tk: ToolkitError = md_codec::Error::MalformedPayloadPadding { bits: 7 }.into();
+        assert_eq!(tk.exit_code(), 2);
+        assert_eq!(tk.kind(), "MdCodec");
+    }
+
+    /// md-codec 0.42.0 (partial-decode P0.3) added ONE new `Error` variant —
+    /// `EmptyOriginOverride { idx }`, the unconditional pre-canonical reject of a
+    /// use-site override that resolves to an empty origin. Pin its routing: it is
+    /// a decode-reject-class error → MdCodec → exit 2 + kind() == "MdCodec" (NOT
+    /// the exit-3 FutureFormat interception). It is deliberately NOT swallowed by
+    /// partial-decode's `allow_unresolved_origin` (only `MissingExplicitOrigin`
+    /// is fatal-in-partial-suppressible). Mirrors `md_codec_v0_41_new_variant_routing`.
+    #[test]
+    fn md_codec_v0_42_new_variant_routing() {
+        // Direct MdCodec wrap → exit 2 + "MdCodec".
+        let e = ToolkitError::MdCodec(md_codec::Error::EmptyOriginOverride { idx: 1 });
+        assert_eq!(e.exit_code(), 2);
+        assert_eq!(e.kind(), "MdCodec");
+
+        // Via `From` (the production path): a non-WireVersionMismatch variant
+        // routes to MdCodec, NOT FutureFormat — so still exit 2 / "MdCodec".
+        let tk: ToolkitError = md_codec::Error::EmptyOriginOverride { idx: 3 }.into();
         assert_eq!(tk.exit_code(), 2);
         assert_eq!(tk.kind(), "MdCodec");
     }

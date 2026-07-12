@@ -333,6 +333,11 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         ),
         E::VarintOverflow { value } => format!("md1 varint overflow: {}", value),
         E::MissingExplicitOrigin { idx } => format!("md1 missing explicit origin for @{}", idx),
+        // md-codec 0.42.0 (partial-decode P0.3): a use-site override resolving to
+        // an empty origin — malformed wire the reference encoder never emits.
+        E::EmptyOriginOverride { idx } => {
+            format!("md1 empty origin override for @{}", idx)
+        }
         E::InvalidPresenceByte { reserved_bits } => format!(
             "md1 presence byte non-zero reserved bits 0x{:02x}",
             reserved_bits,
@@ -612,7 +617,7 @@ mod tests {
         use md_codec::error::ContextKind;
         use md_codec::Error as E;
         use md_codec::Tag;
-        let rows: [(E, &str, &str); 44] = [
+        let rows: [(E, &str, &str); 45] = [
             (
                 E::BitStreamTruncated {
                     requested: 8,
@@ -803,6 +808,11 @@ mod tests {
                 E::MissingExplicitOrigin { idx: 2 },
                 "missing explicit origin",
                 "MissingExplicitOrigin",
+            ),
+            (
+                E::EmptyOriginOverride { idx: 2 },
+                "empty origin override",
+                "EmptyOriginOverride",
             ),
             (
                 E::InvalidPresenceByte {

@@ -294,9 +294,9 @@ pub fn split(d: &Descriptor) -> Result<Vec<String>, Error> {
     Ok(chunks)
 }
 
-use crate::decode::decode_payload;
-
-/// Reassemble a [`Descriptor`] from N md1 codex32 strings.
+/// Reassemble a [`Descriptor`] from N md1 codex32 strings (strict:
+/// byte-identical to pre-P0 behavior). Delegates to
+/// [`reassemble_with_opts`] with the default (strict) options.
 ///
 /// Algorithm:
 /// 1. Unwrap each string via the codex32 layer (verifies BCH per chunk).
@@ -304,12 +304,34 @@ use crate::decode::decode_payload;
 /// 3. Validate consistency: same version, chunk_set_id, count.
 /// 4. Sort by index; verify `0..count-1` with no gaps.
 /// 5. Concatenate per-chunk payload bytes.
-/// 6. Decode the reassembled payload via [`decode_payload`].
+/// 6. Decode the reassembled payload via
+///    [`crate::decode::decode_payload`].
 /// 7. Verify the reassembled payload's derived chunk-set-id matches the
 ///    chunk-set-id present in every chunk header (cross-chunk integrity).
 pub fn reassemble(strings: &[&str]) -> Result<Descriptor, Error> {
+    reassemble_with_opts(strings, crate::decode::DecodeOpts::default())
+}
+
+/// Reassemble a [`Descriptor`] from N md1 codex32 strings, honoring
+/// `opts` (P0 partial-decode; see [`crate::decode::DecodeOpts`] for the
+/// contract). Same algorithm as [`reassemble`], except step 6 decodes via
+/// [`crate::decode::decode_payload_with_opts`] instead of the strict
+/// primitive.
+///
+/// INVARIANT (funds-load-bearing): `opts.allow_unresolved_origin` relaxes
+/// ONLY the origin-gate outcome of the step-6 decode call. Every check
+/// ABOVE that call (per-chunk BCH via `unwrap_string`, chunk-header
+/// consistency, index-gap) and the derived-chunk-set-id / content-id
+/// check BELOW it (step 7) stay enforced UNCONDITIONALLY regardless of
+/// `opts` — a chunk set with a doctored chunk-set-id still rejects with
+/// `Error::ChunkSetIdMismatch` even when `allow_unresolved_origin: true`.
+pub fn reassemble_with_opts(
+    strings: &[&str],
+    opts: crate::decode::DecodeOpts,
+) -> Result<Descriptor, Error> {
     use crate::bitstream::BitReader;
     use crate::codex32::unwrap_string;
+    use crate::decode::decode_payload_with_opts;
     use crate::identity::compute_md1_encoding_id;
 
     if strings.is_empty() {
@@ -377,10 +399,12 @@ pub fn reassemble(strings: &[&str]) -> Result<Descriptor, Error> {
         full_bytes.extend_from_slice(chunk_bytes);
     }
 
-    // Decode payload. bit_len = bytes.len() * 8; TLV-rollback handles trailing padding.
-    let descriptor = decode_payload(&full_bytes, full_bytes.len() * 8)?;
+    // Decode payload, honoring `opts` (P0.2). bit_len = bytes.len() * 8;
+    // TLV-rollback handles trailing padding.
+    let descriptor = decode_payload_with_opts(&full_bytes, full_bytes.len() * 8, opts)?;
 
-    // Cross-chunk integrity check.
+    // Cross-chunk integrity check — UNCONDITIONAL regardless of `opts`
+    // (the content-id oracle; P0.2 funds-load-bearing invariant).
     let md1_id = compute_md1_encoding_id(&descriptor)?;
     let derived_csid = derive_chunk_set_id(&md1_id);
     if derived_csid != expected_csid {

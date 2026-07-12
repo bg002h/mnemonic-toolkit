@@ -264,6 +264,75 @@ pub fn validate_xpub_bytes(d: &Descriptor) -> Result<(), Error> {
     Ok(())
 }
 
+/// Validate that no `OriginPathOverrides[idx]` entry is present-but-empty
+/// (zero path components). Per spec v0.13 §6.3 (I-1 hardening, P0
+/// pathless/dead-card partial-decode).
+///
+/// Runs UNCONDITIONALLY — regardless of `canonical_origin(&d.tree)` — so
+/// a CANONICAL-shape wire (e.g. `wpkh(@0)`) carrying an empty override is
+/// ALSO rejected (I-1a). This is a DISTINCT error variant from
+/// `Error::MissingExplicitOrigin` so partial-allowing decode (P0.2, which
+/// swallows ONLY `MissingExplicitOrigin`) never swallows this: a
+/// present-but-empty override is a MALFORMED wire, not a dead card, and
+/// must not partial-render (I-1b, fatal-in-partial).
+///
+/// Converges with [`crate::canonicalize::expand_per_at_n`], which runs
+/// the same check independently (defense in depth for a hand-built
+/// `Descriptor` that bypasses decode).
+pub fn validate_no_empty_origin_overrides(d: &Descriptor) -> Result<(), Error> {
+    let overrides = d.tlv.origin_path_overrides.as_deref().unwrap_or(&[]);
+    for (idx, op) in overrides {
+        if op.components.is_empty() {
+            return Err(Error::EmptyOriginOverride { idx: *idx });
+        }
+    }
+    Ok(())
+}
+
+impl Descriptor {
+    /// The ascending `@N` indices whose origin cannot be resolved: a pure
+    /// query mirroring [`validate_explicit_origin_required`]'s SEMANTICS
+    /// (P0.1, pathless/dead-card partial-decode).
+    ///
+    /// Returns the ascending indices where `canonical_origin(&self.tree)`
+    /// is `None` AND the per-idx origin (override-or-`path_decl`) is
+    /// empty. Returns `[]` when `canonical_origin` is `Some` OR every idx
+    /// has a non-empty origin (i.e. exactly the set of shapes that decode
+    /// cleanly today under the strict default). Does NOT call
+    /// [`crate::canonicalize::expand_per_at_n`] — this is a
+    /// non-erroring, side-effect-free query, not an expansion; callers
+    /// needing per-`@N` origin/use-site/fp/xpub records still use
+    /// `expand_per_at_n` (which stays strict and fail-closed
+    /// unconditionally — see its doc comment).
+    pub fn unresolved_origin_indices(&self) -> Vec<u8> {
+        if canonical_origin(&self.tree).is_some() {
+            return Vec::new();
+        }
+        let overrides = self.tlv.origin_path_overrides.as_deref().unwrap_or(&[]);
+        let mut out = Vec::new();
+        for idx in 0..self.n {
+            // Override path takes precedence — if present and non-empty, resolved.
+            if let Some((_, op)) = overrides.iter().find(|(i, _)| *i == idx) {
+                if !op.components.is_empty() {
+                    continue;
+                }
+            }
+            // Otherwise consult the path_decl for this idx.
+            let decl_components_empty = match &self.path_decl.paths {
+                PathDeclPaths::Shared(p) => p.components.is_empty(),
+                PathDeclPaths::Divergent(v) => v
+                    .get(idx as usize)
+                    .map(|p| p.components.is_empty())
+                    .unwrap_or(true),
+            };
+            if decl_components_empty {
+                out.push(idx);
+            }
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -689,6 +758,275 @@ mod explicit_origin_required_tests {
         };
         let err = validate_explicit_origin_required(&d).unwrap_err();
         assert!(matches!(err, Error::MissingExplicitOrigin { idx: 1 }));
+    }
+
+    // ─── P0.1: Descriptor::unresolved_origin_indices ─────────────────────
+    //
+    // Pure query mirroring `validate_explicit_origin_required`'s SEMANTICS
+    // (does NOT call `expand_per_at_n`). Every case below has a sibling
+    // `validate_explicit_origin_required_*` test above/below asserting the
+    // same shape's Ok/Err verdict; these pin the parallel non-erroring
+    // query's ascending-index-vec verdict.
+
+    #[test]
+    fn unresolved_origin_indices_empty_for_canonical_wpkh() {
+        // wpkh(@0) has canonical BIP-84 origin → empty path_decl still []
+        let d = single_key_descriptor(Node {
+            tag: Tag::Wpkh,
+            body: Body::KeyArg { index: 0 },
+        });
+        assert_eq!(d.unresolved_origin_indices(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn unresolved_origin_indices_empty_for_canonical_tr_keypath() {
+        // tr(@0) key-path only → BIP-86 canonical → [].
+        let d = single_key_descriptor(Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                is_nums: false,
+                key_index: 0,
+                tree: None,
+            },
+        });
+        assert_eq!(d.unresolved_origin_indices(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn unresolved_origin_indices_empty_for_canonical_sh_wpkh() {
+        // sh(wpkh(@0)) → BIP-49 canonical (F-A1) → [].
+        let d = single_key_descriptor(Node {
+            tag: Tag::Sh,
+            body: Body::Children(vec![Node {
+                tag: Tag::Wpkh,
+                body: Body::KeyArg { index: 0 },
+            }]),
+        });
+        assert_eq!(d.unresolved_origin_indices(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn unresolved_origin_indices_empty_for_canonical_wsh_multi() {
+        // wsh(multi(2,@0,@1)) → BIP-48 type-2 canonical → [].
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(empty_path()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Wsh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::Multi,
+                    body: Body::MultiKeys {
+                        k: 2,
+                        indices: vec![0, 1],
+                    },
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(d.unresolved_origin_indices(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn unresolved_origin_indices_empty_for_explicit_origin_dead_shape() {
+        // sh(sortedmulti(2,@0,@1)) is a dead shape (canonical_origin ==
+        // None) but the shared path_decl is EXPLICITLY populated → every
+        // idx resolves → [].
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(bip84_path()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Sh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::SortedMulti,
+                    body: Body::MultiKeys {
+                        k: 2,
+                        indices: vec![0, 1],
+                    },
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(d.unresolved_origin_indices(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn unresolved_origin_indices_single_for_tr_with_taptree() {
+        // tr(@0, TapTree) → no canonical default → [0].
+        let d = single_key_descriptor(Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                is_nums: false,
+                key_index: 0,
+                tree: Some(Box::new(Node {
+                    tag: Tag::PkK,
+                    body: Body::KeyArg { index: 0 },
+                })),
+            },
+        });
+        assert_eq!(d.unresolved_origin_indices(), vec![0u8]);
+    }
+
+    #[test]
+    fn unresolved_origin_indices_both_for_tr_with_taptree_two_keys() {
+        // tr(@0, pk(@1)) — key-path @0 + tap leaf pk(@1). canonical_origin
+        // is None (Tr with Some(tree)), so BOTH indices are unresolved
+        // with an empty shared path_decl.
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(empty_path()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Tr,
+                body: Body::Tr {
+                    is_nums: false,
+                    key_index: 0,
+                    tree: Some(Box::new(Node {
+                        tag: Tag::PkK,
+                        body: Body::KeyArg { index: 1 },
+                    })),
+                },
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(d.unresolved_origin_indices(), vec![0u8, 1u8]);
+    }
+
+    #[test]
+    fn unresolved_origin_indices_both_for_sh_sortedmulti_dead() {
+        // sh(sortedmulti(2,@0,@1)) — legacy P2SH multi, dead shape, empty
+        // shared path_decl, no overrides → [0, 1].
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(empty_path()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Sh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::SortedMulti,
+                    body: Body::MultiKeys {
+                        k: 2,
+                        indices: vec![0, 1],
+                    },
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(d.unresolved_origin_indices(), vec![0u8, 1u8]);
+    }
+
+    #[test]
+    fn unresolved_origin_indices_single_for_bare_wsh() {
+        // bare wsh(@0) — non-canonical (no multi/sortedmulti inner) → [0].
+        let d = single_key_descriptor(Node {
+            tag: Tag::Wsh,
+            body: Body::Children(vec![Node {
+                tag: Tag::PkK,
+                body: Body::KeyArg { index: 0 },
+            }]),
+        });
+        assert_eq!(d.unresolved_origin_indices(), vec![0u8]);
+    }
+
+    #[test]
+    fn unresolved_origin_indices_both_for_raw_miniscript_body() {
+        // wsh(or_d(pk_k(@0), pk_h(@1))) — raw miniscript body, dead shape
+        // → [0, 1].
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(empty_path()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Wsh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::OrD,
+                    body: Body::Children(vec![
+                        Node {
+                            tag: Tag::PkK,
+                            body: Body::KeyArg { index: 0 },
+                        },
+                        Node {
+                            tag: Tag::PkH,
+                            body: Body::KeyArg { index: 1 },
+                        },
+                    ]),
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(d.unresolved_origin_indices(), vec![0u8, 1u8]);
+    }
+
+    #[test]
+    fn unresolved_origin_indices_partial_divergent() {
+        // sh(sortedmulti(...)) with divergent path_decl; @0 populated, @1
+        // empty, no overrides → [1] only.
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Divergent(vec![bip84_path(), empty_path()]),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Sh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::SortedMulti,
+                    body: Body::MultiKeys {
+                        k: 1,
+                        indices: vec![0, 1],
+                    },
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(d.unresolved_origin_indices(), vec![1u8]);
+    }
+
+    #[test]
+    fn unresolved_origin_indices_empty_when_override_resolves_dead_shape() {
+        // sh(sortedmulti(2,@0,@1)) dead shape, empty shared path_decl, but
+        // a NON-EMPTY override resolves @0 → only @1 unresolved.
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(empty_path()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Sh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::SortedMulti,
+                    body: Body::MultiKeys {
+                        k: 2,
+                        indices: vec![0, 1],
+                    },
+                }]),
+            },
+            tlv: {
+                let mut t = TlvSection::new_empty();
+                t.origin_path_overrides = Some(vec![(0u8, bip84_path())]);
+                t
+            },
+        };
+        assert_eq!(d.unresolved_origin_indices(), vec![1u8]);
     }
 }
 

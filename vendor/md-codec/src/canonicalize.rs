@@ -411,6 +411,17 @@ fn sparse_lookup<T>(v: &Option<Vec<(u8, T)>>, idx: u8) -> Option<&T> {
 /// to be populated, so this surfaces only when the shared-form path is
 /// itself empty.
 ///
+/// Returns [`Error::EmptyOriginOverride`] (P0.3, I-1) when
+/// `OriginPathOverrides[idx]` is PRESENT but carries zero components —
+/// UNCONDITIONALLY, regardless of `canonical_origin` or `path_decl`. A
+/// present override is authoritative over `path_decl` (see the origin
+/// resolution rule above); an empty-but-present override would otherwise
+/// silently resolve to "no origin" without tripping the
+/// `MissingExplicitOrigin` gate (which only fires when NO override is
+/// present). Converges with
+/// [`crate::validate::validate_no_empty_origin_overrides`], the decode-side
+/// counterpart of this same check.
+///
 /// Returns [`Error::DivergentPathCountMismatch`] if `path_decl.paths` is
 /// `Divergent(v)` and `v.len() != d.n` — a malformed descriptor that the
 /// v0.11 decoder would already reject; surfaced here defensively.
@@ -447,8 +458,19 @@ pub fn expand_per_at_n(d: &Descriptor) -> Result<Vec<ExpandedKey>, Error> {
 
     let mut out = Vec::with_capacity(d.n as usize);
     for idx in 0..d.n {
+        let override_entry = sparse_lookup(&d.tlv.origin_path_overrides, idx);
+
+        // P0.3 (I-1): a PRESENT override with zero components is MALFORMED
+        // — reject UNCONDITIONALLY (even for a canonical-shape wrapper),
+        // before it can silently resolve to an empty origin below.
+        if let Some(p) = override_entry {
+            if p.components.is_empty() {
+                return Err(Error::EmptyOriginOverride { idx });
+            }
+        }
+
         // Origin resolution: per-@N override beats path_decl baseline.
-        let origin_path = if let Some(p) = sparse_lookup(&d.tlv.origin_path_overrides, idx) {
+        let origin_path = if let Some(p) = override_entry {
             p.clone()
         } else {
             match &d.path_decl.paths {
@@ -462,7 +484,7 @@ pub fn expand_per_at_n(d: &Descriptor) -> Result<Vec<ExpandedKey>, Error> {
         // This is the only path in v0.11+v0.13 where MissingExplicitOrigin
         // can be raised.
         if origin_path.components.is_empty()
-            && sparse_lookup(&d.tlv.origin_path_overrides, idx).is_none()
+            && override_entry.is_none()
             && crate::canonical_origin::canonical_origin(&d.tree).is_none()
         {
             return Err(Error::MissingExplicitOrigin { idx });
@@ -1421,6 +1443,67 @@ mod expand_tests {
         };
         let err = expand_per_at_n(&d).unwrap_err();
         assert!(matches!(err, Error::MissingExplicitOrigin { idx: 0 }));
+    }
+
+    /// P0.3 (I-1): an `OriginPathOverrides[idx]` entry that is PRESENT but
+    /// zero-component must be rejected — NOT silently treated as "no
+    /// override present" (which is what the pre-P0.3 `sparse_lookup(...)
+    /// .is_none()` conjunct did, letting the empty override silently
+    /// resolve to an empty origin). The shared `path_decl` here is
+    /// POPULATED (non-empty) — under the OLD code neither the
+    /// `MissingExplicitOrigin` condition (guarded by
+    /// `sparse_lookup(...).is_none()`) nor anything else would have
+    /// caught this: `expand_per_at_n` would have silently returned an
+    /// empty `origin_path` for @0.
+    #[test]
+    fn expand_rejects_present_but_empty_origin_override() {
+        let mut d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Shared(bip48_type_2()),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Sh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::SortedMulti,
+                    body: Body::MultiKeys {
+                        k: 2,
+                        indices: vec![0, 1],
+                    },
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        d.tlv.origin_path_overrides = Some(vec![(0u8, OriginPath { components: vec![] })]);
+        let err = expand_per_at_n(&d).unwrap_err();
+        assert!(matches!(err, Error::EmptyOriginOverride { idx: 0 }));
+    }
+
+    /// P0.3 (I-1a): the empty-override reject applies even to a
+    /// CANONICAL-shape wrapper (`wpkh(@0)`) — `expand_per_at_n` doesn't
+    /// special-case canonical shapes for this check (unlike the OLD
+    /// `MissingExplicitOrigin` condition, which required `canonical_origin
+    /// (&d.tree).is_none()`).
+    #[test]
+    fn expand_rejects_present_but_empty_origin_override_canonical_shape() {
+        let mut d = Descriptor {
+            n: 1,
+            path_decl: PathDecl {
+                n: 1,
+                paths: PathDeclPaths::Shared(OriginPath { components: vec![] }),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Wpkh,
+                body: Body::KeyArg { index: 0 },
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        d.tlv.origin_path_overrides = Some(vec![(0u8, OriginPath { components: vec![] })]);
+        let err = expand_per_at_n(&d).unwrap_err();
+        assert!(matches!(err, Error::EmptyOriginOverride { idx: 0 }));
     }
 
     /// Determinism: encode `wpkh(@0)` two ways — once with `Shared(BIP84)`

@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "md-codec"
-version = "0.41.0"
+version = "0.42.0"
 build = false
 autolib = false
 autobins = false
@@ -59,6 +59,10 @@ name = "bch_decode"
 path = "tests/bch_decode.rs"
 
 [[test]]
+name = "bch_exhaustive_sweep"
+path = "tests/bch_exhaustive_sweep.rs"
+
+[[test]]
 name = "bch_visibility_pin"
 path = "tests/bch_visibility_pin.rs"
 
@@ -99,6 +103,10 @@ name = "parity_smoke"
 path = "tests/parity_smoke.rs"
 
 [[test]]
+name = "partial_decode"
+path = "tests/partial_decode.rs"
+
+[[test]]
 name = "per_key_use_site_override"
 path = "tests/per_key_use_site_override.rs"
 
@@ -125,6 +133,10 @@ path = "tests/smoke.rs"
 [[test]]
 name = "wallet_policy"
 path = "tests/wallet_policy.rs"
+
+[[test]]
+name = "wire_golden"
+path = "tests/wire_golden.rs"
 
 [dependencies.bip39]
 version = "2.2.2"

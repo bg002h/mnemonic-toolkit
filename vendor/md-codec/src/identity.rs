@@ -210,8 +210,24 @@ pub fn compute_wallet_policy_id(d: &Descriptor) -> Result<WalletPolicyId, Error>
         // identically to the explicit form. expand_per_at_n already returns
         // explicit paths verbatim, so only the empty case needs the fill;
         // when canonical_origin is None the empty path is structurally
-        // precluded upstream (MissingExplicitOrigin), so the unwrap_or_else
-        // fallback is unreachable-but-safe.
+        // precluded HERE (expand_per_at_n's own MissingExplicitOrigin
+        // gate), so the unwrap_or_else fallback is unreachable-but-safe.
+        //
+        // P0 update (pathless/dead-card partial-decode): partial-allowing
+        // decode (`decode_payload_with_opts` / `decode_md1_string_with_opts`
+        // / `chunk::reassemble_with_opts`, `allow_unresolved_origin: true`)
+        // now lets a `canonical_origin(&d.tree) == None` + empty-origin
+        // `Descriptor` exist in-process — the render-only callers (md-cli /
+        // toolkit) query `Descriptor::unresolved_origin_indices()` on it
+        // directly and never route it through `compute_wallet_policy_id`.
+        // `expand_per_at_n` itself is NOT partial-aware: it is called
+        // unconditionally on `d` a few lines above and still raises
+        // `MissingExplicitOrigin` for any canonical_origin==None +
+        // empty-origin descriptor regardless of how that `Descriptor` was
+        // built or decoded (see its own doc comment). So the
+        // `unwrap_or_else` fallback below stays unreachable-but-safe —
+        // `compute_wallet_policy_id` remains fail-closed even though
+        // partial `Descriptor`s now exist in the same process.
         let origin_for_hash = if e.origin_path.components.is_empty() {
             crate::canonical_origin::canonical_origin(&d.tree)
                 .unwrap_or_else(|| e.origin_path.clone())

@@ -323,6 +323,26 @@ pub enum Error {
         idx: u8,
     },
 
+    /// An `OriginPathOverrides[idx]` entry is PRESENT but carries zero path
+    /// components. A present-but-empty override is MALFORMED — distinct
+    /// from an ABSENT override, which the shared/divergent `path_decl` may
+    /// still resolve. `crate::canonicalize::expand_per_at_n` treats a
+    /// present override as authoritative over `path_decl` regardless of
+    /// its component count, so an empty-but-present override silently
+    /// resolves to "no origin" unless rejected explicitly. Rejected
+    /// UNCONDITIONALLY (even for a CANONICAL-shape wrapper, e.g.
+    /// `wpkh(@0)`) by both the decoder (`crate::validate::
+    /// validate_no_empty_origin_overrides`) and `expand_per_at_n`; this is
+    /// a DISTINCT error variant from `MissingExplicitOrigin` so it is
+    /// never swallowed by partial-allowing decode (P0 pathless/dead-card
+    /// partial-decode) — fatal-in-partial. Per spec v0.13 §6.3 (I-1
+    /// hardening).
+    #[error("origin-path override for @{idx} is present but empty (zero components)")]
+    EmptyOriginOverride {
+        /// The placeholder index whose override entry is empty.
+        idx: u8,
+    },
+
     /// `presence_byte` had non-zero reserved bits (bits 2..7) inside a
     /// `WalletPolicyId` canonical-record preimage. Per spec v0.13 §5.3:
     /// encoders MUST set reserved bits to 0 and decoders MUST reject

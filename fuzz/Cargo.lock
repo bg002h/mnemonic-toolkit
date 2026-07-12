@@ -526,9 +526,9 @@ dependencies = [
 
 [[package]]
 name = "md-codec"
-version = "0.41.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2749bf36a31f6b9423c514f682eb527e34156322b5ba6f0f8adcda239d14907d"
+checksum = "336f2c0c7f8d394136992f0b9f3d527f94a2023b55772dbed07ac09e9abcfd8f"
 dependencies = [
  "bip39",
  "bitcoin",

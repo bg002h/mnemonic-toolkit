@@ -10,9 +10,71 @@ use crate::tlv::TlvSection;
 use crate::tree::read_node;
 use crate::use_site_path::UseSitePath;
 
-/// Decode a Descriptor from the canonical payload bit stream.
+/// Options controlling decode-time validation strictness (P0 pathless/
+/// dead-card partial-decode).
+///
+/// The default (`allow_unresolved_origin: false`) is BYTE-IDENTICAL to
+/// pre-P0 decode behavior: `Error::MissingExplicitOrigin` is raised for
+/// any `@N` whose origin cannot be resolved (no canonical default AND no
+/// explicit `path_decl`/override). When `true`, that ONE reject is
+/// swallowed and the decode succeeds; the caller MUST query
+/// [`crate::encode::Descriptor::unresolved_origin_indices`] on the
+/// returned descriptor to learn which `@N` are unresolved (nothing extra
+/// is recorded on the `Descriptor` itself).
+///
+/// INVARIANT (funds-load-bearing): this flag relaxes ONLY the
+/// `validate_explicit_origin_required` outcome. No other decode check is
+/// affected — placeholder-usage, multipath consistency, tap-script-tree
+/// leaf validity, xpub-bytes validity, and (via
+/// [`crate::chunk::reassemble_with_opts`]) per-chunk BCH, chunk-header
+/// consistency, index-gap, and the derived-chunk-set-id / content-id
+/// check all stay enforced regardless of this flag. The
+/// `Error::EmptyOriginOverride` reject (P0.3) is likewise a DISTINCT,
+/// always-fatal error class — never swallowed by this opt-in, even when
+/// `allow_unresolved_origin` is `true` (fatal-in-partial).
+///
+/// `#[non_exhaustive]` (API-freeze, M-2): a future decode-relaxation option
+/// can be added as a new field without a SemVer-major bump. Downstream
+/// crates therefore cannot construct this with a struct literal — use
+/// [`DecodeOpts::default`] (strict) or [`DecodeOpts::partial`]
+/// (partial-allowing) instead.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DecodeOpts {
+    /// When `true`, `Error::MissingExplicitOrigin` is not raised at
+    /// decode time. Default `false` (strict — today's behavior).
+    pub allow_unresolved_origin: bool,
+}
+
+impl DecodeOpts {
+    /// Partial-allowing decode options (`allow_unresolved_origin: true`),
+    /// all other (future) options at their `Default`. The stable
+    /// constructor for the render-path opt-in (`md decode`/`md inspect`,
+    /// toolkit `verify-bundle` gate) — preferred over a struct literal
+    /// since `DecodeOpts` is `#[non_exhaustive]`.
+    pub fn partial() -> Self {
+        Self {
+            allow_unresolved_origin: true,
+        }
+    }
+}
+
+/// Decode a Descriptor from the canonical payload bit stream (strict:
+/// byte-identical to pre-P0 behavior). Delegates to
+/// [`decode_payload_with_opts`] with the default (strict) options.
 /// `bytes` may be zero-padded; `total_bits` is the exact payload bit count.
 pub fn decode_payload(bytes: &[u8], total_bits: usize) -> Result<Descriptor, Error> {
+    decode_payload_with_opts(bytes, total_bits, DecodeOpts::default())
+}
+
+/// Decode a Descriptor from the canonical payload bit stream, honoring
+/// `opts` (P0 partial-decode; see [`DecodeOpts`] for the contract).
+/// `bytes` may be zero-padded; `total_bits` is the exact payload bit count.
+pub fn decode_payload_with_opts(
+    bytes: &[u8],
+    total_bits: usize,
+    opts: DecodeOpts,
+) -> Result<Descriptor, Error> {
     let mut r = BitReader::with_bit_limit(bytes, total_bits);
 
     let header = Header::read(&mut r)?;
@@ -72,7 +134,23 @@ pub fn decode_payload(bytes: &[u8], total_bits: usize) -> Result<Descriptor, Err
     // Spec v0.13 §6.3 + §6.4: enforce explicit-origin and xpub-validity
     // after the v0.11 ordering / multipath / taptree checks. Order matters:
     // ordering must run first so subsequent checks see canonical indices.
-    crate::validate::validate_explicit_origin_required(&descriptor)?;
+    //
+    // P0.3 (I-1): the empty-origin-override reject is UNCONDITIONAL and a
+    // DISTINCT error from `MissingExplicitOrigin` — it runs regardless of
+    // `opts` and regardless of canonical-shape status (I-1a), so it is
+    // never swallowed by partial-allowing decode below (I-1b,
+    // fatal-in-partial).
+    crate::validate::validate_no_empty_origin_overrides(&descriptor)?;
+    match crate::validate::validate_explicit_origin_required(&descriptor) {
+        Ok(()) => {}
+        Err(Error::MissingExplicitOrigin { .. }) if opts.allow_unresolved_origin => {
+            // P0.2: partial-allowing decode swallows ONLY this reject.
+            // The caller queries `Descriptor::unresolved_origin_indices()`
+            // on the returned descriptor to learn which `@N` are
+            // unresolved.
+        }
+        Err(e) => return Err(e),
+    }
     crate::validate::validate_xpub_bytes(&descriptor)?;
 
     Ok(descriptor)
@@ -94,15 +172,27 @@ pub fn decode_payload(bytes: &[u8], total_bits: usize) -> Result<Descriptor, Err
 /// is all-even ⇒ every currently-valid single-payload string has first-symbol
 /// LSB = 0, so this dispatch never diverts an input that decodes today. No
 /// recursion cycle: `reassemble` → `decode_payload`, never back to here.
+///
+/// Strict (byte-identical to pre-P0 behavior). Delegates to
+/// [`decode_md1_string_with_opts`] with the default (strict) options.
 pub fn decode_md1_string(s: &str) -> Result<Descriptor, Error> {
+    decode_md1_string_with_opts(s, DecodeOpts::default())
+}
+
+/// Decode a Descriptor from a complete codex32 md1 string, honoring
+/// `opts` (P0 partial-decode; see [`DecodeOpts`]). Routes chunk-form
+/// strings through [`crate::chunk::reassemble_with_opts`] and
+/// single-payload strings through [`decode_payload_with_opts`], so
+/// `opts` reaches whichever layer actually performs the origin check.
+pub fn decode_md1_string_with_opts(s: &str, opts: DecodeOpts) -> Result<Descriptor, Error> {
     let (bytes, symbol_aligned_bit_count) = crate::codex32::unwrap_string(s)?;
     // The first symbol occupies the top 5 bits of byte 0 (MSB-first packing),
     // so its LSB (the chunked-flag) is bit 3 of byte 0.
     let chunked_flag = bytes.first().map(|b| (b >> 3) & 0x01).unwrap_or(0);
     if chunked_flag == 1 {
-        return crate::chunk::reassemble(&[s]);
+        return crate::chunk::reassemble_with_opts(&[s], opts);
     }
-    decode_payload(&bytes, symbol_aligned_bit_count)
+    decode_payload_with_opts(&bytes, symbol_aligned_bit_count, opts)
 }
 
 #[cfg(test)]
