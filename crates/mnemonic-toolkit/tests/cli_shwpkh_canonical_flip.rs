@@ -167,7 +167,10 @@ fn flip1_shwpkh_now_matches_canonical_wpkh_master_parity() {
         ds, dw,
         "sh(wpkh) depth must now match canonical wpkh (both depth-0)"
     );
-    assert_eq!(xs, xw, "sh(wpkh) master xpub must now match canonical wpkh's");
+    assert_eq!(
+        xs, xw,
+        "sh(wpkh) master xpub must now match canonical wpkh's"
+    );
     // Neither canonical shape emits the default-path notice.
     assert!(!stderr_w.contains(DEFAULT_PATH_NOTICE));
     assert!(!stderr_s.contains(DEFAULT_PATH_NOTICE));
