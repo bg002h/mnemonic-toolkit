@@ -12,11 +12,19 @@
 //!   - `--json` gains an additive `partial` object; `schema_version` unchanged.
 //!   - Canonical shapes stay exit 0, byte-identical (BOUNDARY RED-proof).
 //!
-//! I-2: the toolkit `mnemonic inspect --md1` decode is CHUNK-FORM only, so ALL
-//! fixtures here are built as chunk-of-N via `md_codec::chunk::split` (mirroring
-//! `tests/cli_inspect.rs::rechunk`). A plain single-string md1 still hits the
-//! pre-existing `unsupported version 2` intake gap (out of scope; FOLLOWUP
-//! `toolkit-inspect-nonchunked-md1-intake-gap`).
+//! The P2.3 fixtures are built as chunk-of-N via `md_codec::chunk::split`
+//! (mirroring `tests/cli_inspect.rs::rechunk`) — the original P2.3 intake was
+//! CHUNK-FORM only.
+//!
+//! v0.89.0 (`toolkit-inspect-nonchunked-md1-intake-gap`): `mnemonic inspect
+//! --md1` now ALSO accepts a plain NON-chunked single-string md1 (the bare
+//! `md encode` form), which previously hit `unsupported version 2` / exit 3.
+//! The `nonchunked_intake` section below feeds the frozen single-string KATs
+//! (`DEAD_SINGLES` / `CANONICAL_SINGLE`) DIRECTLY (no `chunk::split` re-split),
+//! exercising the new length-dispatch: a valid single → exit 0; a dead single →
+//! exit 4 + the unspecified marker, matching the chunked partial path
+//! byte-for-byte. (verify-bundle intake is NOT broadened — that residual stays
+//! on the FOLLOWUP.)
 
 #![allow(missing_docs)]
 
@@ -361,6 +369,241 @@ fn inspect_md1_cross_binary_template_parity_with_md_decode() {
         assert_eq!(
             mn_template, md_template,
             "[{name}] cross-binary template must be byte-identical"
+        );
+    }
+}
+
+// ─── v0.89.0: non-chunked single-string intake ──────────────────────────────
+//
+// `mnemonic inspect --md1 <single>` now accepts a plain NON-chunked single
+// (was `unsupported version 2` / exit 3). These feed the frozen single-string
+// KATs DIRECTLY (no `chunk::split` re-split), exercising the new length-dispatch.
+
+/// Direct single-string inspect argv (no re-split).
+fn inspect_single_args(single: &str, json: bool) -> Vec<String> {
+    let mut args = vec!["inspect".to_string()];
+    if json {
+        args.push("--json".to_string());
+    }
+    args.push("--md1".to_string());
+    args.push(single.to_string());
+    args
+}
+
+/// RED-1 (was exit 3): a valid NON-chunked single → exit 0, template rendered,
+/// no unspecified marker.
+#[test]
+fn inspect_nonchunked_canonical_single_exit_0() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(inspect_single_args(CANONICAL_SINGLE, false))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "valid non-chunked single must inspect at exit 0; stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains(&format!("template: {CANONICAL_TEMPLATE}")),
+        "template must render; stdout={stdout}"
+    );
+    assert!(
+        !stdout.contains(ORIGIN_MARKER),
+        "a canonical single must NOT carry the unspecified marker"
+    );
+}
+
+/// RED-2 (was exit 3): a DEAD non-chunked single → exit 4 + template +
+/// unspecified marker (no fake `m/`) + VERIFY-ME note.
+#[test]
+fn inspect_nonchunked_dead_single_partial_exit_4() {
+    for (name, single) in DEAD_SINGLES {
+        let template = DEAD_TEMPLATES.iter().find(|(n, _)| n == name).unwrap().1;
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(inspect_single_args(single, false))
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            out.status.code(),
+            Some(4),
+            "dead single {name} must partial → exit 4; stderr={stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("template: {template}")),
+            "template must render for {name}; stdout={stdout}"
+        );
+        assert!(
+            stdout.contains(ORIGIN_MARKER),
+            "dead single {name} must carry the unspecified marker; stdout={stdout}"
+        );
+        assert!(
+            !stdout.contains("origin_path: m/"),
+            "dead single {name} must NOT print a fabricated m/ path"
+        );
+        assert!(
+            stderr.contains("VERIFY-ME"),
+            "dead single {name} must emit the VERIFY-ME note"
+        );
+    }
+}
+
+/// BOUNDARY + equivalence: a single via the DIRECT path renders byte-identically
+/// to the same card re-split into chunk-form (the pre-v0.89.0 path) — the new
+/// dispatch is a pure intake broadening, not a render change, and the chunked
+/// path is unchanged.
+#[test]
+fn inspect_nonchunked_single_matches_chunked_of_one() {
+    for (name, single) in DEAD_SINGLES {
+        let direct = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(inspect_single_args(single, false))
+            .output()
+            .unwrap();
+        let rechunked = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(inspect_args(&dead_chunks(single), false))
+            .output()
+            .unwrap();
+        assert_eq!(
+            direct.status.code(),
+            rechunked.status.code(),
+            "[{name}] single vs chunked-of-1 exit must match"
+        );
+        assert_eq!(
+            direct.stdout, rechunked.stdout,
+            "[{name}] single vs chunked-of-1 stdout must be byte-identical"
+        );
+    }
+    let d = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(inspect_single_args(CANONICAL_SINGLE, false))
+        .output()
+        .unwrap();
+    let r = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(inspect_args(&canonical_chunks(CANONICAL_SINGLE), false))
+        .output()
+        .unwrap();
+    assert_eq!(
+        d.stdout, r.stdout,
+        "canonical single vs chunked-of-1 stdout must match"
+    );
+}
+
+/// `--json` on a non-chunked dead single: additive `partial`, schema_version "2".
+#[test]
+fn inspect_nonchunked_single_json_schema_unchanged() {
+    let (_n, single) = DEAD_SINGLES[0];
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(inspect_single_args(single, true))
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(4));
+    assert!(
+        stdout.contains("\"schema_version\":\"2\"") || stdout.contains("\"schema_version\": \"2\""),
+        "schema_version must stay 2; stdout={stdout}"
+    );
+    assert!(
+        stdout.contains("\"partial\""),
+        "partial object must be present on a dead single; stdout={stdout}"
+    );
+}
+
+/// INV-2 (BCH verified before the flag read) + M1 (no spurious exit-5): a
+/// corrupted non-chunked single (checksum broken) must REJECT — never a success,
+/// never the original template, and never a repair short-circuit (exit 5), even
+/// under a forced-TTY auto-fire (a non-chunked md1 is the v0.86.0-demoted class:
+/// no exit-5 self-oracle).
+#[test]
+fn inspect_nonchunked_corrupted_single_rejects_not_exit_5() {
+    let mut chars: Vec<char> = CANONICAL_SINGLE.chars().collect();
+    let i = chars.len() - 6; // a data/checksum symbol, past the "md1" HRP
+    chars[i] = if chars[i] == 'q' { 'p' } else { 'q' };
+    let corrupted: String = chars.into_iter().collect();
+    for force_tty in [false, true] {
+        let mut cmd = Command::cargo_bin("mnemonic").unwrap();
+        cmd.args(inspect_single_args(&corrupted, false));
+        if force_tty {
+            cmd.env("MNEMONIC_FORCE_TTY", "1");
+        }
+        let out = cmd.output().unwrap();
+        let code = out.status.code();
+        assert_ne!(
+            code,
+            Some(0),
+            "a corrupted single must never inspect at exit 0 (force_tty={force_tty})"
+        );
+        assert_ne!(
+            code,
+            Some(5),
+            "a corrupted non-chunked single must NOT exit 5 (force_tty={force_tty})"
+        );
+        assert!(
+            !String::from_utf8_lossy(&out.stdout)
+                .contains(&format!("template: {CANONICAL_TEMPLATE}")),
+            "corruption must not yield the original template (force_tty={force_tty})"
+        );
+    }
+}
+
+/// Cross-binary parity (M-d): a DEAD non-chunked single decodes to the SAME
+/// template on `md decode <single>` (single-arg) and `mnemonic inspect --md1
+/// <single>`, both exit 4. `md decode` is used as the parity binary here for
+/// consistency with the chunked parity cell above; on md-cli 0.13.0 `md inspect`
+/// ALSO honors the exit-4 dead-card contract, so either would serve.
+#[test]
+fn inspect_nonchunked_single_md_decode_parity() {
+    let md = match md_bin() {
+        Some(p) => p,
+        None => {
+            eprintln!("SKIP: MD_BIN unset");
+            return;
+        }
+    };
+    for ((name, single), (_, template)) in DEAD_SINGLES.iter().zip(DEAD_TEMPLATES) {
+        let md_out = std::process::Command::new(&md)
+            .arg("decode")
+            .arg(single)
+            .output()
+            .unwrap();
+        assert_eq!(
+            md_out.status.code(),
+            Some(4),
+            "[{name}] md decode dead single must exit 4"
+        );
+        let md_template = String::from_utf8(md_out.stdout).unwrap();
+        let md_template = md_template.lines().next().unwrap_or("").to_string();
+        assert_eq!(
+            md_template, *template,
+            "[{name}] md decode single template line"
+        );
+
+        let mn_out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(inspect_single_args(single, false))
+            .output()
+            .unwrap();
+        assert_eq!(
+            mn_out.status.code(),
+            Some(4),
+            "[{name}] mnemonic inspect single exit 4"
+        );
+        let mn_stdout = String::from_utf8(mn_out.stdout).unwrap();
+        let mn_template = mn_stdout
+            .lines()
+            .find_map(|l| l.strip_prefix("template: "))
+            .unwrap_or("");
+        assert_eq!(
+            mn_template, *template,
+            "[{name}] mnemonic inspect single template"
         );
     }
 }

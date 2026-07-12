@@ -236,13 +236,29 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
         // `MissingExplicitOrigin` — the render path then marks the origin
         // unspecified + exits 4 (see `emit_inspect_*`). Every other decode
         // check (per-chunk BCH, cross-chunk content-id oracle) stays enforced.
-        // Intake is CHUNK-FORM only (unchanged); a plain single-string md1 still
-        // hits the pre-existing `unsupported version 2` gap (FOLLOWUP
-        // `toolkit-inspect-nonchunked-md1-intake-gap`).
-        CardKind::Md1 => Ok(InspectPayload::Md1(md_codec::reassemble_with_opts(
-            chunks,
-            md_codec::DecodeOpts::partial(),
-        )?)),
+        //
+        // v0.89.0 (`toolkit-inspect-nonchunked-md1-intake-gap`): intake now
+        // length-dispatches so a plain NON-chunked single-string md1 (the bare
+        // `md encode` form) is accepted too — previously it hit `unsupported
+        // version 2` / exit 3 because the chunk-layer `reassemble` misread a
+        // non-chunked string's 4-bit version as `2`. `decode_md1_string_with_opts`
+        // dispatches on the codec's IN-BAND chunked-flag (bit 3 of byte 0),
+        // BCH-verified BEFORE the flag is read (so corruption can't re-route):
+        // flag 1 → routes internally back to `reassemble_with_opts(&[s], opts)`
+        // (chunked-of-1 → byte-identical to the multi-chunk path); flag 0 →
+        // `decode_payload_with_opts` (a single, self-contained payload). The
+        // cross-chunk content-id oracle stays UNCONDITIONAL for chunked cards; a
+        // single non-chunked payload has no cross-chunk oracle by construction
+        // (its integrity = the codex32 BCH checksum + `decode_payload`'s full
+        // validator gauntlet). verify-bundle intake is NOT broadened here (its
+        // `expected.md1 == args.md1` raw-string compare needs a separate
+        // canonicalization — that residual stays on the FOLLOWUP).
+        CardKind::Md1 => Ok(InspectPayload::Md1(match chunks {
+            [single] => {
+                md_codec::decode_md1_string_with_opts(single, md_codec::DecodeOpts::partial())?
+            }
+            _ => md_codec::reassemble_with_opts(chunks, md_codec::DecodeOpts::partial())?,
+        })),
     }
 }
 
