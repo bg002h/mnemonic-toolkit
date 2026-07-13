@@ -470,3 +470,234 @@ fn verify_template_bundle_recompose_matches_restore() {
         "verify recompose must equal restore completion"
     );
 }
+
+/// Like `verify_args`, but supply the md1 as a single NON-chunked string.
+fn verify_args_nonchunked(template: &str, phrase: &str, account: &str) -> Vec<String> {
+    let (ms1, mk1, md1) = template_cards(template, phrase, account);
+    let single = to_nonchunked(&md1);
+    let mut args = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--account".into(),
+        account.into(),
+        "--slot".into(),
+        format!("@0.phrase={phrase}"),
+    ];
+    for m in ms1.iter().filter(|m| !m.is_empty()) {
+        args.push("--ms1".into());
+        args.push(m.clone());
+    }
+    for m in &mk1 {
+        args.push("--mk1".into());
+        args.push(m.clone());
+    } // REQUIRED (SPEC M-2)
+    args.push("--md1".into());
+    args.push(single);
+    args
+}
+
+#[test]
+fn verify_bundle_nonchunked_singlesig_template_ok() {
+    for template in ["bip44", "bip84", "bip86"] {
+        let out = mnemonic()
+            .args(verify_args_nonchunked(template, PHRASE_A, "0"))
+            .assert()
+            .success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        assert!(
+            stdout.contains("OK"),
+            "{template} non-chunked must verify OK: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn verify_bundle_chunked_template_still_ok() {
+    // No-regression (INV-3): byte-compare pass ⟹ same descriptor ⟹ id-compare pass.
+    let out = mnemonic()
+        .args(verify_args("bip84", PHRASE_A, "0", None))
+        .assert()
+        .success();
+    assert!(String::from_utf8(out.get_output().stdout.clone())
+        .unwrap()
+        .contains("OK"));
+}
+
+#[test]
+fn verify_bundle_nonchunked_singlesig_json_ok() {
+    let mut args = verify_args_nonchunked("bip84", PHRASE_A, "0");
+    args.push("--json".into());
+    let out = mnemonic().args(&args).assert().success();
+    let v: serde_json::Value =
+        serde_json::from_slice(&out.get_output().stdout).expect("json");
+    assert_eq!(v["result"], "ok");
+    assert_eq!(v["mode"], "single-sig-template");
+    let md1c = v["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "md1_template_match")
+        .expect("md1_template_match check");
+    assert_eq!(md1c["passed"], true);
+}
+
+#[test]
+fn verify_bundle_form_equivalence_same_verdict() {
+    // SPEC §6.2 #5: the SAME descriptor as chunk-form vs non-chunked yields the
+    // identical verdict — stdout AND stderr (the ✓/✗ check lines print to stderr,
+    // verify_bundle.rs:811-820) AND the --json shape (planr0 M-1).
+    let chunked = mnemonic()
+        .args(verify_args("bip84", PHRASE_A, "0", None))
+        .assert()
+        .success();
+    let nonchunked = mnemonic()
+        .args(verify_args_nonchunked("bip84", PHRASE_A, "0"))
+        .assert()
+        .success();
+    assert_eq!(
+        String::from_utf8(chunked.get_output().stdout.clone()).unwrap(),
+        String::from_utf8(nonchunked.get_output().stdout.clone()).unwrap(),
+        "stdout"
+    );
+    assert_eq!(
+        String::from_utf8(chunked.get_output().stderr.clone()).unwrap(),
+        String::from_utf8(nonchunked.get_output().stderr.clone()).unwrap(),
+        "stderr checks"
+    );
+    let mut cj = verify_args("bip84", PHRASE_A, "0", None);
+    cj.push("--json".into());
+    let mut nj = verify_args_nonchunked("bip84", PHRASE_A, "0");
+    nj.push("--json".into());
+    let cjv: serde_json::Value =
+        serde_json::from_slice(&mnemonic().args(&cj).assert().success().get_output().stdout)
+            .unwrap();
+    let njv: serde_json::Value =
+        serde_json::from_slice(&mnemonic().args(&nj).assert().success().get_output().stdout)
+            .unwrap();
+    assert_eq!(cjv, njv, "--json shape must be identical across forms");
+}
+
+#[test]
+fn verify_bundle_nonchunked_noncanonical_encoding_mismatch() {
+    // PROBATIVE INV-4 anchor (SPEC §6.3 #7, construction b): inject a Fingerprints
+    // TLV the template synthesis never carries. Same (tag,body) → still classifies
+    // single-sig + re-derives the SAME (fingerprint-less) expected → encoding-id
+    // DIFFERS → md1_template_match FALSE. Stays GREEN only if the compare is
+    // content-sensitive (a broken md1_match=true regression FAILS it). Fingerprints
+    // are WDT-id-EXCLUDED, so this also proves encoding-id > WDT-id.
+    let (ms1, mk1, md1) = template_cards("bip84", PHRASE_A, "0");
+    let refs: Vec<&str> = md1.iter().map(String::as_str).collect();
+    let mut d = md_codec::chunk::reassemble(&refs).unwrap();
+    d.tlv.fingerprints = Some(vec![(0u8, [0xABu8; 4])]);
+    let doctored = md_codec::encode_md1_string(&d).unwrap();
+    let mut args = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--account".into(),
+        "0".into(),
+        "--slot".into(),
+        format!("@0.phrase={PHRASE_A}"),
+        "--json".into(),
+    ];
+    for m in ms1.iter().filter(|m| !m.is_empty()) {
+        args.push("--ms1".into());
+        args.push(m.clone());
+    }
+    for m in &mk1 {
+        args.push("--mk1".into());
+        args.push(m.clone());
+    }
+    args.push("--md1".into());
+    args.push(doctored);
+    let assert = mnemonic().args(&args).assert().code(4);
+    let v: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout).unwrap();
+    let md1c = v["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "md1_template_match")
+        .unwrap();
+    assert_eq!(
+        md1c["passed"], false,
+        "non-canonical encoding must mismatch: {v}"
+    );
+}
+
+#[test]
+fn verify_bundle_nonchunked_doctored_origin_stricter_than_wdt() {
+    // SPEC §6.3 #8: an EXPLICIT (non-elided) canonical origin. encode_payload writes
+    // path_decl verbatim → the explicit form's id differs from the elided expected's;
+    // WDT-id EXCLUDES origin-path-decl so it would MATCH — proving encoding-id is
+    // strictly stronger. Tree stays canonical → strict-decodes + classifies.
+    let (ms1, mk1, md1) = template_cards("bip84", PHRASE_A, "0");
+    let refs: Vec<&str> = md1.iter().map(String::as_str).collect();
+    let mut d = md_codec::chunk::reassemble(&refs).unwrap();
+    d.path_decl.paths = md_codec::PathDeclPaths::Shared(md_codec::OriginPath {
+        components: vec![
+            md_codec::PathComponent {
+                hardened: true,
+                value: 84,
+            },
+            md_codec::PathComponent {
+                hardened: true,
+                value: 0,
+            },
+            md_codec::PathComponent {
+                hardened: true,
+                value: 0,
+            },
+        ],
+    });
+    let doctored = md_codec::encode_md1_string(&d).unwrap();
+    let mut args = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--account".into(),
+        "0".into(),
+        "--slot".into(),
+        format!("@0.phrase={PHRASE_A}"),
+    ];
+    for m in ms1.iter().filter(|m| !m.is_empty()) {
+        args.push("--ms1".into());
+        args.push(m.clone());
+    }
+    for m in &mk1 {
+        args.push("--mk1".into());
+        args.push(m.clone());
+    }
+    args.push("--md1".into());
+    args.push(doctored);
+    mnemonic().args(&args).assert().code(4); // md1_template_match mismatch → exit 4
+}
+
+#[test]
+fn verify_bundle_mk1_tolerance_not_extended() {
+    // SPEC §6.4 #10: md1 form-tolerance is md1-ONLY. A matching non-chunked md1 with
+    // a case-variant mk1 still mismatches (mk1_template_stub_bind byte-compare :697-700).
+    let (ms1, mk1, md1) = template_cards("bip84", PHRASE_A, "0");
+    let single = to_nonchunked(&md1);
+    let mk1_variant: Vec<String> = mk1.iter().map(|m| m.to_uppercase()).collect();
+    let mut args = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--account".into(),
+        "0".into(),
+        "--slot".into(),
+        format!("@0.phrase={PHRASE_A}"),
+    ];
+    for m in ms1.iter().filter(|m| !m.is_empty()) {
+        args.push("--ms1".into());
+        args.push(m.clone());
+    }
+    for m in &mk1_variant {
+        args.push("--mk1".into());
+        args.push(m.clone());
+    }
+    args.push("--md1".into());
+    args.push(single);
+    mnemonic().args(&args).assert().code(4); // mk1 stub-bind fails → mismatch
+}

@@ -705,7 +705,16 @@ fn verify_singlesig_template<W: Write, E: Write>(
         args.language.unwrap_or_default().into(),
         crate::synthesize::Md1Form::Template,
     )?;
-    let md1_match = expected.md1 == args.md1;
+    // Compare by CONTENT-ID, not raw strings: a non-chunked supplied md1 can never
+    // string-equal the chunk-form synthesized expected, yet decodes to the SAME
+    // descriptor. compute_md1_encoding_id hashes encode_payload (chunk/HRP/checksum-
+    // agnostic, but sensitive to all descriptor content) — the faithful minimal
+    // relaxation of byte-identity (SPEC §2.2/INV-3/INV-4). `d` is the already-decoded
+    // supplied card; `expected.md1` is toolkit-generated chunk-form (mirror :2902-2904).
+    let expected_md1_refs: Vec<&str> = expected.md1.iter().map(String::as_str).collect();
+    let d_expected = md_codec::chunk::reassemble(&expected_md1_refs)?;
+    let md1_match =
+        md_codec::compute_md1_encoding_id(d)? == md_codec::compute_md1_encoding_id(&d_expected)?;
     let mk1_match = match &expected.mk1 {
         crate::format::MkField::Single(chunks) => chunks == &args.mk1,
         crate::format::MkField::Multi(_) => false,
