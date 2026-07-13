@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.90.0] — 2026-07-12
+
+**SemVer-MINOR (additive intake + a strictly-superset compare relaxation) — `mnemonic verify-bundle` now accepts a plain NON-chunked single-string md1 (the bare `md encode` form). Closes the verify-bundle leg of `toolkit-inspect-nonchunked-md1-intake-gap` (the inspect leg shipped v0.89.0); the whole slug is now RESOLVED. No clap/JSON-wire/schema change (schema-mirror unaffected; no new `--json` `result` state).**
+
+- **[expressiveness · Facet 1] length-dispatch the supplied-md1 classify gate.** The template short-circuit's decode now length-dispatches: a single supplied string (`[single]`) → `md_codec::decode_md1_string(single)` (STRICT — default opts, NOT `partial()`); multi-chunk → `reassemble` (verbatim). A chunked-of-1 string routes internally back through `reassemble`, so chunk-form input is byte-identical to before. This routes a non-chunked template card into `verify_singlesig_template` / `verify_multisig_template` instead of falling through the chunk-form-only gate (which previously yielded exit 2 `--template is required` or a false `mismatch`/exit 4 on a valid card). Fixes intake routing for BOTH single-sig and multisig template cards; strict preserves today's fail-closed routing (a dead/pathless/corrupted non-chunked card still fails classify and falls through).
+- **[correctness · Facet 2] content-id compare for the single-sig template path.** The single-sig `md1_template_match` check now compares `md_codec::compute_md1_encoding_id(supplied) == compute_md1_encoding_id(expected)` instead of raw `Vec<String>` string-equality — the faithful minimal relaxation of byte-identity: it hashes the canonical `encode_payload` bytes, so it is invariant ONLY to encoding form (chunk boundaries, HRP case, BCH checksum) but sensitive to all descriptor content (tree, use-site, origin, fingerprints, keys). Provably no-regression (identical strings ⟹ identical descriptor ⟹ identical id) and rejects any genuinely different descriptor. The multisig template path was already content-id-based (`compute_wallet_descriptor_template_id`) and needed only Facet 1.
+
+### Migration / dispositions
+
+- **No breaking change.** Only a previously-rejected non-chunked template md1 now returns its real verdict (`ok`/exit 0 when it matches, `mismatch`/exit 4 when it doesn't); every existing chunk-form input keeps its verdict (byte-compare pass ⟹ id-compare pass).
+- **Scope is provably complete.** A keyed/wallet-policy md1 is structurally ALWAYS chunked — one 65-byte pubkey TLV entry is 520 bits, exceeding the 400-bit single-string cap — so there is no non-chunked keyed intake to miss. Corrupted/partial-decode paths stay strict (unchanged); the non-chunked keyless *dead-card* general-path `mismatch`-vs-`partial` asymmetry (both exit 4, fail-closed) is filed as `verify-bundle-nonchunked-deadcard-verdict-asymmetry`, parked on a future partial-decode cycle.
+- **R0:** design R0 + SPEC R0 (2 rounds) + plan R0 (3 rounds) all 0C/0I; the mandatory post-impl whole-diff R0 gates the tag. Suite 3760/0; clippy clean; pinned-1.95.0 fmt clean (mlock exempt).
+
 ## mnemonic-toolkit [0.89.0] — 2026-07-11
 
 **SemVer-MINOR (additive intake) — `mnemonic inspect --md1` now accepts a plain NON-chunked single-string md1 (the bare `md encode` form), which previously failed `unsupported version 2` / exit 3. Closes the inspect leg of `toolkit-inspect-nonchunked-md1-intake-gap`. No clap/JSON/schema change (schema-mirror unaffected).**
