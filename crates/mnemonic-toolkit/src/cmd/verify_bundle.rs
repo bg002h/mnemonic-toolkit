@@ -385,7 +385,19 @@ pub fn run<W: Write, E: Write>(
     // template/descriptor dispatch (a template bundle may omit `--template`).
     if !args.md1.is_empty() {
         let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
-        if let Ok(d) = md_codec::chunk::reassemble(&md1_refs) {
+        // A single supplied md1 may be a NON-chunked single-payload string (bare
+        // `md encode` form) OR a chunked-of-1 string. decode_md1_string dispatches
+        // on the in-band chunked-flag bit (decode.rs:187-196) — a chunked-of-1
+        // routes internally back to reassemble, so this is byte-identical to today
+        // for chunk-form input. STRICT (default opts, NOT partial): the classify
+        // gate must preserve today's routing — a dead/pathless/corrupted card still
+        // fails decode here and falls through (SPEC INV-5). Fixes intake routing for
+        // BOTH single-sig and multisig template cards.
+        let classify = match md1_refs.as_slice() {
+            [single] => md_codec::decode_md1_string(single),
+            _ => md_codec::chunk::reassemble(&md1_refs),
+        };
+        if let Ok(d) = classify {
             let is_singlesig_template = !d.is_wallet_policy()
                 && d.n == 1
                 && md_codec::canonical_origin::canonical_origin(&d.tree).is_some()

@@ -286,6 +286,88 @@ fn restore_first_address(args: &[String]) -> String {
         .to_string()
 }
 
+/// Decode a chunk-form md1 set and RE-ENCODE it as a single NON-chunked md1
+/// string (the bare `md encode` form; encode_md1_string always emits the
+/// single-payload/non-chunked form — the shape `bundle` never emits).
+fn to_nonchunked(chunk_form_md1: &[String]) -> String {
+    let refs: Vec<&str> = chunk_form_md1.iter().map(String::as_str).collect();
+    let d = md_codec::chunk::reassemble(&refs).expect("chunk-form md1 decodes");
+    md_codec::encode_md1_string(&d).expect("re-encode as a single non-chunked md1")
+}
+
+#[test]
+fn verify_bundle_nonchunked_multisig_template_routes_no_from() {
+    // A keyless 2-of-2 wsh-sortedmulti TEMPLATE, re-encoded non-chunked, supplied
+    // WITHOUT --from, must REACH verify_multisig_template and refuse naming the
+    // seed requirement (proving Facet 1 routed it). Today it falls THROUGH the
+    // chunk-form-only classify gate → the general dispatch errors differently
+    // (no "--from/seed" refusal). Keyless 2-of-2 template is < 400 bits → fits
+    // a single non-chunked string.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-sortedmulti", "2", cos);
+    let single = to_nonchunked(&md1);
+    // --mk1 is clap-required alongside --md1 (verify_bundle.rs:183); supply the
+    // template-form stubs (as the chunked sibling `..._no_from_refuses` does) so
+    // the invocation reaches the classify gate. WITHOUT --from.
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &[single]);
+    push_mk1_stubs(&mut args, &stubs);
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("--from") || stderr.contains("seed"),
+        "non-chunked multisig template must route to verify_multisig_template and \
+         name the --from/seed requirement (proves Facet 1 routed): {stderr}"
+    );
+}
+
+#[test]
+fn verify_bundle_nonchunked_multisig_template_verifies_ok() {
+    // OUT-3 "free ride": a non-chunked keyless multisig template, completed via
+    // --from + --cosigner, verifies GREEN through the (already id-based) WDT-id
+    // compare (:937-941). Proves Facet 1 alone closes the multisig leg.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let stubs = emit_template_mk1_stubs("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
+
+    let mut args = vec!["verify-bundle".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &[to_nonchunked(&md1)]); // <-- NON-chunked single string
+    push_mk1_stubs(&mut args, &stubs);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--json".into(),
+    ]);
+    push_cosigners(&mut args, &[mk1_b]);
+
+    let j = verify_json(&args);
+    assert_eq!(
+        j["result"], "ok",
+        "non-chunked multisig template must verify OK: {j}"
+    );
+    let by = |n: &str| {
+        j["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == n)
+            .unwrap()["passed"]
+            .clone()
+    };
+    assert_eq!(
+        by("md1_template_match"),
+        true,
+        "md1_template_match must pass: {j}"
+    );
+}
+
 // ===========================================================================
 // 1. canonical multisig template, id-search → recomposes + binds + parity.
 // ===========================================================================

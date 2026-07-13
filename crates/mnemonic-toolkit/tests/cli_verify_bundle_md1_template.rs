@@ -100,6 +100,161 @@ fn verify_args(template: &str, phrase: &str, account: &str, expect: Option<&str>
     args
 }
 
+/// Decode a chunk-form md1 set and RE-ENCODE it as a single NON-chunked md1
+/// string (the bare `md encode` form). Defined per-file (integration test files
+/// are separate crates — helpers cannot be shared).
+fn to_nonchunked(chunk_form_md1: &[String]) -> String {
+    let refs: Vec<&str> = chunk_form_md1.iter().map(String::as_str).collect();
+    let d = md_codec::chunk::reassemble(&refs).expect("chunk-form md1 decodes");
+    md_codec::encode_md1_string(&d).expect("re-encode as a single non-chunked md1")
+}
+
+/// Emit a KEYED (wallet-policy) bundle and return its (ms1, mk1, md1) cards.
+/// Same as `template_cards` but WITHOUT `--md1-form template`, so the md1 is a
+/// keyed policy card — naturally MULTI-chunk (a 65-byte pubkey = 520 bits > the
+/// 400-bit single-string cap), exercising the classify `_ => reassemble` arm.
+fn keyed_cards(
+    template: &str,
+    phrase: &str,
+    account: &str,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let out = mnemonic()
+        .args([
+            "bundle",
+            "--template",
+            template,
+            "--network",
+            "mainnet",
+            "--account",
+            account,
+            "--group-size",
+            "0",
+            "--slot",
+            &format!("@0.phrase={phrase}"),
+        ])
+        .assert()
+        .success();
+    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let (mut ms1, mut mk1, mut md1) = (Vec::new(), Vec::new(), Vec::new());
+    let mut section = "";
+    for line in stdout.lines() {
+        if line.starts_with("# ms1") {
+            section = "ms1";
+            continue;
+        }
+        if line.starts_with("# mk1") {
+            section = "mk1";
+            continue;
+        }
+        if line.starts_with("# md1") {
+            section = "md1";
+            continue;
+        }
+        let t = line.trim();
+        if t.is_empty() {
+            section = "";
+            continue;
+        }
+        match section {
+            "ms1" => ms1.push(t.into()),
+            "mk1" => mk1.push(t.into()),
+            "md1" => md1.push(t.into()),
+            _ => {}
+        }
+    }
+    (ms1, mk1, md1)
+}
+
+#[test]
+fn verify_bundle_keyed_multichunk_unchanged() {
+    // A KEYED bip84 bundle md1 is multi-chunk. It enters the classify `match`'s
+    // `_ => reassemble` arm (len>1, verbatim-unchanged by Facet 1), skips both
+    // template branches (is_wallet_policy=true), and verifies via the general
+    // path — GREEN before AND after Facet 1.
+    let (ms1, mk1, md1) = keyed_cards("bip84", PHRASE_A, "0");
+    assert!(md1.len() > 1, "keyed bip84 md1 must be multi-chunk: {md1:?}");
+    // A KEYED wallet-policy md1 REQUIRES --template: it skips the keyless-template
+    // short-circuit → verify_bundle.rs:435-443 ModeViolation without it (planr0 I-A).
+    // The general/keyed path prints lowercase "result: ok" (:558-567), NOT the
+    // template-path-only "OK (…recomposed)" string (:824). Mirror the proven keyed
+    // verify pattern in cli_verify_bundle_full.rs:30-56.
+    let mut args = vec![
+        "verify-bundle".into(),
+        "--network".into(),
+        "mainnet".into(),
+        "--template".into(),
+        "bip84".into(),
+        "--account".into(),
+        "0".into(),
+        "--slot".into(),
+        format!("@0.phrase={PHRASE_A}"),
+    ];
+    for m in ms1.iter().filter(|m| !m.is_empty()) {
+        args.push("--ms1".into());
+        args.push(m.clone());
+    }
+    for m in &mk1 {
+        args.push("--mk1".into());
+        args.push(m.clone());
+    }
+    for m in &md1 {
+        args.push("--md1".into());
+        args.push(m.clone());
+    }
+    let out = mnemonic().args(&args).assert().success();
+    assert!(String::from_utf8(out.get_output().stdout.clone())
+        .unwrap()
+        .contains("result: ok"));
+}
+
+#[test]
+fn verify_bundle_nonchunked_dead_card_falls_through_strict() {
+    // A NON-chunked KEYLESS DEAD card: take the frozen keyed wsh(pk) card
+    // (`m/48'/0'/0'`, a NON-canonical wrapper), strip its keys → keyless template,
+    // elide the origin → unresolvable. Keyless → re-encodes as a single non-chunked
+    // string (mirrors the `dead()` helper in cli_repair_dead_card_strict.rs:32-36,
+    // minus keys, plus encode_md1_string). Strict decode_md1_string rejects the
+    // elided-unresolvable origin (MissingExplicitOrigin) → classify falls THROUGH →
+    // never "OK" (SPEC INV-5), before AND after Facet 1.
+    const SS_MD1_ORIGIN: &[&str] = &[
+        "md1f9xlxpqpqpmvyyyqqcy2pdqhp5gmug4gy80cpxatjnpdtxhjvyuds54ar44wuc0a34",
+        "md1f9xlxpq036ekkrhtkv6grq7qcua7ej7xusqaaq2qptxulyg808qnqjq8s570kd4kkd",
+        "md1f9xlxpqsz3h36nf43a3dytlcf6saj9lwz9gc9uag7ce95hlcqu95t5qpd0qs94",
+    ];
+    let mut d = md_codec::chunk::reassemble(SS_MD1_ORIGIN).expect("decode keyed wsh(pk) card");
+    d.tlv.pubkeys = None; // → keyless template (fits a single non-chunked string)
+    d.tlv.fingerprints = None;
+    d.path_decl.paths =
+        md_codec::PathDeclPaths::Shared(md_codec::OriginPath { components: vec![] }); // elide → dead
+    let dead_single =
+        md_codec::encode_md1_string(&d).expect("re-encode keyless dead card non-chunked");
+    // --mk1 is clap-required alongside --md1 (verify_bundle.rs:183); supply a real
+    // template mk1 so the invocation PASSES clap and actually REACHES the classify
+    // gate (without it, clap rejects at exit 64 and the strict-classify path is
+    // never exercised — a vacuous lock). The dead md1 strict-decode-fails so it
+    // falls THROUGH classify → "--template is required" (exit 2), never OK, before
+    // AND after Facet 1. The mk1 content is irrelevant: the fall-through refusal
+    // fires before mk1 is examined.
+    let (_ms1, mk1, _md1) = template_cards("bip84", PHRASE_A, "0");
+    let mut args = vec![
+        "verify-bundle".to_string(),
+        "--network".to_string(),
+        "mainnet".to_string(),
+        "--md1".to_string(),
+        dead_single,
+    ];
+    for m in &mk1 {
+        args.push("--mk1".to_string());
+        args.push(m.clone());
+    }
+    let assert = mnemonic().args(&args).assert().failure();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(
+        !stdout.contains("OK"),
+        "non-chunked dead card must never verify OK: {stdout}"
+    );
+}
+
 #[test]
 fn verify_template_bundle_recomposes_and_passes() {
     for template in ["bip44", "bip84", "bip86"] {
