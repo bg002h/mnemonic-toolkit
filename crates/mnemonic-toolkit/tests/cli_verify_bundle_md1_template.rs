@@ -172,7 +172,10 @@ fn verify_bundle_keyed_multichunk_unchanged() {
     // template branches (is_wallet_policy=true), and verifies via the general
     // path — GREEN before AND after Facet 1.
     let (ms1, mk1, md1) = keyed_cards("bip84", PHRASE_A, "0");
-    assert!(md1.len() > 1, "keyed bip84 md1 must be multi-chunk: {md1:?}");
+    assert!(
+        md1.len() > 1,
+        "keyed bip84 md1 must be multi-chunk: {md1:?}"
+    );
     // A KEYED wallet-policy md1 REQUIRES --template: it skips the keyless-template
     // short-circuit → verify_bundle.rs:435-443 ModeViolation without it (planr0 I-A).
     // The general/keyed path prints lowercase "result: ok" (:558-567), NOT the
@@ -529,8 +532,7 @@ fn verify_bundle_nonchunked_singlesig_json_ok() {
     let mut args = verify_args_nonchunked("bip84", PHRASE_A, "0");
     args.push("--json".into());
     let out = mnemonic().args(&args).assert().success();
-    let v: serde_json::Value =
-        serde_json::from_slice(&out.get_output().stdout).expect("json");
+    let v: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).expect("json");
     assert_eq!(v["result"], "ok");
     assert_eq!(v["mode"], "single-sig-template");
     let md1c = v["checks"]
