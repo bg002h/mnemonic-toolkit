@@ -250,11 +250,22 @@ fn verify_bundle_nonchunked_dead_card_falls_through_strict() {
         args.push("--mk1".to_string());
         args.push(m.clone());
     }
-    let assert = mnemonic().args(&args).assert().failure();
+    // Pin exit 2 AND the "--template is required" fall-through message (postimpl
+    // M-1): a bare `.failure()` would stay green even if a future clap-surface
+    // change re-introduced a pre-gate exit-64 reject WITHOUT exercising strict
+    // classify (the vacuous-lock class). Exit 2 + this message prove the dead card
+    // actually reached — and fell through — the classify gate.
+    let assert = mnemonic().args(&args).assert().code(2);
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
         !stdout.contains("OK"),
         "non-chunked dead card must never verify OK: {stdout}"
+    );
+    assert!(
+        stderr.contains("--template"),
+        "dead card must fall through to the --template-required refusal (strict classify, \
+         not a vacuous pre-gate reject): {stderr}"
     );
 }
 
