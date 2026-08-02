@@ -558,8 +558,42 @@ mod tests {
     /// over the attacker's own sighash, so the ECDSA check rejects it even if
     /// the witness-script-hash binding were removed. It is a genuine
     /// foreign-proof-rejection oracle, NOT an isolating oracle for the binding
-    /// itself — see FOLLOWUP `bip322-0011-widened-accept-surface-untested-classes`.
+    /// itself — `P2WSH_BINDING_FORGERY` below is that.
     const P2WSH_FORGED_SIG: &str = "AwBHMEQCID7T4RcHbWzOYsx4TTTB7JoTDuAKebWAqCa+nU/BURTqAiBme6Cv4HfhJovCz3uve2sKZaJYLGk5Kdxz+9mvWbfxDgElUSEDJGU+rENEiAAswGu/t/EP4YmR41+f5DAtvqbSNT3AqxxRrg==";
+
+    /// ISOLATING oracle for the witness-script-hash binding (`verify.rs:453-463`).
+    ///
+    /// The attacker's own 1-of-1 script, but signed over the **VICTIM's**
+    /// `to_sign` sighash — so the ECDSA check would PASS and only the
+    /// script-hash binding stands between it and a VALID verdict. Mutation-
+    /// proven: against the pinned 0.0.11 it is rejected with `ToSignInvalid`,
+    /// and with that binding block stripped from a local copy of the crate the
+    /// exact same bytes verify `Ok(())`. Unlike `P2WSH_FORGED_SIG`, this cell
+    /// goes red if the binding is ever weakened.
+    const P2WSH_BINDING_FORGERY: &str = "AwBHMEQCIANP62M0w/nJQTG8J4AGpOVzz7atHlSZAfeTtnanBfP0AiBZ0H8bNnOZA1ezz0Yees8lmXpGWbwDQggz2qB9b9cvbgElUSEDJGU+rENEiAAswGu/t/EP4YmR41+f5DAtvqbSNT3AqxxRrg==";
+
+    #[test]
+    fn p2wsh_script_hash_binding_is_load_bearing() {
+        // Burndown of `bip322-0011-widened-accept-surface-untested-classes`.
+        //
+        // `p2wsh_foreign_script_forgery_rejected` is over-determined — its
+        // constant fails the ECDSA check too, so it would stay green even if
+        // the witness-script-hash binding were deleted. This cell closes that
+        // gap: P2WSH_BINDING_FORGERY carries the ATTACKER's script signed over
+        // the VICTIM's sighash, so the signature check PASSES and only the
+        // binding (`vendor/bip322/src/verify.rs:453-463`) can reject it.
+        //
+        // Mutation-proven when written: stripping that binding block from a
+        // local copy of 0.0.11 flips this exact input from `ToSignInvalid` to
+        // `Ok(())`. If the binding is ever weakened, this cell goes red.
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            let r = verify_message(P2WSH_ADDRESS, "Hello World", P2WSH_BINDING_FORGERY, f).unwrap();
+            assert!(
+                !r.valid,
+                "FORGERY ACCEPTED: P2WSH witness-script-hash binding is not enforced"
+            );
+        }
+    }
 
     #[test]
     fn p2wsh_multisig_genuine_proof_verifies() {

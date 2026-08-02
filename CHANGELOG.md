@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.92.0] — 2026-08-02
+
+**SemVer-MINOR, test-only — burns down the one open item from the v0.91.0 security cycle: the P2WSH forgery regression was over-determined and did not actually pin the witness-script-hash binding. No production code changed; no clap/JSON/schema change.**
+
+- **[test] isolating oracle for the P2WSH witness-script-hash binding.** `p2wsh_foreign_script_forgery_rejected` (v0.91.0) uses a constant signed over the ATTACKER's own sighash, so the ECDSA check rejects it even with `bip322`'s binding (`verify.rs:453-463`) deleted — it proves foreign proofs are refused, but not that the binding is enforced. New `P2WSH_BINDING_FORGERY` carries the attacker's 1-of-1 script signed over the **VICTIM's** `to_sign` p2wsh sighash, so the signature check PASSES and only the binding can reject it; new cell `p2wsh_script_hash_binding_is_load_bearing` asserts that.
+- **Mutation-proven twice.** In a standalone probe (binding stripped from a local 0.0.11 → the same bytes flip from `ToSignInvalid` to `Ok(())`), and at the toolkit level via `[patch.crates-io]` against a binding-stripped copy, where the new cell goes RED while the old one stays green — demonstrating the over-determination the FOLLOWUP recorded.
+- **Vector derived from source**, not copied: `bip322::create_to_spend`/`create_to_sign` are public, so the sighash was reproduced directly. The independently-derived bytes matched the convergence reviewer's proposed constant exactly.
+
+### Migration / dispositions
+
+- **No behaviour change.** Test-only; `verify_message.rs`'s production paths are untouched.
+- **`bip322-0011-widened-accept-surface-untested-classes` → RESOLVED.** Its other half (P2SH-multisig / P2PKH arms) needs no cell: those arms require a scriptSig and the BIP-322 *simple* encoding carries none, so they are unreachable-to-success and a regression cell would assert a vacuous truth.
+- **crates.io publication remains blocked** (unchanged, pre-existing): `[patch.crates-io]` pins `miniscript` to an unreleased fork rev and is neither published nor honoured downstream. Verified this cycle — without the patch the toolkit does not compile against stock `miniscript 13.1.0` (missing `derive_at_index`, `Terminal::SortedMulti`/`SortedMultiA`, unsatisfied `Descriptor` bounds). Gated on `taproot-coverage-cycle-on-miniscript-gt-13-1-0`.
+
 ## mnemonic-toolkit [0.91.0] — 2026-08-02
 
 **SECURITY (SemVer-MINOR) — fixes a signature-verification flaw where `mnemonic verify-message` reported `VALID` / exit 0 / `"valid": true` for a signature made by a key that does NOT control the challenged address. A proof-of-ownership forgery, under the DEFAULT `--format auto`, for every P2WPKH and EVERY P2SH address. Fixed two independent ways: a new key-binding gate in this repo, and a bump to the patched `bip322` 0.0.11. P2TR was never affected. No clap/JSON-wire/schema change (schema-mirror unaffected).**
