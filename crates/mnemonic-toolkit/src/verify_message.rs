@@ -14,8 +14,13 @@
 //! `p2pkh` arms. Observable effect here: a genuine **P2WSH multisig** proof now
 //! verifies, where 0.0.10 returned `UnsupportedAddress` — see
 //! `p2wsh_multisig_genuine_proof_verifies`. `auto` still routes P2PKH to the
-//! legacy path, so that dispatch is unchanged; the crate's own P2PKH arm is
-//! reachable only via an explicit `--format bip322` on a P2PKH address.
+//! legacy path, so that dispatch is unchanged.
+//!
+//! The P2SH-multisig and P2PKH arms are entered but can never succeed here:
+//! both need a **scriptSig**, and the *simple* encoding carries none
+//! (`create_to_sign` hard-codes `script_sig: ScriptBuf::new()`,
+//! `vendor/bip322/src/util.rs:60`). `--format bip322` on a P2PKH address
+//! reaches the crate's P2PKH arm and always returns `Invalid witness`.
 
 use crate::error::ToolkitError;
 use bitcoin::address::{Address, AddressType, NetworkUnchecked};
@@ -84,9 +89,10 @@ fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, 
 /// the flaw. Its regression cells are the oracle for exactly that. The cost is
 /// one hash and one script comparison per verify.
 ///
-/// Returns `None` for address types the crate binds correctly by construction —
-/// P2TR takes its x-only key from the address's own witness program — so those
-/// keep flowing to the crate unchanged.
+/// Returns `None` for address types the crate binds correctly by construction,
+/// which flow to it unchanged: **P2TR** (x-only key taken from the address's own
+/// witness program) and **P2WSH** (bound by witness-script hash), plus P2PKH and
+/// anything unsupported, which the crate rejects on its own.
 fn bip322_key_binding_holds(addr: &Address, signature: &str) -> Option<bool> {
     use base64::Engine as _;
     use bitcoin::address::AddressData;
@@ -126,31 +132,38 @@ fn bip322_key_binding_holds(addr: &Address, signature: &str) -> Option<bool> {
         // is a bare delegation to `secp256k1::PublicKey::from_slice`
         // (`vendor/bitcoin/src/crypto/key.rs:323-325`) and accepts 65-byte
         // uncompressed and hybrid keys too. Segwit v0 spends require the
-        // compressed form, so this rejects nothing a real wallet can produce —
-        // and it is what actually forecloses the crate's
-        // `wpubkey_hash().unwrap()` panic (`vendor/bip322/src/verify.rs:168`),
-        // which fires when the witness carries the address owner's OWN key in
-        // uncompressed form (the binding matches, since `wpubkey_hash()` always
-        // hashes the compressed serialization).
+        // compressed form, so this rejects nothing a real wallet can produce.
+        //
+        // It is also the gate's own guard against the P2SH-only
+        // `wpubkey_hash().unwrap()` panic that 0.0.10 carried (0.0.10
+        // `verify.rs:168`, inside its `if is_p2sh` sighash branch — that line
+        // number does NOT refer to the vendored 0.0.11 tree). The binding alone
+        // would not have stopped it: `wpubkey_hash()` always hashes the
+        // compressed serialization, so the owner's own key in uncompressed form
+        // still matched. The pinned 0.0.11 returns a clean
+        // `.context(UncompressedPublicKey)` error there instead, so today this
+        // is belt-and-braces — it holds the line if the crate ever regresses.
         if raw_key.len() != 33 {
             return None;
         }
         CompressedPublicKey::from_slice(raw_key).ok()
     })();
     let Some(pk) = claimed else {
-        // Not a `[signature, 33-byte compressed key]` key-path spend.
+        // Not a `[signature, 33-byte compressed key]` key-path spend → fail
+        // closed, for BOTH address types.
         //
-        // For P2WPKH that is the ONLY valid witness shape, so anything else is
-        // a failed binding — fail closed.
-        //
-        // A P2SH address is ambiguous: it may wrap P2WPKH, but equally P2WSH or
-        // multisig, which `bip322` 0.0.11 verifies and binds by redeem/witness
-        // script hash. This gate cannot evaluate those, so it must ABSTAIN
-        // rather than reject — rejecting would report a genuine owner's
-        // multisig proof as INVALID. (Pre-0.0.11 this returned `Some(false)`,
-        // which was safe only because the crate could not verify those forms
-        // at all.)
-        return if is_p2sh { None } else { Some(false) };
+        // P2WPKH has exactly one valid witness shape, so that case is trivial.
+        // P2SH looks ambiguous — 0.0.11 added P2SH-multisig and P2SH-P2WSH arms
+        // — but rejecting here denies no genuine owner anything, because those
+        // arms are unreachable-to-success on this call path: both read the
+        // redeem/witness script out of the input's **scriptSig**
+        // (`vendor/bip322/src/verify.rs:535`, `:457-460`), and the BIP-322
+        // *simple* encoding cannot carry one. `create_to_sign` hard-codes
+        // `script_sig: ScriptBuf::new()` (`vendor/bip322/src/util.rs:60`) and
+        // populates only the witness, so a simple-encoded P2SH-multisig or
+        // P2SH-P2WSH proof always errors inside the crate regardless of this
+        // gate. Staying closed also keeps the 33-byte check below load-bearing.
+        return Some(false);
     };
 
     // The key must reproduce the exact scriptPubKey the address commits to.
@@ -537,6 +550,12 @@ mod tests {
     const P2WSH_GENUINE_SIG: &str = "AwBHMEQCIGLPidfWp4H8TLeHn6wDJZOvVjED3X4GkpIt7UcdfMbwAiBMVCJO/UnGGG/Ftc0nl8xV6uQSNKz7U7HYiORDsHhiDAElUSEDeWLUWzjovPgvqO+oQyoB8gyaU+JMfT8R3xl8uOcJJtpRrg==";
     /// A structurally valid P2WSH proof the ATTACKER made for their OWN P2WSH
     /// address, presented against the victim's — the script hash cannot match.
+    ///
+    /// NOTE (honest scope): this constant is *over-determined*. It was signed
+    /// over the attacker's own sighash, so the ECDSA check rejects it even if
+    /// the witness-script-hash binding were removed. It is a genuine
+    /// foreign-proof-rejection oracle, NOT an isolating oracle for the binding
+    /// itself — see FOLLOWUP `bip322-0011-widened-accept-surface-untested-classes`.
     const P2WSH_FORGED_SIG: &str = "AwBHMEQCID7T4RcHbWzOYsx4TTTB7JoTDuAKebWAqCa+nU/BURTqAiBme6Cv4HfhJovCz3uve2sKZaJYLGk5Kdxz+9mvWbfxDgElUSEDJGU+rENEiAAswGu/t/EP4YmR41+f5DAtvqbSNT3AqxxRrg==";
 
     #[test]
@@ -574,11 +593,12 @@ mod tests {
     }
 
     #[test]
-    fn p2sh_non_keypath_witness_abstains_rather_than_rejecting() {
-        // Direct gate test. A P2SH address may wrap P2WSH or multisig, which
-        // 0.0.11 verifies; the gate cannot evaluate those and must return None
-        // (no opinion) so the crate's own binding decides. Returning
-        // Some(false) here would report a genuine multisig owner as INVALID.
+    fn p2sh_non_keypath_witness_rejected_fail_closed() {
+        // Direct gate test. A non-key-path P2SH witness is rejected outright.
+        // This denies no genuine owner anything: 0.0.11's P2SH-multisig and
+        // P2SH-P2WSH arms both read the redeem/witness script out of the
+        // scriptSig, which the BIP-322 *simple* encoding cannot carry, so those
+        // proofs can never succeed on this call path anyway.
         use base64::Engine;
         use bitcoin::consensus::encode::serialize;
         use bitcoin::Witness;
@@ -590,8 +610,8 @@ mod tests {
         let addr = parse_addr("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy").unwrap();
         assert_eq!(
             bip322_key_binding_holds(&addr, &sig),
-            None,
-            "gate must abstain on a non-key-path P2SH witness, not reject it"
+            Some(false),
+            "gate must stay fail-closed on a non-key-path P2SH witness"
         );
         // ...while the P2WPKH-shaped forgery is still a hard rejection.
         let p2wpkh = parse_addr(SEGWIT_ADDRESS).unwrap();
