@@ -165,3 +165,59 @@ fn message_source_mutually_exclusive() {
         .assert()
         .failure();
 }
+
+// ── Key-binding forgery, end-to-end (responsible disclosure, 2026-08-02) ─────
+// The pinned `bip322 0.0.10` does not bind the witness public key to the
+// challenged address for P2WPKH / P2SH-P2WPKH, so an unrelated key could
+// produce a proof the toolkit reported as VALID. These assert the CLI
+// contract scripted consumers actually rely on: INVALID on stdout, exit 1,
+// and `"valid": false` in the --json envelope.
+
+/// Sign `address` with a key that does NOT control it — the forgery primitive.
+/// `sign_simple_encoded` performs no key↔address check either, so this is all
+/// an attacker ever had to do.
+fn forge_for(address: &str) -> String {
+    use bitcoin::secp256k1::SecretKey;
+    use bitcoin::{Network, PrivateKey};
+    let sk = SecretKey::from_slice(&[0x42u8; 32]).unwrap();
+    let wif = PrivateKey::new(sk, Network::Bitcoin).to_wif();
+    bip322::sign_simple_encoded(address, "Hello World", &wif).unwrap()
+}
+
+#[test]
+fn p2wpkh_foreign_key_forgery_rejected_by_cli() {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-message",
+            "--address",
+            SEGWIT_ADDR,
+            "--message",
+            "Hello World",
+            "--signature",
+            &forge_for(SEGWIT_ADDR),
+        ])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("INVALID"));
+}
+
+#[test]
+fn p2sh_foreign_key_forgery_rejected_by_cli_json() {
+    let addr = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "verify-message",
+            "--address",
+            addr,
+            "--message",
+            "Hello World",
+            "--signature",
+            &forge_for(addr),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("\"valid\": false"));
+}

@@ -57,6 +57,82 @@ fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, 
         .map_err(|e| ToolkitError::VerifyMessage(format!("legacy verify failed: {e}")))
 }
 
+/// Does the public key carried in the witness actually control `addr`?
+///
+/// **Security gate (responsible disclosure, 2026-08-02).** The pinned
+/// `bip322 0.0.10` lifts the ECDSA public key straight out of `witness[1]` and
+/// never checks it against the challenged address: its one equality check
+/// (`vendor/bip322/src/verify.rs:134`) compares that key with *itself*, and the
+/// P2SH arm discards `script_hash` entirely (`verify.rs:87`), deriving the
+/// sighash script from the attacker's own key (`verify.rs:168`). Any keypair
+/// therefore produces a proof that verifies against anyone's P2WPKH or P2SH
+/// address. We re-derive the binding here and refuse to call the crate unless
+/// it holds.
+///
+/// Returns `None` for address types the crate binds correctly by construction —
+/// P2TR takes its x-only key from the address's own witness program — so those
+/// keep flowing to the crate unchanged.
+fn bip322_key_binding_holds(addr: &Address, signature: &str) -> Option<bool> {
+    use base64::Engine as _;
+    use bitcoin::address::AddressData;
+    use bitcoin::consensus::Decodable;
+    use bitcoin::{CompressedPublicKey, ScriptBuf, Witness};
+
+    let is_p2sh = match addr.to_address_data() {
+        AddressData::P2sh { .. } => true,
+        AddressData::Segwit { witness_program } => {
+            if witness_program.version().to_num() != 0 || witness_program.program().len() != 20 {
+                return None; // P2TR / future witness versions — already bound.
+            }
+            false
+        }
+        _ => return None, // P2PKH / unsupported — the crate rejects these.
+    };
+
+    // Recover the claimed key. Any structural problem is a failed binding, not
+    // a pass: this gate is fail-closed.
+    let claimed = (|| {
+        let raw = base64::engine::general_purpose::STANDARD
+            .decode(signature.trim())
+            .ok()?;
+        let witness =
+            Witness::consensus_decode_from_finite_reader(&mut bitcoin::io::Cursor::new(raw))
+                .ok()?;
+        // BIP-322 simple key-path spend is exactly [signature, public key].
+        if witness.len() != 2 {
+            return None;
+        }
+        let raw_key = witness.nth(1)?;
+        // Require the COMPRESSED encoding EXPLICITLY. `CompressedPublicKey`
+        // names its *output* serialization, not its accepted input: `from_slice`
+        // is a bare delegation to `secp256k1::PublicKey::from_slice`
+        // (`vendor/bitcoin/src/crypto/key.rs:323-325`) and accepts 65-byte
+        // uncompressed and hybrid keys too. Segwit v0 spends require the
+        // compressed form, so this rejects nothing a real wallet can produce —
+        // and it is what actually forecloses the crate's
+        // `wpubkey_hash().unwrap()` panic (`vendor/bip322/src/verify.rs:168`),
+        // which fires when the witness carries the address owner's OWN key in
+        // uncompressed form (the binding matches, since `wpubkey_hash()` always
+        // hashes the compressed serialization).
+        if raw_key.len() != 33 {
+            return None;
+        }
+        CompressedPublicKey::from_slice(raw_key).ok()
+    })();
+    let Some(pk) = claimed else {
+        return Some(false);
+    };
+
+    // The key must reproduce the exact scriptPubKey the address commits to.
+    let wpkh = pk.wpubkey_hash();
+    let expected = if is_p2sh {
+        ScriptBuf::new_p2sh(&ScriptBuf::new_p2wpkh(&wpkh).script_hash())
+    } else {
+        ScriptBuf::new_p2wpkh(&wpkh)
+    };
+    Some(expected == addr.script_pubkey())
+}
+
 /// BIP-322 *simple* verify — P2WPKH / P2SH-P2WPKH / P2TR (crate refuses P2PKH).
 ///
 /// The pinned `bip322 0.0.10` crate can **panic** on adversarial input — e.g. a
@@ -66,12 +142,24 @@ fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, 
 /// clean error instead of crashing (exit 101). The default panic hook is
 /// silenced only around the call so the crate's internal panic text does not
 /// leak to stderr; the hook is restored immediately after. (In the CLI this runs
-/// single-threaded; the catch is also exercised by a unit regression test.)
+/// single-threaded.)
+///
+/// Since the key-binding gate below rejects uncompressed witness keys outright,
+/// that input no longer reaches the crate and this guard is now
+/// defence-in-depth rather than a live path. The hazard is still real, so the
+/// guard stays: `crate_panic_hazard_is_real_so_catch_unwind_stays` invokes the
+/// crate DIRECTLY to prove it, and fails loudly if a future bump makes the
+/// guard genuinely unnecessary.
 ///
 /// NOTE: the global panic-hook swap is NOT thread-safe — if a future feature
 /// ever calls this from multiple threads (e.g. batch verification), the hook
 /// swap races. The toolkit is single-threaded today; revisit if that changes.
 fn verify_bip322(address: &str, message: &str, signature: &str) -> Result<bool, ToolkitError> {
+    // MUST precede the crate call — see `bip322_key_binding_holds`. Without it
+    // the crate accepts a signature from a key that does not control `address`.
+    if bip322_key_binding_holds(&parse_addr(address)?, signature) == Some(false) {
+        return Ok(false);
+    }
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -271,17 +359,151 @@ mod tests {
         base64::engine::general_purpose::STANDARD.encode(serialize(&w))
     }
 
+    // ── Key-binding regression (responsible disclosure, 2026-08-02) ──────────
+    // Pinned `bip322 0.0.10` never binds the witness public key to the
+    // challenged address for P2WPKH / P2SH-P2WPKH: `verify_full` lifts the key
+    // out of `witness[1]` (attacker-controlled) and the only equality check
+    // (`verify.rs:134`) compares that key against itself. So ANY keypair can
+    // produce a proof that verifies against SOMEONE ELSE'S address. P2TR is
+    // unaffected — its x-only key is read from the address's witness program.
+    //
+    // `sign_simple_encoded` likewise never checks key↔address, so the forgery
+    // is just "sign the victim's address with the attacker's key".
+    fn attacker_wif() -> String {
+        use bitcoin::secp256k1::SecretKey;
+        use bitcoin::{Network, PrivateKey};
+        let sk = SecretKey::from_slice(&[0x42u8; 32]).unwrap();
+        PrivateKey::new(sk, Network::Bitcoin).to_wif()
+    }
+
     #[test]
-    fn p2sh_uncompressed_pubkey_does_not_panic() {
-        // P2SH (non-segwit) mainnet address; the address layer can't see the
-        // redeem script, so it routes to bip322 under auto/bip322.
+    fn p2wpkh_foreign_key_forgery_rejected() {
+        // SEGWIT_ADDRESS is the BIP-322 vector address; the attacker does not
+        // hold its key, yet signs against it with an unrelated one.
+        let forged = bip322::sign_simple_encoded(SEGWIT_ADDRESS, "Hello World", &attacker_wif())
+            .expect("attacker can always produce a witness");
+        let o = verify_message(SEGWIT_ADDRESS, "Hello World", &forged, SigFormat::Bip322).unwrap();
+        assert!(
+            !o.valid,
+            "FORGERY ACCEPTED: unrelated key verified against a P2WPKH address"
+        );
+    }
+
+    #[test]
+    fn p2wpkh_foreign_key_forgery_rejected_under_auto() {
+        let forged =
+            bip322::sign_simple_encoded(SEGWIT_ADDRESS, "Hello World", &attacker_wif()).unwrap();
+        let o = verify_message(SEGWIT_ADDRESS, "Hello World", &forged, SigFormat::Auto).unwrap();
+        assert!(!o.valid, "FORGERY ACCEPTED under --format auto");
+    }
+
+    #[test]
+    fn p2sh_p2wpkh_foreign_key_forgery_rejected() {
+        // Real mainnet P2SH address the attacker does not control.
         let addr = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+        let forged = bip322::sign_simple_encoded(addr, "Hello World", &attacker_wif()).unwrap();
+        let r = verify_message(addr, "Hello World", &forged, SigFormat::Bip322).unwrap();
+        assert!(
+            !r.valid,
+            "FORGERY ACCEPTED: unrelated key verified against a P2SH address"
+        );
+    }
+
+    #[test]
+    fn p2sh_p2wpkh_genuine_signature_still_valid() {
+        // Positive control for the gate's P2SH arm: the key that DOES control
+        // the address must still verify (guards against over-rejection).
+        use bitcoin::secp256k1::SecretKey;
+        use bitcoin::{CompressedPublicKey, Network, PrivateKey};
+        let secp = Secp256k1::new();
+        let pk = PrivateKey::new(
+            SecretKey::from_slice(&[0x33u8; 32]).unwrap(),
+            Network::Bitcoin,
+        );
+        let cpk = CompressedPublicKey::from_private_key(&secp, &pk).unwrap();
+        let addr = Address::p2shwpkh(&cpk, Network::Bitcoin).to_string();
+        let sig = bip322::sign_simple_encoded(&addr, "Hello World", &pk.to_wif()).unwrap();
+        let o = verify_message(&addr, "Hello World", &sig, SigFormat::Bip322).unwrap();
+        assert!(o.valid, "genuine P2SH-P2WPKH proof was rejected");
+        // ...and the same address must still reject a tampered message.
+        assert!(
+            !verify_message(&addr, "Goodbye World", &sig, SigFormat::Bip322)
+                .unwrap()
+                .valid
+        );
+    }
+
+    #[test]
+    fn p2tr_foreign_key_forgery_rejected() {
+        // Control: taproot binds the key via the address itself, so the same
+        // attack must already fail. Guards against a fix that regresses P2TR.
+        use bitcoin::secp256k1::SecretKey;
+        use bitcoin::Network;
+        let secp = Secp256k1::new();
+        let victim = SecretKey::from_slice(&[0x11u8; 32]).unwrap();
+        let (xonly, _) = victim.public_key(&secp).x_only_public_key();
+        let addr = Address::p2tr(&secp, xonly, None, Network::Bitcoin).to_string();
+        let forged = bip322::sign_simple_encoded(&addr, "Hello World", &attacker_wif()).unwrap();
+        let r = verify_message(&addr, "Hello World", &forged, SigFormat::Bip322);
+        assert!(r.is_err() || !r.unwrap().valid, "FORGERY ACCEPTED on P2TR");
+    }
+
+    /// The P2SH-P2WPKH address the `craft_uncompressed_p2sh_sig` key actually
+    /// controls. Its `wpubkey_hash` MATCHES the crafted witness key (that hash
+    /// is always over the compressed form), so the binding alone does not stop
+    /// this input — only the explicit 33-byte check does. Pre-fix this reached
+    /// the crate and panicked.
+    fn uncompressed_vector_owner_address() -> String {
+        use bitcoin::secp256k1::SecretKey;
+        use bitcoin::{CompressedPublicKey, Network, PrivateKey};
+        let secp = Secp256k1::new();
+        let pk = PrivateKey::new(
+            SecretKey::from_slice(&[0x22u8; 32]).unwrap(),
+            Network::Bitcoin,
+        );
+        let cpk = CompressedPublicKey::from_private_key(&secp, &pk).unwrap();
+        Address::p2shwpkh(&cpk, Network::Bitcoin).to_string()
+    }
+
+    #[test]
+    fn uncompressed_witness_key_rejected() {
         let sig = craft_uncompressed_p2sh_sig();
-        // Must return (Err or Ok(valid=false)) — reaching this assert at all
+        // (a) A P2SH address the key does not control — binding fails outright.
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            let r = verify_message("3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy", "hello", &sig, f);
+            assert!(r.is_err() || !r.unwrap().valid);
+        }
+        // (b) The address the key DOES control. Reaching these asserts at all
         // proves no panic unwound out of the crate.
-        let r = verify_message(addr, "hello", &sig, SigFormat::Bip322);
-        assert!(r.is_err() || !r.unwrap().valid);
-        let r2 = verify_message(addr, "hello", &sig, SigFormat::Auto);
-        assert!(r2.is_err() || !r2.unwrap().valid);
+        let owner = uncompressed_vector_owner_address();
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            assert!(
+                !verify_message(&owner, "hello", &sig, f).unwrap().valid,
+                "an uncompressed witness key must never verify"
+            );
+        }
+    }
+
+    #[test]
+    fn crate_panic_hazard_is_real_so_catch_unwind_stays() {
+        // Non-vacuity guard for `verify_bip322`'s `catch_unwind`. The gate above
+        // now stops this input before the crate sees it, so the unwind guard is
+        // no longer reachable through `verify_message` — which would leave its
+        // rationale asserted rather than proven. Call the crate DIRECTLY to show
+        // the hazard is still live. If a future `bip322` bump fixes
+        // `wpubkey_hash().unwrap()`, this test fails and the guard (and this
+        // test) can be retired deliberately rather than by assumption.
+        let owner = uncompressed_vector_owner_address();
+        let sig = craft_uncompressed_p2sh_sig();
+        let prev = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bip322::verify_simple_encoded(&owner, "hello", &sig).is_ok()
+        }));
+        std::panic::set_hook(prev);
+        assert!(
+            r.is_err(),
+            "pinned bip322 no longer panics here — revisit the catch_unwind rationale"
+        );
     }
 }
