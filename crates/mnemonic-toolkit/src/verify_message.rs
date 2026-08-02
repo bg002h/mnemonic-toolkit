@@ -144,12 +144,16 @@ fn bip322_key_binding_holds(addr: &Address, signature: &str) -> Option<bool> {
 /// leak to stderr; the hook is restored immediately after. (In the CLI this runs
 /// single-threaded.)
 ///
-/// Since the key-binding gate below rejects uncompressed witness keys outright,
-/// that input no longer reaches the crate and this guard is now
-/// defence-in-depth rather than a live path. The hazard is still real, so the
-/// guard stays: `crate_panic_hazard_is_real_so_catch_unwind_stays` invokes the
-/// crate DIRECTLY to prove it, and fails loudly if a future bump makes the
-/// guard genuinely unnecessary.
+/// The key-binding gate below rejects uncompressed witness keys outright, so
+/// THAT input no longer reaches the crate (pinned by
+/// `crate_panic_hazard_is_real_so_catch_unwind_stays`, which calls the crate
+/// directly). This guard is NOT thereby redundant. The crate's P2TR arm
+/// (`vendor/bip322/src/verify.rs:68-75`) carries no witness-length guard —
+/// unlike its v0 and P2SH arms — so a P2TR address with a 0-item witness still
+/// indexes an empty vec at `verify.rs:212`, and the gate passes P2TR through by
+/// design (it is correctly bound). That path is LIVE and reaches this
+/// `catch_unwind`; `p2tr_empty_witness_panic_is_caught` pins it. Do NOT retire
+/// this guard on the strength of either regression cell alone.
 ///
 /// NOTE: the global panic-hook swap is NOT thread-safe — if a future feature
 /// ever calls this from multiple threads (e.g. batch verification), the hook
@@ -502,13 +506,14 @@ mod tests {
 
     #[test]
     fn crate_panic_hazard_is_real_so_catch_unwind_stays() {
-        // Non-vacuity guard for `verify_bip322`'s `catch_unwind`. The gate above
-        // now stops this input before the crate sees it, so the unwind guard is
-        // no longer reachable through `verify_message` — which would leave its
-        // rationale asserted rather than proven. Call the crate DIRECTLY to show
-        // the hazard is still live. If a future `bip322` bump fixes
-        // `wpubkey_hash().unwrap()`, this test fails and the guard (and this
-        // test) can be retired deliberately rather than by assumption.
+        // Non-vacuity guard for the UNCOMPRESSED-KEY hazard specifically. The
+        // gate now stops this input before the crate sees it, so it is
+        // unreachable through `verify_message` — call the crate DIRECTLY so the
+        // hazard stays proven rather than asserted. If a future `bip322` bump
+        // fixes `wpubkey_hash().unwrap()`, this test fails; that is a prompt to
+        // re-check, NOT licence to delete the `catch_unwind`. A SECOND panic
+        // path is still live through `verify_message` — see
+        // `p2tr_empty_witness_panic_is_caught`.
         let owner = uncompressed_vector_owner_address();
         let sig = craft_uncompressed_p2sh_sig();
         let prev = std::panic::take_hook();
@@ -521,5 +526,29 @@ mod tests {
             r.is_err(),
             "pinned bip322 no longer panics here — revisit the catch_unwind rationale"
         );
+    }
+
+    #[test]
+    fn p2tr_empty_witness_panic_is_caught() {
+        // The crate's P2TR arm has NO witness-length guard (its v0 and P2SH arms
+        // do), so a 0-item witness indexes an empty vec at `verify.rs:212`. The
+        // gate passes P2TR through by design, so unlike the uncompressed-key
+        // hazard this one still reaches the crate through `verify_message` and
+        // is absorbed ONLY by `verify_bip322`'s catch_unwind. `Err` here (rather
+        // than `Ok(false)`) is precisely what proves the guard fired, keeping
+        // its reachability pinned instead of assumed.
+        use bitcoin::secp256k1::SecretKey;
+        use bitcoin::Network;
+        let secp = Secp256k1::new();
+        let sk = SecretKey::from_slice(&[0x55u8; 32]).unwrap();
+        let (xonly, _) = sk.public_key(&secp).x_only_public_key();
+        let addr = Address::p2tr(&secp, xonly, None, Network::Bitcoin).to_string();
+        // "AA==" is base64 of a serialized 0-item witness.
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            assert!(
+                verify_message(&addr, "hello", "AA==", f).is_err(),
+                "empty-witness P2TR must surface as a clean error, never a crash"
+            );
+        }
     }
 }
