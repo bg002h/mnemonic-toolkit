@@ -163,7 +163,7 @@ fn verify_bip322(address: &str, message: &str, signature: &str) -> Result<bool, 
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        bip322::verify_simple_encoded(address.trim(), message, signature).is_ok()
+        bip322::verify_simple_encoded(address.trim(), message, signature.trim()).is_ok()
     }));
     std::panic::set_hook(prev_hook);
     outcome.map_err(|_| {
@@ -211,6 +211,22 @@ mod tests {
     const SEGWIT_ADDRESS: &str = "bc1q9vza2e8x573nczrlzms0wvx3gsqjx7vavgkx0l";
     const SIG_HELLO_WORLD: &str = "AkcwRAIgZRfIY3p7/DoVTty6YZbWS71bc5Vct9p9Fia83eRmw2QCICK/ENGfwLtptFluMGs2KsqoNSk89pO7F29zJLUx9a/sASECx/EgAxlkQpQ9hYjgGu6EBCPMVPwVIVJqO4XCsMvViHI=";
     const SIG_EMPTY: &str = "AkcwRAIgM2gBAQqvZX15ZiysmKmQpDrG83avLIT492QBzLnQIxYCIBaTpOaD20qRlEylyxFSeEA2ba9YOixpX8z46TSDtS40ASECx/EgAxlkQpQ9hYjgGu6EBCPMVPwVIVJqO4XCsMvViHI=";
+
+    #[test]
+    fn signature_surrounding_whitespace_tolerated() {
+        // A signature pasted or read from a file commonly carries a trailing
+        // newline. The address has always been trimmed; the signature was not,
+        // so a genuine proof reported INVALID purely over transport whitespace.
+        let padded = format!("  {}\n", SIG_HELLO_WORLD);
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            assert!(
+                verify_message(SEGWIT_ADDRESS, "Hello World", &padded, f)
+                    .unwrap()
+                    .valid,
+                "genuine proof rejected over surrounding whitespace"
+            );
+        }
+    }
 
     #[test]
     fn bip322_hello_world_valid() {
