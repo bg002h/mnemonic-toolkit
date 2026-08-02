@@ -155,10 +155,13 @@ fn bip322_key_binding_holds(addr: &Address, signature: &str) -> Option<bool> {
         // P2WPKH has exactly one valid witness shape, so that case is trivial.
         // P2SH looks ambiguous — 0.0.11 added P2SH-multisig and P2SH-P2WSH arms
         // — but rejecting here denies no genuine owner anything, because those
-        // arms are unreachable-to-success on this call path: both read the
-        // redeem/witness script out of the input's **scriptSig**
-        // (`vendor/bip322/src/verify.rs:535`, `:457-460`), and the BIP-322
-        // *simple* encoding cannot carry one. `create_to_sign` hard-codes
+        // arms are unreachable-to-success on this call path: both require a
+        // NON-EMPTY **scriptSig** — P2SH-multisig parses its redeem script and
+        // signatures out of it (`vendor/bip322/src/verify.rs:535`), and
+        // P2SH-P2WSH requires the scriptSig to equal `push_only_script(program)`
+        // (`:457-460`), taking the witness script itself from the witness
+        // (`:448`) — and the BIP-322 *simple* encoding cannot carry one.
+        // `create_to_sign` hard-codes
         // `script_sig: ScriptBuf::new()` (`vendor/bip322/src/util.rs:60`) and
         // populates only the witness, so a simple-encoded P2SH-multisig or
         // P2SH-P2WSH proof always errors inside the crate regardless of this
