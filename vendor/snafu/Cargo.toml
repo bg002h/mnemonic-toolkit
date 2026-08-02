@@ -11,13 +11,13 @@
 
 [package]
 edition = "2018"
-rust-version = "1.56"
+rust-version = "1.65"
 name = "snafu"
-version = "0.8.9"
+version = "0.9.2"
 authors = ["Jake Goulding <jake.goulding@gmail.com>"]
 build = false
 exclude = [
-    "/.cirrus.yml",
+    "/.github",
     "/.gitignore",
     "/rust-toolchain",
 ]
@@ -50,22 +50,23 @@ features = [
 
 [features]
 alloc = []
-backtraces-impl-backtrace-crate = ["backtrace"]
+backtrace = []
+backtraces-impl-backtrace-crate = ["dep:backtrace"]
 default = [
     "std",
-    "rust_1_65",
+    "rust_1_81",
 ]
 futures = [
-    "futures-core-crate",
-    "pin-project",
+    "dep:futures-core",
+    "dep:pin-project",
 ]
+futures-core-crate = []
+futures-crate = []
 guide = []
-internal-dev-dependencies = ["futures-crate"]
-rust_1_61 = ["snafu-derive/rust_1_61"]
-rust_1_65 = ["rust_1_61"]
-rust_1_81 = ["rust_1_65"]
+internal-dev-dependencies = ["dep:futures"]
+pin-project = []
+rust_1_81 = []
 std = ["alloc"]
-unstable-core-error = []
 unstable-provider-api = ["snafu-derive/unstable-provider-api"]
 unstable-try-trait = []
 
@@ -166,6 +167,10 @@ name = "name-conflicts"
 path = "tests/name-conflicts.rs"
 
 [[test]]
+name = "nested_self"
+path = "tests/nested_self.rs"
+
+[[test]]
 name = "no_context"
 path = "tests/no_context.rs"
 
@@ -192,6 +197,10 @@ path = "tests/recursive_error.rs"
 [[test]]
 name = "report"
 path = "tests/report.rs"
+
+[[test]]
+name = "self_in_trait_bounds"
+path = "tests/self_in_trait_bounds.rs"
 
 [[test]]
 name = "send_between_threads"
@@ -223,19 +232,20 @@ path = "tests/visibility.rs"
 
 [dependencies.backtrace]
 version = "0.3.0"
+features = ["std"]
 optional = true
+default-features = false
 
-[dependencies.futures-core-crate]
+[dependencies.futures]
+version = "0.3.11"
+features = ["executor"]
+optional = true
+default-features = false
+
+[dependencies.futures-core]
 version = "0.3.0"
 optional = true
 default-features = false
-package = "futures-core"
-
-[dependencies.futures-crate]
-version = "0.3.11"
-optional = true
-default-features = false
-package = "futures"
 
 [dependencies.pin-project]
 version = "1.0.2"
@@ -243,4 +253,4 @@ optional = true
 default-features = false
 
 [dependencies.snafu-derive]
-version = "0.8.9"
+version = "0.9.2"

@@ -1,7 +1,7 @@
 use crate::ChainCompat;
-use core::fmt;
+use core::{fmt, panic::Location};
 
-#[cfg(all(feature = "std", feature = "rust_1_61"))]
+#[cfg(feature = "std")]
 use std::process::{ExitCode, Termination};
 
 #[cfg(feature = "alloc")]
@@ -11,21 +11,11 @@ use alloc::string::{String, ToString};
 /// way. Useful as the return type from `main` and test functions.
 ///
 /// Most users will use the [`snafu::report`][] procedural macro
-/// instead of directly using this type, but you can if you do not
-/// wish to use the macro.
+/// instead of directly using this type. To use it directly, change
+/// the return type of the function to [`Report`][] and wrap the body
+/// of your function with [`Report::capture`][].
 ///
 /// [`snafu::report`]: macro@crate::report
-///
-/// ## Rust 1.61 and up
-///
-/// Change the return type of the function to [`Report`][] and wrap
-/// the body of your function with [`Report::capture`][].
-///
-/// ## Rust before 1.61
-///
-/// Use [`Report`][] as the error type inside of [`Result`][] and then
-/// call either [`Report::capture_into_result`][] or
-/// [`Report::from_error`][].
 ///
 /// ## Nightly Rust
 ///
@@ -35,13 +25,13 @@ use alloc::string::{String, ToString};
 /// ```rust
 /// use snafu::{prelude::*, Report};
 ///
-/// # #[cfg(all(feature = "unstable-try-trait", feature = "rust_1_61"))]
+/// # #[cfg(feature = "unstable-try-trait")]
 /// fn main() -> Report<PlaceholderError> {
 ///     let _v = may_fail_with_placeholder_error()?;
 ///
 ///     Report::ok()
 /// }
-/// # #[cfg(not(all(feature = "unstable-try-trait", feature = "rust_1_61")))] fn main() {}
+/// # #[cfg(not(feature = "unstable-try-trait"))] fn main() {}
 /// # #[derive(Debug, Snafu)]
 /// # struct PlaceholderError;
 /// # fn may_fail_with_placeholder_error() -> Result<u8, PlaceholderError> { Ok(42) }
@@ -55,10 +45,13 @@ use alloc::string::{String, ToString};
 /// [`unstable-provider-api` feature flag][provider-ff], additional
 /// capabilities will be added:
 ///
+/// 1. If provided, a [`Location`][] will be appended to each error
+///    message.
 /// 1. If provided, a [`Backtrace`][] will be included in the output.
 /// 1. If provided, a [`ExitCode`][] will be used as the return value.
 ///
 /// [provider-ff]: crate::guide::feature_flags#unstable-provider-api
+/// [`Location`]: crate::Location
 /// [`Backtrace`]: crate::Backtrace
 /// [`ExitCode`]: std::process::ExitCode
 ///
@@ -71,8 +64,6 @@ pub struct Report<E>(Result<(), E>);
 
 impl<E> Report<E> {
     /// Convert an error into a [`Report`][].
-    ///
-    /// Recommended if you support versions of Rust before 1.61.
     ///
     /// ```rust
     /// use snafu::{prelude::*, Report};
@@ -93,45 +84,15 @@ impl<E> Report<E> {
         Self(Err(error))
     }
 
-    /// Executes a closure that returns a [`Result`][], converting the
-    /// error variant into a [`Report`][].
-    ///
-    /// Recommended if you support versions of Rust before 1.61.
-    ///
-    /// ```rust
-    /// use snafu::{prelude::*, Report};
-    ///
-    /// #[derive(Debug, Snafu)]
-    /// struct PlaceholderError;
-    ///
-    /// fn main() -> Result<(), Report<PlaceholderError>> {
-    ///     Report::capture_into_result(|| {
-    ///         let _v = may_fail_with_placeholder_error()?;
-    ///
-    ///         Ok(())
-    ///     })
-    /// }
-    ///
-    /// fn may_fail_with_placeholder_error() -> Result<u8, PlaceholderError> {
-    ///     Ok(42)
-    /// }
-    /// ```
-    pub fn capture_into_result<T>(body: impl FnOnce() -> Result<T, E>) -> Result<T, Self> {
-        body().map_err(Self::from_error)
-    }
-
     /// Executes a closure that returns a [`Result`][], converting any
     /// error to a [`Report`][].
     ///
-    /// Recommended if you only support Rust version 1.61 or above.
-    ///
     /// ```rust
     /// use snafu::{prelude::*, Report};
     ///
     /// #[derive(Debug, Snafu)]
     /// struct PlaceholderError;
     ///
-    /// # #[cfg(feature = "rust_1_61")]
     /// fn main() -> Report<PlaceholderError> {
     ///     Report::capture(|| {
     ///         let _v = may_fail_with_placeholder_error()?;
@@ -139,7 +100,6 @@ impl<E> Report<E> {
     ///         Ok(())
     ///     })
     /// }
-    /// # #[cfg(not(feature = "rust_1_61"))] fn main() {}
     ///
     /// fn may_fail_with_placeholder_error() -> Result<u8, PlaceholderError> {
     ///     Ok(42)
@@ -182,7 +142,7 @@ where
     }
 }
 
-#[cfg(all(feature = "std", feature = "rust_1_61"))]
+#[cfg(feature = "std")]
 impl<E> Termination for Report<E>
 where
     E: crate::Error,
@@ -197,12 +157,10 @@ where
                 {
                     use crate::error;
 
-                    // Broken. https://github.com/rust-lang/rust/pull/114973
-                    // error::request_value::<ExitCode>(&e)
-                    //     .or_else(|| error::request_ref::<ExitCode>(&e).copied())
-
-                    error::request_ref::<ExitCode>(&e)
-                        .copied()
+                    ChainCompat::new(&e)
+                        .find_map(|e| {
+                            error::request_value(e).or_else(|| error::request_ref(e).copied())
+                        })
                         .unwrap_or(ExitCode::FAILURE)
                 }
 
@@ -212,6 +170,24 @@ where
                 }
             }
         }
+    }
+}
+
+fn request_location(e: &dyn crate::Error) -> Option<&Location<'static>> {
+    #[cfg(feature = "unstable-provider-api")]
+    {
+        use crate::error;
+
+        error::request_ref::<&'static Location>(e)
+            .copied()
+            .or_else(|| error::request_ref::<Location>(e))
+            .or_else(|| error::request_value::<&'static Location>(e))
+    }
+
+    #[cfg(not(feature = "unstable-provider-api"))]
+    {
+        let _e = e;
+        None
     }
 }
 
@@ -242,9 +218,7 @@ impl<'a> fmt::Display for ReportFormatter<'a> {
 
         #[cfg(feature = "unstable-provider-api")]
         {
-            use crate::error;
-
-            if let Some(bt) = error::request_ref::<crate::Backtrace>(self.0) {
+            if let Some(bt) = crate::backtraces(self.0).last() {
                 writeln!(f, "\nBacktrace:\n{}", bt)?;
             }
         }
@@ -255,7 +229,7 @@ impl<'a> fmt::Display for ReportFormatter<'a> {
 
 impl<'a> ReportFormatter<'a> {
     fn error_trace(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        writeln!(f, "{}", self.0)?;
+        writeln!(f, "{}", AddLocation(self.0))?;
 
         let sources = ChainCompat::new(self.0).skip(1);
         let plurality = sources.clone().take(2).count();
@@ -269,7 +243,7 @@ impl<'a> ReportFormatter<'a> {
         for (i, source) in sources.enumerate() {
             // Let's use 1-based indexing for presentation
             let i = i + 1;
-            writeln!(f, "{:3}: {}", i, source)?;
+            writeln!(f, "{:3}: {}", i, AddLocation(source))?;
         }
 
         Ok(())
@@ -284,11 +258,16 @@ impl<'a> ReportFormatter<'a> {
         let mut any_cleaned = false;
         let mut any_removed = false;
         let cleaned_messages: Vec<_> = CleanedErrorText::new(self.0)
-            .flat_map(|(_, mut msg, cleaned)| {
+            .flat_map(|(e, mut msg, cleaned)| {
                 if msg.is_empty() {
                     any_removed = true;
                     None
                 } else {
+                    if let Some(l) = request_location(e) {
+                        use core::fmt::Write;
+                        write!(msg, " ({})", l).unwrap();
+                    }
+
                     if cleaned {
                         any_cleaned = true;
                         msg.push(' ');
@@ -340,6 +319,18 @@ impl<'a> ReportFormatter<'a> {
             )?;
         }
 
+        Ok(())
+    }
+}
+
+struct AddLocation<E>(E);
+
+impl<E: crate::Error> fmt::Display for AddLocation<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)?;
+        if let Some(l) = request_location(&self.0) {
+            write!(f, " ({})", l)?;
+        }
         Ok(())
     }
 }

@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.63"
+rust-version = "1.74"
 name = "bip322"
-version = "0.0.10"
+version = "0.0.11"
 build = false
 autolib = false
 autobins = false
@@ -38,7 +38,7 @@ name = "simple_sign_verify_encoded"
 path = "examples/simple_sign_verify_encoded.rs"
 
 [dependencies.base64]
-version = "0.22.1"
+version = "0.23.0"
 
 [dependencies.bitcoin]
 version = "0.32.5"
@@ -47,11 +47,8 @@ version = "0.32.5"
 version = "0.10.8"
 
 [dependencies.snafu]
-version = "0.8.5"
-features = [
-    "rust_1_61",
-    "std",
-]
+version = "0.9.2"
+features = ["std"]
 default-features = false
 
 [dev-dependencies.hex]

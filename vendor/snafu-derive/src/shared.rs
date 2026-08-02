@@ -5,6 +5,7 @@ pub(crate) use self::context_selector::ContextSelector;
 pub(crate) use self::display::{Display, DisplayMatchArm};
 pub(crate) use self::error::{Error, ErrorProvideMatchArm, ErrorSourceMatchArm};
 pub(crate) use self::error_compat::{ErrorCompat, ErrorCompatBacktraceMatchArm};
+pub(crate) use self::no_context_selector::NoContextSelector;
 
 pub(crate) struct StaticIdent(&'static str);
 
@@ -32,6 +33,148 @@ impl<'a> AllFieldNames<'a> {
             .map(crate::Field::name)
             .chain(source_field.map(crate::SourceField::name))
             .collect()
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct GenericsWithoutDefaults<'a> {
+    pub generics: &'a syn::Generics,
+    extra: Option<ExtraGeneric<'a>>,
+}
+
+#[derive(Copy, Clone)]
+struct ExtraGeneric<'a> {
+    parent: &'a Option<Self>,
+    value: &'a [&'a dyn quote::ToTokens],
+}
+
+impl<'a> GenericsWithoutDefaults<'a> {
+    pub fn new(generics: &'a syn::Generics) -> Self {
+        Self {
+            generics,
+            extra: None,
+        }
+    }
+
+    fn push(&'a self, value: &'a [&'a dyn quote::ToTokens]) -> GenericsWithoutDefaults<'a> {
+        let Self { generics, extra } = self;
+        let extra = Some(ExtraGeneric {
+            parent: extra,
+            value,
+        });
+        GenericsWithoutDefaults { generics, extra }
+    }
+}
+
+impl quote::ToTokens for GenericsWithoutDefaults<'_> {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        use quote::quote;
+
+        let lifetimes = self.generics.lifetimes().map(|lt| {
+            let syn::LifetimeParam {
+                attrs, lifetime, ..
+            } = lt;
+            quote! {
+                #(#attrs)*
+                #lifetime
+            }
+        });
+
+        let types = self.generics.type_params().map(|t| {
+            let syn::TypeParam {
+                attrs,
+                ident,
+                colon_token,
+                bounds,
+                ..
+            } = t;
+            quote! {
+                #(#attrs)*
+                #ident
+                #colon_token
+                #bounds
+            }
+        });
+
+        let extra_types = std::iter::from_fn({
+            let mut extra = self.extra;
+            move || {
+                let ExtraGeneric { parent, value } = extra?;
+                extra = *parent;
+                Some(value)
+            }
+        });
+        let extra_types = extra_types.flatten().map(|et| quote! { #et });
+
+        let consts = self.generics.const_params().map(|c| {
+            let syn::ConstParam {
+                attrs,
+                const_token,
+                ident,
+                colon_token,
+                ty,
+                ..
+            } = c;
+            quote! {
+                #(#attrs)*
+                #const_token
+                #ident
+                #colon_token
+                #ty
+            }
+        });
+
+        let generics = lifetimes.chain(types).chain(extra_types).chain(consts);
+
+        let generics = quote! {
+            #(#generics),*
+        };
+
+        tokens.extend(generics);
+    }
+}
+
+const SOURCE_GENERIC_NAME: StaticIdent = StaticIdent("__SnafuSource");
+
+pub(crate) struct SourceInfo<'a> {
+    pub source_field_type: &'a syn::Type,
+    pub transform_source: proc_macro2::TokenStream,
+    pub transfer_source_field: proc_macro2::TokenStream,
+    maybe_generic: Option<StaticIdent>,
+}
+
+impl<'a> SourceInfo<'a> {
+    // Assumes that the error is in a variable called "error"
+    fn from_source_field(source_field: &'a crate::SourceField) -> Self {
+        Self::from_transformation(source_field.name(), &source_field.transformation)
+    }
+
+    // Assumes that the error is in a variable called "error"
+    pub fn from_transformation(
+        source_field_name: &dyn quote::ToTokens,
+        transformation: &'a crate::Transformation,
+    ) -> Self {
+        use quote::quote;
+
+        let source_field_type = transformation.source_ty();
+        let target_field_type = transformation.target_ty();
+        let source_transformation = transformation.transformation();
+
+        let transform_source =
+            quote! { let error: #target_field_type = (#source_transformation)(error) };
+        let transfer_source_field = quote! { #source_field_name: error, };
+        let maybe_generic = if transformation.is_generic() {
+            Some(SOURCE_GENERIC_NAME)
+        } else {
+            None
+        };
+
+        Self {
+            source_field_type,
+            transform_source,
+            transfer_source_field,
+            maybe_generic,
+        }
     }
 }
 
@@ -80,9 +223,12 @@ pub mod context_module {
 }
 
 pub mod context_selector {
+    use super::{GenericsWithoutDefaults, NoContextSelector, SourceInfo, StaticIdent};
     use crate::{ContextSelectorKind, Field, SuffixKind};
     use proc_macro2::TokenStream;
     use quote::{format_ident, quote, ToTokens};
+
+    const FAIL_GENERIC: StaticIdent = StaticIdent("__T");
 
     #[derive(Copy, Clone)]
     pub(crate) struct ContextSelector<'a> {
@@ -90,7 +236,7 @@ pub mod context_selector {
         pub implicit_fields: &'a [Field],
         pub crate_root: &'a dyn ToTokens,
         pub error_constructor_name: &'a dyn ToTokens,
-        pub original_generics_without_defaults: &'a [TokenStream],
+        pub original_generics_without_defaults: GenericsWithoutDefaults<'a>,
         pub parameterized_error_name: &'a dyn ToTokens,
         pub selector_doc_string: &'a str,
         pub selector_kind: &'a ContextSelectorKind,
@@ -253,12 +399,14 @@ pub mod context_selector {
             let transfer_user_fields = self.transfer_user_fields();
             let construct_implicit_fields = self.construct_implicit_fields();
 
+            let fail_generics = original_generics_without_defaults.push(&[&FAIL_GENERIC]);
+
             quote! {
                 impl<#(#user_field_generics,)*> #parameterized_selector_name {
                     #[doc = "Consume the selector and return the associated error"]
                     #[must_use]
                     #[track_caller]
-                    #visibility fn build<#(#original_generics_without_defaults,)*>(self) -> #parameterized_error_name
+                    #visibility fn build<#original_generics_without_defaults>(self) -> #parameterized_error_name
                     where
                         #(#extended_where_clauses),*
                     {
@@ -271,7 +419,7 @@ pub mod context_selector {
                     #[doc = "Consume the selector and return a `Result` with the associated error"]
                     #[allow(dead_code)]
                     #[track_caller]
-                    #visibility fn fail<#(#original_generics_without_defaults,)* __T>(self) -> ::core::result::Result<__T, #parameterized_error_name>
+                    #visibility fn fail<#fail_generics>(self) -> ::core::result::Result<#FAIL_GENERIC, #parameterized_error_name>
                     where
                         #(#extended_where_clauses),*
                     {
@@ -296,13 +444,23 @@ pub mod context_selector {
                 self.construct_implicit_fields()
             };
 
+            let user_field_generics = user_field_generics
+                .iter()
+                .map(|g| g as _)
+                .collect::<Vec<&dyn ToTokens>>();
+            let generics = original_generics_without_defaults.push(&user_field_generics);
+
             let (source_ty, transform_source, transfer_source_field) = match source_field {
                 Some(source_field) => {
                     let SourceInfo {
                         source_field_type,
                         transform_source,
                         transfer_source_field,
-                    } = build_source_info(source_field);
+                        maybe_generic,
+                    } = SourceInfo::from_source_field(source_field);
+
+                    assert!(maybe_generic.is_none(), "Internal error");
+
                     (
                         quote! { #source_field_type },
                         Some(transform_source),
@@ -313,7 +471,7 @@ pub mod context_selector {
             };
 
             quote! {
-                impl<#(#original_generics_without_defaults,)* #(#user_field_generics,)*> #crate_root::IntoError<#parameterized_error_name> for #parameterized_selector_name
+                impl<#generics> #crate_root::IntoError<#parameterized_error_name> for #parameterized_selector_name
                 where
                     #parameterized_error_name: #crate_root::Error + #crate_root::ErrorCompat,
                     #(#extended_where_clauses),*
@@ -367,7 +525,7 @@ pub mod context_selector {
             let message_field_name = &message_field.name;
 
             quote! {
-                impl<#(#original_generics_without_defaults,)*> #crate_root::FromString for #parameterized_error_name
+                impl<#original_generics_without_defaults> #crate_root::FromString for #parameterized_error_name
                 where
                     #(#extended_where_clauses),*
                 {
@@ -395,27 +553,80 @@ pub mod context_selector {
         }
 
         fn generate_from_source(self, source_field: &crate::SourceField) -> TokenStream {
-            let parameterized_error_name = self.parameterized_error_name;
-            let error_constructor_name = self.error_constructor_name;
-            let construct_implicit_fields_with_source =
-                self.construct_implicit_fields_with_source();
-            let original_generics_without_defaults = self.original_generics_without_defaults;
             let user_field_generics = self.user_field_generics();
-            let where_clauses = self.where_clauses;
+            let user_field_generics = user_field_generics
+                .iter()
+                .map(|g| g as _)
+                .collect::<Vec<&dyn ToTokens>>();
+            let generics = self
+                .original_generics_without_defaults
+                .push(&user_field_generics);
+
+            let source_info = SourceInfo::from_source_field(source_field);
+
+            NoContextSelector {
+                source_info,
+                parameterized_error_name: self.parameterized_error_name,
+                generics,
+                where_clauses: self.where_clauses,
+                error_constructor_name: self.error_constructor_name,
+                construct_implicit_fields_with_source: self.construct_implicit_fields_with_source(),
+            }
+            .to_token_stream()
+        }
+    }
+}
+
+pub mod no_context_selector {
+    use proc_macro2::TokenStream;
+    use quote::{quote, ToTokens};
+
+    use super::{GenericsWithoutDefaults, SourceInfo};
+
+    pub(crate) struct NoContextSelector<'a> {
+        pub source_info: SourceInfo<'a>,
+        pub parameterized_error_name: &'a dyn ToTokens,
+        pub generics: GenericsWithoutDefaults<'a>,
+        pub where_clauses: &'a [TokenStream],
+        pub error_constructor_name: &'a dyn ToTokens,
+        pub construct_implicit_fields_with_source: TokenStream,
+    }
+
+    impl ToTokens for NoContextSelector<'_> {
+        fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+            let Self {
+                source_info,
+                parameterized_error_name,
+                generics,
+                where_clauses,
+                error_constructor_name,
+                construct_implicit_fields_with_source,
+            } = self;
 
             let SourceInfo {
                 source_field_type,
                 transform_source,
                 transfer_source_field,
-            } = build_source_info(source_field);
+                maybe_generic,
+            } = source_info;
 
-            quote! {
-                impl<#(#original_generics_without_defaults,)* #(#user_field_generics,)*> ::core::convert::From<#source_field_type> for #parameterized_error_name
+            let maybe_generic = maybe_generic.as_ref().map(|m| m as &dyn ToTokens);
+
+            let generics = match &maybe_generic {
+                Some(g) => generics.push(std::slice::from_ref(g)),
+                None => *generics,
+            };
+
+            let from_type = maybe_generic.unwrap_or(source_field_type);
+
+            let no_context_selector = quote! {
+                impl<#generics> ::core::convert::From<#from_type> for #parameterized_error_name
                 where
+                    #from_type: ::core::convert::Into<#source_field_type>,
                     #(#where_clauses),*
                 {
                     #[track_caller]
-                    fn from(error: #source_field_type) -> Self {
+                    fn from(error: #from_type) -> Self {
                         #transform_source;
                         #error_constructor_name {
                             #construct_implicit_fields_with_source
@@ -423,37 +634,15 @@ pub mod context_selector {
                         }
                     }
                 }
-            }
-        }
-    }
+            };
 
-    struct SourceInfo<'a> {
-        source_field_type: &'a syn::Type,
-        transform_source: TokenStream,
-        transfer_source_field: TokenStream,
-    }
-
-    // Assumes that the error is in a variable called "error"
-    fn build_source_info(source_field: &crate::SourceField) -> SourceInfo<'_> {
-        let source_field_name = source_field.name();
-        let source_field_type = source_field.transformation.source_ty();
-        let target_field_type = source_field.transformation.target_ty();
-        let source_transformation = source_field.transformation.transformation();
-
-        let transform_source =
-            quote! { let error: #target_field_type = (#source_transformation)(error) };
-        let transfer_source_field = quote! { #source_field_name: error, };
-
-        SourceInfo {
-            source_field_type,
-            transform_source,
-            transfer_source_field,
+            tokens.extend(no_context_selector);
         }
     }
 }
 
 pub mod display {
-    use super::StaticIdent;
+    use super::{GenericsWithoutDefaults, StaticIdent};
     use proc_macro2::TokenStream;
     use quote::{quote, ToTokens};
     use std::collections::BTreeSet;
@@ -462,7 +651,7 @@ pub mod display {
 
     pub(crate) struct Display<'a> {
         pub(crate) arms: &'a [TokenStream],
-        pub(crate) original_generics: &'a [TokenStream],
+        pub(crate) original_generics: GenericsWithoutDefaults<'a>,
         pub(crate) parameterized_error_name: &'a dyn ToTokens,
         pub(crate) where_clauses: &'a [TokenStream],
     }
@@ -478,7 +667,7 @@ pub mod display {
 
             let display_impl = quote! {
                 #[allow(single_use_lifetimes)]
-                impl<#(#original_generics),*> ::core::fmt::Display for #parameterized_error_name
+                impl<#original_generics> ::core::fmt::Display for #parameterized_error_name
                 where
                     #(#where_clauses),*
                 {
@@ -571,17 +760,16 @@ pub mod display {
 }
 
 pub mod error {
-    use super::StaticIdent;
+    use super::{GenericsWithoutDefaults, StaticIdent};
     use crate::{FieldContainer, Provide, SourceField};
     use proc_macro2::TokenStream;
-    use quote::{format_ident, quote, ToTokens};
+    use quote::{quote, ToTokens};
 
     pub(crate) const PROVIDE_ARG: StaticIdent = StaticIdent("__snafu_provide_demand");
 
     pub(crate) struct Error<'a> {
         pub(crate) crate_root: &'a dyn ToTokens,
-        pub(crate) description_arms: &'a [TokenStream],
-        pub(crate) original_generics: &'a [TokenStream],
+        pub(crate) original_generics: GenericsWithoutDefaults<'a>,
         pub(crate) parameterized_error_name: &'a dyn ToTokens,
         pub(crate) provide_arms: &'a [TokenStream],
         pub(crate) source_arms: &'a [TokenStream],
@@ -592,7 +780,6 @@ pub mod error {
         fn to_tokens(&self, stream: &mut TokenStream) {
             let Self {
                 crate_root,
-                description_arms,
                 original_generics,
                 parameterized_error_name,
                 provide_arms,
@@ -600,24 +787,10 @@ pub mod error {
                 where_clauses,
             } = *self;
 
-            let description_fn = quote! {
-                fn description(&self) -> &str {
-                    match *self {
-                        #(#description_arms)*
-                    }
-                }
-            };
-
             let source_body = quote! {
                 use #crate_root::AsErrorSource;
                 match *self {
                     #(#source_arms)*
-                }
-            };
-
-            let cause_fn = quote! {
-                fn cause(&self) -> ::core::option::Option<&dyn #crate_root::Error> {
-                    #source_body
                 }
             };
 
@@ -641,13 +814,11 @@ pub mod error {
 
             let error = quote! {
                 #[allow(single_use_lifetimes)]
-                impl<#(#original_generics),*> #crate_root::Error for #parameterized_error_name
+                impl<#original_generics> #crate_root::Error for #parameterized_error_name
                 where
                     Self: ::core::fmt::Debug + ::core::fmt::Display,
                     #(#where_clauses),*
                 {
-                    #description_fn
-                    #cause_fn
                     #source_fn
                     #provide_fn
                 }
@@ -713,11 +884,6 @@ pub mod error {
         }
     }
 
-    pub(crate) struct ProvidePlus<'a> {
-        provide: &'a Provide,
-        cached_name: proc_macro2::Ident,
-    }
-
     pub(crate) struct ErrorProvideMatchArm<'a> {
         pub(crate) crate_root: &'a dyn ToTokens,
         pub(crate) field_container: &'a FieldContainer,
@@ -733,12 +899,10 @@ pub mod error {
             } = *self;
 
             let user_fields = field_container.user_fields();
-            let provides = enhance_provider_list(field_container.provides());
+            let provides = field_container.provides();
             let field_names = super::AllFieldNames(field_container).field_names();
 
-            let (hi_explicit_calls, lo_explicit_calls) = build_explicit_provide_calls(&provides);
-
-            let cached_expressions = quote_cached_expressions(&provides);
+            let explicit_calls = quote_provides(provides);
 
             let provide_refs = user_fields
                 .iter()
@@ -762,15 +926,6 @@ pub mod error {
 
             let provide_refs = provide_refs.chain(source_provide_ref);
 
-            let source_chain = provided_source.map(|f| {
-                let name = f.name();
-                quote! {
-                    #name.provide(#PROVIDE_ARG);
-                }
-            });
-
-            let user_chained = quote_chained(crate_root, &provides);
-
             let shorthand_calls = provide_refs.map(|(ty, name)| {
                 quote! { #PROVIDE_ARG.provide_ref::<#ty>(#name) }
             });
@@ -793,13 +948,9 @@ pub mod error {
 
             let arm = quote! {
                 #pattern_ident { #(ref #field_names,)* .. } => {
-                    #(#cached_expressions;)*
-                    #(#hi_explicit_calls;)*
-                    #source_chain;
-                    #(#user_chained;)*
                     #provide_backtrace;
                     #(#shorthand_calls;)*
-                    #(#lo_explicit_calls;)*
+                    #(#explicit_calls;)*
                 }
             };
 
@@ -807,86 +958,26 @@ pub mod error {
         }
     }
 
-    pub(crate) fn enhance_provider_list(provides: &[Provide]) -> Vec<ProvidePlus<'_>> {
-        provides
-            .iter()
-            .enumerate()
-            .map(|(i, provide)| {
-                let cached_name = format_ident!("__snafu_cached_expr_{}", i);
-                ProvidePlus {
-                    provide,
-                    cached_name,
-                }
-            })
-            .collect()
-    }
-
-    pub(crate) fn quote_cached_expressions<'a>(
-        provides: &'a [ProvidePlus<'a>],
-    ) -> impl Iterator<Item = proc_macro2::TokenStream> + 'a {
-        provides.iter().filter(|pp| pp.provide.is_chain).map(|pp| {
-            let cached_name = &pp.cached_name;
-            let expr = &pp.provide.expr;
-
-            quote! {
-                let #cached_name = #expr;
-            }
-        })
-    }
-
-    pub(crate) fn quote_chained<'a>(
-        crate_root: &'a dyn ToTokens,
-        provides: &'a [ProvidePlus<'a>],
-    ) -> impl Iterator<Item = proc_macro2::TokenStream> + 'a {
-        provides
-            .iter()
-            .filter(|pp| pp.provide.is_chain)
-            .map(move |pp| {
-                let arm = if pp.provide.is_opt {
-                    quote! { ::core::option::Option::Some(chained_item) }
-                } else {
-                    quote! { chained_item }
-                };
-                let cached_name = &pp.cached_name;
-
-                quote! {
-                    if let #arm = #cached_name {
-                        #crate_root::Error::provide(chained_item, #PROVIDE_ARG);
-                    }
-                }
-            })
-    }
-
-    fn quote_provides<'a, I>(provides: I) -> impl Iterator<Item = proc_macro2::TokenStream> + 'a
+    pub(crate) fn quote_provides<'a, I>(
+        provides: I,
+    ) -> impl Iterator<Item = proc_macro2::TokenStream> + 'a
     where
-        I: IntoIterator<Item = &'a ProvidePlus<'a>>,
+        I: IntoIterator<Item = &'a Provide>,
         I::IntoIter: 'a,
     {
-        provides.into_iter().map(|pp| {
-            let ProvidePlus {
-                provide:
-                    Provide {
-                        is_chain,
-                        is_opt,
-                        is_priority: _,
-                        is_ref,
-                        ty,
-                        expr,
-                    },
-                cached_name,
-            } = pp;
-
-            let effective_expr = if *is_chain {
-                quote! { #cached_name }
-            } else {
-                quote! { #expr }
-            };
+        provides.into_iter().map(|p| {
+            let Provide {
+                is_opt,
+                is_ref,
+                ty,
+                expr,
+            } = p;
 
             match (is_opt, is_ref) {
                 (true, true) => {
                     quote! {
                         if #PROVIDE_ARG.would_be_satisfied_by_ref_of::<#ty>() {
-                            if let ::core::option::Option::Some(v) = #effective_expr {
+                            if let ::core::option::Option::Some(v) = #expr {
                                 #PROVIDE_ARG.provide_ref::<#ty>(v);
                             }
                         }
@@ -895,39 +986,25 @@ pub mod error {
                 (true, false) => {
                     quote! {
                         if #PROVIDE_ARG.would_be_satisfied_by_value_of::<#ty>() {
-                            if let ::core::option::Option::Some(v) = #effective_expr {
+                            if let ::core::option::Option::Some(v) = #expr {
                                 #PROVIDE_ARG.provide_value::<#ty>(v);
                             }
                         }
                     }
                 }
                 (false, true) => {
-                    quote! { #PROVIDE_ARG.provide_ref_with::<#ty>(|| #effective_expr) }
+                    quote! { #PROVIDE_ARG.provide_ref_with::<#ty>(|| #expr) }
                 }
                 (false, false) => {
-                    quote! { #PROVIDE_ARG.provide_value_with::<#ty>(|| #effective_expr) }
+                    quote! { #PROVIDE_ARG.provide_value_with::<#ty>(|| #expr) }
                 }
             }
         })
     }
-
-    pub(crate) fn build_explicit_provide_calls<'a>(
-        provides: &'a [ProvidePlus<'a>],
-    ) -> (
-        impl Iterator<Item = TokenStream> + 'a,
-        impl Iterator<Item = TokenStream> + 'a,
-    ) {
-        let (high_priority, low_priority): (Vec<_>, Vec<_>) =
-            provides.iter().partition(|pp| pp.provide.is_priority);
-
-        let hi_explicit_calls = quote_provides(high_priority);
-        let lo_explicit_calls = quote_provides(low_priority);
-
-        (hi_explicit_calls, lo_explicit_calls)
-    }
 }
 
 pub mod error_compat {
+    use super::GenericsWithoutDefaults;
     use crate::{Field, FieldContainer, SourceField};
     use proc_macro2::TokenStream;
     use quote::{quote, ToTokens};
@@ -936,7 +1013,7 @@ pub mod error_compat {
         pub(crate) crate_root: &'a dyn ToTokens,
         pub(crate) parameterized_error_name: &'a dyn ToTokens,
         pub(crate) backtrace_arms: &'a [TokenStream],
-        pub(crate) original_generics: &'a [TokenStream],
+        pub(crate) original_generics: GenericsWithoutDefaults<'a>,
         pub(crate) where_clauses: &'a [TokenStream],
     }
 
@@ -960,7 +1037,7 @@ pub mod error_compat {
 
             let error_compat_impl = quote! {
                 #[allow(single_use_lifetimes)]
-                impl<#(#original_generics),*> #crate_root::ErrorCompat for #parameterized_error_name
+                impl<#original_generics> #crate_root::ErrorCompat for #parameterized_error_name
                 where
                     #(#where_clauses),*
                 {

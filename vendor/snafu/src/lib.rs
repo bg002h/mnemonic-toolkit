@@ -1,8 +1,7 @@
 #![deny(missing_docs)]
 #![allow(stable_features)]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std]
-#![cfg_attr(feature = "unstable-core-error", feature(error_in_core))]
 #![cfg_attr(
     feature = "unstable-provider-api",
     feature(error_generic_member_access)
@@ -265,8 +264,6 @@
 //! capabilities, then read the [user's guide](guide) for deeper
 //! understanding.
 
-use core::fmt;
-
 #[cfg(feature = "alloc")]
 extern crate alloc;
 #[cfg(feature = "alloc")]
@@ -295,10 +292,7 @@ pub mod prelude {
     pub use crate::futures::{TryFutureExt as _, TryStreamExt as _};
 }
 
-#[cfg(not(any(
-    all(feature = "std", feature = "rust_1_65"),
-    feature = "backtraces-impl-backtrace-crate"
-)))]
+#[cfg(not(any(feature = "std", feature = "backtraces-impl-backtrace-crate")))]
 #[path = "backtrace_impl_inert.rs"]
 mod backtrace_impl;
 
@@ -306,11 +300,7 @@ mod backtrace_impl;
 #[path = "backtrace_impl_backtrace_crate.rs"]
 mod backtrace_impl;
 
-#[cfg(all(
-    feature = "std",
-    feature = "rust_1_65",
-    not(feature = "backtraces-impl-backtrace-crate")
-))]
+#[cfg(all(feature = "std", not(feature = "backtraces-impl-backtrace-crate")))]
 #[path = "backtrace_impl_std.rs"]
 mod backtrace_impl;
 
@@ -328,7 +318,7 @@ pub use crate::error_chain::*;
 mod report;
 #[cfg(feature = "alloc")]
 pub use report::CleanedErrorText;
-pub use report::{Report, __InternalExtractErrorType};
+pub use report::{__InternalExtractErrorType, Report};
 
 #[doc = include_str!("Snafu.md")]
 #[doc(alias(
@@ -405,46 +395,35 @@ generate_guide! {
     }
 }
 
-#[cfg(any(feature = "rust_1_81", feature = "unstable-core-error"))]
+#[cfg(feature = "rust_1_81")]
 #[doc(hidden)]
 pub use core::error;
 
-#[cfg(any(feature = "rust_1_81", feature = "unstable-core-error"))]
+#[cfg(feature = "rust_1_81")]
 #[doc(hidden)]
 pub use core::error::Error;
 
-#[cfg(all(
-    not(any(feature = "rust_1_81", feature = "unstable-core-error")),
-    any(feature = "std", test)
-))]
+#[cfg(all(not(feature = "rust_1_81"), any(feature = "std", test)))]
 #[doc(hidden)]
 pub use std::error;
 
-#[cfg(all(
-    not(any(feature = "rust_1_81", feature = "unstable-core-error")),
-    any(feature = "std", test)
-))]
+#[cfg(all(not(feature = "rust_1_81"), any(feature = "std", test)))]
 #[doc(hidden)]
 pub use std::error::Error;
 
-#[cfg(not(any(
-    feature = "rust_1_81",
-    feature = "unstable-core-error",
-    feature = "std",
-    test
-)))]
+#[cfg(not(any(feature = "rust_1_81", feature = "std", test)))]
 mod fallback_error;
-#[cfg(not(any(
-    feature = "rust_1_81",
-    feature = "unstable-core-error",
-    feature = "std",
-    test
-)))]
+#[cfg(not(any(feature = "rust_1_81", feature = "std", test)))]
 #[doc(hidden)]
 pub use fallback_error::Error;
 
 #[cfg(any(feature = "alloc", test))]
 mod boxed_impls;
+
+#[cfg(any(feature = "alloc", test))]
+mod whatever;
+#[cfg(any(feature = "alloc", test))]
+pub use whatever::*;
 
 /// Ensure a condition is true. If it is not, return from the function
 /// with an error.
@@ -562,7 +541,7 @@ macro_rules! whatever {
             $crate::FromString::without_source(
                 $crate::__format!($fmt$(, $($arg),*)*),
             )
-        });
+        })
     };
     ($source:expr, $fmt:literal$(, $($arg:expr),* $(,)?)*) => {
         match $source {
@@ -1402,7 +1381,7 @@ impl GenerateImplicitData for Option<Backtrace> {
         {
             if !backtrace_collection_enabled() {
                 None
-            } else if error::request_ref::<Backtrace>(source).is_some() {
+            } else if backtraces(source).next().is_some() {
                 None
             } else {
                 Some(Backtrace::generate_with_source(source))
@@ -1464,12 +1443,60 @@ fn backtrace_collection_enabled() -> bool {
 ///
 /// ## Limitations
 ///
-/// ### Disabled context selectors
+/// Implicitly generated data, including `Location`, is generated when
+/// the wrapping error value is constructed:
 ///
-/// If you have [disabled the context selector][disabled], SNAFU will
-/// not be able to capture an accurate location.
+/// ```rust
+/// # use snafu::{prelude::*, Location, location};
+/// # fn fallible_code() -> Result<(), InnerError> { Err(InnerError) }
+/// # #[derive(Debug, Snafu)] struct InnerError;
+/// # #[derive(Debug, Snafu)]
+/// # struct InterestingError {
+/// #   source: InnerError,
+/// #   #[snafu(implicit)] location: Location,
+/// # }
+/// # let base_loc = location!();
+/// # let r: Result<(), InterestingError> = (|| {
+/// // The first we know about the error is on this line:
+/// let e = fallible_code();
+/// // but the location will correspond to this line:
+/// e.context(InterestingSnafu)?;
+/// # Ok(())
+/// # })();
+/// # let e = r.unwrap_err();
+/// # assert_eq!(e.location.line(), base_loc.line() + 5);
+/// ```
 ///
-/// As a workaround, re-enable the context selector.
+/// If you have [disabled the context selector][disabled], the
+/// `Location` will correspond to where the `From` implementation is
+/// invoked. This is usually part of the `?` operator:
+///
+/// ```rust
+/// # use snafu::{prelude::*, Location, location};
+/// # fn fallible_code() -> Result<(), InnerError> { Err(InnerError) }
+/// # #[derive(Debug, Snafu)] struct InnerError;
+/// # #[derive(Debug, Snafu)]
+/// # #[snafu(context(false))]
+/// # struct InterestingError {
+/// #   source: InnerError,
+/// #   #[snafu(implicit)] location: Location,
+/// # }
+/// # let base_loc = location!();
+/// # let r: Result<(), InterestingError> = (|| {
+/// // The first we know about the error is on this line:
+/// let e = fallible_code();
+/// // but the location will correspond to this line:
+/// e?;
+/// # Ok(())
+/// # })();
+/// # let e = r.unwrap_err();
+/// # assert_eq!(e.location.line(), base_loc.line() + 5);
+/// ```
+///
+/// Inspecting the code at the generated `Location` will usually
+/// quickly lead back to the original error, but it's recommended to
+/// create the wrapping error as close to the original error location
+/// to reduce confusion.
 ///
 /// [disabled]: Snafu#disabling-the-context-selector
 ///
@@ -1489,98 +1516,60 @@ fn backtrace_collection_enabled() -> bool {
 /// combinator's library.
 ///
 /// There are two workarounds:
-/// 1. Use the [`location!`] macro
-/// 1. Use [`ResultExt`] instead
+/// 1. Avoid combinators and use the non-async [`ResultExt`]
+/// 1. Construct the location explicitly, such as by the [`location!`] macro
 ///
 /// ```rust
-/// # #[cfg(feature = "futures")] {
+/// # #[cfg(all(feature = "futures", feature = "internal-dev-dependencies"))] {
 /// # use snafu::{prelude::*, Location, location};
+/// # let body = async {
 /// // Non-ideal: will report where `wrapped_error_future` is `.await`ed.
+/// # let base_location = location!();
 /// # let error_future = async { AnotherSnafu.fail::<()>() };
 /// let wrapped_error_future = error_future.context(ImplicitLocationSnafu);
+/// # let wrapped_error = wrapped_error_future.await.unwrap_err();
+/// # assert_eq!(wrapped_error.location.line(), base_location.line() + 3);
 ///
 /// // Better: will report the location of `.context`.
+/// # let base_location = location!();
 /// # let error_future = async { AnotherSnafu.fail::<()>() };
 /// let wrapped_error_future = async { error_future.await.context(ImplicitLocationSnafu) };
+/// # let wrapped_error = wrapped_error_future.await.unwrap_err();
+/// # assert_eq!(wrapped_error.location.line(), base_location.line() + 2);
 ///
 /// // Better: Will report the location of `location!`
+/// # let base_location = location!();
 /// # let error_future = async { AnotherSnafu.fail::<()>() };
 /// let wrapped_error_future = error_future.with_context(|_| ExplicitLocationSnafu {
 ///     location: location!(),
 /// });
+/// # let wrapped_error = wrapped_error_future.await.unwrap_err();
+/// # assert_eq!(wrapped_error.location.line(), base_location.line() + 3);
 ///
 /// # #[derive(Debug, Snafu)] struct AnotherError;
 /// #[derive(Debug, Snafu)]
 /// struct ImplicitLocationError {
 ///     source: AnotherError,
 ///     #[snafu(implicit)]
-///     location: Location,
+///     location: snafu::Location,
 /// }
 ///
 /// #[derive(Debug, Snafu)]
 /// struct ExplicitLocationError {
 ///     source: AnotherError,
-///     location: Location,
+///     location: snafu::Location,
 /// }
+/// # };
+/// # futures::executor::block_on(body);
 /// # }
 /// ```
-#[derive(Copy, Clone)]
-#[non_exhaustive]
-pub struct Location {
-    /// The file where the error was reported
-    pub file: &'static str,
-    /// The line where the error was reported
-    pub line: u32,
-    /// The column where the error was reported
-    pub column: u32,
-}
-
-impl Location {
-    /// Constructs a `Location` using the given information
-    pub fn new(file: &'static str, line: u32, column: u32) -> Self {
-        Self { file, line, column }
-    }
-}
-
-impl Default for Location {
-    #[track_caller]
-    fn default() -> Self {
-        let loc = core::panic::Location::caller();
-        Self {
-            file: loc.file(),
-            line: loc.line(),
-            column: loc.column(),
-        }
-    }
-}
+pub type Location = &'static core::panic::Location<'static>;
 
 impl GenerateImplicitData for Location {
     #[inline]
     #[track_caller]
     fn generate() -> Self {
-        Self::default()
-    }
-}
-
-impl fmt::Debug for Location {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Location")
-            .field("file", &self.file)
-            .field("line", &self.line)
-            .field("column", &self.column)
-            .finish()
-    }
-}
-
-impl fmt::Display for Location {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{file}:{line}:{column}",
-            file = self.file,
-            line = self.line,
-            column = self.column,
-        )
+        core::panic::Location::caller()
     }
 }
 
@@ -1588,85 +1577,13 @@ impl fmt::Display for Location {
 #[macro_export]
 macro_rules! location {
     () => {
-        $crate::Location::new(file!(), line!(), column!())
+        core::panic::Location::caller()
     };
 }
 
-/// A basic error type that you can use as a first step to better
-/// error handling.
-///
-/// You can use this type in your own application as a quick way to
-/// create errors or add basic context to another error. This can also
-/// be used in a library, but consider wrapping it in an
-/// [opaque](guide::opaque) error to avoid putting the SNAFU crate in
-/// your public API.
-///
-/// ## Examples
-///
-/// ```rust
-/// use snafu::prelude::*;
-///
-/// type Result<T, E = snafu::Whatever> = std::result::Result<T, E>;
-///
-/// fn subtract_numbers(a: u32, b: u32) -> Result<u32> {
-///     if a > b {
-///         Ok(a - b)
-///     } else {
-///         whatever!("Can't subtract {a} - {b}")
-///     }
-/// }
-///
-/// fn complicated_math(a: u32, b: u32) -> Result<u32> {
-///     let val = subtract_numbers(a, b).whatever_context("Can't do the math")?;
-///     Ok(val * 2)
-/// }
-/// ```
-///
-/// See [`whatever!`][] for detailed usage instructions.
-///
-/// ## Limitations
-///
-/// When wrapping errors, only the backtrace from the shallowest
-/// function is guaranteed to be available. If you need the deepest
-/// possible trace, consider creating a custom error type and [using
-/// `#[snafu(backtrace)]` on the `source`
-/// field](Snafu#controlling-backtraces). If a best-effort attempt is
-/// sufficient, see the [`backtrace`][Self::backtrace] method.
-///
-/// When the standard library stabilizes backtrace support, this
-/// behavior may change.
-#[derive(Debug, Snafu)]
-#[snafu(crate_root(crate))]
-#[snafu(whatever)]
-#[snafu(display("{message}"))]
-#[snafu(provide(opt, ref, chain, dyn crate::Error => source.as_deref()))]
-#[cfg(any(feature = "alloc", test))]
-pub struct Whatever {
-    #[snafu(source(from(Box<dyn crate::Error>, Some)))]
-    #[snafu(provide(false))]
-    source: Option<Box<dyn crate::Error>>,
-    message: String,
-    backtrace: Backtrace,
-}
-
-#[cfg(any(feature = "alloc", test))]
-impl Whatever {
-    /// Gets the backtrace from the deepest `Whatever` error. If none
-    /// of the underlying errors are `Whatever`, returns the backtrace
-    /// from when this instance was created.
-    pub fn backtrace(&self) -> Option<&Backtrace> {
-        let mut best_backtrace = &self.backtrace;
-
-        let mut source = self.source();
-        while let Some(s) = source {
-            if let Some(this) = s.downcast_ref::<Self>() {
-                best_backtrace = &this.backtrace;
-            }
-            source = s.source();
-        }
-
-        Some(best_backtrace)
-    }
+#[cfg(feature = "unstable-provider-api")]
+fn backtraces(error: &dyn Error) -> impl Iterator<Item = &Backtrace> {
+    ChainCompat::new(error).filter_map(error::request_ref)
 }
 
 mod tests {

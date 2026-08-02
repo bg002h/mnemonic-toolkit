@@ -11,9 +11,9 @@
 
 [package]
 edition = "2018"
-rust-version = "1.56"
+rust-version = "1.65"
 name = "snafu-derive"
-version = "0.8.9"
+version = "0.9.2"
 authors = ["Jake Goulding <jake.goulding@gmail.com>"]
 build = false
 autolib = false
@@ -28,7 +28,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/shepmaster/snafu"
 
 [features]
-rust_1_61 = []
 unstable-provider-api = []
 
 [lib]
@@ -42,10 +41,21 @@ default-features = false
 
 [dependencies.proc-macro2]
 version = "1.0.52"
+default-features = false
 
 [dependencies.quote]
 version = "1.0.25"
+default-features = false
 
 [dependencies.syn]
 version = "2.0"
-features = ["full"]
+features = [
+    "clone-impls",
+    "derive",
+    "full",
+    "parsing",
+    "printing",
+    "proc-macro",
+    "visit-mut",
+]
+default-features = false

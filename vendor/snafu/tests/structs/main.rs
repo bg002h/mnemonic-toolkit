@@ -8,6 +8,7 @@ mod display;
 mod from_option;
 mod generics;
 mod module;
+mod nested_self;
 mod no_context;
 mod single_use_lifetimes;
 mod source_attributes;

@@ -167,22 +167,21 @@ fn message_source_mutually_exclusive() {
 }
 
 // ── Key-binding forgery, end-to-end (responsible disclosure, 2026-08-02) ─────
-// The pinned `bip322 0.0.10` does not bind the witness public key to the
-// challenged address for P2WPKH / P2SH-P2WPKH, so an unrelated key could
-// produce a proof the toolkit reported as VALID. These assert the CLI
-// contract scripted consumers actually rely on: INVALID on stdout, exit 1,
-// and `"valid": false` in the --json envelope.
+// `bip322` 0.0.6–0.0.10 did not bind the witness public key to the challenged
+// address for P2WPKH / P2SH-P2WPKH, so an unrelated key produced a proof the
+// toolkit reported as VALID. Fixed upstream in 0.0.11 AND independently by the
+// toolkit's own key-binding gate; these assert the CLI contract scripted
+// consumers actually rely on: INVALID on stdout, exit 1, and `"valid": false`
+// in the --json envelope.
 
-/// Sign `address` with a key that does NOT control it — the forgery primitive.
-/// `sign_simple_encoded` performs no key↔address check either, so this is all
-/// an attacker ever had to do.
-fn forge_for(address: &str) -> String {
-    use bitcoin::secp256k1::SecretKey;
-    use bitcoin::{Network, PrivateKey};
-    let sk = SecretKey::from_slice(&[0x42u8; 32]).unwrap();
-    let wif = PrivateKey::new(sk, Network::Bitcoin).to_wif();
-    bip322::sign_simple_encoded(address, "Hello World", &wif).unwrap()
-}
+// Frozen attack artifacts, generated with the vulnerable 0.0.10 signer (which
+// performed no key↔address check either) against message "Hello World" using
+// attacker key [0x42; 32] — a key controlling NEITHER address. Pinned as
+// literals so these regressions do not depend on the crate's signing API, which
+// changed shape in 0.0.11.
+const FORGED_FOR_SEGWIT: &str = "AkgwRQIhAJTBOPamjqAO8JElIC5qar0xByZiH+vUa5TAeoPEwE+rAiABXk+5/GhuPg+Mc3spH+eLoSR/ln/EaNNG7+wXMIrGigEhAyRlPqxDRIgALMBrv7fxD+GJkeNfn+QwLb6m0jU9wKsc";
+const P2SH_ADDR: &str = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+const FORGED_FOR_P2SH: &str = "AkgwRQIhAIqaalDGdYNZPLR61ST1AySk8LEJuYhNvMzHBCblydsgAiAV9e9FL69lt1KazEWAr6wjrDegUTDo/c0TNehBDflS1gEhAyRlPqxDRIgALMBrv7fxD+GJkeNfn+QwLb6m0jU9wKsc";
 
 #[test]
 fn p2wpkh_foreign_key_forgery_rejected_by_cli() {
@@ -195,7 +194,7 @@ fn p2wpkh_foreign_key_forgery_rejected_by_cli() {
             "--message",
             "Hello World",
             "--signature",
-            &forge_for(SEGWIT_ADDR),
+            FORGED_FOR_SEGWIT,
         ])
         .assert()
         .code(1)
@@ -204,17 +203,16 @@ fn p2wpkh_foreign_key_forgery_rejected_by_cli() {
 
 #[test]
 fn p2sh_foreign_key_forgery_rejected_by_cli_json() {
-    let addr = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
             "verify-message",
             "--address",
-            addr,
+            P2SH_ADDR,
             "--message",
             "Hello World",
             "--signature",
-            &forge_for(addr),
+            FORGED_FOR_P2SH,
             "--json",
         ])
         .assert()

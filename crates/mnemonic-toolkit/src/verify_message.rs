@@ -59,15 +59,22 @@ fn verify_legacy(address: &str, message: &str, signature: &str) -> Result<bool, 
 
 /// Does the public key carried in the witness actually control `addr`?
 ///
-/// **Security gate (responsible disclosure, 2026-08-02).** The pinned
-/// `bip322 0.0.10` lifts the ECDSA public key straight out of `witness[1]` and
-/// never checks it against the challenged address: its one equality check
-/// (`vendor/bip322/src/verify.rs:134`) compares that key with *itself*, and the
-/// P2SH arm discards `script_hash` entirely (`verify.rs:87`), deriving the
-/// sighash script from the attacker's own key (`verify.rs:168`). Any keypair
-/// therefore produces a proof that verifies against anyone's P2WPKH or P2SH
-/// address. We re-derive the binding here and refuse to call the crate unless
-/// it holds.
+/// **Security gate (responsible disclosure, 2026-08-02).** `bip322` 0.0.6–0.0.10
+/// lifted the ECDSA public key straight out of `witness[1]` and never checked it
+/// against the challenged address: the one equality check (0.0.10
+/// `verify.rs:134`) compared that key with *itself*, and the P2SH arm discarded
+/// `script_hash` entirely (`verify.rs:87`), deriving the sighash script from the
+/// attacker's own key (`verify.rs:168`). Any keypair therefore produced a proof
+/// that verified against anyone's P2WPKH or P2SH address. We re-derive the
+/// binding here and refuse to call the crate unless it holds.
+///
+/// **Retained after the upstream fix, deliberately.** The pin is now 0.0.11,
+/// which binds the key itself, so this gate is no longer the only thing standing
+/// between a forgery and a VALID verdict. It stays because it is independent of
+/// the dependency: it keeps the invariant enforced in code we own and test, so a
+/// future bump, a `[patch]`, or a vendor-tree drift cannot silently reintroduce
+/// the flaw. Its regression cells are the oracle for exactly that. The cost is
+/// one hash and one script comparison per verify.
 ///
 /// Returns `None` for address types the crate binds correctly by construction —
 /// P2TR takes its x-only key from the address's own witness program — so those
@@ -135,25 +142,21 @@ fn bip322_key_binding_holds(addr: &Address, signature: &str) -> Option<bool> {
 
 /// BIP-322 *simple* verify — P2WPKH / P2SH-P2WPKH / P2TR (crate refuses P2PKH).
 ///
-/// The pinned `bip322 0.0.10` crate can **panic** on adversarial input — e.g. a
-/// P2SH address whose witness carries a valid *uncompressed* pubkey reaches
-/// `wpubkey_hash().unwrap()` (`bip322/src/verify.rs:168`). We take untrusted
-/// public input, so we isolate any panic with `catch_unwind` and surface it as a
-/// clean error instead of crashing (exit 101). The default panic hook is
-/// silenced only around the call so the crate's internal panic text does not
-/// leak to stderr; the hook is restored immediately after. (In the CLI this runs
-/// single-threaded.)
+/// The input here is attacker-supplied by definition, so the crate call is
+/// isolated with `catch_unwind` and any unwind surfaced as a clean error rather
+/// than an exit-101 abort. The default panic hook is silenced only around the
+/// call so crate-internal panic text does not leak to stderr; the hook is
+/// restored immediately after. (In the CLI this runs single-threaded.)
 ///
-/// The key-binding gate below rejects uncompressed witness keys outright, so
-/// THAT input no longer reaches the crate (pinned by
-/// `crate_panic_hazard_is_real_so_catch_unwind_stays`, which calls the crate
-/// directly). This guard is NOT thereby redundant. The crate's P2TR arm
-/// (`vendor/bip322/src/verify.rs:68-75`) carries no witness-length guard —
-/// unlike its v0 and P2SH arms — so a P2TR address with a 0-item witness still
-/// indexes an empty vec at `verify.rs:212`, and the gate passes P2TR through by
-/// design (it is correctly bound). That path is LIVE and reaches this
-/// `catch_unwind`; `p2tr_empty_witness_panic_is_caught` pins it. Do NOT retire
-/// this guard on the strength of either regression cell alone.
+/// The superseded `bip322 0.0.10` had two reachable panics: `wpubkey_hash()
+/// .unwrap()` on an uncompressed witness key (its `verify.rs:168`), and an
+/// unguarded `witness.to_vec()[0]` on the P2TR arm, which — unlike the v0 and
+/// P2SH arms — carried no witness-length guard, so a 0-item witness indexed an
+/// empty vec (its `verify.rs:212`). BOTH are fixed in the pinned 0.0.11, and
+/// `historically_panicking_inputs_are_handled_cleanly` pins that they stay
+/// fixed. The guard is retained deliberately: it costs nothing on the success
+/// path and still covers panics nobody has enumerated. Do NOT retire it on the
+/// strength of those two cells alone.
 ///
 /// NOTE: the global panic-hook swap is NOT thread-safe — if a future feature
 /// ever calls this from multiple threads (e.g. batch verification), the hook
@@ -387,69 +390,73 @@ mod tests {
     // produce a proof that verifies against SOMEONE ELSE'S address. P2TR is
     // unaffected — its x-only key is read from the address's witness program.
     //
-    // `sign_simple_encoded` likewise never checks key↔address, so the forgery
-    // is just "sign the victim's address with the attacker's key".
-    fn attacker_wif() -> String {
-        use bitcoin::secp256k1::SecretKey;
-        use bitcoin::{Network, PrivateKey};
-        let sk = SecretKey::from_slice(&[0x42u8; 32]).unwrap();
-        PrivateKey::new(sk, Network::Bitcoin).to_wif()
-    }
+    // The vulnerable `sign_simple_encoded` likewise never checked key↔address,
+    // so producing these was just "sign the victim's address with the attacker's
+    // key". They are FROZEN here as literal attack artifacts rather than
+    // regenerated at test time: the signer is not the subject under test, and
+    // pinning the bytes keeps these regressions independent of any future
+    // `bip322` signing-API change (0.0.11 already changed that signature). All
+    // four were generated with the vulnerable 0.0.10 signer, message
+    // "Hello World", attacker key = [0x42; 32].
+
+    /// Forgery against `SEGWIT_ADDRESS` (P2WPKH) by a key that does not own it.
+    const FORGED_P2WPKH: &str = "AkgwRQIhAJTBOPamjqAO8JElIC5qar0xByZiH+vUa5TAeoPEwE+rAiABXk+5/GhuPg+Mc3spH+eLoSR/ln/EaNNG7+wXMIrGigEhAyRlPqxDRIgALMBrv7fxD+GJkeNfn+QwLb6m0jU9wKsc";
+    /// Real mainnet P2SH address the attacker does not control, + its forgery.
+    const P2SH_ADDRESS: &str = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
+    const FORGED_P2SH: &str = "AkgwRQIhAIqaalDGdYNZPLR61ST1AySk8LEJuYhNvMzHBCblydsgAiAV9e9FL69lt1KazEWAr6wjrDegUTDo/c0TNehBDflS1gEhAyRlPqxDRIgALMBrv7fxD+GJkeNfn+QwLb6m0jU9wKsc";
+    /// P2SH-P2WPKH address of key [0x33; 32] + a GENUINE proof from that key.
+    const GENUINE_P2SH_ADDRESS: &str = "3BgEEMQZk9QbuMwG5VUj2J22X8JRzzSAFu";
+    const GENUINE_P2SH_SIG: &str = "AkgwRQIhAM9j0r240qaiDvf7v5w38BJvA6nVaTOMXnr1BBETyMTCAiBzZnpzi05IudsuFG9rLReAR4Furw7u4SEe+7Jk1UJNGgEhAjxyrdtP3wmvlPDJTX/pKjhqfnDPih2FkWOGuyU1x7Gx";
+    /// P2TR address of key [0x11; 32] + an attempted forgery against it.
+    const P2TR_ADDRESS: &str = "bc1p9fjtrm3nwhemkjek0wxtswz2glmneu33w9lcylrvd7alttk0psmq6cnwza";
+    const FORGED_P2TR: &str = "AUGURunomtEqUh6lRdByf2CnBTbKAsC2fBbgoRkmUfWLayUjs4Me2O2m/5P9oNXkLDcLgRlUCOuCDqg6ZUEoieFPAQ==";
 
     #[test]
     fn p2wpkh_foreign_key_forgery_rejected() {
         // SEGWIT_ADDRESS is the BIP-322 vector address; the attacker does not
-        // hold its key, yet signs against it with an unrelated one.
-        let forged = bip322::sign_simple_encoded(SEGWIT_ADDRESS, "Hello World", &attacker_wif())
-            .expect("attacker can always produce a witness");
-        let o = verify_message(SEGWIT_ADDRESS, "Hello World", &forged, SigFormat::Bip322).unwrap();
-        assert!(
-            !o.valid,
-            "FORGERY ACCEPTED: unrelated key verified against a P2WPKH address"
-        );
-    }
-
-    #[test]
-    fn p2wpkh_foreign_key_forgery_rejected_under_auto() {
-        let forged =
-            bip322::sign_simple_encoded(SEGWIT_ADDRESS, "Hello World", &attacker_wif()).unwrap();
-        let o = verify_message(SEGWIT_ADDRESS, "Hello World", &forged, SigFormat::Auto).unwrap();
-        assert!(!o.valid, "FORGERY ACCEPTED under --format auto");
+        // hold its key. Both dispatch paths must refuse.
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            let o = verify_message(SEGWIT_ADDRESS, "Hello World", FORGED_P2WPKH, f).unwrap();
+            assert!(
+                !o.valid,
+                "FORGERY ACCEPTED: unrelated key verified against a P2WPKH address"
+            );
+        }
     }
 
     #[test]
     fn p2sh_p2wpkh_foreign_key_forgery_rejected() {
-        // Real mainnet P2SH address the attacker does not control.
-        let addr = "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy";
-        let forged = bip322::sign_simple_encoded(addr, "Hello World", &attacker_wif()).unwrap();
-        let r = verify_message(addr, "Hello World", &forged, SigFormat::Bip322).unwrap();
-        assert!(
-            !r.valid,
-            "FORGERY ACCEPTED: unrelated key verified against a P2SH address"
-        );
+        for f in [SigFormat::Bip322, SigFormat::Auto] {
+            let r = verify_message(P2SH_ADDRESS, "Hello World", FORGED_P2SH, f).unwrap();
+            assert!(
+                !r.valid,
+                "FORGERY ACCEPTED: unrelated key verified against a P2SH address"
+            );
+        }
     }
 
     #[test]
     fn p2sh_p2wpkh_genuine_signature_still_valid() {
         // Positive control for the gate's P2SH arm: the key that DOES control
         // the address must still verify (guards against over-rejection).
-        use bitcoin::secp256k1::SecretKey;
-        use bitcoin::{CompressedPublicKey, Network, PrivateKey};
-        let secp = Secp256k1::new();
-        let pk = PrivateKey::new(
-            SecretKey::from_slice(&[0x33u8; 32]).unwrap(),
-            Network::Bitcoin,
-        );
-        let cpk = CompressedPublicKey::from_private_key(&secp, &pk).unwrap();
-        let addr = Address::p2shwpkh(&cpk, Network::Bitcoin).to_string();
-        let sig = bip322::sign_simple_encoded(&addr, "Hello World", &pk.to_wif()).unwrap();
-        let o = verify_message(&addr, "Hello World", &sig, SigFormat::Bip322).unwrap();
+        let o = verify_message(
+            GENUINE_P2SH_ADDRESS,
+            "Hello World",
+            GENUINE_P2SH_SIG,
+            SigFormat::Bip322,
+        )
+        .unwrap();
         assert!(o.valid, "genuine P2SH-P2WPKH proof was rejected");
         // ...and the same address must still reject a tampered message.
         assert!(
-            !verify_message(&addr, "Goodbye World", &sig, SigFormat::Bip322)
-                .unwrap()
-                .valid
+            !verify_message(
+                GENUINE_P2SH_ADDRESS,
+                "Goodbye World",
+                GENUINE_P2SH_SIG,
+                SigFormat::Bip322
+            )
+            .unwrap()
+            .valid
         );
     }
 
@@ -457,14 +464,7 @@ mod tests {
     fn p2tr_foreign_key_forgery_rejected() {
         // Control: taproot binds the key via the address itself, so the same
         // attack must already fail. Guards against a fix that regresses P2TR.
-        use bitcoin::secp256k1::SecretKey;
-        use bitcoin::Network;
-        let secp = Secp256k1::new();
-        let victim = SecretKey::from_slice(&[0x11u8; 32]).unwrap();
-        let (xonly, _) = victim.public_key(&secp).x_only_public_key();
-        let addr = Address::p2tr(&secp, xonly, None, Network::Bitcoin).to_string();
-        let forged = bip322::sign_simple_encoded(&addr, "Hello World", &attacker_wif()).unwrap();
-        let r = verify_message(&addr, "Hello World", &forged, SigFormat::Bip322);
+        let r = verify_message(P2TR_ADDRESS, "Hello World", FORGED_P2TR, SigFormat::Bip322);
         assert!(r.is_err() || !r.unwrap().valid, "FORGERY ACCEPTED on P2TR");
     }
 
@@ -505,49 +505,33 @@ mod tests {
     }
 
     #[test]
-    fn crate_panic_hazard_is_real_so_catch_unwind_stays() {
-        // Non-vacuity guard for the UNCOMPRESSED-KEY hazard specifically. The
-        // gate now stops this input before the crate sees it, so it is
-        // unreachable through `verify_message` — call the crate DIRECTLY so the
-        // hazard stays proven rather than asserted. If a future `bip322` bump
-        // fixes `wpubkey_hash().unwrap()`, this test fails; that is a prompt to
-        // re-check, NOT licence to delete the `catch_unwind`. A SECOND panic
-        // path is still live through `verify_message` — see
-        // `p2tr_empty_witness_panic_is_caught`.
+    fn historically_panicking_inputs_are_handled_cleanly() {
+        // Two inputs CRASHED the superseded 0.0.10 (absorbed at the time only by
+        // `verify_bip322`'s catch_unwind):
+        //   1. P2SH-P2WPKH whose witness carries the OWNER's key in uncompressed
+        //      form → `wpubkey_hash().unwrap()` (0.0.10 verify.rs:168). Note the
+        //      binding alone does NOT stop this — `wpubkey_hash()` always hashes
+        //      the compressed form — which is why the gate's 33-byte check
+        //      exists.
+        //   2. P2TR with a 0-item witness → that arm carried no witness-length
+        //      guard, so `witness.to_vec()[0]` indexed an empty vec (0.0.10
+        //      verify.rs:212). The gate passes P2TR through by design, so this
+        //      one reached the crate directly.
+        // Both are fixed in the pinned 0.0.11. This pins that they STAY fixed:
+        // an accidental downgrade or a vendor-tree drift turns it red.
         let owner = uncompressed_vector_owner_address();
         let sig = craft_uncompressed_p2sh_sig();
-        let prev = std::panic::take_hook();
-        std::panic::set_hook(Box::new(|_| {}));
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            bip322::verify_simple_encoded(&owner, "hello", &sig).is_ok()
-        }));
-        std::panic::set_hook(prev);
-        assert!(
-            r.is_err(),
-            "pinned bip322 no longer panics here — revisit the catch_unwind rationale"
-        );
-    }
-
-    #[test]
-    fn p2tr_empty_witness_panic_is_caught() {
-        // The crate's P2TR arm has NO witness-length guard (its v0 and P2SH arms
-        // do), so a 0-item witness indexes an empty vec at `verify.rs:212`. The
-        // gate passes P2TR through by design, so unlike the uncompressed-key
-        // hazard this one still reaches the crate through `verify_message` and
-        // is absorbed ONLY by `verify_bip322`'s catch_unwind. `Err` here (rather
-        // than `Ok(false)`) is precisely what proves the guard fired, keeping
-        // its reachability pinned instead of assumed.
-        use bitcoin::secp256k1::SecretKey;
-        use bitcoin::Network;
-        let secp = Secp256k1::new();
-        let sk = SecretKey::from_slice(&[0x55u8; 32]).unwrap();
-        let (xonly, _) = sk.public_key(&secp).x_only_public_key();
-        let addr = Address::p2tr(&secp, xonly, None, Network::Bitcoin).to_string();
-        // "AA==" is base64 of a serialized 0-item witness.
         for f in [SigFormat::Bip322, SigFormat::Auto] {
             assert!(
-                verify_message(&addr, "hello", "AA==", f).is_err(),
-                "empty-witness P2TR must surface as a clean error, never a crash"
+                !verify_message(&owner, "hello", &sig, f).unwrap().valid,
+                "uncompressed owner key must be a clean INVALID, not a panic"
+            );
+            // "AA==" is base64 of a serialized 0-item witness.
+            assert!(
+                !verify_message(P2TR_ADDRESS, "hello", "AA==", f)
+                    .unwrap()
+                    .valid,
+                "empty-witness P2TR must be a clean INVALID, not a panic"
             );
         }
     }
