@@ -3,7 +3,7 @@
 //! FOLLOWUP `verify-bundle-descriptor-entropy-slot-gap`: the descriptor-mode
 //! binding loop in `verify_bundle.rs` had arms for Phrase/Seedqr, Xpub, and Ms1
 //! but NO `Entropy` arm, so a raw-`entropy` cosigner fell to the catch-all
-//! (`DescriptorReparseFailed`, exit 4). This suite round-trips raw-entropy
+//! (`DescriptorParse`, exit 2 since v0.97.0 — was `DescriptorReparseFailed`/exit 4). This suite round-trips raw-entropy
 //! cosigners through the new arm — the `bundle` Entropy arm (`bundle.rs:1438`)
 //! and the new `verify_bundle` Entropy arm are DISTINCT code paths that must
 //! agree, which is what the round-trips assert. See

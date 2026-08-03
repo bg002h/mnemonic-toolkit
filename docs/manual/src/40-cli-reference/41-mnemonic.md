@@ -191,14 +191,16 @@ distinct keys are different wallets). See
 [Foreign wallet formats → Bitcoin Core](#bitcoin-core-listdescriptors)
 for the guard matrix.
 
-**`verify-bundle`'s two intake paths differ.** A **concrete** descriptor
-(inline `[fp/path]xpub` keys) rejects at exit 2 (`DescriptorParse`)
-*before* comparing against the supplied cards — this closes a
-false-pass: previously, a `/0/*`-collapsed descriptor verified
+**`verify-bundle` rejects both intake paths at exit 2.** A **concrete**
+descriptor (inline `[fp/path]xpub` keys) rejects at exit 2
+(`DescriptorParse`) *before* comparing against the supplied cards — this
+closes a false-pass: previously, a `/0/*`-collapsed descriptor verified
 successfully against the *wrong* card, because both sides collapsed
-identically. An **`@N`-template** descriptor (keys supplied via
-`--slot`) instead rejects at exit 4 (`DescriptorReparseFailed`) when the
-completed wallet is re-parsed.
+identically. Since **v0.97.0** an **`@N`-template** descriptor (keys
+supplied via `--slot`) rejects at the **same** exit 2, matching `bundle`.
+It previously rejected at exit 4, which is the
+[VERIFY-ME tier](#exit-codes) — telling a user who mistyped a descriptor
+that their engraved bundle might be corrupt.
 
 ### Synopsis
 
@@ -725,12 +727,20 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 
 `verify-bundle` applies the same [use-site residue reject](#non-representable-use-site-steps)
 as `bundle` / `import-wallet` when re-parsing a `--descriptor` /
-`--descriptor-file` input, but the exit code differs by intake path: a
-**concrete** descriptor (inline keys) rejects at exit 2
+`--descriptor-file` input, and **both intake paths reject at exit 2**
 (`DescriptorParse`) *before* any comparison against the supplied cards
-runs, while an **`@N`-template** descriptor (keys supplied via `--slot`)
-rejects at exit 4 (`DescriptorReparseFailed`) when the completed wallet
-is re-parsed.
+runs — a **concrete** descriptor (inline keys) and an **`@N`-template**
+descriptor (keys supplied via `--slot`) alike.
+
+> **Changed in v0.97.0.** The `@N`-template path previously rejected at
+> exit 4. Descriptor **input** errors on `verify-bundle` — an unparseable
+> descriptor, an unreadable `--descriptor-file`, or an unsupported
+> `--slot` subkey — are now exit 2, the same as `bundle`. Exit 4 from
+> descriptor-mode verify now means only: **the cards mismatched**, a
+> **dead/pathless card partial-decoded** (`result: partial`), or
+> **BIP-388 key-distinctness failed**. `$?`-gated scripts that treated
+> exit 4 from this path as "possible bundle corruption" should treat
+> exit 2 as "fix your input".
 
 ### Worked example
 

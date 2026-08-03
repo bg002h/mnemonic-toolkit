@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.97.0] — 2026-08-03
+
+**SemVer-MINOR, documented-CLI-contract change — `verify-bundle` descriptor INPUT errors now exit 2 (`DescriptorParse`), matching `bundle`, instead of 4. Exit 4 was this project's BundleMismatch / VERIFY-ME tier, so a mistyped `--descriptor` told the user their engraved bundle might be corrupt — and made the GUI render an amber VERIFY-ME badge for a typo.**
+
+- **[correctness] six intake/usage sites re-tiered 4 → 2.** Unparseable descriptor (lex / placeholder-resolve / parse), unreadable `--descriptor-file`, and unsupported `--slot` subkeys. Three were pure `.map_err` re-wraps of an already-correct `DescriptorParse`; the wrappers are deleted and the native error propagates. The `--descriptor-file` detail string is now byte-identical to `bundle`'s emit twin.
+- **[correctness] emit ↔ verify now agree.** Identical malformed input previously gave `bundle` exit 2 and `verify-bundle` exit 4. Pinned by a parity cell so it cannot reopen.
+- **[unchanged] exit 4 still means what it should.** Cards mismatched, a dead/pathless card partial-decoded (`result: partial`), or BIP-388 key-distinctness failed (`Bip388VerifyDistinctness` — a deliberate v0.19.0 §4.11.c per-surface split, out of scope here and explicitly preserved).
+- **[docs] the manual contradicted itself and misdescribed the mechanism.** One paragraph claimed the `@N` path rejects "when the completed wallet is re-parsed" (exit 4) while another described the same class as exit 2. The pinning test's own comment shows the reject fires in `lex_placeholders` *before any card is consulted* — so the documented rationale named a mechanism that never ran. Both paragraphs corrected, with a migration callout.
+- **[docs] `DescriptorReparseFailed`'s scope corrected everywhere.** Its rustdoc and the two technical-manual rows described "the preserved descriptor string fails to round-trip (corrupted JSON, manual edit…)" — an artifact-provenance scenario that provably cannot reach these sites (`verify-bundle` has no `--from-import-json`; `--bundle-json` never populates `descriptor`).
+
+### Migration / dispositions
+
+- **`$?`-gated scripts:** treat exit 2 from `verify-bundle --descriptor`/`--descriptor-file` as "fix your input". Exit 4 from this path now means only the three result-tier cases above. The stderr prefix `descriptor re-parse failed during verify-bundle: ` is gone; the native `DescriptorParse` message (which names the actionable remedy) survives.
+- **GUI:** zero edits required — it branches on exit 4 generically, so the misleading amber VERIFY-ME badge simply stops firing on typos.
+- **Reverses a prior R0-reviewed pin** (cycleA plan-R0 I-B). That finding was an *assertion-accuracy* correction which pinned incumbent behaviour and marked its exit-4 test "(optional)" — not a ruling that 4 was the right tier. Its cell is flipped, with the history recorded in the test's doc comment.
+- **`DescriptorReparseFailed` retained but believed unreachable.** `parse_descriptor` is deterministic in its string argument — `keys`/`fingerprints` feed only infallible TLV attachment — so the post-binding re-parse cannot fail once the canonicity probe succeeded on the identical string. The one remaining arm is kept **defensively** at exit 4 for toolkit-internal parse non-determinism, is deliberately **not** pinned by a contrived test, and is barred from every user-facing doc as a live exit-4 meaning. A `--slot`-missing site is likewise dead behind the shared coverage gate.
+- **R0:** 3 rounds to GREEN (round 1: 1C/2I; round 2: 3I — **two of them defects the round-1 fold itself introduced**; round 3: GREEN, 4 Minor). Reviews persisted verbatim at `design/agent-reports/verify-bundle-exit-tier-r0-round-{1,2,3}.md`. SPEC: `design/SPEC_verify_bundle_descriptor_exit_tier.md`.
+
 ## mnemonic-toolkit [0.96.0] — 2026-08-03
 
 **SemVer-MINOR, test+docs — closes the three audit Minors v0.95.0 deferred. No production code changed.**

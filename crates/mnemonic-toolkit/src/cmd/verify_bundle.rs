@@ -1367,9 +1367,11 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
 
     let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
         (Some(s), None) => s.clone(),
+        // v0.97.0 exit-tier: an unreadable file is INPUT, not evidence about an
+        // artifact. Same tier + byte-identical detail as `bundle.rs`'s emit twin.
         (None, Some(p)) => std::fs::read_to_string(p)
-            .map_err(|e| ToolkitError::DescriptorReparseFailed {
-                detail: format!("--descriptor-file {}: {e}", p.display()),
+            .map_err(|e| {
+                ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
             })?
             .trim_end()
             .to_string(),
@@ -1441,14 +1443,12 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         }
     }
 
-    let occs =
-        lex_placeholders(&descriptor_str).map_err(|e| ToolkitError::DescriptorReparseFailed {
-            detail: e.message(),
-        })?;
-    let mut descriptor_resolved =
-        resolve_placeholders(&occs).map_err(|e| ToolkitError::DescriptorReparseFailed {
-            detail: e.message(),
-        })?;
+    // v0.97.0 exit-tier: lex/resolve already produce `DescriptorParse` (exit 2)
+    // natively — these were re-wrapped to `DescriptorReparseFailed` (exit 4, the
+    // BundleMismatch/VERIFY-ME tier), so a typo told the user their engraved
+    // bundle might be corrupt. Wrappers deleted; the native error propagates.
+    let occs = lex_placeholders(&descriptor_str)?;
+    let mut descriptor_resolved = resolve_placeholders(&occs)?;
     let n = descriptor_resolved.n as usize;
 
     crate::slot_input::validate_slot_set(&args.slot)?;
@@ -1464,11 +1464,8 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // re-derive xpubs at the template path (BIP-84 default) instead of
     // the inferred BIP-48 cosigner path, and md-codec's
     // validate_explicit_origin_required would refuse the wire.
-    let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[]).map_err(|e| {
-        ToolkitError::DescriptorReparseFailed {
-            detail: e.message(),
-        }
-    })?;
+    // v0.97.0 exit-tier: same as lex/resolve above — native `DescriptorParse`.
+    let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[])?;
     let is_non_canonical =
         md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
 
@@ -1508,12 +1505,19 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     let mut cosigners: Vec<CosignerKeyInfo> = Vec::with_capacity(n);
 
     for idx in 0..(n as u8) {
-        let slot_inputs =
-            by_index_inputs
-                .get(&idx)
-                .ok_or_else(|| ToolkitError::DescriptorReparseFailed {
-                    detail: format!("--slot @{idx} missing for descriptor with n={n} placeholders"),
-                })?;
+        let slot_inputs = by_index_inputs
+            .get(&idx)
+            // v0.97.0 exit-tier: usage error, not an artifact verdict.
+            // BELIEVED DEAD: `validate_slot_set` (contiguity from @0) and the
+            // shared coverage gate (`max_idx+1 == n`) both run earlier, so
+            // every idx in 0..n has an entry. Kept defensively; deliberately
+            // NOT pinned by a test (SPEC §6 T8 — no contrived tests for dead
+            // arms).
+            .ok_or_else(|| {
+                ToolkitError::DescriptorParse(format!(
+                    "--slot @{idx} missing for descriptor with n={n} placeholders"
+                ))
+            })?;
         let subkeys: std::collections::BTreeSet<crate::slot_input::SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
 
@@ -1675,12 +1679,11 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 res.emit_language,
             )
         } else {
-            return Err(ToolkitError::DescriptorReparseFailed {
-                detail: format!(
-                    "--slot @{idx} subkey set {:?} not supported in descriptor verify-bundle path",
-                    subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-                ),
-            });
+            // v0.97.0 exit-tier: a flag-usage error is INPUT (exit 2).
+            return Err(ToolkitError::DescriptorParse(format!(
+                "--slot @{idx} subkey set {:?} not supported in descriptor verify-bundle path",
+                subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+            )));
         };
 
         let entropy = ent_opt.map(zeroize::Zeroizing::new);
@@ -1718,6 +1721,19 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         return Err(ToolkitError::Bip388VerifyDistinctness);
     }
 
+    // DEFENSIVE — believed UNREACHABLE, and deliberately kept at exit 4.
+    //
+    // `parse_descriptor` is a deterministic function of its string argument:
+    // every fallible step reads `descriptor_str` only, while `keys`/`fingerprints`
+    // feed infallible TLV attachment afterwards. `descriptor_str` is unmutated
+    // since the canonicity probe above already parsed it clean, so this call
+    // cannot fail on input grounds. A failure here would mean toolkit-internal
+    // parse non-determinism (e.g. a miniscript bump changing behaviour between
+    // two identical calls) — genuinely "something is wrong, verify out-of-band",
+    // which is what exit 4 means. Precedent: `repair.rs`'s
+    // `PostCorrectionDecodeFailed`. Per SPEC §6 T8 this arm is NOT pinned by a
+    // contrived test, and per §3 it must NOT be presented in any user-facing doc
+    // as a live exit-4 meaning.
     let mut descriptor = parse_descriptor(&descriptor_str, &keys, &fingerprints).map_err(|e| {
         ToolkitError::DescriptorReparseFailed {
             detail: e.message(),

@@ -176,7 +176,7 @@ Source: `bg002h/mnemonic-toolkit/crates/mnemonic-toolkit/src/error.rs` (26 varia
 | Variant | Likely cause | Remediation pointer |
 |---|---|---|
 | `BundleMismatch { card, message }` | Verify-bundle: an engraved card (md1/mk1/ms1, optionally `mk1[N]`) doesn't match what the recomputed bundle would emit. If the engraved bundle was produced at a non-zero BIP-32 account, pass `--account <N>`. | §IV.2 "Anti-collision invariants"; the `card` field surfaces in `details`. |
-| `DescriptorReparseFailed { detail }` | Verify-bundle: preserved descriptor string fails to round-trip through the rust-miniscript parser. Corrupted JSON, manual edit, or upstream library version mismatch. | §V.4.5 "JSON envelope schema"; re-create the bundle from canonical inputs. |
+| `DescriptorReparseFailed { detail }` | Verify-bundle descriptor mode: the completed keyed wallet failed to re-parse. **v0.97.0: believed unreachable, retained defensively** — descriptor INPUT errors now exit 2 (`DescriptorParse`), matching `bundle`. A failure here would indicate toolkit-internal parse non-determinism, not bad input and not a corrupt bundle. | Should not occur; if seen, report it — the descriptor already parsed cleanly moments earlier in the same run. |
 | `Bip388VerifyDistinctness` | Verify-bundle: bundle violates BIP-388 distinct-key rule (re-emitted from `check_key_vector_distinctness` post-binding). | §IV.2 "Anti-collision invariants"; regenerate with distinct keys. |
 
 ### Future-format dispatch

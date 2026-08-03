@@ -121,9 +121,20 @@ pub enum ToolkitError {
     /// Distinct from `ModeViolation` (SPEC §6.9, flag-combination errors):
     /// `DescriptorParse` covers descriptor *content* failures.
     DescriptorParse(String),
-    /// SPEC §5.7 verify-bundle: descriptor-derived bundle's preserved
-    /// descriptor string fails to round-trip (corrupted JSON, manual edit,
-    /// upstream library version mismatch). Exit 4 (BundleMismatch tier).
+    /// verify-bundle descriptor mode: the completed keyed wallet failed to
+    /// re-parse. Exit 4 (BundleMismatch tier).
+    ///
+    /// **v0.97.0: believed UNREACHABLE, retained defensively.** Descriptor
+    /// INPUT errors (lex/resolve/parse, unreadable `--descriptor-file`,
+    /// unsupported `--slot` subkeys) now exit 2 (`DescriptorParse`), matching
+    /// `bundle`. `parse_descriptor` is deterministic in its string argument, so
+    /// the post-binding re-parse cannot fail once the canonicity probe has
+    /// succeeded on the identical string; a failure would indicate
+    /// toolkit-internal parse non-determinism. The earlier doc scoped this to a
+    /// "preserved descriptor" from an artifact — no such descriptor ever reaches
+    /// these sites (`verify-bundle` has no `--from-import-json`, and
+    /// `--bundle-json` never populates `descriptor`). Not presented in
+    /// user-facing docs as a live exit-4 meaning.
     DescriptorReparseFailed {
         detail: String,
     },

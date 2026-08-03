@@ -160,7 +160,7 @@ The submodules under `src/cmd/` (`bundle`, `verify_bundle`, `convert`, `export_w
 | `CosignerSpec { cosigner_idx, message }` | 1 | `CosignerSpec` | SPEC §6.2 cosigner spec parse | `parse::parse_cosigner_spec`, depth-check in `synthesize_*` |
 | `CosignersFile { message }` | 1 | `CosignersFile` | SPEC §6.2 cosigners-file parse | `parse::parse_cosigners_file` |
 | `DescriptorParse(String)` | 2 | `DescriptorParse` | SPEC §6.7 descriptor content parse | `lex_placeholders`, `resolve_placeholders`, `parse_descriptor`, `synthesize_descriptor` |
-| `DescriptorReparseFailed { detail }` | 4 | `DescriptorReparseFailed` | SPEC §5.7 verify-bundle re-parse | `cmd::verify_bundle::run` |
+| `DescriptorReparseFailed { detail }` | 4 | `DescriptorReparseFailed` | verify-bundle completed-wallet re-parse (v0.97.0: believed unreachable, defensive) | `cmd::verify_bundle::run` |
 | `Bip388Distinctness { i, j }` | 2 | `Bip388Distinctness` | SPEC §4.11.b distinct-key at bundle | `check_key_vector_distinctness`, `cmd::bundle::check_resolved_slots_distinctness` |
 | `Bip388VerifyDistinctness` | 4 | `Bip388VerifyDistinctness` | SPEC §4.11.c distinct-key at verify | `cmd::verify_bundle::run` |
 | `SlotInputViolation { kind, message }` | 2 | `SlotInputViolation` | SPEC §6.6 unified slot input | `slot_input::validate_slot_set`, `bundle_unified::detect_bundle_mode` |

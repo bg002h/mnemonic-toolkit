@@ -14,8 +14,10 @@
 //!   (verify-bundle re-parsed the user's descriptor through the SAME
 //!   collapsing lexer as encode, so it silently agreed a wrong card was
 //!   right). Primary = concrete-descriptor verify fork → exit 2 /
-//!   `DescriptorParse` (plan-R0 I-B). Secondary (optional) = the `@N`-template
-//!   verify fork → exit 4 / `DescriptorReparseFailed`.
+//!   `DescriptorParse` (plan-R0 I-B). Secondary = the `@N`-template verify
+//!   fork, which since **v0.97.0** rejects at the SAME exit 2 / `DescriptorParse`
+//!   (it was exit 4 / `DescriptorReparseFailed`; re-tiered under
+//!   `design/SPEC_verify_bundle_descriptor_exit_tier.md`).
 //! - 2b: the BIP-84 oracle. POSITIVE — a correctly-encoded `<0;1>/*`
 //!   single-sig card for `abandon×11 about`, taken through the exact pipeline
 //!   that had the bug (`bundle --descriptor` → `concrete_keys_to_placeholders`
@@ -172,9 +174,8 @@ fn verify_bundle_concrete_fixed_use_site_step_rejects_before_card_comparison() {
     assert_eq!(
         out.status.code(),
         Some(2),
-        "must be exit 2 / DescriptorParse — the concrete-descriptor verify \
-         fork (plan-R0 I-B); exit 4 is only the @N-template verify fork; \
-         stderr: {stderr}"
+        "concrete-fork residue reject must be exit 2 / DescriptorParse; since v0.97.0 the \
+         @N-template fork is exit 2 as well; stderr: {stderr}"
     );
     assert!(
         stderr.contains("multipath") && stderr.contains("<a;b>"),
@@ -182,13 +183,21 @@ fn verify_bundle_concrete_fixed_use_site_step_rejects_before_card_comparison() {
     );
 }
 
-/// OPTIONAL secondary (SPEC D2 / plan-R0 I-B): the `@N`-template verify fork
-/// (`lex_placeholders` called directly on the raw `--descriptor` string,
-/// `verify_bundle.rs:1375`) wraps the SAME residue reject as
-/// `DescriptorReparseFailed{detail}` → exit 4 — a DIFFERENT exit code than the
-/// concrete fork above (per-path error variant, plan-R0 I-B correction).
+/// The `@N`-template verify fork (`lex_placeholders` on the raw `--descriptor`
+/// string, `verify_bundle.rs:1445`) hits the SAME residue reject as the concrete
+/// fork above, and since **v0.97.0 at the SAME exit code (2)**.
+///
+/// It previously re-wrapped to `DescriptorReparseFailed` → exit 4, the
+/// BundleMismatch/VERIFY-ME tier — telling a user who mistyped a descriptor that
+/// their engraved bundle might be corrupt, and making the GUI show an amber
+/// VERIFY-ME badge for a typo. cycleA plan-R0 I-B pinned that incumbent
+/// behaviour as an assertion-accuracy fix (the test was marked "(optional)"),
+/// not as a ruling that 4 was the right tier. Reversed under
+/// `design/SPEC_verify_bundle_descriptor_exit_tier.md` (R0 GREEN, round 3).
+/// Exit 4 on this path now means only: cards mismatched, `result: partial`, or
+/// `Bip388VerifyDistinctness`.
 #[test]
-fn verify_bundle_at_n_template_fixed_use_site_step_rejects_exit_4() {
+fn verify_bundle_at_n_template_fixed_use_site_step_rejects_exit_2() {
     let (fp, acct_xpub) = bip84_account0();
     let placeholder_desc = format!("wpkh(@0[{fp}/84'/0'/0']/0/*)");
 
@@ -220,13 +229,16 @@ fn verify_bundle_at_n_template_fixed_use_site_step_rejects_exit_4() {
     );
     assert_eq!(
         out.status.code(),
-        Some(4),
-        "must be exit 4 / DescriptorReparseFailed — the @N-template verify \
-         fork (distinct from the concrete fork's exit 2); stderr: {stderr}"
+        Some(2),
+        "must be exit 2 / DescriptorParse — same tier as the concrete fork and \
+         as `bundle` (v0.97.0 exit-tier fix); stderr: {stderr}"
     );
+    // v0.97.0: the "descriptor re-parse failed during verify-bundle: " prefix is
+    // GONE with the wrapper — the native `DescriptorParse` message survives, so
+    // the actionable remedy is still named. Assert the remedy, not the wrapper.
     assert!(
-        stderr.contains("re-parse failed") && stderr.contains("multipath"),
-        "stderr must name the re-parse failure + the multipath remedy: {stderr}"
+        stderr.contains("multipath") && !stderr.contains("re-parse failed"),
+        "stderr must name the multipath remedy and NOT the removed wrapper: {stderr}"
     );
 }
 
