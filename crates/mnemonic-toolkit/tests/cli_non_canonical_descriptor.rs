@@ -597,12 +597,20 @@ fn parity_wsh_all_shapes_round_trip() {
     let _ = (FP0, FP1);
 }
 
-/// PARITY (sh-wsh, leaf 1') — H12 selects the sh-wsh BIP-48 leaf `1'`. The
-/// all-elided and slot-override shapes must round-trip, proving the shared fn's
-/// `root_tag`-derived `default_script_type` agrees emit↔verify for the sh root.
+/// PARITY (sh-wsh, leaf 1') — H12 selects the sh-wsh BIP-48 leaf `1'`, proving
+/// the shared fn's `root_tag`-derived `default_script_type` agrees emit↔verify
+/// for the sh root.
+///
+/// Covers all FIVE shapes, as SPEC §4(2) requires ("every (root × shape)
+/// combination the root's arity supports"). It shipped with only two —
+/// all-elided and slot-override — found by the 2026-08-03 post-implementation
+/// audit. Shape handling in the shared fn is root-independent and the wsh cell
+/// covers all five, so the marginal risk was low; but the parity harness is the
+/// emit↔verify drift oracle, and more shapes means more drift it can catch.
 #[test]
 fn parity_sh_wsh_round_trips() {
     for (desc, slots) in [
+        // all-elided
         (
             "sh(wsh(andor(pkh(@0),after(12000000),pk(@1))))",
             vec![
@@ -610,11 +618,36 @@ fn parity_sh_wsh_round_trips() {
                 format!("@1.phrase={BIP39_TEST_2}"),
             ],
         ),
+        // shared-explicit (same path on both, correct per-slot fps; leaf 1')
+        (
+            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/0'/1']@1))))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // divergent (different accounts, correct per-slot fps)
+        (
+            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/7'/1']@1))))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // slot-override (bare @0 + --slot @0.path= overrides the default)
         (
             "sh(wsh(andor(pkh(@0),after(12000000),pk(@1))))",
             vec![
                 format!("@0.phrase={TREZOR_12_ZERO}"),
                 "@0.path=m/48'/0'/4'/1'".into(),
+                format!("@1.phrase={BIP39_TEST_2}"),
+            ],
+        ),
+        // mixed (@0 inline-correct-fp, @1 elided-defaulted)
+        (
+            "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk(@1))))",
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
                 format!("@1.phrase={BIP39_TEST_2}"),
             ],
         ),
@@ -781,4 +814,37 @@ fn over_n_slot_vec_on_parse_failing_descriptor_still_refuses() {
         ])
         .assert()
         .failure();
+}
+
+/// NON-VACUITY PIN for every inline-origin parity fixture.
+///
+/// The parity cells exist to exercise the NON-canonical binding path. If
+/// `canonical_origin` ever widens to accept these shapes, they would silently
+/// start hitting the canonical early-return and keep passing — testing nothing
+/// they were written to test. SPEC §4 offered this assertion as "optional" and
+/// it was never added; the 2026-08-03 audit confirmed the fixtures do classify
+/// non-canonical today but that nothing pinned it.
+#[test]
+fn parity_inline_origin_fixtures_are_non_canonical() {
+    for desc in [
+        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/0'/2']@1)))",
+        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk([b8688df1/48'/0'/7'/2']@1)))",
+        "wsh(andor(pkh([73c5da0a/48'/0'/0'/2']@0),after(12000000),pk(@1)))",
+        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/0'/1']@1))))",
+        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk([b8688df1/48'/0'/7'/1']@1))))",
+        "sh(wsh(andor(pkh([73c5da0a/48'/0'/0'/1']@0),after(12000000),pk(@1))))",
+    ] {
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["gui-schema", "--classify-descriptor", desc])
+            .assert()
+            .success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        assert!(
+            stdout.trim() == "non-canonical",
+            "parity fixture must stay NON-canonical or the parity cells go vacuous \
+             (got {:?}): {desc}",
+            stdout.trim()
+        );
+    }
 }

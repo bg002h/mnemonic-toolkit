@@ -302,6 +302,35 @@ let _defaulted = crate::cmd::bundle::bind_descriptor_mode_paths(
 
 Downstream consumers of `descriptor_resolved.path_decl.paths` (the per-slot binding loop `verify_bundle.rs:1512+`, the propagation `verify_bundle.rs:1748`) are unchanged. `DescriptorBindMode::Verify` ⇒ no row-19 refusal, so verify's accept-set is byte-preserved. The gate now runs after the probe in verify too (verify *already* ran the gate after `validate_slot_set` but BEFORE the probe at `1420`; this is the gate-vs-probe re-order of §3.2 — same disposition. Verify carries NO §4.12.g account refusal and NO §6.6-row-4 refusal, so the gate-vs-account / gate-vs-row4 re-orders are emit-side ONLY and do not apply here).
 
+### 3.3b Doubly-malformed input — the VERIFY-side exit-code re-order (recorded 2026-08-03)
+
+§3.2 enumerates the emit-side disposition flips this dedup causes on
+*doubly*-malformed input ("both exit 2"). §3.3 said the verify side has "the
+same disposition" — that is **not exactly true**, and the difference was never
+written down. A 2026-08-03 post-implementation audit found it and probed it
+live.
+
+On the VERIFY side, an over-`n` `--slot` vec combined with a probe-failing
+descriptor now surfaces as `DescriptorReparseFailed` (**exit 4**) where it
+previously surfaced as `DescriptorParse` (**exit 2**) — because the coverage
+gate moved inside the shared fn and the canonicity probe now runs first. Emit
+keeps exit 2. Verified: identical input yields verify → 4, emit → 2.
+
+**This is deliberate-by-omission, not a defect, and is NOT being changed.** The
+`lex` / `resolve` / `probe` → `DescriptorReparseFailed` mapping is
+pre-existing and consistent across all three verify sites; the dedup only
+altered *which* malformed inputs reach it. Flipping it now would be a
+user-visible exit-code change on a funds surface, breaking any consumer that
+already branches on verify-bundle's exit 4.
+
+**Reader beware of one asymmetry it creates:** exit 4 is this project's
+BundleMismatch / VERIFY-ME tier, and `DescriptorReparseFailed`'s own doc scopes
+it to "descriptor-derived bundle's preserved descriptor string fails to
+round-trip". A *user-typed* malformed `--descriptor` therefore reports in the
+"your bundle may be corrupt" tier rather than the "your input is bad" tier.
+Every path still refuses (exit ≠ 0), so no wrong result is produced. If the
+tiering is ever revisited, this is the case to revisit.
+
 ### 3.4 Imports
 
 - `bundle.rs`: `bind_descriptor_mode_paths` uses `DerivationPath`, `OriginPath`, `PathDeclPaths`, `SlotSubkey`, `Tag` — all already imported or `use`d locally in the body (transcribe the `use` lines from the current inline block). `DescriptorBindMode` is a new `pub(crate) enum` in `bundle.rs`.

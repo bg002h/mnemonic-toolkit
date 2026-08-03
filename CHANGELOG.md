@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.96.0] — 2026-08-03
+
+**SemVer-MINOR, test+docs — closes the three audit Minors v0.95.0 deferred. No production code changed.**
+
+- **[test] `parity_sh_wsh_round_trips` now covers all FIVE shapes**, as SPEC §4(2) requires ("every (root × shape) combination the root's arity supports"). It shipped with two — all-elided and slot-override. Added shared-explicit, divergent and mixed at the sh-wsh BIP-48 leaf `1'`. The parity harness is the emit↔verify drift oracle, so more shapes is more drift it can catch.
+- **[test] `parity_inline_origin_fixtures_are_non_canonical`** pins what SPEC §4 offered as an optional assertion and nobody added. Every inline-origin parity fixture is asserted `non-canonical` via `gui-schema --classify-descriptor`. Without it, a future widening of `canonical_origin` would silently route those fixtures into the canonical early-return — the parity cells would keep passing while testing nothing they were written to test.
+- **[docs] SPEC_wave4_L1 §3.3b records the VERIFY-side exit-code re-order.** §3.2 enumerated the emit-side flips; §3.3 claimed the verify side had "the same disposition", which is not exactly true. On doubly-malformed input (over-`n` slot vec + probe-failing descriptor) verify now yields `DescriptorReparseFailed` (exit 4) where it previously yielded `DescriptorParse` (exit 2); emit keeps exit 2. Probed live.
+
+### Migration / dispositions
+
+- **The exit-code asymmetry is recorded, deliberately NOT changed.** The `lex`/`resolve`/`probe` → `DescriptorReparseFailed` mapping is pre-existing and consistent across all three verify sites; the dedup only altered which inputs reach it. Flipping it would be a user-visible exit-code change on a funds surface, breaking consumers that already branch on verify-bundle's exit 4. The spec note flags the one asymmetry worth revisiting if the tiering is ever reopened: exit 4 is the BundleMismatch/VERIFY-ME tier, so a user-typed malformed `--descriptor` reports in the "your bundle may be corrupt" tier rather than "your input is bad". Every path still refuses; no wrong result is produced.
+
 ## mnemonic-toolkit [0.95.0] — 2026-08-03
 
 **SemVer-MINOR — folds the findings of the fable post-implementation audits of the shipped Wave-3 and Wave-4 specs. Both audits reproduced the SAME two failure shapes the Wave-2 audit found: a site survey that missed a live same-class site, and a guard the spec declared optional that was therefore never written.**
