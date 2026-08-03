@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.94.0] — 2026-08-03
+
+**SemVer-MINOR, secret-hygiene — erases the last two production `ms_codec::Payload` husks the Wave-2 audit flagged as residue. No user-visible behaviour change.**
+
+- **[secret-hygiene] `repair` now scrubs the decoded ms1 husk it never consumes.** `repair` wants only the CORRECTION list, and bound the decoded payload to `_payload` / `_p` — dropping real BIP-39 master entropy into freed heap un-erased (`repair.rs` `repair_via_ms_codec` + the candidate `validate` walker). New `scrub_payload_husk()` moves the bytes into a `Zeroizing` and drops it; `ref other` covers `Payload`'s `#[non_exhaustive]` variants. The walker site is the wider exposure — it decodes a trial string per candidate.
+- **[test] lint row anchored on BEHAVIOUR, not the signature.** The row first anchored `fn scrub_payload_husk(payload: ms_codec::Payload)`, which would have stayed green if the body were gutted — the same false-PASS class the audit had just found in wave2 T4. Re-anchored on `ms_codec::Payload::Entr(b) => zeroize::Zeroizing::new(b)` and mutation-proven: replacing the body with `drop(payload)` (signature intact, still compiles) turns it RED. Row-count range widened 66→72, deliberately, per that cell's own instruction.
+
+### Migration / dispositions
+
+- **Sweep completeness:** all production `ms_codec::decode*` sites were re-checked. `wallet_import/overlay.rs` destructures in the match pattern (`Payload::Entr(bytes)`), so it already moves correctly and needed no change. Remaining bare husks are test-module only (`synthesize.rs`, `repair.rs` tests), consistent with the lint harness's TEST_ONLY tier.
+- Closes the residue noted in v0.93.0's dispositions.
+
 ## mnemonic-toolkit [0.93.0] — 2026-08-03
 
 **SemVer-MINOR, secret-hygiene — closes an ms1-decode site the Wave-2 sweep never covered: `xpub-search` seed intake left real master-seed entropy in an un-scrubbed heap husk. Found by a post-implementation audit of the shipped Wave-2 spec, not by new work. No user-visible behaviour change.**

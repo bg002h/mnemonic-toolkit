@@ -1261,13 +1261,35 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
 /// `(Tag, Payload)` internally; this helper discards both since
 /// `repair_card`'s public contract is "corrected string + correction
 /// details" only.
+/// Erase a decoded `ms_codec::Payload` husk this module never consumes.
+///
+/// `repair` only wants the CORRECTION list — the decoded entropy is incidental.
+/// But ms-codec deliberately does not zeroize-wrap `Payload` ("Callers MUST wrap
+/// the byte buffer at the use site", `ms-codec payload.rs:19-22`), so binding it
+/// to `_payload` and letting it fall out of scope drops real BIP-39 master
+/// entropy into freed heap un-erased. Moving the bytes into a `Zeroizing` and
+/// dropping that erases them. The `ref other` arm covers `Payload`'s
+/// `#[non_exhaustive]` future variants, matching the pattern used at the
+/// consuming sites (`cmd/bundle.rs`, `cmd/xpub_search/seed_intake.rs`).
+///
+/// Found by the 2026-08-03 post-implementation audit of
+/// `SPEC_wave2_secret_hygiene_toolkit.md` (residue class of wave2 T2).
+fn scrub_payload_husk(payload: ms_codec::Payload) {
+    let _scrubbed: zeroize::Zeroizing<Vec<u8>> = match payload {
+        ms_codec::Payload::Entr(b) => zeroize::Zeroizing::new(b),
+        ms_codec::Payload::Mnem { entropy, .. } => zeroize::Zeroizing::new(entropy),
+        ref other => zeroize::Zeroizing::new(other.as_bytes().to_vec()),
+    };
+}
+
 fn repair_via_ms_codec(
     chunk: &str,
     chunk_index: usize,
 ) -> Result<Option<RepairDetail>, RepairError> {
     use ms_codec::Error as MsErr;
     match ms_codec::decode_with_correction(chunk) {
-        Ok((_tag, _payload, corrections)) => {
+        Ok((_tag, payload, corrections)) => {
+            scrub_payload_husk(payload);
             if corrections.is_empty() {
                 return Ok(None);
             }
@@ -1338,7 +1360,11 @@ impl IndelOracle for Ms1IndelOracle {
         e_subst: usize,
     ) -> Option<(String, usize)> {
         match ms_codec::decode_with_correction(cand) {
-            Ok((_t, _p, corrections)) => {
+            Ok((_t, payload, corrections)) => {
+                // Same husk-scrub as `repair_via_ms_codec` — this candidate
+                // walker decodes many trial strings, so an un-erased husk per
+                // trial would be the widest exposure of the class.
+                scrub_payload_husk(payload);
                 let off = corrections
                     .iter()
                     .filter(|c| !allowed.contains(&c.position))

@@ -192,6 +192,15 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/xpub_search/seed_intake.rs",
         evidence: &["ms_codec::Payload::Entr(b) => Zeroizing::new(b)"],
     },
+    // wave2 T2 residue (2026-08-03): `repair` decodes ms1 cards purely for the
+    // CORRECTION list and previously dropped the decoded `Payload` husk
+    // un-erased (`_payload` / `_p`). The candidate walker does this per trial
+    // string, so it was the widest exposure of the class.
+    ZeroizeRow {
+        label: "repair scrubs the discarded ms1 Payload husk — wave2 T2 residue",
+        source_file: "src/repair.rs",
+        evidence: &["ms_codec::Payload::Entr(b) => zeroize::Zeroizing::new(b)"],
+    },
     // wave2 T4 (v0.71.0) — GUARD ADDED 2026-08-03. The spec declared this row
     // OPTIONAL / "NOT gate-required", and the audit mutation-proved the
     // consequence: reverting BOTH stdin-reader wraps left all 18 cells of T4's
@@ -487,8 +496,8 @@ fn canonical_zeroize_list_has_expected_row_count() {
     // authoritative check.
     let n = ZEROIZE_ROWS.len();
     assert!(
-        (18..=66).contains(&n),
-        "ZEROIZE_ROWS row count = {n}; expected 18..=66. The upper bound carries headroom \
+        (18..=72).contains(&n),
+        "ZEROIZE_ROWS row count = {n}; expected 18..=72. The upper bound carries headroom \
          above the current canonical-row count for near-term secret-site additions — widen \
          it deliberately when a cycle exceeds it. This count is a coarse drift tripwire; the \
          per-row evidence test below is authoritative. Survey §1 toolkit table is canonical."
