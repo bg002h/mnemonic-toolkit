@@ -382,6 +382,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **What:** a PTY/temp-file race on the macos runner — the spawned subprocess's bundle-json write hadn't completed (or the temp path collided) when the assertion read it. Class: macos PTY-simulation + temp-file timing under load. (Sibling of the GUI `runner-tracing-test-flaky-under-parallel-load`.)
 - **Fix:** serialize the cell / use a unique temp path / wait-for-non-empty before parse, so a green push can't intermittently red on macos.
 - **Tier:** test-flakiness (CI hygiene).
+- **Status:** ✓ **RESOLVED (`438de943`, NO-BUMP)** — commit titled "fix cell-27 shared-temp race". The entry's proposed fix ("use a unique temp path") is live: `tests/cli_auto_repair.rs::write_temp_json` builds each path from `std::process::id()` + a `TMP_SEQ` `AtomicU64`, so no two cells can collide. Verified 2026-08-03 by the shipped-but-unflipped sweep; this entry had NO status line at all.
 
 ### `bundle-accepts-sortedmulti-in-combinator-restore-cannot` — round-trip asymmetry found by the Cycle-A property test
 
@@ -520,6 +521,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix:** (1) classified the 3 names in `flag_is_secret` (now 14); (2) three non-circular §7b cells in `cli_gui_schema_v5_extensions.rs` — `heuristic_secret_name_net` (vocabulary net over value-bearing kinds, kind-aware exclusions, audited-`EXEMPT` escape hatch empty today), `stdin_toggle_secrecy_matches_base_flag` (8 toggles / 25 instances; orphan toggles fail loudly), `secret_flag_name_set_matches_frozen_literal` (frozen 14-name set-equality) — all TDD-red pre-fix on exactly the 3 names; (3) the tautological cell kept + renamed `secret_bit_plumbing_matches_predicate` (it IS a valid plumbing check); (4) 3 new `--phrase` axis-1 routes in `lint_argv_secret_flags` with discriminating needles (`pub phrase_stdin`/`fn phrase_stdin` — bare forms are `passphrase_stdin` suffixes, vacuous) + boundary prose rewritten (residual: novel vocabulary outside the net).
 - **Companion:** `gui-secret-mirror-phrase-ms1-stdin` (below) — GUI mirrors flip at next pin bump (toolkit-side half of audit I4).
 - **Tier:** resolved.
+- **Status:** ✓ **RESOLVED (v0.53.1, 2026-06-10)** — recorded in the `audit-2026-06-10-backlog` index (finding I3) but never written onto this promoted entry. Delivered three non-circular §7b gate cells + `--phrase`/`--phrase-stdin`/`--ms1-stdin` secret-classified. Status line added 2026-08-03 by the shipped-but-unflipped sweep; no new work.
 
 ### `gui-secret-mirror-phrase-ms1-stdin` — GUI must mirror the 3 newly-secret flags at its next toolkit pin bump (companion, RESOLVED)
 
@@ -558,6 +560,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Companions (mirrored):** `mnemonic-secret/design/FOLLOWUPS.md::ms1-envelope-uppercase-bip173` — **SHIPPED ms-codec v0.4.2 (2026-06-10)**, incl. a BONUS security fix its R0 found (uniform-uppercase secret-at-S bypassed the combine guard → combine RETURNED the secret; restored + red-first pinned). The toolkit pin bump (blocked on crates.io publish of ms-codec 0.4.1+0.4.2) must **INVERT the staged characterization cells** in `cli_hrp_case_insensitive.rs` (they pin the WrongHrp/repair-marker ERRORS — a bare bump turns them RED; nothing flips green automatically). Spawned here: `friendly-ms1-invalidchecksum-echoes-full-input` (below).
 - **ms1 LEG NOW CLOSED (2026-06-10, toolkit v0.53.5):** ms-codec 0.4.2 published + toolkit pin bumped → uppercase ms1 decodes end-to-end (was the one leg v0.53.3 couldn't close toolkit-side). The staged characterization cells were inverted.
 - **Tier:** resolved.
+- **Status:** ✓ **RESOLVED (v0.53.3, 2026-06-10)** — recorded in the `audit-2026-06-10-backlog` index (finding M11) but never written onto this promoted entry. Status line added 2026-08-03 by the shipped-but-unflipped sweep; no new work.
 
 ### `friendly-ms1-invalidchecksum-echoes-full-input` — friendly.rs Debug-prints codex32 InvalidChecksum{string} = the full near-secret on stderr
 
