@@ -77,3 +77,58 @@ fn bundle_md1_card_on_descriptor_clear_refusal() {
         "must NOT be classify_descriptor_form's keyless msg: {stderr:?}"
     );
 }
+
+/// `wave4-L2` site sweep (2026-08-03 post-implementation audit): the L2 fix
+/// wired `bundle` and `export-wallet` but MISSED `verify-bundle --descriptor`,
+/// the wallet-VERIFICATION surface — the one where pasting the engraved card is
+/// the natural mistake. It answered with classify's "keyless script
+/// (hashlock/timelock only)" message and pointed at `export-wallet
+/// --descriptor`, which refuses the same card, sending the user in a circle.
+#[test]
+fn verify_bundle_md1_card_on_descriptor_clear_refusal() {
+    let md1 = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    let mk1 = "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
+    let out = bin()
+        .args([
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--mk1",
+            mk1,
+            "--md1",
+            md1,
+            "--descriptor",
+            md1,
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("md1 descriptor-mnemonic CARD"),
+        "stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("keyless script"),
+        "must NOT be classify_descriptor_form's keyless msg: {stderr:?}"
+    );
+}
+
+/// Same sweep, fourth surface: `compare-cost --descriptor` previously echoed the
+/// entire card back inside an opaque `unrecognized name '<card>'` parse error.
+#[test]
+fn compare_cost_md1_card_on_descriptor_clear_refusal() {
+    let md1 = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+    let out = bin()
+        .args(["compare-cost", "--descriptor", md1])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("md1 descriptor-mnemonic CARD"),
+        "stderr: {stderr:?}"
+    );
+    assert!(
+        !stderr.contains("unrecognized name"),
+        "must NOT echo the card in an opaque parse error: {stderr:?}"
+    );
+}

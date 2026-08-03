@@ -145,7 +145,7 @@ jobs:
               else
                 echo "  OK $f:$lineno: $tag"
               fi
-            done < <(grep -nE 'cargo install --git +https?://[^ ]+ +--tag +[^ ]+' "$f" || true)
+            done < <(grep -nE 'cargo install( +--[a-zA-Z-]+)* +--git +https?://[^ ]+ +--tag +[^ ]+' "$f" || true)
           done
 
           if [ "$FAIL" -ne 0 ]; then

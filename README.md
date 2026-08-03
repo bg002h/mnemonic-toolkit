@@ -10,7 +10,7 @@ Top-level integration crate for the **m-format constellation** of Bitcoin self-c
 | **mk1** | [`mk-codec`](https://github.com/bg002h/mnemonic-key) | xpub + origin (master fingerprint + BIP path) |
 | **md1** | [`md-codec`](https://github.com/bg002h/descriptor-mnemonic) | wallet policy (template + bound xpub) |
 
-<!-- toolkit-version: 0.94.0 -->
+<!-- toolkit-version: 0.95.0 -->
 Status: the `mnemonic` CLI (see [CHANGELOG.md](CHANGELOG.md) for the current release; subcommands grouped under [Subcommands](#subcommands)) spans seed/key/descriptor handling across the m-format constellation: 3-card bundle synthesis + round-trip verification; single-sig (BIP-44/49/84/86) + multisig + BIP-388 descriptors + multi-leaf taproot + multi-source full multisig; guided descriptor construction (`build-descriptor`: a validated policy-tree → wsh descriptor engine with 5 archetype presets and a reviewed `--allow` sanity opt-out); cross-format wallet import/export (Bitcoin Core, BIP-388, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum); watch-only restore documents (single-sig from a seed + passphrase, fingerprint-gated; multisig from the shared md1 card alone, incl. taproot NUMS); seed/key conversion (BIP-39 / BIP-32 / WIF / ms1 / mk1 / BIP-38 / Casascius mini-key / Electrum native seed); batch watch-only address listing; backup splitting (Coldcard seed-XOR, SLIP-39, BIP-93 codex32 K-of-N shares via `ms-shares`, SeedQR); BIP-85 child derivation; BIP-352 silent-payment receiver addresses; nostr key wrapping; legacy + BIP-322 message verification; address decoding; and BCH error-correction / inspection. Mainnet / testnet / signet / regtest. Secret-input hygiene throughout (zeroize + `mlock` + argv-leak advisories + `*-stdin` / `@env:` channels).
 
 For the authoritative, always-current CLI reference see the **[end-user manual](docs/manual/)** (single source of truth, lint-gated against the live `--help` surface); for the full release history see **[CHANGELOG.md](CHANGELOG.md)**.
@@ -32,8 +32,9 @@ installs each component via `cargo install --locked --git --tag` into
 files touched. Requires `cargo` + `git` + a C toolchain. The CLIs build on
 `rustc` ≥ 1.85 (the toolkit MSRV); the `mnemonic-gui` overlay currently needs
 **`rustc` ≥ 1.88** (its dependencies' MSRV). On an older toolchain the CLI
-components install fine but the GUI step fails — pass `--no-gui` or upgrade
-`rustc`.
+components install fine and the installer **auto-skips the GUI with a warning**
+(the run still exits 0) — upgrade `rustc` and re-run, or pass `--no-gui` to
+make the omission explicit.
 
 To install just this toolkit's `mnemonic` binary (no constellation
 siblings), use the installer's `--only` flag (it carries the

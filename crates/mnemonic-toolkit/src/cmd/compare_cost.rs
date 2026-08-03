@@ -72,7 +72,14 @@ pub fn run<R: Read, W: Write, E: Write>(
 ) -> Result<(), ToolkitError> {
     let input = match (&args.miniscript, &args.descriptor) {
         (Some(m), None) => InputForm::Miniscript(m.clone()),
-        (None, Some(d)) => InputForm::Descriptor(d.clone()),
+        (None, Some(d)) => {
+            // Fourth `--descriptor` surface (wave4-L2 sweep covered bundle +
+            // export-wallet; verify-bundle and this were missed — 2026-08-03
+            // audit). Without it an md1 card produces an opaque miniscript
+            // parse error that ECHOES THE WHOLE CARD back at the user.
+            crate::wallet_import::pipeline::reject_md1_card(d, "compare-cost --descriptor")?;
+            InputForm::Descriptor(d.clone())
+        }
         (Some(_), Some(_)) => {
             // Should be unreachable: clap's `conflicts_with` rejects this at parse-time.
             return Err(ToolkitError::BadInput(

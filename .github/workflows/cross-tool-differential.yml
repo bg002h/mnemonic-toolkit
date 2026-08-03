@@ -40,7 +40,9 @@ jobs:
         # gate compares the toolkit walker against THIS md-cli's walker, so a
         # future md-cli tag must not silently move the comparison baseline.
         # `--features cli-compiler` matches scripts/install.sh:35's pin. PIN
-        # AT md-cli v0.9.2: this is wire-neutral for the differential SIGNAL —
+        # AT md-cli v0.9.2 (the proof point; the PIN has since advanced — read it
+        # from the pin line below, not from this comment): wire-neutral for the
+        # differential SIGNAL —
         # the toolkit and md-cli walkers emit byte-identical
         # wallet_policy_id / wallet_descriptor_template_id across the corpus
         # (proven at v0.9.2: all entries Match). The behavioral delta v0.9.2

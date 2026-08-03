@@ -44,7 +44,7 @@ jobs:
   # invariant (see the "g6 invariant" job below): it must stay byte-equal
   # (modulo comments) to `crates/ms-cli/src/mlock.rs` in mnemonic-secret, and g6
   # tracks the canonical ms-cli tag read DYNAMICALLY from scripts/install.sh
-  # (field 3; currently `ms-cli-v0.13.2`), whose copy is
+  # (field 3; currently `ms-cli-v0.14.1`), whose copy is
   # NOT 1.95.0-formatted. So mlock.rs's format is pinned to that tag, NOT to
   # this formatter — a bare `cargo fmt --all` would re-wrap it and break g6.
   # The exemption is durably recorded in design/FOLLOWUPS.md (mlock-rs-fmt-exempt).
@@ -157,6 +157,28 @@ jobs:
             ulimit -l 65536 || true
           fi
           cargo test -p mnemonic-toolkit --lib mlock::tests::g2_4 -- --include-ignored
+
+  install-sh-harnesses:
+    # scripts/install.sh carries two behavioural guards with committed test
+    # harnesses that NOTHING RAN. A 2026-08-03 post-implementation audit deleted
+    # the GUI rustc-MSRV guard outright and every check in the repo stayed green
+    # — the harness existed but was never CI-wired, so it could not catch it.
+    # install.sh gains man-page and pin-bump churn every cycle, which is exactly
+    # the drift these two guard.
+    name: "install.sh harnesses (man-step + MSRV guard)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+      - name: Build mnemonic (man-step canary needs a real binary)
+        run: cargo build --bin mnemonic
+      - name: MSRV-guard harness
+        # Self-contained: stubs rustc/cargo on PATH, asserts warn+skip+exit 0 on
+        # an old toolchain and no spurious warning on a new one. No network.
+        run: sh scripts/install-msrv-guard.test.sh
+      - name: man-step harness
+        run: sh scripts/install-man-step.test.sh
 
   test-release-mlock-einval:
     # Cycle B Phase 3a — release-build coverage for G2.3 EINVAL soft-fail.

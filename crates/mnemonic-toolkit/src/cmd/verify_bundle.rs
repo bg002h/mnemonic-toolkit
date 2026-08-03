@@ -1376,6 +1376,18 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         _ => unreachable!("clap conflicts_with rules out both"),
     };
 
+    // md1-card pre-check — the THIRD `--descriptor` surface, missed by the
+    // wave4-L2 sweep that wired `bundle` and `export-wallet` (found by the
+    // 2026-08-03 post-implementation audit). Without it an md1 card falls into
+    // `classify_descriptor_form`'s keyless arm and is told it is a "keyless
+    // script (hashlock/timelock only)" and pointed at `export-wallet
+    // --descriptor` — which then refuses the same card with the CORRECT md1
+    // message, sending the user in a circle. Pasting the engraved card into the
+    // verification surface is the natural mistake, so this is where the honest
+    // message matters most. Runs after `--descriptor-file` is materialized so it
+    // covers both flags, mirroring `bundle.rs:331`.
+    crate::wallet_import::pipeline::reject_md1_card(&descriptor_str, "verify-bundle --descriptor")?;
+
     // BIP-388 wallet-policy intake (mirror bundle.rs:319): a leading-`{` policy
     // JSON expands to a concrete descriptor BEFORE classify — a raw policy trips
     // BOTH classify's @N and key-regex probes (the v0.49.0 ordering invariant).

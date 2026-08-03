@@ -6,6 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.95.0] — 2026-08-03
+
+**SemVer-MINOR — folds the findings of the fable post-implementation audits of the shipped Wave-3 and Wave-4 specs. Both audits reproduced the SAME two failure shapes the Wave-2 audit found: a site survey that missed a live same-class site, and a guard the spec declared optional that was therefore never written.**
+
+- **[correctness] `verify-bundle --descriptor` / `--descriptor-file` now refuse an md1 card honestly.** The Wave-4 L2 sweep wired `bundle` and `export-wallet` but missed the wallet-VERIFICATION surface — the one where pasting the engraved card is the natural mistake. It answered with `classify_descriptor_form`'s "keyless script (hashlock/timelock only)" message and pointed at `export-wallet --descriptor`, which refuses the same card with the correct md1 message — sending the user in a circle. Input was always refused (exit 2), so this was misleading, never funds-wrong.
+- **[correctness] `compare-cost --descriptor` likewise** — previously an opaque miniscript `unrecognized name '<card>'` that echoed the entire card back.
+- **[test] the GUI rustc-MSRV guard finally has a regression guard.** `scripts/install-msrv-guard.test.sh` stubs `rustc`/`cargo` on PATH and asserts the load-bearing BEHAVIOUR: an old toolchain warns, skips the GUI and still exits 0; a new one does not warn. Mutation-proven — deleting the guard block (the audit's exact scenario) turns it red. Previously the entire block could be deleted with every check in the repo staying green.
+- **[ci] both `install.sh` harnesses are now actually RUN.** New `install-sh-harnesses` job in `rust.yml`. The man-step harness had been committed but referenced by no workflow, so a harness existed and still could not catch anything.
+- **[ci] `sibling-pin-check`'s prose-pin detector widened** to allow flags between `cargo install` and `--git`. It matched only the contiguous form, so `cargo install --locked --git … --tag …` — the exact command `install.sh` runs and the README documents — passed with zero output. No live site escaped, but the next author documenting the real command would have reopened the original silent-drift defect while the FOLLOWUP read `resolved`.
+- **[docs] Wave-3's own table finished.** `SPEC_mnemonic_toolkit_v0_1.md` §6.4.4 rows `InvalidHrp` and `InvalidChar` still lacked the `mk1 ` prefix the code emits — the same divergence class as the row W3-2 fixed, visible at that spec's own SHA. Also refreshed a stale `ms-cli` pin comment in `rust.yml`, marked the differential's `v0.9.2` reference as a historical proof point rather than the live pin, and corrected `README.md`, which still described the pre-guard "GUI step fails" behaviour that the MSRV guard replaced with an auto-skip.
+
+### Migration / dispositions
+
+- **Wave-4 L1 (`verify-bundle` dedup) audited CLEAN** — the funds-adjacent one. Every deleted pre-dedup block was compared line-by-line against the shared helper and five compiling mutations were run: no lost check, error, advisory, or exit code.
+- Remaining audit Minors, not fixed here: `parity_sh_wsh_round_trips` covers 2 of the spec's stated 5 shapes; the verify-side doubly-malformed exit-code re-order (2→4) shipped un-enumerated; the optional inline-origin non-canonicality assertion was never added.
+
 ## mnemonic-toolkit [0.94.0] — 2026-08-03
 
 **SemVer-MINOR, secret-hygiene — erases the last two production `ms_codec::Payload` husks the Wave-2 audit flagged as residue. No user-visible behaviour change.**
