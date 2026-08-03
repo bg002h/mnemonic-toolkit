@@ -43,7 +43,7 @@ flush() {
   [ -n "$slug" ] || return 0
   case "$status" in
     open) open_count=$((open_count + 1)) ;;
-    resolved|done) resolved_count=$((resolved_count + 1)); slug=""; status=""; body=(); return 0 ;;
+    resolved|done|shipped|wontfix|fixed) resolved_count=$((resolved_count + 1)); slug=""; status=""; body=(); return 0 ;;
     *) slug=""; status=""; body=(); return 0 ;;
   esac
   # OPEN entry: scan its body for cited artifact paths that exist.
@@ -67,8 +67,13 @@ while IFS= read -r line; do
   fi
   if [ -n "$slug" ]; then
     body+=("$line")
-    if [[ "$line" =~ \*\*Status:\*\*[[:space:]]*\`?([a-zA-Z]+)\`? ]]; then
-      status="${BASH_REMATCH[1]}"
+    # Capture the first ALPHABETIC run after `**Status:**`, skipping decoration the
+    # registry conventionally puts first (✓ ✅ ✗ ** backticks spaces). The old
+    # pattern matched only a bare/backticked word, so the widespread
+    # `**Status:** ✓ **RESOLVED (vX.Y.Z)**` form parsed as NOTHING and those
+    # entries counted as neither open nor resolved — a silent undercount.
+    if [[ "$line" =~ \*\*Status:\*\*[^a-zA-Z]*([a-zA-Z]+) ]]; then
+      status="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
     fi
   fi
 done < "$FOLLOWUPS"

@@ -291,6 +291,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Resolution:** new `import-wallet --format descriptor` (`wallet_import/descriptor.rs`, cloning the specter parser flow): `strip_comments` (leading `#`-comment + blank-line strip; require exactly one descriptor line) → tolerant `verify_checksum` (validate-if-present, mirror `bundle --descriptor`; bad checksum refused) → `concrete_keys_to_placeholders` → `parse_descriptor` → origin slots → watch-only `ParsedImport`. Subsumes green's 3-line export + `--format descriptor`'s bare line + any hand-written/foreign commented descriptor. **Singlesig AND multisig** (a descriptor carries threshold + cosigners — strictly more general than green-export, which is singlesig-only). **Explicit-only** (`sniff → false`, absent from the sniff votes; `--format descriptor` REQUIRED — a bare descriptor is too generic to auto-sniff, mirroring encrypted-BSMS). `ImportProvenance::Descriptor` UNIT variant (no source metadata; all 8 accessors return `None`). The C1 unrestorable + older() advisories fire on the import for free. MINOR. Paired GUI v0.42.0 (`IMPORT_WALLET_FORMATS` += `descriptor`; pin v0.56.0 → v0.58.0). Manual `41-mnemonic.md` `--format` row (backfilled 2/8 → 9/9) + `45-foreign-formats.md` `## Commented descriptor` section. Plan + R0 GREEN ×3: `design/PLAN_C5_import_format_descriptor_2026-06-17.md`, `design/agent-reports/c5-import-format-descriptor-plan-r0-round{1,2,3}-review.md`. Tests: `tests/cli_import_wallet_descriptor.rs` (8 cells) + module unit (5).
 - **Tier:** resolved (Tier-2 C5).
 - **Companion:** `mnemonic-gui` schema dropdown-value + pin bump (paired-PR; schema_mirror gates flag-NAMES not values → discipline-enforced).
+- **Status:** resolved ✓ (v0.58.0) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `bundle-keyless-descriptor-honest-refusal` — ✓ RESOLVED (2026-06-17, NO-BUMP) — honest message for a keyless descriptor at bundle --descriptor
 
@@ -300,6 +301,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Note:** "allow keyless bundling" was NOT pursued — it would require a whole template-only `BundleMode` (no mk1/ms1, fixed-address restore+derive) for a backup artifact that is just public info; `export-wallet --descriptor` is the correct door.
 - **Tier:** resolved (Tier-3 C4).
 - **Companion:** none (toolkit-local; alongside shipped `import-wallet-format-descriptor` C5).
+- **Status:** resolved ✓ — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `convert-composite-bip38-empty-passphrase-refusal` — ✓ RESOLVED (v0.65.1, 2026-06-21) — refuse composite (seedqr|phrase|entropy)→bip38 on unset --bip38-passphrase
 
@@ -308,6 +310,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix (shipped):** POSITION-BASED fail-closed refusal — the sub-arm's position inside `Seedqr | Phrase | Entropy =>` structurally proves all three sources incl. Seedqr (no `from`-set list that could drop Seedqr). When the in-scope `bip38_passphrase: Option<&str>` param is `None`, return `ConvertRefusal` (exit 2) before the empty encrypt. Predicate tests `.is_none()` (NOT `.is_empty()`), so the deliberate `--bip38-passphrase ""` (Some("")) path STILL encrypts. Reuses `ConvertRefusal` — no new variant/flag, no GUI-schema / manual-flag-table lockstep. Direct `(wif↔bip38)` edges (separate arms) keep their documented `--passphrase` fallback. Manual prose (`56-bip39-vs-bip38-pass.md` edge table generalized to "REFUSED if unset" + new `(seedqr, bip38)` row; `41-mnemonic.md` `--bip38-passphrase` row note) shipped same commit. Tests: `cli_convert_bip38.rs` — RED phrase/entropy/SEEDQR refusals + GREEN explicit-empty (phrase + seedqr) + real-passphrase + direct-edge regression.
 - **Tier:** resolved (cycle-11b L21).
 - **Companion:** none (toolkit-local).
+- **Status:** resolved ✓ (v0.65.1) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `verify-bundle-bundle-rs-descriptor-mode-dedup` — ✓ RESOLVED (Wave-4 L1, toolkit NO-BUMP) — S-VERIFY dedup of the bundle.rs ↔ verify_bundle.rs descriptor-mode binding (carries cycle-11b L24's standalone gate)
 
@@ -325,6 +328,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix (shipped):** ADDITIVE position-aware anchors `(?:tr|pk|pk_k|pk_h)\([0-9a-fA-F]{64}` — match a 64-hex token only in a taproot KEY position (`tr(` internal key, or `pk(`/`pk_k(`/`pk_h(` argument), NOT as a bare token. So `sha256(`/`hash256(`/`ripemd160(`/`hash160(` 64-hex args stay keyless and the `\b0[23]…{64}\b` 66-hex compressed-key alternation is unchanged. Re-routes the x-only case to "must carry a key origin"; both arms still `Err` (message-only). Chose option (a) targeted-context-match (NOT structural parse (b)) — sufficient for a PATCH cosmetic fix, no parse dependency. Tests: `pipeline.rs` units — x-only-in-key-position detected + origin-less x-only → key-origin message; regressions (66-hex compressed-key-is-keyed AND sha256/ripemd160-hash-literal-is-keyless) stay GREEN.
 - **Tier:** resolved (cycle-11b L25).
 - **Companion:** none (toolkit-local).
+- **Status:** resolved ✓ (v0.65.1) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `install-sh-sibling-pins-stale-vs-flag-bearing-clis` — bump install.sh canonical sibling pins to the P1/P2/P3 flag-bearing releases
 
@@ -373,6 +377,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **Fix (SHIPPED v0.55.0):** the TOOLKIT adopted SPEC §5.1 — dropped the `tap_context` gate so `Check(PkK|PkH)` collapses to bare in non-tap too, inverted `walk_check_kept_in_non_tap_context` (→ `walk_check_collapsed_in_non_tap`); recon confirmed no countervailing SPEC reason (the gate was an unexamined v0.3.0-A.4 port artifact). The Cycle-D harness's `wsh-pk`/`wsh-pkh`/`wsh-and_v`/`wsh-or_d` entries flipped `Verdict::Diverge → Match`. NOT "fix md-cli", NOT "define canonicity" (already defined). See the Resolution line above.
 - **Companion:** descriptor-mnemonic `design/FOLLOWUPS.md` (this slug, the conformant side — marked resolved, the toolkit conformed) + a cross-reference on the existing related `v2-design-questions` item 12 ("Walker context-dependent `Check(PkK)` mangling") at :562.
 - **Tier:** ✓ RESOLVED v0.55.0 (was: deferred wire-canonicity / interop hazard; surfaced + gated by Cycle-D).
+- **Status:** resolved ✓ (v0.55.0) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `cell-27-verify-bundle-auto-fire-tty-flaky-on-macos` — ✓ RESOLVED (2026-06-11, NO-BUMP)
 
@@ -396,6 +401,7 @@ Single source of truth for items that surfaced during a review or implementation
 
 - **Surfaced:** 2026-06-11, the 3-agent backup→restore fragment review (`design/agent-reports/fragment-backup-restore-review-2026-06-11.md`). CRITICAL funds-safety: `restore --md1` SILENTLY reconstructed a *different* wallet for general `wsh`/`sh(wsh)` policies whose keys sit inside `multi()` — `wsh(and_v(v:multi(2,…),older(4032)))` → `wsh(multi(2,…))`, the timelock GONE, exit 0, false "verified" banner, wrong importable payload.
 - **Resolution:** the general arm now keeps the faithful `to_miniscript_descriptor` output (via a `translate_pk` multipath/network pass) instead of collapsing it; structural `plain_template_from_tree` discriminator preserves the plain/taproot paths byte-for-byte (13+12 goldens green). `wallet_type: "miniscript-policy"`, null top-level `threshold`. SPEC `design/SPEC_faithful_general_policy_restore.md`; R0 ×3 GREEN (`faithful-general-policy-restore-r0-round{1,2,3}-review.md`). Tests `tests/cli_restore_multisig_general.rs` (RED-proven). `cmd/restore.rs::{faithful_multisig_descriptor, plain_template_from_tree, ReconstructTranslator}`.
+- **Status:** resolved ✓ (v0.54.0) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `restore-md1-per-key-use-site-and-hardened-wildcard` — restore refuses two use-site shapes it can't yet render faithfully
 
@@ -425,12 +431,14 @@ Single source of truth for items that surfaced during a review or implementation
 - **Where:** descriptor-mnemonic `crates/md-codec/src/to_miniscript.rs::node_to_miniscript` (`Tag::Check`/`PkK`/`PkH` arms ~:290-307). Companion: `mnemonic-toolkit` `cmd/restore.rs::faithful_multisig_descriptor` (surfaces the clear refusal naming this slug).
 - **Fix:** A1 — `Tag::Check` over a bare `PkK/PkH` returns the child directly (Check-idempotence, mirrors md-cli `format/text.rs:363-385`); A2 — thread `want_k` to render bare keys at type-K positions (closes `Check(or_i(pk_k,pk_k))` too, ~25 LOC). Both strictly error→success. md-codec PATCH `0.35.1` (renderer-tolerance) + md-cli exact-pin lockstep + toolkit `cargo update -p md-codec`. **Companion entry to file in descriptor-mnemonic.** PART 2 of the long-term restore fix.
 - **Tier:** next-cycle (cross-repo; crates.io publish).
+- **Status:** resolved ✓ (0.35.1 + toolkit v0.54.1) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `export-wallet-from-import-json-template-collapse` (C2) — ✓ RESOLVED (v0.54.2, 2026-06-11) — was: same silent collapse on a second door
 
 - **Surfaced:** 2026-06-11, the backup→restore review. `export-wallet --from-import-json … --format <template-requiring>` collapses a general descriptor via the same `template_from_descriptor` `Wsh(_) => WshMulti` (`export_wallet.rs` `--from-import-json` path) → wrong/partial payload for a general-policy import.
 - **Fix:** apply the faithful/structural-gate approach (mirror the restore C1 fix) at the `--from-import-json` template re-emit site.
 - **Tier:** next-cycle (same class as C1; separate surface).
+- **Status:** resolved ✓ (v0.54.2) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `bundle-engraves-unrestorable-pk-keyed-cards` — bundle accepts pk-keyed policies restore can't yet reconstruct, no warning
 
@@ -504,6 +512,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **What:** for a user with an already-deployed, already-known-masked wallet, the advisory re-fires on **every intake, every surface, every run, with no way to silence it.** A correct one-time warning becomes recurring noise → advisory-blindness / habituation: the user learns to ignore stderr, which dulls the signal for genuinely-new advisories too. The advisory is correct-but-unconditional.
 - **Fix (future option a):** a `--quiet-advisories` flag (or env equivalent) that suppresses the consensus-masked-`older()` advisory (and any future intake advisories of the same class) on the surfaces that emit it. This would be a **MINOR** change (new clap flag) and therefore carries the full lockstep tax: GUI `schema_mirror` (flag-name parity), the `docs/manual/src/40-cli-reference/` flag rows, and the manual `make lint` flag-coverage gate. **Do NOT build this now** — recorded so the trade-off (intentional one-time-correctness vs. recurring-noise) isn't re-discovered from scratch. Whoever picks it up must decide whether suppression is per-invocation (flag), persistent (config/env), or first-N-only.
 - **Tier:** ✗ **WONTFIX (user decision, 2026-06-13).** The advisory is correct and funds-safe; the habituation concern does not justify a `--quiet-advisories` flag and its MINOR-with-full-lockstep tax (GUI `schema_mirror` + manual flag rows + flag-coverage gate). The one-time-correctness value is accepted over the recurring-noise cost; suppression will not be added. (Record retained for the rationale, should the trade-off resurface.)
+- **Status:** wontfix ✗ — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `install-sh-gui-sibling-pin-staleness-ungated` — install.sh's GUI/sibling pins silently drift (no CI gate, unlike the toolkit self-pin)
 
@@ -541,6 +550,7 @@ Single source of truth for items that surfaced during a review or implementation
 
 - **Cross-repo note (2026-06-10):** audit I1 (`stub-formula-divergence`) + I2 (`from-md1-test-tautology`) RESOLVED in **mnemonic-key (mk-cli v0.8.0)**. The divergence was on the **mk** side: `mk --from-md1` computed the `policy_id_stub` from the md1 bytecode hash; the toolkit's `synthesize.rs` (6 sites) already used `compute_wallet_policy_id(...).as_bytes()[..4]` (WalletPolicyId, encoding-stable) and was **confirmed correct — no toolkit change**. mk-cli + the mk SPEC/BIP were aligned to the toolkit's formula. See `mnemonic-key/design/PLAN_stub_formula_walletpolicyid.md`.
 - **Cross-repo note (2026-06-10):** audit I9 (`combine-no-length-validation-panic`) RESOLVED in **mnemonic-secret (ms-codec v0.4.1)** — `dispatch_payload`'s Entr arm now `validate()`s, so a non-standard-length share set returns `Err(PayloadLengthMismatch)` instead of panicking. The toolkit's `mnemonic ms-shares combine` (`cmd/ms_shares.rs:385`) delegates to the same `ms_codec::combine_shares` → inherits the fix once its `ms-codec` pin bumps 0.4.0 → 0.4.1 (tracked: `toolkit-ms-codec-pin-bump-0-4-1-combine-fix` below). No toolkit code change.
+- **Status:** resolved ✓ (v0.53.0) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `audit-minors-m1-m2-m3-m13` — self-check xpub binding + localize narrowing + inspect/repair ms1 argv advisory + orphaned-goldens deletion (RESOLVED v0.53.2)
 
@@ -551,6 +561,7 @@ Single source of truth for items that surfaced during a review or implementation
 - **M13:** see `orphaned-v0_2-md1-vectors-no-harness` (resolved; 25 goldens deleted, module doc corrected).
 - **Plan deviation, recorded (impl-review I-1):** the plan's Phase-3 "file the M14 companion entry in descriptor-mnemonic" was NOT performed as written — recon found M14 is ALREADY tracked there as the audit index line `taptree-leaf-validator-shallow` (`descriptor-mnemonic/design/FOLLOWUPS.md:14`, filed with the constellation backlog before this cycle); a second entry would fragment the record. M14 remains open md-codec-side; no toolkit action.
 - **Tier:** resolved.
+- **Status:** resolved ✓ (v0.53.2) — disposition was stated in this entry's own heading but never written as a `**Status:**` line, so status tooling read it as unresolved. Line added 2026-08-03 by the shipped-but-unflipped sweep; no new work, no re-verification of the original fix.
 
 ### `hrp-classifier-rejects-valid-uppercase-cards` (M11) — HRP probes case-insensitive; uppercase mk1/md1 end-to-end; ms1 leg split to a companion (RESOLVED v0.53.3)
 
