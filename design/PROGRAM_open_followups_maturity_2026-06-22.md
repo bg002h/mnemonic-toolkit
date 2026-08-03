@@ -280,3 +280,81 @@ An independent opus architect reviewed this plan against the 5 FOLLOWUPS registr
 Minors folded: **M-1** softened the unverifiable "57/58" figure; **M-2** noted the audit backlog's one WONTFIX; **M-3** tightened the fmt file count to "79 hunks / ~29 files (~28 non-exempt + mlock)"; **M-4** added the `gui-import-wallet-env-var-secret-channel` co-lander to the Wave-2 modal-redaction row. **M-5 (noted, no body change needed):** md's `…stable-rust-1-95-toolchain-fmt-clippy-drift` is RESOLVED and mk's `…rustfmt-drift…` is RESOLVED — neither is open sibling fmt work; the plan asserts all 5 repos in-sync at the 2026-06-22 reconcile, which implies the md test-hardening branch that cleared md's latent-red state has merged (confirmed: descriptor-mnemonic origin/main = `f18a027`, the reconciled tip).
 
 **Post-fold status: the plan converges (0 Critical / 0 Important remaining after folds).** The review verbatim is preserved in `design/agent-reports/` per project discipline.
+
+---
+
+## 10. RECONCILE PASS — 2026-08-03
+
+Re-derived against all five live registries (781 entries) rather than the
+2026-06-22 snapshot this plan was written from. **The plan is roughly half
+executed, and its Wave-1 keystone is already discharged** — it was parked as
+"awaiting 4 answers" when in fact the thing blocking Wave 1 had been fixed.
+
+### 10.1 Wave-1 keystone: the fmt gate is GREEN, not RED
+
+§Wave-1 opens "stop the bleeding … a RED gate masks all future drift" and sizes
+the drift at ~79 hunks / ~29 files. **That is stale.** Measured today:
+
+- `cargo +1.95.0 fmt --all -- --check` → **2 hunks, both in `src/mlock.rs`**.
+- `rust.yml`'s fmt job greps out exactly `*/mlock.rs` and fails iff any other
+  file appears — so it is genuinely green, not green-by-omission.
+- Last three `rust.yml` runs on master: **success** (`e26e1208`, `8051af16`,
+  `5002e58d`).
+- `toolkit-rustfmt-1-95-0-rebaseline-divergence` is already `resolved`
+  (b-minimal), with only the mlock leg deferred.
+
+**Consequence: open question 8.3-#1 is largely moot.** Option (b) was taken. What
+survives is only its coupled half — whether to cut a fresh 1.95.0-formatted
+ms-cli tag, which would discharge `mlock-rs-fmt-exempt` **and**
+`mlock-g4-a-page-count-assert-flake` in one event.
+
+**Wave 1 therefore collapses to a single action** (one outward-facing ms-cli
+tag + re-pin), plus `xpub-search-descriptor-md1-detection-bech32-validate`,
+which is DEFER-ruled with no live defect.
+
+### 10.2 Progress against the plan
+
+Of the **107** Program-cited slugs that resolve to a real entry:
+
+| status | count |
+|---|---|
+| RESOLVED | 56 |
+| OPEN | 40 |
+| BLOCKED (upstream) | 7 |
+| NO-STATUS | 3 |
+| WONTFIX | 1 |
+| **genuinely live** | **43** |
+
+Per wave, shipped-since-2026-06-22: Wave 1 → 2, Wave 2 → 4, Wave 3 → 4,
+Wave 4 → 6 (waves overlap; a slug may be cited more than once).
+
+### 10.3 Funds-safety headline — RETESTED, still TRUE
+
+§9's load-bearing claim ("no open item can currently emit a wrong address or
+silently mis-build a wallet") was re-run across all five registries: **0 open
+entries** carry silent-wrong-output language. The v0.91.0 BIP-322 key-binding
+forgery — the one genuine funds-class defect since this plan was written — is
+RESOLVED and double-fixed (local gate + `bip322` 0.0.11).
+
+### 10.4 Method note
+
+The first pass of this reconcile under-reported RESOLVED because its status
+matcher was case-sensitive and entries use both `✓ RESOLVED` and lowercase
+`` `resolved` ``. Two entries surfaced as false funds-risks
+(`electrum-native-seed-address-derivation`, `mk-slip0132-byte-parity-test-self-referential`)
+and both are in fact resolved. Corrected figures are the ones above. The repo's
+own `scripts/followup-reconcile.sh` reports 90 open for the toolkit vs 83 open
++ 28 unstatused here — different heuristics, same order; the script remains the
+in-repo authority.
+
+### 10.5 Still blocked on a decision (8.3)
+
+- **#1** — largely moot; only the coupled ms-cli tag remains.
+- **#2** — codex32 vendor-vs-accept (blocks the ms share-string hygiene tail).
+- **#3** — `--json` wire-shape gate: commit, or paired-PR discipline only.
+- **#4** — GUI MSRV / pin policy.
+
+#3 gained evidence this cycle: `schema_mirror` stayed green across a 16-release
+toolkit jump while a fourth pin site (`schema/mnemonic.rs::pinned_version`)
+drifted silently — caught only by `tutorial-snapshots`, and only because that
+constant happens to be rendered into a snapshot.
