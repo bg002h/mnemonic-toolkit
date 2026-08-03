@@ -1,0 +1,127 @@
+name: miniscript-fork-tripwire
+
+# Fires when rust-miniscript publishes a release NEWER than the pinned
+# `[patch.crates-io]` baseline, so the fork pin stops being a thing someone has
+# to remember to look at.
+#
+# WHY THIS EXISTS. `Cargo.toml`'s `[patch.crates-io]` points `miniscript` at an
+# unreleased fork rev (PRs #953 + #910). Two consequences ride on it:
+#
+#   1. `tr(sortedmulti_a)` support stays refused — FOLLOWUP
+#      `taproot-coverage-cycle-on-miniscript-gt-13-1-0` (needs
+#      `Terminal::SortedMultiA`).
+#   2. crates.io publication of `mnemonic-toolkit` is IMPOSSIBLE, and therefore
+#      of `mnemonic-gui` too (it depends on the toolkit by git tag). A `[patch]`
+#      is neither published nor honoured downstream, so a published toolkit
+#      would resolve stock miniscript and fail to compile for every consumer.
+#      Verified 2026-08-02: without the patch the toolkit does not build against
+#      13.1.0 (no `derive_at_index`, no `Terminal::SortedMulti`/`SortedMultiA`,
+#      unsatisfied `Descriptor` bounds).
+#
+# Both unblock on the same upstream event, and nothing in CI noticed it before
+# this job — the patch could have sat stale indefinitely.
+#
+# WHY AN INDEX QUERY AND NOT A COMPILE PROBE. "Does the toolkit build without
+# the patch?" is the semantically exact question, but it CANNOT see the
+# realistic trigger: both PRs target the next MAJOR, and the dependency is
+# `miniscript = { version = "13" }`, so cargo would never resolve a 14.x and the
+# probe would stay green through the very release we are waiting for. The index
+# is range-blind and sees every published version.
+#
+# NOT AUTO-DROP. A release > 13.1.0 is necessary but NOT sufficient: it must
+# actually CONTAIN #953 and #910 (a 13.2.0 backport that omits them would fire
+# this job spuriously). Verify against the miniscript CHANGELOG, then either
+# drop the patch or bump BASELINE below with a note saying why.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'          # Mondays 06:00 UTC
+  workflow_dispatch:              # on-demand, e.g. right before planning a cycle
+  push:
+    paths:
+      - '.github/workflows/miniscript-fork-tripwire.yml'   # born-green self-test
+
+permissions:
+  contents: read
+
+jobs:
+  tripwire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Assert the patch pin still exists (fail-closed)
+        # If the patch is gone or restructured, this job is stale and its GREEN
+        # would be meaningless — a silent false-negative on the exact condition
+        # it exists to watch. Fail loudly instead.
+        run: |
+          if ! grep -qE '^\s*miniscript\s*=\s*\{\s*git\s*=' Cargo.toml; then
+            echo "::error::miniscript [patch.crates-io] pin not found in Cargo.toml." \
+                 "Either the fork was dropped (then DELETE this workflow and close" \
+                 "FOLLOWUP taproot-coverage-cycle-on-miniscript-gt-13-1-0) or the pin" \
+                 "moved (then update this grep). Failing closed."
+            exit 1
+          fi
+          echo "patch pin present:"
+          grep -nE '^\s*miniscript\s*=\s*\{\s*git\s*=' Cargo.toml
+
+      - name: Query crates.io for a release newer than the baseline
+        env:
+          # The highest miniscript release known NOT to contain #953 + #910.
+          # Bump ONLY with a comment recording which release was checked and why
+          # it does not unblock. See the header.
+          BASELINE: '13.1.0'
+        run: |
+          set -euo pipefail
+          # Sparse index = the same source cargo resolves from. `set -o pipefail`
+          # plus an explicit HTTP check keeps a transport failure RED, never a
+          # silent pass.
+          curl -sS --fail --retry 3 --retry-delay 5 \
+            https://index.crates.io/mi/ni/miniscript -o /tmp/miniscript.index
+          test -s /tmp/miniscript.index
+
+          python3 - <<'PY'
+          import json, os, sys
+
+          baseline = os.environ["BASELINE"]
+
+          def key(v):
+              # Release-only comparison. A pre-release (1.0.0-rc1) sorts BELOW
+              # its release and must not trip the wire.
+              core = v.split("-", 1)[0].split("+", 1)[0]
+              return tuple(int(p) for p in core.split("."))
+
+          rows = [json.loads(l) for l in open("/tmp/miniscript.index") if l.strip()]
+          if not rows:
+              sys.exit("::error::empty miniscript index response — failing closed")
+
+          live = [r["vers"] for r in rows if not r.get("yanked")]
+          prerelease = {v for v in live if "-" in v}
+          newer = sorted(
+              (v for v in live if v not in prerelease and key(v) > key(baseline)),
+              key=key,
+          )
+
+          print(f"baseline           : {baseline}")
+          print(f"published versions : {len(rows)} ({len(live)} not yanked)")
+          print(f"highest published  : {max((v for v in live if v not in prerelease), key=key)}")
+
+          if not newer:
+              print("\nNo release newer than the baseline. Fork pin still required.")
+              sys.exit(0)
+
+          print("::error::rust-miniscript published a release NEWER than the pinned "
+                f"baseline {baseline}: {', '.join(newer)}")
+          print("")
+          print("NEXT STEPS — a newer release is necessary but NOT sufficient:")
+          print("  1. Check the miniscript CHANGELOG for PRs #953 and #910.")
+          print("  2. If BOTH are present: drop [patch.crates-io] from Cargo.toml,")
+          print("     bump the `miniscript` version req, run the full suite, and")
+          print("     work FOLLOWUP taproot-coverage-cycle-on-miniscript-gt-13-1-0")
+          print("     (tr(sortedmulti_a)). This ALSO unblocks crates.io publication")
+          print("     of mnemonic-toolkit and, transitively, mnemonic-gui.")
+          print("  3. If EITHER is missing: raise BASELINE in this workflow to the")
+          print("     new version, with a comment saying which PR is still absent.")
+          sys.exit(1)
+          PY
