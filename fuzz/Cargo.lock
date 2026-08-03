@@ -582,7 +582,7 @@ dependencies = [
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.92.0"
+version = "0.93.0"
 dependencies = [
  "aes",
  "base64 0.22.1",

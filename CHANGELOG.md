@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [0.93.0] — 2026-08-03
+
+**SemVer-MINOR, secret-hygiene — closes an ms1-decode site the Wave-2 sweep never covered: `xpub-search` seed intake left real master-seed entropy in an un-scrubbed heap husk. Found by a post-implementation audit of the shipped Wave-2 spec, not by new work. No user-visible behaviour change.**
+
+- **[secret-hygiene] `xpub-search` ms1 seed intake now MOVES the entropy out of the `Payload` husk.** `cmd/xpub_search/seed_intake.rs` wrapped a **copy** (`Zeroizing::new(payload.as_bytes().to_vec())`), which scrubbed the copy but left the bare `ms_codec::Payload`'s own `Vec<u8>` live for the language read and dropping **un-scrubbed** at the end of the arm. It now matches the shipped Site-A pattern in `cmd/bundle.rs`: read the wire language first (it borrows), then move via `Payload::Entr(b)` / `Payload::Mnem { entropy, .. }`, with a `ref other` arm for `Payload`'s `#[non_exhaustive]` future variants. ms-codec deliberately does not zeroize-wrap `Payload` ("Callers MUST wrap the byte buffer at the use site"), so emptying the husk is this call site's responsibility. The site predates the Wave-2 spec (v0.26.0) and appears in neither its site list nor its already-shipped list — a survey gap, not an implementer deviation.
+- **[test] two lint rows added, both mutation-proven.** `wave2 T2 Site C` anchors the new move; a second row anchors the **wave2 T4** stdin-reader scrub, which the audit mutation-proved had *zero* regression guard — reverting both `Zeroizing::new(String::new())` wraps left all 18 cells of T4's named test surface green, because the spec declared that lint row "OPTIONAL / NOT gate-required". Each new row was verified to go RED when its protection is reverted and green when restored.
+
+### Migration / dispositions
+
+- **No behaviour change** — identical outputs; the entropy is moved rather than copied, and the language read is reordered ahead of the move because it borrows.
+- **Audit residue (filed, not fixed here):** `repair.rs:1270` / `:1341` discard bare `Payload` husks un-scrubbed on an immediate-drop path (same class, transient window).
+
 ## mnemonic-toolkit [0.92.0] — 2026-08-02
 
 **SemVer-MINOR, test-only — burns down the one open item from the v0.91.0 security cycle: the P2WSH forgery regression was over-determined and did not actually pin the witness-script-hash binding. No production code changed; no clap/JSON/schema change.**

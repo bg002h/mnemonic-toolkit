@@ -181,6 +181,27 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/bundle.rs",
         evidence: &["let self_check_entropy: zeroize::Zeroizing<Vec<u8>>"],
     },
+    // wave2 T2 Site C (2026-08-03): the xpub-search ms1 seed intake. A
+    // post-implementation audit of SPEC_wave2_secret_hygiene_toolkit.md found
+    // this site was never in the spec's site list — it COPIED the entropy
+    // (`Zeroizing::new(payload.as_bytes().to_vec())`), leaving the bare
+    // `Payload` husk to drop UN-SCRUBBED with real master-seed entropy in it.
+    // Anchored on the MOVE so a regression back to the copy is caught.
+    ZeroizeRow {
+        label: "xpub-search ms1 seed intake MOVES entropy out of the Payload husk — wave2 T2 Site C",
+        source_file: "src/cmd/xpub_search/seed_intake.rs",
+        evidence: &["ms_codec::Payload::Entr(b) => Zeroizing::new(b)"],
+    },
+    // wave2 T4 (v0.71.0) — GUARD ADDED 2026-08-03. The spec declared this row
+    // OPTIONAL / "NOT gate-required", and the audit mutation-proved the
+    // consequence: reverting BOTH stdin-reader wraps left all 18 cells of T4's
+    // named test surface GREEN. The scrub had zero regression guard. These two
+    // rows are that guard.
+    ZeroizeRow {
+        label: "read_stdin_to_string scratch buffer is Zeroizing — wave2 T4",
+        source_file: "src/cmd/convert.rs",
+        evidence: &["let mut buf = zeroize::Zeroizing::new(String::new());"],
+    },
     // ---- cmd/derive_child.rs ----
     ZeroizeRow {
         label: "derive-child from_value wraps in Zeroizing<String>",

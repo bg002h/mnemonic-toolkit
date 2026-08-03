@@ -167,13 +167,26 @@ where
         Source::Ms1(card) => {
             match ms_codec::decode(card.as_str()) {
                 Ok((_tag, payload)) => {
-                    // Entropy bytes wrapped in Zeroizing to scrub on drop at
-                    // function exit. Mirrors `derive_slot.rs:77-84` precedent.
-                    let entropy: Zeroizing<Vec<u8>> = Zeroizing::new(payload.as_bytes().to_vec());
-                    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
                     // ms mnem Phase 3: use per-card wire language (mnem cards) or
-                    // CLI --language (entr/legacy cards).
+                    // CLI --language (entr/legacy cards). Read FIRST — it borrows
+                    // `payload`, which the entropy move below consumes.
                     let lang = crate::language::payload_bip39_language(&payload, args.language())?;
+                    // wave2 T2 (site missed by the original sweep, added 2026-08-03):
+                    // MOVE the decoded master-seed entropy OUT of the bare `Payload`
+                    // husk. The previous `Zeroizing::new(payload.as_bytes().to_vec())`
+                    // COPIED it, leaving the husk's own `Vec<u8>` live to drop
+                    // UN-SCRUBBED at the end of this arm. ms-codec's `Payload` is
+                    // deliberately not zeroize-wrapped ("Callers MUST wrap the byte
+                    // buffer at the use site", `payload.rs:19-22`), so emptying the
+                    // husk is this call site's responsibility. Mirrors the shipped
+                    // Site A pattern in `cmd/bundle.rs`; the `ref other` arm covers
+                    // `Payload`'s `#[non_exhaustive]` future variants.
+                    let entropy: Zeroizing<Vec<u8>> = match payload {
+                        ms_codec::Payload::Entr(b) => Zeroizing::new(b),
+                        ms_codec::Payload::Mnem { entropy, .. } => Zeroizing::new(entropy),
+                        ref other => Zeroizing::new(other.as_bytes().to_vec()),
+                    };
+                    let _entropy_pin = mnemonic_toolkit::mlock::pin_pages_for(&entropy[..]);
                     Mnemonic::from_entropy_in(lang, &entropy[..]).map_err(ToolkitError::Bip39)
                 }
                 Err(decode_err) => {
