@@ -39,6 +39,7 @@ mk encode --xpub <XPUB> --origin-path <PATH> [OPTIONS]
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint` |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
+| `--chunk-set-id <HEX>` | pin the 20-bit `chunk_set_id` (`0x` prefix optional) instead of deriving it from the payload. Chunked output only. A value over 20 bits is refused, not truncated. Rarely needed: since mk-codec 0.5.0 the derived default is already deterministic, so re-encoding a card reproduces its strings byte for byte. |
 | `--group-size <N>` | mstring display grouping: insert a separator every N characters in each emitted `mk1` string; `0` = unbroken (default 5). Display only — `--json` stays unbroken. Separator-stripping on intake means grouped/unbroken cards both re-ingest on `decode`/`verify`/etc. |
 | `--separator <space\|hyphen\|comma>` | the grouping separator for `--group-size` (default `space`); keyword or the literal `-` / `,` or a space. |
 | `--json` | emit a single JSON object on stdout |
