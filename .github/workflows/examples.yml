@@ -22,7 +22,17 @@ name: examples
 #     capture (Q1-(b)).
 on:
   push:
-    branches: [master, main]
+    # `ci/**` added 2026-08-15 so a commit can earn the REQUIRED `examples`
+    # context before it lands on master (a required check binds to a commit SHA,
+    # not a branch, so a direct push is bypassed rather than satisfied).
+    #
+    # The `paths:` filter below is DELIBERATELY LEFT IN PLACE. Per the trigger
+    # ruling above and design/agent-reports/examples-pdf-branch-protection-ruling.md
+    # §7, the push run is LOAD-BEARING — the sole gate for direct-to-master
+    # pushes — and its filter is a considered choice, not an oversight. Adding a
+    # branch does not disturb it: a staged commit still builds iff it touches a
+    # gated path, which every code change does.
+    branches: [master, main, 'ci/**']
     paths:
       - '.examples-build/**'
       - 'docs/Examples.pdf'
