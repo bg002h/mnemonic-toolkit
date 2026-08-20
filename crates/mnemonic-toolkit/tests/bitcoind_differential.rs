@@ -26,7 +26,10 @@
 //! -datadir=$BITCOIND_DATADIR -rpcport=$BITCOIND_RPCPORT <rpc> …` (cookie
 //! auth, no credentials).
 //!
-//! - The three bitcoind vars UNSET → skip (the standard `#[ignore]` default).
+//! - The three bitcoind vars UNSET → **`panic!`** (changed 2026-08-19). These
+//!   tests are `#[ignore]`-by-default, so running one is an explicit request for
+//!   the differential; a request that cannot reach the oracle must not report
+//!   success. `#[ignore]` is the skip mechanism, not the env check.
 //! - SET but `bitcoin-cli getblockchaininfo` fails / `chain != "main"` →
 //!   `panic!` (broken provisioning fails RED, never green-by-skip).
 //!
@@ -292,6 +295,37 @@ fn read_wiring() -> Option<Wiring> {
     }
 }
 
+/// `read_wiring`, but UNSET is a FAILURE rather than a silent pass.
+///
+/// These tests are `#[ignore]`-by-default, so the only way any of them runs is
+/// an explicit `-- --ignored` (CI does exactly that, scoped to this file with
+/// `--test bitcoind_differential`). `#[ignore]` is therefore already the
+/// "don't run me unless asked" mechanism, and the env check on top of it turned
+/// an explicit REQUEST for the differential into a green no-op: measured
+/// 2026-08-19, all four tests reported `ok` in 0.00s without contacting
+/// bitcoind at all.
+///
+/// That matters because the failure mode is invisible. If provisioning ever
+/// stopped exporting the vars, the daily job would keep reporting success while
+/// never reaching the oracle -- and a differential that cannot reach its oracle
+/// has not agreed with it.
+///
+/// The neighbouring contract is unchanged and was already right: PARTIAL wiring
+/// panics, and wiring that is set but unreachable panics at
+/// `getblockchaininfo`.
+fn require_wiring() -> Wiring {
+    read_wiring().unwrap_or_else(|| {
+        panic!(
+            "bitcoind wiring not set. These tests are #[ignore]-by-default, so \
+             running them is an explicit request for the differential and cannot \
+             pass without the oracle. Export BITCOINCLI_BIN, BITCOIND_DATADIR \
+             and BITCOIND_RPCPORT against an offline -chain=main node (see \
+             .github/workflows/bitcoind-differential.yml for the provisioning \
+             CI uses)."
+        )
+    })
+}
+
 /// Shell `$BITCOINCLI_BIN -chain=main -datadir=… -rpcport=… <args>` (cookie
 /// auth) → parsed JSON. `panic!`s on process failure or RPC error.
 fn bitcoin_cli(w: &Wiring, args: &[&str]) -> Value {
@@ -343,12 +377,7 @@ fn core_addresses(w: &Wiring, chain_desc: &str) -> Vec<String> {
 #[test]
 #[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
 fn bitcoind_end_to_end_differential() {
-    let Some(w) = read_wiring() else {
-        eprintln!(
-            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
-        );
-        return;
-    };
+    let w = require_wiring();
 
     // Fail-LOUD if set-but-silent.
     let info = bitcoin_cli(&w, &["getblockchaininfo"]);
@@ -815,12 +844,7 @@ fn template_completion_anti_vacuity_leg() {
 #[test]
 #[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
 fn bitcoind_template_completion_differential() {
-    let Some(w) = read_wiring() else {
-        eprintln!(
-            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
-        );
-        return;
-    };
+    let w = require_wiring();
     let info = bitcoin_cli(&w, &["getblockchaininfo"]);
     assert_eq!(
         info.get("chain").and_then(|c| c.as_str()),
@@ -1100,12 +1124,7 @@ fn subset_search_completion_anti_vacuity_leg() {
 #[test]
 #[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
 fn bitcoind_subset_search_completion_differential() {
-    let Some(w) = read_wiring() else {
-        eprintln!(
-            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
-        );
-        return;
-    };
+    let w = require_wiring();
     let info = bitcoin_cli(&w, &["getblockchaininfo"]);
     assert_eq!(
         info.get("chain").and_then(|c| c.as_str()),
@@ -1293,12 +1312,7 @@ fn h12_taproot_default_origin_anti_vacuity_leg() {
 #[test]
 #[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
 fn bitcoind_h12_taproot_default_origin_differential() {
-    let Some(w) = read_wiring() else {
-        eprintln!(
-            "skipping: bitcoind env not set (BITCOINCLI_BIN/BITCOIND_DATADIR/BITCOIND_RPCPORT)"
-        );
-        return;
-    };
+    let w = require_wiring();
     let info = bitcoin_cli(&w, &["getblockchaininfo"]);
     assert_eq!(
         info.get("chain").and_then(|c| c.as_str()),
