@@ -926,11 +926,9 @@ the descriptor and its first address. The reconstructed first address is
 round-trips this whole policy without loss, every `after`/`older`/`sha256` lock
 and `multi(...)` threshold across all four `or_i` branches preserved.
 
-Note the contrast with the section 6 appendix: that depth->=2 *taproot* tree is
-the one shape the **shipped** `mnemonic` refuses to restore (it needs the
-`experimental/taproot-depth-ge2` branch). This degrading-multisig policy is fully
-supported on the real shipped binary -- the round-trip below uses it, no
-experimental branch required.
+Appendix B carries the depth->=2 *taproot* twin of this idea. It used to be the
+one shape the shipped `mnemonic` refused to restore; since v0.97.0 it is
+supported too, so both round-trips below run on the real shipped binary.
 
 ```
 $ mnemonic bundle --descriptor-file policy.desc --network mainnet --json | jq -r ".md1[]" > policy.md1
@@ -999,7 +997,8 @@ Asking the toolkit to export it:
 
 ```
 $ mnemonic export-wallet --descriptor "$(cat taproot-4leaf.desc)" --format descriptor --network mainnet
-error: export-wallet script-type derive: taptree branch must have 2 children, but found 1
+tr([73c5da0a/84'/0'/4']xpub6CatWdiZiodmeXswr13Gd5aNtNqr2UHCBEsCoL3eEFVaM7n8kY5kS4daaP83gWQncmzL3Wzt79mEiLix6XZs6XQmGcQNeQ4HcjfVTn9TuXE/<0;1>/*,{{and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*,[73c5da0a/84'/0'/1']xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn/<0;1>/*,[73c5da0a/84'/0'/2']xpub6CatWdiZiodmbNGqcQxxjGN165QxTU4PwNNi9WrijYgYf7VxcmuFxosRw3foczLgRDbjDjJbqZhPCTfkcaWmL9BuSw98ybKKJtcHgWeryy6/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub6CatWdiZiodmdHurRokjbycCrxddTDJgTsyEAaQfKjkWbwUi79LAWG5gHjMCQB7BeJc47MkubXuZdf45JZHK1qcr1GZ5EwREUDVDLVdPkEC/<0;1>/*,[b8688df1/84'/0'/0']xpub6DNfJehqF1LUs9kwaqDu12Ajpz9psYVtbGhTykQo1CYdkkqV2vAyR4DiWXSTTDujWHzVy1AtV6ENGKWgwbLWqa4wXMZR4ZmdpRjQBG5EgTV/<0;1>/*,[b8688df1/84'/0'/1']xpub6DNfJehqF1LUsoh1a4XLG3yuFY1oCRJd6Bkba97xvW6SwvY71Nc6LvkqfDLWuyCivJ4eMDxgFtiTxnazgp8rYVzQSKR3L8EGRs9asBarqpe/<0;1>/*)))},{and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub6DNfJehqF1LUwZ1DrFcQN365CDMPLSsrqpSwaz4eRrtYz9qWdsVH9JqsHpQ6yNGdG4VXGKbLgcxKkXtwTB5B4iCuHcmjomqR8z6NNxNpU51/<0;1>/*,[b8688df1/84'/0'/3']xpub6DNfJehqF1LUxb8gRSstbR9LcAxWgwD4V678z5FZ7BLftWzwQCt3yZb5eW4U8AVJwbKcZ2iegjjvKv2xggJpMBRkk3CE7bz7g4uMV7Qp3TU/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub6DBbzvudcQg2nS4tHSkrm7FGkXL6arWxEYoZ1g1GWbaNdWRobcJmxH8KQdjuzTZJtwDveibGd83eGzdGCR6NjSqpU8p2Xx4wWQK7iGBycAm/<0;1>/*,[28645006/84'/0'/1']xpub6DBbzvudcQg2sPDRWpqfEn5VzPiwrd1zNes4aHmmNUog9Jmc2fc2JSfM2E39YZy2iakmpWRpa3rXhzGNmd4GKiJEZxmTCftQpwBGd9ihVks/<0;1>/*,[28645006/84'/0'/2']xpub6DBbzvudcQg2uk9BrxsuxCWjsYsbfPYkPahQfmTVABfJ4j8TRxUnRd5eGgEXfgPJ63xcuTV9uny7pQBFbu3XKCn9rNxcNGRaDT9BD1gkBGZ/<0;1>/*))}})#trqmzhua
+note: stdout is watch-only — public keys only, cannot spend
 ```
 
 So we use a **depth-1** tree (2 leaves) and pack two tiers per leaf with `or_i`:
@@ -1315,30 +1314,24 @@ the authoritative per-flag reference.
 
 \newpage
 
-# Appendix B -- EXPERIMENTAL: depth->=2 taproot reconstruction (NOT FOR REAL FUNDS)
+# Appendix B -- depth->=2 taproot reconstruction
 
-> **EXPERIMENTAL -- DO NOT USE FOR REAL FUNDS.** Everything in this appendix
-> uses `mnemonic-depth2`, a proof-of-concept binary built from the never-merged
-> branch `experimental/taproot-depth-ge2`. It pins an **unreleased**
-> rust-miniscript commit (the PR-#953 merge, in no crates.io release) to lift
-> the depth->=2 taptree cap. It is **not** part of any shipped release, is not
-> on the install path, and must never be used to secure real funds. The shipped
-> `mnemonic` v0.97.0 documented everywhere else in this guide deliberately
-> **refuses** depth->=2 (sections 6.1 and below); that refusal is the supported
-> behavior until a rust-miniscript release > 13.1.0 ships #953.
+This appendix used to be titled EXPERIMENTAL and told you to build a
+proof-of-concept binary from a never-merged branch. **It is a supported feature
+as of v0.97.0** and everything below is live-captured from the shipped
+`mnemonic`, like the rest of this guide.
 
-Master refuses to *restore* a depth->=2 taptree because the shipped miniscript
-pin mis-formats nested taptrees. The POC bumps that pin and lifts the cap. Build
-it under a **distinct name** so it never overwrites your real `mnemonic`. The
-twin below was built from the 0.55.3-era experimental branch; the static
-reconstruction capture further down is from that build:
+What changed: a depth->=2 taptree always ENGRAVED faithfully -- only reading it
+back was gated, because the pinned rust-miniscript mis-formatted nested
+taptrees on Display, printing `{{a,b},c}` as `{{a,b,c}}`, which its own parser
+then rejected. Upstream PR #953 fixes it. Waiting for a crates.io release
+carrying that fix was never a plan with a date: 13.1.0 was cut from a
+maintenance line and is *newer* than the merge, so it does not contain it. The
+toolkit pins the merge commit directly.
 
-```
-$ git clone https://github.com/bg002h/mnemonic-toolkit && cd mnemonic-toolkit
-$ git checkout experimental/taproot-depth-ge2
-$ cargo build --release --manifest-path crates/mnemonic-toolkit/Cargo.toml
-$ cp target/release/mnemonic ~/.cargo/bin/mnemonic-depth2   # DISTINCT name
-```
+One caveat survives, and it is about YOUR build rather than this one: recovery
+needs a `mnemonic` >= 0.97.0. An older binary still cannot reconstruct a
+depth->=2 taptree, and a backup outlives the software that made it.
 
 Recall the depth-2 four-leaf descriptor from section 6.1 (one tier per leaf):
 
@@ -1385,26 +1378,10 @@ md1f8eucv9eyh2tqvnhxzckz5kfhacj7d2lxnax2ywfue5grx4rgemhg0nk5eg0ze8tj0qfnr3s8qltz
 md1f8eucvx92k0c250h62ypsarcmrl7tgutcg8uf4m7gfcd8lfv33knprwthl06am5gdw9aqnfqp9rhl0fq5pp9p
 ```
 
-The shipped `mnemonic` refuses to restore it (the supported behavior -- the card
-stays a faithful backup):
+And the shipped `mnemonic` reconstructs it -- depth-2 taptree and all:
 
 ```
 $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" depth2.md1)
-error: taproot tree depth ≥2 (≥3 leaves) is not yet restorable — the pinned miniscript mis-prints nested taptrees (FOLLOWUP upstream-miniscript-taptree-depth2-display-asymmetry); the engraved card remains a faithful backup
-```
-
-The experimental `mnemonic-depth2` reconstructs the very same card -- depth-2
-taptree and all -- and prints a loud EXPERIMENTAL advisory on stderr before the
-reconstructed descriptor and first address:
-
-*(STATIC CAPTURE -- recorded 2026-06-15 from the experimental `mnemonic-depth2`
-build at v0.55.3. This block is NOT regenerated by `gen.sh` and is not
-reproducible with a released binary or in CI; build the branch as shown above
-to reproduce it. Everything else in this document is live-captured and CI-gated.)*
-
-```
-$ mnemonic-depth2 restore --network mainnet $(sed "s/^/--md1 /" depth2.md1)
-EXPERIMENTAL: depth-≥2 taproot reconstruction relies on an UNRELEASED rust-miniscript commit (#953, in no crates.io release) — proof-of-concept only; do NOT use for real funds and do NOT merge. Rebuild when miniscript > 13.1.0 ships.
 miniscript policy restore (12 cosigners)
 CONFIRM: verify each cosigner fingerprint against your records before importing.
   descriptor: tr([73c5da0a/84'/0'/4']xpub661MyMwAqRbcEyUKSqsBgaz1Lob8pCa1rM1SJ8CEzGCYyP9LisxZ2m1goDqj137XvHdY2nNkctqiE1ixaAFqYHf91CFpFpKicVb7TzvrGsE/<0;1>/*,{{and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub661MyMwAqRbcFHMVYpCiBTXd2Caj7vZhNFHJSgE59Aue2yYkXSrz5q9GaQ4rRjJVhHZTsCiHWSzgMS5beaaTHWVmhpGC7SMdqMXHRXZi8as/<0;1>/*,[73c5da0a/84'/0'/1']xpub661MyMwAqRbcGaxoYcLaxHHXZqEgSRQmN2P5ung8MJ8MNE535mLuhq7zjnrMKyA5eX6ehicVbU1FFPU39LGXbY8PmLPLQxVRQmPFa3Q7spa/<0;1>/*,[73c5da0a/84'/0'/2']xpub661MyMwAqRbcGuXAHBK3oquZS1HJiz2fVZ2idNcK4GLGTXJyGZkPK7fviN6euv5GzY18JD3WBG3SoLat23TLAVjhQMxDVMAqymQNhg3RFT8/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub661MyMwAqRbcGHLCZcLjg25oG8wSyqSE5XNM9uMks6vrpH4pRDC8UmAynovThuKraidMeEKJ2FcqBw1eF76aeu1vrGtLJXUiJXr4r9N1TZQ/<0;1>/*,[b8688df1/84'/0'/0']xpub661MyMwAqRbcGowNgeNcLS8CgL2vnZybpJqtkbCmSQMdq2qzcDWqq3CXXg7x5BqvcNCSaNUw6nisoN7JFK2j3HfxV57nNm2RLKo2UzHgbs6/<0;1>/*,[b8688df1/84'/0'/1']xpub661MyMwAqRbcEv3U8uuxavsQA8LNNYwcNge8rT7SaMS5S8KiEwxoP72TQ8ARYjczPTtVQz6CxcaBTEE3XchmYvSiHcVbC9h17CmyfG7sVq9/<0;1>/*)))},{and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub661MyMwAqRbcG7Xht9EwgNucA47Rmgg8Bn5bNmFdJMkotHQDXirpogQHkVNRcwAy6KwGnUYMUNBFCNaRq4WnsqWW2VNUDdW6ymHXfVpk4c3/<0;1>/*,[b8688df1/84'/0'/3']xpub661MyMwAqRbcEbqBvNkLuDtudGA2PHAbtWUuHKe3CKjZCaLjxLGSG8SJpwBCnXsj8xPGXaV9ZWL3j9ktbed8y1aeNVK95HrkgHfHGBXM5Eh/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub661MyMwAqRbcEdBofBaGbgnse74WRuyEbXRSmzq8jzthzutDnXTV2yNQPzgs3ubwuNp7yrSHnECoA5xHgnoEDH4HSGWqLtYdi6nWVZCfXPk/<0;1>/*,[28645006/84'/0'/1']xpub661MyMwAqRbcH2WNMbtz4pZ8wDtpxndYo6E4r5o8pXedve17srma1LCEjM8WcpVk67xsc36KpBNtYUdqo5dpcFMzRfzSZSa4C5DRty4eDNF/<0;1>/*,[28645006/84'/0'/2']xpub661MyMwAqRbcGqcAAnB9mhvQsdUx2fKasUoXT2gMpt2tFz94wRfAkhuLhZUJkjQ5pgnd9Ny9EwrgcHbAASVnQShCbfhnGsKAk2k6yGoWXAv/<0;1>/*))}})#5trrgdg0
@@ -1426,6 +1403,6 @@ note: stdout is watch-only — public keys only, cannot spend
 ```
 
 The reconstructed descriptor is the genuine depth-2 shape `tr(Kint,{{A,B},{C,D}})`
-(four leaves, one tier each) -- the layout section 6.5 showed is cheaper to spend
-but that master cannot yet build. When a rust-miniscript release > 13.1.0 ships
-#953, this is rebuilt as a supported feature and this appendix retires.
+-- four leaves, one tier each. The capture above is LIVE and CI-gated now; it was
+a static paste from an experimental build until v0.97.0, which is why this
+appendix once carried a warning that it was not reproducible.

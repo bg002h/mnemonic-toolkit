@@ -2613,7 +2613,7 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
                     message: "taproot md1 carries sortedmulti_a under a tap-script tree — md-codec cannot yet render it back as a non-root tap leaf (FOLLOWUP md-codec-sortedmulti-a-to-miniscript-rendering-gap); the engraved card remains a faithful backup",
                 });
             }
-            ensure_taptree_depth_le_one(inner)?;
+            ensure_taptree_wellformed(inner)?;
             Ok(TaprootRestore::GeneralFaithful(internal_key))
         }
     }
@@ -2679,12 +2679,25 @@ fn subtree_contains_sortedmulti_a(n: &md_codec::tree::Node) -> bool {
     }
 }
 
-/// Refuse a tap-script tree of depth ≥2 — STRUCTURAL on the md1 Node tree
-/// (never on Display behavior; see `classify_taproot_restore`). md-codec
-/// taptrees are strictly binary, so "no `TapTree` child of a `TapTree`" ⟺
-/// depth ≤1 ⟺ ≤2 leaves. Spine-only walk: a `TapTree` under a non-TapTree
-/// leaf is not constructible (md-codec decode errors first).
-fn ensure_taptree_depth_le_one(inner: &md_codec::tree::Node) -> Result<(), ToolkitError> {
+/// Refuse a MALFORMED tap-script tree.
+///
+/// THE DEPTH-≥2 REFUSAL WAS LIFTED 2026-08-20, when the miniscript pin moved to
+/// `ff4732e`. It never described a limit of this codec: md1 engraved depth-≥2
+/// taptrees faithfully all along, and the refusal existed only because the
+/// PINNED miniscript mis-printed nested taptrees on Display — it would emit
+/// `{{a,b,c}}` for `{{a,b},c}`, which its own parser then rejected. Restoring
+/// such a card would have produced a descriptor string no wallet could read.
+///
+/// PR #953 fixes that upstream and is in the pinned rev, proven by md-codec's
+/// `nested_taptree_renders_with_nesting_intact`, so depth-≥2 taproot restore is
+/// live. The two refusal cells in `tests/cli_restore_taproot.rs` were flipped to
+/// reconstruction rather than deleted.
+///
+/// What REMAINS here is the defensive branch, and it must: md-codec decode
+/// guarantees a TapTree body is exactly 2 children, so a malformed tree is
+/// unreachable in principle — and must still REFUSE rather than be silently
+/// treated as a leaf if it ever arrives.
+fn ensure_taptree_wellformed(inner: &md_codec::tree::Node) -> Result<(), ToolkitError> {
     use md_codec::tree::Body;
     if inner.tag != md_codec::Tag::TapTree {
         // A single general leaf — no tree nesting possible.
@@ -2704,13 +2717,9 @@ fn ensure_taptree_depth_le_one(inner: &md_codec::tree::Node) -> Result<(), Toolk
             })
         }
     };
-    if children.iter().any(|c| c.tag == md_codec::Tag::TapTree) {
-        return Err(ToolkitError::ModeViolation {
-            mode: "restore",
-            flag: "--md1",
-            message: "taproot tree depth ≥2 (≥3 leaves) is not yet restorable — the pinned miniscript mis-prints nested taptrees (FOLLOWUP upstream-miniscript-taptree-depth2-display-asymmetry); the engraved card remains a faithful backup",
-        });
-    }
+    // The depth-≥2 refusal stood here. See the doc comment: it was upstream's
+    // Display bug, not ours, and it is fixed at the pinned rev.
+    let _ = children;
     Ok(())
 }
 

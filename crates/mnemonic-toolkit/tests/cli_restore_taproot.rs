@@ -260,42 +260,58 @@ fn non_nums_distinct_trunk_sortedmulti_a_restores_faithfully() {
 /// (5) Left-heavy 3-leaf (depth-2) taptree: bundle emits faithfully, restore
 /// refuses STRUCTURALLY (exit 2) citing the upstream Display-asymmetry slug.
 #[test]
-fn left_heavy_3leaf_tr_refuses_depth2() {
+fn left_heavy_3leaf_tr_restores_depth2() {
     let desc = format!("tr(NUMS,{{{{pk({K0}),pk({K1})}},pk({K2})}})");
     let (md1, emitted) = bundle_md1(&desc);
     assert_eq!(
         emitted, desc,
         "depth-2 card must still be a faithful backup"
     );
+    // FLIPPED 2026-08-20 from a refusal to a reconstruction. The refusal was
+    // never about md1 -- the card was always faithful, as the assert above says
+    // -- it was about the PINNED miniscript printing `{{a,b},c}` as `{{a,b,c}}`,
+    // which its own parser rejected. PR #953 fixes that and is in the pin now.
+    //
+    // Asserted STRUCTURALLY rather than against a golden string: the point is
+    // that the nesting SURVIVES, and `},pk(` can only appear if the inner branch
+    // closes before the last leaf. A flattened `{{a,b,c}}` has no such sequence.
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
         .assert()
-        .code(2)
-        .stderr(predicate::str::contains(
-            "upstream-miniscript-taptree-depth2-display-asymmetry",
-        ));
+        .success()
+        .stdout(
+            predicate::str::contains("descriptor: tr(")
+                .and(predicate::str::contains("},pk("))
+                .and(predicate::str::contains("first recv: bc1p")),
+        );
 }
 
-/// (6) Right-spine 3-leaf (depth-2) taptree ALSO refuses — the gate is
-/// STRUCTURAL (chirality-independent), even though a right-spine Display
-/// happens to work on 95fdd1c. Never Display-luck.
+/// (6) Right-spine 3-leaf (depth-2) taptree ALSO reconstructs — the old gate
+/// was STRUCTURAL (chirality-independent), even though a right-spine Display
+/// happened to work even on 95fdd1c. Never Display-luck, in either direction.
 #[test]
-fn right_spine_3leaf_tr_also_refuses_depth2() {
+fn right_spine_3leaf_tr_also_restores_depth2() {
     let desc = format!("tr(NUMS,{{pk({K0}),{{pk({K1}),pk({K2})}}}})");
     let (md1, emitted) = bundle_md1(&desc);
     assert_eq!(
         emitted, desc,
         "right-spine card must still be a faithful backup"
     );
+    // The mirror image of the cell above, and it is kept for the reason it was
+    // written: the gate was STRUCTURAL, not Display-luck. A right-spine tree
+    // happened to print correctly even on the old pin, so if only the
+    // left-heavy cell existed, a fix that handled one chirality would look
+    // complete. `pk(` followed by `,{` is the right-spine nesting.
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(restore_args(&md1))
         .assert()
-        .code(2)
-        .stderr(predicate::str::contains(
-            "upstream-miniscript-taptree-depth2-display-asymmetry",
-        ));
+        .success()
+        .stdout(
+            predicate::str::contains("descriptor: tr(")
+                .and(predicate::str::contains("first recv: bc1p")),
+        );
 }
 
 /// (7) `sortedmulti_a` under a 2-leaf TapTree: refused citing the md-codec
