@@ -73,12 +73,28 @@ box. Measured constellation-wide the same day: **824s → 204s (~4×)**.
   rendering — is a candidate too. Ask whether it is CPU-bound and independent
   before running it in a loop.
 
-**Two measured cautions.** `--release` is ~32× faster at test *execution*
-(25.4s → 0.775s on one workspace) but drops `debug_assertions`; suites relying
-on overflow checks or assertion panics — mutation tests especially — stop
-detecting things. Use it for iteration, never as the gate. And check what
-`/tmp` is before building there: on this box it is a 32 GB tmpfs, and a scratch
-worktree's `target/` filled it and killed a running test.
+**Speed WITHOUT dropping debug_assertions.** Do NOT reach for `--release` to
+speed tests up — it drops `debug_assertions` and overflow checks, so mutation
+tests and invariant panics stop detecting things while still reporting green.
+Raise the optimisation level instead and keep them:
+
+```toml
+[profile.test]
+opt-level = 2
+
+[profile.dev]
+opt-level = 2
+```
+
+`debug-assertions` defaults to **true** on both profiles, so this is pure gain.
+Measured on descriptor-mnemonic: execution **25.4s → 0.765s**, versus 0.775s for
+`--release` — the same speed, with the checks intact. Verified empirically, not
+inferred: at `opt-level = 2` both `cfg!(debug_assertions)` and an
+`attempt to add with overflow` panic still fire. Cost is a slower first build of
+dependencies, cached thereafter.
+
+**Check what `/tmp` is before building there.** On this box it is a 32 GB tmpfs,
+and a scratch worktree's `target/` filled it and killed a running test.
 
 **Never run the same suite twice** to collect counts and failures separately.
 Capture once to a file, then grep it — otherwise every measurement costs double.
