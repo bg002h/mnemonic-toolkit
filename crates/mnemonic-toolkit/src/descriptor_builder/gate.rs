@@ -57,17 +57,9 @@ pub struct AllowSet {
     pub mixed_timelock: bool,
 }
 
-impl AllowSet {
-    fn to_ext_params(self) -> ExtParams {
-        let mut p = ExtParams::new();
-        p.top_unsafe = self.sigless_branch;
-        p.malleability = self.malleable;
-        p.resource_limitations = self.resource_limit;
-        p.repeated_pk = self.repeated_keys;
-        p.timelock_mixing = self.mixed_timelock;
-        p
-    }
-}
+// `AllowSet::to_ext_params` now lives in `descriptor_builder::allow`, beside
+// the `--allow` vocabulary and printer it belongs to — one shared home, so a
+// second caller cannot grow a second mapping (PLAN Phase 1, finding F-3/N1).
 
 /// A node-addressed structured diagnostic. `node_path` is a dotted/bracketed
 /// path into the JSON tree (e.g. `root.or_d[1].and_v[0]`).

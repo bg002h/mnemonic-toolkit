@@ -12,10 +12,9 @@ use serde_json::{json, Value};
 
 use crate::cost::{self, CompareCostArgs, InputForm};
 use crate::derive_address::derive_receive_addresses;
+use crate::descriptor_builder::allow::{allow_set, emit_allow_notes, CliAllow};
 use crate::descriptor_builder::archetype::{self, ArchetypeParams};
-use crate::descriptor_builder::gate::{
-    self, AllowSet, Diagnostic, DiagnosticKind, ValidatedPolicy,
-};
+use crate::descriptor_builder::gate::{self, Diagnostic, ValidatedPolicy};
 use crate::descriptor_builder::ir::{SpecDoc, WrapperKind, SUPPORTED_SCHEMA_VERSION};
 use crate::descriptor_builder::schema;
 use crate::error::ToolkitError;
@@ -114,99 +113,9 @@ pub struct BuildDescriptorArgs {
     pub allow: Vec<CliAllow>,
 }
 
-/// The 5 allowable sanity rules (allow SPEC §1) — kebab values aligned 1:1
-/// with the step-3 `DiagnosticKind::as_str` names (drift self-test below).
-/// miniscript's 6th `ExtParams` field, `raw_pkh`, is deliberately not
-/// exposed (unreachable from IR-rendered miniscript).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-#[clap(rename_all = "kebab-case")]
-pub enum CliAllow {
-    /// A malleable satisfaction.
-    Malleable,
-    /// An unspendable mixed height/time timelock path.
-    MixedTimelock,
-    /// A key used more than once.
-    RepeatedKeys,
-    /// Exceeds script resource limits.
-    ResourceLimit,
-    /// An anyone-can-spend path.
-    SiglessBranch,
-}
-
-impl CliAllow {
-    fn kind(self) -> DiagnosticKind {
-        match self {
-            CliAllow::Malleable => DiagnosticKind::Malleable,
-            CliAllow::MixedTimelock => DiagnosticKind::MixedTimelock,
-            CliAllow::RepeatedKeys => DiagnosticKind::RepeatedKeys,
-            CliAllow::ResourceLimit => DiagnosticKind::ResourceLimit,
-            CliAllow::SiglessBranch => DiagnosticKind::SiglessBranch,
-        }
-    }
-
-    fn kebab(self) -> &'static str {
-        match self {
-            CliAllow::Malleable => "malleable",
-            CliAllow::MixedTimelock => "mixed-timelock",
-            CliAllow::RepeatedKeys => "repeated-keys",
-            CliAllow::ResourceLimit => "resource-limit",
-            CliAllow::SiglessBranch => "sigless-branch",
-        }
-    }
-}
-
-fn allow_set(requested: &[CliAllow]) -> AllowSet {
-    let mut set = AllowSet::default();
-    for a in requested {
-        match a {
-            CliAllow::Malleable => set.malleable = true,
-            CliAllow::MixedTimelock => set.mixed_timelock = true,
-            CliAllow::RepeatedKeys => set.repeated_keys = true,
-            CliAllow::ResourceLimit => set.resource_limit = true,
-            CliAllow::SiglessBranch => set.sigless_branch = true,
-        }
-    }
-    set
-}
-
-/// The never-silent surface (allow SPEC §3): an unmissable stderr warning
-/// for every allowed rule that FIRED (all output modes, `--json` included),
-/// plus a note for each requested allowance that did not fire.
-fn emit_allow_notes<E: Write>(
-    requested: &[CliAllow],
-    fired: &[DiagnosticKind],
-    stderr: &mut E,
-) -> Result<(), ToolkitError> {
-    if !fired.is_empty() {
-        let names: Vec<String> = fired.iter().map(|k| k.as_str().replace('_', "-")).collect();
-        writeln!(
-            stderr,
-            "WARNING: sanity rules OVERRIDDEN by --allow and FIRED: {}. This \
-             descriptor failed miniscript's funds-safety analysis; you have \
-             accepted that risk after review.",
-            names.join(", ")
-        )
-        .map_err(ToolkitError::Io)?;
-    }
-    let mut seen: Vec<DiagnosticKind> = Vec::new();
-    for a in requested {
-        let kind = a.kind();
-        if seen.contains(&kind) {
-            continue;
-        }
-        seen.push(kind);
-        if !fired.contains(&kind) {
-            writeln!(
-                stderr,
-                "note: --allow {} was requested but did not fire (the policy \
-                 passes that rule without it)",
-                a.kebab()
-            )
-            .map_err(ToolkitError::Io)?;
-        }
-    }
-    Ok(())
-}
+// `CliAllow`, `allow_set` and `emit_allow_notes` moved to
+// `descriptor_builder::allow` — the shared home they need before a second
+// command is wired to the same five-rule vocabulary (PLAN Phase 1, N1).
 
 /// The 5 curated archetype presets (alphabetical — matches
 /// `archetype::ARCHETYPE_REGISTRY` order; drift self-test below).

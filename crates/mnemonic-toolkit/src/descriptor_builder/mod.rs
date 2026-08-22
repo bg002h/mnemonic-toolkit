@@ -10,6 +10,7 @@
 //! producers ([`archetype`]) over the frozen IR (presets SPEC
 //! `design/SPEC_descriptor_builder_presets.md`).
 
+pub mod allow;
 pub mod archetype;
 pub mod gate;
 pub mod ir;
