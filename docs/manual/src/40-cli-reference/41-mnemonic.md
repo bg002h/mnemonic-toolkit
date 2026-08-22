@@ -992,7 +992,61 @@ mnemonic export-wallet [OPTIONS]
 | `--bsms-form <FORM>` | (v0.27.0) BSMS Round-2 emit shape — `4-line` (default; BIP-129-canonical) or `2-line` (lenient excerpt symmetric with the v0.26.0 import-side parser); ignored by every non-BSMS format per the per-format ignored-input contract |
 | `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--template` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative). **(v0.37.0)** for template-requiring file-import formats (`sparrow`/`coldcard`/`jade`/`electrum`) the `--template` is **auto-derived from the envelope descriptor** (so these now round-trip via `--from-import-json`); you still cannot pass `--template` explicitly here (it remains mutually exclusive) |
 | `--from-import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array; required when the envelope has > 1 entry |
+| `--allow <RULE>` | reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable): `malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch` — the same vocabulary as `build-descriptor`. On THIS surface only `sigless-branch` is ENFORCED; the other four never run and say so. Never silent — see "Reviewed sanity opt-out" below |
 | `--help` | print help |
+
+### Reviewed sanity opt-out (`--allow`)
+
+`export-wallet` runs ONE admission check on every descriptor it emits, on every
+intake arm (`--descriptor`, `--template`/`--slot`, `--from-import-json`) and
+every wrapper (`wsh`, `sh`, `bare`, `tr`): **does some spend path require no
+signature at all?** If one does, the export refuses (exit 2) and names the flag:
+
+```text
+error: export-wallet: this wallet has a spend path that requires no signature
+(anyone-can-spend); rerun with --allow sigless-branch after review. …
+```
+
+- **Only `sigless-branch` is enforced here.** The other four rules parse (one
+  shared vocabulary with `build-descriptor`) but never run on this surface.
+  Requesting one emits `note: --allow <rule> has no effect on export-wallet —
+  only sigless-branch is enforced here; the descriptor was NOT checked against
+  <rule>`. It deliberately does NOT say the descriptor "passes" that rule: the
+  descriptor was not checked, so nothing passed. If you want all five enforced,
+  author the policy with `build-descriptor`, which does.
+- **Never silent.** A waived rule that actually fires prints an unmissable
+  stderr `WARNING` naming it. A waiver that was requested and did not fire
+  prints a note. The emitted wallet file records **no** allowance — the trace
+  lives on stderr and in your records, because a comment field would be
+  format-specific and silently dropped by most targets.
+- **Detection is per wrapper.** For `wsh`/`sh`/`bare` the top-level miniscript
+  is checked; for `tr` **every tapleaf** is, because one keyless leaf makes the
+  whole output anyone-can-spend regardless of the key path.
+- **`--template`/`--slot` is gated too, and cannot trip the rule.** A
+  builder-produced descriptor never carries a sigless branch, so the check runs
+  and does not fire — a consequence of the uniform gate, not an exemption from
+  it.
+
+#### What the flag does NOT do
+
+**`--allow sigless-branch` permits EMISSION of a wallet file. It does not make
+any wallet application accept that file.** Measured against real software:
+
+| target | verdict on a keyless spend path |
+|---|---|
+| Bitcoin Core (every version through v31.1) | refuses at `importdescriptors` — *"is not sane: witnesses without signature exist"*, and the rule is **not waivable** |
+| Nunchuk | refuses via libnunchuk's `IsSane()` / `NeedsSignature()` |
+| Sparrow | no miniscript engine at all (its `Miniscript` class is a regex shim) |
+
+Use the flag for inspection, archival and parity — not to unblock an import.
+The change that would unblock one is a wallet-design change: give the keyless
+tier a key.
+
+#### `restore` is not gated
+
+`restore --md1 --format bitcoin-core` on a wallet with a keyless spend path
+emits at exit 0 with no flag, unchanged. `restore` has no `--allow` flag.
+
 
 ### Notes
 

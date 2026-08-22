@@ -47,10 +47,17 @@ impl WalletFormatEmitter for GreenEmitter {
         // `export-wallet-green-tr-policy-singlesig-emission`. P2trMulti is
         // already caught by `is_multisig()` above; only P2tr can reach here.
         if inputs.script_type == WalletScriptType::P2tr {
-            use miniscript::{Descriptor, DescriptorPublicKey};
-            use std::str::FromStr;
-            let parsed = Descriptor::<DescriptorPublicKey>::from_str(&inputs.canonical_descriptor)
-                .map_err(|e| ToolkitError::DescriptorParse(format!("green taproot probe: {e}")))?;
+            use miniscript::Descriptor;
+            // Lenient: a re-parse of an already-admitted string (PLAN
+            // `PLAN_wallet_file_export.md` Phase 1, F-2). This is a taproot
+            // SHAPE probe, not an admission point — the refusal below is
+            // green's own singlesig-only rule, and it must fire on its own
+            // terms rather than be pre-empted by a parse error.
+            let parsed =
+                crate::parse_descriptor::parse_descriptor_lenient(&inputs.canonical_descriptor)
+                    .map_err(|e| {
+                        ToolkitError::DescriptorParse(format!("green taproot probe: {e}"))
+                    })?;
             if let Descriptor::Tr(tr) = parsed {
                 if tr.tap_tree().is_some() {
                     return Err(ToolkitError::BadInput(

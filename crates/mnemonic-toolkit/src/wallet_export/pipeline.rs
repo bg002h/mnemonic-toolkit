@@ -25,6 +25,17 @@ pub(crate) fn build_descriptor_string(
 ) -> Result<String, ToolkitError> {
     let s =
         build_descriptor_string_inner(template, slots, k, network, account, taproot_internal_key)?;
+    // DELIBERATELY STRICT, and the only strict descriptor parse left on the
+    // `export-wallet` path (PLAN `PLAN_wallet_file_export.md` Phase 1). It is
+    // NOT an admission point for `sigless-branch`: this canonicalizes the
+    // BUILDER's own output for the `--template`/`--slot` arm, and a
+    // builder-produced descriptor cannot carry a sigless branch — every
+    // template is a `pk`/`multi`/`multi_a`/`sortedmulti` quorum. The uniform
+    // admission gate still runs on the result, and simply never fires there.
+    //
+    // Relaxing it would be a behaviour change nobody has ruled on: this
+    // function is also `restore`'s canonicalizer, and Phase 1 makes no
+    // behaviour change to `restore`.
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&s).map_err(|e| {
         ToolkitError::DescriptorParse(format!("export-wallet descriptor parse: {e}"))
     })?;
@@ -172,7 +183,13 @@ pub(crate) fn descriptor_to_bip388_wallet_policy(
     canonical_descriptor: &str,
     name: &str,
 ) -> Result<Value, ToolkitError> {
-    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(canonical_descriptor)
+    // Lenient: a re-parse of an already-admitted string (PLAN
+    // `PLAN_wallet_file_export.md` Phase 1, F-2). `bip388` is a TRANSFORMING
+    // emitter — it rewrites the descriptor into a `@N/**` template — and it is
+    // reached only AFTER the admission gate, so a keyless leaf must survive
+    // this parse rather than be refused here without an affordance
+    // (round-1 finding I4(b)).
+    let parsed = crate::parse_descriptor::parse_descriptor_lenient(canonical_descriptor)
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
     if !parsed.is_multipath() {
         return Err(ToolkitError::BadInput(

@@ -2,11 +2,47 @@
 //!
 //! Realizes `design/SPEC_export_wallet_v0_8.md` (subcommand grammar, refusal
 //! contract, per-vendor format emitters).
+//!
+//! # The `--allow` admission gate (PLAN_wallet_file_export.md Phase 1)
+//!
+//! Every descriptor this command emits passes ONE admission gate — the
+//! `sigless-branch` check in [`crate::descriptor_builder::allow`] — invoked at
+//! each of the two `EmitInputs` construction sites below, on that arm's
+//! canonical descriptor. Topology (B): the gate runs where the three intake
+//! arms have already converged on a canonical string, so no arm can route
+//! around it, and `--allow` reaches all three identically.
+//!
+//! The three strict parses that used to sit upstream of it are now LENIENT
+//! (`crate::parse_descriptor::parse_descriptor_lenient`). They have to be:
+//! `Descriptor::from_str` runs miniscript's sanity check on `tr()` leaves and
+//! on nothing else, so leaving any of them strict would put a second,
+//! `tr`-only, `--allow`-deaf admission point in front of the real one. The
+//! per-arm map:
+//!
+//! | site | fn | arm | role |
+//! | --- | --- | --- | --- |
+//! | `--descriptor` intake | [`run`] | `--descriptor` | canonicalize; lenient |
+//! | canonical re-parse | [`run`] | `--descriptor` (script-type derive) | lenient |
+//! | canonical parse | [`run_from_import_json`] | `--from-import-json` | lenient |
+//! | **gate 1** | [`run`] | all of `--descriptor` / `--template` / `--slot` | ADMISSION |
+//! | **gate 2** | [`run_from_import_json`] | `--from-import-json` | ADMISSION |
+//!
+//! `cmd/restore.rs`'s two `EmitInputs` builders are deliberately NOT gated.
+//! Phase 1 makes no behaviour change to `restore`.
+//!
+//! **What the flag does not do.** It permits EMISSION. Bitcoin Core refuses a
+//! sigless descriptor at `importdescriptors` on every version through v31.1
+//! and the rule is non-waivable there; Nunchuk and Sparrow refuse it too. No
+//! help text, doc or message here may claim otherwise.
 
+use crate::descriptor_builder::allow::{
+    allow_set, emit_export_allow_notes, export_admission_gate, CliAllow,
+};
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
+use crate::parse_descriptor::parse_descriptor_lenient;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
@@ -344,6 +380,24 @@ pub struct ExportWalletArgs {
         requires = "from_import_json"
     )]
     pub from_import_json_index: Option<usize>,
+
+    /// Reviewed opt-out of ONE funds-safety sanity rule per occurrence
+    /// (repeatable). Same five-value vocabulary as `build-descriptor`,
+    /// but on THIS surface only `sigless-branch` is enforced — requesting
+    /// any of the other four emits a note saying the descriptor was not
+    /// checked against it, and changes nothing.
+    ///
+    /// The emit is never silent: a waived rule that actually fires is
+    /// named in an unmissable stderr warning, and the emitted wallet file
+    /// records no allowance.
+    ///
+    /// SCOPE: the flag permits EMISSION of a wallet file for a wallet with
+    /// an anyone-can-spend path. It does not make any wallet application
+    /// accept that file — Bitcoin Core, Nunchuk and Sparrow all enforce
+    /// the same rule on import, and in Core it cannot be waived. Use it
+    /// for inspection, archival and parity, not to unblock an import.
+    #[arg(long, value_enum)]
+    pub allow: Vec<CliAllow>,
 }
 
 /// SPEC v0.8 §7 parser: `nums` or `@N` (decimal index).
@@ -512,18 +566,21 @@ pub fn run<W: Write, E: Write>(
             ));
         }
         // Descriptor passthrough: parse + canonicalize via miniscript.
-        use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
-        use std::str::FromStr;
         // SPEC bip388-double-star-shorthand-support §0 item 5 — a literal
         // `/**` concrete descriptor genuinely ACCEPTS here (closing the
         // import-accepts/export-rejects asymmetry); only the CONCRETE form
         // reaches this point (the AtN `@0/**` form is already refused by the
         // `is_at_n_form` gate above, by design).
         let expanded_desc = crate::parse_descriptor::expand_literal_double_star(desc);
-        let d =
-            MsDescriptor::<DescriptorPublicKey>::from_str(expanded_desc.as_ref()).map_err(|e| {
-                ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
-            })?;
+        // LENIENT (PLAN Phase 1, round-4 finding R4-2). `Descriptor::from_str`
+        // would run miniscript's sanity check here — but only on `tr()` leaves,
+        // never on `wsh`/`sh`/`bare`. Keeping it strict would leave a second,
+        // `tr`-only, `--allow`-deaf admission point in front of the real gate,
+        // so a `tr` form could never reach the gate at all. Admission now
+        // happens in exactly one place; see the module docs.
+        let d = parse_descriptor_lenient(expanded_desc.as_ref()).map_err(|e| {
+            ToolkitError::DescriptorParse(format!("export-wallet --descriptor: {e}"))
+        })?;
         let adv = crate::timelock_advisory::older_advisories_descriptor(&d);
         crate::timelock_advisory::emit_advisories(&adv, stderr);
         d.to_string()
@@ -634,10 +691,11 @@ pub fn run<W: Write, E: Write>(
     let script_type = if let Some(t) = template_opt {
         script_type_from_template(&t)
     } else {
-        // Descriptor path: parse once for script-type classification.
-        use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
-        use std::str::FromStr;
-        let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical).map_err(|e| {
+        // Descriptor path: parse once for script-type classification. LENIENT —
+        // this is a re-parse of the string the intake above already produced,
+        // and it sits UPSTREAM of the admission gate; a strict parse here would
+        // pre-empt the gate for `tr` and make `--allow` unreachable.
+        let parsed = parse_descriptor_lenient(&canonical).map_err(|e| {
             ToolkitError::DescriptorParse(format!("export-wallet script-type derive: {e}"))
         })?;
         script_type_from_descriptor(&parsed)?
@@ -693,6 +751,17 @@ pub fn run<W: Write, E: Write>(
             )?;
         }
     }
+
+    // ---- ADMISSION GATE 1 of 2 (PLAN Phase 1, topology (B)) ---------------
+    // Runs on THIS arm's canonical descriptor, immediately before `EmitInputs`,
+    // honouring the `AllowSet`. Uniform across wrappers and arms: the
+    // `--descriptor` arm can trip `sigless-branch`, and the `--template` /
+    // `--slot` arm runs the same rule and cannot trip it (a builder-produced
+    // descriptor never carries a sigless branch) — a CONSEQUENCE of the uniform
+    // gate, not an exemption from it. That is why the note printer runs on both.
+    let allowed = allow_set(&args.allow);
+    let fired = export_admission_gate(&canonical, &allowed)?;
+    emit_export_allow_notes(&args.allow, &fired, stderr)?;
 
     let inputs = EmitInputs {
         canonical_descriptor: crate::wallet_export::CheckedDescriptor::new(&canonical)?,
@@ -821,14 +890,17 @@ fn run_from_import_json<W: Write, E: Write>(
     }
 
     // Script-type from the parsed descriptor (canonical form sans checksum).
-    use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
-    use std::str::FromStr;
-    let parsed_ms = MsDescriptor::<DescriptorPublicKey>::from_str(&canonical_descriptor_body)
-        .map_err(|e| {
-            ToolkitError::DescriptorParse(format!(
-                "--from-import-json: descriptor parse for script-type derivation: {e}"
-            ))
-        })?;
+    // LENIENT, for the same reason as the two sites in `run`: this parse is
+    // upstream of admission gate 2 below, and a strict parse here would refuse
+    // a sigless `tr` envelope with miniscript's own message before the taproot
+    // Fix-α refusal — or, for `wsh`, silently never check it at all. One gate,
+    // one message, one place. (Round-3 finding R3-1: this arm is gated exactly
+    // like `--descriptor`; round 2 wrongly listed it as exempt.)
+    let parsed_ms = parse_descriptor_lenient(&canonical_descriptor_body).map_err(|e| {
+        ToolkitError::DescriptorParse(format!(
+            "--from-import-json: descriptor parse for script-type derivation: {e}"
+        ))
+    })?;
     let script_type = script_type_from_descriptor(&parsed_ms)?;
 
     // Task 9 (masked older() advisory): fire BEFORE the taproot refuse below,
@@ -922,6 +994,15 @@ fn run_from_import_json<W: Write, E: Write>(
     } else {
         None
     };
+
+    // ---- ADMISSION GATE 2 of 2 (PLAN Phase 1, topology (B)) ---------------
+    // The envelope arm is gated exactly like `--descriptor`: an envelope
+    // descriptor CAN be sigless (this was the R3-1 hole — a sigless `wsh`
+    // envelope exited 0 flagless), so it is waivable in exactly the same way
+    // and with exactly the same wordings.
+    let allowed = allow_set(&args.allow);
+    let fired = export_admission_gate(&canonical_descriptor, &allowed)?;
+    emit_export_allow_notes(&args.allow, &fired, stderr)?;
 
     let inputs = EmitInputs {
         canonical_descriptor: crate::wallet_export::CheckedDescriptor::new(&canonical_descriptor)?,

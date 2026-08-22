@@ -2,9 +2,7 @@
 
 use super::{EmitInputs, MissingField, TimestampArg, WalletFormatEmitter};
 use crate::error::ToolkitError;
-use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey};
 use serde_json::{json, Value};
-use std::str::FromStr;
 
 /// SPEC v0.8 §12 — `WalletFormatEmitter` impl for `--format bitcoin-core`.
 /// Thin-wraps `format_bitcoin_core_importdescriptors` (a `Value` builder) with
@@ -45,7 +43,14 @@ pub(crate) fn format_bitcoin_core_importdescriptors(
     timestamp: TimestampArg,
     _bitcoin_core_version: u8,
 ) -> Result<Value, ToolkitError> {
-    let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(canonical_descriptor)
+    // Re-parse of an ALREADY-ADMITTED string, so it is lenient (PLAN
+    // `PLAN_wallet_file_export.md` Phase 1, round-2 finding F-2: "every
+    // downstream re-parse becomes a lenient parse of an already-admitted
+    // string"). Admission lives in exactly one place per caller —
+    // `export-wallet`'s two gate sites, and `restore`'s own strict parses
+    // upstream of `emit_payload` — never here, where a refusal would carry no
+    // affordance and could not honour `--allow`.
+    let parsed = crate::parse_descriptor::parse_descriptor_lenient(canonical_descriptor)
         .map_err(|e| ToolkitError::DescriptorParse(format!("export-wallet re-parse: {e}")))?;
 
     let entries: Vec<Value> = if parsed.is_multipath() {

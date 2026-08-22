@@ -411,6 +411,32 @@ pub fn substitute_nums_sentinel(input: &str) -> String {
 /// `expand_bip388_policy`, which emits `/<0;1>/*` and never re-introduces
 /// `/**`) is returned unchanged as a borrowed no-op — zero-cost, no
 /// double-expansion.
+/// Parse a descriptor WITHOUT miniscript's parse-time sanity check.
+///
+/// `Descriptor::from_str` runs `sanity_check()` **and** an
+/// `ext_check(&ExtParams::sane())` pass over `tr()` leaves — and over nothing
+/// else. `wsh`, `sh` and `bare` are not sanity-checked at parse time at all
+/// (`descriptor/mod.rs`'s `FromStr` impl, rev `ff4732e`; the upstream comment
+/// there calls it "weird/broken behavior from 12.x" preserved for
+/// compatibility, rust-miniscript issue #734).
+///
+/// That asymmetry is an upstream parser's shape, not a policy any surface here
+/// chose. Callers that own their own admission gate need a parse that does not
+/// second-guess them, so this goes through the public `expression::FromTree`
+/// path: the same tree walk, the same BIP-380 checksum verification, the same
+/// key parsing — minus the leaf `ext_check`. Malformed input still errors.
+///
+/// The one caller class today is `export-wallet`, whose admission gate
+/// (`descriptor_builder::allow::export_admission_gate`) enforces
+/// `sigless-branch` uniformly across every wrapper and honours `--allow`.
+pub fn parse_descriptor_lenient(
+    s: &str,
+) -> Result<MsDescriptor<DescriptorPublicKey>, miniscript::Error> {
+    use miniscript::expression::{FromTree, Tree};
+    let tree = Tree::from_str(s)?;
+    MsDescriptor::<DescriptorPublicKey>::from_tree(tree.root())
+}
+
 pub fn expand_literal_double_star(desc: &str) -> Cow<'_, str> {
     if !desc.contains("/**") {
         return Cow::Borrowed(desc);

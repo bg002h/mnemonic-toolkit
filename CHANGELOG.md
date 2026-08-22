@@ -6,6 +6,60 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [Unreleased]
+
+**SemVer-MINOR (pre-1.0 breaking axis) — `export-wallet` gains `--allow <RULE>`, and TWO
+operator-visible behaviours change with it. Both are listed below; neither is a footnote.**
+
+Phase 1 of `mnemonic-engrave/design/PLAN_wallet_file_export.md` (R0 GREEN after five rounds).
+
+- **[BREAKING] a sigless `wsh`/`sh` descriptor now REFUSES without `--allow sigless-branch`.**
+  `export-wallet --descriptor <sigless wsh> --format bitcoin-core` exits 0 today (2694 bytes of
+  shape-perfect JSON for the reference wallet) and now exits 2 unless the flag is supplied. The
+  rule was never absent by decision: `rust-miniscript`'s `Descriptor::from_str` runs its sanity
+  check on `tr()` leaves and on nothing else, so the check reached one wrapper by accident of the
+  parser's shape. A flag whose reach depends on that is not a flag anyone can reason about, so the
+  rule is now enforced uniformly on every wrapper and every intake arm — `--descriptor`,
+  `--template`/`--slot` and `--from-import-json` alike. The `--from-import-json` arm is the same
+  change: a sigless `wsh` envelope also exited 0 flagless.
+- **[BREAKING] the `--descriptor` intake parse is now LENIENT.** It has to be, or a `tr` form could
+  never reach the gate to be waived. The consequence to state plainly: `export-wallet` no longer
+  runs miniscript's *other four* sanity rules on `tr()` leaves at intake. A taproot descriptor that
+  is malleable, repeats a key, mixes height/time timelocks or exceeds resource limits used to be
+  refused there and is now emitted. Only `sigless-branch` is enforced on this surface (see below);
+  the other four are enforced on no wrapper, which is what "uniform" means here.
+- **[feature] `--allow <RULE>`**, same five-value vocabulary as `build-descriptor`
+  (`malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch`), repeatable.
+  On THIS surface only `sigless-branch` is enforced; requesting any other emits
+  `note: --allow <rule> has no effect on export-wallet — only sigless-branch is enforced here; the
+  descriptor was NOT checked against <rule>` and changes nothing. The emit is never silent: a
+  waived rule that fires is named in an unmissable stderr `WARNING`, and the emitted wallet file
+  records no allowance.
+- **[scope] `--allow` enables EMISSION, not import.** Measured: Bitcoin Core refuses a sigless
+  descriptor at `importdescriptors` on every version through v31.1 and the rule is **non-waivable**
+  there; Nunchuk refuses via libnunchuk's `IsSane()`/`NeedsSignature()`; Sparrow has no miniscript
+  engine at all. The flag is worth having on parity, inspection and archival merits, and on those
+  alone. Nothing in the help text or messages claims otherwise.
+- **[unchanged] `restore` is NOT gated.** `restore --md1 --format bitcoin-core` on a sigless `wsh`
+  emits flagless at exit 0, byte-for-byte as before
+  (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1f95e4b18`). `restore` has no
+  `--allow` flag and gains none. Gating that surface would be its own decision with its own
+  release note.
+- **[unchanged] taproot `--from-import-json` envelopes stay refused** by the v0.28.7 `Fix-α` gate,
+  with or without `--allow` — the wallet-import wire shape cannot carry a taproot internal-key
+  designation. Nobody has ruled on lifting it.
+- **[internal] `CliAllow` / `allow_set` / `emit_allow_notes` / `AllowSet::to_ext_params` moved to
+  `descriptor_builder::allow`** before the second caller was wired, so the two commands cannot grow
+  two rule vocabularies. `build-descriptor` behaviour is unchanged.
+
+### Migration
+
+- **`$?`-gated scripts exporting a policy wallet with a keyless spend path** must add
+  `--allow sigless-branch`. The refusal names the flag.
+- **Scripts exporting a taproot descriptor that trips one of the other four rules** now succeed
+  where they used to exit 2. If you were relying on that refusal, it never applied to your `wsh`
+  wallets either — use `build-descriptor`, which enforces all five.
+
 ## mnemonic-toolkit [0.97.0] — 2026-08-03
 
 **SemVer-MINOR, documented-CLI-contract change — `verify-bundle` descriptor INPUT errors now exit 2 (`DescriptorParse`), matching `bundle`, instead of 4. Exit 4 was this project's BundleMismatch / VERIFY-ME tier, so a mistyped `--descriptor` told the user their engraved bundle might be corrupt — and made the GUI render an amber VERIFY-ME badge for a typo.**

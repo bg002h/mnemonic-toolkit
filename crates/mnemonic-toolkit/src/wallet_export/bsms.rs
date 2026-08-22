@@ -38,7 +38,6 @@ use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use clap::ValueEnum;
 use miniscript::{Descriptor as MsDescriptor, DescriptorPublicKey, ForEachKey};
-use std::str::FromStr;
 
 /// SPEC v0.27.0 §3.5 — `--bsms-form` CLI value enum. `4-line` is the
 /// BIP-129-canonical Round-2 plaintext shape; `2-line` is the lenient
@@ -101,8 +100,11 @@ impl WalletFormatEmitter for BsmsEmitter {
                 // (rather than threading a `&Descriptor` into `EmitInputs`)
                 // keeps the cross-emitter contract minimal — other formats
                 // do their own parse where needed (e.g., bitcoin_core.rs:48).
+                // Lenient: a re-parse of an already-admitted string (PLAN
+                // `PLAN_wallet_file_export.md` Phase 1, F-2). Admission is the
+                // caller's job and happens exactly once, upstream.
                 let parsed =
-                    MsDescriptor::<DescriptorPublicKey>::from_str(&inputs.canonical_descriptor)
+                    crate::parse_descriptor::parse_descriptor_lenient(&inputs.canonical_descriptor)
                         .map_err(|e| {
                             ToolkitError::DescriptorParse(format!(
                                 "--format bsms 4-line: descriptor re-parse: {e}"
