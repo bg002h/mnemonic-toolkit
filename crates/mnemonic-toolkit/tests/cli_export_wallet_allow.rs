@@ -1044,6 +1044,88 @@ fn sparrow_descriptor_passthrough_refusal_is_untouched_for_a_sane_wallet() {
     );
 }
 
+// ============================================================================
+// PHASE 3 — the Sparrow refusal, made deliberate
+// ============================================================================
+
+/// **This test exists to stop a future change from being harmless-looking.**
+///
+/// Sparrow has no miniscript engine. Verified against `sparrowwallet/drongo`
+/// @ `b385610` and `sparrowwallet/sparrow` @ `e7ae9cc` (both upstream `master`
+/// HEAD, 2026-08-21; latest release 2.5.3). Descriptor import runs through
+/// `drongo/.../OutputDescriptor.java` (1098 lines), which decides a multisig
+/// threshold with one regex, `MULTI_PATTERN = multi\(\s*(\d+)` (line 30).
+///
+/// Both patterns were re-run against this wallet's own two concrete
+/// descriptors:
+///
+/// - **`wsh`** — matches `multi(3`, six xpubs found, so it builds a
+///   **3-of-6 multisig**. `or_i`, both `and_v`s, both `sha256` hashlocks,
+///   `older`, `after`, tiers 2-4: never rejected, **never inspected**. Wrong
+///   script, wrong addresses, and the only warning mentions BIP67 key sorting.
+/// - **`tr`** — `multi_a(` does not satisfy `multi\(`, so the threshold is
+///   ABSENT with 6 keys and `OutputDescriptor.java:619` throws
+///   *"Cannot determine the multisig threshold in a descriptor providing 6
+///   keys"*. Loud, and only because a regex happened not to match.
+///
+/// (The 59-line `policy/Miniscript.java` shim is real but is NOT the import
+/// path — an earlier draft of this comment cited it, which was a neat sentence
+/// pointing at the wrong file.)
+///
+/// An operator who exported this wallet to Sparrow would be shown addresses that
+/// are not their wallet's. That is a funds-loss trap, not a compatibility note.
+///
+/// The constellation cannot produce that file today — but only INCIDENTALLY:
+/// the Sparrow emitter refuses descriptor passthrough because it takes templates
+/// only, not because anyone reasoned about Sparrow's miniscript gap. **Adding
+/// passthrough to that emitter would look like a feature and would be a
+/// funds-safety defect.** This test is the tripwire, and this comment is the
+/// reason it must not simply be updated to match new behaviour.
+///
+/// Distinct from `sparrow_descriptor_passthrough_refusal_is_untouched_for_a_sane_wallet`:
+/// that one guards a SANE descriptor, which never meets the admission gate. This
+/// one drives the sigless wallet PAST the gate with `--allow sigless-branch`, so
+/// the refusal under test is Sparrow's own and not the gate's.
+#[test]
+fn phase3_sparrow_refuses_this_wallet_past_the_gate_both_wrappers() {
+    for (label, desc) in [("wsh", rcw_wsh()), ("tr", rcw_tr())] {
+        let r = run(&[
+            "export-wallet",
+            "--descriptor",
+            &desc,
+            "--format",
+            "sparrow",
+            "--allow",
+            "sigless-branch",
+        ]);
+        assert_eq!(
+            r.code, 1,
+            "{label}: must refuse, and at Sparrow's tier (1), not the gate's (2). \
+             stdout={} stderr={}",
+            r.stdout, r.stderr
+        );
+        assert!(
+            r.stdout.is_empty(),
+            "{label}: a refusal must emit no file — a partial Sparrow artifact is \
+             the thing that gets imported: {}",
+            r.stdout
+        );
+        // The gate was PASSED, not tripped: the override fired. If this stops
+        // being true the test is measuring the wrong refusal.
+        assert!(
+            r.stderr.contains("FIRED: sigless-branch"),
+            "{label}: must be past the admission gate for this to test Sparrow: {}",
+            r.stderr
+        );
+        assert!(
+            r.stderr
+                .contains("requires --template; descriptor passthrough is not supported"),
+            "{label}: the refusal must be Sparrow's own: {}",
+            r.stderr
+        );
+    }
+}
+
 /// Open Q4 (Rust-first): Phase 1 touches the tr/wsh sanity asymmetry the
 /// CLI-surface report flags as potentially normative, so the new refusals are
 /// pinned HERE, in the primary Rust repo, with vectors — before any Go port
