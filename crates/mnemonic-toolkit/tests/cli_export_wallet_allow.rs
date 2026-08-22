@@ -169,6 +169,72 @@ fn sigless_wsh_exports_with_the_flag() {
     assert_eq!(arr[1]["internal"], serde_json::json!(true));
 }
 
+/// A keyless miniscript under a bare `sh()` wrapper — the legacy-P2SH arm of
+/// `descriptor_sigless`'s match (`ShInner::Ms`).
+///
+/// **This test exists because the whole-diff review proved the suite did not
+/// need it to stay green.** With that arm forced to `false`, all 3928 tests
+/// passed while this exact invocation emitted flagless at exit 0 — the
+/// silent-sigless class Phase 1 exists to close, reopened on the one wrapper
+/// nobody had a fixture for. The CODE was always right; only the coverage was
+/// missing, which is indistinguishable from correct until something mutates it.
+///
+/// `sh(ms)` and `sh(wsh(ms))` are different match arms. A fixture for either
+/// leaves the other unguarded.
+fn sh_keyless() -> String {
+    "sh(and_v(v:sha256(ede0b28a805feca09a77c48f82babc1249c79aa840de94fa4a85bf55a453c813),\
+after(1383520)))"
+        .to_string()
+}
+
+#[test]
+fn flagless_sigless_sh_ms_refuses_and_names_the_flag() {
+    let r = run(&[
+        "export-wallet",
+        "--descriptor",
+        &sh_keyless(),
+        "--format",
+        "bitcoin-core",
+    ]);
+    assert_eq!(r.code, 2, "stdout={} stderr={}", r.stdout, r.stderr);
+    assert!(
+        r.stderr.contains("--allow sigless-branch"),
+        "the refusal must name the exact flag that waives it: {}",
+        r.stderr
+    );
+    assert!(
+        r.stdout.is_empty(),
+        "refusal must emit nothing: {}",
+        r.stdout
+    );
+}
+
+#[test]
+fn sigless_sh_ms_exports_with_the_flag() {
+    let r = run(&[
+        "export-wallet",
+        "--descriptor",
+        &sh_keyless(),
+        "--format",
+        "bitcoin-core",
+        "--allow",
+        "sigless-branch",
+    ]);
+    assert_eq!(r.code, 0, "stderr={}", r.stderr);
+    let v: serde_json::Value = serde_json::from_str(&r.stdout).expect("importdescriptors JSON");
+    let arr = v.as_array().expect("array");
+    assert!(
+        arr[0]["desc"].as_str().unwrap().starts_with("sh("),
+        "must emit the sh wrapper it was given: {}",
+        arr[0]["desc"]
+    );
+    assert!(
+        r.stderr.contains("FIRED"),
+        "the override must be announced when it fires: {}",
+        r.stderr
+    );
+}
+
 /// The `:524` intake going lenient is what lets a `tr` form reach the gate at
 /// all (round-4 finding R4-2). An implementer who leaves it strict fails
 /// exactly here.
@@ -862,6 +928,14 @@ fn the_sane_control_is_actually_sane() {
 /// All eleven `--format` values, one sigless wallet, no flag: the gate's
 /// message, every time. If any format ever answers with its own refusal here,
 /// something reached an emitter without passing the gate.
+///
+/// **SCOPE, corrected by the whole-diff review (M-2): this proves the property
+/// for the `--descriptor` arm only.** On the `--from-import-json` arm the
+/// template-requiring formats hit a general-policy refusal *before* gate 2, so
+/// their verdict there is not the gate's. That ordering is fail-closed — it
+/// refuses earlier, never later, so it opens no admission hole — but a reader
+/// who took "every arm" from an earlier draft of this comment would have been
+/// reading a guarantee this test does not make.
 #[test]
 fn every_format_meets_the_same_gate_before_its_own_verdict() {
     const FORMATS: [&str; 11] = [
