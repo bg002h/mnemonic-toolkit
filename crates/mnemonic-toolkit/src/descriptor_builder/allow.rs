@@ -195,6 +195,48 @@ pub(crate) fn descriptor_has_sigless_branch(d: &MsDescriptor<DescriptorPublicKey
     }
 }
 
+/// What the requested waiver actually buys on this invocation, which depends
+/// on the artifact the chosen `--format` produces (PLAN Phase 1b).
+///
+/// The gate's refusal names the flag AND says what accepting it gets you. That
+/// second half is not decoration: Phase 1's round-1 Critical was a purpose
+/// sentence falsified by measurement, and the same sentence would be false
+/// again if `--format bitcoin-core-addresses` inherited it. Every other
+/// format's wording is UNCHANGED — [`EmissionKind::Descriptor`] reproduces the
+/// Phase-1 string byte-for-byte.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EmissionKind {
+    /// A wallet-DESCRIPTOR artifact. Bitcoin Core refuses a sigless descriptor
+    /// at `importdescriptors` on every version through v31.1 and the rule is
+    /// non-waivable there; Nunchuk and Sparrow refuse it too. The flag buys
+    /// emission and nothing downstream of it.
+    Descriptor,
+    /// An `addr()` ADDRESS LIST (`--format bitcoin-core-addresses`). Here the
+    /// emitted addresses genuinely do import — an `addr()` carries no spend
+    /// policy for the sanity rule to object to — so the descriptor-route
+    /// sentence would be a lie. What stays true, and what this wording says
+    /// instead, is that the DESCRIPTOR still never imports.
+    AddressList,
+}
+
+impl EmissionKind {
+    /// The sentence appended to the refusal. Kept beside the variants so the
+    /// two cannot drift apart.
+    fn refusal_tail(self) -> &'static str {
+        match self {
+            EmissionKind::Descriptor => {
+                "The flag permits EMISSION of the wallet file \u{2014} it does not make any \
+                 wallet application accept it."
+            }
+            EmissionKind::AddressList => {
+                "The flag permits EMISSION of this address list. Bitcoin Core does accept \
+                 addr() entries \u{2014} what it will never accept is this wallet's \
+                 descriptor, on any version through v31.1."
+            }
+        }
+    }
+}
+
 /// `export-wallet`'s single admission gate (PLAN Phase 1, round-3 topology
 /// **(B)**, re-stated as a mechanism by round 4).
 ///
@@ -203,6 +245,10 @@ pub(crate) fn descriptor_has_sigless_branch(d: &MsDescriptor<DescriptorPublicKey
 /// honouring the [`AllowSet`]. Uniform: the rule runs on every wrapper and every
 /// arm. On the `--template`/`--slot` arm it therefore RUNS and cannot fire — a
 /// consequence of the uniform gate, not an exemption from it.
+///
+/// `kind` selects only the refusal's closing sentence (PLAN Phase 1b). It does
+/// NOT change what is admitted: the rule, the wrappers it runs on, the exit
+/// code and the leading sentence are identical for every format.
 ///
 /// Returns the allowed rules that actually FIRED, for the never-silent warning.
 ///
@@ -215,19 +261,18 @@ pub(crate) fn descriptor_has_sigless_branch(d: &MsDescriptor<DescriptorPublicKey
 pub(crate) fn export_admission_gate(
     canonical: &str,
     allow: &AllowSet,
+    kind: EmissionKind,
 ) -> Result<Vec<DiagnosticKind>, ToolkitError> {
     let parsed = parse_descriptor_lenient(canonical)
         .map_err(|e| ToolkitError::DescriptorParse(format!("export-wallet admission: {e}")))?;
     let mut fired = Vec::new();
     if descriptor_has_sigless_branch(&parsed) {
         if !allow.sigless_branch {
-            return Err(ToolkitError::DescriptorParse(
+            return Err(ToolkitError::DescriptorParse(format!(
                 "export-wallet: this wallet has a spend path that requires no signature \
-                 (anyone-can-spend); rerun with --allow sigless-branch after review. \
-                 The flag permits EMISSION of the wallet file — it does not make any \
-                 wallet application accept it."
-                    .to_string(),
-            ));
+                 (anyone-can-spend); rerun with --allow sigless-branch after review. {}",
+                kind.refusal_tail()
+            )));
         }
         fired.push(DiagnosticKind::SiglessBranch);
     }
@@ -406,13 +451,15 @@ mod export_allow_tests {
             format!("sh(wsh({keyless}))"),
             format!("tr({NUMS},{keyless})"),
         ] {
-            let err = export_admission_gate(&d, &AllowSet::default()).unwrap_err();
+            let err = export_admission_gate(&d, &AllowSet::default(), EmissionKind::Descriptor)
+                .unwrap_err();
             assert!(
                 err.to_string().contains("--allow sigless-branch"),
                 "refusal must name the flag: {err}"
             );
             let allow = allow_set(&[CliAllow::SiglessBranch]);
-            let fired = export_admission_gate(&d, &allow).expect("admitted with the flag");
+            let fired = export_admission_gate(&d, &allow, EmissionKind::Descriptor)
+                .expect("admitted with the flag");
             assert_eq!(fired, vec![DiagnosticKind::SiglessBranch], "{d}");
         }
     }
@@ -423,14 +470,91 @@ mod export_allow_tests {
     fn gate_admits_a_sane_descriptor_and_reports_nothing_fired() {
         let d = format!("wsh(multi(2,{K},{K2}))");
         assert_eq!(
-            export_admission_gate(&d, &AllowSet::default()).unwrap(),
+            export_admission_gate(&d, &AllowSet::default(), EmissionKind::Descriptor).unwrap(),
             Vec::<DiagnosticKind>::new()
         );
         let allow = allow_set(&[CliAllow::SiglessBranch]);
         assert_eq!(
-            export_admission_gate(&d, &allow).unwrap(),
+            export_admission_gate(&d, &allow, EmissionKind::Descriptor).unwrap(),
             Vec::<DiagnosticKind>::new()
         );
+    }
+
+    /// PLAN Phase 1b — the `EmissionKind` axis changes the refusal's closing
+    /// sentence and NOTHING else. The two things this asserts:
+    ///
+    /// 1. `Descriptor` reproduces the Phase-1 string byte-for-byte, so no
+    ///    shipped format's wording moved;
+    /// 2. `AddressList` does NOT carry the *"does not make any wallet
+    ///    application accept it"* claim, because for an `addr()` list that is
+    ///    false — while still saying the descriptor never imports.
+    #[test]
+    fn the_refusal_tail_is_format_aware_and_the_descriptor_wording_is_unmoved() {
+        let d = format!("wsh(and_v(v:after(1383520),sha256({H})))");
+        let desc_err = export_admission_gate(&d, &AllowSet::default(), EmissionKind::Descriptor)
+            .unwrap_err()
+            .to_string();
+        let addr_err = export_admission_gate(&d, &AllowSet::default(), EmissionKind::AddressList)
+            .unwrap_err()
+            .to_string();
+
+        // (1) the Phase-1 string, verbatim. (`Display` prefixes `error: `.)
+        assert_eq!(
+            desc_err,
+            "error: export-wallet: this wallet has a spend path that requires no signature \
+             (anyone-can-spend); rerun with --allow sigless-branch after review. \
+             The flag permits EMISSION of the wallet file \u{2014} it does not make any \
+             wallet application accept it."
+        );
+
+        // The leading sentence is shared, so the gate is still one gate.
+        let shared = "this wallet has a spend path that requires no signature \
+                      (anyone-can-spend); rerun with --allow sigless-branch after review.";
+        assert!(desc_err.contains(shared), "{desc_err}");
+        assert!(addr_err.contains(shared), "{addr_err}");
+
+        // (2) the address-list tail is different, and honest in both directions.
+        assert_ne!(desc_err, addr_err);
+        assert!(
+            !addr_err.contains("does not make any wallet application accept it"),
+            "false for an addr() list: {addr_err}"
+        );
+        assert!(
+            addr_err.contains("descriptor"),
+            "it must still say the DESCRIPTOR never imports: {addr_err}"
+        );
+        assert!(addr_err.contains("v31.1"), "{addr_err}");
+    }
+
+    /// The gate admits and refuses IDENTICALLY under both `EmissionKind`s —
+    /// the wording axis must not become an admission axis.
+    #[test]
+    fn emission_kind_changes_wording_only_never_admission() {
+        let keyless = format!("and_v(v:after(1383520),sha256({H}))");
+        let sane = format!("wsh(multi(2,{K},{K2}))");
+        let allow = allow_set(&[CliAllow::SiglessBranch]);
+        for k in [EmissionKind::Descriptor, EmissionKind::AddressList] {
+            for d in [
+                format!("wsh({keyless})"),
+                format!("sh(wsh({keyless}))"),
+                format!("tr({NUMS},{keyless})"),
+            ] {
+                assert!(
+                    export_admission_gate(&d, &AllowSet::default(), k).is_err(),
+                    "{k:?} must refuse {d} flagless"
+                );
+                assert_eq!(
+                    export_admission_gate(&d, &allow, k).unwrap(),
+                    vec![DiagnosticKind::SiglessBranch],
+                    "{k:?} {d}"
+                );
+            }
+            assert_eq!(
+                export_admission_gate(&sane, &AllowSet::default(), k).unwrap(),
+                Vec::<DiagnosticKind>::new(),
+                "{k:?}"
+            );
+        }
     }
 
     /// Over-admission guard (round-1 finding I4), at the unit level: requesting
@@ -446,7 +570,7 @@ mod export_allow_tests {
         ] {
             let set = allow_set(&[other]);
             assert!(
-                export_admission_gate(&d, &set).is_err(),
+                export_admission_gate(&d, &set, EmissionKind::Descriptor).is_err(),
                 "--allow {} must not admit a sigless branch",
                 other.kebab()
             );

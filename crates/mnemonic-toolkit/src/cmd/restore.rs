@@ -2513,6 +2513,10 @@ fn build_import_payload(
         timestamp: TimestampArg::Unix(0),
         bitcoin_core_version: 25,
         bsms_form: BsmsForm::default(),
+        // PLAN Phase 1b: `restore` has no --count flag, so the
+        // `bitcoin-core-addresses` window is the stated default. Every
+        // other format ignores this field.
+        address_count: crate::wallet_export::DEFAULT_ADDRESS_COUNT,
     };
 
     // Shared 4-way dispatch (collect_missing-first → emit) via the canonical
@@ -2817,6 +2821,10 @@ fn build_multisig_import_payload(
         timestamp: TimestampArg::Unix(0),
         bitcoin_core_version: 25,
         bsms_form: BsmsForm::default(),
+        // PLAN Phase 1b: `restore` has no --count flag, so the
+        // `bitcoin-core-addresses` window is the stated default. Every
+        // other format ignores this field.
+        address_count: crate::wallet_export::DEFAULT_ADDRESS_COUNT,
     };
 
     // Shared 4-way dispatch (collect_missing-first → emit) via the canonical

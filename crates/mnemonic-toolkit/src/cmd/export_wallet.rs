@@ -36,7 +36,7 @@
 //! help text, doc or message here may claim otherwise.
 
 use crate::descriptor_builder::allow::{
-    allow_set, emit_export_allow_notes, export_admission_gate, CliAllow,
+    allow_set, emit_export_allow_notes, export_admission_gate, CliAllow, EmissionKind,
 };
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
@@ -46,10 +46,10 @@ use crate::parse_descriptor::parse_descriptor_lenient;
 use crate::template::CliTemplate;
 use crate::wallet_export::{
     build_descriptor_string, script_type_from_descriptor, script_type_from_template,
-    validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreEmitter,
-    BsmsEmitter, BsmsForm, ColdcardEmitter, DescriptorEmitter, ElectrumEmitter, EmitInputs,
-    GreenEmitter, JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey, TimestampArg,
-    WalletFormatEmitter, WalletScriptType,
+    validate_watch_only, validate_watch_only_resolved, Bip388Emitter, BitcoinCoreAddressesEmitter,
+    BitcoinCoreEmitter, BsmsEmitter, BsmsForm, ColdcardEmitter, DescriptorEmitter, ElectrumEmitter,
+    EmitInputs, GreenEmitter, JadeEmitter, SparrowEmitter, SpecterEmitter, TaprootInternalKey,
+    TimestampArg, WalletFormatEmitter, WalletScriptType, DEFAULT_ADDRESS_COUNT,
 };
 use clap::{Args, ValueEnum};
 use std::io::Write;
@@ -58,6 +58,12 @@ use std::io::Write;
 pub enum CliExportFormat {
     #[value(name = "bitcoin-core")]
     BitcoinCore,
+    /// PLAN Phase 1b — an `addr()` watch list rather than a descriptor. The
+    /// only Bitcoin Core route that survives a wallet with a signatureless
+    /// spend path: Core's sanity rule has nothing to object to in a bare
+    /// scriptPubKey. See `wallet_export::bitcoin_core_addresses`.
+    #[value(name = "bitcoin-core-addresses")]
+    BitcoinCoreAddresses,
     #[value(name = "bip388")]
     Bip388,
     #[value(name = "coldcard")]
@@ -90,7 +96,28 @@ fn format_requires_template(f: CliExportFormat) -> bool {
     use CliExportFormat::*;
     match f {
         Sparrow | Coldcard | ColdcardMultisig | Jade | Electrum => true,
-        BitcoinCore | Bip388 | Bsms | Green | Specter | Descriptor => false,
+        // `bitcoin-core-addresses` needs only the canonical descriptor (it
+        // derives addresses from it), so it is template-agnostic like the
+        // other faithful formats.
+        BitcoinCore | BitcoinCoreAddresses | Bip388 | Bsms | Green | Specter | Descriptor => false,
+    }
+}
+
+/// Which artifact a `--format` produces, for the admission gate's refusal
+/// wording (PLAN Phase 1b). Exhaustive (no `_` arm) so a new
+/// `CliExportFormat` variant forces a decision rather than silently inheriting
+/// the descriptor-route sentence.
+///
+/// This selects ONLY the closing sentence of the refusal. What is admitted,
+/// which wrappers the rule runs on, and the exit code are identical for every
+/// format — that uniformity is Phase 1's topology (B), asserted by
+/// `every_format_meets_the_same_gate_before_its_own_verdict`.
+fn emission_kind(f: CliExportFormat) -> EmissionKind {
+    use CliExportFormat::*;
+    match f {
+        BitcoinCoreAddresses => EmissionKind::AddressList,
+        BitcoinCore | Bip388 | Coldcard | ColdcardMultisig | Jade | Sparrow | Specter
+        | Electrum | Green | Bsms | Descriptor => EmissionKind::Descriptor,
     }
 }
 
@@ -119,6 +146,10 @@ pub(crate) fn emit_payload(
             CliExportFormat::BitcoinCore => {
                 (BitcoinCoreEmitter::collect_missing(inputs), "bitcoin-core")
             }
+            CliExportFormat::BitcoinCoreAddresses => (
+                BitcoinCoreAddressesEmitter::collect_missing(inputs),
+                "bitcoin-core-addresses",
+            ),
             CliExportFormat::Bip388 => (Bip388Emitter::collect_missing(inputs), "bip388"),
             CliExportFormat::Coldcard => (ColdcardEmitter::collect_missing(inputs), "coldcard"),
             CliExportFormat::ColdcardMultisig => (
@@ -204,6 +235,7 @@ pub(crate) fn emit_payload(
 
     match format {
         CliExportFormat::BitcoinCore => BitcoinCoreEmitter::emit(inputs),
+        CliExportFormat::BitcoinCoreAddresses => BitcoinCoreAddressesEmitter::emit(inputs),
         CliExportFormat::Bip388 => Bip388Emitter::emit(inputs),
         CliExportFormat::Coldcard => ColdcardEmitter::emit(inputs),
         CliExportFormat::ColdcardMultisig => {
@@ -320,6 +352,14 @@ pub struct ExportWalletArgs {
     /// Bitcoin Core target version. 24 or 25 (default 25).
     #[arg(long = "bitcoin-core-version", default_value = "25")]
     pub bitcoin_core_version: u8,
+
+    /// Addresses PER CHAIN for --format bitcoin-core-addresses (default 20,
+    /// the BIP-44 gap limit): N receive + N change, indices 0..N-1. The
+    /// emitted list is FIXED — Bitcoin Core cannot derive past it, because
+    /// the file holds addresses rather than the wallet descriptor. Ignored by
+    /// every other format.
+    #[arg(long, default_value_t = DEFAULT_ADDRESS_COUNT)]
+    pub count: u32,
 
     /// SPEC v0.8 §2 — wallet name/label for formats that publish one
     /// (Coldcard generic JSON, Sparrow, Specter, Electrum). Optional;
@@ -760,7 +800,7 @@ pub fn run<W: Write, E: Write>(
     // descriptor never carries a sigless branch) — a CONSEQUENCE of the uniform
     // gate, not an exemption from it. That is why the note printer runs on both.
     let allowed = allow_set(&args.allow);
-    let fired = export_admission_gate(&canonical, &allowed)?;
+    let fired = export_admission_gate(&canonical, &allowed, emission_kind(args.format))?;
     emit_export_allow_notes(&args.allow, &fired, stderr)?;
 
     let inputs = EmitInputs {
@@ -783,6 +823,7 @@ pub fn run<W: Write, E: Write>(
         bitcoin_core_version: args.bitcoin_core_version,
         master_xpub_at_0,
         bsms_form: args.bsms_form,
+        address_count: args.count,
     };
 
     // Shared 4-way dispatch (collect_missing-first → emit); see `emit_payload`.
@@ -1001,7 +1042,7 @@ fn run_from_import_json<W: Write, E: Write>(
     // envelope exited 0 flagless), so it is waivable in exactly the same way
     // and with exactly the same wordings.
     let allowed = allow_set(&args.allow);
-    let fired = export_admission_gate(&canonical_descriptor, &allowed)?;
+    let fired = export_admission_gate(&canonical_descriptor, &allowed, emission_kind(args.format))?;
     emit_export_allow_notes(&args.allow, &fired, stderr)?;
 
     let inputs = EmitInputs {
@@ -1028,6 +1069,7 @@ fn run_from_import_json<W: Write, E: Write>(
         bitcoin_core_version: args.bitcoin_core_version,
         master_xpub_at_0: None,
         bsms_form: args.bsms_form,
+        address_count: args.count,
     };
 
     // §3.7 — per-format missing-info channel + dispatch via the shared
@@ -1115,6 +1157,7 @@ mod h10_unsorted_multi_refusal_tests {
             timestamp: TimestampArg::Unix(0),
             bitcoin_core_version: 25,
             bsms_form: BsmsForm::FourLine,
+            address_count: crate::wallet_export::DEFAULT_ADDRESS_COUNT,
         }
     }
 

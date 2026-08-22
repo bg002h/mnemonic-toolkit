@@ -17,6 +17,17 @@
 # RPC-ready in ~1s, ~17MB datadir), exports the wiring env vars the test
 # reads, builds the `mnemonic` binary, runs the `--ignored` test, stops it.
 #
+# SECOND GATE, same node (PLAN_wallet_file_export.md Phase 1b):
+# crates/mnemonic-toolkit/tests/bitcoind_addr_import.rs — the IMPORT gate for
+# `--format bitcoin-core-addresses`. It asserts a live `importdescriptors`
+# returns per-entry `success: true` for the emitted addr() list, AND that the
+# same wallet's DESCRIPTOR route is still refused per-entry ("witnesses
+# without signature exist"). That format exists precisely because the
+# descriptor route emits fine and fails at import, so accepting it on
+# emission alone would repeat the defect the plan's round-1 review caught.
+# Same CONNECT-ONLY + `#[ignore]`-by-default contract, same env vars, same
+# node — one provisioning serves both.
+#
 # bitcoind is PINNED to v27.0 and sha256-verified (NOT distro apt). v27
 # accepts the full corpus (single-sig, wsh-miniscript, tr(NUMS,{multi_a,
 # sortedmulti_a})).
@@ -38,6 +49,11 @@ on:
       - "crates/mnemonic-toolkit/src/cmd/restore.rs"
       - "crates/mnemonic-toolkit/src/cmd/bundle.rs"
       - "crates/mnemonic-toolkit/tests/bitcoind_differential.rs"
+      - "crates/mnemonic-toolkit/tests/bitcoind_addr_import.rs"
+      - "crates/mnemonic-toolkit/src/wallet_export/bitcoin_core_addresses.rs"
+      - "crates/mnemonic-toolkit/src/wallet_export/mod.rs"
+      - "crates/mnemonic-toolkit/src/cmd/export_wallet.rs"
+      - "crates/mnemonic-toolkit/src/descriptor_builder/allow.rs"
       - ".github/workflows/bitcoind-differential.yml"
   pull_request:
     paths:
@@ -47,6 +63,11 @@ on:
       - "crates/mnemonic-toolkit/src/cmd/restore.rs"
       - "crates/mnemonic-toolkit/src/cmd/bundle.rs"
       - "crates/mnemonic-toolkit/tests/bitcoind_differential.rs"
+      - "crates/mnemonic-toolkit/tests/bitcoind_addr_import.rs"
+      - "crates/mnemonic-toolkit/src/wallet_export/bitcoin_core_addresses.rs"
+      - "crates/mnemonic-toolkit/src/wallet_export/mod.rs"
+      - "crates/mnemonic-toolkit/src/cmd/export_wallet.rs"
+      - "crates/mnemonic-toolkit/src/descriptor_builder/allow.rs"
       - ".github/workflows/bitcoind-differential.yml"
   schedule:
     # Daily at 05:17 UTC (off the hour to avoid the cron thundering herd).
@@ -62,7 +83,9 @@ env:
 
 jobs:
   differential:
-    name: bitcoind v27.0 end-to-end differential
+    # Renamed 2026-08-22 (PLAN Phase 1b): this job now runs TWO gates against
+    # the one node, and a reader of a green run must be able to tell which.
+    name: bitcoind v27.0 gates (end-to-end differential + addr-import)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -129,6 +152,21 @@ jobs:
           BITCOIND_RPCPORT: "18999"
         run: |
           cargo test -p mnemonic-toolkit --test bitcoind_differential \
+            -- --ignored --nocapture
+
+      # PLAN_wallet_file_export.md Phase 1b — the IMPORT gate. Same node, same
+      # CONNECT-ONLY wiring. NOT `if: success()`-guarded beyond the default:
+      # if the differential above fails this does not run, which is correct —
+      # a node that failed the differential is not a trustworthy oracle.
+      - name: Run bitcoin-core-addresses IMPORT gate (--ignored)
+        shell: bash
+        env:
+          MNEMONIC_BIN: ${{ github.workspace }}/target/debug/mnemonic
+          BITCOINCLI_BIN: ${{ runner.temp }}/bitcoin-${{ env.BITCOIND_VERSION }}/bin/bitcoin-cli
+          BITCOIND_DATADIR: ${{ runner.temp }}/bcd
+          BITCOIND_RPCPORT: "18999"
+        run: |
+          cargo test -p mnemonic-toolkit --test bitcoind_addr_import \
             -- --ignored --nocapture
 
       - name: Stop bitcoind

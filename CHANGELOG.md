@@ -60,6 +60,43 @@ Phase 1 of `mnemonic-engrave/design/PLAN_wallet_file_export.md` (R0 GREEN after 
   where they used to exit 2. If you were relying on that refusal, it never applied to your `wsh`
   wallets either — use `build-descriptor`, which enforces all five.
 
+### Phase 1b — `--format bitcoin-core-addresses` (ADDITIVE; nothing existing changes)
+
+Phase 1b of the same plan. A new `--format` value and a new `--count` flag; no existing format,
+flag, message or exit code behaves differently, and `restore --md1 --format bitcoin-core` is still
+byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1f95e4b18`).
+
+- **[feature] `--format bitcoin-core-addresses`** emits N non-ranged `addr(<address>)#<checksum>`
+  entries as an `importdescriptors` array — receive **and** change, because a change-blind watch
+  wallet silently under-reports the balance. This is the ONLY Bitcoin Core route a wallet with a
+  signatureless spend path survives: Core refuses the *descriptor* on the sanity rule on every
+  version through v31.1 and cannot waive it, but an `addr()` carries no spend policy for that rule
+  to object to. **You can watch such a wallet in Core; you cannot describe it to Core** — this
+  format does not change that, and nothing here claims it does.
+- **[feature] `--count <N>`**, default **20** (the BIP-44 gap limit): N receive + N change,
+  indices `0..N-1`. Ignored by every other format, per the per-format ignored-input contract.
+  `--count 0` is refused rather than emitting a watch list that watches nothing.
+- **[safety] the artifact states its own limits in-band.** Every receive entry carries a `label`
+  naming the address count, the last exported index, and the fact that the list is FIXED — Core
+  cannot derive past it, because the file holds addresses rather than the wallet descriptor. The
+  change entries carry no label because Core refuses `label` together with `internal: true`
+  (*"Internal addresses should not have a label"*), which is an import failure, not a cosmetic
+  slip.
+- **[unchanged] the Phase-1 admission gate still runs first.** A sigless wallet still needs
+  `--allow sigless-branch` for this format, on `tr` and on `wsh` alike. The refusal's closing
+  sentence is format-aware: the descriptor route's *"it does not make any wallet application accept
+  it"* would be false here, so this format says instead that Core does accept `addr()` entries and
+  never will accept this wallet's descriptor. Every other format's wording is byte-unchanged.
+- **[verification] the acceptance criterion is an IMPORT, not an emit.** A live
+  `importdescriptors` against pinned Bitcoin Core v27.0 asserts per-entry `success: true`, that
+  every checksum matches Core's own `getdescriptorinfo`, and — the negative control — that the same
+  wallet's descriptor route is still refused per-entry with *"witnesses without signature exist"*.
+  It rides the existing `bitcoind-differential` workflow's node
+  (`crates/mnemonic-toolkit/tests/bitcoind_addr_import.rs`, `#[ignore]`-by-default, CONNECT-ONLY).
+- **[verification] the addresses are cross-checked against three prior derivations** — the
+  SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
+  under `tests/fixtures/export_wallet_addresses/`.
+
 ## mnemonic-toolkit [0.97.0] — 2026-08-03
 
 **SemVer-MINOR, documented-CLI-contract change — `verify-bundle` descriptor INPUT errors now exit 2 (`DescriptorParse`), matching `bundle`, instead of 4. Exit 4 was this project's BundleMismatch / VERIFY-ME tier, so a mistyped `--descriptor` told the user their engraved bundle might be corrupt — and made the GUI render an amber VERIFY-ME badge for a typo.**

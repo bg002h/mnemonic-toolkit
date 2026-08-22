@@ -4,6 +4,9 @@
 //! - `pipeline` — canonical descriptor build (multipath `<0;1>` form) and
 //!   the `--descriptor` → BIP-388 `wallet_policy` interop pipeline.
 //! - `bitcoin_core` — Bitcoin Core `importdescriptors` JSON emitter.
+//! - `bitcoin_core_addresses` — Bitcoin Core `addr()` watch-list emitter, the
+//!   one route into Core for a wallet whose descriptor Core refuses (PLAN
+//!   `PLAN_wallet_file_export.md` Phase 1b).
 //! - `bip388` — BIP-388 `wallet_policy` JSON emitter.
 //! - `coldcard` — Coldcard generic-wallet JSON + multisig text emitter.
 //! - `jade` — Blockstream Jade multisig-text emitter.
@@ -19,6 +22,7 @@
 
 mod bip388;
 mod bitcoin_core;
+mod bitcoin_core_addresses;
 mod bsms;
 mod coldcard;
 mod descriptor;
@@ -32,6 +36,7 @@ mod specter;
 pub(crate) use bip388::Bip388Emitter;
 pub(crate) use bitcoin_core::import_array_single;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
+pub(crate) use bitcoin_core_addresses::{BitcoinCoreAddressesEmitter, DEFAULT_ADDRESS_COUNT};
 pub(crate) use bsms::BsmsEmitter;
 pub use bsms::BsmsForm;
 pub(crate) use pipeline::{descriptor_to_bip388_wallet_policy, DEFAULT_BIP388_POLICY_NAME};
@@ -547,6 +552,16 @@ pub(crate) struct EmitInputs<'a> {
     /// Silently ignored by every other emitter (per the per-format
     /// ignored-input contract).
     pub bsms_form: BsmsForm,
+    /// PLAN Phase 1b — addresses PER CHAIN for `--format
+    /// bitcoin-core-addresses` (`--count`, default
+    /// [`DEFAULT_ADDRESS_COUNT`] = 20). Silently ignored by every other
+    /// emitter, per the per-format ignored-input contract.
+    ///
+    /// Distinct from `range`, which is Bitcoin Core's rescan window for a
+    /// RANGED descriptor: this one bounds how many addresses exist in the
+    /// artifact at all, because an `addr()` list cannot be extended by the
+    /// consumer.
+    pub address_count: u32,
 }
 
 #[cfg(test)]

@@ -938,8 +938,13 @@ fn the_sane_control_is_actually_sane() {
 /// reading a guarantee this test does not make.
 #[test]
 fn every_format_meets_the_same_gate_before_its_own_verdict() {
-    const FORMATS: [&str; 11] = [
+    // 12 since PLAN Phase 1b added `bitcoin-core-addresses`. That format is
+    // the one whose ARTIFACT Core accepts, and it still meets the gate first:
+    // the uniform gate is about the WALLET's spend policy, not about which
+    // file shape we are about to write.
+    const FORMATS: [&str; 12] = [
         "bitcoin-core",
+        "bitcoin-core-addresses",
         "bip388",
         "coldcard",
         "coldcard-multisig",

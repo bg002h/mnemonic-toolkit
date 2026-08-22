@@ -289,9 +289,13 @@ fn export_wallet_has_format_dropdown_with_eight_vendors() {
     // SPEC v0.8: 8 vendor formats; v0.27.0 adds `bsms` (BIP-129 Round-2
     // emitter) for a total of 9; v0.28.4 adds `coldcard-multisig` alias
     // (export-side semantic precheck) for a total of 10; v0.42.0 adds
-    // `descriptor` (bare canonical `<descriptor>#<checksum>`) for a total of 11.
+    // `descriptor` (bare canonical `<descriptor>#<checksum>`) for a total of 11;
+    // PLAN_wallet_file_export.md Phase 1b adds `bitcoin-core-addresses` (an
+    // `addr()` watch list — the one Core route a signatureless wallet
+    // survives) for a total of 12.
     for vendor in [
         "bitcoin-core",
+        "bitcoin-core-addresses",
         "bip388",
         "coldcard",
         "coldcard-multisig",
@@ -305,7 +309,7 @@ fn export_wallet_has_format_dropdown_with_eight_vendors() {
     ] {
         assert!(choices.contains(&vendor), "format must include {vendor}");
     }
-    assert_eq!(choices.len(), 11);
+    assert_eq!(choices.len(), 12);
 }
 
 #[test]

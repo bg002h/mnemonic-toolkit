@@ -55,6 +55,7 @@
     "keypath",
     "keyspace",
     "importdescriptors",
+    "getdescriptorinfo",
     "lockstep",
     "memorised",
     "lychee",

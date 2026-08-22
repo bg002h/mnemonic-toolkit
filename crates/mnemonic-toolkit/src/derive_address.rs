@@ -77,36 +77,71 @@ pub(crate) fn derive_receive_addresses(
     count: u32,
     network: bitcoin::Network,
 ) -> Result<Vec<String>, ToolkitError> {
-    let receive = if descriptor.is_multipath() {
+    // Chain 0 with the historical `receive-address` message prefix — every
+    // error string this function produced before `derive_chain_addresses`
+    // existed is reproduced byte-for-byte by passing `what` through.
+    derive_chain_addresses(descriptor, 0, count, network, "receive-address")
+}
+
+/// Generalization of [`derive_receive_addresses`] to any multipath branch.
+///
+/// `chain` indexes `into_single_descriptors()`'s output in declaration order,
+/// so for the canonical `<0;1>` shape `0` is receive and `1` is change. A
+/// SINGLE-PATH descriptor has branch 0 only (the descriptor itself) and asking
+/// for any other chain is an error rather than a silent re-derivation of chain
+/// 0 — a change list that is secretly the receive list is worse than none.
+///
+/// `what` is the message prefix, so a caller's errors name the caller.
+///
+/// Added for `--format bitcoin-core-addresses` (PLAN Phase 1b): an `addr()`
+/// watch list must carry BOTH chains, because a change-blind watch wallet
+/// silently under-reports the balance.
+pub(crate) fn derive_chain_addresses(
+    descriptor: &Descriptor<DescriptorPublicKey>,
+    chain: usize,
+    count: u32,
+    network: bitcoin::Network,
+    what: &str,
+) -> Result<Vec<String>, ToolkitError> {
+    let branch = if descriptor.is_multipath() {
         let mut parts = descriptor.clone().into_single_descriptors().map_err(|e| {
-            ToolkitError::DescriptorParse(format!("receive-address: multipath split failed: {e}"))
+            ToolkitError::DescriptorParse(format!("{what}: multipath split failed: {e}"))
         })?;
         if parts.is_empty() {
-            return Err(ToolkitError::DescriptorParse(
-                "receive-address: multipath split produced no branches".into(),
-            ));
+            return Err(ToolkitError::DescriptorParse(format!(
+                "{what}: multipath split produced no branches"
+            )));
         }
-        parts.remove(0)
+        if chain >= parts.len() {
+            return Err(ToolkitError::DescriptorParse(format!(
+                "{what}: descriptor has {} multipath branches; chain {chain} does not exist",
+                parts.len()
+            )));
+        }
+        parts.remove(chain)
     } else {
+        if chain != 0 {
+            return Err(ToolkitError::DescriptorParse(format!(
+                "{what}: descriptor is single-path; chain {chain} does not exist"
+            )));
+        }
         descriptor.clone()
     };
     let mut out = Vec::with_capacity(count as usize);
     for i in 0..count {
-        let definite: Descriptor<DefiniteDescriptorKey> = if receive.has_wildcard() {
-            receive.derive_at_index(i).map_err(|e| {
-                ToolkitError::DescriptorParse(format!(
-                    "receive-address: derive_at_index({i}) failed: {e}"
-                ))
+        let definite: Descriptor<DefiniteDescriptorKey> = if branch.has_wildcard() {
+            branch.derive_at_index(i).map_err(|e| {
+                ToolkitError::DescriptorParse(format!("{what}: derive_at_index({i}) failed: {e}"))
             })?
         } else {
-            Descriptor::<DefiniteDescriptorKey>::try_from(receive.clone()).map_err(|e| {
+            Descriptor::<DefiniteDescriptorKey>::try_from(branch.clone()).map_err(|e| {
                 ToolkitError::DescriptorParse(format!(
-                    "receive-address: definite-key conversion failed: {e}"
+                    "{what}: definite-key conversion failed: {e}"
                 ))
             })?
         };
         let address = definite.address(network).map_err(|e| {
-            ToolkitError::DescriptorParse(format!("receive-address @{i}: render failed: {e}"))
+            ToolkitError::DescriptorParse(format!("{what} @{i}: render failed: {e}"))
         })?;
         out.push(address.to_string());
     }

@@ -982,11 +982,12 @@ mnemonic export-wallet [OPTIONS]
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `seedqr`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys, including `seedqr`, are refused by `export-wallet`'s watch-only validator per SPEC §3) |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `0` (default; rescan from genesis to discover an existing key's funds), `now`, or unix seconds |
 | `--bitcoin-core-version <BITCOIN_CORE_VERSION>` | 24 or 25 (default 25) |
+| `--count <N>` | addresses PER CHAIN for `--format bitcoin-core-addresses` — **default 20**, the BIP-44 gap limit: N receive + N change, indices `0..N-1`. `--count 0` is refused. Distinct from `--range`, which is Core's rescan window for a *ranged* descriptor; this one bounds how many addresses exist in the artifact at all. Ignored by every other format per the per-format ignored-input contract |
 | `--wallet-name <WALLET_NAME>` | wallet name/label for formats that publish one (Coldcard generic JSON, Sparrow, Specter, Electrum); default `<template-human-name>-<account>` |
 | `--taproot-internal-key <TAPROOT_INTERNAL_KEY>` | `nums` or `@N` for `tr-multi-a` / `tr-sortedmulti-a` |
 | `--bsms-form <FORM>` | (v0.27.0) BSMS Round-2 emit shape — `4-line` (default; BIP-129-canonical) or `2-line` (lenient excerpt symmetric with the v0.26.0 import-side parser); ignored by every non-BSMS format per the per-format ignored-input contract |
@@ -1047,6 +1048,50 @@ tier a key.
 `restore --md1 --format bitcoin-core` on a wallet with a keyless spend path
 emits at exit 0 with no flag, unchanged. `restore` has no `--allow` flag.
 
+### Watching a wallet Core will not describe (`--format bitcoin-core-addresses`)
+
+The table above is the whole problem: a wallet with a keyless spend path cannot
+be handed to Bitcoin Core **as a descriptor**, on any version through v31.1, and
+Core has no flag to waive that. `--allow sigless-branch` only moves the refusal
+from our side to Core's.
+
+`--format bitcoin-core-addresses` takes the other route. It derives the wallet's
+addresses locally and emits them as N non-ranged `addr(<address>)#<checksum>`
+entries in an `importdescriptors` array. An `addr()` carries no spend policy, so
+Core's sanity rule has nothing to object to and the entries import.
+
+**You can watch such a wallet in Core; you cannot describe it to Core.** The
+distinction is the entire feature, and it has consequences the artifact states
+for itself:
+
+- **The list is FIXED.** Core cannot derive past it — the file holds addresses,
+  not the wallet. Re-export with a larger `--count` before the last exported
+  index is used. Every receive entry carries this caveat, the address count and
+  the last index in its Core `label`, so a consumer holding only the file can
+  read its own limits.
+- **Both chains are emitted** — N receive (`internal: false`) and N change
+  (`internal: true`). A change-blind watch wallet silently under-reports the
+  balance. Change entries carry no label because Core refuses `label` together
+  with `internal: true` (*"Internal addresses should not have a label"*).
+- **The Phase-1 gate still applies.** A keyless spend path still needs
+  `--allow sigless-branch` here, on `tr` and `wsh` alike — the gate is about the
+  wallet's spend policy, not about which file shape is being written. The
+  refusal's wording is format-specific: it says Core does accept `addr()`
+  entries and will never accept this wallet's descriptor.
+- **Core solves nothing from this file.** It is watch-only in the strongest
+  sense: no signing, no change generation, no address top-up.
+
+```sh
+mnemonic export-wallet --descriptor "$(cat wallet.desc)" \
+  --format bitcoin-core-addresses --count 50 --allow sigless-branch \
+  > watch.json
+bitcoin-cli -rpcwallet=watch importdescriptors "$(cat watch.json)"
+```
+
+Verified end-to-end against pinned Bitcoin Core v27.0 (and re-checked on
+v31.1): every entry returns `success: true`, every checksum matches Core's own
+`getdescriptorinfo`, and the same wallet's descriptor route still returns
+`success: false` with *"witnesses without signature exist"*.
 
 ### Notes
 

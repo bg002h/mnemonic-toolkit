@@ -465,6 +465,7 @@ mod cycle13a_h11_tests {
             timestamp: TimestampArg::Now,
             bitcoin_core_version: 0,
             bsms_form: Default::default(),
+            address_count: crate::wallet_export::DEFAULT_ADDRESS_COUNT,
         };
         let err = emit_coldcard_multisig_text(&inputs).unwrap_err();
         match &err {
