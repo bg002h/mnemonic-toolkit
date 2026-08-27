@@ -35,6 +35,14 @@ md-codec = "0.42.0"
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.
 wc-codec = { path = "../wc-codec" }
+# P3 (SPEC_constellation_cli_uniformity §6d) — the shared constellation I/O
+# library. `mnemonic` adopts exactly TWO items from it: `remedy::history_purge_block`
+# and its structured half `remedy::history_purge_recipes`, printed by the argv
+# refusal. Pinned by `rev` rather than by `path`: the crate is not on crates.io,
+# a path does not resolve in a fresh CI checkout, and this repo exists at more
+# than one filesystem location. NOTE the module path — `remedy` has no root
+# re-export in `lib.rs`, so `mnemonic_io_lib::history_purge_block` is an E0425.
+mnemonic-io-lib = { git = "https://github.com/bg002h/mnemonic-engrave", rev = "6c24e62823e6c1ac02aa3862cd6020674bf58544" }
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"
