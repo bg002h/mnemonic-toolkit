@@ -223,8 +223,8 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--md1-form <policy\|template>` | (#28) what the `md1` card encodes (default `policy`). `policy` = the full keyed wallet-policy `md1` (pre-#28; identifies **this** wallet). `template` = a **keyless**, fingerprint-stripped, origin-conditional template `md1` — a backup of the wallet **type**, byte-identical (for a canonical type) across all users of that type ("one engraving for thousands"); keys/accounts are supplied at restore and the specific wallet is identified out-of-band by the `WalletPolicyId` printed on **stderr**. **(phase 1, v0.59.0)** canonical single-sig (`bip44` / `bip84` / `bip86`). **(phase 2, v0.60.0)** ALSO multisig (`wsh(multi/sortedmulti)`, `sh(wsh)`), general / thresh policies, and `tr(NUMS, multi_a)` — emitting one keyless template `md1` + N keyless cosigner `mk1` stubs with a loud key-ordering warning. Still refused: `tr(sortedmulti_a)`, hardened use-sites, and `bip49` (nested-segwit) — use `--md1-form=policy`. See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
 | `--json` | emit JSON output |
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
-| `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (default 5). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
-| `--separator <space\|hyphen\|comma>` | the grouping separator for `--group-size` (default `space`); accepts the keyword or the literal `-` / `,` or a space. |
+| `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (**default 0** — pass `5` for the engraving-friendly five-character groups). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
+| `--separator <space>` | the grouping separator for `--group-size` (default `space`); accepts the keyword `space` or the literal `" "`. **Whitespace only**: `hyphen` and `comma` were retired, because `mt`'s decoder strips whitespace and nothing else, so a hyphen-grouped card round-trips here and is refused there. Intake still strips `-` and `,`, so cards grouped by an older build still decode. |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 (default bip87) |
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
@@ -467,10 +467,11 @@ DESC='wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(
 ##### Default text-form output
 
 Running `bundle` without `--json` prints the cards directly to stdout
-in a human-readable form — by default each card is printed once, broken
-into space-separated groups of five characters, suitable for steel
-engraving and reading aloud during verification (`--group-size 0` gives
-the dense single-line form; `--separator hyphen` groups with dashes):
+in a human-readable form — by default each card is printed once, in the
+dense single-line form, which is what intake normalises to and what
+pipes into another tool without a filter (`--group-size 5` gives the
+space-separated groups of five that suit steel engraving and reading
+aloud during verification):
 
 ```sh
 mnemonic bundle --network mainnet --account 0 \
@@ -487,12 +488,11 @@ Stdout (the cards — under v0.21.0+ SPEC §5.8 per-slot emission, all three cos
 PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.out lines 1-29 at build
 ```
 
-Each card type is printed once, in 5-character groups separated by
-spaces (the default display grouping), suitable for steel-plate
-engraving and reading aloud during verification. The grouping
-separators are non-load-bearing — pass `--group-size 0` for the dense
-single-line form, or any grouping you like; intake strips the
-separators, so every form decodes back to the same payload.
+Each card type is printed once, unbroken (the default). The grouping
+separators are non-load-bearing — pass `--group-size 5` for the
+5-character groups that suit steel-plate engraving and reading aloud
+during verification; intake strips the separators, so every form decodes
+back to the same payload.
 
 Stderr (info notice + bundle-summary engraving card):
 

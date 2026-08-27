@@ -55,21 +55,42 @@ fn parse_shares(stdout: &str) -> Vec<String> {
     stdout.lines().map(|l| l.to_string()).collect()
 }
 
-/// mstring-grouping P4: split text shares are space/5-grouped by default; the
-/// `--json` shares stay UNBROKEN (SPEC §6 invariant). The grouped→combine
-/// round-trip is covered by `ms_shares_split_2_of_3_entropy_round_trip` (split
-/// groups by default; combine strips on intake).
+/// P3 (SPEC_constellation_cli_uniformity 6c): split text shares are UNBROKEN by
+/// default, and the `--json` shares stay unbroken too (SPEC §6 invariant). The
+/// grouped→combine round-trip is covered by
+/// `ms_shares_split_2_of_3_entropy_round_trip` (combine strips on intake).
+///
+/// **This test pinned the retired space/5 default and is rewritten, not
+/// deleted.** Its `--json` half is untouched — that invariant predates P3 and
+/// is unaffected by it — and an explicit `--group-size 5` leg is added so the
+/// flip cannot be mistaken for the capability being removed.
 #[test]
-fn ms_shares_split_default_grouped_text_json_unbroken() {
+fn ms_shares_split_default_unbroken_text_json_unbroken() {
     let from_arg = format!("entropy={ENTROPY_32_ZEROS_HEX}");
-    // Default text: each share line is space/5-grouped.
+    // Default text: each share line is UNBROKEN.
     let (text, _e, exit) = split(&["--from", &from_arg, "--threshold", "2", "--shares", "3"]);
     assert_eq!(exit, 0);
     let first = text.lines().next().unwrap();
+    assert!(
+        !first.contains(' '),
+        "P3 6c: the default is unbroken; got {first:?}"
+    );
+    // The capability is unchanged -- only the default moved.
+    let (grouped, _eg, exitg) = split(&[
+        "--from",
+        &from_arg,
+        "--threshold",
+        "2",
+        "--shares",
+        "3",
+        "--group-size",
+        "5",
+    ]);
+    assert_eq!(exitg, 0);
     assert_eq!(
-        first.chars().nth(5),
+        grouped.lines().next().unwrap().chars().nth(5),
         Some(' '),
-        "default space/5; got {first:?}"
+        "--group-size 5 must still space-group"
     );
     // --json shares are UNBROKEN.
     let (json, _e2, exit2) = split(&[

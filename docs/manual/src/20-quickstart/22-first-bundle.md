@@ -40,13 +40,19 @@ Three flags carry the work:
 
 ## Output
 
-By default each of the three card strings is printed **once**, broken
-into space-separated groups of five characters — the engraving-friendly
-form, also easy to read aloud during verification. Pass `--group-size 0`
-for the contiguous single-line form (handy for copy-paste into a wallet),
-or `--separator hyphen` to group with dashes instead. Intake (`restore`,
-`verify-bundle`, `convert`, `repair`) accepts any of these forms — the
-display separators are non-load-bearing.
+By default each of the three card strings is printed **once**, in the
+contiguous single-line form — what intake normalises to, and what pipes
+into another tool without a filter. Pass `--group-size 5` for the
+space-separated groups of five that are easier to engrave and to read
+aloud during verification. Intake (`restore`, `verify-bundle`,
+`convert`, `repair`) accepts either form — the display separators are
+non-load-bearing.
+
+The separator is **whitespace only**. `--separator hyphen` and
+`--separator comma` were retired: a card is what a human types back into
+*another* tool, and `mt` strips whitespace and nothing else, so a
+hyphen-grouped card round-trips here and is refused there. Cards you
+already hold still decode — intake keeps stripping `-` and `,`.
 
 ```{.text include="22-first-bundle.out" lines="2-21"}
 PLACEHOLDER — generated from transcripts/22-first-bundle.out lines 2-21 at build
@@ -66,9 +72,10 @@ For this single-sig wallet:
 | **mk1** | `mk1qprsqhp…854wq4` (line 1) and `mk1qprsqhp…ma0nh` (line 2) | Engrave on the *key* card. Two strings because the xpub is too long to fit one BCH-checksummed group at the toolkit's chunking density. |
 | **md1** | `md1fgdxlpq…` (three lines) | Engrave on the *descriptor* card. Three strings encode the wallet policy and bind it to the xpub. |
 
-The *Canonical (contiguous)* column shows each card with grouping
-stripped (the `--group-size 0` form) — what intake normalises to and
-what you'd copy-paste into another wallet.
+The *Canonical (contiguous)* column shows each card in the default
+unbroken form — what intake normalises to and what you'd copy-paste into
+another wallet. `--group-size 5` renders the same payload in
+five-character groups for engraving.
 
 The last block is **not** part of the engraving — it's a bundle
 *summary* showing the version stamps (`1c017`), the master fingerprint,

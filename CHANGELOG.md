@@ -8,6 +8,34 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## mnemonic-toolkit [Unreleased]
 
+**SemVer-MINOR (pre-1.0 breaking axis) — P3 of the constellation CLI-uniformity cycle:
+`mnemonic`'s display-grouping surface changes on FOUR subcommands.**
+
+`mnemonic-engrave/design/IMPLEMENTATION_PLAN_P3_md_mk_mnemonic.md` row 13, against
+`SPEC_constellation_cli_uniformity` sections 6c and 2a (R0 GREEN, 0C/0I).
+
+- **[BREAKING] `--group-size` now defaults to `0` (unbroken), not `5`.** On `bundle`,
+  `convert`, `ms-shares split` and `ms-shares combine` alike — the spec names `bundle`
+  alone, but the binary carries the pair on four subcommands and a default that moves on
+  one is worse than one that moves on none. stdout now carries the artifact a downstream
+  tool can read with no filter; `--group-size 5` still renders the engraving-friendly
+  five-character groups, so this moves the default and removes no capability.
+- **[BREAKING] `--separator` is whitespace only. `hyphen` and `comma` are RETIRED**, as
+  keywords and as the literal `-` / `,`. The reason is cross-tool rather than cosmetic: a
+  card is what a human types back into *another* tool, and `mt`'s decoder strips whitespace
+  and nothing else — so a hyphen-grouped card round-trips here and is refused there, after
+  the plates are cut. The refusal names what replaced it.
+  **INTAKE IS UNCHANGED**: `display_grouping::is_display_separator` still strips `-` and
+  `,`, so every card grouped by an older build still decodes, and the four-repo
+  `design/display-grouping-vectors.tsv` corpus (sha256 `7147b0ec…`) still passes untouched
+  — its consumers are codec-level and take a `char`, not a keyword.
+- Five committed doc transcripts regenerated for the new default:
+  `docs/manual/transcripts/{22-first-bundle,41-bundle-inheritance-cards,qs-23-bundle}.out`,
+  `docs/manual/transcripts/cross-format-recipes/recipe-2-bitcoin-core-to-bundle.out`, and
+  `docs/technical-manual/transcripts/mnemonic-bundle-bip84-abandon.out`. These are
+  byte-compared by `manual.yml`, `quickstart.yml` and `technical-manual.yml`, none of which
+  is `cargo nextest`.
+
 **SemVer-MINOR (pre-1.0 breaking axis) — `export-wallet` gains `--allow <RULE>`, and TWO
 operator-visible behaviours change with it. Both are listed below; neither is a footnote.**
 

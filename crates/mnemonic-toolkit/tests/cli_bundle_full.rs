@@ -40,11 +40,17 @@ fn bundle_full_16_cells_byte_exact_against_pinned_vectors() {
     }
 }
 
-/// mstring-grouping P4: the DEFAULT bundle text output is space/5 print-once
-/// (the `cli_bundle_full` goldens above use `--group-size 0` for the unbroken
-/// canonical pin; this covers the new default). Also exercises `--separator`.
+/// P3 (SPEC_constellation_cli_uniformity 6c / 2a): the DEFAULT bundle text
+/// output is now UNBROKEN print-once, and the separator vocabulary is
+/// whitespace only.
+///
+/// **This test pinned the retired behaviour and is rewritten, not deleted.**
+/// Before P3 it asserted space/5 at the default and a hyphen at index 5 under
+/// `--separator hyphen`; both are exactly what 6c changes, so the assertions
+/// are inverted rather than dropped — the print-once property they also carry
+/// is unrelated to grouping and must keep being checked.
 #[test]
-fn bundle_default_text_is_space_grouped_print_once() {
+fn bundle_default_text_is_unbroken_print_once() {
     let run = |extra: &[&str]| -> String {
         let mut args: Vec<&str> = vec![
             "bundle",
@@ -66,35 +72,60 @@ fn bundle_default_text_is_space_grouped_print_once() {
         String::from_utf8(out.get_output().stdout.clone()).unwrap()
     };
 
-    // Default: the ms1 card line is space/5-grouped, print-once (no duplicate
-    // unbroken copy → the stripped ms1 appears exactly once in stdout).
+    // Default: the ms1 card line is UNBROKEN, print-once (it appears exactly
+    // once in stdout, with no second grouped copy).
     let default_out = run(&[]);
     let ms1_line = default_out
         .lines()
         .find(|l| l.starts_with("ms10"))
         .expect("an ms1 line");
-    assert_eq!(
-        ms1_line.chars().nth(5),
-        Some(' '),
-        "default space/5; got {ms1_line:?}"
-    );
-    let unbroken: String = ms1_line.chars().filter(|c| *c != ' ').collect();
-    // print-once: the unbroken form does NOT also appear as its own line.
     assert!(
-        !default_out.lines().any(|l| l == unbroken),
-        "print-once: unbroken ms1 must not also appear; got {default_out:?}"
+        !ms1_line.contains(' '),
+        "P3 6c: the default is unbroken; got {ms1_line:?}"
+    );
+    assert_eq!(
+        default_out.lines().filter(|l| *l == ms1_line).count(),
+        1,
+        "print-once: the ms1 card must appear exactly once; got {default_out:?}"
     );
 
-    // --separator hyphen.
-    let hyphen_out = run(&["--separator", "hyphen"]);
-    let h_line = hyphen_out
+    // The capability is unchanged -- only the default moved.
+    let grouped_out = run(&["--group-size", "5"]);
+    let g_line = grouped_out
         .lines()
-        .find(|l| l.starts_with("md1"))
-        .expect("md1 line");
+        .find(|l| l.starts_with("ms10"))
+        .expect("an ms1 line");
     assert_eq!(
-        h_line.chars().nth(5),
-        Some('-'),
-        "hyphen at idx 5; got {h_line:?}"
+        g_line.chars().nth(5),
+        Some(' '),
+        "--group-size 5 must still space-group; got {g_line:?}"
+    );
+
+    // 6c: `hyphen` is retired. Asserted on the MESSAGE, not on the exit code
+    // alone -- every incomplete `mnemonic` invocation is also non-zero, so an
+    // exit-code-only assertion would pass in both worlds. This invocation is
+    // otherwise complete and exited 0 before P3.
+    let hyphen = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "bundle",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--no-engraving-card",
+            "--separator",
+            "hyphen",
+        ])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(hyphen.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("invalid value 'hyphen' for '--separator")
+            && stderr.contains("whitespace only"),
+        "6c: --separator hyphen must be refused, naming what replaced it; got:\n{stderr}"
     );
 
     // Invalid separator → clap parse error (non-zero exit).

@@ -72,10 +72,12 @@ pub struct MsSharesSplitArgs {
 
     /// Insert a separator every N chars in each emitted share (0 = unbroken).
     /// SPEC §3. Display only; --json stays unbroken.
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = 0)]
     pub group_size: u16,
 
-    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    /// Separator: `space` (keyword) or the literal " ". Whitespace only --
+    /// `hyphen` and `comma` were retired by
+    /// SPEC_constellation_cli_uniformity 6c. SPEC §5.
     #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
     pub separator: char,
 
@@ -114,10 +116,12 @@ pub struct MsSharesCombineArgs {
 
     /// Insert a separator every N chars in a recovered `--to ms1` card
     /// (0 = unbroken). SPEC §3. Display only; --json + --to phrase/entropy stay raw.
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = 0)]
     pub group_size: u16,
 
-    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    /// Separator: `space` (keyword) or the literal " ". Whitespace only --
+    /// `hyphen` and `comma` were retired by
+    /// SPEC_constellation_cli_uniformity 6c. SPEC §5.
     #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
     pub separator: char,
 

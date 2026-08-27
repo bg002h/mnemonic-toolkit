@@ -39,16 +39,37 @@ pub fn strip_display_separators(s: &str) -> String {
     s.chars().filter(|&c| !is_display_separator(c)).collect()
 }
 
-/// Parse `--separator`: a keyword (`space|hyphen|comma`) or the literal char
-/// (`" "|-|,`). Returns the separator char. SPEC §5. clap value-parser;
-/// rejection surfaces as a clap parse error (before command dispatch).
+/// Parse `--separator`: the keyword `space`, or the literal `" "`. Returns the
+/// separator char. SPEC §5. clap value-parser; rejection surfaces as a clap
+/// parse error (before command dispatch).
+///
+/// **`hyphen` and `comma` were RETIRED by `SPEC_constellation_cli_uniformity`
+/// 6c (P3), and the reason is cross-tool rather than cosmetic.** A grouped card
+/// is what a human types back into *another* tool, and `mt`'s decoder strips
+/// whitespace and nothing else — so a hyphen-grouped string round-trips here
+/// and is refused there, after the plates are cut. A rule that is safe per-tool
+/// and unsafe across tools is exactly the kind an operator carries between
+/// tools. The cost is two cosmetic options; the cost of getting it wrong is a
+/// plate.
+///
+/// **The narrowing is at the CLI's vocabulary and NOWHERE ELSE.** The four-repo
+/// display-grouping corpus (`design/display-grouping-vectors.tsv`, sha256
+/// `7147b0ec…`) still carries `hyphen` and `comma` rows and still passes: its
+/// consumers map the keyword to a `char` inside the test, and [`render_grouped`]
+/// takes a `char` and has no keyword vocabulary at all. Likewise
+/// [`is_display_separator`] still strips `-` and `,` on **intake** (SPEC §3.2),
+/// so a card grouped by an older build — or by hand — still re-ingests.
+/// Narrowing either of those would be applying 6c one layer too deep.
 pub fn parse_separator(s: &str) -> Result<char, String> {
     match s {
         "space" | " " => Ok(' '),
-        "hyphen" | "-" => Ok('-'),
-        "comma" | "," => Ok(','),
         other => Err(format!(
-            "invalid separator {other:?}; expected one of: space|hyphen|comma (or the literal char)"
+            "invalid separator {other:?}; the display separator is whitespace only \
+             -- pass `space` or the literal \" \". `hyphen` and `comma` were retired \
+             (SPEC_constellation_cli_uniformity 6c): mt's decoder strips whitespace \
+             and nothing else, so a hyphen-grouped card round-trips here and is \
+             refused there. Cards you already hold still re-ingest -- intake strips \
+             '-' and ',' unchanged."
         )),
     }
 }
@@ -113,11 +134,37 @@ mod tests {
     fn parse_separator_keyword_and_literal() {
         assert_eq!(parse_separator("space").unwrap(), ' ');
         assert_eq!(parse_separator(" ").unwrap(), ' ');
-        assert_eq!(parse_separator("hyphen").unwrap(), '-');
-        assert_eq!(parse_separator("-").unwrap(), '-');
-        assert_eq!(parse_separator("comma").unwrap(), ',');
-        assert_eq!(parse_separator(",").unwrap(), ',');
         assert!(parse_separator("bogus").is_err());
+    }
+
+    /// SPEC_constellation_cli_uniformity 6c (P3): the CLI's separator vocabulary
+    /// is whitespace only. Both retired spellings AND both retired literals are
+    /// pinned, because a narrowing that dropped only the keywords would leave
+    /// `--separator -` producing exactly the card `mt` refuses.
+    #[test]
+    fn parse_separator_rejects_the_retired_hyphen_and_comma() {
+        for retired in ["hyphen", "-", "comma", ","] {
+            let err = parse_separator(retired).expect_err("6c retired this value");
+            assert!(
+                err.contains("whitespace only"),
+                "the refusal must name what replaced it; got {err}"
+            );
+            assert!(
+                err.contains("re-ingest"),
+                "the refusal must say that cards already grouped still decode; got {err}"
+            );
+        }
+    }
+
+    /// The layer control. 6c narrows the CLI's INPUT vocabulary; INTAKE keeps
+    /// stripping `-` and `,` so a card grouped by an older build still decodes.
+    /// A fix applied one layer too deep reds here.
+    #[test]
+    fn intake_still_strips_the_retired_separators() {
+        assert!(is_display_separator('-'));
+        assert!(is_display_separator(','));
+        assert_eq!(strip_display_separators("ms1qp-zry9,x8"), "ms1qpzry9x8");
+        assert_eq!(render_grouped("abcdefg", 3, '-'), "abc-def-g");
     }
 
     #[test]

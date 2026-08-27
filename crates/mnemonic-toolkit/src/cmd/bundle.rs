@@ -78,10 +78,12 @@ pub struct BundleArgs {
 
     /// Insert a separator every N characters in the emitted ms1/mk1/md1 strings
     /// (0 = unbroken). SPEC §3. Display only; --json + verify-bundle stay unbroken.
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = 0)]
     pub group_size: u16,
 
-    /// Separator: space|hyphen|comma (keyword) or the literal " "|-|, . SPEC §5.
+    /// Separator: `space` (keyword) or the literal " ". Whitespace only --
+    /// `hyphen` and `comma` were retired by
+    /// SPEC_constellation_cli_uniformity 6c. SPEC §5.
     #[arg(long, default_value = "space", value_parser = crate::display_grouping::parse_separator)]
     pub separator: char,
 

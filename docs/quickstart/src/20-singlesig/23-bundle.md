@@ -43,8 +43,9 @@ generated in [Generating entropy safely](22-generate-entropy.md).
 
 ## Output
 
-Each card's strings are printed in 5-character groups (handy for
-engraving). For a real seed, pipe the phrase in via
+Each card's strings are printed unbroken by default; pass
+`--group-size 5` for the 5-character groups that are handy for
+engraving. For a real seed, pipe the phrase in via
 `--slot @0.phrase=-` rather than on the command line — the toolkit
 also prints a leading `warning:` about argv exposure, omitted below
 for brevity:
@@ -55,7 +56,8 @@ for brevity:
 ## Reading the output
 
 Each card section opens with a header comment, then its string(s)
-chunked in 5-character groups. The trailing block beginning
+unbroken (`--group-size 5` chunks them into 5-character groups). The
+trailing block beginning
 `# === Wallet bundle:` is a metadata summary, not part of the
 engraving.
 
