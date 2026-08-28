@@ -1,0 +1,9 @@
+
+
+# The four-repo shared conformance corpus. Its SHA-256 is pinned here and in
+# three sibling repos; `* text=auto` leaves it native-eol, so a Windows
+# checkout CRLF-converts it and the byte-level hash drifts. Measured
+# 2026-08-27 on mnemonic-key: three windows-latest jobs RED at that exact
+# assertion while Linux, macOS, musl and FreeBSD stayed green.
+# MUST sort after any `* text=auto` (last-match-wins per attribute).
+design/display-grouping-vectors.tsv text eol=lf
