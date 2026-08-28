@@ -33,3 +33,9 @@ rust-version = "1.85"
 # `taproot-coverage-cycle-on-miniscript-gt-13-1-0`.
 [patch.crates-io]
 miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "ff4732e5f75aa555682343cb180fa72ee3e8e9d5" }
+
+[profile.test]
+opt-level = 2
+
+[profile.dev]
+opt-level = 2
