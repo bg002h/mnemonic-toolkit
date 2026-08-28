@@ -41,6 +41,13 @@ on:
       - 'Cargo.lock'
       - 'Cargo.toml'                 # root [patch.crates-io] miniscript rev (plan M2)
       - '.github/workflows/examples.yml'
+      # `.gitattributes` is gated because it CHANGES CHECKED-OUT BYTES and so can
+      # change test outcomes. Measured 2026-08-27: the shared conformance corpus
+      # lacked an `eol=lf` rule, so Windows checkouts CRLF-converted it and three
+      # windows-latest jobs went RED on a byte-level hash while every other
+      # platform stayed green. A commit fixing that touches no gated path under
+      # the old filter, so the fix itself could not earn its required contexts.
+      - '.gitattributes'
     tags:
       - 'examples-v*'
   pull_request:                       # NO paths — a REQUIRED check must report on every PR
