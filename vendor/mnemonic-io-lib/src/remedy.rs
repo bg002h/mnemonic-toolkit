@@ -151,7 +151,10 @@ pub fn history_purge_block(command: &str) -> String {
          when you exit.\n",
     );
     for (shell, recipe) in history_purge_recipes(command) {
-        s.push_str(&format!("      \x20   {:<7} {recipe}\n", format!("{shell}:")));
+        s.push_str(&format!(
+            "      \x20   {:<7} {recipe}\n",
+            format!("{shell}:")
+        ));
     }
     s.push_str(
         "      \x20   (fish's recipe clears the whole session's history, not \

@@ -38,11 +38,17 @@ wc-codec = { path = "../wc-codec" }
 # P3 (SPEC_constellation_cli_uniformity §6d) — the shared constellation I/O
 # library. `mnemonic` adopts exactly TWO items from it: `remedy::history_purge_block`
 # and its structured half `remedy::history_purge_recipes`, printed by the argv
-# refusal. Pinned by `rev` rather than by `path`: the crate is not on crates.io,
-# a path does not resolve in a fresh CI checkout, and this repo exists at more
-# than one filesystem location. NOTE the module path — `remedy` has no root
-# re-export in `lib.rs`, so `mnemonic_io_lib::history_purge_block` is an E0425.
-mnemonic-io-lib = { git = "https://github.com/bg002h/mnemonic-engrave", rev = "6c24e62823e6c1ac02aa3862cd6020674bf58544" }
+# refusal. Taken from the REGISTRY — not by `path`, which does not resolve in a
+# fresh CI checkout, and deliberately NOT by `git`+`rev` any more. A git source
+# has no published tarball, so neither `Cargo.lock`'s `checksum` nor
+# `.cargo-checksum.json`'s `package` can anchor the bytes that get vendored;
+# that is precisely the F-354 defect class, and it is why
+# `ci/repro/vendor-freshness.sh` must hand-ground every git source it tolerates.
+# A registry pin is anchored by cargo itself against an immutable tarball on
+# every build, so this crate needs no grounding at all and the gate's unanchored
+# set stays exactly one (miniscript). NOTE the module path — `remedy` has no
+# root re-export in `lib.rs`, so `mnemonic_io_lib::history_purge_block` is E0425.
+mnemonic-io-lib = "0.1.0"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"

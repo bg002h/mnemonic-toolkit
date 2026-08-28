@@ -1,10 +1,16 @@
 //! P3 row 1 — THE PIN, asserted by a call that COMPILES.
 //!
-//! `mnemonic-io-lib` is not on crates.io; it is pinned by `rev` into
-//! `crates/mnemonic-toolkit/Cargo.toml`. The plan's gate for this row is not
-//! "the manifest has a line in it" — a manifest line proves nothing about what
-//! the pinned SHA exposes. It is that a **call compiles** against the pinned
-//! revision, through the module path the crate actually publishes.
+//! `mnemonic-io-lib` is pinned as a REGISTRY dependency (`= "0.1.0"`) in
+//! `crates/mnemonic-toolkit/Cargo.toml`. It was a `git` + `rev` pin when P3
+//! landed and moved to the registry while merging F-354: a git source has no
+//! published tarball, so neither `Cargo.lock`'s `checksum` nor
+//! `.cargo-checksum.json`'s `package` can anchor the bytes that get vendored,
+//! and `ci/repro/vendor-freshness.sh` must hand-ground every git source it
+//! tolerates. The plan's gate for this row is indifferent to which of the two
+//! it is, and is unchanged: it is not "the manifest has a line in it" — a
+//! manifest line proves nothing about what the pinned release exposes. It is
+//! that a **call compiles** against the pinned release, through the module
+//! path the crate actually publishes.
 //!
 //! **The trap this file exists to catch.** `mnemonic_io_lib`'s `lib.rs` root
 //! re-exports exactly three lines — `channel::{destination, Destination}`,

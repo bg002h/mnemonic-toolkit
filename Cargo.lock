@@ -735,7 +735,8 @@ dependencies = [
 [[package]]
 name = "mnemonic-io-lib"
 version = "0.1.0"
-source = "git+https://github.com/bg002h/mnemonic-engrave?rev=6c24e62823e6c1ac02aa3862cd6020674bf58544#6c24e62823e6c1ac02aa3862cd6020674bf58544"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d54d9fc783d32defa2274b346b66549a29756db8514200b12c3c98a2c4579f64"
 
 [[package]]
 name = "mnemonic-toolkit"

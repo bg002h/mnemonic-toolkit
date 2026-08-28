@@ -42,5 +42,5 @@ path = "tests/fish_history_purge.rs"
 
 [dependencies]
 
-[dev-dependencies]
-tempfile = "3"
+[dev-dependencies.tempfile]
+version = "3"
