@@ -41,10 +41,10 @@ $ mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed.t
 ```
 
 This is the **secure** idiom: the phrase travels on stdin, so it never appears
-in `argv` / `/proc/$PID/cmdline` or your shell history (unlike the inline form
-`--slot @0.phrase='<words>'`, which the toolkit flags as secret-on-argv). The
-reader strips a single trailing newline, so an ordinary one-line text file
-works.
+in `argv` / `/proc/$PID/cmdline` or your shell history. The inline form
+`--slot @0.phrase='<words>'` is **refused** at exit 2 before the command line
+is parsed. The reader strips a single trailing newline, so an ordinary one-line
+text file works.
 
 ## Multiple files for multiple seeds
 
@@ -55,11 +55,12 @@ one seed. To use several seed files there are two patterns:
    in its own command and combine only the resulting public xpubs. No machine
    ever holds more than one seed, and nothing secret reaches `argv`. This is the
    per-device 2-of-3 multisig flow in section 3.
-2. **Several files in one command (convenient -- less safe).** Read each file
-   with command substitution, `--slot "@N.phrase=$(cat seedN.txt)"`. This works
-   for any number of seeds, but each substituted phrase lands on `argv` (the
-   toolkit prints a secret-on-argv warning). Only one slot may use the `=-`
-   stdin form; a second `=-` is rejected. Shown in section 3.4.
+2. **Several files in one command, via the environment.** Only one slot may
+   use the `=-` stdin form; a second `=-` is rejected. For the rest, export each
+   seed and point the slot at it with `--slot '@N.phrase=@env:VAR'`. The
+   environment is not `argv`: it is absent from `ps` and from your shell
+   history. Command substitution -- `--slot "@N.phrase=$(cat seedN.txt)"` --
+   puts every phrase on `argv` and is now **refused**. Shown in section 3.4.
 
 > **Convention in this document:** whenever a command reads a file (a seed, a
 > descriptor, a policy JSON, or an `md1` chunk list), the file's contents are
@@ -180,9 +181,10 @@ Commands:
   help              Print this message or the help of the given subcommand(s)
 
 Options:
-      --no-auto-repair  v0.22.0 — skip auto-fire repair on decode failures; preserve pre-v0.22 exit policy. Global flag. Honored by `convert`, `inspect`, and (v0.22.1+) `verify-bundle`. For `verify-bundle`, auto-fire is additionally gated on `std::io::stdout().is_terminal()` to preserve the legacy VerifyCheck-row behavior when output is piped or captured (per v0.22.1 D18 — TTY-conditional default). Standalone `repair` ignores this flag (the whole point of that subcommand IS repair). Under `--json` calling contexts the auto-fire emits a structured JSON envelope on stdout (per v0.22.1 D20) instead of text-form
-  -h, --help            Print help
-  -V, --version         Print version
+      --no-auto-repair     v0.22.0 — skip auto-fire repair on decode failures; preserve pre-v0.22 exit policy. Global flag. Honored by `convert`, `inspect`, and (v0.22.1+) `verify-bundle`. For `verify-bundle`, auto-fire is additionally gated on `std::io::stdout().is_terminal()` to preserve the legacy VerifyCheck-row behavior when output is piped or captured (per v0.22.1 D18 — TTY-conditional default). Standalone `repair` ignores this flag (the whole point of that subcommand IS repair). Under `--json` calling contexts the auto-fire emits a structured JSON envelope on stdout (per v0.22.1 D20) instead of text-form
+      --allow-argv-secret  SPEC_constellation_cli_uniformity 6d — proceed even though secret material is on argv. Use it only where argv is safe (a single-user air-gapped box, an amnesic Tails session). The DECISION is not made here: `argv_guard::inspect` reads this flag out of raw `std::env::args()` before `Cli::try_parse()` runs; this declaration exists so clap ACCEPTS it and so `--help` and `gui-schema` show it. Greppable, so a reviewer can find every place a script opted in
+  -h, --help               Print help
+  -V, --version            Print version
 
 RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:
   If you have your seed words (entropy) but not the BIP-39 passphrase
@@ -225,16 +227,16 @@ human-readable engraving panel and the secret-material warning:
 ```
 $ mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed0.txt
 # ms1 (entropy, BCH-checksummed)
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 # mk1 (xpub + origin)
-mk1qp rsqhp qqsq3 cqtsl eeutk s2qvz g3vs7 0mejh k622w s2kgd emj2c d8zwj 2skzx 2wq0q w70l4 q99vd yh5x0 z8v4y slsp8 qp3yx g3dpe 854wq 4
-mk1qp rsqhp p0f30 mtxzd 65mvw cur9u sdatw uqvq6 z70r9 nwrgk 6xn6l 8gy6n wa2n9 77sw6 zh34r ma0nh
+mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
 
 # md1 (wallet policy)
-md1fg dxlpq pqpm6 jzzqq vqpdq w0za5 zs4gy y55aq 4vsmn hy4s6 wyayp u34c7 raqu8 np
-md1fg dxlpq f2zcg efcpu pmel7 5q543 5j7se ugaj5 jr7qy ur6vt 76es5 cdeyr q7zdy 0d
-md1fg dxlpq 3xa2d k8vwp j7gx7 4hwqx qdp08 3jehp 5tdrf a0n5z dfkqc dlrvn h5r62 jn
+md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np
+md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d
+md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn
 
 # === Wallet bundle: bip84, mainnet ===
 # ms1: 1c017
@@ -371,24 +373,24 @@ $ mnemonic bundle --descriptor-file multisig.desc --network mainnet
 # ms1 (omitted — descriptor watch-only mode)
 
 # mk1[0] (cosigner 0 xpub + origin)
-mk1qp erpup qqspu 3s7de nyv8n wverp umnrn chdq5 pcy3z epa59 349dc gs5n5 stvpv k3v8x 4eqsd ngy2j l4wdd t5ac2 ptv4f ya76t preap yrdfq r
-mk1qp erpup pnq8k p6xcp qphr7 svxwk xx5ag 99s9z fyml9 v7tcq rexmp dj7jg qgmny 8rr0z 7vlj7 eqzv2 486xk kcftr zq8
+mk1qperpupqqspu3s7denyv8nwverpumnrnchdq5pcy3zepa59349dcgs5n5stvpvk3v8x4eqsdngy2jl4wddt5ac2ptv4fya76tpreapyrdfqr
+mk1qperpuppnq8kp6xcpqphr7svxwkxx5ag99s9zfyml9v7tcqrexmpdj7jgqgmny8rr0z7vlj7eqzv2486xkkcftrzq8
 
 # mk1[1] (cosigner 1 xpub + origin)
-mk1qp erpap qqspu 3s7de nyv8n wverp umn9c dzxlz pcy3z epaqx afl63 0m4as 45q6f z4lts ntlue s3e3g ylcu6 jsa6j dz69h y0whc pg2f2 8j5aw u
-mk1qp erpap p02p3 qtffj qpxtu j95jz aevqs 7jqje 40324 vxlfw 0txsw awpxt e3zmh zp6lr pj3ga 2lw65 h2dd2 4cuer kpa
+mk1qperpapqqspu3s7denyv8nwverpumn9cdzxlzpcy3zepaqxafl630m4as45q6fz4ltsntlues3e3gylcu6jsa6jdz69hy0whcpg2f28j5awu
+mk1qperpapp02p3qtffjqpxtuj95jzaevqs7jqje40324vxlfw0txswawpxte3zmhzp6lrpj3ga2lw65h2dd24cuerkpa
 
 # mk1[2] (cosigner 2 xpub + origin)
-mk1qp erp7p qqspu 3s7de nyv8n wverp umnpg v3gqv pcy3z epane cw97s n9g25 uukrg xca47 at8as 54xhd 0rkgx 57cs7 8mc8f k6507 cs8tn ugnpn f
-mk1qp erp7p pr4e5 9ef7u 5p038 j900y e439h sphez 506fr a5k3e ac5kg 0n7jh n3kpz pna6n 0lygd lpfeq 4a75l c2mrr z7f
+mk1qperp7pqqspu3s7denyv8nwverpumnpgv3gqvpcy3zepanecw97sn9g25uukrgxca47at8as54xhd0rkgx57cs78mc8fk6507cs8tnugnpnf
+mk1qperp7ppr4e59ef7u5p038j900ye439hsphez506fra5k3eac5kg0n7jhn3kpzpna6n0lygdlpfeq4a75lc2mrrz7f
 
 # md1 (multisig wallet policy)
-md1f5 przzs pq3m6 7zzqq vzrs3 pstuc w0za5 znwrg 3hcc5 xg5qx zhs7y yg2f6 g9kqk tgkrn 2spp6 tlfzp rv6ye
-md1f5 przzs wgyrv 6pz5h atnt2 a8wzs 2m92f fsrmq arvqs qm3lg xr8tr r2w5z jcz3y jdljk 0qf2g 9tn3u 5jtsz
-md1f5 przzs j7qq7 fkctv h5jqz xuepc cmchn 8u30m 4as45 q6fz4 ltsnt lues3 e3gyl cu6js asrwq tqpe4 mvjxf
-md1f5 przzs afx3d zmj02 p3qtf fjqpx tuj95 jzaev qs7jq je403 24vxl fw0tx swawp xte3z mspu3 5hx7l rg2t6
-md1f5 przz3 r3qa0 3segk px2s4 feevx sd3mt a6k0m pf2dw 678vs dfa3p u0hsw nvwhx sh98m jsqps z8xkj h9l6g
-md1f5 przz3 gzlz0 y277f ntzt0 qr0j9 gl5j8 mfdrn m3fvs l8a90 8rvzy r8m4x l7gs9 e2t6d yvjgv 4j
+md1f5przzspq3m67zzqqvzrs3pstucw0za5znwrg3hcc5xg5qxzhs7yyg2f6g9kqktgkrn2spp6tlfzprv6ye
+md1f5przzswgyrv6pz5hatnt2a8wzs2m92ffsrmqarvqsqm3lgxr8trr2w5zjcz3yjdljk0qf2g9tn3u5jtsz
+md1f5przzsj7qq7fkctvh5jqzxuepccmchn8u30m4as45q6fz4ltsntlues3e3gylcu6jsasrwqtqpe4mvjxf
+md1f5przzsafx3dzmj02p3qtffjqpxtuj95jzaevqs7jqje40324vxlfw0txswawpxte3zmspu35hx7lrg2t6
+md1f5przz3r3qa03segkpx2s4feevxsd3mta6k0mpf2dw678vsdfa3pu0hswnvwhxsh98mjsqpsz8xkjh9l6g
+md1f5przz3gzlz0y277fntzt0qr0j9gl5j8mfdrnm3fvsl8a908rvzyr8m4xl7gs9e2t6dyvjgv4j
 
 # === Wallet bundle: descriptor, mainnet ===
 # Threshold: 2 of 3
@@ -405,10 +407,10 @@ note: stdout is watch-only — public keys only, cannot spend
 ## 3.4 Building from all seeds on one machine (multiple files, one command)
 
 If instead you hold all the seeds yourself, you can build the whole bundle in a
-single command, reading each seed from its own file with command substitution.
-This is less safe -- each substituted phrase lands on `argv`, so the toolkit
-prints a secret-on-argv warning for every one -- but it needs no per-device
-coordination. The three seed files (shown again for reference):
+single command, reading each seed from its own file into an environment
+variable. It needs no per-device coordination, and the seeds stay off `argv`:
+command substitution would put all three there, which the toolkit refuses at
+exit 2 before parsing. The three seed files (shown again for reference):
 
 ```
 $ cat seed0.txt
@@ -429,38 +431,40 @@ Because seeds (not just xpubs) are supplied, this emits the **full secret card
 set** -- one `ms1` per cosigner -- not the watch-only placeholders of 3.3:
 
 ```
-$ mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=$(cat seed0.txt)" --slot "@1.phrase=$(cat seed1.txt)" --slot "@2.phrase=$(cat seed2.txt)"
-warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
-warning: secret material on argv (--slot @1.phrase=) — pipe via --slot @1.phrase=- to avoid /proc/$PID/cmdline exposure
-warning: secret material on argv (--slot @2.phrase=) — pipe via --slot @2.phrase=- to avoid /proc/$PID/cmdline exposure
+$ export SEED0="$(cat seed0.txt)" SEED1="$(cat seed1.txt)" SEED2="$(cat seed2.txt)"
+
+```
+
+```
+$ mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=@env:SEED0" --slot "@1.phrase=@env:SEED1" --slot "@2.phrase=@env:SEED2"
 # ms1[0] (entropy, BCH-checksummed)
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 # ms1[1] (entropy, BCH-checksummed)
-ms10e ntrsq plh7l ml0al h7lml 0alh7 lml0a ls5cc lar2z mksh6
+ms10entrsqplh7lml0alh7lml0alh7lml0als5cclar2zmksh6
 
 # ms1[2] (entropy, BCH-checksummed)
-ms10e ntrsq zqgpq yqszq gpqyq szqgp qyqsz qqlfm 7mep8 4hunu
+ms10entrsqzqgpqyqszqgpqyqszqgpqyqszqqlfm7mep84hunu
 
 # mk1[0] (cosigner 0 xpub + origin)
-mk1qp erpup qqspu 3s7de nyv8n wverp umnrn chdq5 pcy3z epa59 349dc gs5n5 stvpv k3v8x 4eqsd ngy2j l4wdd t5ac2 ptv4f ya76t preap yrdfq r
-mk1qp erpup pnq8k p6xcp qphr7 svxwk xx5ag 99s9z fyml9 v7tcq rexmp dj7jg qgmny 8rr0z 7vlj7 eqzv2 486xk kcftr zq8
+mk1qperpupqqspu3s7denyv8nwverpumnrnchdq5pcy3zepa59349dcgs5n5stvpvk3v8x4eqsdngy2jl4wddt5ac2ptv4fya76tpreapyrdfqr
+mk1qperpuppnq8kp6xcpqphr7svxwkxx5ag99s9zfyml9v7tcqrexmpdj7jgqgmny8rr0z7vlj7eqzv2486xkkcftrzq8
 
 # mk1[1] (cosigner 1 xpub + origin)
-mk1qp erpap qqspu 3s7de nyv8n wverp umn9c dzxlz pcy3z epaqx afl63 0m4as 45q6f z4lts ntlue s3e3g ylcu6 jsa6j dz69h y0whc pg2f2 8j5aw u
-mk1qp erpap p02p3 qtffj qpxtu j95jz aevqs 7jqje 40324 vxlfw 0txsw awpxt e3zmh zp6lr pj3ga 2lw65 h2dd2 4cuer kpa
+mk1qperpapqqspu3s7denyv8nwverpumn9cdzxlzpcy3zepaqxafl630m4as45q6fz4ltsntlues3e3gylcu6jsa6jdz69hy0whcpg2f28j5awu
+mk1qperpapp02p3qtffjqpxtuj95jzaevqs7jqje40324vxlfw0txswawpxte3zmhzp6lrpj3ga2lw65h2dd24cuerkpa
 
 # mk1[2] (cosigner 2 xpub + origin)
-mk1qp erp7p qqspu 3s7de nyv8n wverp umnpg v3gqv pcy3z epane cw97s n9g25 uukrg xca47 at8as 54xhd 0rkgx 57cs7 8mc8f k6507 cs8tn ugnpn f
-mk1qp erp7p pr4e5 9ef7u 5p038 j900y e439h sphez 506fr a5k3e ac5kg 0n7jh n3kpz pna6n 0lygd lpfeq 4a75l c2mrr z7f
+mk1qperp7pqqspu3s7denyv8nwverpumnpgv3gqvpcy3zepanecw97sn9g25uukrgxca47at8as54xhd0rkgx57cs78mc8fk6507cs8tnugnpnf
+mk1qperp7ppr4e59ef7u5p038j900ye439hsphez506fra5k3eac5kg0n7jhn3kpzpna6n0lygdlpfeq4a75lc2mrrz7f
 
 # md1 (multisig wallet policy)
-md1f5 przzs pq3m6 7zzqq vzrs3 pstuc w0za5 znwrg 3hcc5 xg5qx zhs7y yg2f6 g9kqk tgkrn 2spp6 tlfzp rv6ye
-md1f5 przzs wgyrv 6pz5h atnt2 a8wzs 2m92f fsrmq arvqs qm3lg xr8tr r2w5z jcz3y jdljk 0qf2g 9tn3u 5jtsz
-md1f5 przzs j7qq7 fkctv h5jqz xuepc cmchn 8u30m 4as45 q6fz4 ltsnt lues3 e3gyl cu6js asrwq tqpe4 mvjxf
-md1f5 przzs afx3d zmj02 p3qtf fjqpx tuj95 jzaev qs7jq je403 24vxl fw0tx swawp xte3z mspu3 5hx7l rg2t6
-md1f5 przz3 r3qa0 3segk px2s4 feevx sd3mt a6k0m pf2dw 678vs dfa3p u0hsw nvwhx sh98m jsqps z8xkj h9l6g
-md1f5 przz3 gzlz0 y277f ntzt0 qr0j9 gl5j8 mfdrn m3fvs l8a90 8rvzy r8m4x l7gs9 e2t6d yvjgv 4j
+md1f5przzspq3m67zzqqvzrs3pstucw0za5znwrg3hcc5xg5qxzhs7yyg2f6g9kqktgkrn2spp6tlfzprv6ye
+md1f5przzswgyrv6pz5hatnt2a8wzs2m92ffsrmqarvqsqm3lgxr8trr2w5zjcz3yjdljk0qf2g9tn3u5jtsz
+md1f5przzsj7qq7fkctvh5jqzxuepccmchn8u30m4as45q6fz4ltsntlues3e3gylcu6jsasrwqtqpe4mvjxf
+md1f5przzsafx3dzmj02p3qtffjqpxtuj95jzaevqs7jqje40324vxlfw0txswawpxte3zmspu35hx7lrg2t6
+md1f5przz3r3qa03segkpx2s4feevxsd3mta6k0mpf2dw678vsdfa3pu0hswnvwhxsh98mjsqpsz8xkjh9l6g
+md1f5przz3gzlz0y277fntzt0qr0j9gl5j8mfdrnm3fvsl8a908rvzyr8m4xl7gs9e2t6dyvjgv4j
 
 # === Wallet bundle: wsh-sortedmulti, mainnet ===
 # Threshold: 2 of 3
@@ -478,8 +482,7 @@ Only one secret may arrive on stdin, so you cannot replace more than one
 substitution with the `=-` file-redirect form -- a second `=-` is rejected:
 
 ```
-$ mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=$(cat seed2.txt)" < seed0.txt
-warning: secret material on argv (--slot @2.phrase=) — pipe via --slot @2.phrase=- to avoid /proc/$PID/cmdline exposure
+$ mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=@env:SEED2" < seed0.txt
 error: at most one --slot @N.<secret>=- per invocation (single stdin per invocation)
 ```
 
@@ -817,85 +820,85 @@ $ mnemonic bundle --descriptor-file policy.desc --network mainnet
 # ms1 (omitted — descriptor watch-only mode)
 
 # mk1[0] (cosigner 0 xpub + origin)
-mk1qp tfcrz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkp eutks 2qvzg s7hd8 pnnmc v56c4 u
-mk1qp tfcrz pkg08 auetm d998g 9tyxu ae9vx n38f9 gtpr9 8q8s8 08l6s zjkxj t6r83 rk2jg 0cqns 0f30m txzd6 5mvwc ur9us v8qhc mu69g ql0zr c
-mk1qp tfcrz z74hw qxqdp 083je hp5td rfa0n 5zdfh w6425 sqe8p gsyxf tjtf4
+mk1qptfcrzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpeutks2qvzgs7hd8pnnmcv56c4u
+mk1qptfcrzpkg08auetmd998g9tyxuae9vxn38f9gtpr98q8s808l6szjkxjt6r83rk2jg0cqns0f30mtxzd65mvwcur9usv8qhcmu69gql0zrc
+mk1qptfcrzz74hwqxqdp083jehp5tdrfa0n5zdfhw6425sqe8pgsyxftjtf4
 
 # mk1[1] (cosigner 1 xpub + origin)
-mk1qp tfczz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkp eutks 2lcpa g7x7w 00uvz 59ukc 0
-mk1qp tfczz pszqg qzyqs zqgqz ypszq gqzqy 3zepu lhn90 du6se tz7wc ggw0m nt0ja rage0 ptr0v xf3c9 895gh kha0g k58rc wwcdc lrvxv vprnt a
-mk1qp tfczz zdqp8 2uxnp rxcue jaent sxshg r9vud frx5c c7npa egptf 64nsu d0nnn t334x du0p8 3dn95 g54tz
+mk1qptfczzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpeutks2lcpag7x7w00uvz59ukc0
+mk1qptfczzpszqgqzyqszqgqzypszqgqzqy3zepulhn90du6setz7wcggw0mnt0jarage0ptr0vxf3c9895ghkha0gk58rcwwcdclrvxvvprnta
+mk1qptfczzzdqp82uxnprxcuejaentsxshgr9vudfrx5cc7npaegptf64nsud0nnnt334xdu0p83dn95g54tz
 
 # mk1[2] (cosigner 2 xpub + origin)
-mk1qp tfcpz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkp eutks 2lcpa g07c7 z8k5q ayd8z 5
-mk1qp tfcpz pszqg qzyqs zqgqz yzszq gqzqy 3zepu lhn90 d76en fqwwt ug4zd pn8r9 4nrhg nwycc 6l2er rqlch 68l94 cdsr0 vxvng vzwq0 fhe86 j
-mk1qp tfcpz zqupq c34fl c5lnh z7dzk jmzwf htn2t f9tp8 385pw pa2rh 2p9a6 flzxm hl43h hx3cm gcpj6 25l8l
+mk1qptfcpzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpeutks2lcpag07c7z8k5qayd8z5
+mk1qptfcpzpszqgqzyqszqgqzyzszqgqzqy3zepulhn90d76enfqwwtug4zdpn8r94nrhgnwycc6l2errqlch68l94cdsr0vxvngvzwq0fhe86j
+mk1qptfcpzzqupqc34flc5lnhz7dzkjmzwfhtn2tf9tp8385pwpa2rh2p9a6flzxmhl43hhx3cmgcpj625l8l
 
 # mk1[3] (cosigner 3 xpub + origin)
-mk1qp tfcqz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkp eutks 2lcpa gqk6f 7csue 6uzgn a
-mk1qp tfcqz pszqg qzyqs zqgqz yrszq gqzqy 3zepu lhn90 d6awk dsml0 jm7xj ylhyy p7esa klwkw kasq2 4gnq3 578mn e3sjr 64gda uj68u hy768 d
-mk1qp tfcqz zzqp0 dmvsl cy68s h0lw9 3nwwx th488 eqjvn 67gqj px7fy f84xj 7zjfc 29xjt agpgh sxz5x lu0rx
+mk1qptfcqzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpeutks2lcpagqk6f7csue6uzgna
+mk1qptfcqzpszqgqzyqszqgqzyrszqgqzqy3zepulhn90d6awkdsml0jm7xjylhyyp7esaklwkwkasq24gnq3578mne3sjr64gdauj68uhy768d
+mk1qptfcqzzzqp0dmvslcy68sh0lw93nwwxth488eqjvn67gqjpx7fyf84xj7zjfc29xjtagpghsxz5xlu0rx
 
 # mk1[4] (cosigner 4 xpub + origin)
-mk1qp tfc8z qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkz ux3r0 3qvzg snwq0 e2f7m mwlnn x
-mk1qp tfc8z pkg0w 55t7u h3mhp gjm2c tzuev mwdff ap2f5 zl9lk dtfh3 72tg8 y9k3d 35qm0 06q30 450k4 vmqva kpywv 7pkda jnnrd 36ymd aqksn v
-mk1qp tfc8z zm36y 9wa86 gpqpq 5yypp y22y3 ww23f xkwgj cskxq sga8s gz6tl
+mk1qptfc8zqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkzux3r03qvzgsnwq0e2f7mmwlnnx
+mk1qptfc8zpkg0w55t7uh3mhpgjm2ctzuevmwdffap2f5zl9lkdtfh372tg8y9k3d35qm006q30450k4vmqvakpywv7pkdajnnrd36ymdaqksnv
+mk1qptfc8zzm36y9wa86gpqpq5yyppy22y3ww23fxkwgjcskxqsga8sgz6tl
 
 # mk1[5] (cosigner 5 xpub + origin)
-mk1qp tfcxz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkz ux3r0 3lcpa gnlnx hkxfp rlea7 4
-mk1qp tfcxz pszqg qzyqs zqgqz ypszq gqzqy 3zepa 6j30m jj26l 5afq2 2n2ct 2h3zw rjpse fyfqr 5zrzs 70jdm tqvx7 wwt0z 6a3fm fdmqr 0khu2 3
-mk1qp tfcxz zdqp6 ttmcl y57ac 6vels 0u3jj 86dd5 pe7m3 55rtt w8r3a 2s45t szcmr x9xa5 qyec4 g3cru t8d54
+mk1qptfcxzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkzux3r03lcpagnlnxhkxfprlea74
+mk1qptfcxzpszqgqzyqszqgqzypszqgqzqy3zepa6j30mjj26l5afq22n2ct2h3zwrjpsefyfqr5zrzs70jdmtqvx7wwt0z6a3fmfdmqr0khu23
+mk1qptfcxzzdqp6ttmcly57ac6vels0u3jj86dd5pe7m355rttw8r3a2s45tszcmrx9xa5qyec4g3crut8d54
 
 # mk1[6] (cosigner 6 xpub + origin)
-mk1qp tfc9z qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkz ux3r0 3lcpa gz84k 67v3r 27gvy w
-mk1qp tfc9z pszqg qzyqs zqgqz yzszq gqzqy 3zepa 6j30m jemst 4u6j4 atq6u hd0m3 m5l9l vu9cd e6pcs wdrm7 3ejss 4lts9 qugnu fy3yg 6r2y0 f
-mk1qp tfc9z zvgpq dye4j 7rexg zc7vs ch5dx s9e58 7e8u2 2q38u jtrt5 4lm26 dq30k fqqvm 7wyvx mtzy3 8suff
+mk1qptfc9zqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkzux3r03lcpagz84k67v3r27gvyw
+mk1qptfc9zpszqgqzyqszqgqzyzszqgqzqy3zepa6j30mjemst4u6j4atq6uhd0m3m5l9lvu9cde6pcswdrm73ejss4lts9qugnufy3yg6r2y0f
+mk1qptfc9zzvgpqdye4j7rexgzc7vsch5dxs9e587e8u22q38ujtrt54lm26dq30kfqqvm7wyvxmtzy38suff
 
 # mk1[7] (cosigner 7 xpub + origin)
-mk1qp tfcyz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkz ux3r0 3lcpa gd0hp xp2e6 dx8r4 8
-mk1qp tfcyz pszqg qzyqs zqgqz yrszq gqzqy 3zepa 6j30m jstc3 wnact 9lauq xytd7 f9xhq mtmlm a4zhs vtx5p 6e3s3 rggp2 ce7mx am45j 76f5q d
-mk1qp tfcyz z3qpz lzuww w4vzv ckseq udfl7 d8u34 vrr7t 6kyjw lagke p2ywk 6g2q5 h3z3t vy9m0 6y2yd 6kfgs
+mk1qptfcyzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkzux3r03lcpagd0hpxp2e6dx8r48
+mk1qptfcyzpszqgqzyqszqgqzyrszqgqzqy3zepa6j30mjstc3wnact9lauqxytd7f9xhqmtmlma4zhsvtx5p6e3s3rggp2ce7mxam45j76f5qd
+mk1qptfcyzz3qpzlzuwww4vzvcksequdfl7d8u34vrr7t6kyjwlagkep2ywk6g2q5h3z3tvy9m06y2yd6kfgs
 
 # mk1[8] (cosigner 8 xpub + origin)
-mk1qp tfctz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkq 5xg5q xqvzg s9n3l 96x69 pda2y s
-mk1qp tfctz pkg0d qcwzp syrk9 a808d 5f0ge nnj3x 9vjds 63rqg zndx7 8e533 rulqy zd58c mvq4n udnky 9jhqs h5zpe maskg 7pdgx cftuk rgv6n 5
-mk1qp tfctz zt4c4 w6rtn jmnht 889lt vhne3 ktx5e ncnny 6spl8 gsqf5 3tn98
+mk1qptfctzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkq5xg5qxqvzgs9n3l96x69pda2ys
+mk1qptfctzpkg0dqcwzpsyrk9a808d5f0gennj3x9vjds63rqgzndx78e533rulqyzd58cmvq4nudnky9jhqsh5zpemaskg7pdgxcftukrgv6n5
+mk1qptfctzzt4c4w6rtnjmnht889ltvhne3ktx5encnny6spl8gsqf53tn98
 
 # mk1[9] (cosigner 9 xpub + origin)
-mk1qp tfc2z qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkq 5xg5q xlcpa g9zzk txfdl eumyf r
-mk1qp tfc2z pszqg qzyqs zqgqz ypszq gqzqy 3zepa 5rpcg x0jla g0vc8 5ztty 3las6 2hfw7 3f3j8 zx6t3 lmtep 8skfu jv0xf u3hsl fcdrr rp8me 0
-mk1qp tfc2z zlcpn 80c5z mmvvx qknng p3d27 9fuyw f7zfw 5kqe8 wv93v 9fvn0 m39u6 5adln vgwul lstsp xm44n
+mk1qptfc2zqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkq5xg5qxlcpag9zzktxfdleumyfr
+mk1qptfc2zpszqgqzyqszqgqzypszqgqzqy3zepa5rpcgx0jlag0vc85ztty3las62hfw73f3j8zx6t3lmtep8skfujv0xfu3hslfcdrrrp8me0
+mk1qptfc2zzlcpn80c5zmmvvxqknngp3d279fuywf7zfw5kqe8wv93v9fvn0m39u65adlnvgwullstspxm44n
 
 # mk1[10] (cosigner 10 xpub + origin)
-mk1qp tfcfz qqs94 5upmk pd8qw astfc rhvz6 wqamq kns8w c95up mkpd8 qwast fcrhv z6wqa mqkns 8wc95 upmkq 5xg5q xlcpa g56yx xwr4a sa24n c
-mk1qp tfcfz pszqg qzyqs zqgqz yzszq gqzqy 3zepa 5rpcg xwd86 v5gun engsx d2x3n hwsl8 dfjs7 9jwhy 7qnx8 r24vl s4gl0 5j6ux cc7dl 2rjme c
-mk1qp tfcfz z2yps arcmr l7tgu tcg8u f4m7g fcd8l fv33k nprwt hl06a m5gdw 9aqnf x4jz8 l2kjr 0p0ur 43e8j
+mk1qptfcfzqqs945upmkpd8qwastfcrhvz6wqamqkns8wc95upmkpd8qwastfcrhvz6wqamqkns8wc95upmkq5xg5qxlcpag56yxxwr4asa24nc
+mk1qptfcfzpszqgqzyqszqgqzyzszqgqzqy3zepa5rpcgxwd86v5gunengsxd2x3nhwsl8dfjs79jwhy7qnx8r24vls4gl05j6uxcc7dl2rjmec
+mk1qptfcfzz2ypsarcmrl7tgutcg8uf4m7gfcd8lfv33knprwthl06am5gdw9aqnfx4jz8l2kjr0p0ur43e8j
 
 # md1 (multisig wallet policy)
-md1ff umxts 9z3m6 jzqaa fpr80 2gfga afp9n h4yyp m6jzx w75sj 3m6jz t802g grh4y yvaaf p9gen j3xrj hltjx q
-md1ff umxts gqxpx 2v6mq q85ys zv6a4 pxuus yh2un u8xqz 8naa2 r2akw ukvgm 42gws 7xkx9 k7ctq mfdfe 9crr4 q
-md1ff umxts s5mng y26xz zqyn9 xddhp k7csp xdw6s nwwgz t4wf7 rnqpr e774p 4wm8w txyd6 4yxex 7jxul xvqvk c
-md1ff umxts apudv vtdas 2de5z 9drq3 rg4jn xhqqq rll7x ppvax dwqqs 8sngv q9zdq eccpe utk5l pf37m lhphs r
-md1ff umxt3 zpgtn chdq5 feutk s2xu7 9mg9y hp5gm u2ms6 yd794 cdzxl z7ux3 r03s2 ry2qr f9qs7 84qr5 aw8s9 8
-md1ff umxt3 wg5qx 52ry2 qrpdk ssz22 ws2kg demj2 cd8zw j2skz x2wq0 qw70l 4q99v dyh5x 0zxwq 65s8c 69ev9 z
-md1ff umxt3 4j5jr 7qyur 6vt76 esnw4 xmrk8 qe0yr 02mhq rqxsh ncevm s69k3 57he6 px5mr n2zz0 33uqk qk8lq l
-md1ff umxt3 u4308 vyy88 ae4he w375v hs43h krycu znj6y tmt7h 5t2r3 u8dqp 82uxn prxcu ejudw s6tu9 ntlfd x
-md1ff umxtj 8xdwq 6zaqv 4n34y v6nrr 6v8h9 q9d82 kwr34 7wwd9 mtxdy pee03 z5f5x vuvkk vwu4e plqpe dw7ye 5
-md1ff umxtj vfhzv vd04v 33s0u tarlj 6uxcp hkqup qc34f lc5ln hz7dz kjmzw fhtn2 tf9tp 83xfs kawee p093t j
-md1ff umxtj ks9c8 4gwag yhhf8 ugmw8 t46ek r0a7t 0c6gn 7uss8 mxrkm a6e6m kqp24 zvzxn clwk7 4rja8 2tmur l
-md1ff umxtj euccf pazqp 0dmvs lcy68 sh0lw 93nww xth48 8eqjv n67gq jpx7f yf84x j7zjf c2wr6 04yur u2eq3 4
-md1ff umxtn qams5 fd4v9 3wvkd hx557 s4y6p 0jlmx 45mcl 995rj zmgkc 6qdhh aqgh6 68m2k dsxy5 ru7p2 fk5qg s
-md1ff umxtn fmvzg ueurv mm8w8 gs4m5 lfqyq yzsss yy3fg j9ee2 9zj26 l5afq 22n2c t2h3z wrj46 trnch trjpt z
-md1ff umxtn sxr9y 3yqws gv2re 7fhdv psmee edutt gqwj6 778e9 8hwxn x0url yv537 ntdqw 0kusp xl3wy yry2c 2
-md1ff umxtn e55rt tw8r3 a2s45 tszcm rrfms t4u6j 4atq6 uhd0m 3m5l9 lvu9c de6pc swdrm 73cph 9wc0u tcf6l 5
-md1ff umxt5 x2zzh awq5r zqgrf xdvhs 7fjqk 8nyx9 arf5p wdplk flzjs yflyj c6a90 76kng ytumw tunf5 hft8g c
-md1ff umxt5 wtstc 3wnac t9lau qxytd 7f9xh qmtml ma4zh svtx5 p6e3s 3rggp 2ezqz 979cu ua2mf vauyk 5ut07 p
-md1ff umxt5 nqnx9 5xg8r 20lnf lydtq clj74 3ynhl 29kg2 3r4kj zs99q yrk9a 808d5 f0gen njsls rzrnn r484e 6
-md1ff umxt5 uc4jf kr2yv pq2d5 mclxj xy0nu qsfks lrdsz k03kw csk2u zz7sg 880kz er6aw 9tk9y pxcwz cyw6f y
-md1ff umxt4 zrtnj mnht8 89ltv hne3k tx5e8 uhl2r mxpaq j6ey0 lvxj4 6th52 vv3c3 kju07 67gdj m2nna x3x5p w
-md1ff umxt4 f8skf ujv0x falsr xwl3g 9hkcc vpd8x srz64 u2ncg unuyj afvpj wuctz c2jex lhznk tnnzz u3sml 7
-md1ff umxt4 30x4t nf7n9 z8y7v 6ypn2 35vam 58em2 v583v n4e8s ye3c6 4t8u9 28ma9 zqcw3 udszu lgfsx u8xey l
-md1ff umxt4 lluk3 chss0 cnthu sns60 7jerr dxzxu h07l4 mhgs6 ut6px jq3gs 642g7 8tg45
+md1ffumxts9z3m6jzqaafpr802gfgaafp9nh4yypm6jzxw75sj3m6jzt802ggrh4yyvaafp9genj3xrjhltjxq
+md1ffumxtsgqxpx2v6mqq85yszv6a4pxuusyh2unu8xqz8naa2r2akwukvgm42gws7xkx9k7ctqmfdfe9crr4q
+md1ffumxtss5mngy26xzzqyn9xddhpk7cspxdw6snwwgzt4wf7rnqpre774p4wm8wtxyd64yxex7jxulxvqvkc
+md1ffumxtsapudvvtdas2de5z9drq3rg4jnxhqqqrll7xppvaxdwqqs8sngvq9zdqeccpeutk5lpf37mlhphsr
+md1ffumxt3zpgtnchdq5feutks2xu79mg9yhp5gmu2ms6yd794cdzxlz7ux3r03s2ry2qrf9qs784qr5aw8s98
+md1ffumxt3wg5qx52ry2qrpdkssz22ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0zxwq65s8c69ev9z
+md1ffumxt34j5jr7qyur6vt76esnw4xmrk8qe0yr02mhqrqxshncevms69k357he6px5mrn2zz033uqkqk8lql
+md1ffumxt3u4308vyy88ae4hew375vhs43hkrycuznj6ytmt7h5t2r3u8dqp82uxnprxcuejudws6tu9ntlfdx
+md1ffumxtj8xdwq6zaqv4n34yv6nrr6v8h9q9d82kwr347wwd9mtxdypee03z5f5xvuvkkvwu4eplqpedw7ye5
+md1ffumxtjvfhzvvd04v33s0utarlj6uxcphkqupqc34flc5lnhz7dzkjmzwfhtn2tf9tp83xfskaweep093tj
+md1ffumxtjks9c84gwagyhhf8ugmw8t46ekr0a7t0c6gn7uss8mxrkma6e6mkqp24zvzxnclwk74rja82tmurl
+md1ffumxtjeuccfpazqp0dmvslcy68sh0lw93nwwxth488eqjvn67gqjpx7fyf84xj7zjfc2wr604yuru2eq34
+md1ffumxtnqams5fd4v93wvkdhx557s4y6p0jlmx45mcl995rjzmgkc6qdhhaqgh668m2kdsxy5ru7p2fk5qgs
+md1ffumxtnfmvzgueurvmm8w8gs4m5lfqyqyzsssyy3fgj9ee29zj26l5afq22n2ct2h3zwrj46trnchtrjptz
+md1ffumxtnsxr9y3yqwsgv2re7fhdvpsmeeeduttgqwj6778e98hwxnx0urlyv537ntdqw0kuspxl3wyyry2c2
+md1ffumxtne55rttw8r3a2s45tszcmrrfmst4u6j4atq6uhd0m3m5l9lvu9cde6pcswdrm73cph9wc0utcf6l5
+md1ffumxt5x2zzhawq5rzqgrfxdvhs7fjqk8nyx9arf5pwdplkflzjsyflyjc6a9076kngytumwtunf5hft8gc
+md1ffumxt5wtstc3wnact9lauqxytd7f9xhqmtmlma4zhsvtx5p6e3s3rggp2ezqz979cuua2mfvauyk5ut07p
+md1ffumxt5nqnx95xg8r20lnflydtqclj743ynhl29kg23r4kjzs99qyrk9a808d5f0gennjslsrzrnnr484e6
+md1ffumxt5uc4jfkr2yvpq2d5mclxjxy0nuqsfkslrdszk03kwcsk2uzz7sg880kzer6aw9tk9ypxcwzcyw6fy
+md1ffumxt4zrtnjmnht889ltvhne3ktx5e8uhl2rmxpaqj6ey0lvxj46th52vv3c3kju0767gdjm2nnax3x5pw
+md1ffumxt4f8skfujv0xfalsrxwl3g9hkccvpd8xsrz64u2ncgunuyjafvpjwuctzc2jexlhznktnnzzu3sml7
+md1ffumxt430x4tnf7n9z8y7v6ypn235vam58em2v583vn4e8sye3c64t8u928ma9zqcw3udszulgfsxu8xeyl
+md1ffumxt4lluk3chss0cnthusns607jerrdxzxuh07l4mhgs6ut6pxjq3gs642g78tg45
 
 # === Wallet bundle: descriptor, mainnet ===
 # Threshold: 3 of 11

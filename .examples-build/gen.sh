@@ -146,10 +146,10 @@ show "mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < se
 cat <<'MD'
 
 This is the **secure** idiom: the phrase travels on stdin, so it never appears
-in `argv` / `/proc/$PID/cmdline` or your shell history (unlike the inline form
-`--slot @0.phrase='<words>'`, which the toolkit flags as secret-on-argv). The
-reader strips a single trailing newline, so an ordinary one-line text file
-works.
+in `argv` / `/proc/$PID/cmdline` or your shell history. The inline form
+`--slot @0.phrase='<words>'` is **refused** at exit 2 before the command line
+is parsed. The reader strips a single trailing newline, so an ordinary one-line
+text file works.
 
 ## Multiple files for multiple seeds
 
@@ -160,11 +160,12 @@ one seed. To use several seed files there are two patterns:
    in its own command and combine only the resulting public xpubs. No machine
    ever holds more than one seed, and nothing secret reaches `argv`. This is the
    per-device 2-of-3 multisig flow in section 3.
-2. **Several files in one command (convenient -- less safe).** Read each file
-   with command substitution, `--slot "@N.phrase=$(cat seedN.txt)"`. This works
-   for any number of seeds, but each substituted phrase lands on `argv` (the
-   toolkit prints a secret-on-argv warning). Only one slot may use the `=-`
-   stdin form; a second `=-` is rejected. Shown in section 3.4.
+2. **Several files in one command, via the environment.** Only one slot may
+   use the `=-` stdin form; a second `=-` is rejected. For the rest, export each
+   seed and point the slot at it with `--slot '@N.phrase=@env:VAR'`. The
+   environment is not `argv`: it is absent from `ps` and from your shell
+   history. Command substitution -- `--slot "@N.phrase=$(cat seedN.txt)"` --
+   puts every phrase on `argv` and is now **refused**. Shown in section 3.4.
 
 > **Convention in this document:** whenever a command reads a file (a seed, a
 > descriptor, a policy JSON, or an `md1` chunk list), the file's contents are
@@ -315,10 +316,10 @@ cat <<'MD'
 ## 3.4 Building from all seeds on one machine (multiple files, one command)
 
 If instead you hold all the seeds yourself, you can build the whole bundle in a
-single command, reading each seed from its own file with command substitution.
-This is less safe -- each substituted phrase lands on `argv`, so the toolkit
-prints a secret-on-argv warning for every one -- but it needs no per-device
-coordination. The three seed files (shown again for reference):
+single command, reading each seed from its own file into an environment
+variable. It needs no per-device coordination, and the seeds stay off `argv`:
+command substitution would put all three there, which the toolkit refuses at
+exit 2 before parsing. The three seed files (shown again for reference):
 MD
 run 'cat seed0.txt'
 run 'cat seed1.txt'
@@ -328,13 +329,15 @@ cat <<'MD'
 Because seeds (not just xpubs) are supplied, this emits the **full secret card
 set** -- one `ms1` per cosigner -- not the watch-only placeholders of 3.3:
 MD
-run 'mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=$(cat seed0.txt)" --slot "@1.phrase=$(cat seed1.txt)" --slot "@2.phrase=$(cat seed2.txt)"'
+export SEED0="$(cat seed0.txt)" SEED1="$(cat seed1.txt)" SEED2="$(cat seed2.txt)"
+run 'export SEED0="$(cat seed0.txt)" SEED1="$(cat seed1.txt)" SEED2="$(cat seed2.txt)"'
+run 'mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=@env:SEED0" --slot "@1.phrase=@env:SEED1" --slot "@2.phrase=@env:SEED2"'
 cat <<'MD'
 
 Only one secret may arrive on stdin, so you cannot replace more than one
 substitution with the `=-` file-redirect form -- a second `=-` is rejected:
 MD
-run 'mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=$(cat seed2.txt)" < seed0.txt'
+run 'mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=@env:SEED2" < seed0.txt'
 
 cat <<'MD'
 

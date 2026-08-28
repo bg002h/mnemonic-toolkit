@@ -100,18 +100,12 @@ struct Cli {
     #[arg(long, global = true)]
     no_auto_repair: bool,
 
-    /// P3 (SPEC_constellation_cli_uniformity 6d): proceed even though secret
-    /// material is on argv.
-    ///
-    /// **The DECISION is not made here.** `argv_guard::inspect` reads this flag
-    /// out of raw `std::env::args()` before `Cli::try_parse()` runs, because a
-    /// guard that has to parse in order to honour its own override has already
-    /// let the parser see the material. This declaration exists so that clap
-    /// ACCEPTS the flag (an undeclared one exits 64 and the operator never
-    /// reaches the tool) and so that `--help` and `gui-schema` show it.
-    ///
-    /// It is greppable, which is the point: a reviewer can find every place a
-    /// script opted in.
+    // NOTE the single-paragraph doc comment: clap-derive turns anything after a
+    // blank line into `long_help`, and the mere PRESENCE of a long_help flips
+    // `--help` from the compact layout to the verbose one for EVERY root option.
+    // Measured: it rewrote 122 lines of `.examples-build/Examples.md`, none of
+    // them about this flag. The rationale lives in `argv_guard`'s module docs.
+    /// SPEC_constellation_cli_uniformity 6d — proceed even though secret material is on argv. Use it only where argv is safe (a single-user air-gapped box, an amnesic Tails session). The DECISION is not made here: `argv_guard::inspect` reads this flag out of raw `std::env::args()` before `Cli::try_parse()` runs; this declaration exists so clap ACCEPTS it and so `--help` and `gui-schema` show it. Greppable, so a reviewer can find every place a script opted in
     #[arg(long, global = true)]
     allow_argv_secret: bool,
 
