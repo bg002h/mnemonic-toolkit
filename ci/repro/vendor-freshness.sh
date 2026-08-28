@@ -1,25 +1,82 @@
 #!/usr/bin/env bash
-# vendor/ freshness guard — the LEADING (PR-time) gate.
+# vendor/ freshness + CONTENT guard — the LEADING (PR-time) gate.
 #
-# REDs iff the committed `vendor/` tree cannot satisfy the current `Cargo.lock`
-# under the reproducible build's `--offline --locked` source-replacement config.
-# This is the v0.74.0 failure class — a dep bump (e.g. md-codec 0.39.0 -> 0.39.1)
-# that updates Cargo.lock but forgets `cargo vendor vendor/`, so the release
-# `repro` build (man-pages.yml, tag-triggered) can't resolve the bumped dep and
-# publishes NO musl binary. That gate is LAGGING (fires only at the tag); this
-# script makes the same failure surface on the PR.
+# Four checks, in ascending cost. Any one RED fails the gate.
 #
-# Cheap by design: `cargo metadata` does FULL-workspace, all-target resolution
-# with NO compile / NO musl toolchain / NO Docker. With vendored-sources
-# replacement active, resolution validates EVERY Cargo.lock entry against vendor/
-# regardless of target cfg (R0 round-1 proved this — no musl-only false negative;
-# see design/agent-reports/vendor-freshness-guard-r0-round-1.md).
+#   (1) RESOLUTION  — can the committed vendor/ tree satisfy Cargo.lock under the
+#       reproducible build's `--offline --locked` source-replacement config?
+#   (2) INTEGRITY   — does every vendored file match the sha256 recorded for it in
+#       its crate's `.cargo-checksum.json`?
+#   (3) REGISTRY PROVENANCE — for every crates.io crate, does that manifest's
+#       `package` digest (the sha256 of the published .crate) equal the
+#       `checksum` Cargo.lock pins, and is the SET of crates lacking such an
+#       anchor exactly the one this gate is grounded for?
+#       Honest scope note, measured: the digest comparison itself is REDUNDANT
+#       with cargo. Tampering a `package` digest REDs in check (1) already
+#       ("checksum for `bitcoin v0.32.8` changed between lock files"), because
+#       cargo validates it during resolution. What is NOT redundant, and the
+#       reason (3) stays, is the unanchored-SET assertion: cargo is perfectly
+#       happy with a new git or path dependency that no digest can vouch for,
+#       and that is the shape F-354 arrived in.
+#   (4) GIT-FORK PROVENANCE — check (3) is impossible for a git dependency: a git
+#       source has no published tarball, so BOTH `package` and Cargo.lock's
+#       `checksum` are null. That hole is anchored here instead, against a
+#       digest grounded on upstream by hand (see GROUNDING below).
+#
+# WHY (2)-(4) EXIST — F-354. Check (1) alone was green for two months over a
+# vendor/miniscript tree vendored from the WRONG REVISION (95fdd1c5, missing
+# rust-miniscript PR #953) while Cargo.toml/Cargo.lock pinned ff4732e5. Check (1)
+# cannot see this: it compares Cargo.lock resolution, never the vendored BYTES,
+# and name+version+source-id all matched. Every networked build fetched the
+# correct rev from git and was fine; only the `--offline` vendored path — which
+# is what the reproducible RELEASE binary is built from — compiled the old
+# formatter. Depth->=2 taproot restore was measurably broken in that binary while
+# every gate reported green.
+#
+# NOTE check (2) alone would NOT have caught F-354 either, and this was measured,
+# not assumed: the mis-vendored tree was internally SELF-CONSISTENT (168 crates,
+# 7479 files, 0 checksum mismatches) because `cargo vendor` wrote the manifest
+# from the same wrong rev it wrote the files from. Integrity catches corruption
+# and hand-edits; only (3)/(4) catch "vendored from the wrong source".
+#
+# ── BLIND SPOTS. Read these before trusting a green. ────────────────────────
+#
+#  * Check (2) proves the tree matches what `cargo vendor` wrote. It does NOT
+#    prove what `cargo vendor` wrote came from the pinned rev. For crates.io
+#    crates that gap is closed by the published-tarball digest (enforced by cargo
+#    in check (1), restated in (3)). For the git fork there is no such digest,
+#    and (4) closes it only as far as its grounding reaches.
+#  * Check (4) is a TRUST-ON-FIRST-USE anchor, not a live verification. It
+#    compares the vendored tree against a digest a human grounded against GitHub
+#    once. It proves the tree has not CHANGED since that grounding; it cannot by
+#    itself prove the grounding was right. Re-ground it (command below) whenever
+#    the pin moves — the gate REDs and tells you to, rather than passing silently.
+#  * NOTHING here re-proves bit-for-bit build reproducibility. That stays with
+#    repro-drift.yml (scheduled) and the release `repro` gate (tag).
+#  * A dependency added from a NEW git source would have no anchor at all, so
+#    check (3) fails closed on any unanchored crate it does not already know
+#    about, rather than skipping it.
 #
 # Spec: design/SPEC_vendor_freshness_ci_guard.md
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
+
+# ── GROUNDING for check (4) ────────────────────────────────────────────────
+# Grounded 2026-08-27 while fixing F-354, against upstream at the pinned rev:
+#   97 of the 98 vendored files were confirmed byte-identical to
+#   https://github.com/rust-bitcoin/rust-miniscript at ff4732e5 by git blob
+#   hash (GitHub trees API, recursive). The 98th is Cargo.toml, which
+#   `cargo vendor` rewrites ("THIS FILE IS AUTOMATICALLY GENERATED BY CARGO").
+#
+# To RE-GROUND after moving the [patch.crates-io] pin:
+#   cargo vendor --locked vendor/
+#   sha256sum vendor/miniscript/.cargo-checksum.json
+# and paste the rev + digest below. Verify against upstream before you do.
+EXPECTED_GIT_FORK_DIR="miniscript"
+EXPECTED_GIT_FORK_REV="ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+EXPECTED_GIT_FORK_MANIFEST_SHA256="30cc80f5ea57305f09790b661805b58cfdcd16aaaddd26c3769078eccd9a1277"
 
 # Derive the miniscript fork rev from Cargo.lock (authoritative, comment-free) so
 # the 3-block source config auto-tracks the [patch.crates-io] pin. Fail CLOSED on
@@ -32,6 +89,7 @@ if [ -z "$MINISCRIPT_REV" ]; then
   exit 1
 fi
 
+# ── (1) RESOLUTION ──────────────────────────────────────────────────────────
 # 3-block source-replacement, mirroring ci/repro/double-build.sh: crates-io +
 # the miniscript git-fork + vendored-sources -> the committed vendor/ tree.
 SRC_CONFIG=(
@@ -42,9 +100,9 @@ SRC_CONFIG=(
   --config 'source.vendored-sources.directory="vendor"'
 )
 
-echo "vendor-freshness: resolving Cargo.lock against committed vendor/ (offline, locked; miniscript rev ${MINISCRIPT_REV}) ..."
+echo "vendor-freshness: (1/4) resolving Cargo.lock against committed vendor/ (offline, locked; miniscript rev ${MINISCRIPT_REV}) ..."
 if cargo metadata --format-version 1 --locked --offline "${SRC_CONFIG[@]}" >/dev/null; then
-  echo "vendor-freshness: OK — vendor/ satisfies Cargo.lock."
+  echo "vendor-freshness: (1/4) OK — vendor/ satisfies Cargo.lock."
 else
   echo "::error::vendor/ is out of sync with Cargo.lock — the --offline --locked reproducible build" \
        "cannot resolve a dependency from the committed vendor/ tree. Run 'cargo vendor vendor/' and" \
@@ -52,3 +110,138 @@ else
        "class, now caught at PR time." >&2
   exit 1
 fi
+
+# ── (2) INTEGRITY, (3) REGISTRY PROVENANCE, (4) GIT-FORK PROVENANCE ─────────
+# Pure content checks: no compile, no network, no toolchain. Measured at ~0.2s
+# for 168 crates / 7479 files, so every file is verified — nothing is sampled.
+GIT_FORK_DIR="$EXPECTED_GIT_FORK_DIR" \
+GIT_FORK_REV="$EXPECTED_GIT_FORK_REV" \
+GIT_FORK_MANIFEST_SHA256="$EXPECTED_GIT_FORK_MANIFEST_SHA256" \
+LOCK_REV="$MINISCRIPT_REV" \
+python3 - <<'PY'
+import glob, hashlib, json, os, re, sys
+
+fork_dir = os.environ["GIT_FORK_DIR"]
+fork_rev = os.environ["GIT_FORK_REV"]
+fork_manifest = os.environ["GIT_FORK_MANIFEST_SHA256"]
+lock_rev = os.environ["LOCK_REV"]
+
+def sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+errors = []
+
+manifests = sorted(glob.glob("vendor/*/.cargo-checksum.json"))
+if not manifests:
+    print("::error::vendor-freshness: no vendor/*/.cargo-checksum.json found — "
+          "is the vendor/ tree committed? Failing closed.", file=sys.stderr)
+    sys.exit(1)
+
+# ── (2) INTEGRITY ──────────────────────────────────────────────────────────
+n_files = 0
+for cj in manifests:
+    crate_dir = os.path.dirname(cj)
+    try:
+        files = json.load(open(cj))["files"]
+    except Exception as exc:                       # malformed manifest is itself a defect
+        errors.append(f"{cj}: unreadable checksum manifest ({exc})")
+        continue
+    for rel, expected in files.items():
+        path = os.path.join(crate_dir, rel)
+        n_files += 1
+        if not os.path.isfile(path):
+            errors.append(f"{path}: MISSING (recorded in {cj})")
+            continue
+        actual = sha256_file(path)
+        if actual != expected:
+            errors.append(
+                f"{path}: CONTENT MISMATCH\n"
+                f"      recorded {expected}\n"
+                f"      on disk  {actual}"
+            )
+
+# ── (3) REGISTRY PROVENANCE ────────────────────────────────────────────────
+lock = open("Cargo.lock").read()
+lock_ck = {}
+for block in lock.split("[[package]]")[1:]:
+    name = re.search(r'^name = "(.*)"$', block, re.M)
+    ver = re.search(r'^version = "(.*)"$', block, re.M)
+    ck = re.search(r'^checksum = "(.*)"$', block, re.M)
+    if name and ver:
+        lock_ck[(name.group(1), ver.group(1))] = ck.group(1) if ck else None
+
+anchored = 0
+unanchored = []
+for cj in manifests:
+    crate_dir = os.path.dirname(cj)
+    toml = open(os.path.join(crate_dir, "Cargo.toml")).read()
+    name = re.search(r'^name = "(.*)"$', toml, re.M)
+    ver = re.search(r'^version = "(.*)"$', toml, re.M)
+    if not (name and ver):
+        errors.append(f"{crate_dir}/Cargo.toml: could not read name/version")
+        continue
+    key = (name.group(1), ver.group(1))
+    pkg = json.load(open(cj)).get("package")
+    want = lock_ck.get(key)
+    if pkg is None or want is None:
+        # No published tarball to anchor against — a git/path source.
+        unanchored.append((os.path.basename(crate_dir), key))
+    elif pkg != want:
+        errors.append(
+            f"{crate_dir}: PROVENANCE MISMATCH for {key[0]} {key[1]}\n"
+            f"      .cargo-checksum.json package {pkg}\n"
+            f"      Cargo.lock checksum          {want}"
+        )
+    else:
+        anchored += 1
+
+# The ONLY crate allowed to lack a registry anchor is the known git fork. A new
+# unanchored source must fail closed rather than be silently exempted.
+unexpected = [d for d, _ in unanchored if d != fork_dir]
+if unexpected:
+    errors.append(
+        "vendored crate(s) with NO offline provenance anchor and no grounding in "
+        "this gate: " + ", ".join(sorted(unexpected)) + "\n"
+        "      A git or path source cannot be checked against Cargo.lock (no published\n"
+        "      tarball digest). Ground it the way miniscript is grounded above, or drop it."
+    )
+
+# ── (4) GIT-FORK PROVENANCE ────────────────────────────────────────────────
+fork_manifest_path = os.path.join("vendor", fork_dir, ".cargo-checksum.json")
+if not os.path.isfile(fork_manifest_path):
+    errors.append(f"{fork_manifest_path}: MISSING — cannot verify git-fork provenance")
+elif lock_rev != fork_rev:
+    errors.append(
+        f"the miniscript pin MOVED: Cargo.lock is at {lock_rev}, but this gate is\n"
+        f"      grounded at {fork_rev}. The vendored tree cannot be verified against a\n"
+        f"      rev nobody has checked. Re-vendor, verify the tree against upstream at the\n"
+        f"      new rev, then update EXPECTED_GIT_FORK_REV / EXPECTED_GIT_FORK_MANIFEST_SHA256\n"
+        f"      in ci/repro/vendor-freshness.sh (see GROUNDING in its header)."
+    )
+else:
+    actual = sha256_file(fork_manifest_path)
+    if actual != fork_manifest:
+        errors.append(
+            f"{fork_manifest_path}: GIT-FORK PROVENANCE MISMATCH\n"
+            f"      grounded {fork_manifest}\n"
+            f"      on disk  {actual}\n"
+            f"      The vendored miniscript tree is not the one grounded against upstream\n"
+            f"      {fork_rev}. This is the F-354 defect class: a tree vendored from the\n"
+            f"      wrong rev is self-consistent and passes every other check."
+        )
+
+if errors:
+    print(f"::error::vendor-freshness: {len(errors)} content defect(s) in vendor/:", file=sys.stderr)
+    for e in errors:
+        print(f"  - {e}", file=sys.stderr)
+    sys.exit(1)
+
+print(f"vendor-freshness: (2/4) OK — {n_files} files across {len(manifests)} crates match their recorded sha256.")
+print(f"vendor-freshness: (3/4) OK — {anchored} crates anchored to Cargo.lock checksums; "
+      f"{len(unanchored)} git-fork source(s) exempt by grounding ({fork_dir}).")
+print(f"vendor-freshness: (4/4) OK — vendor/{fork_dir} matches the tree grounded against upstream {fork_rev}.")
+PY
