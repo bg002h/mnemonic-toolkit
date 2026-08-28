@@ -33,6 +33,9 @@ keywords = [
 license = "CC0-1.0"
 repository = "https://github.com/rust-bitcoin/rust-miniscript/"
 
+[package.metadata.rbmt.lint]
+allowed_duplicates = ["hex-conservative"]
+
 [features]
 base64 = ["bitcoin/base64"]
 compiler = []
