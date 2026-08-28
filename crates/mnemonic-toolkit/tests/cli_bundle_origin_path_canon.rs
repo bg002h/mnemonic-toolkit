@@ -19,6 +19,7 @@ const SAMPLE_XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUE
 fn bundle_json(args: &[&str]) -> Value {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -84,6 +85,7 @@ fn bundle_descriptor_mode_noncanonical_path_renders_canonical() {
 fn export_wallet_noncanonical_path_renders_canonical() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -120,6 +122,7 @@ fn export_wallet_noncanonical_path_renders_canonical() {
 fn bundle_distinctness_h_vs_apostrophe_paths_collide() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",

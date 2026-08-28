@@ -86,6 +86,7 @@ const V43_EXT_TRUE: &str = "enemy favorite academic acid cowboy phrase havoc lev
 fn split(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args(args)
@@ -101,6 +102,7 @@ fn split(args: &[&str]) -> (String, String, i32) {
 fn combine(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(args)
@@ -465,6 +467,7 @@ fn refusal_row_18_multi_stdin_contention_passphrase_plus_from_dash() {
     let from_arg = "phrase=-";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -499,6 +502,7 @@ fn refusal_row_19_empty_shares() {
     // is empty → row 19 stem.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", "-"])

@@ -40,6 +40,66 @@ reference tracks the current release.
 > offline, on an air-gapped machine. This mirrors the `mnemonic --help`
 > footer.
 
+## Secret material on argv is REFUSED {#argv-refusal}
+
+**`mnemonic` will not accept secret material as a command-line argument.**
+It refuses at **exit 2**, before the command line is parsed — nothing is
+read, nothing is written, and the argument parser never sees the value.
+
+Why the refusal exists: argv is **public**. It is visible in
+`/proc/<pid>/cmdline` to anything running as you, it shows up in `ps`, and
+your shell writes it into its history file. A seed pasted there survives
+long after the command finished.
+
+The refusal names the **class** and the **length** of what it found, never
+the value, and prints a shell-specific purge recipe for the copy that has
+already leaked into your history. Run every step it gives you: your shell
+holds that entry in *memory*, so editing the history file alone changes
+nothing and the entry is written back when you exit.
+
+### The private channels
+
+| you were passing | pass this instead |
+|---|---|
+| `--from <node>=<value>` | `--from <node>=-` and pipe the value on stdin |
+| `--slot @N.<subkey>=<value>` | `--slot @N.<subkey>=-` (one per invocation), or `--slot @N.<subkey>=@env:VAR` |
+| `--passphrase <value>` | `--passphrase-stdin` |
+| `--bip38-passphrase <value>` | `--bip38-passphrase-stdin` |
+| `--decrypt-password <value>` | `--decrypt-password-stdin` |
+| `--phrase <value>` | `--phrase-stdin` |
+| `--secret <value>` | `--secret-stdin` |
+| `--digits <value>` | `--digits -` |
+| `--ms1 <value>` (on `inspect` / `repair`) | `--ms1 -` |
+| `--ms1 <value>` (on `xpub-search`) | `--ms1-stdin` |
+
+Only **one** input per invocation can come from stdin. When a command
+needs two or more secrets at once — a multi-cosigner `bundle`, or
+`ms-shares combine` with K ≥ 2 shares — use the `@env:VAR` sentinel where
+the flag supports it, or `--allow-argv-secret`.
+
+Watch-only material (`--from xpub=`, `--slot @N.xpub=`, `mk1` and `md1`
+cards) is **not** refused: a leak there costs privacy, not the money.
+
+### `--allow-argv-secret`
+
+A global flag; it makes `mnemonic` proceed anyway. Use it when argv is
+safe where you are — a single-user air-gapped box, or an amnesic Tails
+session. It is deliberately greppable, so a reviewer can find every place
+a script opted in.
+
+### The per-command `warning: secret material on argv` rows
+
+The advisory tables further down this chapter still list a
+`warning: secret material on argv (<flag>) — pipe via <alternative>`
+line for each inline-secret flag, and those rows are still accurate —
+they are what you see **after** `--allow-argv-secret` admits the material.
+They are also what you see with no override at all on the few flag/verb
+pairs that have **no** private channel and are therefore not refused:
+`--share` (a K-of-N recovery needs K ≥ 2 shares and only one input can be
+stdin), a positional `ms1`, and `--ms1` on `verify-bundle` /
+`import-wallet`. There the tool warns and proceeds exactly as it did
+before.
+
 ---
 
 ## `mnemonic bundle`
@@ -474,12 +534,15 @@ space-separated groups of five that suit steel engraving and reading
 aloud during verification):
 
 ```sh
+export SEED_0='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+export SEED_1='legal winner thank year wave sausage worth useful legal winner thank yellow'
+export SEED_2='letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
 mnemonic bundle --network mainnet --account 0 \
   --descriptor "$DESC" \
   --language english \
-  --slot '@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
-  --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
+  --slot '@0.phrase=@env:SEED_0' \
+  --slot '@1.phrase=@env:SEED_1' \
+  --slot '@2.phrase=@env:SEED_2'
 ```
 
 Stdout (the cards — under v0.21.0+ SPEC §5.8 per-slot emission, all three cosigners now get their own ms1 card when phrases are supplied for all three slots):
@@ -496,8 +559,8 @@ back to the same payload.
 
 Stderr (info notice + bundle-summary engraving card):
 
-```{.text include="41-bundle-inheritance-cards.err" lines="4-14"}
-PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 4-14 at build
+```{.text include="41-bundle-inheritance-cards.err" lines="1-11"}
+PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-11 at build
 ```
 
 The engraving-card block on stderr is a wallet-level summary the user
@@ -514,12 +577,15 @@ round-trip in the next section — re-run the same invocation with
 `--json` and redirect stdout to a file. Stderr is unchanged.
 
 ```sh
+export SEED_0='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+export SEED_1='legal winner thank year wave sausage worth useful legal winner thank yellow'
+export SEED_2='letter advice cage absurd amount doctor acoustic avoid letter advice cage above'
 mnemonic bundle --network mainnet --account 0 \
   --descriptor "$DESC" \
   --language english \
-  --slot '@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
-  --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
+  --slot '@0.phrase=@env:SEED_0' \
+  --slot '@1.phrase=@env:SEED_1' \
+  --slot '@2.phrase=@env:SEED_2' \
   --json > /tmp/inheritance-bundle.json
 ```
 
@@ -597,30 +663,32 @@ preceding `bundle` invocation just wrote:
 ```sh
 mnemonic verify-bundle --network mainnet --account 0 \
   --descriptor "$DESC" \
-  --slot '@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  --slot '@1.phrase=legal winner thank year wave sausage worth useful legal winner thank yellow' \
-  --slot '@2.phrase=letter advice cage absurd amount doctor acoustic avoid letter advice cage above' \
+  --slot '@0.phrase=@env:SEED_0' \
+  --slot '@1.phrase=@env:SEED_1' \
+  --slot '@2.phrase=@env:SEED_2' \
   --bundle-json /tmp/inheritance-bundle.json
 ```
 
 The preceding `bundle` and `verify-bundle` commands emit stderr
 disclosures alongside the JSON / stdout. From `bundle`:
 
-```{.text include="41-inheritance.out" lines="1-5"}
-PLACEHOLDER — generated from transcripts/41-inheritance.out lines 1-5 at build
+```{.text include="41-inheritance.out" lines="1-2"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 1-2 at build
 ```
 
 The `info:` line is the v0.19.0 silent-default-with-stderr-notice
 feature firing on this recipe's non-canonical `wsh(andor(...))`
 descriptor — the BIP-48 origin path is inferred silently and the
-bundle proceeds. `verify-bundle` emits the same three secret-on-argv
-warnings (no info-notice — the default-path inference fired once at
-bundle-time and is now baked into the envelope).
+bundle proceeds. `verify-bundle` emits no info-notice (the default-path
+inference fired once at bundle-time and is now baked into the envelope).
+Neither command emits a secret-on-argv line, because the three phrases
+arrive through the `@env:` sentinel rather than on argv — on argv they
+would be REFUSED before the command line was parsed.
 
 Expected output (one block per cosigner; final `result: ok`):
 
-```{.text include="41-inheritance.out" lines="9-30"}
-PLACEHOLDER — generated from transcripts/41-inheritance.out lines 9-30 at build
+```{.text include="41-inheritance.out" lines="3-24"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 3-24 at build
 ```
 
 Per SPEC §5.8 emission rule (v0.21.0+), descriptor mode populates
@@ -2641,7 +2709,8 @@ mnemonic seedqr decode --variant compact --from seedqr=0000000000000000000000000
 ### Worked example — decode
 
 ```sh
-mnemonic seedqr decode --from seedqr=000000000000000000000000000000000000000000000003
+printf '%s' '000000000000000000000000000000000000000000000003' \
+  | mnemonic seedqr decode --from seedqr=-
 ```
 
 Stdout:
@@ -2653,7 +2722,8 @@ PLACEHOLDER — generated from transcripts/41-seedqr-decode.out at build
 JSON envelope form:
 
 ```sh
-mnemonic seedqr decode --from seedqr=000000000000000000000000000000000000000000000003 --json-out /tmp/decode.json
+printf '%s' '000000000000000000000000000000000000000000000003' \
+  | mnemonic seedqr decode --from seedqr=- --json-out /tmp/decode.json
 cat /tmp/decode.json
 ```
 
@@ -2666,7 +2736,8 @@ PLACEHOLDER — generated from transcripts/41-seedqr-decode-json.out at build
 ### Worked example — encode
 
 ```sh
-mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --from phrase=-
 ```
 
 Stdout:
@@ -2687,7 +2758,8 @@ The canonical Trezor 24-word `all-abandon-art` vector encodes to 92
 zero-padded digits followed by `0102` (BIP-39 English index of "art"):
 
 ```sh
-mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art' \
+  | mnemonic seedqr encode --from phrase=-
 ```
 
 Stdout:
@@ -2721,7 +2793,8 @@ Expected: `000000000000000000000000000000000000000000000003`. Compare
 against the toolkit:
 
 ```sh
-mnemonic seedqr encode --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --from phrase=-
 ```
 
 The two outputs match byte-for-byte.
@@ -3397,7 +3470,7 @@ did not actually apply.
 
 ```sh
 # A valid ms1 chunk with one character corrupted (position 17 'q' → 'z'):
-mnemonic repair --ms1 ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f
+printf '%s' 'ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f' | mnemonic repair --ms1 -
 ```
 
 Stdout (the corrected chunk is on the LAST line; comment lines describe the fix):
@@ -3532,7 +3605,7 @@ substitution away from a known HRP, the `HrpMismatch` error appends a
 `; did you mean '<suggestion>'?` suffix:
 
 ```sh
-mnemonic repair --ms1 ns10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+printf '%s' 'ns10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f' | mnemonic repair --ms1 -
 # stderr: error: repair: chunk 0 HRP mismatch — expected 'ms', found 'ns'
 #   (HRP is not BCH-protected; re-type the prefix); did you mean 'ms'?
 ```
@@ -3688,7 +3761,7 @@ mnemonic inspect [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md
 ### Worked example
 
 ```sh
-mnemonic inspect --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+printf '%s' 'ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f' | mnemonic inspect --ms1 -
 ```
 
 Stdout:
@@ -3699,8 +3772,8 @@ PLACEHOLDER — generated from transcripts/41-inspect-ms1.out at build
 
 Stderr:
 
-```{.text include="41-inspect-ms1.err" lines="2-2"}
-PLACEHOLDER — generated from transcripts/41-inspect-ms1.err line 2 at build
+```{.text include="41-inspect-ms1.err" lines="1-1"}
+PLACEHOLDER — generated from transcripts/41-inspect-ms1.err line 1 at build
 ```
 
 ### JSON output (v0.27.0)

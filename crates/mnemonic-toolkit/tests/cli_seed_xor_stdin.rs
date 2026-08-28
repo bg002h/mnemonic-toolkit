@@ -12,6 +12,7 @@ const ABANDON_12: &str =
 fn split_stdin_route_round_trip() {
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -31,6 +32,7 @@ fn split_stdin_route_round_trip() {
     let s_inline = format!("phrase={}", shares[0]);
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("combine")
         .arg("--share")
@@ -51,6 +53,7 @@ fn split_stdin_route_round_trip() {
 fn combine_refuses_two_stdin_shares() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("combine")
         .arg("--share")
@@ -73,6 +76,7 @@ fn combine_refuses_two_stdin_shares() {
 fn split_stdin_no_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -96,6 +100,7 @@ fn split_stdin_tolerates_trailing_newline() {
     let with_nl = format!("{ABANDON_12}\n");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -117,6 +122,7 @@ fn stdin_route_equals_inline_route_for_split() {
     let from_arg = format!("phrase={ABANDON_12}");
     let inline = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -128,6 +134,7 @@ fn stdin_route_equals_inline_route_for_split() {
         .unwrap();
     let stdin_form = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")

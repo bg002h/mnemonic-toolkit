@@ -18,6 +18,7 @@ const ADVISORY: &str = "BIP-48 standardizes only script-type 1'";
 fn bundle_tr_sortedmulti_bip48_emits_advisory_and_succeeds() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -44,6 +45,7 @@ fn bundle_tr_sortedmulti_bip48_emits_advisory_and_succeeds() {
 fn bundle_tr_sortedmulti_bip87_is_silent() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -71,6 +73,7 @@ fn bundle_wsh_sortedmulti_bip48_is_silent() {
     // Standardized bip48 script-type 2' (wsh) — no advisory.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -99,6 +102,7 @@ fn verify_bundle_tr_sortedmulti_bip48_emits_advisory() {
     // verify-bundle re-derives at m/48'/.../3' and must surface the advisory.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -166,6 +170,7 @@ fn verify_bundle_tr_sortedmulti_bip48_emits_advisory() {
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&refs)
         .assert()
         .stderr(predicate::str::contains(ADVISORY));
@@ -217,6 +222,7 @@ fn export_wallet_tr_sortedmulti_bip48_emits_advisory() {
     let refs: Vec<&str> = args.iter().map(String::as_str).collect();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&refs)
         .assert()
         .success()

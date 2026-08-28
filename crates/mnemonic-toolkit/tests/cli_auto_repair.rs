@@ -59,6 +59,7 @@ fn cell_19_convert_auto_fire_ms1_one_substitution() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // v0.25.0 §2.B — convert's auto-fire is now TTY-gated like
         // verify-bundle's v0.22.1 D18. Force the gate so cargo test (which
         // pipes stdout) still exercises the TTY-positive path.
@@ -96,6 +97,7 @@ fn cell_20a_mk1_internal_correction_preempts_auto_fire() {
     let mk1_value = format!("{VALID_MK1_CHUNK0} {bad_chunk1}");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -119,6 +121,7 @@ fn cell_20b_inspect_auto_fire_md1_one_substitution() {
     let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated like
         // verify-bundle's v0.22.1 D18. Force the gate so cargo test
         // exercises the TTY-positive path.
@@ -149,6 +152,7 @@ fn cell_18b_inspect_auto_fire_on_corrupted_ms1() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated like
         // verify-bundle's v0.22.1 D18. Force the gate so cargo test
         // exercises the TTY-positive path.
@@ -172,6 +176,7 @@ fn cell_22_no_auto_repair_suppresses_short_circuit_on_convert_and_inspect() {
     // convert with --no-auto-repair → typed MsCodec error, NOT exit 5.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "--no-auto-repair",
             "convert",
@@ -189,6 +194,7 @@ fn cell_22_no_auto_repair_suppresses_short_circuit_on_convert_and_inspect() {
     // inspect with --no-auto-repair → same shape.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["--no-auto-repair", "inspect", "--ms1", &bad])
         .assert()
         .failure()
@@ -207,6 +213,7 @@ fn cell_22_no_auto_repair_suppresses_short_circuit_on_convert_and_inspect() {
 fn cell_23_bundle_self_check_does_not_auto_fire() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -241,6 +248,7 @@ fn cell_24_convert_json_context_ms1_no_longer_short_circuits() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // v0.25.0 §2.B — convert's auto-fire is now TTY-gated; force on.
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
@@ -280,6 +288,7 @@ fn cell_25_inspect_json_context_auto_fire_emits_json_envelope() {
     let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated; force on.
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
@@ -323,6 +332,7 @@ fn cell_26_d20_json_envelope_schema_v1_pin() {
     let bad_chunk0 = flip_at(VALID_MD1_CHUNK0, 20);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // v0.25.0 §2.B — inspect's auto-fire is now TTY-gated; force on.
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
@@ -435,6 +445,7 @@ fn cell_26_d20_json_envelope_schema_v1_pin() {
 fn synth_corrupted_bundle_json(corrupt_pos: usize) -> String {
     let clean_json = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -494,6 +505,7 @@ fn cell_27_verify_bundle_auto_fire_happy_path_tty() {
     let path = write_temp_json(&bad_json);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "verify-bundle",
@@ -526,6 +538,7 @@ fn cell_28_verify_bundle_no_auto_repair_forced_off() {
     let path = write_temp_json(&bad_json);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "--no-auto-repair",
@@ -554,6 +567,7 @@ fn cell_29_verify_bundle_piped_preserves_legacy() {
     let path = write_temp_json(&bad_json);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // MNEMONIC_FORCE_TTY=0 explicitly forces non-TTY (cargo test stdout
         // is already non-TTY but this makes intent unambiguous).
         .env("MNEMONIC_FORCE_TTY", "0")
@@ -586,6 +600,7 @@ fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
     let path = write_temp_json(&bad_json);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "verify-bundle",
@@ -649,6 +664,7 @@ fn cell_31_convert_piped_no_auto_fire_under_tty_zero() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "0")
         .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
         .assert()
@@ -665,6 +681,7 @@ fn cell_32_inspect_piped_no_auto_fire_under_tty_zero() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "0")
         .args(["inspect", "--ms1", &bad])
         .assert()
@@ -683,6 +700,7 @@ fn cell_33_convert_default_pipe_no_auto_fire() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // Intentionally NO .env("MNEMONIC_FORCE_TTY", ...) — relies on
         // cargo test's default piped stdout being is_terminal() == false.
         .env_remove("MNEMONIC_FORCE_TTY")

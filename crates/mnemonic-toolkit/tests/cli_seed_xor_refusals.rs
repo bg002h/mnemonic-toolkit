@@ -10,6 +10,7 @@ const ABANDON_12: &str =
 fn split(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .args(args)
@@ -25,6 +26,7 @@ fn split(args: &[&str]) -> (String, String, i32) {
 fn combine(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("combine")
         .args(args)

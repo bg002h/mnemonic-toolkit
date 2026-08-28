@@ -17,6 +17,7 @@ const ROOT_XPRV: &str = "xprv9s21ZrQH143K3GJpoapnV8SFfukcVBSfeCficPSGfubmSFDxo1k
 fn mainnet_base_address() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", PHRASE])
         .assert()
         .success()
@@ -27,6 +28,7 @@ fn mainnet_base_address() {
 fn testnet_uses_tsp_hrp() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", PHRASE, "--network", "testnet"])
         .assert()
         .success()
@@ -37,6 +39,7 @@ fn testnet_uses_tsp_hrp() {
 fn json_shape_and_labeled_differs() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "silent-payment",
             "--secret",
@@ -68,6 +71,7 @@ fn json_shape_and_labeled_differs() {
 fn label_zero_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", PHRASE, "--label", "0"])
         .assert()
         .failure()
@@ -79,6 +83,7 @@ fn label_zero_refused() {
 fn wif_input_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "silent-payment",
             "--secret",
@@ -95,6 +100,7 @@ fn xprv_input_matches_phrase() {
     // Same master via the canonical root xprv → same base address as the phrase.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", ROOT_XPRV])
         .assert()
         .success()
@@ -105,6 +111,7 @@ fn xprv_input_matches_phrase() {
 fn secret_stdin_works_and_warns_stdout_not_argv() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret-stdin"])
         .write_stdin(format!("{PHRASE}\n"))
         .assert()
@@ -120,6 +127,7 @@ fn secret_stdin_works_and_warns_stdout_not_argv() {
 fn inline_secret_warns_argv() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", PHRASE])
         .assert()
         .success()
@@ -133,6 +141,7 @@ fn inline_secret_warns_argv() {
 fn sp_json(args: &[&str]) -> serde_json::Value {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success()
@@ -173,6 +182,7 @@ fn passphrase_stdin_matches_inline() {
     ]);
     let via_stdin = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "silent-payment",
             "--secret",
@@ -194,6 +204,7 @@ fn passphrase_stdin_matches_inline() {
 fn passphrase_stdin_and_secret_stdin_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "silent-payment",
             "--secret-stdin",
@@ -211,6 +222,7 @@ fn passphrase_conflicts_with_passphrase_stdin() {
     // clap-level conflict (ArgGroup-independent pairwise conflict).
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "silent-payment",
             "--secret",
@@ -229,6 +241,7 @@ fn xprv_input_with_passphrase_warns_and_ignores() {
     let plain = sp_json(&["silent-payment", "--secret", ROOT_XPRV, "--json"]);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "silent-payment",
             "--secret",
@@ -257,6 +270,7 @@ fn xprv_input_with_passphrase_warns_and_ignores() {
 fn change_address_emits_tagged_m0_distinct_from_base() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", PHRASE, "--change-address"])
         .assert()
         .success()
@@ -328,6 +342,7 @@ fn label_zero_still_refused_alongside_change_address_flag() {
     // --label 0 stays refused; --change-address is the only m=0 route.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["silent-payment", "--secret", PHRASE, "--label", "0"])
         .assert()
         .failure()

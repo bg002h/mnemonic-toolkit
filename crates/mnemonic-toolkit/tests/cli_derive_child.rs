@@ -20,6 +20,7 @@ const MASTER_XPRV: &str =
 fn cell_1_bip39_12_words_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -51,6 +52,7 @@ fn cell_1_bip39_12_words_reference_vector() {
 fn cell_2_bip39_18_words_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -86,6 +88,7 @@ fn cell_2_bip39_18_words_reference_vector() {
 fn cell_2b_bip39_24_words_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -120,6 +123,7 @@ fn cell_2b_bip39_24_words_reference_vector() {
 fn cell_3_hd_seed_wif_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -151,6 +155,7 @@ fn cell_3_hd_seed_wif_reference_vector() {
 fn cell_4_xprv_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -182,6 +187,7 @@ fn cell_4_xprv_reference_vector() {
 fn cell_5_hex_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -213,6 +219,7 @@ fn cell_5_hex_reference_vector() {
 fn cell_6a_pwd_base64_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -241,6 +248,7 @@ fn cell_6a_pwd_base64_reference_vector() {
 fn cell_6b_pwd_base85_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -270,6 +278,7 @@ fn cell_6b_pwd_base85_reference_vector() {
 fn cell_7_unsupported_application_rsa_refusal() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -297,6 +306,7 @@ fn cell_7_unsupported_application_rsa_refusal() {
 fn cell_8_bip39_length_out_of_range_refusal() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -324,6 +334,7 @@ fn cell_8_bip39_length_out_of_range_refusal() {
 fn cell_9_hd_seed_length_not_applicable_refusal() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -352,6 +363,7 @@ fn cell_9_hd_seed_length_not_applicable_refusal() {
 fn cell_9b_xprv_length_not_applicable_refusal() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -406,6 +418,7 @@ fn phrase_master_matches_xprv_master_bip39_12_words() {
 
     let from_xprv = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -421,6 +434,7 @@ fn phrase_master_matches_xprv_master_bip39_12_words() {
         .success();
     let from_phrase = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -445,6 +459,7 @@ fn phrase_master_with_passphrase_diverges_from_empty_extension() {
     // Different BIP-39 extensions ⇒ different master xprvs ⇒ different outputs.
     let no_pass = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -460,6 +475,7 @@ fn phrase_master_with_passphrase_diverges_from_empty_extension() {
         .success();
     let with_pass = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -492,6 +508,7 @@ fn phrase_master_with_passphrase_diverges_from_empty_extension() {
 fn bip39_japanese_diverges_from_english() {
     let english = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -507,6 +524,7 @@ fn bip39_japanese_diverges_from_english() {
         .success();
     let japanese = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -543,6 +561,7 @@ fn bip39_japanese_diverges_from_english() {
 fn bip39_portuguese_diverges_from_english() {
     let english = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -558,6 +577,7 @@ fn bip39_portuguese_diverges_from_english() {
         .success();
     let portuguese = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -594,6 +614,7 @@ fn bip39_portuguese_diverges_from_english() {
 fn hd_seed_wif_testnet_prefix() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -621,6 +642,7 @@ fn hd_seed_wif_testnet_prefix() {
 fn xprv_child_testnet_prefix() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -653,6 +675,7 @@ fn xprv_child_testnet_prefix() {
 fn xprv_from_stdin_matches_argv_master() {
     let from_argv = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -668,6 +691,7 @@ fn xprv_from_stdin_matches_argv_master() {
         .success();
     let from_stdin = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -698,6 +722,7 @@ fn xprv_from_stdin_matches_argv_master() {
 fn dice_d6_10_rolls_reference_vector() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -722,6 +747,7 @@ fn dice_d6_10_rolls_reference_vector() {
 fn dice_missing_dice_sides_refused() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",

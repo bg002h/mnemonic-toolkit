@@ -22,6 +22,7 @@ fn comma5(s: &str) -> String {
 fn unbroken_ms1() -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -46,6 +47,7 @@ fn convert_from_ms1_accepts_comma_grouped() {
     let grouped = comma5(&unbroken_ms1());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -64,6 +66,7 @@ fn bundle_slot_ms1_accepts_comma_grouped() {
     let grouped = comma5(&unbroken_ms1());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",

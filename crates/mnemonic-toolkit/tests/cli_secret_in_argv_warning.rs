@@ -54,16 +54,21 @@ fn stderr_of(cmd: &mut Command) -> String {
 
 #[test]
 fn bundle_slot_phrase_inline_emits_argv_advisory() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "bundle",
-        "--slot",
-        &format!("@0.phrase={TREZOR_24}"),
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--no-engraving-card",
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "bundle",
+                "--slot",
+                &format!("@0.phrase={TREZOR_24}"),
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--no-engraving-card",
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX),
         "inline phrase must emit secret-in-argv advisory; stderr: {stderr:?}"
@@ -76,16 +81,21 @@ fn bundle_slot_phrase_inline_emits_argv_advisory() {
 
 #[test]
 fn bundle_slot_entropy_inline_emits_argv_advisory() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "bundle",
-        "--slot",
-        &format!("@0.entropy={TREZOR_24_ENTROPY_HEX}"),
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--no-engraving-card",
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "bundle",
+                "--slot",
+                &format!("@0.entropy={TREZOR_24_ENTROPY_HEX}"),
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--no-engraving-card",
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX),
         "inline entropy must emit secret-in-argv advisory; stderr: {stderr:?}"
@@ -98,16 +108,21 @@ fn bundle_slot_entropy_inline_emits_argv_advisory() {
 
 #[test]
 fn bundle_slot_wif_inline_emits_argv_advisory() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "bundle",
-        "--slot",
-        &format!("@0.wif={MAINNET_WIF}"),
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--no-engraving-card",
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "bundle",
+                "--slot",
+                &format!("@0.wif={MAINNET_WIF}"),
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--no-engraving-card",
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX),
         "inline wif must emit secret-in-argv advisory; stderr: {stderr:?}"
@@ -124,16 +139,21 @@ fn bundle_slot_wif_inline_emits_argv_advisory() {
 
 #[test]
 fn bundle_slot_xprv_inline_emits_argv_advisory_even_on_runtime_reject() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "bundle",
-        "--slot",
-        &format!("@0.xprv={MAINNET_XPRV}"),
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--no-engraving-card",
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "bundle",
+                "--slot",
+                &format!("@0.xprv={MAINNET_XPRV}"),
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--no-engraving-card",
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX),
         "inline xprv must emit secret-in-argv advisory before runtime reject; stderr: {stderr:?}"
@@ -188,7 +208,12 @@ fn verify_bundle_slot_phrase_inline_emits_argv_advisory() {
         args.push(s.clone());
     }
 
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args(&args));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args(&args),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX),
         "inline phrase on verify-bundle must emit secret-in-argv advisory; stderr: {stderr:?}"
@@ -201,18 +226,23 @@ fn verify_bundle_slot_phrase_inline_emits_argv_advisory() {
 
 #[test]
 fn bundle_passphrase_inline_emits_argv_advisory() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "bundle",
-        "--slot",
-        &format!("@0.phrase={TREZOR_24}"),
-        "--passphrase",
-        "swordfish",
-        "--network",
-        "mainnet",
-        "--template",
-        "bip84",
-        "--no-engraving-card",
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "bundle",
+                "--slot",
+                &format!("@0.phrase={TREZOR_24}"),
+                "--passphrase",
+                "swordfish",
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--no-engraving-card",
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX) && stderr.contains("--passphrase"),
         "inline --passphrase on bundle must emit advisory naming the flag; stderr: {stderr:?}"
@@ -271,7 +301,12 @@ fn verify_bundle_passphrase_inline_emits_argv_advisory() {
         args.push(s.clone());
     }
 
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args(&args));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args(&args),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX) && stderr.contains("--passphrase"),
         "inline --passphrase on verify-bundle must emit advisory; stderr: {stderr:?}"
@@ -284,19 +319,24 @@ fn verify_bundle_passphrase_inline_emits_argv_advisory() {
 
 #[test]
 fn derive_child_passphrase_inline_emits_argv_advisory() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "derive-child",
-        "--from",
-        &format!("phrase={TREZOR_24}"),
-        "--application",
-        "bip39",
-        "--length",
-        "12",
-        "--index",
-        "0",
-        "--passphrase",
-        "swordfish",
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "derive-child",
+                "--from",
+                &format!("phrase={TREZOR_24}"),
+                "--application",
+                "bip39",
+                "--length",
+                "12",
+                "--index",
+                "0",
+                "--passphrase",
+                "swordfish",
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX) && stderr.contains("--passphrase"),
         "inline --passphrase on derive-child must emit advisory; stderr: {stderr:?}"
@@ -309,15 +349,20 @@ fn derive_child_passphrase_inline_emits_argv_advisory() {
 
 #[test]
 fn convert_bip38_passphrase_inline_emits_argv_advisory() {
-    let stderr = stderr_of(Command::cargo_bin("mnemonic").unwrap().args([
-        "convert",
-        "--from",
-        &format!("wif={BIP38_WIF}"),
-        "--to",
-        "bip38",
-        "--bip38-passphrase",
-        BIP38_PASS,
-    ]));
+    let stderr = stderr_of(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "convert",
+                "--from",
+                &format!("wif={BIP38_WIF}"),
+                "--to",
+                "bip38",
+                "--bip38-passphrase",
+                BIP38_PASS,
+            ]),
+    );
     assert!(
         stderr.contains(ADVISORY_PREFIX) && stderr.contains("--bip38-passphrase"),
         "inline --bip38-passphrase must emit advisory naming the flag; stderr: {stderr:?}"

@@ -21,6 +21,7 @@ const ABANDON_ACCT1_M0_0: &str = "bc1qku0qh0mc00y8tk0n65x2tqw4trlspak0fnjmfz"; /
 fn mn(args: &[&str]) -> Output {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .output()
         .unwrap()
@@ -385,6 +386,7 @@ fn env_and_stdin_channels() {
     // @env: resolution.
     let env_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "addresses",
             "--from",
@@ -405,6 +407,7 @@ fn env_and_stdin_channels() {
     // stdin `-`.
     let stdin_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "addresses",
             "--from",
@@ -425,6 +428,7 @@ fn env_and_stdin_channels() {
     // single-stdin guard.
     let dual = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "addresses",
             "--from",

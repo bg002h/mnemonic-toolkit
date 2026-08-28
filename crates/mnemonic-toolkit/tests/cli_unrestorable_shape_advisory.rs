@@ -35,7 +35,11 @@ const C2: &str = "letter advice cage absurd amount doctor acoustic avoid letter 
 const ADVISORY_PREFIX: &str = "advisory: restore --md1 cannot reconstruct";
 
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").expect("binary built")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("binary built");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// `bundle --descriptor <desc>` with two phrase-slots, `--json --no-engraving-card`.

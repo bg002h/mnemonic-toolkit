@@ -50,6 +50,7 @@ fn verify_bundle_full_bip84_mainnet_round_trip() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -65,6 +66,7 @@ fn verify_bundle_full_bip84_mainnet_round_trip() {
 fn gen_bundle_full_multisig(args: &[&str]) -> (Vec<String>, Vec<String>, Vec<String>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -140,6 +142,7 @@ fn full_path_parent_fp_matches_silent_at_depth_3() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -180,6 +183,7 @@ fn full_path_parent_fp_mismatch_warns_at_depth_3() {
     // Use a single-sig bip84 bundle to source an alternate ms1 (single string).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -230,6 +234,7 @@ fn full_path_parent_fp_mismatch_warns_at_depth_3() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         // verify-bundle exit code may be 4 (ms1_entropy_match[0] fail is
@@ -304,6 +309,7 @@ fn full_path_passphrase_supplied_check_fires_with_passphrase() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()

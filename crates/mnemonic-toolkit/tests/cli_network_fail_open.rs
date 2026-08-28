@@ -23,7 +23,11 @@
 use assert_cmd::Command;
 
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").expect("binary built")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("binary built");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// Assert exit 2 + the canonical `NetworkMismatch` stderr message.

@@ -45,7 +45,11 @@ fn run_bundle(args: &[&str]) -> (bool, String, String) {
     for a in args {
         full.push((*a).to_string());
     }
-    let assert = Command::cargo_bin("mnemonic").unwrap().args(&full).assert();
+    let assert = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(&full)
+        .assert();
     let out = assert.get_output();
     let success = out.status.success();
     let stdout = String::from_utf8(out.stdout.clone()).unwrap();
@@ -255,6 +259,7 @@ fn verify_bundle_carries_prefix_origin_through_reparse() {
     let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&arg_refs)
         .assert();
     let out = assert.get_output();

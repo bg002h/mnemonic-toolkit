@@ -8,6 +8,7 @@ const NPUB: &str = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvj
 fn pubkey_default_p2tr_emits_descriptor_and_address() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB])
         .assert()
         .success()
@@ -22,6 +23,7 @@ const NSEC: &str = "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnl
 fn secret_emits_wif_and_electrum_hint() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh"])
         .assert()
         .success()
@@ -33,6 +35,7 @@ fn secret_emits_wif_and_electrum_hint() {
 fn secret_via_stdin_works() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--secret-stdin", "--script-type", "p2tr"])
         .write_stdin(format!("{NSEC}\n"))
         .assert()
@@ -44,6 +47,7 @@ fn secret_via_stdin_works() {
 fn all_script_types_emits_four() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB, "--all-script-types"])
         .assert()
         .success()
@@ -56,6 +60,7 @@ fn all_script_types_emits_four() {
 fn json_output_is_valid_and_has_fields() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB, "--json"])
         .assert()
         .success()
@@ -72,6 +77,7 @@ fn json_output_is_valid_and_has_fields() {
 fn json_secret_has_wif_and_electrum() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "nostr",
             "--secret",
@@ -95,6 +101,7 @@ fn json_secret_has_wif_and_electrum() {
 fn no_key_input_is_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr"])
         .assert()
         .failure();
@@ -104,6 +111,7 @@ fn no_key_input_is_refused() {
 fn pubkey_and_secret_together_is_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB, "--secret", NSEC])
         .assert()
         .failure();
@@ -113,6 +121,7 @@ fn pubkey_and_secret_together_is_refused() {
 fn nsec_to_pubkey_flag_is_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NSEC])
         .assert()
         .failure()
@@ -123,6 +132,7 @@ fn nsec_to_pubkey_flag_is_refused() {
 fn secret_inline_warns_on_argv_and_stdout() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh"])
         .assert()
         .success()
@@ -138,6 +148,7 @@ fn secret_inline_warns_on_argv_and_stdout() {
 fn secret_stdin_warns_on_stdout_but_not_argv() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--secret-stdin", "--script-type", "p2tr"])
         .write_stdin(format!("{NSEC}\n"))
         .assert()
@@ -152,6 +163,7 @@ fn secret_stdin_warns_on_stdout_but_not_argv() {
 fn pubkey_path_has_no_wif_or_electrum() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB])
         .assert()
         .success()
@@ -163,6 +175,7 @@ fn pubkey_path_has_no_wif_or_electrum() {
 fn all_script_types_emits_p2pkh_row() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB, "--all-script-types"])
         .assert()
         .success()
@@ -175,6 +188,7 @@ fn p2tr_secret_has_no_electrum_line_but_p2wpkh_does() {
     // taproot: no Electrum WIF import → no electrum hint
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--secret", NSEC, "--script-type", "p2tr"])
         .assert()
         .success()
@@ -183,6 +197,7 @@ fn p2tr_secret_has_no_electrum_line_but_p2wpkh_does() {
     // p2wpkh: Electrum import supported → electrum hint present
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--secret", NSEC, "--script-type", "p2wpkh"])
         .assert()
         .success()
@@ -204,6 +219,7 @@ fn import_json_from_stdout(s: &str) -> serde_json::Value {
 fn import_readonly_emits_watchonly_recipe() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "nostr",
             "--pubkey",
@@ -232,6 +248,7 @@ fn import_readonly_emits_watchonly_recipe() {
 fn import_all_script_types_one_array_four_entries() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "nostr",
             "--pubkey",
@@ -254,6 +271,7 @@ fn import_spending_and_both_are_refused() {
     for mode in ["spending", "both"] {
         Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(["nostr", "--pubkey", NPUB, "--import", mode])
             .assert()
             .failure()
@@ -265,6 +283,7 @@ fn import_spending_and_both_are_refused() {
 fn import_timestamp_flag_overrides_default() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "nostr",
             "--pubkey",
@@ -289,6 +308,7 @@ fn import_timestamp_flag_overrides_default() {
 fn no_import_flag_emits_no_recipe() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB])
         .assert()
         .success()
@@ -299,6 +319,7 @@ fn no_import_flag_emits_no_recipe() {
 fn import_in_json_envelope() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["nostr", "--pubkey", NPUB, "--import", "readonly", "--json"])
         .assert()
         .success()
@@ -318,6 +339,7 @@ fn import_readonly_from_nsec_emits_only_pubkey_descriptor() {
     // NOT leak into the importdescriptors JSON.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "nostr",
             "--secret",

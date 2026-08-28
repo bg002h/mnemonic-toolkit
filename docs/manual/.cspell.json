@@ -14,6 +14,7 @@
     "`[^`]+`"
   ],
   "words": [
+    "greppable",
     "artefacts",
     "BCH",
     "ciphertext",

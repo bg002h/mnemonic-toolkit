@@ -53,12 +53,14 @@ fn verify_bundle_seedqr_slot_byte_equal_to_phrase() {
 
     let via_phrase = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(common_args(format!("@0.phrase={TREZOR_24}")))
         .assert()
         .success();
 
     let via_seedqr = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(common_args(format!("@0.seedqr={TREZOR_24_DIGITS}")))
         .assert()
         .success();
@@ -76,6 +78,7 @@ fn verify_bundle_seedqr_slot_invalid_digit_count_refused() {
     let bad_digits = "0".repeat(47);
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--slot",

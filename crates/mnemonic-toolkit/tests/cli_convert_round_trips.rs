@@ -22,6 +22,7 @@ const TREZOR_24_ZERO_MS1_24WORD: &str =
 fn convert_value(args: &[&str]) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();

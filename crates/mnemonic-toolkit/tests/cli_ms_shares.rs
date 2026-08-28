@@ -23,6 +23,7 @@ const ENTROPY_32_ZEROS_HEX: &str =
 fn split(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("ms-shares")
         .arg("split")
         .args(args)
@@ -38,6 +39,7 @@ fn split(args: &[&str]) -> (String, String, i32) {
 fn combine(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("ms-shares")
         .arg("combine")
         .args(args)
@@ -233,6 +235,7 @@ fn ms_shares_combine_to_ms1_recovers_single_string() {
     // `convert --from ms1 --to phrase`.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["convert", "--from", &format!("ms1={ms1}"), "--to", "phrase"])
         .output()
         .unwrap();
@@ -266,6 +269,7 @@ fn ms_shares_combine_to_entropy_composes_into_bundle() {
     let slot = format!("@0.entropy={entropy_hex}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",

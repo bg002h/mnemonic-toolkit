@@ -47,6 +47,7 @@ fn passphrase_of_xpub_correct_passphrase_matches_bip84() {
     let target = xpub_at("m/84'/0'/0'", "satoshi").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -70,6 +71,7 @@ fn passphrase_of_xpub_wrong_passphrase_no_match_exit_4() {
     let target = xpub_at("m/84'/0'/0'", "satoshi").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -93,6 +95,7 @@ fn passphrase_of_xpub_missing_passphrase_clap_error_exit_64() {
     let target = xpub_at("m/84'/0'/0'", "satoshi").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -114,6 +117,7 @@ fn passphrase_of_xpub_mutex_passphrase_and_passphrase_stdin_clap_error() {
     let target = xpub_at("m/84'/0'/0'", "satoshi").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -139,6 +143,7 @@ fn passphrase_of_xpub_advisory_emitted_on_match_and_no_match() {
     // Match case.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -156,6 +161,7 @@ fn passphrase_of_xpub_advisory_emitted_on_match_and_no_match() {
     // No-match case.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -183,6 +189,7 @@ fn passphrase_of_xpub_passphrase_stdin_happy_path() {
     // passphrase (matches `path_of_xpub.rs:181` pattern). Newline-stripped.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -206,6 +213,7 @@ fn passphrase_of_xpub_json_envelope_shape() {
     let target = xpub_at("m/84'/0'/0'", "satoshi").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -247,6 +255,7 @@ fn passphrase_of_xpub_add_path_extends_search() {
     let target = xpub_at("m/87'/0'/2'", "satoshi").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -291,6 +300,7 @@ fn passphrase_of_xpub_mk1_target_intake() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -313,6 +323,7 @@ fn passphrase_of_xpub_argv_leak_advisory_on_inline_passphrase() {
     let target = xpub_at("m/84'/0'/0'", "satoshi").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",

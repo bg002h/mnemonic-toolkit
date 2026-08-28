@@ -21,6 +21,7 @@ const FOREIGN: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
 fn bundle_multisig(template: &str, network: &str) -> (Vec<String>, Vec<Vec<String>>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -80,6 +81,7 @@ fn md1_alone_emits_descriptor_unverified() {
     let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_args(&md1))
         .assert()
         .code(0)
@@ -102,6 +104,7 @@ fn md1_with_own_seed_partial_only_own_verified() {
     a.push(format!("phrase={C0}"));
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)
@@ -125,6 +128,7 @@ fn md1_with_cosigner_mk1_partial() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)
@@ -146,6 +150,7 @@ fn md1_json_partial_status_and_notes() {
     a.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0);
@@ -190,6 +195,7 @@ fn md1_all_cosigners_verified_no_partial() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)
@@ -210,6 +216,7 @@ fn md1_with_foreign_seed_mismatch_exit4() {
     a.push(format!("phrase={FOREIGN}"));
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(4)
@@ -226,6 +233,7 @@ fn md1_foreign_seed_allow_mismatch_exit0() {
     a.push("--allow-mismatch".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)
@@ -238,6 +246,7 @@ fn sh_wsh_multisig_descriptor() {
     let (md1, _) = bundle_multisig("sh-wsh-sortedmulti", "mainnet");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_args(&md1))
         .assert()
         .code(0)
@@ -258,6 +267,7 @@ fn tr_sortedmulti_a_reconstructs_nums_descriptor_and_bc1p() {
     let (md1, _) = bundle_multisig("tr-sortedmulti-a", "mainnet");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_args(&md1))
         .assert()
         .code(0)
@@ -282,6 +292,7 @@ fn tr_multi_a_reconstructs_nums_descriptor_and_bc1p() {
     let (md1, _) = bundle_multisig("tr-multi-a", "mainnet");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_args(&md1))
         .assert()
         .code(0)
@@ -302,6 +313,7 @@ fn md1_watch_only_no_private_material() {
     let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args({
             let mut a = restore_args(&md1);
             a.push("--from".into());
@@ -332,6 +344,7 @@ fn md1_testnet_emits_tpub() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)
@@ -346,6 +359,7 @@ fn restored_descriptor_round_trips_through_bundle() {
     let (md1, _) = bundle_multisig("wsh-sortedmulti", "mainnet");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args({
             let mut a = restore_args(&md1);
             a.push("--json".into());
@@ -358,6 +372,7 @@ fn restored_descriptor_round_trips_through_bundle() {
     // Feed the bare concrete descriptor back to bundle (A1 descriptor-form door).
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",

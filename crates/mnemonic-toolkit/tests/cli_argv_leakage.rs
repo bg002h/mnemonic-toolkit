@@ -53,6 +53,7 @@ const MAINNET_WIF: &str = "KwYgW8gcxj1JWJXhPSu4Fqwzfhp5Yfi42mdYmMa4XqK7NJxXUSK7"
 fn bundle_slot_phrase_stdin_succeeds() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -76,6 +77,7 @@ fn bundle_slot_phrase_stdin_succeeds() {
 fn bundle_slot_entropy_stdin_succeeds() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -99,6 +101,7 @@ fn bundle_slot_entropy_stdin_succeeds() {
 fn bundle_slot_wif_stdin_succeeds() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -122,6 +125,7 @@ fn bundle_slot_wif_stdin_succeeds() {
 fn bundle_wif_mk1_round_trips_via_inspect() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -157,6 +161,7 @@ fn bundle_wif_mk1_round_trips_via_inspect() {
     // The depth-0 / no-path card must now DECODE (the round-trip the 0.3.1 pin broke).
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -209,6 +214,7 @@ fn verify_bundle_slot_phrase_stdin_succeeds() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .write_stdin(TREZOR_24.as_bytes())
         .assert()
@@ -230,6 +236,7 @@ fn bundle_passphrase_stdin_empty_round_trips_pinned_fixture() {
         std::fs::read_to_string("tests/vectors/v0_1/bip84-mainnet.txt").expect("fixture exists");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -301,6 +308,7 @@ fn verify_bundle_passphrase_stdin_empty_round_trips_pinned_fixture() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .write_stdin("".as_bytes())
         .assert()
@@ -321,6 +329,7 @@ fn verify_bundle_passphrase_stdin_empty_round_trips_pinned_fixture() {
 fn derive_child_passphrase_stdin_phrase_master_succeeds() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "derive-child",
             "--from",
@@ -354,6 +363,7 @@ fn derive_child_passphrase_stdin_phrase_master_succeeds() {
 fn convert_bip38_passphrase_stdin_null_byte_succeeds() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

@@ -23,7 +23,11 @@ const P0: &str =
 const P1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").unwrap()
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").unwrap();
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// Empty card sentinels satisfy clap's required `--mk1`/`--md1` without

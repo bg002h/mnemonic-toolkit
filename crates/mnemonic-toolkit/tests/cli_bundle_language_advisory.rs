@@ -31,6 +31,7 @@ fn french_phrase_bundle_emits_mnem_no_advisory() {
     // self-describing `mnem` ms1 card → advisory SUPPRESSED (no language loss).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -75,6 +76,7 @@ fn french_phrase_bundle_emits_mnem_no_advisory() {
 fn english_phrase_bundle_no_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -101,6 +103,7 @@ fn watch_only_french_bundle_no_advisory() {
     // No ms1 (no secret) → no advisory, even with --language french.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -130,6 +133,7 @@ fn french_bundle_json_stdout_valid_advisory_suppressed() {
     // advisory suppressed on stderr, stdout stays valid JSON.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -173,6 +177,7 @@ fn french_multisig_2of2_both_mnem_no_advisory() {
     // ms-mnem Phase 3 Step 5+6: both French cosigners emit mnem cards → advisory suppressed.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",

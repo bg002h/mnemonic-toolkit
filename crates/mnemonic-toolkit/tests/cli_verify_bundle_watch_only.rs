@@ -51,6 +51,7 @@ fn verify_bundle_watch_only_bip84_mainnet_round_trip() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -109,6 +110,7 @@ fn verify_bundle_watch_only_spurious_ms1_silently_absorbed_v0_5() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -127,6 +129,7 @@ const BIP39_TEST_2: &str =
 fn gen_bundle_json(args: &[&str]) -> (Vec<String>, Vec<String>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -151,6 +154,7 @@ fn gen_bundle_json(args: &[&str]) -> (Vec<String>, Vec<String>) {
 fn gen_bundle_json_multisig(args: &[&str]) -> (Vec<String>, Vec<String>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -229,6 +233,7 @@ fn cross_check_consistent_cards_silent_no_warning() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -270,6 +275,7 @@ fn cross_check_mk1_origin_prefix_disagrees_warns() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .stderr(predicate::str::contains(
@@ -311,6 +317,7 @@ fn cross_check_mk1_child_number_ne_md1_last_warns() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .stderr(predicate::str::contains(
@@ -344,6 +351,7 @@ fn cross_check_mk1_parent_fingerprint_mismatch_warns() {
     // Full bundle from seed B (same template) → extract ms1 + md1.
     let out_b = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -399,6 +407,7 @@ fn cross_check_mk1_parent_fingerprint_mismatch_warns() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .stderr(predicate::str::contains(
@@ -500,6 +509,7 @@ fn cross_check_multi_cosigner_one_inconsistent_lists_index() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .stderr(predicate::str::contains("cosigner[0]"))
@@ -573,6 +583,7 @@ fn watch_only_depth_3_emits_unverified_parent_fp_notice() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .stderr(predicate::str::contains(
@@ -592,6 +603,7 @@ fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only
     // Reuse the same multisig bundle as the depth-3 cell.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -656,6 +668,7 @@ fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .stderr(predicate::str::contains(
@@ -681,6 +694,7 @@ fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only
 fn watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice() {
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -746,6 +760,7 @@ fn watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         // The v0.25.1 NOTICE — proves the empty-string sentinel was

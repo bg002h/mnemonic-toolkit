@@ -15,6 +15,7 @@ fn one_share() -> String {
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "ms-shares",
             "split",
@@ -41,6 +42,7 @@ fn inspect_of_a_share_surfaces_friendly_message() {
     let share = one_share();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", &share])
         .output()
         .unwrap();
@@ -65,6 +67,7 @@ fn convert_from_share_surfaces_friendly_message_and_mapped_exit() {
     let share = one_share();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

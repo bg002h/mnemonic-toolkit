@@ -43,6 +43,7 @@ const TREZOR_24_MASTER_FINGERPRINT: &str = "5436d724";
 fn input_normalizer_zpub_to_fingerprint_matches_xpub() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -63,6 +64,7 @@ fn input_normalizer_zpub_to_fingerprint_matches_xpub() {
 fn input_normalizer_ypub_to_fingerprint_matches_xpub() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -83,6 +85,7 @@ fn input_normalizer_ypub_to_fingerprint_matches_xpub() {
 fn input_normalizer_big_z_to_xpub_normalizes_to_neutral() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -100,6 +103,7 @@ fn input_normalizer_big_z_to_xpub_normalizes_to_neutral() {
 fn input_normalizer_big_y_to_xpub_normalizes_to_neutral() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -117,6 +121,7 @@ fn input_normalizer_big_y_to_xpub_normalizes_to_neutral() {
 fn input_normalizer_testnet_vpub_to_xpub_normalizes_to_tpub() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -134,6 +139,7 @@ fn input_normalizer_testnet_vpub_to_xpub_normalizes_to_tpub() {
 fn input_normalizer_testnet_upub_to_xpub_normalizes_to_tpub() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -155,6 +161,7 @@ fn input_normalizer_testnet_upub_to_xpub_normalizes_to_tpub() {
 fn output_xpub_prefix_zpub_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -178,6 +185,7 @@ fn output_xpub_prefix_zpub_mainnet() {
 fn output_xpub_prefix_big_z_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -205,6 +213,7 @@ fn output_xpub_prefix_ypub_and_big_y_mainnet() {
     ] {
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args([
                 "convert",
                 "--from",
@@ -230,6 +239,7 @@ fn output_xpub_prefix_default_xpub_is_neutral() {
     // --xpub-prefix xpub IS the default; output must equal the no-flag emission.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -255,6 +265,7 @@ fn output_xpub_prefix_testnet_zpub_emits_vpub() {
     // --network testnet → vpub (BIP-84 testnet single-sig).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -282,6 +293,7 @@ fn output_xpub_prefix_testnet_zpub_emits_vpub() {
 fn refusal_xpub_prefix_non_default_without_network() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -316,6 +328,7 @@ fn refusal_unknown_extended_key_version_prefix() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -340,6 +353,7 @@ fn xpub_prefix_silently_ignored_on_non_xpub_target() {
     // silently ignored. Output is the plain fingerprint; no extra stderr noise.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -376,6 +390,7 @@ fn round_trip_xpub_to_zpub_to_xpub_via_two_invocations() {
     // First invocation: neutral xpub → zpub.
     let zpub_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -396,6 +411,7 @@ fn round_trip_xpub_to_zpub_to_xpub_via_two_invocations() {
     // Second invocation: zpub → xpub (input normalizer swaps back).
     let xpub_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

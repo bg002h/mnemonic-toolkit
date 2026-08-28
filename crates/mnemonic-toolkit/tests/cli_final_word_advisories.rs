@@ -20,6 +20,7 @@ const ABANDON_11_PARTIAL: &str =
 fn inline_secret_emits_argv_leakage_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", ABANDON_11_PARTIAL))
@@ -44,6 +45,7 @@ fn inline_secret_emits_argv_leakage_advisory() {
 fn stdin_route_does_not_emit_argv_leakage_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -64,6 +66,7 @@ fn piped_stdout_does_not_emit_stdout_on_tty_advisory() {
     // even when stdout is piped (non-TTY). Inverted from the old NOT-assert.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -90,6 +93,7 @@ fn json_out_world_readable_emits_advisory() {
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -117,6 +121,7 @@ fn json_out_0o600_does_not_emit_advisory() {
     // Keep `f` alive so the path's 0o600 mode persists into the CLI call.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")

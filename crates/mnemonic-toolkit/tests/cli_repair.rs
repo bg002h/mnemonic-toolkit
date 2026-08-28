@@ -53,6 +53,7 @@ fn cell_9_text_form_ms1_happy_path_exit_4_candidate_with_report() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad])
         .assert()
         .code(4)
@@ -72,6 +73,7 @@ fn cell_9_text_form_ms1_happy_path_exit_4_candidate_with_report() {
 fn cell_9b_clean_ms1_stays_exit_0() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -85,6 +87,7 @@ fn cell_10_json_form_ms1_happy_path_envelope_shape() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--json", "--ms1", &bad])
         .assert()
         .code(4)
@@ -109,6 +112,7 @@ fn cell_10_json_form_ms1_happy_path_envelope_shape() {
 fn cell_10b_json_form_clean_ms1_verdict_blessed() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--json", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -125,6 +129,7 @@ fn cell_10b_json_form_clean_ms1_verdict_blessed() {
 fn cell_11_already_valid_ms1_exit_0_no_report() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -142,6 +147,7 @@ fn cell_12_unrepairable_exits_2_with_too_many_errors_stderr() {
         .fold(VALID_MS1.to_string(), |acc, &p| flip_at(&acc, p));
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad])
         .assert()
         .code(2)
@@ -168,6 +174,7 @@ fn cell_12b_ms1_repair_works_for_all_entropy_lengths() {
         // clean longer seed → exit 0 (already valid), no report. (Pre-0.2.1: exit 2.)
         Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(["repair", "--ms1", &valid])
             .assert()
             .code(0)
@@ -180,6 +187,7 @@ fn cell_12b_ms1_repair_works_for_all_entropy_lengths() {
         let bad = flip_at(&valid, 5);
         Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(["repair", "--ms1", &bad])
             .assert()
             .code(4)
@@ -195,6 +203,7 @@ fn cell_13_multi_chunk_mk1_one_corrupted_exit_5_both_emitted() {
     let bad_chunk1 = flip_at(VALID_MK1_REG_CHUNK1, 25);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "repair",
             "--mk1",
@@ -219,6 +228,7 @@ fn cell_14_stdin_form_ms1_dash_reads_from_stdin() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{bad}\n"))
         .assert()
@@ -253,6 +263,7 @@ fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
     let bad_ms1 = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad_ms1])
         .assert()
         .code(4)
@@ -265,6 +276,7 @@ fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
     // Scenario 11: already-valid input.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -277,6 +289,7 @@ fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
         .fold(VALID_MS1.to_string(), |acc, &p| flip_at(&acc, p));
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &unrepairable])
         .assert()
         .code(2)
@@ -287,6 +300,7 @@ fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
     let bad_chunk1 = flip_at(VALID_MK1_REG_CHUNK1, 25);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "repair",
             "--mk1",
@@ -324,6 +338,7 @@ fn cell_b7_2_error_mapping_fidelity_ms1_too_many_errors_observable_exit_2() {
         .fold(VALID_MS1.to_string(), |acc, &p| flip_at(&acc, p));
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad_ms1])
         .assert()
         .code(2)
@@ -345,6 +360,7 @@ fn cell_b7_2_error_mapping_fidelity_ms1_too_many_errors_observable_exit_2() {
         .fold(VALID_MD1_CHUNK0.to_string(), |acc, &p| flip_at(&acc, p));
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "repair",
             "--md1",
@@ -379,6 +395,7 @@ fn repair_inline_ms1_fires_secret_in_argv_advisory() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad])
         .assert()
         // Cycle F FLIP — was exit 5; a touched ms1 correction is now a
@@ -405,6 +422,7 @@ fn repair_indel_relaxed_corrupted_prefix_ms1_still_fires_argv_advisory() {
     let corrupted = &VALID_MS1[1..]; // "s10entr…" — dropped leading 'm'
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--max-indel", "1", "--ms1", corrupted])
         .assert()
         .get_output()
@@ -423,6 +441,7 @@ fn repair_ms1_stdin_dash_does_not_fire_argv_advisory() {
     let bad = flip_at(VALID_MS1, 17);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{bad}\n"))
         .assert()

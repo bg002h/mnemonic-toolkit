@@ -22,6 +22,7 @@ fn non_canonical_wsh_andor_default_path_inference_emits_bundle() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -64,6 +65,7 @@ fn non_canonical_default_path_consumes_account_arg() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -92,6 +94,7 @@ fn non_canonical_default_path_uses_testnet_coin_type() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -121,6 +124,7 @@ fn canonical_wsh_sortedmulti_with_nonzero_account_refuses() {
     let descriptor = "wsh(sortedmulti(2,@0,@1))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -148,6 +152,7 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
     let descriptor = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -177,6 +182,7 @@ fn bare_tr_no_internal_key_refuses_with_row_16_text() {
     let descriptor = "tr(andor(pkh(@0),after(12000000),pk(@1)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -203,6 +209,7 @@ fn canonical_descriptor_does_not_emit_default_path_notice() {
     let descriptor = "wsh(sortedmulti(2,@0,@1))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -234,6 +241,7 @@ fn non_canonical_default_path_self_check_round_trips() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -263,6 +271,7 @@ fn tr_nums_default_path_self_check_round_trips() {
     let descriptor = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -286,6 +295,7 @@ fn canonical_descriptor_refuses_phrase_plus_path_subkey_pair() {
     let descriptor = "wsh(sortedmulti(2,@0,@1))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -340,6 +350,7 @@ fn verify_bundle_descriptor_slot_over_n_rejects_not_panics() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -387,6 +398,7 @@ fn verify_bundle_descriptor_exact_coverage_path_override_does_not_over_fire() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -458,6 +470,7 @@ fn parity_round_trips(descriptor: &str, slots: &[String]) -> (String, bool, usiz
     }
     let emit = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&emit_args)
         .assert()
         .success();
@@ -505,6 +518,7 @@ fn parity_round_trips(descriptor: &str, slots: &[String]) -> (String, bool, usiz
 
     let verify = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&vargs)
         .assert()
         .success();
@@ -701,6 +715,7 @@ fn parity_tr_nums_round_trips() {
 fn bundle_retains_row19_inline_vs_slot_path_mismatch_refusal() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -732,6 +747,7 @@ fn bundle_retains_row19_inline_vs_slot_path_mismatch_refusal() {
 fn verify_bundle_does_not_acquire_row19_refusal() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -767,6 +783,7 @@ fn verify_bundle_does_not_acquire_row19_refusal() {
 fn verify_bundle_emits_no_default_path_notice() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -801,6 +818,7 @@ fn over_n_slot_vec_on_parse_failing_descriptor_still_refuses() {
     // → parse_descriptor probe errors; @0,@1 over-run n=1.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -836,6 +854,7 @@ fn parity_inline_origin_fixtures_are_non_canonical() {
     ] {
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(["gui-schema", "--classify-descriptor", desc])
             .assert()
             .success();

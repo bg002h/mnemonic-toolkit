@@ -35,6 +35,7 @@ const VEC26_WIF_MAINNET: &str = "5HtsqZr2VMtZnUjHfJ2dKDUgd8beQTnEvUW1w1YnQfercBL
 fn convert_value(args: &[&str]) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -120,6 +121,7 @@ fn decode_minikey_30char_to_wif_testnet() {
 fn refusal_minikey_invalid_format_no_s_prefix() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -143,6 +145,7 @@ fn refusal_minikey_invalid_format_wrong_length() {
     // 23 chars, S-prefixed — wrong length class.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -166,6 +169,7 @@ fn refusal_minikey_invalid_checksum() {
     // 22-char S-prefixed, but SHA256("Sxxxxxxxxxxxxxxxxxxxxx" + "?")[0] != 0x00.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -189,6 +193,7 @@ fn refusal_minikey_to_xpub_decode_only() {
     // §3.d: minikey → non-wif surfaces with distinct decode-only refusal pointing at wif.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -213,6 +218,7 @@ fn refusal_minikey_to_xpub_decode_only() {
 fn refusal_minikey_to_phrase_decode_only() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -237,6 +243,7 @@ fn refusal_wif_to_minikey_one_way() {
     const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -265,6 +272,7 @@ fn refusal_wif_to_minikey_one_way() {
 fn minikey_input_redacted_in_json_from_value() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

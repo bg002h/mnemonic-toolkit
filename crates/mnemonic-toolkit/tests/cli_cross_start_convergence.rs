@@ -46,6 +46,7 @@ fn derive_account_xpub(phrase: &str, path_str: &str) -> (String, String) {
 fn bundle_json(args: &[&str]) -> Value {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -190,6 +191,7 @@ fn a1_neg_xpub_without_fingerprint_diverges_on_mk1() {
 fn core_blob_receive_only(acct_xpub: &str, fp: &str) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -215,6 +217,7 @@ fn core_blob_receive_only(acct_xpub: &str, fp: &str) -> String {
 fn walletfile_to_bundle(format: &str, blob: &str) -> Value {
     let imp = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["import-wallet", "--format", format, "--blob", "-", "--json"])
         .write_stdin(blob.to_string())
         .assert()
@@ -222,6 +225,7 @@ fn walletfile_to_bundle(format: &str, blob: &str) -> Value {
     let envelope = String::from_utf8(imp.get_output().stdout.clone()).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -256,6 +260,7 @@ fn a4_seed_vs_walletfile_bitcoin_core_singlesig_converge() {
     let blob = core_blob_receive_only(&acct_xpub, &fp);
     let imp_assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--format",
@@ -282,6 +287,7 @@ fn a4_seed_vs_walletfile_bitcoin_core_singlesig_converge() {
     // "wpkh(@0[fp/84'/0'/0']/0/*)"` rejects identically (same lexer).
     let desc_assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -321,6 +327,7 @@ fn a5_all_four_starts_converge_singlesig() {
     // (1) seed start — direct @N placeholder, fixed `/0/*` use-site.
     let seed_assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -343,6 +350,7 @@ fn a5_all_four_starts_converge_singlesig() {
     // (2) xpub start (watch-only, same descriptor) — rejects identically.
     let xpub_assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -366,6 +374,7 @@ fn a5_all_four_starts_converge_singlesig() {
     let blob = core_blob_receive_only(&acct_xpub, &fp);
     let wf_assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--format",

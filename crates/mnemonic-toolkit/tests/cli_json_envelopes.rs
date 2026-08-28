@@ -9,6 +9,7 @@ const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon
 fn bundle_json_schema_field_order() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -80,6 +81,7 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();

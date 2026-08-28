@@ -76,6 +76,7 @@ fn japanese_mnem_card_convert_to_phrase_uses_japanese() {
     // Run convert --from "ms1=<value>" --to phrase — wire-wins: should produce the Japanese phrase.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -149,6 +150,7 @@ fn mixed_language_multisig_import_wallet_ms1_overlay_cross_check_passes() {
     // cosigner would derive under the wrong language → xpub mismatch → exit 4.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -210,6 +212,7 @@ fn repair_recovers_corrupt_japanese_mnem_ms1() {
     // "recovered"; the corrected string is still presented on stdout).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &corrupt])
         .output()
         .expect("mnemonic repair");

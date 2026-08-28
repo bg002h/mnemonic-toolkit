@@ -41,6 +41,7 @@ fn xpub_to_address_bip84_p2wpkh_reference() {
     // BIP-84 first receive address: from account zpub, relative path m/0/0.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -63,6 +64,7 @@ fn xpub_to_address_bip86_p2tr_reference() {
     // BIP-86 first receive address: from account xpub, relative path m/0/0.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -86,6 +88,7 @@ fn phrase_to_address_bip49_p2sh_p2wpkh_reference_testnet() {
     // receive address at m/49'/1'/0'/0/0 = "2Mww8dCYPUpKHofjgcXcBCEGmniw9CoaiD2".
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -111,6 +114,7 @@ fn phrase_to_address_bip84_composite_with_template_inferred_script_type() {
     // From master at m/84'/0'/0'/0/0 → BIP-84 first receive address.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -133,6 +137,7 @@ fn entropy_to_address_bip86_composite() {
     // Composite entropy → address: 12-word zero entropy + bip86 → BIP-86 reference.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -163,6 +168,7 @@ fn phrase_to_account_upub_bip49_reference_testnet() {
     // `--network testnet` per `src/slip0132.rs::apply_xpub_prefix`.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -187,6 +193,7 @@ fn xpub_to_address_bip84_p2wpkh_receive_index_1() {
     // BIP-84 §"Test vectors": second receive address at m/84'/0'/0'/0/1.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -209,6 +216,7 @@ fn xpub_to_address_bip84_p2wpkh_change_index_0() {
     // BIP-84 §"Test vectors": first change address at m/84'/0'/0'/1/0.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -231,6 +239,7 @@ fn xpub_to_address_bip86_p2tr_receive_index_1() {
     // BIP-86 §"Test vectors": second receive address at m/86'/0'/0'/0/1.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -253,6 +262,7 @@ fn xpub_to_address_bip86_p2tr_change_index_0() {
     // BIP-86 §"Test vectors": first change address at m/86'/0'/0'/1/0.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -279,6 +289,7 @@ fn refusal_address_no_path() {
     // SPEC §10.a / §3.d byte-pin: --to address requires --path.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -304,6 +315,7 @@ fn refusal_address_no_script_type() {
     // v0.26.0: error message now includes p2pkh in the script-type list.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -332,6 +344,7 @@ fn bip44_template_infers_p2pkh_v0_26_0() {
     // `mnemonic convert --template bip44`).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -358,6 +371,7 @@ fn refusal_address_one_way_to_xpub() {
     // SPEC §3.d: address → anything is one-way (addresses are hashes).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -380,6 +394,7 @@ fn refusal_address_one_way_to_phrase() {
     // SPEC §3.d: address → anything is one-way.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -404,6 +419,7 @@ fn refusal_invalid_script_type_value() {
     // refusal path with a definitely-invalid value.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -435,6 +451,7 @@ fn xpub_to_address_p2pkh_explicit_script_type_v0_26_0() {
     const BIP44_ACCOUNT_XPUB: &str = "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -473,6 +490,7 @@ fn xpub_to_address_testnet_explicit_network_with_vpub() {
     // same well-known seed.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

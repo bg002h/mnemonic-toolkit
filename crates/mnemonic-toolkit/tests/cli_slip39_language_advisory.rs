@@ -14,6 +14,7 @@ const ADVISORY_ENTROPY: &str = "BIP-39 seed as raw entropy";
 fn slip39(args: &[&str]) -> (String, String) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .args(args)
         .output()

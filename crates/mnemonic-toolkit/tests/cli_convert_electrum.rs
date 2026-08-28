@@ -31,6 +31,7 @@ const SEGWIT_2FA_PHRASE: &str =
 fn convert_value(args: &[&str]) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -169,6 +170,7 @@ fn round_trip_segwit_phrase_via_entropy() {
 fn refusal_standard_2fa_decode() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -191,6 +193,7 @@ fn refusal_standard_2fa_decode() {
 fn refusal_segwit_2fa_decode() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -216,6 +219,7 @@ fn refusal_phrase_to_electrum_phrase_sibling_pivot() {
     let bip39_phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -238,6 +242,7 @@ fn refusal_phrase_to_electrum_phrase_sibling_pivot() {
 fn refusal_electrum_phrase_to_phrase_sibling_pivot() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -261,6 +266,7 @@ fn refusal_invalid_electrum_phrase_format() {
     // Random text — fails HMAC prefix dispatch.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -285,6 +291,7 @@ fn refusal_electrum_version_2fa_at_arg_parse() {
     // the value parser, never reaching the encode arm.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -308,6 +315,7 @@ fn refusal_electrum_phrase_to_electrum_phrase_identity() {
     // Identity-pivot — caught by the catch-all one-way refusal.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -484,6 +492,7 @@ fn electrum_arm_silently_ignores_language_flag() {
     // Spanish entropy. `--language` produces no warning to stderr (silent).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -516,6 +525,7 @@ fn electrum_arm_silently_ignores_language_flag() {
 fn decode_emits_seed_version_info_line_standard() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -536,6 +546,7 @@ fn decode_emits_seed_version_info_line_standard() {
 fn decode_emits_seed_version_info_line_segwit() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -567,6 +578,7 @@ fn decode_emits_seed_version_info_line_segwit() {
 fn electrum_phrase_to_address_is_refused() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

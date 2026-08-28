@@ -10,7 +10,10 @@ $MNEMONIC_BIN import-wallet --format bitcoin-core --blob wallet.json --json \
 # Step 2: synthesize ms1/mk1/md1 cards from the envelope (NO seed).
 $MNEMONIC_BIN bundle --network mainnet --import-json envelope.json
 
-# Step 3: attach a seed for the single cosigner.
-$MNEMONIC_BIN bundle --network mainnet \
-  --import-json envelope.json \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+# Step 3: attach a seed for the single cosigner. The seed goes in on STDIN
+# via the `=-` sentinel -- on argv it would be refused, because argv is
+# public (/proc, `ps`, shell history).
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | $MNEMONIC_BIN bundle --network mainnet \
+      --import-json envelope.json \
+      --slot @0.phrase=-

@@ -19,6 +19,7 @@ fn split_inline_emits_argv_leakage_advisory() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -39,6 +40,7 @@ fn split_inline_emits_argv_leakage_advisory() {
 fn split_stdin_does_not_emit_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -61,6 +63,7 @@ fn combine_inline_share_emits_argv_leakage_advisory_per_share() {
     let s = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("combine")
         .arg("--share")
@@ -89,6 +92,7 @@ fn piped_stdout_does_not_emit_kofn_tty_advisory() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -110,6 +114,7 @@ fn piped_stdout_combine_does_not_emit_tty_advisory() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -125,6 +130,7 @@ fn piped_stdout_combine_does_not_emit_tty_advisory() {
     let s1 = format!("phrase={}", shares[1]);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("combine")
         .arg("--share")
@@ -148,6 +154,7 @@ fn deterministic_with_15_word_emits_toolkit_only_advisory() {
     let from_arg = format!("phrase={phrase_15}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -169,6 +176,7 @@ fn deterministic_with_12_word_does_not_emit_toolkit_only_advisory() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -195,6 +203,7 @@ fn json_out_world_readable_emits_advisory() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -225,6 +234,7 @@ fn json_out_0o600_does_not_emit_advisory() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")

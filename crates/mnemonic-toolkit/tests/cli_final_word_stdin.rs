@@ -16,6 +16,7 @@ const BEEF_11_PARTIAL: &str = "beef beef beef beef beef beef beef beef beef beef
 fn stdin_route_abandon_11_emits_128_sorted_lines() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -45,6 +46,7 @@ fn stdin_route_abandon_11_emits_128_sorted_lines() {
 fn stdin_route_beef_11_emits_128_sorted_lines() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -70,6 +72,7 @@ fn stdin_route_equals_inline_route_byte_for_byte() {
     // advisory) — we compare stdout only.
     let stdin_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -80,6 +83,7 @@ fn stdin_route_equals_inline_route_byte_for_byte() {
         .unwrap();
     let inline_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", ABANDON_11_PARTIAL))
@@ -102,6 +106,7 @@ fn stdin_route_with_trailing_newline_in_input() {
     let with_nl = format!("{}\n", ABANDON_11_PARTIAL);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -124,6 +129,7 @@ fn stdin_route_with_extra_whitespace() {
     let messy = format!("  {}  ", ABANDON_11_PARTIAL.replace(' ', "\t"));
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")
@@ -144,6 +150,7 @@ fn stdin_route_does_not_emit_argv_advisory() {
     // Sanity: stdin route must NOT trip the inline-secret advisory.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg("phrase=-")

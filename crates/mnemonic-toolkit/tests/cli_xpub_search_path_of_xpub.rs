@@ -78,6 +78,7 @@ fn path_of_xpub_phrase_zpub_match_bip84() {
     let target = xpub_as_zpub(&xpub_at("m/84'/0'/0'", ""));
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -110,6 +111,7 @@ fn path_of_xpub_phrase_xpub_match_bip86_account3() {
     let target = xpub_at("m/86'/0'/3'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -138,6 +140,7 @@ fn path_of_xpub_slip0132_normalize_zpub_variant_preserved() {
     let target = xpub_as_zpub(&xpub_at("m/84'/0'/0'", ""));
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -169,6 +172,7 @@ fn path_of_xpub_no_match_returns_exit_4() {
     let target = other_xpub_at("m/84'/0'/0'").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -198,6 +202,7 @@ fn path_of_xpub_min_account_5_number_of_accounts_3_searches_5_to_8() {
     let target_a2 = xpub_at("m/84'/0'/2'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -218,6 +223,7 @@ fn path_of_xpub_min_account_5_number_of_accounts_3_searches_5_to_8() {
     let target_a6 = xpub_at("m/84'/0'/6'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -248,6 +254,7 @@ fn path_of_xpub_max_account_overrides_number_of_accounts() {
     let target = xpub_at("m/84'/0'/30'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -280,6 +287,7 @@ fn path_of_xpub_add_path_bip87() {
     let target = xpub_at("m/87'/0'/2'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -311,6 +319,7 @@ fn path_of_xpub_add_path_no_account_token_searched_once() {
     let target = xpub_at("m/9999'/0'/0'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -345,6 +354,7 @@ fn path_of_xpub_phrase_stdin() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -374,6 +384,7 @@ fn path_of_xpub_ms1_intake() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -397,6 +408,7 @@ fn path_of_xpub_passphrase_alters_match() {
     // With matching passphrase → match.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -413,6 +425,7 @@ fn path_of_xpub_passphrase_alters_match() {
     // Without passphrase against the same passphrase-derived xpub → no match.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -433,6 +446,7 @@ fn path_of_xpub_multisig_variant_zpub_accepted_searches_multisig_paths() {
     let target = xpub_as_multisig_zpub(&xpub_at("m/48'/0'/0'/2'", ""));
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -461,6 +475,7 @@ fn path_of_xpub_invalid_phrase_exits_1() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -480,6 +495,7 @@ fn path_of_xpub_invalid_phrase_exits_1() {
 fn path_of_xpub_invalid_xpub_exits_1() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -530,6 +546,7 @@ fn path_of_xpub_ms1_decode_failure_auto_fires() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "xpub-search",
@@ -578,6 +595,7 @@ fn path_of_xpub_no_auto_repair_flag_disables_auto_fire() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args([
             "--no-auto-repair",
@@ -606,6 +624,7 @@ fn path_of_xpub_json_envelope_byte_exact_match() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -644,6 +663,7 @@ fn path_of_xpub_argv_leak_advisory_on_inline_phrase() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -675,6 +695,7 @@ fn path_of_xpub_positional_ms1_works() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",

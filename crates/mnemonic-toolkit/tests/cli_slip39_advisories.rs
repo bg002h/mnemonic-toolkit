@@ -31,6 +31,7 @@ fn advisory_split_inline_phrase_emits_argv_leakage_1a() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -61,6 +62,7 @@ fn advisory_split_inline_entropy_emits_argv_leakage_1b() {
     let from_arg = format!("entropy={ENTROPY_16_ZEROS_HEX}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -91,6 +93,7 @@ fn advisory_split_inline_passphrase_emits_argv_leakage_1c() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -125,6 +128,7 @@ fn advisory_split_empty_passphrase_still_emits_argv_leakage_per_r0_c1() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -159,6 +163,7 @@ fn advisory_combine_inline_share_per_occurrence_argv_leakage_1d() {
     let placeholder_b = "academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", placeholder_a, "--share", placeholder_b])
@@ -192,6 +197,7 @@ fn advisory_combine_inline_passphrase_emits_argv_leakage_1e() {
     let placeholder = "academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", placeholder, "--passphrase", "secret-pass"])
@@ -215,6 +221,7 @@ fn advisory_combine_inline_passphrase_emits_argv_leakage_1e() {
 fn advisory_split_stdin_route_does_not_emit_argv_leakage() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -247,6 +254,7 @@ fn advisory_k_of_n_stdout_silent_when_piped() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -277,6 +285,7 @@ fn advisory_combine_reconstructed_silent_when_piped() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -300,6 +309,7 @@ fn advisory_combine_reconstructed_silent_when_piped() {
     assert!(shares.len() >= 2, "expected >=2 shares from 3,2 group");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", shares[0], "--share", shares[1]])
@@ -326,6 +336,7 @@ fn advisory_json_out_world_readable_emits_row_4() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -359,6 +370,7 @@ fn advisory_json_out_0o600_does_not_emit_row_4() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -398,6 +410,7 @@ fn advisory_iteration_exponent_5_emits_g9_row_5() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -432,6 +445,7 @@ fn advisory_iteration_exponent_4_does_not_emit_g9_row_5() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -463,6 +477,7 @@ fn advisory_env_var_test_rng_set_emits_row_6_always_on() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_SLIP39_TEST_RNG", TEST_RNG_HEX_64)
         .arg("slip39")
         .arg("split")
@@ -493,6 +508,7 @@ fn advisory_env_var_test_identifier_alone_emits_row_6_always_on() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_SLIP39_TEST_IDENTIFIER", "12345")
         .arg("slip39")
         .arg("split")

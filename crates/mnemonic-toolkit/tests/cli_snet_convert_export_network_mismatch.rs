@@ -22,7 +22,11 @@ const MAINNET_WIF: &str = "KyZpNDKnfs94vbrwhJneDi77V6jF64PWPF8x5cdJb8ifgg2DUc9d"
 const TESTNET_WIF: &str = "cTGhosGriPpuGA586jemcuH9pE9spwUmneMBmYYzrQEbY92DJrbo";
 
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").expect("binary built")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("binary built");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 fn fixture(name: &str) -> PathBuf {

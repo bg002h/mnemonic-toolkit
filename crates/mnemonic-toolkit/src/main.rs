@@ -1,6 +1,7 @@
 //! `mnemonic` — engraving-bundle CLI for the m-format star.
 
 mod address_render;
+mod argv_guard;
 mod bip85;
 mod bundle_unified;
 mod cmd;
@@ -99,6 +100,21 @@ struct Cli {
     #[arg(long, global = true)]
     no_auto_repair: bool,
 
+    /// P3 (SPEC_constellation_cli_uniformity 6d): proceed even though secret
+    /// material is on argv.
+    ///
+    /// **The DECISION is not made here.** `argv_guard::inspect` reads this flag
+    /// out of raw `std::env::args()` before `Cli::try_parse()` runs, because a
+    /// guard that has to parse in order to honour its own override has already
+    /// let the parser see the material. This declaration exists so that clap
+    /// ACCEPTS the flag (an undeclared one exits 64 and the operator never
+    /// reaches the tool) and so that `--help` and `gui-schema` show it.
+    ///
+    /// It is greppable, which is the point: a reviewer can find every place a
+    /// script opted in.
+    #[arg(long, global = true)]
+    allow_argv_secret: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -162,6 +178,25 @@ enum Command {
 fn main() -> ExitCode {
     // v0.34.7 argv-hardening: deny other-UID /proc/$PID/cmdline reads + core dumps.
     mnemonic_toolkit::process_hardening::set_non_dumpable();
+
+    // SPEC_constellation_cli_uniformity 6d, and THE ORDERING IS THE FIX: this
+    // must decide before `Cli::try_parse()`. Measured on this binary, clap
+    // echoes a stray positional verbatim -- `mnemonic convert --to xpub
+    // --template bip84 "<a 12-word phrase>"` prints the whole phrase back at
+    // exit 64 -- so a guard placed one line lower has already lost for any
+    // shape clap has no declared flag to blame. Nothing below this point runs
+    // when the guard refuses: no file is read, no environment variable is
+    // resolved, and clap never sees argv.
+    let argv: Vec<String> = std::env::args().collect();
+    if let argv_guard::Verdict::Refuse(findings) = argv_guard::inspect(&argv) {
+        let _ = writeln!(
+            io::stderr(),
+            "mnemonic: {}",
+            argv_guard::refusal_message(&findings)
+        );
+        return ExitCode::from(argv_guard::EXIT_REFUSED);
+    }
+
     let cli = match Cli::try_parse() {
         Ok(c) => c,
         Err(e) => {

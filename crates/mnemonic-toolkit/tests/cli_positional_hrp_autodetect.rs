@@ -59,6 +59,7 @@ fn repair_positional_single_ms1_routes_correctly() {
     let bad = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", &bad])
         .assert()
         .code(4)
@@ -75,6 +76,7 @@ fn repair_positional_single_mk1_routes_correctly() {
     // Already-valid mk1 chunk → exit 0, pass-through on stdout.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", VALID_MK1_CHUNK0])
         .assert()
         .code(0)
@@ -87,6 +89,7 @@ fn repair_positional_single_mk1_routes_correctly() {
 fn repair_positional_mixed_hrp_d35_allows() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "repair",
             VALID_MS1,
@@ -110,6 +113,7 @@ fn repair_mixed_positional_and_flag_combined_routing() {
     let bad_ms1 = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad_ms1, VALID_MK1_CHUNK0])
         .assert()
         // Cycle F FLIP — was exit 5; the candidate (ms1) OR-folds to exit 4.
@@ -127,6 +131,7 @@ fn repair_mixed_positional_and_flag_combined_routing() {
 fn repair_positional_unknown_hrp_rejects_with_unknown_hrp() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "abc1xxxxxx"])
         .assert()
         .code(2)
@@ -145,6 +150,7 @@ fn repair_positional_unknown_hrp_rejects_with_unknown_hrp() {
 fn repair_flag_value_mismatched_hrp_rejects_d34() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", VALID_MK1_CHUNK0])
         .assert()
         .code(2)
@@ -158,6 +164,7 @@ fn repair_flag_value_mismatched_hrp_rejects_d34() {
 fn repair_mk1_flag_with_ms1_value_rejects_d34() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--mk1", VALID_MS1])
         .assert()
         .code(2)
@@ -173,6 +180,7 @@ fn repair_mk1_flag_with_ms1_value_rejects_d34() {
 fn repair_no_args_clap_rejects() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair"])
         .assert()
         .failure();
@@ -188,6 +196,7 @@ fn repair_no_args_clap_rejects() {
 fn inspect_positional_single_mk1_routes_correctly() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", VALID_MK1_CHUNK0, VALID_MK1_CHUNK1])
         .assert()
         .code(0)
@@ -202,6 +211,7 @@ fn inspect_positional_single_mk1_routes_correctly() {
 fn inspect_positional_mixed_hrp_d35_allows() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", VALID_MS1, VALID_MK1_CHUNK0, VALID_MK1_CHUNK1])
         .assert()
         .code(0)
@@ -214,6 +224,7 @@ fn inspect_positional_mixed_hrp_d35_allows() {
 fn inspect_mixed_positional_and_flag_combined_routing() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--ms1",
@@ -232,6 +243,7 @@ fn inspect_mixed_positional_and_flag_combined_routing() {
 fn inspect_positional_unknown_hrp_rejects_with_unknown_hrp() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "abc1xxxxxx"])
         .assert()
         .code(2)
@@ -245,6 +257,7 @@ fn inspect_positional_unknown_hrp_rejects_with_unknown_hrp() {
 fn inspect_md1_flag_with_ms1_value_rejects_d34() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--md1", VALID_MS1])
         .assert()
         .code(2)
@@ -270,6 +283,7 @@ fn verify_bundle_bundle_json_xor_positional_clap_rejects_per_i3() {
 
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -342,6 +356,7 @@ fn verify_bundle_positional_watch_only_round_trip() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&argv)
         .assert()
         .success()
@@ -398,6 +413,7 @@ fn verify_bundle_flag_value_mismatched_hrp_rejects_d34() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&argv)
         .assert()
         .code(2)
@@ -420,6 +436,7 @@ fn verify_bundle_flag_value_mismatched_hrp_rejects_d34() {
 fn validate_flag_hrp_case_mismatch_relaxed_reaches_parse_step() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", "MS1XXX"])
         .assert()
         .code(2);
@@ -450,6 +467,7 @@ fn validate_flag_hrp_case_mismatch_relaxed_reaches_parse_step() {
 fn verify_bundle_positional_unknown_hrp_rejects() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",

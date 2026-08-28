@@ -20,6 +20,7 @@ fn split_with_json_out(phrase: &str, shares: usize) -> (String, Value, i32) {
     let from_arg = format!("phrase={phrase}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -83,6 +84,7 @@ fn split_envelope_random_marks_deterministic_false() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -107,6 +109,7 @@ fn split_json_does_not_suppress_plain_stdout() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -136,6 +139,7 @@ fn combine_envelope_shape() {
     let from_arg = format!("phrase={ABANDON_12}");
     let _split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("split")
         .arg("--from")
@@ -164,6 +168,7 @@ fn combine_envelope_shape() {
     let s1 = format!("phrase={}", shares[1]);
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("seed-xor")
         .arg("combine")
         .arg("--share")

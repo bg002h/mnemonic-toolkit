@@ -19,6 +19,7 @@ const ADVISORY_MS1: &str = "BIP-39 seed as an ms1 card";
 fn french_to_entropy_fires_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -40,6 +41,7 @@ fn french_multi_target_with_entropy_fires_once() {
     // entropy co-occurring with a key target → single advisory (targets.contains, once).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -68,6 +70,7 @@ fn french_to_xprv_no_advisory() {
     // A derived key already baked in the language — no re-recovery ambiguity.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -95,6 +98,7 @@ fn english_to_entropy_no_advisory() {
     let english_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -121,6 +125,7 @@ fn french_to_ms1_emits_mnem_no_advisory() {
     // the footgun is resolved by design.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -162,6 +167,7 @@ fn english_to_ms1_no_advisory() {
     let english_12 = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -187,6 +193,7 @@ fn entropy_to_french_phrase_no_advisory() {
     // refused identity edge, so the language-keeping case is exercised entropy→phrase.)
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -220,6 +227,7 @@ fn malformed_french_phrase_errors_without_advisory() {
     // so a bad-checksum phrase exits with an error and never advises.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -243,6 +251,7 @@ fn to_seedqr_still_rejected_at_parse() {
     // Non-regression: `--to seedqr` is an input-only node, refused at clap parse.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

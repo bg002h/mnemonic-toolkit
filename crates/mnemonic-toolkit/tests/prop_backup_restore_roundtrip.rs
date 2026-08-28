@@ -257,7 +257,11 @@ const N_SCHEMAS: usize = 10;
 
 // ── Pipeline (CLI; tests the real binary) ──
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").unwrap()
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").unwrap();
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// `build-descriptor --spec -` → `Some(desc)` if the gate ACCEPTS, else `None`

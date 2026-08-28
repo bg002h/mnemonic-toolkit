@@ -72,6 +72,7 @@ fn flip_at(chunk: &str, pos: usize) -> String {
 fn gen_bundle_single(phrase: &str) -> (String, Vec<String>, Vec<String>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -110,6 +111,7 @@ fn gen_bundle_single(phrase: &str) -> (String, Vec<String>, Vec<String>) {
 fn gen_bundle_multisig(phrase0: &str, phrase1: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -189,6 +191,7 @@ fn verify_bundle_ms1_ground_truth_mismatch_wrong_bundle_exit_4() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(&args)
         .assert()
@@ -259,6 +262,7 @@ fn verify_bundle_ms1_ground_truth_mismatch_wrong_bundle_multisig_exit_4() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(&args)
         .assert()
@@ -300,6 +304,7 @@ fn ms1_unique_indel_recovery_stays_exit_5_post_cycle_f() {
     out.remove(3 + 1);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["repair", "--ms1", &out, "--max-indel", "1"])
         .assert()
@@ -322,6 +327,7 @@ fn repair_mixed_ms1_candidate_and_clean_mk1_exit_4_dominates() {
     let bad_ms1 = flip_at(VALID_MS1, 17);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad_ms1, "--mk1", VALID_MK1_CHUNK0])
         .assert()
         .code(4)
@@ -366,6 +372,7 @@ fn verify_bundle_no_auto_repair_suppresses_ground_truth_compare() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(&args)
         .assert()

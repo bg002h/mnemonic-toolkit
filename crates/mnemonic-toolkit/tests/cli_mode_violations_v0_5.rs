@@ -21,6 +21,7 @@ const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --template are mutually 
 fn threshold_without_multisig_template_rejected() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -49,6 +50,7 @@ fn threshold_without_multisig_template_rejected() {
 fn threshold_with_multisig_template_accepted() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -71,6 +73,7 @@ fn threshold_with_multisig_template_accepted() {
 fn path_family_without_multisig_template_rejected() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -99,6 +102,7 @@ fn path_family_without_multisig_template_rejected() {
 fn path_family_with_multisig_template_accepted() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -123,6 +127,7 @@ fn path_family_with_multisig_template_accepted() {
 fn descriptor_and_template_rejected() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -157,6 +162,7 @@ fn descriptor_without_template_accepted() {
     // annotation behavior, so the annotation is removed.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",

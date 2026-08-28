@@ -18,6 +18,7 @@ const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon
 fn bip388_row13_fires_for_duplicate_slot_phrases() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -53,6 +54,7 @@ fn bip388_row13_fires_for_duplicate_slot_phrases() {
 fn bundle_multisig_full_subtoken_rejected_by_clap_exit_64() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["bundle", "multisig-full"])
         .assert()
         .failure()
@@ -63,6 +65,7 @@ fn bundle_multisig_full_subtoken_rejected_by_clap_exit_64() {
 fn bundle_multisig_watch_only_subtoken_rejected_by_clap_exit_64() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["bundle", "multisig-watch-only"])
         .assert()
         .failure()

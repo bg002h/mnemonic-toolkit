@@ -52,6 +52,7 @@ fn info_line(variant: &str) -> String {
 fn convert_zpub_to_xpub_emits_info_line() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -74,6 +75,7 @@ fn convert_zpub_to_xpub_emits_info_line() {
 fn convert_neutral_xpub_to_xpub_emits_no_info_line() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -97,6 +99,7 @@ fn convert_neutral_xpub_to_xpub_emits_no_info_line() {
 fn convert_zpub_to_xpub_with_output_prefix_still_emits_info_line() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -123,6 +126,7 @@ fn convert_zpub_to_xpub_with_output_prefix_still_emits_info_line() {
 fn convert_zpub_to_fingerprint_emits_info_line() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -149,6 +153,7 @@ fn convert_zpub_to_fingerprint_emits_info_line() {
 fn convert_variant_coverage_ypub_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -166,6 +171,7 @@ fn convert_variant_coverage_ypub_mainnet() {
 fn convert_variant_coverage_big_y_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -183,6 +189,7 @@ fn convert_variant_coverage_big_y_mainnet() {
 fn convert_variant_coverage_zpub_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -200,6 +207,7 @@ fn convert_variant_coverage_zpub_mainnet() {
 fn convert_variant_coverage_big_z_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -217,6 +225,7 @@ fn convert_variant_coverage_big_z_mainnet() {
 fn convert_variant_coverage_upub_testnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -234,6 +243,7 @@ fn convert_variant_coverage_upub_testnet() {
 fn convert_variant_coverage_big_u_testnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -251,6 +261,7 @@ fn convert_variant_coverage_big_u_testnet() {
 fn convert_variant_coverage_vpub_testnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -268,6 +279,7 @@ fn convert_variant_coverage_vpub_testnet() {
 fn convert_variant_coverage_big_v_testnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -288,6 +300,7 @@ fn convert_variant_coverage_big_v_testnet() {
 fn convert_json_mode_emits_info_line_on_stderr() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -311,6 +324,7 @@ fn convert_json_mode_emits_info_line_on_stderr() {
 fn convert_phrase_input_emits_no_info_line() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

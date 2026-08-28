@@ -62,6 +62,7 @@ fn seed_overlay_ms1_match_success() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -117,6 +118,7 @@ fn seed_overlay_ms1_mismatch_exit_4() {
     const WRONG_MS1_16BYTE_ZERO: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -150,6 +152,7 @@ fn seed_overlay_empty_string_sentinel_preserves_watch_only() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -190,6 +193,7 @@ fn seed_overlay_via_slot_subkey_phrase() {
     let slot_arg = format!("@0.phrase={TREZOR_24}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -222,6 +226,7 @@ fn seed_overlay_env_var_sentinel() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_TEST_IMPORT_WALLET_MS1_0", TREZOR_24_MS1)
         .args([
             "import-wallet",
@@ -255,6 +260,7 @@ fn seed_overlay_env_var_unset_exit_1() {
     let blob = flagship_1of1_blob();
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env_remove("MNEMONIC_TEST_IMPORT_WALLET_MS1_NEVER_SET")
         .args([
             "import-wallet",
@@ -288,6 +294,7 @@ fn seed_overlay_slot_non_phrase_subkey_rejected() {
     // or in `run()`.
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -344,6 +351,7 @@ fn seed_overlay_multi_cosigner_skip_middle() {
     let blob = skip_middle_3of3_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -414,6 +422,7 @@ fn seed_overlay_ms1_and_slot_phrase_for_same_cosigner_conflict() {
     let slot_arg = format!("@0.phrase={TREZOR_24}");
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -448,6 +457,7 @@ fn seed_overlay_slot_phrase_mismatch_exit_4() {
     let slot_arg = format!("@0.phrase={WRONG_24}");
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -489,6 +499,7 @@ fn seed_overlay_ms1_decode_error_rejected_with_pointer_text() {
     const MALFORMED_MS1: &str = "ms1qpzqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqy";
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -521,6 +532,7 @@ fn ms1_inline_value_fires_argv_advisory() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -548,6 +560,7 @@ fn ms1_env_sentinel_no_argv_advisory() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -577,6 +590,7 @@ fn slot_phrase_inline_fires_argv_advisory_with_actual_index() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet", "--blob", "-", "--format", "bsms",
             "--slot",
@@ -600,6 +614,7 @@ fn slot_phrase_env_sentinel_no_argv_advisory() {
     let blob = flagship_1of1_blob();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet", "--blob", "-", "--format", "bsms",
             "--slot", "@0.phrase=@env:MNEMONIC_TEST_SLOT_PHRASE", "--json",

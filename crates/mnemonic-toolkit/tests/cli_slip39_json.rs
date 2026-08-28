@@ -34,6 +34,7 @@ fn split_with_json_out(args: &[&str]) -> (String, Value, i32) {
     cmd_args.push(&path_str);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&cmd_args)
         .output()
         .unwrap();
@@ -161,6 +162,7 @@ fn json_split_plain_stdout_coexists_with_json_out() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -194,6 +196,7 @@ fn json_combine_envelope_shape_entropy_output() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_SLIP39_TEST_RNG", TEST_RNG_HEX_64)
         .env("MNEMONIC_SLIP39_TEST_IDENTIFIER", "12345")
         .arg("slip39")
@@ -229,6 +232,7 @@ fn json_combine_envelope_shape_entropy_output() {
     drop(f_combine);
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", &shares[0], "--share", &shares[1], "--json-out"])
@@ -263,6 +267,7 @@ fn json_combine_envelope_shape_phrase_output() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_SLIP39_TEST_RNG", TEST_RNG_HEX_64)
         .env("MNEMONIC_SLIP39_TEST_IDENTIFIER", "12345")
         .arg("slip39")
@@ -294,6 +299,7 @@ fn json_combine_envelope_shape_phrase_output() {
     drop(f_combine);
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args([
@@ -334,6 +340,7 @@ fn json_split_g4_anchor_1_sha_pin_with_test_rng_env_var() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_SLIP39_TEST_RNG", TEST_RNG_HEX_64)
         .env("MNEMONIC_SLIP39_TEST_IDENTIFIER", "12345")
         .arg("slip39")
@@ -383,6 +390,7 @@ fn json_split_g4_anchor_2_sha_pin_different_env_vars() {
     let from_arg = format!("phrase={ABANDON_12}");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_SLIP39_TEST_RNG", TEST_RNG_HEX_64_ANCHOR_2)
         .env("MNEMONIC_SLIP39_TEST_IDENTIFIER", "32767")
         .arg("slip39")
@@ -433,6 +441,7 @@ fn json_split_g4_env_var_yields_deterministic_output() {
         drop(f);
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .env("MNEMONIC_SLIP39_TEST_RNG", TEST_RNG_HEX_64)
             .env("MNEMONIC_SLIP39_TEST_IDENTIFIER", "777")
             .arg("slip39")

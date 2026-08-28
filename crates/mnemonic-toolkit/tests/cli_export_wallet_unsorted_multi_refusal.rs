@@ -28,6 +28,7 @@ const B_FP: &str = "28645006";
 fn export_template(fmt: &str, template: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -98,6 +99,7 @@ fn template_sh_wsh_multi_refused_exit2_for_each_fieldless_vendor() {
 fn import_then_export(descriptor: &str, export_fmt: &str) -> assert_cmd::assert::Assert {
     let imp = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--format",
@@ -113,6 +115,7 @@ fn import_then_export(descriptor: &str, export_fmt: &str) -> assert_cmd::assert:
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--from-import-json",
@@ -171,6 +174,7 @@ fn direct_descriptor_unsorted_multi_refused_not_silently_coerced() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -208,6 +212,7 @@ fn direct_descriptor_sorted_multi_not_typed_unsorted_message() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -251,6 +256,7 @@ fn sorted_multi_template_still_exports_to_fieldless_vendors() {
 fn taproot_multi_a_hits_existing_taproot_refusal_not_h10() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -291,6 +297,7 @@ fn taproot_multi_a_hits_existing_taproot_refusal_not_h10() {
 fn single_sig_to_fieldless_vendor_still_exports() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -340,6 +347,7 @@ const C2: &str = "letter advice cage absurd amount doctor acoustic avoid letter 
 fn bundle_md1(template: &str) -> Vec<String> {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -381,6 +389,7 @@ fn restore_md1_unsorted_multi_to_fieldless_vendor_refused() {
         args.push(fmt.into());
         Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&args)
             .assert()
             .failure()
@@ -403,6 +412,7 @@ fn restore_md1_sorted_multi_to_fieldless_vendor_still_emits() {
         args.push(fmt.into());
         Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&args)
             .assert()
             .success();

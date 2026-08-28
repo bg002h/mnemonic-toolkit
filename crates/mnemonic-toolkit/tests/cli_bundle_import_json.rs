@@ -28,6 +28,7 @@ const A_XPUB: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy
 fn run_bundle_import_json_file(envelope_path: &Path) -> serde_json::Value {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -108,6 +109,7 @@ fn bundle_import_json_with_template_flag_errors_mutex() {
     let p = fixture_path("envelope_v0_27_0.json");
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -135,6 +137,7 @@ fn bundle_import_json_with_descriptor_flag_errors_mutex() {
     let p = fixture_path("envelope_v0_27_0.json");
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -179,6 +182,7 @@ fn bundle_import_json_multi_entry_without_index_errors() {
     std::fs::write(&p, multi_entry_envelope_json()).unwrap();
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -206,6 +210,7 @@ fn bundle_import_json_index_picks_correct_descriptor() {
     std::fs::write(&p, multi_entry_envelope_json()).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -235,6 +240,7 @@ fn bundle_import_json_index_out_of_bounds_errors() {
     let p = fixture_path("envelope_v0_27_0.json");
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -262,6 +268,7 @@ fn bundle_import_json_stdin_dash_reads_envelope() {
     let envelope_json = std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -288,6 +295,7 @@ fn bundle_import_json_self_check_round_trip_passes() {
     let p = fixture_path("envelope_v0_27_0.json");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -326,6 +334,7 @@ fn skip_middle_3of3_envelope_json() -> String {
     let blob = bsms_2line_from_body(body);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["import-wallet", "--blob", "-", "--format", "bsms", "--json"])
         .write_stdin(blob)
         .assert()
@@ -341,6 +350,7 @@ fn bundle_import_json_seed_overlay_via_slot_phrase_yields_full_for_overlaid_slot
     std::fs::write(&p, &envelope_json).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -390,6 +400,7 @@ fn bundle_import_json_overlay_on_seeded_slot_errors_conflict() {
     let blob = bsms_2line_from_body(body);
     let import_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -412,6 +423,7 @@ fn bundle_import_json_overlay_on_seeded_slot_errors_conflict() {
     // entropy in the envelope. This must error with the conflict message.
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -459,6 +471,7 @@ fn bundle_import_json_tampered_descriptor_emits_bip380_checksum_error() {
 
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -485,6 +498,7 @@ fn bundle_import_json_to_verify_bundle_round_trip_yields_ok() {
     // Synthesize via bundle --import-json --json.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -537,6 +551,7 @@ fn bundle_import_json_to_verify_bundle_round_trip_yields_ok() {
     }
     let verify_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -566,6 +581,7 @@ fn bundle_import_json_stderr_threshold_uses_descriptor_k_not_cosigner_count() {
     let p = fixture_path("envelope_v0_27_0.json");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -605,6 +621,7 @@ fn import_then_bundle_stderr(format: &str, blob_path: &Path) -> String {
     let envelope_path = tmpdir.path().join("envelope.json");
     let envelope_bytes = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--format",
@@ -621,6 +638,7 @@ fn import_then_bundle_stderr(format: &str, blob_path: &Path) -> String {
     std::fs::write(&envelope_path, &envelope_bytes).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -729,6 +747,7 @@ fn bundle_import_json_engraving_card_origin_is_bare() {
     let p = fixture_path("envelope_v0_27_0.json");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -768,6 +787,7 @@ fn bundle_import_json_seeded_ms1_self_check_passes() {
     let blob = bsms_2line_from_body(body);
     let import_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",
@@ -790,6 +810,7 @@ fn bundle_import_json_seeded_ms1_self_check_passes() {
     // bundle --import-json <seeded> --self-check → must succeed (exit 0).
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -850,6 +871,7 @@ fn bundle_import_json_masked_older_emits_advisory() {
     std::fs::write(&p, &envelope_json).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -877,6 +899,7 @@ fn bundle_import_json_clean_older_emits_no_advisory() {
     std::fs::write(&p, &envelope_json).unwrap();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -922,6 +945,7 @@ fn bundle_import_json_fixed_step_descriptor_replay_rejects() {
     let good_desc = format!("wpkh([704c7836/84'/0'/0']{A_XPUB}/<0;1>/*)");
     let imp = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--format",
@@ -947,6 +971,7 @@ fn bundle_import_json_fixed_step_descriptor_replay_rejects() {
     // 3. Replay via `bundle --import-json -` → must reject.
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",

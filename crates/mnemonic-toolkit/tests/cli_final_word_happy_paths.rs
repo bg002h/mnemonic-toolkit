@@ -23,6 +23,10 @@ const BEEF_11_PARTIAL: &str = "beef beef beef beef beef beef beef beef beef beef
 /// return (stdout-lines, stderr-as-string, exit-code).
 fn invoke_inline(partial: &str, language: Option<&str>) -> (Vec<String>, String, i32) {
     let mut cmd = Command::cargo_bin("mnemonic").unwrap();
+    // P3 6d: `--from phrase=<inline>` is exactly the argv channel the guard
+    // refuses; these tests exercise final-word's OUTPUT, not its intake, so
+    // they opt in explicitly rather than being rewritten to stdin.
+    cmd.arg("--allow-argv-secret");
     cmd.arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", partial));
@@ -122,6 +126,8 @@ fn n24_zero_entropy_round_trip() {
 fn stdout_has_trailing_newline_after_last_candidate() {
     let mut cmd = Command::cargo_bin("mnemonic").unwrap();
     let out = cmd
+        // P3 6d: opts in to the argv channel, as `invoke_inline` above does.
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", ABANDON_11_PARTIAL))
@@ -141,6 +147,8 @@ fn stdout_has_trailing_newline_after_last_candidate() {
 fn language_default_is_english_when_omitted() {
     let mut cmd = Command::cargo_bin("mnemonic").unwrap();
     let out = cmd
+        // P3 6d: opts in to the argv channel, as `invoke_inline` above does.
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", ABANDON_11_PARTIAL))

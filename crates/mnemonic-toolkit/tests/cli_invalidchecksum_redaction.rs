@@ -20,6 +20,7 @@ const CORRUPTED_MS1: &str = "ms10entrspqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"
 fn invalid_checksum_does_not_echo_input_on_stderr() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "--no-auto-repair",
             "convert",

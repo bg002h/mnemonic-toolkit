@@ -16,7 +16,11 @@ const PHRASE_A: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
 fn mnemonic() -> Command {
-    Command::cargo_bin("mnemonic").expect("mnemonic binary builds")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("mnemonic binary builds");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// Emit a keyless single-sig template md1 (unbroken) for (template, phrase).

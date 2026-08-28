@@ -13,6 +13,7 @@ const TREZOR_FP_HEX: &str = "5436d724";
 fn unified_slot_phrase_singlesig_full_emits_schema_4() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -42,6 +43,7 @@ fn unified_slot_phrase_singlesig_full_emits_schema_4() {
 fn unified_slot_missing_template_or_descriptor_rejected() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -77,6 +79,7 @@ fn unified_slot_entropy_singlesig_full_round_trips_against_phrase() {
     // equivalent phrase form for the same underlying seed.
     let phrase_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -94,6 +97,7 @@ fn unified_slot_entropy_singlesig_full_round_trips_against_phrase() {
 
     let entropy_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -120,6 +124,7 @@ fn unified_slot_xprv_rejected_with_followup_pointer() {
     // K.2: xprv DEFERRED to v0.5+ per impl plan r1 review C-1.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -143,6 +148,7 @@ fn unified_slot_wif_singlesig_emits_valid_bundle() {
     // K.3: wif degenerate single-key in single-sig context.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -180,6 +186,7 @@ fn unified_slot_wif_in_multisig_2_of_3() {
     let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -213,6 +220,7 @@ fn unified_slot_wif_alone_in_2_of_2() {
     // Phase R: pure wif multisig (degenerate but legal). Two DISTINCT WIFs.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -244,6 +252,7 @@ fn unified_slot_same_wif_twice_emits_bip388_row13() {
     // → SPEC §6.6 row 13 fires (exit 2).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -275,6 +284,7 @@ fn unified_slot_xpub_alone_emits_partial_origin() {
     let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -301,6 +311,7 @@ fn unified_slot_xpub_with_fingerprint_no_path() {
     let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -329,6 +340,7 @@ fn unified_slot_descriptor_singlesig_phrase_full() {
     let descriptor = format!("wpkh(@0[{TREZOR_FP_HEX}/84'/0'/0']/<0;1>/*)");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -357,6 +369,7 @@ fn unified_slot_descriptor_watch_only_xpub_via_slot() {
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -382,6 +395,7 @@ fn unified_slot_descriptor_phrase_fingerprint_mismatch_rejected() {
     let descriptor = "wpkh(@0[deadbeef/84'/0'/0']/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",

@@ -33,6 +33,7 @@ const BIP39_TEST_3: &str =
 fn canonical_wsh_sortedmulti_round_trips_via_bundle_json() {
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -62,6 +63,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_bundle_json() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -120,6 +122,7 @@ fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
     emit.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&emit)
         .assert()
         .success();
@@ -137,6 +140,7 @@ fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
     verify.push(path.to_str().unwrap().into());
     let v = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&verify)
         .assert()
         .success();
@@ -163,6 +167,7 @@ fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
 fn canonical_wsh_sortedmulti_round_trips_via_flat_mk1_repetition() {
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -235,6 +240,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_flat_mk1_repetition() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -248,6 +254,7 @@ fn non_canonical_wsh_andor_round_trips_via_bundle_json() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -275,6 +282,7 @@ fn non_canonical_wsh_andor_round_trips_via_bundle_json() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -304,6 +312,7 @@ fn non_canonical_wsh_andor_round_trips_via_bundle_json() {
 fn self_check_canonical_multisig_passes_both_pre_and_post_fix() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -342,6 +351,7 @@ fn single_sig_csi_unchanged_byte_identical_to_pre_fix_fixture() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -372,6 +382,7 @@ fn non_canonical_3_of_3_wsh_andor_round_trips_via_bundle_json() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -403,6 +414,7 @@ fn non_canonical_3_of_3_wsh_andor_round_trips_via_bundle_json() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -438,6 +450,7 @@ fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
     let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -493,6 +506,7 @@ fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",

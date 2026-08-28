@@ -86,6 +86,7 @@ fn xpub_search_literal_funnel_masked_older_emits_advisory() {
     let descriptor = masked_literal_descriptor();
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -127,6 +128,7 @@ fn xpub_search_md1_card_funnel_masked_older_emits_advisory() {
     // normally).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -154,6 +156,7 @@ fn xpub_search_md1_card_funnel_masked_older_emits_advisory() {
     // Feed the md1 card(s) back to xpub-search via the md1-card funnel.
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -186,6 +189,7 @@ fn xpub_search_literal_funnel_clean_older_no_advisory() {
     let descriptor = clean_literal_descriptor();
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",

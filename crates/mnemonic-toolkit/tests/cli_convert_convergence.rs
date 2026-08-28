@@ -37,6 +37,7 @@ const BIP86_RECEIVE_0: &str = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqj
 fn convert_value(args: &[&str]) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -52,6 +53,7 @@ fn convert_value(args: &[&str]) -> String {
 fn convert_lines(args: &[&str]) -> std::collections::BTreeMap<String, String> {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();

@@ -21,10 +21,8 @@ of the previous chapter and verified `mnemonic --version` reports
 ## The command
 
 ```sh
-mnemonic bundle \
-  --network mainnet \
-  --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=-
 ```
 
 Three flags carry the work:
@@ -54,8 +52,8 @@ The separator is **whitespace only**. `--separator hyphen` and
 hyphen-grouped card round-trips here and is refused there. Cards you
 already hold still decode — intake keeps stripping `-` and `,`.
 
-```{.text include="22-first-bundle.out" lines="2-21"}
-PLACEHOLDER — generated from transcripts/22-first-bundle.out lines 2-21 at build
+```{.text include="22-first-bundle.out" lines="1-20"}
+PLACEHOLDER — generated from transcripts/22-first-bundle.out lines 1-20 at build
 ```
 
 ## Reading the output

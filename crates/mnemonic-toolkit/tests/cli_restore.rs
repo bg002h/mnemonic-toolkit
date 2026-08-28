@@ -37,7 +37,11 @@ const SEEDQR_NO_PP: &str = "000000000000000000000000000000000000000000000003";
 const MS1_MNEM_JP: &str = "ms10entrsqgqsqqqqqqqqqqqqqqqqqqqqqqqqqj9tawneveyd9j";
 
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").unwrap()
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").unwrap();
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// Re-derive a master fingerprint independently via `convert --to fingerprint`,

@@ -11,6 +11,7 @@ const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
 fn refusal_xpub_to_entropy_one_way_barrier() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -33,6 +34,7 @@ fn refusal_xpub_to_entropy_one_way_barrier() {
 fn refusal_xpub_to_xprv_one_way_barrier() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -55,6 +57,7 @@ fn refusal_xpub_to_xprv_one_way_barrier() {
 fn refusal_ms1_to_mk1_sibling_pivot() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -77,6 +80,7 @@ fn refusal_ms1_to_mk1_sibling_pivot() {
 fn refusal_xpub_to_mk1_distinct_message() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -99,6 +103,7 @@ fn refusal_xpub_to_mk1_distinct_message() {
 fn refusal_wif_with_path_chain_code_destroyed() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -125,6 +130,7 @@ fn refusal_wif_with_path_chain_code_destroyed() {
 fn refusal_wif_to_entropy_one_way() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -152,6 +158,7 @@ const TREZOR_12: &str =
 fn refusal_phrase_to_wif_missing_path() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -176,6 +183,7 @@ fn refusal_phrase_to_wif_missing_path() {
 fn refusal_entropy_to_wif_missing_path() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -200,6 +208,7 @@ fn refusal_entropy_to_wif_missing_path() {
 fn refusal_fingerprint_as_source() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["convert", "--from", "fingerprint=5436d724", "--to", "xpub"])
         .assert()
         .failure();

@@ -36,6 +36,7 @@ fn hashlock_wsh_and_v_sha256_round_trips_via_bundle_json() {
 
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -61,6 +62,7 @@ fn hashlock_wsh_and_v_sha256_round_trips_via_bundle_json() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -97,6 +99,7 @@ fn verify_bundle_accepts_bip388_policy_json() {
     // Watch-only bundle from the policy JSON (inline keys → no slots) → JSON.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -118,6 +121,7 @@ fn verify_bundle_accepts_bip388_policy_json() {
 
     let v = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -153,6 +157,7 @@ fn verify_bundle_accepts_bip388_singlesig_policy_json() {
 
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -174,6 +179,7 @@ fn verify_bundle_accepts_bip388_singlesig_policy_json() {
 
     let v = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",
@@ -213,6 +219,7 @@ fn verify_bundle_refuses_bip388_policy_at_n_beyond_keys_info() {
     );
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--descriptor",

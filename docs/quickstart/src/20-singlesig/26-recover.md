@@ -22,14 +22,13 @@ Wanted:
 > real wallet.
 
 ```sh
-mnemonic convert \
-  --from ms1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
-  --to phrase
+printf '%s' 'ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f' \
+  | mnemonic convert --from ms1=- --to phrase
 ```
 
 Output:
 
-```{.text include="qs-26-recover-phrase.out" lines="2-"}
+```{.text include="qs-26-recover-phrase.out" lines="1-"}
 ```
 
 The phrase imports directly into any BIP-39 wallet. The `warning`

@@ -44,6 +44,7 @@ fn unicode_horror() -> String {
 fn mn(args: &[&str]) -> Output {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .output()
         .unwrap()

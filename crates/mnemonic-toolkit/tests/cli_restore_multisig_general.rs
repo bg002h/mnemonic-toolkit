@@ -44,6 +44,7 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
     args.push("--no-engraving-card".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -74,6 +75,7 @@ fn restore_json(md1: &[String]) -> Value {
     a.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .success();
@@ -129,6 +131,7 @@ fn assert_reported_addresses_match_independent_derivation(restore_value: &Value)
 fn assert_md1_fixed_point(original_md1: &[String], reconstructed_descriptor: &str) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -260,6 +263,7 @@ fn general_format_descriptor_is_faithful() {
     a.push("descriptor".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .success()
@@ -279,6 +283,7 @@ fn general_masked_older_emits_advisory() {
     a.push("descriptor".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .success()
@@ -298,6 +303,7 @@ fn general_clean_older_no_advisory() {
     a.push("descriptor".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .success()
@@ -315,6 +321,7 @@ fn general_format_coldcard_refuses() {
     a.push("coldcard".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .failure();
@@ -413,6 +420,7 @@ fn general_testnet_network_corrected() {
     a.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .success();
@@ -589,6 +597,7 @@ fn taproot_nums_sortedmulti_a_override_still_refused() {
     let md1 = bundle_general("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_md1_args(&md1))
         .assert()
         .failure()
@@ -607,6 +616,7 @@ fn taproot_nums_multi_a_hardened_override_still_refused() {
     let md1 = bundle_general("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_md1_args(&md1))
         .assert()
         .failure()
@@ -620,6 +630,7 @@ fn taproot_non_nums_multi_a_override_still_refused() {
     let md1 = bundle_general("tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_md1_args(&md1))
         .assert()
         .failure()
@@ -640,6 +651,7 @@ fn override_hardened_wildcard_refused() {
     let md1 = bundle_general("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_md1_args(&md1))
         .assert()
         .failure()
@@ -809,6 +821,7 @@ fn hardened_wildcard_refused() {
     let md1 = bundle_general("wsh(multi(2,@0/*h,@1/*h))");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(restore_md1_args(&md1))
         .assert()
         .failure()

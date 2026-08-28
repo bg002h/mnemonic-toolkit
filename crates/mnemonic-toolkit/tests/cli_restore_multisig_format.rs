@@ -24,6 +24,7 @@ const FP: [&str; 3] = ["73c5da0a", "b8688df1", "28645006"];
 fn bundle_md1(template: &str, network: &str) -> Vec<String> {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -68,6 +69,7 @@ fn restore_format_stdout(md1: &[String], format: &str) -> String {
     a.push(format.into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0);
@@ -161,6 +163,7 @@ fn format_descriptor_equals_json_descriptor() {
     a.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0);
@@ -183,6 +186,7 @@ fn format_specter_refuses_missing_wallet_name() {
     a.push("specter".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(2)
@@ -197,6 +201,7 @@ fn format_green_refuses_no_multisig() {
     a.push("green".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(1)
@@ -214,6 +219,7 @@ fn format_payloads_are_watch_only() {
         a.push(fmt.into());
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&a)
             .assert()
             .code(0);
@@ -237,6 +243,7 @@ fn json_envelope_carries_import_payload() {
     a.push("--json".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0);
@@ -263,6 +270,7 @@ fn mismatch_blocks_payload_exit4() {
     a.push("descriptor".into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(4)
@@ -296,6 +304,7 @@ fn format_output_file_routes_payload() {
     a.push(path.to_str().unwrap().into());
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)

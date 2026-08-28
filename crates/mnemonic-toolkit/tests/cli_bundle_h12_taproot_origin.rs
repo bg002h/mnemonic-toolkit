@@ -47,6 +47,7 @@ fn bundle_taproot(descriptor: &str, extra: &[&str]) -> (Value, String) {
     }
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();

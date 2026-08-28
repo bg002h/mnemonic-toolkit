@@ -24,16 +24,17 @@ the xpub alone on a separate (potentially internet-connected) host.
 ### Step 1 — derive the xpub (on the air-gapped seed-holder)
 
 ```sh
-mnemonic convert \
-  --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
-  --to xpub \
-  --template bip84 \
-  --network mainnet
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic convert \
+      --from phrase=- \
+      --to xpub \
+      --template bip84 \
+      --network mainnet
 ```
 
 Output:
 
-```{.text include="qs-41-watch-only-xpub.out" lines="2-"}
+```{.text include="qs-41-watch-only-xpub.out" lines="1-"}
 ```
 
 Hand-carry that xpub string to the bundle-building host (it is

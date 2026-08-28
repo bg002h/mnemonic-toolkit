@@ -47,6 +47,7 @@ const TREZOR_12_BIP86_MAINNET_ACCOUNT_XPUB: &str = "xpub6BgBgsespWvERF3LHQu6Cnqd
 fn derive_xpub_via_cli(template: &str, network: &str) -> (String, String) {
     let xpub_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -69,6 +70,7 @@ fn derive_xpub_via_cli(template: &str, network: &str) -> (String, String) {
 
     let fp_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -96,6 +98,7 @@ fn derive_xpub_via_cli(template: &str, network: &str) -> (String, String) {
 fn cell_1_bitcoin_core_single_sig_wpkh_round_trip() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -144,6 +147,7 @@ fn cell_1_bitcoin_core_single_sig_wpkh_round_trip() {
 fn export_wallet_default_timestamp_is_zero_not_now() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -179,6 +183,7 @@ fn export_wallet_default_timestamp_is_zero_not_now() {
 fn export_wallet_explicit_timestamp_now_stays_now() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -209,6 +214,7 @@ fn export_wallet_explicit_timestamp_now_stays_now() {
 fn cell_2_bip388_wallet_policy_multisig_wsh_sortedmulti() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -261,6 +267,7 @@ fn cell_2_bip388_wallet_policy_multisig_wsh_sortedmulti() {
 fn cell_3_phrase_slot_refusal_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -288,6 +295,7 @@ fn cell_3_phrase_slot_refusal_byte_exact() {
 fn cell_5_range_override() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -341,6 +349,7 @@ fn cell_6_bitcoin_core_version_24_matches_25_for_emitted_fields() {
     };
     let out_24 = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(mk_args("24"))
         .assert()
         .success();
@@ -348,6 +357,7 @@ fn cell_6_bitcoin_core_version_24_matches_25_for_emitted_fields() {
 
     let out_25 = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(mk_args("25"))
         .assert()
         .success();
@@ -374,6 +384,7 @@ fn taproot_multisig_template_requires_internal_key_flag() {
     for template_name in ["tr-multi-a", "tr-sortedmulti-a"] {
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args([
                 "export-wallet",
                 "--template",
@@ -455,6 +466,7 @@ fn bip380_valid_checksum_round_trip_via_miniscript() {
     // `cell_1_bitcoin_core_single_sig_wpkh_round_trip` inputs.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -531,6 +543,7 @@ fn cell_8_bip388_sh_wpkh_bip49_template_shape() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -583,6 +596,7 @@ fn cell_9_bip388_tr_bip86_template_shape() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -618,6 +632,7 @@ fn cell_9_bip388_tr_bip86_template_shape() {
 fn threshold_greater_than_cosigner_count_refusal() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -663,6 +678,7 @@ const NUMS_HEX: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9a
 fn tr_multi_a_with_nums_internal_key_emits_canonical_tr_descriptor() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -714,6 +730,7 @@ fn tr_multi_a_with_nums_internal_key_emits_canonical_tr_descriptor() {
 fn tr_multi_a_with_cosigner_internal_key_removes_cosigner_from_leaves() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -763,6 +780,7 @@ fn tr_multi_a_with_cosigner_internal_key_removes_cosigner_from_leaves() {
 fn tr_multi_a_internal_key_out_of_range() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -803,6 +821,7 @@ fn tr_multi_a_internal_key_out_of_range() {
 fn taproot_internal_key_on_non_taproot_template_refused() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -846,6 +865,7 @@ fn taproot_internal_key_on_non_taproot_template_refused() {
 fn tr_multi_a_bip388_wallet_policy_with_nums() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -899,6 +919,7 @@ fn descriptor_to_bip388_wallet_policy_round_trip() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--descriptor",
@@ -951,6 +972,7 @@ fn descriptor_to_bip388_wallet_policy_round_trip() {
 fn tr_multi_a_n1_cosigner_internal_degenerate_refused() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--template",
@@ -984,6 +1006,7 @@ fn descriptor_to_bip388_non_multipath_refused() {
     let descriptor = format!("wpkh([{TREZOR_BIP84_FP}/84'/0'/0']{TREZOR_BIP84_XPUB}/0/*)",);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--descriptor",
@@ -1033,6 +1056,7 @@ fn bsms_form_does_not_leak_into_non_bsms_format_output() {
     };
     let out_baseline = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(mk_args(false))
         .assert()
         .success();
@@ -1040,6 +1064,7 @@ fn bsms_form_does_not_leak_into_non_bsms_format_output() {
 
     let out_with_form = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(mk_args(true))
         .assert()
         .success();
@@ -1059,6 +1084,7 @@ fn md1_card_on_descriptor_clear_refusal() {
     let md1 = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--descriptor",

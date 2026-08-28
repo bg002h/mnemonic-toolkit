@@ -17,6 +17,7 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
         .expect("fixture");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -52,6 +53,7 @@ fn bundle_wif_slot_self_check_passes() {
     const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",

@@ -44,6 +44,7 @@ fn path_of_xpub_env_phrase_happy_path() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("XPS_PHRASE", PHRASE)
         .args([
             "xpub-search",
@@ -66,6 +67,7 @@ fn path_of_xpub_env_phrase_unset_fails() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env_remove("XPS_PHRASE_UNSET")
         .args([
             "xpub-search",
@@ -89,6 +91,7 @@ fn path_of_xpub_env_passphrase_happy_path() {
     let target = xpub_at("m/84'/0'/0'", "swordfish").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("XPS_PASSPHRASE", "swordfish")
         .args([
             "xpub-search",
@@ -112,6 +115,7 @@ fn path_of_xpub_env_passphrase_unset_fails() {
     let target = xpub_at("m/84'/0'/0'", "").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env_remove("XPS_PASSPHRASE_UNSET")
         .args([
             "xpub-search",
@@ -152,6 +156,7 @@ fn account_of_descriptor_env_phrase_happy_path() {
     let desc = wpkh_descriptor_at_account_0();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("AOD_PHRASE", PHRASE)
         .args([
             "xpub-search",
@@ -173,6 +178,7 @@ fn account_of_descriptor_env_passphrase_unset_fails() {
     let desc = wpkh_descriptor_at_account_0();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env_remove("AOD_PASSPHRASE_UNSET")
         .args([
             "xpub-search",
@@ -200,6 +206,7 @@ fn passphrase_of_xpub_env_phrase_happy_path() {
     let target = xpub_at("m/84'/0'/0'", "secret-pw").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("POX_PHRASE", PHRASE)
         .args([
             "xpub-search",
@@ -223,6 +230,7 @@ fn passphrase_of_xpub_env_passphrase_happy_path() {
     let target = xpub_at("m/84'/0'/0'", "secret-pw").to_string();
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("POX_PASSPHRASE", "secret-pw")
         .args([
             "xpub-search",

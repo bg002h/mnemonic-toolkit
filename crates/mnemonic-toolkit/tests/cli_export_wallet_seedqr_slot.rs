@@ -15,6 +15,7 @@ const DIGITS_12: &str = "000000000000000000000000000000000000000000000003";
 fn export_wallet_seedqr_slot_refused_watch_only_invariant() {
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",

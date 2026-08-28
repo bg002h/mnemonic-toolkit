@@ -18,7 +18,11 @@ const PHRASE_24: &str = "abandon abandon abandon abandon abandon abandon abandon
 const DIGITS_24: &str = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000102";
 
 fn mnemonic() -> Command {
-    Command::cargo_bin("mnemonic").expect("mnemonic binary builds")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("mnemonic binary builds");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 fn bundle_via_phrase(phrase: &str) -> Vec<u8> {

@@ -86,6 +86,7 @@ fn master_fp(phrase: &str) -> bitcoin::bip32::Fingerprint {
 fn bundle_multisig() -> (Vec<String>, Vec<Vec<String>>) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -138,6 +139,7 @@ fn bundle_multisig() -> (Vec<String>, Vec<Vec<String>>) {
 fn inspect_positional_uppercase_mk1_decodes() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             &VALID_MK1_CHUNK0.to_uppercase(),
@@ -156,6 +158,7 @@ fn inspect_positional_uppercase_mk1_decodes() {
 fn inspect_typed_flag_uppercase_mk1_accepted() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--mk1",
@@ -185,6 +188,7 @@ fn restore_cosigner_uppercase_mk1_cross_checked() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&a)
         .assert()
         .code(0)
@@ -204,6 +208,7 @@ fn xpub_search_target_xpub_uppercase_mk1_accepted() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "path-of-xpub",
@@ -231,6 +236,7 @@ fn xpub_search_target_xpub_uppercase_mk1_accepted() {
 fn inspect_positional_uppercase_md1_decodes() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             &VALID_MD1_CHUNK0.to_uppercase(),
@@ -254,6 +260,7 @@ fn xpub_search_descriptor_uppercase_md1_routes_md1_shape() {
     // Emit a bundle (full single-sig) to obtain the md1 card.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -282,6 +289,7 @@ fn xpub_search_descriptor_uppercase_md1_routes_md1_shape() {
 
     let xs_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -316,6 +324,7 @@ fn inspect_positional_uppercase_ms1_advisory_fires_decodes_no_echo() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", &upper])
         .assert()
         .code(0);
@@ -347,6 +356,7 @@ fn verify_bundle_positional_uppercase_ms1_decodes_ok() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -388,6 +398,7 @@ fn repair_ms1_flag_uppercase_passes_through() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &upper])
         .assert()
         .code(0);
@@ -416,6 +427,7 @@ fn silent_payment_uppercase_ms1_matches_lowercase() {
     let extract_sp = |secret: &str| -> String {
         let assert = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(["silent-payment", "--secret", secret])
             .assert()
             .code(0);
@@ -453,6 +465,7 @@ fn ms_shares_combine_uppercase_secret_at_s_refused_no_leak() {
     let upper = VALID_MS1.to_uppercase();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["ms-shares", "combine", "--share", &upper, "--to", "entropy"])
         .assert()
         .code(2);
@@ -529,6 +542,7 @@ fn verify_bundle_positional_uppercase_mk1_md1_round_trip() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&argv)
         .assert()
         .success()
@@ -547,6 +561,7 @@ fn inspect_mixed_case_ms1_codec_attributed() {
     let mixed = format!("Ms{}", &VALID_MS1[2..]);
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", &mixed])
         .assert()
         .failure();
@@ -568,6 +583,7 @@ fn inspect_mixed_case_mk1_codec_attributed() {
     let mixed = format!("Mk{}", &VALID_MK1_CHUNK0[2..]);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", &mixed])
         .assert()
         .failure()
@@ -586,6 +602,7 @@ fn inspect_mixed_case_md1_rejected() {
     let mixed2 = format!("Md{}", &VALID_MD1_CHUNK2[2..]);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", &mixed0, &mixed1, &mixed2])
         .assert()
         .failure()
@@ -607,6 +624,7 @@ fn unknown_hrp_long_positional_echo_truncated() {
     let truncated_head: String = long.chars().take(12).collect();
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["repair", &long])
         .assert()
         .code(2);

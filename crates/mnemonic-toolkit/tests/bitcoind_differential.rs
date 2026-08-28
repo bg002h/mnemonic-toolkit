@@ -682,6 +682,7 @@ fn run_template_bundle(case: &TemplateCase, form: &str) -> std::process::Output 
     }
     AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .expect("spawn mnemonic bundle")
@@ -790,6 +791,7 @@ fn complete_template(case: &TemplateCase, count: u32) -> (String, Vec<String>) {
     }
     let out = AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .expect("spawn mnemonic restore");
@@ -987,6 +989,7 @@ fn run_subset_bundle(case: &SubsetCase, form: &str) -> std::process::Output {
     }
     AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .expect("spawn mnemonic bundle")
@@ -1050,6 +1053,7 @@ fn complete_subset(case: &SubsetCase, count: u32) -> (String, Vec<String>) {
     }
     let out = AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .expect("spawn mnemonic restore");
@@ -1205,6 +1209,7 @@ fn bitcoind_subset_search_completion_differential() {
 fn h12_bundle_concrete(at_template: &str) -> (String, Vec<String>) {
     let out = AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -1393,6 +1398,7 @@ fn bitcoind_h12_taproot_default_origin_differential() {
 fn h1_bundle_cards(template: &str, threshold: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
     let out = AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -1471,6 +1477,7 @@ fn h1_verify_supplied_md1(
     }
     let out = AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .expect("spawn mnemonic verify-bundle");
@@ -1486,6 +1493,7 @@ fn h1_divergent_multipath_md1() -> Vec<String> {
     // Read back the genuine cosigner xpubs from a wsh-sortedmulti(2) bundle.
     let out = AssertCommand::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",

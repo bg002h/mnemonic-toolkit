@@ -53,7 +53,11 @@ fn run_verify_bundle(ms1: &str, mk1: &[String], md1: &[String]) -> Value {
         args.push("--md1".into());
         args.push(s.clone());
     }
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).assert();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(&args)
+        .assert();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     serde_json::from_str(&stdout).expect("valid JSON")
 }
@@ -79,7 +83,11 @@ fn run_verify_bundle_watch_only(xpub: &str, fp: &str, mk1: &[String], md1: &[Str
         args.push("--md1".into());
         args.push(s.clone());
     }
-    let out = Command::cargo_bin("mnemonic").unwrap().args(&args).assert();
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(&args)
+        .assert();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     serde_json::from_str(&stdout).expect("valid JSON")
 }

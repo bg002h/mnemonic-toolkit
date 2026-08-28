@@ -14,6 +14,7 @@ const TREZOR_12: &str =
 fn phrase_to_entropy_24word() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -31,6 +32,7 @@ fn phrase_to_entropy_24word() {
 fn entropy_to_phrase_12word() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -48,6 +50,7 @@ fn entropy_to_phrase_12word() {
 fn phrase_to_xpub_bip84_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -69,6 +72,7 @@ fn phrase_to_xpub_bip84_mainnet() {
 fn phrase_to_xpub_xprv_compound() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -94,6 +98,7 @@ fn xprv_to_xpub_neuter() {
     // Derive xprv first, then neuter to xpub.
     let xprv_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -112,6 +117,7 @@ fn xprv_to_xpub_neuter() {
 
     let xpub_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["convert", "--from", &format!("xprv={xprv}"), "--to", "xpub"])
         .assert()
         .success();
@@ -123,6 +129,7 @@ fn xprv_to_xpub_neuter() {
 fn xpub_to_fingerprint() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -141,6 +148,7 @@ fn xpub_to_fingerprint() {
 fn entropy_to_ms1_16byte() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -161,6 +169,7 @@ fn entropy_to_ms1_16byte() {
 fn ms1_to_entropy_round_trip() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -180,6 +189,7 @@ fn wif_to_xpub_sentinel() {
     let wif = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -203,6 +213,7 @@ fn mk1_to_xpub_decode() {
     let mk1 = "mk1qpnd2wpqqsqek48ppe2rd4eyqvzg3vs7zfl2pe5jyqghcnaqxqq4gdatr9tn90ga6tg0purlfh9275f4pvjmck3usgpec7pzw3wvgsn9mwmd mk1qpnd2wppha4qc2sv8g58zqcpswt0zfsza3lk237tx7xeg8evycaywffzk5r3hcma55t0u0d83tguz";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -225,6 +236,7 @@ fn mk1_to_xpub_decode() {
 fn ms1_to_phrase_direct_edge() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -248,6 +260,7 @@ fn ms1_to_phrase_direct_edge() {
 fn phrase_to_wif_bip84_leaf_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -274,6 +287,7 @@ fn phrase_to_wif_bip84_leaf_mainnet() {
 fn entropy_to_wif_bip84_leaf_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -316,6 +330,7 @@ fn phrase_to_ms1_composite_via_entropy() {
     // directly but had no phrase-source assertion.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -335,6 +350,7 @@ fn phrase_to_ms1_composite_via_entropy() {
 fn entropy_to_xpub_bip84_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -356,6 +372,7 @@ fn entropy_to_xpub_bip84_mainnet() {
 fn entropy_to_xprv_bip84_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -377,6 +394,7 @@ fn entropy_to_xprv_bip84_mainnet() {
 fn entropy_to_fingerprint_bip84_mainnet() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -402,6 +420,7 @@ fn xprv_to_fingerprint_account_xpriv() {
     // Fingerprint of the account-level xprv's xpub (NOT the master fingerprint).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -421,6 +440,7 @@ fn xprv_to_fingerprint_account_xpriv() {
     // Cross-check against the xpub-source emission for byte-for-byte equality.
     let xpub_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -447,6 +467,7 @@ fn wif_to_fingerprint_co_tested_with_wif_to_xpub() {
     // same WIF, two derived outputs verified together via compound --to.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -475,6 +496,7 @@ fn wif_to_fingerprint_co_tested_with_wif_to_xpub() {
 fn phrase_to_wif_passphrase_does_not_emit_ignored_warning() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

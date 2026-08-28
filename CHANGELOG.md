@@ -29,6 +29,35 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `,`, so every card grouped by an older build still decodes, and the four-repo
   `design/display-grouping-vectors.tsv` corpus (sha256 `7147b0ec…`) still passes untouched
   — its consumers are codec-level and take a `char`, not a keyword.
+**SemVer-MINOR (pre-1.0 breaking axis) — P3 rows 14 and 15: `mnemonic` REFUSES secret
+material on argv.**
+
+- **[BREAKING] secret material on the command line is now REFUSED at exit 2**, before
+  `Cli::try_parse()` runs. Previously every one of these channels printed
+  `warning: secret material on argv (…)` and carried on. The guard is keyed off the
+  toolkit's OWN `secret_taxonomy` constants — `SECRET_NODE_TYPES_ARGV` and
+  `SECRET_SLOT_SUBKEYS` — rather than a second hand-written list, so a new secret node
+  type is covered the moment it lands. Nine argv-material shapes are refused:
+  `--from <node>=`, `--slot @N.<subkey>=`, `--passphrase`, `--bip38-passphrase`,
+  `--decrypt-password`, `--phrase`, `--secret`, `--digits`, and `--ms1` on
+  `inspect` / `repair` / `xpub-search`.
+  The refusal names the CLASS and the LENGTH, never the value; names the private channel
+  that exists for that flag on that subcommand; and prints a shell-specific purge recipe
+  (from `mnemonic-io-lib`, measured against real shells) for the copy already in your
+  history.
+- **NOT refused, deliberately, because no private channel exists there** — a refusal whose
+  remedy cannot be followed is worse than the advisory it replaced: `--share` (a K-of-N
+  recovery needs K >= 2 shares and only one input can be stdin), a positional `ms1`, and
+  `--ms1` on `verify-bundle` / `import-wallet`. Watch-only material
+  (`--from xpub=`, `--slot @N.xpub=`) is not refused at all, per spec section 4.
+- **NEW: `--allow-argv-secret`**, a global flag, proceeds. Same spelling as
+  `me sysw pack` and `mt`. It is greppable so a reviewer can find every opt-in.
+- Documented at `docs/manual/src/40-cli-reference/41-mnemonic.md`, new section
+  *"Secret material on argv is REFUSED"*.
+- 24 committed doc transcripts had their `.cmd` REWRITTEN to a private channel — 19 under
+  `docs/manual/transcripts/` and 5 under `docs/technical-manual/transcripts/` — and their
+  goldens regenerated. No live golden carries the advisory string any more.
+
 - Five committed doc transcripts regenerated for the new default:
   `docs/manual/transcripts/{22-first-bundle,41-bundle-inheritance-cards,qs-23-bundle}.out`,
   `docs/manual/transcripts/cross-format-recipes/recipe-2-bitcoin-core-to-bundle.out`, and

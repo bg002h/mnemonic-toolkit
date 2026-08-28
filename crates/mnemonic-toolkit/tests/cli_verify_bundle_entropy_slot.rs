@@ -82,6 +82,7 @@ fn bundle_cards(
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -137,6 +138,7 @@ fn round_trip_len32() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(verify_args(NONCANONICAL_DESC, &slots, &cards, &[]))
         .assert()
         .code(0)
@@ -153,6 +155,7 @@ fn round_trip_len16() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(verify_args(NONCANONICAL_DESC, &slots, &cards, &[]))
         .assert()
         .code(0)
@@ -174,6 +177,7 @@ fn nonzero_slot_multi_n() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(verify_args(ANDOR3_DESC, &slots, &cards, &extra))
         .assert()
         .code(0)
@@ -194,6 +198,7 @@ fn passphrase_round_trip() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(verify_args(
             NONCANONICAL_DESC,
             &slots,
@@ -220,6 +225,7 @@ fn passphrase_mismatch_detected() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(verify_args(
             NONCANONICAL_DESC,
             &slots,

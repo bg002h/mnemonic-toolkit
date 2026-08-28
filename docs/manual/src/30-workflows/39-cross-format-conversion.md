@@ -103,9 +103,10 @@ and the descriptor via `md1`. To attach a seed for the single cosigner
 (e.g., the wallet owner's BIP-39 phrase), supply `--slot @0.phrase=...`:
 
 ```sh
-mnemonic bundle --network mainnet \
-  --import-json envelope.json \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic bundle --network mainnet \
+      --import-json envelope.json \
+      --slot @0.phrase=-
 ```
 
 The bundle synthesizer re-derives the xpub from the supplied phrase at

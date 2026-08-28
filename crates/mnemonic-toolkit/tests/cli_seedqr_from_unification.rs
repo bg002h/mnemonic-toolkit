@@ -14,7 +14,11 @@ const PHRASE_12: &str =
 const DIGITS_12: &str = "000000000000000000000000000000000000000000000003";
 
 fn mnemonic() -> Command {
-    Command::cargo_bin("mnemonic").expect("mnemonic binary builds")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("mnemonic binary builds");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 // ──────────────────────────────────────────────────────────────────────

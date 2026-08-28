@@ -75,6 +75,7 @@ struct Run {
 fn run(args: &[&str]) -> Run {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .output()
         .expect("mnemonic failed to spawn");

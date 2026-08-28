@@ -12,6 +12,7 @@ fn verify_bundle_via_bundle_json_schema_4_round_trip() {
     // Step 1: bundle --json → write to tmp file.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -40,6 +41,7 @@ fn verify_bundle_via_bundle_json_schema_4_round_trip() {
     // Step 2: verify-bundle --bundle-json <path> with same re-derivation flags.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--template",
@@ -70,6 +72,7 @@ fn verify_bundle_via_bundle_json_schema3_envelope_fails_at_field_extraction_v0_5
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--template",
@@ -95,6 +98,7 @@ fn verify_bundle_bundle_json_conflicts_with_ms1() {
     // clap should reject --bundle-json + --ms1 simultaneously.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--template",

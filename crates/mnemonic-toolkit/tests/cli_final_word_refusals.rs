@@ -10,6 +10,7 @@ use assert_cmd::Command;
 fn invoke(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .args(args)
         .output()

@@ -1,2 +1,3 @@
-$MNEMONIC_BIN seedqr decode --from seedqr=000000000000000000000000000000000000000000000003 --json-out decode.json
+printf '%s' '000000000000000000000000000000000000000000000003' \
+  | $MNEMONIC_BIN seedqr decode --from seedqr=- --json-out decode.json
 cat decode.json

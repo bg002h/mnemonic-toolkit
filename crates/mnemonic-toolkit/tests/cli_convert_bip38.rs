@@ -42,6 +42,7 @@ const SPEC_V5_BIP38: &str = "6PYLtMnXvfG3oJde97zRyLYFZCYizPU5T3LwgdYJz1fRhh16bU7
 fn convert_value(args: &[&str]) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -163,6 +164,7 @@ fn decrypt_bip38_to_wif_vector4_compressed() {
 fn encrypt_wif_to_bip38_spec_vector3_unicode_nfc_passphrase_via_stdin() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -184,6 +186,7 @@ fn encrypt_wif_to_bip38_spec_vector3_unicode_nfc_passphrase_via_stdin() {
 fn decrypt_bip38_to_wif_spec_vector3_unicode_nfc_passphrase_via_stdin() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -219,6 +222,7 @@ fn passphrase_stdin_preserves_internal_whitespace() {
     ]);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -368,6 +372,7 @@ fn decrypt_bip38_to_wif_ec_multiplied_vector_ec4_lot_sequence_unicode() {
 fn refusal_wif_to_bip38_no_passphrase() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -390,6 +395,7 @@ fn refusal_wif_to_bip38_no_passphrase() {
 fn refusal_bip38_to_wif_no_passphrase() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -412,6 +418,7 @@ fn refusal_bip38_to_wif_no_passphrase() {
 fn refusal_bip38_to_wif_wrong_passphrase() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -436,6 +443,7 @@ fn refusal_bip38_to_wif_wrong_passphrase() {
 fn refusal_bip38_to_bip38_identity() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -764,6 +772,7 @@ const COMPOSITE_PATH: &str = "m/84'/0'/0'/0/0";
 fn composite_phrase_to_bip38_unset_bip38_passphrase_refuses() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -788,6 +797,7 @@ fn composite_phrase_to_bip38_unset_bip38_passphrase_refuses() {
 fn composite_entropy_to_bip38_unset_bip38_passphrase_refuses() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -813,6 +823,7 @@ fn composite_entropy_to_bip38_unset_bip38_passphrase_refuses() {
 fn composite_seedqr_to_bip38_unset_bip38_passphrase_refuses() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

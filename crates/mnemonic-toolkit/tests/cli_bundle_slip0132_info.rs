@@ -76,6 +76,7 @@ fn bundle_descriptor_watch_only_zpub_emits_info_line_then_card_no_warning() {
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -114,6 +115,7 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -151,6 +153,7 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
 fn bundle_watch_only_no_origin_xpub_inspect_shows_synthetic_path() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -181,6 +184,7 @@ fn bundle_watch_only_no_origin_xpub_inspect_shows_synthetic_path() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -206,6 +210,7 @@ fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -247,6 +252,7 @@ fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
 fn bundle_full_phrase_only_no_info_line_card_then_warning() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -297,6 +303,7 @@ fn bundle_multisig_two_normalized_slots_emit_info_lines_in_slot_order() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--network",
@@ -348,6 +355,7 @@ fn bundle_json_watch_only_zpub_emits_info_line_no_warning() {
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -385,6 +393,7 @@ fn bundle_no_engraving_card_zpub_emits_info_line_only() {
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",

@@ -49,6 +49,7 @@ fn candidates_hit_reports_matching_line() {
     let file = candidates_file("decoy1\ndecoy2\nsatoshi\ndecoy4\n");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -70,6 +71,7 @@ fn candidates_hit_json_carries_line_and_passphrase() {
     let file = candidates_file("decoy1\nsatoshi\n");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -96,6 +98,7 @@ fn candidates_miss_exit4_candidates_tried() {
     let file = candidates_file("nope1\nnope2\nnope3\n");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -120,6 +123,7 @@ fn candidates_abort_on_first_occurrence() {
     let file = candidates_file("x\nsatoshi\ny\nsatoshi\n"); // lines 2 and 4
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -144,6 +148,7 @@ fn candidates_blank_lines_skipped() {
     let file = candidates_file("nope1\n\nnope2\n");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -170,6 +175,7 @@ fn candidates_exact_bytes_trailing_space() {
     let hit = candidates_file("pw \n");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -185,6 +191,7 @@ fn candidates_exact_bytes_trailing_space() {
     let miss = candidates_file("pw\n");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -205,6 +212,7 @@ fn candidates_mutex_with_passphrase_exit_64() {
     let file = candidates_file("satoshi\n");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -226,6 +234,7 @@ fn candidates_mutex_with_passphrase_exit_64() {
 fn candidates_none_of_passphrase_sources_exit_64() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -244,6 +253,7 @@ fn candidates_empty_file_exit4_zero_tried() {
     let file = candidates_file("\n\n");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -267,6 +277,7 @@ fn candidates_default_stdout_does_not_echo_passphrase() {
     let file = candidates_file("decoy\nsatoshi\n");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -291,6 +302,7 @@ fn candidates_default_stdout_does_not_echo_passphrase() {
 fn candidates_missing_file_exit_1() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",
@@ -311,6 +323,7 @@ fn candidates_emits_sensitivity_advisory_on_stderr() {
     let file = candidates_file("decoy\nsatoshi\n");
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "passphrase-of-xpub",

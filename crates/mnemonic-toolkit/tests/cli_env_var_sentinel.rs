@@ -74,6 +74,7 @@ fn env_var_happy_path_ms1() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_MS1_0", &ms1)
         .args(&args)
         .assert()
@@ -109,6 +110,7 @@ fn env_var_unset_fails_exit_1() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         // Explicit env_remove ensures any environment leak from the parent
         // can't satisfy the lookup.
         .env_remove("MNEMONIC_TEST_NEVER_SET_DEFINITELY_NOT_PRESENT")
@@ -158,6 +160,7 @@ fn env_var_empty_string_preserves_v0_25_1_sentinel() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MNEMONIC_TEST_EMPTY_MS1", "")
         .args(&args)
         .assert()
@@ -176,6 +179,7 @@ fn env_var_empty_string_preserves_v0_25_1_sentinel() {
 fn env_var_invalid_name_with_space_fails() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -201,6 +205,7 @@ fn env_var_invalid_name_with_space_fails() {
 fn env_var_invalid_name_leading_digit_fails() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -226,6 +231,7 @@ fn env_var_invalid_name_leading_digit_fails() {
 fn env_var_invalid_name_empty_fails() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -249,6 +255,7 @@ fn env_var_invalid_name_empty_fails() {
 fn env_var_invalid_name_lowercase_fails() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -283,6 +290,7 @@ fn env_var_works_on_passphrase_via_bundle() {
         std::fs::read_to_string("tests/vectors/v0_1/bip84-mainnet.txt").expect("fixture exists");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("WALLET_PP", "")
         .args([
             "bundle",
@@ -320,6 +328,7 @@ fn env_var_works_on_bip38_passphrase_via_convert() {
     let expected_bip38 = "6PRVWUbkzzsbcVac2qwfssoUJAN1Xhrg6bNk8J7Nzm5H7kxEbn2Nh2ZoGg";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("BIP38_PP", "TestingOneTwoThree")
         .args([
             "convert",
@@ -353,6 +362,7 @@ fn env_var_works_on_bip38_passphrase_via_convert() {
 fn env_var_works_on_share_unset_fails() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env_remove("MNEMONIC_TEST_NEVER_SET_SHARE_X")
         .args([
             "slip39",
@@ -378,6 +388,7 @@ fn env_var_works_on_slot_subkey_phrase() {
         std::fs::read_to_string("tests/vectors/v0_1/bip84-mainnet.txt").expect("fixture exists");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("PHRASE_0", TREZOR_24)
         .args([
             "bundle",
@@ -415,6 +426,7 @@ fn env_var_works_on_slot_subkey_entropy() {
         std::fs::read_to_string("tests/vectors/v0_1/bip84-mainnet.txt").expect("fixture exists");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("ENTROPY_0", entropy_hex)
         .args([
             "bundle",
@@ -478,6 +490,7 @@ fn env_var_repeated_same_var_resolves_consistently() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("V", "")
         .args(&args)
         .assert()
@@ -510,6 +523,7 @@ fn env_var_mixed_with_literal_ms1() {
     // env-var for that slot.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("MS1_0", &ms1)
         .args([
             "verify-bundle",
@@ -544,6 +558,7 @@ fn env_var_two_stdin_sentinels_still_fails() {
     // NOT regress that behavior.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--network",
@@ -597,6 +612,7 @@ fn env_var_literal_at_prefix_passes_through() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .failure()
@@ -617,6 +633,7 @@ fn env_var_on_non_secret_flag_passes_through() {
     // EnvVarMissing.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("NET", "mainnet")
         .args([
             "verify-bundle",
@@ -650,6 +667,7 @@ fn env_var_passphrase_non_empty_changes_derivation() {
         std::fs::read_to_string("tests/vectors/v0_1/bip84-mainnet.txt").expect("fixture exists");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("WALLET_PP", "non-empty-passphrase")
         .args([
             "bundle",
@@ -786,6 +804,7 @@ fn i1_fold_no_advisory_when_passphrase_uses_env_sentinel() {
     // warning on stderr (user already routed via env-var channel).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("WALLET_PP_I1", "")
         .args([
             "bundle",
@@ -814,6 +833,7 @@ fn i1_fold_advisory_still_fires_on_literal_passphrase() {
     // emit the secret-in-argv warning (advisory not silenced wholesale).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -841,6 +861,7 @@ fn i1_fold_no_advisory_when_slot_phrase_uses_env_sentinel() {
     // secret-in-argv advisory.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .env("PHRASE_I1", TREZOR_24)
         .args([
             "bundle",

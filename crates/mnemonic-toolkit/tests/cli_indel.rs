@@ -60,6 +60,9 @@ fn flip_data(s: &str, i: usize) -> String {
 /// Build a command with the deterministic-advisory TTY env set.
 fn cmd() -> Command {
     let mut c = Command::cargo_bin("mnemonic").unwrap();
+    // P3 6d: single construction site for this file, so the argv override is
+    // applied here once rather than at every caller.
+    c.arg("--allow-argv-secret");
     c.env("MNEMONIC_FORCE_TTY", "1");
     c
 }

@@ -28,6 +28,7 @@ fn policy_singlesig() -> String {
 fn run_ok(args: &[&str]) -> String {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(args)
         .assert()
         .success();
@@ -208,6 +209,7 @@ fn export_wallet_descriptor_bip388_policy_to_bitcoin_core() {
 fn export_wallet_raw_policy_not_refused_by_at_n_guard() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--descriptor",
@@ -233,6 +235,7 @@ fn export_wallet_bip388_policy_at_n_beyond_keys_info_refused() {
     );
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--descriptor",
@@ -292,6 +295,7 @@ fn bundle_descriptor_bip388_bare_key_policy_refused() {
         format!(r#"{{"name":"x","description_template":"wpkh(@0/**)","keys_info":["{A}"]}}"#);
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["bundle", "--descriptor", &bare, "--network", "mainnet"])
         .assert()
         .failure()
@@ -308,6 +312,7 @@ fn xpub_search_bip388_policy_at_n_beyond_keys_info_refused() {
     );
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search", "account-of-descriptor", "--descriptor", &bad,
             "--phrase",

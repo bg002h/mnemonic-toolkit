@@ -108,6 +108,7 @@ fn japanese_phrase_bundle_emits_mnem_ms1() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -156,6 +157,7 @@ fn japanese_phrase_bundle_ms1_round_trips_to_phrase() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -179,6 +181,7 @@ fn japanese_phrase_bundle_ms1_round_trips_to_phrase() {
     // Convert the mnem ms1 back to a phrase — must recover the original ja phrase.
     let out2 = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -229,6 +232,7 @@ fn ja_mnem_source_import_json_re_emits_ja_mnem() {
     // Build a watch-only bundle using the descriptor (so bundle JSON has descriptor != null).
     let watch_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -256,6 +260,7 @@ fn ja_mnem_source_import_json_re_emits_ja_mnem() {
 
     let rebundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--import-json",
@@ -321,6 +326,7 @@ fn mixed_language_import_json_re_emits_mnem_ja_and_entr() {
     // Build a watch-only 2-of-2 bundle from the descriptor.
     let watch_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -352,6 +358,7 @@ fn mixed_language_import_json_re_emits_mnem_ja_and_entr() {
 
     let rebundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--import-json",
@@ -388,6 +395,7 @@ fn english_phrase_convert_ms1_golden_byte_identity() {
     // This gates the back-compat invariant: the Entr branch is untouched by Step 5.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -427,6 +435,7 @@ fn inspect_ja_mnem_ms1_reports_kind_and_language() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", &ja_ms1])
         .assert()
         .success();
@@ -451,6 +460,7 @@ fn inspect_ja_mnem_ms1_json_includes_language_field() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", &ja_ms1, "--json"])
         .assert()
         .success();
@@ -475,6 +485,7 @@ fn inspect_english_entr_ms1_no_language_field() {
     // English entr cards must NOT have a language field in inspect output.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", ENGLISH_MS1_GOLDEN])
         .assert()
         .success();
@@ -487,6 +498,7 @@ fn inspect_english_entr_ms1_no_language_field() {
 
     let out_json = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", ENGLISH_MS1_GOLDEN, "--json"])
         .assert()
         .success();
@@ -526,6 +538,7 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
     // the phrase, so the phrase is the only required slot input.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -587,6 +600,7 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -610,6 +624,7 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
     // Convert back to phrase → must recover the original ja phrase.
     let out2 = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -642,6 +657,7 @@ fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -727,6 +743,7 @@ fn import_json_entr_card_stays_entr_under_language_japanese() {
     // Build a watch-only bundle using the descriptor so bundle JSON has descriptor != null.
     let watch_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -755,6 +772,7 @@ fn import_json_entr_card_stays_entr_under_language_japanese() {
     // Re-bundle with --language japanese — the entr card must stay entr.
     let rebundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--import-json",

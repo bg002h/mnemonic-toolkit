@@ -79,6 +79,7 @@ const CONFLICT_MSG: &str = "has both secret-bearing input and watch-only input; 
 fn ms1_plus_path_canonical_descriptor_refused_exit2() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -109,6 +110,7 @@ fn ms1_plus_path_canonical_descriptor_refused_exit2() {
 fn seedqr_plus_path_canonical_descriptor_refused_exit2() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -144,6 +146,7 @@ fn ms1_entr_byte_identical_to_entropy_slot_all_lengths() {
 
         let via_entropy = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args([
                 "bundle",
                 "--template",
@@ -159,6 +162,7 @@ fn ms1_entr_byte_identical_to_entropy_slot_all_lengths() {
             .success();
         let via_ms1 = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args([
                 "bundle",
                 "--template",
@@ -193,6 +197,7 @@ fn ms1_mnem_japanese_matches_phrase_and_emits_mnem_card() {
 
     let via_phrase = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -213,6 +218,7 @@ fn ms1_mnem_japanese_matches_phrase_and_emits_mnem_card() {
 
     let via_ms1 = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -269,6 +275,7 @@ fn ms1_mnem_language_conflict_exit2() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -307,6 +314,7 @@ fn ms1_entr_descriptor_mode_derives_cosigner() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -340,6 +348,7 @@ fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -402,6 +411,7 @@ fn gen_singlesig_bundle(
     }
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -474,6 +484,7 @@ fn verify_bundle_round_trip_entr_ms1() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -520,6 +531,7 @@ fn verify_bundle_round_trip_mnem_japanese_ms1() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -535,6 +547,7 @@ fn verify_bundle_mnem_language_conflict_exit2() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--template",
@@ -567,6 +580,7 @@ fn verify_bundle_descriptor_mode_ms1_cosigner_verified() {
     // Build a non-canonical single-`@0` descriptor bundle.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -608,6 +622,7 @@ fn verify_bundle_descriptor_mode_ms1_cosigner_verified() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -636,6 +651,7 @@ fn ms1_kofn_share_rejected_with_combine_prose() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -669,6 +685,7 @@ fn ms1_mnem_english_emits_entr_card_documented_edge() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",
@@ -702,6 +719,7 @@ fn ms1_mnem_self_check_round_trips() {
 
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--template",

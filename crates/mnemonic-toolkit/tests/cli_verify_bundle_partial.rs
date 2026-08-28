@@ -137,6 +137,7 @@ fn verify_bundle_multisig_elided_md1_is_partial_exit_4() {
         args.extend(extra.clone());
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&args)
             .env("MNEMONIC_FORCE_TTY", "1")
             .output()
@@ -166,6 +167,7 @@ fn verify_bundle_multisig_original_md1_stays_ok_exit_0() {
     args.push("--no-auto-repair".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -204,6 +206,7 @@ fn verify_bundle_mismatch_beats_partial() {
     push_md1(&mut args, &dead);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -226,6 +229,7 @@ fn verify_bundle_doctored_content_id_dead_card_verdicts_mismatch_oracle_intact()
     args.push("--no-auto-repair".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -270,6 +274,7 @@ fn verify_bundle_json_partial_field_present_on_partial() {
     args.push("--no-auto-repair".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -294,6 +299,7 @@ fn verify_bundle_json_no_partial_field_on_ok() {
     args.push("--no-auto-repair".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -325,6 +331,7 @@ fn verify_bundle_descriptor_singlesig_elided_md1_is_partial_exit_4() {
     push_md1(&mut args, &dead);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -354,6 +361,7 @@ fn verify_bundle_descriptor_singlesig_original_md1_stays_ok() {
     push_md1(&mut args, &orig);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();
@@ -375,6 +383,7 @@ fn restore_md1_refuses_the_same_dead_card() {
     args.push("--no-auto-repair".into());
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .output()
         .unwrap();

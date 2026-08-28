@@ -16,6 +16,7 @@ fn descriptor_full_singlesig_bip84_emits_valid_bundle() {
     let descriptor = format!("wpkh(@0[{TREZOR_FP_HEX}/84'/0'/0']/<0;1>/*)");
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -53,6 +54,7 @@ fn descriptor_watch_only_singlesig_emits_no_ms1() {
     let descriptor = "wpkh(@0/<0;1>/*)";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -82,6 +84,7 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
     // Step 1: emit bundle.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -133,6 +136,7 @@ fn descriptor_bundle_round_trips_through_verify_bundle() {
     }
     let verify_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -151,6 +155,7 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
     // Emit, then mangle mk1 before verify.
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -195,6 +200,7 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
     }
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .failure()
@@ -220,6 +226,7 @@ const MASKED_VB_KEY_B: &str = "[97139860/48'/1'/2'/2']tpubDFiXyf7zmBhQrSHoAQB6Sm
 fn bundle_then_verify_flags(descriptor: &str) -> Vec<String> {
     let produced = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -267,6 +274,7 @@ fn verify_bundle_descriptor_masked_older_emits_advisory() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -297,6 +305,7 @@ fn verify_bundle_descriptor_clean_older_emits_no_advisory() {
 
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success()
@@ -323,6 +332,7 @@ fn descriptor_watch_only_singlesig_accepts_zpub_input_via_slip0132_normalizer() 
 
     let from_xpub = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -339,6 +349,7 @@ fn descriptor_watch_only_singlesig_accepts_zpub_input_via_slip0132_normalizer() 
         .success();
     let from_zpub = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",

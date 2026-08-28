@@ -25,6 +25,7 @@ const ENTROPY_32_ZEROS_HEX: &str =
 fn split(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args(args)
@@ -40,6 +41,7 @@ fn split(args: &[&str]) -> (String, String, i32) {
 fn combine(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(args)

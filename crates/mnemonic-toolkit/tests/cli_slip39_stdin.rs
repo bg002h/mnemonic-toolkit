@@ -25,6 +25,7 @@ const ABANDON_12: &str =
 fn stdin_split_from_dash_round_trip() {
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -48,6 +49,7 @@ fn stdin_split_from_dash_round_trip() {
     assert_eq!(shares.len(), 3);
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args([
@@ -77,6 +79,7 @@ fn stdin_combine_one_share_dash_round_trip() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -100,6 +103,7 @@ fn stdin_combine_one_share_dash_round_trip() {
     let stdin_share = &shares[1];
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args([
@@ -133,6 +137,7 @@ fn stdin_split_passphrase_stdin_round_trip() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -156,6 +161,7 @@ fn stdin_split_passphrase_stdin_round_trip() {
         .collect();
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args([
@@ -187,6 +193,7 @@ fn stdin_combine_passphrase_stdin_round_trip() {
     let from_arg = format!("phrase={ABANDON_12}");
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -210,6 +217,7 @@ fn stdin_combine_passphrase_stdin_round_trip() {
         .collect();
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args([
@@ -240,6 +248,7 @@ fn stdin_refusal_pairwise_a_combine_passphrase_stdin_plus_share_dash() {
     let placeholder = "academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic academic";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", placeholder, "--share", "-", "--passphrase-stdin"])
@@ -264,6 +273,7 @@ fn stdin_refusal_pairwise_a_combine_passphrase_stdin_plus_share_dash() {
 fn stdin_refusal_pairwise_b_split_passphrase_stdin_plus_from_dash() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -296,6 +306,7 @@ fn stdin_refusal_pairwise_b_split_passphrase_stdin_plus_from_dash() {
 fn stdin_refusal_pairwise_c_combine_two_share_dash() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args(["--share", "-", "--share", "-"])
@@ -337,6 +348,7 @@ fn stdin_passphrase_stdin_preserves_trailing_whitespace_r0_note_2() {
     // Split via --passphrase-stdin.
     let split_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("split")
         .args([
@@ -365,6 +377,7 @@ fn stdin_passphrase_stdin_preserves_trailing_whitespace_r0_note_2() {
     // preserved exactly in the argv slot).
     let combine_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("slip39")
         .arg("combine")
         .args([

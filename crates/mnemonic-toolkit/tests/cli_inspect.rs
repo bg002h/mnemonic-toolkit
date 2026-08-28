@@ -40,6 +40,7 @@ const VALID_MD1_CHUNK2: &str =
 fn cell_15_ms1_text_form_structure_secret_suppressed_by_default() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -64,6 +65,7 @@ fn cell_16_mk1_and_md1_text_form_structures() {
     // mk1 sub-cell: full 2-chunk bundle should yield xpub-bearing summary.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--mk1",
@@ -82,6 +84,7 @@ fn cell_16_mk1_and_md1_text_form_structures() {
     // md1 sub-cell: 3-chunk bundle, structural summary fields.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--md1",
@@ -106,6 +109,7 @@ fn cell_17_reveal_secret_gate_on_ms1_entropy_hex() {
     // Default: no hex.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -115,6 +119,7 @@ fn cell_17_reveal_secret_gate_on_ms1_entropy_hex() {
     // With --reveal-secret: hex appears.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--reveal-secret", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -140,6 +145,7 @@ fn inspect_json_envelope_schema_version_v_0_27_0() {
     // ms1 kind
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--json", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -155,6 +161,7 @@ fn inspect_json_envelope_schema_version_v_0_27_0() {
     // mk1 kind
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--json",
@@ -176,6 +183,7 @@ fn inspect_json_envelope_schema_version_v_0_27_0() {
     // md1 kind
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--json",
@@ -260,6 +268,7 @@ fn inspect_md1_text_template_line_matches_in_crate_render() {
         }
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&args)
             .assert()
             .code(0)
@@ -291,6 +300,7 @@ fn inspect_md1_json_carries_template_and_schema_v2() {
         }
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&args)
             .assert()
             .code(0)
@@ -319,6 +329,7 @@ fn inspect_ms1_mk1_bodies_have_no_template_but_envelope_is_schema_v2() {
     // ms1 text: no template line.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -334,6 +345,7 @@ fn inspect_ms1_mk1_bodies_have_no_template_but_envelope_is_schema_v2() {
     // ms1 json: schema_version "2", no template field.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--json", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -351,6 +363,7 @@ fn inspect_ms1_mk1_bodies_have_no_template_but_envelope_is_schema_v2() {
     // mk1 text: no template line.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--mk1",
@@ -372,6 +385,7 @@ fn inspect_ms1_mk1_bodies_have_no_template_but_envelope_is_schema_v2() {
     // mk1 json: schema_version "2", no template field.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             "--json",
@@ -412,6 +426,7 @@ const ARGV_ADVISORY_PREFIX: &str = "warning: secret material on argv";
 fn inspect_inline_ms1_fires_secret_in_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", VALID_MS1])
         .assert()
         .code(0)
@@ -436,6 +451,7 @@ fn inspect_inline_ms1_fires_secret_in_argv_advisory() {
 fn inspect_mixed_inline_flag_and_positional_ms1_fire_per_occurrence() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", VALID_MS1, VALID_MS1])
         .assert()
         .get_output()
@@ -463,6 +479,7 @@ fn inspect_mixed_inline_flag_and_positional_ms1_fire_per_occurrence() {
 fn inspect_ms1_stdin_dash_does_not_fire_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["inspect", "--ms1", "-"])
         .write_stdin(format!("{VALID_MS1}\n"))
         .assert()
@@ -481,6 +498,7 @@ fn inspect_ms1_stdin_dash_does_not_fire_argv_advisory() {
 fn inspect_positional_mk1_md1_only_does_not_fire_argv_advisory() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "inspect",
             VALID_MK1_CHUNK0,

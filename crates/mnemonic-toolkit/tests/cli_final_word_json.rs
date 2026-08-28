@@ -20,6 +20,7 @@ fn invoke_with_json_out(partial: &str, language: &str) -> (String, Value, i32) {
     drop(f);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", partial))
@@ -104,6 +105,7 @@ fn json_out_does_not_suppress_plain_stdout() {
     drop(f);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .arg("final-word")
         .arg("--from")
         .arg(format!("phrase={}", ABANDON_11_PARTIAL))

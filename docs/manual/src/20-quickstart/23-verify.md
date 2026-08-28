@@ -14,10 +14,11 @@ single-sig BIP-84 mainnet wallet with one ms1, two mk1 strings, and
 three md1 strings:
 
 ```sh
-mnemonic verify-bundle \
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic verify-bundle \
   --network mainnet \
   --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
+  --slot @0.phrase=- \
   --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
   --mk1 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
@@ -40,8 +41,8 @@ original `bundle` invocation are required so the verifier knows what
 
 ## Output
 
-```{.text include="23-verify.out" lines="2-11"}
-PLACEHOLDER — generated from transcripts/23-verify.out lines 2-11 at build
+```{.text include="23-verify.out" lines="1-10"}
+PLACEHOLDER — generated from transcripts/23-verify.out lines 1-10 at build
 ```
 
 Each line is a discrete check. The four checks per card type are:

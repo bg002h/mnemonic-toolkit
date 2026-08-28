@@ -21,6 +21,9 @@ fn fixture_path(name: &str) -> PathBuf {
 
 fn import_cmd() -> Command {
     let mut cmd = Command::cargo_bin("mnemonic").unwrap();
+    // P3 6d: single construction site for this file, so the argv override is
+    // applied here once rather than at every caller.
+    cmd.arg("--allow-argv-secret");
     cmd.arg("import-wallet");
     cmd
 }

@@ -56,6 +56,7 @@ fn account_of_descriptor_single_sig_wpkh_literal_xpub_match() {
     let descriptor = format!("wpkh([{}/84'/0'/0']{}/<0;1>/*)", fp, xpub);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -103,6 +104,7 @@ fn account_of_descriptor_multisig_sortedmulti_match_at_cosigner_1() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -145,6 +147,7 @@ fn account_of_descriptor_multisig_no_match_exits_4() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -185,6 +188,7 @@ fn account_of_descriptor_md1_stdin_multi_chunk_match() {
     // Emit a bundle (full single-sig) to obtain the md1 card.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -212,6 +216,7 @@ fn account_of_descriptor_md1_stdin_multi_chunk_match() {
 
     let xs_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -242,6 +247,7 @@ fn account_of_descriptor_md1_stdin_multi_chunk_match() {
 fn account_of_descriptor_unknown_descriptor_from_node_refused() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -269,6 +275,7 @@ fn account_of_descriptor_bip388_json_match() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -300,6 +307,7 @@ fn account_of_descriptor_toolkit_at_n_placeholder_refused() {
     let descriptor = "wsh(sortedmulti(2,@0[deadbeef/48'/0'/0'/2'],@1[cafebabe/48'/0'/0'/2'],@2[12345678/48'/0'/0'/2']))";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -337,6 +345,7 @@ fn account_of_descriptor_default_path_inference_emits_stderr_notice() {
     );
     let assertion = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -380,6 +389,7 @@ fn account_of_descriptor_nums_sentinel_marks_internal_key_unspendable() {
     );
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -411,6 +421,7 @@ fn account_of_descriptor_no_xpubs_in_descriptor_refused() {
     let descriptor = "wpkh(02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5)";
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -438,6 +449,7 @@ fn account_of_descriptor_max_account_widens_per_cosigner_range() {
     // Default: no match.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -452,6 +464,7 @@ fn account_of_descriptor_max_account_widens_per_cosigner_range() {
     // --max-account 50: match.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -486,6 +499,7 @@ fn account_of_descriptor_add_path_extends_candidates() {
     // Without --add-path: no match.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -500,6 +514,7 @@ fn account_of_descriptor_add_path_extends_candidates() {
     // With --add-path: match.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -534,6 +549,7 @@ fn account_of_descriptor_passphrase_honored() {
     // Without passphrase: no match.
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -548,6 +564,7 @@ fn account_of_descriptor_passphrase_honored() {
     // With --passphrase: match.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",
@@ -578,6 +595,7 @@ fn account_of_descriptor_json_envelope_byte_exact() {
     let descriptor = format!("wpkh([{}/84'/0'/0']{}/<0;1>/*)", fp, xpub);
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "xpub-search",
             "account-of-descriptor",

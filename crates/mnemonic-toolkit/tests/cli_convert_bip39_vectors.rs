@@ -46,6 +46,7 @@ fn assert_bip39_quad(
     // (1) CLI phrase → entropy.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -65,6 +66,7 @@ fn assert_bip39_quad(
     // (2) CLI entropy → phrase.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

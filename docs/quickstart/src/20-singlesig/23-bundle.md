@@ -10,10 +10,11 @@ BIP-84 mainnet wallet. End-to-end takes about three minutes.
 > entropy safely](22-generate-entropy.md) for the full warning.
 
 ```sh
-mnemonic bundle \
-  --network mainnet \
-  --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic bundle \
+      --network mainnet \
+      --template bip84 \
+      --slot @0.phrase=-
 ```
 
 Three flags carry the work:
@@ -50,7 +51,7 @@ engraving. For a real seed, pipe the phrase in via
 also prints a leading `warning:` about argv exposure, omitted below
 for brevity:
 
-```{.text include="qs-23-bundle.out" lines="2-"}
+```{.text include="qs-23-bundle.out" lines="1-"}
 ```
 
 ## Reading the output

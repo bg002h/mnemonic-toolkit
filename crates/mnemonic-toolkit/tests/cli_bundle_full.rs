@@ -18,6 +18,7 @@ fn bundle_full_16_cells_byte_exact_against_pinned_vectors() {
                 .expect("fixture exists");
             let out = Command::cargo_bin("mnemonic")
                 .unwrap()
+                .arg("--allow-argv-secret")
                 .args([
                     "bundle",
                     "--slot",
@@ -66,6 +67,7 @@ fn bundle_default_text_is_unbroken_print_once() {
         args.extend_from_slice(extra);
         let out = Command::cargo_bin("mnemonic")
             .unwrap()
+            .arg("--allow-argv-secret")
             .args(&args)
             .assert()
             .success();
@@ -107,6 +109,7 @@ fn bundle_default_text_is_unbroken_print_once() {
     // otherwise complete and exited 0 before P3.
     let hyphen = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -131,6 +134,7 @@ fn bundle_default_text_is_unbroken_print_once() {
     // Invalid separator → clap parse error (non-zero exit).
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -155,6 +159,7 @@ fn bundle_default_text_is_unbroken_print_once() {
 fn bundle_full_emits_secret_on_stdout_warning() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -181,6 +186,7 @@ fn bundle_full_emits_secret_on_stdout_warning() {
 fn bundle_full_json_mode_emits_secret_on_stdout_warning() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--slot",
@@ -223,6 +229,7 @@ fn bundle_descriptor_masked_older_emits_advisory() {
     let descriptor = "wsh(and_v(v:multi(2,@0/<0;1>/*,@1/<0;1>/*),older(65536)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -260,6 +267,7 @@ fn bundle_descriptor_clean_older_emits_no_advisory() {
     let descriptor = "wsh(and_v(v:multi(2,@0/<0;1>/*,@1/<0;1>/*),older(2016)))";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",

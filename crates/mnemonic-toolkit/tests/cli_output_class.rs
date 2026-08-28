@@ -19,7 +19,11 @@ const TV_CIPHERTEXT: &str = "ABEiM0RVZneImaq7zN3u/zY0181f7qAY/NWiVQFLdHE=";
 const TV_PASSWORD: &str = "test-password";
 
 fn mnemonic() -> Command {
-    Command::cargo_bin("mnemonic").unwrap()
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").unwrap();
+    c.arg("--allow-argv-secret");
+    c
 }
 fn stderr(o: &std::process::Output) -> String {
     String::from_utf8_lossy(&o.stderr).into()

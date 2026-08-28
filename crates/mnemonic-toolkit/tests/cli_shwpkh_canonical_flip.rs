@@ -58,6 +58,7 @@ fn bundle(descriptor: &str, slots: &[&str]) -> (Value, String) {
     }
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .success();
@@ -208,6 +209,7 @@ fn non_canonical_descriptor_still_gets_default_path_notice() {
 fn flip2_shwpkh_nonzero_account_refuses_mode_violation() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -237,6 +239,7 @@ fn flip2_shwpkh_nonzero_account_refuses_mode_violation() {
 fn flip2_shwpkh_account_zero_still_succeeds() {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -266,6 +269,7 @@ fn flip2_shwpkh_account_zero_still_succeeds() {
 fn flip3_shwpkh_secret_bearing_path_override_refuses() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",
@@ -364,6 +368,7 @@ fn flip4_preflip_elided_shwpkh_bundle_fails_verify_as_byte_mismatch() {
 
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(&args)
         .assert()
         .failure(); // fail-LOUD (exit 4 = mismatch), NOT a false-pass
@@ -447,6 +452,7 @@ const FORGED_KEYLESS_SHWPKH_TEMPLATE_MD1: &str = "md1fn3lnqqpqqqxqqzltp2wcfn0fqa
 fn guard_restore_keyless_shwpkh_template_refuses_never_49prime() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "restore",
             "--md1",
@@ -484,6 +490,7 @@ fn guard_verify_keyless_shwpkh_template_never_singlesig_template_path() {
     // decided from the md1 alone (before the cards are matched).
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
             "--md1",
@@ -518,6 +525,7 @@ fn guard_verify_keyless_shwpkh_template_never_singlesig_template_path() {
 fn mirror_unchanged_shwpkh_template_emit_still_refused() {
     let assert = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "bundle",
             "--descriptor",

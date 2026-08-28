@@ -46,7 +46,11 @@ const SORTEDMULTI_A_OVERRIDE: &str = "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3
 const NONTAPROOT_OVERRIDE: &str = "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))";
 
 fn bin() -> Command {
-    Command::cargo_bin("mnemonic").expect("binary built")
+    // P3 6d: this helper is the file's only construction site, so the argv
+    // override is applied here once rather than at every caller.
+    let mut c = Command::cargo_bin("mnemonic").expect("binary built");
+    c.arg("--allow-argv-secret");
+    c
 }
 
 /// `bundle --descriptor <desc>` with two phrase-slots, `--json --no-engraving-card`.

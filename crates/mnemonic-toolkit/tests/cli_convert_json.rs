@@ -10,6 +10,7 @@ const TREZOR_BIP84_MAINNET_XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4Jxdt
 fn json_secret_from_node_omits_from_value() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -41,6 +42,7 @@ fn json_secret_from_node_omits_from_value() {
 fn json_public_from_node_includes_from_value() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -62,6 +64,7 @@ fn json_public_from_node_includes_from_value() {
 fn json_compound_to_preserves_argument_order() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",

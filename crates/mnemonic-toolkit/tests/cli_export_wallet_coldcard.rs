@@ -69,6 +69,7 @@ const COSIGNER_C_FP: &str = TREZOR_24_MASTER_FP;
 fn cell_1_coldcard_generic_bip84_mainnet_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -101,6 +102,7 @@ fn cell_1_coldcard_generic_bip84_mainnet_byte_exact() {
 fn cell_2_coldcard_generic_bip49_testnet_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -132,6 +134,7 @@ fn cell_2_coldcard_generic_bip49_testnet_byte_exact() {
 fn cell_3_coldcard_generic_bip44_mainnet_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -164,6 +167,7 @@ fn cell_3_coldcard_generic_bip44_mainnet_byte_exact() {
 fn cell_4_coldcard_bip86_refuses_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -200,6 +204,7 @@ fn cell_4_coldcard_bip86_refuses_byte_exact() {
 fn cell_5_coldcard_multisig_2of3_wsh_sortedmulti_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -252,6 +257,7 @@ fn cell_5_coldcard_multisig_2of3_wsh_sortedmulti_byte_exact() {
 fn cell_8_coldcard_master_xpub_plumbing_byte_exact() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -300,6 +306,7 @@ fn cell_8_coldcard_master_xpub_plumbing_byte_exact() {
 fn cell_9_coldcard_master_xpub_absent_omits_top_level_xpub() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -332,6 +339,7 @@ fn cell_9_coldcard_master_xpub_absent_omits_top_level_xpub() {
 fn cell_6_coldcard_tr_multi_a_refuses() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -385,6 +393,7 @@ fn cell_7_coldcard_wallet_name_non_ascii_truncation_no_panic() {
     let long_emoji_name = "\u{1F910}".repeat(25); // 25 chars, 100 bytes
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -440,6 +449,7 @@ fn cell_7_coldcard_wallet_name_non_ascii_truncation_no_panic() {
 fn cell_1_coldcard_bip84_vector_consistency_with_derive_pipeline() {
     let xpub_out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "convert",
             "--from",
@@ -478,6 +488,7 @@ fn export_wallet_coldcard_multisig_format_wsh_sortedmulti_2_of_3_emits_text() {
     // multisig-template arm of ColdcardEmitter::emit delegates identically).
     let out = assert_cmd::Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format", "coldcard-multisig",
@@ -514,6 +525,7 @@ fn export_wallet_coldcard_multisig_format_wsh_sortedmulti_2_of_3_emits_text() {
 fn export_wallet_coldcard_multisig_format_refuses_singlesig_template_bip84() {
     let out = assert_cmd::Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format", "coldcard-multisig",
@@ -541,6 +553,7 @@ fn export_wallet_coldcard_multisig_format_refuses_singlesig_template_bip84() {
 fn export_wallet_coldcard_multisig_format_refuses_no_template() {
     let out = assert_cmd::Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -571,6 +584,7 @@ fn export_wallet_coldcard_multisig_format_refuses_no_template() {
 fn run_divergent_export(format: &str) -> std::process::Output {
     Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -683,6 +697,7 @@ fn export_coldcard_multisig_sort_order_ne_slot_order_pairs_correctly() {
 fn export_coldcard_multisig_shared_path_unchanged() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "export-wallet",
             "--format",
@@ -758,6 +773,7 @@ fn roundtrip_divergent_master_fp_and_paths_preserved() {
 
     let imp = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args([
             "import-wallet",
             "--blob",

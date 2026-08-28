@@ -14,10 +14,11 @@ in the bundle output:
 > [Generating entropy safely](22-generate-entropy.md).
 
 ```sh
-mnemonic verify-bundle \
-  --network mainnet \
-  --template bip84 \
-  --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic verify-bundle \
+      --network mainnet \
+      --template bip84 \
+      --slot @0.phrase=- \
   --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
   --mk1 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
@@ -39,7 +40,7 @@ original `bundle` invocation so the verifier knows what to expect.
 
 ## Output
 
-```{.text include="qs-24-verify.out" lines="2-"}
+```{.text include="qs-24-verify.out" lines="1-"}
 ```
 
 Each line is a discrete check. `*_decode` lines confirm the BCH
