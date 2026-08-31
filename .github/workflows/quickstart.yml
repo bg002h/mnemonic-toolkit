@@ -80,7 +80,7 @@ jobs:
         # Mirrors the mk-cli install pattern above. Use package-name selector
         # (`md-cli`); the descriptor-mnemonic workspace ships multiple binaries.
         # `--features cli-compiler` matches scripts/install.sh's component pin.
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.2 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.14.0 md-cli --features cli-compiler
 
       - name: Install ms-cli
         # Mirrors the mk-cli + md-cli install patterns above.
