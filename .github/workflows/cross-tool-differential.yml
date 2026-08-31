@@ -52,7 +52,32 @@ jobs:
         # harness therefore calls `md encode --force-chunked` (see
         # cli_cross_tool_differential.rs::md_cli_ids), which is what keeps this
         # gate GREEN at v0.9.2; without it every entry would ToolError.
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.14.0 md-cli --features cli-compiler
+        #
+        # DELIBERATELY FROZEN at v0.11.2, out of lockstep with install.sh's
+        # v0.14.0 canonical (2026-08-31 md-cli pin-bump PR #67) — sibling-
+        # pin-check.yml will report ONE known mismatch on this line until a
+        # dedicated follow-up lands. Root-caused, not guessed: both
+        # `toolkit_ids()` and `md_cli_ids()` in
+        # cli_cross_tool_differential.rs round-trip their chunks through
+        # `md inspect` (this job's MD_BIN) to compute the compared ids, so
+        # BOTH sides depend on it. md-cli v0.14.0 ships F-217 ("refuse a
+        # card that declares ONE key origin for TWO different keys"), and
+        # 10 of this corpus's 17 entries (wsh-multi-2of2, tr-pk-leaf,
+        # wsh-and_v, wsh-or_d, wsh-sortedmulti-2of2, sh-wsh-sortedmulti,
+        # wsh-thresh-2of2, wsh-or_i, wsh-and_b, wsh-t-or_c,
+        # wsh-andor-hashlock) reuse the same [fp/path] origin across two
+        # different xpubs — exactly the pattern F-217 now correctly
+        # refuses. Verified locally: at v0.11.2 all 17 entries Match; at
+        # v0.14.0 those 10 become BothError (both tools correctly refuse,
+        # but `classify()` has no "both refused, as expected" verdict, only
+        # Match/Diverge/ToolError/BothError). This is real corpus/oracle
+        # staleness in the test itself (predates this PR — CI simply never
+        # re-ran this path-filtered job since F-217 shipped), not a
+        # wire-format regression to chase via a version bump. Bump this pin
+        # only alongside a fix to cli_cross_tool_differential.rs's corpus
+        # (retire or re-key the 10 now-invalid entries) or its oracle (add
+        # an expected-BothError class for F-217-refused inputs).
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.2 md-cli --features cli-compiler
 
       - name: Build mnemonic binary (debug)
         run: cargo build --bin mnemonic
