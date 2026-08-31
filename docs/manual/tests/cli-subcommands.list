@@ -46,6 +46,8 @@ md encode
 md decode
 md inspect
 md address
+md descriptor
+md decompose
 md bytecode
 md compile
 md vectors
