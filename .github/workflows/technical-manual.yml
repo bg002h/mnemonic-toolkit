@@ -111,7 +111,7 @@ jobs:
       - name: Install md-cli
         # `--features cli-compiler` matches scripts/install.sh's component pin
         # (the technical-manual md1 transcripts exercise the compiler path).
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.2 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.14.0 md-cli --features cli-compiler
 
       - name: Install ms-cli
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.16.0 ms-cli
