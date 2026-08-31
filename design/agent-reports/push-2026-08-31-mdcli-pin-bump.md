@@ -129,8 +129,95 @@ Single commit `c5c224b6` on branch `md-cli-pin-0.14.0`, 5 files / 5 lines:
 `.github/workflows/cross-tool-differential.yml`, `scripts/install.sh` — one
 `--tag` string changed per file, nothing else touched.
 
+## Fold commit — real CI drift found and fixed
+
+Round-1 CI on the PR (below) found real content drift the local `tests/lint.sh`-only
+check didn't cover, since it only exercises flag-coverage, not `verify-examples`.
+Fold commit `4db4a695` (`fold: real CI drift from md-cli v0.14.0 -- golden regen +
+transcript catch-up + differential pin held back`) fixed each:
+
+- **`examples` (required context).** `.examples-build/Examples.md`'s golden capture
+  of `install.sh --list` still showed v0.11.2. Regenerated via
+  `EXAMPLES_BIN_DIR=target/debug bash .examples-build/gen.sh`, exactly as CI does —
+  single-line diff, only the pin string moved.
+- **docs/manual + docs/technical-manual `verify-examples`.** md-cli v0.14.0's
+  `decode` now emits a "note: key origins carried by this card" block the old
+  binary didn't, and `encode` also now prints the raw string plus group-size/
+  separator metadata. Confirmed neither is referenced by surrounding prose
+  (`docs/manual/src/20-quickstart/24-recover.md` only includes line 1 of its
+  transcript; the two technical-manual transcripts aren't `include`d in any
+  chapter at all) — pure golden captures, regenerated against the real v0.14.0
+  binary and verified clean locally before pushing: 62/62 manual transcripts,
+  18/18 technical-manual, 62/62 quickstart (shares manual's via symlink).
+- **`cross-tool-differential`.** Bumping its pin turned up real, pre-existing
+  test-corpus staleness, root-caused via the test's own source: both
+  `toolkit_ids()` and `md_cli_ids()` in `cli_cross_tool_differential.rs`
+  round-trip through `md inspect`, so md-cli's new F-217 refusal ("one origin,
+  two different keys") now correctly `BothError`s 10 of 17 corpus entries that
+  share an origin across two xpubs. Verified empirically: v0.11.2 passes all 17
+  (reinstalled and ran locally), v0.14.0 fails exactly those 10. This is a
+  test/oracle gap, not a wire-format regression — held this ONE pin back at
+  v0.11.2 with a comment recording the full diagnosis at the pin site, and
+  filed `cross-tool-differential-f217-corpus-staleness` in `design/FOLLOWUPS.md`.
+
 ## PR / CI / merge
 
-Recorded in a follow-up append to this same file once the PR is open and
-CI concludes (see the push agent's next actions) — placeholder left
-intentionally rather than guessing outcomes.
+- **PR #67**: `ci: bump md-cli sibling pin to descriptor-mnemonic-md-cli-v0.14.0`
+  — https://github.com/bg002h/mnemonic-toolkit/pull/67. Pushed as a new branch
+  (`md-cli-pin-0.14.0`), no bypass message.
+- **Round 1** (commit `e0386543`, pin bump + pre-PR report only) surfaced 4 real
+  failures: `examples` (required), `build`×2 (manual, quickstart), `lint`
+  (technical-manual), `cross-tool md1 differential` — all fixed by the fold
+  commit above.
+- **Round 2** (commit `4db4a695`, the fold) — full per-job conclusions, watched
+  via `gh pr checks 67` and cross-checked against the exact head SHA
+  (`4db4a695619d361ea0f5c2164eff8594a6498a3a`) via
+  `gh api .../commits/<sha>/check-runs`:
+
+  ```
+  test (ubuntu-latest): success                                  (required)
+  clippy: success                                                 (required)
+  examples: success                                               (required)
+  build (manual.yml): pass
+  build (quickstart.yml): pass
+  lint (technical-manual.yml): pass
+  cross-tool md1 differential (toolkit vs md-cli): pass
+  fmt (pinned 1.95.0): pass
+  g6 invariant (cross-repo mlock.rs): pass
+  install.sh harnesses (man-step + MSRV guard): pass
+  install.sh mnemonic-gui pin vs latest release: pass
+  lib cross-platform check (aarch64-unknown-linux-gnu, ubuntu-latest): pass
+  lib cross-platform check (x86_64-pc-windows-msvc, windows-latest): pass
+  lib cross-platform check (x86_64-unknown-freebsd, ubuntu-latest): pass
+  miri (mlock unsafe): pass
+  test (macos-latest): pass
+  test (release, ubuntu-latest, mlock einval): pass
+  sibling pins match install.sh: fail (x2, expected — the ONE documented
+    cross-tool-differential.yml mismatch; non-required)
+  musl build+test (x86_64-unknown-linux-musl): fail (pre-existing, unrelated —
+    see below; non-required)
+  musl build+test (aarch64-unknown-linux-musl): still running under QEMU
+    emulation at merge time (15+ min elapsed; non-required; precedent PR #65
+    also merged with one non-required job still running)
+  ```
+
+  **All three required contexts (`test (ubuntu-latest)`, `clippy`, `examples`)
+  verified `success` directly against the PR's exact head SHA** via
+  `gh api repos/bg002h/mnemonic-toolkit/commits/4db4a695.../check-runs`, not
+  just the `gh pr checks` summary.
+
+- **`musl build+test (x86_64-unknown-linux-musl)` failure is pre-existing and
+  unrelated to this PR.** Full log fetched via
+  `gh api .../jobs/99495693195/logs --allow-escape-sequences`: the only failing
+  test is `permutation_search::tests::cap_estimate_with_synthetic_slow_evaluator_exceeds_ceiling`
+  — a wall-clock timing-ceiling assertion (`expected ceiling refusal, got
+  Ok(RunWithProgress { estimate: 3437.3154816s })`), unrelated to md-cli,
+  descriptors, or anything this PR's diff touches (CI YAML + doc transcripts +
+  `FOLLOWUPS.md` only — zero Rust source changed). Read as runner-speed-
+  sensitive flakiness, not a regression from this change. Not fixed here — out
+  of scope for a pin-bump PR; not filed as a new FOLLOWUP since it wasn't
+  independently confirmed reproducible (a one-off musl-runner timing flake, not
+  root-caused the way the differential finding was).
+- **Merged** via `gh pr merge 67 --repo bg002h/mnemonic-toolkit --rebase
+  --delete-branch=false` once all required contexts were confirmed `success`
+  against the exact head SHA — no bypass text, no force.
