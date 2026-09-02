@@ -45,6 +45,9 @@
 #   CRATE / BIN         - mnemonic-toolkit / mnemonic
 #   ARCH                - x86_64 (artifact label)
 #   VER                 - version label for the tarball name (default 0.0.0-repro)
+#   MINISCRIPT_REV      - miniscript fork rev (F3a); empty ⇒ two-block form
+#   GIT_SOURCE_URL/REV  - F-324: ONE additional git-source stanza; both empty
+#                         (default) ⇒ no-op, byte-identical to before F-324
 # LC_ALL / TZ are inherited from the job env. The script SELF-CONSTRUCTS the
 # remap (CARGO_BUILD_RUSTFLAGS) and CFLAGS per leg — it does NOT rely on the job
 # setting CARGO_BUILD_RUSTFLAGS (the gate job deliberately does not; any caller
@@ -104,6 +107,15 @@ fi
 # (Single-dash `${VAR-default}` defaults ONLY when UNSET, so an explicit empty
 # value from a codec caller is honored as the two-block selector.)
 MINISCRIPT_REV="${MINISCRIPT_REV-95fdd1c5773bd918c574d2225787973f63e16a66}"
+# F-324: a SECOND, generic git-source stanza, for a caller whose Cargo.lock
+# carries a DIFFERENT git-sourced dependency (e.g. mnemonic-secret's
+# mnemonic-io-lib, git+https://github.com/bg002h/mnemonic-engrave?rev=…) that
+# the miniscript stanza above cannot express. Unlike MINISCRIPT_REV there is
+# no sensible non-empty default rev for an arbitrary caller dependency, so
+# both default to empty via `${VAR:-}` (not the `${VAR-default}` trick above)
+# — unset and explicitly-empty behave identically: no stanza added.
+GIT_SOURCE_URL="${GIT_SOURCE_URL:-}"
+GIT_SOURCE_REV="${GIT_SOURCE_REV:-}"
 SRC_CONFIG=(
   --config 'source.crates-io.replace-with="vendored-sources"'
 )
@@ -112,6 +124,13 @@ if [ -n "$MINISCRIPT_REV" ]; then
     --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
     --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
     --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+  )
+fi
+if [ -n "$GIT_SOURCE_URL" ] && [ -n "$GIT_SOURCE_REV" ]; then
+  SRC_CONFIG+=(
+    --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".git=\"${GIT_SOURCE_URL}\""
+    --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".rev=\"${GIT_SOURCE_REV}\""
+    --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".replace-with=\"vendored-sources\""
   )
 fi
 SRC_CONFIG+=(

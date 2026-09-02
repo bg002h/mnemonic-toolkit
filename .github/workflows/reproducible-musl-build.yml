@@ -52,6 +52,19 @@ name: reproducible-musl-build
 # (POSITIVE 3-block → exit 0; NEGATIVE 2-block → exit 101). The single source of
 # truth for the build command + remap is ci/repro/double-build.sh; this workflow
 # only sets the fixed-path env and invokes those scripts.
+#
+# ── F-324: A SECOND, GENERIC git-source knob ─────────────────────────────────
+# `miniscript_rev` above is hard-coded to ONE fork URL (rust-miniscript). A
+# caller whose OWN Cargo.lock carries a DIFFERENT git-sourced dependency (e.g.
+# mnemonic-secret pinning mnemonic-io-lib to
+# `git+https://github.com/bg002h/mnemonic-engrave?rev=…`) has no input by
+# which to declare it, so `--offline` fails to resolve it even though the
+# caller's committed vendor/ already contains the crate
+# (design/FOLLOWUPS.md F-324 in mnemonic-engrave). `git_source_url` /
+# `git_source_rev` generalize the same pattern for exactly ONE such extra
+# dependency: both empty (default) ⇒ no stanza added, byte-identical to
+# today; both non-empty ⇒ a fourth [source] replacement block is appended,
+# mirroring the miniscript stanza's exact quoting.
 
 on:
   workflow_call:
@@ -108,6 +121,29 @@ on:
         type: string
         required: false
         default: "95fdd1c5773bd918c574d2225787973f63e16a66"
+      git_source_url:
+        description: >-
+          F-324: the URL of ONE additional git dependency whose source must be
+          replaced with vendored-sources, e.g.
+          https://github.com/bg002h/mnemonic-engrave. A caller whose
+          Cargo.lock carries a git-sourced dependency OTHER than the
+          miniscript fork above (e.g. mnemonic-secret's mnemonic-io-lib) needs
+          its own [source] replacement stanza or `--offline` fails
+          ("can't checkout … you are in the offline mode") even though its
+          committed vendor/ already contains the crate. Default "" ⇒ no extra
+          stanza is added (today's behaviour, byte-identical). Paired with
+          git_source_rev; both must be non-empty for the stanza to be added.
+        type: string
+        required: false
+        default: ""
+      git_source_rev:
+        description: >-
+          F-324: the pinned rev of the git_source_url dependency, as it
+          appears after `?rev=` in Cargo.lock. Paired with git_source_url;
+          both must be non-empty for the stanza to be added.
+        type: string
+        required: false
+        default: ""
       toolkit_ref:
         description: >-
           The mnemonic-toolkit ref (SHA/tag/branch) to source the centralized
@@ -171,6 +207,20 @@ on:
         type: string
         required: false
         default: "95fdd1c5773bd918c574d2225787973f63e16a66"
+      git_source_url:
+        description: >-
+          F-324: the URL of ONE additional git dependency whose source must be
+          replaced with vendored-sources, e.g.
+          https://github.com/bg002h/mnemonic-engrave.
+        type: string
+        required: false
+        default: ""
+      git_source_rev:
+        description: >-
+          F-324: its pinned rev, as it appears after `?rev=` in Cargo.lock.
+        type: string
+        required: false
+        default: ""
       toolkit_ref:
         description: >-
           mnemonic-toolkit ref to source the centralized recipe
@@ -331,6 +381,8 @@ jobs:
       BIN: ${{ inputs.bin }}
       TARGET: ${{ inputs.target }}
       MINISCRIPT_REV: ${{ inputs.miniscript_rev }}
+      GIT_SOURCE_URL: ${{ inputs.git_source_url }}
+      GIT_SOURCE_REV: ${{ inputs.git_source_rev }}
     steps:
       - uses: actions/checkout@v4
 
@@ -355,6 +407,15 @@ jobs:
               --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
             )
           fi
+          # F-324: a SECOND, generic git-source stanza (e.g. mnemonic-secret's
+          # mnemonic-io-lib) — added only when BOTH are non-empty.
+          if [ -n "$GIT_SOURCE_URL" ] && [ -n "$GIT_SOURCE_REV" ]; then
+            SRC_CONFIG+=(
+              --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".git=\"${GIT_SOURCE_URL}\""
+              --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".rev=\"${GIT_SOURCE_REV}\""
+              --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".replace-with=\"vendored-sources\""
+            )
+          fi
           SRC_CONFIG+=( --config 'source.vendored-sources.directory="vendor"' )
           cargo build --locked --offline \
             -p "$CRATE" --bin "$BIN" \
@@ -363,7 +424,8 @@ jobs:
 
       # ── NEGATIVE sub-check (TDD) — ISOLATES the directory block (deliverable ─
       # #8 / plan's literal intent). KEEP every OTHER block (crates-io
-      # .replace-with + — for the toolkit — the 3 git blocks), drop ONLY
+      # .replace-with + — for the toolkit — the 3 git blocks + — for F-324 — the
+      # optional 3 git_source blocks), drop ONLY
       # `source.vendored-sources.directory`. With every other block present,
       # dropping just the directory leaves the replace-with redirects pointing at
       # a `vendored-sources` source that has no directory → cargo cannot resolve
@@ -382,6 +444,15 @@ jobs:
               --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
               --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
               --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+            )
+          fi
+          # F-324: keep the same second stanza present here too (it is NOT the
+          # block under negative test — only vendored-sources.directory is).
+          if [ -n "$GIT_SOURCE_URL" ] && [ -n "$GIT_SOURCE_REV" ]; then
+            NEG_CONFIG+=(
+              --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".git=\"${GIT_SOURCE_URL}\""
+              --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".rev=\"${GIT_SOURCE_REV}\""
+              --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".replace-with=\"vendored-sources\""
             )
           fi
           # NOTE: source.vendored-sources.directory is DELIBERATELY omitted.
@@ -424,6 +495,9 @@ jobs:
       # The gate scripts (toolkit/ci/repro/*.sh) read MINISCRIPT_REV from env:
       # set (toolkit default) ⇒ THREE-block --config; empty (codec) ⇒ TWO-block.
       MINISCRIPT_REV: ${{ inputs.miniscript_rev }}
+      # F-324: optional SECOND git-source stanza (both empty ⇒ no-op).
+      GIT_SOURCE_URL: ${{ inputs.git_source_url }}
+      GIT_SOURCE_REV: ${{ inputs.git_source_rev }}
     steps:
       # The CALLER's checkout (path: src) provides the crate source + the
       # committed vendor/ tree the --offline build resolves against.
@@ -584,6 +658,9 @@ jobs:
       CROSS_COMMENT_EXPECT: "GCC:"
       # set (toolkit default) ⇒ THREE-block --config; empty (codec) ⇒ TWO-block.
       MINISCRIPT_REV: ${{ inputs.miniscript_rev }}
+      # F-324: optional SECOND git-source stanza (both empty ⇒ no-op).
+      GIT_SOURCE_URL: ${{ inputs.git_source_url }}
+      GIT_SOURCE_REV: ${{ inputs.git_source_rev }}
     steps:
       # The CALLER's checkout (path: src) provides the crate source + the
       # committed vendor/ AND the caller's committed Cross.toml (cross reads it
