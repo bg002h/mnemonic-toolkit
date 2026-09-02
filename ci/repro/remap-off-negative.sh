@@ -78,6 +78,10 @@ fi
 # UNSET ⇒ toolkit rev (THREE-block); EMPTY ⇒ TWO-block (codec). Single-dash default
 # fires ONLY when UNSET so a codec caller's explicit empty is honored.
 MINISCRIPT_REV="${MINISCRIPT_REV-95fdd1c5773bd918c574d2225787973f63e16a66}"
+# F-324: optional SECOND git-source stanza (both empty ⇒ no-op). No sensible
+# non-empty default rev for an arbitrary caller dependency, so plain ${VAR:-}.
+GIT_SOURCE_URL="${GIT_SOURCE_URL:-}"
+GIT_SOURCE_REV="${GIT_SOURCE_REV:-}"
 SRC_CONFIG=(
   --config 'source.crates-io.replace-with="vendored-sources"'
 )
@@ -86,6 +90,13 @@ if [ -n "$MINISCRIPT_REV" ]; then
     --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
     --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
     --config "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+  )
+fi
+if [ -n "$GIT_SOURCE_URL" ] && [ -n "$GIT_SOURCE_REV" ]; then
+  SRC_CONFIG+=(
+    --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".git=\"${GIT_SOURCE_URL}\""
+    --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".rev=\"${GIT_SOURCE_REV}\""
+    --config "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".replace-with=\"vendored-sources\""
   )
 fi
 SRC_CONFIG+=(
