@@ -63,6 +63,7 @@ ms split
 ms combine
 ms inspect
 ms verify
+ms hashlock
 ms vectors
 ms repair
 ms gen-man
