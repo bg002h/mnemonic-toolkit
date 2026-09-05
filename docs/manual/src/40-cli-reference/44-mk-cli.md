@@ -36,6 +36,10 @@ mk encode --xpub <XPUB> --origin-path <PATH> [OPTIONS]
 | `--origin-path <PATH>` | derivation path (e.g., `m/84'/0'/0'`) |
 | `--policy-id-stub <HEX>` | 8 hex chars (4 bytes) for one stub; repeatable |
 | `--from-md1 <MD1-STRING>` | derive a stub from an md1 wallet-policy string; repeatable |
+| `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` (mk-cli after 0.13.0) |
+| `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored (mk-cli after 0.13.0) |
+| `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive (mk-cli after 0.13.0) |
+| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; overwrites an existing file (operator ruling 2026-08-26) (mk-cli after 0.13.0) |
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint` |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
