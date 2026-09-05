@@ -5022,3 +5022,16 @@ The v0.74.0 reproducible-musl release published NO binary: the Word-Card codec b
   entry for that one pin (with the reason and the owning follow-up), or land the
   fix and bump the pin. A non-required job that is red on every push trains
   everyone to ignore it.
+
+### `permutation-search-ceiling-test-is-wall-clock-flaky` — `permutation_search::tests::cap_estimate_with_synthetic_slow_evaluator_exceeds_ceiling` asserts a wall-clock estimate exceeds a ceiling and fails under CI load (tier: tests; owning phase: the next toolkit code cycle)
+
+- **Surfaced:** 2026-09-04 on the staging-PR push of `67090e2a` (PR #70,
+  `design/agent-reports/push-toolkit-67090e2a.md`): `test (ubuntu-latest)`
+  failed once with `expected ceiling refusal, got Ok(RunWithProgress {
+  estimate: 3219.3697536s })` at `crates/mnemonic-toolkit/src/permutation_search.rs:1610`
+  on a docs-only diff, and passed on rerun (run 33946149247). Precedent PR #69
+  needed no rerun.
+- **Shape:** a calibration test whose verdict depends on the runner's speed is a
+  false-RED generator. Make the synthetic evaluator's slowness deterministic
+  (inject the clock or the per-evaluation cost) so the ceiling refusal is a
+  function of the input, not the host.
