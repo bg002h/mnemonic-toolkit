@@ -4988,3 +4988,37 @@ The v0.74.0 reproducible-musl release published NO binary: the Word-Card codec b
 - **Fix (if pursued):** either retire/re-key the 10 now-BIP-forbidden entries (give each pair of keys distinct origins, which is what a real card would carry) so they exercise the intended miniscript-shape coverage without tripping F-217, or add an explicit expected-`BothError`/"both correctly refused" class to the oracle for inputs that are known-invalid under current policy — then bump `cross-tool-differential.yml`'s pin to v0.14.0+ in the same change.
 - **Consequence while open:** `sibling-pin-check.yml` will report exactly ONE known, documented mismatch (`cross-tool-differential.yml:55`) until this lands. That job is not a required branch-protection context (`test (ubuntu-latest)` / `clippy` / `examples` are), so this does not block merges, but it is a real, tracked gap, not silently ignored drift.
 - **Status:** OPEN. **Tier:** toolkit (test infra). **Owning phase:** next dedicated cross-tool-differential corpus cycle — not deferrable past that cycle's close, but not gating the md-cli-v0.14.0 pin-bump PR itself (that PR's scope is the sibling-pin lockstep across manual.yml/quickstart.yml/technical-manual.yml/install.sh, all of which are unaffected by F-217 and are green). **Severity:** Low-Medium (test-corpus correctness, not a shipped-code defect — both tools' actual refusal behavior is correct per policy; the test's expectations are what's stale).
+
+### `push-ritual-staging-pr-clause` — the push ritual's docs are missing the staging-PR form, so docs-only commits stop two push agents in a row (tier: process; owning phase: next release)
+
+- **Surfaced:** 2026-09-05. Three docs-only commits (the `ms hashlock` manual
+  section + the mk chapter mirror) could not earn `examples` / `test
+  (ubuntu-latest)` / `clippy` on `ci/staging`: those workflows' `push:` triggers
+  are path-filtered to `crates/**` etc. Two push agents stopped correctly rather
+  than bypass. The fable architect's decision
+  (`design/agent-reports/decision-toolkit-docs-push-path.md`): the
+  `pull_request:` triggers carry NO path filter (`rust.yml:45-52`,
+  `examples.yml:53`), so the ritual for a docs-only tip is: push the tip to
+  `ci/staging`, open a "staging only" PR against `master` so the three
+  contexts run on the exact SHA, then fast-forward `master` with a plain push
+  (no "Bypassed rule violations"), close the PR unmerged, delete `ci/staging`.
+  Precedent: PR #68 (2026-09-02), which landed `d39d9626`'s parents this way.
+- **Do:** add that clause to the ritual text in `.github/workflows/rust.yml`'s
+  comment block (and the constellation's shared push notes), so the next agent
+  finds it without a decision round.
+
+### `sibling-pin-check-red-by-design` — `sibling-pin-check` is RED on every push while `cross-tool-differential.yml:80` deliberately pins md-cli v0.11.2 (tier: ci; owning phase: the md-cli corpus/oracle fix that workflow's comment names)
+
+- **Surfaced:** 2026-09-05 on `ci/staging` for `35b8779d`. `scripts/install.sh`
+  is canonical at `descriptor-mnemonic-md-cli-v0.14.0`; the differential
+  workflow pins `v0.11.2` on purpose (its comment: bump only alongside a fix to
+  `cli_cross_tool_differential.rs`'s corpus or oracle for the F-217-refused
+  inputs). The check is non-required, so it blocks nothing — but a permanently
+  red job trains everyone to ignore it, which is the failure mode it exists to
+  catch.
+- **Already tracked** as `cross-tool-differential-f217-corpus-staleness` (above,
+  surfaced 2026-08-31 on PR #67), which names the corpus/oracle fix. This entry
+  adds only the CI half: either teach `sibling-pin-check` an explicit allow-list
+  entry for that one pin (with the reason and the owning follow-up), or land the
+  fix and bump the pin. A non-required job that is red on every push trains
+  everyone to ignore it.
