@@ -426,12 +426,25 @@ mod tests {
     /// The sentinel must be distinguishable from every real errno, and must
     /// render as something an operator can act on.
     ///
-    /// WHAT THIS DOES **NOT** COVER, stated because a half-tested warning is
-    /// worse than an untested one: the non-POSIX `sys_mlock_attempt` arm and
-    /// the platform message in `report_at_exit` are `cfg(not(unix))`, so no
-    /// test on this platform reaches them. CI proves they COMPILE for
-    /// `x86_64-pc-windows-msvc`; nothing here proves the text renders on a
-    /// real Windows run. Tracked in the repo's FOLLOWUPS.
+    /// WHAT THIS DOES NOT COVER: the non-POSIX `sys_mlock_attempt` arm and the
+    /// platform message in `report_at_exit` are `cfg(not(unix))`, so no test on
+    /// a POSIX host reaches them.
+    ///
+    /// THEY ARE NOT UNOBSERVED, THOUGH. The release workflow's Windows job runs
+    /// the binary it just built, and the message appears in its log, on both
+    /// invocations of the round trip:
+    ///
+    /// ```text
+    /// ms 0.19.0
+    /// warning: secret memory is NOT locked on this platform.
+    ///          unpinned: this build has no page-locking implementation, so
+    ///          the page file. On Linux and macOS these regions are pinned
+    /// round trip ok: ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+    /// ```
+    ///
+    /// So "it warns every run" is measured on the real platform rather than
+    /// asserted here. What remains untested is the FAILURE COUNT and byte
+    /// totals in that message, and any errno path other than the sentinel.
     #[test]
     fn unsupported_sentinel_is_distinct_and_named() {
         assert_eq!(errno_to_name(ERRNO_UNSUPPORTED), "UNSUPPORTED");
