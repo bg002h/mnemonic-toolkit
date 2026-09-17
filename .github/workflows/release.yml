@@ -148,8 +148,7 @@ jobs:
           XPUB=xpub6CvHDtn5otAu9fjb7mPpbfizn2A31pQkwLsogfkHaMfsnoGVCwRidN6rZryTBE6G8b6MF152XgJSKiEBpgt3Jx7udU43auRCHB1hvJTRuBu
           # candidates-FILE, never --passphrase on argv: current mnemonic hard-refuses
           # a secret on argv (exit 2), so a file is the portable, non-leaking input.
-          printf 'satoshi
-' > pp-cand.txt
+          echo satoshi > pp-cand.txt
           OUT="$(printf '%s' "$SEED" | "$BIN" xpub-search passphrase-of-xpub --phrase-stdin --target-xpub "$XPUB" --passphrase-candidates-file pp-cand.txt)"
           case "$OUT" in *"m/84'/0'/0'"*) ;; *) echo "::error::passphrase-of-xpub did not match here: $OUT"; exit 1 ;; esac
           echo "acceptance ok: passphrase-of-xpub derives the target xpub at m/84'/0'/0'"
