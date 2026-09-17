@@ -5314,3 +5314,72 @@ A reproduction exists at
 
 **Demo side already handled** in mnemonic-engrave `e910fd63`; this entry is the
 tool-side half.
+
+---
+
+### `expect-wallet-id-silently-discarded-under-explicit-placement` — a CORRECT `--expect-wallet-id` plus `--cosigner @N=` emits a DIFFERENT wallet at exit 0 under a `✓` tick (tier: funds-safety; owning phase: before or with the wallet-id-enumerate implementation)
+
+**Found 2026-09-17** by the adversarial-input lens on the wallet-id enumerate
+spec, measured, then confirmed structurally by the controller.
+
+`--expect-wallet-id` exists to verify that the completed wallet is the one the
+operator recorded. It is **silently ignored** whenever any `--cosigner @N=`
+explicit placement is supplied. The explicit path returns early:
+
+```rust
+// restore.rs:1793
+return complete_explicit_assignment(d, &own_keys, &assigned_cosigners, stderr);
+```
+
+and that function's signature (`restore.rs:2309-2314`) takes `d`, `own_keys`,
+`assigned`, `stderr` — **no `ctx`**. `expect_wallet_id` lives on
+`MultisigCompletionCtx`, so it is structurally unreachable on this path. The
+check is not weak; it does not exist.
+
+**Measured consequence.** Swapping `@1`/`@2` placements while supplying the
+**true** wallet-id emits a *different* wallet (`4fd92f23…` instead of
+`a693d0f4…`) at **exit 0**, printed under a `✓ wallet-id (completed)` line. The
+operator asserted "this is the wallet I recorded", the tool disagreed with them
+silently, and then displayed a success tick with the wrong id in it.
+
+**Why this is the worst combination for it to happen in.** Explicit `@N=`
+placement is the mode with no search and therefore no cross-check — the demo's
+own text calls it the "asserted without verifying" path. It is exactly where an
+operator's independent id assertion should be honoured, and it is the only mode
+where it is dropped.
+
+**Shape of the fix:** thread the ctx (or just the prefix) into
+`complete_explicit_assignment` and compare the completed
+`compute_wallet_policy_id` against it, failing `RestoreMismatch` (exit 4) on a
+mismatch — the same treatment the search paths already give. A test must assert
+that a wrong `@N=` placement plus a correct id **fails**, since today it passes.
+
+**Related:** `bare-xpub-cosigner-fails-silently-on-a-fingerprinted-wallet`
+(same session). Reproduction detail in
+`design/agent-reports/wallet-id-enumerate-adversarial-input-lens.md` (A2).
+
+---
+
+### `sortedmulti-subset-search-never-enumerates-the-true-wallet` — a CORRECT full 16-byte id returns `✗ NO MATCH` on the subset paths (tier: funds-safety; owning phase: GATES the wallet-id-enumerate cycle — see SPEC §3.9)
+
+**Found 2026-09-17**, same lens, measured.
+
+On `wsh-sortedmulti` with `--own-account-max` or `--search-cosigner-subset`, the
+subset generators drop the ordering factor enumeration-side (`sorted: true` —
+each subset emitted once in identity order), while `compute_wallet_policy_id` is
+order-**dependent**. The carve-out comment at `restore.rs:1951-1953` states both
+halves — *"id-search is NOT collapsed: `compute_wallet_policy_id` never sorts …
+the recorded id pins a SPECIFIC order the search must still resolve"* — but the
+enumeration-side collapse on the subset paths is not reconciled with it.
+
+Result: the true ordering is never enumerated, so a **correct full 16-byte id**
+returns `✗ NO MATCH` (exit 4). Measured: the exact pool reconstructs at exit 0;
+both subset paths fail; the same wallet as unsorted `wsh-multi` reconstructs on
+both.
+
+**It gates the wallet-id-enumerate cycle.** Today this operator is shielded by
+the accurate refusal *"need ≥5 bytes"*, which fires before the search. That
+cycle deletes the refusal for the enumerate band, converting an actionable
+refusal into a confident **false negative** — "your wallet is not among these
+keys", said of a wallet that is. SPEC §3.9 therefore carves the combination out
+of enumerate mode until this is fixed, and requires a test pinning the carve-out.

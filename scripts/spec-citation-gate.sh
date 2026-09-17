@@ -66,6 +66,9 @@ chk $S/permutation_search.rs 1162 'found.len\(\) >= 2'                   'oracle
 chk $S/permutation_search.rs 1066 'SearchMode::Id => 0'                 'id-path address_index is 0'
 chk $S/permutation_search.rs 1100 'address_index'                       'engine tie-break order'
 chk $S/cmd/restore.rs        2160 'key65'                               'bare-xpub decode'
+chk $S/cmd/restore.rs        2083 'distinct subsets'                    'subsets => distinct key SETS'
+chk $S/cmd/restore.rs        1951 'id-search is NOT collapsed'          'id-search not collapsed'
+chk $S/cmd/verify_bundle.rs  947  'search_address'                      'verify copies search_address'
 echo
 echo "== numeric gate =="
 python3 - <<'PY'
