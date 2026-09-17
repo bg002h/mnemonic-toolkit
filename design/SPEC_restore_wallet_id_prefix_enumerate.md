@@ -163,10 +163,19 @@ Two consequences follow and are binding:
    ordering yields *identical addresses and identical spending*. A list can
    therefore show N rows that are one wallet under N labellings. The annotation is
    **one line above the rows, derived from the SHAPE FLAG and not from comparing
-   addresses** (L5): `is_order_independent_shape(&d.tree)` (`restore.rs:1954`)
-   already tells the renderer that every match is the same wallet under a
-   different labelling. Grouping by *derived address* would contradict §3.5's
-   "cap before address derivation"; reading the flag does not. **Never merge
+   addresses** (L5): `is_order_independent_shape(&d.tree)` (`restore.rs:1954`).
+   Grouping by *derived address* would contradict §3.5's "cap before address
+   derivation"; reading the flag does not.
+   **But the shape flag ALONE is not sufficient, and an earlier draft of this
+   paragraph was wrong to use it alone (A3, Critical).** "Same wallet under a
+   different labelling" holds only where matches differ by ORDERING. On the
+   subset paths they differ by **key SET** — the code says so itself at
+   `restore.rs:2083-2085`: *"distinct subsets ⇒ distinct key SETS ⇒ distinct
+   scriptPubKey"*. Emitting the annotation (or `order_independent: true`) there
+   would tell the operator that N **genuinely different wallets** are
+   interchangeable — the worst thing this list could say. Required: annotate
+   only when the shape is order-independent **AND** the enumeration is
+   `FullPermutation`. On `OwnAnchored` / `OptIn`, never. **Never merge
    rows — annotate the set.** Unmarked, the operator reads "N wallets it could be" when the
    honest answer is "1 wallet, N labellings" — and for an unsorted `wsh-multi`
    the same display means something entirely different.
@@ -372,6 +381,12 @@ table is the only mapping; do not introduce a fourth:
    `--search-address` become mutually exclusive** (clap `conflicts_with`), so the
    combination refuses with a message naming which to drop. Honouring both is the
    larger change and is NOT in this cycle's scope; refusing is.
+   **On BOTH surfaces** (A4): `verify-bundle` copies both flags into the same ctx
+   (`verify_bundle.rs:946-947`) and silently ignores the address identically.
+   Verified: there is today no `conflicts_with` between these two flags on either
+   surface. Adding it only to `restore` leaves `verify-bundle` accepting the same
+   broken combination — and §5 already rules that the two surfaces must not drift
+   on a silent-wrong-wallet decision.
    *(Already actioned downstream: the live demo taught "USE BOTH TOGETHER"; that
    text was corrected on 2026-09-17 — see §7.)*
 8. **The mandatory warning (the C1 ruling).** On the lone-match-below-threshold
@@ -383,11 +398,17 @@ table is the only mapping; do not introduce a fourth:
    ! assignment matched, and it is reported below, but a match this short can
    ! be spurious when the true wallet is NOT among the keys you supplied.
    ! Before receiving to this wallet, confirm the first address below against
-   ! a source you already trust, or re-run with --search-address.
+   ! a source you already trust, or re-run with --search-address INSTEAD of
+   ! --expect-wallet-id.
    ```
 
    Requirements: no flag suppresses it, and it names the supplied and required
    byte counts (both are in hand at `restore.rs:2009`).
+   **"Instead", here too** (A5): §3.7 makes the two flags mutually exclusive, so
+   a hint reading "or re-run with `--search-address`" would send the operator
+   into a clap usage error. R0's I7 fix added the load-bearing "instead" to
+   §3.3's summary line and missed this second copy of the same sentence — the
+   incomplete-propagation class again. An edit to either must grep for the other.
    **Per-stream, explicitly** (L11): "un-suppressible" means the block goes to
    **stderr even under `--json`** — `mnemonic restore --json … 2>err.txt` must
    leave the warning in `err.txt` — *and* the envelope carries it per §3.4a.
@@ -404,6 +425,53 @@ table is the only mapping; do not introduce a fourth:
    or tested. Required instead: the warning is emitted **before the process
    exits**, and vector 2 asserts its presence on stderr, not its position. It is a warning, not an error — exit stays 0 per
    the operator ruling.
+
+### 3.9 PREREQUISITE — two shipped defects this spec must not uncover
+
+The adversarial lens
+(`design/agent-reports/wallet-id-enumerate-adversarial-input-lens.md`) measured
+two Criticals that **exist today, in shipped code, and are not caused by this
+spec**. They are recorded here because this spec interacts with both, and one of
+them gates it.
+
+**A1 — GATING. `sortedmulti` + a subset path never enumerates the true wallet.**
+On `wsh-sortedmulti` with `--own-account-max` or `--search-cosigner-subset`, the
+subset generators drop the ordering factor enumeration-side (`sorted: true`),
+while `compute_wallet_policy_id` is order-**dependent** — the carve-out comment
+at `restore.rs:1951-1953` states both halves and does not reconcile them for the
+subset paths. Measured: the exact pool reconstructs at exit 0, and both subset
+paths return `✗ NO MATCH` for the **correct full 16-byte id**; the same wallet
+as `wsh-multi` reconstructs on both.
+
+Why it gates *this* spec even though it predates it: today that operator is
+shielded by the accurate, actionable refusal *"need ≥5 bytes"*, which fires
+**before** the search. This spec deletes that refusal for the enumerate band and
+replaces it with a full scan — turning an accurate refusal into a **confident
+false negative**: "your wallet is not among these keys", said of a wallet that
+is. That is strictly worse than saying nothing, which is the bar §7's method
+sets for earning a change.
+
+**Therefore: enumerate mode is NOT enabled for `sortedmulti` + (`OwnAnchored` |
+`OptIn`) until A1 is fixed.** That combination keeps today's `PrefixTooShort`
+refusal verbatim. The implementation MUST gate on it explicitly rather than
+inherit enumerate everywhere, and a test must pin the refusal so the carve-out
+cannot be removed silently. Lifting it is a follow-on cycle that fixes A1 first.
+
+**A2 — NOT gating, but worse in isolation, and it belongs to the tool.**
+`--expect-wallet-id` is **silently discarded** whenever any `--cosigner @N=`
+explicit placement is supplied: the explicit path returns
+`complete_explicit_assignment(d, &own_keys, &assigned_cosigners, stderr)`
+(`restore.rs:1793`), whose signature takes **no ctx**, so the flag is
+structurally unreachable there. Measured: swapped `@1`/`@2` placements plus the
+**true** id emit a *different* wallet at exit 0 under a `✓ wallet-id
+(completed)` line. The flag whose only job is "verify the completed wallet
+matches what I recorded" is ignored in exactly the mode most likely to be wrong,
+and the operator is shown a success tick.
+
+This spec does not touch that path, so it does not gate here — but §3.4a(a)
+already had to reason about that mode for `uniqueness_proven`, and the fix is
+small and adjacent. Filed as a tool follow-up; **it should be fixed before or
+with this cycle's implementation**, not after.
 
 ## 4. Funds-safety analysis
 
