@@ -5090,3 +5090,56 @@ The v0.74.0 reproducible-musl release published NO binary: the Word-Card codec b
   It needs the ceiling + `--accept-search-time` treatment, not a bare loop.
 - **Status:** open. No code written (operator direction 2026-09-17).
 - **Tier:** feature.
+
+### `sortedmulti-address-search-reports-a-bare-wallet-id-as-if-canonical` — a correct restore can show an id that does not match the engraved one, with nothing said (tier: warning/UX; owning phase: the next restore/verify-bundle cycle)
+
+- **Surfaced:** 2026-09-17, building a recovery demo. The OPERATOR called this a
+  red flag; the first response was to file it as a "nuance", which was wrong.
+  The investigation it then got is below.
+- **Reproduce** (2-of-3 `wsh-sortedmulti`, keyless template, seeds A/B/C from
+  `tests/cli_restore_md1_template_multisig.rs`):
+
+  ```
+  explicit  --cosigner @1=B --cosigner @2=C   -> wallet-id 72d94d49b0aca695055b3de0a1f13bea
+  search    --cosigner C --cosigner B --search-address <addr>
+                                              -> wallet-id d3c8c613ed3baa89e1fa4f7ae632919a
+  ```
+
+  **Identical first receive address in both**
+  (`bc1q4vxm2xewpdj2ycxyh9c4w923pjyl0e8dnf0y0gvwz2daxg36mecqhzarw0`). The
+  descriptors differ only in key ORDER (checksums `#zfrn2ayx` / `#rps7lap3`).
+
+- **NOT A CORRECTNESS DEFECT, and the bound is measured, not assumed.** Under
+  BIP-67 `sortedmulti` sorts the derived pubkeys at EVERY index, so relabelling
+  two cosigners yields byte-identical scripts at every index: the same wallet,
+  the same spending. For unsorted `wsh-multi` the same swap gives DIFFERENT
+  addresses (`bc1q734855rt5r9apmcrg8v05mvv4kul9pys3geh76…` vs
+  `bc1q9mxq6v9tw9cdpzkcvck4w3jhg2r4s7rpzdp5xt…`), so the ambiguity is
+  **sortedmulti-only**.
+- **THE DEFECT IS THE REPORTING.** `wallet-id` is computed over the slot
+  labelling, which is not canonical for sortedmulti — one wallet, several valid
+  ids. The tool prints `✓ wallet-id (completed): <hex>` with no indication that
+  the labelling was not determined by the address, and that another valid id
+  exists for the same wallet.
+- **The harm is a FALSE ALARM, not a false pass.** Someone restores by address,
+  compares against the id they engraved, sees a mismatch, and concludes the
+  backup failed — and people do destructive things when they believe that. A
+  restore that is correct must not look broken.
+- **It is already resolvable today, which is what makes the silence a gap rather
+  than a hole:** supplying `--expect-wallet-id` makes the search satisfy BOTH
+  constraints and return exactly the recorded id (verified, exit 0). The address
+  pins the key SET; the id pins the LABELLING.
+- **Proposed fix (no algorithm change):** when completing a **sortedmulti**
+  template via `--search-address` WITHOUT `--expect-wallet-id`, say so at the
+  point of use — that the address does not determine the labelling, that the
+  reported id is one of several valid ones for the same wallet, and that
+  `--expect-wallet-id` pins it. Consider also reporting a
+  labelling-independent identifier for sortedmulti, so there is something stable
+  to compare across restores.
+- **Worth preserving while fixing:** the refusal ladder around
+  `--expect-wallet-id` is exemplary and should not regress — a 4-hex prefix is
+  refused as too weak, 8 hex is STILL refused for this space, 16 is accepted,
+  and a wrong id returns `✗ NO MATCH` (exit 4) rather than a plausible wrong
+  wallet.
+- **Status:** open. No code written (operator direction 2026-09-17).
+- **Tier:** warning/UX. Not funds-loss; funds-ALARM.
