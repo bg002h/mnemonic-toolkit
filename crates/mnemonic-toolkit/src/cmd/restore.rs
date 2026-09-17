@@ -1790,7 +1790,13 @@ pub(crate) fn complete_multisig_template<E: Write>(
     // (both subset-search modes are mutually exclusive with @N= — gated above —
     // so this only runs on the exact path.)
     if any_assigned {
-        return complete_explicit_assignment(d, &own_keys, &assigned_cosigners, stderr);
+        return complete_explicit_assignment(
+            d,
+            &own_keys,
+            &assigned_cosigners,
+            ctx.expect_wallet_id.as_deref(),
+            stderr,
+        );
     }
 
     // --- Build the candidate pool, OWN-FIRST ---------------------------------
@@ -2329,6 +2335,7 @@ fn complete_explicit_assignment<E: Write>(
     d: &md_codec::Descriptor,
     own_keys: &[CandidateKey],
     assigned: &std::collections::BTreeMap<u8, CandidateKey>,
+    expect_wallet_id: Option<&str>,
     stderr: &mut E,
 ) -> Result<MultisigCompletionOutcome, ToolkitError> {
     use mnemonic_toolkit::permutation_search as ps;
@@ -2381,6 +2388,38 @@ fn complete_explicit_assignment<E: Write>(
         })
         .collect();
     let completed = crate::synthesize::build_keyed_template_descriptor(d, &triples)?;
+
+    // A2 (2026-09-17): HONOUR `--expect-wallet-id` HERE. This path used to
+    // discard it structurally -- the prefix lives on `MultisigCompletionCtx`
+    // and this function never received one -- so a WRONG assertion plus the
+    // operator's TRUE recorded id emitted a DIFFERENT wallet at exit 0 under a
+    // `✓ wallet-id (completed)` line. The warning fired just above literally
+    // tells the operator to "Record + check --expect-wallet-id", so the one
+    // mode with no other cross-check was ignoring the only check it advertises.
+    //
+    // Explicit mode stays UNVERIFIED when no id is supplied (that is the
+    // operator's stated risk, and the warning covers it). But when an id IS
+    // supplied it is an assertion about the RESULT, and a result that
+    // contradicts it must refuse rather than print a success tick.
+    if let Some(prefix_hex) = expect_wallet_id {
+        let prefix = decode_wallet_id_prefix(prefix_hex)?;
+        let id = md_codec::compute_wallet_policy_id(&completed).map_err(ToolkitError::from)?;
+        let got = id.as_bytes();
+        if got.len() < prefix.len() || got[..prefix.len()] != prefix[..] {
+            let _ = writeln!(stderr, "✗ NO MATCH");
+            return Err(ToolkitError::RestoreMismatch {
+                reference: "multisig-template-explicit",
+                derived: format!("wallet-id {}", hex::encode(got)),
+                expected: format!(
+                    "--expect-wallet-id {prefix_hex} — the asserted --cosigner @N= placement \
+                     does NOT build the wallet you recorded; re-check the placements, or drop \
+                     them and let the search resolve the assignment"
+                ),
+                slot: None,
+            });
+        }
+    }
+
     let assignment: Vec<usize> = (0..n).collect();
     Ok(MultisigCompletionOutcome {
         completed,

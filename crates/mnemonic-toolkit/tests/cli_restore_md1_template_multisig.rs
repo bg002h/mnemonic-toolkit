@@ -1683,6 +1683,110 @@ fn explicit_assignment_mode_completes_and_warns() {
 }
 
 #[test]
+fn explicit_assignment_honours_expect_wallet_id() {
+    // REGRESSION (2026-09-17, adversarial-input lens A2). FUNDS-SAFETY.
+    //
+    // `--expect-wallet-id` was SILENTLY DISCARDED whenever any `--cosigner @N=`
+    // explicit placement was supplied: the explicit path returns early via
+    // `complete_explicit_assignment`, whose signature carried no ctx, so the
+    // prefix was structurally unreachable there.
+    //
+    // Consequence before the fix: a WRONG placement plus the operator's TRUE
+    // recorded id emitted a DIFFERENT wallet at exit 0, under a
+    // `✓ wallet-id (completed)` line. The flag whose only purpose is to verify
+    // the completed wallet was ignored in the one mode with no other
+    // cross-check — and that mode's own warning tells the operator to
+    // "Record + check --expect-wallet-id".
+    //
+    // UNSORTED `wsh-multi` is required: under sortedmulti every placement is
+    // the same wallet, so a swap would be undetectable by design.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let true_id = emit_template_wallet_id("wsh-multi", "2", cos);
+    // Truth is @1=B, @2=C (own A fills @0). Assert them SWAPPED: @1=C, @2=B.
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        true_id.clone(),
+        "--count".into(),
+        "1".into(),
+    ]);
+    for c in &mk1_c {
+        args.push("--cosigner".into());
+        args.push(format!("@1={c}")); // WRONG: C asserted at @1
+    }
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(format!("@2={c}")); // WRONG: B asserted at @2
+    }
+
+    let assert = mnemonic().args(&args).assert().failure();
+    let out = assert.get_output();
+    let stderr = String::from_utf8(out.stderr.clone()).unwrap();
+    let stdout = String::from_utf8(out.stdout.clone()).unwrap();
+
+    assert_eq!(
+        out.status.code(),
+        Some(4),
+        "a wrong explicit placement that contradicts --expect-wallet-id must \
+         exit 4 (RestoreMismatch); stderr: {stderr}"
+    );
+    assert!(
+        !stdout.contains("descriptor") && !stderr.contains("✓ wallet-id (completed)"),
+        "it must NOT emit a completed wallet for a contradicted id; \
+         stdout: {stdout} stderr: {stderr}"
+    );
+}
+
+#[test]
+fn explicit_assignment_with_correct_id_still_completes() {
+    // The other side of the boundary: a CORRECT explicit placement plus the
+    // true id must still complete. Without this, the fix above could be
+    // "refuse always" and the suite would not notice.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let true_id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--account".into(),
+        "0".into(),
+        "--expect-wallet-id".into(),
+        true_id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(format!("@1={c}"));
+    }
+    for c in &mk1_c {
+        args.push("--cosigner".into());
+        args.push(format!("@2={c}"));
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "a CORRECT explicit placement + the true id must still complete"
+    );
+}
+
+#[test]
 fn singlesig_template_completion_unchanged() {
     // bip84 single-sig template still completes from --from (phase-1 path).
     let out = mnemonic()
