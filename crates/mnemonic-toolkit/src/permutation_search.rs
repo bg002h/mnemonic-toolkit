@@ -40,7 +40,7 @@
 //! **identical to a single-threaded reference** regardless of thread
 //! interleaving (determinism asserted in the tests).
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -363,8 +363,8 @@ pub fn validate_prefix_strength(
 pub enum CapDecision {
     /// Estimated exhaustive time `< 30s` → run silently (no progress UI).
     RunSilent { estimate: Duration },
-    /// `30s ≤ estimate ≤ 1h` → run with a progress bar + ETA (the rendering
-    /// is CLI-wired later; P1 exposes the decision + the estimate).
+    /// `estimate ≥ 30s` → declare the estimate and report progress while
+    /// scanning. No upper bound (the 1h ceiling was removed 2026-09-17).
     RunWithProgress { estimate: Duration },
 }
 
@@ -376,11 +376,14 @@ pub enum CapDecision {
 /// - `< 30s` → [`CapDecision::RunSilent`].
 /// - `30s ≤ est ≤ 1h` → [`CapDecision::RunWithProgress`] (progress bar + ETA;
 ///   rendered by the CLI layer later).
-/// - `> 1h` → REFUSE unless `accept_search_time` is `Some(d)` with `d ≥ est`
-///   (the forced acknowledgment), in which case [`CapDecision::RunWithProgress`].
+/// - `≥ 30s` → [`CapDecision::RunWithProgress`], however large. There is NO
+///   upper bound: the estimate is declared and the scan reports progress, and
+///   the operator decides whether to wait.
 ///
-/// `accept_search_time` below the estimate → [`SearchError::AcceptSearchTimeTooLow`];
-/// no override above the ceiling → [`SearchError::SearchTimeExceedsCeiling`].
+/// `accept_search_time` is accepted and IGNORED (retained so existing scripts do
+/// not break on an unknown flag). [`SearchError::SearchTimeExceedsCeiling`] and
+/// [`SearchError::AcceptSearchTimeTooLow`] are no longer produced by this
+/// function; the variants remain for wire/API compatibility.
 ///
 /// The exhaustive time is over the FULL space (no early-terminate credit) —
 /// the operator is being asked to accept the worst case (the no-match scan,
@@ -394,23 +397,24 @@ pub fn cap_decision(
         .checked_mul_u64(total_candidates)
         .unwrap_or(Duration::MAX);
 
+    // NO TIME CEILING (operator ruling 2026-09-17: "No search time max, just
+    // declare estimate and periodical update progress").
+    //
+    // A recovery tool refusing to look for your wallet because looking would
+    // take a while is the wrong default: the operator is the one who knows
+    // whether their funds justify an overnight scan, and the old behaviour made
+    // that decision for them behind a flag they had to discover from an error.
+    // The estimate is now DECLARED and the scan REPORTS, so the operator can
+    // make an informed decision — including Ctrl-C.
+    //
+    // `accept_search_time` is retained in the signature and IGNORED, so existing
+    // scripts passing `--accept-search-time` keep working rather than failing on
+    // an unknown flag. It is dead weight to be removed on the next breaking bump.
+    let _ = accept_search_time;
     if estimate < SILENT_THRESHOLD {
-        return Ok(CapDecision::RunSilent { estimate });
-    }
-    if estimate <= SEARCH_CEILING {
-        return Ok(CapDecision::RunWithProgress { estimate });
-    }
-    // Above the ceiling — require the forced acknowledgment.
-    match accept_search_time {
-        Some(accepted) if accepted >= estimate => Ok(CapDecision::RunWithProgress { estimate }),
-        Some(accepted) => Err(SearchError::AcceptSearchTimeTooLow {
-            estimate,
-            supplied: accepted,
-        }),
-        None => Err(SearchError::SearchTimeExceedsCeiling {
-            estimate,
-            ceiling: SEARCH_CEILING,
-        }),
+        Ok(CapDecision::RunSilent { estimate })
+    } else {
+        Ok(CapDecision::RunWithProgress { estimate })
     }
 }
 
@@ -996,6 +1000,29 @@ pub fn search_enumerated<E: CandidateEvaluator>(
     mode: SearchMode,
     early_exit: bool,
 ) -> Result<SearchOutcome, SearchError> {
+    search_enumerated_with_progress(enumeration, evaluator, mode, early_exit, None)
+}
+
+/// As [`search_enumerated`], but each worker periodically adds the number of
+/// candidates it has scanned to `progress`.
+///
+/// The engine deliberately does NOT print: it exposes a counter and lets the CLI
+/// layer decide cadence and wording. That keeps this module free of I/O and
+/// keeps the reporter testable by reading the atomic directly.
+///
+/// The counter is bumped on the SAME 1024-candidate tick the stop-flag poll
+/// already uses, so progress costs one relaxed `fetch_add` per 1024 candidates
+/// rather than per candidate — measurable progress, unmeasurable contention.
+/// It is therefore accurate to within 1024 × nthreads at any instant, and is
+/// flushed exactly at the end of each worker's slice so the final total is
+/// exact.
+pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
+    enumeration: &Enumeration,
+    evaluator: &E,
+    mode: SearchMode,
+    early_exit: bool,
+    progress: Option<&AtomicU64>,
+) -> Result<SearchOutcome, SearchError> {
     let n = enumeration.n();
     if n == 0 {
         return Err(SearchError::EmptySearchSpace);
@@ -1049,12 +1076,20 @@ pub fn search_enumerated<E: CandidateEvaluator>(
             scope.spawn(move || {
                 let mut local: Vec<Match> = Vec::new();
                 let mut since_check: u64 = 0;
+                let mut scanned: u64 = 0;
                 for idx in start..end {
                     // Poll the stop flag every 1024 candidates (cheap; bounds
-                    // the over-scan past a discovered 2nd match).
+                    // the over-scan past a discovered 2nd match). The progress
+                    // counter rides the SAME tick, so it costs one relaxed
+                    // fetch_add per 1024 candidates rather than per candidate.
                     since_check += 1;
+                    scanned += 1;
                     if since_check >= 1024 {
                         since_check = 0;
+                        if let Some(p) = progress {
+                            p.fetch_add(scanned, Ordering::Relaxed);
+                            scanned = 0;
+                        }
                         if stop.load(Ordering::Relaxed) {
                             break;
                         }
@@ -1079,6 +1114,13 @@ pub fn search_enumerated<E: CandidateEvaluator>(
                             stop.store(true, Ordering::Relaxed);
                             break;
                         }
+                    }
+                }
+                // Flush the tail so the final count is exact rather than
+                // rounded down to the last 1024-tick.
+                if let Some(p) = progress {
+                    if scanned > 0 {
+                        p.fetch_add(scanned, Ordering::Relaxed);
                     }
                 }
                 if !local.is_empty() {
@@ -1546,15 +1588,64 @@ mod tests {
     }
 
     #[test]
-    fn cap_decision_above_ceiling_refuses_without_accept() {
-        // 7200 candidates × 1s = 7200s (2h) > 1h ceiling, no override → refuse.
-        let est = Duration::from_secs(7200);
+    fn progress_counter_reaches_the_full_space() {
+        // The progress counter is what the CLI's periodic report divides by, so
+        // a counter that silently under-counts would render a percentage that
+        // never reaches 100 and an ETA that never converges. Pin the END state:
+        // a full scan (no early exit, no match) must account for EVERY candidate.
+        //
+        // The tail-flush matters here: workers bump on a 1024-candidate tick, so
+        // without the end-of-slice flush this lands short by up to 1023 per
+        // thread. 5! = 120 is deliberately BELOW one tick, so the tick alone
+        // would report ZERO and only the flush can make this pass.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        let never = |_a: &[usize], _i: u64| false;
+        let e = Enumeration::FullPermutation { n: 5 };
+        let total = e.cardinality().unwrap() as u64;
+        assert_eq!(total, 120);
+        let counter = AtomicU64::new(0);
+        let out =
+            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, Some(&counter))
+                .unwrap();
+        assert_eq!(out, SearchOutcome::None);
+        assert_eq!(
+            counter.load(Ordering::Relaxed),
+            total,
+            "every candidate must be counted exactly once"
+        );
+    }
+
+    #[test]
+    fn progress_counter_is_optional_and_costs_nothing_when_absent() {
+        // The no-progress path must stay byte-identical in behaviour; this is
+        // the delegation `search_enumerated` performs.
+        let never = |_a: &[usize], _i: u64| false;
+        let e = Enumeration::FullPermutation { n: 4 };
+        assert_eq!(
+            search_enumerated(&e, &never, SearchMode::Id, false).unwrap(),
+            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, None).unwrap()
+        );
+    }
+
+    #[test]
+    fn cap_decision_never_refuses_on_time() {
+        // RE-POINTED 2026-09-17. This test used to assert that a 2h estimate
+        // REFUSED without `--accept-search-time`. The time ceiling was removed
+        // (operator ruling: "No search time max, just declare estimate and
+        // periodical update progress"), so the assertion is inverted rather than
+        // deleted -- a removed refusal must be pinned as such, or nothing stops
+        // it being silently reintroduced.
+        let est = Duration::from_secs(7200); // 7200 × 1s = 2h, far past the old 1h
         assert_eq!(
             cap_decision(7200, Duration::from_secs(1), None),
-            Err(SearchError::SearchTimeExceedsCeiling {
-                estimate: est,
-                ceiling: SEARCH_CEILING
-            })
+            Ok(CapDecision::RunWithProgress { estimate: est }),
+            "a 2h estimate must RUN (with progress), not refuse"
+        );
+        // And an absurd one: ~11.5 days. Still no refusal.
+        let huge = cap_decision(1_000_000, Duration::from_secs(1), None).unwrap();
+        assert!(
+            matches!(huge, CapDecision::RunWithProgress { .. }),
+            "there is no upper bound on the estimate: got {huge:?}"
         );
     }
 
@@ -1575,16 +1666,28 @@ mod tests {
     }
 
     #[test]
-    fn cap_decision_above_ceiling_rejects_insufficient_override() {
-        // Override below the estimate → AcceptSearchTimeTooLow.
+    fn cap_decision_ignores_accept_search_time_entirely() {
+        // RE-POINTED 2026-09-17. `--accept-search-time` used to be a forced
+        // acknowledgment, and an insufficient one was an ERROR. With no ceiling
+        // there is nothing to acknowledge, so the argument is accepted and
+        // IGNORED -- retained only so existing scripts do not fail on an unknown
+        // flag. Pin that it changes NOTHING, in both directions.
         let est = Duration::from_secs(7200);
+        let none = cap_decision(7200, Duration::from_secs(1), None).unwrap();
+        let too_low =
+            cap_decision(7200, Duration::from_secs(1), Some(Duration::from_secs(60))).unwrap();
+        let generous = cap_decision(
+            7200,
+            Duration::from_secs(1),
+            Some(Duration::from_secs(99_999)),
+        )
+        .unwrap();
+        assert_eq!(none, CapDecision::RunWithProgress { estimate: est });
         assert_eq!(
-            cap_decision(7200, Duration::from_secs(1), Some(Duration::from_secs(60))),
-            Err(SearchError::AcceptSearchTimeTooLow {
-                estimate: est,
-                supplied: Duration::from_secs(60)
-            })
+            too_low, none,
+            "an insufficient override must no longer error"
         );
+        assert_eq!(generous, none, "a generous override must change nothing");
     }
 
     #[test]
@@ -1621,16 +1724,27 @@ mod tests {
         // speed. Duration is exact nanoseconds and `per > 0` was just asserted,
         // so the division is safe and the product cannot land back on the
         // boundary.
+        // RE-POINTED 2026-09-17, and the flakiness above is now GONE rather than
+        // merely tamed: with no ceiling there is no boundary to race, so the
+        // verdict cannot depend on how fast the runner is. This also closes the
+        // `permutation-search-ceiling-test-is-wall-clock-flaky` follow-up.
+        //
+        // What it pins now: a space this expensive still RUNS, and is announced
+        // rather than refused.
         let needed = (SEARCH_CEILING.as_nanos() / per.as_nanos() + 1) as u64;
-        let res = cap_decision(needed, per, None);
-        assert!(
-            matches!(res, Err(SearchError::SearchTimeExceedsCeiling { .. })),
-            "expected ceiling refusal, got {res:?}"
-        );
-        // With the forced acknowledgment (≥ estimate) it proceeds.
-        if let Err(SearchError::SearchTimeExceedsCeiling { estimate, .. }) = res {
-            let ok = cap_decision(needed, per, Some(estimate)).unwrap();
-            assert_eq!(ok, CapDecision::RunWithProgress { estimate });
+        let res = cap_decision(needed, per, None).expect("no refusal on time, ever");
+        match res {
+            CapDecision::RunWithProgress { estimate } => {
+                assert!(
+                    estimate > SEARCH_CEILING,
+                    "fixture must exceed the OLD ceiling to be meaningful: {estimate:?}"
+                );
+                // The ignored override changes nothing.
+                assert_eq!(cap_decision(needed, per, Some(estimate)).unwrap(), res);
+            }
+            CapDecision::RunSilent { .. } => {
+                panic!("a multi-hour estimate must be announced, not silent: {res:?}")
+            }
         }
     }
 

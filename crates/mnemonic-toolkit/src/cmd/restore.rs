@@ -189,10 +189,11 @@ pub struct RestoreArgs {
     #[arg(long = "search-chain", value_enum, default_value_t = CliSearchChain::Receive)]
     pub search_chain: CliSearchChain,
 
-    /// #28 phase 2 — override the 1-hour search-time ceiling for a multisig
-    /// template completion. Must be ≥ the tool's printed estimated exhaustive
-    /// time (a forced acknowledgment). Accepts a humantime duration (e.g. `2h`,
-    /// `90min`).
+    /// DEPRECATED and IGNORED since v0.99.0 — accepted so existing scripts do
+    /// not fail on an unknown flag, but it changes nothing. There is no longer a
+    /// search-time ceiling to acknowledge: `restore` declares its estimate up
+    /// front and reports progress while it scans, and you decide whether to wait
+    /// (Ctrl-C stops it). Still parses a humantime duration (e.g. `2h`, `90min`).
     #[arg(long = "accept-search-time")]
     pub accept_search_time: Option<String>,
 
@@ -2302,19 +2303,113 @@ where
         None => None,
     };
     let total = u64::try_from(realized_total).unwrap_or(u64::MAX);
-    match ps::cap_decision(total, per, accept).map_err(map_search_error)? {
-        ps::CapDecision::RunSilent { .. } => {}
-        ps::CapDecision::RunWithProgress { estimate } => {
-            let _ = writeln!(
-                stderr,
-                "searching {realized_total} candidate assignment(s) (est. ≤ {estimate:?})…"
-            );
-        }
-    }
+    // NO TIME CEILING (operator ruling 2026-09-17). `cap_decision` no longer
+    // refuses; it only decides whether the run is short enough to stay silent.
+    let announce = match ps::cap_decision(total, per, accept).map_err(map_search_error)? {
+        ps::CapDecision::RunSilent { .. } => None,
+        ps::CapDecision::RunWithProgress { estimate } => Some(estimate),
+    };
+
     // The EXACT path + every id/prefix-id path pass `early_exit=false` (the
     // v0.60.0 full-scan-with-2nd-match ambiguity certification, byte-unchanged);
     // the over-supply collision-free address-search opts into `true` (SPEC §4.4).
-    ps::search_enumerated(enumeration, evaluator, mode, early_exit).map_err(map_search_error)
+    let Some(estimate) = announce else {
+        return ps::search_enumerated(enumeration, evaluator, mode, early_exit)
+            .map_err(map_search_error);
+    };
+
+    // DECLARE the estimate, then REPORT while scanning. The operator decides
+    // whether to wait; Ctrl-C is the escape hatch, and saying so is the point of
+    // declaring a number they can act on.
+    let _ = writeln!(
+        stderr,
+        "searching {realized_total} candidate assignment(s) — estimated {} \
+         (press Ctrl-C to stop; progress below)",
+        human_duration(estimate)
+    );
+
+    let scanned = std::sync::atomic::AtomicU64::new(0);
+    let done = std::sync::atomic::AtomicBool::new(false);
+    let started = std::time::Instant::now();
+    let outcome = std::thread::scope(|scope| {
+        let reporter_scanned = &scanned;
+        let reporter_done = &done;
+        scope.spawn(move || {
+            // Report on a fixed wall-clock cadence rather than a percentage
+            // step: a percentage step goes silent exactly when the scan is
+            // slowest, which is when the operator most needs to see it moving.
+            let tick = std::time::Duration::from_secs(PROGRESS_TICK_SECS);
+            let mut waited = std::time::Duration::ZERO;
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                if reporter_done.load(std::sync::atomic::Ordering::Relaxed) {
+                    return;
+                }
+                waited += std::time::Duration::from_millis(200);
+                if waited < tick {
+                    continue;
+                }
+                waited = std::time::Duration::ZERO;
+                let n = reporter_scanned.load(std::sync::atomic::Ordering::Relaxed);
+                let elapsed = started.elapsed();
+                let pct = if total > 0 {
+                    (n as f64 / total as f64 * 100.0).min(100.0)
+                } else {
+                    100.0
+                };
+                // Re-estimate from OBSERVED throughput, not the initial guess:
+                // the calibration ran on 64 candidates and the machine may be
+                // busier or idler than it was then.
+                let remaining = if n > 0 {
+                    let per_obs = elapsed.as_secs_f64() / n as f64;
+                    let left = total.saturating_sub(n) as f64 * per_obs;
+                    human_duration(std::time::Duration::from_secs_f64(left.max(0.0)))
+                } else {
+                    "unknown".to_string()
+                };
+                eprintln!("  …{pct:.1}% — {n}/{total} scanned, ~{remaining} remaining");
+            }
+        });
+        let out = ps::search_enumerated_with_progress(
+            enumeration,
+            evaluator,
+            mode,
+            early_exit,
+            Some(&scanned),
+        );
+        done.store(true, std::sync::atomic::Ordering::Relaxed);
+        out
+    });
+    let _ = writeln!(
+        stderr,
+        "  scan complete in {}",
+        human_duration(started.elapsed())
+    );
+    outcome.map_err(map_search_error)
+}
+
+/// Seconds between progress lines during a long search.
+const PROGRESS_TICK_SECS: u64 = 10;
+
+/// Render a duration the way an operator reads a clock, not the way `Debug`
+/// renders a `Duration` (`5461.0908s` is not an answer to "how long?").
+fn human_duration(d: std::time::Duration) -> String {
+    let s = d.as_secs();
+    if s < 60 {
+        let ms = d.as_millis();
+        return if ms < 1000 {
+            format!("{ms}ms")
+        } else {
+            format!("{:.1}s", d.as_secs_f64())
+        };
+    }
+    if s < 3600 {
+        return format!("{}m {}s", s / 60, s % 60);
+    }
+    if s < 86_400 {
+        return format!("{}h {}m", s / 3600, (s % 3600) / 60);
+    }
+    format!("{}d {}h", s / 86_400, (s % 86_400) / 3600)
 }
 
 /// Convert a candidate keyed `md_codec::Descriptor` to its watch-only miniscript
