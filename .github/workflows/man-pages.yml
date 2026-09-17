@@ -102,7 +102,7 @@ jobs:
       run_aarch64: false
       # The toolkit depends on the miniscript fork ⇒ pass the toolkit rev so the
       # gate stays THREE-block (also the default; passed explicitly for clarity).
-      miniscript_rev: "95fdd1c5773bd918c574d2225787973f63e16a66"
+      miniscript_rev: "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
       # Source the centralized recipe (ci/repro/*.sh, Dockerfile.repro) from THIS
       # tagged commit — identical content to the crate source the gate checks
       # out, so the toolkit build is byte-unchanged vs pre-P3a.
@@ -229,9 +229,9 @@ jobs:
             cross build --locked --offline --release \
               --target "$TARGET" -p mnemonic-toolkit --bin mnemonic \
               --config 'source.crates-io.replace-with="vendored-sources"' \
-              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"' \
-              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"' \
-              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"' \
+              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".git="https://github.com/rust-bitcoin/rust-miniscript"' \
+              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".rev="ff4732e5f75aa555682343cb180fa72ee3e8e9d5"' \
+              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".replace-with="vendored-sources"' \
               --config 'source.vendored-sources.directory="vendor"'
           tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$EPOCH" \
             -cf - -C "target/${TARGET}/release" mnemonic \
@@ -299,9 +299,9 @@ jobs:
               cargo build --locked --offline --release \
                 --target "$TARGET" -p mnemonic-toolkit --bin mnemonic \
                 --config '"'"'source.crates-io.replace-with="vendored-sources"'"'"' \
-                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".git="https://github.com/rust-bitcoin/rust-miniscript"'"'"' \
-                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".rev="95fdd1c5773bd918c574d2225787973f63e16a66"'"'"' \
-                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=95fdd1c5773bd918c574d2225787973f63e16a66".replace-with="vendored-sources"'"'"' \
+                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".git="https://github.com/rust-bitcoin/rust-miniscript"'"'"' \
+                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".rev="ff4732e5f75aa555682343cb180fa72ee3e8e9d5"'"'"' \
+                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".replace-with="vendored-sources"'"'"' \
                 --config '"'"'source.vendored-sources.directory="vendor"'"'"'
               tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
                 -cf - -C "target/$TARGET/release" mnemonic \

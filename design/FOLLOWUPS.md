@@ -5224,3 +5224,45 @@ rather than done:
 Until then both jobs stay red, neither is a required context, and
 `test (ubuntu-latest)`, `examples` and `clippy` — the three that gate a push —
 are green.
+
+## v0.98.0 has no Linux musl: the tag-triggered musl path carried a stale miniscript_rev
+
+**Owning phase:** next release. **Severity:** Important (a released version is
+missing a platform), NOT a funds/correctness defect.
+
+The `mnemonic-toolkit-v0.98.0` tag (2026-09-17) fired `man-pages.yml` -> the
+reproducible musl build, which failed at `repro-x86_64-musl` / `repro-substrate`:
+
+    error: failed to load source for dependency `miniscript`
+      can't checkout from 'https://github.com/rust-bitcoin/rust-miniscript':
+      you are in the offline mode (--offline)
+
+Root cause: `man-pages.yml` and `repro-drift.yml` hardcoded
+`miniscript_rev: 95fdd1c5773bd918c574d2225787973f63e16a66`, but the workspace
+`[patch.crates-io]` advanced the pin to `ff4732e5f75aa555682343cb180fa72ee3e8e9d5`
+(Cargo.toml:35, "advanced from 95fdd1c"). The `--offline` repro builds a
+`[source]` replacement stanza keyed on the PASSED rev, so it vendored 95fdd1c
+while Cargo.lock wanted ff4732e5 -> offline miss.
+
+Not caught earlier because v0.97.0's musl assets were produced by a MANUAL
+`workflow_dispatch` (2026-06-24) that passed the right rev; the TAG-triggered
+man-pages -> musl path was never exercised until v0.98.0. So the pin had been
+stale since miniscript advanced, invisibly.
+
+**Fixed forward** in this commit (both workflow pins -> ff4732e5), so the NEXT
+tag builds Linux musl. This does NOT retroactively fix v0.98.0, whose tag still
+carries the stale man-pages.yml.
+
+**To give v0.98.0 its Linux musl**, either:
+  1. force-move the v0.98.0 tag to the commit carrying this fix and let both
+     workflows re-run (mac/win re-upload --clobber; musl builds; ~60min for the
+     aarch64 QEMU repro leg), or
+  2. leave v0.98.0 mac/win-and-Windows-only and ship Linux musl at the next
+     version.
+Operator's call; the demo points Linux users at the still-valid v0.97.0 musl
+meanwhile.
+
+**Also make the pin non-driftable:** the rev lives in three places
+(Cargo.toml patch, man-pages.yml, repro-drift.yml) and only the first is the
+source of truth. A gate that greps the workflow pins against the Cargo.toml
+patch rev would have caught this at commit time.
