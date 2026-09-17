@@ -44,9 +44,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-/// Hard ceiling on the search threads — the benchmark cap reused from the
-/// `idsearch_bench` / `addrsearch_bench` cost-model prior art. The realized
-/// thread count is `min(MAX_SEARCH_THREADS, available_parallelism())`.
+/// RETIRED 2026-09-17 (operator: "the real code should use as many threads as
+/// cores"). This was 20 — a benchmark cap carried over from the
+/// `idsearch_bench` / `addrsearch_bench` cost-model prior art, not a principled
+/// limit — and on a 24-core box it left a fifth of the machine idle during a
+/// multi-minute wallet search. Kept as a public constant for API compatibility
+/// and no longer used to clamp anything.
+#[deprecated(note = "the search now uses available_parallelism(); this no longer caps anything")]
 pub const MAX_SEARCH_THREADS: usize = 20;
 
 /// SPEC §6.4 — searches whose estimated EXHAUSTIVE time is below this run
@@ -449,11 +453,22 @@ pub enum CapDecision {
 pub fn cap_decision(
     total_candidates: u64,
     per_candidate: Duration,
+    threads: usize,
     accept_search_time: Option<Duration>,
 ) -> Result<CapDecision, SearchError> {
-    let estimate = per_candidate
+    // THE ESTIMATE IS WALL-CLOCK, SO IT MUST ACCOUNT FOR PARALLELISM
+    // (2026-09-17). `per_candidate` is a single-threaded cost; the scan shards
+    // across `threads`. Reporting `total x per` as wall-clock over-stated by the
+    // core count — measured 5m57s announced against 39.4s actual on 24 cores.
+    //
+    // That number is what an operator reads BEFORE deciding whether to wait, and
+    // over-stating is the wrong failure direction for a recovery tool: it talks
+    // someone out of a search that would have found their wallet.
+    let threads = threads.max(1) as u64;
+    let serial = per_candidate
         .checked_mul_u64(total_candidates)
         .unwrap_or(Duration::MAX);
+    let estimate = serial / u32::try_from(threads).unwrap_or(u32::MAX);
 
     // NO TIME CEILING (operator ruling 2026-09-17: "No search time max, just
     // declare estimate and periodical update progress").
@@ -507,16 +522,33 @@ impl DurationMulU64 for Duration {
 /// start, then feeds the result + the realized total to [`cap_decision`].
 pub fn calibrate_per_candidate<E: CandidateEvaluator>(
     evaluator: &E,
-    n: usize,
+    enumeration: &Enumeration,
     samples: u32,
     address_index: u64,
 ) -> Duration {
     if samples == 0 {
         return Duration::ZERO;
     }
-    let assignment: Vec<usize> = (0..n).collect();
+    // MEASURE THE WORK THE SCAN ACTUALLY DOES (2026-09-17).
+    //
+    // This used to reuse ONE identity assignment `(0..n)` for every sample, so
+    // it measured a hot-cache best case that skipped `unrank` entirely. The real
+    // loop unranks a DIFFERENT assignment per candidate and touches varied
+    // memory. Measured on a 201,329,664-candidate search: the old calibration
+    // said 1.77us/candidate, the scan actually cost 4.70us/candidate/core — a
+    // 2.65x under-estimate, which the serial-vs-parallel error then masked by
+    // pushing the announced figure the other way.
+    //
+    // Sampling STRIDED ranks across the whole space (rather than the first
+    // `samples` of them) keeps a cheap early stratum from standing in for the
+    // rest, which matters for the subset enumerations whose strata differ in
+    // cost.
+    let total = enumeration.cardinality().unwrap_or(1).max(1);
+    let stride = (total / u128::from(samples).max(1)).max(1);
     let start = Instant::now();
-    for _ in 0..samples {
+    for i in 0..samples {
+        let rank = (u128::from(i) * stride) % total;
+        let assignment = enumeration.unrank(rank);
         // `std::hint::black_box` keeps the call from being optimized away.
         std::hint::black_box(evaluator.matches(std::hint::black_box(&assignment), address_index));
     }
@@ -528,13 +560,16 @@ pub fn calibrate_per_candidate<E: CandidateEvaluator>(
 // The search engine.
 // ---------------------------------------------------------------------------
 
-/// Realized thread count: `min(MAX_SEARCH_THREADS, available_parallelism())`,
-/// clamped to ≥1.
+/// Realized thread count: **one per core**, clamped to ≥1.
+///
+/// The search is embarrassingly parallel (each thread walks a disjoint slice of
+/// the rank space and shares only two atomics), so there is no reason to leave
+/// cores idle on a scan an operator is waiting on.
 pub fn search_threads() -> usize {
-    let ncpu = std::thread::available_parallelism()
+    std::thread::available_parallelism()
         .map(|n| n.get())
-        .unwrap_or(1);
-    ncpu.clamp(1, MAX_SEARCH_THREADS)
+        .unwrap_or(1)
+        .max(1)
 }
 
 /// `n!` as a `u128` (the id-search candidate count). `None` on overflow
@@ -1525,11 +1560,20 @@ mod tests {
     fn thread_count_capped_at_20_and_ncpu() {
         let t = search_threads();
         assert!(t >= 1);
-        assert!(t <= MAX_SEARCH_THREADS);
+        // One thread per core (the 20-thread benchmark cap was retired
+        // 2026-09-17): the search must not leave cores idle.
+        assert_eq!(
+            t,
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1)
+                .max(1),
+            "search_threads() must equal the core count"
+        );
         let ncpu = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1);
-        assert_eq!(t, ncpu.clamp(1, MAX_SEARCH_THREADS));
+        assert_eq!(t, ncpu.max(1), "one thread per core");
     }
 
     // -- Permutation unranking sanity (the parallel addressing primitive). --
@@ -1653,7 +1697,7 @@ mod tests {
     #[test]
     fn cap_decision_silent_below_30s() {
         // 1000 candidates × 1µs = 1ms < 30s → silent.
-        let d = cap_decision(1000, Duration::from_micros(1), None).unwrap();
+        let d = cap_decision(1000, Duration::from_micros(1), 1, None).unwrap();
         assert_eq!(
             d,
             CapDecision::RunSilent {
@@ -1665,7 +1709,7 @@ mod tests {
     #[test]
     fn cap_decision_progress_between_30s_and_1h() {
         // 600 candidates × 1s = 600s (10 min): 30s ≤ est ≤ 1h → progress.
-        let d = cap_decision(600, Duration::from_secs(1), None).unwrap();
+        let d = cap_decision(600, Duration::from_secs(1), 1, None).unwrap();
         assert_eq!(
             d,
             CapDecision::RunWithProgress {
@@ -1795,6 +1839,76 @@ mod tests {
     }
 
     #[test]
+    fn cap_estimate_is_wall_clock_and_scales_with_threads() {
+        // FOUND BY RUNNING IT (2026-09-17), not by review. A 201,329,664-candidate
+        // search ANNOUNCED "5m 57s" and finished in 39.4s -- 9.1x over-stated --
+        // because cap_decision reported `total x per_candidate`, a SERIAL figure,
+        // as wall-clock for a scan that shards across every core.
+        //
+        // That number is what an operator reads BEFORE deciding whether to wait,
+        // and over-stating is the wrong direction for a recovery tool: it talks
+        // someone out of a search that would have found their wallet.
+        //
+        // Every prior test asserted cap_decision's arithmetic, which was
+        // internally consistent, so none could see this. This one pins the
+        // RELATIONSHIP instead.
+        // 10,000,000 x 10us = 100s SERIAL, which is 12.5s on 8 threads. The
+        // pair straddles SILENT_THRESHOLD (30s) deliberately, so the test pins
+        // the DECISION as well as the arithmetic.
+        let per = Duration::from_micros(10);
+        let total = 10_000_000u64;
+        let serial = cap_decision(total, per, 1, None).unwrap();
+        let eight = cap_decision(total, per, 8, None).unwrap();
+        let (s_est, e_est) = match (serial, eight) {
+            (
+                CapDecision::RunWithProgress { estimate: a },
+                CapDecision::RunSilent { estimate: b },
+            ) => (a, b),
+            other => panic!("unexpected decisions: {other:?}"),
+        };
+        assert_eq!(s_est, Duration::from_secs(100), "serial = total x per");
+        assert_eq!(
+            e_est,
+            Duration::from_secs(100) / 8,
+            "8 threads must divide the wall-clock estimate by 8"
+        );
+        // The threshold applies to the WALL-CLOCK figure: 100s serial is 12.5s
+        // on 8 threads and must NOT announce. Announcing progress for a scan
+        // that is effectively already over is the same defect wearing the other
+        // face, and dividing correctly is what prevents both.
+    }
+
+    #[test]
+    fn calibration_samples_real_unranked_assignments() {
+        // The other half of the same defect. calibrate_per_candidate used to
+        // reuse ONE identity assignment for every sample, so it measured a
+        // hot-cache best case that never paid the unrank cost the real loop pays
+        // on every candidate -- measured 1.77us/candidate against a real
+        // 3.91us/candidate/thread, a 2.2x under-estimate that partly MASKED the
+        // parallelism error above by pushing the figure the other way.
+        //
+        // Pin that the evaluator now sees VARIED assignments: a recorder that
+        // collects what it was handed must see more than one distinct one.
+        use std::sync::Mutex as StdMutex;
+        let seen: StdMutex<Vec<Vec<usize>>> = StdMutex::new(Vec::new());
+        let rec = |a: &[usize], _i: u64| {
+            seen.lock().unwrap().push(a.to_vec());
+            false
+        };
+        let e = Enumeration::FullPermutation { n: 6 }; // 720 candidates
+        let _ = calibrate_per_candidate(&rec, &e, 64, 0);
+        let got = seen.into_inner().unwrap();
+        assert_eq!(got.len(), 64, "one evaluation per sample");
+        let mut uniq = got.clone();
+        uniq.sort();
+        uniq.dedup();
+        assert!(
+            uniq.len() > 1,
+            "calibration must sample VARIED assignments, not one repeated identity: {uniq:?}"
+        );
+    }
+
+    #[test]
     fn cap_decision_never_refuses_on_time() {
         // RE-POINTED 2026-09-17. This test used to assert that a 2h estimate
         // REFUSED without `--accept-search-time`. The time ceiling was removed
@@ -1804,12 +1918,12 @@ mod tests {
         // it being silently reintroduced.
         let est = Duration::from_secs(7200); // 7200 × 1s = 2h, far past the old 1h
         assert_eq!(
-            cap_decision(7200, Duration::from_secs(1), None),
+            cap_decision(7200, Duration::from_secs(1), 1, None),
             Ok(CapDecision::RunWithProgress { estimate: est }),
             "a 2h estimate must RUN (with progress), not refuse"
         );
         // And an absurd one: ~11.5 days. Still no refusal.
-        let huge = cap_decision(1_000_000, Duration::from_secs(1), None).unwrap();
+        let huge = cap_decision(1_000_000, Duration::from_secs(1), 1, None).unwrap();
         assert!(
             matches!(huge, CapDecision::RunWithProgress { .. }),
             "there is no upper bound on the estimate: got {huge:?}"
@@ -1820,12 +1934,13 @@ mod tests {
     fn cap_decision_above_ceiling_accepts_with_sufficient_override() {
         // Same 2h estimate, override ≥ estimate → run with progress.
         let est = Duration::from_secs(7200);
-        let d = cap_decision(7200, Duration::from_secs(1), Some(est)).unwrap();
+        let d = cap_decision(7200, Duration::from_secs(1), 1, Some(est)).unwrap();
         assert_eq!(d, CapDecision::RunWithProgress { estimate: est });
         // A larger override is also fine.
         let d2 = cap_decision(
             7200,
             Duration::from_secs(1),
+            1,
             Some(Duration::from_secs(10_000)),
         )
         .unwrap();
@@ -1840,12 +1955,18 @@ mod tests {
         // IGNORED -- retained only so existing scripts do not fail on an unknown
         // flag. Pin that it changes NOTHING, in both directions.
         let est = Duration::from_secs(7200);
-        let none = cap_decision(7200, Duration::from_secs(1), None).unwrap();
-        let too_low =
-            cap_decision(7200, Duration::from_secs(1), Some(Duration::from_secs(60))).unwrap();
+        let none = cap_decision(7200, Duration::from_secs(1), 1, None).unwrap();
+        let too_low = cap_decision(
+            7200,
+            Duration::from_secs(1),
+            1,
+            Some(Duration::from_secs(60)),
+        )
+        .unwrap();
         let generous = cap_decision(
             7200,
             Duration::from_secs(1),
+            1,
             Some(Duration::from_secs(99_999)),
         )
         .unwrap();
@@ -1871,7 +1992,7 @@ mod tests {
             std::hint::black_box(x);
             false
         };
-        let per = calibrate_per_candidate(&slow, 11, 64, 0);
+        let per = calibrate_per_candidate(&slow, &Enumeration::FullPermutation { n: 11 }, 64, 0);
         assert!(per > Duration::ZERO, "calibration measured non-zero cost");
 
         // Derive the space from the cost we just MEASURED, rather than assuming
@@ -1899,7 +2020,7 @@ mod tests {
         // What it pins now: a space this expensive still RUNS, and is announced
         // rather than refused.
         let needed = (SEARCH_CEILING.as_nanos() / per.as_nanos() + 1) as u64;
-        let res = cap_decision(needed, per, None).expect("no refusal on time, ever");
+        let res = cap_decision(needed, per, 1, None).expect("no refusal on time, ever");
         match res {
             CapDecision::RunWithProgress { estimate } => {
                 assert!(
@@ -1907,7 +2028,7 @@ mod tests {
                     "fixture must exceed the OLD ceiling to be meaningful: {estimate:?}"
                 );
                 // The ignored override changes nothing.
-                assert_eq!(cap_decision(needed, per, Some(estimate)).unwrap(), res);
+                assert_eq!(cap_decision(needed, per, 1, Some(estimate)).unwrap(), res);
             }
             CapDecision::RunSilent { .. } => {
                 panic!("a multi-hour estimate must be announced, not silent: {res:?}")
@@ -1918,7 +2039,10 @@ mod tests {
     #[test]
     fn calibrate_zero_samples_is_zero() {
         let eval = |_a: &[usize], _idx: u64| true;
-        assert_eq!(calibrate_per_candidate(&eval, 5, 0, 0), Duration::ZERO);
+        assert_eq!(
+            calibrate_per_candidate(&eval, &Enumeration::FullPermutation { n: 5 }, 0, 0),
+            Duration::ZERO
+        );
     }
 
     // -- M1: hostile slot count refuses (no panic). -------------------------

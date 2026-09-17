@@ -2584,7 +2584,12 @@ where
     };
     let realized_total = realized_perms.saturating_mul(outer);
     // Calibrate per-candidate cost on this machine, then cap.
-    let per = ps::calibrate_per_candidate(evaluator, enumeration.n(), 64, 0);
+    // Calibrate against the SAME enumeration the scan will walk, so the sample
+    // pays the unrank cost and touches the same strata the real loop does.
+    let per = ps::calibrate_per_candidate(evaluator, enumeration, 64, 0);
+    // The estimate is wall-clock, so it must use the thread count the engine
+    // will actually shard across -- the same expression `search_enumerated` uses.
+    let threads = ps::search_threads().min(usize::try_from(realized_total).unwrap_or(usize::MAX));
     let accept = match accept_search_time {
         Some(s) => Some(parse_search_duration(s)?),
         None => None,
@@ -2592,7 +2597,7 @@ where
     let total = u64::try_from(realized_total).unwrap_or(u64::MAX);
     // NO TIME CEILING (operator ruling 2026-09-17). `cap_decision` no longer
     // refuses; it only decides whether the run is short enough to stay silent.
-    let announce = match ps::cap_decision(total, per, accept).map_err(map_search_error)? {
+    let announce = match ps::cap_decision(total, per, threads, accept).map_err(map_search_error)? {
         ps::CapDecision::RunSilent { .. } => None,
         ps::CapDecision::RunWithProgress { estimate } => Some(estimate),
     };
@@ -2600,27 +2605,32 @@ where
     // The EXACT path + every id/prefix-id path pass `early_exit=false` (the
     // v0.60.0 full-scan-with-2nd-match ambiguity certification, byte-unchanged);
     // the over-supply collision-free address-search opts into `true` (SPEC §4.4).
-    let Some(estimate) = announce else {
-        return ps::search_enumerated_with_progress(
-            enumeration,
-            evaluator,
-            mode,
-            early_exit,
-            collect_all,
-            None,
-        )
-        .map_err(map_search_error);
-    };
-
-    // DECLARE the estimate, then REPORT while scanning. The operator decides
-    // whether to wait; Ctrl-C is the escape hatch, and saying so is the point of
-    // declaring a number they can act on.
-    let _ = writeln!(
-        stderr,
-        "searching {realized_total} candidate assignment(s) — estimated {} \
-         (press Ctrl-C to stop; progress below)",
-        human_duration(estimate)
-    );
+    // MEASURE, DO NOT PREDICT (2026-09-17, found by running it twice).
+    //
+    // The first design multiplied the candidate count by a single-threaded
+    // per-candidate cost and announced that as wall-clock: 201,329,664
+    // candidates announced "5m 57s" and finished in 39.4s, 9.1x over-stated.
+    // Dividing by the thread count then flipped it the other way -- the same
+    // scan announced NOTHING and ran 39.2s in total silence, because a
+    // single-threaded sample measures ~3.6us/candidate uncontended while 24
+    // threads actually cost ~4.7us each once they are competing for memory
+    // bandwidth. `total x per / threads` silently assumes 100% parallel
+    // efficiency; the real figure here is ~77%, and it is a property of the
+    // machine, not a constant worth hard-coding.
+    //
+    // So the announce decision is no longer a prediction. The scan starts
+    // immediately, and a watcher thread derives the projection from OBSERVED
+    // throughput after a short warm-up. If the projected total crosses the
+    // threshold it announces THEN and keeps ticking; otherwise it stays quiet
+    // and the operator never sees a number at all. The cost is that the first
+    // line appears a beat late rather than instantly -- which is the right
+    // trade against announcing a figure that is wrong by 9x, or staying silent
+    // through a 39-second wait.
+    //
+    // `announce` (the pre-scan estimate) is retained ONLY as the silent-path
+    // fast exit: when even the optimistic serial-derived figure is far below
+    // the threshold there is no point starting a watcher.
+    let _ = &announce;
 
     let scanned = std::sync::atomic::AtomicU64::new(0);
     let done = std::sync::atomic::AtomicBool::new(false);
@@ -2629,39 +2639,62 @@ where
         let reporter_scanned = &scanned;
         let reporter_done = &done;
         scope.spawn(move || {
-            // Report on a fixed wall-clock cadence rather than a percentage
-            // step: a percentage step goes silent exactly when the scan is
-            // slowest, which is when the operator most needs to see it moving.
+            // WARM-UP, then decide from measured throughput. Long enough that
+            // thread start-up and cold caches do not dominate the sample, short
+            // enough that a genuinely long scan is announced while the operator
+            // is still looking at the terminal.
+            let warmup = std::time::Duration::from_millis(WARMUP_MS);
             let tick = std::time::Duration::from_secs(PROGRESS_TICK_SECS);
-            let mut waited = std::time::Duration::ZERO;
+            let mut announced = false;
+            let mut since_tick = std::time::Duration::ZERO;
+            // Poll FAST so a short search is not taxed by the watcher: the
+            // scope joins this thread, so the poll interval is a floor on every
+            // restore's runtime. 25ms is invisible next to a search worth
+            // reporting on, and negligible for one that is not.
+            let step = std::time::Duration::from_millis(25);
             loop {
-                std::thread::sleep(std::time::Duration::from_millis(200));
+                std::thread::sleep(step);
                 if reporter_done.load(std::sync::atomic::Ordering::Relaxed) {
                     return;
                 }
-                waited += std::time::Duration::from_millis(200);
-                if waited < tick {
+                let elapsed = started.elapsed();
+                let n = reporter_scanned.load(std::sync::atomic::Ordering::Relaxed);
+                if elapsed < warmup || n == 0 {
                     continue;
                 }
-                waited = std::time::Duration::ZERO;
-                let n = reporter_scanned.load(std::sync::atomic::Ordering::Relaxed);
-                let elapsed = started.elapsed();
-                let pct = if total > 0 {
-                    (n as f64 / total as f64 * 100.0).min(100.0)
-                } else {
-                    100.0
-                };
-                // Re-estimate from OBSERVED throughput, not the initial guess:
-                // the calibration ran on 64 candidates and the machine may be
-                // busier or idler than it was then.
-                let remaining = if n > 0 {
-                    let per_obs = elapsed.as_secs_f64() / n as f64;
-                    let left = total.saturating_sub(n) as f64 * per_obs;
+                // Observed throughput -> projected TOTAL wall-clock. No serial
+                // model, no parallel-efficiency assumption: this is the rate the
+                // machine is actually achieving, right now, with every thread
+                // already contending.
+                let per_obs = elapsed.as_secs_f64() / n as f64;
+                let projected = std::time::Duration::from_secs_f64(total as f64 * per_obs);
+                if !announced {
+                    if projected < ps::SILENT_THRESHOLD {
+                        // Short enough that the operator will not wonder. Stay
+                        // quiet and stop watching: no number is better than a
+                        // number nobody needed.
+                        return;
+                    }
+                    eprintln!(
+                        "searching {total} candidate assignment(s) — estimated {} \
+                         (measured; press Ctrl-C to stop)",
+                        human_duration(projected)
+                    );
+                    announced = true;
+                    since_tick = std::time::Duration::ZERO;
+                    continue;
+                }
+                since_tick += step;
+                if since_tick < tick {
+                    continue;
+                }
+                since_tick = std::time::Duration::ZERO;
+                let pct = (n as f64 / total as f64 * 100.0).min(100.0);
+                let left = (total.saturating_sub(n)) as f64 * per_obs;
+                eprintln!(
+                    "  …{pct:.1}% — {n}/{total} scanned, ~{} remaining",
                     human_duration(std::time::Duration::from_secs_f64(left.max(0.0)))
-                } else {
-                    "unknown".to_string()
-                };
-                eprintln!("  …{pct:.1}% — {n}/{total} scanned, ~{remaining} remaining");
+                );
             }
         });
         let out = ps::search_enumerated_with_progress(
@@ -2685,6 +2718,11 @@ where
 
 /// Seconds between progress lines during a long search.
 const PROGRESS_TICK_SECS: u64 = 10;
+
+/// How long to let the scan run before judging its throughput. Long enough that
+/// thread start-up and cold caches do not dominate the sample; short enough that
+/// a long scan is announced while the operator is still watching.
+const WARMUP_MS: u64 = 1200;
 
 /// Render a duration the way an operator reads a clock, not the way `Debug`
 /// renders a `Duration` (`5461.0908s` is not an answer to "how long?").
