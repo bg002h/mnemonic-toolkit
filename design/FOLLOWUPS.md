@@ -5387,3 +5387,46 @@ cycle deletes the refusal for the enumerate band, converting an actionable
 refusal into a confident **false negative** — "your wallet is not among these
 keys", said of a wallet that is. SPEC §3.9 therefore carves the combination out
 of enumerate mode until this is fixed, and requires a test pinning the carve-out.
+
+---
+
+### `release-upload-failure-modes-are-backwards` — a transient 500 on the CHECKSUMS fails the job; the same 500 on a BINARY passes it (tier: ci; owning phase: the next release-workflow touch)
+
+**Observed 2026-09-17** on the `mnemonic-toolkit-v0.99.0` release run
+(`35268798306`), which failed with:
+
+```
+HTTP 500: Error creating asset temp dir
+  (https://uploads.github.com/.../assets?label=&name=SHA256SUMS.portable)
+```
+
+GitHub-side and transient — a plain re-run of the failed job published
+everything. But the failure exposed an asymmetry in `release.yml`'s upload step:
+
+```sh
+gh release upload "$TAG" release/mnemonic-*.tar.gz --clobber 2>/dev/null || true
+gh release upload "$TAG" release/mnemonic-*.zip    --clobber 2>/dev/null || true
+gh release upload "$TAG" release/SHA256SUMS.portable --clobber      # no `|| true`
+```
+
+So:
+
+- a transient failure uploading **a binary** is swallowed (`|| true`) and the
+  job reports **success** with that binary missing — the dangerous case, because
+  nobody looks;
+- a transient failure uploading **the checksums** fails the job — the recoverable
+  case, because the binaries are already up and a re-run fixes it.
+
+That is the wrong way round. A release missing a platform binary while reporting
+green is exactly the "a gate that cannot fail" class: `2>/dev/null || true` also
+hides *why* it failed, so a real problem (a misnamed artifact, a missing build)
+is indistinguishable from a 500.
+
+**Shape of the fix:** upload each asset with a bounded retry, then verify the
+expected asset SET against `gh release view --json assets` and fail if any
+member is missing. That turns both cases into the same outcome — loud — and is
+the only version that can tell "GitHub hiccuped" from "the macOS build never
+produced a tarball".
+
+Note the release DID publish correctly in the end: 11 assets including both
+Linux musl builds, which also closed the v0.98.0 musl gap.
