@@ -1675,6 +1675,79 @@ mod tests {
     }
 
     #[test]
+    fn collect_all_returns_every_match_not_the_first_two() {
+        // SPEC §6 vector 1, via the stub-evaluator route §6 itself sanctions.
+        //
+        // A REAL >=2-match fixture is out of reach: a 2-byte prefix needs a
+        // space of ~65536 x the desired match count, and --own-account-max 256
+        // over 3 slots tops out at S=1536 (0.02 expected matches). So the
+        // collect-all contract is pinned at the engine, where the match set is
+        // exact and the test is instant.
+        //
+        // 4! = 24 candidates; the evaluator accepts a KNOWN set of 5 ranks.
+        let hits = [1usize, 4, 9, 16, 23];
+        let eval = |a: &[usize], _i: u64| {
+            // Rank-free predicate: accept iff the assignment's first slot index
+            // is in a chosen set, which selects a deterministic subset.
+            hits.contains(&(a[0] * 6 + a[1]))
+        };
+        let e = Enumeration::FullPermutation { n: 4 };
+        let out =
+            search_enumerated_with_progress(&e, &eval, SearchMode::Id, false, true, None).unwrap();
+        match out {
+            SearchOutcome::Enumerated { assignments } => {
+                // The COUNT is the assertion. A "collect the first two then
+                // stop" mutant still returns >=2 and would pass a `len() >= 2`
+                // check, which is why the draft spec's phrasing was called out
+                // as insufficient.
+                let expected = {
+                    let mut n = 0;
+                    for r in 0..24u128 {
+                        let a = e.unrank(r);
+                        if hits.contains(&(a[0] * 6 + a[1])) {
+                            n += 1;
+                        }
+                    }
+                    n
+                };
+                assert!(expected >= 2, "fixture must produce >=2 matches");
+                assert_eq!(
+                    assignments.len(),
+                    expected,
+                    "collect_all must return EVERY match, not the first two"
+                );
+                // And they must be sorted, so a rendered list is stable run to
+                // run rather than reflecting thread completion order.
+                let mut sorted = assignments.clone();
+                sorted.sort();
+                let mut by_rank = assignments.clone();
+                by_rank.dedup();
+                assert_eq!(by_rank.len(), assignments.len(), "no duplicate rows");
+                assert!(
+                    assignments.windows(2).all(|w| w[0] <= w[1]),
+                    "rows must be in a stable order: {assignments:?}"
+                );
+            }
+            other => panic!("expected Enumerated, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn collect_all_with_one_match_is_unique_not_a_list() {
+        // The band's boundary: ONE match is not a list. It stays `Unique` so the
+        // caller reconstructs it (under the §3.8 warning) rather than rendering
+        // a one-row list, which is the operator ruling.
+        let eval = |a: &[usize], _i: u64| a[0] == 0 && a[1] == 1 && a[2] == 2;
+        let e = Enumeration::FullPermutation { n: 3 };
+        let out =
+            search_enumerated_with_progress(&e, &eval, SearchMode::Id, false, true, None).unwrap();
+        assert!(
+            matches!(out, SearchOutcome::Unique { .. }),
+            "a lone match must stay Unique even with collect_all: {out:?}"
+        );
+    }
+
+    #[test]
     fn progress_counter_reaches_the_full_space() {
         // The progress counter is what the CLI's periodic report divides by, so
         // a counter that silently under-counts would render a percentage that

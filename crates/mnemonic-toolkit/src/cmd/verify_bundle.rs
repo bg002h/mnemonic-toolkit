@@ -134,7 +134,15 @@ pub struct VerifyBundleArgs {
     /// ADDRESS-SEARCH for a multisig template completion (mirrors
     /// `restore --search-address`). Recommended over `--expect-wallet-id`
     /// (full-scriptPubKey match — collision-free).
-    #[arg(long = "search-address")]
+    // SPEC §3.7 — MUTUALLY EXCLUSIVE with `--expect-wallet-id`, on BOTH surfaces.
+    //
+    // Before this, supplying both was accepted and the address was SILENTLY
+    // IGNORED: the dispatch is `if id_search { .. } else if addr_search { .. }`,
+    // so the id search simply won. The live demo taught "USE BOTH TOGETHER …
+    // together the answer is fully determined", which that dispatch falsifies.
+    // Refusing is the small fix; honouring both is a larger change and is not in
+    // this cycle's scope.
+    #[arg(long = "search-address", conflicts_with = "expect_wallet_id")]
     pub search_address: Option<String>,
 
     /// #28 phase 2 — inclusive lower address index for `--search-address`

@@ -170,7 +170,15 @@ pub struct RestoreArgs {
     /// unique key→slot assignment whose scriptPubKey at some `(chain, index)` in
     /// the range equals this address's. Recommended over `--expect-wallet-id`
     /// (full-scriptPubKey match — collision-free).
-    #[arg(long = "search-address")]
+    // SPEC §3.7 — MUTUALLY EXCLUSIVE with `--expect-wallet-id`, on BOTH surfaces.
+    //
+    // Before this, supplying both was accepted and the address was SILENTLY
+    // IGNORED: the dispatch is `if id_search { .. } else if addr_search { .. }`,
+    // so the id search simply won. The live demo taught "USE BOTH TOGETHER …
+    // together the answer is fully determined", which that dispatch falsifies.
+    // Refusing is the small fix; honouring both is a larger change and is not in
+    // this cycle's scope.
+    #[arg(long = "search-address", conflicts_with = "expect_wallet_id")]
     pub search_address: Option<String>,
 
     /// #28 phase 2 — inclusive lower address index for `--search-address`
@@ -1548,6 +1556,39 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     }
 }
 
+/// SPEC §3.4a(c)/(d) — the `--json` envelope for an enumerate listing.
+///
+/// Extracted as a pure function so the two contracts that matter can be tested
+/// without a wallet fixture: there is NO `wallets` key and no per-candidate
+/// `descriptor` (a candidate must not be importable), and truncation is visible
+/// with the TRUE total rather than the truncated length.
+pub(crate) fn candidate_list_envelope(
+    list: &CandidateList,
+    network: CliNetwork,
+) -> serde_json::Value {
+    json!({
+        "network": network.human_name(),
+        "completed_from": "multisig-template-md1",
+        "prefix_hex": list.prefix_hex,
+        "prefix_bytes": list.prefix_bytes,
+        "required_bytes": list.required_bytes,
+        // u128 does not round-trip through JSON numbers; a string keeps it exact.
+        "realized_space": list.realized_space.to_string(),
+        "realized_space_kind": list.realized_space_kind,
+        "match_count": list.match_count,
+        "truncated": list.truncated,
+        "order_independent": list.order_independent,
+        "candidates": list.rows.iter().map(|r| json!({
+            "wallet_policy_id": r.wallet_policy_id,
+            "assignment": r.assignment.iter().map(|(slot, fp)| json!({
+                "slot": slot,
+                "fingerprint": fp,
+            })).collect::<Vec<_>>(),
+            "first_address": r.first_address,
+        })).collect::<Vec<_>>(),
+    })
+}
+
 /// SPEC §3.3/§3.4a — render an enumerate listing.
 ///
 /// The invariant this function exists to hold: it emits NO descriptor, and under
@@ -1563,26 +1604,7 @@ fn emit_candidate_list<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     if args.json {
-        let envelope = json!({
-            "network": network.human_name(),
-            "completed_from": "multisig-template-md1",
-            "prefix_hex": list.prefix_hex,
-            "prefix_bytes": list.prefix_bytes,
-            "required_bytes": list.required_bytes,
-            "realized_space": list.realized_space.to_string(),
-            "realized_space_kind": list.realized_space_kind,
-            "match_count": list.match_count,
-            "truncated": list.truncated,
-            "order_independent": list.order_independent,
-            "candidates": list.rows.iter().map(|r| json!({
-                "wallet_policy_id": r.wallet_policy_id,
-                "assignment": r.assignment.iter().map(|(slot, fp)| json!({
-                    "slot": slot,
-                    "fingerprint": fp,
-                })).collect::<Vec<_>>(),
-                "first_address": r.first_address,
-            })).collect::<Vec<_>>(),
-        });
+        let envelope = candidate_list_envelope(list, network);
         writeln!(
             stdout,
             "{}",
@@ -4417,4 +4439,90 @@ pub(crate) fn uniqueness_warning_block(prefix_bytes: usize, required_bytes: usiz
         out.push('\n');
     }
     out
+}
+
+#[cfg(test)]
+mod candidate_list_envelope_tests {
+    use super::{candidate_list_envelope, CandidateList, CandidateRow, LIST_CAP};
+    use crate::network::CliNetwork;
+
+    fn row(id: &str) -> CandidateRow {
+        CandidateRow {
+            wallet_policy_id: id.into(),
+            assignment: vec![(0, "b8688df1".into()), (1, "28645006".into())],
+            first_address: "bc1qexample".into(),
+        }
+    }
+
+    fn list(rows: usize, match_count: usize, truncated: bool) -> CandidateList {
+        CandidateList {
+            rows: (0..rows).map(|i| row(&format!("{i:032x}"))).collect(),
+            match_count,
+            truncated,
+            prefix_hex: "e1cc".into(),
+            prefix_bytes: 2,
+            required_bytes: 5,
+            realized_space: 6,
+            realized_space_kind: "n_factorial",
+            order_independent: false,
+        }
+    }
+
+    #[test]
+    fn a_candidate_is_not_importable() {
+        // SPEC §6 vector 8. The executable form of §4's "the list reconstructs
+        // nothing": no descriptor anywhere, and NO `wallets` key — reusing
+        // `wallets` would make `.wallets[0].descriptor` silently become
+        // candidate #1 for every script already reading it.
+        let j = candidate_list_envelope(&list(3, 3, false), CliNetwork::Mainnet);
+        assert!(
+            j.get("wallets").is_none(),
+            "`wallets` must be ABSENT when candidates are present: {j}"
+        );
+        let cands = j["candidates"].as_array().expect("candidates array");
+        assert_eq!(cands.len(), 3);
+        for c in cands {
+            assert!(
+                c.get("descriptor").is_none(),
+                "a candidate must carry NO descriptor: {c}"
+            );
+        }
+        // The whole serialized envelope must not contain a descriptor anywhere.
+        assert!(
+            !serde_json::to_string(&j).unwrap().contains("descriptor"),
+            "no descriptor may appear anywhere in a listing envelope"
+        );
+    }
+
+    #[test]
+    fn truncation_is_visible_and_reports_the_true_total() {
+        // SPEC §6 vector 9. A consumer that cannot tell truncation from
+        // completeness concludes "not among my keys" for a wallet that was #65
+        // — a wrong answer delivered as a complete one.
+        let j = candidate_list_envelope(&list(LIST_CAP, 500, true), CliNetwork::Mainnet);
+        assert_eq!(j["truncated"], serde_json::json!(true));
+        assert_eq!(
+            j["match_count"],
+            serde_json::json!(500),
+            "match_count must be the TRUE total, not the truncated row count"
+        );
+        assert_eq!(j["candidates"].as_array().unwrap().len(), LIST_CAP);
+    }
+
+    #[test]
+    fn an_untruncated_listing_says_so() {
+        let j = candidate_list_envelope(&list(3, 3, false), CliNetwork::Mainnet);
+        assert_eq!(j["truncated"], serde_json::json!(false));
+        assert_eq!(j["match_count"], serde_json::json!(3));
+    }
+
+    #[test]
+    fn realized_space_survives_as_an_exact_string() {
+        // u128 does not round-trip through a JSON number; a silently-truncated
+        // space size would misstate the very figure the prefix sizing rests on.
+        let mut l = list(1, 1, false);
+        l.realized_space = 66_902_793_897_139_200;
+        let j = candidate_list_envelope(&l, CliNetwork::Mainnet);
+        assert_eq!(j["realized_space"], serde_json::json!("66902793897139200"));
+    }
 }

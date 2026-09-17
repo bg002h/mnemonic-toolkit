@@ -810,22 +810,26 @@ fn sortedmulti_own_account_max_id_search_finds_non_identity_placement() {
 }
 
 #[test]
-fn sortedmulti_subset_id_and_address_together_still_finds_it() {
-    // REGRESSION W2 (whole-diff review of the first cut of the A1 fix).
+fn id_and_address_together_are_refused() {
+    // RE-POINTED. This test was written for W2: the first cut of the A1 fix
+    // keyed the ordering collapse on `addr_search` alone, so supplying BOTH
+    // flags ran the ID evaluator with the collapse still on and the original
+    // defect was live. It asserted that the combination still resolved.
     //
-    // The first fix keyed the ordering collapse on `addr_search` alone. But the
-    // dispatch is `if id_search { .. } else if addr_search { .. }` and nothing
-    // makes the two flags mutually exclusive — so supplying BOTH ran the ID
-    // evaluator with the collapse still ON, and the original defect was fully
-    // live for that combination. The predicate is now
-    // `sorted_shape && addr_search && !id_search`.
+    // SPEC §3.7 then made the two flags MUTUALLY EXCLUSIVE, because the
+    // dispatch `if id_search { .. } else if addr_search { .. }` had been
+    // silently ignoring the address all along — and the demo was teaching
+    // people to pass both. So the combination is now a usage error, and the
+    // behaviour this test guarded is unreachable from the CLI.
     //
-    // Same fixture as the A1 test (own at @1, a NON-identity placement); the
-    // only change is that the wallet's own correct address is supplied too.
+    // It is re-pointed rather than deleted: the refusal is the new contract and
+    // needs its own guard, and a deleted test would leave nothing asserting that
+    // the silent-ignore is gone. The predicate's `!id_search` term stays
+    // (defensive for the library path, where a caller builds the ctx directly).
     let cos = &[(SEED_B, 0u32), (SEED_A, 3u32)];
     let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
     let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
-    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 2);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 1);
     let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 0);
 
     let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
@@ -839,19 +843,20 @@ fn sortedmulti_subset_id_and_address_together_still_finds_it() {
         id,
         "--search-address".into(),
         golden[0].clone(),
-        "--count".into(),
-        "2".into(),
-        "--json".into(),
     ]);
     for c in &mk1_b {
         args.push("--cosigner".into());
         args.push(c.clone());
     }
-    let got = restore_addresses(&args);
-    assert_eq!(
-        got, golden,
-        "id + address TOGETHER must still resolve a non-identity placement; \
-         the collapse must be off whenever the ID evaluator runs"
+    let assert = mnemonic().args(&args).assert().failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("cannot be used with"),
+        "supplying both must be a usage error, not a silently-ignored address: {stderr}"
+    );
+    assert!(
+        stderr.contains("--expect-wallet-id") && stderr.contains("--search-address"),
+        "the refusal must name BOTH flags so the operator knows which to drop: {stderr}"
     );
 }
 
