@@ -154,6 +154,50 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.98.1] — 2026-09-17
+
+**Two funds-safety fixes in multisig template completion.** Both were found by an
+adversarial-input review of the queued `--expect-wallet-id` enumerate feature,
+both pre-date that feature, and both are cases where the tool gave a *confident*
+answer that was wrong rather than refusing.
+
+### Fixed
+
+- **`--expect-wallet-id` was silently discarded whenever any `--cosigner @N=`
+  explicit placement was supplied.** Not weakly checked — structurally
+  unreachable: the explicit path returned early into a function that never
+  received the prefix. A WRONG placement together with the operator's TRUE
+  recorded id emitted a **different wallet at exit 0**, printed under a
+  `✓ wallet-id (completed)` line — in the one completion mode that has no other
+  cross-check, and whose own warning tells the operator to "Record + check
+  `--expect-wallet-id`". A supplied id is now binding: a completed wallet that
+  contradicts it prints `✗ NO MATCH` and exits 4.
+  Explicit mode remains *unverified* when no id is supplied; that is unchanged,
+  and remains the operator's stated risk.
+
+- **`sortedmulti` + `--own-account-max` / `--search-cosigner-subset` never
+  enumerated the true wallet**, so a **correct full 16-byte `--expect-wallet-id`
+  returned `✗ NO MATCH`.** The subset generators collapse key orderings because a
+  sorted wallet's scriptPubKey is order-independent — true for an *address*
+  target, false for a *wallet-id* target, because `compute_wallet_policy_id`
+  never sorts. The collapse is now gated on the search target rather than the
+  wallet shape.
+  **Second defect closed by the same change:** the under-counted search space
+  also under-sized the `--expect-wallet-id` strength floor, so that path had been
+  accepting prefixes *weaker* than the collision bound the sizing exists to
+  enforce.
+
+Both fixes are inherited by `verify-bundle`, which drives the same completion
+engine. No CLI surface changed; no flag was added or removed.
+
+### Notes
+
+Each fix landed test-first with its RED proven, not assumed. The `sortedmulti`
+regression test uses an unsorted sibling as its control, and the explicit-
+placement fix ships with a both-sides boundary test so that "refuse always"
+cannot satisfy it.
+
+
 ## mnemonic-toolkit [0.97.0] — 2026-08-03
 
 **SemVer-MINOR, documented-CLI-contract change — `verify-bundle` descriptor INPUT errors now exit 2 (`DescriptorParse`), matching `bundle`, instead of 4. Exit 4 was this project's BundleMismatch / VERIFY-ME tier, so a mistyped `--descriptor` told the user their engraved bundle might be corrupt — and made the GUI render an amber VERIFY-ME badge for a typo.**
