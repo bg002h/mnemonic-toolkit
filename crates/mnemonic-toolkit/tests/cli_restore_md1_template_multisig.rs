@@ -749,6 +749,53 @@ fn own_account_max_completes_at_nonzero_account() {
 }
 
 #[test]
+fn sortedmulti_own_account_max_id_search_finds_non_identity_placement() {
+    // REGRESSION (2026-09-17, adversarial-input lens A1). A `sortedmulti` shape
+    // makes the ADDRESS order-independent, so the subset generators collapse
+    // orderings enumeration-side (`sorted: true` → each subset emitted ONCE in
+    // identity order). That collapse is sound for an address target. It is NOT
+    // sound for a wallet-id target: `compute_wallet_policy_id` never sorts
+    // (see the carve-out at restore.rs:1951-1953), so the recorded id pins a
+    // SPECIFIC ordering the search must still resolve.
+    //
+    // Here the OWN key is at slot @1, not @0, so the true assignment is NOT the
+    // identity placement. Before the fix the collapsed generator never emitted
+    // it and a CORRECT full 16-byte id returned `✗ NO MATCH` (exit 4).
+    //
+    // The sibling `own_account_max_completes_at_nonzero_account` cannot catch
+    // this: it uses unsorted `wsh-multi`, where nothing is collapsed.
+    let cos = &[(SEED_B, 0u32), (SEED_A, 3u32)]; // @0 = cosigner, @1 = OWN
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 0);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "5".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "sortedmulti + --own-account-max + id-search must resolve a NON-IDENTITY \
+         placement; the ordering collapse is only sound for an ADDRESS target"
+    );
+}
+
+#[test]
 fn own_account_max_address_search_finds_nonzero_account() {
     // The early-exit (address-search) over-supply path: own@2 of a 2-of-2,
     // resolved via --search-address over the own-anchored space.

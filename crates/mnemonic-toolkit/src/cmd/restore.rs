@@ -1952,6 +1952,25 @@ pub(crate) fn complete_multisig_template<E: Write>(
     // `identity.rs` — so the recorded id pins a SPECIFIC order the search must
     // still resolve. Verified: sortedmulti AB-id ≠ BA-id.)
     let sorted_shape = crate::synthesize::is_order_independent_shape(&d.tree);
+    // The ordering collapse below is sound only when the SEARCH TARGET is itself
+    // order-independent. An ADDRESS is: every placement of a sorted wallet has
+    // the same scriptPubKey. A WALLET-ID is NOT: `compute_wallet_policy_id`
+    // never sorts (see the carve-out note above), so the recorded id pins a
+    // SPECIFIC ordering that the search still has to resolve.
+    //
+    // The EXACT path already draws this distinction — its identity-filter lives
+    // inside the ADDRESS evaluator only. The subset generators did not, and
+    // collapsed for both targets, so a `sortedmulti` + `--own-account-max` /
+    // `--search-cosigner-subset` id-search never enumerated a non-identity
+    // placement: a CORRECT full 16-byte id returned `✗ NO MATCH`.
+    // (2026-09-17, adversarial-input lens A1. Regression test:
+    //  `sortedmulti_own_account_max_id_search_finds_non_identity_placement`.)
+    //
+    // This also re-sizes the prefix floor: `realized_s` feeds
+    // `validate_prefix_strength`, so while the space was under-counted the
+    // required prefix was under-sized too, and prefixes weaker than the
+    // collision bound were being accepted on this path.
+    let collapse_orderings = sorted_shape && addr_search;
 
     // --- The enumeration the engine ranks over (SPEC §4) ---------------------
     // OPT-IN: the stratified opt-in space `s_opt` (own-subset × cosigner-subset ×
@@ -1967,7 +1986,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             k_own,
             m_sup: m_cosigners,
             n,
-            sorted: sorted_shape,
+            sorted: collapse_orderings,
         }
     } else if over_supply {
         let j = n - m_cosigners; // own slots (gated ≥1 above)
@@ -1975,7 +1994,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             k_own,
             j,
             m: m_cosigners,
-            sorted: sorted_shape,
+            sorted: collapse_orderings,
         }
     } else {
         ps::Enumeration::FullPermutation { n }
