@@ -132,9 +132,25 @@ Two consequences follow and are binding:
    **Order requires an explicit sort** (R0 M2): the engine assembles matches
    per-thread (`matches.lock().unwrap().extend(local)`,
    `permutation_search.rs:1085-1087`), so arrival order is nondeterministic. Sort
-   by `(permutation_index, address_index)` — the pair, not the permutation alone,
-   since an address-mode match carries both. Any test asserting order is flaky
-   until both are pinned.
+   by **`permutation_index` alone** (L14). An earlier draft pinned
+   `(permutation_index, address_index)` "since an address-mode match carries
+   both" — but enumerate runs only on the id path, where `address_index` is
+   hard-coded `0` (`permutation_search.rs:1066`, `SearchMode::Id => 0`), and §3.7 makes the two flags
+   mutually exclusive, so the second component can never vary. Worse, the
+   engine's own tie-break is the **reverse** order — `address_index` then
+   `perm_rank` (`permutation_search.rs:1100-1102`) — so the draft's pair
+   contradicted the code it described. Inert today; the risk is a later reader
+   taking that justification as evidence the enumerate path can be address-mode.
+   Any test asserting order is flaky until the sort is explicit.
+   **The `@N=<fp>` column is degenerate for a bare-xpub pool** (L12) — exactly
+   the pool with no mk1 metadata. `decode_cosigner_card`
+   (`restore.rs:2160-2162`) gives a bare xpub `Fingerprint::default()`, so every
+   row renders `@0=00000000, @1=00000000, …`: identical across candidates, with
+   only the id distinguishing them. The column whose job is "which card goes
+   where" carries no information on the one path that most needs it. When a pool
+   key's fingerprint is zero, render a stable disambiguator instead — the pool
+   index plus an xpub prefix — not a row of zeros. Related tool-side follow-up:
+   `bare-xpub-cosigner-fails-silently-on-a-fingerprinted-wallet`.
    **Classification is by MATCH COUNT, never by distinct wallets** (L4).
    Two matches that happen to be the same wallet are still two matches, and
    still list. Grouping is a **display annotation only** and never changes
@@ -309,6 +325,16 @@ reconstructed — supply more id, or re-run with --search-address instead.
 with `<kind>` ∈ {`permutations`, `own-anchored subsets`, `opt-in subsets`},
 mapping 1:1 onto `Enumeration`'s three variants.
 
+**One vocabulary, mapped once** (fold-check round 3). Three names for the same
+thing had accumulated — prose shorthand, a JSON slug, and the text phrase. This
+table is the only mapping; do not introduce a fourth:
+
+| `Enumeration` variant | prose | JSON `realized_space_kind` | text `<kind>` |
+| --- | --- | --- | --- |
+| `FullPermutation` | `n!` | `"n_factorial"` | `permutations` |
+| `OwnAnchored` | `s_own` | `"own_anchored_subsets"` | `own-anchored subsets` |
+| `OptIn` | `s_opt` | `"opt_in_subsets"` | `opt-in subsets` |
+
 5. **Output cap.** Cap the printed list at **64** matches; beyond that print the
    first 64 and `… and K more; supply more id`.
    **Apply the cap BEFORE deriving addresses** (R0 M6). `calibrate_per_candidate`
@@ -360,9 +386,23 @@ mapping 1:1 onto `Enumeration`'s three variants.
    ! a source you already trust, or re-run with --search-address.
    ```
 
-   Requirements: no flag suppresses it; it names the supplied and required byte
-   counts (both are already in hand at `restore.rs:2009`); and the same facts
-   appear in `--json` per §3.4. It is a warning, not an error — exit stays 0 per
+   Requirements: no flag suppresses it, and it names the supplied and required
+   byte counts (both are in hand at `restore.rs:2009`).
+   **Per-stream, explicitly** (L11): "un-suppressible" means the block goes to
+   **stderr even under `--json`** — `mnemonic restore --json … 2>err.txt` must
+   leave the warning in `err.txt` — *and* the envelope carries it per §3.4a.
+   Not one or the other.
+   **The JSON form is pinned** (L10): `warning` carries the text as a single
+   line, gutter (`! `) and newlines stripped, so a consumer can compare it
+   exactly. The six-line gutter block is the terminal rendering only. Without
+   this, one build emits the block verbatim inside the JSON string and another
+   flattens it, and `.warning` greps differ across builds.
+   **No cross-stream ordering claim** (L16): an earlier draft said the warning
+   comes "before the wallet block". The wallet block is stdout
+   (`restore.rs:2432`) and the warning is stderr; ordering between two
+   independently buffered streams is not observable, so it cannot be specified
+   or tested. Required instead: the warning is emitted **before the process
+   exits**, and vector 2 asserts its presence on stderr, not its position. It is a warning, not an error — exit stays 0 per
    the operator ruling.
 
 ## 4. Funds-safety analysis
@@ -440,6 +480,29 @@ mapping 1:1 onto `Enumeration`'s three variants.
   zero occurrences in `restore.rs:900-1100`). Implementing the new floor in the
   shared decoder would silently change single-sig behaviour too. Keep it in
   `validate_prefix_strength`, on the multisig path.
+- **`search_reference` — the determinism oracle — MUST be extended too
+  (L15; graded Minor by the lens, raised to Important here).**
+  `permutation_search.rs:1128` is the stated oracle the parallel `search` must
+  agree with on the outcome for every input, and it short-circuits by
+  construction: `if found.len() >= 2 { return Ok(SearchOutcome::Ambiguous) }`
+  (`:1162-1165`, commented *"Two matches is enough to decide Ambiguous; stop"*).
+  Collect-all gives the parallel engine an outcome the reference **cannot
+  produce**, so unless the reference learns the new mode the parity tests keep
+  passing while covering nothing on the path this cycle adds.
+  The project severity rule is explicit that a test reporting a false PASS
+  blocks, which is why this is not filed as a Minor: an untested collect-all is
+  precisely the mechanism §4's "reconstructs nothing" rests on.
+  Note also `search_reference(n: usize, …)` takes a bare `n`, **not** an
+  `Enumeration`, so today it only ever oracled `FullPermutation` — state that
+  rather than let an implementer discover it, since extending it to the subset
+  spaces is a larger job than extending it to collect-all.
+- **§6 vector 1's fixture advice needs a shape constraint** (L13). Widening `S`
+  with `--own-account-max` does NOT work on an order-independent shape: for
+  `sorted: true` both subset generators drop the ordering factor
+  enumeration-side (`permutation_search.rs:866-873`), so a `sortedmulti` fixture
+  widens far less than the raw count suggests and cannot manufacture the
+  ordering-collision the vector needs. Use an **unsorted `wsh-multi`** fixture,
+  or the stub-evaluator route §6 already hedges toward.
 - Tests: see §6.
 
 ## 6. Test vectors (must be able to FAIL)

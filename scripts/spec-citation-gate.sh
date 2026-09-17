@@ -61,6 +61,11 @@ chk $S/cmd/restore.rs        2231 'SearchTimeExceedsCeiling'            'ceiling
 chk $S/cmd/restore.rs        1954 'is_order_independent_shape'          'sortedmulti shape flag'
 chk $S/permutation_search.rs 848  'pub fn n\('                          'Enumeration::n'
 chk $S/permutation_search.rs 862  'pub fn cardinality\('                'Enumeration::cardinality'
+chk $S/permutation_search.rs 1128 'pub fn search_reference'             'the determinism oracle'
+chk $S/permutation_search.rs 1162 'found.len\(\) >= 2'                   'oracle short-circuits at 2'
+chk $S/permutation_search.rs 1066 'SearchMode::Id => 0'                 'id-path address_index is 0'
+chk $S/permutation_search.rs 1100 'address_index'                       'engine tie-break order'
+chk $S/cmd/restore.rs        2160 'key65'                               'bare-xpub decode'
 echo
 echo "== numeric gate =="
 python3 - <<'PY'
