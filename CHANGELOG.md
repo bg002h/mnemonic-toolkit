@@ -154,6 +154,69 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.100.1] — 2026-09-17
+
+**The multisig search now measures this machine instead of guessing about it.**
+Found by running a real 201-million-candidate search and watching the output,
+which no test had ever done.
+
+### Fixed — the announced search estimate was wrong by 9×
+
+A long search announced **"5m 57s"** and finished in **39.4s**. Three errors
+compounded:
+
+- the estimate multiplied the candidate count by a **single-threaded**
+  per-candidate cost and reported it as wall-clock;
+- calibration timed the same identity assignment 64 times, measuring a
+  hot-cache best case that never paid the per-candidate `unrank` — 1.77µs
+  against ~4.7µs real, an under-estimate that *masked* the first error;
+- the search capped itself at 20 threads regardless of the machine.
+
+Fixing only the first turned the same scan **silent** for 39 seconds, which is
+worse — silence is what "looks like a hang" means. So the estimate is no longer
+predicted at all: the scan starts, and the projection is derived from
+**observed** throughput after a short warm-up. It announces only if the measured
+projection crosses the threshold. No serial model, no parallel-efficiency
+assumption, no constant to be wrong on the next machine.
+
+An over-stated estimate is the dangerous direction for a recovery tool: it talks
+someone out of a search that would have found their wallet.
+
+### Added — per-machine thread measurement, recorded in `~/.mnemonic/mt.conf`
+
+The optimal thread count is a property of the machine. Measured on an i7-13700K
+(8 P-cores + 8 E-cores, 24 logical), full scans, 3 reps each:
+
+| threads | wall |
+| --- | --- |
+| 16 | 2.10s |
+| **20** | **1.94s** |
+| 24 (= all logical cores) | 2.43s — **25% slower** |
+
+Neither the logical count nor the physical count is right, and no rule produces
+20. So the tool measures once per machine and records the answer:
+
+```ini
+[search]
+threads = 20
+measured_logical_cores = 24
+```
+
+Order of precedence: `--recalibrate-threads` → the file → measure and record.
+A hand-edited value wins over measurement, deliberately. The file is safe to
+delete (it is re-created) and safe to edit. Every failure path — no `$HOME`, a
+read-only home, a corrupt file — degrades to measuring or to the core count, and
+never stops a recovery.
+
+`--recalibrate-threads` ignores the file, re-measures, and overwrites `[search]`.
+Use it after a hardware change.
+
+### Changed
+
+- The search uses the measured thread count rather than a hard-coded cap of 20.
+- Progress lines now converge properly: on a 45s scan the ETA read 24.5s at 31%,
+  4.7s at 87%, and 309ms at 99.3%.
+
 ## mnemonic-toolkit [0.100.0] — 2026-09-17
 
 **SemVer-MINOR (pre-1.0 breaking axis): a short `--expect-wallet-id` no longer
