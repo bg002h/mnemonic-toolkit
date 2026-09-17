@@ -5143,3 +5143,46 @@ The v0.74.0 reproducible-musl release published NO binary: the Word-Card codec b
   wallet.
 - **Status:** open. No code written (operator direction 2026-09-17).
 - **Tier:** warning/UX. Not funds-loss; funds-ALARM.
+
+## sibling-pin-check fails on a deliberate hold-back it cannot express
+
+**Owning phase:** next mnemonic-toolkit CI touch. **Severity:** Minor (the job
+is not a required context, so it blocks nothing; it has been red across at
+least `74a8ed8c`, `a1cf0dfd` and `8c073f89`).
+
+`sibling-pin-check` enforces that every sibling-CLI pin in the repo equals the
+canonical pin in `scripts/install.sh`. One pin deliberately does not, and says
+so at length:
+
+`.github/workflows/cross-tool-differential.yml:80` pins
+`descriptor-mnemonic-md-cli-v0.11.2` against a canonical `v0.14.0`, with ten
+lines of comment explaining that at `v0.14.0` ten corpus entries become
+`BothError` — both tools correctly refuse, but `classify()` has no
+"both refused, as expected" verdict — and instructing that the pin be bumped
+only alongside a corpus/oracle fix in `cli_cross_tool_differential.rs`.
+
+So the gate is not catching drift here; it is reporting a documented decision
+as a defect. That is the worse failure of the two: a job that is red for a
+known-benign reason trains everyone to stop reading it, and the next *real*
+drift lands in a job nobody looks at. Note it is already red on three commits.
+
+**Do not fix by bumping the pin** — that breaks the differential run the pin
+exists to keep working, and the comment predicts exactly how.
+
+Two options, in preference order:
+
+1. **Let the gate express an exemption, and pin the gap.** Accept a marker
+   comment adjacent to the pin, e.g.
+   `# sibling-pin-check: held-back <exact-version> — <reason>`, and have the
+   check assert the held-back pin equals that exact version. A bare allowlist
+   would let the pin rot to any value; asserting the exact shape means a
+   *change* to the held-back pin still fails. (This is the "pin the gap, don't
+   fail forever" shape.)
+2. **Fix the oracle and remove the exemption** — add an expected-`BothError`
+   class for F-217-refused inputs, re-key or retire the ten entries, then bump
+   to canonical. More work, and it retires the special case permanently.
+
+Canonical is now itself behind: `descriptor-mnemonic-md-cli-v0.15.0` shipped
+2026-09-17, while `scripts/install.sh` says `v0.14.0`. Whoever takes this
+should bump canonical in the same pass, which will make the job red for a
+second, genuine reason if option 1 lands without it.
