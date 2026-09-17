@@ -1936,6 +1936,81 @@ fn explicit_assignment_with_correct_id_still_completes() {
 }
 
 #[test]
+fn uniqueness_proven_is_scoped_to_the_id_search_path() {
+    // SPEC §6 vector 7 — the guard for the implementability lens's L1 Critical.
+    //
+    // `emit_completed_multisig` is reached by THREE completion modes through a
+    // single call site. `uniqueness_proven` is meaningful only for an id search;
+    // stamping it unconditionally would attach a uniqueness claim to explicit
+    // `@N=` placement, whose own warning says a wrong assignment produces a
+    // wrong wallet SILENTLY. Assert the key is ABSENT on the modes that cannot
+    // support it, and present-and-true only where the prefix met the floor.
+    let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-multi", "2", cos);
+    let id = emit_template_wallet_id("wsh-multi", "2", cos);
+    let golden = golden_addresses("wsh-multi", 2, cos, false, 1);
+    let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
+    let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
+
+    let base = |extra: Vec<String>, positioned: bool| -> serde_json::Value {
+        let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+        push_md1(&mut args, &md1);
+        args.extend([
+            "--from".into(),
+            format!("phrase={SEED_A}"),
+            "--account".into(),
+            "0".into(),
+            "--count".into(),
+            "1".into(),
+            "--json".into(),
+        ]);
+        args.extend(extra);
+        for c in &mk1_b {
+            args.push("--cosigner".into());
+            args.push(if positioned {
+                format!("@1={c}")
+            } else {
+                c.clone()
+            });
+        }
+        for c in &mk1_c {
+            args.push("--cosigner".into());
+            args.push(if positioned {
+                format!("@2={c}")
+            } else {
+                c.clone()
+            });
+        }
+        let out = mnemonic().args(&args).assert().success();
+        let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+        serde_json::from_str(&stdout).expect("restore --json")
+    };
+
+    // (1) id search, full-length id → present and TRUE.
+    let j_id = base(vec!["--expect-wallet-id".into(), id.clone()], false);
+    assert_eq!(
+        j_id["uniqueness_proven"],
+        serde_json::json!(true),
+        "a full-length id over a searched space proves uniqueness"
+    );
+
+    // (2) address search → key ABSENT (collision-free, but not a prefix claim).
+    let j_addr = base(vec!["--search-address".into(), golden[0].clone()], false);
+    assert!(
+        j_addr.get("uniqueness_proven").is_none(),
+        "address search must not claim uniqueness: {j_addr}"
+    );
+
+    // (3) explicit @N= placement → key ABSENT. This is the Critical: the mode
+    //     that warns it cannot verify must never carry a uniqueness claim.
+    let j_expl = base(vec![], true);
+    assert!(
+        j_expl.get("uniqueness_proven").is_none(),
+        "explicit @N= placement proves nothing about uniqueness: {j_expl}"
+    );
+}
+
+#[test]
 fn singlesig_template_completion_unchanged() {
     // bip84 single-sig template still completes from --from (phase-1 path).
     let out = mnemonic()

@@ -1212,6 +1212,47 @@ pub(crate) struct MultisigCompletionOutcome {
     pub pool: Vec<CandidateKey>,
     /// `assignment[i]` = the `pool` index placed at slot `@i`.
     pub assignment: Vec<usize>,
+    /// WHICH completion mode produced this. SPEC §3.4a(a): `uniqueness_proven`
+    /// is meaningful ONLY for an id search, and the emitter is shared by all
+    /// three modes through a single call site — without a discriminant on the
+    /// outcome it cannot tell them apart, and the naive implementation stamps a
+    /// uniqueness claim on the one mode that proves nothing.
+    pub mode: CompletionMode,
+}
+
+/// How a multisig template completion was resolved. Carried on the outcome so
+/// the shared emitter can say only what the mode actually supports.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CompletionMode {
+    /// `--expect-wallet-id`. `uniqueness_proven` is true only when the supplied
+    /// prefix met the strength floor for the realized space: at or above it a
+    /// second match is ruled out by the sizing, below it the operator was given
+    /// the §3.8 warning instead.
+    IdSearch {
+        prefix_bytes: usize,
+        required_bytes: usize,
+    },
+    /// `--search-address`. A full-scriptPubKey match is collision-free, but it
+    /// is not a prefix claim, so no `uniqueness_proven` key is emitted.
+    AddressSearch,
+    /// Explicit `--cosigner @N=` placement. Proves a MATCH when an id was
+    /// supplied (it is verified since v0.98.1) but never uniqueness over a
+    /// space, because no space was searched.
+    Explicit,
+}
+
+impl CompletionMode {
+    /// SPEC §3.4a(a). `None` means the key is ABSENT from the envelope, and a
+    /// consumer must never read absence as `true`.
+    pub(crate) fn uniqueness_proven(&self) -> Option<bool> {
+        match self {
+            CompletionMode::IdSearch {
+                prefix_bytes,
+                required_bytes,
+            } => Some(prefix_bytes >= required_bytes),
+            CompletionMode::AddressSearch | CompletionMode::Explicit => None,
+        }
+    }
 }
 
 impl MultisigCompletionOutcome {
@@ -1438,6 +1479,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         &outcome.completed,
         &outcome.pool,
         &outcome.assignment,
+        &outcome.mode,
         args,
         network,
         stdout,
@@ -2032,10 +2074,14 @@ pub(crate) fn complete_multisig_template<E: Write>(
         crate::synthesize::build_keyed_template_descriptor(d, &triples)
     };
 
+    // Supplied prefix length, recorded for the §3.4a(a) mode. Zero on the
+    // address path, which never reads it.
+    let mut id_prefix_len: usize = 0;
     let outcome = if id_search {
         // ---- id-search (strong-prefix sized to the realized S) -------------
         let prefix_hex = ctx.expect_wallet_id.as_deref().unwrap();
         let prefix = decode_wallet_id_prefix(prefix_hex)?;
+        id_prefix_len = prefix.len();
         ps::validate_prefix_strength(prefix.len(), realized_s).map_err(map_search_error)?;
         let evaluator = |assignment: &[usize], _addr_idx: u64| -> bool {
             match build_candidate(assignment) {
@@ -2162,10 +2208,21 @@ pub(crate) fn complete_multisig_template<E: Write>(
 
     // --- Build the completed watch-only wallet (the caller emits/binds) ------
     let completed = build_candidate(&assignment)?;
+    // SPEC §3.4a(a): record WHICH mode resolved this, so the shared emitter
+    // claims only what the mode supports.
+    let mode = if id_search {
+        CompletionMode::IdSearch {
+            prefix_bytes: id_prefix_len,
+            required_bytes: ps::required_prefix_bytes(realized_s),
+        }
+    } else {
+        CompletionMode::AddressSearch
+    };
     Ok(MultisigCompletionOutcome {
         completed,
         pool,
         assignment,
+        mode,
     })
 }
 
@@ -2524,6 +2581,7 @@ fn complete_explicit_assignment<E: Write>(
         completed,
         pool: placed,
         assignment,
+        mode: CompletionMode::Explicit,
     })
 }
 
@@ -2535,6 +2593,7 @@ fn emit_completed_multisig<W: Write, E: Write>(
     cand: &md_codec::Descriptor,
     pool: &[CandidateKey],
     assignment: &[usize],
+    mode: &CompletionMode,
     args: &RestoreArgs,
     network: CliNetwork,
     stdout: &mut W,
@@ -2562,7 +2621,7 @@ fn emit_completed_multisig<W: Write, E: Write>(
     let own_pos: Option<usize> = assignment.iter().position(|&pi| pool[pi].is_own);
 
     let stdout_content: String = if args.json {
-        let envelope = json!({
+        let mut envelope = json!({
             "network": network.human_name(),
             "completed_from": "multisig-template-md1",
             "wallet_policy_id": id_hex,
@@ -2572,6 +2631,23 @@ fn emit_completed_multisig<W: Write, E: Write>(
                 "first_addresses": first_recv,
             })],
         });
+        // SPEC §3.4a(a). The key is emitted ONLY on the id-search path; on the
+        // address and explicit-@N= paths it is ABSENT, and a consumer must not
+        // read absence as `true`. Stamping it unconditionally would attach a
+        // uniqueness claim to a mode that cannot support one -- explicit
+        // placement in particular warns, in the very same run, that a wrong
+        // assignment produces a wrong wallet silently.
+        if let CompletionMode::IdSearch {
+            prefix_bytes,
+            required_bytes,
+        } = mode
+        {
+            let proven = prefix_bytes >= required_bytes;
+            let obj = envelope.as_object_mut().expect("envelope is an object");
+            obj.insert("uniqueness_proven".into(), json!(proven));
+            obj.insert("prefix_bytes".into(), json!(prefix_bytes));
+            obj.insert("required_bytes".into(), json!(required_bytes));
+        }
         format!(
             "{}\n",
             serde_json::to_string(&envelope)
