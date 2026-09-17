@@ -1603,17 +1603,33 @@ mod tests {
         };
         let per = calibrate_per_candidate(&slow, 11, 64, 0);
         assert!(per > Duration::ZERO, "calibration measured non-zero cost");
-        // A huge realized space (e.g. a 13-slot search ≈ 6.2e9 perms) at any
-        // measurable per-candidate cost blows past 1h.
-        let huge_total: u64 = 6_227_020_800; // 13!
-        let res = cap_decision(huge_total, per, None);
+
+        // Derive the space from the cost we just MEASURED, rather than assuming
+        // a fixed one is slow enough everywhere.
+        //
+        // This used to hard-code 13! = 6_227_020_800 and assert that it blows
+        // past the 1h ceiling -- which silently requires `per > 578ns`
+        // (3600s / 6.227e9). That holds on a slow runner and fails on a fast
+        // one, so the test was a stopwatch race against the machine: commit
+        // 74a8ed8c PASSED this in CI run 35172016220 and FAILED it in
+        // 35172764313, same code, same day. A gate whose verdict depends on how
+        // fast the runner is will eventually report both answers, and the one
+        // that costs you is the false failure on a green tree.
+        //
+        // floor(ceiling / per) + 1 candidates is the smallest count that exceeds
+        // the ceiling at this cost, so the refusal below is now exact at any
+        // speed. Duration is exact nanoseconds and `per > 0` was just asserted,
+        // so the division is safe and the product cannot land back on the
+        // boundary.
+        let needed = (SEARCH_CEILING.as_nanos() / per.as_nanos() + 1) as u64;
+        let res = cap_decision(needed, per, None);
         assert!(
             matches!(res, Err(SearchError::SearchTimeExceedsCeiling { .. })),
             "expected ceiling refusal, got {res:?}"
         );
         // With the forced acknowledgment (≥ estimate) it proceeds.
         if let Err(SearchError::SearchTimeExceedsCeiling { estimate, .. }) = res {
-            let ok = cap_decision(huge_total, per, Some(estimate)).unwrap();
+            let ok = cap_decision(needed, per, Some(estimate)).unwrap();
             assert_eq!(ok, CapDecision::RunWithProgress { estimate });
         }
     }
