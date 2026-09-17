@@ -1345,6 +1345,50 @@ fn search_cosigner_subset_composes_with_own_account_max() {
 }
 
 #[test]
+fn sortedmulti_opt_in_subset_id_search_finds_non_identity_placement() {
+    // REGRESSION W3 (whole-diff review): the OPT-IN arm is changed by the same
+    // collapse predicate as the own-anchored arm, and had NO test. Both arms
+    // drop the ordering factor for a sorted shape, so both were wrong for an id
+    // target — but only the own-anchored one was covered, which is part of why
+    // the defect survived.
+    //
+    // 2-of-3 sortedmulti {B@0, A@0, C@0}; the OWN key (A) sits at @1, a
+    // NON-identity placement. The operator over-supplies one outsider card, so
+    // --search-cosigner-subset must pick the {B,C} subset AND the ordering.
+    let cos = &[(SEED_B, 0u32), (SEED_A, 0u32), (SEED_C, 0u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 0);
+    let mk1_c = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 2);
+    let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
+    let mk1_outsider = emit_cosigner_mk1("wsh-sortedmulti", "2", cos_outsider, 1);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--search-cosigner-subset".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in mk1_b.iter().chain(&mk1_c).chain(&mk1_outsider) {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "sortedmulti + --search-cosigner-subset + id-search must resolve a \
+         NON-IDENTITY placement; the opt-in arm collapses orderings too"
+    );
+}
+
+#[test]
 fn search_cosigner_subset_hard_ceiling_refuses() {
     // §6: an opt-in pool whose s_opt blows past the hard ceiling must refuse
     // BEFORE cap calibration — no DoS, no panic. A 2-of-7 wallet (N=7) with the
