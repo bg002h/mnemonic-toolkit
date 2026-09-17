@@ -5035,3 +5035,58 @@ The v0.74.0 reproducible-musl release published NO binary: the Word-Card codec b
   false-RED generator. Make the synthetic evaluator's slowness deterministic
   (inject the clock or the per-evaluation cost) so the ceiling refusal is a
   function of the input, not the host.
+
+### `passphrase-search-has-no-candidate-generator` — every candidate must be supplied by hand; there is no enumerate-by-length mode (tier: feature; owning phase: the next xpub-search cycle)
+
+- **Surfaced:** 2026-09-17, building a recovery demo. The operator expected
+  "brute force all passphrases of a given length"; what exists is
+  `xpub-search passphrase-of-xpub --passphrase-candidates-file`, whose own
+  source calls it **"file-only scope"**
+  (`cmd/xpub_search/passphrase_search.rs`, FOLLOWUP
+  `xpub-search-passphrase-bruteforce`).
+- **What works today, measured:** 5 candidates × 140 candidate paths in 31 ms,
+  reporting `match: candidate on line 4 derives the target xpub at m/84'/0'/0'`.
+  The passphrase itself stays off stdout (line number only) unless `--json` —
+  a good property worth preserving in anything that replaces this.
+- **The gap:** no `--length`/`--charset`/`--mask` enumerator. A user who does not
+  already have a wordlist cannot use the feature at all, and the obvious
+  workaround (generate a file) is unbounded: a 6-character lowercase-alnum space
+  is 2.2 billion lines, which nobody should be asked to materialise on disk.
+- **What a fix must carry, because this is a slow oracle:** every candidate costs
+  a full BIP-39 `derive_master_seed` (PBKDF2, 2048 rounds) plus up to 140 path
+  derivations. An enumerator therefore needs the SAME cost-ceiling +
+  `--accept-search-time` acknowledgment the permutation engine already has, and
+  a resumable cursor — a search someone cannot resume is a search they will run
+  from zero twice.
+- **Do NOT lose the argv discipline.** Candidates are secret material; the
+  current design keeps them in a file precisely so they never reach argv.
+- **Status:** open. No code written (operator direction 2026-09-17: demo the
+  existing features, build nothing new yet).
+- **Tier:** feature.
+
+### `no-passphrase-search-against-an-address` — the candidate scan targets an xpub only, and users have addresses (tier: feature; owning phase: the next xpub-search cycle)
+
+- **Surfaced:** 2026-09-17, same session. The operator's framing was *"if the
+  user knew the first address"* — and that combination does not exist.
+- **The two halves both exist, and are not joined:**
+
+  | unknown | target | today |
+  | --- | --- | --- |
+  | which key fills which `@N` slot | **address** | ✅ `restore --search-address` |
+  | passphrase, from a candidate list | **xpub** | ✅ `passphrase-of-xpub` |
+  | **passphrase, from a candidate list** | **address** | ❌ missing |
+
+- **Why it matters:** an xpub is something you have only if you kept a
+  watch-only export. An ADDRESS is something anyone can read off a block
+  explorer or an old receipt. The address-targeted version is the one a person
+  in trouble can actually use.
+- **The pieces are already there:** `passphrase_search.rs` streams candidates and
+  loops an oracle; `restore --search-address` already evaluates a candidate
+  wallet by comparing a derived **scriptPubKey** against a known address
+  (`--search-addr-min/max`, `--search-chain`). The missing part is wiring the
+  candidate stream to the scriptPubKey evaluator instead of the xpub matcher.
+- **Watch the cost shape:** the address evaluator multiplies by the address
+  index range, so the space is `candidates × paths × (addr_max − addr_min)`.
+  It needs the ceiling + `--accept-search-time` treatment, not a bare loop.
+- **Status:** open. No code written (operator direction 2026-09-17).
+- **Tier:** feature.
