@@ -154,6 +154,80 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.99.0] — 2026-09-17
+
+**SemVer-MINOR (pre-1.0 breaking axis): the multisig-template search no longer
+refuses on time.** A command that previously exited with
+`--accept-search-time`-required will now run. Scripts keying on that refusal
+must change.
+
+### Changed — no search-time ceiling
+
+`restore` / `verify-bundle` multisig template completion used to refuse any
+search whose estimated exhaustive time exceeded 1 hour, unless the operator
+re-ran with `--accept-search-time ≥ <estimate>`. That ceiling is **removed**.
+
+A recovery tool that refuses to look for your wallet because looking would take
+a while has made your decision for you — behind a flag you could only discover
+by first hitting the error. The operator is the one who knows whether their
+funds justify an overnight scan. So the tool now states the number and gets on
+with it:
+
+```text
+searching 16777218 candidate assignment(s) — estimated 2h 54m (press Ctrl-C to stop; progress below)
+  …12.4% — 2080374/16777218 scanned, ~2h 31m remaining
+  scan complete in 2h 47m
+```
+
+Progress lines appear every 10 seconds for any search estimated at ≥30s. The
+remaining-time figure is re-derived from **observed** throughput each tick
+rather than from the initial calibration, so it converges rather than repeating
+a guess made from a 64-candidate sample.
+
+- **`--accept-search-time` is accepted and IGNORED** on both surfaces. Existing
+  scripts keep working rather than failing on an unknown flag; the flag is dead
+  weight to be removed at the next breaking bump.
+- The **space** ceiling (a combinatorial-overflow bound) is unchanged and still
+  refuses. It is not a time limit.
+
+### Fixed — two funds-safety defects in multisig template completion
+
+Both pre-date this release and both are cases where the tool gave a *confident*
+answer that was wrong rather than refusing.
+
+- **`--expect-wallet-id` was silently discarded whenever any `--cosigner @N=`
+  explicit placement was supplied.** Not weakly checked — structurally
+  unreachable: the explicit path returned early into a function that never
+  received the prefix. A WRONG placement together with the operator's TRUE
+  recorded id emitted a **different wallet at exit 0**, under a
+  `✓ wallet-id (completed)` line — in the one completion mode with no other
+  cross-check, whose own warning tells the operator to "Record + check
+  `--expect-wallet-id`". A supplied id is now binding: a completed wallet that
+  contradicts it prints `✗ NO MATCH` and exits 4. Explicit mode remains
+  *unverified* when no id is supplied; that is unchanged and deliberate.
+
+- **`sortedmulti` + `--own-account-max` / `--search-cosigner-subset` never
+  enumerated the true wallet**, so a **correct full 16-byte `--expect-wallet-id`
+  returned `✗ NO MATCH`.** The subset generators collapse key orderings because
+  a sorted wallet's scriptPubKey is order-independent — true for an *address*
+  target, false for a *wallet-id* target, since the policy id is computed over
+  the key order as written. The collapse is now gated on the search target, and
+  on whether the id evaluator is the one that will actually run.
+  The same change makes the `--expect-wallet-id` strength floor and the cost
+  estimate size the space that is **actually scanned**; they were previously
+  computed from a smaller one, so that path had been accepting prefixes *weaker*
+  than the collision bound requires.
+
+Both fixes are inherited by `verify-bundle`, which drives the same engine.
+
+### Notes
+
+Every fix landed test-first with its RED proven. Two of those tests were found
+**vacuous by mutation testing** before they were trusted — one sized so that
+both the correct and broken spaces rounded to the same prefix floor, one
+asserting a property that was not the one at issue — and were rebuilt until they
+failed against the defect they claim to guard.
+
 ## mnemonic-toolkit [0.98.1] — 2026-09-17
 
 **Two funds-safety fixes in multisig template completion.** Both were found by an
