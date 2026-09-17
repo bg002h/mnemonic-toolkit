@@ -5266,3 +5266,51 @@ meanwhile.
 (Cargo.toml patch, man-pages.yml, repro-drift.yml) and only the first is the
 source of truth. A gate that greps the workflow pins against the Cargo.toml
 patch rev would have caught this at commit time.
+
+---
+
+### `bare-xpub-cosigner-fails-silently-on-a-fingerprinted-wallet` — a correct id and a correct address still return `✗ NO MATCH`, and nothing says why (tier: warning/UX; owning phase: the next restore/verify-bundle cycle)
+
+**Found 2026-09-17** while verifying the `demo/sh2` §3b recipe, by construction
+rather than by reading.
+
+`--cosigner <bare xpub>` decodes to `fingerprint: Fingerprint::default()`
+(`00000000`) and `origin: DerivationPath::master()` (empty) —
+`cmd/restore.rs:2160-2162`, deliberate and documented. The completion then
+builds the keyed descriptor from those triples, so against a wallet whose
+cosigners DID record a real fingerprint and path, no assignment can ever match.
+
+**The failure shape is the problem, not the refusal.** The operator supplies a
+*correct* `--expect-wallet-id` and a *correct* `--search-address` and gets
+`✗ NO MATCH`, whose text points at the id/address:
+
+    ✗ NO MATCH
+    error: restore: multisig-template-search mismatch — derived no key→slot
+    assignment of the supplied keys, expected the recorded wallet
+    (--expect-wallet-id / --search-address)
+
+Nothing mentions cosigner origin metadata, so the operator reasonably concludes
+they misread the id off the plate — mid-recovery, which is the worst possible
+moment to be sent down a wrong path.
+
+**Measured, and counter-intuitive: `--search-address` does NOT rescue it.** A
+scriptPubKey is origin-independent, so one expects address mode to be immune.
+It is not: the OWN key's derivation path is inferred from the cosigners' origin
+metadata in *both* modes, so a bare-xpub cosigner forces the same canonical
+BIP-48/account-0 fallback either way. Verified against a real-fingerprint
+template — both modes return NO MATCH.
+
+**Why it stayed invisible:** the `demo/sh2` fixture genuinely has zero cosigner
+fingerprints (completed descriptor carries `[00000000]xpub…`), so the demo's
+printed bare-xpub command works, and works for a reason no reader's own wallet
+will share.
+
+**Suggested shape (not prescriptive):** when a search exhausts with zero matches
+AND every supplied cosigner had a default fingerprint/empty origin, add one line
+— *"no cosigner origin metadata was supplied (bare xpubs decode to fingerprint
+00000000); if your cosigner cards are mk1, pass the mk1 chunks instead."*
+A reproduction exists at
+`design/agent-reports/bundle-id-restore-roundtrip-check.md`.
+
+**Demo side already handled** in mnemonic-engrave `e910fd63`; this entry is the
+tool-side half.
