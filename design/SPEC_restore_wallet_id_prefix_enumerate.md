@@ -135,13 +135,23 @@ Two consequences follow and are binding:
    by `(permutation_index, address_index)` — the pair, not the permutation alone,
    since an address-mode match carries both. Any test asserting order is flaky
    until both are pinned.
+   **Classification is by MATCH COUNT, never by distinct wallets** (L4).
+   Two matches that happen to be the same wallet are still two matches, and
+   still list. Grouping is a **display annotation only** and never changes
+   which row of §2's table applies — otherwise "2 matches, one wallet" would
+   reconstruct under one reading and list under another, and §6 vector 1's
+   "exactly N rows" would be unwritable.
    **Rows that are the same wallet MUST be marked as such.** For a
    `sortedmulti`/`sortedmulti_a` shape, `compute_wallet_policy_id` never sorts
    (`restore.rs:1951-1953`), so each ordering has a *different id* — but every
    ordering yields *identical addresses and identical spending*. A list can
-   therefore show N rows that are one wallet under N labellings. Rows sharing a
-   first address must be grouped, or annotated `same wallet, different
-   labelling`. Unmarked, the operator reads "N wallets it could be" when the
+   therefore show N rows that are one wallet under N labellings. The annotation is
+   **one line above the rows, derived from the SHAPE FLAG and not from comparing
+   addresses** (L5): `is_order_independent_shape(&d.tree)` (`restore.rs:1954`)
+   already tells the renderer that every match is the same wallet under a
+   different labelling. Grouping by *derived address* would contradict §3.5's
+   "cap before address derivation"; reading the flag does not. **Never merge
+   rows — annotate the set.** Unmarked, the operator reads "N wallets it could be" when the
    honest answer is "1 wallet, N labellings" — and for an unsorted `wsh-multi`
    the same display means something entirely different.
    **Summary line (the list outcome's operator-facing text).** After the rows,
@@ -182,6 +192,123 @@ Two consequences follow and are binding:
    `.wallets[0].descriptor` silently become candidate #1 for every existing
    script. A consumer that has never heard of `candidates` gets a missing key
    and fails loudly, which is the desired behaviour.
+### 3.4a Output contract — the section whose absence caused six findings
+
+The implementability lens (`design/agent-reports/wallet-id-enumerate-implementability-lens.md`)
+found that L1, L2, L3, L6, L8 and L9 all reduce to one omission: the spec named
+*what to decide* without ever fixing *what to emit*. This section is normative
+and takes precedence over any looser phrasing elsewhere.
+
+**(a) `uniqueness_proven` is scoped to the ID-SEARCH path only (L1, Critical).**
+`emit_completed_multisig` (`restore.rs:2377`) is reached from **three**
+completion modes through a single call site (`restore.rs:1436`): id-search,
+address-search, and explicit `--cosigner @N=` placement, which returns early via
+`complete_explicit_assignment` (`restore.rs:1793`). `MultisigCompletionOutcome`
+carries **no mode discriminant**, so the naive implementation stamps
+`uniqueness_proven: true` on all three.
+
+That is forbidden. Explicit `@N=` placement proves nothing — its own warning
+says a wrong assignment produces a wrong wallet **silently** — so claiming
+uniqueness there would attach a funds-safety assertion to the one mode that
+cannot support it, which is worse than emitting nothing.
+
+Required: the outcome type gains the mode, and the field is emitted **only** on
+the id-search path:
+
+| completion mode | `uniqueness_proven` |
+| --- | --- |
+| id-search, prefix ≥ threshold, unique | `true` |
+| id-search, prefix < threshold, lone match | `false` (+ `prefix_bytes`, `required_bytes`, `warning`) |
+| address-search | **key absent** (a scriptPubKey match is collision-free but is not a prefix claim) |
+| explicit `--cosigner @N=` | **key absent** |
+
+A consumer must never read absence as `true`. If a future cycle wants a positive
+signal for the other modes it needs its own field name and its own justification.
+
+**(b) Stream assignment — every line is placed (L3).**
+
+| line | text mode | `--json` |
+| --- | --- | --- |
+| candidate rows | **stdout** (they are the payload) | in `candidates[]` |
+| the sortedmulti annotation | stderr | `order_independent: true` |
+| the §3.3 summary line | stderr | mirrored by the fields below |
+| the §3.8 warning | stderr | `warning` |
+| a reconstructed wallet | stdout (unchanged) | `wallets[]` (unchanged) |
+
+Rationale: stdout carries what a script consumes and stderr carries what a human
+reads, which is the convention the rest of the command already follows. An empty
+stdout with exit 0 — the alternative reading — would be indistinguishable from
+success-with-no-output.
+
+**(c) `candidates[]` shape, and the sub-fork that matters (L8).**
+
+```json
+{ "network": "mainnet",
+  "completed_from": "multisig-template-md1",
+  "prefix_hex": "e1cc", "prefix_bytes": 2, "required_bytes": 5,
+  "realized_space": 6, "realized_space_kind": "n_factorial",
+  "match_count": 3, "order_independent": true,
+  "truncated": false,
+  "candidates": [
+    { "wallet_policy_id": "e1ccd788febf8ba06b21d98a846f89bd",
+      "assignment": [ {"slot": 0, "fingerprint": "b8688df1"},
+                      {"slot": 1, "fingerprint": "28645006"},
+                      {"slot": 2, "fingerprint": "3f635a63"} ],
+      "first_address": "bc1q…" } ]
+}
+```
+
+**No `candidates[].descriptor` field, ever.** That is the funds-relevant fork:
+a descriptor in the list would make the list importable, which is exactly the
+"reconstructs nothing" property §4 rests on. A consumer that wants a descriptor
+must re-run with enough id to reconstruct one.
+`wallets` MUST be absent whenever `candidates` is present, and vice versa (§3.4).
+
+**(d) Truncation is explicit in BOTH channels (L2, Critical).** §3.5's cap of 64
+applies to **rows, not groups** — grouping is annotation only, per §3.3. When it
+bites, text mode prints `… and K more; supply more id` and JSON sets
+`"truncated": true` with `match_count` carrying the **true total**, not the
+truncated length. Silent JSON truncation is the failure this closes: a consumer
+seeing 64 candidates and no marker concludes the wallet is not among its keys
+when it was #65 — a wrong answer delivered as a complete one.
+
+**(e) `--count` applies to the reconstructed wallet only (L6).** `--count`
+(`restore.rs:220`, "Number of first-receive addresses to show per wallet type",
+default 1) already reaches the emitter via `args: &RestoreArgs`. A candidate row
+shows **exactly one** address regardless of `--count`; only the reconstructed-
+wallet path honours it. Otherwise `--count 5` over 64 candidates derives 320
+addresses — unbudgeted work outside the ceiling (§3.5), for a list nobody reads
+five-deep.
+
+**(f) The ceiling case belongs in the exit table (L7).** A sub-threshold prefix
+over a space too large to scan no longer refuses instantly (§3.6): it reaches
+`SearchTimeExceedsCeiling`, which `restore.rs:2231` maps through `bad()` to
+`BadInput` — **exit 1**, not 4. So the same operator input that exits 4 today
+exits 1 after this change:
+
+| case | today | after |
+| --- | --- | --- |
+| short prefix, space within ceiling | 4 (`PrefixTooShort`) | 0 (list or warn-and-reconstruct) |
+| short prefix, space over ceiling | 4 (`PrefixTooShort`) | **1** (`SearchTimeExceedsCeiling`) |
+
+Scripts keying on 4 will see 1. The message must name the prefix length as well
+as the time, or the operator is told about seconds when their problem is digits.
+
+**(g) The summary line needs the cardinality KIND, which has no accessor (L9).**
+§3.3 requires the line to name which of `n!` / `s_own` / `s_opt` it printed, but
+`Enumeration` exposes only `n()` (`permutation_search.rs:848`) and
+`cardinality()` (`:862`) — the *kind* must be added. The template therefore has
+a slot for it, and "emit exactly one line" means one line **after**
+substitution:
+
+```text
+N assignments match prefix <hex> (of S <kind> in the realized space); none
+reconstructed — supply more id, or re-run with --search-address instead.
+```
+
+with `<kind>` ∈ {`permutations`, `own-anchored subsets`, `opt-in subsets`},
+mapping 1:1 onto `Enumeration`'s three variants.
+
 5. **Output cap.** Cap the printed list at **64** matches; beyond that print the
    first 64 and `… and K more; supply more id`.
    **Apply the cap BEFORE deriving addresses** (R0 M6). `calibrate_per_candidate`
@@ -270,7 +397,18 @@ Two consequences follow and are binding:
   are `completed: md_codec::Descriptor`, `pool`, `assignment` — a **single**
   descriptor and a **single** assignment. The type **structurally cannot express
   "listed N candidates, reconstructed none"**, so it must gain a variant (or
-  become an enum). That type change IS the seam where verify-bundle inheritance
+  become an enum). **Make it an enum, not an added field** — the two refactors
+  are not equivalent (L1's neighbouring fork): a `Vec<Match>` field alongside
+  `completed` leaves "both populated" and "neither populated" representable, so
+  the compiler cannot stop a caller from emitting a descriptor for a list. An
+  enum makes list-vs-reconstruct type-level, which IS §4's funds-safety
+  argument.
+  **It must ALSO carry the completion MODE** (§3.4a(a), L1 Critical): one
+  emitter (`restore.rs:2377`) serves id-search, address-search and explicit
+  `@N=` placement through a single call site (`restore.rs:1436`), and
+  `uniqueness_proven` is meaningful only for the first. With no discriminant on
+  the outcome the emitter cannot tell them apart, and the naive implementation
+  stamps `uniqueness_proven: true` on the one mode that proves nothing. That type change IS the seam where verify-bundle inheritance
   is decided; without it there is no seam and §5's own requirement below is
   unenforceable.
 - `crates/mnemonic-toolkit/src/cmd/restore.rs`: render the list + summary; the
@@ -318,6 +456,9 @@ small space:
 | 4 | zero matches → `✗ NO MATCH`, exit 4 | any |
 | 5 | `supplied == required` reconstructs, never lists | any — **the off-by-one guard** |
 | 6 | cap at 64 | S > 4,194,304 with a 2-byte prefix |
+| 7 | `uniqueness_proven` absent on `@N=` and address modes (§3.4a(a)) | any — three invocations |
+| 8 | `candidates[]` carries NO `descriptor`, `wallets` absent (§3.4a(c)) | the vector-1 fixture |
+| 9 | truncation sets `truncated: true` + a TRUE `match_count` (§3.4a(d)) | the vector-6 fixture |
 
 1. **Enumerate lists all, reconstructs none.** The draft's fixture cannot build
    this: a 2-/3-cosigner space needs a genuine id collision (P ≈ 7.6e-5 at the 2-byte floor; ~1.2e-9 at 4 bytes) to get a
@@ -348,6 +489,21 @@ small space:
    gate could never execute — a gate that never runs is a hypothesis, not a gate.
    Either size the fixture accordingly or drive the cap through a seam that does
    not require a real space.
+7. **`uniqueness_proven` never claims what a mode cannot prove** (L1, the
+   Critical). Three invocations completing the SAME wallet: via `@N=` explicit
+   placement, via `--search-address`, and via a full-length id. Assert the field
+   is **absent** in the first two and `true` in the third. Mutation: stamp it
+   unconditionally in the emitter → the first two must fail. Without this vector
+   the Critical's fix is unguarded — and the emitter has exactly one call site
+   (`restore.rs:1436`), so a future edit reaches all three modes at once.
+8. **A candidate is not importable.** Assert `candidates[]` exists, that no
+   element carries a `descriptor` key, and that top-level `wallets` is
+   **absent**. Mutation: add a descriptor per candidate → fails. This is the
+   executable form of §4's "reconstructs nothing".
+9. **Truncation is visible.** Drive >64 matches; assert `truncated: true` and
+   that `match_count` is the TRUE total, not 64. Mutation: truncate the array
+   without setting the flag → fails. A consumer that cannot see truncation
+   concludes "not among my keys" for a wallet that was #65.
 
 ## 7. Demo implication (mnemonic-engrave `demo/sh2` §3b) — ACTIONED
 
