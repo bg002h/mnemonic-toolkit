@@ -5317,6 +5317,8 @@ tool-side half.
 
 ---
 
+**Status:** CLOSED 2026-09-17 in `3d012345` (TDD, red proven first).
+
 ### `expect-wallet-id-silently-discarded-under-explicit-placement` — a CORRECT `--expect-wallet-id` plus `--cosigner @N=` emits a DIFFERENT wallet at exit 0 under a `✓` tick (tier: funds-safety; owning phase: before or with the wallet-id-enumerate implementation)
 
 **Found 2026-09-17** by the adversarial-input lens on the wallet-id enumerate
@@ -5359,6 +5361,8 @@ that a wrong `@N=` placement plus a correct id **fails**, since today it passes.
 `design/agent-reports/wallet-id-enumerate-adversarial-input-lens.md` (A2).
 
 ---
+
+**Status:** CLOSED 2026-09-17 in `75f1b569` (TDD, red proven first).
 
 ### `sortedmulti-subset-search-never-enumerates-the-true-wallet` — a CORRECT full 16-byte id returns `✗ NO MATCH` on the subset paths (tier: funds-safety; owning phase: GATES the wallet-id-enumerate cycle — see SPEC §3.9)
 
