@@ -1807,6 +1807,30 @@ pub(crate) fn complete_multisig_template<E: Write>(
     let mut pool: Vec<CandidateKey> = own_keys;
     pool.extend(unassigned_cosigners);
 
+    // --- Search mode, and the ONE ordering-collapse predicate ----------------
+    // These are hoisted ABOVE `realized_s` deliberately (W1). The collapse
+    // decides how many candidates the engine ENUMERATES, and `realized_s` must
+    // describe that same number: it feeds BOTH the `--expect-wallet-id` strength
+    // floor (funds-safety) and the §6.4 cost estimate. Computing the two from
+    // different predicates lets the engine scan `N!` more candidates than the
+    // sizing believes — which is exactly the regression the first cut of this
+    // fix introduced.
+    let id_search = ctx.expect_wallet_id.is_some();
+    let addr_search = ctx.search_address.is_some();
+    let sorted_shape = crate::synthesize::is_order_independent_shape(&d.tree);
+    // The collapse is sound only when the SEARCH TARGET is order-independent.
+    // An ADDRESS is: every placement of a sorted wallet has the same
+    // scriptPubKey. A WALLET-ID is NOT: `compute_wallet_policy_id` never sorts,
+    // so a recorded id pins a SPECIFIC ordering the search must still resolve.
+    //
+    // `!id_search` is load-bearing and NOT redundant with `addr_search` (W2).
+    // The dispatch below is `if id_search { .. } else if addr_search { .. }`,
+    // and nothing yet makes the two flags mutually exclusive — so when BOTH are
+    // supplied the ID evaluator runs. Keying only on `addr_search` would collapse
+    // orderings underneath it and leave the original defect fully live for that
+    // combination.
+    let collapse_orderings = sorted_shape && addr_search && !id_search;
+
     // --- §5a premise gates (own-only) / Floor 1(ii) every slot supplied ------
     let realized_s: u128 = if opt_in {
         // OPT-IN cosigner-subset search (P3, SPEC §4.3). The cosigner count is
@@ -1842,8 +1866,8 @@ pub(crate) fn complete_multisig_template<E: Write>(
         // even the most-own stratum needs more cosigner cards than supplied, no
         // assignment can fill the slots → NO-MATCH would be the only outcome.
         // Refuse early with an actionable message (s_opt == 0).
-        let sorted = crate::synthesize::is_order_independent_shape(&d.tree);
-        let s = ps::s_opt(k_own, m_cosigners, n, sorted).ok_or_else(|| {
+        // W1: the SAME predicate the enumeration uses, not the shape alone.
+        let s = ps::s_opt(k_own, m_cosigners, n, collapse_orderings).ok_or_else(|| {
             bad("multisig template: opt-in subset-search candidate space overflow")
         })?;
         if s == 0 {
@@ -1896,8 +1920,8 @@ pub(crate) fn complete_multisig_template<E: Write>(
         }
         // §6 hard `realized_s` ceiling (before cap calibration). s_own overflow
         // (None) → refuse.
-        let sorted = crate::synthesize::is_order_independent_shape(&d.tree);
-        let s = ps::s_own(k_own, j, m_cosigners, sorted)
+        // W1: the SAME predicate the enumeration uses, not the shape alone.
+        let s = ps::s_own(k_own, j, m_cosigners, collapse_orderings)
             .ok_or_else(|| bad("multisig template: subset-search candidate space overflow"))?;
         if s > REALIZED_S_MAX {
             return Err(bad(format!(
@@ -1946,8 +1970,8 @@ pub(crate) fn complete_multisig_template<E: Write>(
     ps::reject_duplicate_keys(&pool_key_blobs).map_err(map_search_error)?;
 
     // --- Select the mode + build the evaluator -------------------------------
-    let id_search = ctx.expect_wallet_id.is_some();
-    let addr_search = ctx.search_address.is_some();
+    // (`id_search` / `addr_search` / `collapse_orderings` are computed above,
+    //  because `realized_s` depends on the collapse decision.)
     // SORTED carve-out (SPEC §6.1): a `sortedmulti`/`sortedmulti_a` wallet is
     // ORDER-INDEPENDENT — every key→slot permutation yields the SAME address, so
     // an address-search would find all n! placements (→ Ambiguous) even though
@@ -1957,26 +1981,6 @@ pub(crate) fn complete_multisig_template<E: Write>(
     // (id-search is NOT collapsed: `compute_wallet_policy_id` never sorts —
     // `identity.rs` — so the recorded id pins a SPECIFIC order the search must
     // still resolve. Verified: sortedmulti AB-id ≠ BA-id.)
-    let sorted_shape = crate::synthesize::is_order_independent_shape(&d.tree);
-    // The ordering collapse below is sound only when the SEARCH TARGET is itself
-    // order-independent. An ADDRESS is: every placement of a sorted wallet has
-    // the same scriptPubKey. A WALLET-ID is NOT: `compute_wallet_policy_id`
-    // never sorts (see the carve-out note above), so the recorded id pins a
-    // SPECIFIC ordering that the search still has to resolve.
-    //
-    // The EXACT path already draws this distinction — its identity-filter lives
-    // inside the ADDRESS evaluator only. The subset generators did not, and
-    // collapsed for both targets, so a `sortedmulti` + `--own-account-max` /
-    // `--search-cosigner-subset` id-search never enumerated a non-identity
-    // placement: a CORRECT full 16-byte id returned `✗ NO MATCH`.
-    // (2026-09-17, adversarial-input lens A1. Regression test:
-    //  `sortedmulti_own_account_max_id_search_finds_non_identity_placement`.)
-    //
-    // This also re-sizes the prefix floor: `realized_s` feeds
-    // `validate_prefix_strength`, so while the space was under-counted the
-    // required prefix was under-sized too, and prefixes weaker than the
-    // collision bound were being accepted on this path.
-    let collapse_orderings = sorted_shape && addr_search;
 
     // --- The enumeration the engine ranks over (SPEC §4) ---------------------
     // OPT-IN: the stratified opt-in space `s_opt` (own-subset × cosigner-subset ×

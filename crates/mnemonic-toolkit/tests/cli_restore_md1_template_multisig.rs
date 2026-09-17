@@ -796,6 +796,111 @@ fn sortedmulti_own_account_max_id_search_finds_non_identity_placement() {
 }
 
 #[test]
+fn sortedmulti_subset_id_and_address_together_still_finds_it() {
+    // REGRESSION W2 (whole-diff review of the first cut of the A1 fix).
+    //
+    // The first fix keyed the ordering collapse on `addr_search` alone. But the
+    // dispatch is `if id_search { .. } else if addr_search { .. }` and nothing
+    // makes the two flags mutually exclusive — so supplying BOTH ran the ID
+    // evaluator with the collapse still ON, and the original defect was fully
+    // live for that combination. The predicate is now
+    // `sorted_shape && addr_search && !id_search`.
+    //
+    // Same fixture as the A1 test (own at @1, a NON-identity placement); the
+    // only change is that the wallet's own correct address is supplied too.
+    let cos = &[(SEED_B, 0u32), (SEED_A, 3u32)];
+    let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
+    let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
+    let golden = golden_addresses("wsh-sortedmulti", 2, cos, true, 2);
+    let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 0);
+
+    let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+    push_md1(&mut args, &md1);
+    args.extend([
+        "--from".into(),
+        format!("phrase={SEED_A}"),
+        "--own-account-max".into(),
+        "5".into(),
+        "--expect-wallet-id".into(),
+        id,
+        "--search-address".into(),
+        golden[0].clone(),
+        "--count".into(),
+        "2".into(),
+        "--json".into(),
+    ]);
+    for c in &mk1_b {
+        args.push("--cosigner".into());
+        args.push(c.clone());
+    }
+    let got = restore_addresses(&args);
+    assert_eq!(
+        got, golden,
+        "id + address TOGETHER must still resolve a non-identity placement; \
+         the collapse must be off whenever the ID evaluator runs"
+    );
+}
+
+#[test]
+fn sortedmulti_subset_prefix_floor_matches_the_scanned_space() {
+    // REGRESSION W1. `realized_s` feeds BOTH the --expect-wallet-id strength
+    // floor (funds-safety) and the §6.4 cost estimate. It used to be computed
+    // from the SHAPE alone while the enumeration was computed from the MODE, so
+    // for an id search the engine scanned N! more candidates than the sizing
+    // believed — and the floor was sized for a space nobody was searching.
+    //
+    // FIXTURE SIZING IS THE WHOLE TEST. 3 slots (2 cosigner cards + 1 own slot)
+    // with --own-account-max 50 gives C(50,1) = 50 collapsed vs 50·3! = 300
+    // expanded, which straddles the 5→6 byte boundary of required_prefix_bytes.
+    // At smaller K both sides round to 5 bytes and the assertion is VACUOUS —
+    // the first draft of this test used K=5 and passed against the mutation.
+    let cos = &[(SEED_B, 0u32), (SEED_C, 0u32), (SEED_A, 3u32)];
+
+    let mut required: Vec<String> = Vec::new();
+    for script in ["wsh-sortedmulti", "wsh-multi"] {
+        let md1 = emit_template_md1(script, "2", cos);
+        let id = emit_template_wallet_id(script, "2", cos);
+        let weak = id[..8].to_string(); // 4 bytes — under both candidate floors
+        let mk1_b = emit_cosigner_mk1(script, "2", cos, 0);
+        let mk1_c = emit_cosigner_mk1(script, "2", cos, 1);
+
+        let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
+        push_md1(&mut args, &md1);
+        args.extend([
+            "--from".into(),
+            format!("phrase={SEED_A}"),
+            "--own-account-max".into(),
+            "50".into(),
+            "--expect-wallet-id".into(),
+            weak,
+        ]);
+        for c in mk1_b.iter().chain(&mk1_c) {
+            args.push("--cosigner".into());
+            args.push(c.clone());
+        }
+        let assert = mnemonic().args(&args).assert().failure();
+        let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+        let need = stderr
+            .split("need ≥")
+            .nth(1)
+            .and_then(|t| t.split(' ').next())
+            .unwrap_or("<none>")
+            .to_string();
+        assert_ne!(
+            need, "<none>",
+            "expected a prefix-strength refusal: {stderr}"
+        );
+        required.push(need);
+    }
+    assert_eq!(
+        required[0], required[1],
+        "sortedmulti and wsh-multi over the SAME realized space must demand the \
+         SAME --expect-wallet-id strength. A divergence means the floor is sized \
+         from a different space than the one actually scanned (got {required:?})"
+    );
+}
+
+#[test]
 fn own_account_max_address_search_finds_nonzero_account() {
     // The early-exit (address-search) over-supply path: own@2 of a 2-of-2,
     // resolved via --search-address over the own-anchored space.
