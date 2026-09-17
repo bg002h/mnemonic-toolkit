@@ -68,17 +68,25 @@ pub mod bsms_crypto;
 pub mod display_grouping;
 pub mod electrum_crypto;
 pub mod final_word;
-// `mlock` uses POSIX `libc::mlock` / `libc::munlock` / `libc::sysconf` /
-// `_SC_PAGESIZE`. None of those symbols exist in `libc`'s Windows
-// surface (Windows has `VirtualLock`; libc-rs's Windows surface is
-// CRT-only). Pre-v0.14.0 the toolkit was binary-only and never
-// compiled on Windows. v0.14.0 promoted `secret_taxonomy` to public
-// lib API for `mnemonic-gui` consumption, which transitively required
-// the entire lib to compile on every platform the GUI targets —
-// including Windows. Cfg-gate keeps `mlock` available on Unix
-// (its existing consumer surface) while letting the lib compile on
-// Windows. Closes the architect-flagged Critical at GUI v0.4.0 CI.
-#[cfg(unix)]
+// `mlock`'s POSIX `libc::mlock` / `munlock` / `sysconf(_SC_PAGESIZE)` calls
+// live behind `#[cfg(unix)]` arms INSIDE the module; its whole public surface
+// (`PinnedPageRange`, `pin_pages_for`, `report_at_exit`, the `*_for_test`
+// helpers) is unconditional, and a `#[cfg(not(unix))]` arm (the G6 mirror of
+// ms-cli) makes `sys_mlock_attempt` return a distinct ERRNO_UNSUPPORTED so
+// `report_at_exit` prints "secret memory is NOT locked on this platform"
+// instead of pinning. So the module now compiles on Windows on its own.
+//
+// It was `#[cfg(unix)]`-gated at v0.14.0 — BEFORE that non-unix arm existed —
+// when promoting `secret_taxonomy` to public lib API made the whole lib have to
+// compile for the GUI's Windows target and `mlock` still used libc
+// unconditionally. That gate is now not just obsolete but WRONG: the binary
+// reaches `mlock::{pin_pages_for, report_at_exit, PinnedPageRange}`
+// UNCONDITIONALLY (main.rs, derive.rs, bip85.rs, cmd/*), so gating the module
+// away on Windows left the LIB compiling while the BINARY did not — a
+// windows-x86_64 release build fails with `unresolved import
+// mnemonic_toolkit::mlock`. Mounted unconditionally, matching ms-cli (which
+// ships a Windows binary from the byte-identical file). The lib's own
+// windows-msvc cross-check and the release build both cover it.
 pub mod mlock;
 pub mod secret_taxonomy;
 // v0.34.7: process-level argv-hardening (PR_SET_DUMPABLE). Unconditional —
