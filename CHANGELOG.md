@@ -154,6 +154,70 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.100.0] — 2026-09-17
+
+**SemVer-MINOR (pre-1.0 breaking axis): a short `--expect-wallet-id` no longer
+refuses, and `--expect-wallet-id` + `--search-address` together is now a usage
+error.** Both were previously accepted behaviours; scripts relying on either
+must change.
+
+### Added — a short wallet-id prefix ENUMERATES instead of refusing
+
+`restore --md1 <keyless template> --expect-wallet-id <hex>` searches the
+cosigner→slot assignments for the wallet whose id you recorded. A prefix shorter
+than the space-sized uniqueness threshold used to be refused outright, which left
+an operator who wrote down only the first few hex characters with a dead end —
+and pushed them toward `--cosigner @N=` explicit placement, the genuinely
+dangerous "asserted without verifying" path.
+
+Three bands now:
+
+| prefix | behaviour |
+| --- | --- |
+| below 2 bytes (4 hex) | refused, unchanged |
+| 2 bytes … threshold | **NEW** — one match: reconstruct **with a mandatory warning**; two or more: **list candidates, emit no descriptor** |
+| at or above threshold | unchanged |
+
+The motivation was a contradiction in the tool's own output: `bundle
+--md1-form template` prints a **4-byte** "convenience prefix" and tells you to
+`restore --expect-wallet-id <it>` — a prefix `restore` then refused for needing
+5. Recording exactly what the tool told you to record produced a refusal.
+
+**A listing is not importable.** Candidate rows carry the wallet-id, the
+cosigner→slot assignment and a first address — and deliberately **no
+descriptor**. Under `--json` a listing emits `candidates` and **never**
+`wallets`, so `.wallets[0].descriptor` cannot silently become candidate #1 for a
+script already reading it; truncation past the 64-row cap sets `truncated: true`
+and reports the **true** total, because a consumer that cannot see truncation
+concludes "not among my keys" for a wallet that was #65.
+
+**A lone match below the threshold reconstructs, but says so.** An
+un-suppressible warning names the supplied and required byte counts and states
+that a match this short can be spurious when the true wallet is not among the
+supplied keys. It appears on **stderr even under `--json`**, and as a `warning`
+field in the envelope — a stderr-only warning is invisible to the consumer most
+likely to act on a wrong wallet unattended.
+
+**`verify-bundle` does not enumerate.** It drives the same completion engine but
+keeps the refusal: a verifier must not report PASS on a list of candidate
+wallets. The two surfaces share an engine, not this decision.
+
+### Changed — `--expect-wallet-id` and `--search-address` are mutually exclusive
+
+Supplying both used to be accepted and the **address silently ignored** — the id
+search simply won. Now it is a usage error naming both flags. Use one or the
+other; an address is matched on the full scriptPubKey and is the collision-free
+choice when you have one.
+
+### Added — `uniqueness_proven` in the `--json` envelope (id search only)
+
+`true`/`false` plus `prefix_bytes` and `required_bytes`, emitted **only** on the
+id-search path. The key is **absent** for address search and for explicit
+`--cosigner @N=` placement, neither of which can support a uniqueness claim —
+explicit placement in particular warns, in the same run, that a wrong assignment
+produces a wrong wallet silently. **A consumer must never read absence as
+`true`.**
+
 ## mnemonic-toolkit [0.99.0] — 2026-09-17
 
 **SemVer-MINOR (pre-1.0 breaking axis): the multisig-template search no longer
