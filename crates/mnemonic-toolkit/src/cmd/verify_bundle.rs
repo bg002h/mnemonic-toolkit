@@ -950,8 +950,30 @@ fn verify_multisig_template<W: Write, E: Write>(
         search_chain: args.search_chain,
         accept_search_time: args.accept_search_time.clone(),
         network,
+        // SPEC §5 ruling: verify-bundle NEVER enumerates. A verifier must not
+        // report PASS on a list of candidate wallets, so a below-threshold
+        // prefix keeps today's `PrefixTooShort` refusal here even though
+        // `restore` now lists. The two surfaces share an engine but not this
+        // decision.
+        allow_enumerate: false,
     };
-    let outcome = complete_multisig_template(d, &ctx, stderr)?;
+    // SPEC §5: verify-bundle sets `allow_enumerate: false`, so the engine cannot
+    // return a candidate LIST here. The match is defensive rather than
+    // decorative -- a future edit that flipped the flag would otherwise reach
+    // this code path and a verifier would have to invent a verdict for a list.
+    // Refuse loudly instead: an unreachable!() here would be a false PASS
+    // waiting to happen.
+    let outcome = match complete_multisig_template(d, &ctx, stderr)? {
+        crate::cmd::restore::MultisigCompletion::Completed(o) => o,
+        crate::cmd::restore::MultisigCompletion::Listed(_) => {
+            return Err(ToolkitError::BadInput(
+                "verify-bundle received a candidate LIST from the completion engine, which it \
+                 must never do (allow_enumerate is false here): a verifier cannot report a \
+                 verdict on a set of candidate wallets. This is a bug -- please report it."
+                    .into(),
+            ));
+        }
+    };
 
     // (3) Binding: the supplied md1 + mk1 STUB cards bind to the recomposed
     // wallet's key-invariant `WalletDescriptorTemplateId`.

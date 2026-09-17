@@ -1195,10 +1195,22 @@ pub(crate) struct MultisigCompletionCtx<'a> {
     pub search_addr_max: u32,
     /// Address-search chain scope.
     pub search_chain: CliSearchChain,
-    /// `--accept-search-time` cap override (forced acknowledgment).
+    /// `--accept-search-time`: DEPRECATED and ignored (no time ceiling since
+    /// v0.99.0). Retained so existing callers compile.
     pub accept_search_time: Option<String>,
     /// The network the recomposed wallet is on.
     pub network: CliNetwork,
+    /// SPEC §5 — may a below-threshold `--expect-wallet-id` ENUMERATE instead of
+    /// refusing? `restore` passes `true`; `verify-bundle` passes `false`.
+    ///
+    /// This is a FIELD rather than an inherited default on purpose. Both
+    /// surfaces drive the same engine, and a verifier must never report PASS on
+    /// a list of candidate wallets — "these 6 wallets are consistent with what
+    /// you engraved" is not verification. `MultisigCompletionCtx` has no
+    /// `Default` and both construction sites are exhaustive struct literals, so
+    /// adding this made the compiler force each caller to choose rather than
+    /// letting `verify-bundle` inherit enumeration silently.
+    pub allow_enumerate: bool,
 }
 
 /// #28 phase 2 — the resolved output of [`complete_multisig_template`]: the
@@ -1218,6 +1230,49 @@ pub(crate) struct MultisigCompletionOutcome {
     /// outcome it cannot tell them apart, and the naive implementation stamps a
     /// uniqueness claim on the one mode that proves nothing.
     pub mode: CompletionMode,
+}
+
+/// SPEC §3.5 — cap the rendered list. A realized space is a handful of
+/// cosigners; 64 is generous, and the cap bounds a hostile or garbage input.
+pub(crate) const LIST_CAP: usize = 64;
+
+/// One row of an enumerate listing (SPEC §3.3). Deliberately carries NO
+/// descriptor: a candidate must not be importable, which is the executable form
+/// of §4's "the list reconstructs nothing".
+pub(crate) struct CandidateRow {
+    pub wallet_policy_id: String,
+    /// `(slot, fingerprint)` pairs — what goes where.
+    pub assignment: Vec<(usize, String)>,
+    pub first_address: String,
+}
+
+/// The result of an enumerate search (SPEC §3.3/§3.4a).
+pub(crate) struct CandidateList {
+    pub rows: Vec<CandidateRow>,
+    /// The TRUE total, which may exceed `rows.len()` when the §3.5 cap
+    /// truncated. A consumer that cannot tell truncation from completeness
+    /// concludes "not among my keys" for a wallet that was #65.
+    pub match_count: usize,
+    pub truncated: bool,
+    pub prefix_hex: String,
+    pub prefix_bytes: usize,
+    pub required_bytes: usize,
+    pub realized_space: u128,
+    pub realized_space_kind: &'static str,
+    /// True only when every row is the SAME wallet under a different labelling —
+    /// an order-independent shape searched over FULL permutations. NOT true on
+    /// the subset paths, where rows differ by key SET and are genuinely
+    /// different wallets (SPEC §3.3; adversarial lens A3).
+    pub order_independent: bool,
+}
+
+/// What a completion produced: one wallet, or a list of candidates. An ENUM so
+/// the two are not simultaneously representable — a `Vec` beside `completed`
+/// would let a caller emit a descriptor for a list, which is exactly what §4's
+/// funds-safety argument forbids.
+pub(crate) enum MultisigCompletion {
+    Completed(MultisigCompletionOutcome),
+    Listed(CandidateList),
 }
 
 /// How a multisig template completion was resolved. Carried on the outcome so
@@ -1473,18 +1528,108 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         search_chain: args.search_chain,
         accept_search_time: args.accept_search_time.clone(),
         network,
+        // restore MAY enumerate (SPEC §2) — this is the feature.
+        allow_enumerate: true,
     };
-    let outcome = complete_multisig_template(d, &ctx, stderr)?;
-    emit_completed_multisig(
-        &outcome.completed,
-        &outcome.pool,
-        &outcome.assignment,
-        &outcome.mode,
-        args,
-        network,
-        stdout,
+    match complete_multisig_template(d, &ctx, stderr)? {
+        MultisigCompletion::Completed(outcome) => emit_completed_multisig(
+            &outcome.completed,
+            &outcome.pool,
+            &outcome.assignment,
+            &outcome.mode,
+            args,
+            network,
+            stdout,
+            stderr,
+        ),
+        MultisigCompletion::Listed(list) => {
+            emit_candidate_list(&list, args, network, stdout, stderr)
+        }
+    }
+}
+
+/// SPEC §3.3/§3.4a — render an enumerate listing.
+///
+/// The invariant this function exists to hold: it emits NO descriptor, and under
+/// `--json` it emits `candidates` and NEVER `wallets`. Reusing `wallets` would
+/// make `.wallets[0].descriptor` silently become candidate #1 for every script
+/// already reading it; a consumer that has never heard of `candidates` gets a
+/// missing key and fails loudly, which is the desired behaviour.
+fn emit_candidate_list<W: Write, E: Write>(
+    list: &CandidateList,
+    args: &RestoreArgs,
+    network: CliNetwork,
+    stdout: &mut W,
+    stderr: &mut E,
+) -> Result<u8, ToolkitError> {
+    if args.json {
+        let envelope = json!({
+            "network": network.human_name(),
+            "completed_from": "multisig-template-md1",
+            "prefix_hex": list.prefix_hex,
+            "prefix_bytes": list.prefix_bytes,
+            "required_bytes": list.required_bytes,
+            "realized_space": list.realized_space.to_string(),
+            "realized_space_kind": list.realized_space_kind,
+            "match_count": list.match_count,
+            "truncated": list.truncated,
+            "order_independent": list.order_independent,
+            "candidates": list.rows.iter().map(|r| json!({
+                "wallet_policy_id": r.wallet_policy_id,
+                "assignment": r.assignment.iter().map(|(slot, fp)| json!({
+                    "slot": slot,
+                    "fingerprint": fp,
+                })).collect::<Vec<_>>(),
+                "first_address": r.first_address,
+            })).collect::<Vec<_>>(),
+        });
+        writeln!(
+            stdout,
+            "{}",
+            serde_json::to_string(&envelope)
+                .map_err(|e| bad(format!("json serialization: {e}")))?
+        )
+        .map_err(ToolkitError::Io)?;
+    } else {
+        for (i, r) in list.rows.iter().enumerate() {
+            writeln!(stdout, "  [{}] wallet-id {}", i + 1, r.wallet_policy_id)
+                .map_err(ToolkitError::Io)?;
+            let asg = r
+                .assignment
+                .iter()
+                .map(|(slot, fp)| format!("@{slot}={fp}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            writeln!(stdout, "      {asg}").map_err(ToolkitError::Io)?;
+            writeln!(stdout, "      first recv {}", r.first_address).map_err(ToolkitError::Io)?;
+        }
+        if list.truncated {
+            writeln!(
+                stdout,
+                "  … and {} more; supply more id",
+                list.match_count - list.rows.len()
+            )
+            .map_err(ToolkitError::Io)?;
+        }
+    }
+
+    // The annotation and the summary go to stderr: stdout carries what a script
+    // consumes, stderr what a human reads.
+    if list.order_independent {
+        let _ = writeln!(
+            stderr,
+            "note: this is an ORDER-INDEPENDENT (sortedmulti) template — every row below is \
+             the SAME wallet under a different labelling, with identical addresses and \
+             identical spending."
+        );
+    }
+    let _ = writeln!(
         stderr,
-    )
+        "{} assignments match prefix {} (of {} {} in the realized space); none reconstructed \
+         — supply more id, or re-run with --search-address instead.",
+        list.match_count, list.prefix_hex, list.realized_space, list.realized_space_kind
+    );
+    Ok(0)
 }
 
 /// Parse the `--origin` own-origin override (accepts `m/…` or bare `…`).
@@ -1516,7 +1661,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
     d: &md_codec::Descriptor,
     ctx: &MultisigCompletionCtx,
     stderr: &mut E,
-) -> Result<MultisigCompletionOutcome, ToolkitError> {
+) -> Result<MultisigCompletion, ToolkitError> {
     use mnemonic_toolkit::permutation_search as ps;
 
     let network = ctx.network;
@@ -1839,7 +1984,8 @@ pub(crate) fn complete_multisig_template<E: Write>(
             &assigned_cosigners,
             ctx.expect_wallet_id.as_deref(),
             stderr,
-        );
+        )
+        .map(MultisigCompletion::Completed);
     }
 
     // --- Build the candidate pool, OWN-FIRST ---------------------------------
@@ -2082,7 +2228,21 @@ pub(crate) fn complete_multisig_template<E: Write>(
         let prefix_hex = ctx.expect_wallet_id.as_deref().unwrap();
         let prefix = decode_wallet_id_prefix(prefix_hex)?;
         id_prefix_len = prefix.len();
-        ps::validate_prefix_strength(prefix.len(), realized_s).map_err(map_search_error)?;
+        // SPEC §2/§3.1: three bands, not two. Below the floor we still refuse;
+        // between the floor and the space-sized threshold we ENUMERATE instead
+        // of refusing; at or above it nothing changes.
+        //
+        // `allow_enumerate` is what keeps this restore-only. `verify-bundle`
+        // passes `false` and therefore keeps today's refusal, because a verifier
+        // must not report PASS on a list of candidate wallets (SPEC §5).
+        // The emitter re-derives this band from the CompletionMode it already
+        // carries, so it is not stored: one source, not two that can disagree.
+        let strength = ps::prefix_strength(prefix.len(), realized_s);
+        let enumerate =
+            ctx.allow_enumerate && matches!(strength, ps::PrefixStrength::Enumerate { .. });
+        if !enumerate {
+            ps::validate_prefix_strength(prefix.len(), realized_s).map_err(map_search_error)?;
+        }
         let evaluator = |assignment: &[usize], _addr_idx: u64| -> bool {
             match build_candidate(assignment) {
                 Ok(cand) => match md_codec::compute_wallet_policy_id(&cand) {
@@ -2103,6 +2263,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             ps::SearchMode::Id,
             realized_s,
             false,
+            enumerate,
             ctx.accept_search_time.as_deref(),
             stderr,
         )?
@@ -2170,6 +2331,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             ps::SearchMode::Address(range),
             realized_s,
             early_exit,
+            false, // address search never enumerates: a scriptPubKey match is exact
             ctx.accept_search_time.as_deref(),
             stderr,
         )?
@@ -2204,6 +2366,58 @@ pub(crate) fn complete_multisig_template<E: Write>(
                  scriptPubKey) or a longer --expect-wallet-id.",
             ));
         }
+        ps::SearchOutcome::Enumerated { assignments } => {
+            // SPEC §3.3/§3.5. The cap is applied BEFORE deriving addresses:
+            // an address costs a descriptor build + a miniscript parse +
+            // script_pubkey_at, paid AFTER the cost estimate, so deriving for
+            // every match and truncating afterwards puts unbudgeted work outside
+            // the budget.
+            let match_count = assignments.len();
+            let truncated = match_count > LIST_CAP;
+            let mut rows: Vec<CandidateRow> = Vec::new();
+            for asg in assignments.iter().take(LIST_CAP) {
+                let cand = build_candidate(asg)?;
+                let id = md_codec::compute_wallet_policy_id(&cand).map_err(ToolkitError::from)?;
+                let descriptor = candidate_descriptor_string(&cand, network)?;
+                let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&descriptor)
+                    .map_err(|e| bad(format!("candidate descriptor parse: {e}")))?;
+                let addrs = crate::derive_address::derive_receive_addresses(
+                    &parsed,
+                    1,
+                    network.to_bitcoin_network(),
+                )?;
+                rows.push(CandidateRow {
+                    wallet_policy_id: hex::encode(id.as_bytes()),
+                    assignment: asg
+                        .iter()
+                        .enumerate()
+                        .map(|(slot, &pi)| (slot, pool[pi].fingerprint.to_string()))
+                        .collect(),
+                    first_address: addrs.first().cloned().unwrap_or_default(),
+                });
+            }
+            // A3: "same wallet, different labelling" holds ONLY where matches
+            // differ by ORDERING. On the subset paths they differ by key SET, so
+            // claiming interchangeability there would tell the operator that
+            // genuinely different wallets are the same one.
+            let order_independent =
+                sorted_shape && matches!(enumeration, ps::Enumeration::FullPermutation { .. });
+            return Ok(MultisigCompletion::Listed(CandidateList {
+                rows,
+                match_count,
+                truncated,
+                prefix_hex: ctx.expect_wallet_id.clone().unwrap_or_default(),
+                prefix_bytes: id_prefix_len,
+                required_bytes: ps::required_prefix_bytes(realized_s),
+                realized_space: realized_s,
+                realized_space_kind: match enumeration {
+                    ps::Enumeration::FullPermutation { .. } => "n_factorial",
+                    ps::Enumeration::OwnAnchored { .. } => "own_anchored_subsets",
+                    ps::Enumeration::OptIn { .. } => "opt_in_subsets",
+                },
+                order_independent,
+            }));
+        }
     };
 
     // --- Build the completed watch-only wallet (the caller emits/binds) ------
@@ -2218,12 +2432,12 @@ pub(crate) fn complete_multisig_template<E: Write>(
     } else {
         CompletionMode::AddressSearch
     };
-    Ok(MultisigCompletionOutcome {
+    Ok(MultisigCompletion::Completed(MultisigCompletionOutcome {
         completed,
         pool,
         assignment,
         mode,
-    })
+    }))
 }
 
 /// Decode a `--cosigner` card — one or more `mk1` chunks, or a single bare xpub
@@ -2337,6 +2551,7 @@ fn run_capped_search<Ev, E: Write>(
     mode: mnemonic_toolkit::permutation_search::SearchMode,
     realized_perms: u128,
     early_exit: bool,
+    collect_all: bool,
     accept_search_time: Option<&str>,
     stderr: &mut E,
 ) -> Result<mnemonic_toolkit::permutation_search::SearchOutcome, ToolkitError>
@@ -2371,8 +2586,15 @@ where
     // v0.60.0 full-scan-with-2nd-match ambiguity certification, byte-unchanged);
     // the over-supply collision-free address-search opts into `true` (SPEC §4.4).
     let Some(estimate) = announce else {
-        return ps::search_enumerated(enumeration, evaluator, mode, early_exit)
-            .map_err(map_search_error);
+        return ps::search_enumerated_with_progress(
+            enumeration,
+            evaluator,
+            mode,
+            early_exit,
+            collect_all,
+            None,
+        )
+        .map_err(map_search_error);
     };
 
     // DECLARE the estimate, then REPORT while scanning. The operator decides
@@ -2432,6 +2654,7 @@ where
             evaluator,
             mode,
             early_exit,
+            collect_all,
             Some(&scanned),
         );
         done.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -2599,6 +2822,25 @@ fn emit_completed_multisig<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
+    // SPEC §3.8 — MANDATORY and un-suppressible. It goes to stderr even under
+    // `--json` (the envelope carries it too): a stderr-only warning is invisible
+    // to a script reading `.wallets[0].descriptor`, and that consumer is the one
+    // most likely to act on a wrong wallet unattended. No flag silences it, and
+    // it is emitted BEFORE the wallet so a human reading top-down meets the
+    // caveat first.
+    if let CompletionMode::IdSearch {
+        prefix_bytes,
+        required_bytes,
+    } = mode
+    {
+        if prefix_bytes < required_bytes {
+            let _ = write!(
+                stderr,
+                "{}",
+                uniqueness_warning_block(*prefix_bytes, *required_bytes)
+            );
+        }
+    }
     let descriptor = candidate_descriptor_string(cand, network)?;
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&descriptor)
         .map_err(|e| bad(format!("completed descriptor parse: {e}")))?;
@@ -2643,6 +2885,12 @@ fn emit_completed_multisig<W: Write, E: Write>(
         } = mode
         {
             let proven = prefix_bytes >= required_bytes;
+            if !proven {
+                envelope.as_object_mut().expect("object").insert(
+                    "warning".into(),
+                    json!(uniqueness_warning_line(*prefix_bytes, *required_bytes)),
+                );
+            }
             let obj = envelope.as_object_mut().expect("envelope is an object");
             obj.insert("uniqueness_proven".into(), json!(proven));
             obj.insert("prefix_bytes".into(), json!(prefix_bytes));
@@ -4130,4 +4378,43 @@ mod progress_render_tests {
             );
         }
     }
+}
+
+/// SPEC §3.8 — the mandatory, un-suppressible warning for a lone match found by
+/// a prefix BELOW the uniqueness threshold.
+///
+/// Flattened to ONE line for the `--json` `warning` field so a consumer can
+/// compare it exactly; the terminal rendering adds the `! ` gutter and line
+/// breaks. Without pinning the JSON form, one build emits the gutter block
+/// verbatim inside the string and another flattens it, and `.warning` greps
+/// differ across builds.
+pub(crate) fn uniqueness_warning_line(prefix_bytes: usize, required_bytes: usize) -> String {
+    format!(
+        "UNIQUENESS NOT PROVEN — the supplied --expect-wallet-id is {prefix_bytes} bytes; this \
+         search space needs {required_bytes} to rule out a coincidental match. Exactly one \
+         assignment matched and it is reported here, but a match this short can be spurious when \
+         the true wallet is NOT among the keys you supplied. Before receiving to this wallet, \
+         confirm the first address against a source you already trust, or re-run with \
+         --search-address INSTEAD of --expect-wallet-id."
+    )
+}
+
+/// The terminal rendering of [`uniqueness_warning_line`]: the same facts with a
+/// `! ` gutter, so it cannot be mistaken for ordinary output.
+pub(crate) fn uniqueness_warning_block(prefix_bytes: usize, required_bytes: usize) -> String {
+    let mut out = String::new();
+    for line in [
+        format!("UNIQUENESS NOT PROVEN — the supplied --expect-wallet-id is {prefix_bytes} bytes;"),
+        format!("this search space needs {required_bytes} to rule out a coincidental match."),
+        "Exactly one assignment matched, and it is reported below, but a match this".to_string(),
+        "short CAN be spurious when the true wallet is NOT among the keys you supplied."
+            .to_string(),
+        "Before receiving to this wallet, confirm the first address below against a".to_string(),
+        "source you already trust, or re-run with --search-address INSTEAD.".to_string(),
+    ] {
+        out.push_str("! ");
+        out.push_str(&line);
+        out.push('\n');
+    }
+    out
 }

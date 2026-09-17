@@ -634,12 +634,20 @@ fn floor_duplicate_cosigner_key_refuses() {
 // ===========================================================================
 
 #[test]
-fn floor_weak_id_prefix_refuses() {
-    // A 4-byte (8-hex) prefix is too weak for an N!-space multisig search.
+fn weak_id_prefix_now_warns_and_completes() {
+    // RE-POINTED (SPEC §8). This test used to assert that a 4-byte prefix
+    // REFUSED. The enumerate feature changed that band: a prefix at or above the
+    // 2-byte floor but below the space-sized threshold no longer refuses.
+    //
+    // It does NOT list here, and that is the subtlety §8 called out: the fixture
+    // takes `id[..8]` of the TRUE id with the wallet present, so exactly ONE
+    // assignment matches and the operator ruling ("emit it, with a loud
+    // warning") applies. Deleting the test would have lost the band entirely;
+    // asserting a list would have been wrong for this fixture.
     let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
     let md1 = emit_template_md1("wsh-sortedmulti", "2", cos);
     let id = emit_template_wallet_id("wsh-sortedmulti", "2", cos);
-    let weak = id[..8].to_string(); // 4 bytes
+    let weak = id[..8].to_string(); // 4 bytes — inside the enumerate band
     let mk1_b = emit_cosigner_mk1("wsh-sortedmulti", "2", cos, 1);
 
     let mut args = vec!["restore".into(), "--network".into(), "mainnet".into()];
@@ -656,13 +664,19 @@ fn floor_weak_id_prefix_refuses() {
         args.push("--cosigner".into());
         args.push(c.clone());
     }
-    let assert = mnemonic().args(&args).assert().failure();
+    let assert = mnemonic().args(&args).assert().success();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.to_lowercase().contains("prefix")
-            || stderr.to_lowercase().contains("weak")
-            || stderr.to_lowercase().contains("bytes"),
-        "a too-weak id prefix must be named: {stderr}"
+        stderr.contains("UNIQUENESS NOT PROVEN"),
+        "a below-threshold lone match MUST carry the §3.8 warning: {stderr}"
+    );
+    assert!(
+        stderr.contains("4 bytes") && stderr.contains("needs 5"),
+        "the warning must name the supplied AND required byte counts: {stderr}"
+    );
+    assert!(
+        stderr.contains(&id),
+        "it still completes to the recorded wallet: {stderr}"
     );
 }
 
@@ -843,24 +857,25 @@ fn sortedmulti_subset_id_and_address_together_still_finds_it() {
 
 #[test]
 fn sortedmulti_subset_prefix_floor_matches_the_scanned_space() {
-    // REGRESSION W1. `realized_s` feeds BOTH the --expect-wallet-id strength
-    // floor (funds-safety) and the §6.4 cost estimate. It used to be computed
-    // from the SHAPE alone while the enumeration was computed from the MODE, so
-    // for an id search the engine scanned N! more candidates than the sizing
-    // believed — and the floor was sized for a space nobody was searching.
+    // REGRESSION W1, RE-POINTED for the enumerate feature.
     //
-    // FIXTURE SIZING IS THE WHOLE TEST. 3 slots (2 cosigner cards + 1 own slot)
-    // with --own-account-max 50 gives C(50,1) = 50 collapsed vs 50·3! = 300
-    // expanded, which straddles the 5→6 byte boundary of required_prefix_bytes.
-    // At smaller K both sides round to 5 bytes and the assertion is VACUOUS —
-    // the first draft of this test used K=5 and passed against the mutation.
+    // The property is unchanged: `realized_s` feeds BOTH the strength floor and
+    // the cost estimate, and it must describe the space actually SCANNED. What
+    // moved is where the number is observable — a below-threshold prefix no
+    // longer REFUSES with "need ≥N bytes", it completes with the §3.8 warning,
+    // which quotes the same requirement ("needs N"). Re-pointed rather than
+    // deleted: the feature retired the old signal, not the invariant.
+    //
+    // FIXTURE SIZING IS STILL THE TEST. 3 slots + --own-account-max 50 gives
+    // C(50,1)=50 collapsed vs 50·3!=300 expanded, straddling the 5→6 byte
+    // boundary. At smaller K both round to 5 and the assertion is vacuous.
     let cos = &[(SEED_B, 0u32), (SEED_C, 0u32), (SEED_A, 3u32)];
 
     let mut required: Vec<String> = Vec::new();
     for script in ["wsh-sortedmulti", "wsh-multi"] {
         let md1 = emit_template_md1(script, "2", cos);
         let id = emit_template_wallet_id(script, "2", cos);
-        let weak = id[..8].to_string(); // 4 bytes — under both candidate floors
+        let weak = id[..8].to_string(); // 4 bytes — inside the enumerate band
         let mk1_b = emit_cosigner_mk1(script, "2", cos, 0);
         let mk1_c = emit_cosigner_mk1(script, "2", cos, 1);
 
@@ -878,17 +893,17 @@ fn sortedmulti_subset_prefix_floor_matches_the_scanned_space() {
             args.push("--cosigner".into());
             args.push(c.clone());
         }
-        let assert = mnemonic().args(&args).assert().failure();
+        let assert = mnemonic().args(&args).assert().success();
         let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
         let need = stderr
-            .split("need ≥")
+            .split("needs ")
             .nth(1)
             .and_then(|t| t.split(' ').next())
             .unwrap_or("<none>")
             .to_string();
         assert_ne!(
             need, "<none>",
-            "expected a prefix-strength refusal: {stderr}"
+            "expected the §3.8 warning to quote the requirement: {stderr}"
         );
         required.push(need);
     }
@@ -1146,11 +1161,11 @@ fn own_account_max_ceiling_refuses() {
 }
 
 #[test]
-fn own_account_max_short_id_prefix_refuses() {
-    // The worked prefix sizing: a too-short --expect-wallet-id over the LARGER
-    // over-supply space must refuse for-weakness. A 4-byte (8-hex) prefix that
-    // is accepted for an n!-space (the exact-pool floor_weak test uses the same)
-    // must be REJECTED for the larger s_own space.
+fn own_account_max_short_id_prefix_warns_and_completes() {
+    // RE-POINTED (SPEC §8), same reasoning as the sibling above but over the
+    // LARGER own-anchored space, where the required prefix is longer — so this
+    // pins that the warning quotes the space-sized requirement rather than a
+    // constant.
     let cos = &[(SEED_A, 0u32), (SEED_B, 0u32)];
     let md1 = emit_template_md1("wsh-multi", "2", cos);
     let id = emit_template_wallet_id("wsh-multi", "2", cos);
@@ -1171,12 +1186,15 @@ fn own_account_max_short_id_prefix_refuses() {
         args.push("--cosigner".into());
         args.push(c.clone());
     }
-    let assert = mnemonic().args(&args).assert().failure();
+    let assert = mnemonic().args(&args).assert().success();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    let low = stderr.to_lowercase();
     assert!(
-        low.contains("prefix") || low.contains("weak") || low.contains("bytes"),
-        "a too-short id prefix over the over-supply space must refuse: {stderr}"
+        stderr.contains("UNIQUENESS NOT PROVEN"),
+        "below-threshold over the over-supply space must warn: {stderr}"
+    );
+    assert!(
+        stderr.contains(&id),
+        "it still completes to the recorded wallet: {stderr}"
     );
 }
 
@@ -1442,13 +1460,17 @@ fn search_cosigner_subset_hard_ceiling_refuses() {
 }
 
 #[test]
-fn search_cosigner_subset_weak_prefix_refuses() {
-    // A too-short --expect-wallet-id over the LARGER opt-in space (s_opt) must
-    // refuse for-weakness (prefix-strength sized to s_opt, not s_own / n!).
+fn search_cosigner_subset_weak_prefix_warns_or_lists() {
+    // RE-POINTED (SPEC §8). Was: a 4-byte prefix over the opt-in space REFUSES.
+    // The enumerate band no longer refuses there. Over this much larger space a
+    // 4-byte prefix may match one assignment (→ warn and complete) or several
+    // (→ list and reconstruct nothing), and BOTH are correct outcomes — so this
+    // asserts the invariant common to both rather than picking one and becoming
+    // flaky: it must NOT refuse, and it must never hand over a wallet silently.
     let cos = &[(SEED_A, 0u32), (SEED_B, 0u32), (SEED_C, 0u32)];
     let md1 = emit_template_md1("wsh-multi", "2", cos);
     let id = emit_template_wallet_id("wsh-multi", "2", cos);
-    let weak = id[..8].to_string(); // 4 bytes
+    let weak = id[..8].to_string();
     let mk1_b = emit_cosigner_mk1("wsh-multi", "2", cos, 1);
     let mk1_c = emit_cosigner_mk1("wsh-multi", "2", cos, 2);
     let cos_outsider = &[(SEED_A, 0u32), (SEED_OUTSIDER, 0u32)];
@@ -1459,8 +1481,6 @@ fn search_cosigner_subset_weak_prefix_refuses() {
     args.extend([
         "--from".into(),
         format!("phrase={SEED_A}"),
-        // Widen both axes so s_opt is comfortably large enough that a 4-byte
-        // prefix is too weak.
         "--own-account-max".into(),
         "32".into(),
         "--search-cosigner-subset".into(),
@@ -1471,12 +1491,18 @@ fn search_cosigner_subset_weak_prefix_refuses() {
         args.push("--cosigner".into());
         args.push(c.clone());
     }
-    let assert = mnemonic().args(&args).assert().failure();
+    let assert = mnemonic().args(&args).assert().success();
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    let low = stderr.to_lowercase();
+    let warned = stderr.contains("UNIQUENESS NOT PROVEN");
+    let listed = stderr.contains("none reconstructed");
     assert!(
-        low.contains("prefix") || low.contains("weak") || low.contains("bytes"),
-        "a too-short id prefix over the opt-in space must refuse: {stderr}"
+        warned || listed,
+        "a below-threshold prefix must either warn (lone match) or list (several); \
+         it must never complete silently: {stderr}"
+    );
+    assert!(
+        !(warned && listed),
+        "warn and list are mutually exclusive outcomes: {stderr}"
     );
 }
 

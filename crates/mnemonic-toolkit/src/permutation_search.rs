@@ -270,6 +270,19 @@ pub enum SearchOutcome {
     /// Two or more assignments matched — refuse (the wallet is not uniquely
     /// determined by this predicate over this space).
     Ambiguous,
+    /// SPEC §2: two or more assignments matched a prefix BELOW the uniqueness
+    /// threshold, and the caller asked to collect them all rather than
+    /// short-circuit. Carries EVERY match, sorted by permutation index.
+    ///
+    /// This is a distinct variant rather than a `Vec` beside `Unique` on
+    /// purpose: "listed" and "reconstructed" must not be simultaneously
+    /// representable, or a caller can emit a descriptor for a list, which is the
+    /// one thing §4's funds-safety argument forbids.
+    /// Carries the ASSIGNMENTS (slot → pool index), already unranked and sorted
+    /// by permutation index, rather than raw ranks: the caller has no business
+    /// knowing about ranks, and handing them out would force `unrank` and
+    /// `Match`'s internals public for no gain.
+    Enumerated { assignments: Vec<Vec<usize>> },
 }
 
 // ---------------------------------------------------------------------------
@@ -343,14 +356,59 @@ pub fn validate_prefix_strength(
     supplied_bytes: usize,
     search_space: u128,
 ) -> Result<(), SearchError> {
+    match prefix_strength(supplied_bytes, search_space) {
+        PrefixStrength::Strong => Ok(()),
+        PrefixStrength::Enumerate { .. } | PrefixStrength::BelowFloor { .. } => {
+            Err(SearchError::PrefixTooShort {
+                required: required_prefix_bytes(search_space),
+                supplied: supplied_bytes,
+            })
+        }
+    }
+}
+
+/// The absolute floor, in BYTES, below which a prefix is refused outright
+/// (SPEC §3.1). 4 hex over a wide space prints a wall of matches and teaches
+/// nothing, so enumeration starts here rather than at 1 byte.
+pub const PREFIX_FLOOR_BYTES: usize = 2;
+
+/// What a supplied `--expect-wallet-id` prefix entitles the caller to do
+/// (SPEC §2). Three bands, and the middle one is the feature:
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrefixStrength {
+    /// Below [`PREFIX_FLOOR_BYTES`] — refuse.
+    BelowFloor { floor: usize, supplied: usize },
+    /// At or above the floor but below the space-sized threshold. A lone match
+    /// here can be spurious, so the caller must collect ALL matches and may
+    /// reconstruct only under the §3.8 warning.
+    Enumerate { required: usize, supplied: usize },
+    /// At or above the threshold — a second match is ruled out by the sizing,
+    /// so the caller may short-circuit and reconstruct without qualification.
+    Strong,
+}
+
+/// Classify a prefix against the realized space (SPEC §2).
+///
+/// This replaces the old binary strong/refuse split. The threshold itself is
+/// unchanged — [`required_prefix_bytes`] — and `Strong` means exactly what it
+/// always did; what is new is that the band between the floor and the threshold
+/// now has a name and an answer other than "no".
+pub fn prefix_strength(supplied_bytes: usize, search_space: u128) -> PrefixStrength {
+    if supplied_bytes < PREFIX_FLOOR_BYTES {
+        return PrefixStrength::BelowFloor {
+            floor: PREFIX_FLOOR_BYTES,
+            supplied: supplied_bytes,
+        };
+    }
     let required = required_prefix_bytes(search_space);
-    if supplied_bytes < required {
-        return Err(SearchError::PrefixTooShort {
+    if supplied_bytes >= required {
+        PrefixStrength::Strong
+    } else {
+        PrefixStrength::Enumerate {
             required,
             supplied: supplied_bytes,
-        });
+        }
     }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1000,7 +1058,7 @@ pub fn search_enumerated<E: CandidateEvaluator>(
     mode: SearchMode,
     early_exit: bool,
 ) -> Result<SearchOutcome, SearchError> {
-    search_enumerated_with_progress(enumeration, evaluator, mode, early_exit, None)
+    search_enumerated_with_progress(enumeration, evaluator, mode, early_exit, false, None)
 }
 
 /// As [`search_enumerated`], but each worker periodically adds the number of
@@ -1021,6 +1079,7 @@ pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
     evaluator: &E,
     mode: SearchMode,
     early_exit: bool,
+    collect_all: bool,
     progress: Option<&AtomicU64>,
 ) -> Result<SearchOutcome, SearchError> {
     let n = enumeration.n();
@@ -1030,7 +1089,21 @@ pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
     // The global match count at which every thread stops scanning: 1 for
     // first-match early-exit (collision-free address-search), 2 for the
     // full-scan-with-2nd-match ambiguity certification (the v0.60.0 default).
-    let stop_at: usize = if early_exit { 1 } else { 2 };
+    // `collect_all` (SPEC §3.2) disables the short-circuit entirely: below the
+    // uniqueness threshold the caller needs EVERY match, not a decision. It is
+    // mutually exclusive with `early_exit` by construction — one wants the first
+    // match, the other wants all of them.
+    debug_assert!(
+        !(early_exit && collect_all),
+        "early_exit and collect_all are contradictory"
+    );
+    let stop_at: usize = if collect_all {
+        usize::MAX
+    } else if early_exit {
+        1
+    } else {
+        2
+    };
     // M1 / P1 M-1: a cardinality that overflows `u128` must REFUSE, not panic.
     // `cardinality()` (factorial / s_own / s_opt) returns `None` on overflow; we
     // propagate it as a typed error BEFORE any `unrank` (whose internal
@@ -1149,6 +1222,20 @@ pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
                 address_index: m.address_index,
             }),
         };
+    }
+    if collect_all && found.len() >= 2 {
+        // SPEC §3.3: the engine assembles matches PER THREAD, so arrival order
+        // is nondeterministic. Sort by permutation index so the rendered list is
+        // stable run to run — a list whose order shuffles is not a list an
+        // operator can compare against a plate.
+        let mut matches = found;
+        matches.sort_by_key(|m| (m.perm_rank, m.address_index));
+        return Ok(SearchOutcome::Enumerated {
+            assignments: matches
+                .iter()
+                .map(|m| enumeration.unrank(m.perm_rank))
+                .collect(),
+        });
     }
     match found.len() {
         0 => Ok(SearchOutcome::None),
@@ -1604,9 +1691,15 @@ mod tests {
         let total = e.cardinality().unwrap() as u64;
         assert_eq!(total, 120);
         let counter = AtomicU64::new(0);
-        let out =
-            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, Some(&counter))
-                .unwrap();
+        let out = search_enumerated_with_progress(
+            &e,
+            &never,
+            SearchMode::Id,
+            false,
+            false,
+            Some(&counter),
+        )
+        .unwrap();
         assert_eq!(out, SearchOutcome::None);
         assert_eq!(
             counter.load(Ordering::Relaxed),
@@ -1623,7 +1716,8 @@ mod tests {
         let e = Enumeration::FullPermutation { n: 4 };
         assert_eq!(
             search_enumerated(&e, &never, SearchMode::Id, false).unwrap(),
-            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, None).unwrap()
+            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, false, None)
+                .unwrap()
         );
     }
 
