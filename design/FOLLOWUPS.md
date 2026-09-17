@@ -5186,3 +5186,41 @@ Canonical is now itself behind: `descriptor-mnemonic-md-cli-v0.15.0` shipped
 2026-09-17, while `scripts/install.sh` says `v0.14.0`. Whoever takes this
 should bump canonical in the same pass, which will make the job red for a
 second, genuine reason if option 1 lands without it.
+
+### Same root cause: `g6 invariant` is red for the stale pin too
+
+Measured 2026-09-17, both reds on master trace to one thing — the canonical
+pins in `scripts/install.sh` are behind the code that mirrors them.
+
+`g6 invariant (cross-repo mlock.rs)` compares this repo's `mlock.rs` against the
+ms-cli tag read **dynamically from `scripts/install.sh`**, which pins
+`ms-cli-v0.16.0`. Commit `74a8ed8c` mirrored ms's non-POSIX `mlock` support into
+this repo, and that code exists in ms *master*, not in the v0.16.0 tag:
+
+    ms-cli-v0.16.0  ERRNO_UNSUPPORTED x0     <- what g6 compares against
+    ms-cli-v0.18.0  ERRNO_UNSUPPORTED x0
+    ms-cli-v0.19.0  ERRNO_UNSUPPORTED x8     <- what this repo now mirrors
+
+So g6 is correct and the pin is wrong. The gate is reporting a true divergence
+from the tag it was told to trust. Locally it PASSES — `SIBLING_REPO_PATH`
+points at a working tree on ms master — which is why this is invisible until CI
+runs it. Do not "fix" it by reverting the mirror.
+
+**The fix is a coordinated pin bump, not a one-liner**, which is why it is filed
+rather than done:
+
+1. `scripts/install.sh` ms pin `v0.16.0` → `v0.19.0` (the first tag carrying the
+   mirrored code).
+2. Every workflow pin that currently matches the old canonical must move in the
+   same commit, or `sibling-pin-check` flips from green to red for those:
+   `manual.yml:90`, `quickstart.yml:87`, `technical-manual.yml:117`.
+3. Those three workflows run doc/CLI harnesses against ms. A 0.16 → 0.19 jump
+   changes CLI surface and adds warning output, so the harnesses need an actual
+   run, not an assumption that a version bump is inert.
+4. `md` canonical is also behind (`v0.14.0`; `v0.15.0` shipped 2026-09-17) — and
+   note the differential's deliberate `v0.11.2` hold-back above is a SEPARATE
+   decision that must survive whatever mechanism lands.
+
+Until then both jobs stay red, neither is a required context, and
+`test (ubuntu-latest)`, `examples` and `clippy` — the three that gate a push —
+are green.
