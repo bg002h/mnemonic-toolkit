@@ -33,6 +33,7 @@ const SIBLING_MLOCK_RELATIVE: &str = "crates/ms-cli/src/mlock.rs";
 /// other (and here) fails this test. This is the helper-fn-circumvention
 /// mitigation.
 const MANIFEST: &[&str] = &[
+    "ERRNO_UNSUPPORTED",
     "MLOCK_STATE",
     "MlockState",
     "PinnedPageRange",

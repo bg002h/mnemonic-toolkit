@@ -33,7 +33,15 @@ fn page_size() -> usize {
         {
             4096
         }
-        #[cfg(not(miri))]
+        #[cfg(all(not(miri), not(unix)))]
+        {
+            // NON-POSIX: there is no `sysconf`. 4096 is only ever used here for
+            // the page-rounding arithmetic in `round_to_pages`, and off POSIX
+            // nothing is ever locked, so the value cannot make a pin wrong --
+            // it only has to be a plausible page size for the bookkeeping.
+            4096
+        }
+        #[cfg(all(not(miri), unix))]
         {
             // SAFETY: `libc::sysconf` with `_SC_PAGESIZE` is a POSIX-mandated
             // call that returns a positive long on Linux and macOS. We coerce
@@ -170,6 +178,14 @@ impl MlockState {
     }
 }
 
+/// The `first_errno` recorded when the platform has no page-locking syscall at
+/// all, as opposed to having one that refused.
+///
+/// NEGATIVE ON PURPOSE: real `errno` values are positive, so this cannot
+/// collide with one and `errno_to_name` can tell them apart without a second
+/// flag to keep in sync.
+const ERRNO_UNSUPPORTED: i32 = -1;
+
 static MLOCK_STATE: OnceLock<MlockState> = OnceLock::new();
 
 fn mlock_state() -> &'static MlockState {
@@ -193,6 +209,21 @@ pub fn report_at_exit() {
         .get()
         .map(|&e| errno_to_name(e))
         .unwrap_or("?");
+    if st.first_errno.get() == Some(&ERRNO_UNSUPPORTED) {
+        // A DIFFERENT FAILURE, SO A DIFFERENT MESSAGE. The RLIMIT_MEMLOCK hint
+        // below is POSIX advice; printing it on a platform with no mlock at all
+        // would send someone chasing a limit that does not exist. State the
+        // mechanism instead, as every other message in this constellation does.
+        eprintln!("warning: secret memory is NOT locked on this platform.");
+        eprintln!("         {failures} of {attempts} secret regions ({bytes} bytes) were left");
+        eprintln!("         unpinned: this build has no page-locking implementation, so");
+        eprintln!("         secret data remains in the heap and the OS may write it to");
+        eprintln!("         the page file. On Linux and macOS these regions are pinned");
+        eprintln!("         with mlock(2) and cannot be swapped.");
+        eprintln!("hint:    nothing you can configure changes this. Prefer a Linux or");
+        eprintln!("         macOS build when handling real seed material.");
+        return;
+    }
     eprintln!("warning: {failures} of {attempts} secret regions could not be locked");
     eprintln!("         (first errno: {errno_name}, {bytes} bytes total); secret");
     eprintln!("         data remains in heap and may be swappable.");
@@ -201,6 +232,16 @@ pub fn report_at_exit() {
 }
 
 fn errno_to_name(errno: i32) -> &'static str {
+    if errno == ERRNO_UNSUPPORTED {
+        return "UNSUPPORTED";
+    }
+    #[cfg(not(unix))]
+    {
+        // Off POSIX the only value that reaches here is the sentinel above;
+        // libc's errno constants do not exist to match against.
+        "UNKNOWN"
+    }
+    #[cfg(unix)]
     match errno {
         libc::EPERM => "EPERM",
         libc::ENOMEM => "ENOMEM",
@@ -264,7 +305,31 @@ unsafe fn sys_munlock(_addr: *const u8, _len: usize) -> i32 {
     0
 }
 
-#[cfg(all(not(miri), not(test)))]
+/// NON-POSIX: there is no `mlock`, so report the distinct `ERRNO_UNSUPPORTED`
+/// rather than a fake success.
+///
+/// THIS IS THE WHOLE DESIGN. Returning `Ok(())` would have been one character
+/// cheaper and would have claimed every secret region was pinned when none was
+/// -- a lie told by the exact code that exists to make this auditable. Failing
+/// instead routes the platform gap through the SAME attempt/failure counting
+/// and the SAME `report_at_exit` that a real EPERM goes through, so the warning
+/// is emitted by machinery that is already tested rather than a second path
+/// bolted alongside it.
+///
+/// Windows has `VirtualLock`/`VirtualUnlock` and a real port is possible; until
+/// one exists, the honest report is that the regions are NOT locked.
+#[cfg(all(not(miri), not(test), not(unix)))]
+unsafe fn sys_mlock_attempt(_addr: *const u8, _len: usize) -> Result<(), i32> {
+    Err(ERRNO_UNSUPPORTED)
+}
+
+/// NON-POSIX: nothing was ever locked, so unlocking is a no-op that succeeds.
+#[cfg(all(not(miri), not(test), not(unix)))]
+unsafe fn sys_munlock(_addr: *const u8, _len: usize) -> i32 {
+    0
+}
+
+#[cfg(all(not(miri), not(test), unix))]
 unsafe fn sys_mlock_attempt(addr: *const u8, len: usize) -> Result<(), i32> {
     // SAFETY: addr is page-aligned + len is page-multiple per pin_pages_for
     // caller; mlock is a POSIX syscall with documented semantics.
@@ -276,7 +341,7 @@ unsafe fn sys_mlock_attempt(addr: *const u8, len: usize) -> Result<(), i32> {
     }
 }
 
-#[cfg(all(not(miri), not(test)))]
+#[cfg(all(not(miri), not(test), unix))]
 unsafe fn sys_munlock(addr: *const u8, len: usize) -> i32 {
     // SAFETY: addr came from a successful prior mlock; len matches.
     unsafe { libc::munlock(addr as *const libc::c_void, len) }
@@ -357,6 +422,32 @@ mod fail_mode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The sentinel must be distinguishable from every real errno, and must
+    /// render as something an operator can act on.
+    ///
+    /// WHAT THIS DOES **NOT** COVER, stated because a half-tested warning is
+    /// worse than an untested one: the non-POSIX `sys_mlock_attempt` arm and
+    /// the platform message in `report_at_exit` are `cfg(not(unix))`, so no
+    /// test on this platform reaches them. CI proves they COMPILE for
+    /// `x86_64-pc-windows-msvc`; nothing here proves the text renders on a
+    /// real Windows run. Tracked in the repo's FOLLOWUPS.
+    #[test]
+    fn unsupported_sentinel_is_distinct_and_named() {
+        assert_eq!(errno_to_name(ERRNO_UNSUPPORTED), "UNSUPPORTED");
+        // Disjoint from every real errno, and not swallowed by their table.
+        // Asserted through the loop variable rather than on the constant
+        // itself: `assert!(ERRNO_UNSUPPORTED < 0)` is compiled away, which
+        // clippy rightly calls out as a test that cannot fail.
+        for real in [libc::EPERM, libc::ENOMEM, libc::EAGAIN, libc::EINVAL] {
+            assert!(real > 0, "POSIX errno values are positive: {real}");
+            assert!(
+                real != ERRNO_UNSUPPORTED,
+                "the sentinel collides with errno {real}"
+            );
+            assert_ne!(errno_to_name(real), "UNSUPPORTED");
+        }
+    }
 
     #[test]
     fn page_rounding_formula_single_page() {
