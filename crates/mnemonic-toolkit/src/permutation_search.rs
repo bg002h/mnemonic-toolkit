@@ -560,12 +560,142 @@ pub fn calibrate_per_candidate<E: CandidateEvaluator>(
 // The search engine.
 // ---------------------------------------------------------------------------
 
+/// Choose a thread count from measured `(threads, rate)` pairs: the SMALLEST
+/// count whose rate is within [`PROBE_TIE_PCT`] of the best.
+///
+/// Not a tidying detail — it is the difference between right and wrong. A short
+/// probe cannot observe what a long scan does: measured on an i7-13700K already
+/// running at 56% of nominal clock, the probe ranks 24 threads ~5% ABOVE 20,
+/// while a real 12.4M-candidate scan runs 2.01s at 20 and 2.43s at 24. The top
+/// of the ladder throttles harder the longer it is sustained, and no probe brief
+/// enough to be free will see that.
+///
+/// So when two counts measure within noise, take the smaller: fewer threads
+/// means less memory contention, less power draw and more thermal headroom —
+/// all of which favour the long run the probe is trying to predict. The bias
+/// points at the regime we cannot sample, which is the only direction worth
+/// being biased in.
+pub fn select_threads(results: &[(usize, f64)], fallback: usize) -> usize {
+    let peak = results
+        .iter()
+        .map(|(_, r)| *r)
+        .fold(0.0f64, |a, b| if b > a { b } else { a });
+    if peak <= 0.0 {
+        return fallback.max(1);
+    }
+    let cutoff = peak * (1.0 - PROBE_TIE_PCT);
+    results
+        .iter()
+        .filter(|(_, r)| *r >= cutoff)
+        .map(|(t, _)| *t)
+        .min()
+        .unwrap_or(fallback)
+        .max(1)
+}
+
+/// How close to the best measured rate counts as a tie, for the
+/// prefer-fewer-threads rule in [`probe_threads`]. 10% is wide enough to cover
+/// probe noise plus the throttling a short sample cannot see.
+pub const PROBE_TIE_PCT: f64 = 0.10;
+
+/// Candidate thread counts to probe, derived from the logical core count.
+///
+/// Fractions rather than a fixed ladder, because the useful range scales with
+/// the machine: on 24 logical cores this yields {24, 20, 18, 12, 6}, and the
+/// measured optimum on an i7-13700K was 20 — a value no fixed rule produces.
+pub fn probe_ladder(ncpu: usize) -> Vec<usize> {
+    let mut v: Vec<usize> = [100usize, 85, 75, 50, 25]
+        .iter()
+        .map(|pct| (ncpu * pct / 100).max(1))
+        .collect();
+    v.sort_unstable();
+    v.dedup();
+    v.reverse();
+    v
+}
+
+/// Measure the best thread count for THIS machine and THIS evaluator.
+///
+/// Times a short parallel sweep at each ladder rung and returns the count with
+/// the highest observed throughput. The work is the real evaluator over real
+/// unranked assignments, so the sample pays the same per-candidate cost and
+/// suffers the same memory contention the full scan will.
+///
+/// WHY MEASURE AT ALL. The optimum is a property of the machine: P/E core
+/// asymmetry, SMT, memory bandwidth and the evaluator's working set all move it,
+/// and none is knowable at compile time. Measured on an i7-13700K (8P+8E, 24
+/// logical): 20 threads ran 1.94s where 24 ran 2.43s — using every logical core
+/// was **25% slower** than stopping short of them.
+///
+/// `budget` candidates are swept per rung; the caller sizes it against how long
+/// the real scan is expected to take.
+pub fn probe_threads<E: CandidateEvaluator + Sync>(
+    evaluator: &E,
+    enumeration: &Enumeration,
+    budget: u64,
+) -> (usize, Vec<(usize, f64)>) {
+    let ncpu = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+        .max(1);
+    let total = enumeration.cardinality().unwrap_or(1).max(1);
+    // A rung must run long enough to reach STEADY STATE. The first cut swept a
+    // fixed 200,000 candidates -- about 30ms -- and picked 24 threads on a box
+    // where 24 is 25% slower than 20 over a real scan: at that size, thread
+    // start-up and warm caches dominate and the memory-bandwidth saturation
+    // that penalises the top of the ladder has not begun. Sizing from `budget`
+    // (which the caller sets against the expected scan length) keeps the sample
+    // in the same regime as the work it is predicting.
+    let per_rung = budget.max(1).min(usize_from_u128_clamped(total) as u64);
+    let mut results: Vec<(usize, f64)> = Vec::new();
+    for threads in probe_ladder(ncpu) {
+        let started = Instant::now();
+        let chunk = per_rung.div_ceil(threads as u64);
+        std::thread::scope(|scope| {
+            for t in 0..threads {
+                let start = (t as u64) * chunk;
+                if start >= per_rung {
+                    break;
+                }
+                let end = (start + chunk).min(per_rung);
+                let ev = evaluator;
+                scope.spawn(move || {
+                    for idx in start..end {
+                        // Stride across the whole space so a cheap early stratum
+                        // does not stand in for the rest.
+                        let rank = (u128::from(idx) * 7919) % total;
+                        let a = enumeration.unrank(rank);
+                        std::hint::black_box(ev.matches(&a, 0));
+                    }
+                });
+            }
+        });
+        let secs = started.elapsed().as_secs_f64().max(1e-9);
+        results.push((threads, per_rung as f64 / secs));
+    }
+    let best = select_threads(&results, ncpu);
+    (best, results)
+}
+
 /// Realized thread count: **one per core**, clamped to ≥1.
 ///
 /// The search is embarrassingly parallel (each thread walks a disjoint slice of
 /// the rank space and shares only two atomics), so there is no reason to leave
 /// cores idle on a scan an operator is waiting on.
 pub fn search_threads() -> usize {
+    // EXPERIMENTAL override, for measuring the scaling curve. Not a gate: the
+    // thread count cannot change a search RESULT (the engine certifies
+    // uniqueness over the whole space regardless of sharding), only how long it
+    // takes. An out-of-range or unparseable value falls back to the core count
+    // rather than failing, because a perf knob must never be able to stop a
+    // recovery.
+    if let Ok(v) = std::env::var("MNEMONIC_SEARCH_THREADS") {
+        if let Ok(n) = v.parse::<usize>() {
+            if n >= 1 {
+                return n;
+            }
+        }
+    }
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(1)
@@ -1093,7 +1223,7 @@ pub fn search_enumerated<E: CandidateEvaluator>(
     mode: SearchMode,
     early_exit: bool,
 ) -> Result<SearchOutcome, SearchError> {
-    search_enumerated_with_progress(enumeration, evaluator, mode, early_exit, false, None)
+    search_enumerated_with_progress(enumeration, evaluator, mode, early_exit, false, None, None)
 }
 
 /// As [`search_enumerated`], but each worker periodically adds the number of
@@ -1115,6 +1245,7 @@ pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
     mode: SearchMode,
     early_exit: bool,
     collect_all: bool,
+    threads: Option<usize>,
     progress: Option<&AtomicU64>,
 ) -> Result<SearchOutcome, SearchError> {
     let n = enumeration.n();
@@ -1159,7 +1290,14 @@ pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
         return Ok(SearchOutcome::None);
     }
 
-    let nthreads = search_threads().min(usize_from_u128_clamped(total));
+    // The caller may have MEASURED the right count for this machine (see
+    // `probe_threads`) and recorded it. Taking it as a parameter is what keeps
+    // the sharding and the cost estimate describing the SAME scan -- deriving it
+    // independently here is how they drifted apart before.
+    let nthreads = threads
+        .unwrap_or_else(search_threads)
+        .max(1)
+        .min(usize_from_u128_clamped(total));
     let matches: Mutex<Vec<Match>> = Mutex::new(Vec::new());
     let global_matches = AtomicUsize::new(0);
     let stop = AtomicBool::new(false);
@@ -1737,7 +1875,8 @@ mod tests {
         };
         let e = Enumeration::FullPermutation { n: 4 };
         let out =
-            search_enumerated_with_progress(&e, &eval, SearchMode::Id, false, true, None).unwrap();
+            search_enumerated_with_progress(&e, &eval, SearchMode::Id, false, true, None, None)
+                .unwrap();
         match out {
             SearchOutcome::Enumerated { assignments } => {
                 // The COUNT is the assertion. A "collect the first two then
@@ -1784,7 +1923,8 @@ mod tests {
         let eval = |a: &[usize], _i: u64| a[0] == 0 && a[1] == 1 && a[2] == 2;
         let e = Enumeration::FullPermutation { n: 3 };
         let out =
-            search_enumerated_with_progress(&e, &eval, SearchMode::Id, false, true, None).unwrap();
+            search_enumerated_with_progress(&e, &eval, SearchMode::Id, false, true, None, None)
+                .unwrap();
         assert!(
             matches!(out, SearchOutcome::Unique { .. }),
             "a lone match must stay Unique even with collect_all: {out:?}"
@@ -1814,6 +1954,7 @@ mod tests {
             SearchMode::Id,
             false,
             false,
+            None,
             Some(&counter),
         )
         .unwrap();
@@ -1833,7 +1974,7 @@ mod tests {
         let e = Enumeration::FullPermutation { n: 4 };
         assert_eq!(
             search_enumerated(&e, &never, SearchMode::Id, false).unwrap(),
-            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, false, None)
+            search_enumerated_with_progress(&e, &never, SearchMode::Id, false, false, None, None)
                 .unwrap()
         );
     }
@@ -2830,5 +2971,65 @@ mod tests {
             }
             other => panic!("expected Unique over own-anchored address space, got {other:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod thread_selection_tests {
+    use super::{probe_ladder, select_threads, PROBE_TIE_PCT};
+
+    #[test]
+    fn prefers_the_smallest_count_within_the_tie_band() {
+        // The measured shape on an i7-13700K: 24 probes fastest, but a real scan
+        // is 25% slower there than at 20. Within the tie band, take the smaller.
+        let measured = [
+            (24usize, 6.7e6f64),
+            (20, 6.1e6),
+            (18, 6.0e6),
+            (12, 4.5e6),
+            (6, 2.8e6),
+        ];
+        assert_eq!(
+            select_threads(&measured, 24),
+            20,
+            "24 probes fastest but is only {:.0}% ahead; prefer fewer threads",
+            PROBE_TIE_PCT * 100.0
+        );
+    }
+
+    #[test]
+    fn a_real_win_outside_the_band_is_taken() {
+        // The bias must not become "always pick the smallest": a count that is
+        // genuinely much faster has to win, or the rule would throw away
+        // parallelism on machines where the top of the ladder really is best.
+        let measured = [(24usize, 10.0e6f64), (20, 6.0e6), (12, 4.0e6)];
+        assert_eq!(select_threads(&measured, 24), 24);
+    }
+
+    #[test]
+    fn degenerate_measurements_fall_back_rather_than_panic() {
+        assert_eq!(select_threads(&[], 8), 8);
+        assert_eq!(select_threads(&[(4, 0.0), (8, 0.0)], 8), 8);
+        assert_eq!(
+            select_threads(&[(0, 5.0)], 8),
+            1,
+            "never returns zero threads"
+        );
+    }
+
+    #[test]
+    fn the_ladder_spans_the_machine_and_is_descending_and_unique() {
+        for ncpu in [1usize, 2, 4, 8, 16, 24, 64, 128] {
+            let l = probe_ladder(ncpu);
+            assert!(!l.is_empty());
+            assert_eq!(l[0], ncpu, "the ladder must include the full core count");
+            assert!(l.iter().all(|&t| t >= 1), "no zero rung: {l:?}");
+            assert!(
+                l.windows(2).all(|w| w[0] > w[1]),
+                "descending+unique: {l:?}"
+            );
+        }
+        // The rung that matters on the measured machine is present.
+        assert!(probe_ladder(24).contains(&20));
     }
 }

@@ -964,6 +964,9 @@ fn verify_multisig_template<W: Write, E: Write>(
         // `restore` now lists. The two surfaces share an engine but not this
         // decision.
         allow_enumerate: false,
+        // verify-bundle has no --recalibrate-threads flag: it reuses whatever
+        // `restore` measured, and never re-measures on a verification path.
+        recalibrate_threads: false,
     };
     // SPEC §5: verify-bundle sets `allow_enumerate: false`, so the engine cannot
     // return a candidate LIST here. The match is defensive rather than

@@ -105,6 +105,7 @@ pub mod secret_taxonomy;
 /// (`cmd/restore.rs`, `cmd/verify_bundle.rs`) reach the engine via the
 /// external-self path `mnemonic_toolkit::permutation_search::*` (the same path
 /// the bin already uses for `mnemonic_toolkit::mlock::*`).
+pub mod config;
 pub mod permutation_search;
 pub mod process_hardening;
 /// Serialize-transparent, zeroize-on-drop secret string for derived

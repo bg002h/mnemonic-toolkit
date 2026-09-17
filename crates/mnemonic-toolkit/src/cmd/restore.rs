@@ -181,6 +181,16 @@ pub struct RestoreArgs {
     #[arg(long = "search-address", conflicts_with = "expect_wallet_id")]
     pub search_address: Option<String>,
 
+    /// Ignore any recorded search-thread count, MEASURE this machine, and
+    /// overwrite `[search]` in `~/.mnemonic/mt.conf`.
+    ///
+    /// The optimal thread count is a property of the machine — P/E core
+    /// asymmetry, SMT and memory bandwidth all move it — so it is measured
+    /// once and reused. Use this after a hardware change, or when the recorded
+    /// value looks wrong. Measuring costs well under a second.
+    #[arg(long = "recalibrate-threads")]
+    pub recalibrate_threads: bool,
+
     /// #28 phase 2 — inclusive lower address index for `--search-address`
     /// (default 0).
     #[arg(long = "search-addr-min", default_value_t = 0)]
@@ -1219,6 +1229,9 @@ pub(crate) struct MultisigCompletionCtx<'a> {
     /// adding this made the compiler force each caller to choose rather than
     /// letting `verify-bundle` inherit enumeration silently.
     pub allow_enumerate: bool,
+    /// `--recalibrate-threads`: ignore the recorded thread count, measure this
+    /// machine, and overwrite `[search]` in `~/.mnemonic/mt.conf`.
+    pub recalibrate_threads: bool,
 }
 
 /// #28 phase 2 — the resolved output of [`complete_multisig_template`]: the
@@ -1538,6 +1551,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         network,
         // restore MAY enumerate (SPEC §2) — this is the feature.
         allow_enumerate: true,
+        recalibrate_threads: args.recalibrate_threads,
     };
     match complete_multisig_template(d, &ctx, stderr)? {
         MultisigCompletion::Completed(outcome) => {
@@ -2280,6 +2294,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             false,
             enumerate,
             ctx.accept_search_time.as_deref(),
+            ctx.recalibrate_threads,
             stderr,
         )?
     } else if addr_search {
@@ -2348,6 +2363,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             early_exit,
             false, // address search never enumerates: a scriptPubKey match is exact
             ctx.accept_search_time.as_deref(),
+            ctx.recalibrate_threads,
             stderr,
         )?
     } else {
@@ -2568,6 +2584,7 @@ fn run_capped_search<Ev, E: Write>(
     early_exit: bool,
     collect_all: bool,
     accept_search_time: Option<&str>,
+    recalibrate: bool,
     stderr: &mut E,
 ) -> Result<mnemonic_toolkit::permutation_search::SearchOutcome, ToolkitError>
 where
@@ -2587,9 +2604,9 @@ where
     // Calibrate against the SAME enumeration the scan will walk, so the sample
     // pays the unrank cost and touches the same strata the real loop does.
     let per = ps::calibrate_per_candidate(evaluator, enumeration, 64, 0);
-    // The estimate is wall-clock, so it must use the thread count the engine
-    // will actually shard across -- the same expression `search_enumerated` uses.
-    let threads = ps::search_threads().min(usize::try_from(realized_total).unwrap_or(usize::MAX));
+    // THREAD COUNT: flag > config > measure-and-record. See resolve_threads.
+    let threads = resolve_threads(evaluator, enumeration, recalibrate, stderr)
+        .min(usize::try_from(realized_total).unwrap_or(usize::MAX));
     let accept = match accept_search_time {
         Some(s) => Some(parse_search_duration(s)?),
         None => None,
@@ -2703,6 +2720,7 @@ where
             mode,
             early_exit,
             collect_all,
+            Some(threads),
             Some(&scanned),
         );
         done.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -2715,6 +2733,94 @@ where
     );
     outcome.map_err(map_search_error)
 }
+
+/// Resolve the search thread count: **explicit flag > recorded config >
+/// measure this machine and record it**.
+///
+/// The optimum is not derivable from the core count. Measured on an i7-13700K
+/// (8 P-cores + 8 E-cores, 24 logical), the best count was **20**: using all 24
+/// logical cores ran **25% slower**, because the last threads land on
+/// hyperthread siblings and E-cores and contend for memory bandwidth. Neither
+/// the logical count nor the physical count (16) is right, so it is measured.
+///
+/// Measuring on every run would tax every short search to benefit the rare long
+/// one, so the result is recorded in `~/.mnemonic/mt.conf` and reused.
+///
+/// EVERY failure path here falls back to the core count and carries on: a
+/// tuning knob must never be able to stop a wallet recovery.
+fn resolve_threads<Ev, E: Write>(
+    evaluator: &Ev,
+    enumeration: &mnemonic_toolkit::permutation_search::Enumeration,
+    recalibrate: bool,
+    stderr: &mut E,
+) -> usize
+where
+    Ev: mnemonic_toolkit::permutation_search::CandidateEvaluator,
+{
+    use mnemonic_toolkit::{config, permutation_search as ps};
+
+    if !recalibrate {
+        let doc = config::load();
+        if let Some(t) = config::get_usize(&doc, "search", "threads") {
+            if t >= 1 {
+                return t;
+            }
+        }
+    }
+
+    // Measure. The probe runs the REAL evaluator over real unranked assignments
+    // so it pays the same per-candidate cost and suffers the same contention.
+    let (best, results) = ps::probe_threads(evaluator, enumeration, PROBE_CANDIDATES);
+    let _ = writeln!(
+        stderr,
+        "measuring search threads on this machine (one-off; \
+         --recalibrate-threads to redo)…"
+    );
+    for (t, rate) in &results {
+        let _ = writeln!(
+            stderr,
+            "    {t:>3} threads  {:.1}M candidates/s",
+            rate / 1e6
+        );
+    }
+    let ncpu = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    match config::store(
+        "search",
+        &[
+            ("threads", best.to_string()),
+            ("measured_logical_cores", ncpu.to_string()),
+        ],
+    ) {
+        Some(p) => {
+            let _ = writeln!(
+                stderr,
+                "    chose {best} threads; recorded in {}",
+                p.display()
+            );
+        }
+        None => {
+            // Read-only home, no HOME set, a full disk — all fine. We measured,
+            // we will use the result now, and we will measure again next time.
+            let _ = writeln!(
+                stderr,
+                "    chose {best} threads (could not write ~/.mnemonic/mt.conf; \
+                 will re-measure next run)"
+            );
+        }
+    }
+    best
+}
+
+/// Candidates swept per ladder rung when measuring.
+///
+/// Sized for STEADY STATE, not speed: the first cut used 200,000 (~30ms/rung)
+/// and chose 24 threads on a machine where 24 is 25% slower than 20 over a real
+/// scan — at that size thread start-up and warm caches dominate and the
+/// memory-bandwidth saturation that penalises the top of the ladder has not
+/// started. ~0.6s/rung, ~3s total, once per machine.
+const PROBE_CANDIDATES: u64 = 4_000_000;
 
 /// Seconds between progress lines during a long search.
 const PROGRESS_TICK_SECS: u64 = 10;
