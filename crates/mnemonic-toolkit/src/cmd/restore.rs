@@ -1540,16 +1540,9 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
         allow_enumerate: true,
     };
     match complete_multisig_template(d, &ctx, stderr)? {
-        MultisigCompletion::Completed(outcome) => emit_completed_multisig(
-            &outcome.completed,
-            &outcome.pool,
-            &outcome.assignment,
-            &outcome.mode,
-            args,
-            network,
-            stdout,
-            stderr,
-        ),
+        MultisigCompletion::Completed(outcome) => {
+            emit_completed_multisig(&outcome, args, network, stdout, stderr)
+        }
         MultisigCompletion::Listed(list) => {
             emit_candidate_list(&list, args, network, stdout, stderr)
         }
@@ -2835,15 +2828,20 @@ fn complete_explicit_assignment<E: Write>(
 /// `@i`. Prints the descriptor + first receive addresses + the completed
 /// `WalletPolicyId`.
 fn emit_completed_multisig<W: Write, E: Write>(
-    cand: &md_codec::Descriptor,
-    pool: &[CandidateKey],
-    assignment: &[usize],
-    mode: &CompletionMode,
+    outcome: &MultisigCompletionOutcome,
     args: &RestoreArgs,
     network: CliNetwork,
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
+    // The four pieces always travel together and are exactly what the outcome
+    // IS, so taking them apart at the call site only to reassemble them here was
+    // four chances to pass the wrong one — and it pushed this past clippy's
+    // argument limit, which was the signal rather than the problem.
+    let cand = &outcome.completed;
+    let pool = outcome.pool.as_slice();
+    let assignment = outcome.assignment.as_slice();
+    let mode = &outcome.mode;
     // SPEC §3.8 — MANDATORY and un-suppressible. It goes to stderr even under
     // `--json` (the envelope carries it too): a stderr-only warning is invisible
     // to a script reading `.wallets[0].descriptor`, and that consumer is the one
@@ -2906,7 +2904,9 @@ fn emit_completed_multisig<W: Write, E: Write>(
             required_bytes,
         } = mode
         {
-            let proven = prefix_bytes >= required_bytes;
+            // `uniqueness_proven()` IS the §3.4a(a) rule; calling it keeps one
+            // source rather than a second copy that can drift from it.
+            let proven = mode.uniqueness_proven().unwrap_or(false);
             if !proven {
                 envelope.as_object_mut().expect("object").insert(
                     "warning".into(),

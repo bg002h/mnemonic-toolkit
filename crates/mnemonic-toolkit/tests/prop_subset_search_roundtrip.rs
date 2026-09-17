@@ -170,8 +170,17 @@ struct GenWallet {
     /// `wsh-multi | wsh-sortedmulti | sh-wsh-multi | sh-wsh-sortedmulti`.
     script: &'static str,
     threshold: u32,
-    /// (seed, account) per slot, slot @0 = (SEED_A, own_account).
+    /// (seed, account) per slot. The OWN slot is `own_slot`, not necessarily @0.
     slots: Vec<(&'static str, u32)>,
+    /// Which slot the operator's OWN key (SEED_A) occupies.
+    ///
+    /// This axis was MISSING until 2026-09-17, and its absence is why a real
+    /// funds-safety defect survived this suite. Every generated case put the own
+    /// key at @0, so the true assignment was always the IDENTITY placement — and
+    /// a bug that only ever enumerated the identity placement (the sortedmulti
+    /// ordering collapse) could not be distinguished from correct behaviour.
+    /// A generator that cannot express the failure cannot find it.
+    own_slot: usize,
 }
 
 impl GenWallet {
@@ -305,9 +314,10 @@ fn complete_own_account_max(w: &GenWallet, own_account_max: u32, count: u32) -> 
         count.to_string(),
         "--json".into(),
     ]);
-    // Supply every NON-own slot as an unassigned `--cosigner` mk1 (slot @0 is own).
+    // Supply every NON-own slot as an unassigned `--cosigner` mk1. The own slot
+    // is `w.own_slot` — NOT hardcoded @0, which is the whole point of the axis.
     for (idx, _slot) in w.slots.iter().enumerate() {
-        if idx == 0 {
+        if idx == w.own_slot {
             continue; // own slot, filled by --from over the over-supply range
         }
         for c in &cosigner_groups[idx] {
@@ -329,7 +339,14 @@ fn complete_own_account_max(w: &GenWallet, own_account_max: u32, count: u32) -> 
 
 /// Materialize a (script, threshold, own_account, …) case into a `GenWallet`.
 /// Family 0 = 2-of-2 {A@own, B@b}; family 1 = 2-of-3 {A@own, B@b, C@c}.
-fn build_case(family: u8, script_idx: usize, own_acct: u32, b_acct: u32, c_acct: u32) -> GenWallet {
+fn build_case(
+    family: u8,
+    script_idx: usize,
+    own_acct: u32,
+    b_acct: u32,
+    c_acct: u32,
+    own_slot_raw: usize,
+) -> GenWallet {
     let scripts = [
         "wsh-sortedmulti",
         "wsh-multi",
@@ -337,15 +354,26 @@ fn build_case(family: u8, script_idx: usize, own_acct: u32, b_acct: u32, c_acct:
         "sh-wsh-multi",
     ];
     let script = scripts[script_idx % scripts.len()];
-    let slots = if family == 0 {
-        vec![(SEED_A, own_acct), (SEED_B, b_acct)]
+    // Cosigners in fixed order; the OWN key is then inserted at `own_slot`, so
+    // the own key ranges over EVERY slot position rather than always @0.
+    let others: Vec<(&'static str, u32)> = if family == 0 {
+        vec![(SEED_B, b_acct)]
     } else {
-        vec![(SEED_A, own_acct), (SEED_B, b_acct), (SEED_C, c_acct)]
+        vec![(SEED_B, b_acct), (SEED_C, c_acct)]
     };
+    let n = others.len() + 1;
+    let own_slot = own_slot_raw % n;
+    let mut slots: Vec<(&'static str, u32)> = Vec::with_capacity(n);
+    slots.extend_from_slice(&others[..own_slot]);
+    slots.push((SEED_A, own_acct));
+    slots.extend_from_slice(&others[own_slot..]);
+    debug_assert_eq!(slots.len(), n);
+    debug_assert_eq!(slots[own_slot], (SEED_A, own_acct));
     GenWallet {
         script,
         threshold: 2,
         slots,
+        own_slot,
     }
 }
 
@@ -383,10 +411,16 @@ proptest! {
         // Extra over-supply headroom ABOVE the true account (so K > own_acct AND
         // K > 1 always ⇒ genuine subset-search, never the n! exact path).
         slack in 1u32..3,
+        // THE ORDERING AXIS. Until 2026-09-17 the own key was always at @0, so
+        // the true assignment was always the IDENTITY placement and a bug that
+        // only enumerated the identity placement was indistinguishable from
+        // correct behaviour. `% n` inside build_case clamps this to the family's
+        // slot count.
+        own_slot_raw in 0usize..3,
     ) {
-        let w = build_case(family, script_idx, own_acct, b_acct, c_acct);
-        // Invariant: the own slot is SEED_A at `own_acct`.
-        prop_assert_eq!(w.slots[0], (SEED_A, own_acct));
+        let w = build_case(family, script_idx, own_acct, b_acct, c_acct, own_slot_raw);
+        // Invariant: the own slot is SEED_A at `own_acct` — wherever it landed.
+        prop_assert_eq!(w.slots[w.own_slot], (SEED_A, own_acct));
 
         // K so the true own account is in 0..K-1 AND K is strictly over-supplied
         // (K ≥ own_acct + 2 > 1 = the exact own count). This guarantees every
@@ -433,11 +467,15 @@ fn oracle_own_account_change_changes_address_subset_axis() {
             script,
             threshold: 2,
             slots: vec![(SEED_A, 0), (SEED_B, 0)],
+            // own key at @0 for this hand-built fixture — stated, not implied.
+            own_slot: 0,
         };
         let at3 = GenWallet {
             script,
             threshold: 2,
             slots: vec![(SEED_A, 3), (SEED_B, 0)],
+            // own key at @0 for this hand-built fixture — stated, not implied.
+            own_slot: 0,
         };
         assert_ne!(
             golden_addresses(&at0.descriptor(), 1),
@@ -456,6 +494,8 @@ fn oracle_accepts_faithful_reconstruction() {
         script: "wsh-multi",
         threshold: 2,
         slots: vec![(SEED_A, 3), (SEED_B, 0)],
+        // own key at @0 for this hand-built fixture — stated, not implied.
+        own_slot: 0,
     };
     assert_eq!(
         golden_addresses(&w.descriptor(), 2),
@@ -475,6 +515,8 @@ fn subset_search_unreachable_own_account_no_match_refuses() {
         script: "wsh-sortedmulti",
         threshold: 2,
         slots: vec![(SEED_A, 4), (SEED_B, 0)],
+        // own key at @0 for this hand-built fixture — stated, not implied.
+        own_slot: 0,
     };
     let template_md1 = md1_lines(&run_bundle(&w, "template"));
     let cosigner_groups = mk1_groups(&run_bundle(&w, "policy"));
@@ -515,19 +557,35 @@ fn subset_search_unreachable_own_account_no_match_refuses() {
 /// matrix.
 #[test]
 fn every_generated_shape_completes_via_subset_search() {
+    // Now also walks EVERY own-slot position. A coverage self-test that does not
+    // itself cover the new axis would leave the same blind spot one level up.
+    let mut seen_non_identity = 0usize;
     for family in 0..2u8 {
         for script_idx in 0..4usize {
-            // own at NON-ZERO account 3, over-supplied via --own-account-max 5.
-            let w = build_case(family, script_idx, 3, 0, 1);
-            let golden = golden_addresses(&w.descriptor(), 2);
-            let got = complete_own_account_max(&w, 5, 2);
-            assert_eq!(
-                got, golden,
-                "family {family} script {} (own@3, --own-account-max 5) must complete to golden",
-                w.script
-            );
+            let n = if family == 0 { 2 } else { 3 };
+            for own_slot_raw in 0..n {
+                // own at NON-ZERO account 3, over-supplied via --own-account-max 5.
+                let w = build_case(family, script_idx, 3, 0, 1, own_slot_raw);
+                if w.own_slot != 0 {
+                    seen_non_identity += 1;
+                }
+                let golden = golden_addresses(&w.descriptor(), 2);
+                let got = complete_own_account_max(&w, 5, 2);
+                assert_eq!(
+                    got, golden,
+                    "family {family} script {} own@slot{} (acct 3, --own-account-max 5) \
+                     must complete to golden",
+                    w.script, w.own_slot
+                );
+            }
         }
     }
+    // Anti-vacuity: if the generator ever stopped varying the own slot, this
+    // loop would silently retest the identity placement forever.
+    assert!(
+        seen_non_identity >= 8,
+        "the coverage walk must exercise NON-identity own placements (saw {seen_non_identity})"
+    );
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -571,9 +629,9 @@ fn complete_cosigner_subset(
         count.to_string(),
         "--json".into(),
     ]);
-    // The REAL cosigner cards…
+    // The REAL cosigner cards… (the own slot is `w.own_slot`, not @0)
     for (idx, _slot) in w.slots.iter().enumerate() {
-        if idx == 0 {
+        if idx == w.own_slot {
             continue;
         }
         for c in &cosigner_groups[idx] {
@@ -619,9 +677,13 @@ proptest! {
         script_idx in 0usize..4,
         own_acct in 0u32..4,
         slack in 1u32..3,
+        own_slot_raw in 0usize..3,
     ) {
-        // 2-of-3 {A@own, B@0, C@1} (distinct cosigner accounts → distinct keys).
-        let w = build_case(1, script_idx, own_acct, 0, 1);
+        // 2-of-3 with A@own placed at a RANDOM slot, B@0 and C@1 around it
+        // (distinct cosigner accounts → distinct keys). The opt-in arm collapses
+        // orderings too, so it needs the ordering axis as much as the
+        // own-anchored one does.
+        let w = build_case(1, script_idx, own_acct, 0, 1, own_slot_raw);
         let own_account_max = own_acct + 1 + slack;
 
         // The EXTRA over-supplied cosigner: an outsider seed at the same canonical
@@ -630,7 +692,9 @@ proptest! {
             script: w.script,
             threshold: 2,
             slots: vec![(SEED_A, 0), (SEED_OUTSIDER, 0)],
-        };
+        // own key at @0 for this hand-built fixture — stated, not implied.
+        own_slot: 0,
+    };
         let extra = mk1_groups(&run_bundle(&outsider_wallet, "policy"))[1].clone();
 
         // The golden is built from ONLY the real members — the outsider is NOT in
@@ -657,11 +721,15 @@ fn opt_in_outsider_is_genuinely_distinct() {
         script: "wsh-multi",
         threshold: 2,
         slots: vec![(SEED_A, 0), (SEED_B, 0), (SEED_C, 1)],
+        // own key at @0 for this hand-built fixture — stated, not implied.
+        own_slot: 0,
     };
     let with_outsider = GenWallet {
         script: "wsh-multi",
         threshold: 2,
         slots: vec![(SEED_A, 0), (SEED_B, 0), (SEED_OUTSIDER, 0)],
+        // own key at @0 for this hand-built fixture — stated, not implied.
+        own_slot: 0,
     };
     assert_ne!(
         golden_addresses(&real.descriptor(), 1),
