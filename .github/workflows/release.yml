@@ -1,0 +1,326 @@
+# Release: build `mnemonic` for the platforms this repo does not already ship,
+# then attach them to the tag's GitHub release.
+#
+# MODELLED ON `mnemonic-engrave/.github/workflows/release.yml`. That matrix is
+# already proven for this dependency tree, and `descriptor-mnemonic` now runs the
+# same one green on all five targets.
+#
+# THIS REPO ALREADY SHIPS LINUX. reproducible-musl-build.yml publishes static
+# aarch64 + x86_64 musl builds (PROVENANCE + per-arch SHA256SUMS), a better
+# Linux artifact than a glibc-linked one, so this workflow adds only macOS
+# and Windows. The binary is `mnemonic`; the crate is `mnemonic-toolkit`.
+#
+# mlock is POSIX; the crate carries a cfg(not(unix)) arm (the G6 mirror of
+# ms) so the Windows build compiles and warns at runtime that secret pages
+# are left unlocked -- the same knowingly-taken operator decision as ms.
+#
+# COMPOSES with the other tag-triggered workflows in this repo rather than
+# competing with them: it uses the same `gh release view || gh release create`
+# then `gh release upload --clobber` idiom, so whichever workflow reaches the tag
+# first creates the release and the rest attach their own assets.
+#
+# UNSIGNED FOR NOW (operator decision). Only `mnemonic-engrave` carries
+# MINISIGN_SECRET_KEY. SHA256SUMS ships anyway, and VERIFY.txt says plainly that
+# a checksum proves integrity and NOT origin. Add the secret and signing starts
+# with no change here.
+name: release
+
+on:
+  push:
+    tags:
+      - '*v[0-9]*'
+    branches:
+      - master
+      - 'ci/**'
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and BACKFILL binaries onto. Empty = just exercise the matrix.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  RUST_TOOLCHAIN: '1.85.0'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # The constellation's release-signing key, pinned. Signing is SKIPPED entirely
+  # when MINISIGN_SECRET_KEY is absent, so this works unsigned today and starts
+  # signing the moment the secret is added -- no change here.
+  MINISIGN_PUBKEY: 'RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW'
+
+jobs:
+  # THE SUITE, ON EACH OS THAT CAN RUN IT.
+  #
+  # Running the real tests on a real Mac is the strongest functional evidence
+  # available short of owning the hardware -- stronger than any local VM, since
+  # this IS macOS. Which repos can do it is not uniform and the list is set per
+  # repo: a suite that hardcodes /usr/bin/zsh or /usr/bin/fish is Linux-bound
+  # and stays there rather than being weakened to travel.
+  #
+  # Windows is never in this list: these suites assert POSIX file modes via
+  # std::os::unix, which does not compile there. The per-platform acceptance
+  # check in the build job is what covers Windows, and it runs the commands the
+  # documentation actually hands to people.
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - name: cargo test
+        run: cargo test --locked --workspace
+
+  build:
+    name: build mnemonic (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-x86_64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            use_cross: false
+          - name: macos-aarch64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            use_cross: false
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            use_cross: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use_cross
+        run: cargo install cross --locked --version 0.2.5
+
+      - name: Build (cross)
+        if: matrix.use_cross
+        env:
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=.
+        run: cross build --release --locked --target ${{ matrix.target }} -p mnemonic-toolkit
+
+      - name: Build (cargo)
+        if: ${{ !matrix.use_cross }}
+        env:
+          RUSTFLAGS: --remap-path-prefix=${{ github.workspace }}=.
+        run: cargo build --release --locked --target ${{ matrix.target }} -p mnemonic-toolkit
+
+      - name: Smoke-test the binary
+        # Only where the runner can execute what it just built. A cross build for
+        # aarch64 cannot run on an x86_64 runner, and saying so beats a green job
+        # that never ran its own artifact.
+        if: ${{ !matrix.use_cross }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="target/${{ matrix.target }}/release/mnemonic"
+          [ "${{ runner.os }}" = "Windows" ] && BIN="$BIN.exe"
+          "$BIN" --version
+          # A REAL acceptance pass on this platform, on the demo's own recovery
+          # path: the published all-zeros seed + passphrase "satoshi" must derive
+          # the known account xpub. Deterministic on every target.
+          "$BIN" --version >/dev/null
+          SEED='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+          XPUB=xpub6CvHDtn5otAu9fjb7mPpbfizn2A31pQkwLsogfkHaMfsnoGVCwRidN6rZryTBE6G8b6MF152XgJSKiEBpgt3Jx7udU43auRCHB1hvJTRuBu
+          OUT="$(printf '%s' "$SEED" | "$BIN" xpub-search passphrase-of-xpub --phrase-stdin --passphrase satoshi --target-xpub "$XPUB")"
+          case "$OUT" in *"m/84'/0'/0'"*) ;; *) echo "::error::passphrase-of-xpub did not match here: $OUT"; exit 1 ;; esac
+          echo "acceptance ok: passphrase-of-xpub derives the target xpub at m/84'/0'/0'"
+
+      - name: Stage binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "target/${{ matrix.target }}/release/mnemonic.exe" "dist/mnemonic-${{ matrix.target }}.exe"
+          else
+            cp "target/${{ matrix.target }}/release/mnemonic" "dist/mnemonic-${{ matrix.target }}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mnemonic-${{ matrix.target }}
+          path: dist/mnemonic-*
+          if-no-files-found: error
+
+  assemble:
+    name: assemble + release
+    needs: [test, build]
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Resolve tag
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag }}"
+          [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Decide whether this release is signed
+        id: signing
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          if [ -n "$MINISIGN_SECRET_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::MINISIGN_SECRET_KEY is not set -- publishing checksums UNSIGNED."
+          fi
+
+      - name: Install minisign
+        if: steps.signing.outputs.enabled == 'true'
+        run: sudo apt-get update && sudo apt-get install -y minisign
+
+      - name: Assemble archives
+        env:
+          SIGNED: ${{ steps.signing.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          # THE VERSION, NOT THE TAG. Tags here are `ms-cli-v0.19.0` and
+          # `v0.10.0`; naming an archive `mnemonic-${TAG}-...` yields
+          # `ms-ms-cli-v0.19.0-...`, which stutters AND collides with a second
+          # convention, because the musl workflow uploading to the SAME release
+          # names its files `ms-0.18.0-x86_64-linux-musl.tar.gz`. One release
+          # should not ship two naming schemes.
+          VER="${TAG##*-v}"
+          [ "$VER" = "$TAG" ] && VER="${TAG#v}"
+          mkdir -p release
+          if [ "$SIGNED" = "true" ]; then
+            cat > VERIFY.txt <<EOF
+          Verifying this release
+          ======================
+
+          1. Verify the checksum file's signature:
+
+                 minisign -Vm SHA256SUMS.portable -P ${MINISIGN_PUBKEY}
+
+          2. Verify the binaries against the now-trusted checksums:
+
+                 sha256sum -c SHA256SUMS.portable --ignore-missing
+          EOF
+          else
+            cat > VERIFY.txt <<'EOF'
+          Verifying this release
+          ======================
+
+          These binaries are NOT signed. Verify them against the checksums:
+
+              sha256sum -c SHA256SUMS.portable --ignore-missing
+
+          A checksum file alone proves INTEGRITY, not ORIGIN.
+          EOF
+          fi
+
+          pack() {
+            local target="$1" a_os="$2" a_arch="$3" ext="$4"
+            local stage="stage-${a_os}-${a_arch}"
+            mkdir -p "$stage"
+            cp "artifacts/mnemonic-${target}/mnemonic-${target}${ext}" "$stage/mnemonic${ext}"
+            cp VERIFY.txt "$stage/"
+            [ -f LICENSE ] && cp LICENSE "$stage/" || true
+            if [ "$ext" = ".exe" ]; then
+              (cd "$stage" && zip -q "../release/mnemonic-${VER}-${a_os}-${a_arch}.zip" ./*)
+            else
+              chmod +x "$stage/mnemonic"
+              tar -czf "release/mnemonic-${VER}-${a_os}-${a_arch}.tar.gz" -C "$stage" .
+            fi
+          }
+
+          pack x86_64-apple-darwin          macos   amd64 ""
+          pack aarch64-apple-darwin         macos   arm64 ""
+          pack x86_64-pc-windows-msvc       windows amd64 ".exe"
+
+          ls -l release
+
+      - name: Write SHA256SUMS
+        working-directory: release
+        run: |
+          set -euo pipefail
+          # Named for the platform set THIS workflow produces, so it cannot race
+          # the per-arch checksum files the musl workflow uploads to the same tag.
+          sha256sum mnemonic-* > SHA256SUMS.portable
+          cat SHA256SUMS.portable
+
+      - name: Write minisign secret key to a temp file
+        if: steps.signing.outputs.enabled == 'true'
+        id: minisign_key
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        run: |
+          set -euo pipefail
+          KEYFILE="$(mktemp)"
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$KEYFILE"
+          echo "keyfile=$KEYFILE" >> "$GITHUB_OUTPUT"
+
+      - name: Sign SHA256SUMS.portable
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: release
+        env:
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_SECRET_KEY_PASSWORD }}
+          KEYFILE: ${{ steps.minisign_key.outputs.keyfile }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$MINISIGN_PASSWORD" |             minisign -S -s "$KEYFILE" -m SHA256SUMS.portable -t "mnemonic ${TAG} SHA256SUMS.portable"
+          minisign -Vm SHA256SUMS.portable -P "$MINISIGN_PUBKEY"
+
+      - name: Remove minisign secret key
+        if: always()
+        env:
+          KEYFILE: ${{ steps.minisign_key.outputs.keyfile }}
+        run: rm -f "$KEYFILE" || true
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'release/mnemonic-*'
+
+      - name: Ensure a release exists, then upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" >/dev/null 2>&1 ||             gh release create "$TAG" --title "$TAG" --generate-notes || true
+          gh release upload "$TAG" release/mnemonic-*.tar.gz --clobber 2>/dev/null || true
+          gh release upload "$TAG" release/mnemonic-*.zip --clobber 2>/dev/null || true
+          gh release upload "$TAG" release/SHA256SUMS.portable --clobber
+          [ -f release/SHA256SUMS.portable.minisig ] &&             gh release upload "$TAG" release/SHA256SUMS.portable.minisig --clobber || true
+          gh release view "$TAG" --json assets -q '.assets[].name'
