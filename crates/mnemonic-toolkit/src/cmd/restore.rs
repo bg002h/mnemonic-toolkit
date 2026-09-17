@@ -4009,3 +4009,49 @@ mod taproot_override_predicate_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod progress_render_tests {
+    use super::human_duration;
+    use std::time::Duration;
+
+    #[test]
+    fn human_duration_reads_like_a_clock() {
+        // `Duration`'s Debug renders `5461.0908s`, which is not an answer to
+        // "how long?". These are the exact strings an operator sees in the
+        // estimate line and in every progress tick, so pin them.
+        assert_eq!(human_duration(Duration::from_millis(12)), "12ms");
+        assert_eq!(human_duration(Duration::from_millis(1500)), "1.5s");
+        assert_eq!(human_duration(Duration::from_secs(59)), "59.0s");
+        assert_eq!(human_duration(Duration::from_secs(60)), "1m 0s");
+        assert_eq!(human_duration(Duration::from_secs(3599)), "59m 59s");
+        assert_eq!(human_duration(Duration::from_secs(3600)), "1h 0m");
+        assert_eq!(human_duration(Duration::from_secs(10_440)), "2h 54m");
+        assert_eq!(human_duration(Duration::from_secs(86_400)), "1d 0h");
+        assert_eq!(human_duration(Duration::from_secs(200_000)), "2d 7h");
+    }
+
+    #[test]
+    fn human_duration_changes_unit_at_each_boundary() {
+        // NOT a monotonicity test on adjacent seconds: at minute granularity
+        // 3600s and 3601s SHOULD render identically ("1h 0m"), and asserting
+        // otherwise tests the wrong property (the first draft of this test did,
+        // and failed for being wrong rather than finding anything).
+        //
+        // What actually matters: the unit escalates at each boundary, so an
+        // operator can tell 90 minutes from 90 seconds at a glance.
+        assert!(human_duration(Duration::from_millis(999)).ends_with("ms"));
+        assert!(human_duration(Duration::from_secs(1)).ends_with('s'));
+        assert!(human_duration(Duration::from_secs(60)).contains('m'));
+        assert!(human_duration(Duration::from_secs(3600)).contains('h'));
+        assert!(human_duration(Duration::from_secs(86_400)).contains('d'));
+        // And one granularity step apart must be distinguishable.
+        for (a, b) in [(60u64, 120u64), (3600, 7200), (86_400, 172_800)] {
+            assert_ne!(
+                human_duration(Duration::from_secs(a)),
+                human_duration(Duration::from_secs(b)),
+                "{a}s and {b}s must not render identically"
+            );
+        }
+    }
+}
