@@ -144,10 +144,28 @@ Two consequences follow and are binding:
    labelling`. Unmarked, the operator reads "N wallets it could be" when the
    honest answer is "1 wallet, N labellings" — and for an unsorted `wsh-multi`
    the same display means something entirely different.
-   **Reality check on list length**: for the exact-pool spaces this targets, a
-   second match needs a ~2⁻³² collision, so the list is **almost always exactly
-   one row** (measured 0.01% for S=6 at the 2-byte floor). The multi-row list is
-   a large-space phenomenon. Write §3.3's copy for the one-row case first.
+   **Summary line (the list outcome's operator-facing text).** After the rows,
+   on **stderr** (§8), emit exactly one line naming the count, the prefix, the
+   realized space, and the way out:
+
+   ```text
+   N assignments match prefix <hex> (of S in the realized space); none
+   reconstructed — supply more id, or re-run with --search-address instead.
+   ```
+
+   `S` is the **realized** cardinality — `n!`, `s_own` or `s_opt` depending on
+   flags (R0 N2) — and the line must name which, since the whole prefix-sizing
+   story hangs on that number. "instead" is load-bearing: per §3.7 the two flags
+   become mutually exclusive, so the hint must not read as "add `--search-address`
+   to what you just ran", which would refuse.
+   This line is what §3.7, §5 and §8 refer to as "the summary"/"the hint".
+
+   **Reality check on list length**: for the exact-pool spaces this targets the
+   list is **almost always exactly one row**. A second match needs a collision
+   at the supplied prefix length, and the odds scale with it — for S=6 the
+   chance any other assignment also matches is ~7.6e-5 at the 2-byte floor and
+   ~1.2e-9 at 4 bytes. The multi-row list is a large-space phenomenon; write
+   §3.3's copy for the one-row case first.
 4. **Exit codes and `--json`** (R0 I1). Text and JSON must agree, and `exit 0`
    must never be the only signal distinguishing a wallet from a list:
 
