@@ -154,6 +154,45 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.101.0] — 2026-09-17
+
+**SemVer-MINOR (pre-1.0 breaking axis): the parallel core of the multisig search
+is replaced.** No CLI surface changes and no result changes — the bump reflects
+that every correctness guarantee in the search rests on this code.
+
+### Changed — the search uses a work queue instead of fixed shards
+
+The scan used to cut its candidate space into N equal slices, one per thread.
+Equal slices are not equal **work**: the subset enumerations stratify, the strata
+differ in cost, and a thread handed cheap work finished early and idled while
+another was still grinding. More threads meant more stragglers.
+
+A shared cursor now hands out 64k blocks, so a thread that finishes early takes
+more. Measured on a 12.4M-candidate scan:
+
+| threads | work queue | fixed shards |
+| --- | --- | --- |
+| 4 | 5.77s | 5.99s |
+| 16 | 1.84s | 2.10s |
+| 20 | **1.79s** | 1.94s |
+| 24 | 1.86s | **2.43s** |
+
+**This retracts an explanation given in 0.100.1.** That release attributed 24
+threads being 25% slower than 20 to memory-bandwidth saturation and thermal
+throttling on this CPU's P/E-core split. It was neither — it was our own
+sharding, and with the queue the curve is flat from 18 to 24. The comments
+carrying that claim have been corrected rather than quietly dropped.
+
+Beyond the speed: the thread count is no longer baked into shard geometry, so it
+can change **during** a scan. Workers above the target park rather than exit,
+because an exited thread cannot be recalled — that is the hook an adaptive
+version needs.
+
+Results are unchanged and remain independent of thread count: matches are
+collected and sorted, and the unique-vs-ambiguous decision is a property of the
+whole space, not of the order it was walked. The parity tests against the
+single-threaded reference oracle pass unchanged.
+
 ## mnemonic-toolkit [0.100.1] — 2026-09-17
 
 **The multisig search now measures this machine instead of guessing about it.**

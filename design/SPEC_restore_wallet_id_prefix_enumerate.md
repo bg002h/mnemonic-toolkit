@@ -63,7 +63,7 @@ Behaviour by match count, over the full space scan:
 **`Ambiguous` at ≥ threshold is reachable and stays an error.** An earlier draft
 claimed that cell "cannot occur … collision-free by construction". The code
 disagrees: `SearchOutcome::Ambiguous` has no prefix-length condition, and
-`cmd/restore.rs:2392` prints `✗ AMBIGUOUS` and returns `BadInput` (**exit 1**).
+`cmd/restore.rs:2381` prints `✗ AMBIGUOUS` and returns `BadInput` (**exit 1**).
 `required_prefix_bytes`'s own doc sizes the prefix to a false-positive
 probability of **≤ ~2e-10** — a bound, not impossibility. This spec does not
 touch that path: a long prefix must never silently downgrade into a list.
@@ -131,7 +131,7 @@ Two consequences follow and are binding:
    assignment (`@0=<fp>, @1=<fp>, …`), and the first receive address.
    **Order requires an explicit sort** (R0 M2): the engine assembles matches
    per-thread (`matches.lock().unwrap().extend(local)`,
-   `permutation_search.rs:1373-1375`), so arrival order is nondeterministic. Sort
+   `permutation_search.rs:1413-1415`), so arrival order is nondeterministic. Sort
    by **`permutation_index` alone** (L14). An earlier draft pinned
    `(permutation_index, address_index)` "since an address-mode match carries
    both" — but enumerate runs only on the id path, where `address_index` is
@@ -144,7 +144,7 @@ Two consequences follow and are binding:
    Any test asserting order is flaky until the sort is explicit.
    **The `@N=<fp>` column is degenerate for a bare-xpub pool** (L12) — exactly
    the pool with no mk1 metadata. `decode_cosigner_card`
-   (`restore.rs:2493-2495`) gives a bare xpub `Fingerprint::default()`, so every
+   (`restore.rs:2492-2494`) gives a bare xpub `Fingerprint::default()`, so every
    row renders `@0=00000000, @1=00000000, …`: identical across candidates, with
    only the id distinguishing them. The column whose job is "which card goes
    where" carries no information on the one path that most needs it. When a pool
@@ -159,11 +159,11 @@ Two consequences follow and are binding:
    "exactly N rows" would be unwritable.
    **Rows that are the same wallet MUST be marked as such.** For a
    `sortedmulti`/`sortedmulti_a` shape, `compute_wallet_policy_id` never sorts
-   (`restore.rs:2199-2201`), so each ordering has a *different id* — but every
+   (`restore.rs:2198-2200`), so each ordering has a *different id* — but every
    ordering yields *identical addresses and identical spending*. A list can
    therefore show N rows that are one wallet under N labellings. The annotation is
    **one line above the rows, derived from the SHAPE FLAG and not from comparing
-   addresses** (L5): `is_order_independent_shape(&d.tree)` (`restore.rs:2038`).
+   addresses** (L5): `is_order_independent_shape(&d.tree)` (`restore.rs:2037`).
    Grouping by *derived address* would contradict §3.5's "cap before address
    derivation"; reading the flag does not.
    **But the shape flag ALONE is not sufficient, and an earlier draft of this
@@ -228,7 +228,7 @@ and takes precedence over any looser phrasing elsewhere.
 `emit_completed_multisig` (`restore.rs:2974`) is reached from **three**
 completion modes through a single call site (`restore.rs:1436`): id-search,
 address-search, and explicit `--cosigner @N=` placement, which returns early via
-`complete_explicit_assignment` (`restore.rs:2010`). `MultisigCompletionOutcome`
+`complete_explicit_assignment` (`restore.rs:2009`). `MultisigCompletionOutcome`
 carries **no mode discriminant**, so the naive implementation stamps
 `uniqueness_proven: true` on all three.
 
@@ -298,7 +298,7 @@ seeing 64 candidates and no marker concludes the wallet is not among its keys
 when it was #65 — a wrong answer delivered as a complete one.
 
 **(e) `--count` applies to the reconstructed wallet only (L6).** `--count`
-(`restore.rs:239`, "Number of first-receive addresses to show per wallet type",
+(`restore.rs:238`, "Number of first-receive addresses to show per wallet type",
 default 1) already reaches the emitter via `args: &RestoreArgs`. A candidate row
 shows **exactly one** address regardless of `--count`; only the reconstructed-
 wallet path honours it. Otherwise `--count 5` over 64 candidates derives 320
@@ -307,7 +307,7 @@ five-deep.
 
 **(f) The ceiling case belongs in the exit table (L7).** A sub-threshold prefix
 over a space too large to scan no longer refuses instantly (§3.6): it reaches
-`SearchTimeExceedsCeiling`, which `restore.rs:2563` maps through `bad()` to
+`SearchTimeExceedsCeiling`, which `restore.rs:2562` maps through `bad()` to
 `BadInput` — **exit 1**, not 4. So the same operator input that exits 4 today
 exits 1 after this change:
 
@@ -321,7 +321,7 @@ as the time, or the operator is told about seconds when their problem is digits.
 
 **(g) The summary line needs the cardinality KIND, which has no accessor (L9).**
 §3.3 requires the line to name which of `n!` / `s_own` / `s_opt` it printed, but
-`Enumeration` exposes only `n()` (`permutation_search.rs:1075`) and
+`Enumeration` exposes only `n()` (`permutation_search.rs:1084`) and
 `cardinality()` (`:862`) — the *kind* must be added. The template therefore has
 a slot for it, and "emit exactly one line" means one line **after**
 substitution:
@@ -347,7 +347,7 @@ table is the only mapping; do not introduce a fourth:
 5. **Output cap.** Cap the printed list at **64** matches; beyond that print the
    first 64 and `… and K more; supply more id`.
    **Apply the cap BEFORE deriving addresses** (R0 M6). `calibrate_per_candidate`
-   (`restore.rs:2606`) times the **id** evaluator only; rendering a first receive
+   (`restore.rs:2605`) times the **id** evaluator only; rendering a first receive
    address costs a descriptor build + miniscript parse + `script_pubkey_at`,
    materially more, and is paid *after* the ceiling decision. Deriving addresses
    for every match and then truncating puts unbudgeted work outside the ceiling.
@@ -389,7 +389,7 @@ table is the only mapping; do not introduce a fourth:
    unchanged and still refuses — it is not a time limit.
 
 7. **Interaction with `--search-address` — the spec previously described
-   something that does not exist** (R0 I7). The real dispatch (`restore.rs:2255`)
+   something that does not exist** (R0 I7). The real dispatch (`restore.rs:2254`)
    is:
 
    ```text
@@ -430,7 +430,7 @@ table is the only mapping; do not introduce a fourth:
    ```
 
    Requirements: no flag suppresses it, and it names the supplied and required
-   byte counts (both are in hand at `restore.rs:2273`).
+   byte counts (both are in hand at `restore.rs:2272`).
    **"Instead", here too** (A5): §3.7 makes the two flags mutually exclusive, so
    a hint reading "or re-run with `--search-address`" would send the operator
    into a clap usage error. R0's I7 fix added the load-bearing "instead" to
@@ -465,7 +465,7 @@ them gates it.
 On `wsh-sortedmulti` with `--own-account-max` or `--search-cosigner-subset`, the
 subset generators drop the ordering factor enumeration-side (`sorted: true`),
 while `compute_wallet_policy_id` is order-**dependent** — the carve-out comment
-at `restore.rs:2199-2201` states both halves and does not reconcile them for the
+at `restore.rs:2198-2200` states both halves and does not reconcile them for the
 subset paths. Measured: the exact pool reconstructs at exit 0, and both subset
 paths return `✗ NO MATCH` for the **correct full 16-byte id**; the same wallet
 as `wsh-multi` reconstructs on both.
@@ -494,7 +494,7 @@ record of why one was nearly required.
 `--expect-wallet-id` is **silently discarded** whenever any `--cosigner @N=`
 explicit placement is supplied: the explicit path returns
 `complete_explicit_assignment(d, &own_keys, &assigned_cosigners, stderr)`
-(`restore.rs:2010`), whose signature takes **no ctx**, so the flag is
+(`restore.rs:2009`), whose signature takes **no ctx**, so the flag is
 structurally unreachable there. Measured: swapped `@1`/`@2` placements plus the
 **true** id emit a *different* wallet at exit 0 under a `✓ wallet-id
 (completed)` line. The flag whose only job is "verify the completed wallet
@@ -540,9 +540,9 @@ from "that mode proves nothing" to "that mode proves a match, not uniqueness".
 - `crates/mnemonic-toolkit/src/permutation_search.rs`: collect-all below
   threshold; `validate_prefix_strength` keeps the 2-byte floor but signals
   "enumerate mode" between floor and threshold instead of erroring.
-- **`complete_multisig_template` (`restore.rs:1689`) — the function that actually
+- **`complete_multisig_template` (`restore.rs:1688`) — the function that actually
   makes the decision, omitted by the draft** (R0 I6). Both surfaces call it, and
-  it returns `MultisigCompletionOutcome` (`restore.rs:1241`), whose three fields
+  it returns `MultisigCompletionOutcome` (`restore.rs:1240`), whose three fields
   are `completed: md_codec::Descriptor`, `pool`, `assignment` — a **single**
   descriptor and a **single** assignment. The type **structurally cannot express
   "listed N candidates, reconstructed none"**, so it must gain a variant (or
@@ -591,7 +591,7 @@ from "that mode proves nothing" to "that mode proves a match, not uniqueness".
   `validate_prefix_strength`, on the multisig path.
 - **`search_reference` — the determinism oracle — MUST be extended too
   (L15; graded Minor by the lens, raised to Important here).**
-  `permutation_search.rs:1430` is the stated oracle the parallel `search` must
+  `permutation_search.rs:1470` is the stated oracle the parallel `search` must
   agree with on the outcome for every input, and it short-circuits by
   construction: `if found.len() >= 2 { return Ok(SearchOutcome::Ambiguous) }`
   (`:1162-1165`, commented *"Two matches is enough to decide Ambiguous; stop"*).
@@ -608,7 +608,7 @@ from "that mode proves nothing" to "that mode proves a match, not uniqueness".
 - **§6 vector 1's fixture advice needs a shape constraint** (L13). Widening `S`
   with `--own-account-max` does NOT work on an order-independent shape: for
   `sorted: true` both subset generators drop the ordering factor
-  enumeration-side (`permutation_search.rs:1089-873`), so a `sortedmulti` fixture
+  enumeration-side (`permutation_search.rs:1098-873`), so a `sortedmulti` fixture
   widens far less than the raw count suggests and cannot manufacture the
   ordering-collision the vector needs. Use an **unsorted `wsh-multi`** fixture,
   or the stub-evaluator route §6 already hedges toward.
@@ -648,7 +648,7 @@ small space:
    that only checks the descriptor passes against an implementation that
    silently drops the entire C1 mitigation.
 3. **Below the floor still refuses.** A 1-byte (2 hex) prefix → `PrefixTooShort`,
-   **exit 4** (measured; `restore.rs:2557` → `RestoreMismatch` → `error.rs:656`).
+   **exit 4** (measured; `restore.rs:2556` → `RestoreMismatch` → `error.rs:656`).
    An earlier draft said exit 2; a test asserting 2 would fail as written.
 4. **Zero matches → exit 4** with `✗ NO MATCH`.
 5. **`supplied == required` reconstructs and never lists** (R0 I5). Nothing in
@@ -723,7 +723,7 @@ cannot complete a multisig template at any prefix length.
   1. `weak_id_prefix_now_warns_and_completes` (was `floor_weak_id_prefix_refuses`)
   2. `tests/cli_restore_md1_template_multisig.rs:1169 own_account_max_short_id_prefix_refuses`
   3. `tests/cli_restore_md1_template_multisig.rs:1468 search_cosigner_subset_weak_prefix_refuses`
-  4. `src/permutation_search.rs:1543 validate_prefix_strength_rejects_short_accepts_long`
+  4. `src/permutation_search.rs:1583 validate_prefix_strength_rejects_short_accepts_long`
      — the **unit** test of `validate_prefix_strength` itself, which §5 changes.
 
   **R0 I2: "re-point them to assert the enumerate list" is not achievable for
@@ -751,9 +751,9 @@ threat model, and §5's `verify-bundle` ruling — not to re-measuring these.
 | 1 | `permutation_search.rs`, `cmd/restore.rs` exist at the cited paths | ✓ (2429 / 3854 lines) |
 | 2 | `required_prefix_bytes(S) = ceil((log2 S + 32)/8)`, floor 4 at `S≤1`, `S=2 → 5` | ✓ pinned at `permutation_search.rs:1234-1237` |
 | 3 | `required` for the demo-shaped space (own + 2 cosigners) | **5 bytes**, measured end-to-end (§1) — the draft's "8 bytes" was wrong |
-| 4 | Exit code for `PrefixTooShort` | **4**, measured at 1/2/4-byte prefixes; chain `restore.rs:2557` → `error.rs:656` |
+| 4 | Exit code for `PrefixTooShort` | **4**, measured at 1/2/4-byte prefixes; chain `restore.rs:2556` → `error.rs:656` |
 | 5 | Exit code for `✗ NO MATCH` | **4**, measured (`RestoreMismatch`) — §3.4 correct as written |
-| 6 | Exit code for `✗ AMBIGUOUS` | **1**, `restore.rs:2392` → `bad()` → `BadInput` → `error.rs:1096` |
+| 6 | Exit code for `✗ AMBIGUOUS` | **1**, `restore.rs:2381` → `bad()` → `BadInput` → `error.rs:1096` |
 | 7 | Engine classifies `None`/`Unique`/`Ambiguous`, short-circuits at the SECOND match | ✓ `permutation_search.rs:1163-1165`, doc lines 20-27 — §3.2's premise holds |
 | 8 | `SEARCH_CEILING` = 1h, `--accept-search-time`, `--search-address` all exist | ✓ `permutation_search.rs:59`, `:391`, `verify_bundle.rs:137` |
 | 9 | Which tests assert the refusal in the enumerate band | **4**, enumerated in §8 |
