@@ -5430,3 +5430,34 @@ produced a tarball".
 
 Note the release DID publish correctly in the end: 11 assets including both
 Linux musl builds, which also closed the v0.98.0 musl gap.
+
+---
+
+### `convert-path-silently-ignored-with-template` — `--path` has no effect when `--template` is supplied, and nothing says so (tier: correctness/UX; owning phase: the next convert cycle)
+
+**Found 2026-09-17** while deriving demo cosigner keys at a BIP-48 origin.
+
+```console
+$ mnemonic convert --from phrase=- --to xpub --template wsh-sortedmulti --path "m/48'/0'/0'/2'"
+xpub6DBjiYnc4ewKti13Q1L35bqdodw5…
+$ mnemonic convert --from phrase=- --to xpub --template wsh-sortedmulti --path "m/48'/0'/7'/2'"
+xpub6DBjiYnc4ewKti13Q1L35bqdodw5…      # identical — different account, same key
+```
+
+`--template` wins and `--path` is discarded without a word. Dropping `--template`
+is not a workaround either: *"--template is required for derivation targets
+(xpub/xprv/fingerprint)"*. So there is no way to derive an xpub at an explicit
+path through this subcommand, and the flag that looks like it does that lies.
+
+**Why it matters more than a UX wart.** The operator gets a key at an origin they
+did not ask for and nothing flags the substitution. Deriving at the wrong origin
+produces a *valid-looking* xpub for a *different* wallet — exactly the shape that
+ends in funds sent somewhere unrecoverable. It is the same class as
+`--search-address` being silently ignored alongside `--expect-wallet-id`
+(fixed in v0.100.0 by making them mutually exclusive).
+
+**Shape of the fix:** either honour `--path` over `--template`'s implied path, or
+refuse the combination the way `--expect-wallet-id` + `--search-address` now do.
+Silently discarding an explicit instruction is the one option to rule out.
+Whichever is chosen needs a test asserting two different `--path` values produce
+two different keys — the assertion that is missing today.
