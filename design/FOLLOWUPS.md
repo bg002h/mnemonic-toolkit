@@ -5464,7 +5464,15 @@ two different keys — the assertion that is missing today.
 
 ---
 
-### `bundle-slot-phrase-emits-master-xpub-under-a-derived-origin` — a descriptor whose keys do not match their declared origins (tier: correctness/interop; owning phase: next bundle cycle — treat as blocking for that cycle)
+**MISATTRIBUTED — CORRECTED 2026-09-18. `bundle` is NOT at fault.** The mk1
+cards it mints carry a correctly derived key: decoding one gives
+`origin_path: m/48'/0'/0'/2'` and `xpub6FHZCoNb3tg3o…` at **depth 4,
+parent ee71f8c5**. The depth-0 keys I saw were in **`restore`'s printed
+descriptor**, which is where the defect lives. The entry below is kept verbatim
+rather than rewritten, because the reproduction in it is still valid and the
+misattribution is worth seeing; the corrected entry follows it.
+
+### `bundle-slot-phrase-emits-master-xpub-under-a-derived-origin` — MISATTRIBUTED, see the correction above and the entry below (tier: correctness/interop)
 
 **Found 2026-09-17** while building demo cosigner keys for the SH2 demo payload.
 Not found by the suite, because the suite does not use this input form.
@@ -5514,3 +5522,63 @@ worth settling before anything engraved from this path is trusted.
 given a phrase, exactly as the `@N.xpub=` form expects the caller to have done —
 and a test asserting the emitted key's depth matches its declared origin depth.
 That assertion would have caught this and costs one line.
+
+---
+
+### `restore-multisig-descriptor-carries-master-xpubs-under-derived-origins` — the descriptor an operator would IMPORT declares depth-4 origins over depth-0 keys (tier: correctness/interop; owning phase: next restore cycle — blocking for it)
+
+**Found 2026-09-17, correctly localized 2026-09-18** after first blaming
+`bundle`. Recorded that way on purpose: the first diagnosis was wrong and the
+evidence that corrected it is the useful part.
+
+`restore --md1 <template> --cosigner <mk1…>` prints a descriptor whose keys are
+**master** xpubs beneath **depth-4** origins:
+
+```text
+descriptor: wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']xpub661MyMwAqRbcGQnC8zM…
+                              ^^^^^^^^^^^^^^^^^^^^^^  depth-4 origin
+                                                      ^^^^^^^^^^^^^^^^ depth-0 key
+```
+
+Decoding the BIP-32 serialization of each key in that descriptor:
+
+```text
+[73c5da0a/48'/0'/0'/2']   depth=0 parent_fp=00000000
+[3f635a63/48'/0'/0'/2']   depth=0 parent_fp=00000000
+[66d455ea/48'/0'/0'/2']   depth=0 parent_fp=00000000
+```
+
+**The inputs were correct, so this is `restore`'s own synthesis.** The mk1 cards
+it consumed decode to the right thing:
+
+```text
+$ mnemonic inspect <mk1 chunks>
+origin_fingerprint: 3f635a63
+origin_path:        m/48'/0'/0'/2'
+xpub:               xpub6FHZCoNb3tg3o…       depth=4  parent=ee71f8c5
+```
+
+So a correctly derived depth-4 key goes IN and a depth-0 master comes OUT under
+the same origin string.
+
+**Why nothing caught it.** `cli_restore_md1_template_multisig.rs` contains
+**zero** uses of `--slot @N.phrase=` — every fixture builds its template from
+`@N.xpub=` + `@N.fingerprint=` + `@N.path=`. The phrase-built template is the
+untested path, and it is the one an operator reaches for because it takes the
+thing they actually have.
+
+**Not yet established, and the next step:** whether the ADDRESSES `restore`
+prints are derived from the wrong key too, or only the descriptor STRING is
+malformed. Either is serious — the printed descriptor is the artifact someone
+imports into Core or Sparrow — but they need different fixes, and the difference
+decides severity. Settle that before writing code.
+
+**Corroboration from the firmware side.** `mk.Encode` in the fork gates cards on
+the xpub's depth and last child matching the declared path (*"mk: xpub
+depth/child does not match path"*), and `slotMatchesCard` compares the full
+origin component-by-component. The device already asserts the invariant this
+descriptor violates — two halves of the constellation disagree, and only one has
+the assertion.
+
+**The missing test is one line:** every key in an emitted descriptor must have
+depth equal to its declared origin's component count.
