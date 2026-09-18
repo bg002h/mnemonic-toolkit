@@ -5582,3 +5582,37 @@ the assertion.
 
 **The missing test is one line:** every key in an emitted descriptor must have
 depth equal to its declared origin's component count.
+
+**SETTLED 2026-09-18 — the descriptor STRING only; the ADDRESSES are correct.**
+Measured with Bitcoin Core v25 as an independent oracle. The three keys in
+`restore`'s printed descriptor and the three on the mk1 cards have
+**byte-identical chain codes and public keys**; they differ ONLY in the BIP-32
+header (`depth 4 → 0`, `parent-fp → 00000000`, `child 0x80000002 → 0`). Core
+derives exactly the address `restore` prints, on both branches. Only
+`chain_code` and `public_key` participate in CKDpub, which is why every gate in
+four repos stayed green — nothing downstream reads the header.
+
+So: **not funds-affecting and not a wrong result.** A descriptor imported into
+Core or Sparrow yields the right wallet, and PSBT signing matches keys by origin
+fingerprint+path. The defect is the artifact's honesty, plus the round-trip the
+"corroboration" paragraph above names.
+
+**Fixed upstream in md-codec 0.44.0** (descriptor-mnemonic `24ca7225`), which is
+where the render lives — not in this repo. Root cause was a shape:
+`to_miniscript::assemble_origin_and_xkey` built the origin from `origin_path`
+and the header from nothing, two lines apart. Both now derive from one call.
+Depth and child number needed **no wire change** — the card carried them all
+along, and the fork's own composer review states the same model (*"a key:
+record's origin proves the xpub's DEPTH and its LAST COMPONENT against the
+declared path"*, `gui/composer_review.go:14-16`). `parent_fingerprint` is
+`hash160(parent_point)[..4]`, is genuinely not on the md1 wire, and stays zero.
+
+The missing test named above now exists as
+`crates/md-codec/tests/rendered_xpub_header.rs`, over three accounts spanning
+two depths and three terminal components so a hardcoded fix still fails, plus a
+companion test asserting that spread so it cannot decay into a tautology.
+
+- **Status:** OPEN in THIS repo, for one mechanical step: **bump the `md-codec`
+  dependency from 0.42.0 to 0.44.0** so `restore` and `bundle` actually emit the
+  corrected header. Until that bump lands, this repo still prints depth-0 xpubs.
+  **Owning phase:** next toolkit release. **Tier:** `interop`.
