@@ -598,6 +598,14 @@ pub fn select_threads(results: &[(usize, f64)], fallback: usize) -> usize {
 /// probe noise plus the throttling a short sample cannot see.
 pub const PROBE_TIE_PCT: f64 = 0.10;
 
+/// Candidates a worker claims per trip to the shared cursor.
+///
+/// Large enough that the atomic is not the bottleneck (one `fetch_add` per
+/// 65,536 candidates is nothing next to ~4.7us of work each), small enough that
+/// the tail is well balanced: the last block is the only idle time, so a big
+/// block would waste up to that much on one thread while the rest finish.
+const CLAIM_BLOCK: u64 = 65_536;
+
 /// Candidate thread counts to probe, derived from the logical core count.
 ///
 /// Fractions rather than a fixed ladder, because the useful range scales with
@@ -649,17 +657,23 @@ pub fn probe_threads<E: CandidateEvaluator + Sync>(
     let per_rung = budget.max(1).min(usize_from_u128_clamped(total) as u64);
     let mut results: Vec<(usize, f64)> = Vec::new();
     for threads in probe_ladder(ncpu) {
+        // Claim blocks from a shared cursor, exactly as the real scan does. The
+        // probe must measure the MECHANISM it is choosing a parameter for: when
+        // this loop used static shards and the engine used a work queue, the
+        // probe was ranking thread counts by a straggler effect the real scan no
+        // longer has.
         let started = Instant::now();
-        let chunk = per_rung.div_ceil(threads as u64);
+        let cursor = AtomicU64::new(0);
         std::thread::scope(|scope| {
-            for t in 0..threads {
-                let start = (t as u64) * chunk;
-                if start >= per_rung {
-                    break;
-                }
-                let end = (start + chunk).min(per_rung);
+            for _ in 0..threads {
                 let ev = evaluator;
-                scope.spawn(move || {
+                let cursor = &cursor;
+                scope.spawn(move || loop {
+                    let start = cursor.fetch_add(CLAIM_BLOCK, Ordering::Relaxed);
+                    if start >= per_rung {
+                        break;
+                    }
+                    let end = (start + CLAIM_BLOCK).min(per_rung);
                     for idx in start..end {
                         // Stride across the whole space so a cheap early stratum
                         // does not stand in for the rest.
@@ -1302,68 +1316,99 @@ pub fn search_enumerated_with_progress<E: CandidateEvaluator>(
     let global_matches = AtomicUsize::new(0);
     let stop = AtomicBool::new(false);
 
-    // Shard the contiguous index space [0, total) into `nthreads` near-equal
-    // chunks. Each thread unranks its slice (outer = idx / perms, perm_rank =
-    // idx % perms — address index OUTER) and evaluates. `perms` is the
-    // PERMUTATION-space cardinality `S` (subset count for the over-supply modes,
-    // `n!` for the exact path).
-    let chunk = total.div_ceil(nthreads as u128);
+    // WORK QUEUE, not static shards (2026-09-17).
+    //
+    // The old design cut [0, total) into `nthreads` equal slices up front. Two
+    // problems, and the second is the one that matters for the future:
+    //
+    //   * Equal slices are not equal WORK. The subset enumerations stratify by
+    //     `j`, and the strata differ in cost, so a thread handed a cheap slice
+    //     finished early and idled while another was still grinding.
+    //   * The thread count was baked into the shard geometry, so it could not
+    //     change once the scan started. Anything that wants to ADAPT -- and the
+    //     right count is a machine property we can only measure under load --
+    //     had to re-shard, i.e. restart.
+    //
+    // Now: a single atomic cursor hands out fixed-size blocks. Threads that
+    // finish early take more, which load-balances for free; and `target_threads`
+    // gates how many workers claim at any moment, so the count can move in
+    // EITHER direction mid-scan. Workers above the target PARK rather than exit,
+    // which is what makes raising it possible -- an exited thread cannot be
+    // recalled.
+    //
+    // Determinism is unaffected: matches are collected and sorted, and the
+    // Unique/Ambiguous decision is a property of the whole space, not of the
+    // order it was walked in.
+    let cursor = AtomicU64::new(0);
+    let total_u64 = usize_from_u128_clamped(total) as u64;
+    let spawn_n = search_threads().max(nthreads);
+    let target_threads = AtomicUsize::new(nthreads);
     std::thread::scope(|scope| {
-        for t in 0..nthreads {
-            let start = (t as u128) * chunk;
-            if start >= total {
-                break;
-            }
-            let end = (start + chunk).min(total);
+        for t in 0..spawn_n {
             let matches = &matches;
             let global_matches = &global_matches;
             let stop = &stop;
+            let cursor = &cursor;
+            let target_threads = &target_threads;
             let evaluator_ref = evaluator;
             scope.spawn(move || {
                 let mut local: Vec<Match> = Vec::new();
-                let mut since_check: u64 = 0;
                 let mut scanned: u64 = 0;
-                for idx in start..end {
-                    // Poll the stop flag every 1024 candidates (cheap; bounds
-                    // the over-scan past a discovered 2nd match). The progress
-                    // counter rides the SAME tick, so it costs one relaxed
-                    // fetch_add per 1024 candidates rather than per candidate.
-                    since_check += 1;
-                    scanned += 1;
-                    if since_check >= 1024 {
-                        since_check = 0;
-                        if let Some(p) = progress {
-                            p.fetch_add(scanned, Ordering::Relaxed);
-                            scanned = 0;
-                        }
-                        if stop.load(Ordering::Relaxed) {
-                            break;
-                        }
+                loop {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
                     }
-                    let outer_k = (idx / perms) as u64;
-                    let perm_rank = idx % perms;
-                    let assignment = enumeration.unrank(perm_rank);
-                    let address_index = match mode {
-                        SearchMode::Id => 0,
-                        SearchMode::Address(range) => range.flatten(outer_k),
-                    };
-                    if evaluator_ref.matches(&assignment, address_index) {
-                        local.push(Match {
-                            perm_rank,
-                            address_index,
-                        });
-                        // Bump the global counter; once it reaches the stop
-                        // threshold (2 = ambiguity certification, the default;
-                        // 1 = first-match early-exit), signal stop.
-                        let prior = global_matches.fetch_add(1, Ordering::Relaxed);
-                        if prior + 1 >= stop_at {
-                            stop.store(true, Ordering::Relaxed);
+                    // Above the current target: park, do not exit. Exiting would
+                    // make the count one-way.
+                    if t >= target_threads.load(Ordering::Relaxed) {
+                        if cursor.load(Ordering::Relaxed) >= total_u64 {
                             break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(5));
+                        continue;
+                    }
+                    let start = cursor.fetch_add(CLAIM_BLOCK, Ordering::Relaxed);
+                    if start >= total_u64 {
+                        break;
+                    }
+                    let end = (start + CLAIM_BLOCK).min(total_u64);
+                    let mut since_check: u64 = 0;
+                    for idx in start..end {
+                        since_check += 1;
+                        scanned += 1;
+                        if since_check >= 1024 {
+                            since_check = 0;
+                            if let Some(p) = progress {
+                                p.fetch_add(scanned, Ordering::Relaxed);
+                                scanned = 0;
+                            }
+                            if stop.load(Ordering::Relaxed) {
+                                break;
+                            }
+                        }
+                        let idx = u128::from(idx);
+                        let outer_k = (idx / perms) as u64;
+                        let perm_rank = idx % perms;
+                        let assignment = enumeration.unrank(perm_rank);
+                        let address_index = match mode {
+                            SearchMode::Id => 0,
+                            SearchMode::Address(range) => range.flatten(outer_k),
+                        };
+                        if evaluator_ref.matches(&assignment, address_index) {
+                            local.push(Match {
+                                perm_rank,
+                                address_index,
+                            });
+                            let prior = global_matches.fetch_add(1, Ordering::Relaxed);
+                            if prior + 1 >= stop_at {
+                                stop.store(true, Ordering::Relaxed);
+                                break;
+                            }
                         }
                     }
                 }
-                // Flush the tail so the final count is exact rather than
-                // rounded down to the last 1024-tick.
+                // Flush the tail so the final count is exact rather than rounded
+                // down to the last 1024-tick.
                 if let Some(p) = progress {
                     if scanned > 0 {
                         p.fetch_add(scanned, Ordering::Relaxed);
