@@ -5461,3 +5461,56 @@ refuse the combination the way `--expect-wallet-id` + `--search-address` now do.
 Silently discarding an explicit instruction is the one option to rule out.
 Whichever is chosen needs a test asserting two different `--path` values produce
 two different keys — the assertion that is missing today.
+
+---
+
+### `bundle-slot-phrase-emits-master-xpub-under-a-derived-origin` — a descriptor whose keys do not match their declared origins (tier: correctness/interop; owning phase: next bundle cycle — treat as blocking for that cycle)
+
+**Found 2026-09-17** while building demo cosigner keys for the SH2 demo payload.
+Not found by the suite, because the suite does not use this input form.
+
+`bundle --slot @N.phrase=<mnemonic>` emits a descriptor that declares a BIP-48
+origin but carries the **master** xpub:
+
+```console
+$ mnemonic bundle --template wsh-sortedmulti --threshold 2 \
+    --multisig-path-family bip48 --account 0 --md1-form policy \
+    --slot "@0.phrase=<abandon…about>" --slot "@1.phrase=<zoo…wrong>" \
+    --slot "@2.phrase=<beef ×12>"
+…
+[73c5da0a/48'/0'/0'/2']xpub661MyMwAqRbcGQnC8zM…
+[3f635a63/48'/0'/0'/2']xpub661MyMwAqRbcF7FPXvU…
+[66d455ea/48'/0'/0'/2']xpub661MyMwAqRbcEaMsjk9…
+```
+
+Decoding the BIP-32 serialization of each:
+
+```text
+[73c5da0a/48'/0'/0'/2']    depth=0 parent_fp=00000000 index=0x00000000
+[3f635a63/48'/0'/0'/2']    depth=0 parent_fp=00000000 index=0x00000000
+[66d455ea/48'/0'/0'/2']    depth=0 parent_fp=00000000 index=0x00000000
+```
+
+**depth 0 is a MASTER key.** A `[fp/48'/0'/0'/2']` origin declares a depth-4
+node, so the key and its origin contradict each other. For contrast,
+`convert --to xpub --template wsh-sortedmulti` on the same seed yields
+`depth=3 parent=d0b1a95b` — derivation works there.
+
+**Why the suite never saw it.** `emit_template_md1` and its siblings build slots
+as `@N.xpub=` + `@N.fingerprint=` + `@N.path=`, supplying an ALREADY-DERIVED key
+(`cli_restore_md1_template_multisig.rs:143-149`). The `@N.phrase=` form — the one
+an operator reaches for, because it is the one that takes the thing they have —
+is the untested path.
+
+**What was verified, and what was not.** Verified: the depths above, and that a
+wallet built this way round-trips through `restore` to itself. NOT verified:
+what Bitcoin Core or Sparrow do with such a descriptor. The concern is interop —
+a hardware wallet exporting `[fp/48'/0'/0'/2']xpub` at depth 4 will not match a
+cosigner slot holding a depth-0 key under the same origin string, so a bundle
+built from phrases may not co-sign with one built from exported xpubs. That is
+worth settling before anything engraved from this path is trusted.
+
+**Shape of the fix:** derive the key at the slot's declared path when a slot is
+given a phrase, exactly as the `@N.xpub=` form expects the caller to have done —
+and a test asserting the emitted key's depth matches its declared origin depth.
+That assertion would have caught this and costs one line.
