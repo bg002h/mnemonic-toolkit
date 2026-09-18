@@ -5430,3 +5430,189 @@ produced a tarball".
 
 Note the release DID publish correctly in the end: 11 assets including both
 Linux musl builds, which also closed the v0.98.0 musl gap.
+
+---
+
+### `convert-path-silently-ignored-with-template` — `--path` has no effect when `--template` is supplied, and nothing says so (tier: correctness/UX; owning phase: the next convert cycle)
+
+**Found 2026-09-17** while deriving demo cosigner keys at a BIP-48 origin.
+
+```console
+$ mnemonic convert --from phrase=- --to xpub --template wsh-sortedmulti --path "m/48'/0'/0'/2'"
+xpub6DBjiYnc4ewKti13Q1L35bqdodw5…
+$ mnemonic convert --from phrase=- --to xpub --template wsh-sortedmulti --path "m/48'/0'/7'/2'"
+xpub6DBjiYnc4ewKti13Q1L35bqdodw5…      # identical — different account, same key
+```
+
+`--template` wins and `--path` is discarded without a word. Dropping `--template`
+is not a workaround either: *"--template is required for derivation targets
+(xpub/xprv/fingerprint)"*. So there is no way to derive an xpub at an explicit
+path through this subcommand, and the flag that looks like it does that lies.
+
+**Why it matters more than a UX wart.** The operator gets a key at an origin they
+did not ask for and nothing flags the substitution. Deriving at the wrong origin
+produces a *valid-looking* xpub for a *different* wallet — exactly the shape that
+ends in funds sent somewhere unrecoverable. It is the same class as
+`--search-address` being silently ignored alongside `--expect-wallet-id`
+(fixed in v0.100.0 by making them mutually exclusive).
+
+**Shape of the fix:** either honour `--path` over `--template`'s implied path, or
+refuse the combination the way `--expect-wallet-id` + `--search-address` now do.
+Silently discarding an explicit instruction is the one option to rule out.
+Whichever is chosen needs a test asserting two different `--path` values produce
+two different keys — the assertion that is missing today.
+
+---
+
+**MISATTRIBUTED — CORRECTED 2026-09-18. `bundle` is NOT at fault.** The mk1
+cards it mints carry a correctly derived key: decoding one gives
+`origin_path: m/48'/0'/0'/2'` and `xpub6FHZCoNb3tg3o…` at **depth 4,
+parent ee71f8c5**. The depth-0 keys I saw were in **`restore`'s printed
+descriptor**, which is where the defect lives. The entry below is kept verbatim
+rather than rewritten, because the reproduction in it is still valid and the
+misattribution is worth seeing; the corrected entry follows it.
+
+### `bundle-slot-phrase-emits-master-xpub-under-a-derived-origin` — MISATTRIBUTED, see the correction above and the entry below (tier: correctness/interop)
+
+**Found 2026-09-17** while building demo cosigner keys for the SH2 demo payload.
+Not found by the suite, because the suite does not use this input form.
+
+`bundle --slot @N.phrase=<mnemonic>` emits a descriptor that declares a BIP-48
+origin but carries the **master** xpub:
+
+```console
+$ mnemonic bundle --template wsh-sortedmulti --threshold 2 \
+    --multisig-path-family bip48 --account 0 --md1-form policy \
+    --slot "@0.phrase=<abandon…about>" --slot "@1.phrase=<zoo…wrong>" \
+    --slot "@2.phrase=<beef ×12>"
+…
+[73c5da0a/48'/0'/0'/2']xpub661MyMwAqRbcGQnC8zM…
+[3f635a63/48'/0'/0'/2']xpub661MyMwAqRbcF7FPXvU…
+[66d455ea/48'/0'/0'/2']xpub661MyMwAqRbcEaMsjk9…
+```
+
+Decoding the BIP-32 serialization of each:
+
+```text
+[73c5da0a/48'/0'/0'/2']    depth=0 parent_fp=00000000 index=0x00000000
+[3f635a63/48'/0'/0'/2']    depth=0 parent_fp=00000000 index=0x00000000
+[66d455ea/48'/0'/0'/2']    depth=0 parent_fp=00000000 index=0x00000000
+```
+
+**depth 0 is a MASTER key.** A `[fp/48'/0'/0'/2']` origin declares a depth-4
+node, so the key and its origin contradict each other. For contrast,
+`convert --to xpub --template wsh-sortedmulti` on the same seed yields
+`depth=3 parent=d0b1a95b` — derivation works there.
+
+**Why the suite never saw it.** `emit_template_md1` and its siblings build slots
+as `@N.xpub=` + `@N.fingerprint=` + `@N.path=`, supplying an ALREADY-DERIVED key
+(`cli_restore_md1_template_multisig.rs:143-149`). The `@N.phrase=` form — the one
+an operator reaches for, because it is the one that takes the thing they have —
+is the untested path.
+
+**What was verified, and what was not.** Verified: the depths above, and that a
+wallet built this way round-trips through `restore` to itself. NOT verified:
+what Bitcoin Core or Sparrow do with such a descriptor. The concern is interop —
+a hardware wallet exporting `[fp/48'/0'/0'/2']xpub` at depth 4 will not match a
+cosigner slot holding a depth-0 key under the same origin string, so a bundle
+built from phrases may not co-sign with one built from exported xpubs. That is
+worth settling before anything engraved from this path is trusted.
+
+**Shape of the fix:** derive the key at the slot's declared path when a slot is
+given a phrase, exactly as the `@N.xpub=` form expects the caller to have done —
+and a test asserting the emitted key's depth matches its declared origin depth.
+That assertion would have caught this and costs one line.
+
+---
+
+### `restore-multisig-descriptor-carries-master-xpubs-under-derived-origins` — the descriptor an operator would IMPORT declares depth-4 origins over depth-0 keys (tier: correctness/interop; owning phase: next restore cycle — blocking for it)
+
+**Found 2026-09-17, correctly localized 2026-09-18** after first blaming
+`bundle`. Recorded that way on purpose: the first diagnosis was wrong and the
+evidence that corrected it is the useful part.
+
+`restore --md1 <template> --cosigner <mk1…>` prints a descriptor whose keys are
+**master** xpubs beneath **depth-4** origins:
+
+```text
+descriptor: wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']xpub661MyMwAqRbcGQnC8zM…
+                              ^^^^^^^^^^^^^^^^^^^^^^  depth-4 origin
+                                                      ^^^^^^^^^^^^^^^^ depth-0 key
+```
+
+Decoding the BIP-32 serialization of each key in that descriptor:
+
+```text
+[73c5da0a/48'/0'/0'/2']   depth=0 parent_fp=00000000
+[3f635a63/48'/0'/0'/2']   depth=0 parent_fp=00000000
+[66d455ea/48'/0'/0'/2']   depth=0 parent_fp=00000000
+```
+
+**The inputs were correct, so this is `restore`'s own synthesis.** The mk1 cards
+it consumed decode to the right thing:
+
+```text
+$ mnemonic inspect <mk1 chunks>
+origin_fingerprint: 3f635a63
+origin_path:        m/48'/0'/0'/2'
+xpub:               xpub6FHZCoNb3tg3o…       depth=4  parent=ee71f8c5
+```
+
+So a correctly derived depth-4 key goes IN and a depth-0 master comes OUT under
+the same origin string.
+
+**Why nothing caught it.** `cli_restore_md1_template_multisig.rs` contains
+**zero** uses of `--slot @N.phrase=` — every fixture builds its template from
+`@N.xpub=` + `@N.fingerprint=` + `@N.path=`. The phrase-built template is the
+untested path, and it is the one an operator reaches for because it takes the
+thing they actually have.
+
+**Not yet established, and the next step:** whether the ADDRESSES `restore`
+prints are derived from the wrong key too, or only the descriptor STRING is
+malformed. Either is serious — the printed descriptor is the artifact someone
+imports into Core or Sparrow — but they need different fixes, and the difference
+decides severity. Settle that before writing code.
+
+**Corroboration from the firmware side.** `mk.Encode` in the fork gates cards on
+the xpub's depth and last child matching the declared path (*"mk: xpub
+depth/child does not match path"*), and `slotMatchesCard` compares the full
+origin component-by-component. The device already asserts the invariant this
+descriptor violates — two halves of the constellation disagree, and only one has
+the assertion.
+
+**The missing test is one line:** every key in an emitted descriptor must have
+depth equal to its declared origin's component count.
+
+**SETTLED 2026-09-18 — the descriptor STRING only; the ADDRESSES are correct.**
+Measured with Bitcoin Core v25 as an independent oracle. The three keys in
+`restore`'s printed descriptor and the three on the mk1 cards have
+**byte-identical chain codes and public keys**; they differ ONLY in the BIP-32
+header (`depth 4 → 0`, `parent-fp → 00000000`, `child 0x80000002 → 0`). Core
+derives exactly the address `restore` prints, on both branches. Only
+`chain_code` and `public_key` participate in CKDpub, which is why every gate in
+four repos stayed green — nothing downstream reads the header.
+
+So: **not funds-affecting and not a wrong result.** A descriptor imported into
+Core or Sparrow yields the right wallet, and PSBT signing matches keys by origin
+fingerprint+path. The defect is the artifact's honesty, plus the round-trip the
+"corroboration" paragraph above names.
+
+**Fixed upstream in md-codec 0.44.0** (descriptor-mnemonic `24ca7225`), which is
+where the render lives — not in this repo. Root cause was a shape:
+`to_miniscript::assemble_origin_and_xkey` built the origin from `origin_path`
+and the header from nothing, two lines apart. Both now derive from one call.
+Depth and child number needed **no wire change** — the card carried them all
+along, and the fork's own composer review states the same model (*"a key:
+record's origin proves the xpub's DEPTH and its LAST COMPONENT against the
+declared path"*, `gui/composer_review.go:14-16`). `parent_fingerprint` is
+`hash160(parent_point)[..4]`, is genuinely not on the md1 wire, and stays zero.
+
+The missing test named above now exists as
+`crates/md-codec/tests/rendered_xpub_header.rs`, over three accounts spanning
+two depths and three terminal components so a hardcoded fix still fails, plus a
+companion test asserting that spread so it cannot decay into a tautology.
+
+- **Status:** OPEN in THIS repo, for one mechanical step: **bump the `md-codec`
+  dependency from 0.42.0 to 0.44.0** so `restore` and `bundle` actually emit the
+  corrected header. Until that bump lands, this repo still prints depth-0 xpubs.
+  **Owning phase:** next toolkit release. **Tier:** `interop`.
