@@ -5525,6 +5525,53 @@ That assertion would have caught this and costs one line.
 
 ---
 
+**RETRACTED 2026-09-18. THIS ENTRY'S CENTRAL CLAIM IS FALSE — I wrote it, and
+the measurement that disproves it is the same one that settled the sibling
+entry above.**
+
+"depth 0 is a MASTER key" was inferred from the *header* of a rendered xpub. That
+inference is exactly the error the `restore` entry above records being corrected:
+a depth-0 header does NOT imply master key MATERIAL. Measured on the same bundle
+this entry cites:
+
+```text
+bundle --slot @N.phrase=  ->  md1 wallet-policy-id 9db5d8b6d3a0bcbfd1998679da280f6e
+rendered with md-cli 0.44.0 (post-fix):
+  [73c5da0a/48'/0'/0'/2']  depth=4  chain=bba0c7ca160a870e…  pub=021a3bf5fbf737d0…
+  [3f635a63/48'/0'/0'/2']  depth=4  chain=38d3b00251a463b0…  pub=030e435aae368182…
+  [66d455ea/48'/0'/0'/2']  depth=4  chain=03561484453d108e…  pub=03ed4f6809f69c78…
+```
+
+Those chain codes and points are byte-identical to the mk1 CARDS the same bundle
+emits, which carry real depth-4 headers. **`--slot @N.phrase=` derived correctly
+all along.** The wire (md1's 65-byte Pubkeys TLV) was always right; only the
+RENDER re-serialised it with a blank header, and the render lives in md-codec,
+not in this repo's slot code.
+
+So there is no bundle defect here, no missing derivation, and the "shape of the
+fix" above would have changed code that was already correct. What was real is
+the rendered STRING, fixed in md-codec 0.44.0 (descriptor-mnemonic `24ca7225`);
+this repo inherits it with the dep bump tracked in the sibling entry above.
+
+**What survives, and it is the part worth keeping:** the observation that
+`@N.phrase=` is the form an operator reaches for and the suite never exercises
+(`cli_restore_md1_template_multisig.rs:143-149` builds slots as `@N.xpub=` +
+`@N.fingerprint=` + `@N.path=`). That coverage gap is real and unclosed — it is
+simply not hiding the defect this entry claimed. A test over the `@N.phrase=`
+path asserting the emitted key's depth equals its declared origin depth is still
+worth adding; it would now pass, and it would pin the md-codec behaviour this
+repo depends on.
+
+**The lesson, since it caught me twice in one day:** a depth-0 xpub header is a
+claim about SERIALISATION, never about key material. Compare chain code and
+public key before calling a key wrong.
+
+- **Status:** RETRACTED as filed (no defect). Superseded by the md-codec 0.44.0
+  fix. Residual: the `@N.phrase=` coverage gap, **owning phase:** next bundle
+  cycle, **tier:** `test-coverage` — no longer blocking.
+
+---
+
 ### `restore-multisig-descriptor-carries-master-xpubs-under-derived-origins` — the descriptor an operator would IMPORT declares depth-4 origins over depth-0 keys (tier: correctness/interop; owning phase: next restore cycle — blocking for it)
 
 **Found 2026-09-17, correctly localized 2026-09-18** after first blaming
