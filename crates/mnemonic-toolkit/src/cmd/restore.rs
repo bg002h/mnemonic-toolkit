@@ -184,10 +184,9 @@ pub struct RestoreArgs {
     /// Ignore any recorded search-thread count, MEASURE this machine, and
     /// overwrite `[search]` in `~/.mnemonic/mt.conf`.
     ///
-    /// The optimal thread count is a property of the machine — P/E core
-    /// asymmetry, SMT and memory bandwidth all move it — so it is measured
+    /// The optimal thread count is a property of the machine, so it is measured
     /// once and reused. Use this after a hardware change, or when the recorded
-    /// value looks wrong. Measuring costs well under a second.
+    /// value looks wrong.
     #[arg(long = "recalibrate-threads")]
     pub recalibrate_threads: bool,
 
@@ -2737,11 +2736,14 @@ where
 /// Resolve the search thread count: **explicit flag > recorded config >
 /// measure this machine and record it**.
 ///
-/// The optimum is not derivable from the core count. Measured on an i7-13700K
-/// (8 P-cores + 8 E-cores, 24 logical), the best count was **20**: using all 24
-/// logical cores ran **25% slower**, because the last threads land on
-/// hyperthread siblings and E-cores and contend for memory bandwidth. Neither
-/// the logical count nor the physical count (16) is right, so it is measured.
+/// The optimum is not derivable from the core count: on an i7-13700K (8P+8E, 24
+/// logical) the measured curve is flat from 18 to 24 threads and falls away
+/// below 12. Which rung is best varies by machine, so it is measured rather than
+/// ruled.
+///
+/// (An earlier version of this comment blamed memory bandwidth for 24 threads
+/// being 25% slower than 20. That was a static-sharding straggler effect in our
+/// own engine, fixed by the work queue, not a hardware limit.)
 ///
 /// Measuring on every run would tax every short search to benefit the rare long
 /// one, so the result is recorded in `~/.mnemonic/mt.conf` and reused.
@@ -2815,11 +2817,9 @@ where
 
 /// Candidates swept per ladder rung when measuring.
 ///
-/// Sized for STEADY STATE, not speed: the first cut used 200,000 (~30ms/rung)
-/// and chose 24 threads on a machine where 24 is 25% slower than 20 over a real
-/// scan — at that size thread start-up and warm caches dominate and the
-/// memory-bandwidth saturation that penalises the top of the ladder has not
-/// started. ~0.6s/rung, ~3s total, once per machine.
+/// Sized so thread start-up and cold caches do not dominate: the first cut used
+/// 200,000 (~30ms/rung), far too short to rank anything. ~0.6s/rung, once per
+/// machine.
 const PROBE_CANDIDATES: u64 = 4_000_000;
 
 /// Seconds between progress lines during a long search.

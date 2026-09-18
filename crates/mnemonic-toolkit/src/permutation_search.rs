@@ -563,18 +563,17 @@ pub fn calibrate_per_candidate<E: CandidateEvaluator>(
 /// Choose a thread count from measured `(threads, rate)` pairs: the SMALLEST
 /// count whose rate is within [`PROBE_TIE_PCT`] of the best.
 ///
-/// Not a tidying detail — it is the difference between right and wrong. A short
-/// probe cannot observe what a long scan does: measured on an i7-13700K already
-/// running at 56% of nominal clock, the probe ranks 24 threads ~5% ABOVE 20,
-/// while a real 12.4M-candidate scan runs 2.01s at 20 and 2.43s at 24. The top
-/// of the ladder throttles harder the longer it is sustained, and no probe brief
-/// enough to be free will see that.
+/// When two counts measure within noise, take the smaller: fewer threads means
+/// less contention on the shared cursor and less power drawn for no gain.
 ///
-/// So when two counts measure within noise, take the smaller: fewer threads
-/// means less memory contention, less power draw and more thermal headroom —
-/// all of which favour the long run the probe is trying to predict. The bias
-/// points at the regime we cannot sample, which is the only direction worth
-/// being biased in.
+/// HISTORY, because the original rationale here was WRONG and a wrong rationale
+/// in a comment outlives the code it explains. This tie-break was introduced to
+/// compensate for 24 threads running 25% slower than 20 on a real scan, which I
+/// attributed to memory-bandwidth saturation and thermal throttling. It was
+/// neither: the engine used static equal-sized shards over a space whose strata
+/// differ in cost, so more threads meant more stragglers. With the work queue
+/// the curve is flat from 18 to 24 (1.84 / 1.79 / 1.86s measured) and this rule
+/// is no longer load-bearing — it now just prefers the cheaper of equals.
 pub fn select_threads(results: &[(usize, f64)], fallback: usize) -> usize {
     let peak = results
         .iter()
@@ -594,8 +593,8 @@ pub fn select_threads(results: &[(usize, f64)], fallback: usize) -> usize {
 }
 
 /// How close to the best measured rate counts as a tie, for the
-/// prefer-fewer-threads rule in [`probe_threads`]. 10% is wide enough to cover
-/// probe noise plus the throttling a short sample cannot see.
+/// prefer-fewer-threads rule in [`select_threads`]. 10% covers probe noise on a
+/// curve that is genuinely flat near the top.
 pub const PROBE_TIE_PCT: f64 = 0.10;
 
 /// Candidates a worker claims per trip to the shared cursor.
@@ -629,11 +628,11 @@ pub fn probe_ladder(ncpu: usize) -> Vec<usize> {
 /// unranked assignments, so the sample pays the same per-candidate cost and
 /// suffers the same memory contention the full scan will.
 ///
-/// WHY MEASURE AT ALL. The optimum is a property of the machine: P/E core
-/// asymmetry, SMT, memory bandwidth and the evaluator's working set all move it,
-/// and none is knowable at compile time. Measured on an i7-13700K (8P+8E, 24
-/// logical): 20 threads ran 1.94s where 24 ran 2.43s — using every logical core
-/// was **25% slower** than stopping short of them.
+/// WHY MEASURE AT ALL. The optimum is a property of the machine — core count,
+/// P/E asymmetry, SMT and the evaluator's working set all move it — and none is
+/// knowable at compile time. On an i7-13700K (8P+8E, 24 logical) the curve is
+/// flat from 18 to 24 and falls away below 12, so the useful answer is "enough,
+/// measured here" rather than any fixed rule.
 ///
 /// `budget` candidates are swept per rung; the caller sizes it against how long
 /// the real scan is expected to take.
@@ -647,13 +646,9 @@ pub fn probe_threads<E: CandidateEvaluator + Sync>(
         .unwrap_or(1)
         .max(1);
     let total = enumeration.cardinality().unwrap_or(1).max(1);
-    // A rung must run long enough to reach STEADY STATE. The first cut swept a
-    // fixed 200,000 candidates -- about 30ms -- and picked 24 threads on a box
-    // where 24 is 25% slower than 20 over a real scan: at that size, thread
-    // start-up and warm caches dominate and the memory-bandwidth saturation
-    // that penalises the top of the ladder has not begun. Sizing from `budget`
-    // (which the caller sets against the expected scan length) keeps the sample
-    // in the same regime as the work it is predicting.
+    // A rung must run long enough that thread start-up and cold caches do not
+    // dominate the sample. The first cut swept 200,000 candidates -- about 30ms
+    // -- which was far too short to rank anything meaningfully.
     let per_rung = budget.max(1).min(usize_from_u128_clamped(total) as u64);
     let mut results: Vec<(usize, f64)> = Vec::new();
     for threads in probe_ladder(ncpu) {
