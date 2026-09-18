@@ -70,7 +70,10 @@ ANCHORS = [
     ("Enumeration::cardinality", P, r"pub fn cardinality\(&self\)"),
     ("the determinism oracle", P, r"pub fn search_reference"),
     ("oracle short-circuits at 2", P, r"if found\.len\(\) >= 2"),
-    ("id-path address_index is 0", P, r"^                        SearchMode::Id => 0,"),
+    # TWO matches by design: the parallel engine and `search_reference`, its
+    # determinism oracle, must agree on this. Pinning the COUNT asserts the
+    # oracle still mirrors the engine -- a stronger claim than "it exists".
+    ("id-path address_index is 0", P, r"SearchMode::Id => 0,", 2),
     ("bare-xpub decode", R, r"^            fingerprint: Fingerprint::default\(\),"),
     ("subsets to distinct key SETS", R, r"// \(own-only over-supply OR opt-in cosigner-subset\)"),
     ("retired test 1", TT, r"fn weak_id_prefix_now_warns_and_completes"),
@@ -127,13 +130,18 @@ def main():
     fail = drift = 0
     rewrites = []
     print("== anchor resolution (content-addressed) ==")
-    for label, path, rx in ANCHORS:
+    for anchor in ANCHORS:
+        label, path, rx = anchor[0], anchor[1], anchor[2]
+        want = anchor[3] if len(anchor) > 3 else 1
         hits = resolve(path, rx)
         base = os.path.basename(path)
-        if len(hits) != 1:
-            print("  %-9s %-40s %s  (%d matches)" %
-                  ("GONE" if not hits else "AMBIGUOUS", label, base, len(hits)))
+        if len(hits) != want:
+            print("  %-9s %-40s %s  (%d matches, expected %d)" %
+                  ("GONE" if not hits else "AMBIGUOUS", label, base, len(hits), want))
             fail = 1
+            continue
+        if want != 1:
+            print("  ok        %-40s %s  (%d sites, as expected)" % (label, base, want))
             continue
         line = hits[0]
         cited = CITED.get(label)
