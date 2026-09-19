@@ -600,8 +600,26 @@ pub(crate) fn derive_xpub_at_path(
 }
 
 #[allow(dead_code)]
-/// Synthesize a full-mode multisig bundle (self-multisig: N cosigners derived
-/// from one seed at one path; all N xpubs are byte-identical).
+/// Synthesize a full-mode multisig bundle from ONE seed: cosigner `i` is
+/// derived at `account + i`, so the N xpubs are DISTINCT.
+///
+/// It used to derive all N at the SAME path, making every xpub byte-identical.
+/// That is a degenerate wallet, not a multisig: identical keys at an identical
+/// use-site derive the identical pubkey at every index, so the script is
+/// `multi(k, K, K, …)` and ONE signer satisfies it k times. No k-of-n property
+/// survives, whatever the metadata declares. `distinct_xpub_multisig_bundle`
+/// in `cmd/bundle.rs` already said so — "which would make a cross-slot card
+/// swap undetectable by construction" — and avoided this function for exactly
+/// that reason.
+///
+/// Operator ruling 2026-09-19, verbatim: **"ReUsing same key is bad. Reusing
+/// seed to generate different keys at different keypaths is ok."** So the seed
+/// stays shared (that is the point of the helper) and the PATHS diverge, which
+/// is the legitimate multi-account cosigner shape. md-codec 0.43's
+/// `DuplicateKeySlots` refuses the old shape and admits this one; it compares
+/// key + use-site and deliberately NOT the fingerprint, so one master funding
+/// several accounts still passes.
+///
 /// SPEC §4.1, §4.5 multisig, §4.6 multisig.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_multisig_full(
@@ -648,28 +666,49 @@ pub fn synthesize_multisig_full(
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
     let master_fingerprint = master.fingerprint(&secp);
 
-    // 3. Self-multisig: derive all N at the same path-family path.
+    // 3. One seed, one key PER SLOT: cosigner `i` at `account + i`, so the N
+    //    xpubs differ. Deriving them all at one path made them byte-identical,
+    //    which is a degenerate multisig (see the doc comment above).
     let script_type = template.bip48_script_type().unwrap_or(0);
-    let path_str = path_family.default_origin_path(network, account, script_type);
-    let xpub = derive_xpub_at_path(&master, &secp, &path_str)?;
-    let path = DerivationPath::from_str(&path_str)
-        .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+    let mut slot_xpubs: Vec<[u8; 65]> = Vec::with_capacity(cosigner_count);
+    let mut slot_origins: Vec<md_codec::OriginPath> = Vec::with_capacity(cosigner_count);
+    // The full `Xpub` + its path per slot, for the mk1 cards below: a card
+    // carries the key it is FOR, so slot `i`'s card must carry slot `i`'s key.
+    let mut slot_keys: Vec<(Xpub, DerivationPath)> = Vec::with_capacity(cosigner_count);
+    for i in 0..cosigner_count {
+        let acct = account
+            .checked_add(i as u32)
+            .ok_or_else(|| ToolkitError::BadInput(format!(
+                "multisig account {account} + {i} slots overflows u32"
+            )))?;
+        let path_str = path_family.default_origin_path(network, acct, script_type);
+        let xpub = derive_xpub_at_path(&master, &secp, &path_str)?;
+        let path = DerivationPath::from_str(&path_str)
+            .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+        slot_xpubs.push(xpub_to_65(&xpub));
+        slot_origins.push(derivation_path_to_origin_path(&path));
+        slot_keys.push((xpub, path));
+    }
 
     // 4. Build multisig descriptor.
-    let xpub_65 = xpub_to_65(&xpub);
     let fp_bytes: [u8; 4] = master_fingerprint.to_bytes();
-    let origin_path = derivation_path_to_origin_path(&path);
     let tree = template.wrapper_node(threshold, cosigner_count);
 
+    // The master fingerprint is SHARED and correctly so: one seed funds every
+    // slot, and the fingerprint identifies the master, not the key.
     let fingerprints: Vec<(u8, [u8; 4])> =
         (0..cosigner_count).map(|i| (i as u8, fp_bytes)).collect();
-    let pubkeys: Vec<(u8, [u8; 65])> = (0..cosigner_count).map(|i| (i as u8, xpub_65)).collect();
+    let pubkeys: Vec<(u8, [u8; 65])> = slot_xpubs
+        .iter()
+        .enumerate()
+        .map(|(i, x)| (i as u8, *x))
+        .collect();
 
     let descriptor = Descriptor {
         n: cosigner_count as u8,
         path_decl: PathDecl {
             n: cosigner_count as u8,
-            paths: PathDeclPaths::Shared(origin_path),
+            paths: PathDeclPaths::Divergent(slot_origins),
         },
         use_site_path: UseSitePath::standard_multipath(),
         tree,
@@ -698,13 +737,15 @@ pub fn synthesize_multisig_full(
             } else {
                 Some(master_fingerprint)
             },
-            mk1_origin_path(&xpub, &path),
-            xpub,
+            mk1_origin_path(&slot_keys[i].0, &slot_keys[i].1),
+            slot_keys[i].0,
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
-        // Slot-unique csi (audit I10) — self-multisig here means all xpubs are
-        // identical, so the old per-fingerprint scheme collided ALL cosigners.
+        // Slot-unique csi (audit I10). The xpubs now differ per slot, but the
+        // MASTER FINGERPRINT is still shared across all N — one seed — and the
+        // old scheme keyed the csi on the fingerprint, so it collided every
+        // cosigner regardless. The slot-XOR is what separates them.
         let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         per_cosigner.push(chunks);
