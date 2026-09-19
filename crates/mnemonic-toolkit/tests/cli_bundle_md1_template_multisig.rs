@@ -245,15 +245,54 @@ fn general_policy_template_md1_decodes_with_carried_origins() {
 // Emit 3 — refusals: tr(sortedmulti_a) and hardened use-site.
 // ===========================================================================
 
+/// WAS `template_form_refuses_tr_sortedmulti_a`. The refusal existed only
+/// because of an upstream gap, and the gap has closed.
+///
+/// Its comment said it plainly: "tr-sortedmulti-a renders through the md-codec
+/// to_miniscript gap — refuse." rust-miniscript v13 had no
+/// `Terminal::SortedMultiA`, so a template of that shape could be minted and
+/// never read back, and refusing to mint it was the honest answer. The
+/// workspace's `[patch.crates-io]` miniscript rev `ff4732e` carries the
+/// fragment and md-codec converts it for a sole tap-leaf root child, so the
+/// shape now round-trips and the refusal would be refusing a wallet that works.
+///
+/// KEPT AS AN ACCEPTANCE TEST RATHER THAN DELETED, and it asserts the
+/// round-trip rather than the exit code: `bundle` exiting 0 proves only that it
+/// wrote something, and the whole point of the old refusal was that what got
+/// written could not be read back. So this decodes the emitted md1 and checks
+/// the `sortedmulti_a` leaf actually survived.
 #[test]
-fn template_form_refuses_tr_sortedmulti_a() {
-    // tr-sortedmulti-a renders through the md-codec to_miniscript gap — refuse.
+fn template_form_accepts_tr_sortedmulti_a_since_the_render_gap_closed() {
     let args = canonical_multisig_template_args(
         "tr-sortedmulti-a",
         "2",
         &[(SEED_A1, "48'/0'/0'/3'"), (SEED_A2, "48'/0'/0'/3'")],
     );
-    bundle(&args).failure().code(2);
+    let (out, _) = bundle_ok(&args);
+    let md1 = md1_lines(&out);
+    let md1_refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let decoded = md_codec::chunk::reassemble(&md1_refs)
+        .expect("tr-sortedmulti-a template md1 must decode -- the gap that justified refusing it");
+    assert!(
+        contains_sortedmulti_a(&decoded.tree),
+        "the emitted template must keep its sortedmulti_a leaf, else the shape \
+         was silently rewritten into a different wallet"
+    );
+}
+
+/// Structural search for a `SortedMultiA` leaf anywhere under the tree.
+fn contains_sortedmulti_a(n: &md_codec::tree::Node) -> bool {
+    use md_codec::tag::Tag;
+    use md_codec::tree::Body;
+    if matches!(n.tag, Tag::SortedMultiA) {
+        return true;
+    }
+    match &n.body {
+        Body::Children(c) => c.iter().any(contains_sortedmulti_a),
+        Body::Variable { children, .. } => children.iter().any(contains_sortedmulti_a),
+        Body::Tr { tree, .. } => tree.as_deref().is_some_and(contains_sortedmulti_a),
+        _ => false,
+    }
 }
 
 #[test]

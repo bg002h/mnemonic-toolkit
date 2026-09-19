@@ -95,7 +95,27 @@ fn canonical_wsh_sortedmulti_round_trips_via_bundle_json() {
 /// distinctness gate admits it since the paths differ.)
 #[test]
 fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
+    // ONE MASTER, TWO KEYS -- not one key twice.
+    //
+    // This cell used to put the SAME xpub in both slots and called it "a 2-of-2
+    // reusing ONE xpub at two DIFFERENT origin paths", with the note that "the
+    // BIP-388 distinctness gate admits it since the paths differ". That note
+    // was wrong, and md-codec 0.43's `DuplicateKeySlots` now refuses the shape:
+    // origin is metadata and does not reach the script, so two slots holding one
+    // key at one use-site derive one pubkey at every index and the script is
+    // `sortedmulti(2, K, K)` -- a "2-of-2" that one signer satisfies twice.
+    //
+    // Operator ruling 2026-09-19, verbatim: "ReUsing same key is bad. Reusing
+    // seed to generate different keys at different keypaths is ok." So both
+    // slots keep the SAME MASTER (fingerprint 5436d724, the 24-word
+    // "abandon x23 art" vector) and take DIFFERENT account keys.
+    //
+    // THE REGRESSION IS UNAFFECTED, which is why this is a re-fixture and not a
+    // deletion: audit I10's collision came from the shared FINGERPRINT, which
+    // both slots still share, not from the shared xpub. The old per-fingerprint
+    // csi still collides here; the slot-XOR is still what separates them.
     const X: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
+    const X2: &str = "xpub6Buxw9MmbkJr8dFGbbbjY46MzzbM8MCosN5AxgxVEstcQMYcAn7oV8DvwYouSbixK4zhej2oTUoMkFD6FaHu7tuZPLiGQ7VKcBcj8fmj4g9";
     let common = |cmd: &str| -> Vec<String> {
         vec![
             cmd.into(),
@@ -110,7 +130,7 @@ fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
             "--slot".into(),
             "@0.path=m/48'/0'/0'/2'".into(),
             "--slot".into(),
-            format!("@1.xpub={X}"),
+            format!("@1.xpub={X2}"),
             "--slot".into(),
             "@1.fingerprint=5436d724".into(),
             "--slot".into(),
