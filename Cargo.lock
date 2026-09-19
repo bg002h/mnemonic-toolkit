@@ -684,9 +684,8 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "md-codec"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "336f2c0c7f8d394136992f0b9f3d527f94a2023b55772dbed07ac09e9abcfd8f"
+version = "0.44.0"
+source = "git+https://github.com/bg002h/descriptor-mnemonic?tag=descriptor-mnemonic-md-cli-v0.16.0#9f39a99292ebbaffca9629bf629610c9f87d0773"
 dependencies = [
  "bip39",
  "bitcoin",
