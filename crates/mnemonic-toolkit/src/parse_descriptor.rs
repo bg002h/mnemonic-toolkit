@@ -2888,33 +2888,51 @@ mod tests {
         )
         .unwrap();
 
-        // Derive the same self-multisig xpub the template produced.
+        // Derive the same PER-SLOT xpubs the template produces: cosigner `i` at
+        // account `i`, one seed, distinct keys.
+        //
+        // This used to bind ONE xpub to both @0 and @1, mirroring what
+        // `synthesize_multisig_full` then did. That helper replicated a single
+        // key across every slot, which is a degenerate `sortedmulti_a(2, K, K)`
+        // -- satisfiable twice by one signer -- and it now derives per-account
+        // keys instead (operator ruling 2026-09-19: reusing a seed for
+        // different keys at different keypaths is fine, reusing a KEY is not).
+        // The fixture follows, because its whole job is to mirror the template.
         let script_type = CliTemplate::TrSortedMultiA.bip48_script_type().unwrap_or(0);
-        let path_str =
-            MultisigPathFamily::Bip48.default_origin_path(CliNetwork::Mainnet, 0, script_type);
-        let path = DerivationPath::from_str(&path_str).unwrap();
         let seed = mnemonic.to_seed("");
         let secp = Secp256k1::new();
         let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &seed).unwrap();
         let master_fp = master.fingerprint(&secp);
-        let xpriv = master.derive_priv(&secp, &path).unwrap();
-        let xpub = Xpub::from_priv(&secp, &xpriv);
+        let path_at = |account: u32| -> DerivationPath {
+            let p = MultisigPathFamily::Bip48.default_origin_path(
+                CliNetwork::Mainnet,
+                account,
+                script_type,
+            );
+            DerivationPath::from_str(&p).unwrap()
+        };
+        let xpub_at = |path: &DerivationPath| -> Xpub {
+            Xpub::from_priv(&secp, &master.derive_priv(&secp, path).unwrap())
+        };
+        let path = path_at(0);
+        let path1 = path_at(1);
         let cosigner = CosignerSpec {
-            xpub,
+            xpub: xpub_at(&path1),
             master_fingerprint: master_fp,
-            path: Some(path.clone()),
+            path: Some(path1.clone()),
         };
 
-        // Build descriptor with @0 + @1 each bound to the self-derived xpub at
-        // the BIP-48 self-multisig path (mirrors what the template produces).
-        let path_anno = path
-            .into_iter()
-            .map(|c| match c {
-                ChildNumber::Hardened { index } => format!("{}'", index),
-                ChildNumber::Normal { index } => format!("{}", index),
-            })
-            .collect::<Vec<_>>()
-            .join("/");
+        let anno_of = |p: &DerivationPath| -> String {
+            p.into_iter()
+                .map(|c| match c {
+                    ChildNumber::Hardened { index } => format!("{}'", index),
+                    ChildNumber::Normal { index } => format!("{}", index),
+                })
+                .collect::<Vec<_>>()
+                .join("/")
+        };
+        let path_anno = anno_of(&path);
+        let path_anno1 = anno_of(&path1);
         let fp_hex = hex_fp(&master_fp.to_bytes());
         // v0.48.0 (`toolkit-trmultia-nums-internal-key`): template-mode now emits
         // the BIP-388 NUMS internal key, so the equivalent descriptor uses
@@ -2923,7 +2941,7 @@ mod tests {
         let descriptor = format!(
             "tr(NUMS,\
              sortedmulti_a(2,@0[{fp_hex}/{path_anno}]/<0;1>/*,\
-             @1[{fp_hex}/{path_anno}]/<0;1>/*))"
+             @1[{fp_hex}/{path_anno1}]/<0;1>/*))"
         );
 
         // Drive bind_descriptor_keys directly (descriptor n=2 → full multisig

@@ -39,6 +39,14 @@ use serde_json::Value;
 // depth-4 account key (m/48'/0'/1'/2').
 const FP: &str = "73c5da0a";
 const PATH4: &str = "48'/0'/0'/2'";
+/// XPUB4_1's REAL origin. `k1()` used to annotate it with `PATH4`, i.e. with
+/// @0's account, so the card declared one `(fingerprint, path)` over two
+/// different keys -- impossible, since BIP-32 makes that pair name exactly one
+/// key. The comment on XPUB4_1 always said `m/48'/0'/1'/2'`; only the
+/// annotation was wrong, and nothing read it until md-codec 0.43 added
+/// `OriginKeyContradiction`. Addresses derive from the xpub a card CARRIES, so
+/// the mislabel changed no address and no check ever looked.
+const PATH4_1: &str = "48'/0'/1'/2'";
 const XPUB4_0: &str = "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"; // m/48'/0'/0'/2'
 const XPUB4_1: &str = "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"; // m/48'/0'/1'/2'
 
@@ -103,7 +111,7 @@ fn k0() -> String {
     format!("[{FP}/{PATH4}]{XPUB4_0}/<0;1>/*")
 }
 fn k1() -> String {
-    format!("[{FP}/{PATH4}]{XPUB4_1}/<0;1>/*")
+    format!("[{FP}/{PATH4_1}]{XPUB4_1}/<0;1>/*")
 }
 
 // ── Leg 1 — frozen post-fix wire goldens ──────────────────────────────────
@@ -132,7 +140,7 @@ fn golden_wsh_pkh() {
 fn golden_wsh_and_v_pk() {
     assert_golden(
         &format!("wsh(and_v(v:pk({}),pk({})))", k0(), k1()),
-        "a513edb6343f69ca59841187a567a5ee",
+        "0c6c34788b09033ea0a982dac0c19ea9",
         "cb13e9cd9a18a72e538a41482f562da8",
     );
 }
@@ -141,7 +149,7 @@ fn golden_wsh_and_v_pk() {
 fn golden_wsh_or_d_pk() {
     assert_golden(
         &format!("wsh(or_d(pk({}),pk({})))", k0(), k1()),
-        "aa4bbe01269571d7e5940f542a3b0a3c",
+        "fb30cddd01e693c50f37f8985590cb15",
         "247773f7bc8f1e637d2c6f6163f811c5",
     );
 }

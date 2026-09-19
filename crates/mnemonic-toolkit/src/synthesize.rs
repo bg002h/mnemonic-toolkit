@@ -1185,9 +1185,13 @@ fn template_admissible(descriptor: &Descriptor) -> bool {
 /// general policy).
 ///
 /// Gate (SPEC §3.1): `template_admissible(&descriptor)` — the shape must render
-/// (refusing `tr(sortedmulti_a)` / `sortedmulti`-in-combinator) and carry no
-/// hardened use-site (refusing the unrestorable hardened class). Refusals →
+/// (refusing `sortedmulti`-in-combinator) and carry no hardened use-site
+/// (refusing the unrestorable hardened class). Refusals →
 /// `TemplateFormUnsupportedShape`.
+///
+/// `tr(sortedmulti_a)` used to be named here as refused. It renders since the
+/// `ff4732e` miniscript pin, so the gate admits it now; the gate itself did not
+/// change, only what `to_miniscript_descriptor` can express.
 ///
 /// Mutations on a `descriptor.clone()` (SPEC §3.2):
 ///   1. `tlv.pubkeys = None`
@@ -1843,6 +1847,36 @@ mod tests {
         (descriptor, cosigners, entropy)
     }
 
+
+    /// `descriptor_fixture`, plus the per-`@N` origins bound into `path_decl`.
+    ///
+    /// The plain fixture leaves an empty Shared origin, because the descriptor
+    /// text carries none. That is right for the TEMPLATE tests, which assert a
+    /// canonical shape ELIDES its origins -- but wrong for the keyed multisig
+    /// tests: the fixture derives each `@N` at its own account, so an empty
+    /// shared origin makes every slot declare `[<master fp>/m]` while carrying
+    /// a different xpub, which md-codec 0.43 refuses as an impossible wallet
+    /// (one `(fingerprint, path)` names exactly one key).
+    ///
+    /// `bundle` binds these in `bind_descriptor_mode_paths`; this mirrors it,
+    /// so a keyed fixture describes a card the CLI would actually emit. It is
+    /// opt-in rather than folded into `descriptor_fixture` precisely so the
+    /// elision tests keep testing elision.
+    fn descriptor_fixture_with_bound_origins(
+        descriptor_str: &str,
+        ctx: crate::parse_descriptor::ScriptCtx,
+        n: u8,
+    ) -> (Descriptor, Vec<CosignerKeyInfo>, Vec<u8>) {
+        let (mut descriptor, cosigners, entropy) = descriptor_fixture(descriptor_str, ctx, n);
+        descriptor.path_decl.paths = md_codec::origin_path::PathDeclPaths::Divergent(
+            cosigners
+                .iter()
+                .map(|c| derivation_path_to_origin_path(&c.path))
+                .collect(),
+        );
+        (descriptor, cosigners, entropy)
+    }
+
     #[test]
     fn synthesize_descriptor_full_singlesig_shape() {
         let (descriptor, mut cosigners, entropy) = descriptor_fixture(
@@ -1888,7 +1922,7 @@ mod tests {
 
     #[test]
     fn synthesize_descriptor_full_multisig_shape() {
-        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture_with_bound_origins(
             "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
@@ -1909,7 +1943,7 @@ mod tests {
 
     #[test]
     fn synthesize_descriptor_watch_only_multisig_shape() {
-        let (descriptor, cosigners, _) = descriptor_fixture(
+        let (descriptor, cosigners, _) = descriptor_fixture_with_bound_origins(
             "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
@@ -2538,11 +2572,17 @@ mod tests {
     /// `tr(NUMS, multi_a)` and non-taproot multisig/general.
     #[test]
     fn template_admissible_gate() {
-        // tr-sortedmulti-a 2-of-2 — does NOT render → refused.
+        // tr-sortedmulti-a 2-of-2 — RENDERS since the ff4732e miniscript pin, so
+        // it is admitted. This asserted the opposite, citing the "render gap":
+        // `template_admissible` ends in `to_miniscript_descriptor(..).is_ok()`,
+        // a pure renderability check and not a policy refusal, so the moment
+        // md-codec learned to convert `Terminal::SortedMultiA` for a sole
+        // tap-leaf root child the shape became admissible. Keeping the old
+        // assertion would pin a gap that no longer exists.
         let (sma, _, _) = descriptor_fixture_taproot(CliTemplate::TrSortedMultiA);
         assert!(
-            !template_admissible(&sma),
-            "tr(sortedmulti_a) must be refused (render gap)"
+            template_admissible(&sma),
+            "tr(sortedmulti_a) renders now, so the template gate must admit it"
         );
         // tr-multi-a 2-of-2 (NUMS) — renders → admitted.
         let (ma, _, _) = descriptor_fixture_taproot(CliTemplate::TrMultiA);
