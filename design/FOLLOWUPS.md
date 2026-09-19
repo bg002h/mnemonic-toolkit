@@ -5663,3 +5663,61 @@ companion test asserting that spread so it cannot decay into a tautology.
   dependency from 0.42.0 to 0.44.0** so `restore` and `bundle` actually emit the
   corrected header. Until that bump lands, this repo still prints depth-0 xpubs.
   **Owning phase:** next toolkit release. **Tier:** `interop`.
+
+---
+
+### `adopt-md-codec-0-44-in-the-toolkit` — the dep bump works and closes the descriptor defect; 19 tests need decisions, two of them design ones (tier: correctness/interop; owning phase: its own cycle — branch `deps/md-codec-0.44.0` is parked and pushed)
+
+**Filed 2026-09-19.** Branch: `deps/md-codec-0.44.0` (`0d6eec71`, `0c04b6f6`).
+
+**The bump itself is proven.** `md-codec = { git = ..., tag =
+"descriptor-mnemonic-md-cli-v0.16.0" }`. On the original repro, `restore` goes
+from `depth=0` to `depth=4` under its `[73c5da0a/48'/0'/0'/2']` origin and the
+first receive address is byte-identical — only the serialisation moved.
+
+**"Blocked on crates.io" was wrong** (my earlier claim). It would bind only if
+this crate were published; it is not, it carries the same
+`[patch.crates-io] miniscript` pin for the same cause, and `install.sh` installs
+it from git+tag. Pinning md-codec the same way changes no distribution property.
+
+**Cost: 4016 pass, 19 fail** (from 4010/25 before the `synthesize` fix). The jump
+is 0.42 → 0.44 and 0.43 added three refusals that did not exist before:
+`DuplicateKeySlots`, `OriginKeyContradiction`, `RelativeTimelockTruncated`. Both
+exhaustive matches now handle them (exit 2, with messages). What remains is
+fixtures meeting gates that did not exist when they were written.
+
+**Already fixed, and it was a real defect not a fixture nit:**
+`synthesize_multisig_full` replicated ONE xpub to all N slots — a degenerate
+`multi(k,K,…,K)`. Now one seed, cosigner `i` at `account+i`. Test-only in this
+repo but `pub`, so a consumer could have called it.
+
+**The three remaining classes:**
+
+1. **Mechanical re-fixturing (~14).** Taproot `*_restores_faithfully`, the
+   `golden_wsh_*_pk` pins, `template_admissible_gate`, etc. — fixtures that
+   repeat a key across slots. Re-fixture to distinct keys; goldens move with
+   them.
+
+2. **DESIGN — the adversarial fixture can no longer be minted.**
+   `at_in_both_tr_refuses_structurally` and its two siblings build their RED
+   input with `md_codec::chunk::split(...)`, and md-codec now refuses to ENCODE
+   it. **The toolkit's structural guard is still load-bearing**, verified:
+   `validate_no_duplicate_key_slots` is called only from `encode.rs:120`, so a
+   hostile card carrying duplicate slots still DECODES and the restore-side
+   guard is the only thing standing between it and a silent-wrong
+   reconstruction. Do NOT delete the guard because the encoder got stricter.
+   The test needs its adversarial artifact from somewhere the encode gate does
+   not reach — a FROZEN chunk fixture is the better shape anyway (it pins the
+   exact hostile bytes instead of depending on an encoder's willingness to emit
+   them).
+
+3. **DESIGN — `OriginKeyContradiction` on empty origins.**
+   `unified_slot_wif_alone_in_2_of_2` trips
+   `OriginKeyContradiction { a: 0, b: 1, fingerprint: "5436d724", path: "m" }`.
+   A WIF has no BIP-32 origin, so two WIF-ish slots both declare one fingerprint
+   and an EMPTY path while carrying different keys. Whether that is a genuine
+   contradiction (both claim to BE the master) or a false positive md-codec
+   should exempt for empty paths is an upstream question — settle it in
+   descriptor-mnemonic, not by editing this fixture.
+
+- **Status:** OPEN. **Tier:** `correctness` / `interop`.
