@@ -5721,3 +5721,54 @@ repo but `pub`, so a consumer could have called it.
    descriptor-mnemonic, not by editing this fixture.
 
 - **Status:** OPEN. **Tier:** `correctness` / `interop`.
+
+---
+
+### `bundle-descriptor-drops-per-slot-path` — `--slot @N.path=` never reaches the card; every slot gets one shared EMPTY origin (tier: correctness/funds-adjacent; owning phase: next bundle cycle — blocking for it)
+
+**Found 2026-09-19** while adopting md-codec 0.44 in the toolkit. Pre-existing,
+and invisible until a new upstream check asked the question.
+
+**Measured on the SHIPPED binary** (master, md-codec 0.42 — this is not a
+consequence of the bump):
+
+```console
+$ mnemonic bundle --network mainnet --descriptor "wsh(sortedmulti(2,@0,@1))" \
+    --slot "@0.xpub=<X>"  --slot "@0.fingerprint=5436d724" --slot "@0.path=m/48'/0'/0'/2'" \
+    --slot "@1.xpub=<X2>" --slot "@1.fingerprint=5436d724" --slot "@1.path=m/48'/0'/1'/2'"
+$ mnemonic inspect --md1 <chunks> --json
+  "path_decl_shape": "Shared"
+```
+
+`Shared`, and the shared value is EMPTY. Both declared paths are discarded, so
+**the engraved card records where neither key lives**. md-codec renders the
+origin as `[5436d724/m]` for both slots.
+
+**Why nothing caught it.** Both slots drop the path identically, so
+`verify-bundle` round-trips the card to itself and every address matches —
+addresses derive from the xpubs a card CARRIES, never from the origin it
+declares. The only fixture exercising this path used the SAME xpub in both
+slots, so the two identical empty origins were also consistent. It surfaced
+only when that fixture was corrected to two distinct keys (operator ruling on
+key reuse) and md-codec 0.43's `OriginKeyContradiction` asked whether one
+`(fingerprint, path)` could name two keys.
+
+**Why it matters.** The origin is what a signer uses to FIND its key. A card
+that omits it is a backup whose keys cannot be located without guessing the
+derivation, which is exactly the failure `md-descriptor-depth0-xpub-…` and
+F-217 are about from the other side. It is also not recoverable later: the card
+is the artifact.
+
+**Not fixable in a fixture.** `--slot @N.path=` is the only route — the inline
+form is refused (*"derivation steps after the placeholder are not representable
+in md1"*), so the paths must be plumbed into `PathDecl::Divergent` at emit.
+`audit_i10_same_xpub_two_paths_2of2_round_trips` stays RED on the
+`deps/md-codec-0.44.0` branch until this lands, deliberately and with this
+entry as its reason.
+
+**Cross-ref:** same family as `convert --path is silently ignored when
+--template is given` — a supplied path accepted and discarded rather than
+refused. Worth fixing as one class: **a path the operator supplies must reach
+the artifact or be refused, never be silently dropped.**
+
+- **Status:** OPEN. **Tier:** `correctness` / `funds-adjacent`.
