@@ -49,7 +49,7 @@ mk-codec = "0.4.1"
 #
 # DROP this git pin for a plain version when md-codec reaches crates.io again,
 # which is gated on the same miniscript release as the [patch] above.
-md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", tag = "descriptor-mnemonic-md-cli-v0.16.0" }
+md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", tag = "descriptor-mnemonic-md-cli-v0.16.1" }
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.
 wc-codec = { path = "../wc-codec" }
