@@ -1740,9 +1740,22 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // bare-`@N` non-canonical descriptors), losing the default-inference
     // mutation that `md_codec::validate_explicit_origin_required` needs to
     // accept the wire.
-    if is_non_canonical {
-        descriptor.path_decl.paths = resolved_placeholders.path_decl.paths.clone();
-    }
+    //
+    // PROPAGATED FOR CANONICAL SHAPES TOO, since 2026-09-19. This was the third
+    // and last gate keyed on `is_non_canonical` that together dropped every
+    // `--slot @N.path=` on a canonical descriptor: the binder returned early,
+    // the override loop skipped xpub slots, and this refused to copy the
+    // result back. Each guard was written for default-INFERENCE, which is
+    // genuinely non-canonical-only; each also silently took path BINDING with
+    // it.
+    //
+    // Unconditional is safe, checked case by case. Canonical WITH inline
+    // origins: `resolve_placeholders` already put them in `path_decl`, so this
+    // copies them onto themselves. Canonical with neither inline origins nor
+    // slot paths: both sides are the empty `Shared`, also a no-op. Canonical
+    // with slot paths: the operator's paths finally reach the card, which is
+    // the whole point.
+    descriptor.path_decl.paths = resolved_placeholders.path_decl.paths.clone();
 
     let run_language: bip39::Language = args.language.unwrap_or_default().into();
     let bundle = synthesize_descriptor(
@@ -2261,11 +2274,24 @@ pub(crate) fn bind_descriptor_mode_paths(
     }
 
     let mut defaulted_indices: Vec<u8> = Vec::new();
-    if !is_non_canonical {
-        // Canonical: no default-inference; the caller-side §4.12.g / §6.6-row-4
-        // guards already ran.
-        return Ok(defaulted_indices);
-    }
+    // CANONICAL DESCRIPTORS SKIP DEFAULT-INFERENCE, NOT PATH BINDING.
+    //
+    // This used to `return` here. The comment explained only the first half --
+    // "no default-inference" -- and the early return also skipped the
+    // `--slot @N.path=` override loop below, so for a canonical descriptor
+    // every supplied path was accepted, used for derivation, and then dropped
+    // on the floor. The emitted card carried one shared EMPTY origin and
+    // recorded where NO key lived.
+    //
+    // It hid for two reasons: every slot dropped its path identically, so
+    // `verify-bundle` round-tripped the card to itself, and addresses derive
+    // from the xpubs a card CARRIES rather than the origin it DECLARES, so
+    // every address check passed either way. md-codec 0.43's
+    // `OriginKeyContradiction` is what finally asked the question.
+    //
+    // So: default-inference stays gated on `is_non_canonical` (a canonical
+    // shape has a canonical origin and must not be second-guessed), and
+    // everything below it runs for both.
 
     // H12 — taproot-aware default-origin script-type (Tr → 3', sh → 1',
     // else wsh 2'). Derived from the SAME canonicity-probe root `Tag` both
@@ -2276,9 +2302,21 @@ pub(crate) fn bind_descriptor_mode_paths(
     let mut new_paths: Vec<OriginPath> = match &path_decl.paths {
         PathDeclPaths::Shared(op) => {
             if op.components.is_empty() {
-                // All slots default.
-                defaulted_indices.extend(0..(n as u8));
-                (0..n).map(|_| default_path.clone()).collect()
+                if is_non_canonical {
+                    // All slots default.
+                    defaulted_indices.extend(0..(n as u8));
+                    (0..n).map(|_| default_path.clone()).collect()
+                } else {
+                    // Canonical with no inline origins: leave them EMPTY here
+                    // and let the override loop below fill in whatever the
+                    // operator supplied. Defaulting a canonical shape would
+                    // invent an origin the descriptor never claimed.
+                    (0..n)
+                        .map(|_| OriginPath {
+                            components: Vec::new(),
+                        })
+                        .collect()
+                }
             } else {
                 // Shared non-empty: no defaulting; lift to Divergent for
                 // uniform downstream handling.
@@ -2320,15 +2358,20 @@ pub(crate) fn bind_descriptor_mode_paths(
     }
     for (idx, slot_path) in &by_index_path {
         let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
-        // Only phrase-bearing slots route through this override path (incl.
-        // v0.31.3 Seedqr → phrase and v0.41.0 Ms1 → entropy). Xpub-bearing
-        // slots are handled by the per-slot binding loop's own override logic.
-        if !subkeys.contains(&crate::slot_input::SlotSubkey::Phrase)
-            && !subkeys.contains(&crate::slot_input::SlotSubkey::Seedqr)
-            && !subkeys.contains(&crate::slot_input::SlotSubkey::Ms1)
-        {
-            continue;
-        }
+        // XPUB-BEARING SLOTS ROUTE THROUGH HERE TOO, and used not to.
+        //
+        // The note said they were "handled by the per-slot binding loop's own
+        // override logic". That loop does read `--slot @N.path=` -- but only
+        // into the ResolvedSlot it derives with. It never writes the path back
+        // into `path_decl`, which is what becomes the CARD's origin. So an
+        // `@N.xpub=` + `@N.path=` slot derived correctly and then engraved a
+        // card that did not say where the key came from.
+        //
+        // Every slot kind that can supply a path now folds it into the same
+        // place. The Xpub branch's own handling is unaffected: it still uses
+        // the path for derivation, and the row-19 mismatch guard below still
+        // refuses a slot path that contradicts an inline one.
+        let _ = &subkeys;
         let user_path = DerivationPath::from_str(&slot_path.value)
             .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
         let user_origin = derivation_path_to_origin(&user_path);
