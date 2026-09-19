@@ -676,11 +676,11 @@ pub fn synthesize_multisig_full(
     // carries the key it is FOR, so slot `i`'s card must carry slot `i`'s key.
     let mut slot_keys: Vec<(Xpub, DerivationPath)> = Vec::with_capacity(cosigner_count);
     for i in 0..cosigner_count {
-        let acct = account
-            .checked_add(i as u32)
-            .ok_or_else(|| ToolkitError::BadInput(format!(
+        let acct = account.checked_add(i as u32).ok_or_else(|| {
+            ToolkitError::BadInput(format!(
                 "multisig account {account} + {i} slots overflows u32"
-            )))?;
+            ))
+        })?;
         let path_str = path_family.default_origin_path(network, acct, script_type);
         let xpub = derive_xpub_at_path(&master, &secp, &path_str)?;
         let path = DerivationPath::from_str(&path_str)
@@ -729,7 +729,7 @@ pub fn synthesize_multisig_full(
 
     // 6+7. Build N KeyCards + emit per-cosigner mk1.
     let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(cosigner_count);
-    for i in 0..cosigner_count {
+    for (i, slot_key) in slot_keys.iter().enumerate().take(cosigner_count) {
         let card = mk_codec::KeyCard::new(
             stubs.clone(),
             if privacy_preserving {
@@ -737,8 +737,8 @@ pub fn synthesize_multisig_full(
             } else {
                 Some(master_fingerprint)
             },
-            mk1_origin_path(&slot_keys[i].0, &slot_keys[i].1),
-            slot_keys[i].0,
+            mk1_origin_path(&slot_key.0, &slot_key.1),
+            slot_key.0,
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
@@ -1846,7 +1846,6 @@ mod tests {
         let descriptor = parse_descriptor(descriptor_str, &keys, &fps).unwrap();
         (descriptor, cosigners, entropy)
     }
-
 
     /// `descriptor_fixture`, plus the per-`@N` origins bound into `path_decl`.
     ///
