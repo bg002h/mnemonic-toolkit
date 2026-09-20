@@ -599,7 +599,27 @@ pub(crate) fn derive_xpub_at_path(
     Ok(Xpub::from_priv(secp, &xpriv))
 }
 
-#[allow(dead_code)]
+/// TEST-ONLY since 2026-09-19. It was `pub`, and nothing in this repo called
+/// it outside `#[cfg(test)]` (checked, every site). `mnemonic-toolkit` is
+/// distributed as a binary and is not on crates.io, so it had no library
+/// consumers either -- but a public function that mints a k-of-n is the wrong
+/// thing to leave lying around once its shape has been ruled against.
+///
+/// WHAT IT USED TO BE. `IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_2.md` designed
+/// it as "self-multisig": one seed filling every slot, with a SELF-MULTISIG
+/// WARNING acknowledging that "the cards are byte-identical interchangeable
+/// copies". That is a degenerate k-of-n -- one signer satisfies it k times --
+/// and the operator ruling of 2026-09-19 ("ReUsing same key is bad. Reusing
+/// seed to generate different keys at different keypaths is ok") retires that
+/// shape. The CLI route to it was already gone; this keeps the helper for the
+/// tests that still exercise its threshold validation and its slot-unique csi
+/// derivation, in the corrected per-account form.
+///
+/// Deleting it outright is the tidier end state and is filed as such; it would
+/// take `multisig_threshold_validation` and the audit-I10 csi cell with it, so
+/// it is a cleanup with its own coverage question, not a side effect of this
+/// cycle.
+#[cfg(test)]
 /// Synthesize a full-mode multisig bundle from ONE seed: cosigner `i` is
 /// derived at `account + i`, so the N xpubs are DISTINCT.
 ///

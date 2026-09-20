@@ -5772,3 +5772,33 @@ refused. Worth fixing as one class: **a path the operator supplies must reach
 the artifact or be refused, never be silently dropped.**
 
 - **Status:** OPEN. **Tier:** `correctness` / `funds-adjacent`.
+
+### `delete-synthesize-multisig-full` — a dead helper kept alive by four tests (tier: cleanup; owning phase: any)
+
+**Filed 2026-09-19.** `synthesize::synthesize_multisig_full` is now `#[cfg(test)]`
+— it was `pub` with no caller outside `#[cfg(test)]` anywhere in the repo, and
+`mnemonic-toolkit` ships as a binary rather than a crates.io library, so it had
+no external consumers either.
+
+**What it was.** `IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_2.md` designed it as
+"self-multisig": one seed filling every slot, with a SELF-MULTISIG WARNING
+acknowledging that "the cards are byte-identical interchangeable copies". That
+is a degenerate k-of-n — one signer satisfies it k times — and the operator
+ruling of 2026-09-19 retires the shape. It now derives cosigner `i` at
+`account + i`, so one seed yields N distinct keys, which is the ruling's
+permitted form.
+
+**Why it was not deleted outright**, which was the first instinct: four call
+sites depend on it, and two are tests OF it rather than fixtures —
+`multisig_threshold_validation` and
+`multisig_full_self_multisig_emits_distinct_slot_unique_csi_cards` (the audit-I10
+csi cell). Deleting would take that coverage with it unless the threshold and
+csi logic are re-pinned elsewhere first. That is a cleanup with its own coverage
+question, not a side effect of the md-codec adoption cycle.
+
+**To close it:** re-pin threshold validation and slot-unique csi derivation
+against a fixture that does not need this helper (`distinct_xpub_multisig_bundle`
+in `cmd/bundle.rs` is the existing pattern), then delete the function and its two
+remaining fixture uses.
+
+- **Status:** OPEN. **Tier:** `cleanup`. Not blocking anything.
