@@ -5889,4 +5889,14 @@ as the others, or reconstruct the header from the origin at that emit site; then
 re-baseline those two goldens and DELETE this entry rather than leaving them
 unexplained.
 
-- **Status:** OPEN. **Tier:** `correctness` / `interop`.
+**RESOLVED 2026-09-19.** `xpub_from_65_bytes` (`cmd/restore.rs`) takes the
+origin and sets `depth` = its component count, `child_number` = its terminal
+component — the same reconstruction md-codec does, applied at the one emit site
+that does not route through it. The arm now renders 3/3 for the `87'/0'/0'`
+fixtures. `parent_fingerprint` stays zero for the reason it always does: it is
+hash160 of the PARENT point, which the md1 wire does not carry.
+
+The two goldens are re-baselined, and the `first recv:` address in each is
+UNCHANGED — the check that this moved serialisation and not a wallet.
+
+- **Status:** ✓ RESOLVED. **Tier:** `correctness` / `interop`.

@@ -3498,15 +3498,42 @@ fn template_label(t: CliTemplate) -> &'static str {
 /// Build a `bitcoin::bip32::Xpub` from md-codec's 65-byte `[chain_code‖pubkey]`
 /// form + the `--network`-authoritative `NetworkKind` (R0-r1 I2 — the md1 is
 /// network-agnostic; md-codec's own reconstruction hardcodes `Main`). Depth-0.
-fn xpub_from_65_bytes(bytes: &[u8; 65], network: CliNetwork) -> Result<Xpub, ToolkitError> {
+fn xpub_from_65_bytes(
+    bytes: &[u8; 65],
+    network: CliNetwork,
+    origin: &DerivationPath,
+) -> Result<Xpub, ToolkitError> {
     let chain_code = ChainCode::from(<[u8; 32]>::try_from(&bytes[0..32]).unwrap());
     let public_key = PublicKey::from_slice(&bytes[32..65])
         .map_err(|e| bad(format!("--md1 cosigner pubkey decode: {e}")))?;
+    // DEPTH AND CHILD COME FROM THE ORIGIN, as they do in md-codec since 0.44.0.
+    //
+    // This used to hardcode depth 0 / child 0, so the TAPROOT WALLET-POLICY arm
+    // -- the one path that renders from `ResolvedSlot.xpub` rather than through
+    // md-codec's renderer -- kept emitting a master-looking key under a
+    // depth-4 origin after md-codec had stopped. Measured at the time: five
+    // restore shapes rendered 4/4 and `tr(NUMS,multi_a)` /
+    // `tr(NUMS,sortedmulti_a)` rendered 0/4. Tracked as
+    // `taproot-wallet-policy-arm-still-renders-depth0`; this closes it.
+    //
+    // `parent_fingerprint` stays zero for the same reason it does upstream: it
+    // is hash160 of the PARENT point, which the md1 wire does not carry.
+    let depth = u8::try_from(origin.len()).map_err(|_| {
+        bad(format!(
+            "--md1 cosigner origin depth {} exceeds 255",
+            origin.len()
+        ))
+    })?;
+    let child_number = origin
+        .as_ref()
+        .last()
+        .copied()
+        .unwrap_or(ChildNumber::Normal { index: 0 });
     Ok(Xpub {
         network: network.network_kind(),
-        depth: 0,
+        depth,
         parent_fingerprint: Fingerprint::default(),
-        child_number: ChildNumber::Normal { index: 0 },
+        child_number,
         public_key,
         chain_code,
     })
@@ -3862,9 +3889,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         let fp_bytes = e
             .fingerprint
             .ok_or_else(|| bad(format!("--md1 cosigner @{} has no fingerprint", e.idx)))?;
-        let xpub = xpub_from_65_bytes(&key65, network)?;
         let fingerprint = Fingerprint::from(fp_bytes);
         let origin = origin_path_to_derivation_path(&e.origin_path)?;
+        let xpub = xpub_from_65_bytes(&key65, network, &origin)?;
         slots.push(ResolvedSlot {
             xpub,
             fingerprint,
