@@ -52,9 +52,18 @@ const FP: &str = "73c5da0a";
 // depth-3 (single-sig contexts)
 const XPUB3_84: &str = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V"; // m/84'/0'/0'
 const XPUB3_44: &str = "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj"; // m/44'/0'/0'
-                                                                                                                                          // depth-4 (wsh / multisig contexts), two DISTINCT keys (different accounts)
+                                                                                                                                          // depth-4 (wsh / multisig contexts)
 const XPUB4_0: &str = "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"; // m/48'/0'/0'/2'
-const XPUB4_1: &str = "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"; // m/48'/0'/1'/2'
+                                                                                                                                         // The SECOND cosigner is a SECOND SEED at the SAME path -- the shape a real
+                                                                                                                                         // multisig has, and the only shape `md encode --path` (one shared path per
+                                                                                                                                         // invocation) can state truthfully. It used to be this seed's account-1 key
+                                                                                                                                         // (m/48'/0'/1'/2') stamped with the account-0 origin; md-codec 0.44 refuses
+                                                                                                                                         // that, correctly: one origin identifies exactly one key. Derived from the
+                                                                                                                                         // demo seed `zoo x11 wrong` by `mnemonic bundle --multisig-path-family bip48
+                                                                                                                                         // --account 0` + `mnemonic inspect`, 2026-09-20 (the same recipe reproduces
+                                                                                                                                         // XPUB4_0 and 73c5da0a from `abandon x11 about`).
+const FP_COSIGNER: &str = "3f635a63";
+const XPUB4_COSIGNER: &str = "xpub6FHZCoNb3tg3o1GAJQxSwgFNF8mLRtTk2GgkF7n5rwzoxBhUEdFWa8cyZRHqytAzKZWsKz8627cQEMCCfR5GDSv6yXegqirpgDUX41Pxybr"; // m/48'/0'/0'/2'
 
 /// Four-arm verdict [I3] — a corpus entry is Match/Diverge ONLY when BOTH
 /// tools exit 0 AND emit a parseable md1 whose ids `md inspect` can read.
@@ -91,6 +100,7 @@ struct Ids {
 struct MdKey {
     placeholder: &'static str,
     xpub: &'static str,
+    fingerprint: &'static str,
 }
 
 /// One corpus entry: the toolkit concrete descriptor, the md-cli
@@ -196,7 +206,7 @@ fn md_cli_ids(md: &str, entry: &Entry) -> Option<Ids> {
     }
     for k in &entry.md_keys {
         args.push("--fingerprint".to_string());
-        args.push(format!("{}={}", k.placeholder, FP));
+        args.push(format!("{}={}", k.placeholder, k.fingerprint));
     }
     args.push("--path".to_string());
     args.push(entry.md_path.to_string());
@@ -241,18 +251,25 @@ fn classify(tk: Option<Ids>, md: Option<Ids>) -> (Verdict, Option<Ids>, Option<I
 }
 
 fn key(ph: &'static str, xpub: &'static str) -> MdKey {
+    key_fp(ph, xpub, FP)
+}
+
+fn key_fp(ph: &'static str, xpub: &'static str, fingerprint: &'static str) -> MdKey {
     MdKey {
         placeholder: ph,
         xpub,
+        fingerprint,
     }
 }
 
 /// The curated corpus. MATCH controls (anti-vacuity) + DIVERGE pins (the known
-/// Check(PkK)-in-non-tap finding). Multi-key entries give BOTH cosigners the
-/// SAME origin `[73c5da0a/48'/0'/0'/2']` so the toolkit origin metadata
-/// matches md-cli's single shared `--path m/48'/0'/0'/2'` [I2].
+/// Check(PkK)-in-non-tap finding). Multi-key entries give the two cosigners
+/// the SAME PATH `48'/0'/0'/2'` under their OWN fingerprints, so the toolkit
+/// origin metadata matches md-cli's single shared `--path m/48'/0'/0'/2'`
+/// [I2] without claiming two keys for one origin.
 fn corpus() -> Vec<Entry> {
     let shared4 = format!("[{FP}/48'/0'/0'/2']");
+    let cosigner4 = format!("[{FP_COSIGNER}/48'/0'/0'/2']");
     vec![
         // ── Expect::Match controls (no Check in non-tap; or tap-collapse) ──
         Entry {
@@ -274,10 +291,10 @@ fn corpus() -> Vec<Entry> {
         Entry {
             label: "wsh-multi-2of2",
             toolkit_descriptor: format!(
-                "wsh(multi(2,{shared4}{XPUB4_0}/<0;1>/*,{shared4}{XPUB4_1}/<0;1>/*))"
+                "wsh(multi(2,{shared4}{XPUB4_0}/<0;1>/*,{cosigner4}{XPUB4_COSIGNER}/<0;1>/*))"
             ),
             md_template: "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
@@ -286,10 +303,10 @@ fn corpus() -> Vec<Entry> {
             // too (parse_descriptor.rs:519/523 pass tap=true), so it MATCHES.
             label: "tr-pk-leaf",
             toolkit_descriptor: format!(
-                "tr({shared4}{XPUB4_0}/<0;1>/*,pk({shared4}{XPUB4_1}/<0;1>/*))"
+                "tr({shared4}{XPUB4_0}/<0;1>/*,pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*))"
             ),
             md_template: "tr(@0/<0;1>/*,pk(@1/<0;1>/*))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
@@ -320,20 +337,20 @@ fn corpus() -> Vec<Entry> {
         Entry {
             label: "wsh-and_v",
             toolkit_descriptor: format!(
-                "wsh(and_v(v:pk({shared4}{XPUB4_0}/<0;1>/*),pk({shared4}{XPUB4_1}/<0;1>/*)))"
+                "wsh(and_v(v:pk({shared4}{XPUB4_0}/<0;1>/*),pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "wsh(and_v(v:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
         Entry {
             label: "wsh-or_d",
             toolkit_descriptor: format!(
-                "wsh(or_d(pk({shared4}{XPUB4_0}/<0;1>/*),pk({shared4}{XPUB4_1}/<0;1>/*)))"
+                "wsh(or_d(pk({shared4}{XPUB4_0}/<0;1>/*),pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "wsh(or_d(pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
@@ -347,30 +364,30 @@ fn corpus() -> Vec<Entry> {
         Entry {
             label: "wsh-sortedmulti-2of2",
             toolkit_descriptor: format!(
-                "wsh(sortedmulti(2,{shared4}{XPUB4_0}/<0;1>/*,{shared4}{XPUB4_1}/<0;1>/*))"
+                "wsh(sortedmulti(2,{shared4}{XPUB4_0}/<0;1>/*,{cosigner4}{XPUB4_COSIGNER}/<0;1>/*))"
             ),
             md_template: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
         Entry {
             label: "sh-wsh-sortedmulti",
             toolkit_descriptor: format!(
-                "sh(wsh(sortedmulti(2,{shared4}{XPUB4_0}/<0;1>/*,{shared4}{XPUB4_1}/<0;1>/*)))"
+                "sh(wsh(sortedmulti(2,{shared4}{XPUB4_0}/<0;1>/*,{cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "sh(wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
         Entry {
             label: "wsh-thresh-2of2",
             toolkit_descriptor: format!(
-                "wsh(thresh(2,pk({shared4}{XPUB4_0}/<0;1>/*),s:pk({shared4}{XPUB4_1}/<0;1>/*)))"
+                "wsh(thresh(2,pk({shared4}{XPUB4_0}/<0;1>/*),s:pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "wsh(thresh(2,pk(@0/<0;1>/*),s:pk(@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
@@ -395,30 +412,30 @@ fn corpus() -> Vec<Entry> {
         Entry {
             label: "wsh-or_i",
             toolkit_descriptor: format!(
-                "wsh(or_i(pk({shared4}{XPUB4_0}/<0;1>/*),pk({shared4}{XPUB4_1}/<0;1>/*)))"
+                "wsh(or_i(pk({shared4}{XPUB4_0}/<0;1>/*),pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "wsh(or_i(pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
         Entry {
             label: "wsh-and_b",
             toolkit_descriptor: format!(
-                "wsh(and_b(pk({shared4}{XPUB4_0}/<0;1>/*),a:pk({shared4}{XPUB4_1}/<0;1>/*)))"
+                "wsh(and_b(pk({shared4}{XPUB4_0}/<0;1>/*),a:pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "wsh(and_b(pk(@0/<0;1>/*),a:pk(@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
         Entry {
             label: "wsh-t-or_c",
             toolkit_descriptor: format!(
-                "wsh(t:or_c(pk({shared4}{XPUB4_0}/<0;1>/*),v:pk({shared4}{XPUB4_1}/<0;1>/*)))"
+                "wsh(t:or_c(pk({shared4}{XPUB4_0}/<0;1>/*),v:pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*)))"
             ),
             md_template: "wsh(t:or_c(pk(@0/<0;1>/*),v:pk(@1/<0;1>/*)))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
@@ -427,10 +444,10 @@ fn corpus() -> Vec<Entry> {
             // tools (the differential pins walker parity, not the preimage).
             label: "wsh-andor-hashlock",
             toolkit_descriptor: format!(
-                "wsh(andor(pk({shared4}{XPUB4_0}/<0;1>/*),older(144),and_v(v:pk({shared4}{XPUB4_1}/<0;1>/*),sha256(0000000000000000000000000000000000000000000000000000000000000001))))"
+                "wsh(andor(pk({shared4}{XPUB4_0}/<0;1>/*),older(144),and_v(v:pk({cosigner4}{XPUB4_COSIGNER}/<0;1>/*),sha256(0000000000000000000000000000000000000000000000000000000000000001))))"
             ),
             md_template: "wsh(andor(pk(@0/<0;1>/*),older(144),and_v(v:pk(@1/<0;1>/*),sha256(0000000000000000000000000000000000000000000000000000000000000001))))",
-            md_keys: vec![key("@0", XPUB4_0), key("@1", XPUB4_1)],
+            md_keys: vec![key("@0", XPUB4_0), key_fp("@1", XPUB4_COSIGNER, FP_COSIGNER)],
             md_path: "m/48'/0'/0'/2'",
             expect: Verdict::Match,
         },
