@@ -5663,3 +5663,230 @@ companion test asserting that spread so it cannot decay into a tautology.
   dependency from 0.42.0 to 0.44.0** so `restore` and `bundle` actually emit the
   corrected header. Until that bump lands, this repo still prints depth-0 xpubs.
   **Owning phase:** next toolkit release. **Tier:** `interop`.
+
+---
+
+### `adopt-md-codec-0-44-in-the-toolkit` — the dep bump works and closes the descriptor defect; 19 tests need decisions, two of them design ones (tier: correctness/interop; owning phase: its own cycle — branch `deps/md-codec-0.44.0` is parked and pushed)
+
+**Filed 2026-09-19.** Branch: `deps/md-codec-0.44.0` (`0d6eec71`, `0c04b6f6`).
+
+**The bump itself is proven.** `md-codec = { git = ..., tag =
+"descriptor-mnemonic-md-cli-v0.16.0" }`. On the original repro, `restore` goes
+from `depth=0` to `depth=4` under its `[73c5da0a/48'/0'/0'/2']` origin and the
+first receive address is byte-identical — only the serialisation moved.
+
+**"Blocked on crates.io" was wrong** (my earlier claim). It would bind only if
+this crate were published; it is not, it carries the same
+`[patch.crates-io] miniscript` pin for the same cause, and `install.sh` installs
+it from git+tag. Pinning md-codec the same way changes no distribution property.
+
+**Cost: 4016 pass, 19 fail** (from 4010/25 before the `synthesize` fix). The jump
+is 0.42 → 0.44 and 0.43 added three refusals that did not exist before:
+`DuplicateKeySlots`, `OriginKeyContradiction`, `RelativeTimelockTruncated`. Both
+exhaustive matches now handle them (exit 2, with messages). What remains is
+fixtures meeting gates that did not exist when they were written.
+
+**Already fixed, and it was a real defect not a fixture nit:**
+`synthesize_multisig_full` replicated ONE xpub to all N slots — a degenerate
+`multi(k,K,…,K)`. Now one seed, cosigner `i` at `account+i`. Test-only in this
+repo but `pub`, so a consumer could have called it.
+
+**The three remaining classes:**
+
+1. **Mechanical re-fixturing (~14).** Taproot `*_restores_faithfully`, the
+   `golden_wsh_*_pk` pins, `template_admissible_gate`, etc. — fixtures that
+   repeat a key across slots. Re-fixture to distinct keys; goldens move with
+   them.
+
+2. **DESIGN — the adversarial fixture can no longer be minted.**
+   `at_in_both_tr_refuses_structurally` and its two siblings build their RED
+   input with `md_codec::chunk::split(...)`, and md-codec now refuses to ENCODE
+   it. **The toolkit's structural guard is still load-bearing**, verified:
+   `validate_no_duplicate_key_slots` is called only from `encode.rs:120`, so a
+   hostile card carrying duplicate slots still DECODES and the restore-side
+   guard is the only thing standing between it and a silent-wrong
+   reconstruction. Do NOT delete the guard because the encoder got stricter.
+   The test needs its adversarial artifact from somewhere the encode gate does
+   not reach — a FROZEN chunk fixture is the better shape anyway (it pins the
+   exact hostile bytes instead of depending on an encoder's willingness to emit
+   them).
+
+3. **DESIGN — `OriginKeyContradiction` on empty origins.**
+   `unified_slot_wif_alone_in_2_of_2` trips
+   `OriginKeyContradiction { a: 0, b: 1, fingerprint: "5436d724", path: "m" }`.
+   A WIF has no BIP-32 origin, so two WIF-ish slots both declare one fingerprint
+   and an EMPTY path while carrying different keys. Whether that is a genuine
+   contradiction (both claim to BE the master) or a false positive md-codec
+   should exempt for empty paths is an upstream question — settle it in
+   descriptor-mnemonic, not by editing this fixture.
+
+- **Status:** OPEN. **Tier:** `correctness` / `interop`.
+
+---
+
+### `bundle-descriptor-drops-per-slot-path` — `--slot @N.path=` never reaches the card; every slot gets one shared EMPTY origin (tier: correctness/funds-adjacent; owning phase: next bundle cycle — blocking for it)
+
+**Found 2026-09-19** while adopting md-codec 0.44 in the toolkit. Pre-existing,
+and invisible until a new upstream check asked the question.
+
+**Measured on the SHIPPED binary** (master, md-codec 0.42 — this is not a
+consequence of the bump):
+
+```console
+$ mnemonic bundle --network mainnet --descriptor "wsh(sortedmulti(2,@0,@1))" \
+    --slot "@0.xpub=<X>"  --slot "@0.fingerprint=5436d724" --slot "@0.path=m/48'/0'/0'/2'" \
+    --slot "@1.xpub=<X2>" --slot "@1.fingerprint=5436d724" --slot "@1.path=m/48'/0'/1'/2'"
+$ mnemonic inspect --md1 <chunks> --json
+  "path_decl_shape": "Shared"
+```
+
+`Shared`, and the shared value is EMPTY. Both declared paths are discarded, so
+**the engraved card records where neither key lives**. md-codec renders the
+origin as `[5436d724/m]` for both slots.
+
+**Why nothing caught it.** Both slots drop the path identically, so
+`verify-bundle` round-trips the card to itself and every address matches —
+addresses derive from the xpubs a card CARRIES, never from the origin it
+declares. The only fixture exercising this path used the SAME xpub in both
+slots, so the two identical empty origins were also consistent. It surfaced
+only when that fixture was corrected to two distinct keys (operator ruling on
+key reuse) and md-codec 0.43's `OriginKeyContradiction` asked whether one
+`(fingerprint, path)` could name two keys.
+
+**Why it matters.** The origin is what a signer uses to FIND its key. A card
+that omits it is a backup whose keys cannot be located without guessing the
+derivation, which is exactly the failure `md-descriptor-depth0-xpub-…` and
+F-217 are about from the other side. It is also not recoverable later: the card
+is the artifact.
+
+**Not fixable in a fixture.** `--slot @N.path=` is the only route — the inline
+form is refused (*"derivation steps after the placeholder are not representable
+in md1"*), so the paths must be plumbed into `PathDecl::Divergent` at emit.
+`audit_i10_same_xpub_two_paths_2of2_round_trips` stays RED on the
+`deps/md-codec-0.44.0` branch until this lands, deliberately and with this
+entry as its reason.
+
+**CORRECTION (whole-diff review, 2026-09-19): on the NON-canonical arm the old
+binary engraves a WRONG origin, not a blank one.** Everything above describes
+the canonical arm accurately. Measured on the shipped binary with
+`wsh(and_v(v:pk(@0),pk(@1)))` and slots at accounts 7 and 8: `--json` reports
+the operator's paths, while the CARD records `[aaaaaaaa/48'/0'/0'/2']` and
+`[bbbbbbbb/48'/0'/0'/2']` — default-inferred account 0, for keys that live at 7
+and 8.
+
+That is worse than blank, and the distinction matters for how an operator
+experiences it. **A blank origin is obviously suspicious; a plausible, specific,
+wrong one is not.** Someone holding such a plate and following its engraved
+origin derives a different key and concludes the plate is not theirs.
+
+**Cross-ref:** same family as `convert --path is silently ignored when
+--template is given` — a supplied path accepted and discarded rather than
+refused. Worth fixing as one class: **a path the operator supplies must reach
+the artifact or be refused, never be silently dropped.**
+
+- **Status:** OPEN. **Tier:** `correctness` / `funds-adjacent`.
+
+### `delete-synthesize-multisig-full` — a dead helper kept alive by four tests (tier: cleanup; owning phase: any)
+
+**Filed 2026-09-19.** `synthesize::synthesize_multisig_full` is now `#[cfg(test)]`
+— it was `pub` with no caller outside `#[cfg(test)]` anywhere in the repo, and
+`mnemonic-toolkit` ships as a binary rather than a crates.io library, so it had
+no external consumers either.
+
+**What it was.** `IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_2.md` designed it as
+"self-multisig": one seed filling every slot, with a SELF-MULTISIG WARNING
+acknowledging that "the cards are byte-identical interchangeable copies". That
+is a degenerate k-of-n — one signer satisfies it k times — and the operator
+ruling of 2026-09-19 retires the shape. It now derives cosigner `i` at
+`account + i`, so one seed yields N distinct keys, which is the ruling's
+permitted form.
+
+**Why it was not deleted outright**, which was the first instinct: four call
+sites depend on it, and two are tests OF it rather than fixtures —
+`multisig_threshold_validation` and
+`multisig_full_self_multisig_emits_distinct_slot_unique_csi_cards` (the audit-I10
+csi cell). Deleting would take that coverage with it unless the threshold and
+csi logic are re-pinned elsewhere first. That is a cleanup with its own coverage
+question, not a side effect of the md-codec adoption cycle.
+
+**To close it:** re-pin threshold validation and slot-unique csi derivation
+against a fixture that does not need this helper (`distinct_xpub_multisig_bundle`
+in `cmd/bundle.rs` is the existing pattern), then delete the function and its two
+remaining fixture uses.
+
+- **Status:** OPEN. **Tier:** `cleanup`. Not blocking anything.
+
+### `verify-bundle-does-not-check-md1-origins` — the missing check that let the path-drop live (tier: verification gap; owning phase: next verify-bundle cycle)
+
+**Found 2026-09-19**, while confirming that md-codec 0.44.2 restores readability
+of cards emitted before `bundle` learned to carry `--slot @N.path=`.
+
+`verify-bundle` emits exactly three md1 rows:
+
+```
+md1_decode:        ok decoded successfully
+md1_wallet_policy: ok wallet-policy mode confirmed
+md1_xpub_match:    ok all 2 pubkeys match expected (multiset) and decoded
+                      policy (tree + use-site path) matches
+```
+
+**Pubkeys, tree, use-site path — never the ORIGIN path.** So a card whose md1
+declares an empty origin verifies `result: ok` against slots that declared
+`m/48'/0'/0'/2'` and `m/48'/0'/1'/2'`. Measured on exactly such a card.
+
+**This is the check whose absence hid `bundle-descriptor-drops-per-slot-path`.**
+Every slot dropped its origin identically, so the card round-tripped to itself;
+addresses derive from the xpubs a card CARRIES, so every address matched; and
+the one artifact that was actually wrong — the md1's declared origin — was the
+one thing nothing compared. The `mk1_path_match[i]` rows DO check the per-card
+path, which is why the defect looked invisible rather than obviously untested.
+
+**Scope note, so severity is not overstated:** with the emit fix in place a
+newly-written card carries its origins, so this now matters mainly for cards
+written before it. It is still a false PASS — `verify-bundle` reports a backup
+sound when its origins are absent — and a backup's origins are what a signer
+uses to find its key.
+
+**To close it:** an `md1_origin_match` row comparing each `@N`'s decoded origin
+against the slot's declared path, skipped (not passed) when no path was
+supplied, so an elided canonical origin is not reported as a mismatch.
+
+- **Status:** OPEN. **Tier:** `verification-gap` / `funds-adjacent`.
+
+
+### `taproot-wallet-policy-arm-still-renders-depth0` — the xpub-header fix does not reach `tr(NUMS, multi_a/sortedmulti_a)` (tier: correctness/interop; owning phase: next restore cycle)
+
+**Found 2026-09-19** by whole-diff review of the md-codec 0.44 adoption, which
+measured a claim I had written ("every rendered key") and found it false.
+
+md-codec 0.44 makes a rendered xpub's depth and child number agree with its
+declared origin. Five restore shapes now do; **two do not**, because the taproot
+wallet-policy arm does not route through md-codec's renderer:
+
+| shape | rendered depth / origin length |
+| --- | --- |
+| `wsh(sortedmulti(2,@0,@1))` | 4 / 4 OK |
+| `wsh(multi(2,@0,@1))` | 4 / 4 OK |
+| `sh(wsh(sortedmulti(2,@0,@1)))` | 4 / 4 OK |
+| `wsh(and_v(v:pk(@0),pk(@1)))` | 4 / 4 OK |
+| `tr(NUMS,and_v(v:pk(@0),older(144)))` | 4 / 4 OK |
+| **`tr(NUMS,multi_a(2,@0,@1))`** | **0 / 4 MISMATCH** |
+| **`tr(NUMS,sortedmulti_a(2,@0,@1))`** | **0 / 4 MISMATCH** |
+
+Two goldens in `tests/cli_restore_taproot.rs` kept their pre-fix depth-0 values
+through the re-baseline **and were correct to** — the arm really does still emit
+them. Nothing recorded that as an exception, which is the part worth fixing
+first: a golden that silently keeps an old value looks identical to a golden
+nobody looked at.
+
+**Severity is the same as the original defect** — addresses are unaffected,
+since derivation ignores the header; what is wrong is the artifact's honesty and
+its ability to round-trip back into an mk1 card, whose encoder rejects a
+depth/origin disagreement.
+
+**To close it:** route the taproot wallet-policy arm through the same renderer
+as the others, or reconstruct the header from the origin at that emit site; then
+re-baseline those two goldens and DELETE this entry rather than leaving them
+unexplained.
+
+- **Status:** OPEN. **Tier:** `correctness` / `interop`.

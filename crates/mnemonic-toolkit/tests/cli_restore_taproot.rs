@@ -88,13 +88,13 @@ fn restore_args(md1: &[String]) -> Vec<String> {
 // Goldens: derive-once-then-pin from the binary (NEVER hand-constructed by
 // hex-substituting the input — the keys are md-codec depth-0 reconstructions
 // `xpub661My…`, NOT the bundle-input account xpubs; v0.49.1 I2 trap).
-const GOLDEN_DESC_SINGLE_LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,and_v(v:pk([73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*),after(12000000)))#lvyngt4k";
+const GOLDEN_DESC_SINGLE_LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,and_v(v:pk([73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*),after(12000000)))#ncraj2ld";
 const GOLDEN_ADDR_SINGLE_LEAF: &str =
     "first recv: bc1pq0x9jpvsdkmw3gd87xznly7yxdgt0u4mmchhuyjqv2eckhxd0znq305vxy";
-const GOLDEN_DESC_TWO_LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,{pk([73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*),pk([b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*)})#p24tk237";
+const GOLDEN_DESC_TWO_LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,{pk([73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*),pk([b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/<0;1>/*)})#g7g9px4c";
 const GOLDEN_ADDR_TWO_LEAF: &str =
     "first recv: bc1prgf4vyj0tgqwykeg3hzxrzk5cqtc0awjqg2dh8ksts77tuz20xpqkms0ch";
-const GOLDEN_DESC_MULTI_A_2LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,{multi_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*),pk([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*)})#c4ux7rlz";
+const GOLDEN_DESC_MULTI_A_2LEAF: &str = "descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,{multi_a(2,[73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*,[b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/<0;1>/*),pk([28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/<0;1>/*)})#nznzux2d";
 const GOLDEN_ADDR_MULTI_A_2LEAF: &str =
     "first recv: bc1pw49n2w6ydsnmdcufryu6r3agpw3k4hmkhkzfr9z3wqs3xuvx74as88s86m";
 
@@ -102,7 +102,7 @@ const GOLDEN_ADDR_MULTI_A_2LEAF: &str =
 // Step 4 (v0.55.3). DO NOT hand-construct (md-codec depth-0 xpub661My…
 // reconstructions, not the bundle-input account xpubs). The trunk MUST render
 // as a REAL xpub (K2 depth-0), NOT the 50929b74… NUMS hex.
-const GOLDEN_DESC_NON_NUMS_GENERAL: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,and_v(v:pk([73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*),older(144)))#l2lh2uur";
+const GOLDEN_DESC_NON_NUMS_GENERAL: &str = "descriptor: tr([28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/<0;1>/*,and_v(v:pk([73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*),older(144)))#mjf06e2v";
 const GOLDEN_ADDR_NON_NUMS_GENERAL: &str =
     "first recv: bc1pl6nt2ul52gjdtp5lkfgy7l34ux8yv0pc9r7tx8hkjuxrmg6x25ps0nvn6t";
 const GOLDEN_DESC_NON_NUMS_MULTI_A: &str = "descriptor: tr([28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*,multi_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*))#qtmvesaw";
@@ -421,7 +421,36 @@ fn build_at_in_both_descriptor(
 
     // One filler fingerprint + pubkey per slot (synthetic, distinct fingerprints).
     let fingerprints: Vec<(u8, [u8; 4])> = (0..n).map(|i| (i, [i, 0xBB, 0xCC, 0xDD])).collect();
-    let pubkeys: Vec<(u8, [u8; 65])> = (0..n).map(|i| (i, xpub_bytes)).collect();
+    // ONE VALID POINT PER SLOT, not one filler repeated.
+    //
+    // This used to hand every slot the same 65 bytes. That was incidental --
+    // the `@`-in-both shape under test lives in the TREE (index 0 appears as
+    // the trunk AND as a leaf index), never in the keys -- but md-codec 0.43
+    // added `DuplicateKeySlots`, which refuses to ENCODE a policy whose slots
+    // repeat a key, so `chunk::split` below stopped being able to mint this
+    // adversarial card at all and the structural guard lost its RED input.
+    //
+    // The guard is still load-bearing and must NOT be deleted as redundant:
+    // `validate_no_duplicate_key_slots` is called only from `encode.rs`, so a
+    // hostile card carrying duplicate slots still DECODES, and the restore-side
+    // structural refusal is the only thing between it and a silent-wrong
+    // reconstruction.
+    //
+    // Distinct keys keep the fixture mintable and change nothing it tests: the
+    // trunk index is still a leaf index, which is the whole point.
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let pubkeys: Vec<(u8, [u8; 65])> = (0..n)
+        .map(|i| {
+            let mut sk_bytes = [0u8; 32];
+            sk_bytes[31] = i + 1; // 1, 2, 3, ... — valid, distinct, deterministic
+            let sk = bitcoin::secp256k1::SecretKey::from_slice(&sk_bytes)
+                .expect("a small non-zero scalar is a valid secret key");
+            let pk = bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &sk);
+            let mut b = xpub_bytes;
+            b[32..].copy_from_slice(&pk.serialize());
+            (i, b)
+        })
+        .collect();
 
     Descriptor {
         n,

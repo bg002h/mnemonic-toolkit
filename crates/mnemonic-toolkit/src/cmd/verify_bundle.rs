@@ -1775,10 +1775,15 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // v0.19.0 SPEC §4.11.c symmetric verify-bundle — propagate the
     // mutated path_decl into the freshly-parsed MdDescriptor so md-codec
     // wire validation passes for default-inferred non-canonical bundles.
-    // Mirror of bundle.rs:1260-1262.
-    if is_non_canonical {
-        descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
-    }
+    //
+    // UNGATED 2026-09-19, in lockstep with the emit side. The word "symmetric"
+    // above is the requirement: `bundle` now binds `--slot @N.path=` on
+    // canonical descriptors too, and if verify kept the `is_non_canonical`
+    // gate it would rebuild the SAME wallet with empty origins and report a
+    // mismatch against a card that is right. A verifier that disagrees with
+    // the emitter about what was emitted is worse than either being wrong
+    // alone -- it turns a correct backup into a failed check.
+    descriptor.path_decl.paths = descriptor_resolved.path_decl.paths.clone();
     verify_emit_from_expected(
         args,
         descriptor,

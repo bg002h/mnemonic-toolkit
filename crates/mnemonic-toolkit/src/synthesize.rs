@@ -599,9 +599,47 @@ pub(crate) fn derive_xpub_at_path(
     Ok(Xpub::from_priv(secp, &xpriv))
 }
 
-#[allow(dead_code)]
-/// Synthesize a full-mode multisig bundle (self-multisig: N cosigners derived
-/// from one seed at one path; all N xpubs are byte-identical).
+/// TEST-ONLY since 2026-09-19. It was `pub`, and nothing in this repo called
+/// it outside `#[cfg(test)]` (checked, every site). `mnemonic-toolkit` is
+/// distributed as a binary and is not on crates.io, so it had no library
+/// consumers either -- but a public function that mints a k-of-n is the wrong
+/// thing to leave lying around once its shape has been ruled against.
+///
+/// WHAT IT USED TO BE. `IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_2.md` designed
+/// it as "self-multisig": one seed filling every slot, with a SELF-MULTISIG
+/// WARNING acknowledging that "the cards are byte-identical interchangeable
+/// copies". That is a degenerate k-of-n -- one signer satisfies it k times --
+/// and the operator ruling of 2026-09-19 ("ReUsing same key is bad. Reusing
+/// seed to generate different keys at different keypaths is ok") retires that
+/// shape. The CLI route to it was already gone; this keeps the helper for the
+/// tests that still exercise its threshold validation and its slot-unique csi
+/// derivation, in the corrected per-account form.
+///
+/// Deleting it outright is the tidier end state and is filed as such; it would
+/// take `multisig_threshold_validation` and the audit-I10 csi cell with it, so
+/// it is a cleanup with its own coverage question, not a side effect of this
+/// cycle.
+#[cfg(test)]
+/// Synthesize a full-mode multisig bundle from ONE seed: cosigner `i` is
+/// derived at `account + i`, so the N xpubs are DISTINCT.
+///
+/// It used to derive all N at the SAME path, making every xpub byte-identical.
+/// That is a degenerate wallet, not a multisig: identical keys at an identical
+/// use-site derive the identical pubkey at every index, so the script is
+/// `multi(k, K, K, …)` and ONE signer satisfies it k times. No k-of-n property
+/// survives, whatever the metadata declares. `distinct_xpub_multisig_bundle`
+/// in `cmd/bundle.rs` already said so — "which would make a cross-slot card
+/// swap undetectable by construction" — and avoided this function for exactly
+/// that reason.
+///
+/// Operator ruling 2026-09-19, verbatim: **"ReUsing same key is bad. Reusing
+/// seed to generate different keys at different keypaths is ok."** So the seed
+/// stays shared (that is the point of the helper) and the PATHS diverge, which
+/// is the legitimate multi-account cosigner shape. md-codec 0.43's
+/// `DuplicateKeySlots` refuses the old shape and admits this one; it compares
+/// key + use-site and deliberately NOT the fingerprint, so one master funding
+/// several accounts still passes.
+///
 /// SPEC §4.1, §4.5 multisig, §4.6 multisig.
 #[allow(clippy::too_many_arguments)]
 pub fn synthesize_multisig_full(
@@ -648,28 +686,49 @@ pub fn synthesize_multisig_full(
         .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
     let master_fingerprint = master.fingerprint(&secp);
 
-    // 3. Self-multisig: derive all N at the same path-family path.
+    // 3. One seed, one key PER SLOT: cosigner `i` at `account + i`, so the N
+    //    xpubs differ. Deriving them all at one path made them byte-identical,
+    //    which is a degenerate multisig (see the doc comment above).
     let script_type = template.bip48_script_type().unwrap_or(0);
-    let path_str = path_family.default_origin_path(network, account, script_type);
-    let xpub = derive_xpub_at_path(&master, &secp, &path_str)?;
-    let path = DerivationPath::from_str(&path_str)
-        .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+    let mut slot_xpubs: Vec<[u8; 65]> = Vec::with_capacity(cosigner_count);
+    let mut slot_origins: Vec<md_codec::OriginPath> = Vec::with_capacity(cosigner_count);
+    // The full `Xpub` + its path per slot, for the mk1 cards below: a card
+    // carries the key it is FOR, so slot `i`'s card must carry slot `i`'s key.
+    let mut slot_keys: Vec<(Xpub, DerivationPath)> = Vec::with_capacity(cosigner_count);
+    for i in 0..cosigner_count {
+        let acct = account.checked_add(i as u32).ok_or_else(|| {
+            ToolkitError::BadInput(format!(
+                "multisig account {account} + {i} slots overflows u32"
+            ))
+        })?;
+        let path_str = path_family.default_origin_path(network, acct, script_type);
+        let xpub = derive_xpub_at_path(&master, &secp, &path_str)?;
+        let path = DerivationPath::from_str(&path_str)
+            .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
+        slot_xpubs.push(xpub_to_65(&xpub));
+        slot_origins.push(derivation_path_to_origin_path(&path));
+        slot_keys.push((xpub, path));
+    }
 
     // 4. Build multisig descriptor.
-    let xpub_65 = xpub_to_65(&xpub);
     let fp_bytes: [u8; 4] = master_fingerprint.to_bytes();
-    let origin_path = derivation_path_to_origin_path(&path);
     let tree = template.wrapper_node(threshold, cosigner_count);
 
+    // The master fingerprint is SHARED and correctly so: one seed funds every
+    // slot, and the fingerprint identifies the master, not the key.
     let fingerprints: Vec<(u8, [u8; 4])> =
         (0..cosigner_count).map(|i| (i as u8, fp_bytes)).collect();
-    let pubkeys: Vec<(u8, [u8; 65])> = (0..cosigner_count).map(|i| (i as u8, xpub_65)).collect();
+    let pubkeys: Vec<(u8, [u8; 65])> = slot_xpubs
+        .iter()
+        .enumerate()
+        .map(|(i, x)| (i as u8, *x))
+        .collect();
 
     let descriptor = Descriptor {
         n: cosigner_count as u8,
         path_decl: PathDecl {
             n: cosigner_count as u8,
-            paths: PathDeclPaths::Shared(origin_path),
+            paths: PathDeclPaths::Divergent(slot_origins),
         },
         use_site_path: UseSitePath::standard_multipath(),
         tree,
@@ -690,7 +749,7 @@ pub fn synthesize_multisig_full(
 
     // 6+7. Build N KeyCards + emit per-cosigner mk1.
     let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(cosigner_count);
-    for i in 0..cosigner_count {
+    for (i, slot_key) in slot_keys.iter().enumerate().take(cosigner_count) {
         let card = mk_codec::KeyCard::new(
             stubs.clone(),
             if privacy_preserving {
@@ -698,13 +757,15 @@ pub fn synthesize_multisig_full(
             } else {
                 Some(master_fingerprint)
             },
-            mk1_origin_path(&xpub, &path),
-            xpub,
+            mk1_origin_path(&slot_key.0, &slot_key.1),
+            slot_key.0,
         );
         debug_assert_eq!(card.policy_id_stubs, stubs);
         debug_assert!(descriptor.is_wallet_policy());
-        // Slot-unique csi (audit I10) — self-multisig here means all xpubs are
-        // identical, so the old per-fingerprint scheme collided ALL cosigners.
+        // Slot-unique csi (audit I10). The xpubs now differ per slot, but the
+        // MASTER FINGERPRINT is still shared across all N — one seed — and the
+        // old scheme keyed the csi on the fingerprint, so it collided every
+        // cosigner regardless. The slot-XOR is what separates them.
         let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
         let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
         per_cosigner.push(chunks);
@@ -1144,9 +1205,13 @@ fn template_admissible(descriptor: &Descriptor) -> bool {
 /// general policy).
 ///
 /// Gate (SPEC §3.1): `template_admissible(&descriptor)` — the shape must render
-/// (refusing `tr(sortedmulti_a)` / `sortedmulti`-in-combinator) and carry no
-/// hardened use-site (refusing the unrestorable hardened class). Refusals →
+/// (refusing `sortedmulti`-in-combinator) and carry no hardened use-site
+/// (refusing the unrestorable hardened class). Refusals →
 /// `TemplateFormUnsupportedShape`.
+///
+/// `tr(sortedmulti_a)` used to be named here as refused. It renders since the
+/// `ff4732e` miniscript pin, so the gate admits it now; the gate itself did not
+/// change, only what `to_miniscript_descriptor` can express.
 ///
 /// Mutations on a `descriptor.clone()` (SPEC §3.2):
 ///   1. `tlv.pubkeys = None`
@@ -1802,6 +1867,35 @@ mod tests {
         (descriptor, cosigners, entropy)
     }
 
+    /// `descriptor_fixture`, plus the per-`@N` origins bound into `path_decl`.
+    ///
+    /// The plain fixture leaves an empty Shared origin, because the descriptor
+    /// text carries none. That is right for the TEMPLATE tests, which assert a
+    /// canonical shape ELIDES its origins -- but wrong for the keyed multisig
+    /// tests: the fixture derives each `@N` at its own account, so an empty
+    /// shared origin makes every slot declare `[<master fp>/m]` while carrying
+    /// a different xpub, which md-codec 0.43 refuses as an impossible wallet
+    /// (one `(fingerprint, path)` names exactly one key).
+    ///
+    /// `bundle` binds these in `bind_descriptor_mode_paths`; this mirrors it,
+    /// so a keyed fixture describes a card the CLI would actually emit. It is
+    /// opt-in rather than folded into `descriptor_fixture` precisely so the
+    /// elision tests keep testing elision.
+    fn descriptor_fixture_with_bound_origins(
+        descriptor_str: &str,
+        ctx: crate::parse_descriptor::ScriptCtx,
+        n: u8,
+    ) -> (Descriptor, Vec<CosignerKeyInfo>, Vec<u8>) {
+        let (mut descriptor, cosigners, entropy) = descriptor_fixture(descriptor_str, ctx, n);
+        descriptor.path_decl.paths = md_codec::origin_path::PathDeclPaths::Divergent(
+            cosigners
+                .iter()
+                .map(|c| derivation_path_to_origin_path(&c.path))
+                .collect(),
+        );
+        (descriptor, cosigners, entropy)
+    }
+
     #[test]
     fn synthesize_descriptor_full_singlesig_shape() {
         let (descriptor, mut cosigners, entropy) = descriptor_fixture(
@@ -1847,7 +1941,7 @@ mod tests {
 
     #[test]
     fn synthesize_descriptor_full_multisig_shape() {
-        let (descriptor, mut cosigners, entropy) = descriptor_fixture(
+        let (descriptor, mut cosigners, entropy) = descriptor_fixture_with_bound_origins(
             "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
@@ -1868,7 +1962,7 @@ mod tests {
 
     #[test]
     fn synthesize_descriptor_watch_only_multisig_shape() {
-        let (descriptor, cosigners, _) = descriptor_fixture(
+        let (descriptor, cosigners, _) = descriptor_fixture_with_bound_origins(
             "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
             crate::parse_descriptor::ScriptCtx::MultiSig,
             2,
@@ -2497,11 +2591,17 @@ mod tests {
     /// `tr(NUMS, multi_a)` and non-taproot multisig/general.
     #[test]
     fn template_admissible_gate() {
-        // tr-sortedmulti-a 2-of-2 — does NOT render → refused.
+        // tr-sortedmulti-a 2-of-2 — RENDERS since the ff4732e miniscript pin, so
+        // it is admitted. This asserted the opposite, citing the "render gap":
+        // `template_admissible` ends in `to_miniscript_descriptor(..).is_ok()`,
+        // a pure renderability check and not a policy refusal, so the moment
+        // md-codec learned to convert `Terminal::SortedMultiA` for a sole
+        // tap-leaf root child the shape became admissible. Keeping the old
+        // assertion would pin a gap that no longer exists.
         let (sma, _, _) = descriptor_fixture_taproot(CliTemplate::TrSortedMultiA);
         assert!(
-            !template_admissible(&sma),
-            "tr(sortedmulti_a) must be refused (render gap)"
+            template_admissible(&sma),
+            "tr(sortedmulti_a) renders now, so the template gate must admit it"
         );
         // tr-multi-a 2-of-2 (NUMS) — renders → admitted.
         let (ma, _, _) = descriptor_fixture_taproot(CliTemplate::TrMultiA);

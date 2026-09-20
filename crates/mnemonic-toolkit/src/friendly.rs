@@ -237,6 +237,35 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
                 got
             )
         }
+        // md-codec 0.43/0.44 funds-safety refusals.
+        E::DuplicateKeySlots { a, b, n } => format!(
+            "md1 slots @{a} and @{b} carry the SAME key at the SAME use-site, so this \
+             is not the {n}-slot policy it declares — one signer would hold two seats. \
+             Give each slot a distinct key, or reduce the slot count."
+        ),
+        E::OriginKeyContradiction {
+            a,
+            b,
+            fingerprint,
+            path,
+        } => format!(
+            "md1 slots @{a} and @{b} both declare [{fingerprint}/{path}] but carry \
+             DIFFERENT xpubs. BIP-32 is deterministic, so one (fingerprint, path) is \
+             exactly one key — at least one of these origins is wrong. No address check \
+             catches this: addresses derive from the xpubs the card CARRIES, not from \
+             the origin it declares, so it surfaces only when a signer is asked to find \
+             the key."
+        ),
+        E::RelativeTimelockTruncated {
+            written,
+            enforced,
+            units,
+        } => format!(
+            "md1 relative timelock older({written}) is truncated by BIP-68 to \
+             {enforced} {units} — the plate would assert a lock the chain does not \
+             enforce. A relative lock cannot exceed 65535 {units}; use an absolute \
+             after(<height>) instead."
+        ),
         E::PathDepthExceeded { got, max } => {
             format!("md1 path depth {} exceeds max {}", got, max)
         }

@@ -547,6 +547,22 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::MultipathAltCountMismatch { .. }
         | md_codec::Error::ForbiddenTapTreeLeaf { .. }
         | md_codec::Error::OperatorContextViolation { .. }
+        // md-codec 0.43/0.44 funds-safety refusals. All three are detectable
+        // from the card alone and are refused rather than warned about, so they
+        // route with the sibling validation rejects at exit 2:
+        //   DuplicateKeySlots       — two @N slots carry the same key AND
+        //                             use-site, so the policy is not the k-of-n
+        //                             it claims.
+        //   OriginKeyContradiction  — one (fingerprint, path) pair, two
+        //                             different xpubs. BIP-32 is deterministic,
+        //                             so that is impossible; no address check
+        //                             catches it because addresses derive from
+        //                             the xpubs a card CARRIES.
+        //   RelativeTimelockTruncated — an `older()` above 65535 that BIP-68
+        //                             silently masks to something shorter.
+        | md_codec::Error::DuplicateKeySlots { .. }
+        | md_codec::Error::OriginKeyContradiction { .. }
+        | md_codec::Error::RelativeTimelockTruncated { .. }
         | md_codec::Error::ChunkCountOutOfRange { .. }
         | md_codec::Error::ChunkIndexOutOfRange { .. }
         | md_codec::Error::ChunkSetIdOutOfRange { .. }

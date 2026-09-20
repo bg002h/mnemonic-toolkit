@@ -154,6 +154,63 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.102.0] — 2026-09-19
+
+### Fixed
+
+- **`restore` and `bundle` emit a descriptor whose xpub header agrees with the
+  origin beside it.** Every rendered key used to serialise at `depth 0`,
+  `parent_fingerprint 00000000`, `child 0` under a depth-4 origin — a
+  master-looking key claiming to sit four levels down. From md-codec 0.44.2,
+  pinned by git tag (crates.io is frozen at 0.42.0 while the workspace patches
+  `rust-miniscript`, and this crate is itself unpublishable for the same reason,
+  so a git pin changes no distribution property).
+
+  **Addresses never moved** — only `chain_code` and `public_key` participate in
+  CKDpub — verified against Bitcoin Core v25. `parent_fingerprint` stays zero:
+  it is `hash160` of the PARENT point, which the md1 wire does not carry, so an
+  emitted xpub STRING still will not match a signer's own export byte-for-byte.
+
+  **Exception, measured and recorded:** the taproot wallet-policy arm
+  (`tr(NUMS,multi_a)`, `tr(NUMS,sortedmulti_a)`) does not route through
+  md-codec's renderer and still emits depth 0. Tracked as
+  `taproot-wallet-policy-arm-still-renders-depth0`.
+
+- **A supplied `--slot @N.path=` now reaches the card.** `bundle --descriptor`
+  accepted the path, derived with it, then dropped it: three guards keyed on
+  `is_non_canonical` — an early return, an xpub-slot exclusion, and a gated
+  propagation — were each written for default-INFERENCE and each silently took
+  path BINDING with them. The engraved card recorded **where no key lived** on
+  the canonical arm, and a plausible-but-WRONG default-inferred account on the
+  non-canonical one. `verify-bundle` is ungated in lockstep: a verifier that
+  disagrees with the emitter turns a correct backup into a failed check.
+
+  It hid because every slot dropped its path identically, so the card
+  round-tripped to itself, and because addresses derive from the xpubs a card
+  CARRIES, never the origin it DECLARES.
+
+- **Cards written before that fix read again.** md-codec 0.44.2 stops mint-time
+  admission policy reaching decode, so such a card decodes instead of failing
+  `md1_decode` with `OriginKeyContradiction`.
+
+### Changed
+
+- `synthesize_multisig_full` derives cosigner `i` at `account + i` from one
+  seed, instead of replicating a single xpub across all N slots — that was a
+  degenerate `multi(k, K, …, K)`, satisfiable *k* times by one signer. It is now
+  `#[cfg(test)]` rather than public API. Operator ruling 2026-09-19: reusing a
+  seed for different keys at different keypaths is fine; reusing a KEY is not.
+
+### Review
+
+- Independent adversarial whole-diff review found **1 Critical** in this branch:
+  ungating the path binder left default-inference live in the `Divergent` arm,
+  so a canonical descriptor with PARTIAL inline origins fabricated an origin for
+  the un-annotated slot and derived its key there — a different wallet and a
+  different address for the same command line. **Invisible to all 4037 tests.**
+  Fixed, regression-tested, mutation-proven, re-verified at 0C/0I. Reports in
+  `design/agent-reports/md-codec-0.44-adoption-{whole-diff-review,fold-verify}.md`.
+
 ## mnemonic-toolkit [0.101.0] — 2026-09-17
 
 **SemVer-MINOR (pre-1.0 breaking axis): the parallel core of the multisig search

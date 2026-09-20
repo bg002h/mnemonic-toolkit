@@ -303,6 +303,22 @@ pub fn bip48_script_type_for_root_tag(tag: &Tag) -> u32 {
 
 #[cfg(test)]
 mod tests {
+
+    /// A second valid secp256k1 point for a fixture that needs two DISTINCT
+    /// slot keys. Keeps the chain code, swaps the point: only the key has to
+    /// differ for `DuplicateKeySlots`, and reusing the chain code keeps the
+    /// fixture's shape otherwise identical to what it was.
+    fn second_slot_key(first: &[u8; 65]) -> [u8; 65] {
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        let mut sk_bytes = [0u8; 32];
+        sk_bytes[31] = 2;
+        let sk = bitcoin::secp256k1::SecretKey::from_slice(&sk_bytes)
+            .expect("a small non-zero scalar is a valid secret key");
+        let pk = bitcoin::secp256k1::PublicKey::from_secret_key(&secp, &sk);
+        let mut out = *first;
+        out[32..].copy_from_slice(&pk.serialize());
+        out
+    }
     use super::*;
 
     #[test]
@@ -533,7 +549,13 @@ mod tests {
                     (0, [0xAA, 0xBB, 0xCC, 0xDD]),
                     (1, [0x11, 0x22, 0x33, 0x44]),
                 ]),
-                pubkeys: Some(vec![(0, xpub_bytes), (1, xpub_bytes)]),
+                // DISTINCT points per slot. The same filler used to sit in
+                // both, which md-codec 0.43's `DuplicateKeySlots` now refuses
+                // to encode -- rightly: identical keys at an identical
+                // use-site make the script `multi(k, K, K)`, satisfiable k
+                // times by one signer. Nothing here tests key repetition, so
+                // the fixture just needed two keys.
+                pubkeys: Some(vec![(0, xpub_bytes), (1, second_slot_key(&xpub_bytes))]),
                 origin_path_overrides: None,
                 unknown: Vec::new(),
             },
@@ -559,13 +581,26 @@ mod tests {
             "the wire round-trip must preserve the BIP-388 NUMS internal key (is_nums:true)"
         );
 
-        // Pin the upstream limit (NOT regressed by this fix): tr-sortedmulti-a
-        // still cannot render to a descriptor — rust-miniscript v13 has no
-        // `Terminal::SortedMultiA` fragment (md-codec to_miniscript.rs). This is
-        // independent of `is_nums` (the leaf, not the internal key, is the wall).
+        // THE GAP THIS USED TO PIN HAS CLOSED, and the pin is what said so.
+        //
+        // It asserted that tr-sortedmulti-a "still cannot render to a
+        // descriptor — rust-miniscript v13 has no `Terminal::SortedMultiA`
+        // fragment". That was true when written. The workspace's
+        // `[patch.crates-io]` miniscript rev `ff4732e` carries the fragment,
+        // and md-codec converts it for a sole tap-leaf root child
+        // (`to_miniscript.rs`: "Writable at all only since the ff4732e pin").
+        // So the shape renders now, and asserting it still fails would pin a
+        // limitation that no longer exists — which is how a stale pin starts
+        // hiding the next defect.
+        //
+        // Inverted rather than deleted: the rendered form is still worth
+        // pinning, because what it renders TO is the thing a coordinator reads.
+        let rendered = md_codec::to_miniscript::to_miniscript_descriptor(&recovered, 0)
+            .expect("tr-sortedmulti-a renders since the ff4732e miniscript pin");
+        let text = rendered.to_string();
         assert!(
-            md_codec::to_miniscript::to_miniscript_descriptor(&recovered, 0).is_err(),
-            "tr-sortedmulti-a must still fail to_miniscript (rust-miniscript v13 SortedMultiA gap)"
+            text.contains("sortedmulti_a("),
+            "rendered tr-sortedmulti-a must keep the sortedmulti_a leaf, got {text}"
         );
     }
 
@@ -630,7 +665,13 @@ mod tests {
                     (0, [0xAA, 0xBB, 0xCC, 0xDD]),
                     (1, [0x11, 0x22, 0x33, 0x44]),
                 ]),
-                pubkeys: Some(vec![(0, xpub_bytes), (1, xpub_bytes)]),
+                // DISTINCT points per slot. The same filler used to sit in
+                // both, which md-codec 0.43's `DuplicateKeySlots` now refuses
+                // to encode -- rightly: identical keys at an identical
+                // use-site make the script `multi(k, K, K)`, satisfiable k
+                // times by one signer. Nothing here tests key repetition, so
+                // the fixture just needed two keys.
+                pubkeys: Some(vec![(0, xpub_bytes), (1, second_slot_key(&xpub_bytes))]),
                 origin_path_overrides: None,
                 unknown: Vec::new(),
             },
