@@ -369,6 +369,22 @@ pub enum ComposeError {
         /// 0-based index into `PathList::paths`.
         path: usize,
     },
+    /// Two or more paths have no key (spec §4e).
+    ///
+    /// Paths chain right-leaning as `or_i(P, rest)` (`or_d` under a bare-multi
+    /// head) and `or_i(l, r)` is non-malleable only if `l.safe || r.safe`
+    /// (`vendor/miniscript/.../types/malleability.rs`, `safe` = every
+    /// satisfaction needs a signature). A key-less path is never safe, so with
+    /// two of them ANYWHERE in the list some `or_i` on the spine has two unsafe
+    /// arms and the whole script is malleable: `md encode` refuses it and
+    /// Bitcoin Core will not import it. A timelock does not change this --
+    /// `older`/`after` need no signature either.
+    TooManyKeylessPaths {
+        /// 0-based index into `PathList::paths` of the first key-less path.
+        first: usize,
+        /// 0-based index into `PathList::paths` of the second one.
+        second: usize,
+    },
     /// `k`/`n` outside 1 ≤ k ≤ n ≤ 9.
     BadThreshold {
         /// 0-based index into `PathList::paths`.
@@ -439,6 +455,12 @@ impl core::fmt::Display for ComposeError {
                 "path {} has no key; this build will not put a key-less path in taproot (use wsh, or add a key)",
                 path + 1
             ),
+            ComposeError::TooManyKeylessPaths { first, second } => write!(
+                f,
+                "paths {} and {} both have no key; side by side they lower to a malleable `or_i` that `md encode` refuses and no wallet will import. Give one of them a key, a timelock does not help, or fold them into one path",
+                first + 1,
+                second + 1
+            ),
             ComposeError::BadThreshold { path, k, n } => write!(
                 f,
                 "path {}: {k}-of-{n} is not admitted (1 <= k <= n <= {MAX_KEYS_PER_PATH})",
@@ -488,6 +510,7 @@ pub fn validate(list: &PathList) -> Result<usize, ComposeError> {
     }
     let mut slots = 0usize;
     let mut any_keyed = false;
+    let mut keyless: Vec<usize> = Vec::new();
     for (i, p) in list.paths.iter().enumerate() {
         if let Some(ks) = p.keys {
             if ks.k == 0 || ks.n == 0 || ks.k > ks.n || ks.n > MAX_KEYS_PER_PATH {
@@ -503,6 +526,8 @@ pub fn validate(list: &PathList) -> Result<usize, ComposeError> {
             return Err(ComposeError::LockOnlyPath { path: i });
         } else if list.wrapper == Wrapper::Tr {
             return Err(ComposeError::KeylessUnderTr { path: i });
+        } else {
+            keyless.push(i);
         }
         if let Some(lock) = p.lock {
             if let Err(why) = lock.operand() {
@@ -528,6 +553,24 @@ pub fn validate(list: &PathList) -> Result<usize, ComposeError> {
         if !(sole && sorted) {
             return Err(ComposeError::LegacyWrapperShape);
         }
+    }
+    // AT MOST ONE KEY-LESS PATH (spec §4e; composer fable review r0, lens 1
+    // C-1). Two of them make the spine malleable wherever they sit -- see
+    // `ComposeError::TooManyKeylessPaths` for the type-system reason and
+    // `tests/compose_keyless_cap.rs` for the 859-shape measurement. The rule
+    // is STATED here rather than discovered by re-parsing the output, because
+    // the device's Go port has no miniscript library to re-parse with: before
+    // this, `md compose`'s read-back (md-cli F-600) was the only thing that
+    // knew, and the port cut such a policy into steel.
+    //
+    // PRECEDENCE (fold-A review, M-1): this runs AFTER `TooManySlots` and
+    // `LegacyWrapperShape`, because its remedy -- "fold them into one path" --
+    // does not cure either of those: 36 slots folded are still 36, and `sh`
+    // with two paths is still not one sorted multisig. A remedy that does not
+    // work is worse than no remedy. The two rules above (`KeylessUnderTr`,
+    // `NoKeyedPath`) also precede it, by the same argument.
+    if let (Some(&first), Some(&second)) = (keyless.first(), keyless.get(1)) {
+        return Err(ComposeError::TooManyKeylessPaths { first, second });
     }
     Ok(slots)
 }

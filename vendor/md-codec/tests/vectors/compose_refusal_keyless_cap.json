@@ -1,0 +1,324 @@
+{
+  "_comment": [
+    "CONFORMANCE VECTOR for spec §4e's key-less cap: a policy holds AT MOST ONE",
+    "key-less spend path. Composer fable review r0, lens 1, C-1.",
+    "",
+    "WHY IT EXISTS. Paths chain right-leaning as or_i(P, rest) (or_d under a",
+    "bare-multi head), and or_i(l, r) is non-malleable only if l.safe || r.safe",
+    "-- `safe` meaning every satisfaction needs a signature. A key-less path is",
+    "never safe, so two of them ANYWHERE in the list leave some or_i on the",
+    "spine with two unsafe arms: `md encode` refuses the template as malleable",
+    "and Bitcoin Core refuses the import (`not sane: malleable witnesses",
+    "exist`), keyed path included. A TIMELOCK DOES NOT HELP -- older/after need",
+    "no signature either.",
+    "",
+    "The Rust primary used to reach that verdict only by re-parsing its own",
+    "output in `md compose` (md-cli F-600). The device's Go port has no",
+    "rust-miniscript and cannot read back, so it cut such a policy into steel.",
+    "The rule now lives in md_codec::compose::validate(), which md/compose.go",
+    "ports -- and this file is what the port conforms to.",
+    "",
+    "HAND-WRITTEN, NOT GENERATED. `md vectors` exports ADMITTED policies (a",
+    "template, a card, addresses); a refusal has none of those, so this vector",
+    "is maintained by hand and excluded from the corpus-drift diff in",
+    "md-cli/tests/vector_corpus.rs. Its Rust gate is",
+    "md-codec/tests/compose_keyless_cap.rs.",
+    "",
+    "MEASUREMENT behind `refused_when`: 859 wsh path lists of 2 to 4 paths over",
+    "five keyed and four key-less atoms, driven through `md compose",
+    "--wrapper wsh --experimental` at md-cli 0.16.2. All 504 lists with two or",
+    "more key-less paths were refused after lowering; all 355 with at most one",
+    "were emitted. Zero counterexamples."
+  ],
+  "rule": "a policy holds at most one key-less spend path",
+  "refused_when": "two or more paths are key-less -- `keys == null` AND `hash != null` (a path with neither keys nor hash is LockOnlyPath, refused earlier) -- at any positions, whatever locks they carry",
+  "error": "TooManyKeylessPaths",
+  "error_fields": {
+    "first": "0-based index of the first key-less path",
+    "second": "0-based index of the second key-less path"
+  },
+  "precedence": [
+    "KeylessUnderTr comes first under wrapper tr (the tr rule is the one in force there)",
+    "NoKeyedPath comes first when no path has a key at all (BIP-388 l.191)",
+    "TooManySlots comes first when the slot total exceeds 32 (folding two key-less paths into one does not shed a slot)",
+    "LegacyWrapperShape comes first under sh / sh-wsh (folding leaves two paths, still not one sorted multisig)",
+    "Every precedence rule has a case below; a port that orders the cap ahead of any of them still refuses, but names a remedy that does not work"
+  ],
+  "cases": [
+    {
+      "name": "keyed_then_two_keyless",
+      "wrapper": "wsh",
+      "paths": [
+        {
+          "keys": {
+            "k": 1,
+            "n": 1,
+            "sorted": true
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "TooManyKeylessPaths",
+        "first": 1,
+        "second": 2
+      },
+      "message": "paths 2 and 3 both have no key; side by side they lower to a malleable `or_i` that `md encode` refuses and no wallet will import. Give one of them a key, a timelock does not help, or fold them into one path"
+    },
+    {
+      "name": "keyed_then_two_keyless_second_locked",
+      "wrapper": "wsh",
+      "paths": [
+        {
+          "keys": {
+            "k": 1,
+            "n": 1,
+            "sorted": true
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          },
+          "lock": {
+            "kind": "older_blocks",
+            "value": 5
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "TooManyKeylessPaths",
+        "first": 1,
+        "second": 2
+      },
+      "message": "paths 2 and 3 both have no key; side by side they lower to a malleable `or_i` that `md encode` refuses and no wallet will import. Give one of them a key, a timelock does not help, or fold them into one path"
+    },
+    {
+      "name": "two_keyless_split_by_a_keyed_path",
+      "wrapper": "wsh",
+      "paths": [
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": {
+            "k": 2,
+            "n": 3,
+            "sorted": true
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "TooManyKeylessPaths",
+        "first": 0,
+        "second": 2
+      },
+      "message": "paths 1 and 3 both have no key; side by side they lower to a malleable `or_i` that `md encode` refuses and no wallet will import. Give one of them a key, a timelock does not help, or fold them into one path"
+    },
+    {
+      "name": "one_locked_keyless_head_then_multi",
+      "_control": "ADMITTED. A port that refused every key-less path would satisfy the three cases above and delete the EXPERIMENTAL feature.",
+      "wrapper": "wsh",
+      "paths": [
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          },
+          "lock": {
+            "kind": "older_blocks",
+            "value": 5
+          }
+        },
+        {
+          "keys": {
+            "k": 2,
+            "n": 3,
+            "sorted": true
+          }
+        }
+      ],
+      "expect": "admitted",
+      "slots": 3,
+      "template": "wsh(or_i(and_v(v:sha256(cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d),older(5)),multi(2,@0/48'/0'/0'/2'/<0;1>/*,@1/48'/0'/1'/2'/<0;1>/*,@2/48'/0'/2'/2'/<0;1>/*)))"
+    },
+    {
+      "name": "precedence_keyless_under_tr",
+      "wrapper": "tr",
+      "paths": [
+        {
+          "keys": {
+            "k": 2,
+            "n": 3,
+            "sorted": true
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "KeylessUnderTr",
+        "path": 1
+      }
+    },
+    {
+      "name": "precedence_no_keyed_path",
+      "wrapper": "wsh",
+      "paths": [
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "NoKeyedPath"
+      }
+    },
+    {
+      "name": "precedence_too_many_slots",
+      "wrapper": "wsh",
+      "paths": [
+        {
+          "keys": {
+            "k": 9,
+            "n": 9,
+            "sorted": true
+          }
+        },
+        {
+          "keys": {
+            "k": 9,
+            "n": 9,
+            "sorted": true
+          }
+        },
+        {
+          "keys": {
+            "k": 9,
+            "n": 9,
+            "sorted": true
+          }
+        },
+        {
+          "keys": {
+            "k": 9,
+            "n": 9,
+            "sorted": true
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "TooManySlots",
+        "got": 36,
+        "max": 32
+      }
+    },
+    {
+      "name": "precedence_legacy_wrapper_shape",
+      "wrapper": "sh",
+      "paths": [
+        {
+          "keys": {
+            "k": 2,
+            "n": 3,
+            "sorted": true
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d"
+          }
+        },
+        {
+          "keys": null,
+          "hash": {
+            "kind": "sha256",
+            "digest": "5a23c169bc7e6f2569a3d74f58118576f005118603473a7069e22ab544484a3d"
+          }
+        }
+      ],
+      "expect": "refused",
+      "error": {
+        "kind": "LegacyWrapperShape"
+      }
+    }
+  ]
+}
