@@ -100,7 +100,7 @@ flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--from-git`, `--force`,
 $ sh "$REPO/scripts/install.sh" --list
 COMPONENT       CARGO_PACKAGE        DEFAULT      FEATURES       GIT_TAG
 ---------       -------------        -------      --------       -------
-mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.101.0
+mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.103.0
 md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.16.2
 ms              ms-cli               crates.io    (none)         ms-cli-v0.19.0
 mk              mk-cli               crates.io    (none)         mk-cli-v0.13.0
@@ -113,8 +113,8 @@ m-format constellation installer
 install root: /home/user/.cargo/bin
 source: crates.io (default; mnemonic-toolkit stays on git+tag)
 
-install  mnemonic (git: mnemonic-toolkit-v0.101.0)
-  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.101.0   mnemonic-toolkit
+install  mnemonic (git: mnemonic-toolkit-v0.103.0)
+  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.103.0   mnemonic-toolkit
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
 install  md (crates.io: md-cli)
   [dry-run] cargo install --locked --features cli-compiler  md-cli
