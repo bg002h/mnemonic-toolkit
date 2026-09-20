@@ -154,6 +154,38 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.103.2] — 2026-09-20
+
+### Fixed
+
+- **The x86_64 Linux (musl) binary exists again — the second half of 0.103.1.**
+  `v0.103.1` published the aarch64 musl archive and still no x86_64 one: the
+  `musl-binaries` job in `man-pages.yml` carries its own `cargo build` with its
+  own `[source]` list, which named rust-miniscript and not md-codec, so inside
+  the re-homed `--network=none` container `--offline` had nowhere to find it.
+  (aarch64 builds through `cross` on the runner, whose cargo git cache happened
+  to hold the crate — a build that was not purely from `vendor/`.)
+
+  0.103.1 had fixed the same resolution for the `repro` job by hand-copying the
+  pin into that job's inputs. Two hand copies of one pin was the defect: the
+  workflow now reads md-codec's `git`+`rev` ONCE from `Cargo.toml` (a `pin`
+  job), feeds it to the `repro` inputs, and composes ONE `[source]` list that
+  BOTH build paths consume, mirroring `ci/repro/double-build.sh`. Reproduced
+  locally: the shipped command fails resolution against an empty cargo home
+  (exit 101, the same error); the composed list resolves and compiles.
+
+  No code changed between 0.103.1 and 0.103.2.
+
+### Changed
+
+- **Cross-tool md1 differential: the two cosigners are two seeds.** The corpus
+  gave both multisig keys the SAME origin `[73c5da0a/48'/0'/0'/2']` while the
+  second key was that seed's account-1 xpub — a contradiction md-codec 0.44
+  refuses as "one origin identifies exactly one key", so all 11 multi-key cases
+  came back `BothError` once the workflow installed md-cli 0.16.2. The second
+  cosigner is now a second seed at the same path under its own fingerprint,
+  the shape a real multisig has; all 17 corpus entries `Match`, 11 of them multi-key.
+
 ## mnemonic-toolkit [0.103.1] — 2026-09-20
 
 ### Fixed
