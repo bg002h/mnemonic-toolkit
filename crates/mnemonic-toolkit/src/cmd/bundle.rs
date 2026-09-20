@@ -2327,7 +2327,25 @@ pub(crate) fn bind_descriptor_mode_paths(
             .iter()
             .enumerate()
             .map(|(i, op)| {
-                if op.components.is_empty() {
+                // THE SAME GATE AS THE `Shared` ARM ABOVE, and its absence here
+                // was a Critical found in whole-diff review (2026-09-19).
+                //
+                // Ungating this function for canonical shapes let a canonical
+                // descriptor with PARTIAL inline origins --
+                // `wsh(sortedmulti(2,[fp/48'/0'/0'/2']@0,@1))` -- reach this
+                // arm with one empty entry, and the arm INVENTED an origin for
+                // it. For a phrase/entropy/ms1 slot the key is then DERIVED at
+                // the invented path, so the same command line produced a
+                // different wallet than the shipped binary:
+                //
+                //   shipped: @1 [3f635a63/m]               id 7dd635d7...
+                //   broken:  @1 [3f635a63/48'/0'/0'/2']    id a28485fe...
+                //
+                // and a different first address
+                // (bc1qq3p989... vs bc1qt2yw8z4...). Default-INFERENCE is
+                // non-canonical-only; a canonical shape's un-annotated slot
+                // must be left exactly as the operator left it.
+                if op.components.is_empty() && is_non_canonical {
                     defaulted_indices.push(i as u8);
                     default_path.clone()
                 } else {

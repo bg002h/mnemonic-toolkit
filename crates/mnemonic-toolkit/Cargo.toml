@@ -43,9 +43,16 @@ mk-codec = "0.4.1"
 # same reason and is installed from git+tag (scripts/install.sh), so pinning a
 # dependency the same way changes no distribution property.
 #
-# 0.42.0 -> 0.44.0 is what makes `restore`/`bundle` emit a descriptor whose xpub
-# header agrees with the origin beside it. Before it, every rendered key
-# serialised at depth 0 under a depth-4 origin.
+# 0.42.0 -> 0.44.x is what makes `restore`/`bundle` emit a descriptor whose xpub
+# header agrees with the origin beside it. Before it, a rendered key serialised
+# at depth 0 under a depth-4 origin.
+#
+# NOT EVERY ARM, and the first draft of this comment said "every rendered key",
+# which whole-diff review measured as false. The TAPROOT WALLET-POLICY restore
+# arm -- `tr(NUMS, multi_a(...))` and `tr(NUMS, sortedmulti_a(...))` -- does not
+# route through md-codec's renderer and still emits depth 0 under a depth-4
+# origin. Measured: five other shapes render 4/4, those two render 0/4. Tracked
+# as `taproot-wallet-policy-arm-still-renders-depth0`.
 #
 # DROP this git pin for a plain version when md-codec reaches crates.io again,
 # which is gated on the same miniscript release as the [patch] above.

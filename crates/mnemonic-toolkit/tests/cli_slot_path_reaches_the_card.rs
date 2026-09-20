@@ -110,3 +110,56 @@ fn the_two_slots_do_not_share_one_origin() {
         "neither origin may be empty, which is what the bug emitted: {got:?}"
     );
 }
+
+/// THE CRITICAL FOUND IN WHOLE-DIFF REVIEW (2026-09-19).
+///
+/// Binding `--slot @N.path=` on canonical descriptors meant this function stopped
+/// returning early for them -- and default-INFERENCE lived past that early
+/// return in the `Divergent` arm. A canonical descriptor with PARTIAL inline
+/// origins reaches that arm with one empty entry, and the arm invented an
+/// origin for it. For a phrase slot the key is then DERIVED at the invented
+/// path, so the same command line produced a different wallet:
+///
+///   shipped: @1 [3f635a63/m]            id 7dd635d7...  bc1qq3p989...
+///   broken:  @1 [3f635a63/48'/0'/0'/2']  id a28485fe...  bc1qt2yw8z4...
+///
+/// This asserts the shape a REVIEWER had to construct, because no existing
+/// test covered a canonical descriptor with SOME slots annotated: an
+/// un-annotated slot must be left exactly as the operator left it.
+#[test]
+fn a_canonical_descriptor_with_partial_inline_origins_invents_nothing() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args([
+            "bundle",
+            "--network",
+            "mainnet",
+            // CANONICAL, and only @0 carries an inline origin.
+            "--descriptor",
+            "wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']@0,@1))",
+            "--slot",
+            "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+            "--slot",
+            "@1.phrase=zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong",
+            "--no-engraving-card",
+        ])
+        .assert()
+        .success();
+    let md1: Vec<String> = String::from_utf8(out.get_output().stdout.clone())
+        .unwrap()
+        .lines()
+        .filter(|l| l.trim_start().starts_with("md1"))
+        .map(|l| l.replace(' ', ""))
+        .collect();
+    let got = origins_on_card(&md1);
+    assert_eq!(got.len(), 2, "two slots");
+    assert_eq!(got[0], "48'/0'/0'/2'", "@0's inline origin must survive");
+    assert!(
+        got[1].is_empty(),
+        "@1 carried NO origin and supplied NO --slot path, so none may be \
+         invented for it -- inventing one changes the derived key and the \
+         wallet. got {:?}",
+        got[1]
+    );
+}

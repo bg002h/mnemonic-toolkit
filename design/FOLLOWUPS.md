@@ -5766,6 +5766,19 @@ in md1"*), so the paths must be plumbed into `PathDecl::Divergent` at emit.
 `deps/md-codec-0.44.0` branch until this lands, deliberately and with this
 entry as its reason.
 
+**CORRECTION (whole-diff review, 2026-09-19): on the NON-canonical arm the old
+binary engraves a WRONG origin, not a blank one.** Everything above describes
+the canonical arm accurately. Measured on the shipped binary with
+`wsh(and_v(v:pk(@0),pk(@1)))` and slots at accounts 7 and 8: `--json` reports
+the operator's paths, while the CARD records `[aaaaaaaa/48'/0'/0'/2']` and
+`[bbbbbbbb/48'/0'/0'/2']` — default-inferred account 0, for keys that live at 7
+and 8.
+
+That is worse than blank, and the distinction matters for how an operator
+experiences it. **A blank origin is obviously suspicious; a plausible, specific,
+wrong one is not.** Someone holding such a plate and following its engraved
+origin derives a different key and concludes the plate is not theirs.
+
 **Cross-ref:** same family as `convert --path is silently ignored when
 --template is given` — a supplied path accepted and discarded rather than
 refused. Worth fixing as one class: **a path the operator supplies must reach
@@ -5839,3 +5852,41 @@ against the slot's declared path, skipped (not passed) when no path was
 supplied, so an elided canonical origin is not reported as a mismatch.
 
 - **Status:** OPEN. **Tier:** `verification-gap` / `funds-adjacent`.
+
+
+### `taproot-wallet-policy-arm-still-renders-depth0` — the xpub-header fix does not reach `tr(NUMS, multi_a/sortedmulti_a)` (tier: correctness/interop; owning phase: next restore cycle)
+
+**Found 2026-09-19** by whole-diff review of the md-codec 0.44 adoption, which
+measured a claim I had written ("every rendered key") and found it false.
+
+md-codec 0.44 makes a rendered xpub's depth and child number agree with its
+declared origin. Five restore shapes now do; **two do not**, because the taproot
+wallet-policy arm does not route through md-codec's renderer:
+
+| shape | rendered depth / origin length |
+| --- | --- |
+| `wsh(sortedmulti(2,@0,@1))` | 4 / 4 OK |
+| `wsh(multi(2,@0,@1))` | 4 / 4 OK |
+| `sh(wsh(sortedmulti(2,@0,@1)))` | 4 / 4 OK |
+| `wsh(and_v(v:pk(@0),pk(@1)))` | 4 / 4 OK |
+| `tr(NUMS,and_v(v:pk(@0),older(144)))` | 4 / 4 OK |
+| **`tr(NUMS,multi_a(2,@0,@1))`** | **0 / 4 MISMATCH** |
+| **`tr(NUMS,sortedmulti_a(2,@0,@1))`** | **0 / 4 MISMATCH** |
+
+Two goldens in `tests/cli_restore_taproot.rs` kept their pre-fix depth-0 values
+through the re-baseline **and were correct to** — the arm really does still emit
+them. Nothing recorded that as an exception, which is the part worth fixing
+first: a golden that silently keeps an old value looks identical to a golden
+nobody looked at.
+
+**Severity is the same as the original defect** — addresses are unaffected,
+since derivation ignores the header; what is wrong is the artifact's honesty and
+its ability to round-trip back into an mk1 card, whose encoder rejects a
+depth/origin disagreement.
+
+**To close it:** route the taproot wallet-policy arm through the same renderer
+as the others, or reconstruct the header from the origin at that emit site; then
+re-baseline those two goldens and DELETE this entry rather than leaving them
+unexplained.
+
+- **Status:** OPEN. **Tier:** `correctness` / `interop`.
