@@ -90,7 +90,34 @@ jobs:
   # The PUBLISHED aarch64 artifact is STILL reproducible — the `musl-binaries`
   # cross leg below is re-homed onto the digest-pinned Cross.toml recipe — it
   # just is not byte-gated inline on the release tag in this phase.
+  # The md-codec git pin, read ONCE from Cargo.toml. v0.103.0 shipped without
+  # Linux binaries because the offline musl build could not resolve md-codec;
+  # v0.103.1 added the pin to the `repro` job's inputs by hand and STILL
+  # shipped without the x86_64 archive, because the `musl-binaries` job below
+  # carries its own cargo command with its own [source] list, which nobody
+  # updated. Two hand-copies of one pin is the defect; this job is the copy.
+  pin:
+    runs-on: ubuntu-latest
+    outputs:
+      md_url: ${{ steps.p.outputs.url }}
+      md_rev: ${{ steps.p.outputs.rev }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: |
+          line="$(grep -E '^md-codec *= *\{' crates/mnemonic-toolkit/Cargo.toml)"
+          url="$(sed -nE 's/.*git *= *"([^"]+)".*/\1/p' <<<"$line")"
+          rev="$(sed -nE 's/.*rev *= *"([0-9a-f]{40})".*/\1/p' <<<"$line")"
+          if [ -z "$url" ] || [ -z "$rev" ]; then
+            echo "::error::man-pages: cannot read md-codec's git+rev pin from crates/mnemonic-toolkit/Cargo.toml: $line"
+            exit 1
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "rev=$rev" >> "$GITHUB_OUTPUT"
+          echo "md-codec pin: $url @ $rev"
+
   repro:
+    needs: pin
     uses: ./.github/workflows/reproducible-musl-build.yml
     permissions:
       contents: read
@@ -108,8 +135,8 @@ jobs:
       # the workspace patches miniscript), and `--offline` cannot resolve a git
       # source without its own [source] replacement block -- which is what made
       # the v0.103.0 tag ship with no musl binaries.
-      git_source_url: "https://github.com/bg002h/descriptor-mnemonic"
-      git_source_rev: "922778ad0400957840da26081846fc761deaca41"
+      git_source_url: ${{ needs.pin.outputs.md_url }}
+      git_source_rev: ${{ needs.pin.outputs.md_rev }}
       # Source the centralized recipe (ci/repro/*.sh, Dockerfile.repro) from THIS
       # tagged commit — identical content to the crate source the gate checks
       # out, so the toolkit build is byte-unchanged vs pre-P3a.
@@ -157,7 +184,7 @@ jobs:
   # interpolation of untrusted user input.
   musl-binaries:
     name: musl-binary (${{ matrix.target }})
-    needs: repro
+    needs: [pin, repro]
     runs-on: ubuntu-latest
     # `contents: write` to upload release assets; `packages: read` so the
     # x86_64 (musl_native) leg can authenticate to GHCR and `docker pull` the
@@ -182,6 +209,29 @@ jobs:
             arch: aarch64
     steps:
       - uses: actions/checkout@v4
+      - name: compose the [source] activation (mirrors ci/repro/double-build.sh)
+        env:
+          MINISCRIPT_REV: ff4732e5f75aa555682343cb180fa72ee3e8e9d5
+          GIT_SOURCE_URL: ${{ needs.pin.outputs.md_url }}
+          GIT_SOURCE_REV: ${{ needs.pin.outputs.md_rev }}
+        run: |
+          # ONE newline-separated list of [source] stanzas, consumed by BOTH
+          # build paths below (each line becomes one --config argument), so the
+          # cross job and the re-homed --network=none container can never
+          # disagree on which git sources are redirected into vendor/. Same
+          # blocks, same order, as ci/repro/double-build.sh.
+          {
+            echo 'source.crates-io.replace-with="vendored-sources"'
+            echo "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".git=\"https://github.com/rust-bitcoin/rust-miniscript\""
+            echo "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".rev=\"${MINISCRIPT_REV}\""
+            echo "source.\"git+https://github.com/rust-bitcoin/rust-miniscript?rev=${MINISCRIPT_REV}\".replace-with=\"vendored-sources\""
+            echo "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".git=\"${GIT_SOURCE_URL}\""
+            echo "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".rev=\"${GIT_SOURCE_REV}\""
+            echo "source.\"git+${GIT_SOURCE_URL}?rev=${GIT_SOURCE_REV}\".replace-with=\"vendored-sources\""
+            echo 'source.vendored-sources.directory="vendor"'
+          } > src-config.txt
+          { echo 'SRC_CONFIG_LINES<<__SRC__'; cat src-config.txt; echo '__SRC__'; } >> "$GITHUB_ENV"
+          cat src-config.txt
 
       # ── aarch64 (cross) leg — RE-HOMED reproducible (task #23 P2) ───────────
       # The aarch64 musl binary has no native runner, so it is built via `cross`
@@ -227,6 +277,7 @@ jobs:
           REMAP="--remap-path-prefix=/project=/build --remap-path-prefix=/cargo=/cargo"
           CFMAP="-ffile-prefix-map=/project=/build -ffile-prefix-map=/cargo=/cargo"
           umask 022
+          SRC_CONFIG=(); while IFS= read -r l; do SRC_CONFIG+=(--config "$l"); done <<<"$SRC_CONFIG_LINES"
           env \
             SOURCE_DATE_EPOCH="$EPOCH" \
             LC_ALL=C TZ=UTC \
@@ -235,11 +286,7 @@ jobs:
             CFLAGS_aarch64_unknown_linux_musl="$CFMAP" \
             cross build --locked --offline --release \
               --target "$TARGET" -p mnemonic-toolkit --bin mnemonic \
-              --config 'source.crates-io.replace-with="vendored-sources"' \
-              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".git="https://github.com/rust-bitcoin/rust-miniscript"' \
-              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".rev="ff4732e5f75aa555682343cb180fa72ee3e8e9d5"' \
-              --config 'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".replace-with="vendored-sources"' \
-              --config 'source.vendored-sources.directory="vendor"'
+              "${SRC_CONFIG[@]}"
           tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$EPOCH" \
             -cf - -C "target/${TARGET}/release" mnemonic \
             | gzip -n -9 > "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz"
@@ -300,16 +347,14 @@ jobs:
             -e CFLAGS="-ffile-prefix-map=/build/src=/build -ffile-prefix-map=/cargo=/cargo" \
             -e "CFLAGS_x86_64_unknown_linux_musl=-ffile-prefix-map=/build/src=/build -ffile-prefix-map=/cargo=/cargo" \
             -e VER="$VER" -e ARCH="$ARCH" -e TARGET="$TARGET" \
+            -e SRC_CONFIG_LINES \
             "$REPRO_IMAGE" \
             bash -euxo pipefail -c '
               umask 022
+              SRC_CONFIG=(); while IFS= read -r l; do SRC_CONFIG+=(--config "$l"); done <<<"$SRC_CONFIG_LINES"
               cargo build --locked --offline --release \
                 --target "$TARGET" -p mnemonic-toolkit --bin mnemonic \
-                --config '"'"'source.crates-io.replace-with="vendored-sources"'"'"' \
-                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".git="https://github.com/rust-bitcoin/rust-miniscript"'"'"' \
-                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".rev="ff4732e5f75aa555682343cb180fa72ee3e8e9d5"'"'"' \
-                --config '"'"'source."git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5".replace-with="vendored-sources"'"'"' \
-                --config '"'"'source.vendored-sources.directory="vendor"'"'"'
+                "${SRC_CONFIG[@]}"
               tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
                 -cf - -C "target/$TARGET/release" mnemonic \
                 | gzip -n -9 > "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz"
