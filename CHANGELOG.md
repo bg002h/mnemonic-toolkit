@@ -154,6 +154,31 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.103.1] — 2026-09-20
+
+### Fixed
+
+- **The Linux (musl) binaries exist again.** `v0.103.0` published macOS and
+  Windows archives and **no Linux ones at all** — the `man-pages` workflow,
+  which produces them, died with `failed to load source for dependency
+  md-codec`.
+
+  The reproducible musl build resolves `--offline` against a committed
+  `vendor/` tree, and a git dependency needs its own `[source]` replacement
+  stanza keyed `git+URL?rev=`. `md-codec` was pinned by **tag**, which yields a
+  `?tag=` source id no stanza can name. It is now pinned by **commit**
+  (`922778ad`, = `descriptor-mnemonic-md-cli-v0.16.2`), which is the better pin
+  regardless: a tag is mutable, a commit is not, and this dependency's bytes
+  reach an engraved card. `vendor/` carries the crate and the caller passes the
+  git-source inputs that already existed for this case.
+
+  No code changed between 0.103.0 and 0.103.1 — same tests, same behaviour.
+  This release exists so the Linux artifacts do.
+
+  **Found by the demo page's own link gate**, which returned 404 on the musl
+  archive. The GitHub release looked healthy at five assets; only fetching the
+  URL said otherwise.
+
 ## mnemonic-toolkit [0.103.0] — 2026-09-19
 
 ### Added

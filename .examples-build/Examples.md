@@ -1,6 +1,6 @@
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.103.0 -- worked examples (Linux), exact verbatim I/O"
+subtitle: "mnemonic-toolkit v0.103.1 -- worked examples (Linux), exact verbatim I/O"
 date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
@@ -17,7 +17,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.103.0** on Linux and **both the command and its full output are
+`mnemonic` **v0.103.1** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -100,7 +100,7 @@ flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--from-git`, `--force`,
 $ sh "$REPO/scripts/install.sh" --list
 COMPONENT       CARGO_PACKAGE        DEFAULT      FEATURES       GIT_TAG
 ---------       -------------        -------      --------       -------
-mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.103.0
+mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.103.1
 md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.16.2
 ms              ms-cli               crates.io    (none)         ms-cli-v0.19.0
 mk              mk-cli               crates.io    (none)         mk-cli-v0.13.0
@@ -113,8 +113,8 @@ m-format constellation installer
 install root: /home/user/.cargo/bin
 source: crates.io (default; mnemonic-toolkit stays on git+tag)
 
-install  mnemonic (git: mnemonic-toolkit-v0.103.0)
-  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.103.0   mnemonic-toolkit
+install  mnemonic (git: mnemonic-toolkit-v0.103.1)
+  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.103.1   mnemonic-toolkit
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
 install  md (crates.io: md-cli)
   [dry-run] cargo install --locked --features cli-compiler  md-cli
@@ -142,7 +142,7 @@ Verify the install and list every subcommand:
 
 ```
 $ mnemonic --version
-mnemonic 0.103.0
+mnemonic 0.103.1
 ```
 
 ```
@@ -1312,7 +1312,7 @@ external oracle sees it.
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.103.0 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.103.1 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage
@@ -1321,7 +1321,7 @@ the authoritative per-flag reference.
 
 This appendix used to be titled EXPERIMENTAL and told you to build a
 proof-of-concept binary from a never-merged branch. **It is a supported feature
-as of v0.103.0** and everything below is live-captured from the shipped
+as of v0.103.1** and everything below is live-captured from the shipped
 `mnemonic`, like the rest of this guide.
 
 What changed: a depth->=2 taptree always ENGRAVED faithfully -- only reading it
