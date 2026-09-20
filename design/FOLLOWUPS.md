@@ -5948,3 +5948,46 @@ The two goldens are re-baselined, and the `first recv:` address in each is
 UNCHANGED — the check that this moved serialisation and not a wallet.
 
 - **Status:** ✓ RESOLVED. **Tier:** `correctness` / `interop`.
+
+### `doc-builds-drift-against-current-sibling-clis` — the manual, quickstart and technical-manual transcripts and flag lists are stale against the CLIs install.sh names (tier: docs; owning phase: next docs regeneration cycle)
+
+**Found 2026-09-20** when PR #84 re-pinned the four doc-build workflows to the
+sibling CLIs `install.sh` names (md-cli 0.16.2, mk-cli 0.13.0, ms-cli 0.19.0)
+after `sibling-pin-check` went red on the v0.103.1 tag. With the CURRENT
+binaries installed, the builds that had been green only because their pins
+were stale went red -- honestly: `manual` lint reports three undocumented
+flags (`mnemonic restore --recalibrate-threads`, `ms hashlock --kind`,
+`ms hashlock --phrase-looks-like-digest-ok`) and `verify-examples` reports
+18 drifted transcript captures (quickstart 9, manual 3, technical-manual 6,
+e.g. `md1-decode-wsh-multi-2of3.cmd`, `ms1-decode-12word-abandon.cmd`,
+`54-verify-bundle-json-bip84.cmd`). Some drift is the md-codec 0.44 xpub-header
+change; each capture needs a look at WHAT changed before it is re-captured.
+Non-required contexts; master carries the red until this is done. Do not make
+them green by pinning older tools again.
+
+### `manual-gui-workflow-pins-md-cli-0-11-0-on-a-split-line` — a stale sibling pin the gate cannot see (tier: ci; owning phase: with the entry above)
+
+**Found 2026-09-20.** `.github/workflows/manual-gui.yml:162` installs
+`descriptor-mnemonic-md-cli-v0.11.0 md-cli --features cli-compiler` with
+`--git` and `--tag` on different lines, so `sibling-pin-check`'s one-line
+detector never sees it. Bump it with the docs regeneration (check that the
+`cli-compiler` feature still exists at 0.16.x first), and consider teaching the
+gate to join continuation lines.
+
+### `restore-cross-checks-one-slot-per-seed` — `mnemonic restore --from ms1=<seed> --account 0,1` verifies only the first slot a seed filled (tier: correctness; owning phase: next restore pass)
+
+**Found 2026-09-20** by the composer fable review r0, lens 3, M-3
+(`mnemonic-engrave/design/agent-reports/composer-fable-r0-steel-restore.md`).
+A seed at @0 (account 0) and @3 (account 1) plus two `key:` records: output
+`cosigner @0: ... <- your seed (verified)` and `cosigner @3: ... from md1 (not
+independently verified)`, stderr `PARTIAL: cross-checked 1/4 cosigners`, while
+`ms derive --template bip48-p2wsh --account 1` on the same plate reproduces
+@3's xpub exactly. The material is on the plates; the keyed-md1 cross-check
+stops at one position per seed.
+
+### `inspect-reports-stub-count-not-stub-values` — the stubs the device's stub screen tells the operator to compare are readable only through `mk decode` (tier: ux; owning phase: next inspect pass)
+
+**Found 2026-09-20**, lens 3 N-1. `mnemonic inspect` (text and `--json`) on a
+composer-minted card reports `policy_id_stub_count: 2`; `mk decode` reports
+`policy_id_stubs: b02b4403, 9db5d8b6` -- the template and policy stubs the
+screen printed. Print the values.
