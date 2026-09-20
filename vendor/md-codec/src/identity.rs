@@ -2,7 +2,7 @@
 
 use crate::bitstream::{BitWriter, re_emit_bits};
 use crate::canonicalize::{canonicalize_placeholder_indices, expand_per_at_n};
-use crate::encode::{Descriptor, encode_payload};
+use crate::encode::Descriptor;
 use crate::error::Error;
 use crate::phrase::Phrase;
 use crate::varint::write_varint;
@@ -11,7 +11,8 @@ use bitcoin::hashes::{Hash, sha256};
 /// 128-bit canonical identifier for an md1 encoding (spec §8).
 ///
 /// Computed as the first 16 bytes of `SHA-256` over the canonical
-/// bit-packed payload bytes produced by [`encode_payload`].
+/// bit-packed payload bytes produced by [`crate::encode::encode_payload`]
+/// (via the serialisation-only `encode_payload_for_identity`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Md1EncodingId([u8; 16]);
 
@@ -37,7 +38,11 @@ impl Md1EncodingId {
 /// Compute the [`Md1EncodingId`] for a descriptor by hashing its canonical
 /// bit-packed payload encoding (spec §8).
 pub fn compute_md1_encoding_id(d: &Descriptor) -> Result<Md1EncodingId, Error> {
-    let (bytes, _bit_len) = encode_payload(d)?;
+    // Serialisation only -- hashing a card that already exists must not apply
+    // mint-time admission policy, or every new refusal retroactively makes
+    // older cards undecodable through `chunk::reassemble`. See
+    // `encode::encode_payload_for_identity`.
+    let (bytes, _bit_len) = crate::encode::encode_payload_for_identity(d)?;
     let hash = sha256::Hash::hash(&bytes);
     let mut id = [0u8; 16];
     id.copy_from_slice(&hash.to_byte_array()[0..16]);

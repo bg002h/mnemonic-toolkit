@@ -102,7 +102,7 @@ fn p6_chain(d: &Descriptor) -> String {
         .assume_checked()
         .to_string();
     let expected = reparsed
-        .at_derivation_index(0)
+        .derive_at_index(0)
         .expect("P6 step 4: at_derivation_index")
         .address(Network::Bitcoin)
         .expect("P6 step 4: address")
@@ -621,13 +621,30 @@ fn upstream_taptree_depth2_display_asymmetry() {
         .to_string();
     assert!(addr.starts_with("bc1p"), "expected P2TR, got {addr}");
     assert_string_round_trip_or_oversize_reject(&c, "depth-2 taptree");
-    // …but the rendered STRING is not reparseable under pinned 13.0.0.
+    // …and since the ff4732e pin the rendered STRING re-parses too. This cell
+    // is INVERTED, as its previous version instructed: it asserted upstream was
+    // broken, and now asserts upstream is fixed, so a regression in either
+    // direction is caught by the same test rather than by its absence.
     let rendered_str = rendered.to_string();
+    let reparsed = miniscript::Descriptor::<DescriptorPublicKey>::from_str(&rendered_str)
+        .unwrap_or_else(|e| {
+            panic!(
+                "UPSTREAM REGRESSED: miniscript cannot reparse its own depth-2 \
+                 taptree Display ({rendered_str}): {e}"
+            )
+        });
+    // Re-Display must be STABLE, which is the half the old bug actually broke:
+    // a correctly-written depth-2 string used to parse fine and come back out
+    // flattened.
+    assert_eq!(
+        reparsed.to_string(),
+        rendered_str,
+        "depth-2 taptree does not survive a Display -> parse -> Display cycle"
+    );
+    // And the nesting must still be there, not flattened into one brace pair.
     assert!(
-        miniscript::Descriptor::<DescriptorPublicKey>::from_str(&rendered_str).is_err(),
-        "UPSTREAM FIXED? miniscript now reparses its own depth-2 taptree \
-         Display ({rendered_str}); restore the t_tr_tree depth-2 arm and \
-         invert this cell"
+        rendered_str.contains("},pk("),
+        "inner branch must close before the last leaf: {rendered_str}"
     );
 }
 
@@ -635,20 +652,39 @@ fn upstream_taptree_depth2_display_asymmetry() {
 
 #[test]
 fn self_test_bad_sortedmultia_wsh_leaf() {
-    // SortedMultiA anywhere — rust-miniscript v13 has no Terminal
-    // (FOLLOWUP `md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
+    // STILL A REFUSAL, and now for the RIGHT reason. It used to be refused
+    // because "rust-miniscript v13 has no Terminal" — an implementation limit
+    // that ended at the ff4732e pin. `sortedmulti_a` is TAPSCRIPT-ONLY
+    // (BIP-386/387), so inside `wsh` it is invalid by the standard, not by our
+    // capability. Its tap-leaf sibling below now converts; this one must not,
+    // or the fix widened admission into segwit v0.
     let d = descriptor_with_pubkeys(wrap(Tag::Wsh, multikeys(Tag::SortedMultiA, 1, vec![0, 1])));
     assert_p7_clean_refusal(&d);
 }
 
+/// FLIPPED 2026-08-20 (R5, Stage 3): a tap-leaf `sortedmulti_a` now CONVERTS.
+///
+/// This was a known-bad cell asserting a clean refusal, which was right while
+/// the conversion did not exist. BIP-386 places `sortedmulti_a()` in BIP-387's
+/// category — a sibling of the Miniscript fragments — so the taproot leaf is
+/// exactly where it is admissible, and upstream gained `Terminal::SortedMultiA`
+/// in the pinned rev. Encode already accepted this shape; only derive refused,
+/// so the CLI admitted a card it could not verify.
 #[test]
-fn self_test_bad_sortedmultia_tap_leaf() {
+fn self_test_sortedmultia_tap_leaf_converts() {
     let d = descriptor_with_pubkeys(tr_node(
         false,
         0,
         Some(multikeys(Tag::SortedMultiA, 2, vec![1, 2])),
     ));
-    assert_p7_clean_refusal(&d);
+    // p6_chain runs the full converter + wire round-trip and returns the first
+    // address, so a silent regression to "refused" fails here rather than
+    // passing as a skipped cell.
+    let addr = p6_chain(&d);
+    assert!(
+        addr.starts_with("bc1p"),
+        "a tap-leaf sortedmulti_a must derive a taproot address, got {addr}"
+    );
 }
 
 #[test]
@@ -1169,4 +1205,54 @@ fn t_generator_covers_all_fragments() {
             "T strategy never generated boundary older value {v:#x}"
         );
     }
+}
+
+/// GENERATOR COVERAGE: the depth-2 taptree arm is reached, not merely present.
+///
+/// `t_tr_tree`'s depth-2 arm was capped away while miniscript 13.0.0 mangled
+/// nested taptrees, and restored when the pin moved to ff4732e. Restoring an arm
+/// and having it never fire looks exactly like restoring it — every test still
+/// passes, and the shapes the whole tr()/wsh() feature is about go on being
+/// excluded from every property run. So this samples the strategy and requires
+/// a genuinely nested taptree to appear.
+///
+/// It asserts the SHAPE, not a count: `{{a,b},c}` means a TapTree node one of
+/// whose children is itself a TapTree.
+#[test]
+fn typed_generator_reaches_depth2_taptrees() {
+    use proptest::strategy::{Strategy, ValueTree};
+    use proptest::test_runner::TestRunner;
+
+    fn nested_taptree(n: &Node) -> bool {
+        match &n.body {
+            Body::Children(kids) => {
+                if n.tag == Tag::TapTree && kids.iter().any(|k| k.tag == Tag::TapTree) {
+                    return true;
+                }
+                kids.iter().any(nested_taptree)
+            }
+            Body::Tr { tree: Some(t), .. } => nested_taptree(t),
+            _ => false,
+        }
+    }
+
+    let mut runner = TestRunner::deterministic();
+    let strategy = common::typed_descriptor_strategy();
+    let mut seen = 0;
+    const SAMPLES: usize = 400;
+    for _ in 0..SAMPLES {
+        let d = strategy
+            .new_tree(&mut runner)
+            .expect("strategy value")
+            .current();
+        if nested_taptree(&d.tree) {
+            seen += 1;
+        }
+    }
+    assert!(
+        seen > 0,
+        "no depth-2 taptree in {SAMPLES} samples — the t_tr_tree depth-2 arm is \
+         present but unreachable, so nested shapes are still untested"
+    );
+    eprintln!("depth-2 taptrees in {SAMPLES} samples: {seen}");
 }

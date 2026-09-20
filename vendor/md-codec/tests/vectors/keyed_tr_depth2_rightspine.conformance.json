@@ -1,0 +1,62 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1psyzqndustsn4x4t8cqhyyxu3maw06g9s3l9acqyswxhx6p9qpt2q26gas5",
+        "bc1p3yk6y2mraujeguzrk7nzhahpa00p4ws8lvkg8jszsm9649n5vjdsge4fd9",
+        "bc1psejk0qxpv96v8fnst0wjujpt7dgl57ma7xvh33z2sykh4taw6nhq433hj0"
+      ],
+      "descriptor": "tr([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*,{pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),{pk([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/0/*),pk([73c5da0a/48'/0'/3'/2']xpub6DXuQW1Q2JpZy6ncYa6zqDahP2yfNCq45c41ZU7gRYxxB8uC6nCumhgpmSHhMVS7WFvCwGf1zxnjtQ8m9r67TDMC4TpWHPVT38qEDiWjB8m/0/*)}})#wydkuw87"
+    },
+    "1": {
+      "addresses": [
+        "bc1paldmqvd3nk0e2cp8njrnmz0ff9w57fs48tyd2pp3hspdhxhn5htsc8nsvv",
+        "bc1px7kmx7qx6rudjfzkf8uu2rddet5ydmkndjjulzgnz5llqx2z6rusyj8jqg",
+        "bc1ph0mksv78nczay6ldua57v8nh525s8h39rft5lury55slvrzq63qscpegz6"
+      ],
+      "descriptor": "tr([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*,{pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),{pk([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/1/*),pk([73c5da0a/48'/0'/3'/2']xpub6DXuQW1Q2JpZy6ncYa6zqDahP2yfNCq45c41ZU7gRYxxB8uC6nCumhgpmSHhMVS7WFvCwGf1zxnjtQ8m9r67TDMC4TpWHPVT38qEDiWjB8m/1/*)}})#jjw60v5e"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 2
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 3
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    },
+    {
+      "index": 2,
+      "xpub": "xpub6EGx8sPr9FxPPE1rbZazhqWwpMXA3Hf5DYKtZbL7c4BSddzmQktp96UaTvecEkoCZysuaj79GMCFZYT1KKk7Ph2M3Kf5g8B82KZ8TZ9SKQR"
+    },
+    {
+      "index": 3,
+      "xpub": "xpub6E6Z3Ss5TXJYNJp4U1q3NZ3pCn82i7KXQAKUtNnzLJ3cCdchQeSdFvXemizaHUF7wNwRQAB8mPdoZhGHLiv49cWPtCnoJY3Az3E8JKxH9Mq"
+    }
+  ],
+  "md1_encoding_id": "ce67ca11dda1d958dded3de7fb549290",
+  "name": "keyed_tr_depth2_rightspine",
+  "path": null,
+  "template": "tr(@0/48'/0'/0'/2'/<0;1>/*,{pk(@1/48'/0'/1'/2'/<0;1>/*),{pk(@2/48'/0'/2'/2'/<0;1>/*),pk(@3/48'/0'/3'/2'/<0;1>/*)}})",
+  "wallet_descriptor_template_id": "58df599e3786616693815d55037ec476",
+  "wallet_policy_id": "ee97ef9ac7022cea4d88d8009b50aa48"
+}

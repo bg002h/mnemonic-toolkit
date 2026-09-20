@@ -1,0 +1,46 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1p2ps82seqkfnl6a02eznxqmyqye5ruvdrpagvw6qrg3k6gd7x95mq4cmjyc",
+        "bc1pne93ph6acfeh49mts45l5nvqtqytme5m7nuhmaa20m4y6lptz24s0rmhep",
+        "bc1p42y29er23vyvnhqtt5029z2qgsr2ux6jmdcf3wngr6v84fnwrquqg0329s"
+      ],
+      "descriptor": "tr([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*,pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*))#dgkgp2me"
+    },
+    "1": {
+      "addresses": [
+        "bc1pga3t0asl8tkt97rjyncf52q6358gws2v32s7kvh7zqedtm4cd6ys5gxv4t",
+        "bc1p2p3nvx74mq4yvgd3t0akhmsdc7qgfhztth7zc7vex2fjjkx3752qjag2kg",
+        "bc1ptn7c9fjqdm2sl9ycsp8z0a5fy0ddckk2p0wc80hxdpk5ajjlhvdsa855qu"
+      ],
+      "descriptor": "tr([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*,pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*))#apddsraq"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    }
+  ],
+  "md1_encoding_id": "e0a829dbd45e7bad09262103b9c48e06",
+  "name": "keyed_tr_with_leaf",
+  "path": null,
+  "template": "tr(@0/48'/0'/0'/2'/<0;1>/*,pk(@1/48'/0'/1'/2'/<0;1>/*))",
+  "wallet_descriptor_template_id": "c8fe87cd5fb7351db12479a2bab8f8ad",
+  "wallet_policy_id": "b671300106bf245d39850bbbfefd8f62"
+}

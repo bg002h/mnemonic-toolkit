@@ -1,0 +1,54 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qdk06fyaltxuy4c49wgjdzyrwpadwlxuxp9uxq8klc8dsnrpjq5pqvfd2cy",
+        "bc1qmfa7x9wywzmam2heqedhqctm6hq7yan2pmkkhjnf7vkeymg7pg4qvn845q",
+        "bc1qd6ysumhztppnyy2pjgmdd7fc46hk8066vm5fpghjs0zdkf62hpdq5f26h4"
+      ],
+      "descriptor": "wsh(or_i(pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*),or_i(and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),older(4032)),and_v(v:pkh([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/0/*),after(1000000)))))#ltq6dfvh"
+    },
+    "1": {
+      "addresses": [
+        "bc1qek50u7z385vq3evwrz9e84guhl6uu9cedqvah5mtf5jj09ngyp2s48nhl0",
+        "bc1qxh0nw5cufgmzmhhmney3kkc0um8dtf6pkscxwdrkrgllgclj5g6sfzruyd",
+        "bc1qm2tq6e0mrf0p5kh2ejnlmxt5fk3lsuewnpdrfyxh2xu0xmzwr6lsjnln75"
+      ],
+      "descriptor": "wsh(or_i(pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*),or_i(and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),older(4032)),and_v(v:pkh([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/1/*),after(1000000)))))#4ygpwwlh"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 2
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    },
+    {
+      "index": 2,
+      "xpub": "xpub6EGx8sPr9FxPPE1rbZazhqWwpMXA3Hf5DYKtZbL7c4BSddzmQktp96UaTvecEkoCZysuaj79GMCFZYT1KKk7Ph2M3Kf5g8B82KZ8TZ9SKQR"
+    }
+  ],
+  "md1_encoding_id": "223c20f839ddfa51a91811b0d650eb55",
+  "name": "keyed_compose_wsh_three_paths",
+  "path": null,
+  "template": "wsh(or_i(pkh(@0/48'/0'/0'/2'/<0;1>/*),or_i(and_v(v:pkh(@1/48'/0'/1'/2'/<0;1>/*),older(4032)),and_v(v:pkh(@2/48'/0'/2'/2'/<0;1>/*),after(1000000)))))",
+  "wallet_descriptor_template_id": "6dd89f4930461d2a9dd00b8c48c881c0",
+  "wallet_policy_id": "42cde9deb4785c9390512663419bd367"
+}

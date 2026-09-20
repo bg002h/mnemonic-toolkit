@@ -1,0 +1,356 @@
+{
+  "n": 8,
+  "path_decl": {
+    "tag": "Divergent",
+    "data": [
+      "m/48'/0'/0'/2'",
+      "m/48'/0'/1'/2'",
+      "m/48'/0'/2'/2'",
+      "m/48'/0'/3'/2'",
+      "m/48'/0'/4'/2'",
+      "m/48'/0'/5'/2'",
+      "m/48'/0'/6'/2'",
+      "m/48'/0'/7'/2'"
+    ]
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Wsh",
+    "body": {
+      "kind": "Children",
+      "data": [
+        {
+          "tag": "OrI",
+          "body": {
+            "kind": "Children",
+            "data": [
+              {
+                "tag": "AndV",
+                "body": {
+                  "kind": "Children",
+                  "data": [
+                    {
+                      "tag": "Verify",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "PkH",
+                            "body": {
+                              "kind": "KeyArg",
+                              "data": {
+                                "index": 0
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "tag": "Older",
+                      "body": {
+                        "kind": "Timelock",
+                        "data": 100
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tag": "OrI",
+                "body": {
+                  "kind": "Children",
+                  "data": [
+                    {
+                      "tag": "AndV",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "Verify",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "PkH",
+                                  "body": {
+                                    "kind": "KeyArg",
+                                    "data": {
+                                      "index": 1
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "Older",
+                            "body": {
+                              "kind": "Timelock",
+                              "data": 101
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "tag": "OrI",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "AndV",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "Verify",
+                                  "body": {
+                                    "kind": "Children",
+                                    "data": [
+                                      {
+                                        "tag": "PkH",
+                                        "body": {
+                                          "kind": "KeyArg",
+                                          "data": {
+                                            "index": 2
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "tag": "Older",
+                                  "body": {
+                                    "kind": "Timelock",
+                                    "data": 102
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "OrI",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "AndV",
+                                  "body": {
+                                    "kind": "Children",
+                                    "data": [
+                                      {
+                                        "tag": "Verify",
+                                        "body": {
+                                          "kind": "Children",
+                                          "data": [
+                                            {
+                                              "tag": "PkH",
+                                              "body": {
+                                                "kind": "KeyArg",
+                                                "data": {
+                                                  "index": 3
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      {
+                                        "tag": "Older",
+                                        "body": {
+                                          "kind": "Timelock",
+                                          "data": 103
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "tag": "OrI",
+                                  "body": {
+                                    "kind": "Children",
+                                    "data": [
+                                      {
+                                        "tag": "AndV",
+                                        "body": {
+                                          "kind": "Children",
+                                          "data": [
+                                            {
+                                              "tag": "Verify",
+                                              "body": {
+                                                "kind": "Children",
+                                                "data": [
+                                                  {
+                                                    "tag": "PkH",
+                                                    "body": {
+                                                      "kind": "KeyArg",
+                                                      "data": {
+                                                        "index": 4
+                                                      }
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            {
+                                              "tag": "Older",
+                                              "body": {
+                                                "kind": "Timelock",
+                                                "data": 104
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      {
+                                        "tag": "OrI",
+                                        "body": {
+                                          "kind": "Children",
+                                          "data": [
+                                            {
+                                              "tag": "AndV",
+                                              "body": {
+                                                "kind": "Children",
+                                                "data": [
+                                                  {
+                                                    "tag": "Verify",
+                                                    "body": {
+                                                      "kind": "Children",
+                                                      "data": [
+                                                        {
+                                                          "tag": "PkH",
+                                                          "body": {
+                                                            "kind": "KeyArg",
+                                                            "data": {
+                                                              "index": 5
+                                                            }
+                                                          }
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  {
+                                                    "tag": "Older",
+                                                    "body": {
+                                                      "kind": "Timelock",
+                                                      "data": 105
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            },
+                                            {
+                                              "tag": "OrI",
+                                              "body": {
+                                                "kind": "Children",
+                                                "data": [
+                                                  {
+                                                    "tag": "AndV",
+                                                    "body": {
+                                                      "kind": "Children",
+                                                      "data": [
+                                                        {
+                                                          "tag": "Verify",
+                                                          "body": {
+                                                            "kind": "Children",
+                                                            "data": [
+                                                              {
+                                                                "tag": "PkH",
+                                                                "body": {
+                                                                  "kind": "KeyArg",
+                                                                  "data": {
+                                                                    "index": 6
+                                                                  }
+                                                                }
+                                                              }
+                                                            ]
+                                                          }
+                                                        },
+                                                        {
+                                                          "tag": "Older",
+                                                          "body": {
+                                                            "kind": "Timelock",
+                                                            "data": 106
+                                                          }
+                                                        }
+                                                      ]
+                                                    }
+                                                  },
+                                                  {
+                                                    "tag": "AndV",
+                                                    "body": {
+                                                      "kind": "Children",
+                                                      "data": [
+                                                        {
+                                                          "tag": "Verify",
+                                                          "body": {
+                                                            "kind": "Children",
+                                                            "data": [
+                                                              {
+                                                                "tag": "PkH",
+                                                                "body": {
+                                                                  "kind": "KeyArg",
+                                                                  "data": {
+                                                                    "index": 7
+                                                                  }
+                                                                }
+                                                              }
+                                                            ]
+                                                          }
+                                                        },
+                                                        {
+                                                          "tag": "Older",
+                                                          "body": {
+                                                            "kind": "Timelock",
+                                                            "data": 107
+                                                          }
+                                                        }
+                                                      ]
+                                                    }
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": null,
+    "pubkeys": null,
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}

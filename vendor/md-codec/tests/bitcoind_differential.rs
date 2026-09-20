@@ -115,7 +115,10 @@ struct Shape {
     desc: Descriptor,
 }
 
-/// The 10 R0-PROVEN corpus shapes (md-codec-derivable ∩ bitcoind-sane).
+/// The R0-PROVEN corpus shapes (md-codec-derivable ∩ bitcoind-sane).
+/// COUNT IS NOT STATED HERE ON PURPOSE: this comment said "10" while the
+/// corpus held 16, and the test's own output uses `corpus().len()` and was
+/// always right. Never hand-count what a tool can count.
 /// Each built the SAME way `address_derivation.rs` builds its
 /// descriptors (same abandon-mnemonic xpub vectors, same TLV
 /// construction).
@@ -478,6 +481,109 @@ fn corpus() -> Vec<Shape> {
                 tlv: pubkeys(vec![(0u8, account_xpub_bytes("m/84'/0'/0'"))]),
             },
         },
+        // ─── F-538: THE OTHER THREE HASH KINDS, MEASURED BY CORE ────────────
+        //
+        // SPEC_hashlock_kinds §12 item 1 asks that each kind's address match
+        // Core's measured value. Shape 12 above covered sha256 and nothing
+        // covered the rest -- so the corpus that pins these addresses came
+        // from rust-miniscript, the same library md-codec's converter
+        // delegates to, and agreed with itself. A wrong hashop would have
+        // produced a self-consistent address and passed.
+        //
+        // Core is a different implementation in a different language. These
+        // three are shape 12 with the tag and body changed and nothing else,
+        // so a difference here is the hashop or the width and cannot be
+        // anything about keys, paths or the wrapper.
+        // 12a. hash256 = sha256d. SAME 32-byte body as shape 12 and a DIFFERENT opcode --
+        //      the pair with no structural signal between them (§3 F4), which is
+        //      exactly why an external oracle is worth having here.
+        Shape {
+            label: "wsh(and_v(v:pk, hash256))",
+            desc: Descriptor {
+                n: 1,
+                path_decl: PathDecl {
+                    n: 1,
+                    paths: PathDeclPaths::Shared(origin(&[(true, 84), (true, 0), (true, 0)])),
+                },
+                use_site_path: UseSitePath::standard_multipath(),
+                tree: Node {
+                    tag: Tag::Wsh,
+                    body: Body::Children(vec![Node {
+                        tag: Tag::AndV,
+                        body: Body::Children(vec![
+                            Node {
+                                tag: Tag::Verify,
+                                body: Body::Children(vec![pkk(0)]),
+                            },
+                            Node {
+                                tag: Tag::Hash256,
+                                body: Body::Hash256Body([0x42; 32]),
+                            },
+                        ]),
+                    }]),
+                },
+                tlv: pubkeys(vec![(0u8, account_xpub_bytes("m/84'/0'/0'"))]),
+            },
+        },
+        // 12b. ripemd160, the bare primitive. 20-byte body.
+        Shape {
+            label: "wsh(and_v(v:pk, ripemd160))",
+            desc: Descriptor {
+                n: 1,
+                path_decl: PathDecl {
+                    n: 1,
+                    paths: PathDeclPaths::Shared(origin(&[(true, 84), (true, 0), (true, 0)])),
+                },
+                use_site_path: UseSitePath::standard_multipath(),
+                tree: Node {
+                    tag: Tag::Wsh,
+                    body: Body::Children(vec![Node {
+                        tag: Tag::AndV,
+                        body: Body::Children(vec![
+                            Node {
+                                tag: Tag::Verify,
+                                body: Body::Children(vec![pkk(0)]),
+                            },
+                            Node {
+                                tag: Tag::Ripemd160,
+                                body: Body::Hash160Body([0x42; 20]),
+                            },
+                        ]),
+                    }]),
+                },
+                tlv: pubkeys(vec![(0u8, account_xpub_bytes("m/84'/0'/0'"))]),
+            },
+        },
+        // 12c. hash160 = ripemd160(sha256(x)). Same 20-byte WIDTH as 12b and a different
+        //      function -- the second same-width pair.
+        Shape {
+            label: "wsh(and_v(v:pk, hash160))",
+            desc: Descriptor {
+                n: 1,
+                path_decl: PathDecl {
+                    n: 1,
+                    paths: PathDeclPaths::Shared(origin(&[(true, 84), (true, 0), (true, 0)])),
+                },
+                use_site_path: UseSitePath::standard_multipath(),
+                tree: Node {
+                    tag: Tag::Wsh,
+                    body: Body::Children(vec![Node {
+                        tag: Tag::AndV,
+                        body: Body::Children(vec![
+                            Node {
+                                tag: Tag::Verify,
+                                body: Body::Children(vec![pkk(0)]),
+                            },
+                            Node {
+                                tag: Tag::Hash160,
+                                body: Body::Hash160Body([0x42; 20]),
+                            },
+                        ]),
+                    }]),
+                },
+                tlv: pubkeys(vec![(0u8, account_xpub_bytes("m/84'/0'/0'"))]),
+            },
+        },
         // 13. absolute-timelock wsh(and_v(v:pk, after(800000))) — a height
         //     CLTV. Mirrors shape 9 with Tag::Older→Tag::After (the OTHER
         //     Body::Timelock tag) at a block height < 500_000_000 so it is
@@ -646,6 +752,90 @@ fn corpus() -> Vec<Shape> {
                 },
             }
         },
+        // 17. NESTED taptree, depth 2 — tr(@0,{{pk(@1),pk(@2)},pk(@3)}).
+        //
+        // Added 2026-08-19, and it closes a real hole. The corpus had sixteen
+        // shapes and NOT ONE was a nested taptree: `tr keypath`,
+        // `tr(NUMS, multi_a)` and `tr(key, multi_a)` are all depth ≤ 1. So
+        // depth-≥2 address correctness had NEVER been checked against Bitcoin
+        // Core, even though md encodes, decodes and derives for it today
+        // (measured: the template round-trips with its nesting intact and
+        // yields addresses).
+        //
+        // "It produced an address" is not "it produced the RIGHT address",
+        // which is the whole reason this corpus exists.
+        //
+        // This is also the evidence DD6's EXPERIMENTAL advisory should rest
+        // on. That advisory says depth-≥2 "recovery is not possible with
+        // shipped tooling" — true while md depended on upstream's `Display`,
+        // which mangled non-caterpillar trees. PR #953 fixes it and is merged
+        // but STILL UNRELEASED (verified with `git merge-base --is-ancestor`:
+        // ff4732e is not an ancestor of miniscript-13.1.0), so the workspace
+        // `Cargo.toml` `[patch.crates-io]` pins miniscript to a git rev
+        // carrying it. `md-cli/src/compile.rs` renders taproot templates via
+        // upstream `Descriptor::to_string()` directly — the local
+        // `render_tr_template` port of #953's algorithm this comment used to
+        // name became redundant once the pin carried the fix, and P1 deleted
+        // it (`all-features-suite-is-red-and-ungated-by-ci`). What remained
+        // missing was an INDEPENDENT check, and that is this shape.
+        //
+        // Shaped as the unbalanced 3-leaf tree rather than the balanced
+        // 4-leaf one on purpose: `{{A,B},C}` has a DECREASING leaf-depth
+        // sequence (2,2,1), which is exactly the case upstream's pre-#953
+        // formatter gets wrong. A balanced tree would round-trip even with
+        // the bug and prove nothing.
+        {
+            let a = account_xpub_bytes("m/86'/0'/0'");
+            let b = account_xpub_bytes("m/86'/0'/1'");
+            let c = account_xpub_bytes("m/86'/0'/2'");
+            let d = account_xpub_bytes("m/86'/0'/3'");
+            Shape {
+                label: "tr(key, nested taptree depth-2 {{A,B},C})",
+                desc: Descriptor {
+                    n: 4,
+                    path_decl: PathDecl {
+                        n: 4,
+                        paths: PathDeclPaths::Divergent(vec![
+                            origin(&[(true, 86), (true, 0), (true, 0)]),
+                            origin(&[(true, 86), (true, 0), (true, 1)]),
+                            origin(&[(true, 86), (true, 0), (true, 2)]),
+                            origin(&[(true, 86), (true, 0), (true, 3)]),
+                        ]),
+                    },
+                    use_site_path: UseSitePath::standard_multipath(),
+                    tree: Node {
+                        tag: Tag::Tr,
+                        body: Body::Tr {
+                            is_nums: false,
+                            key_index: 0,
+                            tree: Some(Box::new(Node {
+                                tag: Tag::TapTree,
+                                body: Body::Children(vec![
+                                    Node {
+                                        tag: Tag::TapTree,
+                                        body: Body::Children(vec![
+                                            Node {
+                                                tag: Tag::PkK,
+                                                body: Body::KeyArg { index: 1 },
+                                            },
+                                            Node {
+                                                tag: Tag::PkK,
+                                                body: Body::KeyArg { index: 2 },
+                                            },
+                                        ]),
+                                    },
+                                    Node {
+                                        tag: Tag::PkK,
+                                        body: Body::KeyArg { index: 3 },
+                                    },
+                                ]),
+                            })),
+                        },
+                    },
+                    tlv: pubkeys(vec![(0u8, a), (1u8, b), (2u8, c), (3u8, d)]),
+                },
+            }
+        },
     ]
 }
 
@@ -708,7 +898,7 @@ fn bitcoin_cli(w: &Wiring, args: &[&str]) -> serde_json::Value {
 
 // ─── The differential ────────────────────────────────────────────────────
 
-/// For the 10 R0-proven corpus shapes × 2 chains × indices 0..=N, derive
+/// For each R0-proven corpus shape × 2 chains × indices 0..=N, derive
 /// each address via md-codec AND via a PRE-RUNNING offline `-chain=main`
 /// bitcoind v27.0, and assert byte-equality. Plus the per-shape checksum
 /// round-trip self-test and a pinned anti-vacuity golden.
@@ -744,14 +934,19 @@ fn bitcoind_address_differential() {
             // /0/* or /1/*, checksummed) — bitcoind's input is derived
             // from exactly the string md-codec derives from. NEVER the
             // <0;1> multipath form (bitcoind rejects it).
-            let desc = md_codec::to_miniscript::to_miniscript_descriptor(&shape.desc, chain)
+            // `.to_string()` again since the ff4732e pin: PR #953 fixed
+            // upstream's Display, which used to flatten a non-caterpillar
+            // taptree, and md-codec's `render_descriptor` port is gone. Shape 17
+            // is the depth-2 case that proves the nesting survives, and it runs
+            // against Bitcoin Core here.
+            let d = md_codec::to_miniscript::to_miniscript_descriptor(&shape.desc, chain)
                 .unwrap_or_else(|e| {
                     panic!(
                         "md-codec failed to render {} chain {chain}: {e}",
                         shape.label
                     )
-                })
-                .to_string();
+                });
+            let desc = d.to_string();
 
             // [I3a] Checksum round-trip: bitcoind's computed checksum MUST
             // equal the #csum md-codec/miniscript already put in `desc`.
@@ -860,9 +1055,17 @@ fn bitcoind_address_differential() {
     );
     eprintln!(
         "bitcoind differential PASS: {} shapes × 2 chains × {} indices = {} address checks \
-         (+ checksum round-trip per shape×chain), all byte-identical vs bitcoind v27.0",
+         (+ checksum round-trip per shape×chain), all byte-identical vs {}",
         corpus().len(),
         N + 1,
-        total_checks
+        total_checks,
+        // MEASURED, not asserted. This line hardcoded "bitcoind v27.0" and
+        // printed it verbatim while the node answering was v25.0.0 — a claim
+        // the test made about its own oracle without ever asking. Never
+        // hand-write what a tool can report.
+        bitcoin_cli(&w, &["getnetworkinfo"])
+            .get("subversion")
+            .and_then(|v| v.as_str())
+            .unwrap_or("bitcoind (subversion unavailable)")
     );
 }

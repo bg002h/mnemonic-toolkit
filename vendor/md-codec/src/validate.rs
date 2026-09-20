@@ -177,6 +177,78 @@ pub fn validate_use_site_overrides_canonical(
 }
 
 /// Validate that all leaves in a tap-script-tree are permitted-leaf tags per §6.3.1.
+/// Refuse an `older()` whose written value is not the delay consensus enforces.
+///
+/// BIP-68 gives a relative locktime only 16 bits of magnitude plus a units
+/// flag: bit 31 disables, bit 22 selects blocks-vs-512-second-units, bits 0-15
+/// carry the value, and **every other bit is ignored**. Writing a larger number
+/// does not fail anywhere -- it silently means something else:
+///
+/// | written | enforced |
+/// | --- | --- |
+/// | `older(65535)` | 65535 blocks |
+/// | `older(65536)` | **0** -- no lock at all |
+/// | `older(210000)` | 13392 blocks |
+/// | `older(420000)` | 26784 blocks |
+///
+/// The codec round-trips all of them faithfully, and rust-miniscript accepts
+/// them, so nothing downstream notices. That is tolerable for a string and not
+/// tolerable for a plate: an engraved backup asserting a four-year lock that
+/// the chain releases in three months is a funds-safety defect.
+///
+/// A relative lock cannot express a longer delay at all (65535 blocks ~ 1.25
+/// years; 65535 x 512s ~ 388 days), so the fix is always an absolute
+/// `after(height)`, never a bigger `older()`.
+///
+/// **This codec does NOT call it, deliberately.** A codec's job is to
+/// round-trip anything the descriptor layer accepts, and rust-miniscript 13.0.0
+/// accepts these values -- `proptest_to_miniscript`'s
+/// `self_test_older_0x10000_miniscript_leniency` pins exactly that, so a
+/// refusal here would break the round-trip property rather than protect
+/// anyone. The same split is already specified in `mnemonic-toolkit`
+/// (`SPEC_older_timelock_mask_gate.md`, a blocking gate on the AUTHORING
+/// surface; `SPEC_older_timelock_advisory.md`, a non-blocking advisory on
+/// INTAKE surfaces, scoped "toolkit-only, no md-codec changes").
+///
+/// So this is an opt-in helper for the surfaces that MINT an artifact --
+/// `md encode` calls it, because a plate is authored once and read for years.
+pub fn validate_relative_timelocks(root: &Node) -> Result<(), Error> {
+    // The bits BIP-68 actually reads. Anything outside this mask is discarded
+    // by consensus, so its presence means the written value is misleading.
+    const CONSENSUS_BITS: u32 = 0xFFFF | (1 << 22);
+    walk_older(root, CONSENSUS_BITS)
+}
+
+fn walk_older(node: &Node, consensus_bits: u32) -> Result<(), Error> {
+    if matches!(node.tag, Tag::Older) {
+        if let Body::Timelock(v) = &node.body {
+            if v & !consensus_bits != 0 {
+                let time_based = v & (1 << 22) != 0;
+                return Err(Error::RelativeTimelockTruncated {
+                    written: *v,
+                    enforced: v & 0xFFFF,
+                    units: if time_based {
+                        "512-second units"
+                    } else {
+                        "blocks"
+                    },
+                });
+            }
+        }
+    }
+    match &node.body {
+        Body::Children(children) => {
+            for c in children {
+                walk_older(c, consensus_bits)?;
+            }
+        }
+        Body::Tr { tree: Some(t), .. } => walk_older(t, consensus_bits)?,
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Validate that all leaves in a tap-script-tree are permitted-leaf tags per §6.3.1.
 pub fn validate_tap_script_tree(node: &Node) -> Result<(), Error> {
     walk_tap_tree_leaves(node)
 }
@@ -264,6 +336,183 @@ pub fn validate_xpub_bytes(d: &Descriptor) -> Result<(), Error> {
     Ok(())
 }
 
+/// Validate that no two `@N` slots carry the same key at the same use-site
+/// (F-218).
+///
+/// Such a policy reads as k-of-n and is satisfiable by fewer parties than it
+/// names: one key seated twice lets its holder produce two of the required
+/// signatures. The script is legal; the wallet is not what it looks like.
+///
+/// THE COMPARISON IS `(xpub, use_site_path)`, and each half is load-bearing:
+///
+/// - The 65-byte `chain code ‖ compressed pubkey` rather than the fingerprint
+///   (which identifies a MASTER, so it would refuse the legitimate cosigner
+///   contributing two accounts) or the base58 string (which carries
+///   depth/parent metadata differing between two sources of one key, so it
+///   would MISS a real duplicate that arrived by two routes).
+/// - The use-site, because the same xpub at two different multipath branches
+///   derives a different child at every index — `<0;1>` and `<2;3>` over one
+///   key are two different wallets, not a duplicate. Measured, not assumed.
+///
+/// **WHAT THIS DOES NOT SAY (corrected, mdcli-mini P2).** That a disjoint-use-
+/// site pair is not a DUPLICATE is a statement about this check's comparison,
+/// and it was read as a statement that the shape is fine to mint. It is not:
+/// spelled with two placeholders, the policy repeats the key in BIP 388's key
+/// information vector, which its pairwise-distinctness rule forbids. `md-cli` refuses that
+/// spelling one layer up (its N1 taxonomy's R-N1d,
+/// `design/SPEC_mdcli_mini.md`).
+///
+/// This validator deliberately keeps its own, narrower boundary. It is the
+/// WIRE-level floor and md-cli is not its only consumer, so widening it here
+/// would impose a host-side admission policy on every caller of this crate —
+/// and, because it runs inside `encode_payload`, it would make already-engraved
+/// plates of the disjoint shape unreadable through `inspect` and `verify`,
+/// which re-enter that path on a DECODED card.
+///
+/// DISTINCT FROM [`validate_origin_key_consistency`], and the pair is easy to
+/// conflate: one origin bound to two DIFFERENT keys is IMPOSSIBLE and refused
+/// as malformed; one key in two slots is merely UNSAFE. Separate errors,
+/// because one message explaining both would explain neither.
+pub fn validate_no_duplicate_key_slots(d: &Descriptor) -> Result<(), Error> {
+    // As in the sibling check: an expansion failure belongs to whichever
+    // validator owns it, not to this one.
+    let Ok(expanded) = crate::canonicalize::expand_per_at_n(d) else {
+        return Ok(());
+    };
+    for (i, a) in expanded.iter().enumerate() {
+        let Some(xa) = a.xpub else { continue };
+        for b in &expanded[i + 1..] {
+            let Some(xb) = b.xpub else { continue };
+            if xa == xb && a.use_site_path == b.use_site_path {
+                return Err(Error::DuplicateKeySlots {
+                    a: a.idx,
+                    b: b.idx,
+                    n: d.n,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validate that no two `@N` slots claim the SAME key origin while carrying
+/// DIFFERENT keys (F-217).
+///
+/// BIP-32 is deterministic: a `(master fingerprint, derivation path)` pair
+/// identifies exactly ONE extended key. A card binding one such pair to two
+/// different xpubs therefore describes a wallet that cannot exist, and saying so
+/// takes no seed, no network and no derivation — it is a pure function of the
+/// card.
+///
+/// WHY THIS HAS TO BE ITS OWN CHECK. Nothing else can see it. Addresses derive
+/// from the xpubs a card CARRIES, never from the origin it declares, so every
+/// address comparison — including cross-language conformance over the whole
+/// corpus — passes identically whether the origins are right or nonsense. The
+/// origin is what a *signer* uses to find its key, so an unchecked contradiction
+/// surfaces for the first time when someone tries to spend.
+///
+/// It was found the hard way: `md encode --path` flattens per-key ("Divergent")
+/// origins to a single shared one, and **9 of 9** multi-key keyed conformance
+/// vectors were contradictory, with zero consistent. The corpus that gates the
+/// Go port against Rust pinned an impossible shape in every entry where the
+/// question could be asked.
+///
+/// SCOPE, stated rather than implied:
+/// - Both slots must carry a fingerprint, and an all-zero one does NOT count:
+///   `[0u8; 4]` is the absent sentinel, so a slot carrying it names no master
+///   just as surely as a slot carrying none. Without a master the origin path
+///   names no key, so no contradiction is provable and none is claimed.
+/// - Both slots must carry an xpub. A template has no keys to disagree about.
+/// - Two slots holding the SAME xpub at the same origin are CONSISTENT here.
+///   That is key reuse across slots, a different hazard with a different
+///   remedy (F-218), and conflating them would make one refusal explain two
+///   problems badly.
+pub fn validate_origin_key_consistency(d: &Descriptor) -> Result<(), Error> {
+    // AN EXPANSION FAILURE IS NOT THIS CHECK'S ERROR TO RAISE. expand_per_at_n
+    // fails for its own reasons — a missing explicit origin, a dead card — and
+    // propagating those from here turned twenty unrelated tests red, including
+    // the whole partial-decode suite, by converting "this validator had nothing
+    // to look at" into "encoding failed". If the keys cannot be expanded there
+    // is no contradiction to prove, and whichever validator owns that failure
+    // will report it in its own words.
+    let Ok(expanded) = crate::canonicalize::expand_per_at_n(d) else {
+        return Ok(());
+    };
+    // `[0u8; 4]` is the ABSENT sentinel, not a master. It is what a producer
+    // writes when there IS no master to name -- the same value BIP-32 uses for
+    // a depth-0 key's parent fingerprint -- so two slots carrying it are two
+    // ABSENCES, and the scope note above ("without one ... no contradiction is
+    // provable") is about exactly them. `Some([0,0,0,0])` satisfied the
+    // `Some(_)` while meaning what `None` means.
+    //
+    // MEASURED: `mnemonic bundle` emits `[00000000/m]` for a WIF slot, since a
+    // WIF has no master and no path, so a legal 2-of-2 of two DISTINCT WIFs was
+    // refused. And because `chunk::reassemble` recomputes the encoding id via
+    // `encode_payload`, that refusal reached DECODE -- an already-engraved card
+    // of that shape stopped being READABLE, which is a far worse outcome than
+    // the advisory this check exists to give.
+    //
+    // What the exemption gives up: a genuine master whose fingerprint really is
+    // `00000000`, a 1-in-2^32 accident, loses one advisory on a card that names
+    // its master with the sentinel for "no master". Nothing else narrows -- a
+    // real shared fingerprint still contradicts, pinned by the control test in
+    // `tests/zero_fingerprint_is_absent.rs`.
+    const ABSENT_FINGERPRINT: [u8; 4] = [0, 0, 0, 0];
+    for (i, a) in expanded.iter().enumerate() {
+        let (Some(fp_a), Some(x_a)) = (a.fingerprint, a.xpub) else {
+            continue;
+        };
+        if fp_a == ABSENT_FINGERPRINT {
+            continue;
+        }
+        for b in &expanded[i + 1..] {
+            let (Some(fp_b), Some(x_b)) = (b.fingerprint, b.xpub) else {
+                continue;
+            };
+            if fp_b == ABSENT_FINGERPRINT {
+                continue;
+            }
+            if fp_a != fp_b || a.origin_path != b.origin_path || x_a == x_b {
+                continue;
+            }
+            return Err(Error::OriginKeyContradiction {
+                a: a.idx,
+                b: b.idx,
+                fingerprint: hex_fingerprint(&fp_a),
+                path: render_origin_path(&a.origin_path),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn hex_fingerprint(fp: &[u8; 4]) -> String {
+    use std::fmt::Write as _;
+    fp.iter().fold(String::with_capacity(8), |mut acc, b| {
+        let _ = write!(acc, "{b:02x}");
+        acc
+    })
+}
+
+/// Render an origin path in BIP-32 notation, for a refusal an operator can
+/// match against what their coordinator shows.
+fn render_origin_path(p: &crate::origin_path::OriginPath) -> String {
+    if p.components.is_empty() {
+        return "m".into();
+    }
+    p.components
+        .iter()
+        .map(|c| {
+            if c.hardened {
+                format!("{}'", c.value)
+            } else {
+                c.value.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 /// Validate that no `OriginPathOverrides[idx]` entry is present-but-empty
 /// (zero path components). Per spec v0.13 §6.3 (I-1 hardening, P0
 /// pathless/dead-card partial-decode).
@@ -335,6 +584,72 @@ impl Descriptor {
 
 #[cfg(test)]
 mod tests {
+
+    /// BIP-68 gives a relative lock 16 bits plus a units flag. Anything above
+    /// that is silently reinterpreted, so it is refused at encode.
+    ///
+    /// `older(65536)` is the sharpest case: consensus reads ZERO, i.e. no lock
+    /// at all, on a plate that claims one. Found while designing a wallet whose
+    /// tiers were written as 210000 and 420000 blocks and would have been
+    /// enforced at 13392 and 26784.
+    #[test]
+    fn relative_timelock_above_16_bits_is_refused() {
+        for (written, enforced) in [(65536u32, 0u32), (210_000, 13_392), (420_000, 26_784)] {
+            let node = Node {
+                tag: Tag::Older,
+                body: Body::Timelock(written),
+            };
+            match validate_relative_timelocks(&node) {
+                Err(Error::RelativeTimelockTruncated {
+                    written: w,
+                    enforced: e,
+                    units,
+                }) => {
+                    assert_eq!(w, written);
+                    assert_eq!(e, enforced, "older({written}) is enforced as {enforced}");
+                    assert_eq!(units, "blocks");
+                }
+                other => panic!("older({written}) must be refused, got {other:?}"),
+            }
+        }
+    }
+
+    /// The faithful values still encode: the whole 16-bit block range, and a
+    /// time-based lock (bit 22 set) whose value also fits 16 bits.
+    #[test]
+    fn faithful_relative_timelocks_are_accepted() {
+        for v in [1u32, 32_768, 65_535, (1 << 22) | 1, (1 << 22) | 65_535] {
+            let node = Node {
+                tag: Tag::Older,
+                body: Body::Timelock(v),
+            };
+            assert!(
+                validate_relative_timelocks(&node).is_ok(),
+                "older({v}) is faithful under BIP-68 and must encode"
+            );
+        }
+    }
+
+    /// The walk reaches a timelock nested inside a taproot tree, which is where
+    /// this project's wallets actually put them.
+    #[test]
+    fn relative_timelock_is_checked_inside_a_tap_tree() {
+        let bad = Node {
+            tag: Tag::Older,
+            body: Body::Timelock(210_000),
+        };
+        let tree = Node {
+            tag: Tag::TapTree,
+            body: Body::Children(vec![bad]),
+        };
+        assert!(
+            matches!(
+                validate_relative_timelocks(&tree),
+                Err(Error::RelativeTimelockTruncated { .. })
+            ),
+            "a truncating older() nested in a taptree must still be refused"
+        );
+    }
     use super::*;
     use crate::tag::Tag;
     use crate::tree::{Body, Node};

@@ -103,6 +103,13 @@ jobs:
       # The toolkit depends on the miniscript fork ⇒ pass the toolkit rev so the
       # gate stays THREE-block (also the default; passed explicitly for clarity).
       miniscript_rev: "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+      # F-324 generic git-source stanza, for md-codec. The toolkit pins md-codec
+      # by COMMIT from descriptor-mnemonic (crates.io is frozen at 0.42.0 while
+      # the workspace patches miniscript), and `--offline` cannot resolve a git
+      # source without its own [source] replacement block -- which is what made
+      # the v0.103.0 tag ship with no musl binaries.
+      git_source_url: "https://github.com/bg002h/descriptor-mnemonic"
+      git_source_rev: "922778ad0400957840da26081846fc761deaca41"
       # Source the centralized recipe (ci/repro/*.sh, Dockerfile.repro) from THIS
       # tagged commit — identical content to the crate source the gate checks
       # out, so the toolkit build is byte-unchanged vs pre-P3a.

@@ -1045,24 +1045,34 @@ fn t_tap_leaf(rel_time: bool, abs_time: bool) -> BoxedStrategy<Node> {
 /// multi_a ≤ 16 keys (n-budget). Key slots ≤ 16 total by construction.
 ///
 /// MINIMAL GENERATOR CONSTRAINT (found by P6 during bring-up): taptree
-/// DEPTH ≤ 1 — i.e. at most 2 leaves, `{a,b}`. Pinned miniscript 13.0.0
-/// has a Display/parse asymmetry on DEPTH-2 taptrees: pure upstream
-/// `TapTree::combine(combine(a,b),c)` Displays as the malformed
-/// `{{a,b,c}}` (instead of `{{a,b},c}`), which miniscript's OWN
-/// `Descriptor::from_str` rejects (IncorrectNumberOfChildren) — and a
-/// correctly-written depth-2 string parses Ok but re-Displays broken.
-/// NOT an md-codec bug (md-codec wire round-trip and address derivation
-/// are unaffected). Pinned loudly by
-/// `upstream_taptree_depth2_display_asymmetry` in
-/// tests/proptest_to_miniscript.rs; a miniscript bump past the upstream
-/// fix flips that cell and this arm can be restored.
+/// DEPTH ≤ 2 since the ff4732e pin (2026-08-20).
+///
+/// It was capped at depth ≤ 1 — at most `{a,b}` — because miniscript 13.0.0
+/// had a Display/parse asymmetry on DEPTH-2 taptrees: upstream's own
+/// `TapTree::combine(combine(a,b),c)` Displayed as the malformed `{{a,b,c}}`
+/// instead of `{{a,b},c}`, which miniscript's OWN `Descriptor::from_str`
+/// then rejected. Never an md-codec bug — the wire round-trip and address
+/// derivation do not go through the string form.
+///
+/// PR #953 fixes it and is in the pinned rev, so the depth-2 arm is restored
+/// here and `upstream_taptree_depth2_display_asymmetry` is inverted to assert
+/// the fix. THAT IS THE POINT OF THE BUMP: the generator can now reach the
+/// nested shapes the whole tr()/wsh() feature is about, which the cap had
+/// been quietly excluding from every property test.
 fn t_tr_tree(rel_time: bool, abs_time: bool) -> BoxedStrategy<Node> {
     let leaf = t_tap_leaf(rel_time, abs_time);
     prop_oneof![
         3 => leaf.clone().prop_map(|l| tr_node(false, 0, Some(l))),
         2 => leaf.clone().prop_map(|l| tr_node(true, 0, Some(l))),
-        2 => (any::<bool>(), leaf.clone(), leaf).prop_map(|(nums, a, b)| {
+        2 => (any::<bool>(), leaf.clone(), leaf.clone()).prop_map(|(nums, a, b)| {
             tr_node(nums, 0, Some(taptree2(a, b)))
+        }),
+        // DEPTH 2, UNBALANCED ON PURPOSE: `{{a,b},c}` has leaf depths (2,2,1),
+        // a decreasing sequence, which is exactly the shape the pre-#953
+        // formatter got wrong. A balanced `{{a,b},{c,d}}` round-trips even with
+        // the bug and would prove nothing.
+        2 => (any::<bool>(), leaf.clone(), leaf.clone(), leaf).prop_map(|(nums, a, b, c)| {
+            tr_node(nums, 0, Some(taptree2(taptree2(a, b), c)))
         }),
         1 => t_multi_node(Tag::MultiA, 1, 16).prop_map(|m| tr_node(true, 0, Some(m))),
         1 => t_multi_node(Tag::MultiA, 1, 15).prop_map(|m| tr_node(false, 0, Some(m))),

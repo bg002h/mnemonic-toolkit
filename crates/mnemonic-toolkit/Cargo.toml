@@ -56,7 +56,17 @@ mk-codec = "0.4.1"
 #
 # DROP this git pin for a plain version when md-codec reaches crates.io again,
 # which is gated on the same miniscript release as the [patch] above.
-md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", tag = "descriptor-mnemonic-md-cli-v0.16.2" }
+# PINNED BY COMMIT, not by tag. A tag is mutable and a sha is not, which
+# matters twice here: this is a funds-adjacent dependency, and the reproducible
+# musl build resolves `--offline` against a committed vendor/ tree whose
+# `[source]` replacement stanza is keyed on `git+URL?rev=`. A `tag =` dependency
+# produces a `?tag=` source id that stanza cannot name, so the Linux artifacts
+# silently stopped building -- measured on the v0.103.0 tag, where `man-pages`
+# failed with "failed to load source for dependency `md-codec`" and the release
+# shipped with no musl binaries at all.
+#
+# 922778ad is descriptor-mnemonic-md-cli-v0.16.2 (md-codec 0.44.2).
+md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "922778ad0400957840da26081846fc761deaca41" }
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.
 wc-codec = { path = "../wc-codec" }

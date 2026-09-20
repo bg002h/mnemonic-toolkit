@@ -1,0 +1,46 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1q27yrquzdv7kllskw7zp5vanvaqeejrszfmwktxwg9fswp8a0tmhqf6zw6u",
+        "bc1q055s9vjpfx7vqsvx9p562pe5d5mw5n622cj0y6nw92daw5pp7m2spf4t8c",
+        "bc1qtrr2l9t0kcgchua44yfm5m2rtu8uenfwysdg443zlr8zhwqundvqymy8uv"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*),ripemd160(09e7bb5051d89788fb4e4b374126721dbcc2946b)),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),older(26280))))#akwh7fqf"
+    },
+    "1": {
+      "addresses": [
+        "bc1qf3sdwxjc2r2exk8zuugvkv6xhrp26wntgslhl6hk39q4x2jl5myq7x34nt",
+        "bc1qav0hndhvnx80a2gvwpv82eavk3t35xapgepsw92gjx6qwc3r5p0s8h3et0",
+        "bc1q589a5et030yzgr3hvmvrqaf72asjrmxyymjamkwldh253yd06cmsczld4v"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*),ripemd160(09e7bb5051d89788fb4e4b374126721dbcc2946b)),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),older(26280))))#he625s6v"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    }
+  ],
+  "md1_encoding_id": "c7269b3347249bea1bd2bf8a29e318d3",
+  "name": "keyed_compose_preset_hashlock_gated_ripemd160",
+  "path": null,
+  "template": "wsh(or_i(and_v(v:pkh(@0/48'/0'/0'/2'/<0;1>/*),ripemd160(09e7bb5051d89788fb4e4b374126721dbcc2946b)),and_v(v:pkh(@1/48'/0'/1'/2'/<0;1>/*),older(26280))))",
+  "wallet_descriptor_template_id": "11da851133f6afe9bda1fc5fbe7c96ad",
+  "wallet_policy_id": "57fc098886bd9ed3935674a79619870a"
+}

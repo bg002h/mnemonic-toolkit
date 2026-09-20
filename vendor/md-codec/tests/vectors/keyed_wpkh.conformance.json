@@ -1,0 +1,38 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qtncy45g8qy8laah6jvxn6ppvj0s9rluxj5uxf6",
+        "bc1qsrnmmv9a8hul4dr8qpujepzysw7msxp357uw6c",
+        "bc1qqnvnht83j69wtwdxhqukfqvdu4spyr0nryp8ql"
+      ],
+      "descriptor": "wpkh([73c5da0a]xpub661MyMwAqRbcGQnC8zMGwRc4EXYJCgXrxx9kXtw1RXqu4TcW26PxHqssgp6sU4N5CR5o9QcUZPG31fzPeUHEVPkFit1WpVZTmqZLzpvZG2s/0/*)#rzws2m36"
+    },
+    "1": {
+      "addresses": [
+        "bc1qrn4mq3eyhgpfat3gn9fwlenv6g835w7fa975lu",
+        "bc1qelpkkdf7ywx9fawv98decyvjg8pr5kx7jddqk4",
+        "bc1qjmkp65usg4pxrucal0ft26ljt6nt38xandp7u8"
+      ],
+      "descriptor": "wpkh([73c5da0a]xpub661MyMwAqRbcGQnC8zMGwRc4EXYJCgXrxx9kXtw1RXqu4TcW26PxHqssgp6sU4N5CR5o9QcUZPG31fzPeUHEVPkFit1WpVZTmqZLzpvZG2s/1/*)#jkt3hwpz"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    }
+  ],
+  "md1_encoding_id": "d2db069f8535fc50b929f25864083b94",
+  "name": "keyed_wpkh",
+  "path": null,
+  "template": "wpkh(@0/<0;1>/*)",
+  "wallet_descriptor_template_id": "45775d4d6561625de6efadaad70a1e9b",
+  "wallet_policy_id": "c79039c5a86712c627d80b296643dd6a"
+}

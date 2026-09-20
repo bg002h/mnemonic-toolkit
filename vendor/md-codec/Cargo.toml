@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "md-codec"
-version = "0.42.0"
+version = "0.44.2"
 build = false
 autolib = false
 autobins = false
@@ -83,6 +83,26 @@ name = "chunking"
 path = "tests/chunking.rs"
 
 [[test]]
+name = "compose_crosscheck"
+path = "tests/compose_crosscheck.rs"
+
+[[test]]
+name = "compose_hashkinds"
+path = "tests/compose_hashkinds.rs"
+
+[[test]]
+name = "compose_lowering"
+path = "tests/compose_lowering.rs"
+
+[[test]]
+name = "compose_support"
+path = "tests/compose_support.rs"
+
+[[test]]
+name = "compose_vectors"
+path = "tests/compose_vectors.rs"
+
+[[test]]
 name = "display_grouping_conformance"
 path = "tests/display_grouping_conformance.rs"
 
@@ -93,6 +113,10 @@ path = "tests/forward_compat.rs"
 [[test]]
 name = "indel_reject_contract"
 path = "tests/indel_reject_contract.rs"
+
+[[test]]
+name = "mint_policy_does_not_reach_decode"
+path = "tests/mint_policy_does_not_reach_decode.rs"
 
 [[test]]
 name = "mixed_case_reject"
@@ -123,6 +147,10 @@ name = "render_template_snapshot"
 path = "tests/render_template_snapshot.rs"
 
 [[test]]
+name = "rendered_xpub_header"
+path = "tests/rendered_xpub_header.rs"
+
+[[test]]
 name = "sh_wpkh_canonical"
 path = "tests/sh_wpkh_canonical.rs"
 
@@ -138,6 +166,13 @@ path = "tests/wallet_policy.rs"
 name = "wire_golden"
 path = "tests/wire_golden.rs"
 
+[[test]]
+name = "zero_fingerprint_is_absent"
+path = "tests/zero_fingerprint_is_absent.rs"
+
+[dependencies]
+thiserror = "2.0"
+
 [dependencies.bip39]
 version = "2.2.2"
 
@@ -150,17 +185,18 @@ features = ["std"]
 optional = true
 default-features = false
 
-[dependencies.thiserror]
-version = "2.0"
+[dev-dependencies]
+hex = "0.4"
+proptest = "1"
+serde_json = "1"
 
-[dev-dependencies.hex]
-version = "0.4"
-
-[dev-dependencies.proptest]
-version = "1"
-
-[dev-dependencies.serde_json]
-version = "1"
+[dev-dependencies.miniscript]
+version = "13.0.0"
+features = [
+    "std",
+    "compiler",
+]
+default-features = false
 
 [lints.clippy]
 all = "warn"

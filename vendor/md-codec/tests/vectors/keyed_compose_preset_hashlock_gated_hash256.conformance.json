@@ -1,0 +1,46 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qu9vp7szygrmr35u8mjhpgqemtc0dajdfecekklq8x8nk6fthge4q7zcrdl",
+        "bc1q20atv5v3s8cgpl5ct5yk37gpe486em7n9c4g3ggwax63smhzhjws6s6j4c",
+        "bc1qks3ty2n9knd960myvxf9vaslcnzyr4xts62978zn0gft6v5qhwnq7zqc7m"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*),hash256(98a20fc25dbcdf236fb0307e3f82cad47fca2e807f3ef82c31993549641cd488)),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),older(26280))))#c2dl9q3r"
+    },
+    "1": {
+      "addresses": [
+        "bc1qugtfdkhrq7gsw5j8uvlsprzqe796w663ax5j5jegxgv50jsm2g5qzprgp9",
+        "bc1qx7jwwkmeptmjzlyhe9qd09rrcfkvjud784p6w7t0a9d68056m47qpyle2n",
+        "bc1qg3atu7jlffchrwk8wgym36dsa83t7wz77npvu8zd08e5xqa4atpsyt7cuy"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*),hash256(98a20fc25dbcdf236fb0307e3f82cad47fca2e807f3ef82c31993549641cd488)),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),older(26280))))#luwgks72"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    }
+  ],
+  "md1_encoding_id": "29176cb7acda3b75ae716e9ea35b3ad6",
+  "name": "keyed_compose_preset_hashlock_gated_hash256",
+  "path": null,
+  "template": "wsh(or_i(and_v(v:pkh(@0/48'/0'/0'/2'/<0;1>/*),hash256(98a20fc25dbcdf236fb0307e3f82cad47fca2e807f3ef82c31993549641cd488)),and_v(v:pkh(@1/48'/0'/1'/2'/<0;1>/*),older(26280))))",
+  "wallet_descriptor_template_id": "ecf3e6dd7b9880e02112a9f19c377fc2",
+  "wallet_policy_id": "70ded314be01e8fbdb31770a49a4a1b4"
+}

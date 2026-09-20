@@ -97,6 +97,50 @@ impl Descriptor {
 /// divergent path decl, and per-`@N` TLV maps atomically; if `d` is
 /// already canonical it is unchanged.
 pub fn encode_payload(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
+    encode_payload_inner(d, Admission::Enforce)
+}
+
+/// Which checks `encode_payload_inner` runs. It changes NOTHING about the bytes
+/// produced -- every admission check is a pure refusal -- only whether a
+/// descriptor is allowed through.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Admission {
+    /// Minting a card: apply every rule.
+    Enforce,
+    /// Re-serialising a card that ALREADY EXISTS, to hash it. See
+    /// [`encode_payload_for_identity`].
+    SkipPolicy,
+}
+
+/// Serialise for IDENTITY only, applying no admission policy.
+///
+/// THIS EXISTS BECAUSE THE ENCODE-SIDE REFUSALS WERE REACHING DECODE.
+/// `validate_origin_key_consistency` says so in its own words a few lines
+/// below: "Enforced on encode rather than on decode, deliberately: this stops
+/// new impossible cards without making already-written ones unreadable, and a
+/// card that cannot be read is a backup that cannot be restored."
+///
+/// That intent was correct and the implementation leaked. `chunk::reassemble`
+/// -- a DECODE path -- verifies a chunk set by recomputing the md1 encoding id,
+/// `compute_md1_encoding_id` called `encode_payload`, and `encode_payload`
+/// applies admission policy. So every rule added to the mint path retroactively
+/// made older cards of that shape undecodable. Measured 2026-09-19: a 2-of-2
+/// emitted by the shipped toolkit stopped reading, `verify-bundle` reporting
+/// `md1_decode: fail OriginKeyContradiction` on a backup whose keys were
+/// perfectly intact.
+///
+/// Hashing a card is not minting one. The card is already in metal; asking
+/// whether it would be admitted TODAY answers a question nobody posed. So the
+/// id is computed over the serialisation alone.
+///
+/// The BYTES ARE UNCHANGED -- this is purely about which checks run. Structural
+/// errors (a malformed tree, an over-long path) still surface, because those
+/// come from the writers themselves, not from the admission rules.
+pub(crate) fn encode_payload_for_identity(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
+    encode_payload_inner(d, Admission::SkipPolicy)
+}
+
+fn encode_payload_inner(d: &Descriptor, admission: Admission) -> Result<(Vec<u8>, usize), Error> {
     let mut d_canonical = d.clone();
     crate::canonicalize::canonicalize_placeholder_indices(&mut d_canonical)?;
     let d = &d_canonical;
@@ -108,6 +152,21 @@ pub fn encode_payload(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
         if let Body::Tr { tree: Some(t), .. } = &d.tree.body {
             crate::validate::validate_tap_script_tree(t)?;
         }
+    }
+    // F-217: refuse to MINT a card that declares one key origin for two
+    // different keys. Enforced on encode rather than on decode, deliberately:
+    // this stops new impossible cards without making already-written ones
+    // unreadable, and a card that cannot be read is a backup that cannot be
+    // restored. The decode-side refusal waits until the conformance corpus is
+    // regenerated, so no gate is ever red while it lands.
+    //
+    // BOTH ARE MINT-TIME POLICY, skipped when we are only re-serialising an
+    // existing card to hash it (see `encode_payload_for_identity`). Neither
+    // affects the bytes.
+    if admission == Admission::Enforce {
+        crate::validate::validate_origin_key_consistency(d)?;
+        // F-218: refuse to mint a policy that names more cosigners than it has.
+        crate::validate::validate_no_duplicate_key_slots(d)?;
     }
 
     let mut w = BitWriter::new();

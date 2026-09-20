@@ -258,7 +258,20 @@ pub enum Error {
     ChunkHeaderChunkedFlagMissing,
 
     /// Encoding requires more chunks than the spec maximum (64).
-    #[error("encoding requires {needed} chunks; max is 64 per spec §9.8")]
+    ///
+    /// A SECOND CEILING, independent of the composer's slot and path limits
+    /// (F-515). This one is a function of the encoded SIZE — the keys, their
+    /// origins and every lock operand — so a policy that passes every documented
+    /// composer limit can still land here, and it lands here at `encode`, after
+    /// the operator has chosen both the shape and the keys. The message names
+    /// the levers because "too big" alone leaves them guessing which of three
+    /// things to change.
+    #[error(
+        "encoding requires {needed} chunks; max is 64 per spec §9.8. \
+         This ceiling is on the encoded SIZE, not the slot count, so it is not \
+         implied by the composer's limits: reduce the number of keys, shorten \
+         their origin paths, or drop a spend path"
+    )]
     ChunkCountExceedsMax {
         /// Number of chunks needed.
         needed: usize,
@@ -354,6 +367,60 @@ pub enum Error {
     InvalidPresenceByte {
         /// The reserved-bit field (bits 2..7) of the offending presence byte.
         reserved_bits: u8,
+    },
+
+    /// Two `@N` slots carry the SAME key AND the same use-site, so they
+    /// derive an identical child at every address index.
+    ///
+    /// The policy reads as k-of-n and is satisfiable by fewer parties than it
+    /// names: with one key seated twice, its holder can produce two of the
+    /// required signatures alone. Legal script, misleading wallet.
+    ///
+    /// The comparison is the 65-byte `chain code ‖ compressed pubkey` PLUS the
+    /// use-site. Not the fingerprint, which identifies a MASTER rather than a
+    /// key and would refuse the legitimate multi-account cosigner; not the
+    /// base58 xpub, which carries depth/parent metadata that differs between
+    /// two sources of the same key. And not the key alone: the same xpub at
+    /// two different multipath branches derives DIFFERENT children at every
+    /// index, which is a different wallet, not a duplicate. Measured —
+    /// `<0;1>` and `<2;3>` over one xpub give different addresses.
+    #[error(
+        "@{a} and @{b} carry the same key at the same use-site: this policy names \
+         {n} cosigners but one of them holds two of the seats"
+    )]
+    DuplicateKeySlots {
+        /// The lower placeholder index of the duplicated pair.
+        a: u8,
+        /// The higher placeholder index.
+        b: u8,
+        /// How many `@N` slots the policy declares.
+        n: u8,
+    },
+
+    /// Two `@N` slots declare the SAME master fingerprint and the SAME
+    /// origin path while carrying DIFFERENT xpubs. That is impossible:
+    /// BIP-32 is deterministic, so a `(fingerprint, path)` pair identifies
+    /// exactly one extended key.
+    ///
+    /// Detectable from the card alone — no seed, no network, no
+    /// derivation — which is why it is refused rather than warned about.
+    /// Nothing downstream can catch it: addresses derive from the xpubs a
+    /// card CARRIES, not from the origin it declares, so every address
+    /// check passes either way and the failure surfaces only when someone
+    /// asks a signer to find the key. See F-217.
+    #[error(
+        "@{a} and @{b} declare the same key origin ([{fingerprint}/{path}]) but different xpubs; \
+         one origin identifies exactly one key, so this card describes a wallet that cannot exist"
+    )]
+    OriginKeyContradiction {
+        /// The lower placeholder index of the conflicting pair.
+        a: u8,
+        /// The higher placeholder index of the conflicting pair.
+        b: u8,
+        /// The shared master fingerprint, hex.
+        fingerprint: String,
+        /// The shared origin path, rendered.
+        path: String,
     },
 
     /// A `Pubkeys` TLV entry's 33-byte compressed-pubkey field (bytes
@@ -453,6 +520,32 @@ pub enum Error {
         /// user-facing message; the field is retained for callers/tests that
         /// pin the code's `2t` parameter.
         bound: u8,
+    },
+
+    /// An `older()` value carrying bits that BIP-68 consensus IGNORES, so the
+    /// written number is not the delay that is enforced.
+    ///
+    /// BIP-68 reads only bit 31 (disable), bit 22 (units: blocks vs 512s) and
+    /// bits 0-15 (the value). Every other bit is discarded. `older(210000)`
+    /// therefore enforces `210000 & 0xFFFF` = 13392 blocks, and
+    /// `older(65536)` enforces ZERO — no timelock at all — while both
+    /// round-trip through this codec unchanged.
+    ///
+    /// Refused at encode because the artifact is engraved in metal: a plate
+    /// asserting a four-year lock the chain will release in three months is
+    /// a funds-safety defect, not a rendering one. A relative lock simply
+    /// cannot express a delay above 65535 blocks (or 65535 x 512s ~ 388 days);
+    /// use an absolute `after()` height instead.
+    #[error(
+        "older({written}) is not what consensus enforces: BIP-68 reads only the low 16 bits (and bit 22 for units), so this locks for {enforced} {units}, not {written}. A relative timelock cannot exceed 65535 {units} -- use an absolute after() height for longer delays"
+    )]
+    RelativeTimelockTruncated {
+        /// The value written in the descriptor.
+        written: u32,
+        /// What BIP-68 actually enforces.
+        enforced: u32,
+        /// "blocks" or "512-second units".
+        units: &'static str,
     },
 
     /// Encode-side cap (cycle-4 H6): a single codex32 string's data part

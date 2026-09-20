@@ -20,6 +20,7 @@ pub mod canonical_origin;
 pub mod canonicalize;
 pub mod chunk;
 pub mod codex32;
+pub mod compose;
 pub mod decode;
 pub mod derive;
 pub mod encode;

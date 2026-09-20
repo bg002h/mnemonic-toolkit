@@ -442,7 +442,7 @@ fn xpub_bytes_to_string(bytes: &[u8; 65]) -> String {
 }
 
 /// Independent miniscript-direct derivation: parse `descriptor_str`,
-/// `.at_derivation_index(index).address(network).to_string()`.
+/// `.derive_at_index(index).address(network).to_string()`.
 fn miniscript_direct_address(
     descriptor_str: &str,
     chain: u32,
@@ -467,7 +467,7 @@ fn miniscript_direct_address(
     } else {
         desc
     };
-    let definite = single.at_derivation_index(index).expect("derivation idx");
+    let definite = single.derive_at_index(index).expect("derivation idx");
     definite.address(network).expect("address").to_string()
 }
 
@@ -1130,5 +1130,119 @@ fn wsh_check_or_i_shape_c_still_errors() {
     assert!(
         render(&d).is_err(),
         "shape C (Check over or_i) must still error, not mis-render"
+    );
+}
+
+/// REGRESSION, bitcoind-free: a depth-2 taptree must render with its nesting
+/// intact.
+///
+/// The bitcoind differential proves this against Bitcoin Core, but it is
+/// `#[ignore]`d and only the daily job runs it. This runs on every push.
+///
+/// What it guards: `miniscript::Descriptor`'s `Display` FLATTENS a
+/// non-caterpillar taptree. Measured 2026-08-19 against Core v25 —
+/// `tr(@0,{{pk(@1),pk(@2)},pk(@3)})` came out as
+/// `tr(KEY,{{pk(A),pk(B),pk(C)}})`: one inner brace holding THREE leaves,
+/// which Core rejects with "tr(): expected '}' after script expression".
+/// Upstream PR #953 fixes it, and since the ff4732e pin it is IN the pinned
+/// rev — so md-codec's `render_descriptor` port has been deleted and this test
+/// now guards upstream's own `Display` instead.
+///
+/// Addresses were never wrong — derivation does not go through `Display` — so
+/// md computed correct addresses and emitted a descriptor no other wallet
+/// could parse. That is the "not recoverable with shipped tooling" the DD6
+/// advisory names.
+#[test]
+fn nested_taptree_renders_with_nesting_intact() {
+    let xpub_a = account_xpub_bytes("m/86'/0'/0'");
+    let xpub_b = account_xpub_bytes("m/86'/0'/1'");
+    let xpub_c = account_xpub_bytes("m/86'/0'/2'");
+    let xpub_d = account_xpub_bytes("m/86'/0'/3'");
+
+    let d = Descriptor {
+        n: 4,
+        path_decl: PathDecl {
+            n: 4,
+            paths: PathDeclPaths::Divergent(vec![
+                origin(&[(true, 86), (true, 0), (true, 0)]),
+                origin(&[(true, 86), (true, 0), (true, 1)]),
+                origin(&[(true, 86), (true, 0), (true, 2)]),
+                origin(&[(true, 86), (true, 0), (true, 3)]),
+            ]),
+        },
+        use_site_path: UseSitePath::standard_multipath(),
+        // {{A,B},C} — an UNBALANCED tree on purpose. Its leaf depths are
+        // (2,2,1), a DECREASING sequence, which is exactly the shape the
+        // pre-#953 formatter gets wrong. A balanced {{A,B},{C,D}} round-trips
+        // even with the bug and would prove nothing.
+        tree: Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                is_nums: false,
+                key_index: 0,
+                tree: Some(Box::new(Node {
+                    tag: Tag::TapTree,
+                    body: Body::Children(vec![
+                        Node {
+                            tag: Tag::TapTree,
+                            body: Body::Children(vec![pkk(1), pkk(2)]),
+                        },
+                        pkk(3),
+                    ]),
+                })),
+            },
+        },
+        tlv: {
+            let mut t = TlvSection::new_empty();
+            t.pubkeys = Some(vec![
+                (0u8, xpub_a),
+                (1u8, xpub_b),
+                (2u8, xpub_c),
+                (3u8, xpub_d),
+            ]);
+            t
+        },
+    };
+
+    let desc = md_codec::to_miniscript::to_miniscript_descriptor(&d, 0)
+        .expect("depth-2 taptree must convert");
+    let rendered = desc.to_string();
+
+    // The structural assertion: an inner brace pair closes BEFORE the third
+    // leaf. Counting braces alone would pass on the flattened form too.
+    let body = rendered
+        .split_once("*,")
+        .map(|(_, rest)| rest)
+        .unwrap_or(&rendered);
+    assert!(
+        body.starts_with("{{"),
+        "nested taptree must open two braces: {rendered}"
+    );
+    assert!(
+        body.contains("},pk("),
+        "the inner branch must CLOSE before the third leaf — flattened render? {rendered}"
+    );
+    assert_eq!(
+        body.matches("pk(").count(),
+        3,
+        "three leaves expected: {rendered}"
+    );
+
+    // THE TRIPWIRE WAS INVERTED, NOT DELETED (2026-08-20).
+    //
+    // It used to assert that upstream's Display DISAGREED with md-codec's
+    // corrected `render_descriptor`, and it fired the moment the pin moved to
+    // ff4732e — which is how we knew #953 had landed and the port could go.
+    //
+    // Deleting it with the port would have retired the only check that upstream
+    // still nests correctly, in the exact place a regression would be silent:
+    // addresses do not go through Display, so a re-flattened taptree would
+    // produce right addresses and an unparseable descriptor again. The
+    // assertions above ARE that guard now; this line keeps the pairing honest
+    // by pinning that the string under test is upstream's own.
+    assert_eq!(
+        desc.to_string(),
+        rendered,
+        "this test must exercise upstream's Display, not a local re-render"
     );
 }

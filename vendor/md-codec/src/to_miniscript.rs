@@ -117,13 +117,35 @@ fn assemble_origin_and_xkey(
     e: &ExpandedKey,
 ) -> Result<(DescriptorOrigin, bitcoin::bip32::Xpub), Error> {
     let xpub_bytes = e.xpub.ok_or(Error::MissingPubkey { idx: e.idx })?;
-    let xkey = xpub_from_tlv_bytes(e.idx, &xpub_bytes)?;
-    let origin = e.fingerprint.map(|fp| {
-        (
-            Fingerprint::from(fp),
-            origin_path_to_derivation(&e.origin_path),
-        )
-    });
+    // ONE derivation path feeds BOTH halves. They used to be computed
+    // independently -- the origin from `origin_path`, the header from nothing
+    // at all -- and that independence is precisely how a depth-0 xpub came to
+    // be rendered under a depth-4 origin: `[fp/48'/0'/0'/2']xpub661MyMwAqRbc..`,
+    // a master-looking key claiming to sit four levels down. Core and Sparrow
+    // ignore the header (only `chain_code` + `public_key` participate in
+    // CKDpub, so the ADDRESSES were always right), but mk-codec's card encoder
+    // rejects an xpub whose depth/child disagree with its origin, so the
+    // rendered descriptor could not round-trip back into a key card.
+    let path = origin_path_to_derivation(&e.origin_path);
+    let mut xkey = xpub_from_tlv_bytes(e.idx, &xpub_bytes)?;
+    // `depth` and `child_number` ARE recoverable -- they are the component
+    // count and the terminal component of the origin the card carries.
+    // Encoding caps a path at `MAX_PATH_COMPONENTS` (4-bit depth field), so
+    // this only fires for an in-memory `Descriptor` that never went through
+    // `encode`; refuse rather than truncate into a wrong header.
+    xkey.depth = u8::try_from(path.len()).map_err(|_| Error::PathDepthExceeded {
+        got: path.len(),
+        max: crate::origin_path::MAX_PATH_COMPONENTS,
+    })?;
+    xkey.child_number = path
+        .as_ref()
+        .last()
+        .copied()
+        .unwrap_or(ChildNumber::Normal { index: 0 });
+    // `parent_fingerprint` is the one field md1 genuinely cannot carry: it is
+    // `hash160(parent_pubkey)[..4]` and the PARENT pubkey is not on the wire.
+    // It stays zero -- a truthful "unknown", never invented.
+    let origin = e.fingerprint.map(|fp| (Fingerprint::from(fp), path));
     Ok((origin, xkey))
 }
 
@@ -429,6 +451,39 @@ fn tree_to_taptree(
         return miniscript::descriptor::TapTree::combine(l, r)
             .map_err(|e| failed(format!("TapTree depth: {e}")));
     }
+    // `sortedmulti_a` IS LEGAL HERE AND ONLY HERE (R5, 2026-08-20).
+    //
+    // BIP-386 places `sortedmulti_a()` in BIP-387's category — a SIBLING of the
+    // Miniscript fragments, not a member — so it is admissible as a taproot LEAF
+    // and forbidden as a sub-expression. That is exactly the split this function
+    // boundary already draws: a leaf arrives here, a nested fragment arrives at
+    // `node_to_miniscript`, which refuses it.
+    //
+    // So the conversion lives HERE rather than as an arm in the generic
+    // node→Terminal converter. Putting it there would have made a standards
+    // refusal positional-blind and admitted `sortedmulti_a` inside combinators,
+    // which no BIP permits and which rust-miniscript's own parser would now
+    // accept (it dispatches these through a recursive parser with no depth
+    // guard — more permissive than the standard, see the pin comment).
+    //
+    // Writable at all only since the ff4732e pin: `Terminal::SortedMultiA`
+    // arrived upstream with PR #910. Before that the refusal was an
+    // implementation limit; now the limit is gone and only the positional rule
+    // remains.
+    if let (Tag::SortedMultiA, Body::MultiKeys { k, indices }) = (&node.tag, &node.body) {
+        let thresh = build_multi_threshold::<{ MAX_PUBKEYS_IN_CHECKSIGADD }>(
+            *k,
+            indices,
+            keys,
+            "sortedmulti_a",
+        )?;
+        let ms = miniscript::Miniscript::<DescriptorPublicKey, Tap>::from_ast(
+            Terminal::SortedMultiA(thresh),
+        )
+        .map_err(|e| failed(format!("sortedmulti_a: {e}")))?;
+        return Ok(miniscript::descriptor::TapTree::leaf(Arc::new(ms)));
+    }
+
     // Single bare leaf — including the v0.30 single-leaf wire optimization
     // where `Body::Tr { tree: Some(<bare PkK Node>) }` skips the `Tag::TapTree`
     // wrap.
@@ -572,15 +627,52 @@ where
             )?;
             Terminal::MultiA(thresh)
         }
+        // THESE TWO REFUSALS ARE STANDARDS, NOT IMPLEMENTATION LIMITS, and the
+        // distinction is load-bearing: the reason below used to read
+        // "rust-miniscript v13 has no Terminal::SortedMultiA fragment", which
+        // became FALSE at the ff4732e pin (PR #915 added one). A reader who
+        // believed that would relax a rule the BIPs impose.
+        //
+        //   BIP-388 l.138  `sortedmulti(...)` "(inside sh or wsh only)"
+        //   BIP-383 l.37   top level, or inside sh()/wsh()
+        //   BIP-379        does not list sortedmulti as a Miniscript fragment
+        //   BIP-386 l.118  multi_a/sortedmulti_a belong to BIP-387, a sibling
+        //                  category to the Miniscript fragments
+        //
+        // Upstream is now MORE PERMISSIVE than the standard here -- at ff4732e
+        // it dispatches `sortedmulti` through its generic recursive expression
+        // parser with no depth guard -- so this is a place md-codec must NOT
+        // follow the implementation. See design/agent-reports/
+        // sortedmulti-leaf-bip-recon.md in mnemonic-engrave for the citations.
         (Tag::SortedMulti, Body::MultiKeys { .. }) => {
             return Err(failed(
-                "Tag::SortedMulti must be the sole child of wsh/sh; cannot appear as a miniscript leaf"
+                "Tag::SortedMulti must be the sole child of wsh/sh (BIP-388: inside sh or wsh only); cannot appear as a miniscript leaf"
                     .to_string(),
             ));
         }
         (Tag::SortedMultiA, Body::MultiKeys { .. }) => {
+            // TWO DIFFERENT REFUSALS SHARE THIS ARM, and conflating them is a
+            // regression this comment exists to prevent (2026-08-20).
+            //
+            // Reaching here NESTED inside a fragment is a standards refusal:
+            // BIP-386 puts sortedmulti_a in BIP-387's category, a sibling of the
+            // Miniscript fragments, so it cannot be a sub-expression.
+            //
+            // Reaching here at a TAP-LEAF ROOT is NOT — that position is exactly
+            // where BIP-386/387 admit it. It arrives here only because
+            // `tree_to_taptree` delegates its leaf to this generic converter and
+            // no SortedMultiA conversion has been written yet (R5).
+            //
+            // The message must not claim a standards violation for the legal
+            // position. It briefly did: the older wording said "rust-miniscript
+            // v13 has no Terminal::SortedMultiA fragment", which was true and
+            // became false at the ff4732e pin (#910 added one); rewording it to
+            // cite the BIP then mislabelled the legal case. It says what is
+            // actually true instead — unimplemented, not forbidden.
             return Err(failed(
-                "Tag::SortedMultiA must be a tap-leaf root child; rust-miniscript v13 has no Terminal::SortedMultiA fragment"
+                "Tag::SortedMultiA is not yet converted: legal only as a tap-leaf root child \
+                 (BIP-386/387), and that conversion is unimplemented (R5); nested inside a \
+                 miniscript fragment it is forbidden outright"
                     .to_string(),
             ));
         }
@@ -694,3 +786,21 @@ fn hash160_from_bytes(h: &[u8; 20]) -> Result<bitcoin::hashes::hash160::Hash, Er
     use bitcoin::hashes::Hash;
     Ok(bitcoin::hashes::hash160::Hash::from_byte_array(*h))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// `render_descriptor` LIVED HERE, and was deleted 2026-08-20 when the pin moved
+// to ff4732e.
+//
+// It ported PR #953's algorithm because upstream's `Descriptor` Display
+// FLATTENED a non-caterpillar taptree: `tr(@0,{{pk(@1),pk(@2)},pk(@3)})` came
+// out with one inner brace holding THREE leaves, which Bitcoin Core rejects.
+// Addresses were never wrong -- derivation does not go through Display -- so md
+// computed correct addresses and emitted a descriptor no other wallet could
+// parse.
+//
+// #953 is in the pinned rev now, so `d.to_string()` is correct again and the
+// port is gone. The PROPERTY did not go with it: the tripwire in
+// `address_derivation.rs::nested_taptree_renders_with_nesting_intact` was
+// INVERTED rather than deleted, and now asserts upstream still nests correctly.
+// A deleted workaround with no test behind it is how the same bug returns
+// unnoticed.

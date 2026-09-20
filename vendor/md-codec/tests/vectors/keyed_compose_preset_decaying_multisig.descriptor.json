@@ -1,0 +1,190 @@
+{
+  "n": 4,
+  "path_decl": {
+    "tag": "Divergent",
+    "data": [
+      "m/48'/0'/0'/2'",
+      "m/48'/0'/1'/2'",
+      "m/48'/0'/2'/2'",
+      "m/48'/0'/3'/2'"
+    ]
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Wsh",
+    "body": {
+      "kind": "Children",
+      "data": [
+        {
+          "tag": "OrI",
+          "body": {
+            "kind": "Children",
+            "data": [
+              {
+                "tag": "AndV",
+                "body": {
+                  "kind": "Children",
+                  "data": [
+                    {
+                      "tag": "Verify",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "Multi",
+                            "body": {
+                              "kind": "MultiKeys",
+                              "data": {
+                                "k": 2,
+                                "indices": [
+                                  0,
+                                  1
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "tag": "Older",
+                      "body": {
+                        "kind": "Timelock",
+                        "data": 13140
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tag": "OrI",
+                "body": {
+                  "kind": "Children",
+                  "data": [
+                    {
+                      "tag": "AndV",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "Verify",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "PkH",
+                                  "body": {
+                                    "kind": "KeyArg",
+                                    "data": {
+                                      "index": 2
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "Older",
+                            "body": {
+                              "kind": "Timelock",
+                              "data": 26280
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "tag": "AndV",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "Verify",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "PkH",
+                                  "body": {
+                                    "kind": "KeyArg",
+                                    "data": {
+                                      "index": 3
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "After",
+                            "body": {
+                              "kind": "Timelock",
+                              "data": 1000000
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": [
+      [
+        0,
+        "73c5da0a"
+      ],
+      [
+        1,
+        "73c5da0a"
+      ],
+      [
+        2,
+        "73c5da0a"
+      ],
+      [
+        3,
+        "73c5da0a"
+      ]
+    ],
+    "pubkeys": [
+      [
+        0,
+        "bba0c7ca160a870efeb940ab90d0f4284fea1b5e0d2117677e823fc37e2d5763021a3bf5fbf737d0f36993fd46dc4913093beb532d654fe0dfd98bd27585dc9f29"
+      ],
+      [
+        1,
+        "9960c4a3fff098ea02763233dfd1ddab887d44e5145003f9e82cf4393b80f6370249094a2c106d29ed2c70ec4357cd216faf024889f33e6d5eca96b161d5c97ee3"
+      ],
+      [
+        2,
+        "bddfa53f014165f268e80c4069886c00517b2f1f9087e91f6609fd03f90e48a50240f3910597f2553d15d93286f249c39f8a8ecde6399ae89c76d0b67c73cd37c6"
+      ],
+      [
+        3,
+        "d3175e498ca1a36393767e933818d8c7f5540d375a5004e71a204687b711437f0394b636ac72d936e895d16bdd97cf7210baf4b3e85a11288efb7fc0e0b5d37181"
+      ]
+    ],
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}

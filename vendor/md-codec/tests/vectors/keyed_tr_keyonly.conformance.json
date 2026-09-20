@@ -1,0 +1,38 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1pfuyvyhs0qrzngwl99v432nm0lwcpm3rhp3g4qfmucvm3nhce407sum2cf6",
+        "bc1pv2pqza0emy8ne7grhp0ze38qyvkqxghhlphslfycqdrgy7jsk95qphegxw",
+        "bc1pg66xgpxwcdx8hy0curef5f8aejjuf5dekkwrmvw2ce8xeg8qcewqm9yg8j"
+      ],
+      "descriptor": "tr([73c5da0a]xpub661MyMwAqRbcGQnC8zMGwRc4EXYJCgXrxx9kXtw1RXqu4TcW26PxHqssgp6sU4N5CR5o9QcUZPG31fzPeUHEVPkFit1WpVZTmqZLzpvZG2s/0/*)#pmcypjd4"
+    },
+    "1": {
+      "addresses": [
+        "bc1pfc26n3xw0v448qp2d6knnx0clkujs6rgycjd2uavjvza8vn6zdsq5mll3k",
+        "bc1pn0m8uf6tzjl6rqj5temyhz0seqc3tdq39m258zle7t7rneen3ajqlpwpyl",
+        "bc1pksg7n634qyxf86dnt0kzztxp2pncwflpclqls8smz34yytt2uafsa70pnt"
+      ],
+      "descriptor": "tr([73c5da0a]xpub661MyMwAqRbcGQnC8zMGwRc4EXYJCgXrxx9kXtw1RXqu4TcW26PxHqssgp6sU4N5CR5o9QcUZPG31fzPeUHEVPkFit1WpVZTmqZLzpvZG2s/1/*)#s0a9u8ad"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    }
+  ],
+  "md1_encoding_id": "44c2caeb21797934bd2a3365f7a11249",
+  "name": "keyed_tr_keyonly",
+  "path": null,
+  "template": "tr(@0/<0;1>/*)",
+  "wallet_descriptor_template_id": "6a69ed9bce2b51c6fa20895e2209a4a2",
+  "wallet_policy_id": "ed4c50fe8919368465cb835d99f50908"
+}

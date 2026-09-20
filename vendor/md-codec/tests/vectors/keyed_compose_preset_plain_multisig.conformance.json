@@ -1,0 +1,54 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1q2sz6vvu6k7y9gtc6kfgfe0p6xkhmvmdlu97eecjkykpdktvps08scdjgr5",
+        "bc1qg8fpeqrl9uf3w5vawye5s235xylqhyxd7gjs4hq78crn6sm5w3asar4472",
+        "bc1qqhxzhr0swu2a7h405qaean6v2xday7u05yhav4facasn7qcsth9sgelhyq"
+      ],
+      "descriptor": "wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*,[73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*,[73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/0/*))#hgqy50l4"
+    },
+    "1": {
+      "addresses": [
+        "bc1qz094hjdh83krq7q9mrghv0dx4kczrqhdwha7fa0pmvay7fmemcvqswvwch",
+        "bc1qds2l04teye5zvy5vx24zj8mmqhsd67pa35u4fqdy8pyzk2lwdmcst8fj7w",
+        "bc1qmywkagtpfmpkvsza5qcf57ma3glcwgg4qzsrwzffav0eytvhr5sq2qs6fn"
+      ],
+      "descriptor": "wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*,[73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*,[73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/1/*))#jat72f0a"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 2
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    },
+    {
+      "index": 2,
+      "xpub": "xpub6EGx8sPr9FxPPE1rbZazhqWwpMXA3Hf5DYKtZbL7c4BSddzmQktp96UaTvecEkoCZysuaj79GMCFZYT1KKk7Ph2M3Kf5g8B82KZ8TZ9SKQR"
+    }
+  ],
+  "md1_encoding_id": "7b280d3da90c7735c0e4a0d0349a2905",
+  "name": "keyed_compose_preset_plain_multisig",
+  "path": null,
+  "template": "wsh(sortedmulti(2,@0/48'/0'/0'/2'/<0;1>/*,@1/48'/0'/1'/2'/<0;1>/*,@2/48'/0'/2'/2'/<0;1>/*))",
+  "wallet_descriptor_template_id": "b02b44037119e6b6fd1d82f61aa17e21",
+  "wallet_policy_id": "9433adbb7fd3a4ede28161a8bc24ee5a"
+}

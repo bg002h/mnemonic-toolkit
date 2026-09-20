@@ -132,11 +132,25 @@ impl Descriptor {
         }
 
         let desc = crate::to_miniscript::to_miniscript_descriptor(self, chain)?;
-        let definite =
-            desc.at_derivation_index(index)
-                .map_err(|e| Error::AddressDerivationFailed {
-                    detail: e.to_string(),
-                })?;
+        // BOTH BRANCHES, to keep behaviour EXACTLY what `at_derivation_index`
+        // did before it was deprecated at the ff4732e pin.
+        //
+        // `derive_at_index` is the same function plus a `has_wildcard()` guard,
+        // so for the `<0;1>/*` shapes md1 normally carries it is identical. The
+        // difference is only at the edge: a descriptor with NO wildcard used to
+        // derive silently and would now be a `NoWildcard` error. Rather than
+        // assume md1 can never mint one, the wildcard-free case is routed to
+        // `into_definite`, which is what upstream's deprecation note prescribes
+        // for it. Guessing "that cannot happen" in address derivation is how a
+        // wallet stops showing an address it used to show.
+        let definite = if desc.has_wildcard() {
+            desc.derive_at_index(index)
+        } else {
+            desc.into_definite()
+        }
+        .map_err(|e| Error::AddressDerivationFailed {
+            detail: e.to_string(),
+        })?;
         let addr = definite
             .address(network)
             .map_err(|e| Error::AddressDerivationFailed {

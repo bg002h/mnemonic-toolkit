@@ -9,6 +9,20 @@
 //!   [wildcard-hardened: 1 bit]
 //!
 //! alternative: [hardened: 1 bit][value: LP4-ext varint]
+//!
+//! THE NARROWNESS OF THIS BLOCK IS DELIBERATE — NOT A BUG TO FIX (operator
+//! ruling 2026-08-28, recorded in mnemonic-engrave design/FOLLOWUPS.md F-417).
+//! This block cannot represent: a single fixed child index (`/0/*`), a
+//! multipath group with no trailing wildcard (`<0;1>`), a deeper tail
+//! (`/0/1/*`), or "no use-site path" as distinct from `/*`. That is BIP-388's
+//! wallet-policy tail discipline, and it is what buys an engraved plate its
+//! compactness inside the BCH budget and an unambiguous restore decades
+//! later. Consumers that meet a valid BIP-380 descriptor outside this set
+//! must REFUSE and name the alternative that carries it exactly (see
+//! mnemonic-engrave SPEC_descriptor_input §5.3) — never widen this encoding
+//! to admit it. If a genuinely legitimate exotic wallet ever needs carrying,
+//! the extension seam is an additive TLV tag with a criticality story, not
+//! a change here.
 
 use crate::bitstream::{BitReader, BitWriter};
 use crate::error::Error;

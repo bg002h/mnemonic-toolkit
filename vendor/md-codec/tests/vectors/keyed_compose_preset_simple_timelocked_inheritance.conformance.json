@@ -1,0 +1,46 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qfvm6eztxsqfrucwlq09ld4d58h6rmz7ng4ekvt9s0n8f7t45vdpsv9x03n",
+        "bc1qedhrgnzwc679fnm2w3zrtt6n5zp4ux5jn0sl4c2cxgyweu28twjq7jw3rf",
+        "bc1qq2ewa9m09uctsxh5sfkkggtjhvj9susepcgu5r7j2wm4qg5prlxsuj09cp"
+      ],
+      "descriptor": "wsh(or_i(pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),older(26280))))#tme6m3p3"
+    },
+    "1": {
+      "addresses": [
+        "bc1quklfc09p0jgwq0s3380csy63lh5scxwuryz5skgnlrct6aweuc3sls37p6",
+        "bc1qyaz6ed2u0vrl47tsxtj8h6vwj7jk8nyrcjylparj5n3lxk34c7qsaztglp",
+        "bc1qvu6pkdacmdc5syl36wyv8zf6pqtvmwq3csegjm3y8h7rxevh06eqqre5pa"
+      ],
+      "descriptor": "wsh(or_i(pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),older(26280))))#gw6vsnre"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    }
+  ],
+  "md1_encoding_id": "61dfe6b153c8492c0eff4d58ce52b3f6",
+  "name": "keyed_compose_preset_simple_timelocked_inheritance",
+  "path": null,
+  "template": "wsh(or_i(pkh(@0/48'/0'/0'/2'/<0;1>/*),and_v(v:pkh(@1/48'/0'/1'/2'/<0;1>/*),older(26280))))",
+  "wallet_descriptor_template_id": "648c7eecc47c859b283ff73dd4237642",
+  "wallet_policy_id": "be90dc62925d71ba317cc908299c403b"
+}

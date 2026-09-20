@@ -101,6 +101,35 @@ const CORPUS: &[(&str, &str, &str)] = &[
         "md1yzfdsssj5qqcy6pz9qu2fey3fnf2wqqqqqjqu5afd8p60nnsc",
         "wsh(thresh(2,pk(@0/<0;1>/*),s:pk(@1/<0;1>/*),snj:and_v(v:pk(@2/<0;1>/*),older(144))))",
     ),
+    // ---------------------------------------------------------------------
+    // `v:` ABOVE ANOTHER WRAPPER — added 2026-08-18, and NOT captured from
+    // md-cli 0.11.2 like the entries above. These two are the *corrected*
+    // values: 0.11.2 and every version since emitted `v:j:` and `v:n:`,
+    // because `Tag::Verify` had its own arm in `render_node` instead of
+    // joining `render_wrapper_chain`. A doubled colon is not canonical
+    // miniscript — rust-miniscript's own parser REJECTS it — so the frozen
+    // snapshot was freezing a defect.
+    //
+    // The corpus missed this for one reason worth recording: its only chain
+    // case was `snj:`, which has no `v` in it. Every other appearance of `v:`
+    // above sits directly on a `pk`, where the shorthand path renders it
+    // correctly by accident.
+    //
+    // Wires generated with:
+    //   md encode --group-size 0 --path bip48 'wsh(and_v(vj:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))'
+    //   md encode --group-size 0 --path bip48 'wsh(and_v(vn:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))'
+    // (`md encode` accepts only the canonical `vj:`/`vn:` spelling, which is
+    // itself evidence that the rendered `v:j:` was unparseable.)
+    (
+        "verify_over_nonzero",
+        "md1ypfdsssj5qqcynx5fg2sajgf7wv98ku5s",
+        "wsh(and_v(vj:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
+    ),
+    (
+        "verify_over_zeronotequal",
+        "md1ypfdsssj5qqcynx53g2smkjr65kprh73r",
+        "wsh(and_v(vn:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
+    ),
 ];
 
 #[test]

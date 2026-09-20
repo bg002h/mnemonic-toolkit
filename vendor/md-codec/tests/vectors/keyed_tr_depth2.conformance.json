@@ -1,0 +1,62 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1p2cycz66cyzltrvy5xd6v6g0jz3m5f9tjtz0aqkx9a5xet23su5rsa4mewu",
+        "bc1pa4sqhg0qw69zhqyaw3wv75ke49rwdf9cdc4taah3z5p58lp3zc8se4amnr",
+        "bc1pcvukunk9satzd400j6xlstq25y59geeazvz8qq0gjlc5vsfvxtas9e7rdz"
+      ],
+      "descriptor": "tr([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*,{{pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),pk([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/0/*)},pk([73c5da0a/48'/0'/3'/2']xpub6DXuQW1Q2JpZy6ncYa6zqDahP2yfNCq45c41ZU7gRYxxB8uC6nCumhgpmSHhMVS7WFvCwGf1zxnjtQ8m9r67TDMC4TpWHPVT38qEDiWjB8m/0/*)})#86z45y8d"
+    },
+    "1": {
+      "addresses": [
+        "bc1pq67e92udm4tldq48jjdaravtekrw6k7u9apf6alhq2sfe8m9t6hsseycm5",
+        "bc1pf0lcpa0n7whukgcapvl022964qyu40h4cq7uc06puphjl28ntf3q9uck2h",
+        "bc1pdg2a4wdsjy2vmrz4u5lqnm23rcp7n54vltcv2ju940av5gpnsesqreqtdw"
+      ],
+      "descriptor": "tr([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*,{{pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),pk([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/1/*)},pk([73c5da0a/48'/0'/3'/2']xpub6DXuQW1Q2JpZy6ncYa6zqDahP2yfNCq45c41ZU7gRYxxB8uC6nCumhgpmSHhMVS7WFvCwGf1zxnjtQ8m9r67TDMC4TpWHPVT38qEDiWjB8m/1/*)})#s0hy5nez"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 2
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 3
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    },
+    {
+      "index": 2,
+      "xpub": "xpub6EGx8sPr9FxPPE1rbZazhqWwpMXA3Hf5DYKtZbL7c4BSddzmQktp96UaTvecEkoCZysuaj79GMCFZYT1KKk7Ph2M3Kf5g8B82KZ8TZ9SKQR"
+    },
+    {
+      "index": 3,
+      "xpub": "xpub6E6Z3Ss5TXJYNJp4U1q3NZ3pCn82i7KXQAKUtNnzLJ3cCdchQeSdFvXemizaHUF7wNwRQAB8mPdoZhGHLiv49cWPtCnoJY3Az3E8JKxH9Mq"
+    }
+  ],
+  "md1_encoding_id": "b5f80796d9a3bbbc716ce5ffd7acc5a7",
+  "name": "keyed_tr_depth2",
+  "path": null,
+  "template": "tr(@0/48'/0'/0'/2'/<0;1>/*,{{pk(@1/48'/0'/1'/2'/<0;1>/*),pk(@2/48'/0'/2'/2'/<0;1>/*)},pk(@3/48'/0'/3'/2'/<0;1>/*)})",
+  "wallet_descriptor_template_id": "6f58bdf70d6f7d2fa82e8604bdb89317",
+  "wallet_policy_id": "4e67c6fd8220c32e51c9ad9947e24141"
+}

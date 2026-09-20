@@ -1,0 +1,46 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qkxn9tp0ajyvsegdjgtjhjvxg6rn9eg0hz97dzhpevftgk9pu2crs4e80wp",
+        "bc1qvxee3n7r7re00730ln44pljelpmqpycvmrae9hwu42hey8ukej8srfhq3w",
+        "bc1qynrlawv3yzxfnjh75wl25md88sx2uzmj60l4jsyh2zpga2r9x9sq4zws4e"
+      ],
+      "descriptor": "wsh(or_b(pk([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*),s:pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*)))#m4c3mmqy"
+    },
+    "1": {
+      "addresses": [
+        "bc1qj868p5ft0c6kymmqheagxq9ltyevf5r9lv08tth4gcfn90ucwl4q3g5qu0",
+        "bc1q9hsqgw7cedx5ns5egplp69ncuu3hqaacm7rjrusf5nluqe24j3eqcd64gu",
+        "bc1qs0rzn5vt2gh0f86m03m3amy2usp2k73ukl3h745kfz4qy2du880s286ex6"
+      ],
+      "descriptor": "wsh(or_b(pk([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*),s:pk([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*)))#yaaqchsc"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    }
+  ],
+  "md1_encoding_id": "f4773538ea077be762e43dea50d9b6fd",
+  "name": "keyed_wsh_or_b",
+  "path": null,
+  "template": "wsh(or_b(pk(@0/48'/0'/0'/2'/<0;1>/*),s:pk(@1/48'/0'/1'/2'/<0;1>/*)))",
+  "wallet_descriptor_template_id": "4cdbf7a9cad43b4b02ef2f6be82e3569",
+  "wallet_policy_id": "7709ac75a74cede2779c47e04a6f3b34"
+}

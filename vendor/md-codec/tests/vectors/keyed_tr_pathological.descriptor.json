@@ -1,0 +1,356 @@
+{
+  "n": 11,
+  "path_decl": {
+    "tag": "Divergent",
+    "data": [
+      "m/48'/0'/0'/2'",
+      "m/48'/0'/1'/2'",
+      "m/48'/0'/2'/2'",
+      "m/48'/0'/3'/2'",
+      "m/48'/0'/4'/2'",
+      "m/48'/0'/5'/2'",
+      "m/48'/0'/6'/2'",
+      "m/48'/0'/7'/2'",
+      "m/48'/0'/8'/2'",
+      "m/48'/0'/9'/2'",
+      "m/48'/0'/10'/2'"
+    ]
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Tr",
+    "body": {
+      "kind": "Tr",
+      "data": {
+        "is_nums": true,
+        "key_index": 0,
+        "tree": {
+          "tag": "TapTree",
+          "body": {
+            "kind": "Children",
+            "data": [
+              {
+                "tag": "AndV",
+                "body": {
+                  "kind": "Children",
+                  "data": [
+                    {
+                      "tag": "Verify",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "After",
+                            "body": {
+                              "kind": "Timelock",
+                              "data": 1000000
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "tag": "AndV",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "Verify",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "Sha256",
+                                  "body": {
+                                    "kind": "Hash256Body",
+                                    "data": "a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad"
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "MultiA",
+                            "body": {
+                              "kind": "MultiKeys",
+                              "data": {
+                                "k": 3,
+                                "indices": [
+                                  0,
+                                  1,
+                                  2
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "tag": "TapTree",
+                "body": {
+                  "kind": "Children",
+                  "data": [
+                    {
+                      "tag": "AndV",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "Verify",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "After",
+                                  "body": {
+                                    "kind": "Timelock",
+                                    "data": 1893456000
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "AndV",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "Verify",
+                                  "body": {
+                                    "kind": "Children",
+                                    "data": [
+                                      {
+                                        "tag": "Sha256",
+                                        "body": {
+                                          "kind": "Hash256Body",
+                                          "data": "a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "tag": "MultiA",
+                                  "body": {
+                                    "kind": "MultiKeys",
+                                    "data": {
+                                      "k": 2,
+                                      "indices": [
+                                        3,
+                                        4,
+                                        5
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "tag": "TapTree",
+                      "body": {
+                        "kind": "Children",
+                        "data": [
+                          {
+                            "tag": "AndV",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "Verify",
+                                  "body": {
+                                    "kind": "Children",
+                                    "data": [
+                                      {
+                                        "tag": "Older",
+                                        "body": {
+                                          "kind": "Timelock",
+                                          "data": 65535
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "tag": "MultiA",
+                                  "body": {
+                                    "kind": "MultiKeys",
+                                    "data": {
+                                      "k": 2,
+                                      "indices": [
+                                        6,
+                                        7
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          },
+                          {
+                            "tag": "AndV",
+                            "body": {
+                              "kind": "Children",
+                              "data": [
+                                {
+                                  "tag": "Verify",
+                                  "body": {
+                                    "kind": "Children",
+                                    "data": [
+                                      {
+                                        "tag": "Older",
+                                        "body": {
+                                          "kind": "Timelock",
+                                          "data": 4255898
+                                        }
+                                      }
+                                    ]
+                                  }
+                                },
+                                {
+                                  "tag": "MultiA",
+                                  "body": {
+                                    "kind": "MultiKeys",
+                                    "data": {
+                                      "k": 1,
+                                      "indices": [
+                                        8,
+                                        9,
+                                        10
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": [
+      [
+        0,
+        "73c5da0a"
+      ],
+      [
+        1,
+        "73c5da0a"
+      ],
+      [
+        2,
+        "73c5da0a"
+      ],
+      [
+        3,
+        "73c5da0a"
+      ],
+      [
+        4,
+        "73c5da0a"
+      ],
+      [
+        5,
+        "73c5da0a"
+      ],
+      [
+        6,
+        "73c5da0a"
+      ],
+      [
+        7,
+        "73c5da0a"
+      ],
+      [
+        8,
+        "73c5da0a"
+      ],
+      [
+        9,
+        "73c5da0a"
+      ],
+      [
+        10,
+        "73c5da0a"
+      ]
+    ],
+    "pubkeys": [
+      [
+        0,
+        "bba0c7ca160a870efeb940ab90d0f4284fea1b5e0d2117677e823fc37e2d5763021a3bf5fbf737d0f36993fd46dc4913093beb532d654fe0dfd98bd27585dc9f29"
+      ],
+      [
+        1,
+        "9960c4a3fff098ea02763233dfd1ddab887d44e5145003f9e82cf4393b80f6370249094a2c106d29ed2c70ec4357cd216faf024889f33e6d5eca96b161d5c97ee3"
+      ],
+      [
+        2,
+        "bddfa53f014165f268e80c4069886c00517b2f1f9087e91f6609fd03f90e48a50240f3910597f2553d15d93286f249c39f8a8ecde6399ae89c76d0b67c73cd37c6"
+      ],
+      [
+        3,
+        "d3175e498ca1a36393767e933818d8c7f5540d375a5004e71a204687b711437f0394b636ac72d936e895d16bdd97cf7210baf4b3e85a11288efb7fc0e0b5d37181"
+      ],
+      [
+        4,
+        "9ba386299046f6ac40a6011cbf881a80a6a3878477f1433887d1fd5ac967b6a7024f7b80c325c0dd16651fce3e144822fe5fc6a284c87bb897908b9e93225db9f0"
+      ],
+      [
+        5,
+        "b1ef89d95528d7a5452526c526c354730b7af82f594c790f88479536a20941080267851fb6729ab8cbd6e2881cc76213ae20389adc0d556497d997569f252b897e"
+      ],
+      [
+        6,
+        "86d37641f1e830fbbc327d8a4cb8262ae501d5ec0c2a525285d2f101b5948f7f03c9d2b0f69236a16b26bd3660700939364d3dba60f0644837be23d17e28e97a6d"
+      ],
+      [
+        7,
+        "7737c1508419801ccae19f060abb8cd4b69435f9faadba820cafdcdc1e0200f802db99a2b798a654e73a53d61fb4fa01c426c5aaaa8a98a5345c8bb343be949ce3"
+      ],
+      [
+        8,
+        "e42c65866273741db73f7eb832beeee61059eaeffe0caca9e1e71dac10ad0f170321b9b0f7d78ebdd319bb20535fab1aabfcc6efe514351e5db13e293d895de423"
+      ],
+      [
+        9,
+        "7a338d5b974e54b811754607d88975b40038e0109cac1bf7affcaaa1fe3068c2021bde5beb7a3adb3dfb20410eebf9a8be9a915529a5f1dbab489cd7c713454dcc"
+      ],
+      [
+        10,
+        "eb724e3949d5d455f9e4711b5decea02698e44441f88f504eb6188bbb977dc49025d5bd56e2697bc99c867dffef64fb4f53d084df266cdf9918a3ca411f6fe2c88"
+      ]
+    ],
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}

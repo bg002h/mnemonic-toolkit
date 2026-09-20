@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3df2236365e027b99d731ed818f5ea0c71eab04206543e4f2c6c59ccda737cfa # shrinks to v = 2147483648
+cc 6e71e4de88b1dd76bf7a457f3a9319efd20310c3be272d6d2e205cfc6e0420f6 # shrinks to d = Descriptor { n: 1, path_decl: PathDecl { n: 1, paths: Divergent([OriginPath { components: [PathComponent { hardened: true, value: 1 }, PathComponent { hardened: true, value: 2 }, PathComponent { hardened: true, value: 3 }] }]) }, use_site_path: UseSitePath { multipath: Some([Alternative { hardened: false, value: 0 }, Alternative { hardened: false, value: 1 }]), wildcard_hardened: false }, tree: Node { tag: Wsh, body: Children([Node { tag: AndV, body: Children([Node { tag: Verify, body: Children([Node { tag: Older, body: Timelock(65536) }]) }, Node { tag: PkK, body: KeyArg { index: 0 } }]) }]) }, tlv: TlvSection { use_site_path_overrides: None, fingerprints: None, pubkeys: Some([(0, [198, 26, 143, 39, 233, 129, 130, 49, 77, 36, 68, 218, 62, 96, 14, 181, 131, 110, 200, 173, 24, 60, 134, 195, 17, 249, 93, 248, 8, 43, 24, 170, 3, 65, 130, 120, 162, 136, 92, 139, 185, 129, 72, 21, 141, 20, 116, 99, 64, 151, 161, 121, 198, 66, 242, 60, 241, 204, 4, 218, 98, 154, 198, 240, 251])]), origin_path_overrides: None, unknown: [] } }

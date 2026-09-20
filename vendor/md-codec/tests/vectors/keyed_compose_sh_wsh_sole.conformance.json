@@ -1,0 +1,54 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "3HFYRu1FmRu1oCZ2gLXvtrR2RYw2ynnWy1",
+        "3BkwNX3nmb6nE5toEDAG4BDeSxVr2y3EDE",
+        "38rkv9PqP2t5HyZzhEQHm3rYYoAabXzZWA"
+      ],
+      "descriptor": "sh(wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/1']xpub6DXuQW1Q2JpZvKQoiN6JugqkUcCswaDx3kD8TM7rHtNJg6HWxKdcZoBErf9hRYLJemfShyw1Mod1so24qDiXNyDfWcDcnE1eoxBnbiSycnB/0/*,[73c5da0a/48'/0'/1'/1']xpub6DXuQW1Q2JpZuydhaxhsJC7oa2n6vXkubjRjr8nnW2BmWZfQikPnMR6e2tHimiTPcuEnxG1LckTwkF17VgWcVghkJDq3mYgvae7jBBgMb7C/0/*,[73c5da0a/48'/0'/2'/1']xpub6DXuQW1Q2JpZvLi1pVTqvPADJoATQuKpESsZuapYgdjqQw8DJmSMXBs4is95b3zRSPrd2jnvAgnkt7jcYKCBDdcfyMgGZk4aEU1pMyUtKR9/0/*)))#q8peyuus"
+    },
+    "1": {
+      "addresses": [
+        "3AwSmTV4EjREQTnxyRi6TkxKSFM9bwJ6mF",
+        "3BPSqYqss1n4CmvZv9xYx73yBsCQw1kkcH",
+        "3FnSxTkngV3GqxyegE9wookRufDLjS2kwz"
+      ],
+      "descriptor": "sh(wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/1']xpub6DXuQW1Q2JpZvKQoiN6JugqkUcCswaDx3kD8TM7rHtNJg6HWxKdcZoBErf9hRYLJemfShyw1Mod1so24qDiXNyDfWcDcnE1eoxBnbiSycnB/1/*,[73c5da0a/48'/0'/1'/1']xpub6DXuQW1Q2JpZuydhaxhsJC7oa2n6vXkubjRjr8nnW2BmWZfQikPnMR6e2tHimiTPcuEnxG1LckTwkF17VgWcVghkJDq3mYgvae7jBBgMb7C/1/*,[73c5da0a/48'/0'/2'/1']xpub6DXuQW1Q2JpZvLi1pVTqvPADJoATQuKpESsZuapYgdjqQw8DJmSMXBs4is95b3zRSPrd2jnvAgnkt7jcYKCBDdcfyMgGZk4aEU1pMyUtKR9/1/*)))#g4pcfjp5"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 2
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    },
+    {
+      "index": 2,
+      "xpub": "xpub6EGx8sPr9FxPPE1rbZazhqWwpMXA3Hf5DYKtZbL7c4BSddzmQktp96UaTvecEkoCZysuaj79GMCFZYT1KKk7Ph2M3Kf5g8B82KZ8TZ9SKQR"
+    }
+  ],
+  "md1_encoding_id": "c063964796fee045d74043cbf2677806",
+  "name": "keyed_compose_sh_wsh_sole",
+  "path": null,
+  "template": "sh(wsh(sortedmulti(2,@0/48'/0'/0'/1'/<0;1>/*,@1/48'/0'/1'/1'/<0;1>/*,@2/48'/0'/2'/1'/<0;1>/*)))",
+  "wallet_descriptor_template_id": "536a5123609143ba40806a1a0fd0799c",
+  "wallet_policy_id": "24ee4f7487cc696c8a6b0e903ae9eb48"
+}

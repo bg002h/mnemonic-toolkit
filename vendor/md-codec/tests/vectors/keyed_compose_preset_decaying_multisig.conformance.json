@@ -1,0 +1,62 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qn47ycnyust5zml784muj4ax2ys937w22j34ay7t75rmr8rnkrvvs003sx5",
+        "bc1qdhy8z04u508zluz6s20j78xwppdv66jgr0gdwtglgvwef0v792dqrlvlt8",
+        "bc1qjgdyrmz6aeqgmerk4y5qspss486qhw88wgj3g9tj35s2hcfm74hsfyckrz"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:multi(2,[73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*,[73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),older(13140)),or_i(and_v(v:pkh([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/0/*),older(26280)),and_v(v:pkh([73c5da0a/48'/0'/3'/2']xpub6DXuQW1Q2JpZy6ncYa6zqDahP2yfNCq45c41ZU7gRYxxB8uC6nCumhgpmSHhMVS7WFvCwGf1zxnjtQ8m9r67TDMC4TpWHPVT38qEDiWjB8m/0/*),after(1000000)))))#36wa9kym"
+    },
+    "1": {
+      "addresses": [
+        "bc1qpt6a7wa66eflkttu8j5d7p6pdcv964p9lt2l55sk6cmu69k6j4tsyjkhu2",
+        "bc1qtffjflu88d9harwkkm95vqgkx82uujexyhz3wh7xpmlldwvq4x8q8z8elf",
+        "bc1q2grqdp2elatdj5032xtnkq24cf9vadu738hxdcmayud9aanvwehqfjpvqc"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:multi(2,[73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*,[73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),older(13140)),or_i(and_v(v:pkh([73c5da0a/48'/0'/2'/2']xpub6DXuQW1Q2JpZxtXzMTDvvvEBFYiz9oAYAz8TQ7d3TzDD11M7eVRWtzaG16zfaFWM5JEiaLyS5fRYvihB1EKUQvmP5nA61urd52T3sWa2bPW/1/*),older(26280)),and_v(v:pkh([73c5da0a/48'/0'/3'/2']xpub6DXuQW1Q2JpZy6ncYa6zqDahP2yfNCq45c41ZU7gRYxxB8uC6nCumhgpmSHhMVS7WFvCwGf1zxnjtQ8m9r67TDMC4TpWHPVT38qEDiWjB8m/1/*),after(1000000)))))#sepk4d48"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 2
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 3
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    },
+    {
+      "index": 2,
+      "xpub": "xpub6EGx8sPr9FxPPE1rbZazhqWwpMXA3Hf5DYKtZbL7c4BSddzmQktp96UaTvecEkoCZysuaj79GMCFZYT1KKk7Ph2M3Kf5g8B82KZ8TZ9SKQR"
+    },
+    {
+      "index": 3,
+      "xpub": "xpub6E6Z3Ss5TXJYNJp4U1q3NZ3pCn82i7KXQAKUtNnzLJ3cCdchQeSdFvXemizaHUF7wNwRQAB8mPdoZhGHLiv49cWPtCnoJY3Az3E8JKxH9Mq"
+    }
+  ],
+  "md1_encoding_id": "fcecc460822918f5090a27032bc1db13",
+  "name": "keyed_compose_preset_decaying_multisig",
+  "path": null,
+  "template": "wsh(or_i(and_v(v:multi(2,@0/48'/0'/0'/2'/<0;1>/*,@1/48'/0'/1'/2'/<0;1>/*),older(13140)),or_i(and_v(v:pkh(@2/48'/0'/2'/2'/<0;1>/*),older(26280)),and_v(v:pkh(@3/48'/0'/3'/2'/<0;1>/*),after(1000000)))))",
+  "wallet_descriptor_template_id": "993801bc9c7d23a9c50c5389e5642f55",
+  "wallet_policy_id": "3b6909e04dbcb85e9e3efd8f580f3aa7"
+}

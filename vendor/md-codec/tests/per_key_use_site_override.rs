@@ -411,7 +411,7 @@ fn multipath_builder_address_equivalence() {
     let singles = desc.into_single_descriptors().unwrap();
     let chain0 = &singles[0];
     let got = chain0
-        .at_derivation_index(0)
+        .derive_at_index(0)
         .unwrap()
         .address(Network::Bitcoin)
         .unwrap()
@@ -481,7 +481,7 @@ fn multipath_builder_sortedmulti_divergent_independent_golden() {
     let desc = md_codec::to_miniscript::to_miniscript_descriptor_multipath(&d).unwrap();
     let singles = desc.into_single_descriptors().unwrap();
     let got = singles[0]
-        .at_derivation_index(0)
+        .derive_at_index(0)
         .unwrap()
         .address(Network::Bitcoin)
         .unwrap()

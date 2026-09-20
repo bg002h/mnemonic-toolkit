@@ -1,0 +1,77 @@
+{
+  "n": 2,
+  "path_decl": {
+    "tag": "Divergent",
+    "data": [
+      "m/48'/0'/0'/1'",
+      "m/48'/0'/1'/1'"
+    ]
+  },
+  "use_site_path": {
+    "multipath": [
+      {
+        "hardened": false,
+        "value": 0
+      },
+      {
+        "hardened": false,
+        "value": 1
+      }
+    ],
+    "wildcard_hardened": false
+  },
+  "tree": {
+    "tag": "Sh",
+    "body": {
+      "kind": "Children",
+      "data": [
+        {
+          "tag": "Wsh",
+          "body": {
+            "kind": "Children",
+            "data": [
+              {
+                "tag": "SortedMulti",
+                "body": {
+                  "kind": "MultiKeys",
+                  "data": {
+                    "k": 1,
+                    "indices": [
+                      0,
+                      1
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "tlv": {
+    "use_site_path_overrides": null,
+    "fingerprints": [
+      [
+        0,
+        "73c5da0a"
+      ],
+      [
+        1,
+        "73c5da0a"
+      ]
+    ],
+    "pubkeys": [
+      [
+        0,
+        "bba0c7ca160a870efeb940ab90d0f4284fea1b5e0d2117677e823fc37e2d5763021a3bf5fbf737d0f36993fd46dc4913093beb532d654fe0dfd98bd27585dc9f29"
+      ],
+      [
+        1,
+        "9960c4a3fff098ea02763233dfd1ddab887d44e5145003f9e82cf4393b80f6370249094a2c106d29ed2c70ec4357cd216faf024889f33e6d5eca96b161d5c97ee3"
+      ]
+    ],
+    "origin_path_overrides": null,
+    "unknown": []
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "chains": {
+    "0": {
+      "addresses": [
+        "bc1qzme9m8pnslsxa8sy6zsarugnku2j9xd0y0ctcf5d23j0gz4797tsle67fr",
+        "bc1q9x4j0k2hvclql3j9psdwamk0q25glxd7sa7g47ktachl0xxt45nscqnj0k",
+        "bc1qcdsg6dypmjdgjxygcpyqx2pnn9cxdy37su8v8gyt4szhuksj2jnsc2pzzn"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/0/*),hash160(b5b72c0e6896ff59dfa99e0d1052a9c0214cd0bd)),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/0/*),older(26280))))#4mal4lv6"
+    },
+    "1": {
+      "addresses": [
+        "bc1qt2jecasz90ttqvky66prywmg8zqmnvj2m4g2h7uf7zv2j43ugxrqnluu3v",
+        "bc1qnp8vuhzy0jwt6qu9ahrp3lxddvaxral5hnnjunvajqnerwlyw6psgemyg6",
+        "bc1q98ke2ndfxs2425m6zcmgyp7thc287qjaaesrjwy3fslrrt2dxpmqpag02v"
+      ],
+      "descriptor": "wsh(or_i(and_v(v:pkh([73c5da0a/48'/0'/0'/2']xpub6DXuQW1Q2JpZxsEnFKrPvDuiRMmQgU4fzHU1wsvM5EqgGAWRJ3cmwbtS8u1HQjrEHg3YFb7XGnFovPydJ8qpaGNNd2hSEPoheWd27EABdGH/1/*),hash160(b5b72c0e6896ff59dfa99e0d1052a9c0214cd0bd)),and_v(v:pkh([73c5da0a/48'/0'/1'/2']xpub6DXuQW1Q2JpZxXTg7vTxJjBmWnLdfRbdYGgdLfbHHNf96dtK4UNwjDoqK89JkuyKFoctVsBrXj6jnqxfxbdugyrTQeJsDiUyRCYxgiPSpgC/1/*),older(26280))))#9rf269fr"
+    }
+  },
+  "fingerprints": [
+    {
+      "fingerprint": "73c5da0a",
+      "index": 0
+    },
+    {
+      "fingerprint": "73c5da0a",
+      "index": 1
+    }
+  ],
+  "keys": [
+    {
+      "index": 0,
+      "xpub": "xpub6DkFAXWQ2dHxq2vatrt9qyA3bXYU4ToWQwCHbf5XB2mSTexcHZCeKS1VZYcPoBd5X8yVcbXFHJR9R8UCVpt82VX1VhR28mCyxUFL4r6KFrf"
+    },
+    {
+      "index": 1,
+      "xpub": "xpub6DzhyrnFFYQ1HimDiM388xHnDiRPNdZJFBmmxge3Y1WWcHLtMJLfRuhRHqnQCPbTj3fGKTuKFLHzzwpJkp5Dtc3UtLKZKaVZe1yqMBXd6Vk"
+    }
+  ],
+  "md1_encoding_id": "915e59bc9b84f36dc10b7d3e495d9cfe",
+  "name": "keyed_compose_preset_hashlock_gated_hash160",
+  "path": null,
+  "template": "wsh(or_i(and_v(v:pkh(@0/48'/0'/0'/2'/<0;1>/*),hash160(b5b72c0e6896ff59dfa99e0d1052a9c0214cd0bd)),and_v(v:pkh(@1/48'/0'/1'/2'/<0;1>/*),older(26280))))",
+  "wallet_descriptor_template_id": "8e05e699739e360fa0df70e7102ce422",
+  "wallet_policy_id": "6044220b5aa87f067c14abccc832cabd"
+}
