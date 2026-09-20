@@ -1,6 +1,6 @@
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.101.0 -- worked examples (Linux), exact verbatim I/O"
+subtitle: "mnemonic-toolkit v0.102.0 -- worked examples (Linux), exact verbatim I/O"
 date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
@@ -17,7 +17,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.101.0** on Linux and **both the command and its full output are
+`mnemonic` **v0.102.0** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -100,10 +100,10 @@ flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--from-git`, `--force`,
 $ sh "$REPO/scripts/install.sh" --list
 COMPONENT       CARGO_PACKAGE        DEFAULT      FEATURES       GIT_TAG
 ---------       -------------        -------      --------       -------
-mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.98.0
-md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.14.0
-ms              ms-cli               crates.io    (none)         ms-cli-v0.16.0
-mk              mk-cli               crates.io    (none)         mk-cli-v0.12.0
+mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.101.0
+md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.16.2
+ms              ms-cli               crates.io    (none)         ms-cli-v0.19.0
+mk              mk-cli               crates.io    (none)         mk-cli-v0.13.0
 mnemonic-gui    mnemonic-gui         git (only)   (none)         mnemonic-gui-v0.59.0
 ```
 
@@ -113,8 +113,8 @@ m-format constellation installer
 install root: /home/user/.cargo/bin
 source: crates.io (default; mnemonic-toolkit stays on git+tag)
 
-install  mnemonic (git: mnemonic-toolkit-v0.98.0)
-  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.98.0   mnemonic-toolkit
+install  mnemonic (git: mnemonic-toolkit-v0.101.0)
+  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.101.0   mnemonic-toolkit
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
 install  md (crates.io: md-cli)
   [dry-run] cargo install --locked --features cli-compiler  md-cli
@@ -142,7 +142,7 @@ Verify the install and list every subcommand:
 
 ```
 $ mnemonic --version
-mnemonic 0.101.0
+mnemonic 0.102.0
 ```
 
 ```
@@ -942,7 +942,7 @@ note: stdout is watch-only — public keys only, cannot spend
 $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" policy.md1)
 miniscript policy restore (11 cosigners)
 CONFIRM: verify each cosigner fingerprint against your records before importing.
-  descriptor: wsh(or_i(and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi(3,[73c5da0a/84'/0'/0']xpub661MyMwAqRbcFHMVYpCiBTXd2Caj7vZhNFHJSgE59Aue2yYkXSrz5q9GaQ4rRjJVhHZTsCiHWSzgMS5beaaTHWVmhpGC7SMdqMXHRXZi8as/<0;1>/*,[73c5da0a/84'/0'/1']xpub661MyMwAqRbcGaxoYcLaxHHXZqEgSRQmN2P5ung8MJ8MNE535mLuhq7zjnrMKyA5eX6ehicVbU1FFPU39LGXbY8PmLPLQxVRQmPFa3Q7spa/<0;1>/*,[73c5da0a/84'/0'/2']xpub661MyMwAqRbcGuXAHBK3oquZS1HJiz2fVZ2idNcK4GLGTXJyGZkPK7fviN6euv5GzY18JD3WBG3SoLat23TLAVjhQMxDVMAqymQNhg3RFT8/<0;1>/*))),or_i(and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi(2,[73c5da0a/84'/0'/3']xpub661MyMwAqRbcGHLCZcLjg25oG8wSyqSE5XNM9uMks6vrpH4pRDC8UmAynovThuKraidMeEKJ2FcqBw1eF76aeu1vrGtLJXUiJXr4r9N1TZQ/<0;1>/*,[b8688df1/84'/0'/0']xpub661MyMwAqRbcGowNgeNcLS8CgL2vnZybpJqtkbCmSQMdq2qzcDWqq3CXXg7x5BqvcNCSaNUw6nisoN7JFK2j3HfxV57nNm2RLKo2UzHgbs6/<0;1>/*,[b8688df1/84'/0'/1']xpub661MyMwAqRbcEv3U8uuxavsQA8LNNYwcNge8rT7SaMS5S8KiEwxoP72TQ8ARYjczPTtVQz6CxcaBTEE3XchmYvSiHcVbC9h17CmyfG7sVq9/<0;1>/*))),or_i(and_v(v:older(65535),multi(2,[b8688df1/84'/0'/2']xpub661MyMwAqRbcG7Xht9EwgNucA47Rmgg8Bn5bNmFdJMkotHQDXirpogQHkVNRcwAy6KwGnUYMUNBFCNaRq4WnsqWW2VNUDdW6ymHXfVpk4c3/<0;1>/*,[b8688df1/84'/0'/3']xpub661MyMwAqRbcEbqBvNkLuDtudGA2PHAbtWUuHKe3CKjZCaLjxLGSG8SJpwBCnXsj8xPGXaV9ZWL3j9ktbed8y1aeNVK95HrkgHfHGBXM5Eh/<0;1>/*)),and_v(v:older(4255898),multi(1,[28645006/84'/0'/0']xpub661MyMwAqRbcEdBofBaGbgnse74WRuyEbXRSmzq8jzthzutDnXTV2yNQPzgs3ubwuNp7yrSHnECoA5xHgnoEDH4HSGWqLtYdi6nWVZCfXPk/<0;1>/*,[28645006/84'/0'/1']xpub661MyMwAqRbcH2WNMbtz4pZ8wDtpxndYo6E4r5o8pXedve17srma1LCEjM8WcpVk67xsc36KpBNtYUdqo5dpcFMzRfzSZSa4C5DRty4eDNF/<0;1>/*,[28645006/84'/0'/2']xpub661MyMwAqRbcGqcAAnB9mhvQsdUx2fKasUoXT2gMpt2tFz94wRfAkhuLhZUJkjQ5pgnd9Ny9EwrgcHbAASVnQShCbfhnGsKAk2k6yGoWXAv/<0;1>/*))))))#jgulue7j
+  descriptor: wsh(or_i(and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi(3,[73c5da0a/84'/0'/0']xpub6BemYiVNp19ZzsXfZEitq3w1XJmqRCJcSbxPVjjkZEbmdd445fc9CJ9qiRzFf5MLa3KsF6tb8rWoVUfQW489vNiYJUAYvfiaDBP3Tq1adUC/<0;1>/*,[73c5da0a/84'/0'/1']xpub6BemYiVNp19a4ixx5zcrcQkt1gzKUazQNvK4TNzJYiHrYwoEyi5EC6qmA4dLYWirABF9dDyK8rAAS31QTiwXRhVsUQmWgMeQd9gF7tjL9dt/<0;1>/*,[73c5da0a/84'/0'/2']xpub6BemYiVNp19a7bMHMXMQUWSspcbUW3T2SzDafViz32y9EKG5WETsBC6tQsjE7f9y96XimKaqdcqA2b5ooMFdBxFtDrpDCv7t2i8bm8hR53S/<0;1>/*))),or_i(and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi(2,[73c5da0a/84'/0'/3']xpub6BemYiVNp19a9WzJAv9BMDh5bVp9VnhJyVp6gZGvdE37B9EpzbtmieK8mZQctqvUNBY3ex39Pb3LTnU8VL2AsegpnCE9UGDoC31XR3WAZWn/<0;1>/*,[b8688df1/84'/0'/0']xpub6BemYiVNp19a2Q7Yh4tnz2XbBSE35qiWtfWyoeiSrU3mRgMJASFzwWD6fi3MJXtmV7xqxGfEjCEzwQh76naRg9tj5j29BzPMi9enXJFp5Hh/<0;1>/*,[b8688df1/84'/0'/1']xpub6BemYiVNp19a343cgJCEF4Lkbz61QiXFPaa7Q3Rcmmbacr3v8th7sNkDpPwQmHBku82zLVT2Vzj6dsmQr1NmP5pBzgsmTYqzKb4yD6T84ZT/<0;1>/*))),or_i(and_v(v:older(65535),multi(2,[b8688df1/84'/0'/2']xpub6BemYiVNp19a6oMpxVHJM3SvYfRbYk6V9DGTQtNJH8Pgf5MKmPaJfkqFSzzzpgFfEtTsFb5gvixxRd5McNK5uJ2gqzETwCT92i1kisSt5xi/<0;1>/*,[b8688df1/84'/0'/3']xpub6BemYiVNp19a7qVHXgYnaRWBxd2iuERgnUveoyZCxSqoZSWkXiy5W1aTogfMyUULvRHxYJCzvqkZ11DNqsYjBmFYJQexF2bqZnpjqBDvs3W/<0;1>/*)),and_v(v:older(4255898),multi(1,[28645006/84'/0'/0']xpub6BemYiVNp19ZzDMyfc6TFHCG9DFcjBi9ft6Xq4LpA4aqbZPXLkCe9SNyY2cGHFenn8aXMkcbQdivJ8Y6YGLvr9H42vRCA7ua5veGXuAqXM8/<0;1>/*,[28645006/84'/0'/1']xpub6BemYiVNp19a5AWWtzBFix2VP5eTzxDBozA3Pg7K1wp97MjKmoVtVbv19cuVqN4Wbn7NXYT9MZXoj8BD7UJpSQjU8kNcpqj3QTWRSrBAVBj/<0;1>/*,[28645006/84'/0'/2']xpub6BemYiVNp19a7XSHF8DWSNTjGEo7oijwpuzPV9o2oefm2n6BB6NecnLJQ56sxUUmyFKDcVWUhJePqY65wkJ5RuDPRAZmzSGCnyUL2gQgfkg/<0;1>/*))))))#rt43kz5s
   first recv: bc1q4g7564xxd9hj68hqwu5e558cqafhsklerkr0asfzqp6puq74veesrp6qss
   cosigner @0: 73c5da0a [84'/0'/0']  from md1 (not independently verified)
   cosigner @1: 73c5da0a [84'/0'/1']  from md1 (not independently verified)
@@ -1082,7 +1082,7 @@ md1f40gpvx92k0c250h62ypsarcmrl7tgutcg8uf4m7gfcd8lfv33knprwthl06am5gdw9aqnfqzkhq0
 $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" taproot.md1)
 miniscript policy restore (12 cosigners)
 CONFIRM: verify each cosigner fingerprint against your records before importing.
-  descriptor: tr([73c5da0a/84'/0'/4']xpub661MyMwAqRbcEyUKSqsBgaz1Lob8pCa1rM1SJ8CEzGCYyP9LisxZ2m1goDqj137XvHdY2nNkctqiE1ixaAFqYHf91CFpFpKicVb7TzvrGsE/<0;1>/*,{or_i(and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub661MyMwAqRbcFHMVYpCiBTXd2Caj7vZhNFHJSgE59Aue2yYkXSrz5q9GaQ4rRjJVhHZTsCiHWSzgMS5beaaTHWVmhpGC7SMdqMXHRXZi8as/<0;1>/*,[73c5da0a/84'/0'/1']xpub661MyMwAqRbcGaxoYcLaxHHXZqEgSRQmN2P5ung8MJ8MNE535mLuhq7zjnrMKyA5eX6ehicVbU1FFPU39LGXbY8PmLPLQxVRQmPFa3Q7spa/<0;1>/*,[73c5da0a/84'/0'/2']xpub661MyMwAqRbcGuXAHBK3oquZS1HJiz2fVZ2idNcK4GLGTXJyGZkPK7fviN6euv5GzY18JD3WBG3SoLat23TLAVjhQMxDVMAqymQNhg3RFT8/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub661MyMwAqRbcGHLCZcLjg25oG8wSyqSE5XNM9uMks6vrpH4pRDC8UmAynovThuKraidMeEKJ2FcqBw1eF76aeu1vrGtLJXUiJXr4r9N1TZQ/<0;1>/*,[b8688df1/84'/0'/0']xpub661MyMwAqRbcGowNgeNcLS8CgL2vnZybpJqtkbCmSQMdq2qzcDWqq3CXXg7x5BqvcNCSaNUw6nisoN7JFK2j3HfxV57nNm2RLKo2UzHgbs6/<0;1>/*,[b8688df1/84'/0'/1']xpub661MyMwAqRbcEv3U8uuxavsQA8LNNYwcNge8rT7SaMS5S8KiEwxoP72TQ8ARYjczPTtVQz6CxcaBTEE3XchmYvSiHcVbC9h17CmyfG7sVq9/<0;1>/*)))),or_i(and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub661MyMwAqRbcG7Xht9EwgNucA47Rmgg8Bn5bNmFdJMkotHQDXirpogQHkVNRcwAy6KwGnUYMUNBFCNaRq4WnsqWW2VNUDdW6ymHXfVpk4c3/<0;1>/*,[b8688df1/84'/0'/3']xpub661MyMwAqRbcEbqBvNkLuDtudGA2PHAbtWUuHKe3CKjZCaLjxLGSG8SJpwBCnXsj8xPGXaV9ZWL3j9ktbed8y1aeNVK95HrkgHfHGBXM5Eh/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub661MyMwAqRbcEdBofBaGbgnse74WRuyEbXRSmzq8jzthzutDnXTV2yNQPzgs3ubwuNp7yrSHnECoA5xHgnoEDH4HSGWqLtYdi6nWVZCfXPk/<0;1>/*,[28645006/84'/0'/1']xpub661MyMwAqRbcH2WNMbtz4pZ8wDtpxndYo6E4r5o8pXedve17srma1LCEjM8WcpVk67xsc36KpBNtYUdqo5dpcFMzRfzSZSa4C5DRty4eDNF/<0;1>/*,[28645006/84'/0'/2']xpub661MyMwAqRbcGqcAAnB9mhvQsdUx2fKasUoXT2gMpt2tFz94wRfAkhuLhZUJkjQ5pgnd9Ny9EwrgcHbAASVnQShCbfhnGsKAk2k6yGoWXAv/<0;1>/*)))})#7cy3x3q9
+  descriptor: tr([73c5da0a/84'/0'/4']xpub6BemYiVNp19aAkxPb7RiNKfFcv2N53fpgri5KJuuXjnAvKYFdzeMeSs34DBUBBE5LevKb7H7uCu1YU91HJJixLUk3Y5SsirrLZBoYTVyQoP/<0;1>/*,{or_i(and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub6BemYiVNp19ZzsXfZEitq3w1XJmqRCJcSbxPVjjkZEbmdd445fc9CJ9qiRzFf5MLa3KsF6tb8rWoVUfQW489vNiYJUAYvfiaDBP3Tq1adUC/<0;1>/*,[73c5da0a/84'/0'/1']xpub6BemYiVNp19a4ixx5zcrcQkt1gzKUazQNvK4TNzJYiHrYwoEyi5EC6qmA4dLYWirABF9dDyK8rAAS31QTiwXRhVsUQmWgMeQd9gF7tjL9dt/<0;1>/*,[73c5da0a/84'/0'/2']xpub6BemYiVNp19a7bMHMXMQUWSspcbUW3T2SzDafViz32y9EKG5WETsBC6tQsjE7f9y96XimKaqdcqA2b5ooMFdBxFtDrpDCv7t2i8bm8hR53S/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub6BemYiVNp19a9WzJAv9BMDh5bVp9VnhJyVp6gZGvdE37B9EpzbtmieK8mZQctqvUNBY3ex39Pb3LTnU8VL2AsegpnCE9UGDoC31XR3WAZWn/<0;1>/*,[b8688df1/84'/0'/0']xpub6BemYiVNp19a2Q7Yh4tnz2XbBSE35qiWtfWyoeiSrU3mRgMJASFzwWD6fi3MJXtmV7xqxGfEjCEzwQh76naRg9tj5j29BzPMi9enXJFp5Hh/<0;1>/*,[b8688df1/84'/0'/1']xpub6BemYiVNp19a343cgJCEF4Lkbz61QiXFPaa7Q3Rcmmbacr3v8th7sNkDpPwQmHBku82zLVT2Vzj6dsmQr1NmP5pBzgsmTYqzKb4yD6T84ZT/<0;1>/*)))),or_i(and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub6BemYiVNp19a6oMpxVHJM3SvYfRbYk6V9DGTQtNJH8Pgf5MKmPaJfkqFSzzzpgFfEtTsFb5gvixxRd5McNK5uJ2gqzETwCT92i1kisSt5xi/<0;1>/*,[b8688df1/84'/0'/3']xpub6BemYiVNp19a7qVHXgYnaRWBxd2iuERgnUveoyZCxSqoZSWkXiy5W1aTogfMyUULvRHxYJCzvqkZ11DNqsYjBmFYJQexF2bqZnpjqBDvs3W/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub6BemYiVNp19ZzDMyfc6TFHCG9DFcjBi9ft6Xq4LpA4aqbZPXLkCe9SNyY2cGHFenn8aXMkcbQdivJ8Y6YGLvr9H42vRCA7ua5veGXuAqXM8/<0;1>/*,[28645006/84'/0'/1']xpub6BemYiVNp19a5AWWtzBFix2VP5eTzxDBozA3Pg7K1wp97MjKmoVtVbv19cuVqN4Wbn7NXYT9MZXoj8BD7UJpSQjU8kNcpqj3QTWRSrBAVBj/<0;1>/*,[28645006/84'/0'/2']xpub6BemYiVNp19a7XSHF8DWSNTjGEo7oijwpuzPV9o2oefm2n6BB6NecnLJQ56sxUUmyFKDcVWUhJePqY65wkJ5RuDPRAZmzSGCnyUL2gQgfkg/<0;1>/*)))})#9nr7mke2
   first recv: bc1p9stcwz5597fmkxae9343k8edzkcvdczf9qp65r6p447pg0et82yqst3d2c
   cosigner @0: 73c5da0a [84'/0'/4']  from md1 (not independently verified)
   cosigner @1: 73c5da0a [84'/0'/0']  from md1 (not independently verified)
@@ -1312,7 +1312,7 @@ external oracle sees it.
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.101.0 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.102.0 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage
@@ -1321,7 +1321,7 @@ the authoritative per-flag reference.
 
 This appendix used to be titled EXPERIMENTAL and told you to build a
 proof-of-concept binary from a never-merged branch. **It is a supported feature
-as of v0.101.0** and everything below is live-captured from the shipped
+as of v0.102.0** and everything below is live-captured from the shipped
 `mnemonic`, like the rest of this guide.
 
 What changed: a depth->=2 taptree always ENGRAVED faithfully -- only reading it
@@ -1387,7 +1387,7 @@ And the shipped `mnemonic` reconstructs it -- depth-2 taptree and all:
 $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" depth2.md1)
 miniscript policy restore (12 cosigners)
 CONFIRM: verify each cosigner fingerprint against your records before importing.
-  descriptor: tr([73c5da0a/84'/0'/4']xpub661MyMwAqRbcEyUKSqsBgaz1Lob8pCa1rM1SJ8CEzGCYyP9LisxZ2m1goDqj137XvHdY2nNkctqiE1ixaAFqYHf91CFpFpKicVb7TzvrGsE/<0;1>/*,{{and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub661MyMwAqRbcFHMVYpCiBTXd2Caj7vZhNFHJSgE59Aue2yYkXSrz5q9GaQ4rRjJVhHZTsCiHWSzgMS5beaaTHWVmhpGC7SMdqMXHRXZi8as/<0;1>/*,[73c5da0a/84'/0'/1']xpub661MyMwAqRbcGaxoYcLaxHHXZqEgSRQmN2P5ung8MJ8MNE535mLuhq7zjnrMKyA5eX6ehicVbU1FFPU39LGXbY8PmLPLQxVRQmPFa3Q7spa/<0;1>/*,[73c5da0a/84'/0'/2']xpub661MyMwAqRbcGuXAHBK3oquZS1HJiz2fVZ2idNcK4GLGTXJyGZkPK7fviN6euv5GzY18JD3WBG3SoLat23TLAVjhQMxDVMAqymQNhg3RFT8/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub661MyMwAqRbcGHLCZcLjg25oG8wSyqSE5XNM9uMks6vrpH4pRDC8UmAynovThuKraidMeEKJ2FcqBw1eF76aeu1vrGtLJXUiJXr4r9N1TZQ/<0;1>/*,[b8688df1/84'/0'/0']xpub661MyMwAqRbcGowNgeNcLS8CgL2vnZybpJqtkbCmSQMdq2qzcDWqq3CXXg7x5BqvcNCSaNUw6nisoN7JFK2j3HfxV57nNm2RLKo2UzHgbs6/<0;1>/*,[b8688df1/84'/0'/1']xpub661MyMwAqRbcEv3U8uuxavsQA8LNNYwcNge8rT7SaMS5S8KiEwxoP72TQ8ARYjczPTtVQz6CxcaBTEE3XchmYvSiHcVbC9h17CmyfG7sVq9/<0;1>/*)))},{and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub661MyMwAqRbcG7Xht9EwgNucA47Rmgg8Bn5bNmFdJMkotHQDXirpogQHkVNRcwAy6KwGnUYMUNBFCNaRq4WnsqWW2VNUDdW6ymHXfVpk4c3/<0;1>/*,[b8688df1/84'/0'/3']xpub661MyMwAqRbcEbqBvNkLuDtudGA2PHAbtWUuHKe3CKjZCaLjxLGSG8SJpwBCnXsj8xPGXaV9ZWL3j9ktbed8y1aeNVK95HrkgHfHGBXM5Eh/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub661MyMwAqRbcEdBofBaGbgnse74WRuyEbXRSmzq8jzthzutDnXTV2yNQPzgs3ubwuNp7yrSHnECoA5xHgnoEDH4HSGWqLtYdi6nWVZCfXPk/<0;1>/*,[28645006/84'/0'/1']xpub661MyMwAqRbcH2WNMbtz4pZ8wDtpxndYo6E4r5o8pXedve17srma1LCEjM8WcpVk67xsc36KpBNtYUdqo5dpcFMzRfzSZSa4C5DRty4eDNF/<0;1>/*,[28645006/84'/0'/2']xpub661MyMwAqRbcGqcAAnB9mhvQsdUx2fKasUoXT2gMpt2tFz94wRfAkhuLhZUJkjQ5pgnd9Ny9EwrgcHbAASVnQShCbfhnGsKAk2k6yGoWXAv/<0;1>/*))}})#5trrgdg0
+  descriptor: tr([73c5da0a/84'/0'/4']xpub6BemYiVNp19aAkxPb7RiNKfFcv2N53fpgri5KJuuXjnAvKYFdzeMeSs34DBUBBE5LevKb7H7uCu1YU91HJJixLUk3Y5SsirrLZBoYTVyQoP/<0;1>/*,{{and_v(v:after(1000000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(3,[73c5da0a/84'/0'/0']xpub6BemYiVNp19ZzsXfZEitq3w1XJmqRCJcSbxPVjjkZEbmdd445fc9CJ9qiRzFf5MLa3KsF6tb8rWoVUfQW489vNiYJUAYvfiaDBP3Tq1adUC/<0;1>/*,[73c5da0a/84'/0'/1']xpub6BemYiVNp19a4ixx5zcrcQkt1gzKUazQNvK4TNzJYiHrYwoEyi5EC6qmA4dLYWirABF9dDyK8rAAS31QTiwXRhVsUQmWgMeQd9gF7tjL9dt/<0;1>/*,[73c5da0a/84'/0'/2']xpub6BemYiVNp19a7bMHMXMQUWSspcbUW3T2SzDafViz32y9EKG5WETsBC6tQsjE7f9y96XimKaqdcqA2b5ooMFdBxFtDrpDCv7t2i8bm8hR53S/<0;1>/*))),and_v(v:after(1893456000),and_v(v:sha256(a84dce40975727c398023cfbd50d5db3b9662375521d0f1ac62dbd829b9a08ad),multi_a(2,[73c5da0a/84'/0'/3']xpub6BemYiVNp19a9WzJAv9BMDh5bVp9VnhJyVp6gZGvdE37B9EpzbtmieK8mZQctqvUNBY3ex39Pb3LTnU8VL2AsegpnCE9UGDoC31XR3WAZWn/<0;1>/*,[b8688df1/84'/0'/0']xpub6BemYiVNp19a2Q7Yh4tnz2XbBSE35qiWtfWyoeiSrU3mRgMJASFzwWD6fi3MJXtmV7xqxGfEjCEzwQh76naRg9tj5j29BzPMi9enXJFp5Hh/<0;1>/*,[b8688df1/84'/0'/1']xpub6BemYiVNp19a343cgJCEF4Lkbz61QiXFPaa7Q3Rcmmbacr3v8th7sNkDpPwQmHBku82zLVT2Vzj6dsmQr1NmP5pBzgsmTYqzKb4yD6T84ZT/<0;1>/*)))},{and_v(v:older(65535),multi_a(2,[b8688df1/84'/0'/2']xpub6BemYiVNp19a6oMpxVHJM3SvYfRbYk6V9DGTQtNJH8Pgf5MKmPaJfkqFSzzzpgFfEtTsFb5gvixxRd5McNK5uJ2gqzETwCT92i1kisSt5xi/<0;1>/*,[b8688df1/84'/0'/3']xpub6BemYiVNp19a7qVHXgYnaRWBxd2iuERgnUveoyZCxSqoZSWkXiy5W1aTogfMyUULvRHxYJCzvqkZ11DNqsYjBmFYJQexF2bqZnpjqBDvs3W/<0;1>/*)),and_v(v:older(4255898),multi_a(1,[28645006/84'/0'/0']xpub6BemYiVNp19ZzDMyfc6TFHCG9DFcjBi9ft6Xq4LpA4aqbZPXLkCe9SNyY2cGHFenn8aXMkcbQdivJ8Y6YGLvr9H42vRCA7ua5veGXuAqXM8/<0;1>/*,[28645006/84'/0'/1']xpub6BemYiVNp19a5AWWtzBFix2VP5eTzxDBozA3Pg7K1wp97MjKmoVtVbv19cuVqN4Wbn7NXYT9MZXoj8BD7UJpSQjU8kNcpqj3QTWRSrBAVBj/<0;1>/*,[28645006/84'/0'/2']xpub6BemYiVNp19a7XSHF8DWSNTjGEo7oijwpuzPV9o2oefm2n6BB6NecnLJQ56sxUUmyFKDcVWUhJePqY65wkJ5RuDPRAZmzSGCnyUL2gQgfkg/<0;1>/*))}})#3p0ljhgy
   first recv: bc1p6yc7kzttzsafprr6hwsaefuyqxvee4j48zdrqt4kl9ers68mhcestwvn66
   cosigner @0: 73c5da0a [84'/0'/4']  from md1 (not independently verified)
   cosigner @1: 73c5da0a [84'/0'/0']  from md1 (not independently verified)
