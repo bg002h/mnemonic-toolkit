@@ -101,7 +101,7 @@ $ sh "$REPO/scripts/install.sh" --list
 COMPONENT       CARGO_PACKAGE        DEFAULT      FEATURES       GIT_TAG
 ---------       -------------        -------      --------       -------
 mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.103.2
-md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.16.2
+md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.17.0
 ms              ms-cli               crates.io    (none)         ms-cli-v0.19.0
 mk              mk-cli               crates.io    (none)         mk-cli-v0.13.0
 mnemonic-gui    mnemonic-gui         git (only)   (none)         mnemonic-gui-v0.59.0
