@@ -77,7 +77,7 @@ jobs:
         # only alongside a fix to cli_cross_tool_differential.rs's corpus
         # (retire or re-key the 10 now-invalid entries) or its oracle (add
         # an expected-BothError class for F-217-refused inputs).
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.11.2 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.16.2 md-cli --features cli-compiler
 
       - name: Build mnemonic binary (debug)
         run: cargo build --bin mnemonic
