@@ -1273,7 +1273,7 @@ fn run_watch_only<W: Write, E: Write>(
 
 /// Multisig verify-bundle entry. Synthesizes the expected Bundle (full or
 /// watch-only) and dispatches to `emit_verify_checks(... is_multisig: true)`,
-/// which emits the SPEC §5.7 `3 + 6N` schema in this order:
+/// which emits the SPEC §5.7 `4 + 6N` schema in this order:
 ///
 ///   For each cosigner i ∈ 0..N (interleaved by slot):
 ///     ms1_decode[i], ms1_entropy_match[i],
@@ -1829,7 +1829,7 @@ fn verify_emit_from_expected<W: Write, E: Write>(
         crate::synthesize::Md1Form::Policy,
     )?;
 
-    // SPEC §5.7: descriptor-mode emits the same 9 / 3+6N schema as template-mode.
+    // SPEC §5.7: descriptor-mode emits the same 9 / 4+6N schema as template-mode.
     // is_multisig := descriptor.n > 1.
     let supplied = SuppliedCards {
         ms1: &args.ms1,
@@ -2114,7 +2114,7 @@ fn apply_positional_hrp_autodetect(
 }
 
 // ============================================================================
-// v0.4.4 Phase P — emit_verify_checks helper (SPEC §5.7 9 / 3+6N + forensics).
+// v0.4.4 Phase P — emit_verify_checks helper (SPEC §5.7 9 / 4+6N + forensics).
 // ============================================================================
 
 use crate::synthesize::Bundle;
@@ -2170,7 +2170,7 @@ fn ms1_ground_truth_compare(supplied_ms1: &str, expected_ms1: &str) -> Option<bo
 }
 
 /// SPEC §5.7 verify-bundle check emission. Returns the 9-check array (single-sig)
-/// or 3+6N (multisig) per the SPEC's check-name ordering. Forensic fields
+/// or 4+6N (multisig) per the SPEC's check-name ordering. Forensic fields
 /// populated per SPEC §5.7 rules: pass → all None; string-mismatch → expected/
 /// actual/diff_byte_offset; decode-failure → decode_error; watch-only short-
 /// circuit → passed: true + decode_error: "skipped: watch-only slot".
@@ -3148,6 +3148,12 @@ fn emit_multisig_checks(
                     ..Default::default()
                 });
             }
+            // EMITTED ON EVERY BRANCH, not just the happy one. A check that
+            // appears only when other checks pass is not part of the schema --
+            // `--json` consumers read a FIXED list, and a row that sometimes
+            // vanishes is worse than no row, because its absence reads as
+            // "nothing to say" rather than "not evaluated".
+            checks.push(md1_origin_check(&expected_md_decoded, desc));
         }
         Err(e) => {
             let err_msg = format!("{:?}", e);
@@ -3304,6 +3310,10 @@ fn emit_md1_checks(
             });
         }
     }
+    // The fourth md1 row, on this path too. The schema is one list for every
+    // wallet shape: a check that exists only for multisig is a check a
+    // single-sig consumer cannot rely on.
+    checks.push(md1_origin_check_from_strings(&expected.md1, &supplied_md1));
     Ok(())
 }
 
@@ -3746,6 +3756,137 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
     }
 }
 
+/// `md1_origin_match` — does the card declare the ORIGIN the expectation does?
+///
+/// WHY THIS ROW EXISTS. `md1_xpub_match` compares pubkeys, tree and use-site
+/// path. It does NOT compare the key ORIGIN, and nothing else did either, so
+/// `bundle --descriptor` could drop every `--slot @N.path=` and this command
+/// still reported `result: ok`. Measured before the emit fix: a card declaring
+/// an empty origin verified clean against slots that declared
+/// `m/48'/0'/0'/2'` and `m/48'/0'/1'/2'`. The one field that was wrong was the
+/// one field nothing compared.
+///
+/// THREE OUTCOMES, and the middle one is the point:
+///
+/// 1. origins EQUAL — pass.
+/// 2. the card OMITS an origin the expectation carries — pass, with the
+///    omission named. The card describes the SAME wallet: same keys, same
+///    script, same addresses. It is missing metadata, not describing something
+///    else, and the plate is already engraved — so failing here would cry wolf
+///    on every card written before the emit fix, which the operator cannot
+///    act on. Saying it plainly is the useful thing.
+/// 3. the card declares a DIFFERENT non-empty origin — FAIL. That is a
+///    contradiction with consequences: it points a signer at a key that is not
+///    there, and no address check can see it, because addresses derive from
+///    the xpubs a card CARRIES rather than the origin it DECLARES.
+fn md1_origin_check(expected: &md_codec::Descriptor, actual: &md_codec::Descriptor) -> VerifyCheck {
+    let render = |d: &md_codec::Descriptor| -> Option<Vec<String>> {
+        let ex = md_codec::canonicalize::expand_per_at_n(d).ok()?;
+        Some(
+            ex.iter()
+                .map(|e| {
+                    e.origin_path
+                        .components
+                        .iter()
+                        .map(|c| format!("{}{}", c.value, if c.hardened { "'" } else { "" }))
+                        .collect::<Vec<_>>()
+                        .join("/")
+                })
+                .collect(),
+        )
+    };
+    let (Some(exp), Some(act)) = (render(expected), render(actual)) else {
+        return VerifyCheck {
+            name: "md1_origin_match".into(),
+            passed: true,
+            detail: "skipped: origins not expandable".into(),
+            decode_error: Some("skipped: origins not expandable".into()),
+            ..Default::default()
+        };
+    };
+    if exp.len() != act.len() {
+        return VerifyCheck {
+            name: "md1_origin_match".into(),
+            passed: false,
+            detail: format!(
+                "expected {} origins, card declares {}",
+                exp.len(),
+                act.len()
+            ),
+            ..Default::default()
+        };
+    }
+    let mut contradictions: Vec<String> = Vec::new();
+    let mut omissions: Vec<usize> = Vec::new();
+    for (i, (e, a)) in exp.iter().zip(act.iter()).enumerate() {
+        if e == a {
+            continue;
+        }
+        if a.is_empty() {
+            omissions.push(i);
+        } else {
+            contradictions.push(format!("@{i}: expected {e:?}, card declares {a:?}"));
+        }
+    }
+    if !contradictions.is_empty() {
+        return VerifyCheck {
+            name: "md1_origin_match".into(),
+            passed: false,
+            detail: format!(
+                "the card declares a DIFFERENT key origin than expected — a signer \
+                 following it looks for a key that is not there ({})",
+                contradictions.join("; ")
+            ),
+            ..Default::default()
+        };
+    }
+    if !omissions.is_empty() {
+        let which: Vec<String> = omissions.iter().map(|i| format!("@{i}")).collect();
+        return VerifyCheck {
+            name: "md1_origin_match".into(),
+            passed: true,
+            detail: format!(
+                "card omits the key origin for {} — same wallet and same addresses, \
+                 but a signer cannot be pointed at those keys from the card alone \
+                 (cards written before the --slot @N.path= emit fix look like this)",
+                which.join(", ")
+            ),
+            ..Default::default()
+        };
+    }
+    VerifyCheck {
+        name: "md1_origin_match".into(),
+        passed: true,
+        detail: format!("all {} key origins match expected", exp.len()),
+        ..Default::default()
+    }
+}
+
+/// `md1_origin_check` for the single-sig emitter, which holds card STRINGS
+/// rather than decoded descriptors. Decoding here keeps one comparison for both
+/// paths -- the row must mean the same thing in single-sig and multisig, or
+/// `--json` consumers get a field whose semantics depend on the wallet shape.
+fn md1_origin_check_from_strings(expected_md1: &[String], supplied_md1: &[&str]) -> VerifyCheck {
+    let exp_refs: Vec<&str> = expected_md1.iter().map(String::as_str).collect();
+    let skipped = |why: &str| VerifyCheck {
+        name: "md1_origin_match".into(),
+        passed: true,
+        detail: format!("skipped: {why}"),
+        decode_error: Some(format!("skipped: {why}")),
+        ..Default::default()
+    };
+    if exp_refs.is_empty() || supplied_md1.is_empty() {
+        return skipped("no md1 to compare");
+    }
+    let (Ok(e), Ok(a)) = (
+        md_codec::chunk::reassemble(&exp_refs),
+        md_codec::chunk::reassemble(supplied_md1),
+    ) else {
+        return skipped("md1 not decodable here; md1_decode carries that verdict");
+    };
+    md1_origin_check(&e, &a)
+}
+
 #[cfg(test)]
 mod helper_tests {
     use super::*;
@@ -3789,7 +3930,7 @@ mod helper_tests {
     }
 
     #[test]
-    fn helper_singlesig_full_emits_9_checks_in_spec_order() {
+    fn helper_singlesig_full_emits_10_checks_in_spec_order() {
         let expected = synth_full_bundle();
         let supplied_ms1 = expected.ms1.clone();
         let supplied_mk1 = match &expected.mk1 {
@@ -3816,8 +3957,9 @@ mod helper_tests {
         .unwrap();
         assert_eq!(
             checks.len(),
-            9,
-            "single-sig must emit 9 checks per SPEC §5.7"
+            10,
+            "single-sig must emit 10 checks per SPEC §5.7 -- 10 since \
+             `md1_origin_match` joined the md1 rows"
         );
         let names: Vec<&str> = checks.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(
@@ -3832,6 +3974,13 @@ mod helper_tests {
                 "md1_decode",
                 "md1_wallet_policy",
                 "md1_xpub_match",
+                // SPEC §5.7 grows by one: `md1_origin_match`. The row exists
+                // because nothing compared the key ORIGIN, which is how
+                // `bundle --descriptor` could drop every `--slot @N.path=` and
+                // still be told `result: ok`. This list is the contract, and
+                // it moving is the point -- a new check that no consumer can
+                // see is not a check.
+                "md1_origin_match",
             ],
             "checks must be in SPEC §5.7 order"
         );
@@ -3917,7 +4066,8 @@ mod helper_tests {
             &mut _test_se,
         )
         .unwrap();
-        assert_eq!(checks.len(), 9);
+        // 10, not 9: `md1_origin_match` joined the md1 rows.
+        assert_eq!(checks.len(), 10);
         // ms1_decode and ms1_entropy_match are skipped per SPEC §5.7.
         let ms1_decode = &checks[0];
         let ms1_match = &checks[1];
@@ -3938,7 +4088,7 @@ mod helper_tests {
     }
 
     #[test]
-    fn helper_multisig_watch_only_emits_3plus6n_checks_in_spec_order() {
+    fn helper_multisig_watch_only_emits_4plus6n_checks_in_spec_order() {
         use crate::parse::{CosignerSpec, MultisigPathFamily};
         use crate::synthesize::synthesize_multisig_watch_only;
         use bitcoin::bip32::DerivationPath;
@@ -4012,8 +4162,9 @@ mod helper_tests {
         .unwrap();
         assert_eq!(
             checks.len(),
-            6 * n + 3,
-            "multisig must emit 3+6N checks per SPEC §5.7 (N={n})"
+            6 * n + 4,
+            "multisig must emit 4+6N checks per SPEC §5.7 (N={n}) -- 4 since \
+             `md1_origin_match` joined the md1 rows"
         );
         let names: Vec<&str> = checks.iter().map(|c| c.name.as_str()).collect();
         // First 6N: per-cosigner [i]-indexed.
@@ -4026,17 +4177,19 @@ mod helper_tests {
             expected_names.push(format!("mk1_fingerprint_match[{i}]"));
             expected_names.push(format!("mk1_path_match[{i}]"));
         }
-        // Last 3: shared md1.
+        // Last 4: shared md1. (Was 3; `md1_origin_match` joined them -- see the
+        // sibling test above for why.)
         expected_names.push("md1_decode".into());
         expected_names.push("md1_wallet_policy".into());
         expected_names.push("md1_xpub_match".into());
+        expected_names.push("md1_origin_match".into());
         let expected_names_ref: Vec<&str> = expected_names.iter().map(String::as_str).collect();
         assert_eq!(names, expected_names_ref, "SPEC §5.7 ordering");
         // The fixture uses two distinct mnemonic seeds → two distinct cosigner
         // xpubs → two distinct chunk_set_ids; mk_codec grouping works correctly.
         // Per-cell forensic content on the chunked multi-card path is fully
         // exercised by cli_bundle_multisig.rs / cli_verify_bundle_*.rs end-to-end.
-        // This unit test asserts the helper's structural contract (3+6N name
+        // This unit test asserts the helper's structural contract (4+6N name
         // vec + ms1_decode happy-path) only.
         let ms1_decode_passed = checks
             .iter()
@@ -4049,7 +4202,7 @@ mod helper_tests {
     }
 
     #[test]
-    fn helper_multisig_full_emits_3plus6n_checks_in_spec_order() {
+    fn helper_multisig_full_emits_4plus6n_checks_in_spec_order() {
         // B.1: full-mode multisig fixture. Reuses watch-only synthesis for the
         // mk1+md1 (distinct cosigners → distinct chunk_set_ids → grouping works)
         // then manually populates expected.ms1 with two distinct non-empty ms1
@@ -4146,8 +4299,9 @@ mod helper_tests {
         .unwrap();
         assert_eq!(
             checks.len(),
-            6 * n + 3,
-            "multisig must emit 3+6N checks (N={n})"
+            6 * n + 4,
+            "multisig must emit 4+6N checks (N={n}) -- 4 since \
+             `md1_origin_match` joined the md1 rows"
         );
         // Substantive ms1 happy-path: case 2 (decodes Ok + byte-equal) for both slots.
         for i in 0..n {
@@ -4687,7 +4841,7 @@ mod helper_tests {
         // an abort — the full check array still emits (G3).
         assert_eq!(
             checks.len(),
-            9,
+            10,
             "mismatch must not truncate the check table"
         );
     }

@@ -39,7 +39,7 @@ fn bundle_json_schema_field_order() {
 }
 
 #[test]
-fn verify_bundle_json_emits_9_checks_in_spec_order() {
+fn verify_bundle_json_emits_10_checks_in_spec_order() {
     let fixture =
         std::fs::read_to_string("tests/vectors/v0_1/bip84-mainnet.txt").expect("fixture exists");
     let ms1 = fixture
@@ -90,7 +90,10 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
     assert_eq!(v["schema_version"], "4");
     assert_eq!(v["result"], "ok");
     let checks = v["checks"].as_array().expect("checks is an array");
-    assert_eq!(checks.len(), 9, "9 checks emitted (SPEC §2.2)");
+    // 10, not 9: `md1_origin_match` joined the md1 rows -- nothing had been
+    // comparing the key ORIGIN, which is how a dropped `--slot @N.path=` could
+    // still report `result: ok`.
+    assert_eq!(checks.len(), 10, "10 checks emitted (SPEC §2.2)");
     let names: Vec<&str> = checks.iter().map(|c| c["name"].as_str().unwrap()).collect();
     assert_eq!(
         names,
@@ -104,6 +107,12 @@ fn verify_bundle_json_emits_9_checks_in_spec_order() {
             "md1_decode",
             "md1_wallet_policy",
             "md1_xpub_match",
+            // `md1_origin_match` joined the §5.7 schema: nothing compared the
+            // key ORIGIN, which is how `bundle --descriptor` could accept a
+            // `--slot @N.path=`, drop it, and still be told `result: ok`.
+            // This list is the JSON contract a consumer reads, so it moving is
+            // deliberate and visible rather than silent.
+            "md1_origin_match",
         ]
     );
 }

@@ -5851,7 +5851,26 @@ uses to find its key.
 against the slot's declared path, skipped (not passed) when no path was
 supplied, so an elided canonical origin is not reported as a mismatch.
 
-- **Status:** OPEN. **Tier:** `verification-gap` / `funds-adjacent`.
+**RESOLVED 2026-09-19.** `md1_origin_match` ships, with THREE outcomes rather
+than the two the sketch above imagined:
+
+  1. origins equal — pass;
+  2. the card OMITS an origin the expectation carries — **pass, with the
+     omission named**. The card describes the same wallet: same keys, same
+     script, same addresses. Failing here would cry wolf on every card written
+     before the emit fix, and the plate is already engraved — the operator
+     cannot act on it. Saying it plainly is the useful thing;
+  3. the card declares a DIFFERENT non-empty origin — **fail**. That one points
+     a signer at a key that is not there, and no address check can see it.
+
+Emitted on EVERY branch and on BOTH the single-sig and multisig paths: a row
+that appears only when other checks pass is not part of the schema, and a row
+that exists only for one wallet shape is one a consumer cannot rely on. The
+`--json` contract moves with it: 9 → 10 single-sig, `3+6N` → `4+6N` multisig,
+updated in the check-order tests and the JSON envelope test, which is where a
+consumer would notice.
+
+- **Status:** ✓ RESOLVED. **Tier:** `verification-gap` / `funds-adjacent`.
 
 
 ### `taproot-wallet-policy-arm-still-renders-depth0` — the xpub-header fix does not reach `tr(NUMS, multi_a/sortedmulti_a)` (tier: correctness/interop; owning phase: next restore cycle)
