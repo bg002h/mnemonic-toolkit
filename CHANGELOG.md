@@ -154,6 +154,63 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.103.0] — 2026-09-19
+
+### Added
+
+- **`verify-bundle` compares the key ORIGIN.** A new `md1_origin_match` row.
+  Nothing had been comparing it — the previous rows covered pubkeys, tree and
+  use-site path — which is how `bundle --descriptor` could accept a
+  `--slot @N.path=`, drop it, and still report `result: ok`. Three outcomes:
+  origins equal → pass; the card **omits** an origin → pass, with the omission
+  named (same wallet, same addresses; the plate is already engraved and failing
+  would cry wolf); the card declares a **different** origin → fail, because that
+  points a signer at a key that is not there.
+
+  **`--json` contract:** the `checks[]` list grows by one — 9 → 10 for
+  single-sig, `3+6N` → `4+6N` for multisig. Emitted on every branch and on both
+  the single-sig and multisig paths, so a consumer can rely on it being present.
+
+### Fixed
+
+- **The taproot wallet-policy arm renders its xpub header from the origin.**
+  `tr(NUMS,multi_a)` and `tr(NUMS,sortedmulti_a)` restore through a path that
+  does not use md-codec's renderer, so they kept emitting depth-0 keys under
+  depth-4 origins after every other shape stopped. Addresses unchanged; the two
+  affected goldens moved with the same `first recv:` address either side.
+
+### Changed
+
+- **THE ACCEPT-SET NARROWED IN 0.102.0 AND THAT RELEASE DID NOT SAY SO.**
+  Recorded here because a narrowing an operator meets as an unexplained exit 2
+  is worse than one they were told about. Since 0.102.0, md-codec refuses to
+  MINT a card whose slots contradict each other:
+
+  - two slots binding one real `(fingerprint, origin)` to DIFFERENT xpubs
+    (`OriginKeyContradiction`) — e.g. `wsh(sortedmulti(2,@0,@1))` with two
+    distinct xpubs sharing a fingerprint and no origin paths, which exited 0
+    before;
+  - two slots carrying the SAME key at the same use-site
+    (`DuplicateKeySlots`) — a degenerate `multi(k,K,…,K)` one signer satisfies
+    *k* times.
+
+  Both refusals are at MINT only: an existing card still decodes (md-codec
+  0.44.2), so no backup became unreadable.
+
+  The `OriginKeyContradiction` message now ends with a way forward, which it did
+  not: give each slot its own `--slot @N.path=`, or omit
+  `--slot @N.fingerprint=` so the origin names no master and there is nothing to
+  contradict. Both escapes are measured.
+
+- `synthesize_multisig_full` deleted (it was `pub`, uncalled outside tests, and
+  minted a degenerate k-of-n). Its coverage was re-pinned first — threshold
+  validation onto `synthesize_multisig_watch_only`, slot-unique csi directly
+  onto `derive_mk1_chunk_set_id_for_slot`.
+
+- `verify-bundle` now emits the same "no origin supplied; defaulting" advisory
+  `bundle` does. It had been silently discarding that bookkeeping, so the two
+  commands disagreed about whether the operator is owed a sentence.
+
 ## mnemonic-toolkit [0.102.0] — 2026-09-19
 
 ### Fixed

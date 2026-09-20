@@ -2364,18 +2364,7 @@ pub(crate) fn bind_descriptor_mode_paths(
             by_index_path.insert(s.index, s);
         }
     }
-    let mut by_index_subkeys: std::collections::BTreeMap<
-        u8,
-        std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
-    > = std::collections::BTreeMap::new();
-    for s in slots {
-        by_index_subkeys
-            .entry(s.index)
-            .or_default()
-            .insert(s.subkey);
-    }
     for (idx, slot_path) in &by_index_path {
-        let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
         // XPUB-BEARING SLOTS ROUTE THROUGH HERE TOO, and used not to.
         //
         // The note said they were "handled by the per-slot binding loop's own
@@ -2389,7 +2378,6 @@ pub(crate) fn bind_descriptor_mode_paths(
         // place. The Xpub branch's own handling is unaffected: it still uses
         // the path for derivation, and the row-19 mismatch guard below still
         // refuses a slot path that contradicts an inline one.
-        let _ = &subkeys;
         let user_path = DerivationPath::from_str(&slot_path.value)
             .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
         let user_origin = derivation_path_to_origin(&user_path);
@@ -2514,7 +2502,13 @@ fn emit_default_path_notice<E: Write>(
     // hardcoded 2'.
     writeln!(
         stderr,
-        "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/..."
+        // Says "defaulting", not "non-canonical descriptor". The old wording
+        // asserted a property of the INPUT that this notice never checked, and
+        // after path-binding was ungated for canonical shapes it could be flatly
+        // false. What the operator needs to know is that an origin was CHOSEN
+        // for them and how to choose it themselves -- which slots, and the two
+        // ways to override. The shape of the descriptor is not their problem.
+        "info: no origin supplied for {idx_list}; defaulting to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
     )
     .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     Ok(())

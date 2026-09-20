@@ -249,22 +249,46 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
             fingerprint,
             path,
         } => format!(
+            // ENDS WITH A WAY FORWARD. The first wording stopped at "at least
+            // one of these origins is wrong", which is true and useless to
+            // someone handed two xpubs who does not know their paths. Both
+            // escapes below are measured, not guessed: supplying the real paths
+            // makes the card correct, and dropping the fingerprints makes the
+            // origin name no master, so there is nothing left to contradict.
             "md1 slots @{a} and @{b} both declare [{fingerprint}/{path}] but carry \
              DIFFERENT xpubs. BIP-32 is deterministic, so one (fingerprint, path) is \
              exactly one key — at least one of these origins is wrong. No address check \
              catches this: addresses derive from the xpubs the card CARRIES, not from \
              the origin it declares, so it surfaces only when a signer is asked to find \
-             the key."
+             the key.\n\
+             \n\
+             To fix: give each slot its OWN origin with --slot @N.path=m/... (two \
+             cosigners at different accounts is the usual case). If you do not know \
+             where these keys were derived, omit --slot @N.fingerprint= instead — a \
+             card that names no master claims nothing it cannot support, and the keys \
+             and addresses are unaffected either way."
         ),
+        // UNREACHABLE FROM THIS CRATE TODAY, and the wording matters for when
+        // it stops being so. md-codec's `validate_relative_timelocks` is
+        // opt-in and is NOT called from `encode.rs`, so nothing here can raise
+        // this variant; the arm exists for exhaustiveness.
+        //
+        // It used to read "the plate would assert a lock the chain does not
+        // enforce", i.e. as a refusal. This toolkit's policy for exactly that
+        // condition is the NON-BLOCKING advisory in `timelock_advisory.rs`. Two
+        // surfaces contradicting each other about whether a masked `older()` is
+        // fatal would be worse than either answer, and the advisory is the one
+        // that ships. So this describes the fact and defers the verdict.
         E::RelativeTimelockTruncated {
             written,
             enforced,
             units,
         } => format!(
-            "md1 relative timelock older({written}) is truncated by BIP-68 to \
-             {enforced} {units} — the plate would assert a lock the chain does not \
-             enforce. A relative lock cannot exceed 65535 {units}; use an absolute \
-             after(<height>) instead."
+            "md1 relative timelock older({written}) is masked by BIP-68 to \
+             {enforced} {units} — a relative lock cannot exceed 65535 {units}. \
+             An absolute after(<height>) expresses a longer delay. (This \
+             toolkit reports the same condition as a non-blocking advisory; see \
+             `timelock_advisory`.)"
         ),
         E::PathDepthExceeded { got, max } => {
             format!("md1 path depth {} exceeds max {}", got, max)

@@ -1,6 +1,6 @@
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.102.0 -- worked examples (Linux), exact verbatim I/O"
+subtitle: "mnemonic-toolkit v0.103.0 -- worked examples (Linux), exact verbatim I/O"
 date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
@@ -17,7 +17,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.102.0** on Linux and **both the command and its full output are
+`mnemonic` **v0.103.0** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -142,7 +142,7 @@ Verify the install and list every subcommand:
 
 ```
 $ mnemonic --version
-mnemonic 0.102.0
+mnemonic 0.103.0
 ```
 
 ```
@@ -523,7 +523,7 @@ each key as a depth-0 master xpub, an equivalent serialisation):
 $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" multisig.md1)
 2-of-3 multisig restore
 CONFIRM: verify each cosigner fingerprint against your records before importing.
-  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*,[28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*))#yjp7hj7w
+  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*,[b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/<0;1>/*,[28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/<0;1>/*))#284ufd99
   first recv: bc1qkssenl2m6t3aynza394sr9m86vt6md2v76kj52jun2xlwrdeaa4q84qtpl
   cosigner @0: 73c5da0a [87'/0'/0']  from md1 (not independently verified)
   cosigner @1: b8688df1 [87'/0'/0']  from md1 (not independently verified)
@@ -540,7 +540,7 @@ $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" multisig.md1) --format 
 [
   {
     "active": true,
-    "desc": "wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/0/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/0/*,[28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/0/*))#y65a0dtg",
+    "desc": "wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/0/*,[b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/0/*,[28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/0/*))#f507s7vs",
     "internal": false,
     "range": [
       0,
@@ -550,7 +550,7 @@ $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" multisig.md1) --format 
   },
   {
     "active": true,
-    "desc": "wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/1/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/1/*,[28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/1/*))#k0gfvz2t",
+    "desc": "wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/1/*,[b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/1/*,[28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/1/*))#mpn2n3dn",
     "internal": true,
     "range": [
       0,
@@ -561,7 +561,7 @@ $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" multisig.md1) --format 
 ]
 2-of-3 multisig restore
 CONFIRM: verify each cosigner fingerprint against your records before importing the payload above.
-  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*,[28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*))#yjp7hj7w
+  descriptor: wsh(sortedmulti(2,[73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*,[b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/<0;1>/*,[28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/<0;1>/*))#284ufd99
   first recv: bc1qkssenl2m6t3aynza394sr9m86vt6md2v76kj52jun2xlwrdeaa4q84qtpl
   cosigner @0: 73c5da0a [87'/0'/0']  from md1 (not independently verified)
   cosigner @1: b8688df1 [87'/0'/0']  from md1 (not independently verified)
@@ -1271,7 +1271,7 @@ note: stdout is watch-only — public keys only, cannot spend
 $ mnemonic restore --network mainnet $(sed "s/^/--md1 /" taproot-multi.md1)
 2-of-3 multisig restore
 CONFIRM: verify each cosigner fingerprint against your records before importing.
-  descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,sortedmulti_a(2,[73c5da0a/87'/0'/0']xpub661MyMwAqRbcFrooZ2966EcDmVX5MoFXZhuJqXTudvJzwBTBfPQSc5JzX52fvS18oqSdEJXJ4kTGRJ76wPWDUSNJsY5JsgVBQoD6KrbdCLL/<0;1>/*,[b8688df1/87'/0'/0']xpub661MyMwAqRbcEnFgxHRLx7i1fnjcBPgc71qy8mVkbGXYukNGMK2XFRbAaCLYEJDUufNoBxTNa68i5MYhqmrEkfhjzgHCUEcvJBhXS5bk4RW/<0;1>/*,[28645006/87'/0'/0']xpub661MyMwAqRbcEdy4jr5EtEhQBctfscE6a99DGLr2cW4HnnmBsXDoe3odGzRiw3hcRM5wfKcQmb7s5FjdGrR6SrExXmeopaoY9Lk7tQusDjN/<0;1>/*))#k0lsap8u
+  descriptor: tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,sortedmulti_a(2,[73c5da0a/87'/0'/0']xpub6BemYiVNp19a1SyyZSfGjq1cGbiBf4zSe4aPtayb3z18XpxVDc9biYKZf6x59n3ygbD2cChbh9yPZLguns3v7Jb5UByfgur7nd4rN9cAXyh/<0;1>/*,[b8688df1/87'/0'/0']xpub6BemYiVNp19ZzNRrxhwXbi7QAtviUfRXBNX4Bq1S1LDgWPsZuXmgMtbjiEFwTeGKnR9CZrdgCVeqDQ8WhFPwPXvWbLBZHTyrg1ZHURg94U4/<0;1>/*,[28645006/87'/0'/0']xpub6BemYiVNp19ZzE9EkGbRXq6ngj5nAsy1eVpJKQMi2ZkRPSGVRjxxkWpCR2M8APkTJ6rM3DniPzdzDJKS8Kxo5iTj8RZAdpAUXAbsvhBmpS9/<0;1>/*))#c6tjr7uh
   first recv: bc1p550zvnachy40z6hh8llka93mkm0c3635samp264ck6rfd0dcdc8s00n8c8
   cosigner @0: 73c5da0a [87'/0'/0']  from md1 (not independently verified)
   cosigner @1: b8688df1 [87'/0'/0']  from md1 (not independently verified)
@@ -1312,7 +1312,7 @@ external oracle sees it.
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.102.0 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.103.0 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage
@@ -1321,7 +1321,7 @@ the authoritative per-flag reference.
 
 This appendix used to be titled EXPERIMENTAL and told you to build a
 proof-of-concept binary from a never-merged branch. **It is a supported feature
-as of v0.102.0** and everything below is live-captured from the shipped
+as of v0.103.0** and everything below is live-captured from the shipped
 `mnemonic`, like the rest of this guide.
 
 What changed: a depth->=2 taptree always ENGRAVED faithfully -- only reading it

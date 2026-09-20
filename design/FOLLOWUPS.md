@@ -5671,7 +5671,7 @@ companion test asserting that spread so it cannot decay into a tautology.
 **Filed 2026-09-19.** Branch: `deps/md-codec-0.44.0` (`0d6eec71`, `0c04b6f6`).
 
 **The bump itself is proven.** `md-codec = { git = ..., tag =
-"descriptor-mnemonic-md-cli-v0.16.0" }`. On the original repro, `restore` goes
+"descriptor-mnemonic-md-cli-v0.16.2" }`. On the original repro, `restore` goes
 from `depth=0` to `depth=4` under its `[73c5da0a/48'/0'/0'/2']` origin and the
 first receive address is byte-identical — only the serialisation moved.
 
@@ -5784,7 +5784,11 @@ origin derives a different key and concludes the plate is not theirs.
 refused. Worth fixing as one class: **a path the operator supplies must reach
 the artifact or be refused, never be silently dropped.**
 
-- **Status:** OPEN. **Tier:** `correctness` / `funds-adjacent`.
+- **Status:** ✓ RESOLVED (mnemonic-toolkit v0.102.0). Emit and verify both bind
+  the supplied path; `cli_slot_path_reaches_the_card.rs` pins it, including the
+  partial-inline-origin case a whole-diff review caught. `audit_i10_...` is
+  GREEN — the line above saying it "stays RED until this lands" described the
+  branch mid-flight and the landing is what retired it. **Tier:** `correctness` / `funds-adjacent`.
 
 ### `delete-synthesize-multisig-full` — a dead helper kept alive by four tests (tier: cleanup; owning phase: any)
 

@@ -1511,7 +1511,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // `defaulted_indices` is discarded: verify-bundle emits no notice, and the
     // sole consumed output (`path_decl.paths`) is byte-identical to the prior
     // hand-copied block (only the discarded bookkeeping differs).
-    let _defaulted = crate::cmd::bundle::bind_descriptor_mode_paths(
+    let defaulted = crate::cmd::bundle::bind_descriptor_mode_paths(
         crate::cmd::bundle::DescriptorBindMode::Verify,
         &args.slot,
         &mut descriptor_resolved.path_decl,
@@ -1521,6 +1521,27 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         args.network,
         args.account,
     )?;
+    // THE DEFAULTED SLOTS ARE REPORTED, not discarded. They used to be dropped
+    // on the floor, so `bundle` told the operator it had chosen an origin for
+    // them while `verify-bundle` -- running the SAME inference against the SAME
+    // card -- said nothing. Two commands disagreeing about whether the operator
+    // is owed a sentence is worse than either wording: someone who runs only
+    // `verify-bundle` never learns an origin was assumed on their behalf.
+    // Advisory on stderr, like the emit side; no check row and no exit code
+    // moves.
+    if !defaulted.is_empty() {
+        let idx_list = defaulted
+            .iter()
+            .map(|i| format!("@{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = writeln!(
+            stderr,
+            "info: no origin supplied for {idx_list}; assuming the BIP-48 \
+             cosigner path to rebuild the expected card. If that is not where \
+             those keys live, set it with [fp/path]@N or --slot @N.path=m/..."
+        );
+    }
 
     // Per-slot descriptor-mode binding loop using mutated path_decl as the
     // per-`@N` anno_path source. Mirror of bundle.rs:939-1099.
