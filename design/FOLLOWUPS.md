@@ -5802,3 +5802,40 @@ in `cmd/bundle.rs` is the existing pattern), then delete the function and its tw
 remaining fixture uses.
 
 - **Status:** OPEN. **Tier:** `cleanup`. Not blocking anything.
+
+### `verify-bundle-does-not-check-md1-origins` — the missing check that let the path-drop live (tier: verification gap; owning phase: next verify-bundle cycle)
+
+**Found 2026-09-19**, while confirming that md-codec 0.44.2 restores readability
+of cards emitted before `bundle` learned to carry `--slot @N.path=`.
+
+`verify-bundle` emits exactly three md1 rows:
+
+```
+md1_decode:        ok decoded successfully
+md1_wallet_policy: ok wallet-policy mode confirmed
+md1_xpub_match:    ok all 2 pubkeys match expected (multiset) and decoded
+                      policy (tree + use-site path) matches
+```
+
+**Pubkeys, tree, use-site path — never the ORIGIN path.** So a card whose md1
+declares an empty origin verifies `result: ok` against slots that declared
+`m/48'/0'/0'/2'` and `m/48'/0'/1'/2'`. Measured on exactly such a card.
+
+**This is the check whose absence hid `bundle-descriptor-drops-per-slot-path`.**
+Every slot dropped its origin identically, so the card round-tripped to itself;
+addresses derive from the xpubs a card CARRIES, so every address matched; and
+the one artifact that was actually wrong — the md1's declared origin — was the
+one thing nothing compared. The `mk1_path_match[i]` rows DO check the per-card
+path, which is why the defect looked invisible rather than obviously untested.
+
+**Scope note, so severity is not overstated:** with the emit fix in place a
+newly-written card carries its origins, so this now matters mainly for cards
+written before it. It is still a false PASS — `verify-bundle` reports a backup
+sound when its origins are absent — and a backup's origins are what a signer
+uses to find its key.
+
+**To close it:** an `md1_origin_match` row comparing each `@N`'s decoded origin
+against the slot's declared path, skipped (not passed) when no path was
+supplied, so an elided canonical origin is not reported as a mismatch.
+
+- **Status:** OPEN. **Tier:** `verification-gap` / `funds-adjacent`.
