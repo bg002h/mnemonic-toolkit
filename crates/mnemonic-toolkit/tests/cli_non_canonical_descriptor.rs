@@ -46,7 +46,7 @@ fn non_canonical_wsh_andor_default_path_inference_emits_bundle() {
     // SPEC §4.12.d byte-exact info notice on default-path emission.
     assert!(
         stderr.contains(
-            "info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/..."
+            "info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
         ),
         "stderr did not contain default-path info notice; got:\n{stderr}"
     );
@@ -168,9 +168,7 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
     // H12 (cycle-1): a taproot (`tr(...)`) root tag defaults the BIP-48
     // script-type leaf to 3' (P2TR), not 2' (P2WSH).
     assert!(
-        stderr.contains(
-            "info: non-canonical descriptor; defaulting origin path for @0 to m/48'/0'/0'/3'"
-        ),
+        stderr.contains("info: no origin supplied for @0; defaulting to m/48'/0'/0'/3'"),
         "stderr did not contain default-path info notice for tr(NUMS); got:\n{stderr}"
     );
 }
@@ -775,12 +773,22 @@ fn verify_bundle_does_not_acquire_row19_refusal() {
     );
 }
 
-/// D3 — `verify-bundle` still emits NO default-path-inference notice post-dedup
-/// (the notice is emit-only and stays at the bundle call site). The notice
-/// string is `emit_default_path_notice`'s `info: non-canonical descriptor;
-/// defaulting origin path …`. verify-bundle is read-only.
+/// D3, INVERTED 2026-09-19. `verify-bundle` now emits the SAME
+/// default-path-inference notice `bundle` does.
+///
+/// It used to assert the opposite, on the reasoning that "the notice is
+/// emit-only ... verify-bundle is read-only". Read-only is a reason not to
+/// CHANGE anything; it is not a reason to withhold what was assumed. Both
+/// commands run the identical inference against the identical card, so the old
+/// behaviour meant an operator who ran only `verify-bundle` never learned that
+/// an origin had been chosen for them — while someone running `bundle` was
+/// told. Two commands disagreeing about whether the operator is owed a
+/// sentence is worse than either wording.
+///
+/// It remains an advisory: no check row and no exit code moves, which is what
+/// keeps `verify-bundle` read-only in the sense that mattered.
 #[test]
-fn verify_bundle_emits_no_default_path_notice() {
+fn verify_bundle_emits_the_default_path_notice_like_bundle_does() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -802,8 +810,10 @@ fn verify_bundle_emits_no_default_path_notice() {
         .assert();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        !stderr.contains("info: non-canonical descriptor; defaulting origin path"),
-        "verify-bundle emitted the emit-only default-path notice; got:\n{stderr}"
+        stderr.contains("info: no origin supplied for"),
+        "verify-bundle must tell the operator an origin was ASSUMED, exactly as \
+         bundle does -- silence here means someone who only verifies never \
+         learns it; got:\n{stderr}"
     );
 }
 

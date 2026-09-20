@@ -21,7 +21,7 @@ use zeroize::Zeroizing;
 ///
 /// - `derive_slot::derive_bip32_from_entropy` (this file)
 /// - `derive_slot::derive_bip32_at_path` (this file)
-/// - `synthesize::synthesize_multisig_full`
+/// - `synthesize::synthesize_unified` (the multisig emit path)
 /// - `parse_descriptor::bind_full_mode`
 /// - `cmd::bundle::bundle_run_unified_descriptor` (Phrase + Entropy arms)
 /// - `cmd::derive_child::run` (Phrase master)

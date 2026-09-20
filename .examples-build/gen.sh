@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Generator for docs/Examples.pdf — emits Examples.md to stdout with EXACT,
-# verbatim command input + output captured from the real `mnemonic` v0.102.0
+# verbatim command input + output captured from the real `mnemonic` v0.103.0
 # binary. No eliding: every command is run and its full combined output shown.
 #
 # Prose is ASCII-only (the body roman font lacks math glyphs); real command
@@ -41,7 +41,7 @@ done
 
 # Pin to the real, non-experimental shipped binary.
 VER=$(mnemonic --version 2>/dev/null)
-[ "$VER" = "mnemonic 0.102.0" ] || { echo "FATAL: expected mnemonic 0.102.0, got '$VER'" >&2; exit 1; }
+[ "$VER" = "mnemonic 0.103.0" ] || { echo "FATAL: expected mnemonic 0.103.0, got '$VER'" >&2; exit 1; }
 
 rm -rf "$WORK"; mkdir -p "$WORK"; cd "$WORK" || exit 1
 
@@ -106,7 +106,7 @@ show() { printf '\n```\n'; for c in "$@"; do printf '$ %s\n' "$c"; done; printf 
 cat <<'MD'
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.102.0 -- worked examples (Linux), exact verbatim I/O"
+subtitle: "mnemonic-toolkit v0.103.0 -- worked examples (Linux), exact verbatim I/O"
 date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
@@ -123,7 +123,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.102.0** on Linux and **both the command and its full output are
+`mnemonic` **v0.103.0** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -709,7 +709,7 @@ cat <<'MD'
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.102.0 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.103.0 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage
@@ -718,7 +718,7 @@ the authoritative per-flag reference.
 
 This appendix used to be titled EXPERIMENTAL and told you to build a
 proof-of-concept binary from a never-merged branch. **It is a supported feature
-as of v0.102.0** and everything below is live-captured from the shipped
+as of v0.103.0** and everything below is live-captured from the shipped
 `mnemonic`, like the rest of this guide.
 
 What changed: a depth->=2 taptree always ENGRAVED faithfully -- only reading it

@@ -2364,18 +2364,7 @@ pub(crate) fn bind_descriptor_mode_paths(
             by_index_path.insert(s.index, s);
         }
     }
-    let mut by_index_subkeys: std::collections::BTreeMap<
-        u8,
-        std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
-    > = std::collections::BTreeMap::new();
-    for s in slots {
-        by_index_subkeys
-            .entry(s.index)
-            .or_default()
-            .insert(s.subkey);
-    }
     for (idx, slot_path) in &by_index_path {
-        let subkeys = by_index_subkeys.get(idx).cloned().unwrap_or_default();
         // XPUB-BEARING SLOTS ROUTE THROUGH HERE TOO, and used not to.
         //
         // The note said they were "handled by the per-slot binding loop's own
@@ -2389,7 +2378,6 @@ pub(crate) fn bind_descriptor_mode_paths(
         // place. The Xpub branch's own handling is unaffected: it still uses
         // the path for derivation, and the row-19 mismatch guard below still
         // refuses a slot path that contradicts an inline one.
-        let _ = &subkeys;
         let user_path = DerivationPath::from_str(&slot_path.value)
             .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}")))?;
         let user_origin = derivation_path_to_origin(&user_path);
@@ -2514,7 +2502,13 @@ fn emit_default_path_notice<E: Write>(
     // hardcoded 2'.
     writeln!(
         stderr,
-        "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/..."
+        // Says "defaulting", not "non-canonical descriptor". The old wording
+        // asserted a property of the INPUT that this notice never checked, and
+        // after path-binding was ungated for canonical shapes it could be flatly
+        // false. What the operator needs to know is that an origin was CHOSEN
+        // for them and how to choose it themselves -- which slots, and the two
+        // ways to override. The shape of the descriptor is not their problem.
+        "info: no origin supplied for {idx_list}; defaulting to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
     )
     .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     Ok(())
@@ -2893,18 +2887,49 @@ mod self_check_ms1_tests {
     }
 
     /// A real 2-of-3 self-multisig bundle (md1/mk1/ms1 all valid + decodable).
+    /// A SECRET-BEARING 2-of-3 from one seed at accounts 0..3, built through
+    /// `synthesize_unified` — the PRODUCTION path.
+    ///
+    /// Was `synthesize_multisig_full`, now deleted: it was `pub`, called from
+    /// nothing outside `#[cfg(test)]`, and it replicated one xpub across every
+    /// slot — a degenerate `multi(k, K, K, K)` one signer satisfies k times.
+    ///
+    /// NOT `synthesize_multisig_watch_only`, which was the obvious swap and is
+    /// wrong here: the ms1 self-check cells below assert a NON-EMPTY ms1 per
+    /// cosigner, and the watch-only helper emits empty sentinels. Routing
+    /// through `synthesize_unified` keeps the secret half and has the side
+    /// benefit that this fixture now exercises the path the CLI actually takes.
     fn multisig_bundle() -> Bundle {
+        use crate::synthesize::{synthesize_unified, Md1Form, ResolvedSlot};
+        use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+        use bitcoin::secp256k1::Secp256k1;
+        use std::str::FromStr;
         let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
-        crate::synthesize::synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
+        let entropy = m.to_entropy();
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &m.to_seed("")).unwrap();
+        let slots: Vec<ResolvedSlot> = (0..3u32)
+            .map(|acct| {
+                let path = DerivationPath::from_str(&format!("48'/0'/{acct}'/2'")).unwrap();
+                ResolvedSlot {
+                    xpub: Xpub::from_priv(&secp, &master.derive_priv(&secp, &path).unwrap()),
+                    fingerprint: master.fingerprint(&secp),
+                    path,
+                    entropy: Some(zeroize::Zeroizing::new(entropy.clone())),
+                    master_xpub: None,
+                    language: None,
+                    _entropy_pin: None,
+                }
+            })
+            .collect();
+        synthesize_unified(
+            &slots,
             CliTemplate::WshSortedMulti,
             2,
-            3,
-            0,
-            MultisigPathFamily::Bip87,
+            CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap()
     }
@@ -3075,9 +3100,12 @@ mod self_check_mk1_xpub_binding_tests {
     }
 
     /// A 2-of-2 multisig with DISTINCT per-slot xpubs. NB: NOT
-    /// `synthesize_multisig_full` — that is self-multisig (all N xpubs
-    /// byte-identical), which would make a cross-slot card swap undetectable
-    /// by construction. Watch-only (ms1 = ["", ""]) keeps the fixture small.
+    /// the deleted `synthesize_multisig_full` — that was self-multisig (all N
+    /// xpubs byte-identical), which would make a cross-slot card swap
+    /// undetectable by construction. This note is why that function is gone:
+    /// the knowledge lived here, in a helper that routed around it, instead of
+    /// being fixed at the source. Watch-only (ms1 = ["", ""]) keeps the fixture
+    /// small.
     fn distinct_xpub_multisig_bundle() -> Bundle {
         let secp = Secp256k1::new();
         let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();

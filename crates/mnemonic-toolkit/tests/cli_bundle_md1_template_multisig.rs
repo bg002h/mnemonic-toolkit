@@ -271,13 +271,27 @@ fn template_form_accepts_tr_sortedmulti_a_since_the_render_gap_closed() {
     let (out, _) = bundle_ok(&args);
     let md1 = md1_lines(&out);
     let md1_refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
-    let decoded = md_codec::chunk::reassemble(&md1_refs)
-        .expect("tr-sortedmulti-a template md1 must decode -- the gap that justified refusing it");
+    let decoded =
+        md_codec::chunk::reassemble(&md1_refs).expect("tr-sortedmulti-a template md1 must decode");
     assert!(
         contains_sortedmulti_a(&decoded.tree),
         "the emitted template must keep its sortedmulti_a leaf, else the shape \
          was silently rewritten into a different wallet"
     );
+    // WHY THIS ASSERTS DECODE AND NOT RENDER, since review flagged the earlier
+    // comment for advertising the latter.
+    //
+    // The gap that justified the old refusal was in `to_miniscript_descriptor`
+    // — true. But a TEMPLATE card is keyless by construction, so rendering one
+    // to a concrete descriptor is not a thing that can succeed: tried, and it
+    // returns `MissingPubkey { idx: 0 }`. What this cell can and must show is
+    // that the shape SURVIVES the round trip, which is the half the refusal
+    // was protecting — a template minted and then unreadable.
+    //
+    // The render half is covered where keys exist:
+    // `template.rs::tr_sortedmulti_a_2_of_2_round_trips_via_md_codec` (the
+    // inverted gap pin) and
+    // `cli_restore_taproot::non_nums_distinct_trunk_sortedmulti_a_restores_faithfully`.
 }
 
 /// Structural search for a `SortedMultiA` leaf anywhere under the tree.

@@ -38,7 +38,11 @@ const SEED_MASTER_XPUB: &str = "xpub661MyMwAqRbcFkPHucMnrGNzDwb6teAX1RbKQmqtEF8k
 
 /// Substring of the stderr default-path notice emitted for NON-canonical
 /// descriptors only (`emit_default_path_notice`, `bundle.rs`).
-const DEFAULT_PATH_NOTICE: &str = "info: non-canonical descriptor; defaulting origin path";
+// The notice no longer asserts "non-canonical descriptor" — it described a
+// property of the INPUT that the notice never checked, and once path-binding
+// was ungated for canonical shapes it could be false. It now names the SLOTS
+// and the remedy, which is what the operator can act on.
+const DEFAULT_PATH_NOTICE: &str = "info: no origin supplied for";
 
 /// `bundle --descriptor <d> --slot <s>… --json` → (parsed JSON, raw stderr).
 /// Always `--no-engraving-card`, mainnet.

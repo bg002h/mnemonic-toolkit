@@ -5671,7 +5671,7 @@ companion test asserting that spread so it cannot decay into a tautology.
 **Filed 2026-09-19.** Branch: `deps/md-codec-0.44.0` (`0d6eec71`, `0c04b6f6`).
 
 **The bump itself is proven.** `md-codec = { git = ..., tag =
-"descriptor-mnemonic-md-cli-v0.16.0" }`. On the original repro, `restore` goes
+"descriptor-mnemonic-md-cli-v0.16.2" }`. On the original repro, `restore` goes
 from `depth=0` to `depth=4` under its `[73c5da0a/48'/0'/0'/2']` origin and the
 first receive address is byte-identical — only the serialisation moved.
 
@@ -5784,7 +5784,11 @@ origin derives a different key and concludes the plate is not theirs.
 refused. Worth fixing as one class: **a path the operator supplies must reach
 the artifact or be refused, never be silently dropped.**
 
-- **Status:** OPEN. **Tier:** `correctness` / `funds-adjacent`.
+- **Status:** ✓ RESOLVED (mnemonic-toolkit v0.102.0). Emit and verify both bind
+  the supplied path; `cli_slot_path_reaches_the_card.rs` pins it, including the
+  partial-inline-origin case a whole-diff review caught. `audit_i10_...` is
+  GREEN — the line above saying it "stays RED until this lands" described the
+  branch mid-flight and the landing is what retired it. **Tier:** `correctness` / `funds-adjacent`.
 
 ### `delete-synthesize-multisig-full` — a dead helper kept alive by four tests (tier: cleanup; owning phase: any)
 
@@ -5814,7 +5818,32 @@ against a fixture that does not need this helper (`distinct_xpub_multisig_bundle
 in `cmd/bundle.rs` is the existing pattern), then delete the function and its two
 remaining fixture uses.
 
-- **Status:** OPEN. **Tier:** `cleanup`. Not blocking anything.
+**RESOLVED 2026-09-19 — deleted.** The coverage was re-pinned first, and onto
+better anchors than the function itself:
+
+- **threshold validation** → `synthesize_multisig_watch_only`, which carries the
+  identical two `MultisigConfig` guards and takes EXPLICIT cosigners, so it
+  cannot mint the degenerate wallet the deleted helper could. Gained a control
+  assertion that a legal threshold is accepted, so the two rejections are not
+  passing because the function rejects everything.
+- **slot-unique csi** → `derive_mk1_chunk_set_id_for_slot` DIRECTLY. That
+  primitive has ten production call sites across bundle, verify-bundle and
+  synthesize, so the audit-I10 property is now pinned where it lives rather than
+  through a wrapper no shipping code called. Also pins determinism, since a card
+  minted today must still match itself tomorrow.
+- **four fixture uses** → `synthesize_multisig_watch_only` for the three that
+  are watch-only, and `synthesize_unified` — the PRODUCTION path — for
+  `cmd/bundle.rs::multisig_bundle`, whose ms1 self-check cells assert a
+  non-empty ms1 per cosigner that the watch-only helper cannot give. That
+  fixture now exercises the path the CLI actually takes.
+
+Two rows left `lint_zeroize_discipline.rs` with the function, plus a third whose
+anchor it owned; the surviving path wraps at the `ResolvedSlot.entropy` FIELD
+(`Option<Zeroizing<Vec<u8>>>`), which is a structural guarantee rather than a
+per-call one and is pinned by its own row. Rows whose subject is gone, not a
+discipline relaxed.
+
+- **Status:** ✓ RESOLVED. **Tier:** `cleanup`.
 
 ### `verify-bundle-does-not-check-md1-origins` — the missing check that let the path-drop live (tier: verification gap; owning phase: next verify-bundle cycle)
 
@@ -5851,7 +5880,26 @@ uses to find its key.
 against the slot's declared path, skipped (not passed) when no path was
 supplied, so an elided canonical origin is not reported as a mismatch.
 
-- **Status:** OPEN. **Tier:** `verification-gap` / `funds-adjacent`.
+**RESOLVED 2026-09-19.** `md1_origin_match` ships, with THREE outcomes rather
+than the two the sketch above imagined:
+
+  1. origins equal — pass;
+  2. the card OMITS an origin the expectation carries — **pass, with the
+     omission named**. The card describes the same wallet: same keys, same
+     script, same addresses. Failing here would cry wolf on every card written
+     before the emit fix, and the plate is already engraved — the operator
+     cannot act on it. Saying it plainly is the useful thing;
+  3. the card declares a DIFFERENT non-empty origin — **fail**. That one points
+     a signer at a key that is not there, and no address check can see it.
+
+Emitted on EVERY branch and on BOTH the single-sig and multisig paths: a row
+that appears only when other checks pass is not part of the schema, and a row
+that exists only for one wallet shape is one a consumer cannot rely on. The
+`--json` contract moves with it: 9 → 10 single-sig, `3+6N` → `4+6N` multisig,
+updated in the check-order tests and the JSON envelope test, which is where a
+consumer would notice.
+
+- **Status:** ✓ RESOLVED. **Tier:** `verification-gap` / `funds-adjacent`.
 
 
 ### `taproot-wallet-policy-arm-still-renders-depth0` — the xpub-header fix does not reach `tr(NUMS, multi_a/sortedmulti_a)` (tier: correctness/interop; owning phase: next restore cycle)
@@ -5889,4 +5937,14 @@ as the others, or reconstruct the header from the origin at that emit site; then
 re-baseline those two goldens and DELETE this entry rather than leaving them
 unexplained.
 
-- **Status:** OPEN. **Tier:** `correctness` / `interop`.
+**RESOLVED 2026-09-19.** `xpub_from_65_bytes` (`cmd/restore.rs`) takes the
+origin and sets `depth` = its component count, `child_number` = its terminal
+component — the same reconstruction md-codec does, applied at the one emit site
+that does not route through it. The arm now renders 3/3 for the `87'/0'/0'`
+fixtures. `parent_fingerprint` stays zero for the reason it always does: it is
+hash160 of the PARENT point, which the md1 wire does not carry.
+
+The two goldens are re-baselined, and the `first recv:` address in each is
+UNCHANGED — the check that this moved serialisation and not a wallet.
+
+- **Status:** ✓ RESOLVED. **Tier:** `correctness` / `interop`.

@@ -2870,18 +2870,42 @@ mod tests {
         // walker arm produces the same Tag::SortedMultiA tree the template encoder
         // has been producing since v0.3.0 (template-mode bypasses rust-miniscript).
         use crate::parse::{CosignerSpec, MultisigPathFamily};
-        use crate::synthesize::synthesize_multisig_full;
+        use crate::synthesize::synthesize_multisig_watch_only;
         use crate::template::CliTemplate;
 
         // Template-mode self-multisig bundle (v0.3.0 path: bypasses miniscript).
         let mnemonic = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
-        let template_bundle = synthesize_multisig_full(
-            &mnemonic,
-            "",
+        // Built from EXPLICIT per-account cosigners since
+        // `synthesize_multisig_full` was deleted -- same two keys the
+        // descriptor half derives below, so the byte-equality this cell
+        // asserts still compares like with like.
+        let tpl_secp = Secp256k1::new();
+        let tpl_master =
+            Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &mnemonic.to_seed("")).unwrap();
+        let tpl_script = CliTemplate::TrSortedMultiA.bip48_script_type().unwrap_or(0);
+        let tpl_cosigners: Vec<CosignerSpec> = (0..2u32)
+            .map(|acct| {
+                let ps = MultisigPathFamily::Bip48.default_origin_path(
+                    CliNetwork::Mainnet,
+                    acct,
+                    tpl_script,
+                );
+                let path = DerivationPath::from_str(&ps).unwrap();
+                CosignerSpec {
+                    xpub: Xpub::from_priv(
+                        &tpl_secp,
+                        &tpl_master.derive_priv(&tpl_secp, &path).unwrap(),
+                    ),
+                    master_fingerprint: tpl_master.fingerprint(&tpl_secp),
+                    path: Some(path),
+                }
+            })
+            .collect();
+        let template_bundle = synthesize_multisig_watch_only(
+            &tpl_cosigners,
             CliNetwork::Mainnet,
             CliTemplate::TrSortedMultiA,
             2, // threshold
-            2, // cosigner_count
             0, // account
             MultisigPathFamily::Bip48,
             false, // privacy_preserving
