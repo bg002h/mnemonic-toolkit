@@ -599,213 +599,6 @@ pub(crate) fn derive_xpub_at_path(
     Ok(Xpub::from_priv(secp, &xpriv))
 }
 
-/// TEST-ONLY since 2026-09-19. It was `pub`, and nothing in this repo called
-/// it outside `#[cfg(test)]` (checked, every site). `mnemonic-toolkit` is
-/// distributed as a binary and is not on crates.io, so it had no library
-/// consumers either -- but a public function that mints a k-of-n is the wrong
-/// thing to leave lying around once its shape has been ruled against.
-///
-/// WHAT IT USED TO BE. `IMPLEMENTATION_PLAN_mnemonic_toolkit_v0_2.md` designed
-/// it as "self-multisig": one seed filling every slot, with a SELF-MULTISIG
-/// WARNING acknowledging that "the cards are byte-identical interchangeable
-/// copies". That is a degenerate k-of-n -- one signer satisfies it k times --
-/// and the operator ruling of 2026-09-19 ("ReUsing same key is bad. Reusing
-/// seed to generate different keys at different keypaths is ok") retires that
-/// shape. The CLI route to it was already gone; this keeps the helper for the
-/// tests that still exercise its threshold validation and its slot-unique csi
-/// derivation, in the corrected per-account form.
-///
-/// Deleting it outright is the tidier end state and is filed as such; it would
-/// take `multisig_threshold_validation` and the audit-I10 csi cell with it, so
-/// it is a cleanup with its own coverage question, not a side effect of this
-/// cycle.
-#[cfg(test)]
-/// Synthesize a full-mode multisig bundle from ONE seed: cosigner `i` is
-/// derived at `account + i`, so the N xpubs are DISTINCT.
-///
-/// It used to derive all N at the SAME path, making every xpub byte-identical.
-/// That is a degenerate wallet, not a multisig: identical keys at an identical
-/// use-site derive the identical pubkey at every index, so the script is
-/// `multi(k, K, K, …)` and ONE signer satisfies it k times. No k-of-n property
-/// survives, whatever the metadata declares. `distinct_xpub_multisig_bundle`
-/// in `cmd/bundle.rs` already said so — "which would make a cross-slot card
-/// swap undetectable by construction" — and avoided this function for exactly
-/// that reason.
-///
-/// Operator ruling 2026-09-19, verbatim: **"ReUsing same key is bad. Reusing
-/// seed to generate different keys at different keypaths is ok."** So the seed
-/// stays shared (that is the point of the helper) and the PATHS diverge, which
-/// is the legitimate multi-account cosigner shape. md-codec 0.43's
-/// `DuplicateKeySlots` refuses the old shape and admits this one; it compares
-/// key + use-site and deliberately NOT the fingerprint, so one master funding
-/// several accounts still passes.
-///
-/// SPEC §4.1, §4.5 multisig, §4.6 multisig.
-#[allow(clippy::too_many_arguments)]
-pub fn synthesize_multisig_full(
-    seed_mnemonic: &bip39::Mnemonic,
-    passphrase: &str,
-    network: CliNetwork,
-    template: CliTemplate,
-    threshold: u8,
-    cosigner_count: usize,
-    account: u32,
-    path_family: MultisigPathFamily,
-    privacy_preserving: bool,
-) -> Result<Bundle, ToolkitError> {
-    // 1. Validate config (SPEC §2.1.1).
-    if cosigner_count == 0 || cosigner_count > 16 {
-        return Err(ToolkitError::MultisigConfig {
-            message: format!("cosigner_count {} out of range 1..=16", cosigner_count),
-        });
-    }
-    if threshold == 0 || threshold as usize > cosigner_count {
-        return Err(ToolkitError::MultisigConfig {
-            message: format!(
-                "threshold {} out of range 1..={} (cosigner_count)",
-                threshold, cosigner_count
-            ),
-        });
-    }
-    if !template.is_multisig() {
-        return Err(ToolkitError::MultisigConfig {
-            message: format!(
-                "template {} is single-sig; multisig synthesis requires a multisig template",
-                template.human_name()
-            ),
-        });
-    }
-
-    // 2. Master xpriv.
-    // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy + no
-    // Drop; tracked by FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`. The
-    // 64-byte seed is `Zeroizing<[u8; 64]>` via `derive_master_seed`.
-    let seed = crate::derive_slot::derive_master_seed(seed_mnemonic, passphrase);
-    let secp = Secp256k1::new();
-    let master = Xpriv::new_master(network.network_kind(), &seed[..])
-        .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
-    let master_fingerprint = master.fingerprint(&secp);
-
-    // 3. One seed, one key PER SLOT: cosigner `i` at `account + i`, so the N
-    //    xpubs differ. Deriving them all at one path made them byte-identical,
-    //    which is a degenerate multisig (see the doc comment above).
-    let script_type = template.bip48_script_type().unwrap_or(0);
-    let mut slot_xpubs: Vec<[u8; 65]> = Vec::with_capacity(cosigner_count);
-    let mut slot_origins: Vec<md_codec::OriginPath> = Vec::with_capacity(cosigner_count);
-    // The full `Xpub` + its path per slot, for the mk1 cards below: a card
-    // carries the key it is FOR, so slot `i`'s card must carry slot `i`'s key.
-    let mut slot_keys: Vec<(Xpub, DerivationPath)> = Vec::with_capacity(cosigner_count);
-    for i in 0..cosigner_count {
-        let acct = account.checked_add(i as u32).ok_or_else(|| {
-            ToolkitError::BadInput(format!(
-                "multisig account {account} + {i} slots overflows u32"
-            ))
-        })?;
-        let path_str = path_family.default_origin_path(network, acct, script_type);
-        let xpub = derive_xpub_at_path(&master, &secp, &path_str)?;
-        let path = DerivationPath::from_str(&path_str)
-            .map_err(|e| ToolkitError::BadInput(format!("path parse {}: {}", path_str, e)))?;
-        slot_xpubs.push(xpub_to_65(&xpub));
-        slot_origins.push(derivation_path_to_origin_path(&path));
-        slot_keys.push((xpub, path));
-    }
-
-    // 4. Build multisig descriptor.
-    let fp_bytes: [u8; 4] = master_fingerprint.to_bytes();
-    let tree = template.wrapper_node(threshold, cosigner_count);
-
-    // The master fingerprint is SHARED and correctly so: one seed funds every
-    // slot, and the fingerprint identifies the master, not the key.
-    let fingerprints: Vec<(u8, [u8; 4])> =
-        (0..cosigner_count).map(|i| (i as u8, fp_bytes)).collect();
-    let pubkeys: Vec<(u8, [u8; 65])> = slot_xpubs
-        .iter()
-        .enumerate()
-        .map(|(i, x)| (i as u8, *x))
-        .collect();
-
-    let descriptor = Descriptor {
-        n: cosigner_count as u8,
-        path_decl: PathDecl {
-            n: cosigner_count as u8,
-            paths: PathDeclPaths::Divergent(slot_origins),
-        },
-        use_site_path: UseSitePath::standard_multipath(),
-        tree,
-        tlv: TlvSection {
-            use_site_path_overrides: None,
-            fingerprints: Some(fingerprints),
-            pubkeys: Some(pubkeys),
-            origin_path_overrides: None,
-            unknown: Vec::new(),
-        },
-    };
-
-    // 5. Compute policy_id + N-element stubs list.
-    let policy_id = md_codec::compute_wallet_policy_id(&descriptor).map_err(ToolkitError::from)?;
-    let mut stub = [0u8; 4];
-    stub.copy_from_slice(&policy_id.as_bytes()[..4]);
-    let stubs: Vec<[u8; 4]> = vec![stub; cosigner_count];
-
-    // 6+7. Build N KeyCards + emit per-cosigner mk1.
-    let mut per_cosigner: Vec<Vec<String>> = Vec::with_capacity(cosigner_count);
-    for (i, slot_key) in slot_keys.iter().enumerate().take(cosigner_count) {
-        let card = mk_codec::KeyCard::new(
-            stubs.clone(),
-            if privacy_preserving {
-                None
-            } else {
-                Some(master_fingerprint)
-            },
-            mk1_origin_path(&slot_key.0, &slot_key.1),
-            slot_key.0,
-        );
-        debug_assert_eq!(card.policy_id_stubs, stubs);
-        debug_assert!(descriptor.is_wallet_policy());
-        // Slot-unique csi (audit I10). The xpubs now differ per slot, but the
-        // MASTER FINGERPRINT is still shared across all N — one seed — and the
-        // old scheme keyed the csi on the fingerprint, so it collided every
-        // cosigner regardless. The slot-XOR is what separates them.
-        let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
-        let chunks = mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
-        per_cosigner.push(chunks);
-    }
-
-    // 8. md1.
-    let md1 = md_codec::chunk::split(&descriptor).map_err(ToolkitError::from)?;
-
-    // 9. ms1.
-    // SPEC v0.9.0 §1 item 2 — wrap entropy buffer before move-into-Payload.
-    // The ms_codec::Payload::Entr(Vec<u8>) public shape is unwrapped per
-    // SPEC §3 OOS-2; we clone the wrapped buffer's contents into the
-    // public Vec at the call boundary so the original Zeroizing wrap
-    // drops with scrubbing at function exit.
-    // ms mnem Phase 3 Step 5: emit mnem for non-English sources.
-    let entropy = zeroize::Zeroizing::new(seed_mnemonic.to_entropy());
-    let mnemonic_lang = seed_mnemonic.language();
-    let ms1_payload = if mnemonic_lang == bip39::Language::English {
-        ms_codec::Payload::Entr((*entropy).clone())
-    } else {
-        ms_codec::Payload::Mnem {
-            language: crate::language::bip39_to_wire_code(mnemonic_lang),
-            entropy: (*entropy).clone(),
-        }
-    };
-    let ms1 = ms_codec::encode(ms_codec::Tag::ENTR, &ms1_payload).map_err(ToolkitError::from)?;
-
-    // SPEC §5.8: length-N ms1 vec. Legacy self-multisig path is hard-rejected
-    // for cosigner_count > 1 at bundle.rs entry (BIP-388); cosigner_count == 1
-    // produces vec![ms1]. The clone-N pattern is correct should the hard-reject
-    // ever be lifted (would still violate BIP-388 distinctness, but synthesis
-    // contract holds).
-    let ms1_field: MsField = vec![ms1; cosigner_count];
-    Ok(Bundle {
-        ms1: ms1_field,
-        mk1: MkField::Multi(per_cosigner),
-        md1,
-    })
-}
-
 #[allow(dead_code)]
 /// Synthesize a watch-only multisig bundle from cosigner xpubs.
 /// SPEC §4.1, §4.3, §4.5 multisig, §4.6 multisig.
@@ -1608,43 +1401,31 @@ mod tests {
     }
 
     #[test]
-    fn multisig_full_self_multisig_emits_distinct_slot_unique_csi_cards() {
-        use bip39::Mnemonic;
-        let m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
-        let bundle = synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
-            CliTemplate::WshSortedMulti,
-            2,
-            3,
-            0,
-            MultisigPathFamily::Bip87,
-            false,
-        )
-        .unwrap();
-        let multi = bundle.mk1.as_multi().expect("multisig must emit Multi");
-        assert_eq!(multi.len(), 3, "3 cosigners → 3 card-sets");
-        // Audit I10: self-multisig means all xpubs are identical, so the OLD
-        // per-fingerprint csi made all N card-sets byte-IDENTICAL — the exact
-        // collision that broke verify-bundle reassembly. Post-fix each cosigner
-        // gets a distinct slot-XOR csi, so the card-sets are pairwise DISTINCT.
-        for i in 1..3 {
-            assert_ne!(
-                multi[0], multi[i],
-                "post-I10 self-multisig card-sets must be DISTINCT (slot-unique csi)"
-            );
-        }
-        assert_ne!(multi[1], multi[2], "slots 1 and 2 must also differ");
-        // Cross-binding round-trip via decode.
-        let card_strs: Vec<&str> = multi[0].iter().map(|s| s.as_str()).collect();
-        let decoded = mk_codec::decode(&card_strs).unwrap();
-        assert_eq!(decoded.policy_id_stubs.len(), 3);
-        let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
-        let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
-        assert!(desc.is_wallet_policy());
-        let pid = md_codec::compute_wallet_policy_id(&desc).unwrap();
-        assert_eq!(&decoded.policy_id_stubs[0], &pid.as_bytes()[..4]);
+    fn slot_unique_csi_is_distinct_per_slot() {
+        // AUDIT I10, pinned on the PRIMITIVE instead of on a deleted wrapper.
+        //
+        // The collision that broke verify-bundle reassembly came from keying
+        // the chunk-set id on something shared across cosigners: every card set
+        // then landed in one reassembly group. `derive_mk1_chunk_set_id_for_slot`
+        // XORs the slot index in, and it is heavily production-used (bundle,
+        // verify-bundle, synthesize), so this pins the property where it lives
+        // rather than through a helper no shipping code calls.
+        let stub = [0xDE, 0xAD, 0xBE, 0xEF];
+        let ids: Vec<_> = (0..8u32)
+            .map(|i| derive_mk1_chunk_set_id_for_slot(&stub, i))
+            .collect();
+        let mut sorted = ids.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(
+            sorted.len(),
+            ids.len(),
+            "each slot must get a DISTINCT chunk-set id from one stub; \
+             collisions are what merged every cosigner into one reassembly group"
+        );
+        // Determinism: the same (stub, slot) must always give the same id, or a
+        // card minted today stops matching itself tomorrow.
+        assert_eq!(ids[3], derive_mk1_chunk_set_id_for_slot(&stub, 3));
     }
 
     /// Phase 3 pin (md-codec catchup v0.16.1 → v0.33.1): a 2-of-3
@@ -1660,19 +1441,8 @@ mod tests {
         use md_codec::tag::Tag;
         use md_codec::tree::{Body, Node};
 
-        let m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
-        let bundle = synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
-            CliTemplate::WshSortedMulti,
-            2,
-            3,
-            0,
-            MultisigPathFamily::Bip87,
-            false,
-        )
-        .unwrap();
+        let _m = Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let bundle = watch_only_multisig_from_one_seed(2, 3, false);
 
         let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
         let desc = md_codec::chunk::reassemble(&md1_strs).unwrap();
@@ -1750,54 +1520,93 @@ mod tests {
         }
     }
 
+    /// N cosigners from ONE seed at accounts `0..n`, then
+    /// `synthesize_multisig_watch_only`.
+    ///
+    /// Replaces `synthesize_multisig_full` as the multisig fixture. That helper
+    /// was deleted: it was `pub`, called from nothing outside `#[cfg(test)]`,
+    /// and it replicated a single xpub across every slot -- a degenerate
+    /// `multi(k, K, …, K)` one signer satisfies k times. One seed at distinct
+    /// accounts is the shape the operator ruling of 2026-09-19 permits, and it
+    /// is what the deleted helper had been corrected to do anyway.
+    ///
+    /// Watch-only rather than full: the ms1 half is exercised by the
+    /// descriptor-route cells, and nothing here asserts on it.
+    fn watch_only_multisig_from_one_seed(k: u8, n: u32, privacy: bool) -> Bundle {
+        let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &m.to_seed("")).unwrap();
+        let cosigners: Vec<CosignerSpec> = (0..n)
+            .map(|acct| {
+                let path = DerivationPath::from_str(&format!("m/87'/0'/{acct}'")).unwrap();
+                CosignerSpec {
+                    xpub: Xpub::from_priv(&secp, &master.derive_priv(&secp, &path).unwrap()),
+                    master_fingerprint: master.fingerprint(&secp),
+                    path: Some(path),
+                }
+            })
+            .collect();
+        synthesize_multisig_watch_only(
+            &cosigners,
+            CliNetwork::Mainnet,
+            CliTemplate::WshSortedMulti,
+            k,
+            0,
+            MultisigPathFamily::Bip87,
+            privacy,
+        )
+        .unwrap()
+    }
+
     #[test]
     fn multisig_threshold_validation() {
+        // Re-pinned onto `synthesize_multisig_watch_only` when
+        // `synthesize_multisig_full` was deleted: BOTH carried the same two
+        // `MultisigConfig` guards, and the surviving one takes explicit
+        // cosigners so it cannot mint the degenerate wallet the deleted helper
+        // could. The guards are what this cell is about, not the wrapper.
         let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &m.to_seed("")).unwrap();
+        let cosigner = |acct: u32| -> CosignerSpec {
+            let path = DerivationPath::from_str(&format!("m/87'/0'/{acct}'")).unwrap();
+            CosignerSpec {
+                xpub: Xpub::from_priv(&secp, &master.derive_priv(&secp, &path).unwrap()),
+                master_fingerprint: master.fingerprint(&secp),
+                path: Some(path),
+            }
+        };
+        let cosigners = vec![cosigner(0), cosigner(1), cosigner(2)];
+        let call = |k: u8| {
+            synthesize_multisig_watch_only(
+                &cosigners,
+                CliNetwork::Mainnet,
+                CliTemplate::WshSortedMulti,
+                k,
+                0,
+                MultisigPathFamily::Bip87,
+                false,
+            )
+        };
         // K = 0 rejected.
-        let e = synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
-            CliTemplate::WshSortedMulti,
-            0,
-            3,
-            0,
-            MultisigPathFamily::Bip87,
-            false,
-        )
-        .unwrap_err();
-        assert!(matches!(e, ToolkitError::MultisigConfig { .. }));
+        assert!(matches!(
+            call(0).unwrap_err(),
+            ToolkitError::MultisigConfig { .. }
+        ));
         // K > N rejected.
-        let e = synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
-            CliTemplate::WshSortedMulti,
-            5,
-            3,
-            0,
-            MultisigPathFamily::Bip87,
-            false,
-        )
-        .unwrap_err();
-        assert!(matches!(e, ToolkitError::MultisigConfig { .. }));
+        assert!(matches!(
+            call(5).unwrap_err(),
+            ToolkitError::MultisigConfig { .. }
+        ));
+        // Control: a legal threshold is accepted, so the two above are not
+        // passing because the function rejects everything.
+        assert!(call(2).is_ok(), "2-of-3 must be accepted");
     }
 
     #[test]
     fn multisig_privacy_preserving_omits_fingerprints_in_mk1() {
-        let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
-        let bundle = synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
-            CliTemplate::WshSortedMulti,
-            2,
-            2,
-            0,
-            MultisigPathFamily::Bip87,
-            true,
-        )
-        .unwrap();
+        let _m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
+        let bundle = watch_only_multisig_from_one_seed(2, 3, true);
         let multi = bundle.mk1.as_multi().unwrap();
         for chunks in multi {
             let strs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();

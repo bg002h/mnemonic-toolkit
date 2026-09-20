@@ -5814,7 +5814,32 @@ against a fixture that does not need this helper (`distinct_xpub_multisig_bundle
 in `cmd/bundle.rs` is the existing pattern), then delete the function and its two
 remaining fixture uses.
 
-- **Status:** OPEN. **Tier:** `cleanup`. Not blocking anything.
+**RESOLVED 2026-09-19 — deleted.** The coverage was re-pinned first, and onto
+better anchors than the function itself:
+
+- **threshold validation** → `synthesize_multisig_watch_only`, which carries the
+  identical two `MultisigConfig` guards and takes EXPLICIT cosigners, so it
+  cannot mint the degenerate wallet the deleted helper could. Gained a control
+  assertion that a legal threshold is accepted, so the two rejections are not
+  passing because the function rejects everything.
+- **slot-unique csi** → `derive_mk1_chunk_set_id_for_slot` DIRECTLY. That
+  primitive has ten production call sites across bundle, verify-bundle and
+  synthesize, so the audit-I10 property is now pinned where it lives rather than
+  through a wrapper no shipping code called. Also pins determinism, since a card
+  minted today must still match itself tomorrow.
+- **four fixture uses** → `synthesize_multisig_watch_only` for the three that
+  are watch-only, and `synthesize_unified` — the PRODUCTION path — for
+  `cmd/bundle.rs::multisig_bundle`, whose ms1 self-check cells assert a
+  non-empty ms1 per cosigner that the watch-only helper cannot give. That
+  fixture now exercises the path the CLI actually takes.
+
+Two rows left `lint_zeroize_discipline.rs` with the function, plus a third whose
+anchor it owned; the surviving path wraps at the `ResolvedSlot.entropy` FIELD
+(`Option<Zeroizing<Vec<u8>>>`), which is a structural guarantee rather than a
+per-call one and is pinned by its own row. Rows whose subject is gone, not a
+discipline relaxed.
+
+- **Status:** ✓ RESOLVED. **Tier:** `cleanup`.
 
 ### `verify-bundle-does-not-check-md1-origins` — the missing check that let the path-drop live (tier: verification gap; owning phase: next verify-bundle cycle)
 

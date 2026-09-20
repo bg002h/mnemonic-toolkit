@@ -2893,18 +2893,49 @@ mod self_check_ms1_tests {
     }
 
     /// A real 2-of-3 self-multisig bundle (md1/mk1/ms1 all valid + decodable).
+    /// A SECRET-BEARING 2-of-3 from one seed at accounts 0..3, built through
+    /// `synthesize_unified` — the PRODUCTION path.
+    ///
+    /// Was `synthesize_multisig_full`, now deleted: it was `pub`, called from
+    /// nothing outside `#[cfg(test)]`, and it replicated one xpub across every
+    /// slot — a degenerate `multi(k, K, K, K)` one signer satisfies k times.
+    ///
+    /// NOT `synthesize_multisig_watch_only`, which was the obvious swap and is
+    /// wrong here: the ms1 self-check cells below assert a NON-EMPTY ms1 per
+    /// cosigner, and the watch-only helper emits empty sentinels. Routing
+    /// through `synthesize_unified` keeps the secret half and has the side
+    /// benefit that this fixture now exercises the path the CLI actually takes.
     fn multisig_bundle() -> Bundle {
+        use crate::synthesize::{synthesize_unified, Md1Form, ResolvedSlot};
+        use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+        use bitcoin::secp256k1::Secp256k1;
+        use std::str::FromStr;
         let m = bip39::Mnemonic::parse_in(bip39::Language::English, TREZOR_24).unwrap();
-        crate::synthesize::synthesize_multisig_full(
-            &m,
-            "",
-            CliNetwork::Mainnet,
+        let entropy = m.to_entropy();
+        let secp = Secp256k1::new();
+        let master = Xpriv::new_master(CliNetwork::Mainnet.network_kind(), &m.to_seed("")).unwrap();
+        let slots: Vec<ResolvedSlot> = (0..3u32)
+            .map(|acct| {
+                let path = DerivationPath::from_str(&format!("48'/0'/{acct}'/2'")).unwrap();
+                ResolvedSlot {
+                    xpub: Xpub::from_priv(&secp, &master.derive_priv(&secp, &path).unwrap()),
+                    fingerprint: master.fingerprint(&secp),
+                    path,
+                    entropy: Some(zeroize::Zeroizing::new(entropy.clone())),
+                    master_xpub: None,
+                    language: None,
+                    _entropy_pin: None,
+                }
+            })
+            .collect();
+        synthesize_unified(
+            &slots,
             CliTemplate::WshSortedMulti,
             2,
-            3,
-            0,
-            MultisigPathFamily::Bip87,
+            CliNetwork::Mainnet,
             false,
+            bip39::Language::English,
+            Md1Form::Policy,
         )
         .unwrap()
     }
@@ -3075,9 +3106,12 @@ mod self_check_mk1_xpub_binding_tests {
     }
 
     /// A 2-of-2 multisig with DISTINCT per-slot xpubs. NB: NOT
-    /// `synthesize_multisig_full` — that is self-multisig (all N xpubs
-    /// byte-identical), which would make a cross-slot card swap undetectable
-    /// by construction. Watch-only (ms1 = ["", ""]) keeps the fixture small.
+    /// the deleted `synthesize_multisig_full` — that was self-multisig (all N
+    /// xpubs byte-identical), which would make a cross-slot card swap
+    /// undetectable by construction. This note is why that function is gone:
+    /// the knowledge lived here, in a helper that routed around it, instead of
+    /// being fixed at the source. Watch-only (ms1 = ["", ""]) keeps the fixture
+    /// small.
     fn distinct_xpub_multisig_bundle() -> Bundle {
         let secp = Secp256k1::new();
         let path = DerivationPath::from_str("m/48'/0'/0'/2'").unwrap();

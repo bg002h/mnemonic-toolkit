@@ -118,16 +118,12 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         evidence: &["-> Result<SecretString, ToolkitError>"],
     },
     // ---- synthesize.rs ----
-    ZeroizeRow {
-        label: "synthesize_multisig_full seed wrapped via derive_master_seed",
-        source_file: "src/synthesize.rs",
-        evidence: &["derive_master_seed(seed_mnemonic"],
-    },
-    ZeroizeRow {
-        label: "synthesize_multisig_full entropy local wraps (R1 I-1 fold)",
-        source_file: "src/synthesize.rs",
-        evidence: &["Zeroizing::new(seed_mnemonic.to_entropy())"],
-    },
+    // TWO ROWS REMOVED 2026-09-19 with `synthesize_multisig_full`, whose seed
+    // and entropy locals they pinned. The function is deleted (it was `pub`,
+    // called from nothing outside `#[cfg(test)]`, and minted a degenerate
+    // k-of-n), so the anchors it owned have no subject. This is a row whose
+    // code is gone, NOT a discipline that was relaxed -- the surviving seed
+    // path is `derive_slot::derive_master_seed`, pinned by its own row.
     // v0.10.1: ResolvedSlot.entropy field migrated from `Option<Vec<u8>>` to
     // `Option<Zeroizing<Vec<u8>>>` (closes FOLLOWUP
     // `resolved-slot-derived-account-zeroizing-field`). Drop-time scrub is
@@ -139,13 +135,14 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/synthesize.rs",
         evidence: &["pub entropy: Option<zeroize::Zeroizing<Vec<u8>>>"],
     },
-    ZeroizeRow {
-        label: "synthesize_unified ms1 build wraps cloned entropy",
-        source_file: "src/synthesize.rs",
-        // Multiple Zeroizing call sites — tightened anchor pins the
-        // ms1-build site specifically per R1 I-4 fold.
-        evidence: &["Zeroizing::new(seed_mnemonic.to_entropy())", "Zeroizing::new(mnemonic.to_entropy())"],
-    },
+    // ROW REMOVED 2026-09-19. It anchored on a `Zeroizing::new(..to_entropy())`
+    // call inside synthesize.rs that belonged to the deleted
+    // `synthesize_multisig_full`. `synthesize_unified` -- the surviving
+    // production path -- takes `&[ResolvedSlot]`, and that struct's `entropy`
+    // field IS `Option<zeroize::Zeroizing<Vec<u8>>>`, pinned by the row
+    // directly above. The wrapping moved from a call site to a field type,
+    // which is a STRONGER guarantee (structural rather than per-call), so the
+    // discipline is intact and this row simply had nothing left to point at.
     // ---- parse_descriptor.rs ----
     ZeroizeRow {
         label: "bind_full_mode seed wrapped via derive_master_seed",
