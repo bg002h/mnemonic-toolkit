@@ -16,10 +16,12 @@
 //! CLI's `CliError::TemplateParse` to the dedicated [`RenderError`] so
 //! `md_codec::Error` stays a pure wire/decode taxonomy.
 
+use crate::compose::{HashKind, HashLock};
 use crate::encode::Descriptor;
 use crate::nums::NUMS_H_POINT_X_ONLY_HEX;
+use crate::policy_shape::{LockKind, lock_from_wire};
 use crate::tag::Tag;
-use crate::tree::{Body, Node};
+use crate::tree::{Body, InternalKey, Node};
 use crate::use_site_path::UseSitePath;
 use std::fmt::Write as _;
 
@@ -48,14 +50,118 @@ impl std::fmt::Display for RenderError {
 
 impl std::error::Error for RenderError {}
 
+/// Which literal values `render_node` writes for lock operands and hash
+/// digests. `Literal` is the original, wire-faithful behavior; `Abstract`
+/// replaces both with `kind#class` equality-class labels (see
+/// [`descriptor_to_abstract_template`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Literal,
+    Abstract,
+}
+
+/// Per-render state for [`Mode::Abstract`]: one first-seen-order list per
+/// lock kind and per hash kind, so equal values within a kind share a class
+/// number and distinct values don't — assigned in the template's own
+/// left-to-right traversal order. Unused (and left empty) under
+/// [`Mode::Literal`].
+struct RenderCtx {
+    mode: Mode,
+    older_blocks: Vec<u32>,
+    older_units: Vec<u32>,
+    after_height: Vec<u32>,
+    after_time: Vec<u32>,
+    sha256: Vec<HashLock>,
+    hash256: Vec<HashLock>,
+    ripemd160: Vec<HashLock>,
+    hash160: Vec<HashLock>,
+}
+
+impl RenderCtx {
+    fn new(mode: Mode) -> Self {
+        Self {
+            mode,
+            older_blocks: Vec::new(),
+            older_units: Vec::new(),
+            after_height: Vec::new(),
+            after_time: Vec::new(),
+            sha256: Vec::new(),
+            hash256: Vec::new(),
+            ripemd160: Vec::new(),
+            hash160: Vec::new(),
+        }
+    }
+
+    /// 1-based class number for `value` within lock kind `kind`: the first
+    /// distinct value seen for that kind gets 1, the next distinct value 2,
+    /// and so on; a value equal to one already seen reuses its class.
+    fn class_for_lock(&mut self, kind: LockKind, value: u32) -> usize {
+        let list = match kind {
+            LockKind::OlderBlocks => &mut self.older_blocks,
+            LockKind::OlderUnits => &mut self.older_units,
+            LockKind::AfterHeight => &mut self.after_height,
+            LockKind::AfterTime => &mut self.after_time,
+        };
+        class_index(list, value)
+    }
+
+    /// Same as [`Self::class_for_lock`], scoped per [`HashKind`] instead.
+    fn class_for_hash(&mut self, kind: HashKind, lock: HashLock) -> usize {
+        let list = match kind {
+            HashKind::Sha256 => &mut self.sha256,
+            HashKind::Hash256 => &mut self.hash256,
+            HashKind::Ripemd160 => &mut self.ripemd160,
+            HashKind::Hash160 => &mut self.hash160,
+        };
+        class_index(list, lock)
+    }
+}
+
+/// Return `value`'s 1-based position in `seen` (first-seen order),
+/// appending it as a new class if it has not been seen before.
+fn class_index<T: PartialEq>(seen: &mut Vec<T>, value: T) -> usize {
+    match seen.iter().position(|v| *v == value) {
+        Some(pos) => pos + 1,
+        None => {
+            seen.push(value);
+            seen.len()
+        }
+    }
+}
+
+/// The abstract-mode class label for a lock kind — distinct from the bare
+/// hash-kind token because `older(...)`/`after(...)` alone doesn't say
+/// whether the operand is blocks vs. 512-second units, or a height vs. a
+/// time; the label carries what the wrapper name can't.
+fn lock_class_label(kind: LockKind) -> &'static str {
+    match kind {
+        LockKind::OlderBlocks => "older-blocks",
+        LockKind::OlderUnits => "older-units",
+        LockKind::AfterHeight => "after-height",
+        LockKind::AfterTime => "after-time",
+    }
+}
+
 /// Render a `Descriptor` back to a BIP 388 template string with `@i` placeholders.
 pub fn descriptor_to_template(d: &Descriptor) -> Result<String, RenderError> {
+    render_with(d, Mode::Literal)
+}
+
+/// Render with lock values and digests replaced by `kind#class`.
+/// Used as the coordinator-compatibility key's template component.
+pub fn descriptor_to_abstract_template(d: &Descriptor) -> Result<String, RenderError> {
+    render_with(d, Mode::Abstract)
+}
+
+fn render_with(d: &Descriptor, mode: Mode) -> Result<String, RenderError> {
     let mut out = String::new();
+    let mut ctx = RenderCtx::new(mode);
     render_node(
         &d.tree,
         d.n,
         &d.use_site_path,
         d.tlv.use_site_path_overrides.as_deref(),
+        &mut ctx,
         &mut out,
     )?;
     Ok(out)
@@ -66,32 +172,46 @@ fn render_node(
     n: u8,
     default_usp: &UseSitePath,
     overrides: Option<&[(u8, UseSitePath)]>,
+    ctx: &mut RenderCtx,
     out: &mut String,
 ) -> Result<(), RenderError> {
     match node.tag {
-        Tag::Wpkh => render_wrapper("wpkh", node, n, default_usp, overrides, out),
-        Tag::Pkh => render_wrapper("pkh", node, n, default_usp, overrides, out),
-        Tag::Wsh => render_wrapper("wsh", node, n, default_usp, overrides, out),
-        Tag::Sh => render_wrapper("sh", node, n, default_usp, overrides, out),
+        Tag::Wpkh => render_wrapper("wpkh", node, n, default_usp, overrides, ctx, out),
+        Tag::Pkh => render_wrapper("pkh", node, n, default_usp, overrides, ctx, out),
+        Tag::Wsh => render_wrapper("wsh", node, n, default_usp, overrides, ctx, out),
+        Tag::Sh => render_wrapper("sh", node, n, default_usp, overrides, ctx, out),
         Tag::Tr => {
             out.push_str("tr(");
             match &node.body {
-                Body::Tr {
-                    is_nums,
-                    key_index,
-                    tree,
-                } => {
-                    // SPEC v0.30 §7: is_nums=true encodes the BIP-341 NUMS
-                    // H-point as the implicit internal key; render as the
-                    // literal x-only hex. Otherwise render @{key_index}.
-                    if *is_nums {
-                        out.push_str(NUMS_H_POINT_X_ONLY_HEX);
-                    } else {
-                        render_key(*key_index, default_usp, overrides, out)?;
+                Body::Tr { internal_key, tree } => {
+                    // SPEC v0.30 §7 / stage 1b SPEC §4: NumsPoint encodes the
+                    // BIP-341 NUMS H-point as the implicit internal key;
+                    // render as the literal x-only hex. LianaUnspendable
+                    // (wire kind 1) is a DIFFERENT internal key -- an xpub
+                    // derived from the tap-tree's own leaf keys (SPEC §2) --
+                    // but that derivation needs the already-built leaf keys
+                    // AND a network to pick the base58 prefix, neither of
+                    // which a keyless template carries. §4's table (row 2 and
+                    // row 3): BOTH keyless render modes (this function serves
+                    // both `Mode::Literal` and `Mode::Abstract` -- neither
+                    // reads `ctx.mode` at this site) emit the fixed
+                    // `LIANA_UNSPENDABLE_MARKER` text instead; only the
+                    // *keyed* descriptor (`to_miniscript`, §4 row 1) embeds
+                    // the real derived xpub. A Slot renders @{i}.
+                    match internal_key {
+                        InternalKey::NumsPoint => {
+                            out.push_str(NUMS_H_POINT_X_ONLY_HEX);
+                        }
+                        InternalKey::LianaUnspendable => {
+                            out.push_str(crate::nums::LIANA_UNSPENDABLE_MARKER);
+                        }
+                        InternalKey::Slot(i) => {
+                            render_key(*i, default_usp, overrides, out)?;
+                        }
                     }
                     if let Some(t) = tree {
                         out.push(',');
-                        render_tap_node(t, n, default_usp, overrides, out)?;
+                        render_tap_node(t, n, default_usp, overrides, ctx, out)?;
                     }
                 }
                 _ => {
@@ -141,9 +261,9 @@ fn render_node(
                 }
             };
             out.push_str("and_v(");
-            render_node(&kids[0], n, default_usp, overrides, out)?;
+            render_node(&kids[0], n, default_usp, overrides, ctx, out)?;
             out.push(',');
-            render_node(&kids[1], n, default_usp, overrides, out)?;
+            render_node(&kids[1], n, default_usp, overrides, ctx, out)?;
             out.push(')');
             Ok(())
         }
@@ -156,7 +276,14 @@ fn render_node(
                     ));
                 }
             };
-            write!(out, "older({v})").unwrap();
+            match ctx.mode {
+                Mode::Literal => write!(out, "older({v})").unwrap(),
+                Mode::Abstract => {
+                    let lock = lock_from_wire(Tag::Older, v);
+                    let class = ctx.class_for_lock(lock.kind, lock.value);
+                    write!(out, "older({}#{class})", lock_class_label(lock.kind)).unwrap();
+                }
+            }
             Ok(())
         }
         Tag::After => {
@@ -168,14 +295,21 @@ fn render_node(
                     ));
                 }
             };
-            write!(out, "after({v})").unwrap();
+            match ctx.mode {
+                Mode::Literal => write!(out, "after({v})").unwrap(),
+                Mode::Abstract => {
+                    let lock = lock_from_wire(Tag::After, v);
+                    let class = ctx.class_for_lock(lock.kind, lock.value);
+                    write!(out, "after({}#{class})", lock_class_label(lock.kind)).unwrap();
+                }
+            }
             Ok(())
         }
-        Tag::AndB => render_binary("and_b", node, n, default_usp, overrides, out),
-        Tag::OrB => render_binary("or_b", node, n, default_usp, overrides, out),
-        Tag::OrC => render_binary("or_c", node, n, default_usp, overrides, out),
-        Tag::OrD => render_binary("or_d", node, n, default_usp, overrides, out),
-        Tag::OrI => render_binary("or_i", node, n, default_usp, overrides, out),
+        Tag::AndB => render_binary("and_b", node, n, default_usp, overrides, ctx, out),
+        Tag::OrB => render_binary("or_b", node, n, default_usp, overrides, ctx, out),
+        Tag::OrC => render_binary("or_c", node, n, default_usp, overrides, ctx, out),
+        Tag::OrD => render_binary("or_d", node, n, default_usp, overrides, ctx, out),
+        Tag::OrI => render_binary("or_i", node, n, default_usp, overrides, ctx, out),
         Tag::AndOr => {
             // andor(a, b, c) — ternary "if a then b else c". Only ternary
             // fragment in miniscript; Body::Children must have length 3.
@@ -188,18 +322,18 @@ fn render_node(
                 }
             };
             out.push_str("andor(");
-            render_node(&kids[0], n, default_usp, overrides, out)?;
+            render_node(&kids[0], n, default_usp, overrides, ctx, out)?;
             out.push(',');
-            render_node(&kids[1], n, default_usp, overrides, out)?;
+            render_node(&kids[1], n, default_usp, overrides, ctx, out)?;
             out.push(',');
-            render_node(&kids[2], n, default_usp, overrides, out)?;
+            render_node(&kids[2], n, default_usp, overrides, ctx, out)?;
             out.push(')');
             Ok(())
         }
-        Tag::Sha256 => render_hash256("sha256", &node.body, out),
-        Tag::Hash256 => render_hash256("hash256", &node.body, out),
-        Tag::Ripemd160 => render_hash160("ripemd160", &node.body, out),
-        Tag::Hash160 => render_hash160("hash160", &node.body, out),
+        Tag::Sha256 => render_hash256(HashKind::Sha256, &node.body, ctx, out),
+        Tag::Hash256 => render_hash256(HashKind::Hash256, &node.body, ctx, out),
+        Tag::Ripemd160 => render_hash160(HashKind::Ripemd160, &node.body, ctx, out),
+        Tag::Hash160 => render_hash160(HashKind::Hash160, &node.body, ctx, out),
         // `Tag::Verify` belongs HERE, not in an arm of its own. It used to have
         // one, which pushed a literal `"v:"` and recursed into `render_node` —
         // so a `v:` sitting above another wrapper emitted a second colon,
@@ -212,7 +346,7 @@ fn render_node(
         | Tag::DupIf
         | Tag::NonZero
         | Tag::ZeroNotEqual
-        | Tag::Verify => render_wrapper_chain(node, n, default_usp, overrides, out),
+        | Tag::Verify => render_wrapper_chain(node, n, default_usp, overrides, ctx, out),
         Tag::True => {
             out.push('1');
             Ok(())
@@ -273,7 +407,7 @@ fn render_node(
             write!(out, "thresh({k}").unwrap();
             for child in children {
                 out.push(',');
-                render_node(child, n, default_usp, overrides, out)?;
+                render_node(child, n, default_usp, overrides, ctx, out)?;
             }
             out.push(')');
             Ok(())
@@ -285,40 +419,81 @@ fn render_node(
 }
 
 /// Render a 32-byte-hash literal (sha256, hash256). Body must be Hash256Body.
-fn render_hash256(name: &str, body: &Body, out: &mut String) -> Result<(), RenderError> {
+/// In [`Mode::Abstract`], writes `{kind}(#{class})` instead of the digest —
+/// `HashLock::new` takes the digest at its full alloc-gate width, and
+/// `Hash256Body` is already exactly `kind.digest_len()` (32) bytes wide, so
+/// no padding is introduced here.
+fn render_hash256(
+    kind: HashKind,
+    body: &Body,
+    ctx: &mut RenderCtx,
+    out: &mut String,
+) -> Result<(), RenderError> {
     let h = match body {
         Body::Hash256Body(h) => h,
         _ => {
             return Err(RenderError::MalformedTree(format!(
-                "{name} body must be Hash256Body"
+                "{} body must be Hash256Body",
+                kind.token()
             )));
         }
     };
-    out.push_str(name);
-    out.push('(');
-    for byte in h {
-        write!(out, "{byte:02x}").unwrap();
+    match ctx.mode {
+        Mode::Literal => {
+            out.push_str(kind.token());
+            out.push('(');
+            for byte in h {
+                write!(out, "{byte:02x}").unwrap();
+            }
+            out.push(')');
+        }
+        Mode::Abstract => {
+            let class = ctx.class_for_hash(kind, HashLock::new(kind, *h));
+            write!(out, "{}(#{class})", kind.token()).unwrap();
+        }
     }
-    out.push(')');
     Ok(())
 }
 
-/// Render a 20-byte-hash literal (ripemd160, hash160). Body must be Hash160Body.
-fn render_hash160(name: &str, body: &Body, out: &mut String) -> Result<(), RenderError> {
+/// Render a 20-byte-hash literal (ripemd160, hash160). Body must be
+/// Hash160Body. In [`Mode::Abstract`], writes `{kind}(#{class})` instead of
+/// the digest. `HashLock::new` takes the full 32-byte alloc-gate slot;
+/// `Hash160Body`'s 20 real bytes are placed at the front and the rest
+/// zero-padded — `HashLock::digest()` never reads past `kind.digest_len()`
+/// (20 for this arm), so that padding is never observed. NEVER read past
+/// `digest()`'s slice: committing the padding into a lowering produces a
+/// wallet nobody can spend.
+fn render_hash160(
+    kind: HashKind,
+    body: &Body,
+    ctx: &mut RenderCtx,
+    out: &mut String,
+) -> Result<(), RenderError> {
     let h = match body {
         Body::Hash160Body(h) => h,
         _ => {
             return Err(RenderError::MalformedTree(format!(
-                "{name} body must be Hash160Body"
+                "{} body must be Hash160Body",
+                kind.token()
             )));
         }
     };
-    out.push_str(name);
-    out.push('(');
-    for byte in h {
-        write!(out, "{byte:02x}").unwrap();
+    match ctx.mode {
+        Mode::Literal => {
+            out.push_str(kind.token());
+            out.push('(');
+            for byte in h {
+                write!(out, "{byte:02x}").unwrap();
+            }
+            out.push(')');
+        }
+        Mode::Abstract => {
+            let mut digest = [0u8; 32];
+            digest[..20].copy_from_slice(h);
+            let class = ctx.class_for_hash(kind, HashLock::new(kind, digest));
+            write!(out, "{}(#{class})", kind.token()).unwrap();
+        }
     }
-    out.push(')');
     Ok(())
 }
 
@@ -356,6 +531,7 @@ fn render_wrapper_chain(
     n: u8,
     default_usp: &UseSitePath,
     overrides: Option<&[(u8, UseSitePath)]>,
+    ctx: &mut RenderCtx,
     out: &mut String,
 ) -> Result<(), RenderError> {
     // The single dispatch arm at render_node guarantees `node.tag` is one of
@@ -434,7 +610,7 @@ fn render_wrapper_chain(
     }
     out.push_str(&prefix);
     out.push(':');
-    render_node(current, n, default_usp, overrides, out)
+    render_node(current, n, default_usp, overrides, ctx, out)
 }
 
 /// Render a binary fragment `name(left, right)` — used for and_b, or_b, or_c,
@@ -445,6 +621,7 @@ fn render_binary(
     n: u8,
     default_usp: &UseSitePath,
     overrides: Option<&[(u8, UseSitePath)]>,
+    ctx: &mut RenderCtx,
     out: &mut String,
 ) -> Result<(), RenderError> {
     let kids = match &node.body {
@@ -457,9 +634,9 @@ fn render_binary(
     };
     out.push_str(name);
     out.push('(');
-    render_node(&kids[0], n, default_usp, overrides, out)?;
+    render_node(&kids[0], n, default_usp, overrides, ctx, out)?;
     out.push(',');
-    render_node(&kids[1], n, default_usp, overrides, out)?;
+    render_node(&kids[1], n, default_usp, overrides, ctx, out)?;
     out.push(')');
     Ok(())
 }
@@ -472,13 +649,16 @@ fn render_wrapper(
     n: u8,
     default_usp: &UseSitePath,
     overrides: Option<&[(u8, UseSitePath)]>,
+    ctx: &mut RenderCtx,
     out: &mut String,
 ) -> Result<(), RenderError> {
     out.push_str(name);
     out.push('(');
     match &node.body {
         Body::KeyArg { index } => render_key(*index, default_usp, overrides, out)?,
-        Body::Children(v) if v.len() == 1 => render_node(&v[0], n, default_usp, overrides, out)?,
+        Body::Children(v) if v.len() == 1 => {
+            render_node(&v[0], n, default_usp, overrides, ctx, out)?
+        }
         _ => {
             return Err(RenderError::MalformedTree(format!(
                 "{name} body must be KeyArg or Children([1])"
@@ -521,6 +701,7 @@ fn render_tap_node(
     n: u8,
     default_usp: &UseSitePath,
     overrides: Option<&[(u8, UseSitePath)]>,
+    ctx: &mut RenderCtx,
     out: &mut String,
 ) -> Result<(), RenderError> {
     if matches!(node.tag, Tag::TapTree) {
@@ -533,13 +714,13 @@ fn render_tap_node(
             }
         };
         out.push('{');
-        render_tap_node(&children[0], n, default_usp, overrides, out)?;
+        render_tap_node(&children[0], n, default_usp, overrides, ctx, out)?;
         out.push(',');
-        render_tap_node(&children[1], n, default_usp, overrides, out)?;
+        render_tap_node(&children[1], n, default_usp, overrides, ctx, out)?;
         out.push('}');
         Ok(())
     } else {
-        render_node(node, n, default_usp, overrides, out)
+        render_node(node, n, default_usp, overrides, ctx, out)
     }
 }
 
@@ -620,8 +801,9 @@ mod tests {
         };
         let usp = UseSitePath::standard_multipath();
         let mut out = String::new();
+        let mut ctx = RenderCtx::new(Mode::Literal);
         render_node(
-            &node, /* n */ 1, &usp, /* overrides */ None, &mut out,
+            &node, /* n */ 1, &usp, /* overrides */ None, &mut ctx, &mut out,
         )
         .expect("render_node Verify(Check(PkK)) must succeed");
         assert_eq!(
@@ -638,8 +820,9 @@ mod tests {
         };
         let usp = UseSitePath::standard_multipath();
         let mut out = String::new();
+        let mut ctx = RenderCtx::new(Mode::Literal);
         render_node(
-            &node, /* n */ 1, &usp, /* overrides */ None, &mut out,
+            &node, /* n */ 1, &usp, /* overrides */ None, &mut ctx, &mut out,
         )
         .expect("render_node Tag::RawPkH must succeed");
         assert_eq!(

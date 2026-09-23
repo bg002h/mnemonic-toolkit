@@ -1,6 +1,6 @@
 [package]
 name = "mnemonic-toolkit"
-version = "0.103.2"
+version = "0.104.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -65,10 +65,11 @@ mk-codec = "0.4.1"
 # failed with "failed to load source for dependency `md-codec`" and the release
 # shipped with no musl binaries at all.
 #
-# b2c5d693 is descriptor-mnemonic-md-cli-v0.17.0 (md-codec 0.45.0): a policy holds at
-# most one key-less path, refused at validate time -- compose-only, and this crate
-# calls no compose; the pin moves for currency and for install.sh's sibling gate.
-md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "b2c5d69384327265da239dc13502727c8f9645fb" }
+# cf35d61a is descriptor-mnemonic-md-cli-v0.19.0 (md-codec 0.47.0, F-449 stage 2):
+# wire version 8 and the wire-kind-1 (Liana unspendable) internal key, five new
+# Error variants routed in error.rs/friendly.rs, `UNSPENDABLE(liana)` in
+# descriptor_to_template (F-642).
+md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "cf35d61af0f058029df841f4882945e53f86cd4b" }
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.
 wc-codec = { path = "../wc-codec" }

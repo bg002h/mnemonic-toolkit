@@ -86,7 +86,7 @@ pub fn decode_payload_with_opts(
     // `Descriptor::key_index_width` exactly; a stale formula silently
     // desyncs the bitstream.
     let key_index_width = (32 - (path_decl.n as u32).saturating_sub(1).leading_zeros()) as u8;
-    let tree = read_node(&mut r, key_index_width)?;
+    let tree = read_node(&mut r, key_index_width, header.version)?;
 
     // SPEC §11: root tag MUST be in {Sh, Wsh, Wpkh, Pkh, Tr} (the wrapper-tag
     // allow-list — structural body validation for `Sh`/`Wsh` is separate).

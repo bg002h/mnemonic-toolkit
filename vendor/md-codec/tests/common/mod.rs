@@ -7,7 +7,7 @@ use md_codec::encode::Descriptor;
 use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 use md_codec::tag::Tag;
 use md_codec::tlv::TlvSection;
-use md_codec::tree::{Body, Node};
+use md_codec::tree::{Body, InternalKey, Node};
 use md_codec::use_site_path::UseSitePath;
 use proptest::prelude::*;
 
@@ -86,8 +86,11 @@ pub fn tr_node(is_nums: bool, key_index: u8, tree: Option<Node>) -> Node {
     Node {
         tag: Tag::Tr,
         body: Body::Tr {
-            is_nums,
-            key_index,
+            internal_key: if is_nums {
+                InternalKey::NumsPoint
+            } else {
+                InternalKey::Slot(key_index)
+            },
             tree: tree.map(Box::new),
         },
     }
@@ -97,6 +100,496 @@ pub fn taptree2(l: Node, r: Node) -> Node {
         tag: Tag::TapTree,
         body: Body::Children(vec![l, r]),
     }
+}
+/// Build a template-only `Descriptor` around `tree` with `n` placeholders.
+/// (Tests are a separate crate, so `md_codec::` is correct HERE.)
+/// Template-only is deliberate: Task 1 tests structure, not key identity.
+///
+/// None of `PathDecl`, `UseSitePath` or `TlvSection` derives `Default`, so
+/// this uses the spelling `rg 'Descriptor \{' crates/md-codec/tests` already
+/// establishes (`crates/md-codec/tests/sh_wpkh_canonical.rs`'s
+/// `sh_wpkh_descriptor`): an empty shared origin path, the standard
+/// `<0;1>/*` use-site path, and `TlvSection::new_empty()`.
+pub fn descriptor_of(tree: Node, n: u8) -> md_codec::encode::Descriptor {
+    md_codec::encode::Descriptor {
+        n,
+        path_decl: PathDecl {
+            n,
+            paths: PathDeclPaths::Shared(OriginPath { components: vec![] }),
+        },
+        use_site_path: UseSitePath::standard_multipath(),
+        tree,
+        tlv: TlvSection::new_empty(),
+    }
+}
+
+/// `wsh(or_i(and_v(v:pkh(@0),older(a)), or_i(and_v(v:pkh(@1),older(b)),
+/// and_v(v:pkh(@2),older(c)))))` — three `older` branches, so the abstract
+/// renderer's per-kind class numbering (equal values share a class,
+/// different ones don't) has something to distinguish.
+pub fn three_older_descriptor(a: u32, b: u32, c: u32) -> md_codec::encode::Descriptor {
+    let branch = |i: u8, v: u32| {
+        node2(
+            Tag::AndV,
+            wrap(Tag::Verify, keyarg(Tag::Pkh, i)),
+            timelock(Tag::Older, v),
+        )
+    };
+    let tree = wrap(
+        Tag::Wsh,
+        node2(
+            Tag::OrI,
+            branch(0, a),
+            node2(Tag::OrI, branch(1, b), branch(2, c)),
+        ),
+    );
+    descriptor_of(tree, 3)
+}
+
+/// `wsh(or_i(and_v(v:pkh(@0),after(height)),and_v(v:pkh(@1),after(time))))`
+/// — one `after` branch below `LOCKTIME_THRESHOLD` (a height) and one at or
+/// above it (a time), so the abstract renderer's height/time band split has
+/// a case in each band, straddling the boundary a mutation of
+/// `LOCKTIME_THRESHOLD` would move.
+pub fn two_after_descriptor(height: u32, time: u32) -> md_codec::encode::Descriptor {
+    let branch = |i: u8, v: u32| {
+        node2(
+            Tag::AndV,
+            wrap(Tag::Verify, keyarg(Tag::Pkh, i)),
+            timelock(Tag::After, v),
+        )
+    };
+    let tree = wrap(
+        Tag::Wsh,
+        node2(Tag::OrI, branch(0, height), branch(1, time)),
+    );
+    descriptor_of(tree, 2)
+}
+
+/// `wsh(or_i(and_v(v:pkh(@0),older(blocks)),and_v(v:pkh(@1),older(units))))`
+/// — final whole-branch review, I-2: the `older` equivalent of
+/// [`two_after_descriptor`]. One `older` branch below `SEQUENCE_TYPE_FLAG`
+/// (blocks) and one with it set (512-second units), so the abstract
+/// renderer's blocks/units band split has a case in each band — Task 2
+/// added this coverage for `after`'s height/time bands and never the
+/// `older` equivalent.
+pub fn two_older_descriptor(blocks: u32, units: u32) -> md_codec::encode::Descriptor {
+    let branch = |i: u8, v: u32| {
+        node2(
+            Tag::AndV,
+            wrap(Tag::Verify, keyarg(Tag::Pkh, i)),
+            timelock(Tag::Older, v),
+        )
+    };
+    let tree = wrap(
+        Tag::Wsh,
+        node2(Tag::OrI, branch(0, blocks), branch(1, units)),
+    );
+    descriptor_of(tree, 2)
+}
+
+/// `wsh(or_i(and_v(v:pkh(@0),sha256(a)),and_v(v:pkh(@1),sha256(b))))` — two
+/// `sha256` branches, symmetric with [`three_older_descriptor`] but for
+/// digests rather than lock values.
+pub fn two_sha256_descriptor(a: [u8; 32], b: [u8; 32]) -> md_codec::encode::Descriptor {
+    let branch = |i: u8, h: [u8; 32]| {
+        node2(
+            Tag::AndV,
+            wrap(Tag::Verify, keyarg(Tag::Pkh, i)),
+            hash32(Tag::Sha256, h),
+        )
+    };
+    let tree = wrap(Tag::Wsh, node2(Tag::OrI, branch(0, a), branch(1, b)));
+    descriptor_of(tree, 2)
+}
+
+/// `wsh(or_d(multi(2,@0,@1,@2), and_v(v:pkh(@3), older(26280))))` — same
+/// shape as `tests/policy_shape.rs`'s private `kofn_recovery()`, reused here
+/// to pin that abstracting a lock leaves each key's use-site path
+/// (`descriptor_of`'s standard `/<0;1>/*` multipath) untouched.
+pub fn kofn_recovery_with_use_site() -> md_codec::encode::Descriptor {
+    let primary = multikeys(Tag::Multi, 2, vec![0, 1, 2]);
+    let recovery = node2(
+        Tag::AndV,
+        wrap(Tag::Verify, keyarg(Tag::Pkh, 3)),
+        timelock(Tag::Older, 26280),
+    );
+    let tree = wrap(Tag::Wsh, node2(Tag::OrD, primary, recovery));
+    descriptor_of(tree, 4)
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Task 3 (fp_partition / key_partition) fixtures.
+// Shape: `wsh(or_d(multi(2,@0,@1,@2), and_v(v:pkh(@3), older(26280))))` —
+// the SAME shape as `tests/policy_shape.rs`'s private `kofn_recovery()`
+// (Task 1), reused here so `policy_shape`'s branch decomposition is a fact
+// already pinned by Task 1's suite: branch 0 (the `multi`) references slots
+// [0,1,2], branch 1 (the recovery leg) references slot [3].
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Build the `kofn_recovery` tree with an EXPLICIT non-empty shared origin
+/// path (`m/48'`), so `expand_per_at_n` succeeds instead of raising
+/// `MissingExplicitOrigin` — `wsh(or_d(...))` is not one of
+/// `canonical_origin`'s recognized shapes, and `descriptor_of`'s default
+/// shared path is empty.
+fn kofn_recovery_tree() -> Node {
+    let primary = multikeys(Tag::Multi, 2, vec![0, 1, 2]);
+    let recovery = node2(
+        Tag::AndV,
+        wrap(Tag::Verify, keyarg(Tag::Pkh, 3)),
+        timelock(Tag::Older, 26280),
+    );
+    wrap(Tag::Wsh, node2(Tag::OrD, primary, recovery))
+}
+
+/// `wsh(or_d(multi(2,@0,@1,@2), and_v(v:pkh(@3), older(26280))))`,
+/// template-only (no TLVs) — the same shape `tests/policy_shape.rs`'s
+/// private `kofn_recovery()` pins, reused here as a card with no key
+/// material at all: `fp_partition`/`key_partition` have nothing to group.
+///
+/// Carries the same EXPLICIT non-empty shared origin path every sibling
+/// built on `kofn_recovery_tree()` (`seated`, `seated_pubkeys`,
+/// `seated_same_key`) already sets, for the same reason stated on
+/// `shared_origin_48`: `wsh(or_d(...))` is not one of `canonical_origin`'s
+/// recognized shapes, so `descriptor_of`'s default empty shared path leaves
+/// `@0..@3`'s origin unresolved. Added for Task 4 (`skeleton_key.rs`'s
+/// `seated_and_unseated_do_not_share_a_key` / `the_serialization_is_stable_
+/// and_documented`, both call `skeleton(&kofn_recovery()).unwrap()`):
+/// `skeleton()` gates on `expand_per_at_n` succeeding BEFORE building a
+/// `Skeleton` at all (design §1A (a3)), so a `kofn_recovery()` with an
+/// unresolved origin would refuse there regardless of holding zero TLV
+/// data. Does not change `partitions.rs`'s
+/// `a_template_only_card_partitions_to_nothing`: `fp_partition`/
+/// `key_partition` still come back empty with a resolvable origin -- every
+/// slot's `expanded.get(slot).and_then(|e| e.fingerprint / .xpub)` is
+/// `None` regardless, since no TLV is attached, so `group_ascending` skips
+/// every slot exactly as before, just via per-slot absence instead of a
+/// whole-descriptor expand failure.
+pub fn kofn_recovery() -> md_codec::encode::Descriptor {
+    let mut d = descriptor_of(kofn_recovery_tree(), 4);
+    d.path_decl = shared_origin_48(4);
+    d
+}
+
+/// The explicit non-empty shared origin path (`m/48'`) every Task 3 fixture
+/// below uses, so `expand_per_at_n` resolves instead of raising
+/// `MissingExplicitOrigin` — `wsh(or_d(...))` is not one of
+/// `canonical_origin`'s recognized shapes, and `descriptor_of`'s default
+/// shared path is empty. Factored out (fix round 1, I-1/I-2) once a third
+/// and fourth fixture needed the identical block.
+fn shared_origin_48(n: u8) -> PathDecl {
+    PathDecl {
+        n,
+        paths: PathDeclPaths::Shared(OriginPath {
+            components: vec![PathComponent {
+                hardened: true,
+                value: 48,
+            }],
+        }),
+    }
+}
+
+/// The same `kofn_recovery` shape, with a per-`@N` fingerprint TLV built
+/// from `fps` (ascending `(idx, fingerprint)` pairs — callers pass every
+/// slot's fingerprint including the ABSENT `[0u8; 4]` sentinel where wanted)
+/// and an explicit non-empty shared origin path so `expand_per_at_n`
+/// resolves instead of refusing on `MissingExplicitOrigin`.
+pub fn seated(fps: &[(u8, [u8; 4])]) -> md_codec::encode::Descriptor {
+    let mut d = descriptor_of(kofn_recovery_tree(), 4);
+    d.path_decl = shared_origin_48(4);
+    d.tlv.fingerprints = Some(fps.to_vec());
+    d
+}
+
+/// The same `kofn_recovery` shape, with a per-`@N` xpub (`Pubkeys`) TLV
+/// built from `pks` (ascending `(idx, xpub bytes)` pairs — callers pass the
+/// ABSENT `[0u8; 65]` sentinel for any slot that should carry no key) and
+/// the shared explicit origin path, so `expand_per_at_n` resolves. Mirrors
+/// `seated`, but exercises `key_partition`'s xpub half rather than
+/// `fp_partition`'s fingerprint half — added fix round 1, I-1: the absent-
+/// xpub singleton rule had zero coverage crate-wide before this.
+pub fn seated_pubkeys(pks: &[(u8, [u8; 65])]) -> md_codec::encode::Descriptor {
+    let mut d = descriptor_of(kofn_recovery_tree(), 4);
+    d.path_decl = shared_origin_48(4);
+    d.tlv.pubkeys = Some(pks.to_vec());
+    d
+}
+
+/// The same `kofn_recovery` shape (slots @0..@3, split across the two
+/// branches Task 1 pins), with a `Pubkeys` TLV where every slot named in
+/// `same_key_idxs` carries the IDENTICAL 65-byte xpub, every other slot
+/// carries a distinct one, and every slot resolves to the SAME shared
+/// origin path — so the only thing that can make two slots share a
+/// `key_partition` group is `same_key_idxs` itself. Exercises the
+/// WHOLE-POLICY relation across branches: @0 lives in the primary `multi`
+/// branch, @3 in the recovery branch, and `key_partition` — unlike
+/// `fp_partition` — must still see them as one key.
+pub fn seated_same_key(same_key_idxs: &[u8]) -> md_codec::encode::Descriptor {
+    let mut d = descriptor_of(kofn_recovery_tree(), 4);
+    d.path_decl = shared_origin_48(4);
+    let shared_xpub = {
+        let mut x = [0x11u8; 65];
+        x[32] = 0x02; // a distinct, valid-looking compressed-pubkey prefix
+        x
+    };
+    let pubkeys = (0..4u8)
+        .map(|i| {
+            if same_key_idxs.contains(&i) {
+                (i, shared_xpub)
+            } else {
+                // Distinct per-slot filler, never colliding with
+                // `shared_xpub` or another filler slot.
+                let mut x = [0x22u8 + i; 65];
+                x[32] = 0x03;
+                (i, x)
+            }
+        })
+        .collect();
+    d.tlv.pubkeys = Some(pubkeys);
+    d
+}
+
+/// `seated_same_key`, with a per-`@N` `OriginPathOverrides` TLV layered on
+/// top — so a caller can move one of `same_key_idxs`' slots to a DIFFERENT
+/// resolved origin than the shared `m/48'` baseline while its xpub bytes
+/// stay identical to the others'. `origin_overrides` empty is byte-for-byte
+/// `seated_same_key`. Added fix round 1, I-2: `key_partition`'s
+/// `origin_path` half of its `(xpub, origin_path)` key had zero coverage —
+/// every prior fixture put every slot at the one shared baseline path, so
+/// nothing could tell "grouped because same key" apart from "grouped
+/// because the origin check was never applied at all".
+pub fn seated_same_key_with_overrides(
+    same_key_idxs: &[u8],
+    origin_overrides: &[(u8, OriginPath)],
+) -> md_codec::encode::Descriptor {
+    let mut d = seated_same_key(same_key_idxs);
+    if !origin_overrides.is_empty() {
+        d.tlv.origin_path_overrides = Some(origin_overrides.to_vec());
+    }
+    d
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Task 4 (Skeleton / SkeletonKey) fixtures.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// `wsh(or_d(and_v(v:pkh(@3), older(26280)), multi(2,@0,@1,@2)))` — the
+/// `kofn_recovery` shape with its two `or_d` operands SWAPPED (recovery leg
+/// first, the multi second), so branch 0 is the HIGH-numbered slot [3] and
+/// branch 1 is the LOW-numbered slots [0,1,2]. This is deliberate, not a
+/// typo: with the un-swapped order, branch 0's rendered group list always
+/// starts with a lower digit than branch 1's (branch 0 always holds the
+/// smaller placeholder indices), so it is *already* in ascending
+/// lexicographic order — a mutation that `sort()`s the per-path list before
+/// emitting it is then a no-op and cannot be caught. Swapping the operands
+/// makes branch 0's group list ("[[3]]"-shaped) sort lexicographically AFTER
+/// branch 1's ("[[0,1][2]]"-shaped, a comma-bearing group) — the string a
+/// `sort()` mutation produces then differs from the branch (template
+/// traversal) order this crate's grammar requires.
+fn kofn_recovery_first_tree() -> Node {
+    let recovery = node2(
+        Tag::AndV,
+        wrap(Tag::Verify, keyarg(Tag::Pkh, 3)),
+        timelock(Tag::Older, 26280),
+    );
+    let primary = multikeys(Tag::Multi, 2, vec![0, 1, 2]);
+    wrap(Tag::Wsh, node2(Tag::OrD, recovery, primary))
+}
+
+/// The [`kofn_recovery_first_tree`] shape with BOTH a `Fingerprints` TLV
+/// (asymmetric: branch 0 -- the recovery leg, slot 3 -- gets one group;
+/// branch 1 -- the multi, slots 0/1/2 -- has slots 0 and 1 sharing a
+/// fingerprint and slot 2 standing alone, a 2-member group) AND a `Pubkeys`
+/// TLV (slots 0 and 3 -- in DIFFERENT branches -- share a key; slots 1 and 2
+/// are distinct). Built for the final whole-branch review's I-3: one
+/// fixture whose `fp_partition` (multi-path, asymmetric, with a 2-member
+/// group, and in an order that `sort()` would actually change — see
+/// [`kofn_recovery_first_tree`]) and `key_partition` (non-empty, and
+/// DIFFERENT from `fp_partition`) are both non-trivial, so a single golden
+/// `SkeletonKey` test can pin all five of the review's serialization
+/// mutations: reversing OR sorting the per-path order changes this
+/// deliberately-unsorted `fp_partition`; dropping the `,` inside a group
+/// changes the `{0,1}` pair; dropping the outer `[`/`]` unbalances a
+/// non-empty group list; and swapping the `key_partition`/`fp_partition`
+/// emission order changes the string because the two render to different
+/// text.
+pub fn seated_and_keyed_asymmetric() -> md_codec::encode::Descriptor {
+    let mut d = descriptor_of(kofn_recovery_first_tree(), 4);
+    d.path_decl = shared_origin_48(4);
+    d.tlv.fingerprints = Some(vec![
+        (0, [0xaa; 4]),
+        (1, [0xaa; 4]),
+        (2, [0xbb; 4]),
+        (3, [0xcc; 4]),
+    ]);
+    let shared_xpub = {
+        let mut x = [0x11u8; 65];
+        x[32] = 0x02;
+        x
+    };
+    let distinct = |seed: u8| {
+        let mut x = [seed; 65];
+        x[32] = 0x03;
+        x
+    };
+    d.tlv.pubkeys = Some(vec![
+        (0, shared_xpub),
+        (1, distinct(0x22)),
+        (2, distinct(0x33)),
+        (3, shared_xpub),
+    ]);
+    d
+}
+
+/// `tr(NUMS,{pk(@0),pk(@1)})` — a taproot policy with a provably
+/// unspendable internal key (NUMS) and two tapscript leaves. Needs an
+/// EXPLICIT origin (`shared_origin_48`): `canonical_origin` returns `None`
+/// for any `tr(...)` carrying a TapTree, `is_nums` notwithstanding
+/// (`canonical_origin.rs`'s `(Tag::Tr, Body::Tr { tree: Some(_), .. }) =>
+/// None` arm does not consult `is_nums` at all), so `descriptor_of`'s
+/// default empty shared path would leave `expand_per_at_n` unable to
+/// resolve `@0`/`@1`.
+pub fn tr_nums_two_leaves() -> md_codec::encode::Descriptor {
+    let tree = tr_node(
+        true,
+        0,
+        Some(taptree2(keyarg(Tag::PkK, 0), keyarg(Tag::PkK, 1))),
+    );
+    let mut d = descriptor_of(tree, 2);
+    d.path_decl = shared_origin_48(2);
+    d
+}
+
+/// The same shape, with a REAL (non-NUMS) internal key at `@0` — the
+/// Nunchuk shape F-449 records: an internal key that is a real xpub but
+/// treated as unspendable by a coordinator's own convention, which this
+/// walk cannot tell apart from a genuinely spendable one
+/// (`KeyPathKind::Xpub`'s own doc comment in `policy_shape.rs`). Same
+/// explicit-origin need as `tr_nums_two_leaves` (TapTree present).
+pub fn tr_unspendable_xpub_two_leaves() -> md_codec::encode::Descriptor {
+    let tree = tr_node(
+        false,
+        0,
+        Some(taptree2(keyarg(Tag::PkK, 1), keyarg(Tag::PkK, 2))),
+    );
+    let mut d = descriptor_of(tree, 3);
+    d.path_decl = shared_origin_48(3);
+    d
+}
+
+/// `tr(LianaUnspendable, {pk(@0),pk(@1)})` — stage 1b's wire kind 1
+/// (SPEC §3d), a THIRD internal-key shape distinct from both
+/// `tr_nums_two_leaves` (kind 0, the literal NUMS point) and
+/// `tr_unspendable_xpub_two_leaves` (a pre-stage-1b `Slot`-encoded
+/// unspendable-by-convention xpub — `KeyPathKind::Xpub`'s own doc comment).
+/// Template-only (no `Pubkeys` TLV): for tests that need only the AST shape
+/// (render.rs, policy_shape.rs), not real key material.
+pub fn tr_liana_unspendable_two_leaves() -> md_codec::encode::Descriptor {
+    let tree = Node {
+        tag: Tag::Tr,
+        body: Body::Tr {
+            internal_key: InternalKey::LianaUnspendable,
+            tree: Some(Box::new(taptree2(keyarg(Tag::PkK, 0), keyarg(Tag::PkK, 1)))),
+        },
+    };
+    let mut d = descriptor_of(tree, 2);
+    d.path_decl = shared_origin_48(2);
+    d
+}
+
+/// The same shape as [`tr_liana_unspendable_two_leaves`], with a real
+/// `Pubkeys` TLV (`test_xpubs()` slots 0 and 1) so `to_miniscript`'s
+/// derivation path (`expand_per_at_n`, then the leaf-pubkey walk feeding
+/// `nums::liana_unspendable_xpub`) has real key material to run over.
+pub fn tr_liana_unspendable_two_leaves_with_pubkeys() -> md_codec::encode::Descriptor {
+    let mut d = tr_liana_unspendable_two_leaves();
+    d.tlv.pubkeys = Some(vec![(0, test_xpubs()[0]), (1, test_xpubs()[1])]);
+    d
+}
+
+/// `sh(wsh(multi(2,@0,@1,@2)))` — root=Sh, inner_wsh=true. Canonical
+/// (`canonical_origin`'s BIP48-type-1 row), so `descriptor_of`'s default
+/// empty shared path resolves without an override.
+pub fn sh_wsh_2of3() -> md_codec::encode::Descriptor {
+    let tree = wrap(
+        Tag::Sh,
+        wrap(Tag::Wsh, multikeys(Tag::Multi, 2, vec![0, 1, 2])),
+    );
+    descriptor_of(tree, 3)
+}
+
+/// `sh(wsh(or_d(sortedmulti(2,@0,@1,@2), and_v(v:pkh(@3),older(26280)))))` —
+/// final whole-branch review, I-1: `sh_wsh_2of3`'s single-`multi` shape
+/// cannot tell whether the `sh(wsh(...))` unwrap in `policy_shape` actually
+/// runs (a bare threshold decomposes identically either way). This shape is
+/// MULTI-branch, so the unwrap's absence is observable: without it, the two
+/// `or_d` alternatives collapse into one branch and every slot set changes.
+/// Wire-reachable (reviewer-measured: 18 bytes / 139 bits, strict-decodes
+/// byte-identical). NOT canonical: `canonical_origin`'s `sh(wsh(...))` row
+/// only recognizes a bare `multi`/`sortedmulti` directly inside the `wsh`
+/// (`is_wsh_inner_multi`); this fixture's inner is `or_d(...)`, the same
+/// non-canonical shape `kofn_recovery_tree`'s bare `wsh(or_d(...))` is, so it
+/// needs the same explicit non-empty shared origin path.
+pub fn sh_wsh_or_d_sortedmulti_and_recovery() -> md_codec::encode::Descriptor {
+    let primary = multikeys(Tag::SortedMulti, 2, vec![0, 1, 2]);
+    let recovery = node2(
+        Tag::AndV,
+        wrap(Tag::Verify, keyarg(Tag::Pkh, 3)),
+        timelock(Tag::Older, 26280),
+    );
+    let inner = node2(Tag::OrD, primary, recovery);
+    let tree = wrap(Tag::Sh, wrap(Tag::Wsh, inner));
+    let mut d = descriptor_of(tree, 4);
+    d.path_decl = shared_origin_48(4);
+    d
+}
+
+/// `sh(multi(2,@0,@1,@2))` — root=Sh, inner_wsh=false: the bare legacy
+/// P2SH multi `sh_wsh_2of3` is NOT a wrapper spelling of. Legacy
+/// `sh(multi)` has no canonical-origin row (`canonical_origin.rs`'s
+/// "sh(sortedmulti) legacy … => None" applies identically to `sh(multi)`:
+/// neither `is_wsh_inner_multi`-wrapped nor BIP49), so needs an explicit
+/// origin.
+pub fn bare_sh_2of3() -> md_codec::encode::Descriptor {
+    let tree = wrap(Tag::Sh, multikeys(Tag::Multi, 2, vec![0, 1, 2]));
+    let mut d = descriptor_of(tree, 3);
+    d.path_decl = shared_origin_48(3);
+    d
+}
+
+/// `wsh(tr(NUMS))` — structurally nonsensical: `tr`/`TapTree` cannot appear
+/// inside a branch (`policy_shape::collect`'s own `Tag::Tr | Tag::TapTree
+/// => false` arm is the mechanism that refuses it). `n = 0`: the inner `tr`
+/// is NUMS-only with no TapTree, so no placeholder is referenced anywhere
+/// in this tree — `expand_per_at_n`'s `for idx in 0..d.n` loop is trivially
+/// satisfied, and the ONLY reason `skeleton()` refuses this descriptor is
+/// `PolicyShape::complete == false`.
+pub fn unclassifiable() -> md_codec::encode::Descriptor {
+    let tree = wrap(Tag::Wsh, tr_node(true, 0, None));
+    descriptor_of(tree, 0)
+}
+
+/// A "dead card" (fix round 1, I-1): the SAME `kofn_recovery` shape, with a
+/// REAL `Fingerprints` TLV attached, but WITHOUT an explicit origin
+/// (`descriptor_of`'s default empty shared path is left as-is — the point
+/// of this fixture). This is exactly `DecodeOpts::partial()`'s dead-card
+/// decode mode (`md decode`/`md inspect` on a card whose `@N` origin never
+/// resolved): real key TLVs intact, origin unresolved. Per
+/// `policy_shape::fp_partition`'s own doc comment, WITHOUT `skeleton()`'s
+/// `expand_per_at_n` gate this card's `fp_partition`/`key_partition` would
+/// collapse to the exact same empty shape as a genuinely template-only card
+/// sharing this tree — and since the tree is `kofn_recovery`'s, with the
+/// SAME template, the resulting `SkeletonKey` would be byte-identical to
+/// `kofn_recovery()`'s. That collision is what the gate exists to prevent.
+pub fn dead_card_real_fingerprints_unresolved_origin() -> md_codec::encode::Descriptor {
+    let mut d = descriptor_of(kofn_recovery_tree(), 4);
+    d.tlv.fingerprints = Some(vec![
+        (0, [0xaa; 4]),
+        (1, [0xbb; 4]),
+        (2, [0xcc; 4]),
+        (3, [0xdd; 4]),
+    ]);
+    d
 }
 
 /// n biased to the kiw-width boundaries (exercises kiw 0..5).
@@ -149,13 +642,9 @@ fn referenced_indices(node: &Node, out: &mut std::collections::BTreeSet<u8>) {
         Body::MultiKeys { indices, .. } => {
             out.extend(indices.iter().copied());
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            if !is_nums {
-                out.insert(*key_index);
+        Body::Tr { internal_key, tree } => {
+            if let InternalKey::Slot(i) = internal_key {
+                out.insert(*i);
             }
             if let Some(t) = tree {
                 referenced_indices(t, out);
@@ -187,13 +676,9 @@ fn renumber_tree(node: &mut Node, perm: &std::collections::BTreeMap<u8, u8>) {
                 *i = perm[&*i];
             }
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            if !*is_nums {
-                *key_index = perm[&*key_index];
+        Body::Tr { internal_key, tree } => {
+            if let InternalKey::Slot(i) = internal_key {
+                *internal_key = InternalKey::Slot(perm[&*i]);
             }
             if let Some(t) = tree {
                 renumber_tree(t, perm);
@@ -262,8 +747,7 @@ pub fn descriptor_strategy() -> BoxedStrategy<Descriptor> {
         Just(Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: None
             }
         }),
@@ -305,8 +789,7 @@ pub fn descriptor_strategy() -> BoxedStrategy<Descriptor> {
             let tree = Node {
                 tag: Tag::Tr,
                 body: Body::Tr {
-                    is_nums: false,
-                    key_index: 0,
+                    internal_key: InternalKey::Slot(0),
                     tree: Some(Box::new(leaf)),
                 },
             };
@@ -318,8 +801,7 @@ pub fn descriptor_strategy() -> BoxedStrategy<Descriptor> {
             let tree = Node {
                 tag: Tag::Tr,
                 body: Body::Tr {
-                    is_nums: false,
-                    key_index: 0,
+                    internal_key: InternalKey::Slot(0),
                     tree: Some(Box::new(tt)),
                 },
             };
@@ -419,13 +901,9 @@ pub fn assign_sequential_indices(node: &mut Node, next: &mut u8) {
                 *next += 1;
             }
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            if !*is_nums {
-                *key_index = *next;
+        Body::Tr { internal_key, tree } => {
+            if let InternalKey::Slot(i) = internal_key {
+                *i = *next;
                 *next += 1;
             }
             if let Some(t) = tree {

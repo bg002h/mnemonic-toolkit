@@ -2,6 +2,7 @@
 
 use crate::bitstream::{BitReader, BitWriter};
 use crate::error::Error;
+use crate::header::Header;
 use crate::tag::Tag;
 
 /// A node in the operator AST: a tag plus its body.
@@ -11,6 +12,22 @@ pub struct Node {
     pub tag: Tag,
     /// Body fields and/or children, shape determined by `tag`.
     pub body: Body,
+}
+
+/// The taproot internal key. Replaces the `is_nums: bool` + `key_index: u8`
+/// pair, whose invariant ("is_nums = true implies key_index = 0, no wire
+/// representation otherwise") was enforced only by a debug_assert.
+// Copy is deliberate: the type is one byte plus a discriminant and is passed
+// by value at ~98 sites; Hash mirrors what Body already derives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InternalKey {
+    /// A real, spendable key at this placeholder slot.
+    Slot(u8),
+    /// The BIP-341 NUMS H-point, spelled as raw x-only hex. Wire kind 0.
+    NumsPoint,
+    /// Liana's unspendable xpub, DERIVED from the leaf keys (SPEC §2).
+    /// Wire kind 1, legal only at wire version 8.
+    LianaUnspendable,
 }
 
 /// Body shape for a [`Node`], determined by its [`Tag`].
@@ -38,20 +55,20 @@ pub enum Body {
         /// emitted as `kiw` bits.
         indices: Vec<u8>,
     },
-    /// Tr's body: NUMS flag, key index, optional tap-script-tree root.
-    /// Per SPEC v0.30 §7: wire shape is
-    /// `Tag::Tr | is_nums(1) | [key_index(kiw) iff !is_nums] | has_tree(1) | [tree iff has_tree]`.
-    /// When `is_nums = true`, the internal key is the BIP-341 NUMS H-point
-    /// `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0`
-    /// and `key_index` is unused on the wire (encoder writes 0 by convention;
-    /// decoder ignores). When `is_nums = false`, `key_index` is a `0..n`
-    /// placeholder index encoded at `kiw` bits.
+    /// Tr's body: the taproot internal key plus an optional tap-script-tree root.
+    /// Per SPEC v0.30 §7 the wire shape is
+    /// `Tag::Tr | is_nums(1) | [kind(1) iff is_nums && version==8] | [key_index(kiw) iff !is_nums] | has_tree(1) | [tree]`.
+    /// At version 4 the `kind` bit never appears — the stream is
+    /// byte-identical to what shipped pre-refactor (stage 1a's
+    /// `every_vendored_wire_vector_re_encodes_to_the_same_bytes` gate proves
+    /// it over all 65 vendored vectors). At version 8 the `kind` bit
+    /// distinguishes `InternalKey::NumsPoint` (0) from
+    /// `InternalKey::LianaUnspendable` (1). `InternalKey` replaces the former
+    /// `is_nums`/`key_index` pair; stage 1a changed no wire bytes, stage 1b
+    /// task 3 added the version-8-only `kind` bit.
     Tr {
-        /// `true` iff the internal key is the BIP-341 NUMS H-point.
-        is_nums: bool,
-        /// Internal-key index into the descriptor's key table. Unused when
-        /// `is_nums = true` (no wire representation).
-        key_index: u8,
+        /// The internal key. See [`InternalKey`].
+        internal_key: InternalKey,
         /// Optional tap-script-tree root.
         tree: Option<Box<Node>>,
     },
@@ -76,7 +93,33 @@ pub enum Body {
 ///
 /// `key_index_width` is the bit width used for key-index fields, derived from
 /// the descriptor's path-decl head. Filled in across phases 7-11.
-pub fn write_node(w: &mut BitWriter, node: &Node, key_index_width: u8) -> Result<(), Error> {
+///
+/// `wire_version` is the wire version this write targets (see
+/// [`crate::encode::Descriptor::wire_version`]). Stage 1b task 2 threaded it
+/// through every recursive call site; stage 1b task 3 (this function's
+/// `Body::Tr` arm) is what reads it: the kind bit distinguishing
+/// `InternalKey::NumsPoint` from `InternalKey::LianaUnspendable` is written
+/// iff `wire_version == Header::WF_UNSPENDABLE_VERSION`.
+///
+/// CORRECTION (fix round 1, I-1), CLOSED (stage 1b task 3): an earlier
+/// version of this comment claimed "wire bytes are unchanged until the
+/// following task", which was true only for version-4 trees and FALSE for a
+/// tree carrying `InternalKey::LianaUnspendable` — [`crate::encode::Descriptor::wire_version`]
+/// returned 8 for such a tree while this function's `Body::Tr` arm still
+/// wrote the same v4 NUMS bit pattern for both kinds, a transient
+/// header-version-8-over-a-version-4-body state. Task 3 closed it: the
+/// `Body::Tr` arm now writes a kind bit at version 8, so a
+/// `LianaUnspendable` tree's wire shape matches its own `wire_version()`.
+/// Version-4 trees are still byte-identical to what shipped (proven by
+/// stage 1a's byte-equality gate over all 65 vendored vectors, which cannot
+/// see version 8 since none of the vendored vectors carry
+/// `LianaUnspendable`).
+pub fn write_node(
+    w: &mut BitWriter,
+    node: &Node,
+    key_index_width: u8,
+    wire_version: u8,
+) -> Result<(), Error> {
     node.tag.write(w);
     match &node.body {
         Body::KeyArg { index } => {
@@ -84,7 +127,7 @@ pub fn write_node(w: &mut BitWriter, node: &Node, key_index_width: u8) -> Result
         }
         Body::Children(children) => {
             for c in children {
-                write_node(w, c, key_index_width)?;
+                write_node(w, c, key_index_width, wire_version)?;
             }
         }
         Body::Variable { k, children } => {
@@ -109,7 +152,7 @@ pub fn write_node(w: &mut BitWriter, node: &Node, key_index_width: u8) -> Result
             w.write_bits((*k - 1) as u64, 5);
             w.write_bits((children.len() - 1) as u64, 5);
             for c in children {
-                write_node(w, c, key_index_width)?;
+                write_node(w, c, key_index_width, wire_version)?;
             }
         }
         Body::MultiKeys { k, indices } => {
@@ -137,24 +180,50 @@ pub fn write_node(w: &mut BitWriter, node: &Node, key_index_width: u8) -> Result
                 w.write_bits(u64::from(*idx), key_index_width as usize);
             }
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            // SPEC v0.30 §7: is_nums(1) | [key_index(kiw) iff !is_nums] |
-            // has_tree(1) | [tree iff has_tree].
-            debug_assert!(
-                !(*is_nums && *key_index != 0),
-                "is_nums=true implies key_index=0 (no wire representation otherwise)"
-            );
-            w.write_bits(u64::from(*is_nums), 1);
-            if !*is_nums {
-                w.write_bits(u64::from(*key_index), key_index_width as usize);
+        Body::Tr { internal_key, tree } => {
+            // SPEC v0.30 §7: is_nums(1) | [kind(1) iff is_nums && v==8] |
+            // [key_index(kiw) iff !is_nums] | has_tree(1) | [tree]. UNCHANGED
+            // at wire version 4; the kind bit exists ONLY at version 8.
+            match internal_key {
+                InternalKey::Slot(i) => {
+                    w.write_bits(0, 1);
+                    w.write_bits(u64::from(*i), key_index_width as usize);
+                }
+                InternalKey::NumsPoint | InternalKey::LianaUnspendable => {
+                    w.write_bits(1, 1);
+                    // SPEC §3d: the kind bit exists ONLY at version 8. At
+                    // version 4 the stream stays byte-identical to what
+                    // shipped (stage 1a's byte-equality gate proves it over
+                    // all 65 vendored vectors).
+                    if wire_version == Header::WF_UNSPENDABLE_VERSION {
+                        w.write_bits(u64::from(*internal_key == InternalKey::LianaUnspendable), 1);
+                    } else {
+                        // fix round 1 I-1: a non-NumsPoint unspendable kind
+                        // has no wire representation at version 4 -- writing
+                        // one here would silently downgrade it to NumsPoint
+                        // on the wire with no error and no assert, the exact
+                        // failure this stage exists to prevent. This is a
+                        // programming-error guard, not an input-error one
+                        // (the caller controls both `internal_key` and
+                        // `wire_version`; `encode_payload` never reaches
+                        // this branch because it derives `wire_version` from
+                        // the tree via `Descriptor::wire_version()`, but
+                        // `write_node` is `pub` within the crate and two
+                        // identity sites in `identity.rs` call it directly).
+                        // Mirrors the `is_nums`/`key_index` invariant this
+                        // sum type replaced, which was also debug_assert-only
+                        // (see `InternalKey`'s doc comment).
+                        debug_assert!(
+                            *internal_key != InternalKey::LianaUnspendable,
+                            "LianaUnspendable has no wire representation at version {wire_version} (only at {}) -- kind bit would be silently dropped",
+                            Header::WF_UNSPENDABLE_VERSION
+                        );
+                    }
+                }
             }
             w.write_bits(u64::from(tree.is_some()), 1);
             if let Some(t) = tree {
-                write_node(w, t, key_index_width)?;
+                write_node(w, t, key_index_width, wire_version)?;
             }
         }
         Body::Timelock(v) => {
@@ -189,18 +258,43 @@ pub const MAX_DECODE_DEPTH: u8 = 128;
 /// `key_index_width` is the bit width used for key-index fields, derived from
 /// the descriptor's path-decl head. Filled in across phases 7-11.
 ///
+/// `wire_version` is the version `Header::read` (or `ChunkHeader::read`)
+/// returned for this payload. Stage 1b task 2 threaded it through every
+/// recursive call site; stage 1b task 3 is what reads it in `Tag::Tr`'s arm
+/// below: at version 8, after `is_nums`, an extra kind bit is read and
+/// decoded to `InternalKey::LianaUnspendable` (1) or `InternalKey::NumsPoint`
+/// (0); at version 4 no such bit exists on the wire and `is_nums` alone still
+/// decodes to `InternalKey::NumsPoint`, unchanged from stage 1a.
+///
+/// CLOSED (stage 1b task 3): this used to be the decode-side half of the
+/// transient state documented on [`crate::encode::Descriptor::wire_version`]
+/// — a header-version-8 payload decoded its `Tr` internal key as `NumsPoint`
+/// regardless of what it was encoded as, because nothing on the wire
+/// distinguished it from a version-4 one. Task 3's write-side kind bit (see
+/// `write_node`) and this function's matching read now agree, so a
+/// `LianaUnspendable` tree round-trips as `LianaUnspendable` at version 8.
+///
 /// Top-level entry point. Internally threads a recursion-depth counter that
 /// errors out at [`MAX_DECODE_DEPTH`] before parsing the next node, so a
 /// hostile wire payload nesting recursive tags (`Tag::Sh`, `Tag::AndV`,
 /// `Tag::TapTree`, etc.) arbitrarily deep cannot blow the Rust stack.
-pub fn read_node(r: &mut BitReader, key_index_width: u8) -> Result<Node, Error> {
-    read_node_with_depth(r, key_index_width, 0)
+pub fn read_node(r: &mut BitReader, key_index_width: u8, wire_version: u8) -> Result<Node, Error> {
+    read_node_with_depth(r, key_index_width, wire_version, 0)
 }
 
 /// Inner recursive form of `read_node` that threads `depth`. Public callers
 /// should use `read_node` instead, which starts at depth 0. Increments
 /// `depth` once per call and errors if it reaches [`MAX_DECODE_DEPTH`].
-fn read_node_with_depth(r: &mut BitReader, key_index_width: u8, depth: u8) -> Result<Node, Error> {
+/// `wire_version` is read directly in the `Tag::Tr` arm below (stage 1b
+/// task 3), not only passed to recursive calls, so
+/// `#[allow(clippy::only_used_in_recursion)]` no longer applies — see
+/// `read_node`'s doc comment.
+fn read_node_with_depth(
+    r: &mut BitReader,
+    key_index_width: u8,
+    wire_version: u8,
+    depth: u8,
+) -> Result<Node, Error> {
     if depth >= MAX_DECODE_DEPTH {
         return Err(Error::DecodeRecursionDepthExceeded {
             depth,
@@ -222,23 +316,23 @@ fn read_node_with_depth(r: &mut BitReader, key_index_width: u8, depth: u8) -> Re
         | Tag::DupIf
         | Tag::NonZero
         | Tag::ZeroNotEqual => {
-            let child = read_node_with_depth(r, key_index_width, depth + 1)?;
+            let child = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
             Body::Children(vec![child])
         }
         Tag::AndV | Tag::AndB | Tag::OrB | Tag::OrC | Tag::OrD | Tag::OrI => {
-            let l = read_node_with_depth(r, key_index_width, depth + 1)?;
-            let r2 = read_node_with_depth(r, key_index_width, depth + 1)?;
+            let l = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
+            let r2 = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
             Body::Children(vec![l, r2])
         }
         Tag::AndOr => {
-            let a = read_node_with_depth(r, key_index_width, depth + 1)?;
-            let b = read_node_with_depth(r, key_index_width, depth + 1)?;
-            let c = read_node_with_depth(r, key_index_width, depth + 1)?;
+            let a = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
+            let b = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
+            let c = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
             Body::Children(vec![a, b, c])
         }
         Tag::TapTree => {
-            let l = read_node_with_depth(r, key_index_width, depth + 1)?;
-            let r2 = read_node_with_depth(r, key_index_width, depth + 1)?;
+            let l = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
+            let r2 = read_node_with_depth(r, key_index_width, wire_version, depth + 1)?;
             Body::Children(vec![l, r2])
         }
         Tag::Multi | Tag::SortedMulti | Tag::MultiA | Tag::SortedMultiA => {
@@ -261,34 +355,48 @@ fn read_node_with_depth(r: &mut BitReader, key_index_width: u8, depth: u8) -> Re
             }
             let mut children = Vec::with_capacity(count);
             for _ in 0..count {
-                children.push(read_node_with_depth(r, key_index_width, depth + 1)?);
+                children.push(read_node_with_depth(
+                    r,
+                    key_index_width,
+                    wire_version,
+                    depth + 1,
+                )?);
             }
             Body::Variable { k, children }
         }
         Tag::Tr => {
-            // SPEC v0.30 §7: is_nums(1) | [key_index(kiw) iff !is_nums] |
-            // has_tree(1) | [tree iff has_tree].
+            // SPEC v0.30 §7: is_nums(1) | [kind(1) iff is_nums && v==8] |
+            // [key_index(kiw) iff !is_nums] | has_tree(1) | [tree iff
+            // has_tree]. The kind bit mirrors write_node's write side exactly:
+            // present only when is_nums is set AND wire_version is the
+            // WF_UNSPENDABLE_VERSION (8); absent (and thus always
+            // `NumsPoint`) at version 4, unchanged from stage 1a.
             let is_nums = r.read_bits(1)? != 0;
-            let key_index = if is_nums {
-                0
+            let internal_key = if is_nums {
+                if wire_version == Header::WF_UNSPENDABLE_VERSION {
+                    if r.read_bits(1)? != 0 {
+                        InternalKey::LianaUnspendable
+                    } else {
+                        InternalKey::NumsPoint
+                    }
+                } else {
+                    InternalKey::NumsPoint
+                }
             } else {
-                r.read_bits(key_index_width as usize)? as u8
+                InternalKey::Slot(r.read_bits(key_index_width as usize)? as u8)
             };
             let has_tree = r.read_bits(1)? != 0;
             let tree = if has_tree {
                 Some(Box::new(read_node_with_depth(
                     r,
                     key_index_width,
+                    wire_version,
                     depth + 1,
                 )?))
             } else {
                 None
             };
-            Body::Tr {
-                is_nums,
-                key_index,
-                tree,
-            }
+            Body::Tr { internal_key, tree }
         }
         Tag::After | Tag::Older => {
             let v = r.read_bits(32)? as u32;
@@ -331,6 +439,7 @@ fn read_node_with_depth(r: &mut BitReader, key_index_width: u8, depth: u8) -> Re
 mod tests {
     use super::*;
     use crate::bitstream::{BitReader, BitWriter};
+    use crate::header::Header;
 
     #[test]
     fn key_arg_n1_zero_bits() {
@@ -340,7 +449,7 @@ mod tests {
             body: Body::KeyArg { index: 0 },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag::PkK (6 bits) + key-arg (0 bits) = 6 bits total.
         assert_eq!(w.bit_len(), 6);
     }
@@ -353,7 +462,7 @@ mod tests {
             body: Body::KeyArg { index: 2 },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag::PkK (6 bits) + key-arg (2 bits) = 8 bits total.
         assert_eq!(w.bit_len(), 8);
     }
@@ -365,10 +474,13 @@ mod tests {
             body: Body::KeyArg { index: 1 },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -385,10 +497,13 @@ mod tests {
             }]),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -401,10 +516,13 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.30 Phase C — multi packing bit-cost pin.
@@ -420,7 +538,7 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         assert_eq!(w.bit_len(), 22);
     }
 
@@ -435,10 +553,13 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.30 Phase C — `Body::MultiKeys` round-trips under `Tag::SortedMultiA`.
@@ -452,10 +573,13 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -466,18 +590,20 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: None,
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag::Tr (6) + is_nums (1) + key_index (0, kiw=0) + has_tree (1) = 8 bits.
         assert_eq!(w.bit_len(), 8);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -504,10 +630,13 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -516,8 +645,7 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::MultiA,
                     body: Body::MultiKeys {
@@ -528,10 +656,13 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.30 Phase F — `Body::Tr { is_nums: true, .. }` round-trips. NUMS
@@ -541,35 +672,39 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: None,
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
-    /// v0.30 Phase F — `Body::Tr { is_nums: false, key_index, .. }` round-
-    /// trips with explicit key_index written at kiw width.
+    /// v0.30 Phase F — `Body::Tr { internal_key: InternalKey::Slot(_), .. }`
+    /// round-trips with explicit key_index written at kiw width.
     #[test]
     fn tr_is_nums_false_round_trip() {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 2,
+                internal_key: InternalKey::Slot(2),
                 tree: None,
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -579,12 +714,15 @@ mod tests {
             body: Body::Timelock(700_000),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag(6) + u32(32) = 38 bits
         assert_eq!(w.bit_len(), 38);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -595,12 +733,15 @@ mod tests {
             body: Body::Hash256Body(h),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag(6) + 256 = 262 bits
         assert_eq!(w.bit_len(), 262);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -611,12 +752,15 @@ mod tests {
             body: Body::Hash160Body(h),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag(6) + 160 = 166 bits
         assert_eq!(w.bit_len(), 166);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -627,12 +771,15 @@ mod tests {
             body: Body::Hash256Body(h),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag(6) + 256 = 262 bits (Hash256 primary 0x1F in v0.30).
         assert_eq!(w.bit_len(), 262);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -643,10 +790,13 @@ mod tests {
             body: Body::Hash160Body(h),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -656,11 +806,14 @@ mod tests {
             body: Body::Empty,
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         assert_eq!(w.bit_len(), 6); // Tag(6), no body (False primary 0x22 in v0.30)
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -670,10 +823,13 @@ mod tests {
             body: Body::Empty,
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -683,10 +839,13 @@ mod tests {
             body: Body::Timelock(144),
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -698,19 +857,21 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: None,
             },
         };
         let mut w = BitWriter::new();
         // kiw=0 at n=1 (irrelevant — is_nums=true suppresses the kiw field).
-        write_node(&mut w, &n, 0).unwrap();
+        write_node(&mut w, &n, 0, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag::Tr (6) + is_nums (1) + has_tree (1) = 8 bits.
         assert_eq!(w.bit_len(), 8);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 0).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -721,8 +882,7 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: Some(Box::new(Node {
                     tag: Tag::AndV,
                     body: Body::Children(vec![
@@ -743,10 +903,13 @@ mod tests {
         };
         let mut w = BitWriter::new();
         // v0.30 width at n=2: ⌈log₂(2)⌉ = 1.
-        write_node(&mut w, &n, 1).unwrap();
+        write_node(&mut w, &n, 1, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 1).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 1, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -757,8 +920,7 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: Some(Box::new(Node {
                     tag: Tag::MultiA,
                     body: Body::MultiKeys {
@@ -769,10 +931,13 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     #[test]
@@ -783,19 +948,21 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: None,
             },
         };
         let mut w = BitWriter::new();
         // kiw=2 at n=4 (irrelevant — is_nums=true suppresses the kiw field).
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         // Tag::Tr (6) + is_nums (1) + has_tree (1) = 8 bits.
         assert_eq!(w.bit_len(), 8);
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.19 — multi-branch tap tree wire-format round-trip. Closes audit
@@ -810,8 +977,7 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::TapTree,
                     body: Body::Children(vec![
@@ -828,11 +994,14 @@ mod tests {
             },
         };
         let mut w = BitWriter::new();
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         assert_eq!(w.bit_len(), 32, "2-leaf TapTree wire layout pin");
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.19 — 4-leaf nested multi-branch tap tree:
@@ -856,8 +1025,7 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::TapTree,
                     body: Body::Children(vec![mk_branch(1, 2), mk_branch(3, 4)]),
@@ -866,10 +1034,13 @@ mod tests {
         };
         let mut w = BitWriter::new();
         // 5 distinct indices (0..=4) → v0.30 kiw = ⌈log₂(5)⌉ = 3.
-        write_node(&mut w, &n, 3).unwrap();
+        write_node(&mut w, &n, 3, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 3).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 3, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.19 — 3-leaf unbalanced: `tr(@0, {pk(@1), {pk(@2),pk(@3)}})`.
@@ -881,8 +1052,7 @@ mod tests {
         let n = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::TapTree,
                     body: Body::Children(vec![
@@ -909,10 +1079,13 @@ mod tests {
         };
         let mut w = BitWriter::new();
         // v0.30 kiw at n=3: ⌈log₂(3)⌉ = 2.
-        write_node(&mut w, &n, 2).unwrap();
+        write_node(&mut w, &n, 2, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        assert_eq!(read_node(&mut r, 2).unwrap(), n);
+        assert_eq!(
+            read_node(&mut r, 2, Header::WF_REDESIGN_VERSION).unwrap(),
+            n
+        );
     }
 
     /// v0.19 hardening — reject deeply-nested TapTree on the decode side.
@@ -940,10 +1113,10 @@ mod tests {
             };
         }
         let mut w = BitWriter::new();
-        write_node(&mut w, &left, 0).unwrap();
+        write_node(&mut w, &left, 0, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        let err = read_node(&mut r, 0).unwrap_err();
+        let err = read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap_err();
         assert_eq!(
             err,
             Error::DecodeRecursionDepthExceeded {
@@ -976,10 +1149,10 @@ mod tests {
             };
         }
         let mut w = BitWriter::new();
-        write_node(&mut w, &left, 0).unwrap();
+        write_node(&mut w, &left, 0, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        let err = read_node(&mut r, 0).unwrap_err();
+        let err = read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap_err();
         assert_eq!(
             err,
             Error::DecodeRecursionDepthExceeded {
@@ -1011,10 +1184,10 @@ mod tests {
             };
         }
         let mut w = BitWriter::new();
-        write_node(&mut w, &left, 0).unwrap();
+        write_node(&mut w, &left, 0, Header::WF_REDESIGN_VERSION).unwrap();
         let bytes = w.into_bytes();
         let mut r = BitReader::new(&bytes);
-        let decoded = read_node(&mut r, 0).unwrap();
+        let decoded = read_node(&mut r, 0, Header::WF_REDESIGN_VERSION).unwrap();
         assert_eq!(decoded, left);
     }
 }

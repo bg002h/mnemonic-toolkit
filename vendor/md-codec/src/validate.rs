@@ -5,7 +5,7 @@ use crate::encode::Descriptor;
 use crate::error::Error;
 use crate::origin_path::PathDeclPaths;
 use crate::tag::Tag;
-use crate::tree::{Body, Node};
+use crate::tree::{Body, InternalKey, Node};
 use crate::use_site_path::UseSitePath;
 
 /// Validate the BIP 388 well-formedness of placeholder usage in the tree.
@@ -81,23 +81,19 @@ fn walk_for_placeholders(
                 }
             }
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            // SPEC v0.30 §7 + §11: when `is_nums = true` the internal key is
-            // the BIP-341 NUMS H-point (not a placeholder reference); skip
-            // registration. Otherwise `key_index` must be in `0..n`; out-of-
-            // range raises `NUMSSentinelConflict` per SPEC §11 (Phase G
-            // finalizes the variant's full doc-comment).
-            if !*is_nums {
-                if (*key_index as usize) >= seen.len() {
+        Body::Tr { internal_key, tree } => {
+            // SPEC v0.30 §7 + §11: when the internal key is not a `Slot`,
+            // it is not a placeholder reference; skip registration.
+            // Otherwise the slot index must be in `0..n`; out-of-range
+            // raises `NUMSSentinelConflict` per SPEC §11 (Phase G finalizes
+            // the variant's full doc-comment).
+            if let InternalKey::Slot(i) = internal_key {
+                if (*i as usize) >= seen.len() {
                     return Err(Error::NUMSSentinelConflict);
                 }
-                if !seen[*key_index as usize] {
-                    seen[*key_index as usize] = true;
-                    first_occurrences.push(*key_index);
+                if !seen[*i as usize] {
+                    seen[*i as usize] = true;
+                    first_occurrences.push(*i);
                 }
             }
             if let Some(t) = tree {
@@ -538,6 +534,250 @@ pub fn validate_no_empty_origin_overrides(d: &Descriptor) -> Result<(), Error> {
     Ok(())
 }
 
+/// SPEC §6 rows 1, 2 and 4: the three ENCODE-SIDE structural refusals for a
+/// wire-kind-1 (Liana unspendable) taproot internal key that are decidable
+/// from the tree and use-site alone. Row 6 (the minimum-version rule) needs
+/// the wire version actually about to be written, which this function does
+/// not see — it lives separately, in
+/// [`validate_minimal_wire_version`].
+///
+/// Row 4 (kind 1 is meaningless anywhere but the descriptor's own root)
+/// applies wherever a `LianaUnspendable` internal key is found, walking the
+/// WHOLE tree, and runs FIRST — `reject_nested_unspendable(&d.tree, true)?`
+/// below executes before the `if let` that reads rows 1 and 2. THAT
+/// ORDERING, not anything about which tags a tapscript leaf may carry, is
+/// what makes rows 1 and 2's root-only scope safe: by the time they run,
+/// any `LianaUnspendable` nested anywhere else in the tree has already
+/// short-circuited this function with `UnspendableNotRootTr`, regardless of
+/// what wrapper it sits under — `sh`/`wsh`, or a tapscript-tree miniscript
+/// wrapper such as `and_v`.
+///
+/// (Fix round 2, M1 — CORRECTING A FALSE GUARANTEE. An earlier version of
+/// this comment argued the narrower claim that `Tag::Tr` is caught as a
+/// forbidden tap-script-tree leaf by `validate_tap_script_tree`, which is
+/// not true in general: `walk_tap_tree_leaves` only recurses through
+/// `Tag::TapTree` nodes' children and treats every OTHER tag as an
+/// immediate leaf without ever visiting ITS OWN children, so a `Tag::Tr`
+/// nested one level deeper — e.g. under an `and_v`'s `Body::Children` — is
+/// NOT caught by that check. Unreachable today only because the template
+/// parser refuses every spelling that could construct it, not because this
+/// codec's own tap-script-tree validation forbids it — so this paragraph's
+/// safety argument does not depend on that claim at all, and
+/// `contains_sortedmulti_a` below now also recurses into `Body::Tr` as
+/// defence in depth against the same gap, independent of row 4's ordering.)
+///
+/// **Row 2 checks the WHOLE effective use-site, not just the shared
+/// default (fix round 1, PER-KEY OVERRIDE GAP).** Liana's positional
+/// pairing (SPEC §6 row 2) is a per-LEAF-KEY property: `@1/<2;3>/*` derives
+/// a different address than `@1/<0;1>/*` regardless of what the shared
+/// default says. A first cut here checked only `d.use_site_path`, and
+/// `d.tlv.use_site_path_overrides` (populated straight from a template's
+/// per-placeholder path -- `parse/template.rs:843-858` in md-cli) let a
+/// single `@N` diverge from an otherwise-canonical card and still mint --
+/// MEASURED through the operator CLI: `tr(UNSPENDABLE(liana),
+/// {pk(@0/<0;1>/*),pk(@1/<2;3>/*)})` minted and the override survived
+/// intact through decode. Liana would derive `@1` from `0/i`; a use-site-
+/// following device derives it from `2/i` -- two implementations
+/// disagreeing about which addresses are the wallet's, on a plate that
+/// looks canonical at a glance. So every override entry is checked here
+/// too, with the same error -- the operator does not care which field
+/// carried the divergence.
+pub fn validate_unspendable_shape(d: &Descriptor) -> Result<(), Error> {
+    reject_nested_unspendable(&d.tree, true)?;
+    if let Body::Tr {
+        internal_key: InternalKey::LianaUnspendable,
+        tree,
+    } = &d.tree.body
+    {
+        if let Some(t) = tree {
+            if contains_sortedmulti_a(t) {
+                return Err(Error::UnspendableWithSortedMultiA);
+            }
+        }
+        if d.use_site_path != UseSitePath::standard_multipath() {
+            return Err(Error::UnspendableUseSiteNotCanonical { idx: None });
+        }
+        if let Some(overrides) = &d.tlv.use_site_path_overrides {
+            for (idx, usp) in overrides {
+                if *usp != UseSitePath::standard_multipath() {
+                    // F-638: name the key -- the shared field is fine here.
+                    return Err(Error::UnspendableUseSiteNotCanonical { idx: Some(*idx) });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// SPEC §6 row 4: refuse a `LianaUnspendable` internal key found anywhere
+/// other than the descriptor's own root `tr()`. `is_root` is `true` only on
+/// the initial call from [`validate_unspendable_shape`]; every recursive
+/// call passes `false`.
+fn reject_nested_unspendable(node: &Node, is_root: bool) -> Result<(), Error> {
+    if let Body::Tr { internal_key, tree } = &node.body {
+        if *internal_key == InternalKey::LianaUnspendable && !is_root {
+            return Err(Error::UnspendableNotRootTr);
+        }
+        if let Some(t) = tree {
+            reject_nested_unspendable(t, false)?;
+        }
+        return Ok(());
+    }
+    match &node.body {
+        Body::Children(children) => {
+            for c in children {
+                reject_nested_unspendable(c, false)?;
+            }
+        }
+        Body::Variable { children, .. } => {
+            for c in children {
+                reject_nested_unspendable(c, false)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// SPEC §6 row 1: `true` iff a `Tag::SortedMultiA` node appears anywhere in
+/// this subtree — called with a kind-1 `tr()`'s own tap-script tree.
+///
+/// Recurses into `Body::Tr { tree: Some(t), .. }` too (fix round 2, M1),
+/// even though `validate_unspendable_shape`'s row-4 ordering already makes
+/// a nested `Tr` under a kind-1 root unreachable in practice — this is
+/// defence in depth, not dead code responding to a real input: see that
+/// function's doc comment for why the two checks are independent rather
+/// than one relying on the other.
+fn contains_sortedmulti_a(node: &Node) -> bool {
+    if matches!(node.tag, Tag::SortedMultiA) {
+        return true;
+    }
+    match &node.body {
+        Body::Children(children) => children.iter().any(contains_sortedmulti_a),
+        Body::Variable { children, .. } => children.iter().any(contains_sortedmulti_a),
+        Body::Tr { tree: Some(t), .. } => contains_sortedmulti_a(t),
+        _ => false,
+    }
+}
+
+/// SPEC §6 row 6 (the minimum-version rule): refuse writing
+/// [`crate::header::Header::WF_UNSPENDABLE_VERSION`] when the tree does not
+/// need it. Takes `version` — the value actually about to be written —
+/// rather than recomputing it, because the only way to observe this refusal
+/// is a caller that forces a non-minimal version past what
+/// `Descriptor::wire_version()` itself would choose: no public encoder path
+/// can construct that state, since `encode_payload_inner` always derives its
+/// version from `d.wire_version()`, which is minimal by construction.
+///
+/// **SOUND ONLY DOWNSTREAM OF ROW 4 (fix round 2, M4) — an undocumented
+/// ordering dependency this comment now names.** This function's predicate
+/// is `d.wire_version() != 8`, and `wire_version()` returns 8 if a
+/// `LianaUnspendable` internal key appears ANYWHERE in the tree, not only
+/// at the root. SPEC §6 row 6 states the predicate more narrowly: refuse
+/// when "the root `Tag::Tr` ... is at kind = 0 — or ... there is no `tr`
+/// at all". The two disagree on exactly ONE shape: a kind-0 (or non-`tr`)
+/// ROOT with a kind-1 `tr` nested somewhere below it — e.g.
+/// `wsh(tr(UNSPENDABLE(liana), ...))`. Judged by THIS function's predicate
+/// alone, forcing version 8 on that shape would NOT be refused (the tree
+/// "needs" 8 purely because of the nested key); judged by SPEC row 6's
+/// literal predicate it WOULD be, because the root itself carries no
+/// reason to need 8.
+///
+/// This function does not resolve that disagreement — it is resolved only
+/// by CALL ORDER. `encode_payload_inner` (`encode.rs`) calls
+/// [`validate_unspendable_shape`] (row 4) FIRST, and row 4 already refuses
+/// any non-root `LianaUnspendable` with `Error::UnspendableNotRootTr`
+/// before this function ever runs — so by the time the one real caller
+/// this crate has reaches `validate_minimal_wire_version`, the disagreeing
+/// shape above cannot exist. This function is `pub`, though: a caller that
+/// invokes it directly, on a descriptor row 4 has not screened, does not
+/// get that guarantee — the disagreement is real, only currently
+/// unreachable through this crate's own single call site.
+///
+/// Narrowing this function's own predicate to match row 6 literally was
+/// considered and set aside: it would require this function to also answer
+/// "what version does the disagreeing shape actually need", which is
+/// [`crate::encode::Descriptor::wire_version`]'s job — a function every
+/// real (non-forced) encode calls unconditionally, not only this
+/// refusal's test-only forced-version path — so changing its answer for a
+/// shape it currently reports 8 for is a larger, riskier change than
+/// documenting the dependency. Restructuring the call order in
+/// `encode_payload_inner` to make this function self-sufficient was
+/// likewise set aside, per instruction: it works correctly today and
+/// reordering encode-time policy checks is exactly the kind of change that
+/// re-earns a full review for no behavioural gain.
+pub fn validate_minimal_wire_version(d: &Descriptor, version: u8) -> Result<(), Error> {
+    let minimal = d.wire_version();
+    if version == crate::header::Header::WF_UNSPENDABLE_VERSION
+        && minimal != crate::header::Header::WF_UNSPENDABLE_VERSION
+    {
+        return Err(Error::NonMinimalWireVersion {
+            got: version,
+            minimal,
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod minimal_wire_version_ordering_dependency_tests {
+    use super::*;
+    use crate::header::Header;
+    use crate::origin_path::{OriginPath, PathDecl, PathDeclPaths};
+    use crate::tlv::TlvSection;
+
+    /// Fix round 2 (M4): measures the documented ordering dependency
+    /// directly rather than leaving it as an unverified claim in prose.
+    /// `wsh(tr(UNSPENDABLE(liana), pk(@0)))` is the one shape SPEC row 6's
+    /// literal (root-only) predicate and this function's actual
+    /// (whole-tree) predicate disagree on: the root is `Wsh`, not a
+    /// kind-1 `tr`, so row 6 would refuse forcing version 8 on it -- but
+    /// `Descriptor::wire_version()` reports 8 as NEEDED (it walks the
+    /// whole tree and finds the nested `LianaUnspendable`), so THIS
+    /// function alone does not refuse it. The full encode path is still
+    /// safe: `crates/md-codec/tests/liana_unspendable.rs`'s
+    /// `kind_1_nested_under_wsh_is_refused` pins that
+    /// `validate_unspendable_shape` (row 4) refuses this exact shape
+    /// before `validate_minimal_wire_version` ever runs.
+    #[test]
+    fn alone_it_does_not_catch_a_nested_kind_1_under_a_non_tr_root() {
+        let d = Descriptor {
+            n: 1,
+            path_decl: PathDecl {
+                n: 1,
+                paths: PathDeclPaths::Shared(OriginPath { components: vec![] }),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Wsh,
+                body: Body::Children(vec![Node {
+                    tag: Tag::Tr,
+                    body: Body::Tr {
+                        internal_key: InternalKey::LianaUnspendable,
+                        tree: Some(Box::new(Node {
+                            tag: Tag::PkK,
+                            body: Body::KeyArg { index: 0 },
+                        })),
+                    },
+                }]),
+            },
+            tlv: TlvSection::new_empty(),
+        };
+        assert_eq!(
+            d.wire_version(),
+            Header::WF_UNSPENDABLE_VERSION,
+            "the WHOLE-TREE predicate reports version 8 as needed"
+        );
+        assert!(
+            validate_minimal_wire_version(&d, Header::WF_UNSPENDABLE_VERSION).is_ok(),
+            "row 6's LITERAL (root-only) predicate would refuse this shape; this \
+             function's whole-tree predicate does not -- that gap is real and is \
+             closed only by row 4 running first in encode_payload_inner, not by \
+             this function"
+        );
+    }
+}
+
 impl Descriptor {
     /// The ascending `@N` indices whose origin cannot be resolved: a pure
     /// query mirroring [`validate_explicit_origin_required`]'s SEMANTICS
@@ -652,7 +892,7 @@ mod tests {
     }
     use super::*;
     use crate::tag::Tag;
-    use crate::tree::{Body, Node};
+    use crate::tree::{Body, InternalKey, Node};
 
     #[test]
     fn placeholder_usage_ok_for_2_of_3() {
@@ -807,15 +1047,14 @@ mod tests {
 
     #[test]
     fn placeholder_usage_rejects_out_of_range_in_tr_key_index() {
-        // SPEC v0.30 §7 + §11: `is_nums = false` with `key_index >= n` is a
+        // SPEC v0.30 §7 + §11: `InternalKey::Slot(i)` with `i >= n` is a
         // `NUMSSentinelConflict` (distinct from KeyArg's
-        // `PlaceholderIndexOutOfRange`; NUMS is signalled by `is_nums = true`
-        // with `key_index` unused on wire).
+        // `PlaceholderIndexOutOfRange`; NUMS is signalled by
+        // `InternalKey::NumsPoint`, which has no wire-carried index).
         let root = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 3,
+                internal_key: InternalKey::Slot(3),
                 tree: None,
             },
         };
@@ -825,15 +1064,14 @@ mod tests {
 
     #[test]
     fn placeholder_usage_accepts_nums_flag_in_tr() {
-        // SPEC v0.30 §7: `is_nums = true` is the NUMS-H-point signal and
-        // MUST pass validation. validate_placeholder_usage requires every
-        // @i in 0..n to be referenced; the @0 reference here satisfies that
-        // for n=1.
+        // SPEC v0.30 §7: `InternalKey::NumsPoint` is the NUMS-H-point signal
+        // and MUST pass validation. validate_placeholder_usage requires
+        // every @i in 0..n to be referenced; the @0 reference here satisfies
+        // that for n=1.
         let root = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: Some(Box::new(Node {
                     tag: Tag::PkK,
                     body: Body::KeyArg { index: 0 },
@@ -841,7 +1079,37 @@ mod tests {
             },
         };
         validate_placeholder_usage(&root, 1)
-            .expect("is_nums flag + @0 reference must validate under v0.30");
+            .expect("NumsPoint + @0 reference must validate under v0.30");
+    }
+
+    /// Fix round 2 (M1): `contains_sortedmulti_a` must recurse into
+    /// `Body::Tr { tree: Some(t), .. }`, not just `Body::Children`/
+    /// `Body::Variable`. `validate_unspendable_shape`'s row-4 ordering
+    /// already makes a `Tr` nested under a kind-1 root unreachable through
+    /// `encode_payload` (row 4 refuses it first), so this calls the
+    /// private helper DIRECTLY -- the only way to observe the arm at all --
+    /// rather than asserting through the public encoder, which can never
+    /// reach this shape.
+    #[test]
+    fn contains_sortedmulti_a_recurses_into_a_nested_tr() {
+        let leaf = Node {
+            tag: Tag::SortedMultiA,
+            body: Body::MultiKeys {
+                k: 2,
+                indices: vec![0, 1],
+            },
+        };
+        let nested_tr = Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                internal_key: InternalKey::NumsPoint,
+                tree: Some(Box::new(leaf)),
+            },
+        };
+        assert!(
+            contains_sortedmulti_a(&nested_tr),
+            "a sortedmulti_a leaf inside a NESTED tr's own tree must still be found"
+        );
     }
 }
 
@@ -851,7 +1119,7 @@ mod explicit_origin_required_tests {
     use crate::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
     use crate::tag::Tag;
     use crate::tlv::TlvSection;
-    use crate::tree::{Body, Node};
+    use crate::tree::{Body, InternalKey, Node};
     use crate::use_site_path::UseSitePath;
 
     fn empty_path() -> OriginPath {
@@ -981,8 +1249,7 @@ mod explicit_origin_required_tests {
         let d = single_key_descriptor(Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: None,
             },
         });
@@ -995,8 +1262,7 @@ mod explicit_origin_required_tests {
         let d = single_key_descriptor(Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::PkK,
                     body: Body::KeyArg { index: 0 },
@@ -1099,8 +1365,7 @@ mod explicit_origin_required_tests {
         let d = single_key_descriptor(Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: None,
             },
         });
@@ -1178,8 +1443,7 @@ mod explicit_origin_required_tests {
         let d = single_key_descriptor(Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::PkK,
                     body: Body::KeyArg { index: 0 },
@@ -1204,8 +1468,7 @@ mod explicit_origin_required_tests {
             tree: Node {
                 tag: Tag::Tr,
                 body: Body::Tr {
-                    is_nums: false,
-                    key_index: 0,
+                    internal_key: InternalKey::Slot(0),
                     tree: Some(Box::new(Node {
                         tag: Tag::PkK,
                         body: Body::KeyArg { index: 1 },

@@ -12,6 +12,7 @@
 //! forgets `digest_len()` emits twelve zero bytes of padding into the script.
 
 use md_codec::chunk::{reassemble, split};
+use md_codec::compose::UnspendableKind;
 use md_codec::compose::{HashKind, HashLock, KeySet, PathList, SpendPath, Wrapper, compose};
 use md_codec::render::descriptor_to_template;
 use md_codec::tag::Tag;
@@ -92,18 +93,21 @@ fn lowering_emits_the_kinds_tag_and_its_own_width() {
         } else {
             lock20(kind)
         };
-        let out = compose(&PathList {
-            wrapper: Wrapper::Wsh,
-            paths: vec![SpendPath {
-                keys: Some(KeySet {
-                    k: 1,
-                    n: 1,
-                    sorted: true,
-                }),
-                hash: Some(hl),
-                lock: None,
-            }],
-        })
+        let out = compose(
+            &PathList {
+                wrapper: Wrapper::Wsh,
+                paths: vec![SpendPath {
+                    keys: Some(KeySet {
+                        k: 1,
+                        n: 1,
+                        sorted: true,
+                    }),
+                    hash: Some(hl),
+                    lock: None,
+                }],
+            },
+            UnspendableKind::Nums,
+        )
         .unwrap_or_else(|e| panic!("{kind:?}: compose refused: {e:?}"));
 
         let rendered = descriptor_to_template(&out.descriptor).expect("render");
@@ -159,18 +163,21 @@ fn every_kind_round_trips_compose_to_md1_to_template() {
             } else {
                 lock20(kind)
             };
-            let c = compose(&PathList {
-                wrapper,
-                paths: vec![SpendPath {
-                    keys: Some(KeySet {
-                        k: 1,
-                        n: 1,
-                        sorted: true,
-                    }),
-                    hash: Some(hl),
-                    lock: None,
-                }],
-            })
+            let c = compose(
+                &PathList {
+                    wrapper,
+                    paths: vec![SpendPath {
+                        keys: Some(KeySet {
+                            k: 1,
+                            n: 1,
+                            sorted: true,
+                        }),
+                        hash: Some(hl),
+                        lock: None,
+                    }],
+                },
+                UnspendableKind::Nums,
+            )
             .unwrap_or_else(|e| panic!("{wrapper:?}/{kind:?}: compose refused: {e:?}"));
 
             let before = descriptor_to_template(&c.descriptor).expect("render");

@@ -24,6 +24,7 @@
 //! key-less paths was refused after lowering, and all 355 with at most one were
 //! emitted. Zero counterexamples — the rule is exact, not a heuristic.
 
+use md_codec::compose::UnspendableKind;
 use md_codec::compose::{
     ComposeError, HashKind, HashLock, KeySet, Lock, PathList, SpendPath, Wrapper, compose,
     template_with_origins, validate,
@@ -99,11 +100,10 @@ fn validate_refuses_a_second_keyless_path() {
     // `compose` is the entry point the port calls; it must refuse too, not just
     // the validator underneath it.
     assert_eq!(
-        compose(&wsh(vec![
-            keyed(1, 1),
-            keyless(H1, None),
-            keyless(H2, None)
-        ]))
+        compose(
+            &wsh(vec![keyed(1, 1), keyless(H1, None), keyless(H2, None)]),
+            UnspendableKind::Nums
+        )
         .unwrap_err(),
         err
     );
@@ -170,7 +170,7 @@ fn one_keyless_path_is_still_admitted() {
     // assertion above and delete the EXPERIMENTAL feature.
     let list = wsh(vec![keyless(H1, Some(Lock::OlderBlocks(5))), keyed(2, 3)]);
     assert_eq!(validate(&list).unwrap(), 3);
-    let c = compose(&list).expect("one key-less path composes");
+    let c = compose(&list, UnspendableKind::Nums).expect("one key-less path composes");
     assert_eq!(
         template_with_origins(&c).unwrap(),
         "wsh(or_i(and_v(v:sha256(cc6a74520f526a6135a4eae180547ae73648254ad1ae90bad93520402b0a123d),older(5)),multi(2,@0/48'/0'/0'/2'/<0;1>/*,@1/48'/0'/1'/2'/<0;1>/*,@2/48'/0'/2'/2'/<0;1>/*)))"
@@ -342,7 +342,8 @@ fn every_case_in_the_conformance_vector_behaves_as_recorded() {
                     case["slots"].as_u64().expect("slots"),
                     "{name}"
                 );
-                let c = compose(&list).unwrap_or_else(|e| panic!("{name}: {e}"));
+                let c =
+                    compose(&list, UnspendableKind::Nums).unwrap_or_else(|e| panic!("{name}: {e}"));
                 assert_eq!(
                     template_with_origins(&c).unwrap(),
                     case["template"].as_str().expect("template"),

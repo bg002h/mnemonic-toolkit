@@ -49,8 +49,8 @@ pub(crate) fn taproot_override_card(d: &md_codec::Descriptor) -> bool {
 /// 4. NO hardened use-site anywhere (`/*h` or a hardened multipath alt) — watch-only
 ///    cannot derive hardened (#25 Point B, reused verbatim).
 ///
-/// Conjuncts 2+3 are read off the wire tree using the EXACT `Body::Tr { is_nums,
-/// tree: Some(inner), .. }` destructure `classify_taproot_restore` uses, so the
+/// Conjuncts 2+3 are read off the wire tree using the EXACT `Body::Tr {
+/// internal_key: NumsPoint, tree: Some(inner) }` destructure `classify_taproot_restore` uses, so the
 /// predicate's NUMS/leaf read CANNOT diverge from classify (R0 Min-B). A
 /// `tree: None` (keypath-only tr) or non-`Body::Tr` body yields `false`.
 pub(crate) fn restorable_taproot_override_card(d: &md_codec::Descriptor) -> bool {
@@ -63,15 +63,37 @@ pub(crate) fn restorable_taproot_override_card(d: &md_codec::Descriptor) -> bool
     }
     match &d.tree.body {
         Body::Tr {
-            is_nums: true,
+            internal_key: md_codec::tree::InternalKey::NumsPoint,
             tree: Some(inner),
-            ..
         } => inner.tag == md_codec::Tag::MultiA,
-        // Non-NUMS trunk (D7 out of scope), keypath-only tr (`tree: None`), or a
-        // non-`Tr` body all fall through to unrestorable.
+        // Non-NUMS trunk (D7 out of scope), a wire-kind-1 Liana unspendable
+        // key (md-codec 0.46.0; `classify_taproot_restore` refuses it, so it is
+        // unrestorable here too -- parity), keypath-only tr (`tree: None`), or
+        // a non-`Tr` body all fall through to unrestorable.
         _ => false,
     }
 }
+
+/// F-642: `true` iff the card carries a wire-kind-1 (Liana unspendable)
+/// taproot internal key ANYWHERE in its tree. That key is an xpub DERIVED from
+/// the leaf keys (descriptor-mnemonic SPEC §2); no toolkit restore route can
+/// render it, and folding it into the BIP-341 NUMS point would describe a
+/// different wallet.
+///
+/// This is md-codec's own predicate, not a re-walk: `Descriptor::wire_version`
+/// is whole-tree and returns `WF_UNSPENDABLE_VERSION` iff some node is
+/// `InternalKey::LianaUnspendable`. It is exactly the condition under which
+/// md-codec's network-less renderers return `NetworkRequiredForUnspendable`, so
+/// a card this admits can never reach that error through a toolkit render.
+pub(crate) fn liana_unspendable_card(d: &md_codec::Descriptor) -> bool {
+    d.wire_version() == md_codec::header::Header::WF_UNSPENDABLE_VERSION
+}
+
+/// F-642: the ONE operator wording for a wire-kind-1 (Liana unspendable)
+/// internal key. Used by `cmd::restore`'s refusal and by `friendly.rs`'s
+/// `NetworkRequiredForUnspendable` arm, so the refusal and any propagated
+/// md-codec error cannot say two different things.
+pub(crate) const LIANA_UNSPENDABLE_REFUSAL: &str = "this md1 carries a Liana unspendable internal key (wire kind 1, md-codec wire version 8) — the toolkit cannot render it yet, and substituting the BIP-341 NUMS point would describe a different wallet; use `md descriptor --network <net> <md1…>` to recover the descriptor from a keyed card, or for a keyless template card `md descriptor --network <net> --template <what `md decode <md1…>` prints> --key @i=<xpub> --fingerprint @i=<fp>`. The engraved card remains a faithful backup";
 
 /// The CUSTOM (divergent per-cosigner) use-site on a NUMS-taproot card — the
 /// RESTORABLE `tr(NUMS, multi_a)` override subset that #26/v0.59.1 reconstructs

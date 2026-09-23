@@ -87,7 +87,7 @@ pub fn compute_wallet_descriptor_template_id(
     // Per spec §8.1: use-site-path-decl bits || tree bits || UseSitePathOverrides TLV bits
     let kiw = d.key_index_width();
     d.use_site_path.write(&mut w)?;
-    crate::tree::write_node(&mut w, &d.tree, kiw)?;
+    crate::tree::write_node(&mut w, &d.tree, kiw, d.wire_version())?;
     if let Some(overrides) = &d.tlv.use_site_path_overrides {
         // Re-encode the UseSitePathOverrides TLV ENTRY (tag + length + payload).
         let mut sub = BitWriter::new();
@@ -197,7 +197,7 @@ pub fn compute_wallet_policy_id(d: &Descriptor) -> Result<WalletPolicyId, Error>
 
     // Step 2: canonical_template_tree_bytes — placeholder-form tree only.
     let mut tree_w = BitWriter::new();
-    crate::tree::write_node(&mut tree_w, &d.tree, d.key_index_width())?;
+    crate::tree::write_node(&mut tree_w, &d.tree, d.key_index_width(), d.wire_version())?;
     let canonical_template_tree_bytes = tree_w.into_bytes();
 
     // Step 3: expand to per-@N records.
@@ -623,7 +623,8 @@ mod tests {
         // Canonical template tree: 5-bit Wpkh primary tag, zero-padded
         // to one byte.
         let mut tree_w = crate::bitstream::BitWriter::new();
-        crate::tree::write_node(&mut tree_w, &d.tree, d.key_index_width()).unwrap();
+        crate::tree::write_node(&mut tree_w, &d.tree, d.key_index_width(), d.wire_version())
+            .unwrap();
         let tree_bytes = tree_w.into_bytes();
         assert_eq!(tree_bytes, vec![0x00]);
 

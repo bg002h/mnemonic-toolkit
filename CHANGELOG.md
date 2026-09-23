@@ -154,6 +154,40 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+## mnemonic-toolkit [0.104.0] — 2026-09-23
+
+**SemVer-MINOR: md-codec 0.47.0 adopted (F-642), pin `cf35d61a` =
+`descriptor-mnemonic-md-cli-v0.19.0`.** Minor because `mnemonic restore` gains a
+refusal and `mnemonic repair --json` gains a `verdict` value.
+
+### Changed
+
+- md-codec's taproot internal key is now a sum type (`InternalKey::{Slot, NumsPoint,
+  LianaUnspendable}`), and wire version 8 carries wire kind 1: Liana's unspendable key,
+  an xpub DERIVED from the leaf keys. **`mnemonic restore --md1` and `verify-bundle`
+  REFUSE such a card (exit 2)** instead of rendering it. This covers a keyed card and
+  a keyless template card, in every completion mode (`--search-address`, explicit
+  `--cosigner @N=`, `--expect-wallet-id`). The keyed template arm would otherwise
+  substitute the BIP-341 NUMS point, a different wallet at different addresses; the
+  keyless completion engine would otherwise report a false "✗ NO MATCH" (exit 4) on
+  correct cards. The refusal names `md descriptor --network <net>`, which renders it
+  (for a template card with `--template`/`--key`/`--fingerprint`). The engraved card
+  stays a faithful backup. See the manual's `mnemonic restore` section.
+- md-codec's five new errors (`NetworkRequiredForUnspendable`, `NonMinimalWireVersion`,
+  `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
+  `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.
+- `scripts/install.sh` and the four doc workflows pin md-cli at v0.19.0.
+- **`mnemonic repair --md1` now keeps the correction on a SINGLE-STRING card whose wire
+  version this build cannot read, and exits 4 (VERIFY-ME)** instead of discarding it
+  with exit 2. BCH is version-agnostic (`md_codec::correct_chunks`). The JSON `verdict`
+  is the new value `"unreadable_version"`, and stderr names the version, the accepted
+  set, and advice that depends on the version.
+  **This differs from `md repair`, which exits 5 on the same card** (md-cli 0.19.0).
+  The toolkit gives exit 5 only to a correction that something verified, and nothing
+  past the BCH checksum checks this one. The stdout report and the advice match
+  md's. A multi-string set at such a version, a clean card, and an uncorrectable one
+  still exit 2 with the same error as before.
+
 ## mnemonic-toolkit [0.103.2] — 2026-09-20
 
 ### Fixed

@@ -7,6 +7,7 @@
 
 use std::str::FromStr;
 
+use md_codec::compose::UnspendableKind;
 use md_codec::compose::{
     Composed, HashKind, HashLock, PathList, SlotOrigin, compose, compose_with,
 };
@@ -117,7 +118,7 @@ pub fn xpub_bytes(x: &Xpub) -> [u8; 65] {
 /// Seat every slot at `m/48'/0'/<slot>'/T'` under one master fingerprint and
 /// bind distinct xpub bytes: a KEYED descriptor the converter can derive.
 pub fn keyed(list: &PathList) -> Descriptor {
-    let unseated = compose(list).expect("list is composable");
+    let unseated = compose(list, UnspendableKind::Nums).expect("list is composable");
     let n = unseated.slots.len();
     let declared: Vec<Option<SlotOrigin>> = (0..n)
         .map(|i| {
@@ -127,7 +128,8 @@ pub fn keyed(list: &PathList) -> Descriptor {
             })
         })
         .collect();
-    let mut c = compose_with(list, &declared).expect("declared origins compose");
+    let mut c =
+        compose_with(list, &declared, UnspendableKind::Nums).expect("declared origins compose");
     let xs = slot_xpubs(n);
     c.descriptor.tlv.pubkeys = Some(
         xs.iter()

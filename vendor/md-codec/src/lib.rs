@@ -27,13 +27,15 @@ pub mod encode;
 pub mod error;
 pub mod header;
 pub mod identity;
-mod nums;
+pub mod nums;
 pub mod origin_path;
 pub mod phrase;
+pub mod policy_shape;
 // The `@N`-template renderer is pure AST string-walking (no miniscript/derive
 // dependency); it sources the NUMS H-point from the ungated `nums` module, so
 // it is unconditional — available with or without the `derive` feature.
 pub mod render;
+pub mod skeleton;
 pub mod tag;
 pub mod test_vectors;
 pub mod tlv;
@@ -46,14 +48,14 @@ pub mod varint;
 
 pub use canonicalize::canonicalize_placeholder_indices;
 pub use chunk::{
-    ChunkHeader, CorrectionDetail, decode_with_correction, derive_chunk_set_id, reassemble,
-    reassemble_with_opts, split,
+    ChunkHeader, CorrectionDetail, correct_chunks, decode_with_correction, derive_chunk_set_id,
+    reassemble, reassemble_with_opts, split,
 };
 pub use decode::{
     DecodeOpts, decode_md1_string, decode_md1_string_with_opts, decode_payload,
     decode_payload_with_opts,
 };
-pub use encode::{Descriptor, encode_md1_string, encode_payload};
+pub use encode::{Descriptor, encode_md1_string, encode_payload, encode_payload_unadmitted};
 pub use error::Error;
 pub use header::Header;
 pub use identity::{
@@ -68,4 +70,5 @@ pub use tlv::TlvSection;
 #[cfg(feature = "derive")]
 pub use to_miniscript::{
     has_hardened_use_site, to_miniscript_descriptor, to_miniscript_descriptor_multipath,
+    to_miniscript_descriptor_multipath_with_network, to_miniscript_descriptor_with_network,
 };

@@ -18,7 +18,7 @@ use md_codec::identity::compute_wallet_policy_id;
 use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
 use md_codec::tag::Tag;
 use md_codec::tlv::TlvSection;
-use md_codec::tree::{Body, Node};
+use md_codec::tree::{Body, InternalKey, Node};
 use md_codec::use_site_path::UseSitePath;
 use md_codec::validate::{validate_explicit_origin_required, validate_placeholder_usage};
 
@@ -171,8 +171,7 @@ fn tr_keypath_at_0() -> Node {
     Node {
         tag: Tag::Tr,
         body: Body::Tr {
-            is_nums: false,
-            key_index: 0,
+            internal_key: InternalKey::Slot(0),
             tree: None,
         },
     }
@@ -736,8 +735,7 @@ fn tr_with_taptree_rejects_empty_path_decl() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(pkk(0))),
             },
         },
@@ -763,8 +761,7 @@ fn tr_with_taptree_accepts_with_populated_path_decl() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(pkk(0))),
             },
         },

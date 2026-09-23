@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 mod support;
 use support::*;
 
+use md_codec::compose::UnspendableKind;
 use md_codec::compose::{compose, template_with_origins};
 use md_codec::render::descriptor_to_template;
 use md_codec::test_vectors::MANIFEST;
@@ -18,7 +19,7 @@ use md_codec::test_vectors::MANIFEST;
 fn every_family_entry_renders_as_listed() {
     // Gate-runnable without the MANIFEST: the lowering against the listed text.
     for (name, list, expected, _) in &family() {
-        let c = compose(list).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let c = compose(list, UnspendableKind::Nums).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(
             &descriptor_to_template(&c.descriptor).unwrap(),
             expected,
@@ -43,7 +44,7 @@ fn every_compose_vector_in_the_manifest_is_exactly_what_compose_renders() {
             .iter()
             .find(|v| v.name == *name)
             .unwrap_or_else(|| panic!("MANIFEST lacks {name}"));
-        let c = compose(list).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let c = compose(list, UnspendableKind::Nums).unwrap_or_else(|e| panic!("{name}: {e}"));
         assert_eq!(template_with_origins(&c).unwrap(), v.template, "{name}");
         assert_eq!(
             v.path, None,
@@ -156,7 +157,7 @@ fn print_family_templates_for_the_manifest() {
         if tags.contains(&"no-corpus") {
             continue;
         }
-        let c = compose(&list).unwrap();
+        let c = compose(&list, UnspendableKind::Nums).unwrap();
         println!("{name}\t{}", template_with_origins(&c).unwrap());
     }
 }
