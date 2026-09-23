@@ -3287,9 +3287,9 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 | Code | Meaning |
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks |
+| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); **also (F-642) a corrected SINGLE-STRING md1 at a wire version this build cannot read — corrected but NOT verified, see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version)**; stdout = repair report + corrected chunks |
 | `4` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **every non-chunked `--md1` single-string correction (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below)**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified** — verify each before trusting; all candidates are printed |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery; an md1 at an unreadable wire version that is multi-string, clean, or uncorrectable) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
 | `1` | I/O error or other generic failure |
 
 ### mk1 set-level re-verify (Cycle E funds fix) {#mnemonic-repair-mk1-set-level-reverify}
@@ -3466,6 +3466,34 @@ corrected codex32 string without user confirmation; this demotion
 closes the one md1 shape where the earlier content-id-based reasoning
 did not actually apply.
 
+### md1 at an unreadable wire version (F-642) {#mnemonic-repair-md1-unreadable-version}
+
+BCH correction does not read the payload, so it works on a card whose
+wire version this build cannot decode (md-codec 0.47.0 reads versions 4
+and 8). On a **single-string** `--md1` card at such a version,
+`mnemonic repair` keeps the correction: the report and corrected string
+go to stdout, the JSON `verdict` is `"unreadable_version"`, and the exit
+is `5`, as `md repair` does since md-cli 0.19.0. Two stderr lines follow:
+`repair: corrected, but this build cannot read wire version N (accepted:
+4, 8)`, then advice that depends on `N` — an even version above 8 may be
+a newer md's (`take the corrected card to a newer md`); any other version
+(odd, or a pre-v0.30 card, which reads as version 0) is `a pre-v0.30 or
+misread card`. There is no output-class advisory, since nothing was
+decoded to classify.
+
+This exit `5` is **not** self-verified: nothing past the BCH checksum
+checks the corrected string. Treat it like a VERIFY-ME candidate until a
+build that reads the version decodes it.
+
+The branch is single-string only. A **multi-string** set at an
+unreadable version exits `2` with empty stdout: a build cannot read the
+chunk-header layout of a version it does not support, so it cannot tell
+one card's chunks from unrelated ones. A **clean** card at an unreadable
+version also exits `2`, never `0`, because a card this build cannot read
+is not "already valid". Both print the same
+`post-correction decode failed: wire-format version mismatch` error as
+before F-642.
+
 ### Worked example
 
 ```sh
@@ -3497,7 +3525,10 @@ recovered card, `"candidate"` for a touched-but-unverified correction —
 reachable for every `ms1` substitution-correction, an incomplete mk1
 partial-plate group, and (v0.86.0) every non-chunked `md1` single-string
 correction (see [md1 non-chunked
-demotion](#mnemonic-repair-md1-non-chunked-demotion) above). `ms-cli`'s
+demotion](#mnemonic-repair-md1-non-chunked-demotion) above). It is
+`"unreadable_version"` (F-642) for a single-string md1 corrected at a wire
+version this build cannot read (see [md1 at an unreadable wire
+version](#mnemonic-repair-md1-unreadable-version) above). `ms-cli`'s
 standalone `ms repair --json` byte-matches this field's position.
 
 ```{.text include="41-repair-ms1-json.out"}

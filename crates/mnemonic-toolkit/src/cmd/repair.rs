@@ -15,7 +15,10 @@
 //!         self-verified (ms1 substitution-correction — Cycle F; mk1
 //!         partial-set / ambiguous indel — Cycle E)
 //!   - 5 — REPAIR_APPLIED, confidently: a blessed correction (mk1/md1
-//!         full-set reassembly-confirmed) or a unique full-checksum indel
+//!         full-set reassembly-confirmed) or a unique full-checksum indel;
+//!         and (F-642, NOT self-verified) a corrected SINGLE-STRING md1 at a
+//!         wire version this build cannot read, converging on `md repair`
+//!         (md-cli 0.19.0) -- see `repair::correct_unreadable_md1`
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
@@ -155,7 +158,35 @@ pub fn run<R: Read, W: Write, E: Write>(
     // non-fatal (Ambiguous / recovered) outcomes, so every group still emits
     // (R0 I1). Only Unrecoverable short-circuits (exit 2).
     for (kind, chunks) in &groups {
-        match repair::repair_card(*kind, chunks) {
+        // F-642: an md1 card at a wire version this build cannot read. BCH
+        // correction is version-agnostic, so a correctable SINGLE-STRING card
+        // keeps its correction and counts as REPAIR_APPLIED (exit 5), as
+        // `md repair` does since md-cli 0.19.0. Everything else -- a
+        // multi-string set (ruling 7), a clean card, an uncorrectable one --
+        // keeps today's error, unchanged. No output-class advisory: there is
+        // no decoded descriptor to classify, and the md1 kind-default
+        // (Template) would be a guess.
+        let result = match repair::repair_card(*kind, chunks) {
+            Err(RepairError::WireVersionUnsupported { got }) if *kind == CardKind::Md1 => {
+                match repair::correct_unreadable_md1(chunks, got) {
+                    Some(outcome) => {
+                        total_repairs += outcome.repairs.len();
+                        if args.json {
+                            emit_repair_json(&outcome, stdout)?;
+                        } else {
+                            emit_repair_text(&outcome, stdout)?;
+                        }
+                        for line in repair::unreadable_version_advisory(got) {
+                            writeln!(stderr, "{line}").ok();
+                        }
+                        continue;
+                    }
+                    None => Err(RepairError::WireVersionUnsupported { got }),
+                }
+            }
+            other => other,
+        };
+        match result {
             Ok(outcome) => {
                 total_repairs += outcome.repairs.len();
                 kinds.push(crate::secret_advisory::card_kind_class(*kind));
@@ -294,7 +325,9 @@ struct RepairJson<'a> {
     /// clean (or confidently-recovered) card, `"candidate"` for a
     /// touched-but-unverified correction (currently only reachable for ms1
     /// substitution-corrections and an incomplete mk1 partial-plate group;
-    /// see [`crate::repair::SetVerify`]). Fixed position right after `kind`
+    /// see [`crate::repair::SetVerify`]), `"unreadable_version"` for a
+    /// single-string md1 correction at a wire version this build cannot read
+    /// (F-642; exit 5). Fixed position right after `kind`
     /// — ms-cli's `RepairJson` (Phase P1) must byte-match this field order
     /// (D27/D9).
     verdict: &'static str,
@@ -362,6 +395,8 @@ fn verdict_str(set_verify: &repair::SetVerify) -> &'static str {
     match set_verify {
         repair::SetVerify::Blessed => "blessed",
         repair::SetVerify::Unverified { .. } => "candidate",
+        // F-642: corrected, but at a wire version this build cannot read.
+        repair::SetVerify::UnreadableVersion { .. } => "unreadable_version",
     }
 }
 

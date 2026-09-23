@@ -487,6 +487,16 @@ pub enum SetVerify {
     /// chunk/content-id oracle either — see `repair_via_md_codec`).
     /// `reason` is the loud user-facing advisory text.
     Unverified { reason: String },
+    /// F-642: a SINGLE-STRING md1 card whose wire version `got` this build
+    /// cannot read, and which BCH correction (`md_codec::correct_chunks`,
+    /// version-agnostic) DID correct. The correction is kept and reported;
+    /// there is no decoded descriptor behind it. Produced ONLY by
+    /// [`correct_unreadable_md1`], which only `mnemonic repair` calls --
+    /// `repair_card` never returns it, so the auto-repair sites (convert /
+    /// inspect / verify-bundle) never see it and still fail with
+    /// [`RepairError::WireVersionUnsupported`], exactly as before F-642.
+    /// Converges on `md repair` (md-cli 0.19.0), which exits 5 here.
+    UnreadableVersion { got: u8 },
 }
 
 #[derive(Debug)]
@@ -547,6 +557,17 @@ pub enum RepairError {
     /// `--max-indel` search can meaningfully act on, and routing it there
     /// would replace this variant's precise message with the generic
     /// "indel unrecoverable" one.
+    /// F-642: md-codec refused the (corrected) md1 set's WIRE VERSION
+    /// (`md_codec::Error::WireVersionMismatch`). Carved out of
+    /// `PostCorrectionDecodeFailed` so `mnemonic repair` can match it
+    /// structurally and keep a single-string correction
+    /// ([`correct_unreadable_md1`]); its Display is byte-identical to the
+    /// `PostCorrectionDecodeFailed { chunk_index: None }` text it replaced,
+    /// and it routes identically (exit 2, indel trigger), so every other
+    /// caller behaves exactly as before.
+    WireVersionUnsupported {
+        got: u8,
+    },
     SetReassemblyMismatch {
         /// Human-readable identifier of the failing group (e.g.
         /// `"chunk_set_id 0x12345"` or `"single-string chunk 2"`), so a
@@ -634,6 +655,11 @@ impl std::fmt::Display for RepairError {
                 Some(i) => write!(f, "repair: chunk {i} post-correction decode failed: {detail}"),
                 None => write!(f, "repair: post-correction decode failed: {detail}"),
             },
+            RepairError::WireVersionUnsupported { got } => write!(
+                f,
+                "repair: post-correction decode failed: {}",
+                md_codec::Error::WireVersionMismatch { got: *got }
+            ),
             RepairError::SetReassemblyMismatch { group, detail } => write!(
                 f,
                 "repair: each chunk corrected individually, but the set does not reassemble ({group}): {detail} — the correction(s) may have aliased to a DIFFERENT valid card; this output is NOT trustworthy"
@@ -1551,6 +1577,8 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
         RepairError::HrpMismatch { .. }
         | RepairError::TooManyErrors { .. }
         | RepairError::PostCorrectionDecodeFailed { .. }
+        // F-642: carved out of PostCorrectionDecodeFailed; same routing.
+        | RepairError::WireVersionUnsupported { .. }
         | RepairError::UnparseableInput { .. }
         | RepairError::ReservedInvalidLength { .. } => true,
         RepairError::EmptyInput
@@ -1712,6 +1740,7 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
             bound: bound as usize,
         }),
         Err(MdErr::ChunkSetEmpty) => Err(RepairError::EmptyInput),
+        Err(MdErr::WireVersionMismatch { got }) => Err(RepairError::WireVersionUnsupported { got }),
         Err(MdErr::Codex32DecodeError(s)) => {
             // md-codec's Codex32DecodeError wraps stringy errors from the
             // codex32 wire-format parser, which doesn't expose a structured
@@ -1738,6 +1767,71 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
             detail: other.to_string(),
         }),
     }
+}
+
+/// F-642: keep a BCH correction on a SINGLE-STRING md1 card whose wire
+/// version this build cannot read. Converges on `md repair`'s
+/// `corrected_but_unsupported` (descriptor-mnemonic `cf35d61a`,
+/// `crates/md-cli/src/cmd/repair.rs`).
+///
+/// Returns `Some` only when `chunks` is ONE string and
+/// `md_codec::correct_chunks` corrected at least one character. `None` for:
+/// - a multi-string set (RULING 7, descriptor-mnemonic `23203195`): a build
+///   cannot read the chunk-header layout of a version it does not support,
+///   so nothing it checks can establish that the version is one card's own
+///   -- a single-string card in a set reads as a bit-shifted "version", and
+///   two genuine chunks from UNRELATED wallets pass any per-string check;
+/// - a clean card (no corrections): a card this build cannot read is not
+///   "already valid", so it must not reach the `repairs ? 5 : 0` success
+///   mapping;
+/// - a card `correct_chunks` cannot correct.
+///
+/// The caller surfaces its original [`RepairError::WireVersionUnsupported`]
+/// on every `None`.
+pub fn correct_unreadable_md1(chunks: &[String], got: u8) -> Option<RepairOutcome> {
+    if chunks.len() != 1 {
+        return None;
+    }
+    let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+    let (_, corrections) = md_codec::correct_chunks(&refs).ok()?;
+    if corrections.is_empty() {
+        return None;
+    }
+    let (corrected_chunks, repairs) = apply_md_corrections(chunks, &corrections);
+    Some(RepairOutcome {
+        kind: CardKind::Md1,
+        corrected_chunks,
+        repairs,
+        set_verify: SetVerify::UnreadableVersion { got },
+    })
+}
+
+/// F-642: the two stderr lines `mnemonic repair` prints after keeping a
+/// correction on a card at an unreadable wire version. Worded as `md repair`
+/// words them (md-cli 0.19.0), with the toolkit's `repair:` prefix. The
+/// advice depends on `got`: wire versions have been even since v0.30, so an
+/// even version above the newest this build reads may be a newer md's; any
+/// other (odd, or at/below the newest -- e.g. a pre-v0.30 card, which shares
+/// the HRP and BCH constant and reads as version 0) is not from the future.
+pub fn unreadable_version_advisory(got: u8) -> [String; 2] {
+    let accepted: Vec<String> = (0..=u8::MAX)
+        .filter(|v| md_codec::header::Header::is_supported_version(*v))
+        .map(|v| v.to_string())
+        .collect();
+    let first = format!(
+        "repair: corrected, but this build cannot read wire version {got} (accepted: {})",
+        accepted.join(", ")
+    );
+    let newest = md_codec::header::Header::WF_UNSPENDABLE_VERSION;
+    let second = if got % 2 == 0 && got > newest {
+        format!("repair: take the corrected card to a newer md, which may read wire version {got}")
+    } else {
+        format!(
+            "repair: this looks like a pre-v0.30 or misread card; no md release reads wire \
+             version {got}"
+        )
+    };
+    [first, second]
 }
 
 /// Extract `chunk_index` from md-codec's `"chunk N: …"` error-string
@@ -2089,7 +2183,9 @@ mod tests {
                 assert!(reason.contains("BIP-93"), "reason: {reason}");
                 assert!(reason.contains("self-verified"), "reason: {reason}");
             }
-            SetVerify::Blessed => panic!("a touched ms1 correction must NOT be Blessed"),
+            SetVerify::Blessed | SetVerify::UnreadableVersion { .. } => {
+                panic!("a touched ms1 correction must NOT be Blessed")
+            }
         }
     }
 
@@ -2887,6 +2983,21 @@ mod tests {
 
     /// `is_indel_trigger` set (§1.7 — HrpMismatch INCLUDED so a prefix-region
     /// indel engages; the non-triggers pass through to today's typed error).
+    /// F-642: `WireVersionUnsupported` was carved out of
+    /// `PostCorrectionDecodeFailed { chunk_index: None }`; every caller other
+    /// than `mnemonic repair`'s single-string branch must see the SAME text
+    /// it saw before, and the same indel-trigger routing.
+    #[test]
+    fn wire_version_unsupported_renders_and_routes_as_before() {
+        let new = RepairError::WireVersionUnsupported { got: 12 };
+        let old = RepairError::PostCorrectionDecodeFailed {
+            chunk_index: None,
+            detail: md_codec::Error::WireVersionMismatch { got: 12 }.to_string(),
+        };
+        assert_eq!(new.to_string(), old.to_string());
+        assert_eq!(is_indel_trigger(&new), is_indel_trigger(&old));
+    }
+
     #[test]
     fn is_indel_trigger_set() {
         use RepairError::*;

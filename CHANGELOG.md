@@ -21,6 +21,13 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
   `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.
 - `scripts/install.sh` and the four doc workflows pin md-cli at v0.19.0.
+- **`mnemonic repair --md1` now exits 5 on a corrected SINGLE-STRING card whose wire
+  version this build cannot read**, keeping the correction (BCH is version-agnostic, via
+  `md_codec::correct_chunks`) instead of discarding it with exit 2. This converges on
+  `md repair` (md-cli 0.19.0). The JSON `verdict` is the new value `"unreadable_version"`,
+  and stderr names the version, the accepted set, and version-dependent advice. This exit
+  5 is NOT self-verified. A multi-string set at such a version, a clean card, and an
+  uncorrectable one still exit 2 with the same error as before.
 
 **SemVer-MINOR (pre-1.0 breaking axis) — P3 of the constellation CLI-uniformity cycle:
 `mnemonic`'s display-grouping surface changes on FOUR subcommands.**
