@@ -16,9 +16,9 @@
 //!         partial-set / ambiguous indel — Cycle E)
 //!   - 5 — REPAIR_APPLIED, confidently: a blessed correction (mk1/md1
 //!         full-set reassembly-confirmed) or a unique full-checksum indel;
-//!         and (F-642, NOT self-verified) a corrected SINGLE-STRING md1 at a
-//!         wire version this build cannot read, converging on `md repair`
-//!         (md-cli 0.19.0) -- see `repair::correct_unreadable_md1`
+//!         (F-642 ruling 8: a corrected SINGLE-STRING md1 at a wire version
+//!         this build cannot read is NOT here -- it exits 4, where `md repair`
+//!         exits 5; see `repair::correct_unreadable_md1`)
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
@@ -160,8 +160,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     for (kind, chunks) in &groups {
         // F-642: an md1 card at a wire version this build cannot read. BCH
         // correction is version-agnostic, so a correctable SINGLE-STRING card
-        // keeps its correction and counts as REPAIR_APPLIED (exit 5), as
-        // `md repair` does since md-cli 0.19.0. Everything else -- a
+        // keeps its correction. RULING 8: it is a VERIFY-ME candidate (exit
+        // 4), NOT REPAIR_APPLIED (5) -- nothing past the BCH checksum checks
+        // it, which is less than the v0.86.0 non-chunked demotion (also 4)
+        // had. `md repair` (md-cli 0.19.0) exits 5 here; the toolkit's exit-5
+        // contract is "corrected AND self-verified". Everything else -- a
         // multi-string set (ruling 7), a clean card, an uncorrectable one --
         // keeps today's error, unchanged. No output-class advisory: there is
         // no decoded descriptor to classify, and the md1 kind-default
@@ -179,6 +182,8 @@ pub fn run<R: Read, W: Write, E: Write>(
                         for line in repair::unreadable_version_advisory(got) {
                             writeln!(stderr, "{line}").ok();
                         }
+                        // Ruling 8: fold into the exit-4 VERIFY-ME tier.
+                        candidate_seen = true;
                         continue;
                     }
                     None => Err(RepairError::WireVersionUnsupported { got }),
@@ -327,7 +332,7 @@ struct RepairJson<'a> {
     /// substitution-corrections and an incomplete mk1 partial-plate group;
     /// see [`crate::repair::SetVerify`]), `"unreadable_version"` for a
     /// single-string md1 correction at a wire version this build cannot read
-    /// (F-642; exit 5). Fixed position right after `kind`
+    /// (F-642; exit 4, ruling 8). Fixed position right after `kind`
     /// — ms-cli's `RepairJson` (Phase P1) must byte-match this field order
     /// (D27/D9).
     verdict: &'static str,

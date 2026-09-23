@@ -495,7 +495,8 @@ pub enum SetVerify {
     /// `repair_card` never returns it, so the auto-repair sites (convert /
     /// inspect / verify-bundle) never see it and still fail with
     /// [`RepairError::WireVersionUnsupported`], exactly as before F-642.
-    /// Converges on `md repair` (md-cli 0.19.0), which exits 5 here.
+    /// `mnemonic repair` exits 4 on it (VERIFY-ME, ruling 8: nothing past
+    /// BCH verifies it); `md repair` (md-cli 0.19.0) exits 5 on the same card.
     UnreadableVersion { got: u8 },
 }
 
@@ -1772,7 +1773,8 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
 /// F-642: keep a BCH correction on a SINGLE-STRING md1 card whose wire
 /// version this build cannot read. Converges on `md repair`'s
 /// `corrected_but_unsupported` (descriptor-mnemonic `cf35d61a`,
-/// `crates/md-cli/src/cmd/repair.rs`).
+/// `crates/md-cli/src/cmd/repair.rs`) in WHAT it keeps and reports; the exit
+/// differs by ruling 8 (`mnemonic repair` 4, `md repair` 5).
 ///
 /// Returns `Some` only when `chunks` is ONE string and
 /// `md_codec::correct_chunks` corrected at least one character. `None` for:

@@ -21,13 +21,16 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
   `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.
 - `scripts/install.sh` and the four doc workflows pin md-cli at v0.19.0.
-- **`mnemonic repair --md1` now exits 5 on a corrected SINGLE-STRING card whose wire
-  version this build cannot read**, keeping the correction (BCH is version-agnostic, via
-  `md_codec::correct_chunks`) instead of discarding it with exit 2. This converges on
-  `md repair` (md-cli 0.19.0). The JSON `verdict` is the new value `"unreadable_version"`,
-  and stderr names the version, the accepted set, and version-dependent advice. This exit
-  5 is NOT self-verified. A multi-string set at such a version, a clean card, and an
-  uncorrectable one still exit 2 with the same error as before.
+- **`mnemonic repair --md1` now keeps the correction on a SINGLE-STRING card whose wire
+  version this build cannot read, and exits 4 (VERIFY-ME)** instead of discarding it
+  with exit 2. BCH is version-agnostic (`md_codec::correct_chunks`). The JSON `verdict`
+  is the new value `"unreadable_version"`, and stderr names the version, the accepted
+  set, and advice that depends on the version.
+  **This differs from `md repair`, which exits 5 on the same card** (md-cli 0.19.0).
+  The toolkit gives exit 5 only to a correction that something verified, and nothing
+  past the BCH checksum checks this one. The stdout report and the advice match
+  md's. A multi-string set at such a version, a clean card, and an uncorrectable one
+  still exit 2 with the same error as before.
 
 **SemVer-MINOR (pre-1.0 breaking axis) — P3 of the constellation CLI-uniformity cycle:
 `mnemonic`'s display-grouping surface changes on FOUR subcommands.**

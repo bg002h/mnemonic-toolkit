@@ -4,7 +4,10 @@
 //!
 //! BCH correction is version-agnostic (`md_codec::correct_chunks`), so a
 //! correctable SINGLE-STRING card at an unreadable version keeps its
-//! correction and exits 5 (REPAIR_APPLIED). Ruling 7 (descriptor-mnemonic
+//! correction. RULING 8: it exits 4 (VERIFY-ME), NOT 5 -- the toolkit gives 5
+//! only to a correction something verified, and nothing past BCH checks this
+//! one. This is the one deliberate divergence from `md repair`, which exits 5.
+//! Ruling 7 (descriptor-mnemonic
 //! `23203195`): a MULTI-string set at such a version still exits 2 with empty
 //! stdout, since a build cannot read the chunk-header layout of a version it
 //! does not support. A CLEAN card at an unreadable version is not "already
@@ -52,9 +55,12 @@ fn legacy_one_error() -> String {
 }
 
 #[test]
-fn a_single_string_correction_on_an_unsupported_version_is_kept_and_exits_5() {
+fn a_single_string_correction_on_an_unsupported_version_is_kept_and_exits_4() {
     let (out, err, code) = mnemonic(&["repair", "--md1", V12_ONE_ERROR]);
-    assert_eq!(code, 5, "REPAIR_APPLIED, not the atomic-fail 2: {err}");
+    assert_eq!(
+        code, 4,
+        "VERIFY-ME (ruling 8): not the atomic-fail 2, not the verified 5: {err}"
+    );
     assert!(
         out.lines().any(|l| l == V12_CLEAN),
         "the corrected card must reach stdout: {out}"
@@ -72,7 +78,7 @@ fn a_single_string_correction_on_an_unsupported_version_is_kept_and_exits_5() {
 #[test]
 fn the_json_report_carries_the_unreadable_version_verdict() {
     let (out, err, code) = mnemonic(&["repair", "--json", "--md1", V12_ONE_ERROR]);
-    assert_eq!(code, 5, "{err}");
+    assert_eq!(code, 4, "{err}");
     let v: serde_json::Value =
         serde_json::from_str(&out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"));
     assert_eq!(v["kind"], "md1", "{v}");
@@ -128,7 +134,7 @@ fn a_multi_chunk_set_at_an_unsupported_version_exits_2() {
 fn a_legacy_card_is_corrected_without_the_newer_md_advice() {
     let bad = legacy_one_error();
     let (out, err, code) = mnemonic(&["repair", "--md1", &bad]);
-    assert_eq!(code, 5, "{err}");
+    assert_eq!(code, 4, "{err}");
     assert!(out.contains("position 7: 'q' -> 'x'"), "{out}");
     assert!(out.lines().any(|l| l == LEGACY_CLEAN), "{out}");
     assert!(err.contains("wire version 0"), "{err}");
@@ -142,7 +148,7 @@ fn a_legacy_card_is_corrected_without_the_newer_md_advice() {
 #[test]
 fn an_odd_version_above_8_is_not_sent_to_a_newer_md() {
     let (out, err, code) = mnemonic(&["repair", "--md1", V9_ONE_ERROR]);
-    assert_eq!(code, 5, "{err}");
+    assert_eq!(code, 4, "{err}");
     assert!(out.lines().any(|l| l == V9_CLEAN), "{out}");
     assert!(err.contains("wire version 9"), "{err}");
     assert!(!err.contains("newer md"), "9 is odd: {err}");
