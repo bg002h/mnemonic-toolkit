@@ -5,6 +5,7 @@
 
 use md_codec::canonicalize::canonicalize_placeholder_indices;
 use md_codec::chunk::{reassemble, split};
+use md_codec::compose::UnspendableKind;
 use md_codec::compose::{
     ComposeError, Composed, Experimental, HashKind, HashLock, KeySet, Lock, MAX_PATHS, MAX_SLOTS,
     PathList, SlotOrigin, SpendPath, Wrapper, compose, compose_with, template_with_origins,
@@ -73,20 +74,24 @@ fn hardened(values: &[u32]) -> OriginPath {
 
 #[test]
 fn compose_refuses_an_empty_path_list() {
-    let err = compose(&list(Wrapper::Wsh, vec![])).unwrap_err();
+    let err = compose(&list(Wrapper::Wsh, vec![]), UnspendableKind::Nums).unwrap_err();
     assert_eq!(err, ComposeError::NoPaths);
 }
 
 #[test]
 fn compose_refuses_more_than_max_paths() {
     let paths: Vec<SpendPath> = (0..(MAX_PATHS + 1)).map(|_| keys(1, 1)).collect();
-    let err = compose(&list(Wrapper::Wsh, paths)).unwrap_err();
+    let err = compose(&list(Wrapper::Wsh, paths), UnspendableKind::Nums).unwrap_err();
     assert_eq!(err, ComposeError::TooManyPaths { got: MAX_PATHS + 1 });
 }
 
 #[test]
 fn compose_refuses_a_policy_with_no_keyed_path() {
-    let err = compose(&list(Wrapper::Wsh, vec![keyless(H1, None)])).unwrap_err();
+    let err = compose(
+        &list(Wrapper::Wsh, vec![keyless(H1, None)]),
+        UnspendableKind::Nums,
+    )
+    .unwrap_err();
     assert_eq!(err, ComposeError::NoKeyedPath);
 }
 
@@ -97,20 +102,28 @@ fn compose_refuses_a_lock_only_path() {
         hash: None,
         lock: Some(Lock::OlderBlocks(100)),
     };
-    let err = compose(&list(Wrapper::Wsh, vec![keys(1, 1), lock_only])).unwrap_err();
+    let err = compose(
+        &list(Wrapper::Wsh, vec![keys(1, 1), lock_only]),
+        UnspendableKind::Nums,
+    )
+    .unwrap_err();
     assert_eq!(err, ComposeError::LockOnlyPath { path: 1 });
 }
 
 #[test]
 fn compose_refuses_a_keyless_path_under_tr() {
-    let err = compose(&list(Wrapper::Tr, vec![keys(2, 3), keyless(H1, None)])).unwrap_err();
+    let err = compose(
+        &list(Wrapper::Tr, vec![keys(2, 3), keyless(H1, None)]),
+        UnspendableKind::Nums,
+    )
+    .unwrap_err();
     assert_eq!(err, ComposeError::KeylessUnderTr { path: 1 });
 }
 
 #[test]
 fn compose_refuses_bad_thresholds() {
     assert_eq!(
-        compose(&list(Wrapper::Wsh, vec![keys(0, 2)])).unwrap_err(),
+        compose(&list(Wrapper::Wsh, vec![keys(0, 2)]), UnspendableKind::Nums).unwrap_err(),
         ComposeError::BadThreshold {
             path: 0,
             k: 0,
@@ -118,7 +131,7 @@ fn compose_refuses_bad_thresholds() {
         }
     );
     assert_eq!(
-        compose(&list(Wrapper::Wsh, vec![keys(3, 2)])).unwrap_err(),
+        compose(&list(Wrapper::Wsh, vec![keys(3, 2)]), UnspendableKind::Nums).unwrap_err(),
         ComposeError::BadThreshold {
             path: 0,
             k: 3,
@@ -126,7 +139,11 @@ fn compose_refuses_bad_thresholds() {
         }
     );
     assert_eq!(
-        compose(&list(Wrapper::Wsh, vec![keys(1, 10)])).unwrap_err(),
+        compose(
+            &list(Wrapper::Wsh, vec![keys(1, 10)]),
+            UnspendableKind::Nums
+        )
+        .unwrap_err(),
         ComposeError::BadThreshold {
             path: 0,
             k: 1,
@@ -139,7 +156,7 @@ fn compose_refuses_bad_thresholds() {
 fn compose_refuses_a_thirty_third_slot() {
     // 3 × 9 + 6 = 33 slots.
     let paths = vec![keys(9, 9), keys(9, 9), keys(9, 9), keys(6, 6)];
-    let err = compose(&list(Wrapper::Wsh, paths)).unwrap_err();
+    let err = compose(&list(Wrapper::Wsh, paths), UnspendableKind::Nums).unwrap_err();
     assert_eq!(
         err,
         ComposeError::TooManySlots {
@@ -153,26 +170,34 @@ fn compose_refuses_a_thirty_third_slot() {
 fn compose_admits_exactly_thirty_two_slots() {
     // 3 × 9 + 5 = 32 slots. Passes only once the lowering exists (Task 2).
     let paths = vec![keys(9, 9), keys(9, 9), keys(9, 9), keys(5, 5)];
-    assert!(compose(&list(Wrapper::Wsh, paths)).is_ok());
+    assert!(compose(&list(Wrapper::Wsh, paths), UnspendableKind::Nums).is_ok());
 }
 
 #[test]
 fn compose_refuses_legacy_wrappers_outside_the_single_sorted_multi_shape() {
     for w in [Wrapper::Sh, Wrapper::ShWsh] {
         assert_eq!(
-            compose(&list(w, vec![keys(1, 1)])).unwrap_err(),
+            compose(&list(w, vec![keys(1, 1)]), UnspendableKind::Nums).unwrap_err(),
             ComposeError::LegacyWrapperShape
         );
         assert_eq!(
-            compose(&list(w, vec![keys(2, 3), keys(1, 1)])).unwrap_err(),
+            compose(
+                &list(w, vec![keys(2, 3), keys(1, 1)]),
+                UnspendableKind::Nums
+            )
+            .unwrap_err(),
             ComposeError::LegacyWrapperShape
         );
         assert_eq!(
-            compose(&list(w, vec![with_lock(keys(2, 3), Lock::OlderBlocks(10))])).unwrap_err(),
+            compose(
+                &list(w, vec![with_lock(keys(2, 3), Lock::OlderBlocks(10))]),
+                UnspendableKind::Nums
+            )
+            .unwrap_err(),
             ComposeError::LegacyWrapperShape
         );
         assert_eq!(
-            compose(&list(w, vec![unsorted(2, 3)])).unwrap_err(),
+            compose(&list(w, vec![unsorted(2, 3)]), UnspendableKind::Nums).unwrap_err(),
             ComposeError::LegacyWrapperShape
         );
     }
@@ -202,7 +227,11 @@ fn compose_refuses_lock_operands_outside_the_consensus_bands() {
         ),
     ];
     for (lock, why) in cases {
-        let err = compose(&list(Wrapper::Wsh, vec![with_lock(keys(1, 1), *lock)])).unwrap_err();
+        let err = compose(
+            &list(Wrapper::Wsh, vec![with_lock(keys(1, 1), *lock)]),
+            UnspendableKind::Nums,
+        )
+        .unwrap_err();
         assert_eq!(
             err,
             ComposeError::LockOutOfRange { path: 0, why },
@@ -245,7 +274,7 @@ fn lock_operand_bands_are_inclusive_at_both_ends() {
 // ---- §5 wsh lowering, by rendered text -----------------------------------------
 
 fn text(list: &PathList) -> String {
-    descriptor_to_template(&compose(list).unwrap().descriptor).unwrap()
+    descriptor_to_template(&compose(list, UnspendableKind::Nums).unwrap().descriptor).unwrap()
 }
 
 /// Every slot's origin, in slot order, read from `path_decl` (the rendered
@@ -259,7 +288,7 @@ fn origins(c: &Composed) -> Vec<OriginPath> {
 
 #[test]
 fn unseated_slots_take_ascending_default_accounts_under_the_wrapper_script_type() {
-    let c = compose(&list(Wrapper::Wsh, vec![keys(2, 3)])).unwrap();
+    let c = compose(&list(Wrapper::Wsh, vec![keys(2, 3)]), UnspendableKind::Nums).unwrap();
     assert_eq!(
         origins(&c),
         vec![
@@ -273,19 +302,23 @@ fn unseated_slots_take_ascending_default_accounts_under_the_wrapper_script_type(
         "wsh(sortedmulti(2,@0/48'/0'/0'/2'/<0;1>/*,@1/48'/0'/1'/2'/<0;1>/*,@2/48'/0'/2'/2'/<0;1>/*))"
     );
     // One slot: a shared declaration, not a one-element divergent list.
-    let c = compose(&list(Wrapper::Wsh, vec![keys(1, 1)])).unwrap();
+    let c = compose(&list(Wrapper::Wsh, vec![keys(1, 1)]), UnspendableKind::Nums).unwrap();
     assert!(matches!(
         c.descriptor.path_decl.paths,
         PathDeclPaths::Shared(_)
     ));
     assert_eq!(origins(&c), vec![hardened(&[48, 0, 0, 2])]);
     // Script types: sh(wsh) is 1', sh is 2', tr is 3'.
-    let c = compose(&list(Wrapper::ShWsh, vec![keys(2, 2)])).unwrap();
+    let c = compose(
+        &list(Wrapper::ShWsh, vec![keys(2, 2)]),
+        UnspendableKind::Nums,
+    )
+    .unwrap();
     assert_eq!(
         origins(&c),
         vec![hardened(&[48, 0, 0, 1]), hardened(&[48, 0, 1, 1])]
     );
-    let c = compose(&list(Wrapper::Sh, vec![keys(2, 2)])).unwrap();
+    let c = compose(&list(Wrapper::Sh, vec![keys(2, 2)]), UnspendableKind::Nums).unwrap();
     assert_eq!(
         origins(&c),
         vec![hardened(&[48, 0, 0, 2]), hardened(&[48, 0, 1, 2])]
@@ -297,7 +330,11 @@ fn unseated_slots_take_ascending_default_accounts_under_the_wrapper_script_type(
 fn template_with_origins_inlines_two_digit_slots_without_touching_their_prefixes() {
     // Hand-written, NOT printer-generated: `@1/` must not be rewritten inside
     // `@10/` or `@11/`. Twelve slots: a 9-of-9 head and a 3-of-3 tail.
-    let c = compose(&list(Wrapper::Wsh, vec![keys(9, 9), keys(3, 3)])).unwrap();
+    let c = compose(
+        &list(Wrapper::Wsh, vec![keys(9, 9), keys(3, 3)]),
+        UnspendableKind::Nums,
+    )
+    .unwrap();
     assert_eq!(
         template_with_origins(&c).unwrap(),
         "wsh(or_d(multi(9,@0/48'/0'/0'/2'/<0;1>/*,@1/48'/0'/1'/2'/<0;1>/*,@2/48'/0'/2'/2'/<0;1>/*,@3/48'/0'/3'/2'/<0;1>/*,@4/48'/0'/4'/2'/<0;1>/*,@5/48'/0'/5'/2'/<0;1>/*,@6/48'/0'/6'/2'/<0;1>/*,@7/48'/0'/7'/2'/<0;1>/*,@8/48'/0'/8'/2'/<0;1>/*),multi(3,@9/48'/0'/9'/2'/<0;1>/*,@10/48'/0'/10'/2'/<0;1>/*,@11/48'/0'/11'/2'/<0;1>/*)))"
@@ -314,7 +351,11 @@ fn sole_unlocked_multi_path_under_wsh_is_sortedmulti() {
 
 #[test]
 fn sole_unsorted_multi_path_under_wsh_is_multi_and_experimental() {
-    let c = compose(&list(Wrapper::Wsh, vec![unsorted(2, 3)])).unwrap();
+    let c = compose(
+        &list(Wrapper::Wsh, vec![unsorted(2, 3)]),
+        UnspendableKind::Nums,
+    )
+    .unwrap();
     assert_eq!(
         descriptor_to_template(&c.descriptor).unwrap(),
         "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))"
@@ -334,10 +375,13 @@ fn single_key_under_wsh_is_pkh() {
 fn a_locked_multi_path_is_unsorted_multi_without_the_experimental_mark() {
     // Sorted forms cannot nest inside a fragment (BIP-383/388; md refuses), so
     // the lowering forces `multi` and does NOT report it as chosen-unsorted.
-    let c = compose(&list(
-        Wrapper::Wsh,
-        vec![with_lock(keys(2, 3), Lock::OlderBlocks(26280)), keys(1, 1)],
-    ))
+    let c = compose(
+        &list(
+            Wrapper::Wsh,
+            vec![with_lock(keys(2, 3), Lock::OlderBlocks(26280)), keys(1, 1)],
+        ),
+        UnspendableKind::Nums,
+    )
     .unwrap();
     assert_eq!(
         descriptor_to_template(&c.descriptor).unwrap(),
@@ -391,7 +435,7 @@ fn a_keyless_wsh_path_is_admitted_and_marked_experimental() {
         Wrapper::Wsh,
         vec![keys(2, 3), keyless(H1, Some(Lock::AfterHeight(1_383_520)))],
     );
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     let h = "a8".repeat(32);
     assert_eq!(
         descriptor_to_template(&c.descriptor).unwrap(),
@@ -426,10 +470,13 @@ fn legacy_wrappers_wrap_the_single_sorted_multi() {
 
 #[test]
 fn a_time_lock_of_one_unit_encodes_as_0x400001() {
-    let c = compose(&list(
-        Wrapper::Wsh,
-        vec![with_lock(keys(1, 1), Lock::OlderUnits(1))],
-    ))
+    let c = compose(
+        &list(
+            Wrapper::Wsh,
+            vec![with_lock(keys(1, 1), Lock::OlderUnits(1))],
+        ),
+        UnspendableKind::Nums,
+    )
     .unwrap();
     let text = descriptor_to_template(&c.descriptor).unwrap();
     assert!(text.contains("older(4194305)"), "{text}");
@@ -441,7 +488,7 @@ fn slots_are_numbered_by_first_appearance_and_canonicalisation_is_identity() {
         Wrapper::Wsh,
         vec![keys(2, 3), with_lock(keys(1, 1), Lock::OlderBlocks(26280))],
     );
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     let indices: Vec<u8> = c.slots.iter().map(|s| s.index).collect();
     assert_eq!(indices, vec![0, 1, 2, 3]);
     assert_eq!(c.slots[3].path, 1);
@@ -459,7 +506,7 @@ fn composed_templates_encode_and_round_trip_through_the_wire() {
         Wrapper::Wsh,
         vec![keys(2, 3), with_lock(keys(1, 1), Lock::OlderBlocks(26280))],
     );
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     let (_bytes, bits) = encode_payload(&c.descriptor).unwrap();
     assert!(bits > 0);
     let chunks = split(&c.descriptor).unwrap();
@@ -490,7 +537,7 @@ fn compose_with_refuses_two_slots_at_one_origin_unless_both_fingerprints_differ(
         }),
     ];
     assert_eq!(
-        compose_with(&l, &d).unwrap_err(),
+        compose_with(&l, &d, UnspendableKind::Nums).unwrap_err(),
         ComposeError::IndistinguishableSlots { a: 0, b: 1 }
     );
     // One fingerprinted: still refused (the one-card-fills-two-slots case).
@@ -505,7 +552,7 @@ fn compose_with_refuses_two_slots_at_one_origin_unless_both_fingerprints_differ(
         }),
     ];
     assert_eq!(
-        compose_with(&l, &d).unwrap_err(),
+        compose_with(&l, &d, UnspendableKind::Nums).unwrap_err(),
         ComposeError::IndistinguishableSlots { a: 0, b: 1 }
     );
     // Both fingerprinted and distinct: admitted, as a shared origin.
@@ -519,14 +566,14 @@ fn compose_with_refuses_two_slots_at_one_origin_unless_both_fingerprints_differ(
             fingerprint: Some([8, 8, 8, 8]),
         }),
     ];
-    assert!(compose_with(&l, &d).is_ok());
+    assert!(compose_with(&l, &d, UnspendableKind::Nums).is_ok());
 }
 
 #[test]
 fn compose_with_refuses_a_declaration_slice_of_the_wrong_length() {
     let l = list(Wrapper::Wsh, vec![keys(2, 2)]);
     assert_eq!(
-        compose_with(&l, &[None]).unwrap_err(),
+        compose_with(&l, &[None], UnspendableKind::Nums).unwrap_err(),
         ComposeError::WrongSlotCount { got: 1, want: 2 }
     );
 }
@@ -543,7 +590,7 @@ fn two_path_taproot_with_no_single_key_uses_nums_and_two_leaves() {
         Wrapper::Tr,
         vec![keys(2, 3), with_lock(keys(1, 1), Lock::OlderBlocks(26280))],
     );
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     assert_eq!(
         descriptor_to_template(&c.descriptor).unwrap(),
         format!(
@@ -564,7 +611,7 @@ fn the_unlocked_single_key_becomes_the_internal_key_and_slot_zero() {
             with_lock(keys(1, 1), Lock::AfterHeight(900_000)),
         ],
     );
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     assert_eq!(c.internal_key_path, Some(1));
     assert_eq!(c.slots[0].path, 1, "the extracted key is @0");
     assert_eq!(
@@ -620,7 +667,7 @@ fn four_leaves_form_a_right_spine() {
 fn only_the_first_listed_unlocked_single_key_is_extracted() {
     // Two unlocked single keys: the first is the internal key, the second stays a leaf.
     let l = list(Wrapper::Tr, vec![keys(2, 2), keys(1, 1), keys(1, 1)]);
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     assert_eq!(c.internal_key_path, Some(1));
     assert_eq!(
         descriptor_to_template(&c.descriptor).unwrap(),
@@ -634,7 +681,7 @@ fn taproot_templates_round_trip_through_the_wire() {
         Wrapper::Tr,
         vec![keys(2, 3), with_lock(keys(1, 1), Lock::OlderBlocks(26280))],
     );
-    let c = compose(&l).unwrap();
+    let c = compose(&l, UnspendableKind::Nums).unwrap();
     let chunks = split(&c.descriptor).unwrap();
     let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
     assert_eq!(reassemble(&refs).unwrap(), c.descriptor);
@@ -642,7 +689,7 @@ fn taproot_templates_round_trip_through_the_wire() {
 
 #[test]
 fn tr_default_origins_use_script_type_three() {
-    let c = compose(&list(Wrapper::Tr, vec![keys(2, 2)])).unwrap();
+    let c = compose(&list(Wrapper::Tr, vec![keys(2, 2)]), UnspendableKind::Nums).unwrap();
     assert_eq!(
         origins(&c),
         vec![hardened(&[48, 0, 0, 3]), hardened(&[48, 0, 1, 3])]
@@ -668,7 +715,7 @@ fn compose_with_uses_declared_origins_and_fills_unseated_slots_with_the_lowest_f
             fingerprint: Some([1, 2, 3, 4]),
         }),
     ];
-    let c = compose_with(&l, &declared).unwrap();
+    let c = compose_with(&l, &declared, UnspendableKind::Nums).unwrap();
     // Accounts 0 and 1 are taken, so the unseated slot @1 gets account 2.
     assert_eq!(
         origins(&c),
@@ -744,7 +791,7 @@ fn presets_compose_and_carry_the_documented_shapes() {
         presets::hashlock_gated(Wrapper::Wsh, H1, 144).unwrap(),
         presets::decaying_multisig(Wrapper::Wsh, 2, 3, 1, 2, 1000, 2000, 4_000_000).unwrap(),
     ] {
-        compose(&l).unwrap_or_else(|e| panic!("{l:?}: {e}"));
+        compose(&l, UnspendableKind::Nums).unwrap_or_else(|e| panic!("{l:?}: {e}"));
     }
 }
 
@@ -805,4 +852,45 @@ fn presets_refuse_parameters_the_grammar_refuses() {
         presets::decaying_multisig(Wrapper::Wsh, 1, 2, 2, 3, 1000, 2000, 4_000_000),
         Err(ComposeError::PresetShape { .. })
     ));
+}
+
+/// F-449 stage 2 Task 2 Step 4 (SPEC §6 row 3): the codec SIGNALS a `liana`
+/// request it could not honour because a real internal key was extracted.
+/// Never set for the default, never set when Liana's key was composed.
+#[test]
+fn unspendable_request_unmet_is_set_exactly_when_liana_meets_a_real_key() {
+    use md_codec::tree::{Body, InternalKey};
+    let real = list(
+        Wrapper::Tr,
+        vec![keys(1, 1), with_lock(keys(1, 1), Lock::OlderBlocks(100))],
+    );
+    let unspendable = list(
+        Wrapper::Tr,
+        vec![keys(2, 3), with_lock(keys(1, 1), Lock::OlderBlocks(100))],
+    );
+    let c = compose(&real, UnspendableKind::Liana).unwrap();
+    assert!(
+        c.unspendable_request_unmet,
+        "liana over a real key must signal"
+    );
+    assert_eq!(c.internal_key_path, Some(0));
+    assert!(
+        !compose(&real, UnspendableKind::Nums)
+            .unwrap()
+            .unspendable_request_unmet
+    );
+    let c = compose(&unspendable, UnspendableKind::Liana).unwrap();
+    assert!(!c.unspendable_request_unmet, "liana was composed: {c:?}");
+    assert!(matches!(
+        c.descriptor.tree.body,
+        Body::Tr {
+            internal_key: InternalKey::LianaUnspendable,
+            ..
+        }
+    ));
+    assert!(
+        !compose(&unspendable, UnspendableKind::Nums)
+            .unwrap()
+            .unspendable_request_unmet
+    );
 }

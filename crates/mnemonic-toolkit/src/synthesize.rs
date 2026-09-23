@@ -2505,8 +2505,7 @@ mod tests {
         let tr_sma = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: md_codec::tree::InternalKey::NumsPoint,
                 tree: Some(Box::new(leaf(Tag::SortedMultiA))),
             },
         };
@@ -2514,8 +2513,7 @@ mod tests {
         let tr_ma = Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: md_codec::tree::InternalKey::NumsPoint,
                 tree: Some(Box::new(leaf(Tag::MultiA))),
             },
         };

@@ -14,9 +14,10 @@ use crate::encode::Descriptor;
 use crate::error::Error;
 use crate::origin_path::OriginPath;
 use crate::tag::Tag;
-use crate::tree::{Body, Node};
+use crate::tree::{Body, InternalKey, Node};
 use crate::use_site_path::UseSitePath;
 
+use bitcoin::Network;
 use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint};
 use miniscript::descriptor::{
     DerivPaths, DescriptorMultiXKey, DescriptorPublicKey, DescriptorXKey, SinglePub, SinglePubKey,
@@ -29,7 +30,8 @@ use miniscript::{
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::nums::NUMS_H_POINT_X_ONLY_HEX;
+use crate::header::Header;
+use crate::nums::{NUMS_H_POINT_X_ONLY_HEX, liana_unspendable_xpub};
 
 /// Convert an md1 [`Descriptor`] AST to a
 /// `miniscript::Descriptor<DescriptorPublicKey>` for `chain` (the
@@ -42,6 +44,12 @@ use crate::nums::NUMS_H_POINT_X_ONLY_HEX;
 ///
 /// # Errors
 ///
+/// - [`Error::NetworkRequiredForUnspendable`] when `d` carries a wire-kind-1
+///   (Liana unspendable) internal key anywhere in its tree
+///   (`d.wire_version() == Header::WF_UNSPENDABLE_VERSION`) — its derived
+///   xpub's base58 prefix is network-dependent (SPEC §2 step 5), and this
+///   network-less entry point refuses rather than silently guessing
+///   mainnet. Call [`to_miniscript_descriptor_with_network`] instead.
 /// - [`Error::MissingPubkey`] / [`Error::InvalidXpubBytes`] /
 ///   [`Error::MissingExplicitOrigin`] propagated from
 ///   [`expand_per_at_n`].
@@ -52,6 +60,35 @@ pub fn to_miniscript_descriptor(
     d: &Descriptor,
     chain: u32,
 ) -> Result<miniscript::Descriptor<DescriptorPublicKey>, Error> {
+    // Step 3 (SPEC §4 / G-7): the network-less entry point delegates with
+    // mainnet EXCEPT when `d` carries a wire-kind-1 internal key, in which
+    // case guessing mainnet would silently render a mainnet xpub for a
+    // possibly-testnet wallet -- refuse instead. `wire_version()` is
+    // whole-tree (any `LianaUnspendable` node anywhere forces version 8), so
+    // this check alone covers every reachable position.
+    if d.wire_version() == Header::WF_UNSPENDABLE_VERSION {
+        return Err(Error::NetworkRequiredForUnspendable);
+    }
+    to_miniscript_descriptor_with_network(d, chain, Network::Bitcoin)
+}
+
+/// Same as [`to_miniscript_descriptor`], but threads `network` through to a
+/// wire-kind-1 (Liana unspendable) internal key's derived xpub (SPEC §2 step
+/// 5: mainnet → `xpub`, anything else → `tpub`). `network` is otherwise
+/// unused -- every other key on the wire carries its own version-independent
+/// bytes (`crate::derive::xpub_from_tlv_bytes` fills a placeholder network
+/// that `Xpub::derive_pub`/address rendering never reads).
+///
+/// # Errors
+///
+/// Same as [`to_miniscript_descriptor`], minus
+/// [`Error::NetworkRequiredForUnspendable`] (this entry point always has a
+/// network, so it never needs to refuse for that reason).
+pub fn to_miniscript_descriptor_with_network(
+    d: &Descriptor,
+    chain: u32,
+    network: Network,
+) -> Result<miniscript::Descriptor<DescriptorPublicKey>, Error> {
     let expanded = expand_per_at_n(d)?;
     let mut keys: Vec<DescriptorPublicKey> = Vec::with_capacity(expanded.len());
     for e in &expanded {
@@ -61,7 +98,7 @@ pub fn to_miniscript_descriptor(
         // the silent-wrong-address bug for per-cosigner override cards.
         keys.push(build_descriptor_public_key(e, &e.use_site_path, chain)?);
     }
-    node_to_descriptor(&d.tree, &keys)
+    node_to_descriptor(&d.tree, &keys, network, Some(chain))
 }
 
 /// Returns `true` if ANY use-site path on `d` requires a hardened public
@@ -256,19 +293,40 @@ fn build_descriptor_multi_public_key(e: &ExpandedKey) -> Result<DescriptorPublic
 ///
 /// # Errors
 ///
-/// Same propagation as [`to_miniscript_descriptor`]:
+/// [`Error::NetworkRequiredForUnspendable`] under the same condition as
+/// [`to_miniscript_descriptor`] (call
+/// [`to_miniscript_descriptor_multipath_with_network`] instead), plus the
+/// same propagation as [`to_miniscript_descriptor`]:
 /// [`Error::MissingPubkey`] / [`Error::InvalidXpubBytes`] /
 /// [`Error::MissingExplicitOrigin`] from [`expand_per_at_n`], and
 /// [`Error::AddressDerivationFailed`] wrapping any miniscript-layer failure.
 pub fn to_miniscript_descriptor_multipath(
     d: &Descriptor,
 ) -> Result<miniscript::Descriptor<DescriptorPublicKey>, Error> {
+    if d.wire_version() == Header::WF_UNSPENDABLE_VERSION {
+        return Err(Error::NetworkRequiredForUnspendable);
+    }
+    to_miniscript_descriptor_multipath_with_network(d, Network::Bitcoin)
+}
+
+/// Same as [`to_miniscript_descriptor_multipath`], but threads `network`
+/// through to a wire-kind-1 internal key's derived xpub. See
+/// [`to_miniscript_descriptor_with_network`] for the network's exact role.
+///
+/// # Errors
+///
+/// Same as [`to_miniscript_descriptor_multipath`], minus
+/// [`Error::NetworkRequiredForUnspendable`].
+pub fn to_miniscript_descriptor_multipath_with_network(
+    d: &Descriptor,
+    network: Network,
+) -> Result<miniscript::Descriptor<DescriptorPublicKey>, Error> {
     let expanded = expand_per_at_n(d)?;
     let mut keys: Vec<DescriptorPublicKey> = Vec::with_capacity(expanded.len());
     for e in &expanded {
         keys.push(build_descriptor_multi_public_key(e)?);
     }
-    node_to_descriptor(&d.tree, &keys)
+    node_to_descriptor(&d.tree, &keys, network, None)
 }
 
 /// Translate an `OriginPath` into a `bip32::DerivationPath`.
@@ -311,9 +369,22 @@ fn use_site_to_derivation_path(u: &UseSitePath, chain: u32) -> Result<Derivation
 }
 
 /// Map an md1 top-level tree node onto a `miniscript::Descriptor`.
+///
+/// `network` and `chain` matter only for a `Tag::Tr` node whose internal key
+/// is `InternalKey::LianaUnspendable` (wire kind 1, SPEC §2/§4): `network`
+/// picks the derived xpub's base58 prefix, and `chain` picks how its own
+/// `<0;1>` derivation renders — `Some(c)` collapses to the single alt `c`
+/// (mirrors [`build_descriptor_public_key`]'s single-path collapse, the
+/// [`to_miniscript_descriptor_with_network`] caller), `None` keeps the full
+/// `<0;1>` group (mirrors [`build_descriptor_multi_public_key`], the
+/// [`to_miniscript_descriptor_multipath_with_network`] caller). Both callers
+/// have already refused (or resolved) a network before this is reached, so
+/// `network` is a concrete value here, never itself a source of error.
 fn node_to_descriptor(
     node: &Node,
     keys: &[DescriptorPublicKey],
+    network: Network,
+    chain: Option<u32>,
 ) -> Result<miniscript::Descriptor<DescriptorPublicKey>, Error> {
     match (&node.tag, &node.body) {
         (Tag::Pkh, Body::KeyArg { index }) => {
@@ -333,20 +404,30 @@ fn node_to_descriptor(
         (
             Tag::Tr,
             Body::Tr {
-                is_nums,
-                key_index,
+                internal_key: ik,
                 tree,
             },
         ) => {
-            let internal_key = if *is_nums {
-                build_nums_internal_key()?
-            } else {
-                lookup_key(keys, *key_index)?
-            };
+            // The script tree is built FIRST for `LianaUnspendable`: SPEC §2's
+            // recipe hashes the tree's own leaf keys, so the leaves must
+            // already exist before the internal key can be computed from
+            // them. `NumsPoint`/`Slot` don't need `script_tree` at all, but
+            // building it unconditionally costs nothing (leaf conversion is
+            // pure and infallible-or-erroring independent of the internal
+            // key) and keeps one code path instead of two.
             let script_tree = if let Some(t) = tree {
                 Some(tree_to_taptree(t, keys)?)
             } else {
                 None
+            };
+            let internal_key = match ik {
+                InternalKey::NumsPoint => build_nums_internal_key()?,
+                InternalKey::LianaUnspendable => {
+                    let leaf_pubkeys = collect_leaf_pubkeys(script_tree.as_ref())?;
+                    let xpub = liana_unspendable_xpub(&leaf_pubkeys, network);
+                    build_liana_internal_key(xpub, chain)?
+                }
+                InternalKey::Slot(i) => lookup_key(keys, *i)?,
             };
             miniscript::Descriptor::new_tr(internal_key, script_tree)
                 .map_err(|e| failed(e.to_string()))
@@ -355,6 +436,114 @@ fn node_to_descriptor(
             "unsupported top-level tag {:?} with body shape",
             node.tag
         ))),
+    }
+}
+
+/// SPEC §2: every taproot leaf's key expressions' 33-byte compressed public
+/// keys, in tap-tree left-to-right (wire/slot) order — one entry per
+/// OCCURRENCE, not deduplicated (`crate::nums::liana_unspendable_xpub`'s own
+/// contract). Walks the ALREADY-BUILT `TapTree<DescriptorPublicKey>` (built
+/// by `tree_to_taptree`, above, before this is ever called) via
+/// [`miniscript::descriptor::TapTree::leaves`]'s own depth-first-preorder
+/// (matching `combine`'s `left.chain(right)` construction, so it is provably
+/// the SAME left-to-right order the md1 AST's binary `Tag::TapTree` nodes
+/// were built in) plus each leaf `Miniscript`'s `iter_pk()` (which walks a
+/// leaf's OWN key expressions in the same left-first pre-order, e.g. a
+/// `multi_a(k,...)` leaf's keys in threshold-list order). This is a single
+/// walk over rust-miniscript's own traversal, not a second, independently
+/// written one that could silently drift from it.
+fn collect_leaf_pubkeys(
+    tree: Option<&miniscript::descriptor::TapTree<DescriptorPublicKey>>,
+) -> Result<Vec<[u8; 33]>, Error> {
+    let Some(t) = tree else {
+        // A bare `tr(LianaUnspendable)` key-path-only tree (no script paths
+        // at all) has no leaves to hash. `liana_unspendable_xpub` is
+        // well-defined over an empty slice (sha256 of the empty string) --
+        // this is not a special case, just an empty walk.
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for item in t.leaves() {
+        for pk in item.miniscript().iter_pk() {
+            out.push(descriptor_public_key_compressed_bytes(&pk)?);
+        }
+    }
+    Ok(out)
+}
+
+/// The 33-byte compressed public key backing a leaf `DescriptorPublicKey`.
+/// `XPub`/`MultiXPub`'s `xkey.public_key` is exactly SPEC §2 step 1's
+/// `bytes[32..65]` — the same bytes `assemble_origin_and_xkey` reads from
+/// the `Pubkeys` TLV, unmodified by any derivation (BIP 32 CKDpub does not
+/// touch the parent's own `public_key` field).
+///
+/// `Single` cannot appear in a leaf built by this module:
+/// `build_descriptor_public_key`/`build_descriptor_multi_public_key` (the
+/// only two functions that populate the `keys` slice `tree_to_taptree`
+/// builds leaves from) never construct a `Single` — only
+/// `build_nums_internal_key` does, and that value is the internal key
+/// itself, never placed into a leaf. Kept as a defensive, never-taken error
+/// arm rather than a `match` panic, matching this module's fail-closed
+/// style everywhere else.
+fn descriptor_public_key_compressed_bytes(pk: &DescriptorPublicKey) -> Result<[u8; 33], Error> {
+    match pk {
+        DescriptorPublicKey::XPub(x) => Ok(x.xkey.public_key.serialize()),
+        DescriptorPublicKey::MultiXPub(x) => Ok(x.xkey.public_key.serialize()),
+        DescriptorPublicKey::Single(_) => Err(failed(
+            "Liana unspendable-xpub recipe requires an XPub/MultiXPub leaf key, found Single"
+                .to_string(),
+        )),
+    }
+}
+
+/// Build the `DescriptorPublicKey` for a wire-kind-1 taproot internal key
+/// from its already-derived xpub (`xpub` is `crate::nums::liana_unspendable_xpub`'s
+/// output, computed by the caller over the tap-tree's own leaf pubkeys).
+///
+/// `origin: None` — the derived xpub is not itself a seed-rooted key with a
+/// recorded origin path; it derives entirely from the wallet's OTHER keys.
+/// `wildcard: Unhardened` and ALWAYS the `<0;1>` derivation, regardless of
+/// the wallet's own use-site path (SPEC §2 step 6, "Derivation, not just
+/// rendering — the internal key derives at `0/i` for receive and `1/i` for
+/// change **in every port**, independent of the wallet's use-site path").
+///
+/// `chain`: `Some(c)` collapses to the single alt `c` — mirrors
+/// `build_descriptor_public_key`'s single-path collapse. `None` keeps the
+/// full `<0;1>` group — mirrors `build_descriptor_multi_public_key`.
+fn build_liana_internal_key(
+    xpub: bitcoin::bip32::Xpub,
+    chain: Option<u32>,
+) -> Result<DescriptorPublicKey, Error> {
+    let alts = [
+        DerivationPath::from(vec![ChildNumber::Normal { index: 0 }]),
+        DerivationPath::from(vec![ChildNumber::Normal { index: 1 }]),
+    ];
+    match chain {
+        Some(c) => {
+            let derivation_path =
+                alts.get(c as usize)
+                    .cloned()
+                    .ok_or(Error::ChainIndexOutOfRange {
+                        chain: c,
+                        alt_count: alts.len(),
+                    })?;
+            Ok(DescriptorPublicKey::XPub(DescriptorXKey {
+                origin: None,
+                xkey: xpub,
+                derivation_path,
+                wildcard: Wildcard::Unhardened,
+            }))
+        }
+        None => {
+            let derivation_paths =
+                DerivPaths::new(alts.to_vec()).expect("2 hard-coded non-empty paths");
+            Ok(DescriptorPublicKey::MultiXPub(DescriptorMultiXKey {
+                origin: None,
+                xkey: xpub,
+                derivation_paths,
+                wildcard: Wildcard::Unhardened,
+            }))
+        }
     }
 }
 

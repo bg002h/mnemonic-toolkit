@@ -332,6 +332,28 @@ pub enum Experimental {
     UnsortedKeys(usize),
 }
 
+/// Which unspendable taproot internal key a `tr` composition should use when
+/// no path supplies a real one. `Nums` is the default and the only kind any
+/// released md composed before 0.47.0 (0.46.0 could already ENCODE kind 1
+/// from a template, but `compose` always chose NUMS).
+///
+/// A REQUEST, not a wire concept: [`crate::tree::InternalKey`] is what lands
+/// on the wire. Do not merge the two (F-449 stage 2 plan, Type consistency).
+/// Under `wsh`/`sh`/`sh-wsh`, and under a `tr` whose first bare single-key
+/// path is extracted as a real internal key, the request has nothing to
+/// select and is ignored by the lowering; `md compose` refuses or warns on
+/// those cases (stage 2 Tasks 1b and 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum UnspendableKind {
+    /// The BIP-341 NUMS H-point. The default, and the only kind any md
+    /// released before 0.47.0 could compose.
+    #[default]
+    Nums,
+    /// Liana's own unspendable key, derived over the composed leaf set
+    /// (SPEC §2). Required for Liana to import the wallet.
+    Liana,
+}
+
 /// A lowered policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Composed {
@@ -345,6 +367,13 @@ pub struct Composed {
     pub internal_key_path: Option<usize>,
     /// Every EXPERIMENTAL condition the list triggered.
     pub experimental: Vec<Experimental>,
+    /// `true` iff [`UnspendableKind::Liana`] was requested and the composed
+    /// descriptor does NOT carry Liana's unspendable key -- under `tr`, when
+    /// the first bare single-key path was extracted as a REAL internal key
+    /// (SPEC §6 row 3), so there was no unspendable key to choose. The codec
+    /// signals; the caller decides how to tell the operator (`md compose`
+    /// warns). Never `true` for the default [`UnspendableKind::Nums`].
+    pub unspendable_request_unmet: bool,
 }
 
 /// Why a list cannot be lowered (spec §4e, §4c, §4f).
@@ -601,11 +630,12 @@ pub fn default_origin(wrapper: Wrapper, account: u32) -> OriginPath {
 
 /// Lower a list with every slot UNSEATED: each slot takes the §4f default
 /// origin at the lowest account not yet declared (so slot `i` gets account
-/// `i`), and no fingerprint.
-pub fn compose(list: &PathList) -> Result<Composed, ComposeError> {
+/// `i`), and no fingerprint. `unspendable` selects the `tr` internal key when
+/// no path supplies a real one ([`UnspendableKind`]).
+pub fn compose(list: &PathList, unspendable: UnspendableKind) -> Result<Composed, ComposeError> {
     let n = validate(list)?;
     let none: Vec<Option<SlotOrigin>> = vec![None; n];
-    compose_with(list, &none)
+    compose_with(list, &none, unspendable)
 }
 
 /// Lower a list with per-slot declarations, indexed by EMITTED slot index
@@ -613,6 +643,7 @@ pub fn compose(list: &PathList) -> Result<Composed, ComposeError> {
 pub fn compose_with(
     list: &PathList,
     declared: &[Option<SlotOrigin>],
+    unspendable: UnspendableKind,
 ) -> Result<Composed, ComposeError> {
     let n = validate(list)?;
     if declared.len() != n {
@@ -621,7 +652,18 @@ pub fn compose_with(
             want: n,
         });
     }
-    lowering::lower(list, declared)
+    let mut c = lowering::lower(list, declared, unspendable)?;
+    // SPEC §6 row 3's signal, decided from what was BUILT rather than from
+    // the path list, so it cannot drift from `lower_tr`'s own selection.
+    c.unspendable_request_unmet = unspendable == UnspendableKind::Liana
+        && !matches!(
+            c.descriptor.tree.body,
+            crate::tree::Body::Tr {
+                internal_key: crate::tree::InternalKey::LianaUnspendable,
+                ..
+            }
+        );
+    Ok(c)
 }
 
 /// The rendered template with each slot's origin written inline

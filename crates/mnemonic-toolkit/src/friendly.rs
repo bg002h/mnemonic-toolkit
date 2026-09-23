@@ -467,6 +467,34 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
             "md1 non-zero trailing padding: the final {} pad bit(s) must be zero",
             bits,
         ),
+        // md-codec 0.46.0/0.47.0 (F-449): wire kind 1, Liana's unspendable
+        // internal key, legal only at wire version 8.
+        E::NetworkRequiredForUnspendable => "md1 Liana unspendable internal key needs a \
+             network to render its derived xpub; this renderer has none (toolkit bug — \
+             use `md descriptor --network <net>`)"
+            .to_string(),
+        E::NonMinimalWireVersion { got, minimal } => format!(
+            "md1 non-minimal wire version: {got} was requested but the tree needs only \
+             {minimal}"
+        ),
+        E::UnspendableNotRootTr => "md1 Liana unspendable internal key found on a nested \
+             tr(), not the descriptor's root tr(), where it has no meaning"
+            .to_string(),
+        E::UnspendableUseSiteNotCanonical { idx } => match idx {
+            None => "md1 Liana unspendable internal key requires the canonical <0;1>/* \
+                     use-site path; this card's shared use-site differs, which derives a \
+                     different wallet than Liana would"
+                .to_string(),
+            Some(i) => format!(
+                "md1 Liana unspendable internal key requires the canonical <0;1>/* \
+                 use-site path at every key; @{i} carries its own different use-site \
+                 path, which derives a different wallet than Liana would"
+            ),
+        },
+        E::UnspendableWithSortedMultiA => "md1 Liana unspendable internal key with a \
+             sortedmulti_a leaf is refused: the derived key hashes the leaves' unsorted \
+             wire-order pubkeys, the shape a sorting port error would silently diverge on"
+            .to_string(),
     }
 }
 
@@ -670,7 +698,7 @@ mod tests {
         use md_codec::error::ContextKind;
         use md_codec::Error as E;
         use md_codec::Tag;
-        let rows: [(E, &str, &str); 45] = [
+        let rows: [(E, &str, &str); 51] = [
             (
                 E::BitStreamTruncated {
                     requested: 8,
@@ -929,6 +957,36 @@ mod tests {
                 },
                 "uncorrectable",
                 "TooManyErrors",
+            ),
+            (
+                E::NetworkRequiredForUnspendable,
+                "needs a network",
+                "NetworkRequiredForUnspendable",
+            ),
+            (
+                E::NonMinimalWireVersion { got: 8, minimal: 4 },
+                "non-minimal wire version: 8",
+                "NonMinimalWireVersion",
+            ),
+            (
+                E::UnspendableNotRootTr,
+                "nested tr()",
+                "UnspendableNotRootTr",
+            ),
+            (
+                E::UnspendableUseSiteNotCanonical { idx: None },
+                "shared use-site differs",
+                "UnspendableUseSiteNotCanonical",
+            ),
+            (
+                E::UnspendableUseSiteNotCanonical { idx: Some(2) },
+                "@2 carries its own different use-site",
+                "UnspendableUseSiteNotCanonical",
+            ),
+            (
+                E::UnspendableWithSortedMultiA,
+                "sortedmulti_a leaf is refused",
+                "UnspendableWithSortedMultiA",
             ),
         ];
         for (e, needle, variant) in rows {

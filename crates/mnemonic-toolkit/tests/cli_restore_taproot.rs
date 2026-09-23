@@ -366,6 +366,26 @@ fn build_at_in_both_descriptor(
     leaf_indices: Vec<u8>,
     tag: md_codec::Tag,
 ) -> md_codec::Descriptor {
+    build_tr_leaf_descriptor(
+        md_codec::tree::InternalKey::Slot(0),
+        n,
+        k,
+        leaf_indices,
+        tag,
+    )
+}
+
+/// `tr(<internal_key>, <tag>(k, <leaf_indices>))`, built directly. The
+/// `@-in-both` builder above passes `InternalKey::Slot(0)`; the F-642 Liana
+/// refusal test passes `InternalKey::LianaUnspendable` (md-codec 0.46.0 wire
+/// kind 1, which `chunk::split` encodes at wire version 8).
+fn build_tr_leaf_descriptor(
+    internal_key: md_codec::tree::InternalKey,
+    n: u8,
+    k: u8,
+    leaf_indices: Vec<u8>,
+    tag: md_codec::Tag,
+) -> md_codec::Descriptor {
     use md_codec::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
     use md_codec::tree::{Body, Node};
     use md_codec::use_site_path::UseSitePath;
@@ -382,12 +402,12 @@ fn build_at_in_both_descriptor(
         0x17, 0x98,
     ]);
 
-    // The @-in-both shape: trunk @0 (is_nums:false) is ALSO a leaf index.
+    // For the @-in-both shape the trunk @0 (a real key, `InternalKey::Slot(0)`)
+    // is ALSO a leaf index.
     let tree = Node {
         tag: Tag::Tr,
         body: Body::Tr {
-            is_nums: false,
-            key_index: 0,
+            internal_key,
             tree: Some(Box::new(Node {
                 tag,
                 body: Body::MultiKeys {
@@ -502,6 +522,39 @@ fn at_in_both_tr_refuses_structurally() {
         .stderr(
             predicate::str::contains("restore-non-nums-tr-internal-key-also-in-leaf")
                 .and(predicate::str::contains("also a leaf key")),
+        );
+}
+
+/// F-642: a Liana unspendable internal key (md-codec 0.46.0 wire kind 1) is
+/// REFUSED by restore, never mapped to the BIP-341 NUMS point. `tr(<Liana>,
+/// multi_a(2, @0, @1))` is otherwise exactly a Template-arm shape: had the
+/// classifier folded `LianaUnspendable` into `TaprootInternalKey::Nums`, the
+/// Template arm would print `tr(NUMS, multi_a(...))` and exit 0 -- a DIFFERENT
+/// wallet at DIFFERENT addresses, since Liana's key is derived from the leaves.
+#[test]
+fn liana_unspendable_internal_key_refuses_not_nums() {
+    let d = build_tr_leaf_descriptor(
+        md_codec::tree::InternalKey::LianaUnspendable,
+        2,
+        2,
+        vec![0, 1],
+        md_codec::Tag::MultiA,
+    );
+    assert_eq!(
+        d.wire_version(),
+        8,
+        "a Liana tree must encode at wire version 8"
+    );
+    let chunks = md_codec::chunk::split(&d).expect("split Liana md1");
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(restore_args(&chunks))
+        .assert()
+        .code(2)
+        .stdout(predicate::str::contains("tr(").not())
+        .stderr(
+            predicate::str::contains("Liana unspendable internal key")
+                .and(predicate::str::contains("md descriptor --network")),
         );
 }
 

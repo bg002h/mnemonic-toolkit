@@ -27,10 +27,11 @@ pub enum Error {
         available: usize,
     },
 
-    /// Wire-format version field doesn't match v0.30 (=4). Returned when a
-    /// payload or chunk-header is read with a version value outside the
-    /// accepted v0.30 set. Per SPEC v0.30 §2.4 + §2.5 + §11.1.
-    #[error("wire-format version mismatch: got {got}, expected 4")]
+    /// Wire-format version field is outside the accepted set (`{4, 8}`).
+    /// Returned when a payload or chunk-header is read with a version value
+    /// outside that set. Per SPEC v0.30 §2.4 + §2.5 + §11.1 and stage 1b's
+    /// SPEC §6a row (the accepted set grew from `{4}` to `{4, 8}`).
+    #[error("wire-format version mismatch: got {got}; accepted versions: 4, 8")]
     WireVersionMismatch {
         /// Version value parsed from the wire.
         got: u8,
@@ -476,6 +477,22 @@ pub enum Error {
         detail: String,
     },
 
+    /// [`crate::to_miniscript::to_miniscript_descriptor`] /
+    /// [`crate::to_miniscript::to_miniscript_descriptor_multipath`] (the
+    /// network-less entry points) were called on a descriptor whose
+    /// [`crate::encode::Descriptor::wire_version`] is
+    /// [`crate::header::Header::WF_UNSPENDABLE_VERSION`] — i.e. it carries a
+    /// wire-kind-1 (Liana unspendable) taproot internal key somewhere in its
+    /// tree. SPEC §2 step 5: the derived internal key's base58 prefix
+    /// (`xpub`/`tpub`) is network-dependent, and the network-less entry
+    /// points delegate to mainnet — silently rendering a mainnet xpub for a
+    /// testnet wallet is exactly the funds-safety defect this refusal
+    /// exists to prevent. Use the `_with_network` entry point instead.
+    #[error(
+        "a wire-kind-1 (Liana unspendable) internal key needs a network to render its derived xpub prefix; call the _with_network entry point instead of guessing mainnet"
+    )]
+    NetworkRequiredForUnspendable,
+
     /// Inside a `tr()` body, `is_nums = false` was paired with a `key_index`
     /// out of range (`key_index >= n`). Per SPEC v0.30 §7 + §11: the
     /// placeholder-index range is `0..n` strictly; the v0.x NUMS sentinel
@@ -611,6 +628,97 @@ pub enum Error {
         /// Number of trailing pad bits inspected (1..=7).
         bits: usize,
     },
+
+    /// SPEC §6 row 1: a wire-kind-1 (Liana unspendable) `tr()` whose own
+    /// tap-script tree contains a `sortedmulti_a` leaf anywhere. Refused as
+    /// a belt against a port error: `MultiALeafScript` sorts the
+    /// *serialized derived* x-only keys when building the script, while §2's
+    /// recipe hashes the leaves' *account-level* 33-byte pubkeys in
+    /// unsorted, wire order — a port that feeds the already-sorted script
+    /// order into the recipe would silently diverge. `md encode` accepts a
+    /// `sortedmulti_a` leaf under any internal key, so this refusal is not
+    /// vacuous; cost is near-zero, since Liana itself emits `multi_a`, never
+    /// `sortedmulti_a`.
+    #[error(
+        "wire kind 1 (Liana unspendable internal key) with a sortedmulti_a leaf is refused: a \
+         correct implementation hashes the leaves' unsorted, wire-order pubkeys (SPEC §2), and a \
+         sortedmulti_a leaf is exactly the shape a sorting port error would silently diverge on"
+    )]
+    UnspendableWithSortedMultiA,
+
+    /// SPEC §6 row 2: a wire-kind-1 `tr()` whose use-site path is not the
+    /// canonical `<0;1>/*` form (`crate::use_site_path::UseSitePath::standard_multipath`).
+    /// Liana pairs multipath alternatives positionally (branch 0 = receive,
+    /// branch 1 = change); a use-site of e.g. `<2;3>` would have Liana
+    /// deriving from `0/i` while a use-site-following device derives from
+    /// `2/i` — two different wallets sharing one plate. Refusing is
+    /// narrower than reconciling the two conventions.
+    ///
+    /// F-638 (F-449 stage 2): `idx` names the placeholder when the divergence
+    /// is a per-key use-site OVERRIDE (`@idx` has its own path while the
+    /// shared use-site is canonical) -- otherwise the message would point
+    /// the operator at a shared field they can see is correct, with no
+    /// locator for the key that is wrong. `None` when the SHARED use-site
+    /// itself diverged. Message-only: the set of refused inputs is
+    /// unchanged.
+    #[error(
+        "wire kind 1 (Liana unspendable internal key) requires the canonical <0;1>/* use-site \
+         path{}; Liana pairs multipath alternatives positionally, so any other use-site derives a \
+         different wallet than the one this card's addresses would show",
+        use_site_locator(*.idx)
+    )]
+    UnspendableUseSiteNotCanonical {
+        /// The placeholder whose per-key override diverged, or `None` when
+        /// the shared use-site path did.
+        idx: Option<u8>,
+    },
+
+    /// SPEC §6 row 4: a wire-kind-1 internal key found on a `tr()` node that
+    /// is not the descriptor's own root (e.g. `wsh(tr(...))`). The internal
+    /// key of a `tr()` nested inside `sh`/`wsh` is not the descriptor's
+    /// internal key, so a "derived unspendable key" has no meaning there —
+    /// there is no wallet-level taproot output for it to describe.
+    #[error(
+        "wire kind 1 (Liana unspendable internal key) is only meaningful on the descriptor's \
+         root tr(); found nested under an outer wrapper, where it has no meaning"
+    )]
+    UnspendableNotRootTr,
+
+    /// SPEC §6 row 6 (the minimum-version rule): the wire version about to
+    /// be written is [`crate::header::Header::WF_UNSPENDABLE_VERSION`] (8),
+    /// but no node in the tree needs it — i.e.
+    /// [`crate::encode::Descriptor::wire_version`] computes a lower minimal
+    /// version for the same tree. Enforced at ENCODE only, never at decode
+    /// (old payloads must keep decoding even if a future encoder becomes
+    /// stricter): a non-minimal version would otherwise admit a second,
+    /// distinct on-wire encoding of a kind-0 wallet with a different
+    /// `WalletDescriptorTemplateId` than its minimal encoding produces. Not
+    /// reachable through any public encoder — `encode_payload_inner` always
+    /// derives its version from `Descriptor::wire_version()`, which is
+    /// minimal by construction; only a test helper that forces a version can
+    /// hit this.
+    #[error(
+        "wire version {got} was requested but the tree needs only version {minimal}: write the \
+         minimal version a tree needs, never a higher one"
+    )]
+    NonMinimalWireVersion {
+        /// The version actually requested for this encode.
+        got: u8,
+        /// The minimal version `Descriptor::wire_version()` computes for the tree.
+        minimal: u8,
+    },
+}
+
+/// `Error::UnspendableUseSiteNotCanonical`'s locator (F-638): empty for the
+/// shared use-site, a named placeholder for a per-key override.
+fn use_site_locator(idx: Option<u8>) -> String {
+    match idx {
+        None => String::new(),
+        Some(i) => format!(
+            " at every key, and @{i} carries its own different use-site path (the shared \
+             use-site is canonical; @{i}'s override is what diverged)"
+        ),
+    }
 }
 
 #[cfg(test)]

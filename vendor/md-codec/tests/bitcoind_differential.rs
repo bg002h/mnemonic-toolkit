@@ -35,7 +35,7 @@
 use bitcoin::Network;
 use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
-use md_codec::tree::{Body, Node};
+use md_codec::tree::{Body, InternalKey, Node};
 use md_codec::use_site_path::{Alternative, UseSitePath};
 use md_codec::{Descriptor, OriginPath, PathComponent, PathDecl, PathDeclPaths, Tag, TlvSection};
 use std::process::Command;
@@ -191,8 +191,7 @@ fn corpus() -> Vec<Shape> {
                 tree: Node {
                     tag: Tag::Tr,
                     body: Body::Tr {
-                        is_nums: false,
-                        key_index: 0,
+                        internal_key: InternalKey::Slot(0),
                         tree: None,
                     },
                 },
@@ -289,8 +288,7 @@ fn corpus() -> Vec<Shape> {
                     tree: Node {
                         tag: Tag::Tr,
                         body: Body::Tr {
-                            is_nums: true,
-                            key_index: 0,
+                            internal_key: InternalKey::NumsPoint,
                             tree: Some(Box::new(Node {
                                 tag: Tag::MultiA,
                                 body: Body::MultiKeys {
@@ -327,8 +325,7 @@ fn corpus() -> Vec<Shape> {
                     tree: Node {
                         tag: Tag::Tr,
                         body: Body::Tr {
-                            is_nums: false,
-                            key_index: 0,
+                            internal_key: InternalKey::Slot(0),
                             tree: Some(Box::new(Node {
                                 tag: Tag::MultiA,
                                 body: Body::MultiKeys {
@@ -806,8 +803,7 @@ fn corpus() -> Vec<Shape> {
                     tree: Node {
                         tag: Tag::Tr,
                         body: Body::Tr {
-                            is_nums: false,
-                            key_index: 0,
+                            internal_key: InternalKey::Slot(0),
                             tree: Some(Box::new(Node {
                                 tag: Tag::TapTree,
                                 body: Body::Children(vec![

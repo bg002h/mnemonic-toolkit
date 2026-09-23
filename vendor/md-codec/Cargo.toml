@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "md-codec"
-version = "0.45.0"
+version = "0.47.0"
 build = false
 autolib = false
 autobins = false
@@ -45,6 +45,18 @@ derive = ["dep:miniscript"]
 [lib]
 name = "md_codec"
 path = "src/lib.rs"
+
+[[example]]
+name = "dump_encodings"
+path = "examples/dump_encodings.rs"
+
+[[example]]
+name = "dump_ids"
+path = "examples/dump_ids.rs"
+
+[[example]]
+name = "dump_skeleton_keys"
+path = "examples/dump_skeleton_keys.rs"
 
 [[test]]
 name = "address_derivation"
@@ -107,6 +119,10 @@ name = "compose_vectors"
 path = "tests/compose_vectors.rs"
 
 [[test]]
+name = "correct_chunks"
+path = "tests/correct_chunks.rs"
+
+[[test]]
 name = "display_grouping_conformance"
 path = "tests/display_grouping_conformance.rs"
 
@@ -117,6 +133,22 @@ path = "tests/forward_compat.rs"
 [[test]]
 name = "indel_reject_contract"
 path = "tests/indel_reject_contract.rs"
+
+[[test]]
+name = "internal_key_refactor"
+path = "tests/internal_key_refactor.rs"
+
+[[test]]
+name = "liana_render"
+path = "tests/liana_render.rs"
+
+[[test]]
+name = "liana_to_miniscript"
+path = "tests/liana_to_miniscript.rs"
+
+[[test]]
+name = "liana_unspendable"
+path = "tests/liana_unspendable.rs"
 
 [[test]]
 name = "mint_policy_does_not_reach_decode"
@@ -135,8 +167,16 @@ name = "partial_decode"
 path = "tests/partial_decode.rs"
 
 [[test]]
+name = "partitions"
+path = "tests/partitions.rs"
+
+[[test]]
 name = "per_key_use_site_override"
 path = "tests/per_key_use_site_override.rs"
+
+[[test]]
+name = "policy_shape"
+path = "tests/policy_shape.rs"
 
 [[test]]
 name = "proptest_roundtrip"
@@ -145,6 +185,10 @@ path = "tests/proptest_roundtrip.rs"
 [[test]]
 name = "proptest_to_miniscript"
 path = "tests/proptest_to_miniscript.rs"
+
+[[test]]
+name = "render_abstract"
+path = "tests/render_abstract.rs"
 
 [[test]]
 name = "render_template_snapshot"
@@ -159,6 +203,14 @@ name = "sh_wpkh_canonical"
 path = "tests/sh_wpkh_canonical.rs"
 
 [[test]]
+name = "skeleton_key"
+path = "tests/skeleton_key.rs"
+
+[[test]]
+name = "skeleton_key_conformance"
+path = "tests/skeleton_key_conformance.rs"
+
+[[test]]
 name = "smoke"
 path = "tests/smoke.rs"
 
@@ -169,6 +221,10 @@ path = "tests/wallet_policy.rs"
 [[test]]
 name = "wire_golden"
 path = "tests/wire_golden.rs"
+
+[[test]]
+name = "wire_version_8"
+path = "tests/wire_version_8.rs"
 
 [[test]]
 name = "zero_fingerprint_is_absent"
@@ -201,6 +257,10 @@ features = [
     "compiler",
 ]
 default-features = false
+
+[dev-dependencies.serde]
+version = "1.0"
+features = ["derive"]
 
 [lints.clippy]
 all = "warn"

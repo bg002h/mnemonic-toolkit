@@ -59,15 +59,16 @@ impl ChunkHeader {
 
     /// Decode a chunk header (37 bits) from `r`.
     ///
-    /// Returns [`Error::WireVersionMismatch`] if the 4-bit version field
-    /// is not `WF_REDESIGN_VERSION` per SPEC §2.5 (e.g., v0.x chunked
-    /// payloads where version=0 in the first 3 wire bits become version=0
-    /// or version=1 under the v0.30 4-bit read depending on prior bits).
-    /// Returns [`Error::ChunkHeaderChunkedFlagMissing`] if the chunked-flag
-    /// bit is not set after the version check passes.
+    /// Returns [`Error::WireVersionMismatch`] if the 4-bit version field is
+    /// outside the accepted set (`{4, 8}`; see `Header::is_supported_version`)
+    /// per SPEC §2.5 (e.g., v0.x chunked payloads where version=0 in the
+    /// first 3 wire bits become version=0 or version=1 under the v0.30 4-bit
+    /// read depending on prior bits). Returns
+    /// [`Error::ChunkHeaderChunkedFlagMissing`] if the chunked-flag bit is
+    /// not set after the version check passes.
     pub fn read(r: &mut BitReader) -> Result<Self, Error> {
         let version = r.read_bits(4)? as u8;
-        if version != Header::WF_REDESIGN_VERSION {
+        if !Header::is_supported_version(version) {
             return Err(Error::WireVersionMismatch { got: version });
         }
         let chunked = r.read_bits(1)? != 0;
@@ -276,7 +277,7 @@ pub fn split(d: &Descriptor) -> Result<Vec<String>, Error> {
         // (full 8 bits per byte, no further fractional content). Chunk's
         // exact bit count = 37 + 8 × |chunk_payload_bytes|.
         let header = ChunkHeader {
-            version: Header::WF_REDESIGN_VERSION,
+            version: d.wire_version(),
             chunk_set_id,
             count,
             index,
@@ -502,45 +503,29 @@ fn encode_chunk_string(data_with_checksum: &[u8]) -> String {
     out
 }
 
-/// BCH-error-correcting decode for a chunk-set of md1 strings.
+/// BCH error correction for a chunk-set of md1 strings, and NOTHING else:
+/// no header is read and no payload is decoded (F-449 stage 2 Task 2c).
 ///
-/// Per plan §1 Q1 lock — full-decode semantics: this is the single entry
-/// point that callers needing both "did anything get repaired?" AND "the
-/// fully-decoded descriptor" should use.
+/// Returns the corrected strings (a chunk that was already a valid codeword
+/// passes through byte-unchanged) and one [`CorrectionDetail`] per repaired
+/// character, in (`chunk_index` ascending, `position` ascending within chunk)
+/// order. Atomic per plan §1 D28: the first uncorrectable chunk aborts the
+/// whole call with [`Error::TooManyErrors`].
 ///
-/// Algorithm:
-/// 1. For each chunk, parse the data-part into 5-bit symbols and compute
-///    the BCH polymod residue (`hrp_expand("md") || data_with_checksum`)
-///    XOR'd against [`crate::bch::MD_REGULAR_CONST`].
-/// 2. Residue `== 0` ⇒ chunk passes through unchanged.
-/// 3. Residue `!= 0` ⇒ invoke
-///    [`crate::bch_decode::decode_regular_errors`]. If `None`, return
-///    `Err(Error::TooManyErrors { chunk_index, bound: 8 })` per plan §2.B.4
-///    D29 error-mapping table.
-/// 4. Apply corrections to the chunk's symbol vector, re-encode as a
-///    fresh md1 string, and record one [`CorrectionDetail`] per repaired
-///    character.
-/// 5. After ALL chunks have been processed (any single uncorrectable
-///    chunk aborts atomically per plan §1 D28), forward the corrected
-///    chunk strings to [`reassemble`] to produce the [`Descriptor`].
-///
-/// On success returns `(Descriptor, Vec<CorrectionDetail>)`. The
-/// correction-detail vector is in (`chunk_index` ascending,
-/// `position` ascending within chunk) order; an empty vector means every
-/// input chunk was already a valid codeword.
-pub fn decode_with_correction(
-    strings: &[&str],
-) -> Result<(Descriptor, Vec<CorrectionDetail>), Error> {
+/// This is the first half of [`decode_with_correction`], which calls it and
+/// then decodes. It exists on its own for the one caller that must keep a
+/// correction the decode half refuses: `md repair` on a card whose wire
+/// version this build does not support (`Error::WireVersionMismatch`) --
+/// the correction is real and BCH-verified, and discarding it would leave the
+/// operator nothing to take to a build that can read the card. Added rather
+/// than changing `decode_with_correction`'s or [`Error`]'s shapes, which
+/// downstream crates match exhaustively.
+pub fn correct_chunks(strings: &[&str]) -> Result<(Vec<String>, Vec<CorrectionDetail>), Error> {
     if strings.is_empty() {
         return Err(Error::ChunkSetEmpty);
     }
 
     let mut corrected_strings: Vec<String> = Vec::with_capacity(strings.len());
-    // Track the post-correction 5-bit symbol vector of the first string so the
-    // single-string detection pre-pass below can inspect bit 0 of the first
-    // symbol (the chunked-flag per SPEC v0.30 §2.3) without re-parsing the
-    // wrapped string.
-    let mut first_corrected_symbols: Option<Vec<u8>> = None;
     let mut all_details: Vec<CorrectionDetail> = Vec::new();
 
     for (chunk_index, chunk) in strings.iter().enumerate() {
@@ -569,9 +554,6 @@ pub fn decode_with_correction(
         if residue == 0 {
             // Already valid — pass through unchanged.
             corrected_strings.push((*chunk).to_string());
-            if chunk_index == 0 {
-                first_corrected_symbols = Some(symbols);
-            }
             continue;
         }
 
@@ -623,11 +605,46 @@ pub fn decode_with_correction(
         }
 
         corrected_strings.push(encode_chunk_string(&corrected));
-        if chunk_index == 0 {
-            first_corrected_symbols = Some(corrected);
-        }
         all_details.extend(details);
     }
+
+    Ok((corrected_strings, all_details))
+}
+
+/// BCH-error-correcting decode for a chunk-set of md1 strings.
+///
+/// Per plan §1 Q1 lock — full-decode semantics: this is the single entry
+/// point that callers needing both "did anything get repaired?" AND "the
+/// fully-decoded descriptor" should use.
+///
+/// Algorithm (steps 1-4 are [`correct_chunks`], which this calls):
+/// 1. For each chunk, parse the data-part into 5-bit symbols and compute
+///    the BCH polymod residue (`hrp_expand("md") || data_with_checksum`)
+///    XOR'd against [`crate::bch::MD_REGULAR_CONST`].
+/// 2. Residue `== 0` ⇒ chunk passes through unchanged.
+/// 3. Residue `!= 0` ⇒ invoke
+///    [`crate::bch_decode::decode_regular_errors`]. If `None`, return
+///    `Err(Error::TooManyErrors { chunk_index, bound: 8 })` per plan §2.B.4
+///    D29 error-mapping table.
+/// 4. Apply corrections to the chunk's symbol vector, re-encode as a
+///    fresh md1 string, and record one [`CorrectionDetail`] per repaired
+///    character.
+/// 5. After ALL chunks have been processed (any single uncorrectable
+///    chunk aborts atomically per plan §1 D28), forward the corrected
+///    chunk strings to [`reassemble`] to produce the [`Descriptor`].
+///
+/// On success returns `(Descriptor, Vec<CorrectionDetail>)`. The
+/// correction-detail vector is in (`chunk_index` ascending,
+/// `position` ascending within chunk) order; an empty vector means every
+/// input chunk was already a valid codeword.
+pub fn decode_with_correction(
+    strings: &[&str],
+) -> Result<(Descriptor, Vec<CorrectionDetail>), Error> {
+    if strings.is_empty() {
+        return Err(Error::ChunkSetEmpty);
+    }
+
+    let (corrected_strings, all_details) = correct_chunks(strings)?;
 
     // v0.35.0: single-string auto-dispatch per SPEC v0.30 §2.3. The first
     // 5-bit symbol of the corrected payload carries the chunked-flag in
@@ -641,12 +658,11 @@ pub fn decode_with_correction(
     // preserving the legitimate count==1 chunked-of-1 case shipped in
     // v0.34.0.
     if strings.len() == 1 {
-        // `first_corrected_symbols` is populated by the loop above (both
-        // the residue==0 pass-through and the correction-applied paths
-        // populate it for `chunk_index == 0`).
-        let symbols = first_corrected_symbols
-            .as_ref()
-            .expect("loop populates first_corrected_symbols when strings.len() >= 1");
+        // Re-derived from the corrected string rather than carried out of
+        // `correct_chunks` (plan Task 2c Step 2): the string is either the
+        // input `correct_chunks` already parsed, or its own re-encoding of
+        // a BCH-verified symbol vector, so this parse cannot newly fail.
+        let symbols = parse_chunk_symbols(&corrected_strings[0], 0)?;
         let chunked_flag = symbols.first().map(|s| s & 0x01).unwrap_or(1);
         if chunked_flag == 0 {
             // Non-chunked: decode via the single-payload path. The

@@ -131,7 +131,8 @@ impl Descriptor {
             });
         }
 
-        let desc = crate::to_miniscript::to_miniscript_descriptor(self, chain)?;
+        let desc =
+            crate::to_miniscript::to_miniscript_descriptor_with_network(self, chain, network)?;
         // BOTH BRANCHES, to keep behaviour EXACTLY what `at_derivation_index`
         // did before it was deprecated at the ff4732e pin.
         //
@@ -166,7 +167,7 @@ mod tests {
     use crate::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
     use crate::tag::Tag;
     use crate::tlv::TlvSection;
-    use crate::tree::{Body, Node};
+    use crate::tree::{Body, InternalKey, Node};
     use crate::use_site_path::{Alternative, UseSitePath};
 
     // ─── xpub_from_tlv_bytes ─────────────────────────────────────────
@@ -401,6 +402,63 @@ mod tests {
                 }
             ),
             "over-max chain must still reject with alt_count=2, got {err:?}"
+        );
+    }
+
+    /// `derive.rs:134` — the caller the brief singles out by name: "miss
+    /// this and every kind-1 address derivation returns `Err`, disabling
+    /// Task 8's address gate." Reverting that one call site back to the
+    /// network-less `to_miniscript_descriptor` turns BOTH assertions below
+    /// into `Err(Error::NetworkRequiredForUnspendable)` instead of `Ok`.
+    #[test]
+    fn derive_address_kind_1_liana_unspendable_internal_key_derives() {
+        let d = Descriptor {
+            n: 2,
+            path_decl: PathDecl {
+                n: 2,
+                paths: PathDeclPaths::Divergent(vec![bip84_origin(), bip84_origin()]),
+            },
+            use_site_path: UseSitePath::standard_multipath(),
+            tree: Node {
+                tag: Tag::Tr,
+                body: Body::Tr {
+                    internal_key: InternalKey::LianaUnspendable,
+                    tree: Some(Box::new(Node {
+                        tag: Tag::TapTree,
+                        body: Body::Children(vec![
+                            Node {
+                                tag: Tag::PkK,
+                                body: Body::KeyArg { index: 0 },
+                            },
+                            Node {
+                                tag: Tag::PkK,
+                                body: Body::KeyArg { index: 1 },
+                            },
+                        ]),
+                    })),
+                },
+            },
+            tlv: {
+                let mut t = TlvSection::new_empty();
+                t.pubkeys = Some(vec![
+                    (0u8, one_test_xpub_bytes()),
+                    (1u8, one_test_xpub_bytes()),
+                ]);
+                t
+            },
+        };
+        let receive = d.derive_address(0, 0, Network::Bitcoin);
+        assert!(
+            receive.is_ok(),
+            "chain 0 (receive) must derive: {receive:?}"
+        );
+        let change = d.derive_address(1, 0, Network::Bitcoin);
+        assert!(change.is_ok(), "chain 1 (change) must derive: {change:?}");
+        assert_ne!(
+            receive.unwrap(),
+            change.unwrap(),
+            "receive and change must be different addresses -- the internal \
+             key's own <0;1> split feeds the taproot output key"
         );
     }
 }

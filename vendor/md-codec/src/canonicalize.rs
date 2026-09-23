@@ -36,7 +36,7 @@
 use crate::encode::Descriptor;
 use crate::error::Error;
 use crate::origin_path::{OriginPath, PathDeclPaths};
-use crate::tree::{Body, Node};
+use crate::tree::{Body, InternalKey, Node};
 use crate::use_site_path::UseSitePath;
 
 /// Walk `node` in pre-order, recording the first occurrence of each
@@ -52,19 +52,14 @@ fn walk_collect_first(node: &Node, seen: &mut [bool], first_occurrences: &mut Ve
                 }
             }
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            // SPEC v0.30 §7: when `is_nums = true` the internal key is the
-            // BIP-341 NUMS H-point (not a placeholder reference); skip
-            // registration.
-            if !*is_nums {
-                if let Some(slot) = seen.get_mut(*key_index as usize) {
+        Body::Tr { internal_key, tree } => {
+            // SPEC v0.30 §7: when the internal key is not a `Slot`, it is
+            // not a placeholder reference; skip registration.
+            if let InternalKey::Slot(i) = internal_key {
+                if let Some(slot) = seen.get_mut(*i as usize) {
                     if !*slot {
                         *slot = true;
-                        first_occurrences.push(*key_index);
+                        first_occurrences.push(*i);
                     }
                 }
             }
@@ -104,15 +99,11 @@ fn remap_indices(node: &mut Node, perm: &[u8]) {
         Body::KeyArg { index } => {
             *index = perm[*index as usize];
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            // SPEC v0.30 §7: when `is_nums = true` the internal key is the
-            // BIP-341 NUMS H-point (not a placeholder); skip remapping.
-            if !*is_nums {
-                *key_index = perm[*key_index as usize];
+        Body::Tr { internal_key, tree } => {
+            // SPEC v0.30 §7: when the internal key is not a `Slot`, it is
+            // not a placeholder; skip remapping.
+            if let InternalKey::Slot(i) = internal_key {
+                *internal_key = InternalKey::Slot(perm[*i as usize]);
             }
             if let Some(t) = tree {
                 remap_indices(t, perm);
@@ -270,18 +261,16 @@ fn check_placeholder_bounds(node: &Node, n: u8) -> Result<(), Error> {
                 return Err(Error::PlaceholderIndexOutOfRange { idx: *index, n });
             }
         }
-        Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } => {
-            // SPEC v0.30 §7 + §11: when `is_nums = true` the internal key is
-            // the BIP-341 NUMS H-point (not a placeholder); skip the bounds
-            // check. Otherwise `key_index` must be in `0..n`; out-of-range
-            // raises `NUMSSentinelConflict` per SPEC §11 (Phase G finalizes
-            // the variant's full doc-comment).
-            if !*is_nums && *key_index >= n {
-                return Err(Error::NUMSSentinelConflict);
+        Body::Tr { internal_key, tree } => {
+            // SPEC v0.30 §7 + §11: when the internal key is not a `Slot`,
+            // it is not a placeholder; skip the bounds check. Otherwise the
+            // slot index must be in `0..n`; out-of-range raises
+            // `NUMSSentinelConflict` per SPEC §11 (Phase G finalizes the
+            // variant's full doc-comment).
+            if let InternalKey::Slot(i) = internal_key {
+                if *i >= n {
+                    return Err(Error::NUMSSentinelConflict);
+                }
             }
             if let Some(t) = tree {
                 check_placeholder_bounds(t, n)?;
@@ -515,7 +504,7 @@ mod tests {
     use crate::origin_path::{OriginPath, PathComponent, PathDecl, PathDeclPaths};
     use crate::tag::Tag;
     use crate::tlv::TlvSection;
-    use crate::tree::{Body, Node};
+    use crate::tree::{Body, InternalKey, Node};
     use crate::use_site_path::UseSitePath;
 
     fn shared_bip84() -> PathDecl {
@@ -570,8 +559,7 @@ mod tests {
             tree: Node {
                 tag: Tag::Tr,
                 body: Body::Tr {
-                    is_nums: false,
-                    key_index: 0,
+                    internal_key: InternalKey::Slot(0),
                     tree: None,
                 },
             },
@@ -912,8 +900,7 @@ mod tests {
             tree: Node {
                 tag: Tag::Tr,
                 body: Body::Tr {
-                    is_nums: false,
-                    key_index: 0,
+                    internal_key: InternalKey::Slot(0),
                     tree: None,
                 },
             },

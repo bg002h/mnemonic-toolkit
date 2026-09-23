@@ -676,11 +676,16 @@ fn walk_tr(
     // ignored by md-codec when `is_nums = true` (per validate.rs:85-96 +
     // to_miniscript.rs:161-165 — `is_nums=true` triggers `build_nums_internal_key()`
     // which constructs the NUMS DescriptorPublicKey from the same hex constant).
+    //
+    // md-codec 0.46.0 replaced the `is_nums`/`key_index` pair with
+    // `InternalKey`: NUMS -> `NumsPoint`, a key -> `Slot(idx)`. This parser
+    // never emits `LianaUnspendable` (wire version 8) -- that kind is spelled
+    // only by md-codec's own compose/encode path, not by a miniscript walk.
     let internal_key_str = t.internal_key().to_string();
-    let (is_nums, key_index) = if internal_key_str == NUMS_H_POINT_X_ONLY_HEX {
-        (true, 0u8)
+    let internal_key = if internal_key_str == NUMS_H_POINT_X_ONLY_HEX {
+        md_codec::tree::InternalKey::NumsPoint
     } else {
-        (false, lookup_key(&internal_key_str, km)?)
+        md_codec::tree::InternalKey::Slot(lookup_key(&internal_key_str, km)?)
     };
     let tree: Option<Box<Node>> = match t.tap_tree() {
         None => None,
@@ -688,11 +693,7 @@ fn walk_tr(
     };
     Ok(Node {
         tag: Tag::Tr,
-        body: Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        },
+        body: Body::Tr { internal_key, tree },
     })
 }
 
@@ -2296,16 +2297,14 @@ mod tests {
     fn walk_tr_keypath_root() {
         let root = parse_and_walk("tr(@0/<0;1>/*)", ScriptCtx::SingleSig);
         assert_eq!(root.tag, Tag::Tr);
-        let Body::Tr {
-            is_nums,
-            key_index,
-            tree,
-        } = &root.body
-        else {
+        let Body::Tr { internal_key, tree } = &root.body else {
             panic!("expected Tr body");
         };
-        assert!(!is_nums, "BIP-86 single-sig uses a real key, not NUMS");
-        assert_eq!(*key_index, 0);
+        assert_eq!(
+            *internal_key,
+            md_codec::tree::InternalKey::Slot(0),
+            "BIP-86 single-sig uses a real key at @0, not NUMS"
+        );
         assert!(tree.is_none());
     }
 
@@ -3529,12 +3528,7 @@ mod tests {
             ScriptCtx::MultiSig,
         );
         assert_eq!(root.tag, Tag::Tr);
-        let Body::Tr {
-            is_nums: _,
-            key_index: _,
-            tree,
-        } = &root.body
-        else {
+        let Body::Tr { tree, .. } = &root.body else {
             panic!("expected Tr body");
         };
         let leaf = tree.as_ref().expect("expected single tap leaf");

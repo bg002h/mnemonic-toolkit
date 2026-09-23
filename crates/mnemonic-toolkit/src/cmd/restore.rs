@@ -3196,8 +3196,8 @@ enum TaprootRestore {
 /// around md-codec's `to_miniscript`, which errors on a root `SortedMultiA`);
 /// the GeneralFaithful arm re-enters `to_miniscript` via
 /// `faithful_multisig_descriptor`, so its blockers are pre-gated here.
-/// Supports `is_nums:true` (NUMS) AND `is_nums:false` (real cosigner trunk
-/// key), the latter for general single-leaf/depth-1 (route-around) and
+/// Supports `InternalKey::NumsPoint` (NUMS) AND `InternalKey::Slot` (real
+/// cosigner trunk key), the latter for general single-leaf/depth-1 (route-around) and
 /// distinct-trunk multisig (Template); the `@-in-both` shape (trunk key also a
 /// leaf key) refuses (`restore-non-nums-tr-internal-key-also-in-leaf`).
 ///
@@ -3214,21 +3214,38 @@ enum TaprootRestore {
 ///   `md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
 fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestore, ToolkitError> {
     use md_codec::tree::Body;
+    use md_codec::tree::InternalKey;
     let (inner, internal_key) = match &tree.body {
         Body::Tr {
-            is_nums: true,
+            internal_key: InternalKey::NumsPoint,
             tree: Some(inner),
-            ..
         } => (inner, TaprootInternalKey::Nums),
         Body::Tr {
-            is_nums: false,
-            key_index,
+            internal_key: InternalKey::Slot(key_index),
             tree: Some(inner),
         } => {
             // Read the real trunk key off the wire — no inference. (key_index
             // is a 0..n placeholder index into the cosigner table; u8, and
             // TaprootInternalKey::Cosigner is also u8 — no cast.)
             (inner, TaprootInternalKey::Cosigner(*key_index))
+        }
+        // md-codec 0.46.0 wire kind 1: Liana's unspendable internal key, an
+        // xpub DERIVED from the leaf keys (descriptor-mnemonic SPEC §2). This
+        // restore has no arm that renders it: the Template arm would emit the
+        // BIP-341 NUMS point in its place -- a DIFFERENT wallet at DIFFERENT
+        // addresses -- and the faithful arm's network-less renderer refuses it
+        // (`NetworkRequiredForUnspendable`). Refused before either can run,
+        // never mapped to `TaprootInternalKey::Nums`. `md descriptor
+        // --network` renders it (md-cli 0.19.0).
+        Body::Tr {
+            internal_key: InternalKey::LianaUnspendable,
+            ..
+        } => {
+            return Err(ToolkitError::ModeViolation {
+                mode: "restore",
+                flag: "--md1",
+                message: "taproot md1 carries a Liana unspendable internal key (wire kind 1, md-codec wire version 8) — `mnemonic restore` cannot render it yet, and substituting the BIP-341 NUMS point would describe a different wallet; use `md descriptor --network <net> <md1…>` to recover the descriptor. The engraved card remains a faithful backup",
+            });
         }
         Body::Tr { tree: None, .. } => {
             return Err(bad(

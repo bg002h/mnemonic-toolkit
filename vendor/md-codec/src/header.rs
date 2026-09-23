@@ -26,6 +26,17 @@ impl Header {
     /// Usable WF-redesign version set per SPEC §2.4: {4, 8, 12}.
     pub const WF_REDESIGN_VERSION: u8 = 4;
 
+    /// The version carrying a non-`NumsPoint` taproot internal key (SPEC §3c).
+    /// Usable WF-redesign versions are {4, 8, 12} because the single-payload
+    /// auto-dispatch reads v0 as the chunked flag, so every usable version must
+    /// be EVEN. This spends 8 and leaves 12 as the format's last generation.
+    pub const WF_UNSPENDABLE_VERSION: u8 = 8;
+
+    /// Versions this build decodes.
+    pub fn is_supported_version(v: u8) -> bool {
+        v == Self::WF_REDESIGN_VERSION || v == Self::WF_UNSPENDABLE_VERSION
+    }
+
     /// Encode the 5-bit header into the bit stream.
     pub fn write(&self, w: &mut BitWriter) {
         let bits = (u64::from(self.divergent_paths) << 4) | u64::from(self.version & 0b1111);
@@ -33,13 +44,13 @@ impl Header {
     }
 
     /// Decode the 5-bit header from the bit stream. Rejects inputs whose
-    /// version field ≠ `WF_REDESIGN_VERSION` (4 in this release) with
-    /// `Error::WireVersionMismatch` per SPEC §2.5.
+    /// version field is outside the accepted set (`{4, 8}`; see
+    /// `is_supported_version`) with `Error::WireVersionMismatch` per SPEC §2.5.
     pub fn read(r: &mut BitReader) -> Result<Self, Error> {
         let bits = r.read_bits(5)?;
         let divergent_paths = (bits >> 4) & 1 != 0;
         let version = (bits & 0b1111) as u8;
-        if version != Self::WF_REDESIGN_VERSION {
+        if !Self::is_supported_version(version) {
             return Err(Error::WireVersionMismatch { got: version });
         }
         Ok(Self {

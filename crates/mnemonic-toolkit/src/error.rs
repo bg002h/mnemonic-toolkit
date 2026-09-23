@@ -609,7 +609,22 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         // rejects above.
         | md_codec::Error::PayloadTooLongForSingleString { .. }
         | md_codec::Error::ChunkSymbolCountOutOfRange { .. }
-        | md_codec::Error::StringSymbolCountOutOfRange { .. } => 2,
+        | md_codec::Error::StringSymbolCountOutOfRange { .. }
+        // md-codec 0.46.0/0.47.0 (F-449, wire-kind-1 Liana unspendable internal
+        // key). The three `Unspendable*` refusals are detectable from the card
+        // alone and refused rather than warned about, so they route with the
+        // sibling funds-safety validation rejects (DuplicateKeySlots,
+        // ForbiddenTapTreeLeaf) at exit 2. `NonMinimalWireVersion` is an
+        // encode-side reject no public encoder reaches → with the other
+        // encode-side reject (PayloadTooLongForSingleString) at exit 2.
+        // `NetworkRequiredForUnspendable` is a render-time refusal (a
+        // network-less renderer asked for a Liana tree) → with its nearest
+        // render-time sibling AddressDerivationFailed at exit 2.
+        | md_codec::Error::NetworkRequiredForUnspendable
+        | md_codec::Error::NonMinimalWireVersion { .. }
+        | md_codec::Error::UnspendableNotRootTr
+        | md_codec::Error::UnspendableUseSiteNotCanonical { .. }
+        | md_codec::Error::UnspendableWithSortedMultiA => 2,
         // WireVersionMismatch is intercepted by From → FutureFormat.
         md_codec::Error::WireVersionMismatch { .. } => 3,
     }

@@ -87,7 +87,7 @@ pub fn canonical_origin(tree: &Node) -> Option<OriginPath> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tree::{Body, Node};
+    use crate::tree::{Body, InternalKey, Node};
 
     fn pkh_at(n: u8) -> Node {
         Node {
@@ -107,8 +107,7 @@ mod tests {
         Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: n,
+                internal_key: InternalKey::Slot(n),
                 tree: None,
             },
         }
@@ -121,8 +120,7 @@ mod tests {
         Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: n,
+                internal_key: InternalKey::Slot(n),
                 tree: Some(Box::new(Node {
                     tag: Tag::PkK,
                     body: Body::KeyArg { index: 1 },

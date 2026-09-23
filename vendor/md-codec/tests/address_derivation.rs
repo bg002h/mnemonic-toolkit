@@ -16,7 +16,7 @@
 use bitcoin::Network;
 use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
-use md_codec::tree::{Body, Node};
+use md_codec::tree::{Body, InternalKey, Node};
 use md_codec::use_site_path::UseSitePath;
 use md_codec::{Descriptor, OriginPath, PathComponent, PathDecl, PathDeclPaths, Tag, TlvSection};
 use std::str::FromStr;
@@ -167,8 +167,7 @@ fn bip86_tr_keypath_only_receive_address_zero() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: None,
             },
         },
@@ -546,8 +545,7 @@ fn tr_nums_single_pk_leaf_address() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: true,
-                key_index: 0,
+                internal_key: InternalKey::NumsPoint,
                 tree: Some(Box::new(pkk(0))),
             },
         },
@@ -593,8 +591,7 @@ fn tr_single_pk_leaf_address() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(pkk(1))),
             },
         },
@@ -643,8 +640,7 @@ fn tr_multi_a_2_of_3_leaf_address() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::MultiA,
                     body: Body::MultiKeys {
@@ -742,8 +738,7 @@ fn tr_branching_two_leaf_address() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::TapTree,
                     body: Body::Children(vec![pkk(1), pkk(2)]),
@@ -796,8 +791,7 @@ fn tr_branching_with_multi_a_address() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::TapTree,
                     body: Body::Children(vec![
@@ -1178,8 +1172,7 @@ fn nested_taptree_renders_with_nesting_intact() {
         tree: Node {
             tag: Tag::Tr,
             body: Body::Tr {
-                is_nums: false,
-                key_index: 0,
+                internal_key: InternalKey::Slot(0),
                 tree: Some(Box::new(Node {
                     tag: Tag::TapTree,
                     body: Body::Children(vec![

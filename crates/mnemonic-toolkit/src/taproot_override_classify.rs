@@ -49,8 +49,8 @@ pub(crate) fn taproot_override_card(d: &md_codec::Descriptor) -> bool {
 /// 4. NO hardened use-site anywhere (`/*h` or a hardened multipath alt) — watch-only
 ///    cannot derive hardened (#25 Point B, reused verbatim).
 ///
-/// Conjuncts 2+3 are read off the wire tree using the EXACT `Body::Tr { is_nums,
-/// tree: Some(inner), .. }` destructure `classify_taproot_restore` uses, so the
+/// Conjuncts 2+3 are read off the wire tree using the EXACT `Body::Tr {
+/// internal_key: NumsPoint, tree: Some(inner) }` destructure `classify_taproot_restore` uses, so the
 /// predicate's NUMS/leaf read CANNOT diverge from classify (R0 Min-B). A
 /// `tree: None` (keypath-only tr) or non-`Body::Tr` body yields `false`.
 pub(crate) fn restorable_taproot_override_card(d: &md_codec::Descriptor) -> bool {
@@ -63,12 +63,13 @@ pub(crate) fn restorable_taproot_override_card(d: &md_codec::Descriptor) -> bool
     }
     match &d.tree.body {
         Body::Tr {
-            is_nums: true,
+            internal_key: md_codec::tree::InternalKey::NumsPoint,
             tree: Some(inner),
-            ..
         } => inner.tag == md_codec::Tag::MultiA,
-        // Non-NUMS trunk (D7 out of scope), keypath-only tr (`tree: None`), or a
-        // non-`Tr` body all fall through to unrestorable.
+        // Non-NUMS trunk (D7 out of scope), a wire-kind-1 Liana unspendable
+        // key (md-codec 0.46.0; `classify_taproot_restore` refuses it, so it is
+        // unrestorable here too -- parity), keypath-only tr (`tree: None`), or
+        // a non-`Tr` body all fall through to unrestorable.
         _ => false,
     }
 }

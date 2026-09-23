@@ -11,6 +11,7 @@ use std::str::FromStr;
 mod support;
 use support::*;
 
+use md_codec::compose::UnspendableKind;
 use md_codec::compose::{KeySet, Lock, PathList, SpendPath, Wrapper, compose};
 use md_codec::render::descriptor_to_template;
 use md_codec::to_miniscript::to_miniscript_descriptor;
@@ -46,7 +47,7 @@ fn two_path(wrapper: Wrapper) -> PathList {
 /// keyless-wsh list, whose leg is the documented sanity FAILURE).
 pub fn cross_check(name: &str, list: &PathList, keyless_wsh: bool) -> String {
     let d = keyed(list);
-    let c = compose(list).unwrap_or_else(|e| panic!("{name}: {e}"));
+    let c = compose(list, UnspendableKind::Nums).unwrap_or_else(|e| panic!("{name}: {e}"));
     let conv = to_miniscript_descriptor(&d, 0).unwrap_or_else(|e| panic!("{name}: convert: {e}"));
     if keyless_wsh {
         let e = conv
@@ -116,7 +117,7 @@ fn the_cross_check_notices_a_wrong_lowering() {
     // can fail is the only kind worth running over the family.
     let list = two_path(Wrapper::Wsh);
     let d = keyed(&list);
-    let c = compose(&list).unwrap();
+    let c = compose(&list, UnspendableKind::Nums).unwrap();
     let conv = to_miniscript_descriptor(&d, 0).unwrap();
     let key_strings: Vec<String> = conv.iter_pk().map(|k| k.to_string()).collect();
     let wrong = concrete_policy(&list, &c, &key_strings).replacen("thresh(2,", "thresh(1,", 1);

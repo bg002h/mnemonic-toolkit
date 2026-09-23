@@ -4,7 +4,7 @@
 
 use super::{
     ComposeError, Composed, Experimental, HashKind, KeySet, PathList, Slot, SlotOrigin, SpendPath,
-    Wrapper, default_origin,
+    UnspendableKind, Wrapper, default_origin,
 };
 use crate::encode::Descriptor;
 use crate::origin_path::{OriginPath, PathDecl, PathDeclPaths};
@@ -287,15 +287,18 @@ pub(super) fn finish(
         slots,
         internal_key_path,
         experimental,
+        // Set by `compose_with`, the one entry point that knows the request.
+        unspendable_request_unmet: false,
     })
 }
 
 pub(super) fn lower(
     list: &PathList,
     declared: &[Option<SlotOrigin>],
+    unspendable: UnspendableKind,
 ) -> Result<Composed, ComposeError> {
     match list.wrapper {
-        Wrapper::Tr => super::tr::lower_tr(list, declared),
+        Wrapper::Tr => super::tr::lower_tr(list, declared, unspendable),
         Wrapper::Wsh | Wrapper::Sh | Wrapper::ShWsh => {
             let (numbered, slots) = number(list, None);
             let sole = list.paths.len() == 1;

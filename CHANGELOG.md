@@ -8,6 +8,20 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## mnemonic-toolkit [Unreleased]
 
+**md-codec 0.47.0 adopted (F-642): pin `cf35d61a` = `descriptor-mnemonic-md-cli-v0.19.0`.**
+
+- md-codec's taproot internal key is now a sum type (`InternalKey::{Slot, NumsPoint,
+  LianaUnspendable}`), and wire version 8 carries wire kind 1: Liana's unspendable key,
+  an xpub DERIVED from the leaf keys. **`mnemonic restore --md1` REFUSES such a card
+  (exit 2)** instead of rendering it: its template arm would otherwise substitute the
+  BIP-341 NUMS point, which is a different wallet at different addresses. The refusal
+  names `md descriptor --network <net>`, which renders it. The engraved card stays a
+  faithful backup.
+- md-codec's five new errors (`NetworkRequiredForUnspendable`, `NonMinimalWireVersion`,
+  `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
+  `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.
+- `scripts/install.sh` and the four doc workflows pin md-cli at v0.19.0.
+
 **SemVer-MINOR (pre-1.0 breaking axis) — P3 of the constellation CLI-uniformity cycle:
 `mnemonic`'s display-grouping surface changes on FOUR subcommands.**
 
