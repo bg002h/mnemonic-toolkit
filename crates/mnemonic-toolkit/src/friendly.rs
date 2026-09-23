@@ -469,10 +469,13 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         ),
         // md-codec 0.46.0/0.47.0 (F-449): wire kind 1, Liana's unspendable
         // internal key, legal only at wire version 8.
-        E::NetworkRequiredForUnspendable => "md1 Liana unspendable internal key needs a \
-             network to render its derived xpub; this renderer has none (toolkit bug — \
-             use `md descriptor --network <net>`)"
-            .to_string(),
+        // F-642: no toolkit route renders a Liana tree any more -- both restore
+        // routes refuse it first (`cmd::restore::refuse_liana_unspendable`).
+        // Should a future call propagate this error, it says exactly what that
+        // refusal says (one wording), not a second, divergent text.
+        E::NetworkRequiredForUnspendable => {
+            crate::taproot_override_classify::LIANA_UNSPENDABLE_REFUSAL.to_string()
+        }
         E::NonMinimalWireVersion { got, minimal } => format!(
             "md1 non-minimal wire version: {got} was requested but the tree needs only \
              {minimal}"
@@ -960,7 +963,7 @@ mod tests {
             ),
             (
                 E::NetworkRequiredForUnspendable,
-                "needs a network",
+                "md descriptor --network",
                 "NetworkRequiredForUnspendable",
             ),
             (

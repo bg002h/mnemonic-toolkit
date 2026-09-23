@@ -164,11 +164,15 @@ refusal and `mnemonic repair --json` gains a `verdict` value.
 
 - md-codec's taproot internal key is now a sum type (`InternalKey::{Slot, NumsPoint,
   LianaUnspendable}`), and wire version 8 carries wire kind 1: Liana's unspendable key,
-  an xpub DERIVED from the leaf keys. **`mnemonic restore --md1` REFUSES such a card
-  (exit 2)** instead of rendering it: its template arm would otherwise substitute the
-  BIP-341 NUMS point, which is a different wallet at different addresses. The refusal
-  names `md descriptor --network <net>`, which renders it. The engraved card stays a
-  faithful backup.
+  an xpub DERIVED from the leaf keys. **`mnemonic restore --md1` and `verify-bundle`
+  REFUSE such a card (exit 2)** instead of rendering it. This covers a keyed card and
+  a keyless template card, in every completion mode (`--search-address`, explicit
+  `--cosigner @N=`, `--expect-wallet-id`). The keyed template arm would otherwise
+  substitute the BIP-341 NUMS point, a different wallet at different addresses; the
+  keyless completion engine would otherwise report a false "✗ NO MATCH" (exit 4) on
+  correct cards. The refusal names `md descriptor --network <net>`, which renders it
+  (for a template card with `--template`/`--key`/`--fingerprint`). The engraved card
+  stays a faithful backup. See the manual's `mnemonic restore` section.
 - md-codec's five new errors (`NetworkRequiredForUnspendable`, `NonMinimalWireVersion`,
   `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
   `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.

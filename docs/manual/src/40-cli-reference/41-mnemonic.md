@@ -1493,6 +1493,24 @@ emits `descriptor` / `bitcoin-core` only (`bip388` / `green` refused), while a
 non-NUMS distinct-trunk **multisig** also emits `bip388`. `--template` and
 `--expect-xpub` are single-sig only.
 
+**Liana unspendable internal key (v0.104.0).** An `md1` whose taproot
+internal key is Liana's unspendable key (`tr(UNSPENDABLE(liana),…)`: wire
+kind 1, md-codec wire version 8) is **refused** (exit 2). This applies to
+keyed and keyless template cards alike, in every completion mode
+(`--search-address`, explicit `--cosigner @N=`, `--expect-wallet-id`), and
+in `verify-bundle`, which runs the same completion engine. That key is an
+xpub derived from the leaf keys, which no restore route here renders, and
+substituting the BIP-341 NUMS point would describe a different wallet at
+different addresses. The refusal names the tool that renders it:
+`md descriptor --network <net> <md1…>` for a keyed card; for a keyless
+template card, `md descriptor --network <net> --template <T> --key
+@i=<xpub> --fingerprint @i=<fp>`, where `<T>` is what `md decode <md1…>`
+prints. (`md descriptor --from-mk1` can refuse such a card as ambiguous
+when every slot declares the same path and no fingerprint.) The engraved
+card remains a faithful backup.
+`mnemonic inspect` still decodes the card (`template:
+tr(UNSPENDABLE(liana),…)`).
+
 ---
 
 ## `mnemonic import-wallet`

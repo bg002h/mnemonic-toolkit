@@ -1692,6 +1692,13 @@ pub(crate) fn complete_multisig_template<E: Write>(
 ) -> Result<MultisigCompletion, ToolkitError> {
     use mnemonic_toolkit::permutation_search as ps;
 
+    // F-642 (review I-1): the one Liana (wire-kind-1) rule, FIRST, so every
+    // mode of this shared engine (search-address, explicit `@N=`,
+    // expect-wallet-id; restore AND verify-bundle) refuses with the same exit
+    // 2 and wording as the keyed route, before any candidate render can turn
+    // md-codec's `NetworkRequiredForUnspendable` into a false NO MATCH.
+    refuse_liana_unspendable(d)?;
+
     let network = ctx.network;
     let n = d.n as usize;
 
@@ -3237,16 +3244,13 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
         // (`NetworkRequiredForUnspendable`). Refused before either can run,
         // never mapped to `TaprootInternalKey::Nums`. `md descriptor
         // --network` renders it (md-cli 0.19.0).
+        // Unreachable: `run_multisig` calls `refuse_liana_unspendable` before
+        // classifying. Kept as defense in depth, returning the SAME refusal
+        // (one wording), never folded into `TaprootInternalKey::Nums`.
         Body::Tr {
             internal_key: InternalKey::LianaUnspendable,
             ..
-        } => {
-            return Err(ToolkitError::ModeViolation {
-                mode: "restore",
-                flag: "--md1",
-                message: "taproot md1 carries a Liana unspendable internal key (wire kind 1, md-codec wire version 8) — `mnemonic restore` cannot render it yet, and substituting the BIP-341 NUMS point would describe a different wallet; use `md descriptor --network <net> <md1…>` to recover the descriptor. The engraved card remains a faithful backup",
-            });
-        }
+        } => return Err(liana_unspendable_refusal()),
         Body::Tr { tree: None, .. } => {
             return Err(bad(
                 "--md1 taproot tree has no script leaf (keypath-only tr is single-sig, not multisig)",
@@ -3657,8 +3661,40 @@ impl miniscript::Translator<DescriptorPublicKey> for ReconstructTranslator {
 // (`use super::*`) resolve the bare names unchanged. Logic is byte-identical —
 // a pure relocation, no behavior change.
 pub(crate) use crate::taproot_override_classify::{
-    restorable_taproot_override_card, taproot_override_card,
+    liana_unspendable_card, restorable_taproot_override_card, taproot_override_card,
+    LIANA_UNSPENDABLE_REFUSAL,
 };
+
+/// F-642: THE refusal for a wire-kind-1 (Liana unspendable) internal key, as
+/// the ONE rule every restore route applies. It is called at the entry of both
+/// routes that can receive such a card:
+/// - the keyed wallet-policy route (`run_multisig`, straight after decode);
+/// - the keyless template-completion engine (`complete_multisig_template`),
+///   which `restore` and `verify-bundle` share.
+///
+/// Before this existed, only the keyed route's classifier refused. The engine
+/// let the card through to md-codec's network-less renderer, whose
+/// `NetworkRequiredForUnspendable` `--search-address` swallowed as "not this
+/// assignment": a false "✗ NO MATCH" (exit 4) on correct cards (review I-1).
+///
+/// The predicate is md-codec's own (`liana_unspendable_card`), and this
+/// function holds the only copy of the wording. `classify_taproot_restore`'s
+/// Liana arm, now unreachable behind the keyed call, returns the same error
+/// rather than a second copy of it.
+pub(crate) fn refuse_liana_unspendable(d: &md_codec::Descriptor) -> Result<(), ToolkitError> {
+    if liana_unspendable_card(d) {
+        return Err(liana_unspendable_refusal());
+    }
+    Ok(())
+}
+
+fn liana_unspendable_refusal() -> ToolkitError {
+    ToolkitError::ModeViolation {
+        mode: "restore",
+        flag: "--md1",
+        message: LIANA_UNSPENDABLE_REFUSAL,
+    }
+}
 
 /// Reconstruct the faithful concrete watch-only descriptor STRING from a general
 /// (non-plain-template) wallet-policy md1, PRESERVING the full policy tree
@@ -3794,6 +3830,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
     let d =
         md_codec::chunk::reassemble(&md1_refs).map_err(|e| bad(format!("--md1 decode: {e}")))?;
+
+    // F-642: the one Liana (wire-kind-1) rule, applied before anything else.
+    refuse_liana_unspendable(&d)?;
 
     // --- 2. Gate: wallet-policy requirement (taproot multisig handled in §3) ---
     if !d.is_wallet_policy() {
