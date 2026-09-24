@@ -1,1 +1,1 @@
-$MS_BIN encode --phrase 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' --no-engraving-card
+printf '%s\n' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' > phrase.txt && $MS_BIN encode --in phrase.txt --no-engraving-card

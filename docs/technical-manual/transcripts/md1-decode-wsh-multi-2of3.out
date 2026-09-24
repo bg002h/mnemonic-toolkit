@@ -3,4 +3,6 @@ note: key origins carried by this card (not shown in the template):
   @0: m
   @1: m
   @2: m
+note: the template above does NOT carry the origin. Verbs that resolve a non-canonical wrapper need it:
+      md address --template <the line above> --key @i=<xpub> --path m
 note: stdout is a keyless descriptor template (no keys)

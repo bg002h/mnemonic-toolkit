@@ -1,1 +1,1 @@
-$MS_BIN repair --ms1 ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f
+printf '%s\n' ms10entrsqqqqqqqqqqqzqqqqqqqqqqqqqqqqcj9sxraq34v7f > broken.txt && $MS_BIN repair --in broken.txt
