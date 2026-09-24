@@ -1,5 +1,6 @@
-info: non-canonical descriptor; defaulting origin path for @0,@1,@2 to m/48'/0'/0'/2' (BIP-48 cosigner path). Override per-placeholder with [fp/path]@N or --slot @N.path=m/...
+info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
 warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+info: no origin supplied for @0, @1, @2; assuming the BIP-48 cosigner path to rebuild the expected card. If that is not where those keys live, set it with [fp/path]@N or --slot @N.path=m/...
 ms1_decode[0]: ok cosigner[0] ms1 decoded
 ms1_entropy_match[0]: ok cosigner[0] ms1 byte-identical
 mk1_decode[0]: ok cosigner[0] mk1 decoded
@@ -21,4 +22,5 @@ mk1_path_match[2]: ok cosigner[2] path matches
 md1_decode: ok decoded successfully
 md1_wallet_policy: ok wallet-policy mode confirmed
 md1_xpub_match: ok all 3 pubkeys match expected (multiset) and decoded policy (tree + use-site path) matches
+md1_origin_match: ok all 3 key origins match expected
 result: ok

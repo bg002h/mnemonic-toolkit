@@ -20,7 +20,7 @@ format a given task targets — and then jump to the right tool.
 | Engrave a single-sig BIP-84 wallet | `mnemonic bundle --template bip84 --slot @0.phrase=…` |
 | Engrave a 2-of-3 multisig wallet | `mnemonic bundle --template wsh-sortedmulti --threshold 2 --slot @0.phrase=… --slot @1.phrase=… --slot @2.phrase=…` |
 | Engrave a taproot multisig | `mnemonic bundle --template tr-sortedmulti-a --taproot-internal-key nums …` |
-| Re-derive a phrase from an ms1 card | `mnemonic convert --from ms1=… --to phrase` (or `ms decode <STRING>`) |
+| Re-derive a phrase from an ms1 card | `mnemonic convert --from ms1=- --to phrase` (or `ms decode --in <FILE>`) |
 | Re-derive xpub + path from an mk1 card | `mnemonic convert --from mk1=… --to xpub --to fingerprint --to path` |
 | Decode a wallet policy from md1 | `md decode <STRINGS>` (positional) |
 | Cross-check a 3-card bundle | `mnemonic verify-bundle …` |

@@ -7,4 +7,5 @@ mk1_path_match: ok path matches
 md1_decode: ok decoded successfully
 md1_wallet_policy: ok wallet-policy mode confirmed
 md1_xpub_match: ok 65-byte xpub matches expected
+md1_origin_match: ok all 1 key origins match expected
 result: ok

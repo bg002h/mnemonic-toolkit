@@ -46,6 +46,11 @@
       "name": "md1_xpub_match",
       "passed": true,
       "detail": "65-byte xpub matches expected"
+    },
+    {
+      "name": "md1_origin_match",
+      "passed": true,
+      "detail": "all 1 key origins match expected"
     }
   ]
 }
