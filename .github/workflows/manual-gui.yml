@@ -189,13 +189,13 @@ jobs:
         env:
           DOCBIN_ROOT: ${{ runner.temp }}/docbins
         run: |
-          cargo install --root "$DOCBIN_ROOT" \
+          cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/descriptor-mnemonic \
             --tag descriptor-mnemonic-md-cli-v0.11.0 md-cli --features cli-compiler
-          cargo install --root "$DOCBIN_ROOT" \
+          cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-secret \
             --tag ms-cli-v0.13.0 ms-cli
-          cargo install --root "$DOCBIN_ROOT" \
+          cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-key \
             --tag mk-cli-v0.11.0 mk-cli
 
@@ -206,7 +206,7 @@ jobs:
         env:
           DOCBIN_ROOT: ${{ runner.temp }}/docbins
         run: |
-          cargo install --root "$DOCBIN_ROOT" \
+          cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-toolkit \
             --tag mnemonic-toolkit-v0.74.0 mnemonic-toolkit
 
@@ -285,7 +285,7 @@ jobs:
           # needs 1.88. RUSTUP_TOOLCHAIN takes precedence over rust-toolchain.toml.
           RUSTUP_TOOLCHAIN: stable
         run: |
-          cargo install --root "$GUIBIN_ROOT" \
+          cargo install --locked --root "$GUIBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-gui \
             --tag "$PINNED_TAG" \
             --no-default-features --bin gui-render
