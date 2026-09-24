@@ -6,51 +6,38 @@ name: examples
 # and the AUTHORITATIVE config in
 # design/agent-reports/examples-pdf-branch-protection-ruling.md §7.
 #
-# Trigger shape (ruling §7):
-#   - pull_request: NO `paths:` filter. The single job `examples` ALWAYS runs
-#     and ALWAYS reports its context, so it is safe as a REQUIRED branch-
-#     protection check (a path-filtered required check wedges forever at
-#     "Expected — waiting for status"). A PR-event-only, fail-safe internal
-#     guard early-exits the heavy steps when no gated path changed, so a
-#     docs-only PR is a seconds-long green no-op instead of a wasted compile.
-#   - push (master/main): WITH a `paths:` filter. This run is LOAD-BEARING,
-#     not redundant — it is the sole gate for direct-to-master pushes (the
-#     toolkit's dominant change mode: releases + design docs), which bypass
-#     all PR checks. `paths` never filters tag pushes.
+# Trigger shape (F-677, superseding the push half of ruling §7):
+#   - push (master/main/ci/**) and pull_request: NO `paths:` filter. The single
+#     job `examples` ALWAYS runs and ALWAYS reports its context, so it is safe
+#     as a REQUIRED check on both events. Its first real step,
+#     ci/doc-gate-guard.sh, decides whether the heavy steps run; an irrelevant
+#     commit is a fast green. This is the always-run pattern the doc workflows
+#     (manual, quickstart, technical-manual, manual-gui) already use.
+#     WHY THE PUSH FILTER HAD TO GO: a required context binds to a commit SHA,
+#     and scripts/push-via-staging.sh earns it on the `ci/staging` PUSH. With a
+#     `paths:` filter on push, a commit touching no gated path (docs-only,
+#     design-only) never started this workflow, the context never appeared, and
+#     the staging script stopped with "required context(s) NEVER RAN".
+#   - WHAT IS GATED is unchanged: the union of the old push `paths:` list and
+#     the old PR regex. `--book .examples-build` derives .examples-build/ plus
+#     docs/Examples.pdf (ci/doc-gate-paths.py); `--also` adds
+#     scripts/install.sh, crates/, Cargo.{toml,lock}, .gitattributes, this
+#     workflow and the guard itself. (.gitattributes was on the push list but
+#     missing from the old PR regex; it is now gated on both.)
+#   - The guard errs only toward RUNNING the gate: a tag, a dispatch, an
+#     unfetchable base, or any git/python error answers relevant=true. A push to
+#     master diffs against the event's `before`; any other branch (ci/staging)
+#     against the merge-base with origin/master (see the guard's header).
 #   - tags: examples-v*. Builds the PDF and attaches docs/Examples.pdf to the
 #     release (manual.yml:147-168 pattern). NO bitcoind — §6.6 is a static
 #     capture (Q1-(b)).
 on:
   push:
-    # `ci/**` added 2026-08-15 so a commit can earn the REQUIRED `examples`
-    # context before it lands on master (a required check binds to a commit SHA,
-    # not a branch, so a direct push is bypassed rather than satisfied).
-    #
-    # The `paths:` filter below is DELIBERATELY LEFT IN PLACE. Per the trigger
-    # ruling above and design/agent-reports/examples-pdf-branch-protection-ruling.md
-    # §7, the push run is LOAD-BEARING — the sole gate for direct-to-master
-    # pushes — and its filter is a considered choice, not an oversight. Adding a
-    # branch does not disturb it: a staged commit still builds iff it touches a
-    # gated path, which every code change does.
     branches: [master, main, 'ci/**']
-    paths:
-      - '.examples-build/**'
-      - 'docs/Examples.pdf'
-      - 'scripts/install.sh'
-      - 'crates/**'
-      - 'Cargo.lock'
-      - 'Cargo.toml'                 # root [patch.crates-io] miniscript rev (plan M2)
-      - '.github/workflows/examples.yml'
-      # `.gitattributes` is gated because it CHANGES CHECKED-OUT BYTES and so can
-      # change test outcomes. Measured 2026-08-27: the shared conformance corpus
-      # lacked an `eol=lf` rule, so Windows checkouts CRLF-converted it and three
-      # windows-latest jobs went RED on a byte-level hash while every other
-      # platform stayed green. A commit fixing that touches no gated path under
-      # the old filter, so the fix itself could not earn its required contexts.
-      - '.gitattributes'
     tags:
       - 'examples-v*'
   pull_request:                       # NO paths — a REQUIRED check must report on every PR
+  workflow_dispatch:
 
 jobs:
   examples:
@@ -65,40 +52,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect relevant changes (PR-event only)
+      - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
         id: guard
-        # Fail-SAFE guard: it may only ever err toward *running* the gate,
-        # never toward skipping it (a wrongly-skipped gate is a silent
-        # false-green — the dangerous failure). Two properties enforce this:
-        #   (a) the two-dot `git diff BASE HEAD` OVER-includes (it also picks
-        #       up base-side changes since the branch point) → at worst it
-        #       runs the gate unnecessarily; it can NEVER miss a PR-side edit
-        #       to a gated path.
-        #   (b) if the fetch/diff itself errors, the step exits non-zero under
-        #       the default `-eo pipefail` shell → the JOB FAILS (hard red),
-        #       never a false green.
-        # The gated path set MUST match the `push:` `paths:` filter above
-        # (incl. `.github/workflows/examples.yml`, so this workflow's own PR
-        # exercises the born-green gate rather than no-op'ing itself).
-        if: github.event_name == 'pull_request'
-        run: |
-          git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF"
-          changed="$(git diff --name-only FETCH_HEAD HEAD)"
-          printf 'changed files:\n%s\n' "$changed"
-          if printf '%s\n' "$changed" | grep -qE \
-             '^(\.examples-build/|docs/Examples\.pdf$|scripts/install\.sh$|crates/|Cargo\.lock$|Cargo\.toml$|\.github/workflows/examples\.yml$)'; then
-            echo "relevant=true"  >> "$GITHUB_OUTPUT"
-            echo "Gated paths changed — running the full examples gate."
-          else
-            echo "relevant=false" >> "$GITHUB_OUTPUT"
-            echo "No gated paths changed — examples gate is a no-op for this PR."
-          fi
+        # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
+        # --book + --also are this gate's whole path scope; see the header.
+        run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
 
       - name: Install pandoc + texlive + DejaVu mono
         # Monofont "DejaVu Sans Mono" (gen.sh:116) needs fonts-dejavu; jq is
         # runner-preinstalled but pinned explicitly (gen.sh preflight requires
         # it). No chromium/mermaid — Examples.pdf has no figures.
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -115,25 +79,25 @@ jobs:
 
       - name: Install pinned Rust toolchain (1.85.0)
         # Matches rust-toolchain.toml; gen.sh:167 requires rustc >= 1.85.
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         uses: dtolnay/rust-toolchain@1.85.0
 
       - name: Rust build cache
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         uses: Swatinem/rust-cache@v2
 
       - name: Build mnemonic binary (debug)
         # Debug binary is sufficient — gen.sh captures the same output as
         # release modulo panic verbosity (mnemonic never panics in normal
         # flow). Precedent: manual.yml:92-96.
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         run: cargo build --bin mnemonic
 
       - name: Regenerate the golden Examples.md
         # EXAMPLES_BIN_DIR wins over any cargo-installed mnemonic on PATH.
         # gen.sh scrubs HOME/LC_ALL/LANG/TZ internally for byte-determinism
         # and FATALs on a version mismatch or a missing preflight tool.
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         run: |
           EXAMPLES_BIN_DIR="$GITHUB_WORKSPACE/target/debug" \
             bash .examples-build/gen.sh > .examples-build/Examples.md || exit 1
@@ -143,7 +107,7 @@ jobs:
         # regen shows verbatim in the CI log and REDs the job. Scoped to the
         # one golden path so the still-ignored preamble.tex / work/ / *.err
         # can never false-positive.
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         run: git diff --exit-code -- .examples-build/Examples.md
 
       - name: Build PDF (proves buildability; not byte-gated)
@@ -152,7 +116,7 @@ jobs:
         # xelatex output is not reproducible across texlive versions, so the
         # PDF is NOT byte-gated — the golden .md is the gated artifact; this
         # step only re-proves the PDF still builds cleanly.
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: .examples-build
         run: |
           pandoc Examples.md --include-in-header=preamble.tex --listings \
@@ -160,7 +124,7 @@ jobs:
           test -s Examples.pdf
 
       - name: Upload golden + PDF as workflow artifacts
-        if: github.event_name != 'pull_request' || steps.guard.outputs.relevant == 'true'
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: examples

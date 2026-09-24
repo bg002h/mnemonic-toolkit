@@ -36,7 +36,7 @@ git --git-dir="$TMP/origin.git" fetch --quiet --no-tags --update-shallow "$REPO"
 git clone --quiet --no-checkout "$TMP/origin.git" "$TMP/work"
 W="$TMP/work"
 g() { git -C "$W" -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
-g sparse-checkout set --cone docs ci .github >/dev/null
+g sparse-checkout set --cone docs ci .github .examples-build scripts >/dev/null
 g checkout --quiet master
 MASTER=$(g rev-parse HEAD)
 
@@ -211,6 +211,50 @@ expect "F2 workflow_dispatch" true "$(relevant manual workflow_dispatch refs/hea
 expect "F3 master push with no previous tip" true "$(relevant manual push refs/heads/master 0000000000000000000000000000000000000000)"
 expect "F4 master push with an unfetchable previous tip" true "$(relevant manual push refs/heads/master deadbeefdeadbeefdeadbeefdeadbeefdeadbeef)"
 expect "F5 PR against a base that does not exist" true "$(relevant manual pull_request refs/pull/3/merge '' no-such-branch)"
+
+# ---- S9 (F-677): examples.yml runs on EVERY push; the guard carries its scope ----
+# The hole: examples.yml filtered `push:` by paths, so a docs-only commit on
+# ci/staging never started it and the REQUIRED `examples` context never
+# appeared. Structural half: no `paths:` on any trigger, and every heavy step
+# is gated on the guard alone.
+if python3 - "$W/.github/workflows/examples.yml" <<'PYEOF'
+import sys, yaml
+w = yaml.safe_load(open(sys.argv[1]))
+on = w.get("on", w.get(True))
+bad = [ev for ev, cfg in on.items() if isinstance(cfg, dict) and ("paths" in cfg or "paths-ignore" in cfg)]
+steps = w["jobs"]["examples"]["steps"]
+gi = [i for i, st in enumerate(steps) if st.get("id") == "guard"]
+assert gi and "if" not in steps[gi[0]], "guard step missing or conditional"
+heavy = [st.get("name") for st in steps[gi[0] + 1:]
+         if not str(st.get("if", "")).startswith("startsWith(github.ref, 'refs/tags/examples-v')")
+         and st.get("if") != "steps.guard.outputs.relevant == 'true'"]
+if bad or heavy:
+    print("paths filters on:", bad, "; ungated steps:", heavy); sys.exit(1)
+PYEOF
+then ok "S9 examples.yml: no paths filter on any trigger; heavy steps gated only on the guard"
+else bad "S9 examples.yml trigger/step shape"; fi
+if git -C "$W" show 15443535:.github/workflows/examples.yml 2>/dev/null | grep -qE "^    paths:"; then
+  ok "S9-control the pre-fix examples.yml (15443535) filtered push by paths (the defect)"
+else printf 'skip S9-control (pre-fix rev not in history)\n'; fi
+
+branch_from_master s9-docs
+echo '# touched' >> "$W/docs/manual/src/40-cli-reference/42-md.md"
+g commit --quiet -am "s9: docs-only"
+expect "S9 examples, ci/staging push, docs-only (context reports, heavy steps skip)" false "$(relevant examples push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+expect "S9 examples, PR, docs-only" false "$(relevant examples pull_request refs/pull/9/merge '' master)"
+# Every path the old push filter or the old PR regex gated must still gate.
+for f in .examples-build/Examples.md docs/Examples.pdf scripts/install.sh crates/x.txt \
+         Cargo.lock Cargo.toml .gitattributes .github/workflows/examples.yml ci/doc-gate-guard.sh ci/doc-gate-paths.py; do
+  branch_from_master "s9-$(tr '/.' '__' <<<"$f")"
+  mkdir -p "$W/$(dirname "$f")"
+  echo '# touched' >> "$W/$f"
+  g add --sparse -f "$f"
+  g commit --quiet -m "s9: touch $f"
+  expect "S9 examples, ci/staging push, only $f" true "$(relevant examples push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+  expect "S9 examples, master push (before=parent), only $f" true "$(relevant examples push refs/heads/master "$(g rev-parse HEAD~1)")"
+done
+expect "S9 examples, examples-v* tag push" true "$(relevant examples push refs/tags/examples-v9.9.9)"
+expect "S9 examples, workflow_dispatch" true "$(relevant examples workflow_dispatch refs/heads/master)"
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
