@@ -11,10 +11,10 @@ name: quickstart
 # pattern, extended to `push` so the context also appears on a code-only
 # staging push. Tag pushes always run the full gate.
 #
-# Gated paths: docs/quickstart/** AND docs/manual/** (the QuickStart's
-# transcripts/ is a symlink into docs/manual/transcripts/, and it reuses the
-# manual's pandoc filters and lint config -- the old push filter missed all of
-# that), the mermaid cache tool, this workflow, the guard, and crates/** +
+# Watched paths: docs/quickstart/ plus everything it reaches outside itself,
+# DERIVED by ci/doc-gate-paths.py (resolved symlinks + `../` references): the
+# manual's transcripts/, pandoc filters, verify-examples.sh and lint configs.
+# `--also` adds the mermaid cache tool, this workflow, the guard, and crates/ +
 # Cargo.{toml,lock} (transcripts replay the mnemonic built from this tree).
 
 on:
@@ -41,10 +41,10 @@ jobs:
       - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
         id: guard
         # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
-        # The regex is this gate's whole path scope -- there is no `paths:`
-        # filter on the triggers any more, so the context reports on every
-        # push and PR and can be a REQUIRED check.
-        run: bash ci/doc-gate-guard.sh '^(docs/quickstart/|docs/manual/|docs/tools/render-mermaid-cache\.py$|\.github/workflows/quickstart\.yml$|ci/doc-gate-guard\.sh$|crates/|Cargo\.(toml|lock)$)'
+        # --book + --also are this gate's whole path scope -- there is no
+        # `paths:` filter on the triggers any more, so the context reports on
+        # every push and PR and can be a REQUIRED check.
+        run: bash ci/doc-gate-guard.sh --book docs/quickstart --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/quickstart\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
 
       - name: Install pandoc + texlive
         if: steps.guard.outputs.relevant == 'true'

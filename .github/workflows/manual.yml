@@ -11,10 +11,11 @@ name: manual
 # pattern, extended to `push` so the context also appears on a code-only
 # staging push. Tag pushes always run the full gate.
 #
-# Gated paths (the guard's regex): docs/manual/**, the mermaid cache tool, this
-# workflow, the guard itself, and crates/** + Cargo.{toml,lock} -- the audit
-# replays every transcript against the mnemonic binary built from THIS tree,
-# so a code change can drift a golden without touching docs/.
+# Watched paths: docs/manual/ plus anything it reaches outside itself, DERIVED
+# by ci/doc-gate-paths.py; `--also` adds the mermaid cache tool, this
+# workflow, the guard, and crates/ + Cargo.{toml,lock} -- the audit replays
+# every transcript against the mnemonic binary built from THIS tree, so a code
+# change can drift a golden without touching docs/.
 
 on:
   push:
@@ -40,10 +41,10 @@ jobs:
       - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
         id: guard
         # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
-        # The regex is this gate's whole path scope -- there is no `paths:`
-        # filter on the triggers any more, so the context reports on every
-        # push and PR and can be a REQUIRED check.
-        run: bash ci/doc-gate-guard.sh '^(docs/manual/|docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-guard\.sh$|crates/|Cargo\.(toml|lock)$)'
+        # --book + --also are this gate's whole path scope -- there is no
+        # `paths:` filter on the triggers any more, so the context reports on
+        # every push and PR and can be a REQUIRED check.
+        run: bash ci/doc-gate-guard.sh --book docs/manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
 
       - name: Install pandoc + texlive
         if: steps.guard.outputs.relevant == 'true'

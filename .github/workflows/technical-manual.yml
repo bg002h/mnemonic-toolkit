@@ -31,8 +31,11 @@ name: technical-manual
 # pattern, extended to `push` so the context also appears on a code-only
 # staging push. Tag pushes always run the full gate.
 #
-# Gated paths: docs/technical-manual/**, the mermaid cache tool, this workflow,
-# the guard, and crates/** + Cargo.{toml,lock} -- wider than the old
+# Watched paths: docs/technical-manual/ plus what it reaches outside itself,
+# DERIVED by ci/doc-gate-paths.py -- today docs/manual/tests/verify-examples.sh
+# and docs/manual/pandoc/filters/include-transcript.lua, both symlinked in.
+# `--also` adds the mermaid cache tool, this workflow, the guard, and crates/ +
+# Cargo.{toml,lock} -- wider than the old
 # crates/mnemonic-toolkit/{src,tests} filter, because verify-examples replays
 # transcripts against the mnemonic built from this tree and the cargo-example
 # crate resolves against the workspace lockfile.
@@ -64,10 +67,10 @@ jobs:
       - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
         id: guard
         # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
-        # The regex is this gate's whole path scope -- there is no `paths:`
-        # filter on the triggers any more, so the context reports on every
-        # push and PR and can be a REQUIRED check.
-        run: bash ci/doc-gate-guard.sh '^(docs/technical-manual/|docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-guard\.sh$|crates/|Cargo\.(toml|lock)$)'
+        # --book + --also are this gate's whole path scope -- there is no
+        # `paths:` filter on the triggers any more, so the context reports on
+        # every push and PR and can be a REQUIRED check.
+        run: bash ci/doc-gate-guard.sh --book docs/technical-manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
 
       - name: Install make
         if: steps.guard.outputs.relevant == 'true'

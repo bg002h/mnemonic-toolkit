@@ -12,7 +12,9 @@ name: manual-gui
 # (examples.yml's always-run pattern, extended to `push` so the context also
 # appears on the `ci/**` staging push of a commit that touches no docs.)
 #
-# Gated paths: docs/manual-gui/**, this workflow and the guard. This manual
+# Watched paths: docs/manual-gui/ plus what it reaches outside itself, DERIVED
+# by ci/doc-gate-paths.py (today docs/manual/tests/, via the verify-examples.sh
+# symlink); `--also` adds this workflow and the guard. This manual
 # pins its own CLI tier and mnemonic-gui tag (pinned-upstream.toml), so the
 # toolkit's crates/ do not affect it.
 #
@@ -43,7 +45,7 @@ jobs:
 
       - name: Detect relevant changes
         id: guard
-        run: bash ci/doc-gate-guard.sh '^(docs/manual-gui/|\.github/workflows/manual-gui\.yml$|ci/doc-gate-guard\.sh$)'
+        run: bash ci/doc-gate-guard.sh --book docs/manual-gui --also '^(\.github/workflows/manual-gui\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
 
   # ---------------------------------------------------------------------------
   # Job 1 — lint
