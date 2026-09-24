@@ -38,13 +38,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Self-test the doc-gate guard (always runs, BEFORE the guard decides)
+        # A gate whose own tests no job runs is a hypothesis. This step has no
+        # `if:` and sits before the guard, so it runs on every push (master,
+        # main, ci/**), every tag, every PR and every dispatch that starts this
+        # job -- i.e. whenever the required `manual` context is produced -- and
+        # a guard regression REDs that context. It needs only git + python3
+        # (preinstalled on ubuntu-latest) and the full history checked out
+        # above; it builds a scratch origin under $RUNNER_TEMP and never
+        # touches the real remote.
+        env:
+          DOC_GATE_TEST_TMP: ${{ runner.temp }}/doc-gate-test
+        run: bash ci/doc-gate-guard.test.sh
+
       - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
         id: guard
         # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
         # --book + --also are this gate's whole path scope -- there is no
         # `paths:` filter on the triggers any more, so the context reports on
         # every push and PR and can be a REQUIRED check.
-        run: bash ci/doc-gate-guard.sh --book docs/manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
+        run: bash ci/doc-gate-guard.sh --book docs/manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|ci/doc-(gate-guard|flag-lint)\.test\.sh$|crates/|Cargo\.(toml|lock)$)'
 
       - name: Install pandoc + texlive
         if: steps.guard.outputs.relevant == 'true'
@@ -129,6 +142,18 @@ jobs:
             MS_BIN=ms \
             MK_BIN=mk \
             FIXTURES_DIR="$GITHUB_WORKSPACE/crates/mnemonic-toolkit/tests/fixtures/wallet_import"
+
+      - name: Mutation-test the flag lint (ci/doc-flag-lint.test.sh)
+        # Tests the LINT, not the guard, so it may sit behind the guard: every
+        # input it depends on -- docs/manual/tests/lint.sh, the chapters, the
+        # CLI pins in this file, and this test script (in --also above) -- makes
+        # the guard answer relevant=true. It needs the pinned CLIs installed
+        # above, which is why it is not in the always-run self-test step.
+        if: steps.guard.outputs.relevant == 'true'
+        run: |
+          MNEMONIC_BIN="$GITHUB_WORKSPACE/target/debug/mnemonic" \
+          MD_BIN="$(command -v md)" MS_BIN="$(command -v ms)" MK_BIN="$(command -v mk)" \
+            bash ci/doc-flag-lint.test.sh
 
       - name: Build PDF
         if: steps.guard.outputs.relevant == 'true'
