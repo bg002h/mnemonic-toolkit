@@ -23,7 +23,8 @@ REPO="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 TMP="${DOC_GATE_TEST_TMP:-$(mktemp -d)}"
 rm -rf "$TMP/origin.git" "$TMP/work" "$TMP/old"
 mkdir -p "$TMP"
-PREFIX_REV=6ce7e464   # the guard the review found the counterexamples in
+PREFIX_REV=6ce7e464   # the guard the first review found I-1..I-3 in
+FIX1_REV=aafd9d27     # the round-1 guard the re-review found NEW-1 in
 WFS=(manual quickstart technical-manual manual-gui)
 
 pass=0; fail=0
@@ -47,14 +48,19 @@ guard_line() {
   grep -oE 'bash ci/doc-gate-guard\.sh .*$' <<<"$src" | head -1
 }
 
-# relevant WF EVENT REF [BEFORE] [BASE_REF] [OLD] -> prints true|false|error
+# relevant WF EVENT REF [BEFORE] [BASE_REF] [OLD-REV] -> prints true|false|n/a
+# OLD-REV runs the guard (and its path deriver) as they were at that commit,
+# with that commit's workflow arguments: the control that proves a scenario
+# reproduces the defect it guards.
 relevant() {
   local wf=$1 event=$2 ref=$3 before=${4:-} base_ref=${5:-} old=${6:-} cmd dir out ev
   dir="$W"
+  [ "$old" = old ] && old=$PREFIX_REV
   if [ -n "$old" ]; then
-    cmd=$(guard_line "$wf" "$PREFIX_REV") || { echo n/a; return; }
+    cmd=$(guard_line "$wf" "$old") || { echo n/a; return; }
     rm -rf "$TMP/old"; mkdir -p "$TMP/old/ci"
-    git -C "$W" show "$PREFIX_REV:ci/doc-gate-guard.sh" > "$TMP/old/ci/doc-gate-guard.sh" 2>/dev/null || { echo n/a; return; }
+    git -C "$W" show "$old:ci/doc-gate-guard.sh" > "$TMP/old/ci/doc-gate-guard.sh" 2>/dev/null || { echo n/a; return; }
+    git -C "$W" show "$old:ci/doc-gate-paths.py" > "$TMP/old/ci/doc-gate-paths.py" 2>/dev/null || true
     cmd=${cmd/bash ci\/doc-gate-guard.sh/bash $TMP/old/ci/doc-gate-guard.sh}
   else
     cmd=$(guard_line "$wf")
@@ -68,7 +74,7 @@ relevant() {
 }
 
 expect() { # LABEL WANT GOT   (GOT=n/a: a control whose pre-fix rev is absent)
-  if [ "$3" = n/a ]; then printf 'skip %s (pre-fix rev %s not in history)\n' "$1" "$PREFIX_REV"; return; fi
+  if [ "$3" = n/a ]; then printf 'skip %s (pre-fix rev not in history)\n' "$1"; return; fi
   if [ "$2" = "$3" ]; then ok "$1 -> $3"; else bad "$1: want $2, got ${3:-<none>}"; fi
 }
 
@@ -128,6 +134,64 @@ for wf in manual; do
   expect "S3 $wf, ci/staging push D with before=C (C unchecked)" true "$(relevant "$wf" push refs/heads/ci/staging "$C")"
 done
 expect "S3-control manual with the pre-fix guard (the defect)" false "$(relevant manual push refs/heads/ci/staging "$C" '' old)"
+
+# ---- S4 (fix1 NEW-1): the SHARED file itself is deleted ----
+# Every book that reaches docs/manual/tests/verify-examples.sh (manual owns it;
+# quickstart, technical-manual and manual-gui symlink to it) must run.
+branch_from_master s4
+g rm --quiet docs/manual/tests/verify-examples.sh
+g commit --quiet -m "s4: delete the shared verify-examples.sh"
+for wf in "${WFS[@]}"; do
+  expect "S4 $wf, the shared verify-examples.sh deleted" true "$(relevant "$wf" push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+done
+for wf in quickstart technical-manual; do
+  expect "S4-control $wf with the round-1 guard (the defect)" false "$(relevant "$wf" push refs/heads/ci/staging 0000000000000000000000000000000000000000 '' "$FIX1_REV")"
+done
+
+# ---- S5 (fix1 NEW-1): a book's symlink is RETARGETED ----
+branch_from_master s5
+ln -sfn ../../manual/tests/lint.sh "$W/docs/technical-manual/tests/verify-examples.sh"
+g add docs/technical-manual/tests/verify-examples.sh
+g commit --quiet -m "s5: retarget technical-manual's verify-examples.sh symlink"
+expect "S5 technical-manual, its verify-examples.sh symlink retargeted" true "$(relevant technical-manual push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+# ...and a directory symlink repointed in the same commit as a change to its
+# OLD target (the symlink change alone already makes it relevant; this pins
+# that the combination is not mis-handled).
+branch_from_master s5b
+ln -sfn ../manual/tests "$W/docs/quickstart/transcripts"
+echo '# touched' >> "$W/docs/manual/transcripts/22-first-bundle.cmd"
+g add docs/quickstart/transcripts docs/manual/transcripts/22-first-bundle.cmd
+g commit --quiet -m "s5b: retarget quickstart transcripts + touch the old target"
+expect "S5b quickstart, transcripts symlink retargeted" true "$(relevant quickstart push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+
+# ---- S6 (fix1 NEW-1): the symlink itself is deleted ----
+for b in quickstart technical-manual manual-gui; do
+  branch_from_master "s6-$b"
+  g rm --quiet "docs/$b/tests/verify-examples.sh"
+  g commit --quiet -m "s6: delete docs/$b/tests/verify-examples.sh (the symlink)"
+  expect "S6 $b, its verify-examples.sh symlink deleted" true "$(relevant "$b" push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+done
+
+# ---- S7: derivation reads the BASE tree too (a dependency only the base shows) ----
+branch_from_master s7
+g rm --quiet docs/manual/.cspell.json
+g commit --quiet -m "s7: delete a config quickstart imports by relative reference"
+expect "S7 quickstart, its imported ../manual/.cspell.json deleted" true "$(relevant quickstart push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+expect "S7-control quickstart with the round-1 guard (the defect)" false "$(relevant quickstart push refs/heads/ci/staging 0000000000000000000000000000000000000000 '' "$FIX1_REV")"
+
+# ---- S8 (fix1 self-check): a repo-rooted tool only the Makefile names ----
+# manual-gui's `make lint` runs $(TOOLKIT_ROOT)/docs/tools/render-mermaid-cache.py
+# (figures-cache-verify); neither its old paths: filter nor its round-1 --also
+# watched it.
+branch_from_master s8
+mkdir -p "$W/docs/tools"
+echo '# touched' >> "$W/docs/tools/render-mermaid-cache.py"
+g add --sparse docs/tools/render-mermaid-cache.py
+g commit --quiet -m "s8: touch only the mermaid cache tool"
+for wf in "${WFS[@]}"; do
+  expect "S8 $wf, only docs/tools/render-mermaid-cache.py changed" true "$(relevant "$wf" push refs/heads/ci/staging 0000000000000000000000000000000000000000)"
+done
+expect "S8-control manual-gui with the round-1 guard (the defect)" false "$(relevant manual-gui push refs/heads/ci/staging 0000000000000000000000000000000000000000 '' "$FIX1_REV")"
 
 # ---- negatives: the guard is not trivially true ----
 branch_from_master n1

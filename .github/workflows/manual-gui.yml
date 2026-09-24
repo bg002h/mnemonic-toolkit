@@ -14,7 +14,8 @@ name: manual-gui
 #
 # Watched paths: docs/manual-gui/ plus what it reaches outside itself, DERIVED
 # by ci/doc-gate-paths.py (today docs/manual/tests/, via the verify-examples.sh
-# symlink); `--also` adds this workflow and the guard. This manual
+# symlink, and docs/tools/render-mermaid-cache.py, which `make lint` runs via
+# $(TOOLKIT_ROOT)); `--also` adds this workflow and the guard. This manual
 # pins its own CLI tier and mnemonic-gui tag (pinned-upstream.toml), so the
 # toolkit's crates/ do not affect it.
 #

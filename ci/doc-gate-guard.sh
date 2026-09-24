@@ -19,8 +19,9 @@
 #
 # WHAT IS WATCHED (review I-1). Each --book directory, PLUS everything the
 # book reaches outside itself, DERIVED by ci/doc-gate-paths.py from the
-# checked-out tree: resolved symlink targets and `../` references in the
-# book's Makefiles, scripts, filters and configs, to a fixed point. E.g.
+# git trees of BOTH the diff base and HEAD (union): lexical symlink targets
+# and `../` references in the book's Makefiles, scripts, filters and configs,
+# to a fixed point -- so deleting or retargeting a shared file is still seen. E.g.
 # technical-manual watches docs/manual/tests/verify-examples.sh (its
 # tests/verify-examples.sh is a symlink to it). --also adds what no file
 # spells as a relative path: crates/, Cargo.*, the mermaid cache tool, the
@@ -118,9 +119,12 @@ case "$event" in
     ;;
 esac
 
-watched=$(python3 "$here/doc-gate-paths.py" "${books[@]}") \
+# The watched set is derived from BOTH trees and unioned (review fix1 NEW-1):
+# a file a book reaches only by symlink or reference can be DELETED or
+# retargeted in HEAD, and then only the base tree still shows the dependency.
+watched=$(python3 "$here/doc-gate-paths.py" --rev "$base" --rev HEAD "${books[@]}") \
   || decide true "could not derive the watched set"
-printf 'watched (derived from %s):\n%s\n' "${books[*]}" "$watched"
+printf 'watched (derived from %s at %s and HEAD):\n%s\n' "${books[*]}" "$base" "$watched"
 [ -n "$also" ] && printf 'also: %s\n' "$also"
 
 changed=$(git diff --no-renames --name-only "$base" HEAD 2>/dev/null) \
