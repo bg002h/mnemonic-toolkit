@@ -83,11 +83,29 @@ fi
 #     they are documented once, not per verb.
 # An EMPTY `--help` output is a FAIL, not a skip: it means the binary was not
 # invoked (e.g. `*_BIN=true`), and a gate that checked nothing must not pass.
+#
+# REVERSE direction (2026-09-23, review I-4): every flag in the FIRST COLUMN of
+# a flag-table row (`| `--flag ...` | ... |`) inside a verb's section must be
+# defined by that verb's `--help` on the binary the lint runs (the CI pin), or
+# be one of the binary's global options. A section shared by several verbs
+# (`mnemonic seed-xor` for split + combine) accepts the union of their flags.
+# Without this, a flag a release removes or renames stays documented and green.
+#
+# The ONE exemption is a row documenting a flag NEWER than the pinned release.
+# It must carry the literal marker
+#       (unreleased: <cli> after <X.Y.Z>)
+# e.g. `(unreleased: mk-cli after 0.13.0)`, where <cli> is the binary's crate
+# (mnemonic-toolkit / md-cli / ms-cli / mk-cli) and <X.Y.Z> is EXACTLY the
+# version the pinned binary reports. The marker exempts that row only, every
+# use is printed and counted, and it FAILS when stale: a version that no longer
+# matches the pin (the pin moved -- re-check the row), or a flag the pinned
+# binary now defines (the release shipped -- drop the marker).
 step "4/6 flag-coverage"
 LIST="$TESTS_DIR/cli-subcommands.list"
 CLI_REF_DIR="$SRC_DIR/40-cli-reference"
 
-# section_of CHAPTER HEADING-TOKEN -> prints the section body (heading line
+# section_of CHAPTER HEADING-TOKEN -> prints `@@START <line>` (the heading's
+# line number, which keys the section) and then the section body (heading line
 # excluded); empty output + exit 1 when no such heading exists.
 section_of() {
   awk -v tok="$2" '
@@ -95,12 +113,15 @@ section_of() {
     /^```/ { fence = !fence }
     !fence && /^#+ / {
       if (inside && level($0) <= lvl) { exit }
-      if (!inside && index($0, "`" tok "`") > 0) { inside = 1; lvl = level($0); found = 1; next }
+      if (!inside && index($0, "`" tok "`") > 0) { inside = 1; lvl = level($0); found = 1; print "@@START " NR; next }
     }
     inside { print }
     END { if (!found) exit 1 }
   ' "$1"
 }
+
+declare -A SEC_FLAGS=() SEC_BODY=() SEC_BIN=() SEC_LABEL=() PINNED=()
+crate_of() { case "$1" in mnemonic) echo mnemonic-toolkit ;; md) echo md-cli ;; ms) echo ms-cli ;; mk) echo mk-cli ;; esac; }
 
 if [ ! -f "$LIST" ]; then
   err "$LIST missing"
@@ -123,6 +144,8 @@ else
     if [ -z "${GLOBALS[$bin]+x}" ]; then
       # shellcheck disable=SC2086
       GLOBALS[$bin]=$(eval $binv --help 2>&1 | sed -n '/^Options:/,$p' | grep -oE -- '^ +(-[a-zA-Z], )?--[a-z][a-z0-9-]+' | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
+      # shellcheck disable=SC2086
+      PINNED[$bin]=$(eval $binv --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
     fi
     # shellcheck disable=SC2086
     help=$(eval $binv $sub --help 2>&1 || true)
@@ -137,10 +160,16 @@ else
         continue
       fi
     fi
+    key="$chapter:$(head -1 <<<"$section" | cut -d' ' -f2)"
+    section=$(tail -n +2 <<<"$section")
     # DEFINED options only — the lines clap indents under Options:, not every
     # `--word` in the help prose (a verb's help that mentions another verb's
     # `--json` in passing does not give this verb a `--json`).
     flags=$(printf '%s\n' "$help" | grep -oE -- '^ +(-[a-zA-Z], )?--[a-z][a-z0-9-]+' | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
+    SEC_FLAGS[$key]+="$flags"$'\n'
+    SEC_BODY[$key]="$section"
+    SEC_BIN[$key]="$bin"
+    SEC_LABEL[$key]+="${SEC_LABEL[$key]:+, }$bin $sub"
     while read -r flag; do
       [ -z "$flag" ] && continue
       case "$flag" in --help | --version) continue ;; esac
@@ -162,6 +191,36 @@ else
       fi
     done <<<"$flags"
   done <"$LIST"
+
+  # Reverse direction: documented (first-column) flags must exist.
+  exempt=0
+  for key in "${!SEC_BODY[@]}"; do
+    bin="${SEC_BIN[$key]}"; chap=$(basename "${key%%:*}")
+    known=$(printf '%s\n%s\n--help\n--version\n' "${SEC_FLAGS[$key]}" "${GLOBALS[$bin]}")
+    while IFS= read -r row; do
+      cell=$(cut -d'|' -f2 <<<"$row")
+      marker=$(grep -oE '\(unreleased: [a-z-]+ after [0-9]+\.[0-9]+\.[0-9]+\)' <<<"$row" | head -1 || true)
+      while read -r flag; do
+        [ -z "$flag" ] && continue
+        if grep -qxF -- "$flag" <<<"$known"; then
+          [ -n "$marker" ] && err "stale marker in $chap (${SEC_LABEL[$key]}): $flag is defined by the pinned $(crate_of "$bin") ${PINNED[$bin]}; drop '$marker'"
+          continue
+        fi
+        if [ -n "$marker" ]; then
+          want="(unreleased: $(crate_of "$bin") after ${PINNED[$bin]})"
+          if [ "$marker" = "$want" ]; then
+            printf '[lint] exempt: %s in %s (%s) %s\n' "$flag" "$chap" "${SEC_LABEL[$key]}" "$marker"
+            exempt=$((exempt + 1))
+          else
+            err "marker '$marker' on $flag in $chap (${SEC_LABEL[$key]}) does not name the pinned release; expected '$want'"
+          fi
+          continue
+        fi
+        err "flag $flag is documented for \`${SEC_LABEL[$key]}\` in $chap but the pinned binary does not define it (no '(unreleased: $(crate_of "$bin") after ${PINNED[$bin]})' marker on the row)"
+      done < <(grep -oE -- '--[a-z][a-z0-9-]+' <<<"$cell" | sort -u)
+    done < <(grep -E '^\|[[:space:]]*`' <<<"${SEC_BODY[$key]}" || true)
+  done
+  printf '[lint] flag-coverage: %d row exemption(s) for unreleased flags\n' "$exempt"
 fi
 
 # 5. glossary-coverage
