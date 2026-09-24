@@ -60,38 +60,105 @@ else
 fi
 
 # 4. flag-coverage
+#
+# SECTION-scoped (2026-09-23). Every `<bin> <sub>` in cli-subcommands.list
+# must have a SECTION in its chapter — a heading carrying `` `<bin> <sub>` ``
+# (or, for a nested verb such as `mnemonic seed-xor split`, the parent's
+# `` `<bin> <parent>` `` heading) — and every flag in `<bin> <sub> --help`
+# must appear INSIDE that section, i.e. between the heading and the next
+# heading of the same or a higher level.
+#
+# Why not the whole chapter any more: the chapter-wide grep this replaced
+# passed a flag documented under ANY verb of the same binary, so `ms decode
+# --in` counted as documented because `ms hashlock --in` was, and a verb with
+# no section at all passed as long as its flags appeared elsewhere. Measured
+# on the day of the change: 108 flag/verb pairs were undocumented in their own
+# section while the chapter-wide check was green, and `md compose` /
+# `md shape-key` had no section at all.
+#
+# Exemptions, derived from the binary rather than listed by hand:
+#   * `--help` / `--version` (every verb has them);
+#   * the binary's GLOBAL options — the flags `<bin> --help` itself lists —
+#     which must still appear somewhere in the chapter (the old rule), since
+#     they are documented once, not per verb.
+# An EMPTY `--help` output is a FAIL, not a skip: it means the binary was not
+# invoked (e.g. `*_BIN=true`), and a gate that checked nothing must not pass.
 step "4/6 flag-coverage"
 LIST="$TESTS_DIR/cli-subcommands.list"
 CLI_REF_DIR="$SRC_DIR/40-cli-reference"
+
+# section_of CHAPTER HEADING-TOKEN -> prints the section body (heading line
+# excluded); empty output + exit 1 when no such heading exists.
+section_of() {
+  awk -v tok="$2" '
+    function level(l) { match(l, /^#+/); return RLENGTH }
+    /^```/ { fence = !fence }
+    !fence && /^#+ / {
+      if (inside && level($0) <= lvl) { exit }
+      if (!inside && index($0, "`" tok "`") > 0) { inside = 1; lvl = level($0); found = 1; next }
+    }
+    inside { print }
+    END { if (!found) exit 1 }
+  ' "$1"
+}
+
 if [ ! -f "$LIST" ]; then
   err "$LIST missing"
 else
+  declare -A GLOBALS=()
   while IFS= read -r line; do
     case "$line" in '' | '#'*) continue ;; esac
     bin="${line%% *}"; sub="${line#* }"
     case "$bin" in
-      mnemonic)   cmd="$MNEMONIC_BIN $sub --help" ; chapter="$CLI_REF_DIR/41-mnemonic.md" ;;
-      md)         cmd="$MD_BIN $sub --help"       ; chapter="$CLI_REF_DIR/42-md.md" ;;
-      ms)         cmd="$MS_BIN $sub --help"       ; chapter="$CLI_REF_DIR/43-ms.md" ;;
-      mk|mk-cli)  cmd="$MK_BIN $sub --help"       ; chapter="$CLI_REF_DIR/44-mk-cli.md" ;;
+      mnemonic)   binv="$MNEMONIC_BIN" ; chapter="$CLI_REF_DIR/41-mnemonic.md" ;;
+      md)         binv="$MD_BIN"       ; chapter="$CLI_REF_DIR/42-md.md" ;;
+      ms)         binv="$MS_BIN"       ; chapter="$CLI_REF_DIR/43-ms.md" ;;
+      mk|mk-cli)  binv="$MK_BIN"       ; chapter="$CLI_REF_DIR/44-mk-cli.md" ;;
       *) err "unknown binary in cli-subcommands.list: $bin"; continue ;;
     esac
     if [ ! -f "$chapter" ]; then
-      warn "chapter $chapter missing; skipping flag-coverage for $bin $sub"
+      err "chapter $chapter missing for $bin $sub"
       continue
+    fi
+    if [ -z "${GLOBALS[$bin]+x}" ]; then
+      # shellcheck disable=SC2086
+      GLOBALS[$bin]=$(eval $binv --help 2>&1 | sed -n '/^Options:/,$p' | grep -oE -- '^ +(-[a-zA-Z], )?--[a-z][a-z0-9-]+' | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
     fi
     # shellcheck disable=SC2086
-    flags=$(eval $cmd 2>&1 | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
-    if [ -z "$flags" ]; then
-      warn "no flags parsed from \`$cmd\`; skipping"
+    help=$(eval $binv $sub --help 2>&1 || true)
+    if [ -z "$help" ]; then
+      err "\`$bin $sub --help\` printed nothing (is ${bin}'s *_BIN a real binary?)"
       continue
     fi
+    if ! section=$(section_of "$chapter" "$bin $sub"); then
+      parent="${sub%% *}"
+      if [ "$parent" = "$sub" ] || ! section=$(section_of "$chapter" "$bin $parent"); then
+        err "\`$bin $sub\` has no section in $(basename "$chapter") (no heading carrying \`$bin $sub\`)"
+        continue
+      fi
+    fi
+    # DEFINED options only — the lines clap indents under Options:, not every
+    # `--word` in the help prose (a verb's help that mentions another verb's
+    # `--json` in passing does not give this verb a `--json`).
+    flags=$(printf '%s\n' "$help" | grep -oE -- '^ +(-[a-zA-Z], )?--[a-z][a-z0-9-]+' | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
     while read -r flag; do
-      # `--` end-of-options marker prevents grep from interpreting the
-      # flag string itself as an option to grep (which causes grep to
-      # spam its --help output and exit non-zero).
-      if ! grep -qF -- "$flag" "$chapter"; then
-        err "flag $flag for \`$bin $sub\` is not documented in $(basename "$chapter")"
+      [ -z "$flag" ] && continue
+      case "$flag" in --help | --version) continue ;; esac
+      # Here-strings, not `printf | grep -q`: under pipefail, grep -q exiting on
+      # the first match SIGPIPEs the printf and the pipeline reports FAILURE,
+      # so a documented flag would read as missing (measured on the first run).
+      if grep -qxF -- "$flag" <<<"${GLOBALS[$bin]}"; then
+        grep -qE -- "${flag}([^a-z0-9-]|\$)" "$chapter" \
+          || err "global flag $flag of \`$bin\` is not documented anywhere in $(basename "$chapter")"
+        continue
+      fi
+      # `--` end-of-options marker keeps grep from reading the flag as its own option.
+      # Whole-flag match: `--unspendable` must not be satisfied by
+      # `--unspendable-key` (the chapter-wide substring grep this replaced
+      # passed `md compose --unspendable` on exactly that). Flags are
+      # [a-z0-9-] only, so they are safe to splice into an ERE.
+      if ! grep -qE -- "${flag}([^a-z0-9-]|\$)" <<<"$section"; then
+        err "flag $flag for \`$bin $sub\` is not documented in its section of $(basename "$chapter")"
       fi
     done <<<"$flags"
   done <"$LIST"

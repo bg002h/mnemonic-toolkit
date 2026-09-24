@@ -171,3 +171,12 @@ flag-coverage, glossary-coverage, index bidirectional. The full
 toolchain may not be installed locally; missing tools are warned
 and skipped, but **CI runs all six** and a missing tool is not an
 excuse on a PR.
+
+flag-coverage is **section-scoped**: every `<bin> <sub>` in
+`tests/cli-subcommands.list` needs a heading carrying `` `<bin> <sub>` ``
+in its `40-cli-reference/` chapter (a nested verb may use its parent's
+heading), and every option `<bin> <sub> --help` defines must appear,
+as a whole flag, between that heading and the next one of the same or a
+higher level. The binary's global options (those `<bin> --help` lists)
+need only appear somewhere in the chapter. A new subcommand goes into
+the list first — the lint then fails until its section exists.
