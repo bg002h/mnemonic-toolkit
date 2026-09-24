@@ -1,25 +1,53 @@
 name: manual-gui
 
-# `paths` filters apply only to branch pushes / PRs; tag pushes
-# matching `manual-gui-v*` always trigger the workflow regardless of
-# which files are in the tag's commit. This is intentional — the
-# release-asset upload + gh-pages publish steps must run on every
-# tag push.
+# REQUIRED-CHECK SHAPE (2026-09-23). No `paths:` filter on either trigger: a
+# path-filtered workflow never starts on a commit outside its paths, and a
+# required context that never appears blocks that commit forever. Instead the
+# `changes` job runs ci/doc-gate-guard.sh (fail-safe: it errs only toward
+# running), the four gate jobs run only when it says a gated path changed, and
+# the final `manual-gui` job ALWAYS runs and reports ONE context that is safe
+# to require: it passes iff `changes` succeeded and every gate job either
+# succeeded or was skipped BECAUSE nothing gated changed. A gate job that
+# failed, was cancelled, or was skipped for any other reason fails it.
+# (examples.yml's always-run pattern, extended to `push` so the context also
+# appears on the `ci/**` staging push of a commit that touches no docs.)
+#
+# Watched paths: docs/manual-gui/ plus what it reaches outside itself, DERIVED
+# by ci/doc-gate-paths.py (today docs/manual/tests/, via the verify-examples.sh
+# symlink, and docs/tools/render-mermaid-cache.py, which `make lint` runs via
+# $(TOOLKIT_ROOT)); `--also` adds this workflow and the guard. This manual
+# pins its own CLI tier and mnemonic-gui tag (pinned-upstream.toml), so the
+# toolkit's crates/ do not affect it.
+#
+# Tag pushes matching `manual-gui-v*` always run the full gate (the guard
+# answers `relevant=true` for every tag); the release job needs it.
 
 on:
   push:
-    branches: [main, master]
-    paths:
-      - 'docs/manual-gui/**'
-      - '.github/workflows/manual-gui.yml'
+    branches: [main, master, 'ci/**']
     tags:
       - 'manual-gui-v*'
   pull_request:
-    paths:
-      - 'docs/manual-gui/**'
-      - '.github/workflows/manual-gui.yml'
+  workflow_dispatch:
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 0 — changes: does this push / PR touch a gated path?
+  # ---------------------------------------------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.guard.outputs.relevant }}
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect relevant changes
+        id: guard
+        run: bash ci/doc-gate-guard.sh --book docs/manual-gui --also '^(\.github/workflows/manual-gui\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
+
   # ---------------------------------------------------------------------------
   # Job 1 — lint
   #
@@ -37,6 +65,8 @@ jobs:
   # No extra clone needed — one pinned checkout anchors all three corpora.
   # ---------------------------------------------------------------------------
   lint:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout toolkit
@@ -135,6 +165,8 @@ jobs:
   # fails in CI).
   # ---------------------------------------------------------------------------
   verify-examples:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout toolkit
@@ -214,6 +246,8 @@ jobs:
   # verify-examples-gui` invocation; RUSTUP_TOOLCHAIN > rust-toolchain.toml).
   # ---------------------------------------------------------------------------
   verify-examples-gui:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout toolkit
@@ -273,6 +307,8 @@ jobs:
   # consumed by the release job below).
   # ---------------------------------------------------------------------------
   build:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout toolkit
@@ -360,6 +396,34 @@ jobs:
         with:
           name: m-format-gui-manual-html
           path: docs/manual-gui/build/m-format-gui-manual.html
+
+  # ---------------------------------------------------------------------------
+  # Job 4 — manual-gui: the ONE context to require (always runs)
+  # ---------------------------------------------------------------------------
+  manual-gui:
+    needs: [changes, lint, verify-examples, verify-examples-gui, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All gate jobs passed, or were skipped because nothing gated changed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          RELEVANT: ${{ needs.changes.outputs.relevant }}
+          LINT: ${{ needs.lint.result }}
+          VERIFY: ${{ needs.verify-examples.result }}
+          VERIFY_GUI: ${{ needs.verify-examples-gui.result }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          echo "changes=$CHANGES relevant=$RELEVANT lint=$LINT verify-examples=$VERIFY verify-examples-gui=$VERIFY_GUI build=$BUILD"
+          [ "$CHANGES" = success ] || { echo "::error::the changes guard did not succeed ($CHANGES)"; exit 1; }
+          for r in "$LINT" "$VERIFY" "$VERIFY_GUI" "$BUILD"; do
+            if [ "$RELEVANT" = true ]; then
+              [ "$r" = success ] || { echo "::error::a gate job did not succeed ($r)"; exit 1; }
+            else
+              [ "$r" = skipped ] || { echo "::error::nothing gated changed, yet a gate job reported $r"; exit 1; }
+            fi
+          done
+          echo "manual-gui gate: OK"
 
   # ---------------------------------------------------------------------------
   # Job 3 — release  (tag push only)

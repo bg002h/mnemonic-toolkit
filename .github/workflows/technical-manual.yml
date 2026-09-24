@@ -8,44 +8,48 @@ name: technical-manual
 # present (toolkit) repo; G2 for any ref whose file is unresolvable here —
 # codec files in absent siblings — skip gracefully in bare CI (codec-G2 is
 # enforced only by local `make lint` with all siblings present). Toolkit-G2 is
-# airtight here: the trigger also fires on crates/mnemonic-toolkit/{src,tests}
+# airtight here: the guard (below) also runs the gate on any crates/** change
 # so a toolkit-symbol rename re-runs symbol-ref-check, and a non-authoritative
 # chapter must fully-qualify toolkit refs (the `unqualified-toolkit` gate) so
 # they FAIL-on-rename rather than skip.
 #
-# `paths` filters apply only to branch pushes / PRs; tag pushes matching
-# `tech-manual-v*` always trigger the workflow regardless of which files are in
-# the tag's commit. This is intentional — the release-asset upload step needs to
-# run on every tag push. Mirrors manual.yml's manual-v* PDF release: the
+# Tag pushes matching `tech-manual-v*` always run the full gate (the guard
+# answers `relevant=true` for every tag) — the release-asset upload step needs
+# to run on every tag push. Mirrors manual.yml's manual-v* PDF release: the
 # frontmatter (src/00-frontmatter.md) and release-history appendix promise the
 # rendered build/m-format-technical-manual.pdf ships as a GitHub release asset
 # under the tech-manual-vX.Y.Z tag.
 
+# REQUIRED-CHECK SHAPE (2026-09-23). No `paths:` filter on either trigger, so
+# this workflow's single job reports its context on EVERY push (master, main,
+# and the `ci/**` staging branches scripts/push-via-staging.sh uses) and on
+# EVERY pull request -- a path-filtered workflow never starts on a commit
+# outside its paths, and a required context that never appears blocks that
+# commit forever. The path scope moved into the first step,
+# `ci/doc-gate-guard.sh`, which decides whether the heavy steps run; an
+# irrelevant commit gets a fast green. This is examples.yml's always-run PR
+# pattern, extended to `push` so the context also appears on a code-only
+# staging push. Tag pushes always run the full gate.
+#
+# Watched paths: docs/technical-manual/ plus what it reaches outside itself,
+# DERIVED by ci/doc-gate-paths.py -- today docs/manual/tests/verify-examples.sh
+# and docs/manual/pandoc/filters/include-transcript.lua, both symlinked in.
+# `--also` adds the mermaid cache tool, this workflow, the guard, and crates/ +
+# Cargo.{toml,lock} -- wider than the old
+# crates/mnemonic-toolkit/{src,tests} filter, because verify-examples replays
+# transcripts against the mnemonic built from this tree and the cargo-example
+# crate resolves against the workspace lockfile.
+
 on:
   push:
-    branches: [main, master]
-    paths:
-      - 'docs/technical-manual/**'
-      - 'docs/tools/render-mermaid-cache.py'
-      - '.github/workflows/technical-manual.yml'
-      # Toolkit source: a rename of a cited symbol breaks a `file.rs::symbol`
-      # citation; fire so symbol-ref-check re-runs (toolkit-G2 in bare CI).
-      - 'crates/mnemonic-toolkit/src/**'
-      - 'crates/mnemonic-toolkit/tests/**'
+    branches: [main, master, 'ci/**']
     tags:
       - 'tech-manual-v*'
   pull_request:
-    paths:
-      - 'docs/technical-manual/**'
-      - 'docs/tools/render-mermaid-cache.py'
-      - '.github/workflows/technical-manual.yml'
-      # Toolkit source: a rename of a cited symbol breaks a `file.rs::symbol`
-      # citation; fire so symbol-ref-check re-runs (toolkit-G2 in bare CI).
-      - 'crates/mnemonic-toolkit/src/**'
-      - 'crates/mnemonic-toolkit/tests/**'
+  workflow_dispatch:
 
 jobs:
-  lint:
+  technical-manual:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -60,23 +64,35 @@ jobs:
         # resolves to the checkout. A `path:` override would break this.
         uses: actions/checkout@v6
 
+      - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
+        id: guard
+        # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
+        # --book + --also are this gate's whole path scope -- there is no
+        # `paths:` filter on the triggers any more, so the context reports on
+        # every push and PR and can be a REQUIRED check.
+        run: bash ci/doc-gate-guard.sh --book docs/technical-manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
+
       - name: Install make
+        if: steps.guard.outputs.relevant == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends make
 
       - name: Set up Node.js
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: '22'
 
       - name: Install npm lint tools
+        if: steps.guard.outputs.relevant == 'true'
         run: |
           npm install -g \
             markdownlint-cli2@^0.13 \
             cspell@^8
 
       - name: Install lychee
+        if: steps.guard.outputs.relevant == 'true'
         run: |
           LARCH=x86_64-unknown-linux-gnu
           curl -fsSL "https://github.com/lycheeverse/lychee/releases/download/lychee-v0.24.2/lychee-${LARCH}.tar.gz" \
@@ -84,6 +100,7 @@ jobs:
           sudo chmod +x /usr/local/bin/lychee
 
       - name: Lint technical manual
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/technical-manual
         # *_BIN=true: the `make lint` path never INVOKES a binary —
         # api-surface-coverage reads lib.rs/format.rs source directly and
@@ -104,23 +121,28 @@ jobs:
       # above stays binary-independent; this adds the binary-dependent
       # `verify-examples` leg the old workflow stubbed out with `=true`.
       - name: Install mk-cli
+        if: steps.guard.outputs.relevant == 'true'
         # Package-name selector (multi-binary workspace; --bin refuses
         # disambig). Current-release tier pin — mirrors manual.yml:79.
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 mk-cli
 
       - name: Install md-cli
+        if: steps.guard.outputs.relevant == 'true'
         # `--features cli-compiler` matches scripts/install.sh's component pin
         # (the technical-manual md1 transcripts exercise the compiler path).
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.19.0 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.2 md-cli --features cli-compiler
 
       - name: Install ms-cli
+        if: steps.guard.outputs.relevant == 'true'
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.19.0 ms-cli
 
       - name: Build mnemonic binary (debug)
+        if: steps.guard.outputs.relevant == 'true'
         # Debug binary is sufficient for transcript-replay byte comparison.
         run: cargo build --bin mnemonic
 
       - name: Pre-build cargo-example targets (md-codec-examples)
+        if: steps.guard.outputs.relevant == 'true'
         # The 4 api-roundtrip transcripts run `cargo run --manifest-path
         # $EXAMPLES_DIR/Cargo.toml --example …`; pre-building keeps the first
         # replay from emitting compile chatter into the captured output.
@@ -128,6 +150,7 @@ jobs:
         run: cargo build --examples
 
       - name: Verify technical-manual examples (real current-tier bins)
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/technical-manual
         # MD/MS/MK resolve via $PATH to the cargo-installed ~/.cargo/bin
         # binaries above (no md→mkdir alias in CI). EXAMPLES_DIR is absolute so
@@ -146,6 +169,7 @@ jobs:
       # (push / PR / tag); only the two release steps are tag-gated. The frontmatter
       # promises build/m-format-technical-manual.pdf ships under tech-manual-vX.Y.Z.
       - name: Install pandoc + texlive
+        if: steps.guard.outputs.relevant == 'true'
         # No chromium / mermaid-filter: the build runs MERMAID_FILTER=skip
         # (the Makefile default) and consumes the checked-in figures/cache/.
         run: |
@@ -161,32 +185,38 @@ jobs:
             make
 
       - name: Build PDF
+        if: steps.guard.outputs.relevant == 'true'
         # MERMAID_FILTER=skip is the Makefile default; explicit here for
         # clarity. The build consumes the checked-in figures/cache/.
         working-directory: docs/technical-manual
         run: make pdf MERMAID_FILTER=skip
 
       - name: Verify PDF
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/technical-manual
         run: test -f build/m-format-technical-manual.pdf && ls -lh build/m-format-technical-manual.pdf
 
       - name: Build HTML
+        if: steps.guard.outputs.relevant == 'true'
         # Self-contained pandoc --standalone render (embedded CSS); opens in
         # any browser with no server — the no-PDF-viewer release asset.
         working-directory: docs/technical-manual
         run: make html MERMAID_FILTER=skip
 
       - name: Verify HTML
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/technical-manual
         run: test -f build/m-format-technical-manual.html && ls -lh build/m-format-technical-manual.html
 
       - name: Upload PDF as workflow artifact
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: m-format-technical-manual-pdf
           path: docs/technical-manual/build/m-format-technical-manual.pdf
 
       - name: Upload HTML as workflow artifact
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: m-format-technical-manual-html
