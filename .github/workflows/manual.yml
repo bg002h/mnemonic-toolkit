@@ -1,27 +1,31 @@
 name: manual
 
-# `paths` filters apply only to branch pushes / PRs; tag pushes
-# matching `manual-v*` always trigger the workflow regardless of
-# which files are in the tag's commit. This is intentional — the
-# release-asset upload step needs to run on every tag push.
+# REQUIRED-CHECK SHAPE (2026-09-23). No `paths:` filter on either trigger, so
+# this workflow's single job reports its context on EVERY push (master, main,
+# and the `ci/**` staging branches scripts/push-via-staging.sh uses) and on
+# EVERY pull request -- a path-filtered workflow never starts on a commit
+# outside its paths, and a required context that never appears blocks that
+# commit forever. The path scope moved into the first step,
+# `ci/doc-gate-guard.sh`, which decides whether the heavy steps run; an
+# irrelevant commit gets a fast green. This is examples.yml's always-run PR
+# pattern, extended to `push` so the context also appears on a code-only
+# staging push. Tag pushes always run the full gate.
+#
+# Gated paths (the guard's regex): docs/manual/**, the mermaid cache tool, this
+# workflow, the guard itself, and crates/** + Cargo.{toml,lock} -- the audit
+# replays every transcript against the mnemonic binary built from THIS tree,
+# so a code change can drift a golden without touching docs/.
 
 on:
   push:
-    branches: [main, master]
-    paths:
-      - 'docs/manual/**'
-      - 'docs/tools/render-mermaid-cache.py'
-      - '.github/workflows/manual.yml'
+    branches: [main, master, 'ci/**']
     tags:
       - 'manual-v*'
   pull_request:
-    paths:
-      - 'docs/manual/**'
-      - 'docs/tools/render-mermaid-cache.py'
-      - '.github/workflows/manual.yml'
+  workflow_dispatch:
 
 jobs:
-  build:
+  manual:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,7 +37,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
+        id: guard
+        # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
+        # The regex is this gate's whole path scope -- there is no `paths:`
+        # filter on the triggers any more, so the context reports on every
+        # push and PR and can be a REQUIRED check.
+        run: bash ci/doc-gate-guard.sh '^(docs/manual/|docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-guard\.sh$|crates/|Cargo\.(toml|lock)$)'
+
       - name: Install pandoc + texlive
+        if: steps.guard.outputs.relevant == 'true'
         # No chromium (and no mermaid-filter / mermaid-cli below): the
         # build runs MERMAID_FILTER=skip and consumes the checked-in
         # figures/cache/ PDFs. See `ci-chromium-drop` (closed) in
@@ -51,11 +64,13 @@ jobs:
             make
 
       - name: Set up Node.js
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: '22'
 
       - name: Install npm tools (lints only)
+        if: steps.guard.outputs.relevant == 'true'
         # mermaid-filter / mermaid-cli intentionally absent — the cache
         # is checked into git; CI never regenerates it. Contributors who
         # need to regen the cache install mmdc + chromium locally.
@@ -65,6 +80,7 @@ jobs:
             cspell@^8
 
       - name: Install lychee
+        if: steps.guard.outputs.relevant == 'true'
         run: |
           LARCH=x86_64-unknown-linux-gnu
           curl -fsSL "https://github.com/lycheeverse/lychee/releases/download/lychee-v0.24.2/lychee-${LARCH}.tar.gz" \
@@ -72,6 +88,7 @@ jobs:
           sudo chmod +x /usr/local/bin/lychee
 
       - name: Install mk-cli
+        if: steps.guard.outputs.relevant == 'true'
         # Use package-name selector (`mk-cli`) instead of `--bin mk`: the
         # mnemonic-key workspace ships multiple binaries (mk-codec's
         # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
@@ -79,6 +96,7 @@ jobs:
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 mk-cli
 
       - name: Install md-cli
+        if: steps.guard.outputs.relevant == 'true'
         # Mirrors the mk-cli install pattern above. Use package-name
         # selector (`md-cli`) instead of `--bin md`: the descriptor-mnemonic
         # workspace ships multiple binaries. The `--features cli-compiler`
@@ -86,16 +104,19 @@ jobs:
         run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.2 md-cli --features cli-compiler
 
       - name: Install ms-cli
+        if: steps.guard.outputs.relevant == 'true'
         # Mirrors the mk-cli + md-cli install patterns above.
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.19.0 ms-cli
 
       - name: Build mnemonic binary (debug)
+        if: steps.guard.outputs.relevant == 'true'
         # Debug binary is sufficient for transcript-replay byte-comparison.
         # Behavior under test is identical between debug/release modulo
         # panic-handler verbosity; mnemonic never panics in normal flow.
         run: cargo build --bin mnemonic
 
       - name: Audit manual (lint + verify-examples with real mnemonic binary)
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/manual
         # All flag values below are constants or controlled built-ins
         # ($GITHUB_WORKSPACE); no untrusted github.event.* fields per
@@ -109,16 +130,19 @@ jobs:
             FIXTURES_DIR="$GITHUB_WORKSPACE/crates/mnemonic-toolkit/tests/fixtures/wallet_import"
 
       - name: Build PDF
+        if: steps.guard.outputs.relevant == 'true'
         # MERMAID_FILTER=skip is the Makefile default; explicit here for
         # clarity. The build consumes the checked-in figures/cache/.
         working-directory: docs/manual
         run: make pdf MERMAID_FILTER=skip
 
       - name: Verify PDF
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/manual
         run: test -f build/m-format-manual.pdf && ls -lh build/m-format-manual.pdf
 
       - name: Build HTML
+        if: steps.guard.outputs.relevant == 'true'
         # Self-contained pandoc --standalone render (embedded CSS); opens in
         # any browser with no server — the no-PDF-viewer release asset.
         # `make audit` above already builds this HTML (anchor-check consumes
@@ -129,16 +153,19 @@ jobs:
         run: make html MERMAID_FILTER=skip
 
       - name: Verify HTML
+        if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/manual
         run: test -f build/m-format-manual.html && ls -lh build/m-format-manual.html
 
       - name: Upload PDF as workflow artifact
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: m-format-manual-pdf
           path: docs/manual/build/m-format-manual.pdf
 
       - name: Upload HTML as workflow artifact
+        if: steps.guard.outputs.relevant == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: m-format-manual-html
