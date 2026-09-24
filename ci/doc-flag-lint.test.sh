@@ -18,11 +18,16 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
 
 run_lint() { # SRC -> lint output (exit status in $?); cwd = the book, as `make lint` runs it
-  (cd "$REPO/docs/manual" && bash "$TESTS/lint.sh" SRC_DIR="$1" TESTS_DIR="$TESTS" \
+  (cd "$REPO/docs/manual" && bash "$TMP/tests/lint.sh" SRC_DIR="$1" TESTS_DIR="$TMP/tests" \
     MNEMONIC_BIN="$MNEMONIC_BIN" MD_BIN="$MD_BIN" MS_BIN="$MS_BIN" MK_BIN="$MK_BIN" 2>&1)
 }
 
-fresh() { rm -rf "$TMP/src"; cp -r "$REPO/docs/manual/src" "$TMP/src"; echo "$TMP/src"; }
+# A fresh copy of src/ AND tests/ (so a mutation may edit cli-subcommands.list).
+fresh() {
+  rm -rf "$TMP/src" "$TMP/tests"
+  cp -r "$REPO/docs/manual/src" "$TMP/src"; cp -r "$TESTS" "$TMP/tests"
+  echo "$TMP/src"
+}
 
 mutate() { # LABEL PYTHON-EDIT EXPECTED-SUBSTRING
   local src out
@@ -32,7 +37,7 @@ import sys, re
 src, edit = sys.argv[1], sys.argv[2]
 ns = {"src": src, "re": re}
 def edit_file(rel, old, new, count=1):
-    p = f"{src}/{rel}"; s = open(p).read()
+    p = f"{src}/{rel}" if not rel.startswith("/") else rel; s = open(p).read()
     if s.count(old) < 1:
         raise SystemExit(f"mutation anchor not found in {rel}: {old[:60]!r}")
     open(p, "w").write(s.replace(old, new, count))
@@ -55,7 +60,7 @@ step4() { sed -n '/=== 4\/6 flag-coverage ===/,/=== 5\/6/p' <<<"$1"; }
 
 # baseline
 out=$(run_lint "$(fresh)")
-if ! grep -qF '[lint] FAIL' <<<"$(step4 "$out")" && grep -qF 'row exemption(s)' <<<"$out"; then
+if ! grep -qF '[lint] FAIL' <<<"$(step4 "$out")" && grep -qF 'flag exemption(s)' <<<"$out"; then
   pass=$((pass + 1)); echo "ok   baseline: unmutated manual passes flag-coverage"
 else fail=$((fail + 1)); echo "FAIL baseline: unmutated manual fails flag-coverage"; step4 "$out" | grep -F FAIL | head; fi
 
@@ -68,16 +73,36 @@ mutate "R1 reverse: a documented --no-such-flag row in md compose" \
   "flag --no-such-flag is documented for \`md compose\`"
 
 mutate "R2 reverse: an unreleased marker naming the wrong version" \
-  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0) |', '(unreleased: mk-cli after 0.12.0) |')" \
+  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0: --in)', '(unreleased: mk-cli after 0.12.0: --in)')" \
   "does not name the pinned release"
 
 mutate "R3 reverse: a stale marker on a flag the pinned binary defines" \
-  "edit_file('$CMP', '| \`--md-only\` | compose even', '| \`--md-only\` | (unreleased: md-cli after 0.20.2) compose even')" \
+  "edit_file('$CMP', '| \`--md-only\` | compose even', '| \`--md-only\` | (unreleased: md-cli after 0.20.2: --md-only) compose even')" \
   "stale marker"
 
 mutate "R4 reverse: an unreleased row with its marker removed" \
-  "edit_file('$MK', ' (unreleased: mk-cli after 0.13.0) |', ' |')" \
+  "edit_file('$MK', ' (unreleased: mk-cli after 0.13.0: --in) |', ' |')" \
   "but the pinned binary does not define it"
+
+mutate "R5 reverse (fix1 NEW-2): a fake flag added to a MARKED row's cell" \
+  "edit_file('$MK', '| \`--keys <FILE>\` |', '| \`--keys <FILE>\`, \`--bogus-forever\` |')" \
+  "flag --bogus-forever is documented for \`mk encode\`"
+
+mutate "R6 reverse (fix1 NEW-2): a marker naming a flag its row does not document" \
+  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0: --keys)', '(unreleased: mk-cli after 0.13.0: --keys, --no-such-flag)')" \
+  "names --no-such-flag, which that row does not document"
+
+mutate "R7 reverse (fix1 NEW-2): the old row-wide marker form (no flag named)" \
+  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0: --keys)', '(unreleased: mk-cli after 0.13.0)')" \
+  "names no flag"
+
+mutate "C1 completeness: md compose dropped from cli-subcommands.list" \
+  "edit_file(src + '/../tests/cli-subcommands.list', 'md compose\\n', '')" \
+  "\`md compose\` is a subcommand of the pinned binary but is missing"
+
+mutate "C2 completeness: a listed verb the binary does not have" \
+  "edit_file(src + '/../tests/cli-subcommands.list', 'md compose\\n', 'md compose\\nmd no-such-verb\\n')" \
+  "\`md no-such-verb\` is listed"
 
 mutate "F1 forward: --kind removed from the ms hashlock section" \
   "import re as _r; p=f'{src}/$MS'; s=open(p).read(); a=s.index('## \`ms hashlock\`'); b=s.index('## \`ms vectors\`'); open(p,'w').write(s[:a]+s[a:b].replace('--kind','--kxnd')+s[b:])" \

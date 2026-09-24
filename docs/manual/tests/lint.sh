@@ -93,13 +93,16 @@ fi
 #
 # The ONE exemption is a row documenting a flag NEWER than the pinned release.
 # It must carry the literal marker
-#       (unreleased: <cli> after <X.Y.Z>)
-# e.g. `(unreleased: mk-cli after 0.13.0)`, where <cli> is the binary's crate
-# (mnemonic-toolkit / md-cli / ms-cli / mk-cli) and <X.Y.Z> is EXACTLY the
-# version the pinned binary reports. The marker exempts that row only, every
-# use is printed and counted, and it FAILS when stale: a version that no longer
-# matches the pin (the pin moved -- re-check the row), or a flag the pinned
-# binary now defines (the release shipped -- drop the marker).
+#       (unreleased: <cli> after <X.Y.Z>: --flag[, --flag]...)
+# e.g. `(unreleased: mk-cli after 0.13.0: --in)`, where <cli> is the binary's
+# crate (mnemonic-toolkit / md-cli / ms-cli / mk-cli) and <X.Y.Z> is EXACTLY the
+# version the pinned binary reports. The marker exempts exactly the flags it
+# LISTS, in that row -- any other flag in the cell is linted normally (review
+# fix1 NEW-2: a row-wide marker let a second, fictitious flag ride along).
+# Every exemption is printed and counted. The marker FAILS when: it names no
+# flag; its version is not the pin (the pin moved -- re-check the row); it
+# names a flag the row does not document; or a listed flag is now defined by
+# the pinned binary (the release shipped -- drop it from the marker).
 step "4/6 flag-coverage"
 LIST="$TESTS_DIR/cli-subcommands.list"
 CLI_REF_DIR="$SRC_DIR/40-cli-reference"
@@ -123,9 +126,37 @@ section_of() {
 declare -A SEC_FLAGS=() SEC_BODY=() SEC_BIN=() SEC_LABEL=() PINNED=()
 crate_of() { case "$1" in mnemonic) echo mnemonic-toolkit ;; md) echo md-cli ;; ms) echo ms-cli ;; mk) echo mk-cli ;; esac; }
 
+# leaves BIN-NAME BIN-INVOCATION -> every leaf subcommand the binary exposes,
+# one "<name> <sub>[ <subsub>]" per line (clap `Commands:` blocks, `help` skipped).
+leaves() {
+  local name=$1 binv=$2 c s subs
+  # shellcheck disable=SC2086
+  for c in $(eval $binv --help 2>/dev/null | sed -n '/^Commands:/,/^$/p' | awk 'NR>1 && NF{print $1}' | grep -vx help); do
+    # shellcheck disable=SC2086
+    subs=$(eval $binv $c --help 2>/dev/null | sed -n '/^Commands:/,/^$/p' | awk 'NR>1 && NF{print $1}' | grep -vx help || true)
+    if [ -n "$subs" ]; then for s in $subs; do echo "$name $c $s"; done; else echo "$name $c"; fi
+  done
+}
+
 if [ ! -f "$LIST" ]; then
   err "$LIST missing"
 else
+  # COMPLETENESS (fix1 self-check): the list is the lint's scope, so a verb
+  # missing from it is a verb nobody checks -- exactly how `md compose` went
+  # undocumented (F-647). Every leaf subcommand each pinned binary exposes must
+  # be listed, and every listed verb must exist.
+  listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | sort -u)
+  exposed_verbs=$( { leaves mnemonic "$MNEMONIC_BIN"; leaves md "$MD_BIN"; leaves ms "$MS_BIN"; leaves mk "$MK_BIN"; } | sort -u)
+  if [ -z "$exposed_verbs" ]; then
+    err "no subcommands enumerated from the binaries (are the *_BIN real binaries?)"
+  else
+    while IFS= read -r v; do
+      [ -n "$v" ] && ! grep -qxF -- "$v" <<<"$listed_verbs" && err "\`$v\` is a subcommand of the pinned binary but is missing from $(basename "$LIST")"
+    done <<<"$exposed_verbs"
+    while IFS= read -r v; do
+      [ -n "$v" ] && ! grep -qxF -- "$v" <<<"$exposed_verbs" && err "\`$v\` is listed in $(basename "$LIST") but the pinned binary has no such subcommand"
+    done <<<"$listed_verbs"
+  fi
   declare -A GLOBALS=()
   while IFS= read -r line; do
     case "$line" in '' | '#'*) continue ;; esac
@@ -153,8 +184,14 @@ else
       err "\`$bin $sub --help\` printed nothing (is ${bin}'s *_BIN a real binary?)"
       continue
     fi
-    if ! section=$(section_of "$chapter" "$bin $sub"); then
-      parent="${sub%% *}"
+    # Lookup order, narrowest first: `<bin> <sub>`; for a nested verb, a
+    # subsection headed `<sub>` (e.g. "### `seed-xor split` flags"); only then
+    # the parent's `<bin> <parent>` section. A section shared by sibling verbs
+    # accepts the union of their flags in the reverse check, so the narrower
+    # section is always preferred; the shared sections left are printed below.
+    parent="${sub%% *}"
+    if ! section=$(section_of "$chapter" "$bin $sub") \
+       && { [ "$parent" = "$sub" ] || ! section=$(section_of "$chapter" "$sub"); }; then
       if [ "$parent" = "$sub" ] || ! section=$(section_of "$chapter" "$bin $parent"); then
         err "\`$bin $sub\` has no section in $(basename "$chapter") (no heading carrying \`$bin $sub\`)"
         continue
@@ -193,34 +230,59 @@ else
   done <"$LIST"
 
   # Reverse direction: documented (first-column) flags must exist.
+  # The exemption is per FLAG, never per row (review fix1 NEW-2): the marker
+  # lists the exact flags it exempts, `(unreleased: <crate> after <X.Y.Z>:
+  # --a, --b)`, and every OTHER flag in the cell is linted normally.
   exempt=0
+  mre='\(unreleased: [a-z-]+ after [0-9]+\.[0-9]+\.[0-9]+(: --[a-z][a-z0-9-]+(, --[a-z][a-z0-9-]+)*)?\)'
   for key in "${!SEC_BODY[@]}"; do
     bin="${SEC_BIN[$key]}"; chap=$(basename "${key%%:*}")
+    label="${SEC_LABEL[$key]}"
     known=$(printf '%s\n%s\n--help\n--version\n' "${SEC_FLAGS[$key]}" "${GLOBALS[$bin]}")
+    want_head="(unreleased: $(crate_of "$bin") after ${PINNED[$bin]}:"
     while IFS= read -r row; do
       cell=$(cut -d'|' -f2 <<<"$row")
-      marker=$(grep -oE '\(unreleased: [a-z-]+ after [0-9]+\.[0-9]+\.[0-9]+\)' <<<"$row" | head -1 || true)
-      while read -r flag; do
+      cell_flags=$(grep -oE -- '--[a-z][a-z0-9-]+' <<<"$cell" | sort -u || true)
+      markers=$(grep -oE "$mre" <<<"$row" || true)
+      listed=''
+      while IFS= read -r marker; do
+        [ -z "$marker" ] && continue
+        case "$marker" in
+          *": --"*) ;;
+          *) err "marker '$marker' in $chap ($label) names no flag; write '${want_head} --flag)'"; continue ;;
+        esac
+        if [ "${marker%%: --*}" != "${want_head%:}" ]; then
+          err "marker '$marker' in $chap ($label) does not name the pinned release; expected '${want_head} …)'"
+          continue
+        fi
+        names=$(sed -E 's/^.* after [0-9.]+: //; s/\)$//' <<<"$marker" | tr ',' '\n' | sed 's/^ *//')
+        while IFS= read -r n; do
+          [ -z "$n" ] && continue
+          grep -qxF -- "$n" <<<"$cell_flags" \
+            || err "marker '$marker' in $chap ($label) names $n, which that row does not document"
+          listed+="$n"$'\n'
+        done <<<"$names"
+      done <<<"$markers"
+      while IFS= read -r flag; do
         [ -z "$flag" ] && continue
+        in_marker=0; grep -qxF -- "$flag" <<<"$listed" && in_marker=1
         if grep -qxF -- "$flag" <<<"$known"; then
-          [ -n "$marker" ] && err "stale marker in $chap (${SEC_LABEL[$key]}): $flag is defined by the pinned $(crate_of "$bin") ${PINNED[$bin]}; drop '$marker'"
+          [ $in_marker = 1 ] && err "stale marker in $chap ($label): $flag is defined by the pinned $(crate_of "$bin") ${PINNED[$bin]}; remove it from the marker"
           continue
         fi
-        if [ -n "$marker" ]; then
-          want="(unreleased: $(crate_of "$bin") after ${PINNED[$bin]})"
-          if [ "$marker" = "$want" ]; then
-            printf '[lint] exempt: %s in %s (%s) %s\n' "$flag" "$chap" "${SEC_LABEL[$key]}" "$marker"
-            exempt=$((exempt + 1))
-          else
-            err "marker '$marker' on $flag in $chap (${SEC_LABEL[$key]}) does not name the pinned release; expected '$want'"
-          fi
+        if [ $in_marker = 1 ]; then
+          printf '[lint] exempt: %s in %s (%s), unreleased after %s %s\n' "$flag" "$chap" "$label" "$(crate_of "$bin")" "${PINNED[$bin]}"
+          exempt=$((exempt + 1))
           continue
         fi
-        err "flag $flag is documented for \`${SEC_LABEL[$key]}\` in $chap but the pinned binary does not define it (no '(unreleased: $(crate_of "$bin") after ${PINNED[$bin]})' marker on the row)"
-      done < <(grep -oE -- '--[a-z][a-z0-9-]+' <<<"$cell" | sort -u)
+        err "flag $flag is documented for \`$label\` in $chap but the pinned binary does not define it (no '${want_head} $flag)' marker naming it)"
+      done <<<"$cell_flags"
     done < <(grep -E '^\|[[:space:]]*`' <<<"${SEC_BODY[$key]}" || true)
   done
-  printf '[lint] flag-coverage: %d row exemption(s) for unreleased flags\n' "$exempt"
+  for key in "${!SEC_LABEL[@]}"; do
+    case "${SEC_LABEL[$key]}" in *", "*) printf '[lint] shared section (union of flags): %s\n' "${SEC_LABEL[$key]}" ;; esac
+  done
+  printf '[lint] flag-coverage: %d flag exemption(s) for unreleased flags\n' "$exempt"
 fi
 
 # 5. glossary-coverage
