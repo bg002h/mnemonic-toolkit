@@ -396,10 +396,24 @@ The engine then resolves the unique key→slot assignment via one of three
 3. **explicit assignment** — pin every cosigner with `--cosigner @N=` (no
    search).
 
-The engine carries an adaptive **~1-hour search-time ceiling**; if the
-realized space would exceed it the tool refuses with a printed exhaustive-
-time estimate. Override with **`--accept-search-time <duration>`** (a
-humantime duration that must be ≥ the estimate — a forced acknowledgment).
+There is **no search-time ceiling** (since v0.99.0). The scan starts at
+once; if the throughput it measures after a short warm-up projects a long
+run, it prints `searching N candidate assignment(s) — estimated T
+(measured; press Ctrl-C to stop)` on stderr and a progress line every ten
+seconds, and it ends with `scan complete in T`. You decide whether to
+wait. `--accept-search-time <duration>` is still accepted, so existing
+scripts do not fail on an unknown flag, but it changes nothing.
+
+The search runs on several threads. The best thread count is a property
+of the machine, not of its core count, so the first search **measures**
+it (a one-off probe of about half a second per rung, reported on stderr
+as `measuring search threads on this machine …`) and records the winner
+as `threads` under `[search]` in `~/.mnemonic/mt.conf`; later searches
+reuse it. **`--recalibrate-threads`** ignores the recorded value,
+measures again and overwrites it — use it after a hardware change, or
+when the recorded value looks wrong. If the file cannot be written the
+tool uses the measurement anyway and measures again next time; a
+tuning file never stops a recovery.
 
 **Funds-safety floors (all refuse loudly — never a silent wrong wallet):**
 distinct-keys (no slot may collide), every-slot-supplied (own + cosigner
@@ -450,10 +464,10 @@ silent wrong wallet). For large pools, **`--search-address` is recommended**
 (full-scriptPubKey match — collision-free, no prefix-length tuning).
 
 **Bounds (§6 ceilings).** Own pool `K_own ≤ 256`; the optional-cosigner
-search space `S_opt ≤ 1e15` (a hard ceiling); the adaptive **~1-hour**
-time-cap applies on top (override with `--accept-search-time`). Inputs that
-would exceed a ceiling **refuse** (exit ≠ 0) with a printed estimate rather
-than run unbounded. The own candidate pool is derived **public-only** (the
+search space `S_opt ≤ 1e15` (a hard ceiling). Inputs that would exceed a
+ceiling **refuse** (exit ≠ 0) rather than run unbounded; below it there is
+no time cap, only the measured estimate and progress lines described
+above. The own candidate pool is derived **public-only** (the
 own xpriv is scrubbed by-move, never lingering un-scrubbed). All refusals
 exit ≠ 0.
 
@@ -782,7 +796,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0; mirrors `restore`) |
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20; mirrors `restore`) |
 | `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, default), `change` (chain 1), or `both` (mirrors `restore`) |
-| `--accept-search-time <ACCEPT_SEARCH_TIME>` | (#28 phase 2) override the adaptive ~1-hour search-time ceiling for a multisig-template completion (mirrors [`restore --accept-search-time`](#mnemonic-restore)). Must be ≥ the printed exhaustive-time estimate (a forced acknowledgment). Humantime duration (e.g. `2h`, `90min`) |
+| `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0** (as on [`restore`](#mnemonic-restore)): accepted so existing scripts do not fail, but there is no search-time ceiling any more; the completion reports a measured estimate and progress instead |
 | `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
 | `--ms1 <STRING>` | repeating; one ms1 card |
@@ -1007,6 +1021,8 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--xpub-prefix <XPUB_PREFIX>` | SLIP-0132 prefix selector for emitted xpubs (`xpub`/`ypub`/`Ypub`/`zpub`/`Zpub`; requires `--network`). **(v0.58.1)** Reading an `mk1` card (`--from mk1= --to xpub`) prints a non-blocking stderr note naming the SLIP-0132 variant the card's derivation path conventionally implies (e.g. `m/84'` → zpub) and pointing here — stdout stays the BIP-32-neutral xpub. The mk1 card stores only the neutral xpub (the variant is normalized away on intake and is not recoverable exactly); pass `--xpub-prefix <variant>` to emit the SLIP-0132 form. |
 | `--script-type <SCRIPT_TYPE>` | `p2pkh` / `p2wpkh` / `p2sh-p2wpkh` / `p2tr` for `(Xpub, Address)` derivation (v0.26.0: `p2pkh` added) |
 | `--json` | JSON output |
+| `--group-size <N>` | insert a separator every N characters in an emitted ms1 or mk1 card (default `0` = unbroken). Display only; `--json` and non-card outputs (xpub, WIF, …) stay unbroken |
+| `--separator <SEPARATOR>` | the grouping separator: `space` (keyword, the default) or the literal `" "`. Whitespace only — `hyphen` and `comma` are refused |
 | `--help` | print help |
 
 ### Worked example
@@ -1240,7 +1256,8 @@ channels that keep the seed off the argv.
 | `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0) |
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20). Deepen (`0..20`, then `20..40`, …) if the target is not found; a narrow range expresses "I know the index" |
 | `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, the **default**), `change` (chain 1), or `both` (doubles the per-index search cost) |
-| `--accept-search-time <ACCEPT_SEARCH_TIME>` | (#28 phase 2) override the adaptive ~1-hour search-time ceiling for a multisig-template completion. Must be ≥ the tool's printed estimated exhaustive time (a forced acknowledgment). Accepts a humantime duration (e.g. `2h`, `90min`) |
+| `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0.** Accepted (and still parsed as a humantime duration such as `2h` or `90min`) so existing scripts do not fail on an unknown flag, but it changes nothing: there is no search-time ceiling any more — the completion declares its measured estimate and reports progress, and Ctrl-C stops it |
+| `--recalibrate-threads` | ignore the search-thread count recorded under `[search]` in `~/.mnemonic/mt.conf`, measure this machine again and overwrite the record. The count is measured once, on the first multisig-template search, and reused, because the best count is a property of the machine rather than of its core count; use this after a hardware change or when the recorded value looks wrong. Only a multisig-template completion (id-search or `--search-address`) runs the search, so on any other restore the flag has no effect |
 | `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
 | `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 4 (unless `--allow-mismatch`) |
 | `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`); mismatch → exit 4 (unless `--allow-mismatch`) |
@@ -2572,6 +2589,8 @@ mnemonic ms-shares combine --share <ms1-share-or-> ... [OPTIONS]
 | `--shares <N>` | total shares N to emit (K ≤ N ≤ 31) |
 | `--language <LANGUAGE>` | BIP-39 wordlist of the input phrase; ignored for `entropy=` inputs. A non-English language produces a `mnem` share-set so the wordlist survives the split |
 | `--json` | emit a JSON object on stdout (`{"shares": [...]}`) instead of the one-share-per-line text form |
+| `--group-size <N>` | insert a separator every N characters in each printed share (default `0` = unbroken). Display only; `--json` stays unbroken, and separators are stripped on intake, so a grouped share re-ingests |
+| `--separator <SEPARATOR>` | the grouping separator: `space` (keyword, the default) or the literal `" "`. Whitespace only — `hyphen` and `comma` are refused |
 | `--no-auto-repair` | global flag; skip auto-fire BCH repair on a decode failure (see [`verify-bundle` auto-fire](#mnemonic-verify-bundle)) |
 | `--help` | print help |
 
@@ -2583,6 +2602,8 @@ mnemonic ms-shares combine --share <ms1-share-or-> ... [OPTIONS]
 | `--to <phrase\|entropy\|ms1>` | output shape (default `phrase`); `phrase` emits a BIP-39 mnemonic (language per the recovered card / `--language`), `entropy` emits hex, `ms1` re-encodes a recovered single-string ms1 |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase` when the recovered secret is a plain `entr` payload (no wire language); ignored for `mnem` payloads and for `--to entropy`/`--to ms1` |
 | `--json` | emit a JSON object on stdout instead of the plain secret line |
+| `--group-size <N>` | insert a separator every N characters in a recovered `--to ms1` card (default `0` = unbroken). Display only; `--json`, `--to phrase` and `--to entropy` stay raw |
+| `--separator <SEPARATOR>` | the grouping separator: `space` (keyword, the default) or the literal `" "`. Whitespace only |
 | `--no-auto-repair` | global flag; skip auto-fire BCH repair on a decode failure |
 | `--help` | print help |
 

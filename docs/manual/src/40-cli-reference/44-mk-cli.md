@@ -1,7 +1,7 @@
 # `mk` (mk-cli) reference
 
 The standalone CLI for the mk1 format (mnemonic-key / mk-codec).
-Eight subcommands. Most users will use `mnemonic bundle` and
+Ten subcommands. Most users will use `mnemonic bundle` and
 `mnemonic verify-bundle` instead; `mk` is for direct key-card
 inspection, mk1-plate recovery from an air-gapped machine without
 shipping the secret-material code paths of the toolkit, or when
@@ -127,6 +127,7 @@ from stdin.
 
 | Flag | Purpose |
 |---|---|
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (mk-cli after 0.13.0; the released 0.13.0 has no `--in` here) |
 | `--json` | emit JSON output |
 
 ### Worked example
@@ -175,6 +176,7 @@ mk inspect [OPTIONS] <MK1-STRING>...
 
 | Flag | Purpose |
 |---|---|
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (mk-cli after 0.13.0; the released 0.13.0 has no `--in` here) |
 | `--json` | emit JSON output |
 
 ### Output
@@ -232,6 +234,7 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Flag | Purpose |
 |---|---|
 | `[MK1_STRINGS]...` | one or more mk1 strings to attempt to repair; use `-` to read one string per line from stdin |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (mk-cli after 0.13.0; the released 0.13.0 has no `--in` here) |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form report; shares the `RepairJson` fields with `mnemonic repair --json` (whose toolkit envelope is a superset since Cycle F — see above) |
 | `--help` | print help |
 
@@ -402,6 +405,7 @@ mk verify [OPTIONS] <MK1-STRING>...
 | `--origin-path <EXPECTED-PATH>` | assert decoded path equals this |
 | `--policy-id-stub <HEX>` | assert decoded stubs match this set; repeatable, order-sensitive |
 | `--from-md1 <MD1-STRING>` | derive expected stub from md1 string; repeatable, order-sensitive |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (mk-cli after 0.13.0; the released 0.13.0 has no `--in` here) |
 | `--json` | emit a JSON envelope on stdout |
 
 Without any expected-* flags, `mk verify` performs BCH-checksum and
@@ -492,6 +496,7 @@ Use `-` as a positional argument to read one mk1 string per line from stdin.
 | `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
 | `--chain <WHICH>` | `receive` (default) \| `change` \| `both` |
 | `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes and must agree with its network kind |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (mk-cli after 0.13.0; the released 0.13.0 has no `--in` here) |
 | `--json` | emit JSON output |
 
 ### Worked example
@@ -541,6 +546,7 @@ mk1 strings from stdin.
 |---|---|
 | `--path <REL>` | relative derivation path, unhardened only (e.g. `m/0/5`) |
 | `--index <N>` | single external-chain index — sugar for `--path m/0/<N>` |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (mk-cli after 0.13.0; the released 0.13.0 has no `--in` here) |
 | `--json` | emit JSON output |
 
 ### Worked example
@@ -597,6 +603,18 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 | 3 | FutureFormat — string is well-formed but its declared version is newer than this tool. Maps to `Error::UnsupportedVersion`. |
 | 4 | Verify content mismatch (only `mk verify` with expected-* flags emits this). |
 | 64 | CLI usage error per clap convention (unrecognized flag, missing required argument, etc.). |
+
+## `mk gui-schema`
+
+Emit a machine-readable JSON description of `mk`'s flag surface, which the
+`mnemonic-gui` overlay uses to build and drift-check its per-subcommand
+forms. It takes no flags; the output is for programs, not for reading.
+
+```sh
+mk gui-schema | jq '.subcommands[].name'
+```
+
+---
 
 ## `mk gen-man` (v0.11.0) {#mk-gen-man}
 
