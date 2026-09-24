@@ -48,6 +48,8 @@
 #   BUILDER (cargo|cross), CROSS_COMMENT_EXPECT (aarch64 .comment substring).
 
 set -euo pipefail
+# shellcheck source=ci/repro/residue-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/residue-lib.sh"
 
 ROOT="${1:?usage: cc-validate.sh <build-root>}"
 TARGET="${TARGET:-x86_64-unknown-linux-musl}"
@@ -221,18 +223,24 @@ residue=0
 scan() {
   local label="$1" file="$2"
   [ -f "$file" ] || { echo "  ($label: $file absent — skipped)"; return; }
-  if grep -aEo "$DATE_RE" "$file" | grep -vE 'Jan  1 1980' | head -1 | grep -q .; then
+  # residue_hits (residue-lib.sh), never `grep | head -1 | grep -q`: under
+  # pipefail that shape read HEAVY residue as none (F-675).
+  local hits
+  hits="$(residue_hits "$DATE_RE" "$file" 'Jan  1 1980')"
+  if [ -n "$hits" ]; then
     echo "::error::$label: __DATE__-shaped residue present" >&2
-    grep -aEo "$DATE_RE" "$file" | head -3 >&2
+    sed -n 1,3p <<<"$hits" >&2
     residue=1
   fi
-  if grep -aEo "$TIME_RE" "$file" | head -1 | grep -q .; then
+  hits="$(residue_hits "$TIME_RE" "$file")"
+  if [ -n "$hits" ]; then
     echo "::warning::$label: __TIME__-shaped token present (may be a false positive — verify)" >&2
-    grep -aEo "$TIME_RE" "$file" | head -3 >&2
+    sed -n 1,3p <<<"$hits" >&2
   fi
-  if grep -aEo "$PATHS_RE" "$file" | head -1 | grep -q .; then
+  hits="$(residue_hits "$PATHS_RE" "$file")"
+  if [ -n "$hits" ]; then
     echo "::error::$label: host-path residue present (real build path leaked — -ffile-prefix-map/remap gap)" >&2
-    grep -aEo "$PATHS_RE" "$file" | head -3 >&2
+    sed -n 1,3p <<<"$hits" >&2
     residue=1
   fi
 }
@@ -258,7 +266,7 @@ scan "binary" "$BINARY"
 # (x86_64 leg) ⇒ informational only.
 if [ -n "$CROSS_COMMENT_EXPECT" ]; then
   echo "== (d) .comment compiler-string assertion (aarch64; expect substring '$CROSS_COMMENT_EXPECT') =="
-  if printf '%s' "$COMMENT" | grep -aqF "$CROSS_COMMENT_EXPECT"; then
+  if grep -aqF "$CROSS_COMMENT_EXPECT" <<<"$COMMENT"; then
     echo "  OK: .comment carries the expected pinned cross-toolchain string."
   else
     echo "::error::cc-validate (d) FAILED — .comment does NOT contain '$CROSS_COMMENT_EXPECT'; the digest-pinned cross toolchain (Cross.toml) is NOT the compiler in use (passthrough gap or wrong image). PRIMARY aarch64 gate." >&2

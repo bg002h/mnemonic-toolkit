@@ -49,9 +49,48 @@ permissions:
   contents: read
 
 jobs:
+  # F-675: read BOTH git pins from Cargo.lock instead of hard-coding them here.
+  # Two measured failures came from this caller disagreeing with the lock:
+  #   * 08-31, 09-07, 09-14: `miniscript_rev` was still the pre-F-354 95fdd1c5
+  #     while Cargo.lock pinned ff4732e5, so the miniscript [source] stanza
+  #     named a rev nothing used and `--offline` failed "failed to load source
+  #     for dependency `miniscript`" (repro-substrate and repro-x86_64-musl).
+  #   * 09-21: md-codec became a git dependency (F-642) and this caller never
+  #     passed git_source_url/git_source_rev, so "failed to get `md-codec`".
+  # The reusable workflow redirects exactly the miniscript fork plus ONE other
+  # git source, so this job fails closed if Cargo.lock ever names a third.
+  pin:
+    name: read git pins from Cargo.lock
+    runs-on: ubuntu-latest
+    outputs:
+      miniscript_rev: ${{ steps.p.outputs.miniscript_rev }}
+      git_source_url: ${{ steps.p.outputs.git_source_url }}
+      git_source_rev: ${{ steps.p.outputs.git_source_rev }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: p
+        run: |
+          set -euo pipefail
+          mapfile -t srcs < <(sed -nE 's/^source = "git\+([^?"#]+)\?rev=([0-9a-f]{40})#[0-9a-f]{40}"$/\1 \2/p' Cargo.lock | sort -u)
+          ms_rev=""; other=()
+          for s in "${srcs[@]}"; do
+            if [ "${s% *}" = "https://github.com/rust-bitcoin/rust-miniscript" ]; then ms_rev="${s#* }"; else other+=("$s"); fi
+          done
+          if [ -z "$ms_rev" ]; then
+            echo "::error::repro-drift: Cargo.lock has no rust-miniscript git pin; git sources: ${srcs[*]:-none}"; exit 1
+          fi
+          if [ "${#other[@]}" -gt 1 ]; then
+            echo "::error::repro-drift: Cargo.lock names ${#other[@]} non-miniscript git sources (${other[*]}); reproducible-musl-build.yml redirects only one."; exit 1
+          fi
+          echo "miniscript_rev=$ms_rev" >> "$GITHUB_OUTPUT"
+          echo "git_source_url=${other[0]:+${other[0]% *}}" >> "$GITHUB_OUTPUT"
+          echo "git_source_rev=${other[0]:+${other[0]#* }}" >> "$GITHUB_OUTPUT"
+          echo "miniscript rev $ms_rev; other git source: ${other[0]:-none}"
+
   # Re-run the WHOLE centralized reproducibility gate with BOTH arches active.
   drift:
     name: repro-drift (x86_64 + aarch64)
+    needs: pin
     uses: ./.github/workflows/reproducible-musl-build.yml
     permissions:
       contents: read
@@ -69,9 +108,13 @@ jobs:
       run_aarch64: true
       # The toolkit depends on the miniscript [patch.crates-io] git fork ⇒ pass
       # the toolkit rev so the gate stays THREE-block (the git-fork [source]
-      # stanza is MANDATORY; the two-block form FAILS --offline — R0-r5-C1). This
-      # is also the reusable workflow's default; passed explicitly for clarity.
-      miniscript_rev: "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+      # stanza is MANDATORY; the two-block form FAILS --offline — R0-r5-C1).
+      # From Cargo.lock (the `pin` job), NOT the reusable workflow's default,
+      # which is the stale 95fdd1c5.
+      miniscript_rev: ${{ needs.pin.outputs.miniscript_rev }}
+      # F-324 / F-675: md-codec's git source gets its own [source] stanza.
+      git_source_url: ${{ needs.pin.outputs.git_source_url }}
+      git_source_rev: ${{ needs.pin.outputs.git_source_rev }}
       # Source the centralized recipe (ci/repro/*.sh, Dockerfile.repro, Cross.toml)
       # from THIS commit — the exact toolkit HEAD the schedule runs against — so
       # the recipe and the crate source are the same commit (byte-unchanged build).
