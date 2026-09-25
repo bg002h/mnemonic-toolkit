@@ -77,7 +77,7 @@ mutate "R2 reverse: an unreleased marker naming the wrong version" \
   "does not name the pinned release"
 
 mutate "R3 reverse: a stale marker on a flag the pinned binary defines" \
-  "edit_file('$CMP', '| \`--md-only\` | compose even', '| \`--md-only\` | (unreleased: md-cli after 0.20.2: --md-only) compose even')" \
+  "edit_file('$CMP', '| \`--md-only\` | compose even', '| \`--md-only\` | (unreleased: md-cli after 0.20.3: --md-only) compose even')" \
   "stale marker"
 
 mutate "R4 reverse: an unreleased row with its marker removed" \

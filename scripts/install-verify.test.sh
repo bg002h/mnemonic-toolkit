@@ -174,16 +174,6 @@ detect() {  # detect <getconf exit status> -> prints the detected platform
     chmod +x "$T/det/uname" "$T/det/getconf" "$T/det/ldd"
     PATH="$T/det:$PATH" MNEMONIC_INSTALL_PLATFORM='' sh "$INSTALL_SH" --list | sed -n 's/^platform: //p'
 }
-# 13. the md binary's missing cli-compiler feature is said, and only for the
-#     binary path (a --from-source build enables it).
-nb=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu sh "$INSTALL_SH" --dry-run --only md --no-man 2>&1)
-ns=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu sh "$INSTALL_SH" --dry-run --only md --no-man --from-source 2>&1)
-if printf '%s' "$nb" | grep -q "md binary is built without the cli-compiler feature" \
-   && ! printf '%s' "$ns" | grep -q "cli-compiler feature" \
-   && printf '%s' "$ns" | grep -q -- "--features cli-compiler"; then
-    ok "md binary: cli-compiler gap noted; --from-source builds with the feature, no note"
-else bad "md cli-compiler note: binary run: $nb / source run: $ns"; fi
-
 g=$(detect 0); m=$(detect 1)
 if [ "$g" = linux-x86_64-gnu ] && [ "$m" = linux-x86_64-musl ]; then
     ok "libc detection: getconf GNU_LIBC_VERSION -> gnu; otherwise ldd musl -> musl"

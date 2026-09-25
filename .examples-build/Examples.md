@@ -105,7 +105,7 @@ platform: linux-x86_64-gnu
 COMPONENT       CARGO_PACKAGE        FEATURES       GIT_TAG                              BINARY
 ---------       -------------        --------       -------                              ------
 mnemonic        mnemonic-toolkit     (none)         mnemonic-toolkit-v0.104.0            mnemonic-0.104.0-x86_64-linux-musl.tar.gz
-md              md-cli               cli-compiler   descriptor-mnemonic-md-cli-v0.20.2   md-0.20.2-linux-amd64.tar.gz
+md              md-cli               cli-compiler   descriptor-mnemonic-md-cli-v0.20.3   md-0.20.3-linux-amd64.tar.gz
 ms              ms-cli               (none)         ms-cli-v0.19.0                       ms-0.19.0-x86_64-linux-musl.tar.gz
 mk              mk-cli               (none)         mk-cli-v0.13.0                       mk-0.13.0-x86_64-linux-musl.tar.gz
 mnemonic-gui    mnemonic-gui         (none)         mnemonic-gui-v0.59.0                 mnemonic-gui-v0.59.0-x86_64-linux.tar.gz
@@ -124,15 +124,12 @@ install  mnemonic (release mnemonic-toolkit-v0.104.0: mnemonic-0.104.0-x86_64-li
   [dry-run] run 'mnemonic --version'; refuse unless it prints 'mnemonic 0.104.0'
   [dry-run] install /home/user/.cargo/bin/mnemonic
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
-install  md (release descriptor-mnemonic-md-cli-v0.20.2: md-0.20.2-linux-amd64.tar.gz)
-  [dry-run] download https://github.com/bg002h/descriptor-mnemonic/releases/download/descriptor-mnemonic-md-cli-v0.20.2/md-0.20.2-linux-amd64.tar.gz
+install  md (release descriptor-mnemonic-md-cli-v0.20.3: md-0.20.3-linux-amd64.tar.gz)
+  [dry-run] download https://github.com/bg002h/descriptor-mnemonic/releases/download/descriptor-mnemonic-md-cli-v0.20.3/md-0.20.3-linux-amd64.tar.gz
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
-  [dry-run] run 'md --version'; refuse unless it prints 'md 0.20.2'
+  [dry-run] run 'md --version'; refuse unless it prints 'md 0.20.3'
   [dry-run] install /home/user/.cargo/bin/md
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/md" gen-man --out "/home/user/.local/share/man/man1"
-note: the descriptor-mnemonic-md-cli-v0.20.2 md binary is built without the cli-compiler feature,
-      so 'md encode --from-policy' refuses; for it, re-run with
-      --from-source --only md (needs cargo).
 install  ms (release ms-cli-v0.19.0: ms-0.19.0-x86_64-linux-musl.tar.gz)
   [dry-run] download https://github.com/bg002h/mnemonic-secret/releases/download/ms-cli-v0.19.0/ms-0.19.0-x86_64-linux-musl.tar.gz
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry

@@ -16,7 +16,7 @@ documents are the ones pinned in the toolkit's installer,
 
 **Do not install these CLIs from crates.io.** The copies there are
 several releases older than this manual (for example `md` 0.13 against
-the 0.20.2 documented here) and lack flags it describes.
+the 0.20.3 documented here) and lack flags it describes.
 
 ## Path A — the installer (prebuilt binaries)
 
@@ -41,12 +41,6 @@ If a release has no binary for your platform (FreeBSD, for example),
 the installer says so and builds that CLI from the same pinned tag with
 `cargo`, which then needs a Rust toolchain (below). `--from-source`
 does that for every component.
-
-One difference to know about: the `md` release binary is built without
-the `cli-compiler` feature, so `md encode --from-policy` refuses with
-"requires the cli-compiler feature". The installer says so when it
-installs `md`; to use `--from-policy`, re-run it with
-`--from-source --only md`, which builds that feature in.
 
 ### Building the pinned tags from source
 

@@ -46,7 +46,7 @@ component_info() {
             echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.104.0|mnemonic|"
             ;;
         md)
-            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.2|md|cli-compiler"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.3|md|cli-compiler"
             ;;
         ms)
             echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.19.0|ms|"
@@ -165,8 +165,6 @@ SOURCE (default behavior):
     the file the release published, not who built it.
     If a release has no binary for this platform, that component is
     built from the same pinned tag with cargo instead (said on stderr).
-    The md binary lacks the cli-compiler feature ('md encode
-    --from-policy'); --from-source --only md builds it with it.
 
 OPTIONS:
     --only LIST       Install only the comma-separated components
@@ -558,22 +556,6 @@ install_binary() {
     echo "  installed $BIN_DIR/$_bin$EXE ($_ran)"
 }
 
-# ── What a release binary lacks against the source build ──────────────
-# binary_gap <name> <tag>: say on stderr what the prebuilt binary cannot do
-# that a --from-source build of the same tag can. Measured, not inferred:
-# md's release workflow builds without `--features cli-compiler`, so its
-# binary refuses `md encode --from-policy` ("requires the cli-compiler
-# feature"), which the source build (component_info's features field) enables.
-# Delete the md arm once descriptor-mnemonic's releases build with it.
-binary_gap() {
-    case "$1" in
-        md)
-            echo "note: the $2 md binary is built without the cli-compiler feature," >&2
-            echo "      so 'md encode --from-policy' refuses; for it, re-run with" >&2
-            echo "      --from-source --only md (needs cargo)." >&2 ;;
-    esac
-}
-
 # ── Man-page post-install hook ──────────────────────────────────────────
 # After a SUCCESSFUL install, the just-installed CLI self-emits its roff man
 # pages into $MAN_DIR via `<bin> gen-man --out`. Excludes the GUI (it has no
@@ -638,11 +620,9 @@ for name in $ALL; do
             echo "  [dry-run] install $BIN_DIR/$bin$EXE"
             installed_count=$((installed_count + 1))
             install_man_pages "$name"
-            binary_gap "$name" "$tag"
         elif install_binary "$name" "$bin" "$(version_of "$tag")" "$base" "$asset"; then
             installed_count=$((installed_count + 1))
             install_man_pages "$name"
-            binary_gap "$name" "$tag"
         else
             echo "  FAILED" >&2
             failed_count=$((failed_count + 1))
