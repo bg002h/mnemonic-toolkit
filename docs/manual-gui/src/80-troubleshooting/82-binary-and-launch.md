@@ -39,8 +39,8 @@ installs newer than these.
 ## When the installer is ahead of the GUI {#installer-ahead}
 
 The toolkit installer currently installs two CLI releases newer than
-this GUI was built against: `mnemonic-toolkit-v0.105.0` (the GUI's
-label reads `Pinned: mnemonic 0.104.0`) and `ms-cli-v0.20.0` (label
+this GUI was built against: `mnemonic-toolkit-v0.105.1` (the GUI's
+label reads `Pinned: mnemonic 0.104.0`) and `ms-cli-v0.20.1` (label
 `Pinned: ms 0.19.1`). The forms run unchanged, and `mnemonic --version`
 and `ms --version` printing the newer versions is expected.
 

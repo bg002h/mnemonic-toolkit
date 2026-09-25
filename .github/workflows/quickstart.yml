@@ -102,7 +102,7 @@ jobs:
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'
         # Mirrors the mk-cli + md-cli install patterns above.
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.0 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.1 ms-cli
 
       - name: Build mnemonic binary (debug)
         if: steps.guard.outputs.relevant == 'true'

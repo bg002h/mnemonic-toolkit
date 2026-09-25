@@ -8,6 +8,8 @@ numbers.
 
 ## [Unreleased]
 
+**The installer's newer tags move to toolkit 0.105.1 and ms 0.20.1** (the F-687e macOS stdin fix). `[installer-ahead]` and §82 name them; nothing else in the GUI-facing text changes.
+
 **The installer runs ahead of the GUI on two CLIs.** Toolkit 0.105.0 and ms 0.20.0 (F-687) shipped before the GUI re-pinned, and the installer pins them. The manual keeps documenting `mnemonic-gui-v0.62.0`'s tier; `pinned-upstream.toml` declares the two newer tags in a new `[installer-ahead]` table, which `check_cli_pins.py` accepts only while it matches `scripts/install.sh`. A new §82 section, *When the installer is ahead of the GUI*, names them and the one behaviour change a GUI user can hit: a passphrase of exactly `-`, or one beginning `@env:`, is now read from stdin or the environment instead of taken literally. §12, §21 and §82 no longer say the installer installs exactly the GUI's pins.
 
 **Minor — GUI pin bump `mnemonic-gui-v0.57.0` → `mnemonic-gui-v0.62.0` (F-679), NOT pin-neutral.** The tag pins mnemonic 0.104.0, md 0.20.3, ms 0.19.1 and mk 0.13.0, so the four `*-tag-implied` fields in `pinned-upstream.toml` and the `verify-examples` CLI tier in `.github/workflows/manual-gui.yml` move with it (the workflow had also lagged at toolkit v0.74.0).
