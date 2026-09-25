@@ -9,6 +9,16 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 ## mnemonic-toolkit [Unreleased]
 
 ### Changed
+- **The discarded-input note shows a MASKED preview, not the text** (F-687d,
+  operator ruling 2026-09-25: "Agree with masked echo as you suggested").
+  Under the unchanged header, one line per discarded line, indented two
+  spaces: up to 8 characters as is; longer, its first 8 characters, `…` and
+  `(W word(s), N chars)` (characters, not bytes); whitespace-only
+  `(blank)`. Control characters, escape sequences (CSI, OSC, `ESC x`) and
+  invisible bidi/format marks in the preview become `?`, so a paste cannot
+  drive the terminal. One formatter (`passphrase_input::drain_note`), pinned
+  by `tests/vectors/drain_preview.json` (15 cases, byte-identical with
+  mnemonic-secret). F-687c printed the discarded text in full.
 
 - **A terminal prompt drains what was pasted or typed after the line, and
   shows it** (F-687c, operator ruling 2026-09-25: "Yes to the paste question
@@ -18,7 +28,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   prompt's mode (echo off, signal handlers) is still in force, any input
   already pending is read (non-canonical, 0.1 s after input stops), printed
   on stderr as `note: discarded N line(s) typed after the <what> (not run,
-  not used):` followed by the text, and the input queue is flushed — so the
+  not used):` followed by a masked preview of each line (F-687d), and the input queue is flushed — so the
   shell never runs a pasted second line or records it in its history.
   Nothing pending: no output. Pipes and files: unchanged, nothing extra read.
   Ctrl-C during the drain still restores the terminal and exits by SIGINT.
