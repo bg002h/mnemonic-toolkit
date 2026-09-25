@@ -88,7 +88,7 @@ struct Shape {
 /// The 9-shape positive corpus — each ∈ (toolkit-derivable ∩ Core-v27-sane ∩
 /// restore-reconstructable). Every shape's bundle→restore round-trip was
 /// proven locally (2026-06-16) before this test was written. Excluded
-/// (restore refuses): @-in-both, depth-≥2 taproot, nested sortedmulti_a,
+/// (restore refuses): @-in-both, nested sortedmulti_a,
 /// sortedmulti-in-combinator — those are covered by `cli_restore_multisig.rs`.
 fn corpus() -> Vec<Shape> {
     let m = "/<0;1>/*";

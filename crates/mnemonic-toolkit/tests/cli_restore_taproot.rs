@@ -10,15 +10,14 @@
 //!
 //! Still refused (each pinned below, all `ModeViolation` exit 2, slug-citing):
 //! - non-NUMS (cosigner) internal key — SUPPORTED since v0.55.3 for general
-//!   single-leaf/depth-1 + distinct-trunk multisig; only the `@-in-both` shape
+//!   policies at any depth + distinct-trunk multisig; only the `@-in-both` shape
 //!   (trunk key also a leaf key) stays refused
 //!   (`restore-non-nums-tr-internal-key-also-in-leaf`),
-//! - depth ≥2 / ≥3 leaves — STRUCTURAL, chirality-independent: the pinned
-//!   miniscript 95fdd1c mis-Displays only a LEFT-child `TapTree`, but the gate
-//!   refuses right-spine shapes too (never Display-luck; lift on the
-//!   miniscript #953 release — `upstream-miniscript-taptree-depth2-display-asymmetry`),
 //! - `sortedmulti_a` under a `TapTree`
 //!   (`md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
+//!
+//! Depth ≥2 tap trees were refused until 2026-08-20 and now reconstruct
+//! (cells 5 and 6).
 //!
 //! The reconstructed descriptor is asymmetric to the bundle input ON PURPOSE:
 //! md-codec wallet-policy cards carry [chain_code‖pubkey] (no depth/parent), so
@@ -257,8 +256,8 @@ fn non_nums_distinct_trunk_sortedmulti_a_restores_faithfully() {
 
 // ─── Refusal contracts (ModeViolation, exit 2, slug-citing) ─────────────────
 
-/// (5) Left-heavy 3-leaf (depth-2) taptree: bundle emits faithfully, restore
-/// refuses STRUCTURALLY (exit 2) citing the upstream Display-asymmetry slug.
+/// (5) Left-heavy 3-leaf (depth-2) taptree: bundle emits faithfully, and
+/// restore reconstructs it (a refusal until 2026-08-20; see below).
 #[test]
 fn left_heavy_3leaf_tr_restores_depth2() {
     let desc = format!("tr(NUMS,{{{{pk({K0}),pk({K1})}},pk({K2})}})");
@@ -312,6 +311,38 @@ fn right_spine_3leaf_tr_also_restores_depth2() {
             predicate::str::contains("descriptor: tr(")
                 .and(predicate::str::contains("first recv: bc1p")),
         );
+}
+
+/// F-686: `restore --help` kept saying "depth-≥2 taproot are refused" after
+/// the two cells above were flipped to reconstruction. The `--md1` entry must
+/// say a deeper tap tree restores, and must not list it among the refusals.
+#[test]
+fn restore_help_says_depth2_taproot_restores() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["restore", "--help"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let help = String::from_utf8(out.stdout).unwrap();
+    let entry: String = help
+        .split("--md1 <MD1>")
+        .nth(1)
+        .expect("no --md1 entry in `mnemonic restore --help`")
+        .split("\n      --")
+        .next()
+        .unwrap()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        !entry.contains("depth-≥2 taproot are refused"),
+        "the lifted refusal is back in the help: {entry}"
+    );
+    assert!(
+        entry.contains("tap tree of any depth"),
+        "the help must say deeper tap trees restore: {entry}"
+    );
 }
 
 /// (7) `sortedmulti_a` under a 2-leaf TapTree: refused citing the md-codec

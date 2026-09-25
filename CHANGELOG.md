@@ -8,6 +8,15 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## mnemonic-toolkit [Unreleased]
 
+### `restore --help` no longer says depth-≥2 taproot is refused (F-686)
+
+- The `--md1` help (and so `mnemonic-restore.1`) still listed "depth-≥2 taproot" among the
+  refusals, though restore has reconstructed a tap tree of any depth since the 2026-08-20
+  miniscript pin. It now says so, and names the refusal it had omitted: `sortedmulti_a`
+  anywhere but as the single leaf. The CLI manual's `restore` section had the same claim in
+  three places, now corrected. Measured on 0.104.0 and this build: depth-2 NUMS and non-NUMS
+  trees restore at exit 0 with the first receive address equal to `export-wallet`'s.
+
 ### Installer — release binaries at the pinned tags, never crates.io (F-676)
 
 - **`scripts/install.sh` no longer installs `md` / `ms` / `mk` from crates.io**, whose copies
