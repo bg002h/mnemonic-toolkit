@@ -37,7 +37,7 @@ name: repro-drift
 
 on:
   # Weekly — Monday 06:00 UTC. Cheap enough at weekly cadence (one x86_64 gate +
-  # one ~30-60min QEMU aarch64 gate); frequent enough to surface drift well
+  # one ~4-10min QEMU aarch64 gate); frequent enough to surface drift well
   # before the next release relies on the published hash.
   schedule:
     - cron: "0 6 * * 1"

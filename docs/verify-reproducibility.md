@@ -232,7 +232,7 @@ honest **between** releases:
   reproducibility gate (`reproducible-musl-build.yml`) against the toolkit's
   current `HEAD`, with **`run_aarch64: true`** so it exercises **both** the x86_64
   **and** the aarch64 gates. The *release* path (`man-pages.yml`) also runs
-  `run_aarch64: true` (since F-680, 2026-09-24; each release waits the ~30-60min
+  `run_aarch64: true` (since F-680, 2026-09-24; each release waits the ~4-10min
   QEMU aarch64 build), but only on a tag; without the scheduled gate, an
   **aarch64-only** reproducibility regression would surface only at the next
   release. The drift gate
@@ -419,4 +419,4 @@ ci/repro/gzip-residue.sh mnemonic-<VER>-aarch64-linux-musl.tar.gz 03
 qemu-aarch64 target/aarch64-unknown-linux-musl/release/mnemonic --version
 ```
 
-The aarch64 QEMU build is **slow (~30-60min)** — expected for a gate.
+The aarch64 QEMU build is **slow (~4-10min)** — expected for a gate.

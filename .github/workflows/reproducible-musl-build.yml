@@ -101,7 +101,7 @@ on:
         default: ""
       run_aarch64:
         description: >-
-          Run the slow (~30-60min, QEMU) aarch64-musl reproducibility gate
+          Run the slow (~4-10min, QEMU) aarch64-musl reproducibility gate
           (repro-aarch64-musl). Default true so the gate is active; a caller may
           set false to run the x86_64 gate alone (e.g. a fast iteration).
         type: boolean
@@ -196,7 +196,7 @@ on:
         default: ""
       run_aarch64:
         description: >-
-          Run the slow (~30-60min, QEMU) aarch64-musl reproducibility gate.
+          Run the slow (~4-10min, QEMU) aarch64-musl reproducibility gate.
         type: boolean
         required: false
         default: true
@@ -609,7 +609,7 @@ jobs:
   # [source] overrides + the Cross.toml [build.env] passthrough vars into it.
   # cross needs Docker on the HOST → this job runs on a bare `ubuntu-latest`
   # runner with NO job-level `container:` (that would be docker-in-docker). The
-  # aarch64 build is SLOW under emulation (~30-60min); that is expected for a
+  # aarch64 build is SLOW under emulation (~4-10min); that is expected for a
   # gate. cross reads Cross.toml from the build CWD (/build-a/src, /build-b/src),
   # where the CALLER's committed Cross.toml is present (cp -a src/. includes it).
   # The Cross.toml is therefore the CALLER's (per-repo cross image / passthrough);
@@ -631,7 +631,7 @@ jobs:
     name: repro-aarch64-musl (aarch64-unknown-linux-musl)
     # NO `needs: build-container`: this leg builds via `cross` (its own
     # digest-pinned QEMU image, Cross.toml), NOT inside the build-container
-    # image — so it is independent and starts in parallel (the ~30-60min QEMU
+    # image — so it is independent and starts in parallel (the ~4-10min QEMU
     # build should not wait on the container push).
     # Gated so a caller (workflow_dispatch checkbox, or a workflow_call `with:
     # run_aarch64: false`) can run the x86_64 gate alone. Default true ⇒ active.

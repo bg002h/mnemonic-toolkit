@@ -84,7 +84,7 @@ jobs:
   #
   # run_aarch64: true on the RELEASE path (F-680, operator ruling 2026-09-24).
   # `musl-binaries needs: repro` blocks on the WHOLE reusable workflow, so every
-  # release-artifact publish now waits for the ~30-60min QEMU aarch64 gate —
+  # release-artifact publish now waits for the ~4-10min QEMU aarch64 gate —
   # deliberately: the PUBLISHED aarch64 artifact (the `musl-binaries` cross leg
   # below, re-homed onto the digest-pinned Cross.toml recipe) is byte-gated
   # inline on the release tag before it ships. repro-drift.yml still re-runs
