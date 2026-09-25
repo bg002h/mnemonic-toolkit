@@ -210,7 +210,9 @@ fi
   echo "FATAL: the tip moved during the window -- re-stage the new tip" >&2; exit 1; }
 
 OUT="$(git push origin "HEAD:$BRANCH" 2>&1)"; echo "$OUT"
-if echo "$OUT" | grep -qi "bypassed rule violations"; then
+# Here-string, not `echo | grep -q` (F-695): under pipefail a SIGPIPE'd echo
+# makes the test false, and a bypass would be reported as a clean push.
+if grep -qi "bypassed rule violations" <<<"$OUT"; then
   echo "FATAL: bypass message detected -- ci/staging left in place for forensics" >&2
   echo "       check runs on $TIP at push time (name, status, conclusion, id):" >&2
   check_runs | sed 's/^/         /' >&2 || true
