@@ -75,7 +75,11 @@ component_info() {
 #   * md: x86_64 Linux ships only a glibc build (md-<v>-linux-amd64), so a
 #     musl x86_64 host builds md from source; aarch64 Linux uses the static
 #     musl build.
-#   * mnemonic-gui: glibc and musl builds per arch, `v`-prefixed version.
+#   * mnemonic-gui: glibc builds per arch, `v`-prefixed version. The releases
+#     also carry static musl GUI builds, but a static binary cannot dlopen the
+#     X11/Wayland libraries, so it passes --version and then cannot open a
+#     window (measured: "Dynamic loading not supported"). A musl host builds
+#     the GUI from source instead, as the pre-F-676 installer did.
 asset_for() {
     _n="$1"; _v="$2"; _p="$3"
     case "$_n" in
@@ -100,15 +104,27 @@ asset_for() {
         mnemonic-gui)
             case "$_p" in
                 linux-x86_64-gnu)   echo "mnemonic-gui-v$_v-x86_64-linux.tar.gz" ;;
-                linux-x86_64-musl)  echo "mnemonic-gui-v$_v-x86_64-linux-musl.tar.gz" ;;
                 linux-aarch64-gnu)  echo "mnemonic-gui-v$_v-aarch64-linux.tar.gz" ;;
-                linux-aarch64-musl) echo "mnemonic-gui-v$_v-aarch64-linux-musl.tar.gz" ;;
                 macos-x86_64)       echo "mnemonic-gui-v$_v-x86_64-macos.tar.gz" ;;
                 macos-aarch64)      echo "mnemonic-gui-v$_v-aarch64-macos.tar.gz" ;;
                 windows-x86_64)     echo "mnemonic-gui-v$_v-x86_64-windows.zip" ;;
                 *) return 1 ;;
             esac ;;
         *) return 1 ;;
+    esac
+}
+
+# `glibc_floor <short-name> <platform>` echoes the newest GLIBC_x.y symbol
+# version the pinned glibc build of that component needs, or nothing when the
+# asset is static (every musl build). Measured with `readelf -V` on the pinned
+# assets; scripts/install-assets.test.sh re-measures every Linux asset and fails
+# if a floor here is wrong or a static asset turns dynamic. A glibc host older
+# than the floor gets a source build instead of a binary that cannot start.
+glibc_floor() {
+    case "$1:$2" in
+        md:linux-x86_64-gnu)           echo 2.34 ;;
+        mnemonic-gui:linux-x86_64-gnu) echo 2.39 ;;
+        mnemonic-gui:linux-aarch64-gnu) echo 2.18 ;;
     esac
 }
 
@@ -165,6 +181,10 @@ SOURCE (default behavior):
     the file the release published, not who built it.
     If a release has no binary for this platform, that component is
     built from the same pinned tag with cargo instead (said on stderr).
+    The same happens where a binary needs a newer glibc than this host
+    has: on Linux x86_64 the GUI needs glibc >= 2.39 and md needs >= 2.34
+    (on aarch64 the GUI needs >= 2.18; mnemonic, ms, mk are static and run
+    on any Linux). A musl host always builds the GUI from source.
 
 OPTIONS:
     --only LIST       Install only the comma-separated components
@@ -199,6 +219,8 @@ ENVIRONMENT:
     MNEMONIC_INSTALL_PLATFORM   Override platform detection, e.g.
                       linux-x86_64-gnu, linux-aarch64-musl, macos-aarch64,
                       windows-x86_64 (anything else means "no binary").
+    MNEMONIC_INSTALL_GLIBC      Override the detected glibc version, e.g.
+                      2.35 (default: getconf GNU_LIBC_VERSION).
 
 EXAMPLES:
     install.sh                            # install all 5 (release binaries)
@@ -263,11 +285,43 @@ esac
 field() { echo "$1" | cut -d'|' -f"$2"; }
 version_of() { echo "${1##*-v}"; }
 
+# The host's glibc as "major.minor", or empty when unknown (not glibc, or no
+# getconf). Only consulted on linux-*-gnu platforms.
+HOST_GLIBC="${MNEMONIC_INSTALL_GLIBC:-}"
+if [ -z "$HOST_GLIBC" ]; then
+    HOST_GLIBC=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}' | grep -oE '^[0-9]+\.[0-9]+' || true)
+fi
+
+# version_lt A B: A < B, both "major.minor" integers.
+version_lt() {
+    _a1=${1%%.*}; _a2=${1#*.}; _b1=${2%%.*}; _b2=${2#*.}
+    [ "$_a1" -lt "$_b1" ] || { [ "$_a1" -eq "$_b1" ] && [ "$_a2" -lt "$_b2" ]; }
+}
+
+# floor_unmet <name>: 0 when this host's known glibc is older than the
+# component's floor for this platform. An unknown glibc is NOT unmet: the
+# pre-install run check still refuses a binary that cannot start.
+floor_unmet() {
+    _f=$(glibc_floor "$1" "$PLATFORM")
+    [ -n "$_f" ] && [ -n "$HOST_GLIBC" ] && version_lt "$HOST_GLIBC" "$_f"
+}
+
 # plan_for <name> -> echoes the asset name, or nothing for a source build.
 plan_for() {
     [ -n "$FROM_SOURCE" ] && return 0
+    floor_unmet "$1" && return 0
     _i=$(component_info "$1")
     asset_for "$1" "$(version_of "$(field "$_i" 3)")" "$PLATFORM" || true
+}
+
+# source_reason <name> <tag>: why a component builds from source (stderr note).
+source_reason() {
+    if floor_unmet "$1"; then
+        echo "note: the $2 $1 binary needs glibc >= $(glibc_floor "$1" "$PLATFORM"); this host has $HOST_GLIBC," >&2
+    else
+        echo "note: $2 publishes no $1 binary for platform '$PLATFORM';" >&2
+    fi
+    echo "      building $1 from source at that tag with cargo instead." >&2
 }
 
 # ── Argument parsing ────────────────────────────────────────────────────
@@ -294,10 +348,12 @@ while [ $# -gt 0 ]; do
         --man-dir=*)
             MAN_DIR="${1#*=}"; shift ;;
         --root)
-            shift; [ $# -gt 0 ] || { echo "--root requires an argument" >&2; exit 2; }
+            shift; [ -n "${1:-}" ] || { echo "--root requires a non-empty argument" >&2; exit 2; }
             ROOT_ARG="$1"; shift ;;
         --root=*)
-            ROOT_ARG="${1#*=}"; shift ;;
+            ROOT_ARG="${1#*=}"
+            [ -n "$ROOT_ARG" ] || { echo "--root requires a non-empty argument" >&2; exit 2; }
+            shift ;;
         --from-source|--from-git)
             FROM_SOURCE="1"; shift ;;
         --force)
@@ -394,10 +450,11 @@ for n in $ALL; do
     [ -z "$(plan_for "$n")" ] && NEED_CARGO="${NEED_CARGO:+$NEED_CARGO }$n"
 done
 if [ -n "$NEED_CARGO" ] && [ -z "$DRY_RUN" ] && ! command -v cargo >/dev/null 2>&1; then
-    echo "error: $NEED_CARGO must be built from source (no release binary for" >&2
-    echo "       platform '$PLATFORM'$( [ -n "$FROM_SOURCE" ] && echo ", or --from-source was given"))," >&2
-    echo "       and \`cargo\` is not on PATH. Install the Rust toolchain first:" >&2
-    echo "       https://rustup.rs/" >&2
+    echo "error: $NEED_CARGO must be built from source here, and \`cargo\` is not on PATH." >&2
+    for n in $NEED_CARGO; do source_reason "$n" "$(field "$(component_info "$n")" 3)" 2>&1 | sed -n 1p | sed 's/^note: /       /' >&2; done
+    [ -n "$FROM_SOURCE" ] && echo "       (--from-source was given)" >&2
+    echo "       Install the Rust toolchain first (https://rustup.rs/), or install" >&2
+    echo "       the rest without them: re-run with --exclude $(echo "$NEED_CARGO" | tr ' ' ',')" >&2
     exit 1
 fi
 
@@ -447,7 +504,14 @@ fetch() {
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL --proto '=https' --tlsv1.2 -o "$2" "$1" 2>/dev/null
     elif command -v wget >/dev/null 2>&1; then
-        wget -q --https-only -O "$2" "$1" 2>/dev/null
+        # BusyBox wget (stock Alpine) has no --https-only. The URL is https and
+        # every download is checked against the release's checksum, so plain
+        # wget fails closed the same way.
+        if wget --help 2>&1 | grep -q -- '--https-only'; then
+            wget -q --https-only -O "$2" "$1" 2>/dev/null
+        else
+            wget -q -O "$2" "$1" 2>/dev/null
+        fi
     else
         echo "error: neither curl nor wget is on PATH; cannot download $1" >&2
         return 3
@@ -468,21 +532,47 @@ sha256_of() {
 }
 
 TMP_ROOT=""
-cleanup() { if [ -n "$TMP_ROOT" ]; then rm -rf "$TMP_ROOT"; fi; }
+PART=""
+cleanup() {
+    if [ -n "$PART" ]; then rm -f "$PART"; fi
+    case "$TMP_ROOT" in /?*) rm -rf "$TMP_ROOT" ;; esac
+}
 # EXIT alone: a trapped INT/TERM would otherwise run cleanup and CONTINUE.
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# make_tmp_root: create the private work dir, or exit before touching anything.
+# `mktemp -d` alone, then a template under ${TMPDIR:-/tmp} (portable to GNU,
+# BSD and BusyBox). An empty or relative result is a refusal: every path below
+# is built as "$TMP_ROOT/<name>", which with an empty TMP_ROOT would be /<name>.
+make_tmp_root() {
+    TMP_ROOT=$(mktemp -d 2>/dev/null) || TMP_ROOT=""
+    case "$TMP_ROOT" in /?*) [ -d "$TMP_ROOT" ] && return 0 ;; esac
+    TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/mnemonic-install.XXXXXX" 2>/dev/null) || TMP_ROOT=""
+    case "$TMP_ROOT" in /?*) [ -d "$TMP_ROOT" ] && return 0 ;; esac
+    TMP_ROOT=""
+    echo "error: cannot create a temporary directory (mktemp -d failed; TMPDIR=${TMPDIR:-unset})." >&2
+    echo "       Nothing was installed. Point TMPDIR at a writable directory and re-run." >&2
+    return 1
+}
+
 # install_binary <name> <bin> <version> <release-base-url> <asset>: download,
 # verify against the release's checksum file, extract, run, install. Returns
 # non-zero (after saying why on stderr) on ANY failure; never installs an
-# unverified file.
+# unverified file. Runs inside an `if`, where `set -e` is off, so every step
+# checks its own status.
 install_binary() {
     _name="$1"; _bin="$2"; _ver="$3"; _base="$4"; _asset="$5"
-    [ -n "$TMP_ROOT" ] || TMP_ROOT=$(mktemp -d 2>/dev/null || mktemp -d -t mnemonic-install)
+    case "$TMP_ROOT" in
+        /?*) [ -d "$TMP_ROOT" ] || { echo "  error: temporary directory $TMP_ROOT is gone" >&2; return 1; } ;;
+        *) echo "  error: no temporary directory; refusing to continue" >&2; return 1 ;;
+    esac
     _w="$TMP_ROOT/$_name"
-    rm -rf "$_w"; mkdir -p "$_w/x"
+    if ! { rm -rf "$_w" && mkdir -p "$_w/x"; }; then
+        echo "  error: cannot prepare $_w" >&2
+        return 1
+    fi
 
     if ! fetch "$_base/$_asset" "$_w/$_asset"; then
         echo "  error: download failed: $_base/$_asset" >&2
@@ -493,9 +583,14 @@ install_binary() {
     for _s in $SUMS_FILES; do
         fetch "$_base/$_s" "$_w/$_s" || continue
         # Exact name match on field 2 (`<hex>  <name>` or `<hex> *<name>`).
-        _want=$(awk -v a="$_asset" '$2 == a || $2 == "*" a { print tolower($1); exit }' "$_w/$_s")
+        # Every digest listed for the name; more than one distinct is refused.
+        _want=$(awk -v a="$_asset" '$2 == a || $2 == "*" a { print tolower($1) }' "$_w/$_s" | sort -u)
         if [ -n "$_want" ]; then _sums="$_s"; break; fi
     done
+    if [ "$(printf '%s\n' "$_want" | grep -c .)" -gt 1 ]; then
+        echo "  error: REFUSED $_asset: $_sums lists it with more than one digest" >&2
+        return 1
+    fi
     if [ -z "$_want" ]; then
         echo "  error: REFUSED $_asset: no checksum for it in any of" >&2
         echo "         $SUMS_FILES at $_base/" >&2
@@ -539,20 +634,26 @@ install_binary() {
             if [ "$_ran" != "$_bin $_ver" ]; then
                 echo "  error: REFUSED $_asset: '$_bin$EXE --version' did not print '$_bin $_ver'" >&2
                 echo "         it printed: $_ran" >&2
-                echo "         (it does not run on this host, or is not the pinned version;" >&2
-                echo "         --from-source builds the pinned tag instead)" >&2
+                echo "         (it does not run on this host, or is not the pinned version)." >&2
+                echo "         To build the pinned tag instead, re-run with: --from-source --only $_name" >&2
                 return 1
             fi ;;
     esac
     mkdir -p "$BIN_DIR" || { echo "  error: cannot create $BIN_DIR" >&2; return 1; }
+    if [ -d "$BIN_DIR/$_bin$EXE" ]; then
+        echo "  error: $BIN_DIR/$_bin$EXE is a directory; not replacing it" >&2
+        return 1
+    fi
     # Copy beside the target, then rename over it, so a failed copy never
-    # leaves a truncated binary behind.
-    _part="$BIN_DIR/.$_bin$EXE.partial.$$"
-    if ! { cp "$_found" "$_part" && chmod 755 "$_part" && mv -f "$_part" "$BIN_DIR/$_bin$EXE"; }; then
-        rm -f "$_part"
+    # leaves a truncated binary behind. PART lets the EXIT trap remove the
+    # partial copy if the run is interrupted mid-copy.
+    PART="$BIN_DIR/.$_bin$EXE.partial.$$"
+    if ! { cp "$_found" "$PART" && chmod 755 "$PART" && mv -f "$PART" "$BIN_DIR/$_bin$EXE"; }; then
+        rm -f "$PART"; PART=""
         echo "  error: cannot write $BIN_DIR/$_bin$EXE" >&2
         return 1
     fi
+    PART=""
     echo "  installed $BIN_DIR/$_bin$EXE ($_ran)"
 }
 
@@ -581,7 +682,24 @@ install_man_pages() {
         || echo "warning: man pages skipped for $man_name (needs a $man_name build with gen-man)" >&2
 }
 
+# cargo_root <cargo args...>: run cargo, adding `--root <ROOT_ARG>` (as one
+# argument) after the subcommand when --root was given.
+cargo_root() {
+    _sub="$1"; shift
+    if [ -n "$ROOT_ARG" ]; then
+        cargo "$_sub" --root "$ROOT_ARG" "$@"
+    else
+        cargo "$_sub" "$@"
+    fi
+}
+
 # ── Install loop ────────────────────────────────────────────────────────
+if [ -z "$DRY_RUN" ]; then
+    for n in $ALL; do
+        selected "$n" || continue
+        if [ -n "$(plan_for "$n")" ]; then make_tmp_root || exit 1; break; fi
+    done
+fi
 installed_count=0
 failed_count=0
 echo "m-format constellation installer"
@@ -632,29 +750,35 @@ for name in $ALL; do
 
     # ── source build from the pinned tag ──
     if [ -z "$FROM_SOURCE" ]; then
-        echo "note: $tag publishes no $name binary for platform '$PLATFORM';" >&2
-        echo "      building $name from source at that tag with cargo instead." >&2
+        source_reason "$name" "$tag"
+    fi
+    # A binary this installer copied into place is not in cargo's
+    # <root>/.crates.toml, and cargo refuses to overwrite an untracked file
+    # ("binary `mk` already exists in destination"). Replace it: it is ours, or
+    # a file a binary install would have replaced anyway.
+    src_force="$FORCE"
+    if [ -z "$src_force" ] && [ -e "$BIN_DIR/$bin$EXE" ] \
+       && ! grep -q "^\"$pkg " "$ROOT/.crates.toml" 2>/dev/null; then
+        src_force="--force"
+        echo "note: replacing $BIN_DIR/$bin$EXE, which cargo does not track (--force)." >&2
     fi
     if [ -n "$features" ]; then
         feat_args="--features $features"
     else
         feat_args=""
     fi
-    if [ -n "$ROOT_ARG" ]; then
-        root_args="--root $ROOT_ARG"
-    else
-        root_args=""
-    fi
     printf 'install  %s (source: %s)\n' "$name" "$tag"
     # shellcheck disable=SC2086
-    # $LOCKED / $FORCE / $feat_args / $root_args intentionally unquoted: each
-    # is empty or literal flag tokens. (--root DIR with whitespace in DIR is
-    # not supported on this path.)
+    # $LOCKED / $src_force / $feat_args intentionally unquoted: each is empty
+    # or literal flag tokens. --root goes through cargo_root, which passes the
+    # directory as ONE argument (a space in it once split it in two: cargo
+    # installed into the first half and tried to install a crate named after
+    # the second).
     if [ -n "$DRY_RUN" ]; then
-        echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $feat_args $root_args $FORCE $pkg"
+        echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $feat_args${ROOT_ARG:+ --root \"$ROOT_ARG\"} $src_force $pkg"
         installed_count=$((installed_count + 1))
         install_man_pages "$name"
-    elif cargo install $LOCKED --git "$url" --tag "$tag" $feat_args $root_args $FORCE "$pkg"; then
+    elif cargo_root install $LOCKED --git "$url" --tag "$tag" $feat_args $src_force "$pkg"; then
         installed_count=$((installed_count + 1))
         install_man_pages "$name"
     else
@@ -669,6 +793,17 @@ if [ "$failed_count" -gt 0 ]; then
     exit 1
 fi
 echo "$installed_count installed."
+if [ -z "$DRY_RUN" ] && [ "$installed_count" -gt 0 ]; then
+    case ":$PATH:" in
+        *":$BIN_DIR:"*) ;;
+        *)
+            echo
+            echo "warning: $BIN_DIR is not on your PATH, so the commands below will"
+            echo "         not be found yet. Add it to your shell rc, e.g.:"
+            echo "           bash/zsh: export PATH=\"$BIN_DIR:\$PATH\""
+            echo "           fish:     fish_add_path $BIN_DIR" ;;
+    esac
+fi
 echo
 echo "verify:"
 echo "    mnemonic --version       md --version"

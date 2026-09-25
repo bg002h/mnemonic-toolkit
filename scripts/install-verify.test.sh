@@ -32,13 +32,20 @@ REL="$T/fixture/mnemonic-key/$MK_TAG"
 mkdir -p "$T/stub"
 cat > "$T/stub/curl" <<EOF
 #!/bin/sh
-out=""; url=""; prev=""
-for a in "\$@"; do [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; url="\$a"; done
+out=""; url=""; prev=""; fail=""
+for a in "\$@"; do
+    case "\$a" in --*) ;; -*f*) fail=1 ;; esac
+    [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; url="\$a"
+done
 echo "\$url" >> "$T/curl.log"
+[ -n "\${CURL_STUB_SLEEP:-}" ] && sleep "\$CURL_STUB_SLEEP"
 rel=\${url#https://github.com/bg002h/}
 repo=\${rel%%/*}; rest=\${rel#*/releases/download/}
 src="$T/fixture/\$repo/\$rest"
-[ -f "\$src" ] || exit 22
+if [ ! -f "\$src" ]; then
+    [ -n "\$fail" ] && exit 22
+    echo "Not Found" > "\$out"; exit 0
+fi
 cp "\$src" "\$out"
 EOF
 cat > "$T/stub/cargo" <<EOF
@@ -123,7 +130,8 @@ else bad "asset 404 (rc=$rc): $out"; fi
 # 7. a platform with no binary -> cargo from the pinned tag, said on stderr.
 fresh_release
 run_case freebsd freebsd-x86_64
-if [ "$rc" -eq 0 ] && grep -q -- "install --locked --git https://github.com/bg002h/mnemonic-key --tag $MK_TAG .*--root $T/root .*mk-cli" "$T/cargo.log" 2>/dev/null \
+if [ "$rc" -eq 0 ] && grep -q -- "install .*--locked --git https://github.com/bg002h/mnemonic-key --tag $MK_TAG .*mk-cli" "$T/cargo.log" 2>/dev/null \
+   && grep -q -- "--root $T/root " "$T/cargo.log" \
    && printf '%s' "$out" | grep -q 'publishes no mk binary for platform'; then
     ok "no binary for freebsd-x86_64: cargo install --git --tag $MK_TAG, with a note"
 else bad "freebsd fallback (rc=$rc): $out / $(cat "$T/cargo.log" 2>/dev/null)"; fi
@@ -174,6 +182,245 @@ detect() {  # detect <getconf exit status> -> prints the detected platform
     chmod +x "$T/det/uname" "$T/det/getconf" "$T/det/ldd"
     PATH="$T/det:$PATH" MNEMONIC_INSTALL_PLATFORM='' sh "$INSTALL_SH" --list | sed -n 's/^platform: //p'
 }
+# ── fold 2 (review f675-677-toolkit-review.md) ─────────────────────────────
+
+# rearchive <members...>: rebuild the asset from $T/pkg with the given
+# members (paths relative to $T/pkg) and a matching sums line.
+rearchive() {
+    tar -czf "$REL/$ASSET" -C "$T/pkg" "$@"
+    ( cd "$REL" && sha256sum "$ASSET" > SHA256SUMS.x86_64 )
+}
+
+# 14. M2: mktemp fails -> refused before ANY rm/mkdir, nothing installed.
+#     rm and mkdir are wrapped to log every call; the log must stay empty.
+fresh_release
+mkdir -p "$T/m2"
+for tool in rm mkdir; do
+    real=$(command -v "$tool")
+    printf '#!/bin/sh\necho "%s $*" >> "%s/m2.log"\nexec %s "$@"\n' "$tool" "$T" "$real" > "$T/m2/$tool"
+done
+printf '#!/bin/sh\nexit 1\n' > "$T/m2/mktemp"
+chmod +x "$T/m2/rm" "$T/m2/mkdir" "$T/m2/mktemp"
+rm -rf "$T/root"; rm -f "$T/m2.log"; rc=0
+out=$(PATH="$T/m2:$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && ! installed && [ ! -e "$T/m2.log" ] \
+   && printf '%s' "$out" | grep -q 'cannot create a temporary directory'; then
+    ok "mktemp fails: refused before any rm/mkdir, nothing installed"
+else bad "mktemp failure (rc=$rc, rm/mkdir calls: $(cat "$T/m2.log" 2>/dev/null | tr '\n' ';')): $out"; fi
+# ... and the realistic trigger: a TMPDIR that does not exist, real mktemp.
+rm -f "$T/root/bin/mk"; rc=0
+out=$(TMPDIR="$T/no-such-dir" PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && ! installed && printf '%s' "$out" | grep -q 'cannot create a temporary directory'; then
+    ok "TMPDIR that does not exist: refused, nothing installed"
+else bad "bad TMPDIR (rc=$rc): $out"; fi
+
+# 15. I1: glibc floors decide binary vs source, before any download.
+floor_plan() {  # floor_plan <component> <glibc> -> "binary" | "source"
+    MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu MNEMONIC_INSTALL_GLIBC="$2" \
+        sh "$INSTALL_SH" --dry-run --no-man --only "$1" 2>&1 \
+        | sed -n "s/^install  $1 (\([a-z]*\).*/\1/p" | sed 's/release/binary/'
+}
+r="$(floor_plan md 2.33) $(floor_plan md 2.34) $(floor_plan mnemonic-gui 2.38) $(floor_plan mnemonic-gui 2.39) $(floor_plan mk 2.17)"
+if [ "$r" = "source binary source binary binary" ]; then
+    ok "glibc floors: md 2.33->source 2.34->binary; gui 2.38->source 2.39->binary; mk static"
+else bad "glibc floors: got '$r'"; fi
+n=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu MNEMONIC_INSTALL_GLIBC=2.35 sh "$INSTALL_SH" --dry-run --no-man --only mnemonic-gui 2>&1)
+if printf '%s' "$n" | grep -q 'mnemonic-gui binary needs glibc >= 2.39; this host has 2.35'; then
+    ok "glibc floor: the note names the floor and the host's glibc"
+else bad "glibc floor note: $n"; fi
+# the host glibc comes from getconf when not overridden
+mkdir -p "$T/gc"; printf '#!/bin/sh\necho "glibc 2.35"\n' > "$T/gc/getconf"; chmod +x "$T/gc/getconf"
+g=$(PATH="$T/gc:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu sh "$INSTALL_SH" --dry-run --no-man --only mnemonic-gui 2>&1)
+if printf '%s' "$g" | grep -q 'install  mnemonic-gui (source'; then
+    ok "glibc floor: host glibc read from getconf GNU_LIBC_VERSION"
+else bad "getconf glibc: $g"; fi
+
+# 16. I1: the refusal names a recipe, and that recipe works after a run that
+#     already installed the binary (cargo refuses an untracked file without
+#     --force, so the installer must pass it).
+rerelease 'echo "mk 0.0.1"'
+run_case recipe linux-x86_64-gnu
+if printf '%s' "$out" | grep -q -- 're-run with: --from-source --only mk'; then
+    ok "refusal prints the recipe: --from-source --only mk"
+else bad "refusal recipe: $out"; fi
+fresh_release
+run_case first linux-x86_64-gnu                      # binary install, rc 0
+rc=0
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" --from-source 2>&1) || rc=$?
+if [ "$rc" -eq 0 ] && grep -q -- '--force mk-cli' "$T/cargo.log" 2>/dev/null \
+   && printf '%s' "$out" | grep -q 'which cargo does not track (--force)'; then
+    ok "--from-source over an installer-copied binary: cargo gets --force"
+else bad "--from-source after a binary install (rc=$rc): $out / $(cat "$T/cargo.log" 2>/dev/null)"; fi
+rm -f "$T/cargo.log"
+printf '[v1]\n"mk-cli 0.13.0 (git+https://github.com/bg002h/mnemonic-key?tag=%s#0feaaaa9)" = ["mk"]\n' "$MK_TAG" > "$T/root/.crates.toml"
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" --from-source 2>&1) || true
+if ! grep -q -- '--force' "$T/cargo.log" 2>/dev/null; then
+    ok "--from-source over a cargo-tracked binary: no --force"
+else bad "tracked binary was forced: $(cat "$T/cargo.log")"; fi
+
+# 17. exactly one binary: two copies that both print the right version.
+fresh_release
+mkdir -p "$T/pkg/sub"; cp "$T/pkg/mk" "$T/pkg/sub/mk"
+rearchive mk sub/mk LICENSE
+run_case twobins linux-x86_64-gnu
+if [ "$rc" -ne 0 ] && ! installed && printf '%s' "$out" | grep -q "expected exactly one 'mk'"; then
+    ok "two 'mk' in the archive: refused, nothing installed"
+else bad "two binaries (rc=$rc): $out"; fi
+
+# 18. the version match is exact, not a prefix.
+rerelease "echo \"mk $MK_VER-rc1\""
+run_case rc1 linux-x86_64-gnu
+if [ "$rc" -ne 0 ] && ! installed && printf '%s' "$out" | grep -q "did not print 'mk $MK_VER'"; then
+    ok "binary printing 'mk $MK_VER-rc1': refused (exact match)"
+else bad "prefix version (rc=$rc): $out"; fi
+
+# 19. an asset that matches its checksum but does not unpack.
+fresh_release
+head -c 4096 /dev/urandom > "$REL/$ASSET"
+( cd "$REL" && sha256sum "$ASSET" > SHA256SUMS.x86_64 )
+run_case badtar linux-x86_64-gnu
+if [ "$rc" -ne 0 ] && ! installed && printf '%s' "$out" | grep -q "cannot unpack $ASSET"; then
+    ok "checksummed asset that is not an archive: 'cannot unpack', nothing installed"
+else bad "unpack failure (rc=$rc): $out"; fi
+
+# 20. Darwin detection, both arches.
+darwin() {
+    mkdir -p "$T/dw"
+    printf '#!/bin/sh\ncase "$1" in -s) echo Darwin ;; -m) echo %s ;; esac\n' "$1" > "$T/dw/uname"
+    chmod +x "$T/dw/uname"
+    PATH="$T/dw:$PATH" MNEMONIC_INSTALL_PLATFORM='' sh "$INSTALL_SH" --list | sed -n 's/^platform: //p'
+}
+d="$(darwin arm64) $(darwin x86_64)"
+if [ "$d" = "macos-aarch64 macos-x86_64" ]; then ok "Darwin detection: arm64 -> macos-aarch64, x86_64 -> macos-x86_64"
+else bad "Darwin detection: got '$d'"; fi
+
+# 21. SIGTERM mid-download stops the run (the draft's trap cleaned up and
+#     carried on to the next component).
+fresh_release
+rm -rf "$T/root"; rm -f "$T/curl.log"
+( PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu CURL_STUB_SLEEP=2 \
+    exec sh "$INSTALL_SH" --only ms,mk --no-man --root "$T/root" > "$T/term.out" 2>&1 ) &
+tpid=$!
+sleep 1; kill -TERM "$tpid" 2>/dev/null; rc=0; wait "$tpid" || rc=$?
+if [ "$rc" -eq 143 ] && ! grep -q 'mnemonic-key' "$T/curl.log" 2>/dev/null && ! installed; then
+    ok "SIGTERM during a download: exit 143, the next component is never started"
+else bad "SIGTERM (rc=$rc, downloads: $(cat "$T/curl.log" 2>/dev/null | tr '\n' ' ')): $(cat "$T/term.out")"; fi
+
+# 22. every platform mapping, exactly (a swap that still passes its checksum,
+#     e.g. macOS arm64 given the amd64 build, or the GUI glibc/musl pair,
+#     must fail here). Expected names were checked with `file` against the
+#     real assets on 2026-09-24. Versions come from the pin table.
+pin_ver() { sed -n "s/.*|https:\/\/github.com\/bg002h\/$1|[^|]*-v\([0-9.]*\)|.*/\1/p" "$INSTALL_SH"; }
+TV=$(pin_ver mnemonic-toolkit); DV=$(pin_ver descriptor-mnemonic); SV=$(pin_ver mnemonic-secret)
+KV=$(pin_ver mnemonic-key); GV=$(pin_ver mnemonic-gui)
+expect_map() {
+    case "$1" in
+        linux-x86_64-gnu)   echo "mnemonic-$TV-x86_64-linux-musl.tar.gz md-$DV-linux-amd64.tar.gz ms-$SV-x86_64-linux-musl.tar.gz mk-$KV-x86_64-linux-musl.tar.gz mnemonic-gui-v$GV-x86_64-linux.tar.gz" ;;
+        linux-x86_64-musl)  echo "mnemonic-$TV-x86_64-linux-musl.tar.gz source ms-$SV-x86_64-linux-musl.tar.gz mk-$KV-x86_64-linux-musl.tar.gz source" ;;
+        linux-aarch64-gnu)  echo "mnemonic-$TV-aarch64-linux-musl.tar.gz md-$DV-aarch64-linux-musl.tar.gz ms-$SV-aarch64-linux-musl.tar.gz mk-$KV-aarch64-linux-musl.tar.gz mnemonic-gui-v$GV-aarch64-linux.tar.gz" ;;
+        linux-aarch64-musl) echo "mnemonic-$TV-aarch64-linux-musl.tar.gz md-$DV-aarch64-linux-musl.tar.gz ms-$SV-aarch64-linux-musl.tar.gz mk-$KV-aarch64-linux-musl.tar.gz source" ;;
+        macos-x86_64)       echo "mnemonic-$TV-macos-amd64.tar.gz md-$DV-macos-amd64.tar.gz ms-$SV-macos-amd64.tar.gz mk-$KV-macos-amd64.tar.gz mnemonic-gui-v$GV-x86_64-macos.tar.gz" ;;
+        macos-aarch64)      echo "mnemonic-$TV-macos-arm64.tar.gz md-$DV-macos-arm64.tar.gz ms-$SV-macos-arm64.tar.gz mk-$KV-macos-arm64.tar.gz mnemonic-gui-v$GV-aarch64-macos.tar.gz" ;;
+        windows-x86_64)     echo "mnemonic-$TV-windows-amd64.zip md-$DV-windows-amd64.zip ms-$SV-windows-amd64.zip mk-$KV-windows-amd64.zip mnemonic-gui-v$GV-x86_64-windows.zip" ;;
+        freebsd-x86_64)     echo "source source source source source" ;;
+    esac
+}
+mapbad=0
+for p in linux-x86_64-gnu linux-x86_64-musl linux-aarch64-gnu linux-aarch64-musl macos-x86_64 macos-aarch64 windows-x86_64 freebsd-x86_64; do
+    got=$(MNEMONIC_INSTALL_PLATFORM=$p MNEMONIC_INSTALL_GLIBC=99.0 sh "$INSTALL_SH" --list \
+          | awk 'NR > 3 { print ($NF == "source)" ? "source" : $NF) }' | tr '\n' ' ' | sed 's/ $//')
+    want=$(expect_map "$p")
+    [ "$got" = "$want" ] || { bad "mapping $p: got '$got', want '$want'"; mapbad=1; }
+done
+[ "$mapbad" -eq 0 ] && ok "every platform mapping matches the measured table (8 platforms x 5)"
+
+# 23. the run check applies to Windows CLI binaries too (only the Windows
+#     GUI is exempt).
+fresh_release
+WZIP="mk-$MK_VER-windows-amd64.zip"
+printf '#!/bin/sh\necho "mk 0.0.1"\n' > "$T/pkg/mk.exe"
+python3 - "$REL/$WZIP" "$T/pkg/mk.exe" <<'PY'
+import sys, zipfile
+z = zipfile.ZipFile(sys.argv[1], "w"); z.write(sys.argv[2], "mk.exe"); z.close()
+PY
+( cd "$REL" && sha256sum "$WZIP" > SHA256SUMS.portable )
+rm -rf "$T/root"; rc=0
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=windows-x86_64 \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && [ ! -e "$T/root/bin/mk.exe" ] && printf '%s' "$out" | grep -q "REFUSED $WZIP: 'mk.exe --version'"; then
+    ok "Windows CLI binary with the wrong version: refused (run check not skipped)"
+else bad "windows run check (rc=$rc): $out"; fi
+
+# 24. sums matching is by exact name: a decoy line whose name merely contains
+#     the asset name (listed first, wrong digest) must not be used.
+fresh_release
+( cd "$REL" && { echo "0000000000000000000000000000000000000000000000000000000000000000  old/$ASSET"; sha256sum "$ASSET"; } > SHA256SUMS.x86_64 )
+run_case decoy linux-x86_64-gnu
+if [ "$rc" -eq 0 ] && installed; then ok "sums decoy 'old/<asset>' ignored; exact entry used"
+else bad "sums decoy (rc=$rc): $out"; fi
+
+# 25. N5: the same name listed twice with different digests -> refused.
+fresh_release
+( cd "$REL" && { sha256sum "$ASSET"; echo "1111111111111111111111111111111111111111111111111111111111111111  $ASSET"; } > SHA256SUMS.x86_64 )
+run_case dup linux-x86_64-gnu
+if [ "$rc" -ne 0 ] && ! installed && printf '%s' "$out" | grep -q 'lists it with more than one digest'; then
+    ok "asset listed with two different digests: refused"
+else bad "duplicate digests (rc=$rc): $out"; fi
+
+# 26. N1: a directory where the binary goes -> refused, directory untouched.
+fresh_release
+rm -rf "$T/root"; mkdir -p "$T/root/bin/mk"; rc=0
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && [ -z "$(ls -A "$T/root/bin/mk")" ] && printf '%s' "$out" | grep -q 'is a directory; not replacing it'; then
+    ok "directory at <root>/bin/mk: refused, left empty"
+else bad "directory target (rc=$rc, contents: $(ls -A "$T/root/bin/mk")): $out"; fi
+
+# 27. N3: --root "" is an error, not a silent ~/.cargo.
+rc=0; out=$(sh "$INSTALL_SH" --only mk --no-man --dry-run --root "" 2>&1) || rc=$?
+rc2=0; out2=$(sh "$INSTALL_SH" --only mk --no-man --dry-run --root= 2>&1) || rc2=$?
+if [ "$rc" -eq 2 ] && [ "$rc2" -eq 2 ] && printf '%s' "$out" | grep -q 'non-empty'; then
+    ok "--root \"\" and --root= are refused (exit 2)"
+else bad "--root empty (rc=$rc/$rc2): $out / $out2"; fi
+
+# 28. M5: warn when <root>/bin is not on PATH, and only then.
+fresh_release
+run_case pathwarn linux-x86_64-gnu
+w1=$(printf '%s' "$out" | grep -c 'is not on your PATH' || true)
+rm -rf "$T/root"; rc=0
+out=$(PATH="$T/root/bin:$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+w2=$(printf '%s' "$out" | grep -c 'is not on your PATH' || true)
+if [ "$w1" -eq 1 ] && [ "$w2" -eq 0 ]; then ok "PATH warning: printed when <root>/bin is off PATH, not when on it"
+else bad "PATH warning: off-PATH=$w1 on-PATH=$w2"; fi
+
+# 29. M6: no cargo and a component that must build from source -> the error
+#     names --exclude for exactly those components.
+mkdir -p "$T/nocargo"
+for tool in sh cut sed tr grep awk getconf uname ldd ls head wc sort find cat [ test echo printf; do
+    real=$(command -v "$tool") && ln -sf "$real" "$T/nocargo/$tool"
+done
+rc=0; out=$(PATH="$T/nocargo" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-musl \
+    "$T/nocargo/sh" "$INSTALL_SH" --no-man --root "$T/root" 2>&1) || rc=$?
+if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 're-run with --exclude md,mnemonic-gui'; then
+    ok "no cargo on x86_64 musl: error suggests --exclude md,mnemonic-gui"
+else bad "no-cargo message (rc=$rc): $out"; fi
+
+# 30. --root with a space reaches cargo as ONE argument (the source path used
+#     to word-split it). The stub cargo records one argument per line.
+printf '#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a"; done > "%s/cargo.argv"\n' "$T" > "$T/stub/cargo-argv"
+mkdir -p "$T/argv"; cp "$T/stub/cargo-argv" "$T/argv/cargo"; chmod +x "$T/argv/cargo"
+rm -f "$T/cargo.argv"
+PATH="$T/argv:$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=freebsd-x86_64 \
+    sh "$INSTALL_SH" --only mk --no-man --root "$T/sp ace" >/dev/null 2>&1 || true
+if grep -qx -- "--root" "$T/cargo.argv" 2>/dev/null && grep -qx -- "$T/sp ace" "$T/cargo.argv"; then
+    ok "--root with a space: passed to cargo as one argument"
+else bad "--root with a space: cargo argv was: $(tr '\n' '|' < "$T/cargo.argv" 2>/dev/null)"; fi
+
 g=$(detect 0); m=$(detect 1)
 if [ "$g" = linux-x86_64-gnu ] && [ "$m" = linux-x86_64-musl ]; then
     ok "libc detection: getconf GNU_LIBC_VERSION -> gnu; otherwise ldd musl -> musl"

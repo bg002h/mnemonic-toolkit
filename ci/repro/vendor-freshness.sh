@@ -60,7 +60,9 @@
 #  * Check (1) runs under an EMPTY, throwaway CARGO_HOME (F-675). Without that, a
 #    git source the stanzas miss resolves from ~/.cargo/git on any machine that
 #    has built the tree, so a local run passed while CI failed. The mutation
-#    tests in ci/repro/vendor-freshness.test.sh pin this and every other RED.
+#    tests in ci/repro/vendor-freshness.test.sh pin every RED, and pin the
+#    hermetic home directly: they run the gate with a caller CARGO_HOME whose
+#    config.toml is malformed, which only passes if that home is ignored.
 #
 # Spec: design/SPEC_vendor_freshness_ci_guard.md
 set -euo pipefail

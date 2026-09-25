@@ -33,6 +33,8 @@ export PATH="${EXAMPLES_BIN_DIR:+$EXAMPLES_BIN_DIR:}$HOME/.cargo/bin:$PATH"
 unset XDG_DATA_HOME CARGO_INSTALL_ROOT CARGO_HOME
 export HOME=/home/user
 export MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu
+# and glibc, which decides binary vs source build for md and the GUI.
+export MNEMONIC_INSTALL_GLIBC=2.39
 export LC_ALL=C LANG=C TZ=UTC
 
 # Strict preflight: fail loud BEFORE emitting so a missing tool can NEVER be

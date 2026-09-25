@@ -166,8 +166,20 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   x86_64) falls back to that per component, said on stderr. New `--root DIR`.
 - md pin 0.20.2 → 0.20.3, the first md release whose binaries are built with `cli-compiler`
   (`md encode --from-policy`), so the release binary matches a `--from-source` build.
-- CI: `install-verify.test.sh` (offline refusals and fallbacks) and `install-assets.test.sh` (every
-  platform mapping against the real pinned releases) join the install.sh harness job.
+- **glibc floors.** Where a Linux binary needs a newer glibc than the host has (x86_64 GUI ≥ 2.39,
+  aarch64 GUI ≥ 2.18, x86_64 `md` ≥ 2.34), that component is built from source instead, with a
+  note, before anything is downloaded. On musl the GUI is always built from source: the static musl
+  GUI build cannot load the X11/Wayland libraries.
+- `--from-source` now works after a binary install: an untracked binary this installer copied into
+  place is replaced with `cargo install --force`, where cargo previously refused ("already exists
+  in destination"). A refused binary names the recipe (`--from-source --only <name>`).
+- Fails closed, before any `rm`/`mkdir`, when no temporary directory can be created (an empty temp
+  path used to make the work dir `/<component>`). `--root` with a space now reaches cargo as one
+  argument. BusyBox `wget` (no `--https-only`) works. Warns when `<root>/bin` is not on `PATH`, and
+  a missing cargo suggests `--exclude` for the components that need it.
+- CI: `install-verify.test.sh` (offline refusals, fallbacks and the exact platform table) and
+  `install-assets.test.sh` (every mapping, and every Linux asset's glibc floor via `readelf`,
+  against the real pinned releases) join the install.sh harness job.
 
 ## mnemonic-toolkit [0.104.0] — 2026-09-23
 

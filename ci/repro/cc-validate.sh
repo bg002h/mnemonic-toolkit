@@ -219,31 +219,10 @@ TIME_RE='[0-2][0-9]:[0-5][0-9]:[0-5][0-9]'
 # cross leg — so listing it would only duplicate an existing alternative.)
 PATHS_RE="${ROOT}|/project|/build-a|/build-b|/home/|${CARGO_HOME:-/cargo}/registry"
 
+# residue_scan (residue-lib.sh) reads DATE_RE / TIME_RE / PATHS_RE and sets
+# residue=1 on any __DATE__ or host-path hit. It lives in the lib so that
+# ci/repro/residue.test.sh drives this exact verdict code (review M3/R1).
 residue=0
-scan() {
-  local label="$1" file="$2"
-  [ -f "$file" ] || { echo "  ($label: $file absent — skipped)"; return; }
-  # residue_hits (residue-lib.sh), never `grep | head -1 | grep -q`: under
-  # pipefail that shape read HEAVY residue as none (F-675).
-  local hits
-  hits="$(residue_hits "$DATE_RE" "$file" 'Jan  1 1980')"
-  if [ -n "$hits" ]; then
-    echo "::error::$label: __DATE__-shaped residue present" >&2
-    sed -n 1,3p <<<"$hits" >&2
-    residue=1
-  fi
-  hits="$(residue_hits "$TIME_RE" "$file")"
-  if [ -n "$hits" ]; then
-    echo "::warning::$label: __TIME__-shaped token present (may be a false positive — verify)" >&2
-    sed -n 1,3p <<<"$hits" >&2
-  fi
-  hits="$(residue_hits "$PATHS_RE" "$file")"
-  if [ -n "$hits" ]; then
-    echo "::error::$label: host-path residue present (real build path leaked — -ffile-prefix-map/remap gap)" >&2
-    sed -n 1,3p <<<"$hits" >&2
-    residue=1
-  fi
-}
 echo "  -- readelf -p .comment of the .o --"
 COMMENT="$(readelf -p .comment "$WORK/o.pinned1" 2>/dev/null || true)"
 if [ -n "$COMMENT" ]; then
@@ -251,8 +230,8 @@ if [ -n "$COMMENT" ]; then
 else
   echo "  (no .comment section)"
 fi
-scan ".o" "$WORK/o.pinned1"
-scan "binary" "$BINARY"
+residue_scan ".o" "$WORK/o.pinned1"
+residue_scan "binary" "$BINARY"
 
 # (d) PASSTHROUGH / COMPILER-STRING assertion (R0-I2 — PRIMARY aarch64 evidence).
 # For the aarch64 cross leg, A/B-equality alone is WEAK evidence: both legs share

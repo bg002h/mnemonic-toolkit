@@ -31,16 +31,29 @@ its pinned GitHub release and checks it against the `SHA256SUMS` file
 published with that release. It refuses a download whose digest does
 not match, or that no published checksum covers, and it runs each
 binary once before installing it, refusing one that does not report
-the pinned version (for example, a build too new for your C library).
-The releases are not signed, so the check proves the file is the one
-the release published, not who built it. Binaries land in `~/.cargo/bin/` (`--root DIR` puts
-them in `DIR/bin/` instead); make sure that directory is on your
-`PATH`. `--dry-run` shows every URL first; `--help` lists the options.
+the pinned version. The releases are not signed, so the check proves
+the file is the one the release published, not who built it. Binaries
+land in `~/.cargo/bin/` (`--root DIR` puts them in `DIR/bin/` instead);
+the installer warns if that directory is not on your `PATH`.
+`--dry-run` shows every URL first; `--help` lists the options.
 
 If a release has no binary for your platform (FreeBSD, for example),
-the installer says so and builds that CLI from the same pinned tag with
-`cargo`, which then needs a Rust toolchain (below). `--from-source`
-does that for every component.
+the installer says so and builds that component from the same pinned
+tag with `cargo`, which then needs a Rust toolchain (below).
+`--from-source` does that for every component. The same happens on
+Linux where a binary needs a newer C library than yours:
+
+| Binary | Needs |
+|---|---|
+| `mnemonic-gui`, Linux x86_64 | glibc ≥ 2.39 |
+| `mnemonic-gui`, Linux aarch64 | glibc ≥ 2.18 |
+| `md`, Linux x86_64 | glibc ≥ 2.34 |
+| `mnemonic`, `ms`, `mk`, and `md` on aarch64 | any Linux (static) |
+
+So on Ubuntu 22.04 (glibc 2.35) or Debian 12 (2.36) the GUI is built
+from source, and on Ubuntu 20.04 (2.31) `md` is too. On a musl system
+(Alpine, Void musl) the GUI is always built from source, because the
+static musl build cannot open a window.
 
 ### Building the pinned tags from source
 

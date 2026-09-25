@@ -103,5 +103,13 @@ run_case "md-codec file edited -> check 2"          nonzero  'lib.rs: CONTENT MI
 run_case "md-codec self-consistent re-vendor -> 4"  nonzero  'md-codec/.cargo-checksum.json: GIT-SOURCE PROVENANCE MISMATCH' revendor_md_wrong
 run_case "ungrounded git source -> fails closed"    nonzero  'has no row in GROUNDED_GIT_SOURCES'  new_git_source
 
+# Hermetic CARGO_HOME, observed directly (review M3/VF-H): the caller's
+# CARGO_HOME holds a malformed config.toml. Check (1) passes only because the
+# gate resolves under its own empty home; drop that and cargo fails to parse it.
+POISON_HOME="$WORK/poisoned-cargo-home"
+mkdir -p "$POISON_HOME"
+printf 'this is [not valid toml\n' > "$POISON_HOME/config.toml"
+CARGO_HOME="$POISON_HOME" run_case "hermetic CARGO_HOME: caller's config.toml never read" 0 '\(4/4\) OK' noop
+
 echo "vendor-freshness.test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

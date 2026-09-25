@@ -90,7 +90,7 @@ else
   ok "new rustc: no spurious MSRV warning"
 fi
 
-out_bin=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu run_with_rustc "1.85.0" --only mnemonic-gui)
+out_bin=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu MNEMONIC_INSTALL_GLIBC=99.0 run_with_rustc "1.85.0" --only mnemonic-gui)
 if printf '%s' "$out_bin" | grep -q 'mnemonic-gui needs rustc'; then
   bad "prebuilt GUI: old rustc skipped a binary install — guard over-binds"
 elif printf '%s' "$out_bin" | grep -q 'CURL-INVOKED.*mnemonic-gui-v'; then

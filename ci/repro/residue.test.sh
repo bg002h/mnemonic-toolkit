@@ -69,6 +69,31 @@ for _ in $(seq 20); do
 done
 echo "info - OLD 'grep | head -1 | grep -q' shape reported NO residue in $old_false/20 runs on heavy residue"
 
+# ── residue_scan: cc-validate.sh's (c) verdict (review M3/R1) ──────────────
+# The same REs cc-validate.sh sets, read from it so a change there is tested.
+eval "$(grep -E '^(DATE_RE|TIME_RE)=' "$HERE/cc-validate.sh")"
+ROOT=/build-root; PATHS_RE="${ROOT}|/project|/build-a|/build-b|/home/|/cargo/registry"
+scan_case() {  # scan_case <name> <want residue 0|1> <file>
+  local name="$1" want="$2" file="$3" rc=0
+  residue=0
+  residue_scan "t" "$file" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -eq 0 ] && [ "$residue" -eq "$want" ]; then ok "residue_scan: $name -> residue=$want"
+  else bad "residue_scan: $name -> residue=$residue rc=$rc (want $want)"; fi
+}
+scan_case "clean binary" 0 "$WORK/clean.bin"
+scan_case "heavy /project path residue" 1 "$WORK/heavy-project.bin"
+printf '\x7fELF built from /home/runner/work/x.c\x00' > "$WORK/home.bin"
+scan_case "one /home/ path" 1 "$WORK/home.bin"
+printf '\x7fELF Feb 29 2024\x00' > "$WORK/date.bin"
+scan_case "__DATE__ residue" 1 "$WORK/date.bin"
+printf '\x7fELF Jan  1 1980\x00' > "$WORK/epoch.bin"
+scan_case "only the pinned epoch date" 0 "$WORK/epoch.bin"
+printf '\x7fELF 12:34:56\x00' > "$WORK/time.bin"
+scan_case "__TIME__ token only (a warning)" 0 "$WORK/time.bin"
+residue=0; rc=0
+residue_scan "t" "$WORK/absent.bin" >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 0 ] && [ "$residue" -eq 0 ] && ok "residue_scan: missing file skipped" || bad "residue_scan missing file: rc=$rc residue=$residue"
+
 # ── remap-off-negative.sh end to end, stub builders ───────────────────────
 STUBS="$WORK/stubs"; mkdir -p "$STUBS"
 # The stub writes target/<TARGET>/release/<BIN> in the leg's cwd from the
