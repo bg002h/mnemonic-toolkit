@@ -8,6 +8,94 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## mnemonic-toolkit [Unreleased]
 
+### Installer — release binaries at the pinned tags, never crates.io (F-676)
+
+- **`scripts/install.sh` no longer installs `md` / `ms` / `mk` from crates.io**, whose copies
+  (md-cli 0.13.0, ms-cli 0.14.0, mk-cli 0.12.1) lag the pins the manual documents (0.20.3, 0.19.0,
+  0.13.0). Each component now installs the prebuilt binary from its pinned GitHub release, checked
+  against that release's `SHA256SUMS*` file (refused on a mismatch or when no published checksum
+  lists it) and run once (refused unless `--version` prints the pin). No Rust toolchain needed.
+- `--from-source` (alias `--from-git`) builds the same pinned tags with
+  `cargo install --locked --git … --tag …`; a platform with no release binary (FreeBSD, md on musl
+  x86_64) falls back to that per component, said on stderr. New `--root DIR`.
+- md pin 0.20.2 → 0.20.3, the first md release whose binaries are built with `cli-compiler`
+  (`md encode --from-policy`), so the release binary matches a `--from-source` build.
+- **glibc floors.** Where a Linux binary needs a newer glibc than the host has (x86_64 GUI ≥ 2.39,
+  aarch64 GUI ≥ 2.18, x86_64 `md` ≥ 2.34), that component is built from source instead, with a
+  note, before anything is downloaded. On musl the GUI is always built from source: the static musl
+  GUI build cannot load the X11/Wayland libraries.
+- `--from-source` now works after a binary install. When no cargo record in the install root
+  claims the binary (the file this installer copied into place), it passes `cargo install --force`,
+  where cargo previously refused ("already exists in destination"). Ownership is read from cargo's
+  own `<root>/.crates.toml`, including multi-line bin arrays: a binary that cargo tracks under a
+  **different** package is never replaced; that component is refused with the owner named and the
+  way out (`cargo uninstall`, or an explicit `--force`). Unreadable records mean no `--force`. cargo
+  is always given `--root` explicitly, so it installs where the script looks. A refused binary
+  names the recipe (`--from-source --only <name>`).
+- Fails closed, before any `rm`/`mkdir`, when no temporary directory can be created (an empty temp
+  path used to make the work dir `/<component>`). `--root` with a space now reaches cargo as one
+  argument. BusyBox `wget` (no `--https-only`) works. Warns when `<root>/bin` is not on `PATH`, and
+  a missing cargo suggests `--exclude` for the components that need it.
+- CI: `install-verify.test.sh` (offline refusals, fallbacks and the exact platform table) and
+  `install-assets.test.sh` (every mapping, and every Linux asset's glibc floor via `readelf`,
+  against the real pinned releases) join the install.sh harness job.
+
+### Installer pins: mnemonic-gui v0.62.0, ms 0.19.1 (F-679)
+
+- **ms 0.19.0 → 0.19.1.** 0.19.0's `ms verify --phrase <P> <ms1>` failed ("cannot read both ms1 and
+  --phrase from stdin"), which broke the GUI's verify flow; 0.19.1 fixes it. The pin moves with the
+  GUI's, so the installer never pairs the new GUI with the ms that breaks it.
+- **mnemonic-gui v0.59.0 → v0.62.0**, the release pinned to mnemonic 0.104.0, md 0.20.3, ms 0.19.1,
+  mk 0.13.0.
+- **The Linux GUI's glibc floor falls to 2.18 on x86_64** (it was 2.39; v0.62.0's x86_64 build is
+  made with `cross`), matching aarch64, measured with `readelf -V` on the published asset. Older
+  LTS hosts (Ubuntu 22.04, Debian 12, RHEL 9) now get the prebuilt GUI instead of a source build.
+  `--help`, the manual and the README say so.
+- **The GUI manual can no longer name CLI versions the installer does not install.** A new check
+  (`docs/manual-gui/tests/check_cli_pins.py`, run on every push by `sibling-pin-check.yml` and as
+  manual-gui lint phase 13) fails when `docs/manual-gui/pinned-upstream.toml` disagrees with
+  `scripts/install.sh`'s pins, or when the manual names an off-pin CLI version outside its
+  history list.
+
+## mnemonic-toolkit [0.104.0] — 2026-09-23
+
+**SemVer-MINOR: md-codec 0.47.0 adopted (F-642), pin `cf35d61a` =
+`descriptor-mnemonic-md-cli-v0.19.0`.** Minor because `mnemonic restore` gains a
+refusal and `mnemonic repair --json` gains a `verdict` value.
+
+### Changed
+
+- md-codec's taproot internal key is now a sum type (`InternalKey::{Slot, NumsPoint,
+  LianaUnspendable}`), and wire version 8 carries wire kind 1: Liana's unspendable key,
+  an xpub DERIVED from the leaf keys. **`mnemonic restore --md1` and `verify-bundle`
+  REFUSE such a card (exit 2)** instead of rendering it. This covers a keyed card and
+  a keyless template card, in every completion mode (`--search-address`, explicit
+  `--cosigner @N=`, `--expect-wallet-id`). The keyed template arm would otherwise
+  substitute the BIP-341 NUMS point, a different wallet at different addresses; the
+  keyless completion engine would otherwise report a false "✗ NO MATCH" (exit 4) on
+  correct cards. The refusal names `md descriptor --network <net>`, which renders it
+  (for a template card with `--template`/`--key`/`--fingerprint`). The engraved card
+  stays a faithful backup. See the manual's `mnemonic restore` section.
+- md-codec's five new errors (`NetworkRequiredForUnspendable`, `NonMinimalWireVersion`,
+  `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
+  `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.
+- `scripts/install.sh` and the four doc workflows pin md-cli at v0.19.0.
+- **`mnemonic repair --md1` now keeps the correction on a SINGLE-STRING card whose wire
+  version this build cannot read, and exits 4 (VERIFY-ME)** instead of discarding it
+  with exit 2. BCH is version-agnostic (`md_codec::correct_chunks`). The JSON `verdict`
+  is the new value `"unreadable_version"`, and stderr names the version, the accepted
+  set, and advice that depends on the version.
+  **This differs from `md repair`, which exits 5 on the same card** (md-cli 0.19.0).
+  The toolkit gives exit 5 only to a correction that something verified, and nothing
+  past the BCH checksum checks this one. The stdout report and the advice match
+  md's. A multi-string set at such a version, a clean card, and an uncorrectable one
+  still exit 2 with the same error as before.
+
+### Also in 0.104.0
+
+These shipped in the 0.104.0 binary but were left under `[Unreleased]` when it was cut
+(F-684; each checked against the `mnemonic-toolkit-v0.104.0` tag and its release binary).
+
 **SemVer-MINOR (pre-1.0 breaking axis) — P3 of the constellation CLI-uniformity cycle:
 `mnemonic`'s display-grouping surface changes on FOUR subcommands.**
 
@@ -153,89 +241,6 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
 - **[verification] the addresses are cross-checked against three prior derivations** — the
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
-
-### Installer — release binaries at the pinned tags, never crates.io (F-676)
-
-- **`scripts/install.sh` no longer installs `md` / `ms` / `mk` from crates.io**, whose copies
-  (md-cli 0.13.0, ms-cli 0.14.0, mk-cli 0.12.1) lag the pins the manual documents (0.20.3, 0.19.0,
-  0.13.0). Each component now installs the prebuilt binary from its pinned GitHub release, checked
-  against that release's `SHA256SUMS*` file (refused on a mismatch or when no published checksum
-  lists it) and run once (refused unless `--version` prints the pin). No Rust toolchain needed.
-- `--from-source` (alias `--from-git`) builds the same pinned tags with
-  `cargo install --locked --git … --tag …`; a platform with no release binary (FreeBSD, md on musl
-  x86_64) falls back to that per component, said on stderr. New `--root DIR`.
-- md pin 0.20.2 → 0.20.3, the first md release whose binaries are built with `cli-compiler`
-  (`md encode --from-policy`), so the release binary matches a `--from-source` build.
-- **glibc floors.** Where a Linux binary needs a newer glibc than the host has (x86_64 GUI ≥ 2.39,
-  aarch64 GUI ≥ 2.18, x86_64 `md` ≥ 2.34), that component is built from source instead, with a
-  note, before anything is downloaded. On musl the GUI is always built from source: the static musl
-  GUI build cannot load the X11/Wayland libraries.
-- `--from-source` now works after a binary install. When no cargo record in the install root
-  claims the binary (the file this installer copied into place), it passes `cargo install --force`,
-  where cargo previously refused ("already exists in destination"). Ownership is read from cargo's
-  own `<root>/.crates.toml`, including multi-line bin arrays: a binary that cargo tracks under a
-  **different** package is never replaced; that component is refused with the owner named and the
-  way out (`cargo uninstall`, or an explicit `--force`). Unreadable records mean no `--force`. cargo
-  is always given `--root` explicitly, so it installs where the script looks. A refused binary
-  names the recipe (`--from-source --only <name>`).
-- Fails closed, before any `rm`/`mkdir`, when no temporary directory can be created (an empty temp
-  path used to make the work dir `/<component>`). `--root` with a space now reaches cargo as one
-  argument. BusyBox `wget` (no `--https-only`) works. Warns when `<root>/bin` is not on `PATH`, and
-  a missing cargo suggests `--exclude` for the components that need it.
-- CI: `install-verify.test.sh` (offline refusals, fallbacks and the exact platform table) and
-  `install-assets.test.sh` (every mapping, and every Linux asset's glibc floor via `readelf`,
-  against the real pinned releases) join the install.sh harness job.
-
-### Installer pins: mnemonic-gui v0.62.0, ms 0.19.1 (F-679)
-
-- **ms 0.19.0 → 0.19.1.** 0.19.0's `ms verify --phrase <P> <ms1>` failed ("cannot read both ms1 and
-  --phrase from stdin"), which broke the GUI's verify flow; 0.19.1 fixes it. The pin moves with the
-  GUI's, so the installer never pairs the new GUI with the ms that breaks it.
-- **mnemonic-gui v0.59.0 → v0.62.0**, the release pinned to mnemonic 0.104.0, md 0.20.3, ms 0.19.1,
-  mk 0.13.0.
-- **The Linux GUI's glibc floor falls to 2.18 on x86_64** (it was 2.39; v0.62.0's x86_64 build is
-  made with `cross`), matching aarch64, measured with `readelf -V` on the published asset. Older
-  LTS hosts (Ubuntu 22.04, Debian 12, RHEL 9) now get the prebuilt GUI instead of a source build.
-  `--help`, the manual and the README say so.
-- **The GUI manual can no longer name CLI versions the installer does not install.** A new check
-  (`docs/manual-gui/tests/check_cli_pins.py`, run on every push by `sibling-pin-check.yml` and as
-  manual-gui lint phase 13) fails when `docs/manual-gui/pinned-upstream.toml` disagrees with
-  `scripts/install.sh`'s pins, or when the manual names an off-pin CLI version outside its
-  history list.
-
-## mnemonic-toolkit [0.104.0] — 2026-09-23
-
-**SemVer-MINOR: md-codec 0.47.0 adopted (F-642), pin `cf35d61a` =
-`descriptor-mnemonic-md-cli-v0.19.0`.** Minor because `mnemonic restore` gains a
-refusal and `mnemonic repair --json` gains a `verdict` value.
-
-### Changed
-
-- md-codec's taproot internal key is now a sum type (`InternalKey::{Slot, NumsPoint,
-  LianaUnspendable}`), and wire version 8 carries wire kind 1: Liana's unspendable key,
-  an xpub DERIVED from the leaf keys. **`mnemonic restore --md1` and `verify-bundle`
-  REFUSE such a card (exit 2)** instead of rendering it. This covers a keyed card and
-  a keyless template card, in every completion mode (`--search-address`, explicit
-  `--cosigner @N=`, `--expect-wallet-id`). The keyed template arm would otherwise
-  substitute the BIP-341 NUMS point, a different wallet at different addresses; the
-  keyless completion engine would otherwise report a false "✗ NO MATCH" (exit 4) on
-  correct cards. The refusal names `md descriptor --network <net>`, which renders it
-  (for a template card with `--template`/`--key`/`--fingerprint`). The engraved card
-  stays a faithful backup. See the manual's `mnemonic restore` section.
-- md-codec's five new errors (`NetworkRequiredForUnspendable`, `NonMinimalWireVersion`,
-  `UnspendableNotRootTr`, `UnspendableUseSiteNotCanonical`,
-  `UnspendableWithSortedMultiA`) route at exit 2 with the sibling validation rejects.
-- `scripts/install.sh` and the four doc workflows pin md-cli at v0.19.0.
-- **`mnemonic repair --md1` now keeps the correction on a SINGLE-STRING card whose wire
-  version this build cannot read, and exits 4 (VERIFY-ME)** instead of discarding it
-  with exit 2. BCH is version-agnostic (`md_codec::correct_chunks`). The JSON `verdict`
-  is the new value `"unreadable_version"`, and stderr names the version, the accepted
-  set, and advice that depends on the version.
-  **This differs from `md repair`, which exits 5 on the same card** (md-cli 0.19.0).
-  The toolkit gives exit 5 only to a correction that something verified, and nothing
-  past the BCH checksum checks this one. The stdout report and the advice match
-  md's. A multi-string set at such a version, a clean card, and an uncorrectable one
-  still exit 2 with the same error as before.
 
 ## mnemonic-toolkit [0.103.2] — 2026-09-20
 
