@@ -29,7 +29,9 @@
 #
 # Everything installs into <root>/bin, root = --root DIR, else
 # $CARGO_INSTALL_ROOT, else ${CARGO_HOME:-~/.cargo} (so the default is
-# ~/.cargo/bin, as with cargo). No system files touched; no sudo.
+# ~/.cargo/bin, as with cargo). cargo's `install.root` config is not read:
+# source builds get --root explicitly, so they land where binary installs do
+# and crates_owner() inspects the right records. No system files touched; no sudo.
 
 set -eu
 
@@ -199,7 +201,8 @@ OPTIONS:
                       binaries. Needs cargo, git and a C toolchain.
     --from-git        Alias for --from-source
     --root DIR        Install into DIR/bin (default:
-                      \$CARGO_INSTALL_ROOT/bin, else ~/.cargo/bin)
+                      \$CARGO_INSTALL_ROOT/bin, else ~/.cargo/bin).
+                      cargo's install.root config is not read.
     --force           Source builds: re-install even if the same version
                       is already installed (cargo install --force).
                       Binary installs always replace the file.
@@ -738,7 +741,9 @@ crates_owner() {
         /^\[v1\][ \t]*$/ { if (hdr) bad = 1; hdr = 1; next }
         /^"[^"]*" = \[/ {
             if (!hdr) { bad = 1; next }
-            id = $0; sub(/^"/, "", id); sub(/" = \[.*$/, "", id)
+            # index(), not a regex: mawk 1.3.4 misses /" = \[.*$/ when the
+            # line ends at the bracket (a multi-line array header).
+            id = substr($0, 2); id = substr(id, 1, index(id, "\" = [") - 1)
             rest = $0; sub(/^"[^"]*" = \[/, "", rest); gsub(/[ \t]+$/, "", rest)
             if (rest == "") { inarr = 1; next }          # multi-line array
             if (rest !~ /\]$/) { bad = 1; next }

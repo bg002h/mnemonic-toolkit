@@ -33,7 +33,8 @@ not match, or that no published checksum covers, and it runs each
 binary once before installing it, refusing one that does not report
 the pinned version. The releases are not signed, so the check proves
 the file is the one the release published, not who built it. Binaries
-land in `~/.cargo/bin/` (`--root DIR` puts them in `DIR/bin/` instead);
+land in `~/.cargo/bin/` (`--root DIR` or `$CARGO_INSTALL_ROOT` puts them
+in `DIR/bin/` instead; cargo's `install.root` config setting is not read);
 the installer warns if that directory is not on your `PATH`.
 `--dry-run` shows every URL first; `--help` lists the options.
 
