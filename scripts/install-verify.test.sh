@@ -39,6 +39,11 @@ for a in "\$@"; do
 done
 echo "\$url" >> "$T/curl.log"
 [ -n "\${CURL_STUB_SLEEP:-}" ] && sleep "\$CURL_STUB_SLEEP"
+if [ -n "\${CURL_STUB_RMTMP:-}" ]; then
+    tmproot=\$(dirname "\$(dirname "\$out")")
+    case "\$tmproot" in /?*/?*) rm -rf "\$tmproot" ;; esac
+    exit 22
+fi
 rel=\${url#https://github.com/bg002h/}
 repo=\${rel%%/*}; rest=\${rel#*/releases/download/}
 src="$T/fixture/\$repo/\$rest"
@@ -208,6 +213,29 @@ if [ "$rc" -ne 0 ] && ! installed && [ ! -e "$T/m2.log" ] \
    && printf '%s' "$out" | grep -q 'cannot create a temporary directory'; then
     ok "mktemp fails: refused before any rm/mkdir, nothing installed"
 else bad "mktemp failure (rc=$rc, rm/mkdir calls: $(cat "$T/m2.log" 2>/dev/null | tr '\n' ';')): $out"; fi
+# mktemp that "succeeds" but prints a RELATIVE path, or an absolute path it
+# never created: both must be refused before any rm/mkdir (review fold-2 Minor).
+for lie in 'relative/evil-path' "$T/never-created"; do
+    printf '#!/bin/sh\necho "%s"\nexit 0\n' "$lie" > "$T/m2/mktemp"; chmod +x "$T/m2/mktemp"
+    rm -rf "$T/root"; rm -f "$T/m2.log"; rc=0
+    out=$(cd "$T" && PATH="$T/m2:$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+          sh "$INSTALL_SH" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ] && ! installed && [ ! -e "$T/m2.log" ] && [ ! -e "$T/relative" ] \
+       && printf '%s' "$out" | grep -q 'cannot create a temporary directory'; then
+        ok "mktemp prints '$lie' (exit 0): refused before any rm/mkdir"
+    else bad "mktemp lie '$lie' (rc=$rc, rm/mkdir: $(tr '\n' ';' < "$T/m2.log" 2>/dev/null)): $out"; fi
+done
+# install_binary's own guard: the temp root disappears between components
+# (the curl stub deletes it during ms's download). mk must not be fetched into
+# a recreated directory; it is refused.
+fresh_release
+rm -rf "$T/root"; rm -f "$T/curl.log"; rc=0
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu CURL_STUB_RMTMP=1 \
+      sh "$INSTALL_SH" --only ms,mk --no-man --root "$T/root" 2>&1) || rc=$?
+if [ "$rc" -ne 0 ] && ! installed && printf '%s' "$out" | grep -q 'temporary directory .* is gone' \
+   && ! grep -q 'mnemonic-key' "$T/curl.log" 2>/dev/null; then
+    ok "temp root deleted mid-run: the next component is refused, not refetched"
+else bad "temp root gone (rc=$rc, downloads: $(tr '\n' ' ' < "$T/curl.log" 2>/dev/null)): $out"; fi
 # ... and the realistic trigger: a TMPDIR that does not exist, real mktemp.
 rm -f "$T/root/bin/mk"; rc=0
 out=$(TMPDIR="$T/no-such-dir" PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
@@ -251,7 +279,7 @@ rc=0
 out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
       sh "$INSTALL_SH" --only mk --no-man --root "$T/root" --from-source 2>&1) || rc=$?
 if [ "$rc" -eq 0 ] && grep -q -- '--force mk-cli' "$T/cargo.log" 2>/dev/null \
-   && printf '%s' "$out" | grep -q 'which cargo does not track (--force)'; then
+   && printf '%s' "$out" | grep -q 'which no cargo record in .* claims (--force)'; then
     ok "--from-source over an installer-copied binary: cargo gets --force"
 else bad "--from-source after a binary install (rc=$rc): $out / $(cat "$T/cargo.log" 2>/dev/null)"; fi
 rm -f "$T/cargo.log"
@@ -420,6 +448,110 @@ PATH="$T/argv:$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=freebsd-x86_64 \
 if grep -qx -- "--root" "$T/cargo.argv" 2>/dev/null && grep -qx -- "$T/sp ace" "$T/cargo.argv"; then
     ok "--root with a space: passed to cargo as one argument"
 else bad "--root with a space: cargo argv was: $(tr '\n' '|' < "$T/cargo.argv" 2>/dev/null)"; fi
+# ... and with no --root, cargo still gets the root this script inspects
+# ($CARGO_INSTALL_ROOT here), not whatever cargo's own config would pick.
+rm -f "$T/cargo.argv"
+CARGO_INSTALL_ROOT="$T/cir" PATH="$T/argv:$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=freebsd-x86_64 \
+    sh "$INSTALL_SH" --only mk --no-man >/dev/null 2>&1 || true
+if grep -qx -- "--root" "$T/cargo.argv" 2>/dev/null && grep -qx -- "$T/cir" "$T/cargo.argv"; then
+    ok "no --root: cargo is given --root \$CARGO_INSTALL_ROOT explicitly"
+else bad "implicit root: cargo argv was: $(tr '\n' '|' < "$T/cargo.argv" 2>/dev/null)"; fi
+
+# 31-36. NEW-1 (fold-2 re-review): --from-source must never auto-force over a
+#     binary that cargo tracks under ANOTHER package. The .crates.toml below is
+#     a real cargo-written file (paths shortened): several packages, one of
+#     them with a multi-line bin array, as cargo writes it.
+src_case() {  # src_case <crates.toml content or -> [extra install.sh args...]
+    _toml=$1; shift
+    rm -rf "$T/root"; mkdir -p "$T/root/bin"; rm -f "$T/cargo.log"
+    printf '#!/bin/sh\necho "I am someone else"\n' > "$T/root/bin/mk"; chmod +x "$T/root/bin/mk"
+    [ "$_toml" = - ] || printf '%s\n' "$_toml" > "$T/root/.crates.toml"
+    rc=0
+    out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+          sh "$INSTALL_SH" --only mk --no-man --root "$T/root" --from-source "$@" 2>&1) || rc=$?
+}
+mk_untouched() { [ "$("$T/root/bin/mk")" = "I am someone else" ]; }
+REAL_TOML='[v1]
+"fake-mk 0.1.0 (path+file:///home/user/src/fake-mk)" = ["mk"]
+"ms-cli 0.19.0 (git+https://github.com/bg002h/mnemonic-secret?tag=ms-cli-v0.19.0#4f1e99eb05eefac7fd9d8eb9087ee1f4c6aaea07)" = ["ms"]
+"multi 2.3.4 (path+file:///home/user/src/multi)" = [
+    "alpha",
+    "beta",
+]'
+
+# 31. another package owns mk -> refused, cargo never run, file untouched, owner named.
+src_case "$REAL_TOML"
+if [ "$rc" -ne 0 ] && [ ! -e "$T/cargo.log" ] && mk_untouched \
+   && printf '%s' "$out" | grep -q "belongs to cargo package 'fake-mk 0.1.0 (path+file:///home/user/src/fake-mk)', not mk-cli" \
+   && printf '%s' "$out" | grep -q 'cargo uninstall --root .* fake-mk'; then
+    ok "mk owned by another cargo package (fake-mk): refused, owner named, cargo not run"
+else bad "other owner (rc=$rc, cargo: $(cat "$T/cargo.log" 2>/dev/null)): $out"; fi
+
+# 32. same, owner inside a multi-line array (as cargo writes several bins).
+MULTI_TOML='[v1]
+"ms-cli 0.19.0 (git+https://github.com/bg002h/mnemonic-secret?tag=ms-cli-v0.19.0#4f1e99eb)" = ["ms"]
+"tools 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = [
+    "alpha",
+    "mk",
+]'
+src_case "$MULTI_TOML"
+if [ "$rc" -ne 0 ] && [ ! -e "$T/cargo.log" ] && mk_untouched \
+   && printf '%s' "$out" | grep -q "belongs to cargo package 'tools 1.0.0"; then
+    ok "mk owned via a multi-line bin array: refused"
+else bad "multi-line owner (rc=$rc): $out"; fi
+
+# 33. a user-supplied --force is the one override.
+src_case "$REAL_TOML" --force
+if [ "$rc" -eq 0 ] && grep -q -- '--force mk-cli' "$T/cargo.log" 2>/dev/null \
+   && printf '%s' "$out" | grep -q "force given: replacing .*owned by cargo package 'fake-mk"; then
+    ok "user --force overrides another package's mk, and says whose"
+else bad "user --force (rc=$rc): $out / $(cat "$T/cargo.log" 2>/dev/null)"; fi
+
+# 34. cargo tracks mk as mk-cli itself -> no --force (cargo upgrades or skips).
+src_case '[v1]
+"mk-cli 0.12.0 (git+https://github.com/bg002h/mnemonic-key?tag=mk-cli-v0.12.0#b0abc867)" = ["mk"]
+"multi 2.3.4 (path+file:///home/user/src/multi)" = [
+    "alpha",
+    "beta",
+]'
+if [ "$rc" -eq 0 ] && [ -e "$T/cargo.log" ] && ! grep -q -- '--force' "$T/cargo.log"; then
+    ok "mk tracked as mk-cli: cargo run without --force"
+else bad "own package (rc=$rc): $out / $(cat "$T/cargo.log" 2>/dev/null)"; fi
+
+# 35. records present but unreadable with certainty -> never force.
+for bad_toml in 'not toml at all' '"fake-mk 0.1.0 (x)" = ["mk"]' '[v1]
+"half = ["mk"' '[v1]
+"x 1 (y)" = [
+    "mk",'; do
+    src_case "$bad_toml"
+    if [ -e "$T/cargo.log" ] && ! grep -q -- '--force' "$T/cargo.log" \
+       && printf '%s' "$out" | grep -q 'could not be read with certainty; not forcing'; then :
+    else bad "malformed .crates.toml '$(printf '%s' "$bad_toml" | head -n1)': forced or no note: $out / $(cat "$T/cargo.log" 2>/dev/null)"; fi
+done
+ok "malformed .crates.toml (4 shapes): cargo run without --force"
+#     .crates2.json without .crates.toml, and .crates.toml/.crates2.json disagreeing.
+src_case -
+printf '{"installs":{"fake-mk 0.1.0 (path+file:///x)":{"bins":["mk"]}}}\n' > "$T/root/.crates2.json"
+rm -f "$T/cargo.log"; rc=0
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" --from-source 2>&1) || rc=$?
+j1=$(grep -c -- '--force' "$T/cargo.log" 2>/dev/null || true)
+printf '[v1]\n"multi 2.3.4 (path+file:///x)" = ["alpha"]\n' > "$T/root/.crates.toml"
+rm -f "$T/cargo.log"
+out=$(PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+      sh "$INSTALL_SH" --only mk --no-man --root "$T/root" --from-source 2>&1) || rc=$?
+j2=$(grep -c -- '--force' "$T/cargo.log" 2>/dev/null || true)
+if [ "$j1" = 0 ] && [ "$j2" = 0 ]; then
+    ok ".crates2.json alone, or naming mk when .crates.toml does not: no --force"
+else bad ".crates2.json cases forced (json-only=$j1, disagree=$j2)"; fi
+
+# 36. no cargo record at all (the binary-install case): --force, with a note
+#     that no longer claims "cargo does not track" when that is unknown.
+src_case -
+if [ "$rc" -eq 0 ] && grep -q -- '--force mk-cli' "$T/cargo.log" 2>/dev/null \
+   && printf '%s' "$out" | grep -q 'which no cargo record in .* claims (--force)'; then
+    ok "no cargo records: the installer-copied binary is replaced (--force)"
+else bad "no records (rc=$rc): $out"; fi
 
 g=$(detect 0); m=$(detect 1)
 if [ "$g" = linux-x86_64-gnu ] && [ "$m" = linux-x86_64-musl ]; then

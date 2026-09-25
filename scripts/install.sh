@@ -682,15 +682,85 @@ install_man_pages() {
         || echo "warning: man pages skipped for $man_name (needs a $man_name build with gen-man)" >&2
 }
 
-# cargo_root <cargo args...>: run cargo, adding `--root <ROOT_ARG>` (as one
-# argument) after the subcommand when --root was given.
+# cargo_root <cargo args...>: run cargo with `--root "$ROOT"` (as ONE
+# argument) after the subcommand. Always explicit, so cargo installs into, and
+# keeps its records in, the same root this script inspects and reports; a
+# cargo `install.root` config would otherwise send the build somewhere else.
 cargo_root() {
     _sub="$1"; shift
-    if [ -n "$ROOT_ARG" ]; then
-        cargo "$_sub" --root "$ROOT_ARG" "$@"
-    else
-        cargo "$_sub" "$@"
+    cargo "$_sub" --root "$ROOT" "$@"
+}
+
+# crates_owner <bin>: which cargo package, per cargo's own records in $ROOT,
+# owns $BIN_DIR/<bin>. Prints exactly one of:
+#   none              no cargo record in $ROOT claims it (neither .crates.toml
+#                     nor .crates2.json exists, or .crates.toml parses and no
+#                     package lists it, and .crates2.json does not name it)
+#   pkg <package-id>  .crates.toml lists it under <package-id>, e.g.
+#                     "fake-mk 0.1.0 (path+file:///src/fake-mk)"
+#   unknown           the records exist but cannot be read with certainty
+#                     (malformed, unreadable, or .crates2.json without
+#                     .crates.toml, or the two files disagree)
+# .crates.toml is cargo's v1 record: a `[v1]` table of
+#   "<name> <version> (<source>)" = ["<bin>"]
+# with a package of several bins written as a multi-line array, one
+# "<bin>", per line and a closing `]` (as cargo writes it). Any line that is
+# not one of those shapes makes the whole file "unknown".
+crates_owner() {
+    _cb="$1"; _toml="$ROOT/.crates.toml"; _json="$ROOT/.crates2.json"
+    if [ ! -e "$_toml" ]; then
+        if [ -e "$_json" ]; then echo unknown; else echo none; fi
+        return 0
     fi
+    [ -r "$_toml" ] || { echo unknown; return 0; }
+    _co=$(awk -v b="$_cb" -v be="$_cb$EXE" '
+        # item <token>: one array element, e.g. "mk" or "mk", ; claims b?
+        function item(it) {
+            gsub(/^[ \t]+|[ \t]+$/, "", it)
+            sub(/,$/, "", it)
+            gsub(/[ \t]+$/, "", it)
+            if (it == "") return
+            if (it !~ /^"[^"]*"$/) { bad = 1; return }
+            it = substr(it, 2, length(it) - 2)
+            if (it == b || it == be) {
+                if (owner != "" && owner != id) bad = 1
+                owner = id
+            }
+        }
+        BEGIN { bad = 0; hdr = 0; inarr = 0; owner = "" }
+        inarr {
+            line = $0; gsub(/^[ \t]+|[ \t]+$/, "", line)
+            if (line == "]") { inarr = 0; next }
+            if (line ~ /^"[^"]*",?$/) { item(line); next }
+            bad = 1; next
+        }
+        /^[ \t]*$/ { next }
+        /^\[v1\][ \t]*$/ { if (hdr) bad = 1; hdr = 1; next }
+        /^"[^"]*" = \[/ {
+            if (!hdr) { bad = 1; next }
+            id = $0; sub(/^"/, "", id); sub(/" = \[.*$/, "", id)
+            rest = $0; sub(/^"[^"]*" = \[/, "", rest); gsub(/[ \t]+$/, "", rest)
+            if (rest == "") { inarr = 1; next }          # multi-line array
+            if (rest !~ /\]$/) { bad = 1; next }
+            sub(/\]$/, "", rest)
+            n = split(rest, items, ",")
+            for (i = 1; i <= n; i++) item(items[i])
+            next
+        }
+        { bad = 1 }
+        END {
+            if (bad || !hdr || inarr) print "unknown"
+            else if (owner == "") print "none"
+            else print "pkg " owner
+        }' "$_toml" 2>/dev/null) || _co=unknown
+    [ -n "$_co" ] || _co=unknown
+    if [ "$_co" = none ] && [ -e "$_json" ]; then
+        # .crates.toml says nobody owns it; .crates2.json must not disagree.
+        if [ ! -r "$_json" ] || grep -Eq "\"$_cb(\\.exe)?\"" "$_json" 2>/dev/null; then
+            _co=unknown
+        fi
+    fi
+    echo "$_co"
 }
 
 # ── Install loop ────────────────────────────────────────────────────────
@@ -752,15 +822,47 @@ for name in $ALL; do
     if [ -z "$FROM_SOURCE" ]; then
         source_reason "$name" "$tag"
     fi
-    # A binary this installer copied into place is not in cargo's
-    # <root>/.crates.toml, and cargo refuses to overwrite an untracked file
-    # ("binary `mk` already exists in destination"). Replace it: it is ours, or
-    # a file a binary install would have replaced anyway.
+    # An existing $BIN_DIR/<bin> decides whether cargo needs --force. Ask
+    # cargo's own records in $ROOT who owns it (crates_owner), never infer
+    # from the package name:
+    #   none     no record claims it: the file a binary install of this
+    #            script copied in. cargo refuses to overwrite an untracked
+    #            file, so pass --force.
+    #   this pkg cargo already tracks it as $pkg: no --force; cargo upgrades
+    #            it or says it is already installed.
+    #   another  a DIFFERENT package owns it: refuse this component and name
+    #            the owner. Only a user-supplied --force overrides.
+    #   unknown  records unreadable or inconsistent: no --force (fail safe);
+    #            cargo itself then refuses if the file is in the way.
     src_force="$FORCE"
-    if [ -z "$src_force" ] && [ -e "$BIN_DIR/$bin$EXE" ] \
-       && ! grep -q "^\"$pkg " "$ROOT/.crates.toml" 2>/dev/null; then
-        src_force="--force"
-        echo "note: replacing $BIN_DIR/$bin$EXE, which cargo does not track (--force)." >&2
+    if [ -e "$BIN_DIR/$bin$EXE" ]; then
+        owner=$(crates_owner "$bin")
+        case "$owner" in
+            none)
+                if [ -z "$src_force" ]; then
+                    src_force="--force"
+                    echo "note: replacing $BIN_DIR/$bin$EXE, which no cargo record in $ROOT claims (--force)." >&2
+                fi ;;
+            "pkg $pkg "*) ;;
+            pkg\ *)
+                owner_id=${owner#pkg }
+                if [ -z "$FORCE" ]; then
+                    printf 'install  %s (source: %s)\n' "$name" "$tag"
+                    echo "  error: $BIN_DIR/$bin$EXE belongs to cargo package '$owner_id', not $pkg;" >&2
+                    echo "         not replacing it. To replace it, re-run with --force (this" >&2
+                    echo "         deletes that package's $bin), or first run:" >&2
+                    echo "           cargo uninstall --root \"$ROOT\" ${owner_id%% *}" >&2
+                    echo "  FAILED" >&2
+                    failed_count=$((failed_count + 1))
+                    continue
+                fi
+                echo "note: --force given: replacing $BIN_DIR/$bin$EXE, owned by cargo package '$owner_id'." >&2 ;;
+            *)
+                if [ -z "$FORCE" ]; then
+                    echo "note: cargo's records in $ROOT could not be read with certainty; not forcing." >&2
+                    echo "      If cargo refuses because $BIN_DIR/$bin$EXE exists, check what owns it." >&2
+                fi ;;
+        esac
     fi
     if [ -n "$features" ]; then
         feat_args="--features $features"
@@ -775,7 +877,7 @@ for name in $ALL; do
     # installed into the first half and tried to install a crate named after
     # the second).
     if [ -n "$DRY_RUN" ]; then
-        echo "  [dry-run] cargo install $LOCKED --git $url --tag $tag $feat_args${ROOT_ARG:+ --root \"$ROOT_ARG\"} $src_force $pkg"
+        echo "  [dry-run] cargo install --root \"$ROOT\" $LOCKED --git $url --tag $tag $feat_args $src_force $pkg"
         installed_count=$((installed_count + 1))
         install_man_pages "$name"
     elif cargo_root install $LOCKED --git "$url" --tag "$tag" $feat_args $src_force "$pkg"; then

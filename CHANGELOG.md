@@ -170,9 +170,14 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   aarch64 GUI ≥ 2.18, x86_64 `md` ≥ 2.34), that component is built from source instead, with a
   note, before anything is downloaded. On musl the GUI is always built from source: the static musl
   GUI build cannot load the X11/Wayland libraries.
-- `--from-source` now works after a binary install: an untracked binary this installer copied into
-  place is replaced with `cargo install --force`, where cargo previously refused ("already exists
-  in destination"). A refused binary names the recipe (`--from-source --only <name>`).
+- `--from-source` now works after a binary install. When no cargo record in the install root
+  claims the binary (the file this installer copied into place), it passes `cargo install --force`,
+  where cargo previously refused ("already exists in destination"). Ownership is read from cargo's
+  own `<root>/.crates.toml`, including multi-line bin arrays: a binary that cargo tracks under a
+  **different** package is never replaced; that component is refused with the owner named and the
+  way out (`cargo uninstall`, or an explicit `--force`). Unreadable records mean no `--force`. cargo
+  is always given `--root` explicitly, so it installs where the script looks. A refused binary
+  names the recipe (`--from-source --only <name>`).
 - Fails closed, before any `rm`/`mkdir`, when no temporary directory can be created (an empty temp
   path used to make the work dir `/<component>`). `--root` with a space now reaches cargo as one
   argument. BusyBox `wget` (no `--https-only`) works. Warns when `<root>/bin` is not on `PATH`, and
