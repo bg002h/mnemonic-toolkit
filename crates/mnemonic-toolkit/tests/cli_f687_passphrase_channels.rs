@@ -975,6 +975,9 @@ struct PtyRun {
     shown: Vec<u8>,
     /// Was ECHO on in the terminal's mode after the child was gone?
     echo_after: bool,
+    /// F-687c: input still queued on the terminal after the child was gone,
+    /// i.e. what the shell would read next and run.
+    left_for_shell: Vec<u8>,
 }
 
 /// Run `bin argv` on a fresh pty that is the child's CONTROLLING terminal
@@ -989,6 +992,19 @@ fn run_on_a_terminal(
     env: &[(&str, &str)],
     prompt: &str,
     typed: &[u8],
+) -> PtyRun {
+    run_on_a_terminal_writes(bin, argv, env, prompt, &[typed])
+}
+
+/// [`run_on_a_terminal`], typing each of `writes` as a separate write (the
+/// second and later ones are type-ahead after the first).
+#[cfg(target_os = "linux")]
+fn run_on_a_terminal_writes(
+    bin: &std::path::Path,
+    argv: &[&str],
+    env: &[(&str, &str)],
+    prompt: &str,
+    writes: &[&[u8]],
 ) -> PtyRun {
     use std::io::{Read, Write};
     use std::os::fd::{AsRawFd, FromRawFd};
@@ -1055,7 +1071,16 @@ fn run_on_a_terminal(
         let _ = child.wait();
         panic!("the prompt {prompt:?} never appeared on stderr (child killed)");
     }
-    master.write_all(typed).unwrap();
+    for w in writes {
+        // An EMPTY write is a 40 ms pause: it lets the child finish reading
+        // the line and enter the drain before the next write arrives.
+        if w.is_empty() {
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            continue;
+        }
+        master.write_all(w).unwrap();
+        master.flush().unwrap();
+    }
     let out = child.wait_with_output().unwrap();
     let stderr = reader.join().unwrap();
     // SAFETY: fcntl/tcgetattr on fds we own.
@@ -1069,6 +1094,28 @@ fn run_on_a_terminal(
         let mut t: libc::termios = std::mem::zeroed();
         assert_eq!(libc::tcgetattr(keep.as_raw_fd(), &mut t), 0, "tcgetattr");
         t.c_lflag & libc::ECHO != 0
+    };
+    // What would the shell read next? Switch our slave handle to
+    // non-blocking, non-canonical reads and take everything queued.
+    // SAFETY: termios/read on the slave fd we own.
+    let left_for_shell = unsafe {
+        let fd = keep.as_raw_fd();
+        let mut t: libc::termios = std::mem::zeroed();
+        libc::tcgetattr(fd, &mut t);
+        t.c_lflag &= !libc::ICANON;
+        t.c_cc[libc::VMIN] = 0;
+        t.c_cc[libc::VTIME] = 0;
+        libc::tcsetattr(fd, libc::TCSANOW, &t);
+        let mut left = Vec::new();
+        let mut b = [0u8; 256];
+        loop {
+            let n = libc::read(fd, b.as_mut_ptr().cast(), b.len());
+            if n <= 0 {
+                break;
+            }
+            left.extend_from_slice(&b[..n as usize]);
+        }
+        left
     };
     let mut shown = Vec::new();
     let mut buf = [0u8; 256];
@@ -1085,6 +1132,7 @@ fn run_on_a_terminal(
         stderr,
         shown,
         echo_after,
+        left_for_shell,
     }
 }
 
@@ -1630,4 +1678,222 @@ fn fold1_stdin_gaps_are_refused() {
         "{}",
         r.stderr
     );
+}
+
+// ---------------------------------------------------------------------------
+// F-687c (operator ruling 2026-09-25): on a terminal, input pending after the
+// prompted line -- a multi-line paste or type-ahead -- is read, shown on
+// stderr and discarded, so the shell never runs it.
+// ---------------------------------------------------------------------------
+
+#[cfg(target_os = "linux")]
+#[test]
+fn pasted_and_typed_ahead_lines_are_drained_and_shown() {
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let argv = [
+        "convert",
+        "--from",
+        "phrase=@env:F687_SEED",
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+        "--passphrase",
+        "-",
+    ];
+    let env = [("F687_SEED", SEED)];
+    let p = "Enter passphrase: ";
+    let label = "note: discarded";
+    for (what, writes, lines, text) in [
+        (
+            "paste",
+            vec![&b"TREZOR\nline2\nline3\n"[..]],
+            2usize,
+            "line2\nline3",
+        ),
+        (
+            "type-ahead",
+            vec![&b"TREZOR\n"[..], b"ls -la\n"],
+            1,
+            "ls -la",
+        ),
+        ("partial line", vec![&b"TREZOR\npartial"[..]], 1, "partial"),
+    ] {
+        let r = run_on_a_terminal_writes(&bin, &argv, &env, p, &writes);
+        assert_eq!(r.code, Some(0), "{what}: {}", r.stderr);
+        assert!(
+            r.stdout.contains("fingerprint: b4e3f5ed"),
+            "{what}: {}",
+            r.stdout
+        );
+        assert!(
+            r.stderr.contains(&format!(
+                "{label} {lines} line(s) typed after the passphrase (not run, not used):\n{text}\n"
+            )),
+            "{what}: {:?}",
+            r.stderr
+        );
+        assert!(
+            r.left_for_shell.is_empty(),
+            "{what}: left for the shell: {:?}",
+            r.left_for_shell
+        );
+        assert!(r.echo_after, "{what}: echo left off");
+        assert!(
+            !String::from_utf8_lossy(&r.shown).contains("line2"),
+            "{what}: echoed"
+        );
+    }
+    // Nothing pending: no note, nothing left.
+    let r = run_on_a_terminal(&bin, &argv, &env, p, b"TREZOR\n");
+    assert_eq!(r.code, Some(0), "{}", r.stderr);
+    assert!(!r.stderr.contains(label), "{}", r.stderr);
+    assert!(r.left_for_shell.is_empty());
+    assert!(r.echo_after);
+    // Every prompt drains: the BIP-38 prompt names its own noun.
+    let bargv = [
+        "convert",
+        "--from",
+        "wif=@env:F687_W",
+        "--to",
+        "bip38",
+        "--bip38-passphrase",
+        "-",
+    ];
+    let typed = format!("{BIP38_PW}\nstray\n");
+    let r = run_on_a_terminal(
+        &bin,
+        &bargv,
+        &[("F687_W", BIP38_WIF)],
+        "Enter BIP-38 passphrase: ",
+        typed.as_bytes(),
+    );
+    assert!(r.stdout.contains(BIP38_OUT), "{}", r.stdout);
+    assert!(
+        r.stderr
+            .contains("1 line(s) typed after the BIP-38 passphrase"),
+        "{}",
+        r.stderr
+    );
+    assert!(r.left_for_shell.is_empty());
+    // A pipe is unchanged: read to EOF under the byte rule, no drain, no note.
+    let r = run(&s(&argv), b"TREZOR\nline2\n", &[]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(!r.stderr.contains(label), "{}", r.stderr);
+    // ...the passphrase is the whole stream "TREZOR\nline2", not "TREZOR".
+    assert!(!r.stdout.contains("b4e3f5ed"), "{}", r.stdout);
+}
+
+/// `verify-bundle --ms1 -` on a terminal drains too, naming the ms1.
+#[cfg(target_os = "linux")]
+#[test]
+fn verify_bundle_ms1_prompt_drains_a_paste() {
+    let r = run(
+        &s(&[
+            "bundle",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ]),
+        b"",
+        &[],
+    );
+    let ms1 = r
+        .stdout
+        .lines()
+        .find(|l| l.starts_with("ms1"))
+        .unwrap()
+        .to_string();
+    let mut argv: Vec<String> = s(&[
+        "verify-bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        "@0.phrase=@env:F687_SEED",
+        "--ms1",
+        "-",
+        "--",
+    ]);
+    argv.extend(
+        r.stdout
+            .lines()
+            .filter(|l| l.starts_with("mk1") || l.starts_with("md1"))
+            .map(str::to_string),
+    );
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let typed = format!("{ms1}\nrm -rf ~\n");
+    let r = run_on_a_terminal(
+        &bin,
+        &argv,
+        &[("F687_SEED", SEED)],
+        "Enter ms1: ",
+        typed.as_bytes(),
+    );
+    assert!(
+        r.stdout.lines().any(|l| l == "result: ok"),
+        "{}\n{}",
+        r.stdout,
+        r.stderr
+    );
+    assert!(
+        r.stderr
+            .contains("1 line(s) typed after the ms1 (not run, not used):\nrm -rf ~\n"),
+        "{}",
+        r.stderr
+    );
+    assert!(r.left_for_shell.is_empty(), "{:?}", r.left_for_shell);
+    assert!(r.echo_after);
+}
+
+/// F-687c: a Ctrl-C arriving DURING the drain (40 ms after Enter; the drain
+/// listens for 100 ms) still restores the terminal and exits by SIGINT. With
+/// ISIG off in the drain the ^C would be read as data and the run would exit
+/// 0 -- which is what makes this test fail on that mutation.
+#[cfg(target_os = "linux")]
+#[test]
+fn ctrl_c_during_the_drain_leaves_a_working_terminal() {
+    let (bin, argv, env) = drain_target();
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    let r = run_on_a_terminal_writes(
+        &bin,
+        &argv,
+        &env,
+        "Enter passphrase: ",
+        &[b"TREZOR\n", b"", b"\x03"],
+    );
+    assert_eq!(
+        r.signal,
+        Some(libc::SIGINT),
+        "code {:?}: {}",
+        r.code,
+        r.stderr
+    );
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
+    assert!(r.echo_after, "a signal during the drain left echo OFF");
+}
+
+#[cfg(target_os = "linux")]
+fn drain_target() -> (std::path::PathBuf, Vec<String>, Vec<(String, String)>) {
+    (
+        assert_cmd::cargo::cargo_bin("mnemonic"),
+        s(&[
+            "convert",
+            "--from",
+            "phrase=@env:F687_SEED",
+            "--to",
+            "fingerprint",
+            "--template",
+            "bip84",
+            "--passphrase",
+            "-",
+        ]),
+        vec![("F687_SEED".to_string(), SEED.to_string())],
+    )
 }

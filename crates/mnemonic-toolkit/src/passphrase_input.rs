@@ -412,6 +412,71 @@ impl Drop for EchoOff {
     }
 }
 
+/// F-687c (operator ruling 2026-09-25: "Yes to the paste question but print
+/// what was dropped on stderr"). On the TERMINAL path only, after the
+/// prompted line is read and while the prompt's mode (echo off, signal
+/// handlers armed) is still in force: read whatever input is already
+/// pending, so a multi-line paste or type-ahead is not left for the shell to
+/// run (and record in its history). What is read is printed on stderr under a
+/// clear label, then the input queue is flushed. Nothing pending → no output.
+///
+/// The queue is read in non-canonical mode (`VMIN = 0`, `VTIME = 1`: each
+/// read waits at most 0.1 s), so a partial last line and input still arriving
+/// from a paste are both caught, and the read ends 0.1 s after input stops.
+/// `ISIG` stays on, so Ctrl-C during the drain is still handled by the armed
+/// handler, which restores the ORIGINAL mode. The prompt's mode is restored
+/// before returning; `EchoOff`'s drop then restores the original.
+#[cfg(unix)]
+fn drain_pending_input(noun: &str) {
+    use std::io::Write as _;
+    // SAFETY: tcgetattr/tcsetattr/read/tcflush on fd 0 with buffers we own.
+    unsafe {
+        let mut prompt_mode: libc::termios = std::mem::zeroed();
+        if libc::tcgetattr(0, &mut prompt_mode) != 0 {
+            return;
+        }
+        let mut raw = prompt_mode;
+        raw.c_lflag &= !libc::ICANON;
+        raw.c_cc[libc::VMIN] = 0;
+        raw.c_cc[libc::VTIME] = 1;
+        if libc::tcsetattr(0, libc::TCSANOW, &raw) != 0 {
+            return;
+        }
+        let mut got: Zeroizing<Vec<u8>> = Zeroizing::new(Vec::new());
+        let mut chunk = [0u8; 256];
+        loop {
+            let n = libc::read(0, chunk.as_mut_ptr().cast(), chunk.len());
+            if n > 0 {
+                got.extend_from_slice(&chunk[..n as usize]);
+                if got.len() < 1 << 20 {
+                    continue;
+                }
+            } else if n < 0
+                && std::io::Error::last_os_error().kind() == std::io::ErrorKind::Interrupted
+            {
+                continue;
+            }
+            break;
+        }
+        // Belt and braces: nothing is left for the shell.
+        libc::tcflush(0, libc::TCIFLUSH);
+        chunk.iter_mut().for_each(|b| *b = 0);
+        libc::tcsetattr(0, libc::TCSANOW, &prompt_mode);
+        if got.is_empty() {
+            return;
+        }
+        let text = String::from_utf8_lossy(&got);
+        let body = text.strip_suffix('\n').unwrap_or(&text);
+        let lines = body.split('\n').count();
+        let mut e = std::io::stderr();
+        let _ = writeln!(
+            e,
+            "note: discarded {lines} line(s) typed after the {noun} (not run, not used):"
+        );
+        let _ = writeln!(e, "{body}");
+    }
+}
+
 /// Read ONE line (up to and including the first `\n`, or EOF) byte by byte,
 /// so nothing past the line is consumed.
 fn read_line<R: Read + ?Sized>(stdin: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()> {
@@ -484,6 +549,8 @@ pub(crate) fn read_stdin_raw<R: Read + ?Sized>(
         if bytes.last() != Some(&b'\n') {
             let _ = writeln!(e);
         }
+        #[cfg(unix)]
+        drain_pending_input(f.noun);
         *buf = String::from_utf8(bytes.to_vec())
             .map_err(|_| ToolkitError::BadInput(format!("{}: stdin is not valid UTF-8", f.flag)))?;
     } else {
