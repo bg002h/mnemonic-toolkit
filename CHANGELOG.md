@@ -8,6 +8,14 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## mnemonic-toolkit [0.105.1] — 2026-09-25
 
+### Installer pins: mnemonic-toolkit v0.105.1, ms 0.20.1
+
+- **`scripts/install.sh` installs this release and ms 0.20.1**, the ms release with the same
+  F-687e fix, so neither CLI the installer puts in place misreads a `< file` redirect on
+  macOS. The ms pin is mirrored in `manual.yml`, `quickstart.yml` and
+  `technical-manual.yml`; the Examples golden shows the new pins. The GUI manual's
+  `[installer-ahead]` declaration and §82 name the two new tags (the GUI stays at v0.62.0).
+
 ### Fixed
 - **macOS: a file that IS stdin was not recognised as stdin** (F-687e). The
   one-stdin guard identified fd 0 by stat-ing `/dev/stdin`; on macOS that
