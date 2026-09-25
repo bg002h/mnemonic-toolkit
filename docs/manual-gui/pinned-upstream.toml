@@ -100,3 +100,15 @@ toolkit-tag-implied = "mnemonic-toolkit-v0.104.0"
 md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.20.3"
 ms-cli-tag-implied  = "ms-cli-v0.19.1"
 mk-cli-tag-implied  = "mk-cli-v0.13.0"
+
+# The installer runs AHEAD of mnemonic-gui v0.62.0 on two CLIs: toolkit 0.105.0
+# and ms 0.20.0 (F-687) shipped before the GUI re-pinned to them. This manual
+# keeps documenting the GUI's tier above; the installer installs the tags
+# below, and src/80-troubleshooting/82-binary-and-launch.md's
+# {#installer-ahead} section tells the reader what differs. Read by
+# tests/check_cli_pins.py: each entry must equal install.sh's pin and be newer
+# than [manual-gui]'s. Delete this table (and that section) when the GUI
+# re-pins.
+[installer-ahead]
+toolkit-tag-implied = "mnemonic-toolkit-v0.105.0"
+ms-cli-tag-implied  = "ms-cli-v0.20.0"

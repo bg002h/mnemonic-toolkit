@@ -45,13 +45,13 @@ set -eu
 component_info() {
     case "$1" in
         mnemonic)
-            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.104.0|mnemonic|"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.105.0|mnemonic|"
             ;;
         md)
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.3|md|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.19.1|ms|"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.20.0|ms|"
             ;;
         mk)
             echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.13.0|mk|"
