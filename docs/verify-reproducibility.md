@@ -231,10 +231,11 @@ honest **between** releases:
   06:00 UTC) + on-demand (`workflow_dispatch`) workflow re-runs the whole
   reproducibility gate (`reproducible-musl-build.yml`) against the toolkit's
   current `HEAD`, with **`run_aarch64: true`** so it exercises **both** the x86_64
-  **and** the aarch64 gates. This matters because the *release* path
-  (`man-pages.yml`) runs `run_aarch64: false` (the ~30-60min QEMU aarch64 build
-  would delay every release); without the scheduled gate, an **aarch64-only**
-  reproducibility regression could ship unnoticed between releases. The drift gate
+  **and** the aarch64 gates. The *release* path (`man-pages.yml`) also runs
+  `run_aarch64: true` (since F-680, 2026-09-24; each release waits the ~30-60min
+  QEMU aarch64 build), but only on a tag; without the scheduled gate, an
+  **aarch64-only** reproducibility regression would surface only at the next
+  release. The drift gate
   closes that gap — environment / toolchain / base-image drift surfaces as a
   recurring red check rather than at the next release. (Each codec CLI — `md` /
   `ms` / `mk` — can add its own scheduled caller of the same reusable workflow
