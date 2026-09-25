@@ -126,33 +126,60 @@ done
 gh run list --repo "$SLUG" --commit "$TIP" --json name,conclusion \
   -q '.[]|"   \(.name) -> \(.conclusion)"'
 
-# Job-level conclusions: a required CONTEXT is a job name, not a workflow name.
-mapfile -t JOBS < <(
-  gh run list --repo "$SLUG" --commit "$TIP" --json databaseId -q '.[].databaseId' \
-  | while read -r id; do gh run view "$id" --repo "$SLUG" --json jobs \
-      -q '.jobs[]|"\(.name)\t\(.conclusion // "pending")"'; done
-)
+# Judge the commit the way the branch rule does: by CHECK RUNS on the SHA
+# (a required context is a check-run name), not by workflow job listings.
+#
+# Two defects the old job-listing version had, both measured 2026-09-25 on
+# mnemonic-engrave 6405decd, which was staged three times:
+#   1. It took the FIRST job whose name matched a context, so an older failed
+#      run on a re-staged SHA shadowed the newer pass ("CI is not green" for a
+#      commit whose latest run was green).
+#   2. It waited only for the workflow runs `gh run list --commit` returned. A
+#      check run still in progress on the SHA (from a parallel staging of the
+#      same commit) was not waited for, and the final push printed
+#      "Bypassed rule violations" even though every run later ended green.
+# So: wait until NO check run on the SHA is incomplete, then take the LATEST
+# run (highest id) per required context.
+check_runs() {
+  gh api --paginate "repos/$SLUG/commits/$TIP/check-runs?per_page=100" \
+    -q '.check_runs[]|[.name, .status, (.conclusion // "pending"), (.id|tostring)]|@tsv'
+}
+for _ in $(seq 1 180); do
+  INCOMPLETE="$(check_runs | awk -F'\t' '$2!="completed"' | wc -l)"
+  [ "$INCOMPLETE" = "0" ] && break
+  sleep 10
+done
+mapfile -t CR < <(check_runs)
+[ "${#CR[@]}" -gt 0 ] || { echo "FATAL: no check runs visible for $TIP" >&2; exit 1; }
+if printf '%s\n' "${CR[@]}" | awk -F'\t' '$2!="completed"{f=1} END{exit !f}'; then
+  echo "FATAL: check runs on $TIP still incomplete after 30 minutes -- NOT pushing" >&2
+  printf '%s\n' "${CR[@]}" | awk -F'\t' '$2!="completed"{print "   "$1" -> "$2}' >&2
+  exit 1
+fi
 fail=0
 MISSING=()
 if [ "${#CONTEXTS[@]}" -gt 0 ]; then
   for ctx in "${CONTEXTS[@]}"; do
     # Exact string compare, never a regex: context names contain parentheses --
-    # "test (ubuntu-latest)" as a pattern matches the literal text WITHOUT them,
-    # so a regex match silently never fires and the wait looks like slowness.
-    got="$(printf '%s\n' "${JOBS[@]}" | awk -F'\t' -v c="$ctx" '$1==c{print $2; exit}')"
-    echo "   context '$ctx' -> ${got:-MISSING}"
+    # "test (ubuntu-latest)" as a pattern matches the literal text WITHOUT them.
+    # Latest run for the context = the highest check-run id.
+    got="$(printf '%s\n' "${CR[@]}" | awk -F'\t' -v c="$ctx" \
+           '$1==c && ($4+0)>best {best=$4+0; conc=$3} END{print conc}')"
+    n="$(printf '%s\n' "${CR[@]}" | awk -F'\t' -v c="$ctx" '$1==c' | wc -l)"
+    echo "   context '$ctx' -> ${got:-MISSING} (latest of $n run(s))"
     if [ -z "$got" ]; then MISSING+=("$ctx"); fail=1
     elif [ "$got" != "success" ]; then fail=1
     fi
   done
 else
-  for row in "${JOBS[@]}"; do
-    name="${row%%$'\t'*}"; conc="${row##*$'\t'}"
+  # Unprotected branch: every check run's latest conclusion must be green.
+  while IFS=$'\t' read -r name conc; do
     case "$conc" in
-      success|skipped) ;;
-      *) echo "   job '$name' -> $conc"; fail=1 ;;
+      success|skipped|neutral) ;;
+      *) echo "   check '$name' -> $conc"; fail=1 ;;
     esac
-  done
+  done < <(printf '%s\n' "${CR[@]}" | awk -F'\t' \
+             '{if(($4+0)>best[$1]){best[$1]=$4+0; c[$1]=$3}} END{for(n in c) print n"\t"c[n]}')
 fi
 
 if [ "${#MISSING[@]}" -gt 0 ]; then
@@ -184,7 +211,10 @@ fi
 
 OUT="$(git push origin "HEAD:$BRANCH" 2>&1)"; echo "$OUT"
 if echo "$OUT" | grep -qi "bypassed rule violations"; then
-  echo "FATAL: bypass message detected -- ci/staging left in place for forensics" >&2; exit 1
+  echo "FATAL: bypass message detected -- ci/staging left in place for forensics" >&2
+  echo "       check runs on $TIP at push time (name, status, conclusion, id):" >&2
+  check_runs | sed 's/^/         /' >&2 || true
+  exit 1
 fi
 git push origin --delete ci/staging
 git fetch -q origin
