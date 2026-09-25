@@ -103,9 +103,9 @@ jobs:
           LATEST_V=${LATEST#mnemonic-gui-v}
           LOWER=$(printf '%s\n%s\n' "$PIN_V" "$LATEST_V" | sort -V | head -n1)
           if [ "$LOWER" = "$PIN_V" ]; then
-            echo "::warning::install.sh mnemonic-gui pin '$PIN' LAGS the latest release '$LATEST'. Bump scripts/install.sh:44 and commit: chore(install): bump mnemonic-gui pin $PIN -> $LATEST"
+            echo "::warning::install.sh mnemonic-gui pin '$PIN' LAGS the latest release '$LATEST'. Bump the mnemonic-gui arm of component_info in scripts/install.sh and commit: chore(install): bump mnemonic-gui pin $PIN -> $LATEST"
           else
-            echo "::warning::install.sh mnemonic-gui pin '$PIN' is AHEAD of the latest release '$LATEST' (unreleased GUI tag pinned?). Verify scripts/install.sh:44."
+            echo "::warning::install.sh mnemonic-gui pin '$PIN' is AHEAD of the latest release '$LATEST' (unreleased GUI tag pinned?). Verify the mnemonic-gui arm of component_info in scripts/install.sh."
           fi
           # Warn-only: never block a PR on a cross-repo currency mismatch.
           exit 0

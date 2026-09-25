@@ -8,41 +8,75 @@ This chapter installs the four binaries.
 **The four sibling repos** are `bg002h/mnemonic-toolkit` (CLI:
 `mnemonic`), `bg002h/descriptor-mnemonic` (CLI: `md`),
 `bg002h/mnemonic-secret` (CLI: `ms`), and `bg002h/mnemonic-key`
-(library `mk-codec` plus CLI `mk`, since v0.2). They are published
-to crates.io as soon as their dependencies land there; until then,
-install from source via `cargo install --git`. Future versions will
-pin to crates.io directly.
+(library `mk-codec` plus CLI `mk`, since v0.2). Each tags its releases
+and attaches prebuilt binaries to them. The versions this manual
+documents are the ones pinned in the toolkit's installer,
+`scripts/install.sh` (`install.sh --list` prints them).
 :::
 
-## Pre-requisites
+**Do not install these CLIs from crates.io.** The copies there are
+several releases older than this manual (for example `md` 0.13 against
+the 0.20.3 documented here) and lack flags it describes.
 
-You need a recent **Rust toolchain**. The four CLIs (`mnemonic`,
-`md`, `ms`, `mk`) build on `rustc` ≥ 1.85 (the toolkit MSRV). The
-optional `mnemonic-gui` overlay (Path D below) currently needs
-`rustc` ≥ 1.88 — its dependencies pin a newer MSRV. Install via
-`rustup` if you do not have it:
+## Path A — the installer (prebuilt binaries)
+
+This is the recommended path. It needs no Rust toolchain:
+
+```sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --no-gui
+```
+
+For each CLI the installer downloads the binary for your platform from
+its pinned GitHub release and checks it against the `SHA256SUMS` file
+published with that release. It refuses a download whose digest does
+not match, or that no published checksum covers, and it runs each
+binary once before installing it, refusing one that does not report
+the pinned version. The releases are not signed, so the check proves
+the file is the one the release published, not who built it. Binaries
+land in `~/.cargo/bin/` (`--root DIR` or `$CARGO_INSTALL_ROOT` puts them
+in `DIR/bin/` instead; cargo's `install.root` config setting is not read);
+the installer warns if that directory is not on your `PATH`.
+`--dry-run` shows every URL first; `--help` lists the options.
+
+If a release has no binary for your platform (FreeBSD, for example),
+the installer says so and builds that component from the same pinned
+tag with `cargo`, which then needs a Rust toolchain (below).
+`--from-source` does that for every component. The same happens on
+Linux where a binary needs a newer C library than yours:
+
+| Binary | Needs |
+|---|---|
+| `mnemonic-gui`, Linux x86_64 | glibc ≥ 2.39 |
+| `mnemonic-gui`, Linux aarch64 | glibc ≥ 2.18 |
+| `md`, Linux x86_64 | glibc ≥ 2.34 |
+| `mnemonic`, `ms`, `mk`, and `md` on aarch64 | any Linux (static) |
+
+So on Ubuntu 22.04 (glibc 2.35) or Debian 12 (2.36) the GUI is built
+from source, and on Ubuntu 20.04 (2.31) `md` is too. On a musl system
+(Alpine, Void musl) the GUI is always built from source, because the
+static musl build cannot open a window.
+
+### Building the pinned tags from source
+
+With a Rust toolchain you can build the same versions yourself. The
+four CLIs build on `rustc` ≥ 1.85 (the toolkit MSRV); the optional
+`mnemonic-gui` overlay (Path D) needs `rustc` ≥ 1.88. Install the
+toolchain via `rustup` if you do not have it:
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-(Or use your distribution's package manager. Verify with
-`cargo --version` and `rustc --version`.)
-
-## Path A — install from source via cargo
-
-This is the recommended path until crates.io publication completes:
+Then run the installer with `--from-source` added: it builds each
+pinned tag with `cargo install --locked --git <repo> --tag <pin>`.
+To see those four commands, with their tags, without running them:
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit.git mnemonic-toolkit
-cargo install --locked --git https://github.com/bg002h/descriptor-mnemonic.git md-cli
-cargo install --locked --git https://github.com/bg002h/mnemonic-secret.git ms-cli
-cargo install --locked --git https://github.com/bg002h/mnemonic-key.git --bin mk
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --no-gui --from-source --dry-run
 ```
 
-Each command compiles the source and writes the binary into
-`~/.cargo/bin/`. Make sure that directory is on your `PATH` (most
-rustup installations add it automatically).
+If you run such a command by hand, always pass `--tag`: without it
+cargo builds the repository's default branch, which is not a release.
 
 Verify the binaries:
 
@@ -83,9 +117,9 @@ for AI-assisted contributions.
 For CI and reproducible installations, the toolkit ships a build
 image at `docs/manual/Dockerfile.build` (used by `make pdf-docker`
 for the manual). For the *binaries themselves* there is no
-distribution image yet — see the [follow-up](#manual-coverage)
-on cargo-publishing the workspace; that's the prerequisite for
-official binary releases.
+distribution image; use the release binaries (Path A), which for the
+toolkit's Linux builds are reproducible from source (see
+`docs/verify-reproducibility.md` in the toolkit repository).
 
 ## Path D — graphical interface (`mnemonic-gui`)
 
@@ -97,34 +131,23 @@ visible before you run it, and the GUI never substitutes its own
 implementation for the CLI behaviour. The CLIs remain the
 ground truth.
 
-Pre-built release artifacts for v0.2.0 are attached to the GitHub
-release:
-
-- `mnemonic-gui-v0.2.0-x86_64-linux.tar.gz`
-- `mnemonic-gui-v0.2.0-aarch64-linux.tar.gz`
-- `mnemonic-gui-v0.2.0-x86_64-macos.tar.gz`
-- `mnemonic-gui-v0.2.0-aarch64-macos.tar.gz`
-- `mnemonic-gui-v0.2.0-x86_64-windows.zip`
-
-Download from
-<https://github.com/bg002h/mnemonic-gui/releases/tag/mnemonic-gui-v0.2.0>,
-extract, and launch the `mnemonic-gui` (`mnemonic-gui.exe` on
-Windows) binary. The four CLIs from Paths A–C must still be on
-your `PATH` — the GUI invokes them as subprocesses. The binaries
-are currently unsigned on macOS and Windows; on first launch you
-will need to right-click → Open (macOS) or click "More info →
-Run anyway" past SmartScreen (Windows). Code-signing is a v0.3+
-deferred item.
+The installer in Path A installs it too: run it without `--no-gui`,
+or with `--only mnemonic-gui` to add only the GUI. It downloads the
+pinned `mnemonic-gui` release binary for your platform and checks it
+the same way. The four CLIs must still be on your `PATH` — the GUI
+invokes them as subprocesses. The binaries are currently unsigned on
+macOS and Windows; on first launch you will need to right-click → Open
+(macOS) or click "More info → Run anyway" past SmartScreen (Windows).
 
 The GUI's source lives at `bg002h/mnemonic-gui`; a dedicated
 standalone paper covering the GUI in depth is planned separately.
 This manual continues with the CLI surface.
 
 Building the GUI from source requires `rustc` ≥ 1.88 (its
-dependencies' MSRV); the four CLIs build on `rustc` ≥ 1.85. The
-constellation installer (`scripts/install.sh`) auto-skips the GUI
-with a warning on an older toolchain and still installs the four
-CLIs — upgrade `rustc` and re-run to add the GUI.
+dependencies' MSRV); the four CLIs build on `rustc` ≥ 1.85. When the
+installer (`scripts/install.sh`) has to build the GUI from source, it
+skips it with a warning on an older toolchain and still installs the
+four CLIs — upgrade `rustc` and re-run to add the GUI.
 
 ## Verifying your install
 

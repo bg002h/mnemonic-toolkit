@@ -26,14 +26,18 @@ modern systems.
 
 3. **The four constellation CLIs on your `$PATH`.** `mnemonic-gui`
    requires `mnemonic`, `md`, `ms`, and `mk` to already be installed.
-   See the CLI manual's install chapter, or in short:
+   See the CLI manual's install chapter, or in short, from Git Bash
+   (it ships with Git for Windows; the installer is a POSIX shell
+   script):
 
-   ```pwsh
-   cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit.git mnemonic-toolkit
-   cargo install --locked md-cli
-   cargo install --locked ms-cli
-   cargo install --locked mk-cli
+   ```sh
+   sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --no-gui
    ```
+
+   It installs each CLI's prebuilt binary from the release the toolkit
+   pins, checked against that release's `SHA256SUMS`. Do not use
+   `cargo install md-cli` (or `ms-cli`, `mk-cli`): the crates.io copies
+   are several releases older than the GUI expects.
 
    Verify with `mnemonic --version`, etc. (Cargo's binary directory
    is at `%USERPROFILE%\.cargo\bin`; rustup adds it to your `PATH`.)

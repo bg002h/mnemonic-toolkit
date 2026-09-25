@@ -54,6 +54,8 @@
 # NOT constructed — that is the whole point.
 
 set -euo pipefail
+# shellcheck source=ci/repro/residue-lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/residue-lib.sh"
 
 PATH_A="${1:?usage: remap-off-negative.sh <path-a> <path-b>}"
 PATH_B="${2:?usage: remap-off-negative.sh <path-a> <path-b>}"
@@ -141,9 +143,14 @@ if [ "$BUILDER" = "cross" ]; then
   # cross-image digest bump MUST re-verify cross still bind-mounts the source to
   # /project (same pin the positive scripts carry: double-build.sh / cc-validate.sh).
   RESIDUE_RE="${CROSS_INTERNAL_SRC}|${CARGO_HOME:-/cargo}/registry"
-  if grep -aEo "$RESIDUE_RE" "$BINARY" | head -1 | grep -q .; then
-    echo "  OK: no-remap cross build leaks the expected host-path residue:"
-    grep -aEo "$RESIDUE_RE" "$BINARY" | sort -u | head -5
+  # residue_hits (residue-lib.sh), never `grep | head -1 | grep -q`: under
+  # pipefail that shape REDed this gate whenever the residue was plentiful
+  # enough to SIGPIPE the first grep ("grep: write error: Broken pipe", then
+  # "leaked ZERO") — repro-drift 08-17 and 09-21 (F-675).
+  HITS="$(residue_hits "$RESIDUE_RE" "$BINARY")"
+  if [ -n "$HITS" ]; then
+    echo "  OK: no-remap cross build leaks the expected host-path residue ($(wc -l <<<"$HITS") matches):"
+    sort -u <<<"$HITS" | sed -n 1,5p
     echo "== remap-off NEGATIVE PASSED: the remap/-ffile-prefix-map IS load-bearing (it strips this /project leak). =="
     exit 0
   fi

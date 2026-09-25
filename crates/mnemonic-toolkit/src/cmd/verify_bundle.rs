@@ -161,10 +161,11 @@ pub struct VerifyBundleArgs {
     #[arg(long = "search-chain", value_enum, default_value_t = crate::cmd::restore::CliSearchChain::Receive)]
     pub search_chain: crate::cmd::restore::CliSearchChain,
 
-    /// #28 phase 2 — override the 1-hour search-time ceiling for a multisig
-    /// DEPRECATED and IGNORED since v0.99.0 — accepted so existing scripts do
-    /// not fail on an unknown flag. There is no search-time ceiling any more;
-    /// the completion declares its estimate and reports progress instead.
+    /// DEPRECATED and IGNORED since v0.99.0 (as on `restore`) — accepted so
+    /// existing scripts do not fail on an unknown flag, but it changes nothing.
+    /// There is no search-time ceiling any more: the completion declares its
+    /// estimate and reports progress instead (Ctrl-C stops it). Still parses a
+    /// humantime duration (e.g. `2h`, `90min`) when a search runs.
     #[arg(long = "accept-search-time")]
     pub accept_search_time: Option<String>,
 

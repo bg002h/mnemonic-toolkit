@@ -4865,7 +4865,7 @@ hand-authored man content to maintain.
 One page is written per (nested) subcommand, named hyphen-joined parent→child:
 `mnemonic.1` (root), `mnemonic-bundle.1`, `mnemonic-seed-xor-split.1`,
 `mnemonic-xpub-search-path-of-xpub.1`, and so on. `scripts/install.sh` invokes
-this after `cargo install` to drop the pages into the user manpath (no sudo, no
+this after installing the binary to drop the pages into the user manpath (no sudo, no
 system files); see the install chapter.
 
 ### Synopsis

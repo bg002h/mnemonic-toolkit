@@ -31,7 +31,7 @@ on:
       - 'Cargo.toml'
       - 'crates/**/Cargo.toml'
       - 'vendor/**'
-      - 'ci/repro/vendor-freshness.sh'
+      - 'ci/repro/**'
       - '.github/workflows/vendor-freshness.yml'
   pull_request:
     paths:
@@ -39,7 +39,7 @@ on:
       - 'Cargo.toml'
       - 'crates/**/Cargo.toml'
       - 'vendor/**'
-      - 'ci/repro/vendor-freshness.sh'
+      - 'ci/repro/**'
       - '.github/workflows/vendor-freshness.yml'
 
 permissions:
@@ -55,3 +55,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Resolve Cargo.lock against committed vendor/ (offline, locked)
         run: bash ci/repro/vendor-freshness.sh
+      # F-675: prove the gate can fail. Seven cases, each asserting the exit
+      # status AND which check fired: a control that must stay green, vendor/
+      # md-codec removed or stale (check 1), a moved pin and a self-consistent
+      # wrong-rev re-vendor (check 4), a hand edit (check 2), and an ungrounded
+      # git source. Runs after the real gate so a red there is reported first.
+      - name: Mutation tests for the gate
+        run: bash ci/repro/vendor-freshness.test.sh
+
+  # F-675: the reproducible-build gate scripts' verdict logic, with stub
+  # builders (no compiler, no container, a few seconds). The scripts themselves
+  # only run on the release tag and the weekly repro-drift schedule, which is
+  # how a pipefail race in their residue checks went unexplained for a month.
+  repro-script-tests:
+    name: ci/repro verdict logic (stub builders)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: residue-lib + remap-off-negative tests
+        run: bash ci/repro/residue.test.sh

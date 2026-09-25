@@ -24,11 +24,17 @@ export PATH="${EXAMPLES_BIN_DIR:+$EXAMPLES_BIN_DIR:}$HOME/.cargo/bin:$PATH"
 
 # Pin the output-visible environment so captured install.sh paths + tool output
 # are a pure function of (repo tree, mnemonic binary) on any machine. install.sh
-# derives every path it prints from exactly these three (MAN_DIR from
-# XDG_DATA_HOME/HOME, install root from CARGO_INSTALL_ROOT/HOME); LC_ALL/LANG/TZ
-# pin the python3/jq/sed output. (Set AFTER PATH resolution — order matters.)
-unset XDG_DATA_HOME CARGO_INSTALL_ROOT
+# derives every path it prints from exactly these (MAN_DIR from
+# XDG_DATA_HOME/HOME, install root from CARGO_INSTALL_ROOT/CARGO_HOME/HOME), and
+# picks each release asset by MNEMONIC_INSTALL_PLATFORM (pinned to the Linux
+# x86_64 glibc runner so the captured asset names never follow the build host);
+# LC_ALL/LANG/TZ pin the python3/jq/sed output. (Set AFTER PATH resolution —
+# order matters.)
+unset XDG_DATA_HOME CARGO_INSTALL_ROOT CARGO_HOME
 export HOME=/home/user
+export MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu
+# and glibc, which decides binary vs source build for md and the GUI.
+export MNEMONIC_INSTALL_GLIBC=2.39
 export LC_ALL=C LANG=C TZ=UTC
 
 # Strict preflight: fail loud BEFORE emitting so a missing tool can NEVER be
@@ -185,20 +191,23 @@ Throughout, `$` is the shell prompt; everything after it is what you type.
 
 # 1. Install the constellation on Linux
 
-The in-repo installer builds each component with `cargo install --locked` into
-`~/.cargo/bin` (no `sudo`, no system files touched). It needs `cargo`, `git`,
-and a C toolchain; the CLIs require `rustc >= 1.85`.
+The in-repo installer downloads each component's prebuilt binary from its
+pinned GitHub release, checks it against the `SHA256SUMS` file published with
+that release (refusing a mismatch or an asset no checksum covers), runs it once
+to confirm the pinned version, and installs it into `~/.cargo/bin` (no `sudo`,
+no system files touched, no Rust toolchain needed). `--from-source` builds the
+same pinned tags with `cargo install --locked --git ... --tag ...` instead.
 
-Install all four CLIs (this compiles from source, so the build log is
-machine-specific and not reproduced here):
+Install all four CLIs (the output names this machine's paths, so it is not
+reproduced here):
 MD
 show 'sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --no-gui'
 cat <<'MD'
 
 The installer carries the current version pins, so it never goes stale. Useful
-flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--from-git`, `--force`,
-`--dry-run`, `--list`. The pin table (`--list`) and a dry run are deterministic
-(`$REPO` = your clone root):
+flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--root <dir>`,
+`--from-source`, `--dry-run`, `--list`. The pin table (`--list`) and a dry run
+are deterministic (`$REPO` = your clone root):
 MD
 run 'sh "$REPO/scripts/install.sh" --list'
 run 'sh "$REPO/scripts/install.sh" --no-gui --dry-run'

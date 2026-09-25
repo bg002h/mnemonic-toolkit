@@ -130,7 +130,7 @@ jobs:
         if: steps.guard.outputs.relevant == 'true'
         # `--features cli-compiler` matches scripts/install.sh's component pin
         # (the technical-manual md1 transcripts exercise the compiler path).
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.2 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.3 md-cli --features cli-compiler
 
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'

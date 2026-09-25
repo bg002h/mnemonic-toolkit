@@ -16,6 +16,9 @@
 #   (c) BEHAVIOUR, on a stubbed old rustc: warns, skips the GUI, exits 0, and
 #       still plans the 4 CLIs — the whole point of the guard;
 #   (d) BEHAVIOUR, on a stubbed new rustc: no skip warning.
+#   (e) F-676: the guard binds only to a SOURCE build of the GUI. With a
+#       prebuilt GUI binary for the platform, an old rustc must NOT skip it
+#       (a download needs no rustc). (c)/(d) therefore run --from-source.
 # (c)/(d) are the load-bearing ones — (b) alone would pass if the block were
 # gutted, the signature-anchor false-PASS shape.
 #
@@ -57,12 +60,17 @@ STUB
 echo "CARGO-INVOKED \$*"
 STUB
   chmod +x "$_tmp/cargo"
+  # curl stub: a binary install must not reach the network from this test.
+  cat > "$_tmp/curl" <<STUB
+echo "CURL-INVOKED \$*"; exit 22
+STUB
+  chmod +x "$_tmp/curl"
   PATH="$_tmp:$PATH" sh "$INSTALL_SH" "$@" 2>&1 || true
   rm -rf "$_tmp"
 }
 
 # (c) old rustc -> warn + skip GUI + exit 0 + 4 CLIs still planned
-out_old=$(run_with_rustc "1.85.0" --only mnemonic-gui)
+out_old=$(run_with_rustc "1.85.0" --from-source --only mnemonic-gui)
 if printf '%s' "$out_old" | grep -q 'mnemonic-gui needs rustc'; then
   ok "old rustc: emits the MSRV warning"
 else
@@ -75,11 +83,20 @@ else
 fi
 
 # (d) new rustc -> no skip warning
-out_new=$(run_with_rustc "1.99.0" --only mnemonic-gui)
+out_new=$(run_with_rustc "1.99.0" --from-source --only mnemonic-gui)
 if printf '%s' "$out_new" | grep -q 'mnemonic-gui needs rustc'; then
   bad "new rustc: MSRV warning fired spuriously — guard over-triggers"
 else
   ok "new rustc: no spurious MSRV warning"
+fi
+
+out_bin=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu MNEMONIC_INSTALL_GLIBC=99.0 run_with_rustc "1.85.0" --only mnemonic-gui)
+if printf '%s' "$out_bin" | grep -q 'mnemonic-gui needs rustc'; then
+  bad "prebuilt GUI: old rustc skipped a binary install — guard over-binds"
+elif printf '%s' "$out_bin" | grep -q 'CURL-INVOKED.*mnemonic-gui-v'; then
+  ok "prebuilt GUI: old rustc does not skip it (the binary download is attempted)"
+else
+  bad "prebuilt GUI: no download attempted: $out_bin"
 fi
 
 if [ "$fail" -eq 0 ]; then
