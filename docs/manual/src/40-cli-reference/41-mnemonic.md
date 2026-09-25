@@ -1212,14 +1212,14 @@ wallet-policy `md1` card **alone** — the card already carries every cosigner's
 public key, so `--from`/`--cosigner` are *optional cross-check* inputs, not
 build inputs. Multisig mode covers `wsh`, `sh(wsh)`, **NUMS taproot**
 multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) **general
-NUMS-taproot policies** with a single script leaf or a depth-1 two-leaf tap
-tree, and (v0.55.3) **non-NUMS key-path taproot** — a real cosigner key at
-the trunk — for general single-leaf/depth-1 policies and distinct-trunk
-multisig. A **keyless multisig / general TEMPLATE `md1`** (no concrete
+NUMS-taproot policies** with a single script leaf or a tap tree of any
+depth (depth ≥ 2 since the 2026-08-20 miniscript pin), and (v0.55.3)
+**non-NUMS key-path taproot** — a real cosigner key at the trunk — for
+general policies and distinct-trunk multisig. A **keyless multisig / general TEMPLATE `md1`** (no concrete
 keys) is *not* a refusal — it is **completed** by re-supplying the keys
 (see [Multisig template completion](#multisig-template-completion)). Still
 refused (exit 2): the `@-in-both` shape (the trunk key is *also* a leaf
-key) and a depth-≥2 tap tree.
+key) and a `sortedmulti_a` leaf inside a multi-leaf tree.
 
 ### Synopsis
 
@@ -1241,7 +1241,7 @@ channels that keep the seed off the argv.
 | Flag | Purpose |
 |---|---|
 | `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots). See [Multisig template completion](#multisig-template-completion) |
-| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. **(#28 phase 2) also accepts a keyless multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`), completed via `--from` + `--account` + `--cosigner` (see [Multisig template completion](#multisig-template-completion)). Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies up to a depth-1 two-leaf tap tree, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general single-leaf/depth-1 + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key) or a depth-≥2 tap tree is refused (exit 2). Watch-only (non-secret) |
+| `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. **(#28 phase 2) also accepts a keyless multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`), completed via `--from` + `--account` + `--cosigner` (see [Multisig template completion](#multisig-template-completion)). Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies in a tap tree of any depth, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general policies + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key) or a `sortedmulti_a` leaf inside a multi-leaf tree is refused (exit 2). Watch-only (non-secret) |
 | `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. **(#28 phase 2) for multisig-template completion** the bare form (`--cosigner <mk1>`, no `@N=`) supplies an UNASSIGNED cosigner the search places; the `@N=` form assigns it explicitly. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
@@ -1495,14 +1495,13 @@ from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
 
 **Scope.** `wsh`, `sh(wsh)`, **NUMS taproot** (`tr-multi-a` /
 `tr-sortedmulti-a`) multisig, (v0.55.1) **general NUMS-taproot policies**
-up to a depth-1 two-leaf tap tree (single general leaf or two leaves;
-reconstructed with the NUMS H-point hex internal key), and (v0.55.3)
+in a tap tree of any depth (reconstructed with the NUMS H-point hex internal
+key; depth ≥ 2 since the 2026-08-20 miniscript pin), and (v0.55.3)
 **non-NUMS key-path taproot** — a real cosigner key at the trunk — for
-general single-leaf/depth-1 policies and distinct-trunk multisig. The
-`@-in-both` shape (the trunk key is *also* a leaf key) is refused (exit 2,
-citing `restore-non-nums-tr-internal-key-also-in-leaf`), as are a depth-≥2
-(≥3-leaf) tap tree and a `sortedmulti_a` leaf inside a multi-leaf tree (both
-exit 2, each citing its tracking slug). A **keyless multisig / general
+general policies and distinct-trunk multisig. The `@-in-both` shape (the
+trunk key is *also* a leaf key) is refused (exit 2, citing
+`restore-non-nums-tr-internal-key-also-in-leaf`), as is a `sortedmulti_a`
+leaf inside a multi-leaf tree (exit 2, citing its tracking slug). A **keyless multisig / general
 TEMPLATE `md1`** (no concrete keys, `bundle --md1-form=template`) is
 **completed** rather than refused — see [Multisig template
 completion](#multisig-template-completion). A non-NUMS **general** tr

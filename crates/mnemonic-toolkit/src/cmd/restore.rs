@@ -82,8 +82,9 @@ pub struct RestoreArgs {
     /// chunk(s). Reconstructs the concrete watch-only multisig descriptor from
     /// the md1 ALONE; `--from`/`--cosigner` are optional cross-check inputs.
     /// wsh / sh(wsh) and taproot multisig (NUMS or a non-NUMS distinct-trunk
-    /// cosigner key) plus general single-leaf/depth-1 taproot; the @-in-both
-    /// shape (trunk key also a leaf key) and depth-≥2 taproot are refused.
+    /// cosigner key) plus general taproot policies, in a tap tree of any
+    /// depth; the @-in-both shape (trunk key also a leaf key) and
+    /// `sortedmulti_a` anywhere but as the single leaf are refused.
     /// Repeat for chunked cards.
     #[arg(long)]
     pub md1: Vec<String>,
@@ -3191,7 +3192,8 @@ enum TaprootRestore {
     /// Single-leaf `multi_a`/`sortedmulti_a` — the byte-identical template
     /// path (`build_descriptor_string`). NUMS or distinct-trunk Cosigner(idx).
     Template(CliTemplate, TaprootInternalKey),
-    /// General single-leaf or depth-1 two-leaf `tr(<internal>,…)` policy — the
+    /// General `tr(<internal>,…)` policy, single leaf or a tap tree of any
+    /// depth (depth-≥2 since the 2026-08-20 miniscript pin) — the
     /// faithful arm (`faithful_multisig_descriptor`), v0.55.1 (T3-partial of
     /// FOLLOWUP `restore-general-and-multi-leaf-taproot-roundtrip`); v0.55.3
     /// extends it to a non-NUMS (real cosigner) trunk key.
@@ -3204,18 +3206,14 @@ enum TaprootRestore {
 /// the GeneralFaithful arm re-enters `to_miniscript` via
 /// `faithful_multisig_descriptor`, so its blockers are pre-gated here.
 /// Supports `InternalKey::NumsPoint` (NUMS) AND `InternalKey::Slot` (real
-/// cosigner trunk key), the latter for general single-leaf/depth-1 (route-around) and
+/// cosigner trunk key), the latter for general policies at any depth (route-around) and
 /// distinct-trunk multisig (Template); the `@-in-both` shape (trunk key also a
 /// leaf key) refuses (`restore-non-nums-tr-internal-key-also-in-leaf`).
 ///
 /// The GeneralFaithful arm is gated CONSERVATIVELY + STRUCTURALLY (never on
 /// Display behavior):
-/// - depth ≥2 (any `TapTree` child of a `TapTree`) refuses — the pinned
-///   miniscript 95fdd1c mis-Displays a LEFT-child `TapTree` (`{{a,b,c}}`),
-///   and a right-spine shape that happens to Display fine must not create a
-///   Display-luck accepted set (FOLLOWUP
-///   `upstream-miniscript-taptree-depth2-display-asymmetry`; lift the gate
-///   when the miniscript #953 fix releases);
+/// - a malformed tap tree refuses ([`ensure_taptree_wellformed`]); depth ≥2 is
+///   NOT refused -- that gate was lifted 2026-08-20 (see that function);
 /// - `sortedmulti_a` anywhere under a `TapTree` refuses — md-codec's
 ///   `to_miniscript` cannot render it as a non-root tap leaf (FOLLOWUP
 ///   `md-codec-sortedmulti-a-to-miniscript-rendering-gap`).
@@ -3880,10 +3878,10 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // single-leaf `multi_a`/`sortedmulti_a` → the byte-identical Template path
     // (routing AROUND md-codec's `to_miniscript`, which errors on a root
     // `SortedMultiA`; the toolkit's own miniscript rev 95fdd1c HAS
-    // `Terminal::SortedMultiA`); general single-leaf / depth-1 two-leaf
+    // `Terminal::SortedMultiA`); general single-leaf or any-depth tap-tree
     // `tr(NUMS,…)` → GeneralFaithful (`template_opt = None`, falls through the
     // SAME general-policy machinery as wsh below, v0.55.1; non-NUMS real-trunk
-    // reconstructs since v0.55.3); depth ≥2 / `sortedmulti_a`-under-TapTree /
+    // reconstructs since v0.55.3; depth ≥2 since 2026-08-20); `sortedmulti_a`-under-TapTree /
     // `@-in-both` (trunk key also a leaf key) → loud structural refusals.
     // wsh/sh-wsh keep `to_miniscript_descriptor`. `template_opt = Some(_)`
     // ONLY for a strictly-plain `wsh/sh-wsh(multi|sortedmulti)` (or
