@@ -1705,19 +1705,24 @@ fn pasted_and_typed_ahead_lines_are_drained_and_shown() {
     let p = "Enter passphrase: ";
     let label = "note: discarded";
     for (what, writes, lines, text) in [
+        // F-687d: each discarded line is MASKED (<= 8 chars shown as is,
+        // two-space indent); see drain_preview.json.
+        ("paste", vec![&b"TREZOR\nline2\nline3\n"[..]], 2usize, "  line2\n  line3"),
+        ("type-ahead", vec![&b"TREZOR\n"[..], b"ls -la\n"], 1, "  ls -la"),
+        ("partial line", vec![&b"TREZOR\npartial"[..]], 1, "  partial"),
         (
-            "paste",
-            vec![&b"TREZOR\nline2\nline3\n"[..]],
-            2usize,
-            "line2\nline3",
-        ),
-        (
-            "type-ahead",
-            vec![&b"TREZOR\n"[..], b"ls -la\n"],
+            "a pasted 12-word seed",
+            vec![&b"TREZOR\nabandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\n"[..]],
             1,
-            "ls -la",
+            "  abandon \u{2026} (12 words, 93 chars)",
         ),
-        ("partial line", vec![&b"TREZOR\npartial"[..]], 1, "partial"),
+        ("an escape sequence", vec![&b"TREZOR\n\x1b[2J\n"[..]], 1, "  ?"),
+        (
+            "multi-byte text",
+            vec!["TREZOR\n\u{43f}\u{430}\u{440}\u{43e}\u{43b}\u{44c}-\u{441}\u{435}\u{43a}\u{440}\u{435}\u{442}\n".as_bytes()],
+            1,
+            "  \u{43f}\u{430}\u{440}\u{43e}\u{43b}\u{44c}-\u{441}\u{2026} (1 word, 13 chars)",
+        ),
     ] {
         let r = run_on_a_terminal_writes(&bin, &argv, &env, p, &writes);
         assert_eq!(r.code, Some(0), "{what}: {}", r.stderr);
@@ -1738,6 +1743,9 @@ fn pasted_and_typed_ahead_lines_are_drained_and_shown() {
             "{what}: left for the shell: {:?}",
             r.left_for_shell
         );
+        // Masked: never the seed's tail, never a raw escape byte.
+        assert!(!r.stderr.contains("about"), "{what}: the full line leaked: {}", r.stderr);
+        assert!(!r.stderr.contains('\u{1b}'), "{what}: a raw ESC reached stderr");
         assert!(r.echo_after, "{what}: echo left off");
         assert!(
             !String::from_utf8_lossy(&r.shown).contains("line2"),
@@ -1827,7 +1835,7 @@ fn verify_bundle_ms1_prompt_drains_a_paste() {
     );
     let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
     let bin = assert_cmd::cargo::cargo_bin("mnemonic");
-    let typed = format!("{ms1}\nrm -rf ~\n");
+    let typed = format!("{ms1}\necho pwn\n");
     let r = run_on_a_terminal(
         &bin,
         &argv,
@@ -1843,7 +1851,7 @@ fn verify_bundle_ms1_prompt_drains_a_paste() {
     );
     assert!(
         r.stderr
-            .contains("1 line(s) typed after the ms1 (not run, not used):\nrm -rf ~\n"),
+            .contains("1 line(s) typed after the ms1 (not run, not used):\n  echo pwn\n"),
         "{}",
         r.stderr
     );

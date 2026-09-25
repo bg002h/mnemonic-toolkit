@@ -129,13 +129,17 @@ Enter, not Ctrl-D. Ctrl-C at the prompt restores the terminal's echo before
 the command exits (by the signal, status 130 in a shell); so do SIGTERM,
 SIGHUP and SIGQUIT. Anything already typed or pasted after that one line —
 the rest of a multi-line paste, or type-ahead — is read (for 0.1 s after
-input stops), shown on stderr and discarded, so the shell never runs it or
-records it in its history:
+input stops) and discarded, so the shell never runs it or records it in its
+history. Stderr shows a MASKED preview of each discarded line: a line of up
+to 8 characters as is, a longer one as its first 8 characters, `…` and its
+word and character counts, a whitespace-only line as `(blank)`. Control
+characters and escape sequences in the preview are shown as `?`, so a paste
+cannot drive the terminal:
 
 ```text
 note: discarded 2 line(s) typed after the passphrase (not run, not used):
-line2
-line3
+  abandon … (12 words, 93 chars)
+  ls -la
 ```
 
 With stdin a pipe or file nothing is printed and nothing beyond what the

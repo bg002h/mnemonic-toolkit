@@ -1,0 +1,102 @@
+{
+  "name": "F-687d drain preview",
+  "description": "The stderr note printed when input pasted or typed after a terminal prompt is discarded (F-687c/F-687d). Normative for mnemonic-toolkit and mnemonic-secret; identical copies live in crates/mnemonic-toolkit/tests/vectors/ and crates/ms-cli/vectors/. `input` is the discarded input exactly as read; `note` is the exact stderr text.",
+  "rule": [
+    "One header line, then one line per discarded line, indented two spaces.",
+    "A line of only whitespace (or empty) is '(blank)'.",
+    "A line of at most 8 characters (Unicode scalar values, not bytes) is shown as is; a longer one as its first 8 characters, '\u2026', and '(W word(s), N chars)' where W counts whitespace-separated words and N characters of the whole line.",
+    "In what is shown, each control character, each escape sequence (CSI ESC [ ... final byte @..~; OSC ESC ] ... BEL or ESC \\; any other ESC x) and each of U+200B-U+200F, U+202A-U+202E, U+2066-U+2069, U+FEFF is replaced by one '?'."
+  ],
+  "cases": [
+    {
+      "why": "a pasted 12-word seed shows its first 8 characters and the counts; a short line is shown in full",
+      "noun": "passphrase",
+      "input": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about\nls -la\n",
+      "note": "note: discarded 2 line(s) typed after the passphrase (not run, not used):\n  abandon \u2026 (12 words, 93 chars)\n  ls -la\n"
+    },
+    {
+      "why": "exactly 8 characters: shown as is",
+      "noun": "passphrase",
+      "input": "12345678\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  12345678\n"
+    },
+    {
+      "why": "9 characters: first 8, then the counts (singular word)",
+      "noun": "passphrase",
+      "input": "123456789\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  12345678\u2026 (1 word, 9 chars)\n"
+    },
+    {
+      "why": "whitespace-only and empty lines: (blank)",
+      "noun": "passphrase",
+      "input": "   \n\n",
+      "note": "note: discarded 2 line(s) typed after the passphrase (not run, not used):\n  (blank)\n  (blank)\n"
+    },
+    {
+      "why": "a CSI escape sequence becomes one ?",
+      "noun": "passphrase",
+      "input": "\u001b[2J\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  ?\n"
+    },
+    {
+      "why": "an escape sequence at the start of a long line",
+      "noun": "passphrase",
+      "input": "\u001b[2Jrm -rf /tmp/x\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  ?rm -\u2026 (3 words, 17 chars)\n"
+    },
+    {
+      "why": "an OSC sequence (window title) is swallowed into one ?",
+      "noun": "passphrase",
+      "input": "\u001b]0;owned\u0007x\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  ?\u2026 (1 word, 11 chars)\n"
+    },
+    {
+      "why": "tab and BEL become ?",
+      "noun": "passphrase",
+      "input": "a\tb\u0007c\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  a?b?c\n"
+    },
+    {
+      "why": "a bidi override becomes ?",
+      "noun": "passphrase",
+      "input": "\u202eabc\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  ?abc\n"
+    },
+    {
+      "why": "Cyrillic: characters, not bytes, are counted",
+      "noun": "passphrase",
+      "input": "\u043f\u0430\u0440\u043e\u043b\u044c-\u0441\u0435\u043a\u0440\u0435\u0442\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  \u043f\u0430\u0440\u043e\u043b\u044c-\u0441\u2026 (1 word, 13 chars)\n"
+    },
+    {
+      "why": "CJK, 9 characters",
+      "noun": "passphrase",
+      "input": "\u65e5\u672c\u8a9e\u306e\u30d1\u30b9\u30ef\u30fc\u30c9\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  \u65e5\u672c\u8a9e\u306e\u30d1\u30b9\u30ef\u30fc\u2026 (1 word, 9 chars)\n"
+    },
+    {
+      "why": "8 characters with accents: shown as is",
+      "noun": "passphrase",
+      "input": "\u00e9t\u00e9 caf\u00e9\n",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  \u00e9t\u00e9 caf\u00e9\n"
+    },
+    {
+      "why": "a partial last line with no newline",
+      "noun": "passphrase",
+      "input": "partial",
+      "note": "note: discarded 1 line(s) typed after the passphrase (not run, not used):\n  partial\n"
+    },
+    {
+      "why": "the noun follows the prompt",
+      "noun": "BIP-38 passphrase",
+      "input": "stray\n",
+      "note": "note: discarded 1 line(s) typed after the BIP-38 passphrase (not run, not used):\n  stray\n"
+    },
+    {
+      "why": "a pasted ms1 is masked too",
+      "noun": "ms1",
+      "input": "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f\n",
+      "note": "note: discarded 1 line(s) typed after the ms1 (not run, not used):\n  ms10entr\u2026 (1 word, 50 chars)\n"
+    }
+  ]
+}
