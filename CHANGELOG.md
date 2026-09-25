@@ -10,6 +10,41 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ### Changed
 
+- **BREAKING (behaviour): the F-687 `--passphrase` rule now also governs
+  `convert --bip38-passphrase` and `import-wallet` / `electrum-decrypt
+  --decrypt-password`** (F-687b, operator ruling 2026-09-25). `-` reads the
+  value from stdin (the same bytes as the `*-stdin` flag), `@env:VAR` from the
+  environment (one trailing `\n` / `\r\n` stripped; before, `@env:` was
+  verbatim on `--bip38-passphrase` and not supported at all on
+  `--decrypt-password`), a literal works and prints one stderr note naming the
+  three private forms, one stdin per invocation. Before, `-` was the literal
+  one-character password (argv-refused without `--allow-argv-secret`). All
+  three flags go through the one resolver in `src/passphrase_input.rs`.
+- **An empty value from a private channel is announced** (F-687b ruling 2):
+  when `-`, a `*-stdin` flag or `@env:VAR` yields an empty passphrase or
+  password, one stderr line — `warning: --passphrase from stdin is empty;
+  proceeding with the EMPTY passphrase` (or `from environment variable VAR`;
+  per flag) — and the command proceeds. Never refused. A literal `""` is not
+  warned (it gets the argv note).
+- **A terminal gets a prompt** (F-687b ruling 3): when a passphrase or
+  password is read from stdin and stdin is a terminal, `Enter passphrase: `
+  (`Enter BIP-38 passphrase: `, `Enter decryption password: `) goes to
+  stderr, echo is turned off (`ECHO` off, `ECHONL` on; restored afterwards;
+  if the terminal refuses, the prompt says `(input will be visible)`), and ONE
+  line is read, so Enter finishes the input (before, a terminal needed
+  Ctrl-D). Pipes and files: no prompt, unchanged bytes.
+- The shared vectors (`tests/vectors/passphrase_channels.json`, byte-identical
+  with mnemonic-secret) grow to 42 cases: empty-warning counts on every case,
+  no prompt on any piped case, and the F-691 row below.
+
+### Fixed
+
+- **`verify-bundle --ms1 -` reads the ms1 from stdin** (F-689). Before, the
+  `-` went through the display-separator strip, became `""` — the watch-only
+  sentinel — and a matching bundle reported a false `result: mismatch`.
+  Empty stdin is refused (it would otherwise mean watch-only); at most one
+  `--ms1 -`, and not beside another stdin reader.
+
 - **BREAKING (behaviour): `--passphrase -` reads the passphrase from stdin, and
   `--passphrase @env:VAR` from the environment, on every subcommand that takes
   `--passphrase`** (F-687, operator ruling 2026-09-25): `addresses`, `restore`,

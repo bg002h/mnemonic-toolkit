@@ -9,48 +9,611 @@
     "A path naming stdin (/dev/stdin, /dev/fd/0, or any path that is the same file as fd 0) is a stdin reader for the one-stdin rule.",
     "--passphrase <anything else>: that literal string, verbatim, plus exactly one stderr line (argv_note); the value is never echoed.",
     "--passphrase together with --passphrase-stdin: a usage error.",
+    "A private channel (-, the -stdin flag, @env:VAR) that yields an EMPTY value prints exactly one stderr line (empty_warning, with {origin} = 'stdin' or 'environment variable VAR') and proceeds; it is never refused. A literal (even '') gets only argv_note.",
+    "When the passphrase is read from stdin and stdin is a TERMINAL, 'Enter passphrase: ' is printed on stderr first, echo is switched off where the terminal allows, and one line is read. On a non-terminal nothing is printed (every case below runs with piped stdin, so none may print a prompt).",
+    "Only the exact value - is the stdin channel. As a separate argument, a value beginning with '-' other than '-' itself (e.g. '- ') is a usage error, exit 64 (F-691); spell it --passphrase=<value> to pass it literally.",
+    "The same rule applies, with its own flag names and prompt, to --bip38-passphrase / --bip38-passphrase-stdin and --decrypt-password / --decrypt-password-stdin (mnemonic-toolkit); those are covered by the toolkit's tests, not by these fingerprint vectors.",
     "one stdin per invocation: --passphrase - or --passphrase-stdin beside another input read from stdin is refused before anything is read."
   ],
   "note_env_newline": "Changed by F-687 (operator, 2026-09-25: no existing wallets to preserve): before, mnemonic-toolkit took @env:VAR verbatim, so VAR=TREZOR\\n derived 48efb44f while TREZOR\\n on stdin derived b4e3f5ed. All three private forms now share one byte rule.",
   "argv_note": "warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)",
   "seed_phrase": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
   "cases": [
-    {"name": "no passphrase", "args": [], "stdin": "", "expect": {"fingerprint": "73c5da0a"}, "argv_notes": 0},
-    {"name": "stdin flag", "args": ["--passphrase-stdin"], "stdin": "TREZOR", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "dash is stdin", "args": ["--passphrase", "-"], "stdin": "TREZOR", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "dash, equals-joined", "args": ["--passphrase=-"], "stdin": "TREZOR", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "dash strips one trailing LF", "args": ["--passphrase", "-"], "stdin": "TREZOR\n", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "dash strips one trailing CRLF", "args": ["--passphrase", "-"], "stdin": "TREZOR\r\n", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "dash strips only ONE LF", "args": ["--passphrase", "-"], "stdin": "TREZOR\n\n", "expect": {"fingerprint": "48efb44f"}, "argv_notes": 0},
-    {"name": "stdin flag strips only ONE LF", "args": ["--passphrase-stdin"], "stdin": "TREZOR\n\n", "expect": {"fingerprint": "48efb44f"}, "argv_notes": 0},
-    {"name": "dash keeps an interior LF", "args": ["--passphrase", "-"], "stdin": "TRE\nZOR", "expect": {"fingerprint": "c6278769"}, "argv_notes": 0},
-    {"name": "dash keeps leading and trailing spaces", "args": ["--passphrase", "-"], "stdin": " TREZOR ", "expect": {"fingerprint": "9a2a7b73"}, "argv_notes": 0},
-    {"name": "a literal dash passphrase, via stdin", "args": ["--passphrase", "-"], "stdin": "-", "expect": {"fingerprint": "66d564d1"}, "argv_notes": 0},
-    {"name": "dash with empty stdin is the empty passphrase", "args": ["--passphrase", "-"], "stdin": "", "expect": {"fingerprint": "73c5da0a"}, "argv_notes": 0},
-    {"name": "env", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TREZOR"}, "stdin": "", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "env, equals-joined", "args": ["--passphrase=@env:F687_PP"], "env": {"F687_PP": "TREZOR"}, "stdin": "", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "env set but empty is the empty passphrase", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": ""}, "stdin": "", "expect": {"fingerprint": "73c5da0a"}, "argv_notes": 0},
-    {"name": "env strips one trailing LF", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TREZOR\n"}, "stdin": "", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "env strips one trailing CRLF", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TREZOR\r\n"}, "stdin": "", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 0},
-    {"name": "env strips only ONE LF", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TREZOR\n\n"}, "stdin": "", "expect": {"fingerprint": "48efb44f"}, "argv_notes": 0},
-    {"name": "env keeps an interior LF", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TRE\nZOR"}, "stdin": "", "expect": {"fingerprint": "c6278769"}, "argv_notes": 0},
-    {"name": "env keeps leading and trailing spaces", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": " TREZOR "}, "stdin": "", "expect": {"fingerprint": "9a2a7b73"}, "argv_notes": 0},
-    {"name": "argv literal is verbatim, a trailing LF included", "args": ["--passphrase", "TREZOR\n"], "allow_argv_secret": true, "stdin": "", "expect": {"fingerprint": "48efb44f"}, "argv_notes": 1},
-    {"name": "env holding a dash is the literal dash", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "-"}, "stdin": "TREZOR", "expect": {"fingerprint": "66d564d1"}, "argv_notes": 0},
-    {"name": "env unset is an error naming the variable", "args": ["--passphrase", "@env:F687_PP_NEVER_SET"], "unset": ["F687_PP_NEVER_SET"], "stdin": "", "expect": {"error_contains": "F687_PP_NEVER_SET"}, "argv_notes": 0},
-    {"name": "env with an invalid name is an error", "args": ["--passphrase", "@env:lower"], "stdin": "", "expect": {"error_contains": "invalid env-var name"}, "argv_notes": 0},
-    {"name": "argv literal", "args": ["--passphrase", "TREZOR"], "allow_argv_secret": true, "stdin": "", "expect": {"fingerprint": "b4e3f5ed"}, "argv_notes": 1},
-    {"name": "argv literal, not a whole-value sentinel", "args": ["--passphrase", "x@env:F687_PP"], "allow_argv_secret": true, "env": {"F687_PP": "TREZOR"}, "stdin": "", "expect": {"fingerprint": "d6700ced"}, "argv_notes": 1},
-    {"name": "env holding an @env: sentinel is that literal, resolved once", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "@env:F687_QQ", "F687_QQ": "TREZOR"}, "stdin": "", "expect": {"fingerprint": "cc24affa"}, "argv_notes": 0},
-    {"name": "dash keeps a lone trailing CR", "args": ["--passphrase", "-"], "stdin": "TREZOR\r", "expect": {"fingerprint": "4b53a850"}, "argv_notes": 0},
-    {"name": "env keeps a lone trailing CR", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TREZOR\r"}, "stdin": "", "expect": {"fingerprint": "4b53a850"}, "argv_notes": 0},
-    {"name": "dash keeps a leading LF", "args": ["--passphrase", "-"], "stdin": "\nTREZOR", "expect": {"fingerprint": "8fa10bb3"}, "argv_notes": 0},
-    {"name": "env keeps a leading LF", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "\nTREZOR"}, "stdin": "", "expect": {"fingerprint": "8fa10bb3"}, "argv_notes": 0},
-    {"name": "dash strips a trailing LF only, not LF then CR", "args": ["--passphrase", "-"], "stdin": "TREZOR\n\r", "expect": {"fingerprint": "f934e53f"}, "argv_notes": 0},
-    {"name": "env strips a trailing LF only, not LF then CR", "args": ["--passphrase", "@env:F687_PP"], "env": {"F687_PP": "TREZOR\n\r"}, "stdin": "", "expect": {"fingerprint": "f934e53f"}, "argv_notes": 0},
-    {"name": "a space-padded dash is argv material, not stdin", "args": ["--passphrase", " -"], "stdin": "TREZOR", "expect": {"error_contains": "BIP-39 passphrase"}, "argv_notes": 0},
-    {"name": "a space-padded dash admitted by the override is the literal", "args": ["--passphrase", " -"], "allow_argv_secret": true, "stdin": "TREZOR", "expect": {"fingerprint": "e20c1882"}, "argv_notes": 1},
-    {"name": "an equals-joined dash with trailing space is the literal", "args": ["--passphrase=- "], "allow_argv_secret": true, "stdin": "TREZOR", "expect": {"fingerprint": "3ca82432"}, "argv_notes": 1},
-    {"name": "dash and the stdin flag together", "args": ["--passphrase", "-", "--passphrase-stdin"], "stdin": "TREZOR", "expect": {"error_contains": "--passphrase"}, "argv_notes": 0}
-  ]
+    {
+      "name": "no passphrase",
+      "args": [],
+      "stdin": "",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "stdin flag",
+      "args": [
+        "--passphrase-stdin"
+      ],
+      "stdin": "TREZOR",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash is stdin",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TREZOR",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash, equals-joined",
+      "args": [
+        "--passphrase=-"
+      ],
+      "stdin": "TREZOR",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash strips one trailing LF",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TREZOR\n",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash strips one trailing CRLF",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TREZOR\r\n",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash strips only ONE LF",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TREZOR\n\n",
+      "expect": {
+        "fingerprint": "48efb44f"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "stdin flag strips only ONE LF",
+      "args": [
+        "--passphrase-stdin"
+      ],
+      "stdin": "TREZOR\n\n",
+      "expect": {
+        "fingerprint": "48efb44f"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash keeps an interior LF",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TRE\nZOR",
+      "expect": {
+        "fingerprint": "c6278769"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash keeps leading and trailing spaces",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": " TREZOR ",
+      "expect": {
+        "fingerprint": "9a2a7b73"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "a literal dash passphrase, via stdin",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "-",
+      "expect": {
+        "fingerprint": "66d564d1"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash with empty stdin is the empty passphrase",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 1
+    },
+    {
+      "name": "env",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env, equals-joined",
+      "args": [
+        "--passphrase=@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env set but empty is the empty passphrase",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": ""
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 1
+    },
+    {
+      "name": "env strips one trailing LF",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR\n"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env strips one trailing CRLF",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR\r\n"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env strips only ONE LF",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR\n\n"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "48efb44f"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env keeps an interior LF",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TRE\nZOR"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "c6278769"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env keeps leading and trailing spaces",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": " TREZOR "
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "9a2a7b73"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "argv literal is verbatim, a trailing LF included",
+      "args": [
+        "--passphrase",
+        "TREZOR\n"
+      ],
+      "allow_argv_secret": true,
+      "stdin": "",
+      "expect": {
+        "fingerprint": "48efb44f"
+      },
+      "argv_notes": 1,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env holding a dash is the literal dash",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "-"
+      },
+      "stdin": "TREZOR",
+      "expect": {
+        "fingerprint": "66d564d1"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env unset is an error naming the variable",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP_NEVER_SET"
+      ],
+      "unset": [
+        "F687_PP_NEVER_SET"
+      ],
+      "stdin": "",
+      "expect": {
+        "error_contains": "F687_PP_NEVER_SET"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env with an invalid name is an error",
+      "args": [
+        "--passphrase",
+        "@env:lower"
+      ],
+      "stdin": "",
+      "expect": {
+        "error_contains": "invalid env-var name"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "argv literal",
+      "args": [
+        "--passphrase",
+        "TREZOR"
+      ],
+      "allow_argv_secret": true,
+      "stdin": "",
+      "expect": {
+        "fingerprint": "b4e3f5ed"
+      },
+      "argv_notes": 1,
+      "empty_warnings": 0
+    },
+    {
+      "name": "argv literal, not a whole-value sentinel",
+      "args": [
+        "--passphrase",
+        "x@env:F687_PP"
+      ],
+      "allow_argv_secret": true,
+      "env": {
+        "F687_PP": "TREZOR"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "d6700ced"
+      },
+      "argv_notes": 1,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env holding an @env: sentinel is that literal, resolved once",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "@env:F687_QQ",
+        "F687_QQ": "TREZOR"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "cc24affa"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash keeps a lone trailing CR",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TREZOR\r",
+      "expect": {
+        "fingerprint": "4b53a850"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env keeps a lone trailing CR",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR\r"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "4b53a850"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash keeps a leading LF",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "\nTREZOR",
+      "expect": {
+        "fingerprint": "8fa10bb3"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env keeps a leading LF",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "\nTREZOR"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "8fa10bb3"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash strips a trailing LF only, not LF then CR",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "TREZOR\n\r",
+      "expect": {
+        "fingerprint": "f934e53f"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "env strips a trailing LF only, not LF then CR",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "TREZOR\n\r"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "f934e53f"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "a space-padded dash is argv material, not stdin",
+      "args": [
+        "--passphrase",
+        " -"
+      ],
+      "stdin": "TREZOR",
+      "expect": {
+        "error_contains": "BIP-39 passphrase"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "a space-padded dash admitted by the override is the literal",
+      "args": [
+        "--passphrase",
+        " -"
+      ],
+      "allow_argv_secret": true,
+      "stdin": "TREZOR",
+      "expect": {
+        "fingerprint": "e20c1882"
+      },
+      "argv_notes": 1,
+      "empty_warnings": 0
+    },
+    {
+      "name": "an equals-joined dash with trailing space is the literal",
+      "args": [
+        "--passphrase=- "
+      ],
+      "allow_argv_secret": true,
+      "stdin": "TREZOR",
+      "expect": {
+        "fingerprint": "3ca82432"
+      },
+      "argv_notes": 1,
+      "empty_warnings": 0
+    },
+    {
+      "name": "stdin flag with only a LF is the empty passphrase, warned",
+      "args": [
+        "--passphrase-stdin"
+      ],
+      "stdin": "\n",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 1
+    },
+    {
+      "name": "dash with only a CRLF is the empty passphrase, warned",
+      "args": [
+        "--passphrase",
+        "-"
+      ],
+      "stdin": "\r\n",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 1
+    },
+    {
+      "name": "env holding only a LF is the empty passphrase, warned",
+      "args": [
+        "--passphrase",
+        "@env:F687_PP"
+      ],
+      "env": {
+        "F687_PP": "\n"
+      },
+      "stdin": "",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 1
+    },
+    {
+      "name": "a literal empty passphrase is not an empty-channel warning",
+      "args": [
+        "--passphrase",
+        ""
+      ],
+      "allow_argv_secret": true,
+      "stdin": "",
+      "expect": {
+        "fingerprint": "73c5da0a"
+      },
+      "argv_notes": 1,
+      "empty_warnings": 0
+    },
+    {
+      "name": "a space-padded dash as a separate argument is a usage error in both CLIs (F-691)",
+      "args": [
+        "--passphrase",
+        "- "
+      ],
+      "allow_argv_secret": true,
+      "stdin": "TREZOR",
+      "expect": {
+        "exit_code": 64
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    },
+    {
+      "name": "dash and the stdin flag together",
+      "args": [
+        "--passphrase",
+        "-",
+        "--passphrase-stdin"
+      ],
+      "stdin": "TREZOR",
+      "expect": {
+        "error_contains": "--passphrase"
+      },
+      "argv_notes": 0,
+      "empty_warnings": 0
+    }
+  ],
+  "empty_warning": "warning: --passphrase from {origin} is empty; proceeding with the EMPTY passphrase",
+  "prompt": "Enter passphrase: "
 }

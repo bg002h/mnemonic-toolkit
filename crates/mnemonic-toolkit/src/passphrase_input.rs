@@ -29,11 +29,60 @@
 //! (`conflicts_with`, exit 64) on every site; [`resolve`] refuses it too, as a
 //! backstop, so no caller can ever read stdin twice.
 
+//!
+//! ## F-687b (operator rulings 2026-09-25, "1) yes 2) yes 3) yes")
+//!
+//! 1. The SAME rule governs every password- or passphrase-like secret flag,
+//!    through this module (never a copy): `--passphrase`,
+//!    `--bip38-passphrase` and `--decrypt-password` ([`SecretFlag`]).
+//! 2. A private channel (`-`, the `*-stdin` flag, `@env:VAR`) that yields an
+//!    EMPTY value prints one stderr warning ([`empty_warning`]) and proceeds.
+//! 3. When a stdin secret is read and stdin is a terminal, a prompt goes to
+//!    stderr first, echo is switched off where the terminal allows it, and one
+//!    line is read (a terminal user presses Enter, not Ctrl-D).
+
 use std::io::{Read, Write};
 
 use zeroize::Zeroizing;
 
 use crate::error::ToolkitError;
+
+/// A password- or passphrase-like secret flag that follows this module's rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SecretFlag {
+    /// The value flag, e.g. `--passphrase`.
+    pub flag: &'static str,
+    /// Its boolean stdin twin, e.g. `--passphrase-stdin`.
+    pub stdin_flag: &'static str,
+    /// What the value is, for the empty warning.
+    pub noun: &'static str,
+    /// The terminal prompt (ruling 3).
+    pub prompt: &'static str,
+}
+
+/// `--passphrase`: BIP-39 (or, on `slip39`, SLIP-39) passphrase.
+pub(crate) const PASSPHRASE: SecretFlag = SecretFlag {
+    flag: "--passphrase",
+    stdin_flag: "--passphrase-stdin",
+    noun: "passphrase",
+    prompt: "Enter passphrase: ",
+};
+
+/// `convert --bip38-passphrase`: the BIP-38 Scrypt passphrase.
+pub(crate) const BIP38_PASSPHRASE: SecretFlag = SecretFlag {
+    flag: "--bip38-passphrase",
+    stdin_flag: "--bip38-passphrase-stdin",
+    noun: "BIP-38 passphrase",
+    prompt: "Enter BIP-38 passphrase: ",
+};
+
+/// `import-wallet` / `electrum-decrypt --decrypt-password`.
+pub(crate) const DECRYPT_PASSWORD: SecretFlag = SecretFlag {
+    flag: "--decrypt-password",
+    stdin_flag: "--decrypt-password-stdin",
+    noun: "decryption password",
+    prompt: "Enter decryption password: ",
+};
 
 /// Where the value of `--passphrase` comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +125,15 @@ pub(crate) fn stdin_spelling(stdin_flag: bool) -> &'static str {
         "--passphrase-stdin"
     } else {
         "--passphrase -"
+    }
+}
+
+/// [`stdin_spelling`] for any [`SecretFlag`].
+pub(crate) fn stdin_spelling_for(f: &SecretFlag, stdin_flag: bool) -> String {
+    if stdin_flag {
+        f.stdin_flag.to_string()
+    } else {
+        format!("{} -", f.flag)
     }
 }
 
@@ -122,17 +180,51 @@ pub(crate) fn refuse_second_stdin(readers: &[(bool, &str)]) -> Result<(), Toolki
     Ok(())
 }
 
-/// The note printed once for a literal argv passphrase. Never carries the
-/// value. Byte-identical to `ms`'s `advisory::PASSPHRASE_ARGV_NOTE`.
-pub(crate) const ARGV_NOTE: &str = "warning: secret material on argv (--passphrase) \u{2014} \
-read it privately with --passphrase - or --passphrase-stdin (stdin), \
-or --passphrase @env:VAR (environment variable)";
+/// The note printed once for a literal argv value of `f`. Never carries the
+/// value. For `--passphrase` it is byte-identical to ms's `ARGV_NOTE`.
+pub(crate) fn argv_note(f: &SecretFlag) -> String {
+    format!(
+        "warning: secret material on argv ({flag}) \u{2014} read it privately with \
+         {flag} - or {stdin} (stdin), or {flag} @env:VAR (environment variable)",
+        flag = f.flag,
+        stdin = f.stdin_flag
+    )
+}
 
-/// Emit [`ARGV_NOTE`] iff the passphrase is literal on argv. Best-effort, like
-/// every advisory: a closed stderr is not an error.
-pub(crate) fn emit_argv_note<E: Write>(value: Option<&str>, stdin_flag: bool, stderr: &mut E) {
+/// Emit [`argv_note`] iff the value of `f` is literal on argv. Best-effort,
+/// like every advisory: a closed stderr is not an error.
+pub(crate) fn emit_argv_note_for<E: Write>(
+    f: &SecretFlag,
+    value: Option<&str>,
+    stdin_flag: bool,
+    stderr: &mut E,
+) {
     if source(value, stdin_flag) == PassphraseSource::Argv {
-        let _ = writeln!(stderr, "{ARGV_NOTE}");
+        let _ = writeln!(stderr, "{}", argv_note(f));
+    }
+}
+
+/// [`emit_argv_note_for`] for `--passphrase`.
+pub(crate) fn emit_argv_note<E: Write>(value: Option<&str>, stdin_flag: bool, stderr: &mut E) {
+    emit_argv_note_for(&PASSPHRASE, value, stdin_flag, stderr)
+}
+
+/// Ruling 2: the one line printed when a PRIVATE channel yields an empty
+/// value. `origin` is `stdin` or `environment variable VAR`. Byte-identical
+/// to ms's `empty_warning`.
+pub(crate) fn empty_warning(f: &SecretFlag, origin: &str) -> String {
+    format!(
+        "warning: {} from {origin} is empty; proceeding with the EMPTY {}",
+        f.flag, f.noun
+    )
+}
+
+/// Print [`empty_warning`] iff `value` is empty. Goes to the PROCESS stderr:
+/// it is emitted at the one place each value is read, which is below the
+/// layer that carries a `stderr` writer on some paths (`@env:` pre-passes).
+fn warn_if_empty(f: &SecretFlag, origin: &str, value: &str) {
+    if value.is_empty() {
+        let _ = writeln!(std::io::stderr(), "{}", empty_warning(f, origin));
     }
 }
 
@@ -157,9 +249,89 @@ pub(crate) fn strip_one_newline(s: &mut String) {
 /// calls THIS for `--passphrase` — never `resolve_env_var_sentinel` directly,
 /// which is verbatim and serves the other secret flags.
 pub(crate) fn resolve_env(value: &str) -> Result<String, ToolkitError> {
-    let mut v = crate::env_sentinel::resolve_env_var_sentinel(value, "--passphrase")?;
+    resolve_env_for(&PASSPHRASE, value)
+}
+
+/// [`resolve_env`] for any [`SecretFlag`]; warns once if the value is empty.
+pub(crate) fn resolve_env_for(f: &SecretFlag, value: &str) -> Result<String, ToolkitError> {
+    let mut v = crate::env_sentinel::resolve_env_var_sentinel(value, f.flag)?;
     strip_one_newline(&mut v);
+    let var = value.strip_prefix("@env:").unwrap_or(value);
+    warn_if_empty(f, &format!("environment variable {var}"), &v);
     Ok(v)
+}
+
+/// Is the PROCESS stdin a terminal? Never in unit tests (`cfg(test)`), whose
+/// readers are in-memory cursors even when `cargo test` runs on a terminal.
+fn stdin_is_terminal() -> bool {
+    use std::io::IsTerminal;
+    !cfg!(test) && std::io::stdin().is_terminal()
+}
+
+/// Echo off on fd 0 for the life of the guard (Unix; restored on drop,
+/// including on an error return). `ECHONL` keeps the Enter visible, so the
+/// cursor moves on without showing the secret.
+struct EchoOff {
+    #[cfg(unix)]
+    saved: Option<libc::termios>,
+}
+
+impl EchoOff {
+    /// `(guard, echo_disabled)`.
+    fn new() -> (Self, bool) {
+        #[cfg(unix)]
+        {
+            // SAFETY: tcgetattr/tcsetattr on fd 0 with a zeroed, then
+            // kernel-filled, termios; no pointers are retained.
+            unsafe {
+                let mut t: libc::termios = std::mem::zeroed();
+                if libc::tcgetattr(0, &mut t) == 0 {
+                    let saved = t;
+                    t.c_lflag &= !libc::ECHO;
+                    t.c_lflag |= libc::ECHONL;
+                    if libc::tcsetattr(0, libc::TCSANOW, &t) == 0 {
+                        return (Self { saved: Some(saved) }, true);
+                    }
+                }
+            }
+            (Self { saved: None }, false)
+        }
+        #[cfg(not(unix))]
+        {
+            (Self {}, false)
+        }
+    }
+}
+
+impl Drop for EchoOff {
+    fn drop(&mut self) {
+        #[cfg(unix)]
+        if let Some(t) = self.saved.take() {
+            // SAFETY: restores the attributes read in `new`.
+            unsafe {
+                libc::tcsetattr(0, libc::TCSANOW, &t);
+            }
+        }
+    }
+}
+
+/// Read ONE line (up to and including the first `\n`, or EOF) byte by byte,
+/// so nothing past the line is consumed.
+fn read_line<R: Read + ?Sized>(stdin: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()> {
+    let mut b = [0u8; 1];
+    loop {
+        match stdin.read(&mut b) {
+            Ok(0) => return Ok(()),
+            Ok(_) => {
+                buf.push(b[0]);
+                if b[0] == b'\n' {
+                    return Ok(());
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// Read a passphrase from stdin, preserving every byte except ONE trailing
@@ -168,12 +340,42 @@ pub(crate) fn resolve_env(value: &str) -> Result<String, ToolkitError> {
 pub(crate) fn read_stdin_passphrase<R: Read + ?Sized>(
     stdin: &mut R,
 ) -> Result<String, ToolkitError> {
-    // wave2 T4: scrub the read_to_string SCRATCH buffer (passphrase material).
+    read_stdin_secret(&PASSPHRASE, stdin)
+}
+
+/// [`read_stdin_passphrase`] for any [`SecretFlag`]. On a terminal (ruling
+/// 3): prompt on stderr, echo off where possible, read one line. Otherwise
+/// read to EOF, no prompt. Warns once if the result is empty (ruling 2).
+pub(crate) fn read_stdin_secret<R: Read + ?Sized>(
+    f: &SecretFlag,
+    stdin: &mut R,
+) -> Result<String, ToolkitError> {
+    let err = |e: std::io::Error| ToolkitError::BadInput(format!("stdin read: {e}"));
+    // wave2 T4: scrub the SCRATCH buffer (passphrase material).
     let mut buf = Zeroizing::new(String::new());
-    stdin
-        .read_to_string(&mut buf)
-        .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+    if stdin_is_terminal() {
+        let (_echo, hidden) = EchoOff::new();
+        let mut e = std::io::stderr();
+        let _ = write!(
+            e,
+            "{}{}",
+            f.prompt,
+            if hidden {
+                ""
+            } else {
+                "(input will be visible) "
+            }
+        );
+        let _ = e.flush();
+        let mut bytes = Zeroizing::new(Vec::new());
+        read_line(stdin, &mut bytes).map_err(err)?;
+        *buf = String::from_utf8(bytes.to_vec())
+            .map_err(|_| ToolkitError::BadInput(format!("{}: stdin is not valid UTF-8", f.flag)))?;
+    } else {
+        stdin.read_to_string(&mut buf).map_err(err)?;
+    }
     strip_one_newline(&mut buf);
+    warn_if_empty(f, "stdin", &buf);
     Ok(buf.to_string())
 }
 
@@ -247,16 +449,26 @@ pub(crate) fn resolve<R: Read + ?Sized>(
     stdin_flag: bool,
     stdin: &mut R,
 ) -> Result<Option<Zeroizing<String>>, ToolkitError> {
+    resolve_for(&PASSPHRASE, value, stdin_flag, stdin)
+}
+
+/// [`resolve`] for any [`SecretFlag`].
+pub(crate) fn resolve_for<R: Read + ?Sized>(
+    f: &SecretFlag,
+    value: Option<&str>,
+    stdin_flag: bool,
+    stdin: &mut R,
+) -> Result<Option<Zeroizing<String>>, ToolkitError> {
     if stdin_flag && value.is_some() {
-        return Err(ToolkitError::BadInput(
-            "--passphrase and --passphrase-stdin cannot both be given (one passphrase, one stdin)"
-                .into(),
-        ));
+        return Err(ToolkitError::BadInput(format!(
+            "{} and {} cannot both be given (one value, one stdin)",
+            f.flag, f.stdin_flag
+        )));
     }
     Ok(match source(value, stdin_flag) {
         PassphraseSource::Absent => None,
-        PassphraseSource::Stdin => Some(Zeroizing::new(read_stdin_passphrase(stdin)?)),
-        PassphraseSource::Env => Some(Zeroizing::new(resolve_env(value.unwrap_or(""))?)),
+        PassphraseSource::Stdin => Some(Zeroizing::new(read_stdin_secret(f, stdin)?)),
+        PassphraseSource::Env => Some(Zeroizing::new(resolve_env_for(f, value.unwrap_or(""))?)),
         PassphraseSource::Argv => Some(Zeroizing::new(value.unwrap_or("").to_string())),
     })
 }
@@ -373,6 +585,37 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn notes_and_warnings_per_flag() {
+        assert_eq!(
+            argv_note(&PASSPHRASE),
+            "warning: secret material on argv (--passphrase) \u{2014} read it privately with \
+             --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR \
+             (environment variable)"
+        );
+        assert!(argv_note(&BIP38_PASSPHRASE).contains("--bip38-passphrase-stdin (stdin)"));
+        assert!(argv_note(&DECRYPT_PASSWORD).contains("--decrypt-password @env:VAR"));
+        assert_eq!(
+            empty_warning(&PASSPHRASE, "stdin"),
+            "warning: --passphrase from stdin is empty; proceeding with the EMPTY passphrase"
+        );
+        assert_eq!(
+            stdin_spelling_for(&BIP38_PASSPHRASE, false),
+            "--bip38-passphrase -"
+        );
+    }
+
+    #[test]
+    fn read_line_stops_at_the_first_newline() {
+        let mut cur = std::io::Cursor::new(b"TREZOR\nrest".to_vec());
+        let mut v = Vec::new();
+        read_line(&mut cur, &mut v).unwrap();
+        assert_eq!(v, b"TREZOR\n");
+        let mut rest = String::new();
+        cur.read_to_string(&mut rest).unwrap();
+        assert_eq!(rest, "rest");
     }
 
     #[test]
