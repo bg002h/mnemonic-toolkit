@@ -33,8 +33,10 @@ graphics-stack notes you may need.
    `cargo install md-cli` (or `ms-cli`, `mk-cli`): the crates.io copies
    are several releases older than the GUI expects.
 
-   The installer puts exactly the tags this GUI is built against in
-   place; if you install the CLIs another way, stay at or above them
+   The installer puts the tags this GUI is built against in place, or
+   newer ones where it has moved ahead (see
+   [When the installer is ahead of the GUI](#installer-ahead)); if you
+   install the CLIs another way, stay at or above them
    (see [Version pinning](#version-pinning)). Verify with
    `mnemonic --version` etc.
 

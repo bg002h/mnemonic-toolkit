@@ -32,8 +32,10 @@ secret on the command line.
 ## Version pinning {#version-pinning}
 
 The GUI is built against specific CLI releases. `pinned-upstream.toml`
-declares the exact tags this manual matches, and the toolkit's
-installer (`scripts/install.sh`) installs exactly these:
+declares the exact tags this manual matches. The toolkit's installer
+(`scripts/install.sh`) installs these, except where it has already
+moved to a newer CLI release (see
+[When the installer is ahead of the GUI](#installer-ahead)):
 
 | CLI | Pinned tag | Oldest release that works with this GUI |
 |---|---|---|
@@ -57,7 +59,9 @@ and `mk --version`. A mismatch shows up as either:
 
 Both surface as the CLI's own error message in the output panel.
 **Re-run the toolkit installer** (`install.sh`, or `install.sh --only
-<cli>` for one CLI) to put the pinned releases in place.
+<cli>` for one CLI) to put its releases in place: the pinned ones, or
+the newer ones listed under
+[When the installer is ahead of the GUI](#installer-ahead).
 
 :::primer
 The pin is *which CLI release* the GUI knows about, not *which

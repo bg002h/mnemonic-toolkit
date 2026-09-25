@@ -208,6 +208,18 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `{#installer-ahead}` section in the manual while any entry exists (and none otherwise).
   Prose version mentions are checked against the manual's own pins, plus a declared newer tag.
 
+### Installer pins: mnemonic-toolkit v0.105.0, ms 0.20.0
+
+- **`scripts/install.sh` installs this release and ms 0.20.0**, the ms release with the same
+  F-687 passphrase rule, so the installer never pairs a toolkit and an ms that read
+  `--passphrase -` differently. The ms pin is mirrored in `manual.yml`, `quickstart.yml` and
+  `technical-manual.yml`; the Examples golden shows the new pins.
+- **mnemonic-gui stays at v0.62.0**, built against toolkit 0.104.0 and ms 0.19.1. Its forms run
+  unchanged against the newer CLIs, but a passphrase of exactly `-`, or one beginning `@env:`,
+  typed into the GUI is now read from stdin or the environment instead of taken literally
+  (the GUI's stdin is empty, so that run uses the EMPTY passphrase, with a warning). The GUI
+  manual declares the lag (`[installer-ahead]`) and says so in a new §82 section.
+
 ## mnemonic-toolkit [0.104.0] — 2026-09-23
 
 **SemVer-MINOR: md-codec 0.47.0 adopted (F-642), pin `cf35d61a` =
