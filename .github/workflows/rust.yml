@@ -207,6 +207,17 @@ jobs:
         run: sh scripts/install-msrv-guard.test.sh
       - name: man-step harness
         run: sh scripts/install-man-step.test.sh
+      # F-676: the binary path. Offline (stub curl + fixture release): a good
+      # archive installs, one flipped byte / an unlisted asset / no SHA256SUMS
+      # are refused with nothing installed, a platform with no binary falls
+      # back to cargo at the pinned tag, and no crates.io path remains.
+      - name: install-verify harness (offline)
+        run: sh scripts/install-verify.test.sh
+      # Every platform mapping names a real asset of the PINNED release, listed
+      # in exactly one of its SHA256SUMS files. Network (plain HTTPS). This is
+      # what breaks when a pin moves to a release that names assets differently.
+      - name: install-assets check (every platform mapping, against the pinned releases)
+        run: sh scripts/install-assets.test.sh
 
   test-release-mlock-einval:
     # Cycle B Phase 3a — release-build coverage for G2.3 EINVAL soft-fail.

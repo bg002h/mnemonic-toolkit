@@ -154,6 +154,21 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   SeedHammer II device, a BIP-129 BSMS canary and the operator-journey capture — pinned as fixtures
   under `tests/fixtures/export_wallet_addresses/`.
 
+### Installer — release binaries at the pinned tags, never crates.io (F-676)
+
+- **`scripts/install.sh` no longer installs `md` / `ms` / `mk` from crates.io**, whose copies
+  (md-cli 0.13.0, ms-cli 0.14.0, mk-cli 0.12.1) lag the pins the manual documents (0.20.2, 0.19.0,
+  0.13.0). Each component now installs the prebuilt binary from its pinned GitHub release, checked
+  against that release's `SHA256SUMS*` file (refused on a mismatch or when no published checksum
+  lists it) and run once (refused unless `--version` prints the pin). No Rust toolchain needed.
+- `--from-source` (alias `--from-git`) builds the same pinned tags with
+  `cargo install --locked --git … --tag …`; a platform with no release binary (FreeBSD, md on musl
+  x86_64) falls back to that per component, said on stderr. New `--root DIR`.
+- The `md` release binary lacks the `cli-compiler` feature (`md encode --from-policy`); the
+  installer says so, and `--from-source --only md` builds it in.
+- CI: `install-verify.test.sh` (offline refusals and fallbacks) and `install-assets.test.sh` (every
+  platform mapping against the real pinned releases) join the install.sh harness job.
+
 ## mnemonic-toolkit [0.104.0] — 2026-09-23
 
 **SemVer-MINOR: md-codec 0.47.0 adopted (F-642), pin `cf35d61a` =

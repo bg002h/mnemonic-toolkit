@@ -80,50 +80,70 @@ Throughout, `$` is the shell prompt; everything after it is what you type.
 
 # 1. Install the constellation on Linux
 
-The in-repo installer builds each component with `cargo install --locked` into
-`~/.cargo/bin` (no `sudo`, no system files touched). It needs `cargo`, `git`,
-and a C toolchain; the CLIs require `rustc >= 1.85`.
+The in-repo installer downloads each component's prebuilt binary from its
+pinned GitHub release, checks it against the `SHA256SUMS` file published with
+that release (refusing a mismatch or an asset no checksum covers), runs it once
+to confirm the pinned version, and installs it into `~/.cargo/bin` (no `sudo`,
+no system files touched, no Rust toolchain needed). `--from-source` builds the
+same pinned tags with `cargo install --locked --git ... --tag ...` instead.
 
-Install all four CLIs (this compiles from source, so the build log is
-machine-specific and not reproduced here):
+Install all four CLIs (the output names this machine's paths, so it is not
+reproduced here):
 
 ```
 $ sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --no-gui
 ```
 
 The installer carries the current version pins, so it never goes stale. Useful
-flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--from-git`, `--force`,
-`--dry-run`, `--list`. The pin table (`--list`) and a dry run are deterministic
-(`$REPO` = your clone root):
+flags: `--only <c>`, `--exclude <c>`, `--no-gui`, `--root <dir>`,
+`--from-source`, `--dry-run`, `--list`. The pin table (`--list`) and a dry run
+are deterministic (`$REPO` = your clone root):
 
 ```
 $ sh "$REPO/scripts/install.sh" --list
-COMPONENT       CARGO_PACKAGE        DEFAULT      FEATURES       GIT_TAG
----------       -------------        -------      --------       -------
-mnemonic        mnemonic-toolkit     git (only)   (none)         mnemonic-toolkit-v0.104.0
-md              md-cli               crates.io    cli-compiler   descriptor-mnemonic-md-cli-v0.20.2
-ms              ms-cli               crates.io    (none)         ms-cli-v0.19.0
-mk              mk-cli               crates.io    (none)         mk-cli-v0.13.0
-mnemonic-gui    mnemonic-gui         git (only)   (none)         mnemonic-gui-v0.59.0
+platform: linux-x86_64-gnu
+COMPONENT       CARGO_PACKAGE        FEATURES       GIT_TAG                              BINARY
+---------       -------------        --------       -------                              ------
+mnemonic        mnemonic-toolkit     (none)         mnemonic-toolkit-v0.104.0            mnemonic-0.104.0-x86_64-linux-musl.tar.gz
+md              md-cli               cli-compiler   descriptor-mnemonic-md-cli-v0.20.2   md-0.20.2-linux-amd64.tar.gz
+ms              ms-cli               (none)         ms-cli-v0.19.0                       ms-0.19.0-x86_64-linux-musl.tar.gz
+mk              mk-cli               (none)         mk-cli-v0.13.0                       mk-0.13.0-x86_64-linux-musl.tar.gz
+mnemonic-gui    mnemonic-gui         (none)         mnemonic-gui-v0.59.0                 mnemonic-gui-v0.59.0-x86_64-linux.tar.gz
 ```
 
 ```
 $ sh "$REPO/scripts/install.sh" --no-gui --dry-run
 m-format constellation installer
-install root: /home/user/.cargo/bin
-source: crates.io (default; mnemonic-toolkit stays on git+tag)
+install root: /home/user/.cargo (binaries in /home/user/.cargo/bin)
+platform: linux-x86_64-gnu
+source: pinned GitHub release binaries, sha256-verified
 
-install  mnemonic (git: mnemonic-toolkit-v0.104.0)
-  [dry-run] cargo install --locked --git https://github.com/bg002h/mnemonic-toolkit --tag mnemonic-toolkit-v0.104.0   mnemonic-toolkit
+install  mnemonic (release mnemonic-toolkit-v0.104.0: mnemonic-0.104.0-x86_64-linux-musl.tar.gz)
+  [dry-run] download https://github.com/bg002h/mnemonic-toolkit/releases/download/mnemonic-toolkit-v0.104.0/mnemonic-0.104.0-x86_64-linux-musl.tar.gz
+  [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
+  [dry-run] run 'mnemonic --version'; refuse unless it prints 'mnemonic 0.104.0'
+  [dry-run] install /home/user/.cargo/bin/mnemonic
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
-install  md (crates.io: md-cli)
-  [dry-run] cargo install --locked --features cli-compiler  md-cli
+install  md (release descriptor-mnemonic-md-cli-v0.20.2: md-0.20.2-linux-amd64.tar.gz)
+  [dry-run] download https://github.com/bg002h/descriptor-mnemonic/releases/download/descriptor-mnemonic-md-cli-v0.20.2/md-0.20.2-linux-amd64.tar.gz
+  [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
+  [dry-run] run 'md --version'; refuse unless it prints 'md 0.20.2'
+  [dry-run] install /home/user/.cargo/bin/md
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/md" gen-man --out "/home/user/.local/share/man/man1"
-install  ms (crates.io: ms-cli)
-  [dry-run] cargo install --locked   ms-cli
+note: the descriptor-mnemonic-md-cli-v0.20.2 md binary is built without the cli-compiler feature,
+      so 'md encode --from-policy' refuses; for it, re-run with
+      --from-source --only md (needs cargo).
+install  ms (release ms-cli-v0.19.0: ms-0.19.0-x86_64-linux-musl.tar.gz)
+  [dry-run] download https://github.com/bg002h/mnemonic-secret/releases/download/ms-cli-v0.19.0/ms-0.19.0-x86_64-linux-musl.tar.gz
+  [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
+  [dry-run] run 'ms --version'; refuse unless it prints 'ms 0.19.0'
+  [dry-run] install /home/user/.cargo/bin/ms
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/ms" gen-man --out "/home/user/.local/share/man/man1"
-install  mk (crates.io: mk-cli)
-  [dry-run] cargo install --locked   mk-cli
+install  mk (release mk-cli-v0.13.0: mk-0.13.0-x86_64-linux-musl.tar.gz)
+  [dry-run] download https://github.com/bg002h/mnemonic-key/releases/download/mk-cli-v0.13.0/mk-0.13.0-x86_64-linux-musl.tar.gz
+  [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
+  [dry-run] run 'mk --version'; refuse unless it prints 'mk 0.13.0'
+  [dry-run] install /home/user/.cargo/bin/mk
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mk" gen-man --out "/home/user/.local/share/man/man1"
 skip     mnemonic-gui
 

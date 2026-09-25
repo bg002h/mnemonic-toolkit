@@ -26,15 +26,23 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/ma
 
 If you already have the repo cloned, run `scripts/install.sh` directly.
 `scripts/install.sh --help` lists per-component flags (`--only`,
-`--exclude`, `--no-gui`, `--dry-run`, `--list`, `--force`). The script
-installs each component via `cargo install --locked --git --tag` into
-`$CARGO_INSTALL_ROOT` (default: `~/.cargo/bin`); no `sudo`, no system
-files touched. Requires `cargo` + `git` + a C toolchain. The CLIs build on
-`rustc` ≥ 1.85 (the toolkit MSRV); the `mnemonic-gui` overlay currently needs
-**`rustc` ≥ 1.88** (its dependencies' MSRV). On an older toolchain the CLI
-components install fine and the installer **auto-skips the GUI with a warning**
-(the run still exits 0) — upgrade `rustc` and re-run, or pass `--no-gui` to
-make the omission explicit.
+`--exclude`, `--no-gui`, `--root`, `--from-source`, `--dry-run`, `--list`).
+For each component the script downloads the prebuilt binary from its
+**pinned GitHub release** (`--list` prints the pins), checks it against the
+`SHA256SUMS` file published with that release, runs it once to confirm it
+reports the pinned version, and installs it into `~/.cargo/bin` (`--root DIR`
+puts it in `DIR/bin`); no `sudo`, no system files touched, no Rust toolchain
+needed. A digest mismatch, or an asset no published checksum covers, is
+refused. The releases are not signed: the check proves the download is the
+file the release published, not who built it. Nothing installs from
+crates.io, whose copies lag these pins.
+
+`--from-source` (and any platform a release has no binary for, e.g. FreeBSD)
+builds the same pinned tags with `cargo install --locked --git … --tag …`,
+which needs `cargo` + `git` + a C toolchain. The CLIs build on `rustc` ≥ 1.85
+(the toolkit MSRV); building the `mnemonic-gui` overlay needs **`rustc` ≥ 1.88**
+(its dependencies' MSRV), and on an older toolchain a source install
+**auto-skips the GUI with a warning** (the run still exits 0).
 
 To install just this toolkit's `mnemonic` binary (no constellation
 siblings), use the installer's `--only` flag (it carries the
@@ -56,7 +64,7 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/ma
 
    Then `man mnemonic` works (and `man mnemonic-<subcommand>` per subcommand; likewise `man md` / `man ms` / `man mk`). Pass `--no-man` to skip, or `--man-dir <dir>` to relocate.
 
-2. **By hand.** If you installed a binary directly (`cargo install`), emit its pages yourself:
+2. **By hand.** If you installed a binary some other way, emit its pages yourself:
 
    ```sh
    mnemonic gen-man --out ~/.local/share/man/man1
@@ -113,7 +121,7 @@ proves the published binary came from this source.
 
 **Scope:** the static-musl Linux **x86_64** and **aarch64** `mnemonic` binaries.
 (gnu, macOS/Windows, and the GUI are not yet reproducible.) Note: a local
-`cargo install` / `install.sh` build is *not* bit-for-bit reproducible — the
+`cargo install` / `install.sh --from-source` build is *not* bit-for-bit reproducible — the
 guarantee is for the published container-built release tarballs.
 
 ## License

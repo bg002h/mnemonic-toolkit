@@ -19,7 +19,7 @@ The three cards engrave together as a coherent backup. Each card is independentl
 
 ## Installation
 
-`cargo install mnemonic-toolkit` is gated on the three sibling codecs reaching crates.io; until then install from the GitHub tag via the in-repo installer (it carries the current version pin):
+`mnemonic-toolkit` is not on crates.io. Install the prebuilt, checksum-verified binary from the pinned GitHub release with the in-repo installer (it carries the current version pin; `--from-source` builds that tag instead):
 
 ```bash
 sh -c "$(curl -fsSL https://raw.githubusercontent.com/bg002h/mnemonic-toolkit/master/scripts/install.sh)" -- --only mnemonic

@@ -62,7 +62,7 @@ jobs:
           # Parse install.sh's `component_info` arms into a
           # newline-separated `url|tag` table. Each canonical line has
           # the shape:
-          #   echo "<pkg>|<repo-url>|<tag>|<bool>|<features-opt>"
+          #   echo "<pkg>|<repo-url>|<tag>|<bin>|<features-opt>"
           # The toolkit arm uses pkg=mnemonic-toolkit (the SELF-pin —
           # excluded by field-1 name; gated by install-pin-check.yml).
           # The table is keyed on the REPO-URL (field 2), not the pkg
