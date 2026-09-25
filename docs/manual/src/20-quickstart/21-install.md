@@ -36,6 +36,9 @@ the file is the one the release published, not who built it. Binaries
 land in `~/.cargo/bin/` (`--root DIR` or `$CARGO_INSTALL_ROOT` puts them
 in `DIR/bin/` instead; cargo's `install.root` config setting is not read);
 the installer warns if that directory is not on your `PATH`.
+`--root` covers the binaries only: man pages go to
+`${XDG_DATA_HOME:-~/.local/share}/man/man1` unless you pass
+`--man-dir DIR`, or `--no-man` to skip them.
 `--dry-run` shows every URL first; `--help` lists the options.
 
 If a release has no binary for your platform (FreeBSD, for example),

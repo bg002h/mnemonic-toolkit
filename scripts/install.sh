@@ -203,6 +203,8 @@ OPTIONS:
     --root DIR        Install into DIR/bin (default:
                       \$CARGO_INSTALL_ROOT/bin, else ~/.cargo/bin).
                       cargo's install.root config is not read.
+                      Binaries only: man pages go to --man-dir
+                      (turn them off with --no-man).
     --force           Source builds: re-install even if the same version
                       is already installed (cargo install --force).
                       Binary installs always replace the file.
