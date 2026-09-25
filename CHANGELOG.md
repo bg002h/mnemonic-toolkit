@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
-## mnemonic-toolkit [Unreleased]
+## mnemonic-toolkit [0.105.0] — 2026-09-25
 
 ### Changed
 - **The discarded-input note shows a MASKED preview, not the text** (F-687d,
@@ -199,6 +199,14 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   manual-gui lint phase 13) fails when `docs/manual-gui/pinned-upstream.toml` disagrees with
   `scripts/install.sh`'s pins, or when the manual names an off-pin CLI version outside its
   history list.
+- **...unless the installer is declared to be ahead of the GUI.** A CLI release can ship before
+  the GUI re-pins to it; the GUI manual then keeps documenting the GUI's own tier.
+  `pinned-upstream.toml` may carry an `[installer-ahead]` table naming the installer's newer
+  tag per CLI. `check_cli_pins.py` accepts an entry only if it equals the installer's pin
+  exactly and is newer than the manual's tag; it flags an entry the installer no longer runs
+  ahead on as stale, never lets the GUI tag itself run ahead, and requires exactly one
+  `{#installer-ahead}` section in the manual while any entry exists (and none otherwise).
+  Prose version mentions are checked against the manual's own pins, plus a declared newer tag.
 
 ## mnemonic-toolkit [0.104.0] — 2026-09-23
 

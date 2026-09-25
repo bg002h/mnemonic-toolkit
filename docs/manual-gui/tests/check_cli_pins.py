@@ -9,9 +9,19 @@ One source for the CLI versions the GUI manual names: the toolkit installer.
       GUI together with these CLIs, so a manual pinned to other CLIs documents
       a combination nobody installs (F-679: ms 0.19.0 broke the GUI's
       `ms verify --phrase`).
+      ONE declared exception: a CLI release can ship before the GUI re-pins to
+      it. The manual then keeps documenting the GUI's tier, and the file's
+      [installer-ahead] table names the installer's newer tag under the same
+      key (e.g. `ms-cli-tag-implied = "ms-cli-v0.20.0"`). Each entry must equal
+      the installer's pin exactly and be strictly NEWER than the manual's tag,
+      and an entry for a CLI the installer does not run ahead on is stale. The
+      GUI tag itself can never be ahead. While any entry exists, the manual
+      must carry the `{#installer-ahead}` section that tells the reader, and
+      it must not carry it otherwise.
   (b) Every CLI version the manual's prose names -- `mnemonic-toolkit-v0.13.0`,
       `ms-cli v0.2.1`, `Pinned: md 0.11.0`, `toolkit 0.104.0`, ... -- must
-      equal that CLI's pin, UNLESS the exact line is listed in
+      equal that CLI's pin in pinned-upstream.toml (or its [installer-ahead]
+      tag), UNLESS the exact line is listed in
       tests/cli-version-history.txt as history ("since ms-cli v0.14.0 …",
       the release-history appendix). A pin bump therefore fails on every
       sentence that stated the old pin, and each one must be updated or
@@ -61,6 +71,10 @@ def version_of(tag: str) -> str:
     return tag.rsplit("-v", 1)[1]
 
 
+def version_key(tag: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in version_of(tag).split("."))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--manual-dir", required=True, help="docs/manual-gui")
@@ -75,12 +89,28 @@ def main() -> int:
         print(f"ERROR: cli-pin-consistency: cannot read pins for {missing} from {a.install_sh}", file=sys.stderr)
         return 2
 
-    # (a) pinned-upstream.toml == installer
+    # (a) pinned-upstream.toml == installer, or a declared [installer-ahead]
     toml = tomllib.loads((man / "pinned-upstream.toml").read_text())
+    ahead = toml.get("installer-ahead", {})
+    for key in ahead:
+        if key not in IMPLIED_KEY.values():
+            errs.append(f"pinned-upstream.toml [installer-ahead] {key}: not one of {sorted(IMPLIED_KEY.values())}")
+    manual_tag: dict[str, str] = {}
     for cli in CLIS:
-        got = toml["manual-gui"][IMPLIED_KEY[cli]]
-        if got != pins[cli]:
-            errs.append(f"pinned-upstream.toml [manual-gui] {IMPLIED_KEY[cli]} = {got}, but install.sh pins {pins[cli]}")
+        key = IMPLIED_KEY[cli]
+        got = toml["manual-gui"][key]
+        manual_tag[cli] = got
+        if key in ahead:
+            decl = ahead[key]
+            if got == pins[cli]:
+                errs.append(f"pinned-upstream.toml [installer-ahead] {key} = {decl} is stale: install.sh pins {pins[cli]}, "
+                            f"the same as [manual-gui]; remove the entry")
+            elif decl != pins[cli]:
+                errs.append(f"pinned-upstream.toml [installer-ahead] {key} = {decl}, but install.sh pins {pins[cli]}")
+            elif version_key(decl) <= version_key(got):
+                errs.append(f"pinned-upstream.toml [installer-ahead] {key} = {decl} is not newer than [manual-gui] {got}")
+        elif got != pins[cli]:
+            errs.append(f"pinned-upstream.toml [manual-gui] {key} = {got}, but install.sh pins {pins[cli]}")
     if toml["mnemonic-gui"]["tag"] != pins["gui"]:
         errs.append(f"pinned-upstream.toml [mnemonic-gui] tag = {toml['mnemonic-gui']['tag']}, but install.sh pins {pins['gui']}")
 
@@ -92,17 +122,21 @@ def main() -> int:
             continue
         path, _, line = raw.partition("\t")
         history[(path, line)] = False
-    want = {cli: version_of(pins[cli]) for cli in CLIS}
+    want = {cli: version_of(manual_tag[cli]) for cli in CLIS}
+    also = {cli: version_of(ahead[IMPLIED_KEY[cli]]) for cli in CLIS if IMPLIED_KEY[cli] in ahead}
     files = sorted([*man.glob("src/**/*.md"), *man.glob("tutorial/*.md")])
     checked = 0
+    ahead_section = []
     for f in files:
         rel = f.relative_to(man).as_posix()
         for n, line in enumerate(f.read_text().splitlines(), 1):
+            if "{#installer-ahead}" in line:
+                ahead_section.append(f"{rel}:{n}")
             for m in MENTION.finditer(line):
                 cli = next(c for c in CLIS if m.group(c))
                 ver = next(v for v in (m.group("v1"), m.group("v2"), m.group("v3"), m.group("v4")) if v)
                 checked += 1
-                if ver == want[cli]:
+                if ver == want[cli] or ver == also.get(cli):
                     continue
                 key = (rel, line)
                 if key in history:
@@ -110,6 +144,12 @@ def main() -> int:
                     continue
                 errs.append(f"{rel}:{n}: names {cli} {ver} ({m.group(0).strip()!r}), but the pin is {want[cli]}; "
                             f"update it, or if the line is history, add it to tests/cli-version-history.txt")
+    if ahead and len(ahead_section) != 1:
+        errs.append(f"[installer-ahead] is declared, so the manual needs exactly one {{#installer-ahead}} section "
+                    f"telling the reader; found {len(ahead_section)} {ahead_section}")
+    if not ahead and ahead_section:
+        errs.append(f"{ahead_section[0]}: an {{#installer-ahead}} section, but pinned-upstream.toml declares no "
+                    f"[installer-ahead]; remove the section")
     # (c) stale history entries
     for (path, line), used in history.items():
         if not used:
@@ -120,8 +160,9 @@ def main() -> int:
         for e in errs:
             print(f"  {e}", file=sys.stderr)
         return 1
-    print(f"OK: cli-pin-consistency: pinned-upstream.toml == install.sh "
-          f"({', '.join(f'{c} {want[c]}' for c in CLIS)}, {pins['gui']}); "
+    ahead_note = "".join(f"; installer ahead: {c} {also[c]}" for c in CLIS if c in also)
+    print(f"OK: cli-pin-consistency: pinned-upstream.toml agrees with install.sh "
+          f"({', '.join(f'{c} {want[c]}' for c in CLIS)}, {pins['gui']}{ahead_note}); "
           f"{checked} version mention(s) in {len(files)} files, {len(history)} history line(s)")
     return 0
 

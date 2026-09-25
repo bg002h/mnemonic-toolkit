@@ -739,7 +739,7 @@ checksum = "d54d9fc783d32defa2274b346b66549a29756db8514200b12c3c98a2c4579f64"
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.104.0"
+version = "0.105.0"
 dependencies = [
  "aes",
  "assert_cmd",

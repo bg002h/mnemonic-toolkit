@@ -42,9 +42,11 @@
 #      to a manifest artifact. The tutorial analogue of gui-form-xref,
 #      keyed on manifest-stems.txt.)
 #  13. cli-pin-consistency (F-679 fold 1: pinned-upstream.toml's CLI and
-#      GUI tags equal scripts/install.sh's pins, and every CLI version the
-#      prose names equals its pin unless the exact line is listed as
-#      history in tests/cli-version-history.txt. See check_cli_pins.py.)
+#      GUI tags equal scripts/install.sh's pins, except a CLI the
+#      installer is declared to run ahead on ([installer-ahead]); every CLI
+#      version the prose names equals its pin unless the exact line is
+#      listed as history in tests/cli-version-history.txt. See
+#      check_cli_pins.py.)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR                 — absolute path to src/
