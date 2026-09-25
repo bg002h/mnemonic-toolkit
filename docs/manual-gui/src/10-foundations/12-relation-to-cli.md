@@ -37,7 +37,7 @@ installer (`scripts/install.sh`) installs exactly these:
 
 | CLI | Pinned tag | Oldest release that works with this GUI |
 |---|---|---|
-| `mnemonic` (this toolkit) | `mnemonic-toolkit-v0.104.0` | `0.104.0` — the GUI adds `--allow-argv-secret` to every secret-bearing run, and older `mnemonic` rejects that flag |
+| `mnemonic` (this toolkit) | `mnemonic-toolkit-v0.104.0` | the pinned tag — the GUI's forms mirror this release's flags, and no older release has been tested with this GUI |
 | `md` | `descriptor-mnemonic-md-cli-v0.20.3` | the pinned tag — older releases lack flags the form offers (`--in`, `--experimental`, `address --from-mk1`) |
 | `ms` | `ms-cli-v0.19.1` | `0.19.1` — `ms verify` with an `ms1` card and `--phrase` fails on `0.19.0` (`cannot read both ms1 and --phrase from stdin`) |
 | `mk` | `mk-cli-v0.13.0` | the pinned tag — older releases lack flags the form offers (`encode --chunk-set-id`) |
