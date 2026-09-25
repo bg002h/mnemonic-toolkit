@@ -82,14 +82,13 @@ jobs:
   # (R0-r1-I-release-rehome). The reusable workflow is the single source of the
   # recipe (F6).
   #
-  # run_aarch64: false on the RELEASE path (P2). `musl-binaries needs: repro`
-  # blocks on the WHOLE reusable workflow, so enabling the ~30-60min QEMU aarch64
-  # gate here would delay EVERY release-artifact publish by that long. The
-  # aarch64 gate is instead exercised on demand via `workflow_dispatch`
-  # (run_aarch64 default true) and lands as the continuous P4 drift gate later.
-  # The PUBLISHED aarch64 artifact is STILL reproducible — the `musl-binaries`
-  # cross leg below is re-homed onto the digest-pinned Cross.toml recipe — it
-  # just is not byte-gated inline on the release tag in this phase.
+  # run_aarch64: true on the RELEASE path (F-680, operator ruling 2026-09-24).
+  # `musl-binaries needs: repro` blocks on the WHOLE reusable workflow, so every
+  # release-artifact publish now waits for the ~4-10min QEMU aarch64 gate —
+  # deliberately: the PUBLISHED aarch64 artifact (the `musl-binaries` cross leg
+  # below, re-homed onto the digest-pinned Cross.toml recipe) is byte-gated
+  # inline on the release tag before it ships. repro-drift.yml still re-runs
+  # both arches weekly, between releases.
   # The md-codec git pin, read ONCE from Cargo.toml. v0.103.0 shipped without
   # Linux binaries because the offline musl build could not resolve md-codec;
   # v0.103.1 added the pin to the `repro` job's inputs by hand and STILL
@@ -126,7 +125,7 @@ jobs:
     with:
       target: x86_64-unknown-linux-musl
       arch: x86_64
-      run_aarch64: false
+      run_aarch64: true
       # The toolkit depends on the miniscript fork ⇒ pass the toolkit rev so the
       # gate stays THREE-block (also the default; passed explicitly for clarity).
       miniscript_rev: "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
