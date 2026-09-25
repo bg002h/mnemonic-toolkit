@@ -142,8 +142,9 @@ syntax and refusal table at the matching per-flag section.
 
 ## `md` tab
 
-8 subcommands. The per-subcommand chapters are at
-[§52](#md-inspect) through [§59](#md-address).
+12 subcommands. The per-subcommand chapters are at
+[§52](#md-inspect) through [§59](#md-address), and
+[`md compose`](#md-compose) through [`md decompose`](#md-decompose).
 
 ### `md inspect` {#flag-index-md-inspect}
 
@@ -200,10 +201,51 @@ syntax and refusal table at the matching per-flag section.
 [`--network`](#md-address-network) ·
 [`--template`](#md-address-template)
 
+### `md compose` {#flag-index-md-compose}
+
+[`--experimental`](#md-compose-experimental) ·
+[`--json`](#md-compose-json) ·
+[`--md-only`](#md-compose-md-only) ·
+[`--path`](#md-compose-path) ·
+[`--preset`](#md-compose-preset) ·
+[`--unspendable`](#md-compose-unspendable) ·
+[`--wrapper`](#md-compose-wrapper)
+
+### `md shape-key` {#flag-index-md-shape-key}
+
+[`--descriptor`](#md-shape-key-descriptor)
+
+### `md descriptor` {#flag-index-md-descriptor}
+
+[`--chain`](#md-descriptor-chain) ·
+[`--change`](#md-descriptor-change) ·
+[`--emit`](#md-descriptor-emit) ·
+[`--experimental`](#md-descriptor-experimental) ·
+[`--fingerprint`](#md-descriptor-fingerprint) ·
+[`--from-mk1`](#md-descriptor-from-mk1) ·
+[`--from-mk1-file`](#md-descriptor-from-mk1-file) ·
+[`--group-size`](#md-descriptor-group-size) ·
+[`--json`](#md-descriptor-json) ·
+[`--key`](#md-descriptor-key) ·
+[`--network`](#md-descriptor-network) ·
+[`--out`](#md-descriptor-out) ·
+[`--path`](#md-descriptor-path) ·
+[`--seat`](#md-descriptor-seat) ·
+[`--separator`](#md-descriptor-separator) ·
+[`--template`](#md-descriptor-template) ·
+[`--verify-against`](#md-descriptor-verify-against)
+
+### `md decompose` {#flag-index-md-decompose}
+
+[`--emit`](#md-decompose-emit) ·
+[`--in`](#md-decompose-in) ·
+[`--network`](#md-decompose-network)
+
 ## `ms` tab
 
-5 subcommands. The per-subcommand chapters are at
-[§62](#ms-inspect) through [§66](#ms-vectors).
+6 subcommands. The per-subcommand chapters are at
+[§62](#ms-inspect) through [§66](#ms-vectors), and
+[`ms hashlock`](#ms-hashlock).
 
 ### `ms inspect` {#flag-index-ms-inspect}
 
@@ -231,6 +273,23 @@ syntax and refusal table at the matching per-flag section.
 ### `ms vectors` {#flag-index-ms-vectors}
 
 [`--pretty`](#ms-vectors-pretty)
+
+### `ms hashlock` {#flag-index-ms-hashlock}
+
+[`--emit-record`](#ms-hashlock-emit-record) ·
+[`--group-size`](#ms-hashlock-group-size) ·
+[`--hashlock-phrase`](#ms-hashlock-hashlock-phrase) ·
+[`--hashlock-phrase-stdin`](#ms-hashlock-hashlock-phrase-stdin) ·
+[`--hex`](#ms-hashlock-hex) ·
+[`--in`](#ms-hashlock-in) ·
+[`--json`](#ms-hashlock-json) ·
+[`--kind`](#ms-hashlock-kind) ·
+[`--method`](#ms-hashlock-method) ·
+[`--no-engraving-card`](#ms-hashlock-no-engraving-card) ·
+[`--out`](#ms-hashlock-out) ·
+[`--phrase-looks-like-digest-ok`](#ms-hashlock-phrase-looks-like-digest-ok) ·
+[`--random`](#ms-hashlock-random) ·
+[`--separator`](#ms-hashlock-separator)
 
 ## `mk` tab
 

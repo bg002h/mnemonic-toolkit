@@ -1,6 +1,6 @@
 # `md` — per-tab reference
 
-The `md` tab covers the descriptor-mnemonic CLI (`md-cli`), ten
+The `md` tab covers the descriptor-mnemonic CLI (`md-cli`), fourteen
 subcommands that operate on `md1` cards (the descriptor card of
 the m-format constellation bundle). The `md1` encodes a BIP-388
 wallet-policy template plus the bound public-key references that
@@ -12,7 +12,7 @@ Pinned-banner format `Pinned: md 0.20.3`.
 
 ## Subcommand index
 
-The subcommands group into five families:
+The subcommands group into six families:
 
 - **Decode + inspect.** Read what an `md1` carries.
   - [`md inspect`](#md-inspect)\index{md inspect} — decode + pretty-print.
@@ -33,6 +33,16 @@ The subcommands group into five families:
 - **Derive.** Use an `md1` to produce wallet artifacts.
   - [`md address`](#md-address)\index{md address} — derive Bitcoin
     addresses from an `md1` (or from a template + cosigner xpubs).
+  - [`md descriptor`](#md-descriptor) — render the concrete
+    descriptor from an `md1`, a template + keys, or a keyless card +
+    its `mk1` key cards.
+- **Compose + decompose.** Build a policy, or take a wallet apart.
+  - [`md compose`](#md-compose) — lower an ordered list of spend
+    paths to a BIP-388 template (the Wallet Policy composer's CLI).
+  - [`md decompose`](#md-decompose) — split one concrete descriptor
+    into its template, key records and fingerprint flags.
+  - [`md shape-key`](#md-shape-key) — print a policy's shape key, the
+    summary md's coordinator verdicts are keyed by.
 - **Maintainer tools.**
   - [`md vectors`](#md-vectors)\index{md vectors} — regenerate
     the test-vector corpus (typically used by md-cli developers,
@@ -45,17 +55,23 @@ The subcommands group into five families:
 
 ## Form shape
 
-All ten subcommands follow the same form scaffolding described
+All fourteen subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form `Pinned:
-md 0.11.0` label + subcommand selector ComboBox + per-subcommand
+md 0.20.3` label + subcommand selector ComboBox + per-subcommand
 `?` help-icon; per-flag widgets; an action bar with **Copy
 command**, **Run** buttons; an always-on `Preview:` line. None of
 the md-tab subcommands accept slot input (`allows_slots: false`
-for all 10).
+for all 14).
 
 The `md` subcommands operate on **public** material throughout.
-None of the schema flags is `secret: true`. The run-confirm modal
-does not fire for any md-tab invocation, regardless of input.
+None of the schema flags is `secret: true`, and the run-confirm modal
+does not fire for public input. The one exception is by content: a
+private extended key (`xprv`, `tprv`, …) pasted into
+[`md shape-key --descriptor`](#md-shape-key-descriptor),
+[`md descriptor --key`](#md-descriptor-key) or the
+[`md decompose`](#md-decompose) positional is masked, never saved, and
+makes the run ask for confirmation, even though md itself will refuse
+it.
 
 ## Worked-example data convention
 

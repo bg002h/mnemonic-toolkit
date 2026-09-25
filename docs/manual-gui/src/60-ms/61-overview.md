@@ -1,6 +1,6 @@
 # `ms` — per-tab reference
 
-The `ms` tab covers the BIP-39-entropy CLI (`ms-cli`), ten
+The `ms` tab covers the BIP-39-entropy CLI (`ms-cli`), eleven
 subcommands that operate on `ms1` cards (the secret card of the
 m-format constellation bundle). The `ms1` encodes the raw BIP-39
 entropy bytes in a BIP-93 / codex32 envelope — the seed card that
@@ -12,7 +12,7 @@ Pinned-banner format `Pinned: ms 0.19.1`.
 
 ## Subcommand index
 
-The ten subcommands group into five families:
+The eleven subcommands group into six families:
 
 - **Encode + decode.** Round-trip from BIP-39 entropy to `ms1` and
   back.
@@ -39,6 +39,10 @@ The ten subcommands group into five families:
     N codex32 shares, any K of which recombine.
   - [`ms combine`](#ms-combine)\index{ms combine} — recombine ≥K
     shares back into the original secret.
+- **Hashlock.** The secret behind a hash-locked spend path.
+  - [`ms hashlock`](#ms-hashlock) — derive a hashlock preimage from a
+    phrase (or take one), print its `hash:` record, and back the
+    preimage up as an `ms1` plate string.
 - **Maintainer tools.**
   - [`ms vectors`](#ms-vectors)\index{ms vectors} — print the
     SHA-pinned v0.1 test-vector corpus as JSON (typically used by
@@ -48,15 +52,15 @@ The ten subcommands group into five families:
 
 ## Form shape
 
-All ten subcommands follow the same form scaffolding described
+All eleven subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
 `Pinned: ms 0.19.1` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the ms-tab subcommands accept slot input
-(`allows_slots: false` for all 10).
+(`allows_slots: false` for all 11).
 
-Most of the ten subcommands consume secret-bearing input and
+Most of the eleven subcommands consume secret-bearing input and
 fire the run-confirm modal on any non-empty secret value (per
 `mnemonic-gui/src/secrets.rs:should_confirm_run`):
 
@@ -74,6 +78,9 @@ fire the run-confirm modal on any non-empty secret value (per
   [`ms split --hex`](#ms-split-hex) — the secret being split.
 - [`ms combine`](#ms-combine) — the positional shares are
   secret-equivalent (any K recover the secret).
+- [`ms hashlock`](#ms-hashlock) — the
+  [`--hashlock-phrase`](#ms-hashlock-hashlock-phrase),
+  [`--hex`](#ms-hashlock-hex) and the `ms1` plate positional.
 
 The threat-model warning in [§14 Defense 2](#secret-handling)
 about the modal-redaction history and the recommended cold-node

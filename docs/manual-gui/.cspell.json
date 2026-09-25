@@ -269,6 +269,9 @@
     "zeroize",
     "zeroized",
     "Zpub",
-    "zpub"
+    "zpub",
+    "NFKC",
+    "RIPEMD",
+    "brainwallet"
   ]
 }

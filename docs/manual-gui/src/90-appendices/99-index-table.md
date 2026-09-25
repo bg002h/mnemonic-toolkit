@@ -23,11 +23,15 @@ versa) fails the lint.
 | `md address` | [`md address`](#md-address) |
 | `md bytecode` | [`md bytecode`](#md-bytecode) |
 | `md compile` | [`md compile`](#md-compile) |
+| `md compose` | [`md compose`](#md-compose) |
 | `md decode` | [`md decode`](#md-decode) |
+| `md decompose` | [`md decompose`](#md-decompose) |
+| `md descriptor` | [`md descriptor`](#md-descriptor) |
 | `md encode` | [`md encode`](#md-encode) |
 | `md gen-man` | [`md gen-man`](#md-gen-man) |
 | `md inspect` | [`md inspect`](#md-inspect) |
 | `md repair` | [`md repair`](#md-repair) |
+| `md shape-key` | [`md shape-key`](#md-shape-key) |
 | `md vectors` | [`md vectors`](#md-vectors) |
 | `md verify` | [`md verify`](#md-verify) |
 | `m-format constellation` | [Glossary](#glossary) |
@@ -79,6 +83,7 @@ versa) fails the lint.
 | `ms derive` | [`ms derive`](#ms-derive) |
 | `ms encode` | [`ms encode`](#ms-encode) |
 | `ms gen-man` | [`ms gen-man`](#ms-gen-man) |
+| `ms hashlock` | [`ms hashlock`](#ms-hashlock) |
 | `ms inspect` | [`ms inspect`](#ms-inspect) |
 | `ms repair` | [`ms repair`](#ms-repair) |
 | `ms split` | [`ms split`](#ms-split) |
