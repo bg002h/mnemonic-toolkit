@@ -38,7 +38,8 @@ pub struct SilentPaymentArgs {
 
     /// BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase /
     /// ms1 / entropy-hex inputs; ignored (with a warning) for an xprv input
-    /// (the xprv IS the master). SECRET — leaks via argv; prefer --passphrase-stdin.
+    /// (the xprv IS the master). SECRET — leaks via argv; `-` reads it from
+    /// stdin (same as --passphrase-stdin), `@env:VAR` from an environment variable.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -214,11 +215,19 @@ pub fn run<R: Read, W: Write, E: Write>(
         ));
     }
     // Single stdin per invocation — refuse the two-readers case BEFORE any read.
-    if args.passphrase_stdin && args.secret_stdin {
-        return Err(ToolkitError::SilentPayment(
-            "--passphrase-stdin cannot be combined with --secret-stdin (single stdin per invocation)"
-                .into(),
-        ));
+    // F-687: `--passphrase -` reads stdin too, so it counts.
+    let pp_value = args.passphrase.as_deref();
+    // F-687 fold 1 (M1): a `--secret-file` that IS stdin is a stdin reader too.
+    let secret_reads_stdin = args.secret_stdin
+        || args
+            .secret_file
+            .as_deref()
+            .is_some_and(crate::passphrase_input::path_is_stdin);
+    if crate::passphrase_input::reads_stdin(pp_value, args.passphrase_stdin) && secret_reads_stdin {
+        return Err(ToolkitError::SilentPayment(format!(
+            "{} cannot be combined with --secret-stdin or a --secret-file that is stdin (single stdin per invocation)",
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
+        )));
     }
 
     // Resolve the seed-bearing secret (with argv-leak advisory for inline).
@@ -245,14 +254,10 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // Resolve the BIP-39 passphrase. Whitespace is SIGNIFICANT (PBKDF2 salt) —
     // read via read_stdin_passphrase (NOT .trim()) for the stdin path.
-    let passphrase: Zeroizing<String> = if let Some(p) = &args.passphrase {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-        Zeroizing::new(p.clone())
-    } else if args.passphrase_stdin {
-        Zeroizing::new(crate::cmd::convert::read_stdin_passphrase(stdin)?)
-    } else {
-        Zeroizing::new(String::new())
-    };
+    // F-687: one rule for `--passphrase` (`-` = stdin, `@env:VAR` = env).
+    crate::passphrase_input::emit_argv_note(pp_value, args.passphrase_stdin, stderr);
+    let passphrase: Zeroizing<String> =
+        crate::passphrase_input::resolve_or_empty(pp_value, args.passphrase_stdin, stdin)?;
     let _pin_pass = mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes());
 
     let secp = bitcoin::secp256k1::Secp256k1::new();

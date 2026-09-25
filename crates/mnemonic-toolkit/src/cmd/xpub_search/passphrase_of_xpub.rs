@@ -31,12 +31,12 @@ use crate::derive_slot::derive_master_seed;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
-use crate::secret_advisory::secret_in_argv_warning;
 use crate::synthesize::xpub_to_65;
 use bitcoin::bip32::Xpriv;
 use clap::Args;
 use serde::Serialize;
 use std::io::{Read, Write};
+use zeroize::Zeroizing;
 
 #[derive(Args, Debug)]
 // Exactly-one passphrase source (R0-r2 M-2): replaces the prior pairwise
@@ -78,8 +78,10 @@ pub struct PassphraseOfXpubArgs {
     )]
     pub ms1_stdin: bool,
 
-    /// BIP-39 passphrase (inline). Emits an argv-leakage advisory. One of the
-    /// `passphrase_source` group (exactly one required; see the struct group).
+    /// BIP-39 passphrase. `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory.
+    /// One of the `passphrase_source` group (exactly one required).
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -271,6 +273,19 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
     //    if stderr is unreachable the user already has bigger problems.
     let _ = writeln!(stderr, "{STDERR_ADVISORY}");
 
+    // F-687: one stdin per invocation. Before this, `--phrase-stdin
+    // --passphrase-stdin` let the seed read drain stdin and searched with the
+    // EMPTY passphrase (a false "no match", exit 4).
+    crate::passphrase_input::refuse_second_stdin(&[
+        (
+            args.phrase_stdin || args.ms1_stdin,
+            "--phrase-stdin/--ms1-stdin",
+        ),
+        (
+            crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin),
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin),
+        ),
+    ])?;
     // 1) Resolve seed (mutex + parse + ms1 auto-fire attempt). Cycle F: a
     //    touched ms1 correction no longer short-circuits here — it falls
     //    through to the original decode error, with a stderr advisory.
@@ -289,36 +304,22 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
     //    emits argv-leak advisory. Wrapped in Zeroizing<String> so the heap
     //    buffer scrubs on drop (plan §6 secret hygiene reuse of §3.6 contract;
     //    mirrors `path_of_xpub.rs:178-198`).
-    let passphrase: zeroize::Zeroizing<String> = if args.passphrase_stdin {
-        let mut buf: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(String::new());
-        stdin
-            .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
-        if buf.ends_with('\n') {
-            buf.pop();
-            if buf.ends_with('\r') {
-                buf.pop();
-            }
-        }
-        buf
-    } else if let Some(p) = &args.passphrase {
-        // v0.26.0 §3 — resolve `@env:<VAR>` sentinel; skip argv-leak advisory
-        // when the user routed through the env-var channel.
-        if p.starts_with("@env:") {
-            let resolved = crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?;
-            zeroize::Zeroizing::new(resolved)
-        } else {
-            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-            zeroize::Zeroizing::new(p.clone())
-        }
-    } else {
-        // Defensive: clap's required_unless_present pair makes this
-        // unreachable in practice (the `required_unless_present` on both
-        // fields forms a mandatory `passphrase | passphrase_stdin` group).
-        return Err(ToolkitError::BadInput(
-            "passphrase-of-xpub requires --passphrase <VALUE> or --passphrase-stdin".into(),
-        ));
-    };
+    // F-687: the one `--passphrase` rule (`-` = stdin, `@env:VAR` = env,
+    // anything else literal + one stderr note).
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
+    // Clap's `passphrase_source` group makes the `None` arm unreachable; kept
+    // as a refusal rather than an empty passphrase.
+    let passphrase: Zeroizing<String> =
+        crate::passphrase_input::resolve(args.passphrase.as_deref(), args.passphrase_stdin, stdin)?
+            .ok_or_else(|| {
+                ToolkitError::BadInput(
+                    "passphrase-of-xpub requires --passphrase <VALUE> or --passphrase-stdin".into(),
+                )
+            })?;
     // Pin passphrase heap pages for handler scope.
     let _passphrase_pin = mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes());
 

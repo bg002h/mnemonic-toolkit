@@ -65,10 +65,13 @@ pub(crate) fn resolve_env_var_sentinel(
                 reason: EnvVarMissingReason::InvalidName,
             });
         }
-        std::env::var(varname).map_err(|_| ToolkitError::EnvVarMissing {
+        std::env::var(varname).map_err(|e| ToolkitError::EnvVarMissing {
             flag: flag_name.to_string(),
             var: varname.to_string(),
-            reason: EnvVarMissingReason::Unset,
+            reason: match e {
+                std::env::VarError::NotUnicode(_) => EnvVarMissingReason::NotUnicode,
+                std::env::VarError::NotPresent => EnvVarMissingReason::Unset,
+            },
         })
     } else {
         Ok(value.to_string())

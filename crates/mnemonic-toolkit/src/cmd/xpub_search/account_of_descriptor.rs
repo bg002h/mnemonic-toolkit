@@ -21,11 +21,11 @@ use crate::derive_slot::derive_master_seed;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
-use crate::secret_advisory::secret_in_argv_warning;
 use bitcoin::bip32::Xpriv;
 use clap::Args;
 use serde::Serialize;
 use std::io::{Read, Write};
+use zeroize::Zeroizing;
 
 #[derive(Args, Debug)]
 pub struct AccountOfDescriptorArgs {
@@ -61,7 +61,9 @@ pub struct AccountOfDescriptorArgs {
     )]
     pub ms1_stdin: bool,
 
-    /// BIP-39 passphrase (inline). Emits an argv-leakage advisory.
+    /// BIP-39 passphrase. `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory.
     #[arg(long, conflicts_with = "passphrase_stdin")]
     pub passphrase: Option<String>,
 
@@ -233,6 +235,25 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
+    // F-687: one stdin per invocation. Before this, `--phrase-stdin
+    // --passphrase-stdin` let the seed read drain stdin and searched with the
+    // EMPTY passphrase (a false "no match", exit 4).
+    crate::passphrase_input::refuse_second_stdin(&[
+        (
+            args.phrase_stdin || args.ms1_stdin,
+            "--phrase-stdin/--ms1-stdin",
+        ),
+        (
+            crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin),
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin),
+        ),
+        (
+            args.descriptor_from
+                .as_deref()
+                .is_some_and(|s| s.ends_with("=-")),
+            "--descriptor-from <node>=-",
+        ),
+    ])?;
     // Mutex: --descriptor xor --descriptor-from.
     if args.descriptor.is_none() && args.descriptor_from.is_none() {
         return Err(ToolkitError::BadInput(
@@ -274,31 +295,18 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
     let mnemonic = resolve_seed(args, stdin, stdout, stderr, no_auto_repair)?;
 
     // 3) Resolve passphrase (mirrors path_of_xpub.rs:178-198).
-    let passphrase: zeroize::Zeroizing<String> = if args.passphrase_stdin {
-        let mut buf: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(String::new());
-        stdin
-            .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
-        if buf.ends_with('\n') {
-            buf.pop();
-            if buf.ends_with('\r') {
-                buf.pop();
-            }
-        }
-        buf
-    } else if let Some(p) = &args.passphrase {
-        // v0.26.0 §3 — resolve `@env:<VAR>` sentinel; skip argv-leak advisory
-        // when the user routed through the env-var channel.
-        if p.starts_with("@env:") {
-            let resolved = crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?;
-            zeroize::Zeroizing::new(resolved)
-        } else {
-            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-            zeroize::Zeroizing::new(p.clone())
-        }
-    } else {
-        zeroize::Zeroizing::new(String::new())
-    };
+    // F-687: the one `--passphrase` rule (`-` = stdin, `@env:VAR` = env,
+    // anything else literal + one stderr note).
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
+    let passphrase: Zeroizing<String> = crate::passphrase_input::resolve_or_empty(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stdin,
+    )?;
     let _passphrase_pin = mnemonic_toolkit::mlock::pin_pages_for(passphrase.as_bytes());
 
     // 4) Derive master xprv.

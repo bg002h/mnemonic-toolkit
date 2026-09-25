@@ -134,9 +134,10 @@ const TABLE: &[Entry] = &[
     },
     Entry {
         flag: "--passphrase",
+        // F-687: `--passphrase -` reads stdin on every subcommand.
         shape: Shape::Whole {
             class: "a BIP-39 passphrase",
-            sentinel: false,
+            sentinel: true,
         },
     },
     Entry {
@@ -271,6 +272,11 @@ fn channel_for(flag: &str, sub: Option<&str>, subkey_form: Option<&str>) -> Opti
         ("--slot", _) => Some(format!("--slot {}-", subkey_form.unwrap_or("@N.phrase="))),
         ("--from", _) => Some(format!("--from {}-", subkey_form.unwrap_or("phrase="))),
         ("--digits", _) => Some("--digits -".into()),
+        // F-687: all three private `--passphrase` channels exist on every
+        // subcommand that declares the flag (fold 1, review N3).
+        ("--passphrase", _) => {
+            Some("--passphrase -   (stdin; or --passphrase-stdin, or --passphrase @env:VAR)".into())
+        }
         (other, _) => Some(format!("{other}-stdin")),
     }
 }
@@ -532,15 +538,24 @@ mod tests {
         ));
     }
 
-    /// `-` is a stdin sentinel on `--ms1` and `--digits`, and is a one-character
-    /// VALUE on `--passphrase`. Exempting it there would be exempting a real
-    /// leak on the strength of a channel that flag does not have.
+    /// F-687: `-` on `--passphrase` IS a stdin channel now, on every
+    /// subcommand (`passphrase_input`), so the guard exempts it exactly as it
+    /// exempts `--ms1 -` and `--digits -`. Before F-687 it was a
+    /// one-character VALUE and this test asserted the refusal.
     #[test]
-    fn a_dash_passphrase_is_a_value_not_a_channel() {
-        let f = findings(&["convert", "--passphrase", "-", "--from", "xpub=x"]);
-        assert_eq!(f[0].flag, "--passphrase");
-        assert_eq!(f[0].channel, "--passphrase-stdin");
-        assert_eq!(f[0].len, 1);
+    fn a_dash_passphrase_is_a_channel() {
+        assert!(matches!(
+            inspect(&argv(&["convert", "--passphrase", "-", "--from", "xpub=x"])),
+            Verdict::Clean
+        ));
+        assert!(matches!(
+            inspect(&argv(&["convert", "--passphrase=-", "--from", "xpub=x"])),
+            Verdict::Clean
+        ));
+        // `-` is exempt ONLY on `--passphrase`; `--bip38-passphrase -` is still
+        // a one-character value there (F-687 names `--passphrase`).
+        let f = findings(&["convert", "--bip38-passphrase", "-", "--from", "wif=x"]);
+        assert_eq!(f[0].flag, "--bip38-passphrase");
     }
 
     #[test]
@@ -621,6 +636,8 @@ mod tests {
         assert!(!msg.contains("staple"));
         assert!(msg.contains("28 characters"));
         assert!(msg.contains("--passphrase-stdin"));
+        assert!(msg.contains("--passphrase -"));
+        assert!(msg.contains("--passphrase @env:VAR"));
     }
 
     /// Section 6h: the remedy must not forward-reference a channel that does not

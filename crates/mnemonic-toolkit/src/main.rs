@@ -23,6 +23,7 @@ mod network;
 mod nostr;
 mod parse;
 mod parse_descriptor;
+mod passphrase_input;
 mod repair;
 mod secret_advisory;
 mod secret_string;
@@ -181,7 +182,23 @@ fn main() -> ExitCode {
     // shape clap has no declared flag to blame. Nothing below this point runs
     // when the guard refuses: no file is read, no environment variable is
     // resolved, and clap never sees argv.
-    let argv: Vec<String> = std::env::args().collect();
+    // F-687 fold 1 (review N1): `std::env::args()` PANICS (exit 101) on a
+    // non-UTF-8 argument. Refuse it as a usage error instead, naming only the
+    // position -- the bytes may be a secret, so they are never echoed.
+    let argv: Vec<String> = match std::env::args_os()
+        .enumerate()
+        .map(|(i, a)| a.into_string().map_err(|_| i))
+        .collect::<Result<Vec<String>, usize>>()
+    {
+        Ok(v) => v,
+        Err(i) => {
+            eprintln!(
+                "error: argument {i} on argv (0 is `mnemonic` itself) is not valid UTF-8; \
+                 refused (the value is not shown)"
+            );
+            return ExitCode::from(64);
+        }
+    };
     if let argv_guard::Verdict::Refuse(findings) = argv_guard::inspect(&argv) {
         let _ = writeln!(
             io::stderr(),

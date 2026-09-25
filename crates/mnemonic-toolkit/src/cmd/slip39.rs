@@ -37,9 +37,7 @@
 //!     when either env-var is set; production binary path (env-vars
 //!     unset) uses `OsRng` + library-generated random identifier.
 
-use crate::cmd::convert::{
-    parse_from_input, read_stdin_passphrase, read_stdin_to_string, FromInput, NodeType,
-};
+use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
 use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
@@ -93,11 +91,10 @@ pub struct Slip39SplitArgs {
 
     /// SLIP-39 passphrase (NOT BIP-39 passphrase).
     ///
-    /// Inline value emits an argv-leakage advisory; prefer
-    /// `--passphrase-stdin` for sensitive passphrases. The argv-leakage
-    /// advisory fires iff this field is `Some(_)` (user supplied the
-    /// flag), regardless of value — so empty passphrases
-    /// (`--passphrase ""`) still trigger the advisory (R0 C1 fold).
+    /// `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory. An empty literal
+    /// (`--passphrase ""`) still triggers the advisory.
     #[arg(long = "passphrase", conflicts_with = "passphrase_stdin")]
     pub passphrase: Option<String>,
 
@@ -152,8 +149,9 @@ pub struct Slip39CombineArgs {
     )]
     pub share: Vec<String>,
 
-    /// SLIP-39 passphrase used at split time. Same shape constraints as
-    /// the split flag (Option + conflicts_with).
+    /// SLIP-39 passphrase used at split time. `-` reads it from stdin (same
+    /// as `--passphrase-stdin`); `@env:VAR` reads it from an environment
+    /// variable. Same shape constraints as the split flag.
     #[arg(long = "passphrase", conflicts_with = "passphrase_stdin")]
     pub passphrase: Option<String>,
 
@@ -241,23 +239,16 @@ pub fn run<R: Read, W: Write, E: Write>(
 }
 
 fn needs_split_env_sentinel_resolution(args: &Slip39SplitArgs) -> bool {
-    let pp = args
-        .passphrase
-        .as_deref()
-        .map(|v| v.starts_with("@env:"))
-        .unwrap_or(false);
+    // F-687: `--passphrase` is NOT resolved here; `run_split` resolves it
+    // through `passphrase_input`, which needs the value as written.
     // `--from` carries `phrase=` or `entropy=` (both secret-bearing per
     // row 17). Resolve sentinel in the value side.
-    let from = args.from.value.starts_with("@env:");
-    pp || from
+    args.from.value.starts_with("@env:")
 }
 
 fn resolve_split_env_sentinels(args: &Slip39SplitArgs) -> Result<Slip39SplitArgs, ToolkitError> {
     use crate::env_sentinel::resolve_env_var_sentinel;
     let mut owned = args.clone();
-    if let Some(pp) = owned.passphrase.as_ref() {
-        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
-    }
     // Both `phrase=` and `entropy=` are secret-bearing per SPEC §2.5 row 17.
     let flag = format!("--from {}=", owned.from.node.as_str());
     owned.from.value = resolve_env_var_sentinel(&owned.from.value, &flag)?;
@@ -265,13 +256,8 @@ fn resolve_split_env_sentinels(args: &Slip39SplitArgs) -> Result<Slip39SplitArgs
 }
 
 fn needs_combine_env_sentinel_resolution(args: &Slip39CombineArgs) -> bool {
-    let pp = args
-        .passphrase
-        .as_deref()
-        .map(|v| v.starts_with("@env:"))
-        .unwrap_or(false);
-    let share = args.share.iter().any(|v| v.starts_with("@env:"));
-    pp || share
+    // F-687: `--passphrase` is resolved in `run_combine` (see split).
+    args.share.iter().any(|v| v.starts_with("@env:"))
 }
 
 fn resolve_combine_env_sentinels(
@@ -279,9 +265,6 @@ fn resolve_combine_env_sentinels(
 ) -> Result<Slip39CombineArgs, ToolkitError> {
     use crate::env_sentinel::resolve_env_var_sentinel;
     let mut owned = args.clone();
-    if let Some(pp) = owned.passphrase.as_ref() {
-        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
-    }
     for v in owned.share.iter_mut() {
         *v = resolve_env_var_sentinel(v, "--share")?;
     }
@@ -295,18 +278,27 @@ fn emit_env_var_advisory<E: Write>(stderr: &mut E) {
     );
 }
 
+/// SPEC §2.5 row 18 refusal. Names the passphrase spelling the operator
+/// typed (F-687 fold 1, review N2); the `--passphrase-stdin` wording is
+/// unchanged byte for byte.
+fn stdin_conflict_message(passphrase: Option<&str>, passphrase_stdin_flag: bool) -> String {
+    let spelling = if !passphrase_stdin_flag && passphrase == Some("-") {
+        "--passphrase -"
+    } else {
+        "--passphrase-stdin"
+    };
+    format!(
+        "slip39: at most one stdin consumer per invocation (across --share, --from, and {spelling})"
+    )
+}
+
+/// F-687: the shared `--passphrase` rule (`-` = stdin, `@env:VAR` = env).
 fn resolve_passphrase<R: Read>(
     inline: Option<&String>,
     stdin_flag: bool,
     stdin: &mut R,
 ) -> Result<zeroize::Zeroizing<String>, ToolkitError> {
-    if stdin_flag {
-        Ok(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?))
-    } else if let Some(p) = inline {
-        Ok(zeroize::Zeroizing::new(p.clone()))
-    } else {
-        Ok(zeroize::Zeroizing::new(String::new()))
-    }
+    crate::passphrase_input::resolve_or_empty(inline.map(String::as_str), stdin_flag, stdin)
 }
 
 fn parse_master_to_entropy(
@@ -372,11 +364,14 @@ fn run_split<R: Read, W: Write, E: Write>(
 
     // SPEC §2.5 row 18 — single stdin consumer per invocation.
     // For split: --from - + --passphrase-stdin = max 2 candidates.
-    let split_stdin_count = (args.from.value == "-") as usize + (args.passphrase_stdin) as usize;
+    let split_stdin_count = (args.from.value == "-") as usize
+        + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
+            as usize;
     if split_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
-            "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
-        ));
+        return Err(ToolkitError::BadInput(stdin_conflict_message(
+            args.passphrase.as_deref(),
+            args.passphrase_stdin,
+        )));
     }
 
     // SPEC §2.5 row 5 — CLI-layer pre-check for `--group 1,1`. The
@@ -405,11 +400,13 @@ fn run_split<R: Read, W: Write, E: Write>(
         }
     }
     // SPEC §2.6 row 1c — argv-leakage advisory for inline --passphrase.
-    // Fires on Option::is_some (R0 C1 fold: user-supplied vs. default
-    // distinction is structural, regardless of value).
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-    }
+    // Fires for any literal value, including `--passphrase ""` (R0 C1 fold);
+    // F-687: not for `-` (stdin) or `@env:VAR`.
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
 
     // Env-var determinism wedge (SPEC §2.6 row 6 — always-on insecurity
     // advisory; SPEC §6 documents the two env-vars).
@@ -575,12 +572,14 @@ fn run_combine<R: Read, W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     // SPEC §2.5 row 18 — single stdin consumer per invocation.
-    let combine_stdin_count =
-        args.share.iter().filter(|s| *s == "-").count() + (args.passphrase_stdin) as usize;
+    let combine_stdin_count = args.share.iter().filter(|s| *s == "-").count()
+        + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
+            as usize;
     if combine_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
-            "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
-        ));
+        return Err(ToolkitError::BadInput(stdin_conflict_message(
+            args.passphrase.as_deref(),
+            args.passphrase_stdin,
+        )));
     }
 
     // SPEC §2.6 rows 1d (per-share inline) + 1e (passphrase inline).
@@ -589,9 +588,11 @@ fn run_combine<R: Read, W: Write, E: Write>(
             secret_in_argv_warning(stderr, "--share", "--share -");
         }
     }
-    if args.passphrase.is_some() {
-        secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-    }
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
 
     // Resolve --share values (stdin or inline) into Zeroizing<String>.
     let mut share_strings: Vec<zeroize::Zeroizing<String>> = Vec::with_capacity(args.share.len());

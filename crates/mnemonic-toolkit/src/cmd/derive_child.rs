@@ -86,6 +86,8 @@ pub struct DeriveChildArgs {
 
     /// SPEC v0.8 §3 — BIP-39 mnemonic extension passphrase, used only
     /// when `--from phrase=…`. Empty by default. Ignored on `--from xprv=…`.
+    /// `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -113,6 +115,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     // v0.26.0 §I1 fold: emit BEFORE `@env:` sentinel resolution so
     // sentinel-bearing flag values are skipped.
     emit_secret_in_argv_advisories(args, stderr);
+    // F-687: decide stdin-vs-literal from the value AS WRITTEN, before `@env:`
+    // resolution — a variable whose value is `-` is that literal passphrase.
+    let pp_reads_stdin =
+        crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin);
+    let pp_spelling = crate::passphrase_input::stdin_spelling(args.passphrase_stdin);
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--passphrase` and
     // secret-bearing `--from <node>=` values before downstream consumption.
@@ -126,11 +133,10 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.9.0 §1 item 1 — single-stdin-per-invocation. `--from <node>=-`
     // and `--passphrase-stdin` both want stdin; refuse the combination.
-    if args.passphrase_stdin && args.from.value == "-" {
-        return Err(ToolkitError::BadInput(
-            "--passphrase-stdin cannot be used with --from <node>=- (single stdin per invocation)"
-                .into(),
-        ));
+    if pp_reads_stdin && args.from.value == "-" {
+        return Err(ToolkitError::BadInput(format!(
+            "{pp_spelling} cannot be used with --from <node>=- (single stdin per invocation)"
+        )));
     }
 
     // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
@@ -146,18 +152,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Preserves NULL bytes; strips a single trailing `\r?\n`.
     // SPEC v0.9.0 §1 item 2 — wrap the OWNED stdin buffer in Zeroizing so
     // the BIP-39 passphrase scrubs on drop at function exit.
-    let stdin_passphrase: Option<zeroize::Zeroizing<String>> = if args.passphrase_stdin {
-        let mut buf: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(String::new());
-        stdin
-            .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
-        if buf.ends_with('\n') {
-            buf.pop();
-            if buf.ends_with('\r') {
-                buf.pop();
-            }
-        }
-        Some(buf)
+    // F-687: `--passphrase -` shares this read, byte for byte.
+    let stdin_passphrase: Option<zeroize::Zeroizing<String>> = if pp_reads_stdin {
+        Some(zeroize::Zeroizing::new(
+            crate::passphrase_input::read_stdin_passphrase(stdin)?,
+        ))
     } else {
         None
     };
@@ -371,11 +370,11 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &DeriveChildArgs, stderr: &mut
         let alt = format!("--from {node}=-");
         secret_in_argv_warning(stderr, &flag, &alt);
     }
-    if let Some(pp) = args.passphrase.as_deref() {
-        if !pp.starts_with("@env:") {
-            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-        }
-    }
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
 }
 
 /// v0.26.0 §3 — cheap pre-check for `@env:` sentinels on `derive-child`'s
@@ -397,7 +396,10 @@ fn resolve_env_sentinels(args: &DeriveChildArgs) -> Result<DeriveChildArgs, Tool
     use crate::env_sentinel::resolve_env_var_sentinel;
     let mut owned = args.clone();
     if let Some(pp) = owned.passphrase.as_ref() {
-        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+        // F-687: only `@env:` resolves here; `-` is stdin, read in `run`.
+        if pp.starts_with("@env:") {
+            owned.passphrase = Some(crate::passphrase_input::resolve_env(pp)?);
+        }
     }
     if owned.from.node.is_secret_bearing() {
         let flag = format!("--from {}=", owned.from.node.as_str());
