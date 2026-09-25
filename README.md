@@ -40,8 +40,8 @@ crates.io, whose copies lag these pins.
 `--from-source` (and any platform a release has no binary for, e.g. FreeBSD)
 builds the same pinned tags with `cargo install --locked --git … --tag …`,
 which needs `cargo` + `git` + a C toolchain. The installer also builds from
-source where a Linux binary needs a newer glibc than the host has: the x86_64
-GUI needs **glibc ≥ 2.39** (aarch64: 2.18) and x86_64 `md` needs **≥ 2.34**;
+source where a Linux binary needs a newer glibc than the host has: the
+GUI needs **glibc ≥ 2.18** (x86_64 and aarch64) and x86_64 `md` needs **≥ 2.34**;
 `mnemonic`, `ms` and `mk` are static. On musl the GUI is always built from
 source. The CLIs build on `rustc` ≥ 1.85
 (the toolkit MSRV); building the `mnemonic-gui` overlay needs **`rustc` ≥ 1.88**

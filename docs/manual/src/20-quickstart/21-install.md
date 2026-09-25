@@ -49,13 +49,12 @@ Linux where a binary needs a newer C library than yours:
 
 | Binary | Needs |
 |---|---|
-| `mnemonic-gui`, Linux x86_64 | glibc ≥ 2.39 |
-| `mnemonic-gui`, Linux aarch64 | glibc ≥ 2.18 |
+| `mnemonic-gui`, Linux x86_64 and aarch64 | glibc ≥ 2.18 |
 | `md`, Linux x86_64 | glibc ≥ 2.34 |
 | `mnemonic`, `ms`, `mk`, and `md` on aarch64 | any Linux (static) |
 
-So on Ubuntu 22.04 (glibc 2.35) or Debian 12 (2.36) the GUI is built
-from source, and on Ubuntu 20.04 (2.31) `md` is too. On a musl system
+So on Ubuntu 20.04 (glibc 2.31) or RHEL 8 (2.28) `md` is built from
+source; the GUI binary runs on any glibc from 2.18 (2013) on. On a musl system
 (Alpine, Void musl) the GUI is always built from source, because the
 static musl build cannot open a window.
 

@@ -51,13 +51,13 @@ component_info() {
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.3|md|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.19.0|ms|"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.19.1|ms|"
             ;;
         mk)
             echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.13.0|mk|"
             ;;
         mnemonic-gui)
-            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.59.0|mnemonic-gui|"
+            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.62.0|mnemonic-gui|"
             ;;
         *)
             return 1
@@ -125,7 +125,7 @@ asset_for() {
 glibc_floor() {
     case "$1:$2" in
         md:linux-x86_64-gnu)           echo 2.34 ;;
-        mnemonic-gui:linux-x86_64-gnu) echo 2.39 ;;
+        mnemonic-gui:linux-x86_64-gnu) echo 2.18 ;;
         mnemonic-gui:linux-aarch64-gnu) echo 2.18 ;;
     esac
 }
@@ -184,8 +184,8 @@ SOURCE (default behavior):
     If a release has no binary for this platform, that component is
     built from the same pinned tag with cargo instead (said on stderr).
     The same happens where a binary needs a newer glibc than this host
-    has: on Linux x86_64 the GUI needs glibc >= 2.39 and md needs >= 2.34
-    (on aarch64 the GUI needs >= 2.18; mnemonic, ms, mk are static and run
+    has: on Linux the GUI needs glibc >= 2.18 and x86_64 md needs >= 2.34
+    (mnemonic, ms, mk, and md on aarch64, are static and run
     on any Linux). A musl host always builds the GUI from source.
 
 OPTIONS:

@@ -250,18 +250,18 @@ floor_plan() {  # floor_plan <component> <glibc> -> "binary" | "source"
         sh "$INSTALL_SH" --dry-run --no-man --only "$1" 2>&1 \
         | sed -n "s/^install  $1 (\([a-z]*\).*/\1/p" | sed 's/release/binary/'
 }
-r="$(floor_plan md 2.33) $(floor_plan md 2.34) $(floor_plan mnemonic-gui 2.38) $(floor_plan mnemonic-gui 2.39) $(floor_plan mk 2.17)"
+r="$(floor_plan md 2.33) $(floor_plan md 2.34) $(floor_plan mnemonic-gui 2.17) $(floor_plan mnemonic-gui 2.18) $(floor_plan mk 2.17)"
 if [ "$r" = "source binary source binary binary" ]; then
-    ok "glibc floors: md 2.33->source 2.34->binary; gui 2.38->source 2.39->binary; mk static"
+    ok "glibc floors: md 2.33->source 2.34->binary; gui 2.17->source 2.18->binary; mk static"
 else bad "glibc floors: got '$r'"; fi
-n=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu MNEMONIC_INSTALL_GLIBC=2.35 sh "$INSTALL_SH" --dry-run --no-man --only mnemonic-gui 2>&1)
-if printf '%s' "$n" | grep -q 'mnemonic-gui binary needs glibc >= 2.39; this host has 2.35'; then
+n=$(MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu MNEMONIC_INSTALL_GLIBC=2.33 sh "$INSTALL_SH" --dry-run --no-man --only md 2>&1)
+if printf '%s' "$n" | grep -q 'md binary needs glibc >= 2.34; this host has 2.33'; then
     ok "glibc floor: the note names the floor and the host's glibc"
 else bad "glibc floor note: $n"; fi
 # the host glibc comes from getconf when not overridden
-mkdir -p "$T/gc"; printf '#!/bin/sh\necho "glibc 2.35"\n' > "$T/gc/getconf"; chmod +x "$T/gc/getconf"
-g=$(PATH="$T/gc:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu sh "$INSTALL_SH" --dry-run --no-man --only mnemonic-gui 2>&1)
-if printf '%s' "$g" | grep -q 'install  mnemonic-gui (source'; then
+mkdir -p "$T/gc"; printf '#!/bin/sh\necho "glibc 2.33"\n' > "$T/gc/getconf"; chmod +x "$T/gc/getconf"
+g=$(PATH="$T/gc:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu sh "$INSTALL_SH" --dry-run --no-man --only md 2>&1)
+if printf '%s' "$g" | grep -q 'install  md (source'; then
     ok "glibc floor: host glibc read from getconf GNU_LIBC_VERSION"
 else bad "getconf glibc: $g"; fi
 
