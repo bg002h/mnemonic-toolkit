@@ -267,7 +267,7 @@ ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 | Trigger | Refusal |
 |---|---|
-| Neither `--phrase` nor `--hex` supplied | clap-group refusal: `error: the following required arguments were not provided: <--phrase <PHRASE>\|--hex <HEX>>` |
+| None of `--phrase`, `--hex`, `--in` supplied | clap-group refusal, exit 64: `error: the following required arguments were not provided: <--phrase <PHRASE>\|--hex <HEX>\|--in <FILE>>` |
 | Both `--phrase` and `--hex` supplied | clap-group refusal: `error: the argument '--phrase <PHRASE>' cannot be used with '--hex <HEX>'` |
 | `--hex` with empty string | exit 1 with `error: expected hex of length 32/40/48/56/64 chars (got empty input)` |
 | `--hex` with odd-length value | exit 1 with `error: expected even-length hex (one byte = 2 chars); got <N> chars` |

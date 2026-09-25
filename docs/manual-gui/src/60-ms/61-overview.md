@@ -7,8 +7,8 @@ entropy bytes in a BIP-93 / codex32 envelope — the seed card that
 recovers the wallet on its own.
 
 The `ms` tab's pinned upstream version is
-`ms-cli v0.13.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: ms 0.13.0`.
+`ms-cli v0.19.1` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: ms 0.19.1`.
 
 ## Subcommand index
 
@@ -50,7 +50,7 @@ The ten subcommands group into five families:
 
 All ten subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
-`Pinned: ms 0.13.0` label + subcommand selector ComboBox +
+`Pinned: ms 0.19.1` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the ms-tab subcommands accept slot input

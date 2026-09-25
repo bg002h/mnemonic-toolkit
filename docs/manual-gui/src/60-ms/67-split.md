@@ -228,7 +228,7 @@ identifier, and a distinct non-`s` index. Recombine any 2 with
 | Neither `--phrase` nor `--hex` supplied | clap-group refusal: required-input not provided |
 | Both `--phrase` and `--hex` supplied | clap-group refusal: mutually-exclusive |
 | `--threshold` or `--shares` omitted | clap refusal: required argument not provided |
-| `K < 2` or `K > 9` | value-parser refusal (range `2..=9`) |
+| `K < 2` or `K > 9` | exit 1 at run time: `error: invalid threshold <K>; K-of-N shares require k in 2..=9` |
 | `N < K` or `N > 31` | exit 1 with a `K <= N <= 31` bounds refusal |
 | `--hex` not 16/20/24/28/32 bytes | ms-codec entropy-length refusal |
 | `--phrase` with invalid BIP-39 checksum | exit 1 with `error: <bip39 error>` |

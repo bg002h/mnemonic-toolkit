@@ -9,11 +9,12 @@ the GUI assembles the equivalent argv and invokes the underlying CLI
 as a subprocess, streaming stdout and stderr back into an output panel.
 
 The GUI is **not** a re-implementation. It runs the same binaries the
-CLI manual documents — `mnemonic-toolkit v0.13.0`,
-`descriptor-mnemonic-md-cli v0.5.0`, `ms-cli v0.2.1`, `mk-cli v0.3.1`
-(per `pinned-upstream.toml`). Anything the CLI does, the GUI exposes
-the same way; anything the GUI shows in a dropdown corresponds 1:1
-to a CLI flag value.
+CLI manual documents, at the releases this GUI is built against —
+`mnemonic-toolkit-v0.104.0`, `descriptor-mnemonic-md-cli-v0.20.3`,
+`ms-cli-v0.19.1`, `mk-cli-v0.13.0` (per `pinned-upstream.toml`; see
+[Version pinning](#version-pinning) for the minimums). Anything the
+CLI does, the GUI exposes the same way; anything the GUI shows in a
+dropdown corresponds 1:1 to a CLI flag value.
 
 :::primer
 You can think of the GUI as a *thin overlay*: it has no business

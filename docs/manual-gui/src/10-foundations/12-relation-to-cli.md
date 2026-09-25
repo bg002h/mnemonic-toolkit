@@ -29,35 +29,43 @@ visible to other processes on the same machine via `/proc/<pid>/cmdline`
 is not GUI-specific; treat it as you would any CLI invocation with a
 secret on the command line.
 
-## Version pinning
+## Version pinning {#version-pinning}
 
-The GUI pins specific CLI versions at build time. `pinned-upstream.toml`
-declares the exact tags this manual matches:
+The GUI is built against specific CLI releases. `pinned-upstream.toml`
+declares the exact tags this manual matches, and the toolkit's
+installer (`scripts/install.sh`) installs exactly these:
 
-| CLI | Pinned tag | Crates.io version available |
+| CLI | Pinned tag | Oldest release that works with this GUI |
 |---|---|---|
-| `mnemonic` (this toolkit) | `mnemonic-toolkit-v0.13.0` | n/a (binary-only) |
-| `md` | `descriptor-mnemonic-md-cli-v0.5.0` | `md-cli 0.5.0` |
-| `ms` | `ms-cli-v0.2.1` | `ms-cli 0.2.1` |
-| `mk` | `mk-cli-v0.3.1` | `mk-cli 0.3.1` |
+| `mnemonic` (this toolkit) | `mnemonic-toolkit-v0.104.0` | `0.104.0` — the GUI adds `--allow-argv-secret` to every secret-bearing run, and older `mnemonic` rejects that flag |
+| `md` | `descriptor-mnemonic-md-cli-v0.20.3` | the pinned tag — older releases lack flags the form offers (`--in`, `--experimental`, `address --from-mk1`) |
+| `ms` | `ms-cli-v0.19.1` | `0.19.1` — `ms verify` with an `ms1` card and `--phrase` fails on `0.19.0` (`cannot read both ms1 and --phrase from stdin`) |
+| `mk` | `mk-cli-v0.13.0` | the pinned tag — older releases lack flags the form offers (`encode --chunk-set-id`) |
+
+Do not install these CLIs from crates.io: the copies there are several
+releases older than every row above.
 
 The GUI's schema (Dropdown value-sets, NodeValueComposite shapes,
-flag inventories) is generated from each pinned CLI's source. A
-mismatch between the installed CLI and the pinned one shows up as
-either:
+flag inventories) is generated from each pinned CLI's source. The GUI
+does **not** read your installed CLIs' versions (the `Pinned:` label
+above each form is the version the GUI was built against), so compare
+them yourself with `mnemonic --version`, `md --version`, `ms --version`
+and `mk --version`. A mismatch shows up as either:
 
 - A flag the GUI offers that the CLI rejects (CLI is older).
 - A flag the CLI accepts that the GUI doesn't render (CLI is newer).
 
 Both surface as the CLI's own error message in the output panel.
-**Re-install the CLI at the pinned tag** to resolve.
+**Re-run the toolkit installer** (`install.sh`, or `install.sh --only
+<cli>` for one CLI) to put the pinned releases in place.
 
 :::primer
 The pin is *which CLI release* the GUI knows about, not *which
-features your wallet uses*. You can still use the GUI to drive an
-older or newer CLI as long as the flag set you actually click on
-overlaps. The pin is most load-bearing when the schema changes:
-flag renames, new variants in a dropdown, new subcommands.
+features your wallet uses*. A newer CLI usually works as long as the
+flag set you click on overlaps. An older one is riskier: below the
+minimums in the table, a whole class of runs fails, not just a flag.
+The pin is most load-bearing when the schema changes: flag renames,
+new variants in a dropdown, new subcommands.
 :::
 
 ## What the GUI does **not** do

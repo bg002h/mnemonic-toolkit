@@ -477,9 +477,10 @@ alone. Also accepts a **keyless multisig / general TEMPLATE `md1`**
 ([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template)),
 completed via `--from` + `--account` + `--cosigner`. Repeat for chunked
 cards. Covers `wsh` / `sh(wsh)`, NUMS taproot multisig, general
-NUMS-taproot policies up to a depth-1 two-leaf tap tree, and non-NUMS
-key-path taproot; the `@-in-both` shape (trunk key also a leaf key) or a
-depth-≥2 tap tree is refused (exit 2). Watch-only (non-secret). The GUI
+NUMS-taproot policies, non-NUMS key-path taproot, and deeper tap trees:
+a depth-2 four-leaf tree restores (the CLI's own `--help` text still
+says depth-≥2 is refused; it is not). The `@-in-both`
+shape (trunk key also a leaf key) is refused (exit 2). Watch-only (non-secret). The GUI
 renders this as a Text widget with `repeating: true`.
 
 ## `--cosigner` {#mnemonic-restore-cosigner}
@@ -620,7 +621,7 @@ you know the reference itself is wrong.
 | `--template <multisig value>` (single-sig restore) | refused — reconstruct multisig via `--md1` |
 | `--expect-fingerprint` / `--expect-xpub` mismatch | exit 4 (`RestoreMismatch`) unless `--allow-mismatch` |
 | `--cosigner @N=` mismatch against the md1 slot | exit 4 unless `--allow-mismatch` |
-| `--md1` `@-in-both` taproot shape / depth-≥2 tap tree | exit 2 (faithful card preserved) |
+| `--md1` `@-in-both` taproot shape | exit 2 (faithful card preserved) |
 | `--language` conflicting with a `mnem`-kind ms1's wire language | refused |
 
 ## Advisories

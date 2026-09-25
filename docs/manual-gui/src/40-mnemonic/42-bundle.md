@@ -38,7 +38,7 @@ longer the load-bearing element of the on-screen security model.
 - [`--language`](#mnemonic-bundle-language) — BIP-39 wordlist (default `english`)
 - [`--passphrase`](#mnemonic-bundle-passphrase) — BIP-39 mnemonic-extension passphrase (XOR with `--passphrase-stdin`)
 - [`--passphrase-stdin`](#mnemonic-bundle-passphrase-stdin) — read `--passphrase` from stdin (raw, NULL-byte preserving)
-- [`--account`](#mnemonic-bundle-account) — BIP-32 account index (default 0; refused under descriptor mode)
+- [`--account`](#mnemonic-bundle-account) — BIP-32 account index (default 0; with a descriptor, refused for canonical `@i` shapes; the GUI pins it to 0)
 - [`--json`](#mnemonic-bundle-json) — emit envelope JSON (`ms1`/`mk1`/`md1` + metadata)
 - [`--no-engraving-card`](#mnemonic-bundle-no-engraving-card) — suppress the human-readable engraving-card panel
 - [`--multisig-path-family`](#mnemonic-bundle-multisig-path-family) — `bip48` or `bip87` (default `bip87`)
@@ -226,9 +226,12 @@ A user-supplied BIP-388 descriptor string. Mutually-required-one-of
 with `--template` (and clap-level conflicts with both `--template`
 and `--descriptor-file`). When used, the conditional-visibility
 engine disables `--descriptor-file`. Several other flags become
-refused under descriptor-mode: `--threshold`,
-`--multisig-path-family`, and any non-zero `--account` are not
-permitted because the descriptor itself fully specifies them.
+refused under descriptor-mode: `--threshold` and
+`--multisig-path-family` are not permitted because the descriptor
+itself fully specifies them. A non-zero `--account` is refused only
+for a canonical `@i` shape (see [`--account`](#mnemonic-bundle-account));
+the GUI pins `--account` to `0` whenever `--descriptor` is set, so the
+form never sends one.
 
 The GUI renders this flag as a plain Text widget with no `?`
 help-icon (per [§33 Option C placement](#help-icons-and-deep-links-into-this-manual)
@@ -370,11 +373,22 @@ hardened-derivation limit). The GUI renders this as a Number
 widget; no `?` help-icon (Number widgets are not in the
 help-icon class).
 
-Refused under descriptor mode: when `--descriptor` or
-`--descriptor-file` is set AND `--account != 0`, the CLI emits
-`--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.`
-(byte-exact mirror of `mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT`
-at `crates/mnemonic-toolkit/src/cmd/bundle.rs:91-101`).
+With a descriptor (`--descriptor` or `--descriptor-file`), a non-zero
+`--account` depends on the descriptor's shape (measured on the pinned
+0.104.0):
+
+- A canonical `@i` shape (`wpkh(@0/<0;1>/*)`,
+  `wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))`, …) is refused, exit `2`:
+  `--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.`
+  (`mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT` in
+  `crates/mnemonic-toolkit/src/cmd/bundle.rs`).
+- A non-canonical shape (`wsh(pk(@0/<0;1>/*))`) accepts it as the
+  account in the default origin it infers (`--account 1` →
+  `m/48'/0'/1'/2'`).
+- A key written with its own origin (`[73c5da0a/84'/0'/0']xpub…`) keeps
+  that origin; `--account` does not change it.
+
+The GUI pins `--account` to `0` whenever `--descriptor` is set.
 
 ## `--json` {#mnemonic-bundle-json}
 
@@ -639,13 +653,13 @@ SPEC §6.6 / §6.9 byte-pinned and integration-test-gated.
 | Trigger | Refusal message |
 |---|---|
 | `--descriptor` AND `--template` | `--descriptor and --template are mutually exclusive; pick descriptor passthrough or template, not both.` |
-| `--descriptor` AND `--descriptor-file` | `--descriptor and --descriptor-file are mutually exclusive; supply the descriptor inline or via file, not both.` |
+| `--descriptor` AND `--descriptor-file` | clap `conflicts_with`, exit 64: `the argument '--descriptor <DESCRIPTOR>' cannot be used with '--descriptor-file <DESCRIPTOR_FILE>'` |
 | `--descriptor*` AND `--threshold` | `--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.` |
 | `--descriptor*` AND `--multisig-path-family` | `--multisig-path-family is meaningful only with --template; descriptor mode encodes paths directly via @i/path syntax.` |
-| `--descriptor*` AND `--account != 0` | `--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
+| `--descriptor*` with a canonical `@i` shape AND `--account != 0` | exit 2: `--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
 | `--threshold` AND single-sig template | `--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.` |
 | `--multisig-path-family` AND single-sig template | `--multisig-path-family is meaningful only with a multisig --template.` |
-| `--passphrase` AND `--passphrase-stdin` | clap-level `conflicts_with` error: `the argument '--passphrase-stdin' cannot be used with '--passphrase'` |
+| `--passphrase` AND `--passphrase-stdin` | clap `conflicts_with`, exit 64: `the argument '--passphrase <PASSPHRASE>' cannot be used with '--passphrase-stdin'` (the GUI's run adds `--allow-argv-secret`; without it the CLI's argv-secret refusal fires first, exit 2) |
 
 The conditional-visibility engine pre-disables several of these
 combinations in the GUI form (`--descriptor` disables
@@ -663,7 +677,7 @@ region after the run completes.
 | Trigger | Stderr advisory |
 |---|---|
 | Inline `--slot @N.<secret>=<value>` (any of `phrase`, `entropy`, `wif`, `xprv`) | `warning: secret material on argv (--slot @N.<subkey>=) — pipe via --slot @N.<subkey>=- to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — use --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
 | `--self-check` failure (re-derivation drift) | exits non-zero with `self-check failed: round-trip drift on <card-class>` |
 
 Note that the GUI's command-line preview always uses the inline

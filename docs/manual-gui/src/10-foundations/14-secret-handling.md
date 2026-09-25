@@ -106,8 +106,8 @@ only; closing the spawned-argv exposure (rewriting secret values to an
 
 ### The CLI's argv refusal and the GUI's `--allow-argv-secret` {#secret-argv-opt-in}
 
-Since toolkit 0.104.0 and ms 0.19, `mnemonic` and `ms` **refuse** a
-secret on the command line — before parsing, reading or writing
+The pinned `mnemonic` and `ms` (see [Version
+pinning](#version-pinning)) **refuse** a secret on the command line — before parsing, reading or writing
 anything — unless the invocation carries `--allow-argv-secret`. In a
 shell that refusal is exactly right: the shell has already written
 the line to its history.

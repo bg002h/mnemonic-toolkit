@@ -51,7 +51,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 1 — lint
   #
-  # Runs the 12-phase `make lint` against a fresh `make html` build (phase 4
+  # Runs the 13-phase `make lint` against a fresh `make html` build (phase 4
   # reads from the built HTML for the bidirectional schema-coverage check).
   # Clones `mnemonic-gui` at the pinned tag from pinned-upstream.toml so the
   # schema-coverage check operates against the exact source the manual was

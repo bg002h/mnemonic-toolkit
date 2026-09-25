@@ -41,6 +41,10 @@
 #      include-transcript.lua fenced includes — and every embed resolves
 #      to a manifest artifact. The tutorial analogue of gui-form-xref,
 #      keyed on manifest-stems.txt.)
+#  13. cli-pin-consistency (F-679 fold 1: pinned-upstream.toml's CLI and
+#      GUI tags equal scripts/install.sh's pins, and every CLI version the
+#      prose names equals its pin unless the exact line is listed as
+#      history in tests/cli-version-history.txt. See check_cli_pins.py.)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR                 — absolute path to src/
@@ -118,7 +122,7 @@ if [ -n "${TUTORIAL_DIR:-}" ] && [ -d "${TUTORIAL_DIR:-}" ]; then
 fi
 
 # 1. markdownlint
-step "1/12 markdownlint"
+step "1/13 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
   markdownlint-cli2 "$SRC_DIR/**/*.md" ${TUT_MD_GLOB:+"$TUT_MD_GLOB"} \
     || err "markdownlint reported issues"
@@ -127,7 +131,7 @@ else
 fi
 
 # 2. cspell
-step "2/12 cspell"
+step "2/13 cspell"
 if command -v cspell >/dev/null; then
   # `--no-must-find-files` keeps cspell from exiting 1 when src/ is
   # empty (the baseline state at P1; SPEC §2.1 G3 says all three
@@ -139,7 +143,7 @@ else
 fi
 
 # 3. lychee
-step "3/12 lychee"
+step "3/13 lychee"
 if command -v lychee >/dev/null; then
   lychee --offline --no-progress "$SRC_DIR" ${TUT_PATH:+"$TUT_PATH"} \
     || err "lychee reported issues"
@@ -148,7 +152,7 @@ else
 fi
 
 # 4. gui-schema-coverage
-step "4/12 gui-schema-coverage"
+step "4/13 gui-schema-coverage"
 CHECKER="$TESTS_DIR/check_gui_schema_coverage.py"
 HTML="$BUILD_DIR/m-format-gui-manual.html"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
@@ -163,7 +167,7 @@ else
 fi
 
 # 5. outline-coverage
-step "5/12 outline-coverage"
+step "5/13 outline-coverage"
 OUTLINE_CHECKER="$TESTS_DIR/check_outline_coverage.py"
 if [ ! -d "$MANUAL_GUI_UPSTREAM_ROOT" ]; then
   err "MANUAL_GUI_UPSTREAM_ROOT not a directory (see phase 4 above)"
@@ -177,7 +181,7 @@ else
 fi
 
 # 6. glossary-coverage
-step "6/12 glossary-coverage"
+step "6/13 glossary-coverage"
 # GUI manual appendices live under 90-appendices/ per SPEC §1.4 (the
 # numbering deviates from the CLI manual's 60-appendices/ scheme so
 # the two manuals never share an anchor namespace). Token list will
@@ -194,7 +198,7 @@ else
 fi
 
 # 7. index bidirectional
-step "7/12 index bidirectional"
+step "7/13 index bidirectional"
 INDEX_TABLE="$SRC_DIR/90-appendices/99-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
@@ -222,7 +226,7 @@ else
 fi
 
 # 8. gui-form-xref
-step "8/12 gui-form-xref"
+step "8/13 gui-form-xref"
 XREF_CHECKER="$TESTS_DIR/check_gui_form_xref.py"
 if [ ! -d "${TRANSCRIPTS_GUI:-}" ]; then
   err "TRANSCRIPTS_GUI not a directory: ${TRANSCRIPTS_GUI:-<unset>} (pass TRANSCRIPTS_GUI=...; the Makefile lint: target threads it from TRANSCRIPTS_GUI := \$(TRANSCRIPTS)/gui)"
@@ -236,7 +240,7 @@ else
 fi
 
 # 9. verify-figures-gui
-step "9/12 verify-figures-gui"
+step "9/13 verify-figures-gui"
 # Byte-compares the committed screenshot corpus (figures/gui/<stem>.png)
 # against the PINNED mnemonic-gui checkout's tests/snapshots/forms/ —
 # the egui_kittest snapshot corpus the GUI repo's `snapshots` CI job
@@ -354,7 +358,7 @@ byte_census_against_manifest() {
 }
 
 # 10. verify-tutorial-figures
-step "10/12 verify-tutorial-figures"
+step "10/13 verify-tutorial-figures"
 if [ -z "${FIGURES_TUTORIAL:-}" ]; then
   err "FIGURES_TUTORIAL not set (pass FIGURES_TUTORIAL=...; the Makefile lint: target threads it from FIGURES_TUTORIAL := \$(FIGURES_DIR)/tutorial)"
 else
@@ -362,7 +366,7 @@ else
 fi
 
 # 11. verify-tutorial-transcripts
-step "11/12 verify-tutorial-transcripts"
+step "11/13 verify-tutorial-transcripts"
 if [ -z "${TRANSCRIPTS_TUTORIAL:-}" ]; then
   err "TRANSCRIPTS_TUTORIAL not set (pass TRANSCRIPTS_TUTORIAL=...; the Makefile lint: target threads it from TRANSCRIPTS_TUTORIAL := \$(TRANSCRIPTS)/tutorial)"
 else
@@ -370,7 +374,7 @@ else
 fi
 
 # 12. tutorial-xref
-step "12/12 tutorial-xref"
+step "12/13 tutorial-xref"
 XREF_TUT="$TESTS_DIR/check_tutorial_xref.py"
 if [ -z "${TUTORIAL_DIR:-}" ] || [ ! -d "${TUTORIAL_DIR:-}" ]; then
   err "TUTORIAL_DIR not a directory: ${TUTORIAL_DIR:-<unset>} (pass TUTORIAL_DIR=...; the Makefile lint: target threads it from TUTORIAL_DIR := \$(MANUAL_DIR)/tutorial)"
@@ -383,6 +387,19 @@ else
       --manifest "$TUT_MANIFEST" \
       --tutorial-dir "$TUTORIAL_DIR" \
     || err "tutorial-xref reported missing/duplicated/orphan embeds"
+fi
+
+# 13. cli-pin-consistency
+step "13/13 cli-pin-consistency"
+PINS_CHECK="$TESTS_DIR/check_cli_pins.py"
+PINS_INSTALL_SH="$TESTS_DIR/../../../scripts/install.sh"
+if [ ! -f "$PINS_CHECK" ]; then
+  err "$PINS_CHECK missing"
+elif [ ! -f "$PINS_INSTALL_SH" ]; then
+  err "cli-pin-consistency: installer not found at $PINS_INSTALL_SH"
+else
+  python3 "$PINS_CHECK" --manual-dir "$TESTS_DIR/.." --install-sh "$PINS_INSTALL_SH" \
+    || err "cli-pin-consistency reported CLI versions that disagree with the installer's pins"
 fi
 
 if [ "$fail" -ne 0 ]; then

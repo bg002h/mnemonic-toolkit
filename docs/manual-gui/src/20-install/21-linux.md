@@ -33,8 +33,10 @@ graphics-stack notes you may need.
    `cargo install md-cli` (or `ms-cli`, `mk-cli`): the crates.io copies
    are several releases older than the GUI expects.
 
-   The GUI pins specific tags of these (see chapter 12); install at
-   or above the pinned tags. Verify with `mnemonic --version` etc.
+   The installer puts exactly the tags this GUI is built against in
+   place; if you install the CLIs another way, stay at or above them
+   (see [Version pinning](#version-pinning)). Verify with
+   `mnemonic --version` etc.
 
 3. **System libraries for the graphics stack.** Most distributions
    ship these already; if not, install the development headers your

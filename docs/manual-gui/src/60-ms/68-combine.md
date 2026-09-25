@@ -94,7 +94,7 @@ a `PrivateKeyMaterial` stderr advisory.
 
 | Trigger | Refusal |
 |---|---|
-| Fewer than K shares supplied | `threshold not passed` refusal |
+| Fewer than K shares supplied | exit 1: `error: not enough shares: have <n>, need <K>` |
 | A repeated share index | `repeated index` refusal |
 | The secret share at index `s` supplied | `secret share supplied to combine` refusal |
 | A share string fails BIP-93 codex32 parse | exit 1 with `error: <codex32 parse error>` |

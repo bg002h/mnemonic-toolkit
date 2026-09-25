@@ -250,8 +250,8 @@ access. The CLI prints a warning on every use.
 A BIP-388 template string, e.g. `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))`
 for a 2-of-2 native-SegWit multisig. **Optional** at the clap
 level (because `--from-policy` is the alternate input mode), but
-the runtime pre-check refuses if NEITHER the positional NOR
-`--from-policy` is set. The conditional-visibility engine surfaces
+the runtime pre-check refuses if none of the positional, `--in`
+and `--from-policy` is set. The conditional-visibility engine surfaces
 this constraint by marking both `--from-policy` and the positional
 slot as Required when neither is filled.
 
@@ -291,7 +291,7 @@ corresponding `md1`.
 
 | Trigger | Refusal |
 |---|---|
-| Neither positional `[TEMPLATE]` nor `--from-policy` set | runtime pre-check (per `md-cli/src/main.rs:291`): `encode: TEMPLATE required (or use --from-policy with cli-compiler)` |
+| None of positional `[TEMPLATE]`, `--in`, `--from-policy` set | runtime pre-check, exit 2: `md: encode: TEMPLATE required (on argv, via --in FILE, or use --from-policy with cli-compiler)` |
 | Both positional `[TEMPLATE]` and `--from-policy` set | clap-level `conflicts_with` refusal (per `md-cli/src/main.rs:66`'s `conflicts_with = "template"` on `from_policy`) |
 | `--from-policy` set without `--context` | runtime pre-check (per `md-cli/src/main.rs:263`): `--from-policy requires --context tap\|segwitv0` |
 | `--context segwitv0` AND `--unspendable-key <value>` | value-inspect refusal (per `md-cli/src/main.rs:270`): `--unspendable-key is only valid for --context tap (segwitv0 has no internal key)` |

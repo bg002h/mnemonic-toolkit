@@ -6,9 +6,19 @@ pinned against. The manual itself ships under
 Tags advance in lockstep when GUI surface (schema, conditional,
 help-icon URL) changes in a way that affects the manual.
 
-## Unreleased — GUI pin `mnemonic-gui-v0.53.0`
+## Unreleased — GUI pin `mnemonic-gui-v0.62.0`
 
-**In progress** (generated-GUI-form-renders cycle, Leg-2). Pin bump
+Pin bump `mnemonic-gui-v0.57.0` → `mnemonic-gui-v0.62.0` (F-679). The
+four implied CLI tags advance in lockstep to `mnemonic-toolkit-v0.104.0`,
+`descriptor-mnemonic-md-cli-v0.20.3`, `ms-cli-v0.19.1`, `mk-cli-v0.13.0`
+— the same tags the toolkit installer installs, which lint phase 13
+(`cli-pin-consistency`) now enforces. See the manual's `CHANGELOG.md`
+for the full delta (new flags, the argv-secret opt-in, the J4 depth-2
+export).
+
+## GUI pin `mnemonic-gui-v0.53.0`
+
+(Generated-GUI-form-renders cycle, Leg-2.) Pin bump
 `mnemonic-gui-v0.49.0` → `mnemonic-gui-v0.53.0`; the four implied CLI
 tags advance in lockstep to `mnemonic-toolkit-v0.74.0`,
 `descriptor-mnemonic-md-cli-v0.11.0`, `ms-cli-v0.13.0`,

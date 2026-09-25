@@ -197,6 +197,11 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   made with `cross`), matching aarch64, measured with `readelf -V` on the published asset. Older
   LTS hosts (Ubuntu 22.04, Debian 12, RHEL 9) now get the prebuilt GUI instead of a source build.
   `--help`, the manual and the README say so.
+- **The GUI manual can no longer name CLI versions the installer does not install.** A new check
+  (`docs/manual-gui/tests/check_cli_pins.py`, run on every push by `sibling-pin-check.yml` and as
+  manual-gui lint phase 13) fails when `docs/manual-gui/pinned-upstream.toml` disagrees with
+  `scripts/install.sh`'s pins, or when the manual names an off-pin CLI version outside its
+  history list.
 
 ## mnemonic-toolkit [0.104.0] — 2026-09-23
 

@@ -55,7 +55,8 @@ mode.
 The output panel renders the indented JSON corpus on stdout. The
 top-level object has fields `family_token`, `schema`, and
 `vectors`; the `vectors` array carries one entry per fixture
-(40 fixtures at `mk-cli v0.3.1` / `mk-codec v0.3.0`).
+(41 fixtures at the pinned `mk-cli v0.13.0`, whose `family_token`
+reads `mk-codec 0.5`).
 
 ## Worked example — per-fixture files
 

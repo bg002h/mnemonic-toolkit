@@ -7,8 +7,8 @@ wallet-policy template plus the bound public-key references that
 the bundle's `mk1` cards carry.
 
 The `md` tab's pinned upstream version is
-`md-cli v0.11.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: md 0.11.0`.
+`md-cli v0.20.3` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: md 0.20.3`.
 
 ## Subcommand index
 

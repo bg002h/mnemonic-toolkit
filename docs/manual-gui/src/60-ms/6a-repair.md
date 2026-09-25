@@ -94,11 +94,8 @@ two surfaces' own exit-code tables.
 **Version scoping.** This demotion ships in **`ms-cli v0.14.0`**;
 before that release `ms repair` reported ANY substitution correction
 as a confident exit-`5` `REPAIR_APPLIED`, with no UNVERIFIED advisory.
-**This manual is pinned to `ms-cli v0.13.0`** (`pinned-upstream.toml`)
-— PRE-demote — so a build at the manual's own pinned tag still exits
-`5` for the worked example below, unlike the exit-`4` behavior
-documented above and in the worked example, which describes a current
-(`v0.14.0`+) `ms` binary.
+The pinned `ms` 0.19.1 carries it: the worked example below exits
+`4`.
 
 ## Worked example — one-character repair
 
@@ -121,8 +118,7 @@ derived from it.
 
 The output panel renders the repair report with the corrected
 `ms1` on the last line; exit code `4` (`VERIFY-ME` Candidate, as of
-`ms-cli v0.14.0` — see Exit codes above; the manual's pinned `v0.13.0`
-build exits `5` instead, with no advisory). A
+`ms-cli v0.14.0` — see Exit codes above). A
 `repair: correction UNVERIFIED — a corrected seed card cannot be
 self-verified; confirm the derived address/xpub against a known-good
 copy before use; BIP-93 recommends confirming a corrected codex32
