@@ -134,9 +134,10 @@ const TABLE: &[Entry] = &[
     },
     Entry {
         flag: "--passphrase",
+        // F-687: `--passphrase -` reads stdin on every subcommand.
         shape: Shape::Whole {
             class: "a BIP-39 passphrase",
-            sentinel: false,
+            sentinel: true,
         },
     },
     Entry {
@@ -532,15 +533,24 @@ mod tests {
         ));
     }
 
-    /// `-` is a stdin sentinel on `--ms1` and `--digits`, and is a one-character
-    /// VALUE on `--passphrase`. Exempting it there would be exempting a real
-    /// leak on the strength of a channel that flag does not have.
+    /// F-687: `-` on `--passphrase` IS a stdin channel now, on every
+    /// subcommand (`passphrase_input`), so the guard exempts it exactly as it
+    /// exempts `--ms1 -` and `--digits -`. Before F-687 it was a
+    /// one-character VALUE and this test asserted the refusal.
     #[test]
-    fn a_dash_passphrase_is_a_value_not_a_channel() {
-        let f = findings(&["convert", "--passphrase", "-", "--from", "xpub=x"]);
-        assert_eq!(f[0].flag, "--passphrase");
-        assert_eq!(f[0].channel, "--passphrase-stdin");
-        assert_eq!(f[0].len, 1);
+    fn a_dash_passphrase_is_a_channel() {
+        assert!(matches!(
+            inspect(&argv(&["convert", "--passphrase", "-", "--from", "xpub=x"])),
+            Verdict::Clean
+        ));
+        assert!(matches!(
+            inspect(&argv(&["convert", "--passphrase=-", "--from", "xpub=x"])),
+            Verdict::Clean
+        ));
+        // `-` is exempt ONLY on `--passphrase`; `--bip38-passphrase -` is still
+        // a one-character value there (F-687 names `--passphrase`).
+        let f = findings(&["convert", "--bip38-passphrase", "-", "--from", "wif=x"]);
+        assert_eq!(f[0].flag, "--bip38-passphrase");
     }
 
     #[test]

@@ -14,8 +14,8 @@ use clap::Args;
 use serde_json::json;
 
 use crate::address_render::{network_from_xpub, render_address_from_xpub};
+use crate::cmd::convert::read_stdin_to_string;
 use crate::cmd::convert::{parse_from_input, parse_script_type_arg, NodeType, ScriptType};
-use crate::cmd::convert::{read_stdin_passphrase, read_stdin_to_string};
 use crate::derive_slot::derive_bip32_from_entropy;
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
@@ -56,7 +56,8 @@ pub struct AddressesArgs {
     #[arg(long, value_enum)]
     pub network: Option<CliNetwork>,
 
-    /// BIP-39 passphrase (seed sources). `@env:VAR` supported; or `--passphrase-stdin`.
+    /// BIP-39 passphrase (seed sources). `-` reads it from stdin (same as
+    /// `--passphrase-stdin`); `@env:VAR` reads it from an environment variable.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -115,11 +116,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     let from = parse_from_input(&args.from).map_err(bad)?;
     let from_uses_stdin = from.value == "-";
 
-    // Single-stdin-per-invocation guard.
-    if args.passphrase_stdin && from_uses_stdin {
-        return Err(bad(
-            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
-        ));
+    // Single-stdin-per-invocation guard. F-687: `--passphrase -` reads stdin
+    // exactly as `--passphrase-stdin` does, so it is counted here too.
+    let pp_value = args.passphrase.as_deref();
+    if crate::passphrase_input::reads_stdin(pp_value, args.passphrase_stdin) && from_uses_stdin {
+        return Err(bad(format!(
+            "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
+        )));
     }
 
     // argv-leak advisories for inline secret-bearing values (mirror convert scope).
@@ -134,29 +138,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     // `--passphrase` only applies to seed sources (xpub rejects it below), so
     // don't fire the advisory for an xpub source that's about to be refused (M2).
     if from.node != NodeType::Xpub {
-        if let Some(pp) = args.passphrase.as_deref() {
-            if !pp.starts_with("@env:") {
-                crate::secret_advisory::secret_in_argv_warning(
-                    stderr,
-                    "--passphrase",
-                    "--passphrase-stdin",
-                );
-            }
-        }
+        crate::passphrase_input::emit_argv_note(pp_value, args.passphrase_stdin, stderr);
     }
 
     // Effective BIP-39 passphrase (stdin / @env: / inline).
     // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
     // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
     let passphrase: zeroize::Zeroizing<String> =
-        zeroize::Zeroizing::new(if args.passphrase_stdin {
-            read_stdin_passphrase(stdin)?
-        } else {
-            match args.passphrase.as_deref() {
-                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-                None => String::new(),
-            }
-        });
+        crate::passphrase_input::resolve_or_empty(pp_value, args.passphrase_stdin, stdin)?;
 
     // Resolved `--from` value (stdin / @env: / literal).
     let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {

@@ -23,6 +23,7 @@ mod network;
 mod nostr;
 mod parse;
 mod parse_descriptor;
+mod passphrase_input;
 mod repair;
 mod secret_advisory;
 mod secret_string;

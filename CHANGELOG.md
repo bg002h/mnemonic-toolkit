@@ -8,6 +8,57 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## mnemonic-toolkit [Unreleased]
 
+### Changed
+
+- **BREAKING (behaviour): `--passphrase -` reads the passphrase from stdin, and
+  `--passphrase @env:VAR` from the environment, on every subcommand that takes
+  `--passphrase`** (F-687, operator ruling 2026-09-25): `addresses`, `restore`,
+  `derive-child`, `bundle`, `verify-bundle`, `convert`, `silent-payment`,
+  `slip39 split` / `combine`, and `xpub-search path-of-xpub` /
+  `account-of-descriptor` / `passphrase-of-xpub`. Measured on 0.104.0: `-` was
+  refused by the argv guard, and under `--allow-argv-secret` was the literal
+  one-character passphrase on all twelve (exit 0, or exit 4 — a false
+  mismatch — on `verify-bundle` and `xpub-search`); `@env:VAR` was literal on
+  `silent-payment`. A caller who meant the literal passphrase `-` (or one
+  beginning `@env:`) must now pipe it on stdin. Nothing is refused for using
+  either form.
+  - One resolver (`src/passphrase_input.rs`) replaces the per-subcommand copies
+    whose disagreement caused this. The rule, pinned by
+    `crates/mnemonic-toolkit/tests/vectors/passphrase_channels.json` (27 cases;
+    mnemonic-secret carries a byte-identical copy): `--passphrase -` =
+    `--passphrase-stdin`, byte for byte (exactly one trailing `\n` / `\r\n`
+    removed, every other byte kept); `@env:VAR` under the same one-newline
+    rule; an unset `VAR` an error naming it; set-but-empty the empty
+    passphrase; any other value literal and verbatim.
+  - **`@env:VAR` now strips one trailing newline**, as stdin always has.
+    Before, `VAR=$'TREZOR\n'` derived `48efb44f` where `TREZOR\n` on stdin
+    derived `b4e3f5ed`.
+  - A literal argv passphrase derives as before and prints exactly ONE stderr
+    line, `warning: secret material on argv (--passphrase) — read it privately
+    with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR
+    (environment variable)`, replacing `… — pipe via --passphrase-stdin to avoid
+    /proc/$PID/cmdline exposure`. No line for `-`, `@env:` or
+    `--passphrase-stdin` (`slip39` used to print it for `@env:` too); stdout is
+    unchanged. The argv guard now treats `--passphrase -` as a channel.
+  - One stdin per invocation: `--passphrase -` beside another stdin input
+    (`--from <node>=-`, `--slot @N.<secret>=-`, `--share -`, `--secret-stdin`,
+    `--phrase-stdin` / `--ms1-stdin`, `--descriptor-from <node>=-`) is refused
+    exactly as `--passphrase-stdin` is.
+
+### Fixed
+
+- **`verify-bundle` keyless-template completion with `--passphrase-stdin`
+  reported a false NO MATCH (exit 4) on a matching bundle** (found under
+  F-687). The stdin passphrase was read once up front, then the shared
+  template-completion helper read the drained stdin again and derived with
+  the EMPTY passphrase. `@env:` and literal passphrases on that path also
+  printed a spurious argv warning. The helper now takes the already-resolved
+  passphrase.
+- **`xpub-search` with `--phrase-stdin` (or `--ms1-stdin`) and
+  `--passphrase-stdin` searched with the EMPTY passphrase** — the phrase read
+  drained stdin — and reported a false "no match" (exit 4) for the right
+  passphrase. Now refused as a two-stdin conflict (found under F-687).
+
 ### `restore --help` no longer says depth-≥2 taproot is refused (F-686)
 
 - The `--md1` help (and so `mnemonic-restore.1`) still listed "depth-≥2 taproot" among the

@@ -356,6 +356,13 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/cmd/addresses.rs",
         evidence: &["zeroize::Zeroizing<Vec<u8>>", "Zeroizing::new"],
     },
+    // F-687: the one `--passphrase` resolver (stdin / `-` / `@env:` / literal)
+    // returns the passphrase as Zeroizing<String>.
+    ZeroizeRow {
+        label: "passphrase_input resolves --passphrase into Zeroizing<String> (F-687)",
+        source_file: "src/passphrase_input.rs",
+        evidence: &["Result<Option<Zeroizing<String>>, ToolkitError>", "Zeroizing::new"],
+    },
     ZeroizeRow {
         label: "electrum-decrypt resolves the decrypt-password into Zeroizing<String>",
         source_file: "src/cmd/electrum_decrypt.rs",
@@ -413,17 +420,17 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
     ZeroizeRow {
         label: "account-of-descriptor wraps the BIP-39 passphrase in Zeroizing<String>",
         source_file: "src/cmd/xpub_search/account_of_descriptor.rs",
-        evidence: &["zeroize::Zeroizing<String>"],
+        evidence: &["let passphrase: Zeroizing<String>"],
     },
     ZeroizeRow {
         label: "passphrase-of-xpub wraps the mandatory BIP-39 passphrase in Zeroizing<String>",
         source_file: "src/cmd/xpub_search/passphrase_of_xpub.rs",
-        evidence: &["zeroize::Zeroizing<String>"],
+        evidence: &["let passphrase: Zeroizing<String>"],
     },
     ZeroizeRow {
         label: "path-of-xpub wraps the BIP-39 passphrase in Zeroizing<String>",
         source_file: "src/cmd/xpub_search/path_of_xpub.rs",
-        evidence: &["zeroize::Zeroizing<String>"],
+        evidence: &["let passphrase: Zeroizing<String>"],
     },
     ZeroizeRow {
         label: "xpub-search seed_intake owns the phrase/ms1 source + decoded entropy in Zeroizing",

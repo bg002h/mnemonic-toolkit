@@ -272,6 +272,10 @@ pub fn run<W: Write, E: Write>(
     // resolution; sentinel-bearing flag values are skipped (user opted
     // into the env-var leak-mitigation channel).
     emit_secret_in_argv_advisories(args, stderr);
+    // F-687: `--passphrase -` reads stdin like `--passphrase-stdin`. Decided
+    // from the value as written, before `@env:` resolution below.
+    let pp_reads_stdin =
+        crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin);
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before HRP validation
     // + downstream consumption. Owned-args shadowing keeps the diff
@@ -338,8 +342,8 @@ pub fn run<W: Write, E: Write>(
     }
 
     let stdin_synth;
-    let args: &VerifyBundleArgs = if needs_stdin_substitution(args) {
-        stdin_synth = apply_stdin_substitutions(args, stdin)?;
+    let args: &VerifyBundleArgs = if needs_stdin_substitution(args, pp_reads_stdin) {
+        stdin_synth = apply_stdin_substitutions(args, stdin, pp_reads_stdin)?;
         &stdin_synth
     } else {
         args
@@ -911,11 +915,18 @@ fn verify_multisig_template<W: Write, E: Write>(
                   key, and --cosigner <mk1> supplies the others). Supply \
                   --from ms1=…/phrase=…/entropy=…/seedqr=…",
     };
+    // F-687: `args` here is post-substitution — the passphrase is already
+    // resolved (stdin read, `@env:` expanded, argv note emitted). Passing it
+    // as written made the helper re-read a drained stdin (the EMPTY
+    // passphrase: a false NO MATCH, exit 4) and re-emit the argv note.
     let seed = resolve_template_completion_seed(
         args.from.as_deref(),
         no_from,
-        args.passphrase.as_deref(),
-        args.passphrase_stdin,
+        crate::passphrase_input::PassphraseArg::Resolved {
+            value: args.passphrase.as_deref(),
+            // set by `apply_stdin_substitutions` for `-` as well as the flag
+            consumed_stdin: args.passphrase_stdin,
+        },
         args.language,
         stdin,
         stderr,
@@ -1945,17 +1956,17 @@ fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &VerifyBundleArgs, st
             secret_in_argv_warning(stderr, &flag, &alt);
         }
     }
-    // v0.26.0 §I1 fold: `--passphrase @env:VAR` is the leak-mitigation
-    // channel; do not emit the argv-leak warning for sentinel values.
-    if let Some(pp) = args.passphrase.as_deref() {
-        if !pp.starts_with("@env:") {
-            secret_in_argv_warning(stderr, "--passphrase", "--passphrase-stdin");
-        }
-    }
+    // F-687: one note for a literal argv passphrase; none for `-` (stdin)
+    // or `@env:VAR`.
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
 }
 
-fn needs_stdin_substitution(args: &VerifyBundleArgs) -> bool {
-    args.passphrase_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
+fn needs_stdin_substitution(args: &VerifyBundleArgs, pp_reads_stdin: bool) -> bool {
+    pp_reads_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
 }
 
 /// v0.26.0 §3 — cheap pre-check for `@env:` sentinels across `verify-bundle`'s
@@ -1985,7 +1996,10 @@ fn resolve_env_sentinels(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, To
     use crate::env_sentinel::resolve_env_var_sentinel;
     let mut owned = args.clone();
     if let Some(pp) = owned.passphrase.as_ref() {
-        owned.passphrase = Some(resolve_env_var_sentinel(pp, "--passphrase")?);
+        // F-687: only `@env:` resolves here; `-` is stdin (substituted later).
+        if pp.starts_with("@env:") {
+            owned.passphrase = Some(crate::passphrase_input::resolve_env(pp)?);
+        }
     }
     for v in owned.ms1.iter_mut() {
         *v = resolve_env_var_sentinel(v, "--ms1")?;
@@ -2002,30 +2016,27 @@ fn resolve_env_sentinels(args: &VerifyBundleArgs) -> Result<VerifyBundleArgs, To
     Ok(owned)
 }
 
+/// `pp_reads_stdin` is decided from `--passphrase` AS WRITTEN (F-687: `-` or
+/// `--passphrase-stdin`), before `@env:` resolution — a variable whose value
+/// is `-` is that literal passphrase, not a request to read stdin.
 fn apply_stdin_substitutions(
     args: &VerifyBundleArgs,
     stdin: &mut dyn std::io::Read,
+    pp_reads_stdin: bool,
 ) -> Result<VerifyBundleArgs, ToolkitError> {
     let mut owned = args.clone();
     let has_slot_stdin = owned.slot.iter().any(|s| s.is_stdin_sentinel());
-    if owned.passphrase_stdin && has_slot_stdin {
-        return Err(ToolkitError::BadInput(
-            "--passphrase-stdin cannot be used with --slot @N.<secret>=- (single stdin per invocation)"
-                .into(),
-        ));
+    if pp_reads_stdin && has_slot_stdin {
+        return Err(ToolkitError::BadInput(format!(
+            "{} cannot be used with --slot @N.<secret>=- (single stdin per invocation)",
+            crate::passphrase_input::stdin_spelling(owned.passphrase_stdin)
+        )));
     }
-    if owned.passphrase_stdin {
-        let mut buf = String::new();
-        stdin
-            .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
-        if buf.ends_with('\n') {
-            buf.pop();
-            if buf.ends_with('\r') {
-                buf.pop();
-            }
-        }
-        owned.passphrase = Some(buf);
+    if pp_reads_stdin {
+        owned.passphrase = Some(crate::passphrase_input::read_stdin_passphrase(stdin)?);
+        // From here on `passphrase` is RESOLVED and `passphrase_stdin` records
+        // that it came from stdin (for `-` too) — see the template path.
+        owned.passphrase_stdin = true;
     } else if has_slot_stdin {
         crate::slot_input::apply_slot_stdin(&mut owned.slot, stdin)?;
     }

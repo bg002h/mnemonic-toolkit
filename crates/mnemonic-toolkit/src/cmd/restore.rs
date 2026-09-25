@@ -25,8 +25,7 @@ use serde_json::json;
 
 use crate::address_render::render_address_from_xpub;
 use crate::cmd::convert::{
-    parse_from_input, read_stdin_passphrase, read_stdin_to_string, script_type_from_template,
-    NodeType,
+    parse_from_input, read_stdin_to_string, script_type_from_template, NodeType,
 };
 use crate::cmd::export_wallet::CliExportFormat;
 use crate::derive_slot::derive_bip32_from_entropy;
@@ -96,8 +95,9 @@ pub struct RestoreArgs {
     #[arg(long)]
     pub cosigner: Vec<String>,
 
-    /// BIP-39 mnemonic-extension passphrase. `@env:VAR` supported; or
-    /// `--passphrase-stdin`. Empty (default) = no passphrase.
+    /// BIP-39 mnemonic-extension passphrase. `-` reads it from stdin (same as
+    /// `--passphrase-stdin`); `@env:VAR` reads it from an environment
+    /// variable. Empty (default) = no passphrase.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -428,10 +428,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // Single-stdin-per-invocation guard (mirror convert / addresses).
-    if args.passphrase_stdin && from_uses_stdin {
-        return Err(bad(
-            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
-        ));
+    // F-687: `--passphrase -` reads stdin exactly as `--passphrase-stdin`.
+    if crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
+        && from_uses_stdin
+    {
+        return Err(bad(format!(
+            "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
+        )));
     }
 
     // argv-leak advisories for inline secret-bearing values (mirror addresses scope).
@@ -443,28 +447,21 @@ pub fn run<R: Read, W: Write, E: Write>(
             &format!("--from {node}=-"),
         );
     }
-    if let Some(pp) = args.passphrase.as_deref() {
-        if !pp.starts_with("@env:") {
-            crate::secret_advisory::secret_in_argv_warning(
-                stderr,
-                "--passphrase",
-                "--passphrase-stdin",
-            );
-        }
-    }
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
 
     // Effective BIP-39 passphrase (stdin / @env: / inline).
     // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
     // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
-    let passphrase: zeroize::Zeroizing<String> =
-        zeroize::Zeroizing::new(if args.passphrase_stdin {
-            read_stdin_passphrase(stdin)?
-        } else {
-            match args.passphrase.as_deref() {
-                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-                None => String::new(),
-            }
-        });
+    // F-687: the one `--passphrase` rule (`-` = stdin, `@env:VAR` = env).
+    let passphrase: zeroize::Zeroizing<String> = crate::passphrase_input::resolve_or_empty(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stdin,
+    )?;
     let passphrase_applied = !passphrase.is_empty();
 
     // Resolved `--from` value (stdin / @env: / literal).
@@ -862,10 +859,14 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     }
 
     // Single-stdin guard (mirror the single-sig path).
-    if args.passphrase_stdin && from_uses_stdin {
-        return Err(bad(
-            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
-        ));
+    // F-687: `--passphrase -` reads stdin exactly as `--passphrase-stdin`.
+    if crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
+        && from_uses_stdin
+    {
+        return Err(bad(format!(
+            "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
+        )));
     }
 
     // argv-leak advisory.
@@ -877,26 +878,19 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
             &format!("--from {node}=-"),
         );
     }
-    if let Some(pp) = args.passphrase.as_deref() {
-        if !pp.starts_with("@env:") {
-            crate::secret_advisory::secret_in_argv_warning(
-                stderr,
-                "--passphrase",
-                "--passphrase-stdin",
-            );
-        }
-    }
+    crate::passphrase_input::emit_argv_note(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stderr,
+    );
 
     // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub; mlock-pinned).
-    let passphrase: zeroize::Zeroizing<String> =
-        zeroize::Zeroizing::new(if args.passphrase_stdin {
-            read_stdin_passphrase(stdin)?
-        } else {
-            match args.passphrase.as_deref() {
-                Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-                None => String::new(),
-            }
-        });
+    // F-687: the one `--passphrase` rule (`-` = stdin, `@env:VAR` = env).
+    let passphrase: zeroize::Zeroizing<String> = crate::passphrase_input::resolve_or_empty(
+        args.passphrase.as_deref(),
+        args.passphrase_stdin,
+        stdin,
+    )?;
     let passphrase_applied = !passphrase.is_empty();
 
     let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
@@ -1413,8 +1407,7 @@ pub(crate) struct TemplateSeed {
 pub(crate) fn resolve_template_completion_seed<E: Write>(
     from_raw: Option<&str>,
     no_from: ToolkitError,
-    passphrase: Option<&str>,
-    passphrase_stdin: bool,
+    passphrase: crate::passphrase_input::PassphraseArg<'_>,
     language: Option<CliLanguage>,
     stdin: &mut dyn Read,
     stderr: &mut E,
@@ -1431,10 +1424,12 @@ pub(crate) fn resolve_template_completion_seed<E: Write>(
             from.node.as_str()
         )));
     }
-    if passphrase_stdin && from_uses_stdin {
-        return Err(bad(
-            "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
-        ));
+    // F-687: `--passphrase -` reads stdin exactly as `--passphrase-stdin`.
+    if passphrase.reads_stdin() && from_uses_stdin {
+        return Err(bad(format!(
+            "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+            passphrase.stdin_spelling()
+        )));
     }
 
     // argv-leak advisories (mirror the single-sig template path).
@@ -1446,29 +1441,15 @@ pub(crate) fn resolve_template_completion_seed<E: Write>(
             &format!("--from {node}=-"),
         );
     }
-    if let Some(pp) = passphrase {
-        if !pp.starts_with("@env:") {
-            crate::secret_advisory::secret_in_argv_warning(
-                stderr,
-                "--passphrase",
-                "--passphrase-stdin",
-            );
-        }
-    }
+    passphrase.emit_argv_note(stderr);
 
     // --- Resolve the seed entropy --------------------------------------------
     // `stdin` is `&mut dyn Read` (unsized); reborrow as `&mut (&mut dyn Read)`
     // so the generic `<R: Read>` stdin helpers monomorphize over the sized
     // reference type.
     // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub).
-    let passphrase: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if passphrase_stdin {
-        read_stdin_passphrase(&mut &mut *stdin)?
-    } else {
-        match passphrase {
-            Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-            None => String::new(),
-        }
-    });
+    // F-687: the one `--passphrase` rule (`-` = stdin, `@env:VAR` = env).
+    let passphrase: zeroize::Zeroizing<String> = passphrase.resolve_or_empty(&mut &mut *stdin)?;
     let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
         read_stdin_to_string(&mut &mut *stdin)?
     } else {
@@ -1519,8 +1500,10 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     let seed = resolve_template_completion_seed(
         args.from.as_deref(),
         no_from,
-        args.passphrase.as_deref(),
-        args.passphrase_stdin,
+        crate::passphrase_input::PassphraseArg::AsWritten {
+            value: args.passphrase.as_deref(),
+            stdin_flag: args.passphrase_stdin,
+        },
         args.language,
         stdin,
         stderr,
@@ -4045,10 +4028,14 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 from.node.as_str()
             )));
         }
-        if args.passphrase_stdin && from_uses_stdin {
-            return Err(bad(
-                "--passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both)",
-            ));
+        // F-687: `--passphrase -` reads stdin exactly as `--passphrase-stdin`.
+        if crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
+            && from_uses_stdin
+        {
+            return Err(bad(format!(
+                "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
+                crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
+            )));
         }
         if !from_uses_stdin && !from.value.starts_with("@env:") {
             let node = from_raw.split('=').next().unwrap_or("");
@@ -4058,25 +4045,18 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 &format!("--from {node}=-"),
             );
         }
-        if let Some(pp) = args.passphrase.as_deref() {
-            if !pp.starts_with("@env:") {
-                crate::secret_advisory::secret_in_argv_warning(
-                    stderr,
-                    "--passphrase",
-                    "--passphrase-stdin",
-                );
-            }
-        }
+        crate::passphrase_input::emit_argv_note(
+            args.passphrase.as_deref(),
+            args.passphrase_stdin,
+            stderr,
+        );
         // cycle-14 (L22): wrap in Zeroizing (handler-scope scrub).
-        let passphrase: zeroize::Zeroizing<String> =
-            zeroize::Zeroizing::new(if args.passphrase_stdin {
-                read_stdin_passphrase(stdin)?
-            } else {
-                match args.passphrase.as_deref() {
-                    Some(p) => crate::env_sentinel::resolve_env_var_sentinel(p, "--passphrase")?,
-                    None => String::new(),
-                }
-            });
+        // F-687: the one `--passphrase` rule (`-` = stdin, `@env:VAR` = env).
+        let passphrase: zeroize::Zeroizing<String> = crate::passphrase_input::resolve_or_empty(
+            args.passphrase.as_deref(),
+            args.passphrase_stdin,
+            stdin,
+        )?;
         let from_value: zeroize::Zeroizing<String> = zeroize::Zeroizing::new(if from_uses_stdin {
             read_stdin_to_string(stdin)?
         } else {

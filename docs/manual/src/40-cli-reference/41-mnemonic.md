@@ -63,7 +63,7 @@ nothing and the entry is written back when you exit.
 |---|---|
 | `--from <node>=<value>` | `--from <node>=-` and pipe the value on stdin |
 | `--slot @N.<subkey>=<value>` | `--slot @N.<subkey>=-` (one per invocation), or `--slot @N.<subkey>=@env:VAR` |
-| `--passphrase <value>` | `--passphrase-stdin` |
+| `--passphrase <value>` | `--passphrase -` or `--passphrase-stdin` (stdin), or `--passphrase @env:VAR` |
 | `--bip38-passphrase <value>` | `--bip38-passphrase-stdin` |
 | `--decrypt-password <value>` | `--decrypt-password-stdin` |
 | `--phrase <value>` | `--phrase-stdin` |
@@ -79,6 +79,29 @@ the flag supports it, or `--allow-argv-secret`.
 
 Watch-only material (`--from xpub=`, `--slot @N.xpub=`, `mk1` and `md1`
 cards) is **not** refused: a leak there costs privacy, not the money.
+
+### How `--passphrase` is read (every subcommand)
+
+The same rule holds on every subcommand that takes `--passphrase`
+(`addresses`, `restore`, `derive-child`, `bundle`, `verify-bundle`,
+`convert`, `silent-payment`, `slip39 split` / `combine`, and the three
+`xpub-search` modes), and in `ms derive`:
+
+| you write | the passphrase is |
+|---|---|
+| nothing | empty (the no-passphrase wallet) |
+| `--passphrase-stdin` | stdin, with exactly **one** trailing newline (`\n` or `\r\n`) removed; every other byte kept |
+| `--passphrase -` | the same as `--passphrase-stdin`, byte for byte |
+| `--passphrase @env:VAR` | the value of `VAR`, with the same one-newline rule. `VAR` unset is an error naming it; set but empty is the empty passphrase |
+| `--passphrase <anything else>` | that string, verbatim, plus one stderr line: `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+
+A passphrase that differs by one byte is a different wallet, so leading and
+trailing spaces, a second trailing newline and interior newlines are all
+kept. `--passphrase -` beside another input read from stdin is refused
+(one stdin per invocation), as is `--passphrase -` together with
+`--passphrase-stdin`. Since F-687 there is no way to pass the one-character
+passphrase `-`, or one beginning `@env:`, on the command line; pipe it on
+stdin instead.
 
 ### `--allow-argv-secret`
 
@@ -1243,7 +1266,7 @@ channels that keep the seed off the argv.
 | `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots). See [Multisig template completion](#multisig-template-completion) |
 | `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. **(#28 phase 2) also accepts a keyless multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`), completed via `--from` + `--account` + `--cosigner` (see [Multisig template completion](#multisig-template-completion)). Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies in a tap tree of any depth, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general policies + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key) or a `sortedmulti_a` leaf inside a multi-leaf tree is refused (exit 2). Watch-only (non-secret) |
 | `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. **(#28 phase 2) for multisig-template completion** the bare form (`--cosigner <mk1>`, no `@N=`) supplies an UNASSIGNED cosigner the search places; the `@N=` form assigns it explicitly. Watch-only (non-secret) |
-| `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `@env:VAR` supported. Empty (default) = no passphrase |
+| `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `-` reads stdin, `@env:VAR` the environment. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
@@ -2243,9 +2266,9 @@ Stdout: the original 24-word phrase.
 >
 > **Argv-leakage advisory:** `--passphrase TREZOR` is on argv and
 > visible in `/proc/$PID/cmdline`; the toolkit emits
-> `warning: secret material on argv (--passphrase) — pipe via
-> --passphrase-stdin to avoid /proc/$PID/cmdline exposure` on stderr.
-> For sensitive use, pipe via `--passphrase-stdin`.
+> `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` on stderr.
+> For sensitive use, pass `--passphrase -` (or `--passphrase-stdin`) and
+> pipe it, or use `--passphrase @env:VAR`.
 
 #### Example 3 — standard 2-of-3 single group, no passphrase
 
@@ -2450,7 +2473,8 @@ success). Mirror of SPEC §2.6 (6 rows).
 
 | Trigger | Stderr advisory |
 |---|---|
-| Inline secret on argv (`--from`, `--share`, `--passphrase`) | per-occurrence `warning: secret material on argv (<flag>) — pipe via <alternative> to avoid /proc/$PID/cmdline exposure` |
+| Inline secret on argv (`--from`, `--share`) | per-occurrence `warning: secret material on argv (<flag>) — pipe via <alternative> to avoid /proc/$PID/cmdline exposure` |
+| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `split` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: each share is secret material — distribute across separate locations; SLIP-39 shares have no authentication tag` |
 | `combine` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
 | `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
@@ -3068,7 +3092,7 @@ The scan key is derived at `m/352'/<coin>'/<account>'/1'/0` and the spend key at
 | `--secret <SEED>` | seed-bearing secret: BIP-39 phrase / ms1 / entropy-hex / master xprv. A single private key (WIF/minikey) is refused — it cannot derive `m/352'`. SECRET: leaks via argv; prefer `--secret-file` / `--secret-stdin` |
 | `--secret-file <PATH>` | read the seed-bearing secret from a file (avoids argv exposure) |
 | `--secret-stdin` | read the seed-bearing secret from stdin |
-| `--passphrase <P>` | BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase / ms1 / entropy-hex inputs; **ignored (with a warning) for an xprv input** (the xprv is already the master). SECRET: leaks via argv; prefer `--passphrase-stdin` |
+| `--passphrase <P>` | BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase / ms1 / entropy-hex inputs; **ignored (with a warning) for an xprv input** (the xprv is already the master). SECRET: leaks via argv; prefer `--passphrase -` / `--passphrase-stdin` (stdin) or `--passphrase @env:VAR` |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (whitespace-preserving — significant PBKDF2 salt). Mutually exclusive with `--passphrase`, and with `--secret-stdin` (one stdin per invocation) |
 | `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet). For an xprv/tprv `--secret`, `--network` (including the default) must agree with the key's own version bytes — a disagreement is refused fail-closed (exit 2) rather than deriving at the wrong coin-type; phrase/ms1/entropy-hex secrets are network-agnostic (the master mints AT `--network`) and are unaffected |
 | `--account <N>` | BIP-32 account index `m/352'/coin'/<account>'/…` (default 0) |
@@ -3114,7 +3138,7 @@ mnemonic addresses --from <SOURCE> --address-type <T> [--account <N>] \
 | `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
 | `--chain <receive\|change\|both>` | which chain(s) to list (default `receive`) |
 | `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes (xpub source) or mainnet (seed source); must agree with an xpub's network kind |
-| `--passphrase <V>` | BIP-39 passphrase (seed sources); `@env:VAR` supported |
+| `--passphrase <V>` | BIP-39 passphrase (seed sources); `-` reads stdin, `@env:VAR` the environment |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`) |
 | `--language <L>` | BIP-39 wordlist language for `phrase=`/`seedqr=` (default `english`); ignored for `electrum-phrase=` (the Electrum seed is stretched from the raw phrase string, not decoded via a wordlist) |
 | `--json` | emit a JSON envelope instead of the text rows |
@@ -3952,7 +3976,7 @@ mnemonic xpub-search path-of-xpub \
 | `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
 | `--ms1-stdin` | read ms1 card from stdin (single chunk) |
 | `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
-| `--passphrase <P>` | BIP-39 passphrase (inline); emits argv-leakage advisory |
+| `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value emits the argv-leakage advisory |
 | `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped) |
 | `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
 | `--language <LANGUAGE>` | BIP-39 wordlist (default `english`; same options as `seed-xor`) |
@@ -4051,7 +4075,7 @@ demotion](#mnemonic-repair-ms1-substitution-demotion).
 |---|---|
 | Inline `--phrase <v>` | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
 | Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <v>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 
 #### Candidate path set
 
@@ -4457,7 +4481,7 @@ substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 |---|---|
 | Inline `--phrase <v>` | `warning: secret material on argv (--phrase) — pipe via --phrase-stdin to avoid /proc/$PID/cmdline exposure` |
 | Inline `--ms1 <v>` | `warning: secret material on argv (--ms1) — pipe via --ms1-stdin to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <v>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | Every invocation (before search starts) | `note: passphrase verification searches the standard BIP-44/49/84/86 + BIP-48 templates × account range; if the wallet uses a non-standard path, supply --add-path or use \`xpub-search path-of-xpub\` to find the path first.` |
 
 ## `mnemonic compare-cost`

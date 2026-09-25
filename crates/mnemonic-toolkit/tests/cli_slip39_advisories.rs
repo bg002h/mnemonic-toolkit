@@ -111,7 +111,7 @@ fn advisory_split_inline_passphrase_emits_argv_leakage_1c() {
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
         stderr.contains(
-            "warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure"
+            "warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)"
         ),
         "expected row 1c stem byte-faithful; got: {stderr}"
     );
@@ -206,7 +206,7 @@ fn advisory_combine_inline_passphrase_emits_argv_leakage_1e() {
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
         stderr.contains(
-            "warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure"
+            "warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)"
         ),
         "expected row 1e stem byte-faithful; got: {stderr}"
     );
