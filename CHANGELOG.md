@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
-## mnemonic-toolkit [Unreleased]
+## mnemonic-toolkit [0.105.1] — 2026-09-25
 
 ### Fixed
 - **macOS: a file that IS stdin was not recognised as stdin** (F-687e). The
