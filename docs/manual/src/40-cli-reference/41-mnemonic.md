@@ -127,7 +127,19 @@ stderr, what you type is not echoed (where the terminal allows; otherwise
 the prompt adds `(input will be visible)`), and one line is read — press
 Enter, not Ctrl-D. Ctrl-C at the prompt restores the terminal's echo before
 the command exits (by the signal, status 130 in a shell); so do SIGTERM,
-SIGHUP and SIGQUIT. With stdin a pipe or file nothing is printed.
+SIGHUP and SIGQUIT. Anything already typed or pasted after that one line —
+the rest of a multi-line paste, or type-ahead — is read (for 0.1 s after
+input stops), shown on stderr and discarded, so the shell never runs it or
+records it in its history:
+
+```text
+note: discarded 2 line(s) typed after the passphrase (not run, not used):
+line2
+line3
+```
+
+With stdin a pipe or file nothing is printed and nothing beyond what the
+command consumes is read.
 `verify-bundle --ms1 -` reads its ms1 the same way (`Enter ms1:`, echo off).
 
 ### `--allow-argv-secret`

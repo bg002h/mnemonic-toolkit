@@ -10,6 +10,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ### Changed
 
+- **A terminal prompt drains what was pasted or typed after the line, and
+  shows it** (F-687c, operator ruling 2026-09-25: "Yes to the paste question
+  but print what was dropped on stderr"). On every prompt (`Enter
+  passphrase:`, `Enter BIP-38 passphrase:`, `Enter decryption password:`,
+  `verify-bundle`'s `Enter ms1:`), after the one line is read and while the
+  prompt's mode (echo off, signal handlers) is still in force, any input
+  already pending is read (non-canonical, 0.1 s after input stops), printed
+  on stderr as `note: discarded N line(s) typed after the <what> (not run,
+  not used):` followed by the text, and the input queue is flushed — so the
+  shell never runs a pasted second line or records it in its history.
+  Nothing pending: no output. Pipes and files: unchanged, nothing extra read.
+  Ctrl-C during the drain still restores the terminal and exits by SIGINT.
+
 - **BREAKING (behaviour): the F-687 `--passphrase` rule now also governs
   `convert --bip38-passphrase` and `import-wallet` / `electrum-decrypt
   --decrypt-password`** (F-687b, operator ruling 2026-09-25). `-` reads the
