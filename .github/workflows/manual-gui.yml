@@ -154,8 +154,8 @@ jobs:
   # pins the GUI *output* (worked-example stdout/stderr a GUI user sees).
   #
   # The four CLI tags below MUST equal pinned-upstream.toml's
-  # [manual-gui] *-tag-implied fields (toolkit-v0.74.0 / md-cli-v0.11.0 with
-  # --features cli-compiler / ms-cli-v0.13.0 / mk-cli-v0.11.0). A GUI-pin bump
+  # [manual-gui] *-tag-implied fields (toolkit-v0.104.0 / md-cli-v0.20.3 with
+  # --features cli-compiler / ms-cli-v0.19.1 / mk-cli-v0.13.0). A GUI-pin bump
   # re-pins all four here in lockstep with that file (and with Job 1's
   # schema clone).
   #
@@ -191,24 +191,24 @@ jobs:
         run: |
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/descriptor-mnemonic \
-            --tag descriptor-mnemonic-md-cli-v0.11.0 md-cli --features cli-compiler
+            --tag descriptor-mnemonic-md-cli-v0.20.3 md-cli --features cli-compiler
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-secret \
-            --tag ms-cli-v0.13.0 ms-cli
+            --tag ms-cli-v0.19.1 ms-cli
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-key \
-            --tag mk-cli-v0.11.0 mk-cli
+            --tag mk-cli-v0.13.0 mk-cli
 
-      - name: Install GUI-pinned mnemonic binary (toolkit v0.74.0)
+      - name: Install GUI-pinned mnemonic binary (toolkit v0.104.0)
         # The `mnemonic` binary the GUI subprocess-runs on the mnemonic tab.
-        # mnemonic-toolkit-v0.74.0 is the toolkit tag the pinned GUI ships
+        # mnemonic-toolkit-v0.104.0 is the toolkit tag the pinned GUI ships
         # (pinned-upstream.toml [manual-gui] toolkit-tag-implied).
         env:
           DOCBIN_ROOT: ${{ runner.temp }}/docbins
         run: |
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-toolkit \
-            --tag mnemonic-toolkit-v0.74.0 mnemonic-toolkit
+            --tag mnemonic-toolkit-v0.104.0 mnemonic-toolkit
 
       - name: Verify worked-example transcripts against the GUI-pinned tier
         working-directory: docs/manual-gui

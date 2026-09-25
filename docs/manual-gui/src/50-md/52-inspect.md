@@ -7,10 +7,22 @@ view see [`md bytecode`](#md-bytecode).
 
 > **GUI form:** see [GUI Forms › md › inspect](#gui-form-md-inspect).
 
+## Outline {#md-inspect-outline}
+
+- [`--json`](#md-inspect-json) — emit JSON output
+- [`--in`](#md-inspect-in) — read the `md1` strings from a file, one per line
+
 ## `--json` {#md-inspect-json}
 
 Boolean. Emit structured JSON instead of pretty-printed text.
 Default off.
+
+## `--in` {#md-inspect-in}
+
+Path widget. Read the `md1` strings from FILE, one per line, instead of
+the positional (P3 §6b, the file channel added in md 0.20). The
+GUI treats `--in` as an alternative to the positional, which is no
+longer marked required: fill one or the other.
 
 ## Positional `md1-strings`
 

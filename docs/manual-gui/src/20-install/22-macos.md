@@ -14,7 +14,7 @@ extra GPU configuration is required.
    ```
 
    Verify: `cargo --version && rustc --version`. `mnemonic-gui`'s
-   `Cargo.toml` declares MSRV 1.85 (`rust-version = "1.85"`).
+   `Cargo.toml` declares MSRV 1.88 (`rust-version = "1.88"`).
    Apple Silicon users: rustup detects the target automatically; no
    extra `--target` flag needed.
 
@@ -42,8 +42,12 @@ extra GPU configuration is required.
 Path A — install from source via `cargo`:
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-gui.git mnemonic-gui
+cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.62.0 mnemonic-gui
 ```
+
+Always pass `--tag`: without it cargo builds the repository's default
+branch, not the release this manual documents. Building the GUI needs
+`rustc` 1.88 or newer.
 
 Path B — clone and build:
 
@@ -59,7 +63,10 @@ Path C — prebuilt binary from GitHub releases. Every
 macOS these are `mnemonic-gui-${VERSION}-aarch64-macos.tar.gz`
 (Apple Silicon) and `mnemonic-gui-${VERSION}-x86_64-macos.tar.gz`
 (Intel). Download the asset that matches your CPU, extract, and
-place `mnemonic-gui` on your `$PATH`.
+place `mnemonic-gui` on your `$PATH`. The toolkit's installer does
+this for you: `install.sh --only mnemonic-gui` downloads the pinned
+release's binary and refuses it unless it matches that release's
+`SHA256SUMS` file.
 
 :::danger
 **Prebuilt binaries are NOT yet code-signed nor notarised at v1.0.**
@@ -71,7 +78,7 @@ verified" dialog. Workarounds:
   involvement).
 - **Tolerable:** clear the quarantine attribute manually after
   download: `xattr -d com.apple.quarantine mnemonic-gui`. Verify
-  the SHA-256 sum against the release notes BEFORE clearing.
+  the SHA-256 sum against the release's `SHA256SUMS` file BEFORE clearing.
 - **Avoid:** right-click → Open → Open Anyway. This sets a
   per-binary trust without any signature verification, leaving you
   unable to detect tampering on later updates.

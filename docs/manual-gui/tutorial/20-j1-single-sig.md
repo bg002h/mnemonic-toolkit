@@ -29,15 +29,16 @@ below.
 Clicking **Run** does not spawn immediately — the form carries a
 secret, so the **"Confirm secret-bearing run"** modal appears (second
 shot). It lists the exact argument vector, with the phrase shown only as
-`••••`, and the **Copy command** buttons are relabelled *"— reveals
-secret"*. Confirm with the modal's **Run**.
+`••••` and with the `--allow-argv-secret` the GUI adds on Run (a copied
+command leaves it out, so a shell refuses the phrase on argv), and the
+**Copy command** buttons are relabelled *"— reveals secret"*. Confirm with the modal's **Run**.
 
 The populated panel (third shot) carries the three engraving cards on
 standard output: `ms1` (the BIP-39 entropy, BCH-checksummed), `mk1`
 (the account xpub plus its origin), and `md1` (the wallet policy). Each
-card is printed once, grouped into five-character blocks — the default
-`--group-size 5`, the **form you punch or engrave** (pass `--group-size 0`
-for an unbroken single line instead). Standard
+card is printed once, as one unbroken line — the default
+`--group-size 0` (set `--group-size 5` for five-character blocks, the
+**form you punch or engrave**). Standard
 error carries the human-readable engraving panel (fingerprint
 `73c5da0a`, origin path `m/84'/0'/0'`, template `bip84`), a
 `secret material on argv` warning, and the `stdout carries private key

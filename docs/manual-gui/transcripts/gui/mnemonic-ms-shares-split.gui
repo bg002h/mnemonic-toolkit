@@ -1,6 +1,6 @@
 [ mnemonic > ms-shares-split ]
   --group-size      number  -> <unset>
-  --separator       dropdown[space,hyphen,comma]  -> space
+  --separator       dropdown[space]  -> space
   --from            composite[phrase,entropy]  (required) -> phrase=<empty>
   --threshold       number  (required) -> <unset>
   --shares          number  (required) -> <unset>

@@ -1,10 +1,12 @@
 [ ms > split ]
   --group-size  number  -> <unset>
-  --separator   dropdown[space,hyphen,comma]  -> space
+  --separator   dropdown[space]  -> space
   --phrase      text  (secret) -> <masked> [reveal]
   --hex         text  (secret) -> <masked> [reveal]
   --threshold   number  (required) -> <unset>
   --shares      number  (required) -> <unset>
   --language    dropdown[english,japanese,korean,spanish,chinese-simplified,chinese-traditional,french,italian,czech,portuguese]  -> english
   --json        checkbox  -> [ ] off
+  --in          path  -> <empty>
+  --out         path  -> <empty>
   [ Run ]

@@ -8,6 +8,15 @@ numbers.
 
 ## [Unreleased]
 
+**Minor — GUI pin bump `mnemonic-gui-v0.57.0` → `mnemonic-gui-v0.62.0` (F-679), NOT pin-neutral.** The tag pins mnemonic 0.104.0, md 0.20.3, ms 0.19.1 and mk 0.13.0, so the four `*-tag-implied` fields in `pinned-upstream.toml` and the `verify-examples` CLI tier in `.github/workflows/manual-gui.yml` move with it (the workflow had also lagged at toolkit v0.74.0).
+
+- **Corpora re-synced from the tag:** 19 of 61 gallery PNGs, 23 of 61 `.gui` renders (regenerated with the tag's `gui-render`), and the tutorial corpus: 48 of 50 figures and 17 of 98 transcripts moved, and step 14 (2 figures, 3 transcripts) is renamed `tut-j4-14-depth2-refusal` → `tut-j4-14-depth2-export`.
+- **Journey 4 step 14 rewritten:** toolkit 0.104.0 exports the four-leaf depth-2 taptree (its `rust-miniscript` pin carries the PR-#953 fix), so the step shows the export (`…#trqmzhua`) instead of a refusal. Other tutorial prose updated to the new transcripts: J1's cards are printed unbroken (`--group-size` now defaults to `0`), J3's restore note now describes the corrected xpub headers (origin depth and child number, zero parent fingerprint), and J5's canonical descriptor checksum is `#284ufd99`.
+- **Secret on argv:** `mnemonic` and `ms` now refuse a secret on argv unless `--allow-argv-secret` is given. A new §14 subsection describes the GUI-managed opt-in (added on Run, shown in the confirm modal, never in Copy command). The `ms` worked-example transcripts use the Run argv, and three `ms` steps that claimed no run-confirm modal now say it fires (the `ms1` positional is secret-bearing, as it has been since GUI v0.34.0).
+- **New schema surface documented** (39 anchors): md `--in` on inspect/decode/verify/bytecode/repair, `encode --in/--out/--experimental`, `verify --path/--experimental`, `address --path/--from-mk1/--from-mk1-file/--seat/--experimental`; mk `encode --chunk-set-id`; `export-wallet --allow` (5 values) and `--count`, the `bitcoin-core-addresses` format on export-wallet and restore, `restore --recalibrate-threads`; the `(none)` entries on `xpub-search address-of-xpub --address-type/--network`; ms `--in` on all 8 material verbs and `--out` on encode/repair/split.
+- **`--separator` offers `space` only** on `mnemonic`, `md` and `ms` (the `hyphen`/`comma` variant sections are removed; `mk` keeps all three), and the `mnemonic` group-size defaults read `0`.
+- **Install pages:** the GUI's `cargo install --git` lines are pinned to `--tag mnemonic-gui-v0.62.0`, the stated GUI MSRV is corrected to 1.88, and Path C points at the toolkit installer's checksum-verified GUI install.
+
 ## [1.3.1] - 2026-07-05
 
 **Patch — `gui_example.pdf` tutorial prose-accuracy fixes** (no figure/transcript/code change; corpus + gates byte-unchanged). A prose-accuracy sweep against the byte-committed transcripts + figures — prompted by a user-caught error — found three un-gated narration mistakes (the output *blocks* are byte-verified, the prose describing them was not):

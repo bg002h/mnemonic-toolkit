@@ -16,8 +16,10 @@ positional — an `ms1` is single-chunk by codex32 specification (HRP
 
 ## Outline {#ms-repair-outline}
 
-- [`--ms1`](#ms-repair-ms1) — the `ms1` string to repair (required; `-` reads stdin; secret-bearing)
+- [`--ms1`](#ms-repair-ms1) — the `ms1` string to repair (`-` reads stdin; secret-bearing; or use `--in`)
 - [`--json`](#ms-repair-json) — emit a single JSON envelope on stdout instead of the text report
+- [`--in`](#ms-repair-in) — read the `ms1` string from a file
+- [`--out`](#ms-repair-out) — write the artifact to a file (owner-only `0600`, overwrites)
 
 ## `--ms1` {#ms-repair-ms1}
 
@@ -38,6 +40,23 @@ deliberate GUI-side `secret: true` override — see
 Boolean. Emit a single JSON envelope on stdout instead of the
 text-form report; the envelope schema byte-matches
 `mnemonic repair --json`'s `RepairJson` shape. Default off.
+
+## `--in` {#ms-repair-in}
+
+Path widget. Read the `ms1` string from FILE instead of the
+positional (or `--ms1`). It is the private channel that frees stdin: a path on
+argv is not secret, so a run that uses it needs no
+`--allow-argv-secret` and shows no run-confirm modal. The GUI lets only
+one input source through: the first filled source wins and the others
+grey out, because the CLI refuses `--in` alongside them.
+
+## `--out` {#ms-repair-out}
+
+Path widget. Write the canonical artifact to FILE, **owner-only
+(`0600`)** — the mode is set on the open file, so an existing `0644`
+target is tightened too. It **overwrites** and truncates. Not to be
+confused with [`ms gen-man --out`](#ms-gen-man), which takes a
+directory.
 
 ## Exit codes
 

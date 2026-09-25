@@ -19,6 +19,7 @@ is the unshared sentinel and is rejected). The toolkit front-end is
 
 - [`--to`](#ms-combine-to) — output form for the recovered secret (`phrase`|`entropy`|`ms1`; default `phrase`)
 - [`--json`](#ms-combine-json) — emit a single JSON object on stdout instead of text
+- [`--in`](#ms-combine-in) — read the shares from a file, one per line
 
 ## Positional `shares`
 
@@ -59,6 +60,15 @@ form, threshold digit `0`).
 
 Boolean. Emit a single JSON object on stdout instead of the text
 form. Default off.
+
+## `--in` {#ms-combine-in}
+
+Path widget. Read the shares from FILE, **one per line**, instead of
+the positional or stdin. Display separators are stripped per line, as
+the stdin path already does, so a grouped share typed back off metal
+re-ingests. A path on argv is not secret, so a run that uses it needs
+no `--allow-argv-secret`. The GUI greys out the other input source once
+one is filled.
 
 ## Worked example — recombine 2-of-3
 

@@ -6,55 +6,65 @@ cheap, private cooperative **key-path** spend and hides the fallbacks in
 journey builds the Taproot twin of Journey 3's vault: the same four
 timelock/hash/multisig tiers as fallbacks, plus a distinct cooperative
 internal key `Kint`, using `multi_a` in place of `multi` — **twelve
-distinct keys**. Along the way it teaches three refusals and two
-comparisons: the depth-2 taptree the shipped binary declines, the
-BSMS format Taproot cannot use, a `wsh`-vs-`tr` cost table, and a
-NUMS-point Taproot multisig for wallets with no cooperative signer.
+distinct keys**. Along the way it exports the four-leaf (depth-2)
+layout, meets one refusal — the BSMS format Taproot cannot use — and
+makes two comparisons: a `wsh`-vs-`tr` cost table, and a NUMS-point
+Taproot multisig for wallets with no cooperative signer.
 This is `Examples.pdf` section 6.
 
 > All keys here are **public** watch-only xpubs; no secret is typed in
 > this journey.
 
-## Depth-2 refusal {#tut-j4-14-depth2-refusal}
+## Four leaves: a depth-2 taptree {#tut-j4-14-depth2-export}
 
-The tidiest Taproot layout is one tier per leaf — four leaves — but
-that is a **depth-2** taptree, and the shipped `rust-miniscript` pin
-mis-formats depth-≥2 taptrees (the upstream PR-#953 bug), so the toolkit
-refuses such a descriptor up front rather than emit a malformed one.
+The tidiest Taproot layout is one tier per leaf — four leaves, which
+makes a **depth-2** taptree: `{{tier 1, tier 2}, {tier 3, tier 4}}`
+under the cooperative internal key `Kint` (`[73c5da0a/84'/0'/4']`).
+Each spend then reveals exactly one tier. Earlier toolkit releases
+refused this descriptor up front, because the `rust-miniscript` they
+pinned mis-formatted depth-≥2 taptrees (the upstream PR-#953 bug). The
+revision toolkit 0.104.0 pins carries that fix, so the tree now
+exports.
+
 Select **Export Wallet (watch-only)**, take the Template drop-down's
-**`(none)`** entry, and load the four-leaf `tr(…)` descriptor. The
-filled form is below.
+**`(none)`** entry, load the four-leaf `tr(…)` descriptor, and set
+**`--format`** `descriptor`. The filled form is below.
 
-The run refuses with exit 2: `error: export-wallet script-type derive:
-taptree branch must have 2 children, but found 1`. The fix, applied in
-the next step, is a **depth-1** tree (two leaves) that packs two tiers
-per leaf with `or_i`.
+The run exits 0. Standard output is the canonical four-leaf descriptor,
+checksum `…#trqmzhua`: the two `after(…)` + hashlock tiers pair under
+one branch and the two `older(…)` tiers under the other, each leaf a
+single `and_v(…, multi_a(…))`. Standard error carries only the
+watch-only note — every key here is public.
 
-![GUI form (screenshot)](../figures/tutorial/tut-j4-14-depth2-refusal-form.png)
+![GUI form (screenshot)](../figures/tutorial/tut-j4-14-depth2-export-form.png)
 
-![Output pane after Run (screenshot)](../figures/tutorial/tut-j4-14-depth2-refusal-run.png)
+![Output pane after Run (screenshot)](../figures/tutorial/tut-j4-14-depth2-export-run.png)
 
 **Output (stdout):**
 
-```{.text include="tutorial/tut-j4-14-depth2-refusal.stdout.txt"}
+```{.text include="tutorial/tut-j4-14-depth2-export.stdout.txt"}
 (captured transcript — included at build time)
 ```
 
 **Standard error (stderr):**
 
-```{.text include="tutorial/tut-j4-14-depth2-refusal.stderr.txt"}
+```{.text include="tutorial/tut-j4-14-depth2-export.stderr.txt"}
 (captured transcript — included at build time)
 ```
 
 **Exit code:**
 
-```{.text include="tutorial/tut-j4-14-depth2-refusal.exit.txt"}
+```{.text include="tutorial/tut-j4-14-depth2-export.exit.txt"}
 (captured transcript — included at build time)
 ```
 
+The rest of this journey works with the two-leaf (depth-1) twin that
+`Examples.pdf` section 6 engraves: the same four tiers, packed two per
+leaf with `or_i`.
+
 ## Canonicalise the descriptor {#tut-j4-15-canonicalise}
 
-The depth-1 Taproot descriptor validates. It keeps the same four tiers
+Now canonicalise the depth-1 twin. It keeps the same four tiers
 but arranges them as two script leaves — Leaf A = tiers 1 or 2
 (absolute-lock + hashlock), Leaf B = tiers 3 or 4 (relative-lock) —
 under a real cooperative internal key `Kint` (`[73c5da0a/84'/0'/4']`).
@@ -187,7 +197,7 @@ to load into a blank Core descriptor wallet.
 
 ## BSMS unsupported for Taproot {#tut-j4-19-bsms-unsupported}
 
-A second teaching refusal. Ask `export-wallet` for **`--format`** `bsms`
+A teaching refusal. Ask `export-wallet` for **`--format`** `bsms`
 on the Taproot descriptor and it declines with exit 2: `error: --format
 bsms does not support taproot (P2trMulti); BIP-129 §1 prerequisites do
 not yet include BIP-386…` The message points you at the working paths

@@ -1,1 +1,1 @@
-$MS_BIN decode ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
+$MS_BIN decode --allow-argv-secret -- ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f

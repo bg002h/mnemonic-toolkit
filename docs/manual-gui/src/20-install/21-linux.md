@@ -10,7 +10,7 @@ graphics-stack notes you may need.
 ## Prerequisites
 
 1. **A working Rust toolchain.** `mnemonic-gui`'s `Cargo.toml`
-   declares MSRV 1.85 (`rust-version = "1.85"`). Install via `rustup`:
+   declares MSRV 1.88 (`rust-version = "1.88"`). Install via `rustup`:
 
    ```sh
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -54,8 +54,12 @@ graphics-stack notes you may need.
 Path A — install from source via `cargo` (recommended pre-v1.0):
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-gui.git mnemonic-gui
+cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.62.0 mnemonic-gui
 ```
+
+Always pass `--tag`: without it cargo builds the repository's default
+branch, not the release this manual documents. Building the GUI needs
+`rustc` 1.88 or newer.
 
 This compiles the source and writes `mnemonic-gui` into
 `~/.cargo/bin/`. Ensure that directory is on your `$PATH` (most
@@ -77,7 +81,11 @@ Linux these are `mnemonic-gui-${VERSION}-x86_64-linux.tar.gz` and
 `.github/workflows/build.yml`). Download the asset that matches
 your CPU, extract, and place `mnemonic-gui` somewhere on your
 `$PATH`. Prebuilt binaries are unsigned at v1.0; verify the
-SHA-256 sum against the release notes.
+SHA-256 sum against the release's `SHA256SUMS` file. The toolkit's
+installer does this path for you: `install.sh --only mnemonic-gui`
+downloads the pinned release's binary, refuses it unless it matches
+`SHA256SUMS`, and on Linux falls back to a source build where your
+glibc is older than 2.18 (or on musl).
 
 Verify with `mnemonic-gui --version`.
 

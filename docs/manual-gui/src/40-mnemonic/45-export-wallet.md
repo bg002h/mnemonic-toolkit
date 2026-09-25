@@ -38,6 +38,8 @@ whatever shape your spending wallet imports.
 - [`--bsms-form`](#mnemonic-export-wallet-bsms-form) — BSMS Round-2 emit shape (`4-line` default / `2-line`)
 - [`--from-import-json`](#mnemonic-export-wallet-from-import-json) — emit from an `import-wallet --json` envelope
 - [`--from-import-json-index`](#mnemonic-export-wallet-from-import-json-index) — pick one entry from a multi-entry import envelope
+- [`--allow`](#mnemonic-export-wallet-allow) — reviewed opt-out of one funds-safety rule (repeating; only `sigless-branch` is enforced here)
+- [`--count`](#mnemonic-export-wallet-count) — addresses per chain for `--format bitcoin-core-addresses` (default 20)
 
 ## `--template` {#mnemonic-export-wallet-template}
 
@@ -280,7 +282,7 @@ add-on documented at
 
 ## `--format` {#mnemonic-export-wallet-format}
 
-The output format. Default `bitcoin-core`. Eight allowed values
+The output format. Default `bitcoin-core`. Twelve allowed values
 covering the major spending-wallet ecosystems.
 
 ### Outline {#mnemonic-export-wallet-format-outline}
@@ -296,6 +298,7 @@ covering the major spending-wallet ecosystems.
 - [`green`](#mnemonic-export-wallet-format-green)
 - [`bsms`](#mnemonic-export-wallet-format-bsms)
 - [`descriptor`](#mnemonic-export-wallet-format-descriptor)
+- [`bitcoin-core-addresses`](#mnemonic-export-wallet-format-bitcoin-core-addresses)
 
 ### `bitcoin-core` {#mnemonic-export-wallet-format-bitcoin-core}
 
@@ -305,6 +308,16 @@ Bitcoin Core `importdescriptors` JSON. Default. Includes the
 `--bitcoin-core-version` to target Core 24 or 25 (the latter is
 default; the difference is in the `active` / `next_index`
 optional fields).
+
+### `bitcoin-core-addresses` {#mnemonic-export-wallet-format-bitcoin-core-addresses}
+
+An `addr()` watch list for Bitcoin Core's `importdescriptors`, rather
+than the wallet descriptor: [`--count`](#mnemonic-export-wallet-count)
+receive plus `--count` change addresses (default 20 each). It is the
+only Bitcoin Core route that survives a wallet with a signature-free
+spend path — Core's sanity rule has nothing to object to in a bare
+scriptPubKey. The list is **fixed**: Core cannot derive past it,
+because the file holds addresses, not the descriptor.
 
 ### `bip388` {#mnemonic-export-wallet-format-bip388}
 
@@ -503,6 +516,66 @@ this as a Path widget; `stdio_sentinel: true`.
 (v0.27.0) Pick a specific entry from a multi-entry envelope array;
 required when the envelope has more than one entry. The GUI renders
 this as a Number widget; no `?` help-icon.
+
+## `--allow` {#mnemonic-export-wallet-allow}
+
+Repeating Dropdown. A reviewed opt-out of **one** funds-safety sanity
+rule per occurrence, with the same five-value vocabulary as
+[`build-descriptor --allow`](#mnemonic-build-descriptor). On this
+surface only `sigless-branch` is enforced: asking for any of the other
+four prints a note that the descriptor was not checked against that
+rule, and changes nothing. The emit is never silent — a waived rule
+that actually fires is named in a stderr warning, and the emitted
+wallet file records no allowance.
+
+**Scope:** it permits *emitting* a wallet file for a wallet with an
+anyone-can-spend path. It does not make any wallet application accept
+that file: Bitcoin Core, Nunchuk and Sparrow enforce the same rule on
+import, and in Core it cannot be waived. Use it for inspection,
+archival and parity; for a Core watch-only of such a wallet, use
+[`--format bitcoin-core-addresses`](#mnemonic-export-wallet-format-bitcoin-core-addresses).
+
+### Outline {#mnemonic-export-wallet-allow-outline}
+
+- [`malleable`](#mnemonic-export-wallet-allow-malleable)
+- [`mixed-timelock`](#mnemonic-export-wallet-allow-mixed-timelock)
+- [`repeated-keys`](#mnemonic-export-wallet-allow-repeated-keys)
+- [`resource-limit`](#mnemonic-export-wallet-allow-resource-limit)
+- [`sigless-branch`](#mnemonic-export-wallet-allow-sigless-branch)
+
+### `malleable` {#mnemonic-export-wallet-allow-malleable}
+
+A malleable satisfaction. Not enforced by `export-wallet`: the flag
+only produces the "not checked" note here.
+
+### `mixed-timelock` {#mnemonic-export-wallet-allow-mixed-timelock}
+
+An unspendable mixed height/time timelock path. Not enforced by
+`export-wallet` (note only).
+
+### `repeated-keys` {#mnemonic-export-wallet-allow-repeated-keys}
+
+A key used more than once. Not enforced by `export-wallet` (note
+only).
+
+### `resource-limit` {#mnemonic-export-wallet-allow-resource-limit}
+
+Exceeds script resource limits. Not enforced by `export-wallet` (note
+only).
+
+### `sigless-branch` {#mnemonic-export-wallet-allow-sigless-branch}
+
+An anyone-can-spend path — a spend path with no signature, such as a
+bare hashlock + timelock tier. The one rule `export-wallet` enforces;
+waiving it lets the file be emitted, with the warning described above.
+
+## `--count` {#mnemonic-export-wallet-count}
+
+Number widget; default `20` (the BIP-44 gap limit). Addresses **per
+chain** for
+[`--format bitcoin-core-addresses`](#mnemonic-export-wallet-format-bitcoin-core-addresses):
+N receive and N change, indices `0..N-1`. Ignored by every other
+format.
 
 ## Worked example — Bitcoin Core watch-only from canonical bundle
 

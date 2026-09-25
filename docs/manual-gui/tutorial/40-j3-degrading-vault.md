@@ -174,11 +174,11 @@ The panel reconstructs the descriptor and its **first receive
 address** — `bc1q4g7564xxd9hj68hqwu5e558cqafhsklerkr0asfzqp6puq74veesrp6qss`,
 identical to the BSMS address from the BSMS step. That match is the proof: the
 `md1` card set round-trips this entire eleven-key, four-branch policy
-without loss. (The restore re-serialises each key as a depth-0
-`xpub661My…` master, so the descriptor *string* differs from the
-canonicalise step while the addresses are the same wallet.) Unlike the depth-2 Taproot
-tree in Journey 4, this degrading-multisig policy restores on the
-shipped binary with no experimental build.
+without loss. (The restore re-serialises each key with its origin
+depth and child number but a zero parent fingerprint — the card does
+not carry it — so the descriptor *string* and checksum differ from the
+canonicalise step while the keys, and so the addresses, are the same
+wallet.)
 
 ![GUI form (screenshot)](../figures/tutorial/tut-j3-13-restore-form.png)
 

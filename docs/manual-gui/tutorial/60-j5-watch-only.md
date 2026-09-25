@@ -53,7 +53,7 @@ avoids the single-sig-template refusal in `--md1` mode), set
 **`--format`** to `descriptor`, and let the `md1` chunks chain in from
 the bundle-JSON step's run. The filled form is below.
 
-The panel returns `wsh(sortedmulti(2,…))#yjp7hj7w` on standard output —
+The panel returns `wsh(sortedmulti(2,…))#284ufd99` on standard output —
 the plain descriptor other wallets import — and the restore summary
 (descriptor, first receive address, per-cosigner fingerprints,
 `UNVERIFIED` reminder) on standard error. The first address matches

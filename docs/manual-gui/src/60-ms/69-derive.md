@@ -29,6 +29,7 @@ depend on [`--language`](#ms-derive-language); when omitted,
 - [`--passphrase-stdin`](#ms-derive-passphrase-stdin) — read the BIP-39 passphrase from stdin
 - [`--language`](#ms-derive-language) — BIP-39 wordlist (load-bearing; default `english`)
 - [`--json`](#ms-derive-json) — emit a single JSON object on stdout instead of text
+- [`--in`](#ms-derive-in) — read the `ms1` string from a file
 
 ## Positional `ms1`
 
@@ -38,6 +39,15 @@ level; when omitted or set to a literal `-`, the binary reads the
 string from stdin. Alternative to [`--hex`](#ms-derive-hex) /
 [`--phrase`](#ms-derive-phrase). Any non-empty value triggers the
 run-confirm modal.
+
+## `--in` {#ms-derive-in}
+
+Path widget. Read the `ms1` string from FILE instead of the
+positional (or `--phrase` / `--hex`). It is the private channel that frees stdin: a path on
+argv is not secret, so a run that uses it needs no
+`--allow-argv-secret` and shows no run-confirm modal. The GUI lets only
+one input source through: the first filled source wins and the others
+grey out, because the CLI refuses `--in` alongside them.
 
 ## `--hex` {#ms-derive-hex}
 

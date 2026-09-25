@@ -74,15 +74,29 @@
 # src/40-mnemonic/4d-restore.md) so gui-schema-coverage's per-variant
 # anchor stays satisfied.
 #
+# v0.57.0 -> v0.62.0 (F-679): NOT pin-neutral. The tag's own
+# pinned-upstream.toml pins mnemonic-toolkit-v0.104.0 /
+# descriptor-mnemonic-md-cli-v0.20.3 / ms-cli-v0.19.1 / mk-cli-v0.13.0
+# (verified against the tag clone at 9f569e1), so all four *-tag-implied
+# fields below move, and with them the verify-examples CLI tier in
+# .github/workflows/manual-gui.yml (which had also lagged at toolkit
+# v0.74.0). The bump re-syncs 19 of 61 gallery PNGs, the tutorial corpus
+# (step 14 renamed tut-j4-14-depth2-refusal -> tut-j4-14-depth2-export:
+# toolkit v0.104.0 exports a depth-2 taptree), 23 of 61 .gui renders, and
+# re-derives the CLI worked-example transcripts: mnemonic and ms now refuse
+# secret material on argv unless --allow-argv-secret is given (the GUI's
+# Run path adds it; Copy command never does), --group-size defaults to 0,
+# and --separator offers `space` only on mnemonic/md/ms.
+#
 # Source-path resolution for the lint:
 #   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
 #   default `../mnemonic-gui` relative to docs/manual-gui/.
 
 [mnemonic-gui]
-tag = "mnemonic-gui-v0.57.0"
+tag = "mnemonic-gui-v0.62.0"
 
 [manual-gui]
-toolkit-tag-implied = "mnemonic-toolkit-v0.75.0"
-md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.11.0"
-ms-cli-tag-implied  = "ms-cli-v0.13.0"
-mk-cli-tag-implied  = "mk-cli-v0.11.0"
+toolkit-tag-implied = "mnemonic-toolkit-v0.104.0"
+md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.20.3"
+ms-cli-tag-implied  = "ms-cli-v0.19.1"
+mk-cli-tag-implied  = "mk-cli-v0.13.0"

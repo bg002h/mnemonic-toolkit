@@ -1,1 +1,1 @@
-$MS_BIN encode --hex 00000000000000000000000000000000 --no-engraving-card
+$MS_BIN encode --allow-argv-secret --hex 00000000000000000000000000000000 --no-engraving-card

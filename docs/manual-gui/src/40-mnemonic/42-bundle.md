@@ -27,7 +27,7 @@ longer the load-bearing element of the on-screen security model.
 
 ## Outline {#mnemonic-bundle-outline}
 
-- [`--group-size`](#mnemonic-bundle-group-size) — mstring display grouping width (default 5; `0` = unbroken)
+- [`--group-size`](#mnemonic-bundle-group-size) — mstring display grouping width (default 0 = unbroken; `5` for engraving blocks)
 - [`--separator`](#mnemonic-bundle-separator) — grouping separator for `--group-size` (default `space`)
 - [`--network`](#mnemonic-bundle-network) — Bitcoin network for derivations + address encoding (required)
 - [`--template`](#mnemonic-bundle-template) — pre-built descriptor template (required unless `--descriptor*`)
@@ -53,7 +53,8 @@ longer the load-bearing element of the on-screen security model.
 mstring display grouping. Inserts a separator every N characters in
 the emitted `ms1` / `mk1` / `md1` card strings to make them easier to
 engrave and read aloud during verification. `0` = unbroken (single
-dense line); default `5`. **Display only** — the `--json` envelope and
+dense line), the default since toolkit 0.104.0; set `5` for the
+five-character blocks you engrave. **Display only** — the `--json` envelope and
 the forensic strings `verify-bundle` consumes always stay unbroken, so
 grouping never changes the wire payload. The same flag (with
 `--separator`) is also accepted on [`convert`](#mnemonic-convert-group-size)
@@ -65,28 +66,20 @@ The GUI renders this as a Number widget (range 0..); no `?` help-icon
 ## `--separator` {#mnemonic-bundle-separator}
 
 The grouping separator inserted by `--group-size`. Default `space`.
-Dropdown with three values; the GUI renders this flag with a `?`
+Dropdown with one value; the GUI renders this flag with a `?`
 help-icon deep-linking here.
+Only `space` is offered: `mnemonic` retired `hyphen` and `comma`, and
+the CLI refuses them for new cards. Intake still strips any separator,
+so an already-engraved hyphen- or comma-grouped card still re-ingests.
 
 ### Outline {#mnemonic-bundle-separator-outline}
 
 - [`space`](#mnemonic-bundle-separator-space)
-- [`hyphen`](#mnemonic-bundle-separator-hyphen)
-- [`comma`](#mnemonic-bundle-separator-comma)
 
 ### `space` {#mnemonic-bundle-separator-space}
 
 Group with an ASCII space (U+0020). Default. The dense,
 read-aloud-friendly grouping used by the engraving panel.
-
-### `hyphen` {#mnemonic-bundle-separator-hyphen}
-
-Group with a hyphen (`-`). Useful when the surrounding medium already
-uses spaces for other delimiters.
-
-### `comma` {#mnemonic-bundle-separator-comma}
-
-Group with a comma (`,`).
 
 ## `--network` {#mnemonic-bundle-network}
 
@@ -613,16 +606,16 @@ The output panel renders the three card strings on stdout:
 
 ```{.text include="42-bundle-singlesig-bip84.out"}
 # ms1 (entropy, BCH-checksummed)
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
 # mk1 (xpub + origin)
-mk1qp rsqhp qqsq3 cqtsl eeutk s2qvz g3vs7 0mejh k622w s2kgd emj2c d8zwj 2skzx 2wq0q w70l4 q99vd yh5x0 z8v4y slsp8 qp3yx g3dpe 854wq 4
-mk1qp rsqhp p0f30 mtxzd 65mvw cur9u sdatw uqvq6 z70r9 nwrgk 6xn6l 8gy6n wa2n9 77sw6 zh34r ma0nh
+mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4
+mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh
 
 # md1 (wallet policy)
-md1fg dxlpq pqpm6 jzzqq vqpdq w0za5 zs4gy y55aq 4vsmn hy4s6 wyayp u34c7 raqu8 np
-md1fg dxlpq f2zcg efcpu pmel7 5q543 5j7se ugaj5 jr7qy ur6vt 76es5 cdeyr q7zdy 0d
-md1fg dxlpq 3xa2d k8vwp j7gx7 4hwqx qdp08 3jehp 5tdrf a0n5z dfkqc dlrvn h5r62 jn
+md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np
+md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d
+md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn
 ```
 
 Plus the engraving-card panel on stderr (rendered in the output

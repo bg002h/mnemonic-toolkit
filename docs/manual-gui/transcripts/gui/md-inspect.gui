@@ -1,4 +1,5 @@
 [ md > inspect ]
   --json       checkbox  -> [ ] off
-  md1-strings  positional...  (required) -> <empty>
+  --in         path  -> <empty>
+  md1-strings  positional...  -> <empty>
   [ Run ]

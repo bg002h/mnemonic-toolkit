@@ -33,7 +33,7 @@ of failure — do it on an airgapped machine and re-disperse afterward.
 
 ## `--group-size` {#mnemonic-ms-shares-combine-group-size}
 
-Number widget (0..65535; default 5). Display grouping for a `--to ms1`
+Number widget (0..65535; default 0, unbroken). Display grouping for a `--to ms1`
 recovery: break the recovered `ms1` string into groups of N characters.
 Cosmetic only — intake strips separators. `0` emits an unbroken single
 line. No effect on `--to phrase` / `--to entropy` output.
@@ -41,26 +41,16 @@ line. No effect on `--to phrase` / `--to entropy` output.
 ## `--separator` {#mnemonic-ms-shares-combine-separator}
 
 Dropdown. The display-grouping separator keyword for a `--to ms1`
-recovery (default `space`). Three allowed values. Cosmetic and
+recovery (default `space`, the only value). Cosmetic and
 non-load-bearing. The `?` help-icon deep-links here.
 
 ### Outline {#mnemonic-ms-shares-combine-separator-outline}
 
 - [`space`](#mnemonic-ms-shares-combine-separator-space)
-- [`hyphen`](#mnemonic-ms-shares-combine-separator-hyphen)
-- [`comma`](#mnemonic-ms-shares-combine-separator-comma)
 
 ### `space` {#mnemonic-ms-shares-combine-separator-space}
 
 ASCII space between groups (default).
-
-### `hyphen` {#mnemonic-ms-shares-combine-separator-hyphen}
-
-ASCII hyphen (`-`) between groups.
-
-### `comma` {#mnemonic-ms-shares-combine-separator-comma}
-
-ASCII comma (`,`) between groups.
 
 ## `--share` {#mnemonic-ms-shares-combine-share}
 

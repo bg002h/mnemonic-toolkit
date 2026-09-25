@@ -15,6 +15,7 @@ end-to-end engraving verification.
 - [`--phrase`](#ms-verify-phrase) — original BIP-39 phrase to round-trip-check (secret-bearing; exit 4 on mismatch)
 - [`--language`](#ms-verify-language) — BIP-39 wordlist for `--phrase` (default `english`)
 - [`--json`](#ms-verify-json) — emit success JSON on stdout
+- [`--in`](#ms-verify-in) — read the `ms1` string from a file
 
 ## `--phrase` {#ms-verify-phrase}
 
@@ -111,6 +112,15 @@ The `status` field is `valid` for the no-phrase path and
 emit the standard `ms-cli` error envelope on stdout under `--json`
 (not the success object).
 
+## `--in` {#ms-verify-in}
+
+Path widget. Read the `ms1` string from FILE instead of the
+positional. It is the private channel that frees stdin: a path on
+argv is not secret, so a run that uses it needs no
+`--allow-argv-secret` and shows no run-confirm modal. The GUI lets only
+one input source through: the first filled source wins and the others
+grey out, because the CLI refuses `--in` alongside them.
+
 ## Positional `ms1`
 
 A single `ms1` string to verify. Optional at the clap level; when
@@ -127,8 +137,10 @@ stdin.
    ```
 
 3. Leave `--phrase` empty.
-4. Click **Run** (no run-confirm modal — `--phrase` is empty so
-   the form has no secret-bearing value).
+4. Click **Run**. The run-confirm modal fires, because the `ms1`
+   positional is secret-bearing even with `--phrase` empty; its argv
+   shows the GUI-added `--allow-argv-secret` (see
+   [Secret handling](#secret-argv-opt-in)). Confirm to proceed.
 
 The output panel emits the simple OK line on stdout and exit 0:
 

@@ -9,10 +9,24 @@ candidate `ms1` fails.
 
 > **GUI form:** see [GUI Forms › ms › inspect](#gui-form-ms-inspect).
 
+## Outline {#ms-inspect-outline}
+
+- [`--json`](#ms-inspect-json) — emit a single JSON object on stdout
+- [`--in`](#ms-inspect-in) — read the `ms1` string from a file
+
 ## `--json` {#ms-inspect-json}
 
 Boolean. Emit JSON output instead of the labeled-block text verdict
 and fields. Default off.
+
+## `--in` {#ms-inspect-in}
+
+Path widget. Read the `ms1` string from FILE instead of the
+positional. It is the private channel that frees stdin: a path on
+argv is not secret, so a run that uses it needs no
+`--allow-argv-secret` and shows no run-confirm modal. The GUI lets only
+one input source through: the first filled source wins and the others
+grey out, because the CLI refuses `--in` alongside them.
 
 ## Positional `ms1`
 
@@ -32,8 +46,10 @@ form.
    ```
 
 3. Leave `--json` unchecked.
-4. Click **Run** (no run-confirm modal — `ms inspect` has no
-   secret-bearing flag).
+4. Click **Run**. The run-confirm modal fires, because the `ms1`
+   positional is secret-bearing; its argv shows `--allow-argv-secret`
+   right after the subcommand, which the GUI adds on Run (see
+   [Secret handling](#secret-argv-opt-in)). Confirm to proceed.
 
 The output panel renders the verdict line and structured fields
 on stdout:
