@@ -32,7 +32,11 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   stderr, echo is turned off (`ECHO` off, `ECHONL` on; restored afterwards;
   if the terminal refuses, the prompt says `(input will be visible)`), and ONE
   line is read, so Enter finishes the input (before, a terminal needed
-  Ctrl-D). Pipes and files: no prompt, unchanged bytes.
+  Ctrl-D). Pipes and files: no prompt, unchanged bytes. While echo is off,
+  SIGINT/SIGTERM/SIGHUP/SIGQUIT restore the terminal mode and then take their
+  default action, so Ctrl-C at the prompt exits by the signal with echo back
+  on (a signal inherited as ignored stays ignored). Ctrl-D at an empty prompt
+  moves to a fresh line before the empty warning.
 - The shared vectors (`tests/vectors/passphrase_channels.json`, byte-identical
   with mnemonic-secret) grow to 42 cases: empty-warning counts on every case,
   no prompt on any piped case, and the F-691 row below.
@@ -42,8 +46,14 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 - **`verify-bundle --ms1 -` reads the ms1 from stdin** (F-689). Before, the
   `-` went through the display-separator strip, became `""` — the watch-only
   sentinel — and a matching bundle reported a false `result: mismatch`.
-  Empty stdin is refused (it would otherwise mean watch-only); at most one
-  `--ms1 -`, and not beside another stdin reader.
+  Stdin that is empty OR only display separators (`-`, `---`) is refused (it
+  would otherwise strip to `""`, i.e. watch-only); at most one `--ms1 -`, and
+  not beside another stdin reader, including `--descriptor-file /dev/stdin` /
+  `--bundle-json /dev/stdin`. On a terminal it prompts `Enter ms1: ` with echo
+  off, like a passphrase (the ms1 is seed material).
+- **`import-wallet --blob /dev/stdin` beside `--decrypt-password -` or
+  `--decrypt-password-stdin` is refused as two stdin readers** (the blob used
+  to drain stdin, leaving an empty password and a misleading "wrong password").
 
 - **BREAKING (behaviour): `--passphrase -` reads the passphrase from stdin, and
   `--passphrase @env:VAR` from the environment, on every subcommand that takes

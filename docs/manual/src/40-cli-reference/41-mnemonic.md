@@ -125,7 +125,10 @@ and stdin is a terminal, `Enter passphrase:` (for the other flags,
 `Enter BIP-38 passphrase:` / `Enter decryption password:`) is printed on
 stderr, what you type is not echoed (where the terminal allows; otherwise
 the prompt adds `(input will be visible)`), and one line is read — press
-Enter, not Ctrl-D. With stdin a pipe or file nothing is printed.
+Enter, not Ctrl-D. Ctrl-C at the prompt restores the terminal's echo before
+the command exits (by the signal, status 130 in a shell); so do SIGTERM,
+SIGHUP and SIGQUIT. With stdin a pipe or file nothing is printed.
+`verify-bundle --ms1 -` reads its ms1 the same way (`Enter ms1:`, echo off).
 
 ### `--allow-argv-secret`
 
@@ -846,7 +849,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0** (as on [`restore`](#mnemonic-restore)): accepted so existing scripts do not fail, but there is no search-time ceiling any more; the completion reports a measured estimate and progress instead |
 | `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
-| `--ms1 <STRING>` | repeating; one ms1 card |
+| `--ms1 <STRING>` | repeating; one ms1 card. `--ms1 -` reads one card from stdin (at most one; empty or separator-only stdin is refused) |
 | `--mk1 <STRING>` | repeating; one mk1 card |
 | `--md1 <STRING>` | repeating; one md1 card |
 | `--json` | JSON output |

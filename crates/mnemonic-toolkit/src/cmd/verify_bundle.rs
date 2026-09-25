@@ -184,7 +184,10 @@ pub struct VerifyBundleArgs {
     /// cosigner as watch-only; required for middle-cosigner skips
     /// (`--ms1 <s0> --ms1 "" --ms1 <s2>`); emits a one-line stderr
     /// NOTICE per skipped cosigner. Mutually exclusive with
-    /// `--bundle-json`.
+    /// `--bundle-json`. `--ms1 -` reads ONE ms1 from stdin (at most one per
+    /// invocation; on a terminal it prompts `Enter ms1:` with echo off);
+    /// stdin that is empty or only separators is refused, never read as the
+    /// watch-only `""`.
     #[arg(long, action = clap::ArgAction::Append, conflicts_with = "bundle_json")]
     pub ms1: Vec<String>,
 
@@ -320,6 +323,20 @@ pub fn run<W: Write, E: Write>(
             args.slot.iter().any(|s| s.is_stdin_sentinel()),
             "--slot @N.<secret>=-",
         ),
+        // F-687b fold 1 (review M3): the path-is-stdin readers the F-687
+        // guard above lists.
+        (
+            args.bundle_json
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--bundle-json /dev/stdin",
+        ),
+        (
+            args.descriptor_file
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--descriptor-file /dev/stdin",
+        ),
     ])?;
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before HRP validation
@@ -340,14 +357,18 @@ pub fn run<W: Write, E: Write>(
     let ms1_stdin_owned;
     let args: &VerifyBundleArgs = if ms1_dash_count == 1 {
         let mut a = args.clone();
-        let mut raw_in = zeroize::Zeroizing::new(String::new());
-        stdin
-            .read_to_string(&mut raw_in)
-            .map_err(ToolkitError::Io)?;
+        // Same reader as a stdin passphrase: a terminal gets `Enter ms1: `
+        // with echo off (the ms1 is seed material), a pipe is read to EOF.
+        let raw_in = crate::passphrase_input::read_stdin_raw(&crate::passphrase_input::MS1, stdin)?;
         let read = zeroize::Zeroizing::new(raw_in.trim().to_string());
-        if read.is_empty() {
+        // F-687b fold 1 (review M1): judge emptiness on what the value will
+        // BECOME after the display-separator strip below -- stdin of `-` or
+        // `---` would otherwise pass here and strip to the watch-only `""`.
+        if crate::display_grouping::strip_display_separators(&read).is_empty() {
             return Err(ToolkitError::BadInput(
-                "--ms1 -: stdin was empty (an empty --ms1 would mean a watch-only cosigner)".into(),
+                "--ms1 -: stdin was empty or only separators (an empty --ms1 would mean a \
+                 watch-only cosigner)"
+                    .into(),
             ));
         }
         for (v, raw) in a.ms1.iter_mut().zip(ms1_as_written.iter()) {

@@ -371,7 +371,8 @@ pub fn run<R: Read, W: Write, E: Write>(
         .is_some_and(crate::passphrase_input::path_is_stdin)
     {
         if let Some(blob_p) = &args.blob {
-            if blob_p.as_os_str() == "-" {
+            // F-687b fold 1 (review M2): a blob PATH that is stdin too.
+            if blob_p.as_os_str() == "-" || crate::passphrase_input::path_is_stdin(blob_p) {
                 return Err(ToolkitError::BadInput(format!(
                     "--blob=- and {pw_spelling} cannot both read from stdin"
                 )));

@@ -962,9 +962,26 @@ fn slip39_refusal_names_the_dash_spelling() {
 // to exercise it: every other test pipes stdin, which is the no-prompt case.
 // ---------------------------------------------------------------------------
 
-/// Run `bin argv` with stdin on a fresh pty slave; wait for `prompt` on
-/// stderr, then type `typed` on the master. Returns (exit code, stdout,
-/// stderr, everything the terminal displayed = the pty echo).
+/// What a pty run produced.
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+struct PtyRun {
+    code: Option<i32>,
+    /// The signal that killed the child, if one did.
+    signal: Option<i32>,
+    stdout: String,
+    stderr: String,
+    /// Everything the terminal DISPLAYED (the line discipline's echo).
+    shown: Vec<u8>,
+    /// Was ECHO on in the terminal's mode after the child was gone?
+    echo_after: bool,
+}
+
+/// Run `bin argv` on a fresh pty that is the child's CONTROLLING terminal
+/// (setsid + TIOCSCTTY, so a typed Ctrl-C really sends SIGINT). Waits for
+/// `prompt` on stderr, then types `typed` on the master. On a timeout the
+/// child is KILLED before the test fails, so no process is left blocked on
+/// the pty (review M5).
 #[cfg(target_os = "linux")]
 fn run_on_a_terminal(
     bin: &std::path::Path,
@@ -972,11 +989,12 @@ fn run_on_a_terminal(
     env: &[(&str, &str)],
     prompt: &str,
     typed: &[u8],
-) -> (i32, String, String, Vec<u8>) {
+) -> PtyRun {
     use std::io::{Read, Write};
-    use std::os::fd::FromRawFd;
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
     // SAFETY: posix_openpt/grantpt/unlockpt/ptsname on a fd we own.
-    let (mut master, slave) = unsafe {
+    let (mut master, name) = unsafe {
         let m = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY);
         assert!(m >= 0, "posix_openpt");
         assert_eq!(libc::grantpt(m), 0);
@@ -985,20 +1003,35 @@ fn run_on_a_terminal(
             .to_str()
             .unwrap()
             .to_string();
-        let slave = std::fs::OpenOptions::new()
+        (std::fs::File::from_raw_fd(m), name)
+    };
+    let open_slave = || {
+        std::fs::OpenOptions::new()
             .read(true)
             .write(true)
+            .custom_flags(libc::O_NOCTTY)
             .open(&name)
-            .unwrap();
-        (std::fs::File::from_raw_fd(m), slave)
+            .unwrap()
     };
+    use std::os::unix::fs::OpenOptionsExt;
+    // Our own handle on the slave, to read the terminal mode back afterwards.
+    let keep = open_slave();
     let mut cmd = std::process::Command::new(bin);
     cmd.args(argv)
-        .stdin(slave)
+        .stdin(open_slave())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
     for (k, v) in env {
         cmd.env(k, v);
+    }
+    // SAFETY: async-signal-safe calls only, between fork and exec.
+    unsafe {
+        cmd.pre_exec(|| {
+            if libc::setsid() < 0 || libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
     }
     let mut child = cmd.spawn().unwrap();
     let mut err = child.stderr.take().unwrap();
@@ -1015,28 +1048,28 @@ fn run_on_a_terminal(
                 sent = true;
             }
         }
-        if !sent {
-            let _ = tx.send(());
-        }
         String::from_utf8_lossy(&got).into_owned()
     });
-    rx.recv_timeout(std::time::Duration::from_secs(20))
-        .expect("the prompt never appeared on stderr");
+    if rx.recv_timeout(std::time::Duration::from_secs(20)).is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("the prompt {prompt:?} never appeared on stderr (child killed)");
+    }
     master.write_all(typed).unwrap();
     let out = child.wait_with_output().unwrap();
     let stderr = reader.join().unwrap();
-    // Everything the terminal would have DISPLAYED (the line discipline's
-    // echo), read non-blocking now that the child is gone.
-    // SAFETY: fcntl on the master fd we own.
-    unsafe {
-        use std::os::fd::AsRawFd;
+    // SAFETY: fcntl/tcgetattr on fds we own.
+    let echo_after = unsafe {
         let fd = master.as_raw_fd();
         libc::fcntl(
             fd,
             libc::F_SETFL,
             libc::fcntl(fd, libc::F_GETFL) | libc::O_NONBLOCK,
         );
-    }
+        let mut t: libc::termios = std::mem::zeroed();
+        assert_eq!(libc::tcgetattr(keep.as_raw_fd(), &mut t), 0, "tcgetattr");
+        t.c_lflag & libc::ECHO != 0
+    };
     let mut shown = Vec::new();
     let mut buf = [0u8; 256];
     while let Ok(n) = master.read(&mut buf) {
@@ -1045,12 +1078,14 @@ fn run_on_a_terminal(
         }
         shown.extend_from_slice(&buf[..n]);
     }
-    (
-        out.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
+    PtyRun {
+        code: out.status.code(),
+        signal: out.status.signal(),
+        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
         stderr,
         shown,
-    )
+        echo_after,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1374,25 +1409,31 @@ fn a_terminal_gets_a_prompt_and_no_echo() {
     ];
     for pp in [&["--passphrase", "-"][..], &["--passphrase-stdin"][..]] {
         let argv: Vec<&str> = fp.iter().chain(pp.iter()).copied().collect();
-        let (code, stdout, stderr, shown) = run_on_a_terminal(
+        let r = run_on_a_terminal(
             &bin,
             &argv,
             &[("F687_SEED", SEED)],
             "Enter passphrase: ",
             b"TREZOR\n",
         );
-        assert_eq!(code, 0, "{pp:?}: {stderr}");
-        assert!(stdout.contains("fingerprint: b4e3f5ed"), "{pp:?}: {stdout}");
-        assert!(stderr.contains("Enter passphrase: "), "{stderr}");
+        assert_eq!(r.code, Some(0), "{pp:?}: {}", r.stderr);
         assert!(
-            !stderr.contains("input will be visible"),
-            "echo could not be disabled: {stderr}"
+            r.stdout.contains("fingerprint: b4e3f5ed"),
+            "{pp:?}: {}",
+            r.stdout
         );
-        let shown = String::from_utf8_lossy(&shown);
+        assert!(
+            !r.stderr.contains("input will be visible"),
+            "echo could not be disabled: {}",
+            r.stderr
+        );
+        let shown = String::from_utf8_lossy(&r.shown);
         assert!(
             !shown.contains("TREZOR"),
             "the terminal echoed the passphrase: {shown:?}"
         );
+        // Review M4: the terminal mode is RESTORED after a normal exit.
+        assert!(r.echo_after, "{pp:?}: echo left OFF after the run");
     }
     // The other flags prompt with their own name.
     let argv = [
@@ -1405,13 +1446,188 @@ fn a_terminal_gets_a_prompt_and_no_echo() {
         "-",
     ];
     let typed = format!("{BIP38_PW}\n");
-    let (code, stdout, stderr, _) = run_on_a_terminal(
+    let r = run_on_a_terminal(
         &bin,
         &argv,
         &[("F687_W", BIP38_WIF)],
         "Enter BIP-38 passphrase: ",
         typed.as_bytes(),
     );
-    assert_eq!(code, 0, "{stderr}");
-    assert!(stdout.contains(BIP38_OUT), "{stdout}");
+    assert_eq!(r.code, Some(0), "{}", r.stderr);
+    assert!(r.stdout.contains(BIP38_OUT), "{}", r.stdout);
+    assert!(r.echo_after);
+}
+
+/// Ctrl-C at the prompt: the process dies of SIGINT (the conventional
+/// status) AND the terminal has echo back on. Ctrl-D at an empty prompt: the
+/// empty warning starts on its own line (review N1), echo restored.
+#[cfg(target_os = "linux")]
+#[test]
+fn ctrl_c_and_ctrl_d_at_the_prompt_leave_a_working_terminal() {
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let argv = [
+        "convert",
+        "--from",
+        "phrase=@env:F687_SEED",
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+        "--passphrase",
+        "-",
+    ];
+    let env = [("F687_SEED", SEED)];
+    let r = run_on_a_terminal(&bin, &argv, &env, "Enter passphrase: ", b"TRE\x03");
+    assert_eq!(
+        r.signal,
+        Some(libc::SIGINT),
+        "code {:?}: {}",
+        r.code,
+        r.stderr
+    );
+    assert!(r.stdout.is_empty());
+    assert!(r.echo_after, "Ctrl-C left echo OFF");
+    let r = run_on_a_terminal(&bin, &argv, &env, "Enter passphrase: ", b"\x04");
+    assert_eq!(r.code, Some(0), "{}", r.stderr);
+    assert!(r.stdout.contains("fingerprint: 73c5da0a"), "{}", r.stdout);
+    assert!(
+        r.stderr
+            .contains("Enter passphrase: \nwarning: --passphrase from stdin is empty"),
+        "{:?}",
+        r.stderr
+    );
+    assert!(r.echo_after);
+}
+
+/// F-689 follow-up: `verify-bundle --ms1 -` on a terminal prompts and hides
+/// the ms1 (seed material) exactly like a passphrase.
+#[cfg(target_os = "linux")]
+#[test]
+fn verify_bundle_ms1_dash_prompts_on_a_terminal() {
+    let r = run(
+        &s(&[
+            "bundle",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ]),
+        b"",
+        &[],
+    );
+    let ms1 = r
+        .stdout
+        .lines()
+        .find(|l| l.starts_with("ms1"))
+        .unwrap()
+        .to_string();
+    let mut argv: Vec<String> = s(&[
+        "verify-bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        "@0.phrase=@env:F687_SEED",
+        "--ms1",
+        "-",
+        "--",
+    ]);
+    argv.extend(
+        r.stdout
+            .lines()
+            .filter(|l| l.starts_with("mk1") || l.starts_with("md1"))
+            .map(str::to_string),
+    );
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let typed = format!("{ms1}\n");
+    let r = run_on_a_terminal(
+        &bin,
+        &argv,
+        &[("F687_SEED", SEED)],
+        "Enter ms1: ",
+        typed.as_bytes(),
+    );
+    assert_eq!(r.code, Some(0), "{}\n{}", r.stdout, r.stderr);
+    assert!(r.stdout.lines().any(|l| l == "result: ok"), "{}", r.stdout);
+    assert!(
+        !String::from_utf8_lossy(&r.shown).contains(&ms1[5..]),
+        "the ms1 was echoed"
+    );
+    assert!(r.echo_after);
+}
+
+/// Review M1-M3: separators-only `--ms1 -` is refused (never the watch-only
+/// `""`); `import-wallet --blob /dev/stdin` beside a stdin password, and
+/// `verify-bundle --ms1 -` beside `--descriptor-file /dev/stdin`, are two
+/// stdin readers.
+#[test]
+fn fold1_stdin_gaps_are_refused() {
+    for stdin in [&b"-\n"[..], b"---", b" - - \n"] {
+        let r = run(
+            &s(&[
+                "verify-bundle",
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--slot",
+                "@0.phrase=@env:F687_SEED",
+                "--ms1",
+                "-",
+                "--",
+                "mk1x",
+            ]),
+            stdin,
+            &[],
+        );
+        assert!(
+            r.code != 0
+                && r.stderr
+                    .contains("--ms1 -: stdin was empty or only separators"),
+            "{stdin:?}: {}",
+            r.stderr
+        );
+        assert!(!r.stderr.contains("watch-only via empty"), "{}", r.stderr);
+    }
+    for pw in [
+        &["--decrypt-password", "-"][..],
+        &["--decrypt-password-stdin"][..],
+    ] {
+        let r = run(
+            &with(&s(&["import-wallet", "--blob", "/dev/stdin"]), pw),
+            b"satoshi\n",
+            &[],
+        );
+        assert!(
+            r.code != 0 && r.stderr.contains("cannot both read from stdin"),
+            "{pw:?}: {}",
+            r.stderr
+        );
+    }
+    let r = run(
+        &s(&[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--descriptor-file",
+            "/dev/stdin",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--ms1",
+            "-",
+            "--",
+            "mk1x",
+        ]),
+        b"x\n",
+        &[],
+    );
+    assert!(
+        r.code != 0 && r.stderr.contains("--descriptor-file /dev/stdin"),
+        "{}",
+        r.stderr
+    );
 }
