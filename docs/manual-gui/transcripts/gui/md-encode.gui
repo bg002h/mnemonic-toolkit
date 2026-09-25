@@ -1,6 +1,6 @@
 [ md > encode ]
   --group-size             number  -> <unset>
-  --separator              dropdown[space,hyphen,comma]  -> space
+  --separator              dropdown[space]  -> space
   --from-policy            text  (required) -> <empty>
   --context                dropdown[tap,segwitv0]  -> tap
   --unspendable-key        text  -> <empty>
@@ -12,5 +12,8 @@
   --force-long-code        checkbox  -> [ ] off
   --policy-id-fingerprint  checkbox  -> [ ] off
   --json                   checkbox  -> [ ] off
+  --in                     path  -> <empty>
+  --out                    path  -> <empty>
+  --experimental           checkbox  -> [ ] off
   template                 positional  -> <empty>
   [ Run ]

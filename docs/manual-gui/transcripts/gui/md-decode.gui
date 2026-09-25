@@ -1,4 +1,5 @@
 [ md > decode ]
   --json   checkbox  -> [ ] off
-  strings  positional...  (required) -> <empty>
+  --in     path  -> <empty>
+  strings  positional...  -> <empty>
   [ Run ]

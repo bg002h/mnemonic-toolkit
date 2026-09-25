@@ -28,6 +28,11 @@ Required is widget-layer).
 - [`--index`](#md-address-index) — starting index along the wildcard (default 0)
 - [`--count`](#md-address-count) — number of consecutive addresses to derive (default 1)
 - [`--json`](#md-address-json) — emit JSON output
+- [`--path`](#md-address-path) — shared origin path for slots whose template gave none
+- [`--from-mk1`](#md-address-from-mk1) — `mk1` key cards to seat into a keyless policy card (repeating; excludes `--template`)
+- [`--from-mk1-file`](#md-address-from-mk1-file) — read `mk1` key cards from a file, one per line
+- [`--seat`](#md-address-seat) — assert which card seats a slot (`@i=<chunk-set-id>[#k]`; repeating)
+- [`--experimental`](#md-address-experimental) — accept a template with a signature-free spend path
 
 ## `--template` {#md-address-template}
 
@@ -125,6 +130,56 @@ for a gap-limit warm-up workflow.
 Boolean. Emit JSON output instead of plain-text address-per-line.
 Default off.
 
+## `--path` {#md-address-path}
+
+Text widget. A shared origin path, applied **per slot** to whichever
+`@i` the template gave no inline origin — a slot's inline origin always
+wins. Accepts the named (`bip44`/`48`/`49`/`84`/`86`), hex (`0xNN`) and
+literal (`m/…`) forms. Same value grammar as
+[`md encode --path`](#md-encode-path) but not the same rule: `md encode
+--path` replaces the declaration wholesale, this fills only the slots
+that declared nothing. A slot with neither still refuses with
+"non-canonical wrapper requires explicit origin for @N".
+
+## `--from-mk1` {#md-address-from-mk1}
+
+Repeating Text widget. An `mk1` key-card string; one occurrence also
+takes several values, so a pasted card set works without repeating the
+flag. Supplied **together with** the keyless `md1` phrases of a policy
+card (the positional): the seating engine matches each card to the slot
+whose declared origin it satisfies, then composes the concrete
+descriptor. Mutually exclusive with
+[`--template`](#md-address-template); when only `--from-mk1` is given,
+the GUI marks the policy-card positional **Required**. The GUI ends its
+options with `--` before the positional, so the multi-value
+`--from-mk1` cannot swallow the policy card.
+
+## `--from-mk1-file` {#md-address-from-mk1-file}
+
+Path widget. Read `mk1` key-card strings from FILE, one per line.
+Blank lines and `#` comments are skipped; any other unparseable line is
+refused rather than ignored. Combines with
+[`--from-mk1`](#md-address-from-mk1).
+
+## `--seat` {#md-address-seat}
+
+Repeating Text widget, `@i=<chunk-set-id>[#k]`. Asserts the seating of
+one slot. The id is the **full** five-hex-digit label a seating refusal
+prints beside each card, never a prefix. If that id auto-partitioned
+into several collided cards, add `#<k>` (the 1-based ordinal from its
+`<id>#<k>` label) to bind one carrier — the bare id alone refuses as
+ambiguous. The named card must still satisfy the slot's declared
+origin, so `--seat` only chooses among seatings the engine already
+permits: it never places a card the engine would not, never silences a
+stub warning, and never fills a missing-card gap.
+
+## `--experimental` {#md-address-experimental}
+
+Boolean. Accept a template with a spend path that requires no
+signature, mirroring [`md encode --experimental`](#md-encode-experimental).
+Without it, a card authored with `--experimental` could be verified but
+never rendered to addresses.
+
 ## Positional `[PHRASES]`
 
 One or more `md1` strings. Repeating. **Optional** at the clap
@@ -166,7 +221,7 @@ re-derives the same descriptor that the md1 cards encode).
 
 | Trigger | Refusal |
 |---|---|
-| Neither `[PHRASES]` positional nor `--template` set | runtime pre-check: `md address requires either [PHRASES] positional or --template` |
+| None of `[PHRASES]`, `--template`, `--from-mk1` set | clap-group refusal, exit 2: `error: the following required arguments were not provided: <PHRASES\|--template <TEMPLATE>\|--from-mk1 <STRING>...>` |
 | Both `[PHRASES]` positional and `--template` set | clap-level `conflicts_with` (per `md-cli` `conflicts_with = "phrases"` on `--template`) |
 | `--key` set without `--template` | clap-level requirement refusal |
 | `--fingerprint` set without `--template` | clap-level requirement refusal |

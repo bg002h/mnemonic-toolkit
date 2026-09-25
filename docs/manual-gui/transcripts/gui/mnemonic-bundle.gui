@@ -1,6 +1,6 @@
 [ mnemonic > bundle ]
   --group-size            number  -> <unset>
-  --separator             dropdown[space,hyphen,comma]  -> space
+  --separator             dropdown[space]  -> space
   --network               dropdown[mainnet,testnet,signet,regtest]  (required) -> mainnet
   --template              dropdown[bip44,bip49,bip84,bip86,wsh-multi,wsh-sortedmulti,sh-wsh-multi,sh-wsh-sortedmulti,tr-multi-a,tr-sortedmulti-a]  (required) -> bip44
   --descriptor            text  -> <empty>

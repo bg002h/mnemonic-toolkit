@@ -15,8 +15,8 @@ modern systems.
    - Verify in a fresh `cmd.exe` or PowerShell:
      `cargo --version && rustc --version`.
 
-   `mnemonic-gui`'s `Cargo.toml` declares MSRV 1.85
-   (`rust-version = "1.85"`).
+   `mnemonic-gui`'s `Cargo.toml` declares MSRV 1.88
+   (`rust-version = "1.88"`).
 
 2. **Visual Studio Build Tools** (for the MSVC linker). If you do
    not have Visual Studio installed, download the Build Tools from
@@ -47,8 +47,12 @@ modern systems.
 Path A — install from source via `cargo`:
 
 ```pwsh
-cargo install --locked --git https://github.com/bg002h/mnemonic-gui.git mnemonic-gui
+cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.62.0 mnemonic-gui
 ```
+
+Always pass `--tag`: without it cargo builds the repository's default
+branch, not the release this manual documents. Building the GUI needs
+`rustc` 1.88 or newer.
 
 Path B — clone and build:
 
@@ -63,14 +67,17 @@ Path C — prebuilt binary from GitHub releases. Every
 `mnemonic-gui-v*` release attaches a
 `mnemonic-gui-${VERSION}-x86_64-windows.zip` asset (built from
 `.github/workflows/build.yml`). Download, extract, and place
-`mnemonic-gui.exe` in a directory on your `PATH`.
+`mnemonic-gui.exe` in a directory on your `PATH`. From Git Bash, the
+toolkit's installer does this for you: `install.sh --only
+mnemonic-gui` downloads the pinned release's zip and refuses it unless
+it matches that release's `SHA256SUMS` file.
 
 :::danger
 **Prebuilt binaries are NOT code-signed at v1.0.** Windows
 SmartScreen will show a "Windows protected your PC" dialog on first
 launch ("Don't run" by default; click "More info" → "Run anyway" to
-bypass). Verify the SHA-256 sum against the release notes BEFORE
-bypassing SmartScreen.
+bypass). Verify the SHA-256 sum against the release's `SHA256SUMS`
+file BEFORE bypassing SmartScreen.
 
 Defender may also flag the unsigned binary as a potential threat.
 This is a known false-positive class for unsigned Rust binaries; the

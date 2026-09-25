@@ -36,6 +36,9 @@ the file is the one the release published, not who built it. Binaries
 land in `~/.cargo/bin/` (`--root DIR` or `$CARGO_INSTALL_ROOT` puts them
 in `DIR/bin/` instead; cargo's `install.root` config setting is not read);
 the installer warns if that directory is not on your `PATH`.
+`--root` covers the binaries only: man pages go to
+`${XDG_DATA_HOME:-~/.local/share}/man/man1` unless you pass
+`--man-dir DIR`, or `--no-man` to skip them.
 `--dry-run` shows every URL first; `--help` lists the options.
 
 If a release has no binary for your platform (FreeBSD, for example),
@@ -46,13 +49,12 @@ Linux where a binary needs a newer C library than yours:
 
 | Binary | Needs |
 |---|---|
-| `mnemonic-gui`, Linux x86_64 | glibc ≥ 2.39 |
-| `mnemonic-gui`, Linux aarch64 | glibc ≥ 2.18 |
+| `mnemonic-gui`, Linux x86_64 and aarch64 | glibc ≥ 2.18 |
 | `md`, Linux x86_64 | glibc ≥ 2.34 |
 | `mnemonic`, `ms`, `mk`, and `md` on aarch64 | any Linux (static) |
 
-So on Ubuntu 22.04 (glibc 2.35) or Debian 12 (2.36) the GUI is built
-from source, and on Ubuntu 20.04 (2.31) `md` is too. On a musl system
+So on Ubuntu 20.04 (glibc 2.31) or RHEL 8 (2.28) `md` is built from
+source; the GUI binary runs on any glibc from 2.18 (2013) on. On a musl system
 (Alpine, Void musl) the GUI is always built from source, because the
 static musl build cannot open a window.
 

@@ -7,6 +7,7 @@
   --policy-id-stub      text  (repeating) -> <empty>
   --from-md1            text  (repeating) -> <empty>
   --privacy-preserving  checkbox  -> [ ] off
+  --chunk-set-id        text  -> <empty>
   --force-chunked       checkbox  -> [ ] off
   --force-long-code     checkbox  -> [ ] off
   --json                checkbox  -> [ ] off

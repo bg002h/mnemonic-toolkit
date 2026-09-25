@@ -4,8 +4,8 @@
   --target-address  text  (required, repeating) -> <empty>
   --gap-limit       number  -> <unset>
   --external-only   checkbox  -> [ ] off
-  --address-type    dropdown[p2pkh,p2sh-p2wpkh,p2wpkh,p2tr]  -> p2pkh
-  --network         dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --address-type    dropdown[(none),p2pkh,p2sh-p2wpkh,p2wpkh,p2tr]  -> <empty>
+  --network         dropdown[(none),mainnet,testnet,signet,regtest]  -> <empty>
   --json            checkbox  -> [ ] off
   --no-auto-repair  checkbox  -> [ ] off
   [ Run ]

@@ -21,7 +21,7 @@ is chosen).
 ## Outline {#md-encode-outline}
 
 - [`--group-size`](#md-encode-group-size) — display grouping: break the card into groups of N characters (default 5; 0 = unbroken)
-- [`--separator`](#md-encode-separator) — display-grouping separator keyword (`space` | `hyphen` | `comma`; default `space`)
+- [`--separator`](#md-encode-separator) — display-grouping separator keyword (`space` only)
 - [`--from-policy`](#md-encode-from-policy) — sub-Miniscript-Policy expression (XOR with `[TEMPLATE]` positional)
 - [`--context`](#md-encode-context) — script context for `--from-policy` (conditionally Required when `--from-policy` is set; Hidden when positional `[TEMPLATE]` is set)
 - [`--unspendable-key`](#md-encode-unspendable-key) — Tap-context fallback unspendable internal key (Disabled when `--context segwitv0`)
@@ -33,6 +33,9 @@ is chosen).
 - [`--force-long-code`](#md-encode-force-long-code) — force the long BCH code even when regular suffices
 - [`--policy-id-fingerprint`](#md-encode-policy-id-fingerprint) — print the freshly-computed PolicyId fingerprint after the phrase
 - [`--json`](#md-encode-json) — emit JSON output
+- [`--in`](#md-encode-in) — read the BIP 388 template from a file
+- [`--out`](#md-encode-out) — write the `md1` artifact to a file (created `0600`)
+- [`--experimental`](#md-encode-experimental) — admit a spend path that requires no signature
 
 ## `--group-size` {#md-encode-group-size}
 
@@ -51,32 +54,26 @@ regardless of this setting.
 
 The same display-grouping pair (`--group-size` + `--separator`)
 appears on [`mnemonic bundle`](#mnemonic-bundle-group-size) and the
-`ms` / `mk` encode surfaces with identical semantics.
+`ms` / `mk` encode surfaces. The `md`, `ms` and `mk` encoders default to
+`5`; the `mnemonic` subcommands default to `0` (unbroken).
 
 ## `--separator` {#md-encode-separator}
 
 The grouping separator keyword used when `--group-size` is non-zero.
-Dropdown widget; 3 valid values; default `space`. Cosmetic and
+Dropdown widget with one value, `space` (the default). Cosmetic and
 non-load-bearing — like `--group-size`, the choice never affects
 intake (separators are stripped on every consumer).
+Only `space` is offered: `md` retired `hyphen` and `comma`, and
+the CLI refuses them for new cards. Intake still strips any separator,
+so an already-engraved hyphen- or comma-grouped card still re-ingests.
 
 ### Outline {#md-encode-separator-outline}
 
 - [`space`](#md-encode-separator-space)
-- [`hyphen`](#md-encode-separator-hyphen)
-- [`comma`](#md-encode-separator-comma)
 
 ### `space` {#md-encode-separator-space}
 
 Default. Insert a single space every `--group-size` characters.
-
-### `hyphen` {#md-encode-separator-hyphen}
-
-Insert a hyphen (`-`) every `--group-size` characters.
-
-### `comma` {#md-encode-separator-comma}
-
-Insert a comma (`,`) every `--group-size` characters.
 
 ## `--from-policy` {#md-encode-from-policy}
 
@@ -222,13 +219,39 @@ want to record it alongside the engraved card.
 
 Boolean. Emit JSON output instead of plain text. Default off.
 
+## `--in` {#md-encode-in}
+
+Path widget. Read the BIP 388 template from FILE instead of the
+positional; the file holds one template, and surrounding whitespace is
+trimmed. The GUI counts `--in` as the template input, so it satisfies
+the same one-of as the positional and `--from-policy`.
+
+## `--out` {#md-encode-out}
+
+Path widget. Write the `md1` artifact to FILE instead of standard
+output, **created with mode `0600`** — which a shell redirect cannot
+do. It **overwrites** an existing file and tightens its mode. The
+stderr engraving card, the chunk-set-id and the advisories are
+unaffected.
+
+## `--experimental` {#md-encode-experimental}
+
+Boolean. Admit a spend path that requires **no signature** (for
+example a hashlock + timelock recovery tier). rust-miniscript refuses
+these by default with "All spend paths must require a signature" — a
+safety policy, not a language rule. This relaxes only that rule:
+malleability, resource limits, repeated keys and timelock mixing are
+still enforced. Whoever learns the preimage of a keyless path can
+spend it alone, so if that preimage is engraved, the plate is bearer
+access. The CLI prints a warning on every use.
+
 ## Positional `[TEMPLATE]`
 
 A BIP-388 template string, e.g. `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))`
 for a 2-of-2 native-SegWit multisig. **Optional** at the clap
 level (because `--from-policy` is the alternate input mode), but
-the runtime pre-check refuses if NEITHER the positional NOR
-`--from-policy` is set. The conditional-visibility engine surfaces
+the runtime pre-check refuses if none of the positional, `--in`
+and `--from-policy` is set. The conditional-visibility engine surfaces
 this constraint by marking both `--from-policy` and the positional
 slot as Required when neither is filled.
 
@@ -268,7 +291,7 @@ corresponding `md1`.
 
 | Trigger | Refusal |
 |---|---|
-| Neither positional `[TEMPLATE]` nor `--from-policy` set | runtime pre-check (per `md-cli/src/main.rs:291`): `encode: TEMPLATE required (or use --from-policy with cli-compiler)` |
+| None of positional `[TEMPLATE]`, `--in`, `--from-policy` set | runtime pre-check, exit 2: `md: encode: TEMPLATE required (on argv, via --in FILE, or use --from-policy with cli-compiler)` |
 | Both positional `[TEMPLATE]` and `--from-policy` set | clap-level `conflicts_with` refusal (per `md-cli/src/main.rs:66`'s `conflicts_with = "template"` on `from_policy`) |
 | `--from-policy` set without `--context` | runtime pre-check (per `md-cli/src/main.rs:263`): `--from-policy requires --context tap\|segwitv0` |
 | `--context segwitv0` AND `--unspendable-key <value>` | value-inspect refusal (per `md-cli/src/main.rs:270`): `--unspendable-key is only valid for --context tap (segwitv0 has no internal key)` |

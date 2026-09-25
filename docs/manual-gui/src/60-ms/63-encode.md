@@ -26,12 +26,14 @@ hex path).
 ## Outline {#ms-encode-outline}
 
 - [`--group-size`](#ms-encode-group-size) — display-grouping chunk width for the emitted `ms1` (default `5`; `0` = unbroken)
-- [`--separator`](#ms-encode-separator) — display-grouping separator keyword (`space`|`hyphen`|`comma`; default `space`)
+- [`--separator`](#ms-encode-separator) — display-grouping separator keyword (`space` only)
 - [`--phrase`](#ms-encode-phrase) — BIP-39 mnemonic input (XOR with `--hex`, secret-bearing)
 - [`--hex`](#ms-encode-hex) — raw hex entropy input (XOR with `--phrase`, secret-bearing)
 - [`--language`](#ms-encode-language) — BIP-39 wordlist for `--phrase` (default `english`; Hidden when `--hex` is set)
 - [`--no-engraving-card`](#ms-encode-no-engraving-card) — suppress the stderr engraving card
 - [`--json`](#ms-encode-json) — emit a single JSON object on stdout instead of multi-line text
+- [`--in`](#ms-encode-in) — read the BIP-39 phrase from a file (never hex)
+- [`--out`](#ms-encode-out) — write the artifact to a file (owner-only `0600`, overwrites)
 
 ## `--group-size` {#ms-encode-group-size}
 
@@ -50,28 +52,23 @@ always carries the unbroken `ms1` regardless of this flag.
 ## `--separator` {#ms-encode-separator}
 
 Display-grouping separator keyword used between the
-[`--group-size`](#ms-encode-group-size) chunks. Dropdown widget;
-3 values, default `space`. **Cosmetic — non-load-bearing** (intake
-strips it, so any separator re-ingests).
+[`--group-size`](#ms-encode-group-size) chunks. Dropdown widget with
+one value, `space` (the default). **Cosmetic — non-load-bearing**
+(intake strips it, so any separator re-ingests).
+Only `space` is offered: `ms` retired `hyphen` and `comma`, and
+the CLI refuses them for new cards. Intake still strips any separator,
+so an already-engraved hyphen- or comma-grouped card still re-ingests.
+(`ms`'s own `--help` text still lists `hyphen|comma`; the binary
+refuses both.)
 
 ### Outline {#ms-encode-separator-outline}
 
 - [`space`](#ms-encode-separator-space)
-- [`hyphen`](#ms-encode-separator-hyphen)
-- [`comma`](#ms-encode-separator-comma)
 
 ### `space` {#ms-encode-separator-space}
 
 ASCII-space (`U+0020`) between chunks — the default, matching the
 canonical chunked-card form.
-
-### `hyphen` {#ms-encode-separator-hyphen}
-
-ASCII hyphen-minus (`-`) between chunks.
-
-### `comma` {#ms-encode-separator-comma}
-
-ASCII comma (`,`) between chunks.
 
 ## `--phrase` {#ms-encode-phrase}
 
@@ -201,6 +198,23 @@ field is gated by `serde(skip_serializing_if = "Option::is_none")`
 per `crates/ms-cli/src/format.rs:40` and the
 `encode_json_omits_language_for_hex_input` unit test pins this).
 
+## `--in` {#ms-encode-in}
+
+Path widget. Read the BIP-39 **phrase** from FILE — never hex (for hex
+from a file, use `--hex -` with the file on stdin). `--in` means a
+phrase and refuses to sniff, so no file can be read as entropy for a
+different wallet by accident. It joins the phrase/hex one-of: fill one
+of `--phrase`, `--hex` or `--in`. A path on argv is not secret, so a
+run that uses it needs no `--allow-argv-secret`.
+
+## `--out` {#ms-encode-out}
+
+Path widget. Write the canonical artifact to FILE, **owner-only
+(`0600`)** — the mode is set on the open file, so an existing `0644`
+target is tightened too. It **overwrites** and truncates. Not to be
+confused with [`ms gen-man --out`](#ms-gen-man), which takes a
+directory.
+
 ## Worked example — phrase → ms1
 
 1. **ms** tab; pick **Encode (phrase/hex → ms1)**.
@@ -213,18 +227,18 @@ per `crates/ms-cli/src/format.rs:40` and the
 3. Leave `--language` at default `english`.
 4. Click **Run**. The run-confirm modal fires; confirm to proceed.
 
-The output panel renders the canonical `ms1` in its default
-5-character display grouping on stdout (the unbroken form
-`ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f` is recovered
-by dropping the separators, or by re-encoding with `--group-size 0`):
+The output panel renders the canonical, unbroken `ms1` on stdout:
 
 ```{.text include="63-ms-encode-phrase.out"}
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 ```
 
-The stderr engraving card adds:
+The stderr engraving card adds the same string in its default
+5-character display grouping (the form you engrave; `--group-size`
+and `--separator` shape this line), then the phrase metadata:
 
-```{.text include="63-ms-encode-phrase.err" lines="1-3"}
+```{.text include="63-ms-encode-phrase.err" lines="1-4"}
+engraving card: ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
 word count: 12
 language: english (BIP-39 checksum valid)
 passphrase: not stored in ms1 (record separately if used)
@@ -242,18 +256,18 @@ passphrase: not stored in ms1 (record separately if used)
    panel.
 5. **Run**. The modal fires; confirm to proceed.
 
-Output (without engraving card; same canonical `ms1` as the phrase
-path, in the default 5-character display grouping):
+Output (without the engraving card, so no grouped line; the same
+canonical, unbroken `ms1` as the phrase path):
 
 ```{.text include="63-ms-encode-hex.out"}
-ms10e ntrsq qqqqq qqqqq qqqqq qqqqq qqqqq qqcj9 sxraq 34v7f
+ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 ```
 
 ## Refusals
 
 | Trigger | Refusal |
 |---|---|
-| Neither `--phrase` nor `--hex` supplied | clap-group refusal: `error: the following required arguments were not provided: <--phrase <PHRASE>\|--hex <HEX>>` |
+| None of `--phrase`, `--hex`, `--in` supplied | clap-group refusal, exit 64: `error: the following required arguments were not provided: <--phrase <PHRASE>\|--hex <HEX>\|--in <FILE>>` |
 | Both `--phrase` and `--hex` supplied | clap-group refusal: `error: the argument '--phrase <PHRASE>' cannot be used with '--hex <HEX>'` |
 | `--hex` with empty string | exit 1 with `error: expected hex of length 32/40/48/56/64 chars (got empty input)` |
 | `--hex` with odd-length value | exit 1 with `error: expected even-length hex (one byte = 2 chars); got <N> chars` |

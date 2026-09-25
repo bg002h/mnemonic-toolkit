@@ -6,9 +6,21 @@ intended for piping the template string into other tooling.
 
 > **GUI form:** see [GUI Forms › md › decode](#gui-form-md-decode).
 
+## Outline {#md-decode-outline}
+
+- [`--json`](#md-decode-json) — emit JSON output
+- [`--in`](#md-decode-in) — read the `md1` strings from a file, one per line
+
 ## `--json` {#md-decode-json}
 
 Boolean. Emit JSON output. Default off.
+
+## `--in` {#md-decode-in}
+
+Path widget. Read the `md1` strings from FILE, one per line, instead of
+the positional (P3 §6b, the file channel added in md 0.20). Display separators are stripped per line, so a card copied off the engraving card re-ingests. The
+GUI treats `--in` as an alternative to the positional, which is no
+longer marked required: fill one or the other.
 
 ## Positional `strings`
 

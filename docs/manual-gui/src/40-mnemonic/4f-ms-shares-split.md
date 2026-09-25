@@ -38,7 +38,7 @@ medium; storing K shares together re-creates a single point of failure.
 
 ## `--group-size` {#mnemonic-ms-shares-split-group-size}
 
-Number widget (0..65535; default 5). Display grouping: break each
+Number widget (0..65535; default 0, unbroken). Display grouping: break each
 emitted share string into groups of N characters for readability. This
 is cosmetic only — share intake strips separators, so any grouping
 re-ingests cleanly. `0` emits an unbroken single line. The `--json`
@@ -47,29 +47,18 @@ forensic strings always stay unbroken regardless of this flag.
 ## `--separator` {#mnemonic-ms-shares-split-separator}
 
 Dropdown. The display-grouping separator keyword inserted between
-`--group-size` groups (default `space`). Three allowed values. Cosmetic
+`--group-size` groups (default `space`, the only value). Cosmetic
 and non-load-bearing — the separator is stripped on re-ingest. The `?`
 help-icon deep-links here.
 
 ### Outline {#mnemonic-ms-shares-split-separator-outline}
 
 - [`space`](#mnemonic-ms-shares-split-separator-space)
-- [`hyphen`](#mnemonic-ms-shares-split-separator-hyphen)
-- [`comma`](#mnemonic-ms-shares-split-separator-comma)
 
 ### `space` {#mnemonic-ms-shares-split-separator-space}
 
 ASCII space between groups (default). The most legible for hand
 transcription onto a backup medium.
-
-### `hyphen` {#mnemonic-ms-shares-split-separator-hyphen}
-
-ASCII hyphen (`-`) between groups. Useful when the share is embedded in
-a context where spaces are collapsed or trimmed.
-
-### `comma` {#mnemonic-ms-shares-split-separator-comma}
-
-ASCII comma (`,`) between groups.
 
 ## `--from` {#mnemonic-ms-shares-split-from}
 

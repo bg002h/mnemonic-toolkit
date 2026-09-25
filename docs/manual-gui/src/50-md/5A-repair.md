@@ -29,6 +29,11 @@ run-confirm modal does not fire for any `md repair` invocation.
 
 > **GUI form:** see [GUI Forms › md › repair](#gui-form-md-repair).
 
+## Outline {#md-repair-outline}
+
+- [`--json`](#md-repair-json) — emit a JSON envelope instead of the text report
+- [`--in`](#md-repair-in) — read the `md1` strings from a file, one per line
+
 ## Positional `<MD1_STRINGS>...`
 
 One or more `md1` strings to attempt to repair (BCH
@@ -51,6 +56,13 @@ fields with [`mnemonic repair --json`](#mnemonic-repair-json); since
 toolkit v0.81.0 the toolkit's envelope is a strict superset (adds a
 `verdict` field this NO-BUMP `md repair` envelope does not carry; see
 the intro above), so a wrapper reading the shared fields parses both.
+
+## `--in` {#md-repair-in}
+
+Path widget. Read the `md1` strings from FILE, one per line, instead of
+the positional (P3 §6b, the file channel added in md 0.20). Display separators are stripped per line, so a card copied off an engraving card re-ingests. The
+GUI treats `--in` as an alternative to the positional, which is no
+longer marked required: fill one or the other.
 
 ## Per-chunk atomic semantics
 

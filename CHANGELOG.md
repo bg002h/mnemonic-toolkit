@@ -186,6 +186,23 @@ byte-identical (`sha256 c121fb6ca9723e22489e58b04a82edd3ffccf92d7c13acf0472933c1
   `install-assets.test.sh` (every mapping, and every Linux asset's glibc floor via `readelf`,
   against the real pinned releases) join the install.sh harness job.
 
+### Installer pins: mnemonic-gui v0.62.0, ms 0.19.1 (F-679)
+
+- **ms 0.19.0 → 0.19.1.** 0.19.0's `ms verify --phrase <P> <ms1>` failed ("cannot read both ms1 and
+  --phrase from stdin"), which broke the GUI's verify flow; 0.19.1 fixes it. The pin moves with the
+  GUI's, so the installer never pairs the new GUI with the ms that breaks it.
+- **mnemonic-gui v0.59.0 → v0.62.0**, the release pinned to mnemonic 0.104.0, md 0.20.3, ms 0.19.1,
+  mk 0.13.0.
+- **The Linux GUI's glibc floor falls to 2.18 on x86_64** (it was 2.39; v0.62.0's x86_64 build is
+  made with `cross`), matching aarch64, measured with `readelf -V` on the published asset. Older
+  LTS hosts (Ubuntu 22.04, Debian 12, RHEL 9) now get the prebuilt GUI instead of a source build.
+  `--help`, the manual and the README say so.
+- **The GUI manual can no longer name CLI versions the installer does not install.** A new check
+  (`docs/manual-gui/tests/check_cli_pins.py`, run on every push by `sibling-pin-check.yml` and as
+  manual-gui lint phase 13) fails when `docs/manual-gui/pinned-upstream.toml` disagrees with
+  `scripts/install.sh`'s pins, or when the manual names an off-pin CLI version outside its
+  history list.
+
 ## mnemonic-toolkit [0.104.0] — 2026-09-23
 
 **SemVer-MINOR: md-codec 0.47.0 adopted (F-642), pin `cf35d61a` =

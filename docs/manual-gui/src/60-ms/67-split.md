@@ -27,13 +27,15 @@ inputs — [`--phrase`](#ms-split-phrase) XOR
 ## Outline {#ms-split-outline}
 
 - [`--group-size`](#ms-split-group-size) — display-grouping chunk width for each emitted share (default `5`; `0` = unbroken)
-- [`--separator`](#ms-split-separator) — display-grouping separator keyword (`space`|`hyphen`|`comma`; default `space`)
+- [`--separator`](#ms-split-separator) — display-grouping separator keyword (`space` only)
 - [`--phrase`](#ms-split-phrase) — BIP-39 mnemonic to split (XOR with `--hex`, secret-bearing)
 - [`--hex`](#ms-split-hex) — raw hex entropy to split (XOR with `--phrase`, secret-bearing)
 - [`--threshold`](#ms-split-threshold) — threshold K, minimum shares to recombine (required; `2..=9`)
 - [`--shares`](#ms-split-shares) — total shares N to produce (required; `K..=31`)
 - [`--language`](#ms-split-language) — BIP-39 wordlist for `--phrase` (default `english`; ignored under `--hex`)
 - [`--json`](#ms-split-json) — emit a single JSON object on stdout instead of multi-line text
+- [`--in`](#ms-split-in) — read the BIP-39 phrase from a file (never hex)
+- [`--out`](#ms-split-out) — write the artifact to a file (owner-only `0600`, overwrites)
 
 ## `--group-size` {#ms-split-group-size}
 
@@ -52,26 +54,19 @@ unbroken shares regardless of this flag.
 
 Display-grouping separator keyword used between the
 [`--group-size`](#ms-split-group-size) chunks of each share.
-Dropdown widget; 3 values, default `space`. **Cosmetic —
+Dropdown widget with one value, `space` (the default). **Cosmetic —
 non-load-bearing** (intake strips it).
+Only `space` is offered: `ms` retired `hyphen` and `comma`, and
+the CLI refuses them for new cards. Intake still strips any separator,
+so an already-engraved hyphen- or comma-grouped card still re-ingests.
 
 ### Outline {#ms-split-separator-outline}
 
 - [`space`](#ms-split-separator-space)
-- [`hyphen`](#ms-split-separator-hyphen)
-- [`comma`](#ms-split-separator-comma)
 
 ### `space` {#ms-split-separator-space}
 
 ASCII-space (`U+0020`) between chunks — the default.
-
-### `hyphen` {#ms-split-separator-hyphen}
-
-ASCII hyphen-minus (`-`) between chunks.
-
-### `comma` {#ms-split-separator-comma}
-
-ASCII comma (`,`) between chunks.
 
 ## `--phrase` {#ms-split-phrase}
 
@@ -187,6 +182,23 @@ text form (one share per line). Default off. The `language` field
 is present only for a `mnem` share-set. JSON shares are always
 unbroken regardless of [`--group-size`](#ms-split-group-size).
 
+## `--in` {#ms-split-in}
+
+Path widget. Read the BIP-39 **phrase** from FILE — never hex (for hex
+from a file, use `--hex -` with the file on stdin). `--in` means a
+phrase and refuses to sniff, so no file can be read as entropy for a
+different wallet by accident. It joins the phrase/hex one-of: fill one
+of `--phrase`, `--hex` or `--in`. A path on argv is not secret, so a
+run that uses it needs no `--allow-argv-secret`.
+
+## `--out` {#ms-split-out}
+
+Path widget. Write the canonical artifact to FILE, **owner-only
+(`0600`)** — the mode is set on the open file, so an existing `0644`
+target is tightened too. It **overwrites** and truncates. Not to be
+confused with [`ms gen-man --out`](#ms-gen-man), which takes a
+directory.
+
 ## Worked example — split entropy 2-of-3
 
 :::danger
@@ -216,7 +228,7 @@ identifier, and a distinct non-`s` index. Recombine any 2 with
 | Neither `--phrase` nor `--hex` supplied | clap-group refusal: required-input not provided |
 | Both `--phrase` and `--hex` supplied | clap-group refusal: mutually-exclusive |
 | `--threshold` or `--shares` omitted | clap refusal: required argument not provided |
-| `K < 2` or `K > 9` | value-parser refusal (range `2..=9`) |
+| `K < 2` or `K > 9` | exit 1 at run time: `error: invalid threshold <K>; K-of-N shares require k in 2..=9` |
 | `N < K` or `N > 31` | exit 1 with a `K <= N <= 31` bounds refusal |
 | `--hex` not 16/20/24/28/32 bytes | ms-codec entropy-length refusal |
 | `--phrase` with invalid BIP-39 checksum | exit 1 with `error: <bip39 error>` |

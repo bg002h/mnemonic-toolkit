@@ -39,6 +39,7 @@ runtime UsageError surfaces if both are empty.
 - [`--force-chunked`](#mk-encode-force-chunked) — force chunked output even when single-string would fit (reserved for v0.2)
 - [`--force-long-code`](#mk-encode-force-long-code) — force long-code BCH variant (reserved for v0.2)
 - [`--json`](#mk-encode-json) — emit a single JSON object instead of one mk1 string per line
+- [`--chunk-set-id`](#mk-encode-chunk-set-id) — pin the 20-bit `chunk_set_id` (conformance fixtures only)
 
 ## `--group-size` {#mk-encode-group-size}
 
@@ -184,6 +185,14 @@ instead of one mk1 string per stdout line. Default off.
 The `code_variant` field reports the first chunk's variant
 (`regular` for single-chunk emission; `long` for chunked
 emission's leading chunk).
+
+## `--chunk-set-id` {#mk-encode-chunk-set-id}
+
+Text widget, hex (`0x` prefix optional). Pin the 20-bit `chunk_set_id`
+instead of deriving it from the payload. Chunked output only —
+single-string encodings carry no such field. It exists for vector
+regeneration and conformance fixtures; the derived default is already
+deterministic, so ordinary encoding never needs it.
 
 ## Worked example — typical mainnet mk1 with fingerprint
 

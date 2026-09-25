@@ -19,19 +19,21 @@ the failure as a top-of-form banner or an output-panel error.
 
 ## Verifying the pinned-upstream tags
 
-The GUI's chapter `Pinned:` banners come from
-`docs/manual-gui/pinned-upstream.toml`, which fixes the
-SHA-pinned tags this v1.0 cycle of the manual was written
-against:
+The GUI's `Pinned:` labels are the CLI releases it was built
+against; `docs/manual-gui/pinned-upstream.toml` records the same tags
+for this manual:
 
-- `mnemonic-toolkit-v0.13.0`
-- `descriptor-mnemonic-md-cli-v0.5.0`
-- `ms-cli-v0.2.1`
-- `mk-cli-v0.3.1`
+- `mnemonic-toolkit-v0.104.0`
+- `descriptor-mnemonic-md-cli-v0.20.3`
+- `ms-cli-v0.19.1`
+- `mk-cli-v0.13.0`
 
-Run each binary with `--version` to compare against the pinned
-tags. Drift is allowed but be aware that refusal messages and
-flag surfaces can shift across upstream versions.
+Run each binary with `--version` to compare; the GUI does not check
+them for you. Below `mnemonic` 0.104.0 every secret-bearing run fails
+(the GUI adds `--allow-argv-secret`, which older releases reject), and
+below `ms` 0.19.1 `ms verify` with `--phrase` fails; see
+[Version pinning](#version-pinning). Re-run the toolkit installer to
+put the pinned releases in place.
 
 ## When the GUI is older than the CLI
 

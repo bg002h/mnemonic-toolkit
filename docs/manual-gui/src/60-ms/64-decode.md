@@ -13,6 +13,7 @@ line so users notice when the default may not match their wallet.
 
 - [`--language`](#ms-decode-language) — BIP-39 wordlist for the recovered phrase (default `english`, with explicit-default annotation)
 - [`--json`](#ms-decode-json) — emit a single JSON object on stdout
+- [`--in`](#ms-decode-in) — read the `ms1` string from a file
 
 ## `--language` {#ms-decode-language}
 
@@ -97,6 +98,15 @@ The `language_defaulted` field is `true` iff the user omitted
 `--language` — useful for programmatic detection of the
 hazard-surfacing case.
 
+## `--in` {#ms-decode-in}
+
+Path widget. Read the `ms1` string from FILE instead of the
+positional. It is the private channel that frees stdin: a path on
+argv is not secret, so a run that uses it needs no
+`--allow-argv-secret` and shows no run-confirm modal. The GUI lets only
+one input source through: the first filled source wins and the others
+grey out, because the CLI refuses `--in` alongside them.
+
 ## Positional `ms1`
 
 A single `ms1` string to decode. Optional at the clap level; when
@@ -114,8 +124,10 @@ form.
    ```
 
 3. Leave `--language` unset.
-4. Click **Run** (no run-confirm modal — `ms decode` has no
-   secret-bearing flag, only public input).
+4. Click **Run**. The run-confirm modal fires, because the `ms1`
+   positional is secret-bearing; its argv shows `--allow-argv-secret`
+   right after the subcommand, which the GUI adds on Run (see
+   [Secret handling](#secret-argv-opt-in)). Confirm to proceed.
 
 The output panel renders the decoded entropy, phrase, and the
 language line (with the explicit-default annotation since

@@ -153,3 +153,12 @@ jobs:
             exit 1
           fi
           echo "OK all sibling pins match $INSTALL_SH"
+
+      - name: GUI manual names only the installer's CLI pins
+        # F-679 fold 1 (review I-1). docs/manual-gui/pinned-upstream.toml and
+        # every CLI version the GUI manual's prose names must equal
+        # scripts/install.sh's pins (history lines are listed in
+        # docs/manual-gui/tests/cli-version-history.txt). Also lint phase 13
+        # of manual-gui.yml; here because this workflow runs on EVERY push, so
+        # an installer-only pin bump cannot skip it.
+        run: python3 docs/manual-gui/tests/check_cli_pins.py --manual-dir docs/manual-gui --install-sh scripts/install.sh

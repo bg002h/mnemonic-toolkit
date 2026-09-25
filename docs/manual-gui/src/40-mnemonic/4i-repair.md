@@ -114,13 +114,12 @@ CLI's own (differently-scoped) exit-code table.
 **Version scoping.** This split ships in two legs: the `--mk1`
 incomplete-group candidate demotion in **toolkit v0.80.0**, and the
 `--ms1` every-substitution-correction demotion in **toolkit v0.81.0**.
-**This manual is pinned to `toolkit v0.75.0`** (`pinned-upstream.toml`)
-— PRE-both — so a build at the manual's own pinned tag reports exit
-`5` (no candidate demotion, no `UNVERIFIED` advisory) for BOTH cases:
-an incomplete `--mk1` chunk-set-id group, and any `--ms1` substitution
-correction. The `--max-indel`/`--max-subst` rule (unique indel → `5`;
+The pinned `mnemonic` 0.104.0 carries both, and the table above is
+its behavior: an incomplete `--mk1` chunk-set-id group and any
+`--ms1` substitution correction both exit `4` with an `UNVERIFIED`
+advisory. The `--max-indel`/`--max-subst` rule (unique indel → `5`;
 an indel that consumed a substitution, or an ambiguous indel, → `4`)
-predates both legs and is unchanged at the pin.
+predates both legs.
 
 ## Worked example — repair a single-character `ms1` corruption
 
@@ -146,8 +145,7 @@ predates both legs and is unchanged at the pin.
 The output panel renders the repair report on stdout — comment lines
 describe the fix and the corrected chunk is on the last line — with exit
 code `4` (`VERIFY-ME` Candidate, as of toolkit v0.81.0; see Exit codes
-above — the manual's pinned `v0.75.0` build exits `5` instead, with no
-UNVERIFIED advisory). A `repair: correction UNVERIFIED — a corrected
+above). A `repair: correction UNVERIFIED — a corrected
 seed card cannot be self-verified; confirm the derived address/xpub
 against a known-good copy before use; BIP-93 recommends confirming a
 corrected codex32 string` advisory fires on stderr, alongside a

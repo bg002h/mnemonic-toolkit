@@ -1,6 +1,6 @@
 [ mnemonic > convert ]
   --group-size              number  -> <unset>
-  --separator               dropdown[space,hyphen,comma]  -> space
+  --separator               dropdown[space]  -> space
   --from                    composite[phrase,seedqr,entropy,xpub,xprv,wif,fingerprint,path,ms1,mk1,bip38,minikey,electrum-phrase,address]  (required) -> phrase=<empty>
   --to                      dropdown[phrase,entropy,xpub,xprv,wif,fingerprint,path,ms1,mk1,bip38,minikey,electrum-phrase,address]  (required, repeating) -> phrase
   --network                 dropdown[mainnet,testnet,signet,regtest]  -> mainnet

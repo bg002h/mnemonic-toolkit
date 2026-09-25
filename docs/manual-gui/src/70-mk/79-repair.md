@@ -101,12 +101,9 @@ decode`) to confirm; a >4-error correction can alias to a different
 card; BIP-93 recommends confirming a corrected codex32 string `` —
 worded differently from the `ms`/toolkit surfaces' advisory (compare
 [`ms repair`](#ms-repair)) but making the same recommendation.
-**This manual is pinned to `mk-cli v0.11.0`** (`pinned-upstream.toml`)
-— PRE-fix — so a build at the manual's own pinned tag exits `5` for
-BOTH cases: an incomplete-group correction (with no `UNVERIFIED`
-line) AND a complete-group reassembly failure (blessed as a
-confident fix rather than rejected at exit `2` — the funds gap this
-release closes).
+The pinned `mk` 0.13.0 carries both: an incomplete-group correction
+exits `5` with the `UNVERIFIED` line, and a complete group whose
+correction fails reassembly is rejected at exit `2`.
 
 ## Worked example
 

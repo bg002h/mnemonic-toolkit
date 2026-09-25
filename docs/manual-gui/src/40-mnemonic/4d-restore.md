@@ -63,6 +63,7 @@ for every secret-bearing invocation.
 - [`--search-addr-max`](#mnemonic-restore-search-addr-max) — exclusive upper address index for `--search-address` (default 20)
 - [`--search-chain`](#mnemonic-restore-search-chain) — which BIP-32 change-chain `--search-address` scans
 - [`--accept-search-time`](#mnemonic-restore-accept-search-time) — override the adaptive search-time ceiling
+- [`--recalibrate-threads`](#mnemonic-restore-recalibrate-threads) — re-measure this machine's search-thread count
 
 ## `--from` {#mnemonic-restore-from}
 
@@ -85,7 +86,7 @@ masked as `••••`. Suffix `=-` reads from stdin.
 
 Emit an importable wallet-software payload via an
 [`export-wallet`](#mnemonic-export-wallet) emitter, instead of the
-plain restore document. Dropdown; eleven values. For single-sig this
+plain restore document. Dropdown; twelve values. For single-sig this
 REQUIRES a single `--template` (one-descriptor-in / one-out);
 `--format` with no `--template` → exit 2. For multisig (`--md1`) mode
 the payload class matches `export-wallet --template <multisig>
@@ -111,11 +112,19 @@ flag with a `?` help-icon.
 - [`green`](#mnemonic-restore-format-green)
 - [`bsms`](#mnemonic-restore-format-bsms)
 - [`descriptor`](#mnemonic-restore-format-descriptor)
+- [`bitcoin-core-addresses`](#mnemonic-restore-format-bitcoin-core-addresses)
 
 ### `bitcoin-core` {#mnemonic-restore-format-bitcoin-core}
 
 Bitcoin Core `importdescriptors` JSON. See
 [`export-wallet --format bitcoin-core`](#mnemonic-export-wallet-format-bitcoin-core).
+
+### `bitcoin-core-addresses` {#mnemonic-restore-format-bitcoin-core-addresses}
+
+The [`export-wallet --format bitcoin-core-addresses`](#mnemonic-export-wallet-format-bitcoin-core-addresses)
+emitter: an `addr()` watch list for Bitcoin Core rather than the
+descriptor, the one Core route for a wallet with a signature-free spend
+path.
 
 ### `bip388` {#mnemonic-restore-format-bip388}
 
@@ -468,9 +477,10 @@ alone. Also accepts a **keyless multisig / general TEMPLATE `md1`**
 ([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template)),
 completed via `--from` + `--account` + `--cosigner`. Repeat for chunked
 cards. Covers `wsh` / `sh(wsh)`, NUMS taproot multisig, general
-NUMS-taproot policies up to a depth-1 two-leaf tap tree, and non-NUMS
-key-path taproot; the `@-in-both` shape (trunk key also a leaf key) or a
-depth-≥2 tap tree is refused (exit 2). Watch-only (non-secret). The GUI
+NUMS-taproot policies, non-NUMS key-path taproot, and deeper tap trees:
+a depth-2 four-leaf tree restores (the CLI's own `--help` text still
+says depth-≥2 is refused; it is not). The `@-in-both`
+shape (trunk key also a leaf key) is refused (exit 2). Watch-only (non-secret). The GUI
 renders this as a Text widget with `repeating: true`.
 
 ## `--cosigner` {#mnemonic-restore-cosigner}
@@ -567,6 +577,14 @@ multisig-template completion. Must be ≥ the tool's printed estimated
 exhaustive time (a forced acknowledgment). Accepts a humantime duration
 (e.g. `2h`, `90min`). The GUI renders this as a Text widget.
 
+## `--recalibrate-threads` {#mnemonic-restore-recalibrate-threads}
+
+Boolean. Ignore any recorded search-thread count, **measure** this
+machine, and overwrite the `[search]` section of `~/.mnemonic/mt.conf`.
+The optimal thread count is a property of the machine, so it is
+measured once and reused; use this after a hardware change, or when
+the recorded value looks wrong.
+
 ## Worked example — single-sig BIP-84 restore from the canonical phrase
 
 1. Switch to **mnemonic** tab; pick **Restore (watch-only document)**
@@ -603,7 +621,7 @@ you know the reference itself is wrong.
 | `--template <multisig value>` (single-sig restore) | refused — reconstruct multisig via `--md1` |
 | `--expect-fingerprint` / `--expect-xpub` mismatch | exit 4 (`RestoreMismatch`) unless `--allow-mismatch` |
 | `--cosigner @N=` mismatch against the md1 slot | exit 4 unless `--allow-mismatch` |
-| `--md1` `@-in-both` taproot shape / depth-≥2 tap tree | exit 2 (faithful card preserved) |
+| `--md1` `@-in-both` taproot shape | exit 2 (faithful card preserved) |
 | `--language` conflicting with a `mnem`-kind ms1's wire language | refused |
 
 ## Advisories

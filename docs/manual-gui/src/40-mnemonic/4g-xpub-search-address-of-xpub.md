@@ -69,15 +69,24 @@ is `0` for no-match JSON entries. The GUI renders this as a checkbox.
 
 The explicit script-type for child-address rendering. Required for
 neutral `xpub`/`tpub` (which carry no SLIP-0132 single-sig signal);
-otherwise it overrides the prefix-inferred type. Four allowed values.
-The GUI renders this as a Dropdown widget.
+otherwise it overrides the prefix-inferred type. Four values, plus the
+GUI's `(none)` entry. The GUI renders this as a Dropdown widget.
 
 ### Outline {#mnemonic-xpub-search-address-of-xpub-address-type-outline}
 
+- [`(none)`](#mnemonic-xpub-search-address-of-xpub-address-type-)
 - [`p2pkh`](#mnemonic-xpub-search-address-of-xpub-address-type-p2pkh)
 - [`p2sh-p2wpkh`](#mnemonic-xpub-search-address-of-xpub-address-type-p2sh-p2wpkh)
 - [`p2wpkh`](#mnemonic-xpub-search-address-of-xpub-address-type-p2wpkh)
 - [`p2tr`](#mnemonic-xpub-search-address-of-xpub-address-type-p2tr)
+
+### `(none)` {#mnemonic-xpub-search-address-of-xpub-address-type-}
+
+The empty-string unset entry, and the dropdown's default: no
+`--address-type` is emitted, so the CLI infers the script type from the
+xpub's SLIP-0132 prefix (`ypub` → `p2sh-p2wpkh`, `zpub` → `p2wpkh`, and
+so on). For a neutral `xpub`/`tpub`, which carries no such signal, the
+CLI refuses until you pick a type.
 
 ### `p2pkh` {#mnemonic-xpub-search-address-of-xpub-address-type-p2pkh}
 
@@ -104,10 +113,19 @@ renders this as a Dropdown widget.
 
 ### Outline {#mnemonic-xpub-search-address-of-xpub-network-outline}
 
+- [`(none)`](#mnemonic-xpub-search-address-of-xpub-network-)
 - [`mainnet`](#mnemonic-xpub-search-address-of-xpub-network-mainnet)
 - [`testnet`](#mnemonic-xpub-search-address-of-xpub-network-testnet)
 - [`signet`](#mnemonic-xpub-search-address-of-xpub-network-signet)
 - [`regtest`](#mnemonic-xpub-search-address-of-xpub-network-regtest)
+
+### `(none)` {#mnemonic-xpub-search-address-of-xpub-network-}
+
+The empty-string unset entry, and the dropdown's default: no
+`--network` is emitted, so the CLI infers the network from the xpub's
+version byte (mainnet for `xpub`/`ypub`/`zpub`…, testnet for
+`tpub`/`upub`/`vpub`…). Pick `signet` or `regtest` explicitly when the
+test-network ambiguity matters.
 
 ### `mainnet` {#mnemonic-xpub-search-address-of-xpub-network-mainnet}
 

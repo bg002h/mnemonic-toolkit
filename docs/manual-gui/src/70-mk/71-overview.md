@@ -8,8 +8,8 @@ one or more `policy_id_stub` bytes that bind the card to a
 matching `md1` wallet-policy template.
 
 The `mk` tab's pinned upstream version is
-`mk-cli v0.11.0` (per `docs/manual-gui/pinned-upstream.toml`).
-Pinned-banner format `Pinned: mk 0.11.0`.
+`mk-cli v0.13.0` (per `docs/manual-gui/pinned-upstream.toml`).
+Pinned-banner format `Pinned: mk 0.13.0`.
 
 ## Subcommand index
 
@@ -53,7 +53,7 @@ The nine subcommands group into four families:
 
 All nine subcommands follow the same form scaffolding described
 in [chapter 31](#first-launch-walkthrough): top-of-form
-`Pinned: mk 0.11.0` label + subcommand selector ComboBox +
+`Pinned: mk 0.13.0` label + subcommand selector ComboBox +
 per-subcommand `?` help-icon; per-flag widgets; an action bar
 with **Copy command**, **Run** buttons; an always-on `Preview:`
 line. None of the mk-tab subcommands accept slot input

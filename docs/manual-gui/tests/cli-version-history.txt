@@ -1,0 +1,40 @@
+# docs/manual-gui/tests/cli-version-history.txt -- read by tests/check_cli_pins.py
+# (lint phase 13, cli-pin-consistency; F-679 fold 1).
+#
+# Lines of GUI-manual prose that name a CLI version OTHER than the current pin
+# ON PURPOSE: version history ("since ms-cli v0.14.0", "as of toolkit
+# v0.81.0"), the release-history appendix. Format: <path relative to
+# docs/manual-gui><TAB><the exact line>. Anything naming an off-pin version
+# that is NOT listed here fails the lint -- so a pin bump surfaces every
+# sentence that stated the old pin. Before adding a line, check that it is
+# history and not a stale statement of the pin.
+src/40-mnemonic/4i-repair.md	| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted) **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
+src/40-mnemonic/4i-repair.md	incomplete-group candidate demotion in **toolkit v0.80.0**, and the
+src/40-mnemonic/4i-repair.md	`--ms1` every-substitution-correction demotion in **toolkit v0.81.0**.
+src/40-mnemonic/4i-repair.md	code `4` (`VERIFY-ME` Candidate, as of toolkit v0.81.0; see Exit codes
+src/40-mnemonic/4n-word-card.md	with toolkit v0.74.0 (the `wc-codec` engine). The GUI exposes it as a flat
+src/50-md/53-encode.md	Boolean. **No-op since md-cli v0.12.0** — the long-code mode was
+src/50-md/53-encode.md	has no effect (status: wont-fix at md-cli v0.15.2 per
+src/50-md/5A-repair.md	`md-cli`'s `repair` subcommand (md-cli v0.6.2+), which wraps
+src/50-md/5A-repair.md	`RepairJson` envelope schema fields. Since ms-cli v0.14.0 / toolkit
+src/50-md/5A-repair.md	toolkit v0.81.0 the toolkit's envelope is a strict superset (adds a
+src/60-ms/61-overview.md	  splitting (ms-cli v0.7.0+).
+src/60-ms/67-split.md	into **N BIP-93 codex32 K-of-N shares** (ms-cli v0.7.0+). Any K of
+src/60-ms/68-combine.md	(ms-cli v0.7.0+). Supply the distributed share strings as
+src/60-ms/69-derive.md	watch-only setup (ms-cli v0.5+). This is **read-only public
+src/60-ms/6a-repair.md	| `4` | **`VERIFY-ME` Candidate** (as of `ms-cli v0.14.0`) — at least one substitution corrected; stdout = repair report + corrected string; stderr carries a `repair: correction UNVERIFIED …` advisory. `ms repair` has no `--max-indel` flag, so exit `5` is unreachable from this binary. |
+src/60-ms/6a-repair.md	**Version scoping.** This demotion ships in **`ms-cli v0.14.0`**;
+src/60-ms/6a-repair.md	`ms-cli v0.14.0` — see Exit codes above). A
+src/70-mk/79-repair.md	toolkit v0.81.0's ms1 demotion, the toolkit's envelope is a strict
+src/70-mk/79-repair.md	**Version scoping — set-level re-verify ships in `mk-cli v0.12.0`.**
+src/90-appendices/91-glossary.md	toolkit v0.74.0+). Layers optional Reed–Solomon parity words for
+src/90-appendices/94-release-history.md	`mnemonic-toolkit-v0.74.0+`; the GUI under `mnemonic-gui-v0.53.0+`.
+src/90-appendices/94-release-history.md	tags advance in lockstep to `mnemonic-toolkit-v0.74.0`,
+src/90-appendices/94-release-history.md	`descriptor-mnemonic-md-cli-v0.11.0`, `ms-cli-v0.13.0`,
+src/90-appendices/94-release-history.md	`mk-cli-v0.11.0`. Purely additive coverage: the toolkit-v0.74.0
+src/90-appendices/94-release-history.md	  `mnemonic-toolkit-v0.70.0`, `descriptor-mnemonic-md-cli-v0.7.0`,
+src/90-appendices/94-release-history.md	  `ms-cli-v0.8.0`, `mk-cli-v0.9.0`.
+src/90-appendices/94-release-history.md	- `mnemonic-toolkit-v0.13.0` — `mnemonic` CLI (the integration
+src/90-appendices/94-release-history.md	- `descriptor-mnemonic-md-cli-v0.5.0` — `md` CLI (wallet-policy
+src/90-appendices/94-release-history.md	- `ms-cli-v0.2.1` — `ms` CLI (BIP-39 entropy backups).
+src/90-appendices/94-release-history.md	- `mk-cli-v0.3.1` — `mk` CLI (xpub backups).
