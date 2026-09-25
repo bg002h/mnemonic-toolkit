@@ -141,8 +141,9 @@ as a checkbox.
 
 1. Switch to the **mnemonic** tab; pick **silent-payment** in the
    subcommand selector.
-2. Set the secret source to **`--secret-stdin`** (the seed flows via
-   stdin, never argv).
+2. Type the seed into **`--secret`**. On Linux the GUI sends it over
+   `--secret-stdin` itself (the toggle stays greyed: the GUI manages
+   it), so it never reaches argv; see [Secret channels](#secret-channels).
 3. Leave `--account` at `0` and `--network` at `mainnet`.
 4. Click **Run** and confirm the modal.
 

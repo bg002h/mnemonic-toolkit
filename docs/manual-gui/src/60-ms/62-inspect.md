@@ -32,7 +32,9 @@ grey out, because the CLI refuses `--in` alongside them.
 
 A single `ms1` string to inspect. Optional at the clap level; when
 omitted or set to literal `-`, the binary reads the string from
-stdin. The GUI renders this as a text field at the bottom of the
+stdin. In the GUI a typed `-` is refused (the GUI has no stdin of its
+own to forward); on Linux the GUI itself sends the typed card as a
+positional `-` over stdin (see [Secret channels](#secret-channels)). The GUI renders this as a text field at the bottom of the
 form.
 
 ## Worked example
@@ -47,9 +49,13 @@ form.
 
 3. Leave `--json` unchecked.
 4. Click **Run**. The run-confirm modal fires, because the `ms1`
-   positional is secret-bearing; its argv shows `--allow-argv-secret`
-   right after the subcommand, which the GUI adds on Run (see
-   [Secret handling](#secret-argv-opt-in)). Confirm to proceed.
+   positional is secret-bearing. On Linux its argv ends in `-- -` and
+   its **Secrets:** line reads
+   `` <ms1> ← stdin via positional `-` + '\r\n' (typed) ``: the card
+   goes over stdin. On macOS and Windows the
+   argv instead carries the card masked `••••` and the GUI-added
+   `--allow-argv-secret` (see [Secret handling](#secret-argv-opt-in)).
+   Confirm to proceed.
 
 The output panel renders the verdict line and structured fields
 on stdout:

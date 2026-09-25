@@ -43,8 +43,8 @@ wallet derived from it.
 ## `--from` {#mnemonic-addresses-from}
 
 The source: `xpub=<v>` | `phrase=<v>` | `entropy=<hex>` |
-`seedqr=<digits>` | `electrum-phrase=<v>`. Secret values support
-`@env:VAR` and `-` (stdin). Required. For an `xpub=` source the xpub
+`seedqr=<digits>` | `electrum-phrase=<v>`. On the command line,
+secret values support `@env:VAR` and `-` (stdin). In a GUI field, `@env:VAR` is read by the GUI itself and `-` is refused (the GUI has no stdin to forward); see [Secret channels](#secret-channels-typed-sentinels). Required. For an `xpub=` source the xpub
 *is* the account key (so `--account` / `--passphrase` do not apply;
 supplying them is an error). `electrum-phrase=` (v0.47.0+) derives
 Electrum's own native-seed addresses (not BIP-39/BIP-44); the script
@@ -117,9 +117,9 @@ A locally-controlled regression-test network. Coin-type 1.
 
 ## `--passphrase` {#mnemonic-addresses-passphrase}
 
-The BIP-39 passphrase for seed sources; `@env:VAR` is supported.
-Inline use emits the argv-leakage advisory; prefer
-`--passphrase-stdin`. The GUI renders this as a masked
+The BIP-39 passphrase for seed sources. On the command line `-` and
+`@env:VAR` are supported, and inline use emits the argv-leakage
+advisory; prefer `--passphrase-stdin`. In a GUI field, `@env:VAR` is read by the GUI itself and `-` is refused (the GUI has no stdin to forward); see [Secret channels](#secret-channels-typed-sentinels). The GUI renders this as a masked
 `SecretLineEdit`.
 
 ## `--passphrase-stdin` {#mnemonic-addresses-passphrase-stdin}

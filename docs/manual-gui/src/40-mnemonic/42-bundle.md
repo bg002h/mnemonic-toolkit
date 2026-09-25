@@ -677,7 +677,7 @@ region after the run completes.
 | Trigger | Stderr advisory |
 |---|---|
 | Inline `--slot @N.<secret>=<value>` (any of `phrase`, `entropy`, `wif`, `xprv`) | `warning: secret material on argv (--slot @N.<subkey>=) — pipe via --slot @N.<subkey>=- to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `--self-check` failure (re-derivation drift) | exits non-zero with `self-check failed: round-trip drift on <card-class>` |
 
 Note that the GUI's command-line preview always uses the inline

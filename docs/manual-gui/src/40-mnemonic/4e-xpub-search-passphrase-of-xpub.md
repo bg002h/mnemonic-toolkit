@@ -244,11 +244,12 @@ path-lookup separately via [`path-of-xpub`](#mnemonic-xpub-search-path-of-xpub).
 
 1. Switch to the **mnemonic** tab; pick **xpub-search:
    passphrase-of-xpub** in the subcommand selector.
-2. Set the seed-intake to **`--phrase-stdin`**; set the passphrase
-   source to **`--passphrase-stdin`** — wait, only one stdin per
-   invocation: use `--phrase-stdin` for the seed and type the
-   passphrase inline into `--passphrase` (it renders masked, and the
-   modal redacts it to `••••`).
+2. Type the seed into **`--phrase`** and the candidate passphrase
+   into **`--passphrase`**. Only one secret can use stdin per run, so
+   on Linux the GUI sends the phrase over `--phrase-stdin` and the
+   passphrase through its own environment variable
+   (`--passphrase @env:MNEMONIC_GUI_S1`); neither reaches argv. See
+   [Secret channels](#secret-channels).
 3. Paste the target xpub (or `mk1` card) into `--target-xpub`.
 4. Click **Run** and confirm the modal.
 

@@ -284,7 +284,9 @@ different preimage). The GUI renders this as a Text widget.
 ([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template),
 n≥2). Same grammar + semantics as
 [`restore --from`](#mnemonic-restore-from) (`ms1=` / `phrase=` /
-`entropy=` / `seedqr=`; `@env:VAR` or stdin). REQUIRED to complete a
+`entropy=` / `seedqr=`; `@env:VAR` or stdin on the command line, and
+in a GUI field `@env:VAR` only — see
+[Secret channels](#secret-channels-typed-sentinels)). REQUIRED to complete a
 multisig template; ignored for a single-sig template or a keyed
 wallet-policy bundle. The own key is derived at `--account` (a single
 own account for verify) honoring `--origin`. Distinct from

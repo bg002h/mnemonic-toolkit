@@ -94,12 +94,14 @@ stdout with the private-key-material output advisory.
    ABEiM0RVZneImaq7zN3u/zY0181f7qAY/NWiVQFLdHE=
    ```
 
-3. Tick `--decrypt-password-stdin` (so the password stays off argv) and
-   supply the password through the form's stdin channel.
+3. Type the password into `--decrypt-password`. On Linux the GUI
+   sends it over `--decrypt-password-stdin` itself (that toggle stays
+   greyed: the GUI manages it), so it stays off argv.
 4. The `Preview:` line resembles:
 
    ```text
    mnemonic electrum-decrypt --ciphertext ABEi…dHE= --decrypt-password-stdin
+     --decrypt-password ← stdin via --decrypt-password-stdin + '\r\n' (typed)
    ```
 
 5. Click **Run**; redact-confirm in the modal.

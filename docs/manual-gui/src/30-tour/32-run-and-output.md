@@ -113,15 +113,22 @@ set, the GUI does NOT fire the subprocess immediately; instead the
 +-----------------------------------------------------------------+
 |              Confirm secret-bearing run                         |
 +-----------------------------------------------------------------+
-| This invocation passes secret-bearing arguments to              |
+| This invocation sends these secrets privately to mnemonic:      |
 | ----                                                            |
 | Argv:                                                           |
 |   mnemonic                                                      |
 |   convert                                                       |
 |   --from                                                        |
-|   ••••                                                          |
+|   phrase=@env:MNEMONIC_GUI_S0                                   |
 |   --to                                                          |
 |   ms1                                                           |
+|   --network                                                     |
+|   mainnet                                                       |
+|   --language                                                    |
+|   english                                                       |
+| ----                                                            |
+| Secrets:                                                        |
+|   --from phrase= ← env MNEMONIC_GUI_S0 (typed)                  |
 | ----                                                            |
 | [ Run ]   [ Cancel ]                                            |
 +-----------------------------------------------------------------+
@@ -132,19 +139,16 @@ dismisses the modal and leaves the form unchanged. There is no
 Escape-key affordance — see [§14 Defense 2](#secret-handling) for
 the threat-model rationale.
 
-**The modal redacts the secret-bearing argv tokens** as a fixed
-`••••` sentinel (shown above in place of the `phrase=abandon ... about`
-token). The literal secret is never drawn on screen: the GUI builds a
-parallel display-mask alongside the real argv and substitutes the
-sentinel for each masked token, while the *unredacted* argv is what
-actually spawns when you click **Run**. For a composite
-`--from <node>=<value>` token the whole `node=value` token is masked,
-so even the `phrase=` prefix is hidden in that one case. The residual
-exposure — the flag NAME and the *fact* that a secret-bearing run is
-in progress — remains observable to anything that can read the screen;
-see [§14 Defense 2](#secret-handling) for the full masking semantics
-and the still-recommended (now general-hygiene, not load-bearing)
-cold-node operational practice.
+**The phrase is not in the argv at all.** On Linux the GUI puts it
+in an environment variable of the child process, `MNEMONIC_GUI_S0`,
+and passes `mnemonic` the reference `phrase=@env:MNEMONIC_GUI_S0`;
+the **Secrets:** line says so, and `(typed)` says the value came from
+the field. The same argv and line appear under the form's `Preview:`
+before you click **Run**. On macOS and Windows the phrase still goes
+on the command line for now, and there the modal shows it as `••••`
+and opens with *"This invocation passes secret-bearing arguments
+to"*. See [Secret channels](#secret-channels) for both paths, and for
+what `-` or `@env:VAR` typed into a secret field does.
 
 Click **Run** in the modal. The subprocess fires; the output panel
 updates with the `ms1` encoding of the test vector:
@@ -172,12 +176,11 @@ ms1` produces the same output as the CLI invocation it wraps.
   transcript, copy text out of the panel before re-running, or
   invoke the same argv from a shell where you control the
   scrollback.
-- It does **not** echo secrets in plaintext in the `argv:` line.
-  The output panel's `argv:` echo is masked with the same `••••`
-  sentinel the run-confirm modal uses, so a secret-bearing run does
-  not leave the literal secret visible in the panel. The flag NAMES
-  remain visible (the same residual exposure as the modal); only the
-  secret VALUE is masked.
+- It does **not** echo secrets in the `argv:` line. On Linux the
+  line shows the private references the run used
+  (`phrase=@env:MNEMONIC_GUI_S0`, `--passphrase-stdin`); on macOS and
+  Windows it masks each secret as `••••`, as the modal does. The flag
+  NAMES remain visible (the same residual exposure as the modal).
 
 The next chapter (33) covers the `?` help-icons that deep-link
 into this manual.

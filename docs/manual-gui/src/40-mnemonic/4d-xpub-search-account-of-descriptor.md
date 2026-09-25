@@ -249,14 +249,15 @@ report. The envelope carries `matched_cosigners[]` (each with
 
 1. Switch to the **mnemonic** tab; pick **xpub-search:
    account-of-descriptor** in the subcommand selector.
-2. Set the seed-intake to **`--phrase-stdin`** (the seed flows via
-   stdin, never argv).
+2. Type the seed into **`--phrase`**. On Linux the GUI sends it over
+   `--phrase-stdin` itself (the toggle stays greyed: the GUI manages
+   it), so it never reaches argv; see [Secret channels](#secret-channels).
 3. Paste the 2-of-3 wallet descriptor (literal-xpub or `md1`) into
    the `--descriptor` field.
 4. Leave the range knobs at their defaults (`--min-account 0`,
    `--number-of-accounts 20`).
-5. Click **Run** and confirm the modal (the pasted phrase shows as
-   `••••`).
+5. Click **Run** and confirm the modal; its **Secrets:** line reads
+   `--phrase ← stdin via --phrase-stdin + '\r\n' (typed)`.
 
 Stdout (text form, multisig match):
 
