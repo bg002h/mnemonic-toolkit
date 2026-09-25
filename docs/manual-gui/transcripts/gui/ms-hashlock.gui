@@ -1,0 +1,17 @@
+[ ms > hashlock ]
+  --hashlock-phrase              text  (required, secret) -> <masked> [reveal]
+  --hashlock-phrase-stdin        checkbox  (secret) -> [ ] off [disabled]
+  --kind                         dropdown[(choose),sha256,hash256,ripemd160,hash160,all kinds -- lookup only]  -> <empty>
+  --hex                          text  (required, secret) -> <masked> [reveal]
+  --in                           path  (required) -> <empty>
+  --random                       checkbox  (required) -> [ ] off
+  --method                       dropdown[hardened,sha256]  -> hardened [disabled]
+  --out                          path  -> <empty>
+  --json                         checkbox  -> [ ] off
+  --no-engraving-card            checkbox  -> [ ] off
+  --emit-record                  checkbox  -> [ ] off [disabled]
+  --group-size                   number  -> <unset>
+  --separator                    dropdown[space]  -> space
+  --phrase-looks-like-digest-ok  checkbox  -> [ ] off
+  ms1                            positional  (required, secret) -> <masked> [reveal]
+  [ Run ]

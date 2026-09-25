@@ -1,0 +1,4 @@
+[ md > shape-key ]
+  --descriptor  text  (required) -> <empty>
+  phrases       positional...  (required) -> <empty>
+  [ Run ]

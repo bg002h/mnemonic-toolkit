@@ -41,14 +41,13 @@ read the public phrase), choose **`--to`** `fingerprint`, and set
 path). The filled form is below; the run panel returns
 `fingerprint: 73c5da0a`.
 
-Note the standard-error line: because the GUI passes the phrase as an
-argument, the tool prints a `secret material on argv (--from phrase=)`
-warning and suggests piping on standard input instead. `Examples.pdf`
-uses that safer stdin idiom (`< seed0.txt`) and so shows no warning; the
-wallet output — the fingerprint — is identical either way. The phrase is
-masked everywhere on screen except where you deliberately reveal it — the
-confirm modal and the `argv:` echo stay `••••` regardless; only the
-*warning* differs.
+Standard error is empty. On Linux the GUI hands the phrase to the tool
+privately, through an environment variable of its own
+(`--from phrase=@env:MNEMONIC_GUI_S0` in the `argv:` line, never the
+words), so the tool has no argv warning to print (the reference
+manual's *Secret handling* chapter explains the channels). `Examples.pdf` keeps the phrase off the command line its own way
+(`< seed0.txt`); the fingerprint is identical either way. The phrase is
+never drawn on screen unless you deliberately reveal it in its field.
 
 ![GUI form (screenshot)](../figures/tutorial/tut-j2-02-convert-fingerprint-form.png)
 
@@ -57,12 +56,6 @@ confirm modal and the `argv:` echo stay `••••` regardless; only the
 **Output (stdout):**
 
 ```{.text include="tutorial/tut-j2-02-convert-fingerprint.stdout.txt"}
-(captured transcript — included at build time)
-```
-
-**Standard error (stderr):**
-
-```{.text include="tutorial/tut-j2-02-convert-fingerprint.stderr.txt"}
 (captured transcript — included at build time)
 ```
 
@@ -77,9 +70,9 @@ confirm modal and the `argv:` echo stay `••••` regardless; only the
 Same form, same seed (the **`--from`** phrase field is revealed in the
 shot again, as in the previous step), **`--to`** set to `xpub`: this
 returns cosigner 0's account **public** key,
-`xpub6DBjiYnc4ewKti13Q1L35…VqqzrXvicM`. Standard error repeats the
-argv warning and adds `stdout is watch-only — public keys only, cannot
-spend` — this xpub is safe to hand to the coordinator. In practice you
+`xpub6DBjiYnc4ewKti13Q1L35…VqqzrXvicM`. Standard error carries one
+line, `stdout is watch-only — public keys only, cannot spend` — this
+xpub is safe to hand to the coordinator. In practice you
 run these two `convert` steps on the air-gapped signing device and
 carry out only the fingerprint and the xpub.
 
@@ -229,14 +222,15 @@ the single-revealed-field rule, where revealing one secret field
 re-masks any other. The filled form is below.
 
 Clicking **Run** raises the same "Confirm secret-bearing run" modal as
-Journey 1 (three masked phrases this time); it runs through the confirm
+Journey 1 (three private environment references this time, one per
+slot); it runs through the confirm
 path but, to keep the book lean, is not re-photographed. Because seeds
 — not just xpubs — are supplied, the panel emits the **full secret card
 set**: one `ms1` per cosigner alongside the `mk1` and shared `md1`
-cards. Standard error carries one `secret material on argv` warning per
-slot and the `can spend` warning — this is the spendable set. Only one
-secret may arrive on standard input per run, so the truly safe path
-remains the per-device flow above.
+cards. Standard error carries the engraving panel and the `can spend`
+warning — this is the spendable set. The three seeds went to the tool
+privately, but they still met on one machine, so the safe path remains
+the per-device flow above.
 
 ![GUI form (screenshot)](../figures/tutorial/tut-j2-07-bundle-all-seeds-form.png)
 
@@ -319,12 +313,6 @@ seed differs.
 (captured transcript — included at build time)
 ```
 
-**Standard error (stderr):**
-
-```{.text include="tutorial/tut-j2-dev1-convert-fingerprint.stderr.txt"}
-(captured transcript — included at build time)
-```
-
 **Exit code:**
 
 ```{.text include="tutorial/tut-j2-dev1-convert-fingerprint.exit.txt"}
@@ -363,12 +351,6 @@ Cosigner 2, same interaction again — the transcript returns
 **Output (stdout):**
 
 ```{.text include="tutorial/tut-j2-dev2-convert-fingerprint.stdout.txt"}
-(captured transcript — included at build time)
-```
-
-**Standard error (stderr):**
-
-```{.text include="tutorial/tut-j2-dev2-convert-fingerprint.stderr.txt"}
 (captured transcript — included at build time)
 ```
 

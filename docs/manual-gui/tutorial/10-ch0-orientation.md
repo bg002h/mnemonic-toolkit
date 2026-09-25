@@ -104,28 +104,28 @@ Journey 1 shots:
   moment you release, click **Run**, switch fields, or leave the
   window). Several filled-form shots in this book hold that toggle on
   purpose (see *Revealed demo phrases* below).
-- **The masked preview.** The `Preview:` line shows the argument vector
-  with the secret replaced by `••••` (for example `… --slot ••••`).
+- **The private preview.** On Linux the GUI never puts a secret on the
+  command line. The `Preview:` line shows the argument vector with a
+  private reference where the secret goes (for example
+  `… --slot '@0.phrase=@env:MNEMONIC_GUI_S0'`), and under it one line per
+  secret saying how it travels (`--slot @N.phrase= ← env
+  MNEMONIC_GUI_S0 (typed)`).
 - **The confirm modal.** The "Confirm secret-bearing run" dialog lists
-  the argument vector — again with the secret shown only as `••••` —
-  and makes you click **Run** a second time before anything spawns. The
-  **Copy command** buttons for such a form are relabelled *"— reveals
-  secret"* so you cannot copy an unmasked command line by reflex.
-- **The masked argv echo (the `argv:` line).** After a run, the output
-  panel's command-line line echoes the argument vector the app
-  actually ran — with the secret still masked as `••••`.
+  the same argument vector and the same per-secret lines, and makes you
+  click **Run** a second time before anything spawns.
+- **The `argv:` echo.** After a run, the output panel's command-line
+  line echoes the argument vector the app actually ran — the private
+  reference, never the words.
 
 That last surface deserves a word, because it looks like the command
-"lost" your seed. It did not. The masked `--slot ••••` (or `--from
-••••`) in the panel is proof that the **real** phrase was accepted and
-passed to the tool: the run succeeded, the cards came out, the
-fingerprint is correct — the app simply refuses to *print* the secret
-back to you. A real invocation on your own machine is identical to what
-the panel shows, minus the masking. (One consequence, flagged again in
-Journey 2: because the GUI passes a phrase as an argument, the tool
-emits its own "secret material on argv" warning — a hint to prefer
-piping the seed on standard input, which the shell examples in
-`Examples.pdf` do.)
+"lost" your seed. It did not. The GUI placed the phrase in a private
+environment variable of the child process and told the tool to read it
+from there (`@env:MNEMONIC_GUI_S0`); the run succeeded, the cards came
+out, the fingerprint is correct. Because the phrase never went on the
+command line, the tool prints no "secret material on argv" warning. (On
+macOS and Windows the GUI still passes the secret as an argument for
+now, and there the preview, modal and `argv:` line show it as `••••`;
+the reference manual's *Secret handling* chapter has the details.)
 
 ## Revealed demo phrases in this book
 
@@ -135,8 +135,8 @@ phrase shown that way is one of the three **public** test vectors — safe
 to print, never to fund. With your *own* seed, use the reveal only to
 verify against a paper backup, then release it (or Alt-Tab away) to
 re-mask before anyone can read the screen; the reveal is display-only, so
-the confirm modal, the `argv:` echo, and the saved session state stay
-masked no matter what.
+it never puts the phrase into the preview, the confirm modal, the
+`argv:` echo, or the saved session state.
 
 ## What the panel's `argv:` line really contains
 

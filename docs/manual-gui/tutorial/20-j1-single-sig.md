@@ -21,17 +21,22 @@ the single row's subkey drop-down from `xpub` to `phrase` and type the
 demo phrase into its value box. The box masks it as `••••` by default;
 the filled-form shot below holds the row's **reveal** toggle so you
 can read the exact public phrase to type (it re-masks the instant you
-release, or click **Run**). Notice the `Preview:` line still reads
-`… --slot ••••` — the reveal is display-only and never unmasks the
-preview, the confirm modal, or the `argv:` echo. The filled form is
+release, or click **Run**). Notice the `Preview:` line reads
+`… --slot '@0.phrase=@env:MNEMONIC_GUI_S0'`, with a line under it,
+`--slot @N.phrase= ← env MNEMONIC_GUI_S0 (typed)`: on Linux the GUI
+hands the phrase to `mnemonic` through a private environment variable of
+its own, so the words never appear on the command line or on screen. The
+reveal is display-only and changes none of this. The filled form is
 below.
 
 Clicking **Run** does not spawn immediately — the form carries a
 secret, so the **"Confirm secret-bearing run"** modal appears (second
-shot). It lists the exact argument vector, with the phrase shown only as
-`••••` and with the `--allow-argv-secret` the GUI adds on Run (a copied
-command leaves it out, so a shell refuses the phrase on argv), and the
-**Copy command** buttons are relabelled *"— reveals secret"*. Confirm with the modal's **Run**.
+shot). Its first line reads *"This invocation sends these secrets
+privately to mnemonic:"*; it lists the exact argument vector, which
+carries only the environment reference, and under **Secrets:** the same
+`← env MNEMONIC_GUI_S0 (typed)` line. **Copy command** copies a command
+with no secret in it: a comment line tells you how to set the variable
+yourself before running it. Confirm with the modal's **Run**.
 
 The populated panel (third shot) carries the three engraving cards on
 standard output: `ms1` (the BIP-39 entropy, BCH-checksummed), `mk1`
@@ -40,12 +45,13 @@ card is printed once, as one unbroken line — the default
 `--group-size 0` (set `--group-size 5` for five-character blocks, the
 **form you punch or engrave**). Standard
 error carries the human-readable engraving panel (fingerprint
-`73c5da0a`, origin path `m/84'/0'/0'`, template `bip84`), a
-`secret material on argv` warning, and the `stdout carries private key
-material (can spend)` warning — a reminder that this card set is the
-*spendable* backup and belongs on steel, offline. The masked `--slot
-••••` in the `argv:` line is proof the real phrase was accepted; your
-own run is identical bar the masking.
+`73c5da0a`, origin path `m/84'/0'/0'`, template `bip84`) and the
+`stdout carries private key material (can spend)` warning — a reminder
+that this card set is the *spendable* backup and belongs on steel,
+offline. There is no argv warning, because the phrase never went on the
+command line. The `argv:` line shows the same environment reference as
+the preview; the fingerprint `73c5da0a` is the proof the real phrase
+was used.
 
 ![GUI form (screenshot)](../figures/tutorial/tut-j1-01-bundle-single-sig-form.png)
 
