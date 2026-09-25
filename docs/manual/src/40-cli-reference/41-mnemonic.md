@@ -92,14 +92,16 @@ The same rule holds on every subcommand that takes `--passphrase`
 | nothing | empty (the no-passphrase wallet) |
 | `--passphrase-stdin` | stdin, with exactly **one** trailing newline (`\n` or `\r\n`) removed; every other byte kept |
 | `--passphrase -` | the same as `--passphrase-stdin`, byte for byte |
-| `--passphrase @env:VAR` | the value of `VAR`, with the same one-newline rule. `VAR` unset is an error naming it; set but empty is the empty passphrase |
-| `--passphrase <anything else>` | that string, verbatim, plus one stderr line: `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+| `--passphrase @env:VAR` | the value of `VAR`, resolved once, with the same one-newline rule. `VAR` unset, not valid UTF-8, or not a valid name (`[A-Z_][A-Z0-9_]*`) is an error naming it; set but empty is the empty passphrase |
+| `--passphrase <anything else>` | refused as argv material (exit 2) unless `--allow-argv-secret` is given; with it, that string, verbatim, plus one stderr line: `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 
 A passphrase that differs by one byte is a different wallet, so leading and
 trailing spaces, a second trailing newline and interior newlines are all
-kept. `--passphrase -` beside another input read from stdin is refused
-(one stdin per invocation), as is `--passphrase -` together with
-`--passphrase-stdin`. Since F-687 there is no way to pass the one-character
+kept. Only the exact value `-` is stdin: a dash padded with a space or tab is a literal.
+`--passphrase -` beside another input read from stdin is refused (one
+stdin per invocation) — including a file path that is stdin, such as
+`--secret-file /dev/stdin` or `--import-json -` — as is `--passphrase -`
+together with `--passphrase-stdin`. Since F-687 there is no way to pass the one-character
 passphrase `-`, or one beginning `@env:`, on the command line; pipe it on
 stdin instead.
 
@@ -2164,7 +2166,7 @@ mnemonic slip39 combine --share <slip39-mnemonic-or-> ... [OPTIONS]
 | Flag | Purpose |
 |---|---|
 | `--from <phrase=…\|entropy=…>` | master secret as `phrase=<value-or->` or `entropy=<hex-or->`; `=-` reads from stdin |
-| `--passphrase <P>` | SLIP-39 passphrase (NOT the BIP-39 mnemonic-extension passphrase) |
+| `--passphrase <P>` | SLIP-39 passphrase (NOT the BIP-39 mnemonic-extension passphrase); `-` reads stdin, `@env:VAR` the environment |
 | `--passphrase-stdin` | read `--passphrase` from stdin (single stdin per invocation) |
 | `--group-threshold <G>` | groups required to reconstruct (1 ≤ G ≤ group count) |
 | `--group <N,T>` | repeating group spec (`<member_count>,<member_threshold>`); position in argv = SLIP-39 `group_idx` |
@@ -2178,7 +2180,7 @@ mnemonic slip39 combine --share <slip39-mnemonic-or-> ... [OPTIONS]
 | Flag | Purpose |
 |---|---|
 | `--share <slip39-mnemonic-or->` | repeating share input; at most ONE may be `-` (stdin) |
-| `--passphrase <P>` | SLIP-39 passphrase used at split time |
+| `--passphrase <P>` | SLIP-39 passphrase used at split time; `-` reads stdin, `@env:VAR` the environment |
 | `--passphrase-stdin` | read `--passphrase` from stdin (incompatible with any `--share -`) |
 | `--to <entropy\|phrase>` | output shape (default `entropy`); `phrase` emits a BIP-39 mnemonic per `--language` |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase`; ignored for `--to entropy` |
@@ -4120,7 +4122,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 | Flag | Purpose |
 |---|---|
 | `--phrase` / `--phrase-stdin` / `--ms1` / `--ms1-stdin` / `<positional MS1>` | seed-intake mutex (same as `path-of-xpub`) |
-| `--passphrase` / `--passphrase-stdin` | optional BIP-39 passphrase |
+| `--passphrase` / `--passphrase-stdin` | optional BIP-39 passphrase; `--passphrase -` reads stdin, `@env:VAR` the environment |
 | `--descriptor <VALUE>` | wallet descriptor; shape auto-detected per tie-break order |
 | `--descriptor-from <NODE>=<VALUE>` | explicit shape override (`literal=` / `md1=` / `bip388=`; `-` for stdin) |
 | `--language` / `--network` | BIP-39 wordlist + network selector (same defaults as `path-of-xpub`) |
@@ -4334,7 +4336,7 @@ mnemonic xpub-search passphrase-of-xpub \
 | `--ms1 <MS1>` | ms1 card carrying BIP-39 entropy (inline); emits argv-leakage advisory |
 | `--ms1-stdin` | read ms1 card from stdin (single chunk) |
 | `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
-| `--passphrase <P>` | BIP-39 passphrase (inline); emits argv-leakage advisory. One of the mandatory passphrase-source group |
+| `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value emits the argv-leakage advisory. One of the mandatory passphrase-source group |
 | `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped). One of the mandatory passphrase-source group |
 | `--passphrase-candidates-file <PATH>` | scan a text file of candidate passphrases (one per line, no argv exposure); first match wins, reports the file line (passphrase only in `--json`); exit 4 if none match. One of the mandatory passphrase-source group |
 | `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |

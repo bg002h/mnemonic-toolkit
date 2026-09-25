@@ -47,8 +47,9 @@ pub struct BundleArgs {
     pub language: Option<CliLanguage>,
 
     /// BIP-39 mnemonic-extension passphrase ("25th word"). Empty
-    /// (default) is the common case. Mutually exclusive with
-    /// `--passphrase-stdin`.
+    /// (default) is the common case. `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -214,6 +215,27 @@ pub fn run<W: Write, E: Write>(
     // from the value as written, before `@env:` resolution below.
     let pp_reads_stdin =
         crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin);
+    // F-687 fold 1 (M1, M4): `--import-json -`, and a `--descriptor-file` /
+    // `--import-json` path that IS stdin, read stdin too. (Slot stdin is
+    // refused in `apply_stdin_substitutions`.)
+    crate::passphrase_input::refuse_second_stdin(&[
+        (
+            pp_reads_stdin,
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin),
+        ),
+        (
+            args.import_json.as_deref().is_some_and(|v| {
+                v == "-" || crate::passphrase_input::path_is_stdin(std::path::Path::new(v))
+            }),
+            "--import-json -",
+        ),
+        (
+            args.descriptor_file
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--descriptor-file /dev/stdin",
+        ),
+    ])?;
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
     // consumption. Skipped when no sentinel is present to avoid an

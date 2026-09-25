@@ -420,9 +420,11 @@ pub enum ToolkitError {
 /// two distinct stderr message templates per SPEC_wallet_import_v0_26_0.md §2.4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvVarMissingReason {
-    /// The `@env:VAR` syntax was well-formed but `std::env::var(VAR)` failed
-    /// (variable is unset or not valid UTF-8).
+    /// The `@env:VAR` syntax was well-formed but the variable is unset.
     Unset,
+    /// The variable is set but its value is not valid UTF-8 (F-687 fold 1,
+    /// review N1: it used to be reported as "not set").
+    NotUnicode,
     /// The `<VAR>` token failed the POSIX env-var-name regex
     /// `[A-Z_][A-Z0-9_]*` (e.g., `@env:foo bar`, `@env:1FOO`, `@env:lowercase`).
     InvalidName,
@@ -865,6 +867,9 @@ impl ToolkitError {
             ToolkitError::EnvVarMissing { flag, var, reason } => match reason {
                 EnvVarMissingReason::Unset => format!(
                     "{flag}: env-var {var} referenced by sentinel is not set"
+                ),
+                EnvVarMissingReason::NotUnicode => format!(
+                    "{flag}: env-var {var} referenced by sentinel is set but not valid UTF-8"
                 ),
                 EnvVarMissingReason::InvalidName => {
                     format!("{flag}: invalid env-var name `{var}`")

@@ -79,6 +79,30 @@ pub(crate) fn stdin_spelling(stdin_flag: bool) -> &'static str {
     }
 }
 
+/// Is this input PATH really stdin? `/dev/stdin`, `/dev/fd/0` and
+/// `/proc/self/fd/0` by name, and on Unix anything that resolves to the same
+/// file as fd 0 (same device + inode). Opening such a path reads the SAME
+/// stream as a stdin passphrase, so it counts as a second stdin reader —
+/// before F-687 fold 1, `silent-payment --secret-file /dev/stdin
+/// --passphrase -` let the secret read drain stdin and derived with the EMPTY
+/// passphrase at exit 0 (review M1).
+pub(crate) fn path_is_stdin(path: &std::path::Path) -> bool {
+    if matches!(
+        path.to_str(),
+        Some("/dev/stdin" | "/dev/fd/0" | "/proc/self/fd/0")
+    ) {
+        return true;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if let (Ok(a), Ok(b)) = (std::fs::metadata(path), std::fs::metadata("/dev/stdin")) {
+            return a.dev() == b.dev() && a.ino() == b.ino();
+        }
+    }
+    false
+}
+
 /// One stdin per invocation: refuse when more than one of `readers` (each a
 /// `(reads_stdin, name)` pair) consumes stdin. The second reader would
 /// otherwise see an empty stream — for a passphrase, silently the empty

@@ -90,7 +90,7 @@ fn every_vector_case_holds() {
     ]);
     let cases = v["cases"].as_array().unwrap();
     assert!(
-        cases.len() >= 25,
+        cases.len() >= 37,
         "the vector file lost cases: {}",
         cases.len()
     );
@@ -765,4 +765,168 @@ fn xpub_search_phrase_stdin_and_passphrase_stdin_are_refused() {
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Fold 1 (review f687-review.md).
+// ---------------------------------------------------------------------------
+
+/// M1 + M4: an input PATH that is stdin — by name, or the same file as fd 0 —
+/// and `bundle --import-json -` are stdin readers. Before fold 1,
+/// `silent-payment --secret-file /dev/stdin --passphrase -` derived the
+/// NO-passphrase wallet at exit 0, and `bundle --import-json -` swallowed the
+/// JSON as the passphrase.
+#[test]
+fn a_path_that_is_stdin_is_a_second_stdin_reader() {
+    let dir = tempfile::tempdir().unwrap();
+    let seed_file = dir.path().join("seed.txt");
+    std::fs::write(&seed_file, format!("{SEED}\n")).unwrap();
+    let seed_path = seed_file.to_str().unwrap();
+    let cases: Vec<Vec<String>> = vec![
+        s(&["silent-payment", "--secret-file", "/dev/stdin"]),
+        s(&["silent-payment", "--secret-file", "/dev/fd/0"]),
+        s(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--import-json",
+            "-",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+        ]),
+        s(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor-file",
+            "/dev/stdin",
+        ]),
+        s(&[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--bundle-json",
+            "/dev/stdin",
+        ]),
+    ];
+    for base in &cases {
+        for pp in [&["--passphrase", "-"][..], &["--passphrase-stdin"][..]] {
+            let r = run(&with(base, pp), format!("{SEED}\n").as_bytes(), &[]);
+            assert!(
+                r.code != 0 && r.stdout.is_empty() && r.stderr.contains("stdin"),
+                "{base:?} {pp:?}: rc {} stderr {}",
+                r.code,
+                r.stderr
+            );
+        }
+    }
+    // By INODE: stdin redirected from a file, and the same file named as the
+    // input path.
+    // fd 0 IS the file (a real `< seed.txt` redirect, not a pipe).
+    let o = std::process::Command::new(assert_cmd::cargo::cargo_bin("mnemonic"))
+        .args([
+            "silent-payment",
+            "--secret-file",
+            seed_path,
+            "--passphrase",
+            "-",
+        ])
+        .stdin(std::fs::File::open(&seed_file).unwrap())
+        .output()
+        .unwrap();
+    assert!(!o.status.success() && o.stdout.is_empty(), "{:?}", o);
+    // Control: the same path with the passphrase NOT on stdin is fine.
+    let r = run(
+        &s(&[
+            "silent-payment",
+            "--secret-file",
+            seed_path,
+            "--passphrase",
+            "@env:F687_PP",
+        ]),
+        b"",
+        &[("F687_PP", PW)],
+    );
+    assert_eq!(r.code, 0, "{}", r.stderr);
+}
+
+/// N1: a non-UTF-8 `@env:` value is "not valid UTF-8", not "not set"; a
+/// non-UTF-8 argv value is a usage error (64), not a panic (101), and is not
+/// echoed.
+#[cfg(unix)]
+#[test]
+fn non_utf8_input_is_refused_by_name_not_panicked() {
+    use std::os::unix::ffi::OsStrExt;
+    let bad = std::ffi::OsStr::from_bytes(b"TRE\xffZOR");
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("F687_SEED", SEED)
+        .env("F687_PP", bad)
+        .args([
+            "convert",
+            "--from",
+            "phrase=@env:F687_SEED",
+            "--to",
+            "fingerprint",
+            "--template",
+            "bip84",
+            "--passphrase",
+            "@env:F687_PP",
+        ])
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(1), "{err}");
+    assert!(
+        err.contains("F687_PP") && err.contains("not valid UTF-8"),
+        "{err}"
+    );
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("F687_SEED", SEED)
+        .args([
+            "convert",
+            "--from",
+            "phrase=@env:F687_SEED",
+            "--to",
+            "fingerprint",
+            "--template",
+            "bip84",
+            "--allow-argv-secret",
+            "--passphrase",
+        ])
+        .arg(bad)
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(64), "{err}");
+    assert!(
+        err.contains("not valid UTF-8") && !err.contains("ZOR"),
+        "{err}"
+    );
+}
+
+/// N2: the slip39 two-stdin refusal names the spelling the operator typed.
+#[test]
+fn slip39_refusal_names_the_dash_spelling() {
+    let r = run(
+        &s(&[
+            "slip39",
+            "combine",
+            "--share",
+            "-",
+            "--share",
+            "@env:F687_SEED",
+            "--passphrase",
+            "-",
+        ]),
+        b"x",
+        &[],
+    );
+    assert!(r.code != 0, "{}", r.stderr);
+    assert!(r.stderr.contains("and --passphrase -)"), "{}", r.stderr);
 }

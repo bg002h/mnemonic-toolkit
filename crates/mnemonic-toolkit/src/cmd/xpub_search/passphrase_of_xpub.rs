@@ -78,8 +78,10 @@ pub struct PassphraseOfXpubArgs {
     )]
     pub ms1_stdin: bool,
 
-    /// BIP-39 passphrase (inline). Emits an argv-leakage advisory. One of the
-    /// `passphrase_source` group (exactly one required; see the struct group).
+    /// BIP-39 passphrase. `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory.
+    /// One of the `passphrase_source` group (exactly one required).
     #[arg(long)]
     pub passphrase: Option<String>,
 

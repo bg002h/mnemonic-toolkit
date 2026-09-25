@@ -61,7 +61,9 @@ pub struct AccountOfDescriptorArgs {
     )]
     pub ms1_stdin: bool,
 
-    /// BIP-39 passphrase (inline). Emits an argv-leakage advisory.
+    /// BIP-39 passphrase. `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory.
     #[arg(long, conflicts_with = "passphrase_stdin")]
     pub passphrase: Option<String>,
 

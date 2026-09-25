@@ -217,9 +217,15 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Single stdin per invocation — refuse the two-readers case BEFORE any read.
     // F-687: `--passphrase -` reads stdin too, so it counts.
     let pp_value = args.passphrase.as_deref();
-    if crate::passphrase_input::reads_stdin(pp_value, args.passphrase_stdin) && args.secret_stdin {
+    // F-687 fold 1 (M1): a `--secret-file` that IS stdin is a stdin reader too.
+    let secret_reads_stdin = args.secret_stdin
+        || args
+            .secret_file
+            .as_deref()
+            .is_some_and(crate::passphrase_input::path_is_stdin);
+    if crate::passphrase_input::reads_stdin(pp_value, args.passphrase_stdin) && secret_reads_stdin {
         return Err(ToolkitError::SilentPayment(format!(
-            "{} cannot be combined with --secret-stdin (single stdin per invocation)",
+            "{} cannot be combined with --secret-stdin or a --secret-file that is stdin (single stdin per invocation)",
             crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
         )));
     }

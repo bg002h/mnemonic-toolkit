@@ -272,6 +272,11 @@ fn channel_for(flag: &str, sub: Option<&str>, subkey_form: Option<&str>) -> Opti
         ("--slot", _) => Some(format!("--slot {}-", subkey_form.unwrap_or("@N.phrase="))),
         ("--from", _) => Some(format!("--from {}-", subkey_form.unwrap_or("phrase="))),
         ("--digits", _) => Some("--digits -".into()),
+        // F-687: all three private `--passphrase` channels exist on every
+        // subcommand that declares the flag (fold 1, review N3).
+        ("--passphrase", _) => {
+            Some("--passphrase -   (stdin; or --passphrase-stdin, or --passphrase @env:VAR)".into())
+        }
         (other, _) => Some(format!("{other}-stdin")),
     }
 }
@@ -631,6 +636,8 @@ mod tests {
         assert!(!msg.contains("staple"));
         assert!(msg.contains("28 characters"));
         assert!(msg.contains("--passphrase-stdin"));
+        assert!(msg.contains("--passphrase -"));
+        assert!(msg.contains("--passphrase @env:VAR"));
     }
 
     /// Section 6h: the remedy must not forward-reference a channel that does not

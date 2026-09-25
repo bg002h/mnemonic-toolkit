@@ -92,11 +92,9 @@ pub struct Slip39SplitArgs {
     /// SLIP-39 passphrase (NOT BIP-39 passphrase).
     ///
     /// `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
-    /// reads it from an environment variable. Any other inline value emits
-    /// an argv-leakage advisory. The argv-leakage
-    /// advisory fires iff this field is `Some(_)` (user supplied the
-    /// flag), regardless of value — so empty passphrases
-    /// (`--passphrase ""`) still trigger the advisory (R0 C1 fold).
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory. An empty literal
+    /// (`--passphrase ""`) still triggers the advisory.
     #[arg(long = "passphrase", conflicts_with = "passphrase_stdin")]
     pub passphrase: Option<String>,
 
@@ -280,6 +278,20 @@ fn emit_env_var_advisory<E: Write>(stderr: &mut E) {
     );
 }
 
+/// SPEC §2.5 row 18 refusal. Names the passphrase spelling the operator
+/// typed (F-687 fold 1, review N2); the `--passphrase-stdin` wording is
+/// unchanged byte for byte.
+fn stdin_conflict_message(passphrase: Option<&str>, passphrase_stdin_flag: bool) -> String {
+    let spelling = if !passphrase_stdin_flag && passphrase == Some("-") {
+        "--passphrase -"
+    } else {
+        "--passphrase-stdin"
+    };
+    format!(
+        "slip39: at most one stdin consumer per invocation (across --share, --from, and {spelling})"
+    )
+}
+
 /// F-687: the shared `--passphrase` rule (`-` = stdin, `@env:VAR` = env).
 fn resolve_passphrase<R: Read>(
     inline: Option<&String>,
@@ -356,9 +368,10 @@ fn run_split<R: Read, W: Write, E: Write>(
         + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             as usize;
     if split_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
-            "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
-        ));
+        return Err(ToolkitError::BadInput(stdin_conflict_message(
+            args.passphrase.as_deref(),
+            args.passphrase_stdin,
+        )));
     }
 
     // SPEC §2.5 row 5 — CLI-layer pre-check for `--group 1,1`. The
@@ -563,9 +576,10 @@ fn run_combine<R: Read, W: Write, E: Write>(
         + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             as usize;
     if combine_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
-            "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
-        ));
+        return Err(ToolkitError::BadInput(stdin_conflict_message(
+            args.passphrase.as_deref(),
+            args.passphrase_stdin,
+        )));
     }
 
     // SPEC §2.6 rows 1d (per-share inline) + 1e (passphrase inline).

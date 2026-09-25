@@ -46,7 +46,9 @@ pub struct VerifyBundleArgs {
 
     /// BIP-39 mnemonic-extension passphrase used during the
     /// original `mnemonic bundle` emission. Empty (default) is the
-    /// common case. Mutually exclusive with `--passphrase-stdin`.
+    /// common case. `-` reads it from stdin (same as `--passphrase-stdin`); `@env:VAR`
+    /// reads it from an environment variable. Any other value is taken
+    /// literally and emits an argv-leakage advisory.
     #[arg(long)]
     pub passphrase: Option<String>,
 
@@ -276,6 +278,26 @@ pub fn run<W: Write, E: Write>(
     // from the value as written, before `@env:` resolution below.
     let pp_reads_stdin =
         crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin);
+    // F-687 fold 1 (M1): a `--bundle-json` / `--descriptor-file` path that IS
+    // stdin reads the same stream as a stdin passphrase.
+    crate::passphrase_input::refuse_second_stdin(&[
+        (
+            pp_reads_stdin,
+            crate::passphrase_input::stdin_spelling(args.passphrase_stdin),
+        ),
+        (
+            args.bundle_json
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--bundle-json /dev/stdin",
+        ),
+        (
+            args.descriptor_file
+                .as_deref()
+                .is_some_and(crate::passphrase_input::path_is_stdin),
+            "--descriptor-file /dev/stdin",
+        ),
+    ])?;
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before HRP validation
     // + downstream consumption. Owned-args shadowing keeps the diff

@@ -24,7 +24,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   either form.
   - One resolver (`src/passphrase_input.rs`) replaces the per-subcommand copies
     whose disagreement caused this. The rule, pinned by
-    `crates/mnemonic-toolkit/tests/vectors/passphrase_channels.json` (27 cases;
+    `crates/mnemonic-toolkit/tests/vectors/passphrase_channels.json` (37 cases;
     mnemonic-secret carries a byte-identical copy): `--passphrase -` =
     `--passphrase-stdin`, byte for byte (exactly one trailing `\n` / `\r\n`
     removed, every other byte kept); `@env:VAR` under the same one-newline
@@ -43,7 +43,22 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   - One stdin per invocation: `--passphrase -` beside another stdin input
     (`--from <node>=-`, `--slot @N.<secret>=-`, `--share -`, `--secret-stdin`,
     `--phrase-stdin` / `--ms1-stdin`, `--descriptor-from <node>=-`) is refused
-    exactly as `--passphrase-stdin` is.
+    exactly as `--passphrase-stdin` is. So is an input PATH that is stdin (`/dev/stdin`, `/dev/fd/0`, or any
+    path that is the same file as fd 0) on `silent-payment --secret-file`,
+    `bundle --descriptor-file` / `--import-json`, and `verify-bundle
+    --bundle-json` / `--descriptor-file`, and `bundle --import-json -`. Before,
+    `silent-payment --secret-file /dev/stdin --passphrase -` derived the
+    no-passphrase wallet at exit 0, and `--import-json -` swallowed the JSON
+    as the passphrase.
+  - An `@env:` value is resolved ONCE: a variable holding `@env:X` is that
+    literal.
+  - The argv-guard refusal for a literal `--passphrase` now names all three
+    private channels; the slip39 one-stdin refusal names `--passphrase -` when
+    that is what was typed; `--passphrase` help on `bundle`, `verify-bundle`
+    and the three `xpub-search` modes describes `-` and `@env:`.
+  - A non-UTF-8 `@env:` value (any secret flag) is reported as "set but not
+    valid UTF-8" (was "not set"), and a non-UTF-8 argument is a usage error
+    (exit 64, value not shown) instead of a panic (exit 101).
 
 ### Fixed
 
