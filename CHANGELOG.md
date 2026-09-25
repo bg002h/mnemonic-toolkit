@@ -6,6 +6,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## mnemonic-toolkit [Unreleased]
+
+### Fixed
+- **macOS: a file that IS stdin was not recognised as stdin** (F-687e). The
+  one-stdin guard identified fd 0 by stat-ing `/dev/stdin`; on macOS that
+  path resolves through the fdesc filesystem and does not report the dev/ino
+  of the file fd 0 is open on. So `silent-payment --secret-file seed.txt
+  --passphrase -` with stdin redirected FROM `seed.txt` exited 0 and derived
+  with the file's text as the passphrase, a wrong wallet, where Linux refuses
+  it as two stdin readers. The same check guards `bundle --descriptor-file` /
+  `--import-json`, `verify-bundle --bundle-json` / `--descriptor-file`,
+  `import-wallet --blob` and `electrum-decrypt --decrypt-password-file`. fd 0
+  is now identified by `fstat` on fd 0 itself. Found by the macos-latest CI
+  job (run 36188069667).
+
 ## mnemonic-toolkit [0.105.0] — 2026-09-25
 
 ### Changed
