@@ -144,14 +144,16 @@ const TABLE: &[Entry] = &[
         flag: "--bip38-passphrase",
         shape: Shape::Whole {
             class: "a BIP-38 passphrase",
-            sentinel: false,
+            // F-687b: `-` reads stdin, like `--passphrase -`.
+            sentinel: true,
         },
     },
     Entry {
         flag: "--decrypt-password",
         shape: Shape::Whole {
             class: "a wallet decryption password",
-            sentinel: false,
+            // F-687b: `-` reads stdin, like `--passphrase -`.
+            sentinel: true,
         },
     },
     Entry {
@@ -277,6 +279,15 @@ fn channel_for(flag: &str, sub: Option<&str>, subkey_form: Option<&str>) -> Opti
         ("--passphrase", _) => {
             Some("--passphrase -   (stdin; or --passphrase-stdin, or --passphrase @env:VAR)".into())
         }
+        // F-687b: the same three channels.
+        ("--bip38-passphrase", _) => Some(
+            "--bip38-passphrase -   (stdin; or --bip38-passphrase-stdin, or --bip38-passphrase @env:VAR)"
+                .into(),
+        ),
+        ("--decrypt-password", _) => Some(
+            "--decrypt-password -   (stdin; or --decrypt-password-stdin, or --decrypt-password @env:VAR)"
+                .into(),
+        ),
         (other, _) => Some(format!("{other}-stdin")),
     }
 }
@@ -552,10 +563,44 @@ mod tests {
             inspect(&argv(&["convert", "--passphrase=-", "--from", "xpub=x"])),
             Verdict::Clean
         ));
-        // `-` is exempt ONLY on `--passphrase`; `--bip38-passphrase -` is still
-        // a one-character value there (F-687 names `--passphrase`).
-        let f = findings(&["convert", "--bip38-passphrase", "-", "--from", "wif=x"]);
+        // F-687b: the same rule on `--bip38-passphrase` and
+        // `--decrypt-password` (both spellings).
+        for a in [
+            &["convert", "--bip38-passphrase", "-", "--from", "xpub=x"][..],
+            &["convert", "--bip38-passphrase=-", "--from", "xpub=x"][..],
+            &[
+                "electrum-decrypt",
+                "--decrypt-password",
+                "-",
+                "--ciphertext",
+                "x",
+            ][..],
+            &["import-wallet", "--decrypt-password=-", "--blob", "x"][..],
+            &[
+                "import-wallet",
+                "--decrypt-password",
+                "@env:PW",
+                "--blob",
+                "x",
+            ][..],
+        ] {
+            assert!(matches!(inspect(&argv(a)), Verdict::Clean), "{a:?}");
+        }
+        // ...and a literal is still refused, naming all three channels.
+        let f = findings(&["convert", "--bip38-passphrase", "pw", "--from", "wif=x"]);
         assert_eq!(f[0].flag, "--bip38-passphrase");
+        assert!(
+            f[0].channel.contains("--bip38-passphrase -"),
+            "{}",
+            f[0].channel
+        );
+        assert!(f[0].channel.contains("--bip38-passphrase @env:VAR"));
+        let f = findings(&["import-wallet", "--decrypt-password", "pw", "--blob", "x"]);
+        assert!(
+            f[0].channel.contains("--decrypt-password -"),
+            "{}",
+            f[0].channel
+        );
     }
 
     #[test]

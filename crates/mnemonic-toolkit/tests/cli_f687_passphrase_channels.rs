@@ -90,7 +90,7 @@ fn every_vector_case_holds() {
     ]);
     let cases = v["cases"].as_array().unwrap();
     assert!(
-        cases.len() >= 37,
+        cases.len() >= 42,
         "the vector file lost cases: {}",
         cases.len()
     );
@@ -141,6 +141,25 @@ fn every_vector_case_holds() {
                 r.stderr
             ));
         }
+        // F-687b ruling 2: exactly `empty_warnings` empty-channel warnings.
+        let empties = r
+            .stderr
+            .lines()
+            .filter(|l| {
+                l.starts_with("warning: --passphrase from ")
+                    && l.ends_with(" is empty; proceeding with the EMPTY passphrase")
+            })
+            .count() as u64;
+        if empties != case["empty_warnings"].as_u64().unwrap() {
+            failures.push(format!(
+                "{name}: {empties} empty warnings; stderr:\n{}",
+                r.stderr
+            ));
+        }
+        // F-687b ruling 3: stdin is a pipe in every case, so never a prompt.
+        if r.stderr.contains(v["prompt"].as_str().unwrap().trim_end()) {
+            failures.push(format!("{name}: prompted on a non-terminal:\n{}", r.stderr));
+        }
         let fp = r
             .stdout
             .lines()
@@ -151,6 +170,13 @@ fn every_vector_case_holds() {
                 failures.push(format!(
                     "{name}: want {want}, got rc {} fp {fp:?}; stderr:\n{}",
                     r.code, r.stderr
+                ));
+            }
+        } else if let Some(code) = case["expect"]["exit_code"].as_i64() {
+            if i64::from(r.code) != code || !r.stdout.is_empty() {
+                failures.push(format!(
+                    "{name}: want exit {code}, got rc {} stdout {:?} stderr {:?}",
+                    r.code, r.stdout, r.stderr
                 ));
             }
         } else {
@@ -929,4 +955,679 @@ fn slip39_refusal_names_the_dash_spelling() {
     );
     assert!(r.code != 0, "{}", r.stderr);
     assert!(r.stderr.contains("and --passphrase -)"), "{}", r.stderr);
+}
+
+// ---------------------------------------------------------------------------
+// F-687b ruling 3: the terminal prompt. A real pseudo-terminal is the only way
+// to exercise it: every other test pipes stdin, which is the no-prompt case.
+// ---------------------------------------------------------------------------
+
+/// What a pty run produced.
+#[cfg(target_os = "linux")]
+#[allow(dead_code)]
+struct PtyRun {
+    code: Option<i32>,
+    /// The signal that killed the child, if one did.
+    signal: Option<i32>,
+    stdout: String,
+    stderr: String,
+    /// Everything the terminal DISPLAYED (the line discipline's echo).
+    shown: Vec<u8>,
+    /// Was ECHO on in the terminal's mode after the child was gone?
+    echo_after: bool,
+}
+
+/// Run `bin argv` on a fresh pty that is the child's CONTROLLING terminal
+/// (setsid + TIOCSCTTY, so a typed Ctrl-C really sends SIGINT). Waits for
+/// `prompt` on stderr, then types `typed` on the master. On a timeout the
+/// child is KILLED before the test fails, so no process is left blocked on
+/// the pty (review M5).
+#[cfg(target_os = "linux")]
+fn run_on_a_terminal(
+    bin: &std::path::Path,
+    argv: &[&str],
+    env: &[(&str, &str)],
+    prompt: &str,
+    typed: &[u8],
+) -> PtyRun {
+    use std::io::{Read, Write};
+    use std::os::fd::{AsRawFd, FromRawFd};
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
+    // SAFETY: posix_openpt/grantpt/unlockpt/ptsname on a fd we own.
+    let (mut master, name) = unsafe {
+        let m = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY);
+        assert!(m >= 0, "posix_openpt");
+        assert_eq!(libc::grantpt(m), 0);
+        assert_eq!(libc::unlockpt(m), 0);
+        let name = std::ffi::CStr::from_ptr(libc::ptsname(m))
+            .to_str()
+            .unwrap()
+            .to_string();
+        (std::fs::File::from_raw_fd(m), name)
+    };
+    let open_slave = || {
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NOCTTY)
+            .open(&name)
+            .unwrap()
+    };
+    use std::os::unix::fs::OpenOptionsExt;
+    // Our own handle on the slave, to read the terminal mode back afterwards.
+    let keep = open_slave();
+    let mut cmd = std::process::Command::new(bin);
+    cmd.args(argv)
+        .stdin(open_slave())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    // SAFETY: async-signal-safe calls only, between fork and exec.
+    unsafe {
+        cmd.pre_exec(|| {
+            if libc::setsid() < 0 || libc::ioctl(0, libc::TIOCSCTTY as _, 0) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = cmd.spawn().unwrap();
+    let mut err = child.stderr.take().unwrap();
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let prompt_owned = prompt.to_string();
+    let reader = std::thread::spawn(move || {
+        let mut got = Vec::new();
+        let mut b = [0u8; 1];
+        let mut sent = false;
+        while err.read(&mut b).unwrap_or(0) == 1 {
+            got.push(b[0]);
+            if !sent && String::from_utf8_lossy(&got).contains(&prompt_owned) {
+                let _ = tx.send(());
+                sent = true;
+            }
+        }
+        String::from_utf8_lossy(&got).into_owned()
+    });
+    if rx.recv_timeout(std::time::Duration::from_secs(20)).is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("the prompt {prompt:?} never appeared on stderr (child killed)");
+    }
+    master.write_all(typed).unwrap();
+    let out = child.wait_with_output().unwrap();
+    let stderr = reader.join().unwrap();
+    // SAFETY: fcntl/tcgetattr on fds we own.
+    let echo_after = unsafe {
+        let fd = master.as_raw_fd();
+        libc::fcntl(
+            fd,
+            libc::F_SETFL,
+            libc::fcntl(fd, libc::F_GETFL) | libc::O_NONBLOCK,
+        );
+        let mut t: libc::termios = std::mem::zeroed();
+        assert_eq!(libc::tcgetattr(keep.as_raw_fd(), &mut t), 0, "tcgetattr");
+        t.c_lflag & libc::ECHO != 0
+    };
+    let mut shown = Vec::new();
+    let mut buf = [0u8; 256];
+    while let Ok(n) = master.read(&mut buf) {
+        if n == 0 {
+            break;
+        }
+        shown.extend_from_slice(&buf[..n]);
+    }
+    PtyRun {
+        code: out.status.code(),
+        signal: out.status.signal(),
+        stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
+        stderr,
+        shown,
+        echo_after,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// F-687b: the operator's three rulings (2026-09-25) and F-689.
+// ---------------------------------------------------------------------------
+
+/// BIP-38 test vector 1 (no EC multiply, uncompressed).
+const BIP38_WIF: &str = "5KN7MzqK5wt2TP1fQCYyHBtDrXdJuXbUzm4A9rKAteGu3Qi5CVR";
+const BIP38_PW: &str = "TestingOneTwoThree";
+const BIP38_OUT: &str = "bip38: 6PRVWUbkzzsbcVac2qwfssoUJAN1Xhrg6bNk8J7Nzm5H7kxEbn2Nh2ZoGg";
+/// Electrum field-encryption test vector (`cli_electrum_decrypt.rs`).
+const EL_CT: &str = "ABEiM0RVZneImaq7zN3u/zY0181f7qAY/NWiVQFLdHE=";
+const EL_PW: &str = "test-password";
+const BIE1: &str = "tests/fixtures/wallet_import/electrum-bie1-storage-bip84.txt";
+
+fn empties(stderr: &str, flag: &str) -> usize {
+    stderr
+        .lines()
+        .filter(|l| l.starts_with(&format!("warning: {flag} from ")) && l.contains(" is empty; "))
+        .count()
+}
+
+/// Ruling 1: `--bip38-passphrase` follows the same rule through the same
+/// resolver: `-`, `@env:` (one newline stripped), the stdin flag and a
+/// literal all give the BIP-38 vector; only the literal gets the note; an
+/// empty private value warns once (ruling 2).
+#[test]
+fn bip38_passphrase_takes_every_form() {
+    let base = s(&["convert", "--from", "wif=@env:F687_W", "--to", "bip38"]);
+    let w = [("F687_W", BIP38_WIF)];
+    let lf = format!("{BIP38_PW}\n");
+    for (label, extra, stdin, env, notes) in [
+        (
+            "stdin flag",
+            vec!["--bip38-passphrase-stdin"],
+            lf.as_str(),
+            vec![],
+            0usize,
+        ),
+        (
+            "dash",
+            vec!["--bip38-passphrase", "-"],
+            lf.as_str(),
+            vec![],
+            0,
+        ),
+        ("dash =", vec!["--bip38-passphrase=-"], BIP38_PW, vec![], 0),
+        (
+            "env",
+            vec!["--bip38-passphrase", "@env:F687_BP"],
+            "",
+            vec![("F687_BP", lf.as_str())],
+            0,
+        ),
+        (
+            "literal",
+            vec!["--allow-argv-secret", "--bip38-passphrase", BIP38_PW],
+            "",
+            vec![],
+            1,
+        ),
+    ] {
+        let mut e = w.to_vec();
+        e.extend(env);
+        let r = run(&with(&base, &extra), stdin.as_bytes(), &e);
+        assert_eq!(r.code, 0, "{label}: {}", r.stderr);
+        assert!(
+            r.stdout.lines().any(|l| l == BIP38_OUT),
+            "{label}: {}",
+            r.stdout
+        );
+        let n = r
+            .stderr
+            .lines()
+            .filter(|l| l.starts_with("warning: secret material on argv (--bip38-passphrase)"))
+            .count();
+        assert_eq!(n, notes, "{label}: {}", r.stderr);
+        assert_eq!(empties(&r.stderr, "--bip38-passphrase"), 0, "{label}");
+    }
+    // Empty from stdin: warned once, proceeds (never refused).
+    let r = run(&with(&base, &["--bip38-passphrase", "-"]), b"\n", &w);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(empties(&r.stderr, "--bip38-passphrase"), 1, "{}", r.stderr);
+    // One stdin: `--bip38-passphrase -` beside `--from wif=-`, or beside a
+    // stdin `--passphrase`, is refused before anything is read.
+    for argv in [
+        s(&[
+            "convert",
+            "--from",
+            "wif=-",
+            "--to",
+            "bip38",
+            "--bip38-passphrase",
+            "-",
+        ]),
+        s(&[
+            "convert",
+            "--from",
+            "phrase=@env:F687_SEED",
+            "--to",
+            "bip38",
+            "--template",
+            "bip84",
+            "--passphrase",
+            "-",
+            "--bip38-passphrase",
+            "-",
+        ]),
+    ] {
+        let r = run(&argv, format!("{BIP38_WIF}\n").as_bytes(), &[]);
+        assert!(r.code != 0 && r.stdout.is_empty(), "{argv:?}: {}", r.stderr);
+        assert!(r.stderr.contains("--bip38-passphrase -"), "{}", r.stderr);
+    }
+}
+
+/// Ruling 1: `--decrypt-password` on `electrum-decrypt` and `import-wallet`.
+#[test]
+fn decrypt_password_takes_every_form() {
+    let base = s(&["electrum-decrypt", "--ciphertext", EL_CT]);
+    let lf = format!("{EL_PW}\n");
+    for (label, extra, stdin, env, notes) in [
+        (
+            "stdin flag",
+            vec!["--decrypt-password-stdin"],
+            lf.as_str(),
+            vec![],
+            0usize,
+        ),
+        (
+            "dash",
+            vec!["--decrypt-password", "-"],
+            lf.as_str(),
+            vec![],
+            0,
+        ),
+        (
+            "env",
+            vec!["--decrypt-password", "@env:F687_DP"],
+            "",
+            vec![("F687_DP", lf.as_str())],
+            0,
+        ),
+        (
+            "literal",
+            vec!["--allow-argv-secret", "--decrypt-password", EL_PW],
+            "",
+            vec![],
+            1,
+        ),
+    ] {
+        let r = run(&with(&base, &extra), stdin.as_bytes(), &env);
+        assert_eq!(r.code, 0, "{label}: {}", r.stderr);
+        assert_eq!(r.stdout.trim(), "hello world", "{label}");
+        let n = r
+            .stderr
+            .lines()
+            .filter(|l| l.starts_with("warning: secret material on argv (--decrypt-password)"))
+            .count();
+        assert_eq!(n, notes, "{label}: {}", r.stderr);
+    }
+    // Empty from the environment: warned once, then the (wrong) password
+    // fails closed, as any wrong password does.
+    let r = run(
+        &with(&base, &["--decrypt-password", "@env:F687_DP"]),
+        b"",
+        &[("F687_DP", "")],
+    );
+    assert_eq!(empties(&r.stderr, "--decrypt-password"), 1, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("environment variable F687_DP"),
+        "{}",
+        r.stderr
+    );
+    // One stdin.
+    let r = run(
+        &s(&[
+            "electrum-decrypt",
+            "--ciphertext",
+            "-",
+            "--decrypt-password",
+            "-",
+        ]),
+        b"x",
+        &[],
+    );
+    assert!(r.code != 0 && r.stderr.contains("stdin"), "{}", r.stderr);
+
+    // import-wallet: BIE1 storage decrypts through `-` and `@env:`.
+    for (extra, stdin, env) in [
+        (vec!["--decrypt-password", "-"], "satoshi\n", vec![]),
+        (
+            vec!["--decrypt-password", "@env:F687_DP"],
+            "",
+            vec![("F687_DP", "satoshi")],
+        ),
+    ] {
+        let r = run(
+            &with(&s(&["import-wallet", "--blob", BIE1]), &extra),
+            stdin.as_bytes(),
+            &env,
+        );
+        assert_eq!(r.code, 0, "{extra:?}: {}", r.stderr);
+        assert!(
+            r.stderr.contains("BIE1 user-password storage decrypted"),
+            "{}",
+            r.stderr
+        );
+        assert!(
+            !r.stderr.contains("secret material on argv"),
+            "{}",
+            r.stderr
+        );
+    }
+    let r = run(
+        &s(&["import-wallet", "--blob", "-", "--decrypt-password", "-"]),
+        b"x",
+        &[],
+    );
+    assert!(
+        r.code != 0 && r.stderr.contains("--decrypt-password -"),
+        "{}",
+        r.stderr
+    );
+}
+
+/// F-689: `verify-bundle --ms1 -` reads the ms1 from stdin and verifies
+/// `result: ok` against a matching bundle. Before, the `-` was stripped to
+/// `""` (the watch-only sentinel) and the bundle reported a false mismatch.
+#[test]
+fn verify_bundle_ms1_dash_reads_stdin() {
+    let r = run(
+        &s(&[
+            "bundle",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ]),
+        b"",
+        &[],
+    );
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let line = |p: &str| -> Vec<String> {
+        r.stdout
+            .lines()
+            .filter(|l| l.starts_with(p))
+            .map(str::to_string)
+            .collect()
+    };
+    let ms1 = line("ms1")[0].clone();
+    let mut base = s(&[
+        "verify-bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        "@0.phrase=@env:F687_SEED",
+    ]);
+    let mut tail = vec!["--".to_string()];
+    tail.extend(line("mk1"));
+    tail.extend(line("md1"));
+    let ok = |r: &Run| r.stdout.lines().any(|l| l == "result: ok");
+    // Control: the ms1 on argv verifies.
+    let mut lit = base.clone();
+    lit.extend(["--allow-argv-secret".into(), "--ms1".into(), ms1.clone()]);
+    lit.extend(tail.clone());
+    assert!(ok(&run(&lit, b"", &[])));
+    // `--ms1 -`.
+    base.extend(["--ms1".to_string(), "-".to_string()]);
+    let mut dash = base.clone();
+    dash.extend(tail.clone());
+    let r = run(&dash, format!("{ms1}\n").as_bytes(), &[]);
+    assert!(ok(&r), "rc {}: {}\n{}", r.code, r.stdout, r.stderr);
+    // A wrong ms1 on stdin still mismatches (the `-` really is read).
+    let r = run(
+        &dash,
+        b"ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7g\n",
+        &[],
+    );
+    assert!(!ok(&r), "{}", r.stdout);
+    // Empty stdin is refused, never the watch-only sentinel.
+    let r = run(&dash, b"", &[]);
+    assert!(
+        r.code != 0 && r.stderr.contains("--ms1 -: stdin was empty"),
+        "{}",
+        r.stderr
+    );
+    // One stdin: beside `--passphrase -`, or twice.
+    let mut two = base.clone();
+    two.extend(["--passphrase".into(), "-".into()]);
+    two.extend(tail.clone());
+    let r = run(&two, format!("{ms1}\n").as_bytes(), &[]);
+    assert!(r.code != 0 && r.stderr.contains("--ms1 -"), "{}", r.stderr);
+    let mut twice = base.clone();
+    twice.extend(["--ms1".into(), "-".into()]);
+    twice.extend(tail);
+    let r = run(&twice, format!("{ms1}\n").as_bytes(), &[]);
+    assert!(
+        r.code != 0 && r.stderr.contains("at most one --ms1 -"),
+        "{}",
+        r.stderr
+    );
+}
+
+/// Ruling 3: on a terminal, prompt on stderr, echo off, read ONE line.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_terminal_gets_a_prompt_and_no_echo() {
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let fp = [
+        "convert",
+        "--from",
+        "phrase=@env:F687_SEED",
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+    ];
+    for pp in [&["--passphrase", "-"][..], &["--passphrase-stdin"][..]] {
+        let argv: Vec<&str> = fp.iter().chain(pp.iter()).copied().collect();
+        let r = run_on_a_terminal(
+            &bin,
+            &argv,
+            &[("F687_SEED", SEED)],
+            "Enter passphrase: ",
+            b"TREZOR\n",
+        );
+        assert_eq!(r.code, Some(0), "{pp:?}: {}", r.stderr);
+        assert!(
+            r.stdout.contains("fingerprint: b4e3f5ed"),
+            "{pp:?}: {}",
+            r.stdout
+        );
+        assert!(
+            !r.stderr.contains("input will be visible"),
+            "echo could not be disabled: {}",
+            r.stderr
+        );
+        let shown = String::from_utf8_lossy(&r.shown);
+        assert!(
+            !shown.contains("TREZOR"),
+            "the terminal echoed the passphrase: {shown:?}"
+        );
+        // Review M4: the terminal mode is RESTORED after a normal exit.
+        assert!(r.echo_after, "{pp:?}: echo left OFF after the run");
+    }
+    // The other flags prompt with their own name.
+    let argv = [
+        "convert",
+        "--from",
+        "wif=@env:F687_W",
+        "--to",
+        "bip38",
+        "--bip38-passphrase",
+        "-",
+    ];
+    let typed = format!("{BIP38_PW}\n");
+    let r = run_on_a_terminal(
+        &bin,
+        &argv,
+        &[("F687_W", BIP38_WIF)],
+        "Enter BIP-38 passphrase: ",
+        typed.as_bytes(),
+    );
+    assert_eq!(r.code, Some(0), "{}", r.stderr);
+    assert!(r.stdout.contains(BIP38_OUT), "{}", r.stdout);
+    assert!(r.echo_after);
+}
+
+/// Ctrl-C at the prompt: the process dies of SIGINT (the conventional
+/// status) AND the terminal has echo back on. Ctrl-D at an empty prompt: the
+/// empty warning starts on its own line (review N1), echo restored.
+#[cfg(target_os = "linux")]
+#[test]
+fn ctrl_c_and_ctrl_d_at_the_prompt_leave_a_working_terminal() {
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let argv = [
+        "convert",
+        "--from",
+        "phrase=@env:F687_SEED",
+        "--to",
+        "fingerprint",
+        "--template",
+        "bip84",
+        "--passphrase",
+        "-",
+    ];
+    let env = [("F687_SEED", SEED)];
+    let r = run_on_a_terminal(&bin, &argv, &env, "Enter passphrase: ", b"TRE\x03");
+    assert_eq!(
+        r.signal,
+        Some(libc::SIGINT),
+        "code {:?}: {}",
+        r.code,
+        r.stderr
+    );
+    assert!(r.stdout.is_empty());
+    assert!(r.echo_after, "Ctrl-C left echo OFF");
+    let r = run_on_a_terminal(&bin, &argv, &env, "Enter passphrase: ", b"\x04");
+    assert_eq!(r.code, Some(0), "{}", r.stderr);
+    assert!(r.stdout.contains("fingerprint: 73c5da0a"), "{}", r.stdout);
+    assert!(
+        r.stderr
+            .contains("Enter passphrase: \nwarning: --passphrase from stdin is empty"),
+        "{:?}",
+        r.stderr
+    );
+    assert!(r.echo_after);
+}
+
+/// F-689 follow-up: `verify-bundle --ms1 -` on a terminal prompts and hides
+/// the ms1 (seed material) exactly like a passphrase.
+#[cfg(target_os = "linux")]
+#[test]
+fn verify_bundle_ms1_dash_prompts_on_a_terminal() {
+    let r = run(
+        &s(&[
+            "bundle",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--network",
+            "mainnet",
+            "--template",
+            "bip84",
+        ]),
+        b"",
+        &[],
+    );
+    let ms1 = r
+        .stdout
+        .lines()
+        .find(|l| l.starts_with("ms1"))
+        .unwrap()
+        .to_string();
+    let mut argv: Vec<String> = s(&[
+        "verify-bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        "@0.phrase=@env:F687_SEED",
+        "--ms1",
+        "-",
+        "--",
+    ]);
+    argv.extend(
+        r.stdout
+            .lines()
+            .filter(|l| l.starts_with("mk1") || l.starts_with("md1"))
+            .map(str::to_string),
+    );
+    let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let typed = format!("{ms1}\n");
+    let r = run_on_a_terminal(
+        &bin,
+        &argv,
+        &[("F687_SEED", SEED)],
+        "Enter ms1: ",
+        typed.as_bytes(),
+    );
+    assert_eq!(r.code, Some(0), "{}\n{}", r.stdout, r.stderr);
+    assert!(r.stdout.lines().any(|l| l == "result: ok"), "{}", r.stdout);
+    assert!(
+        !String::from_utf8_lossy(&r.shown).contains(&ms1[5..]),
+        "the ms1 was echoed"
+    );
+    assert!(r.echo_after);
+}
+
+/// Review M1-M3: separators-only `--ms1 -` is refused (never the watch-only
+/// `""`); `import-wallet --blob /dev/stdin` beside a stdin password, and
+/// `verify-bundle --ms1 -` beside `--descriptor-file /dev/stdin`, are two
+/// stdin readers.
+#[test]
+fn fold1_stdin_gaps_are_refused() {
+    for stdin in [&b"-\n"[..], b"---", b" - - \n"] {
+        let r = run(
+            &s(&[
+                "verify-bundle",
+                "--network",
+                "mainnet",
+                "--template",
+                "bip84",
+                "--slot",
+                "@0.phrase=@env:F687_SEED",
+                "--ms1",
+                "-",
+                "--",
+                "mk1x",
+            ]),
+            stdin,
+            &[],
+        );
+        assert!(
+            r.code != 0
+                && r.stderr
+                    .contains("--ms1 -: stdin was empty or only separators"),
+            "{stdin:?}: {}",
+            r.stderr
+        );
+        assert!(!r.stderr.contains("watch-only via empty"), "{}", r.stderr);
+    }
+    for pw in [
+        &["--decrypt-password", "-"][..],
+        &["--decrypt-password-stdin"][..],
+    ] {
+        let r = run(
+            &with(&s(&["import-wallet", "--blob", "/dev/stdin"]), pw),
+            b"satoshi\n",
+            &[],
+        );
+        assert!(
+            r.code != 0 && r.stderr.contains("cannot both read from stdin"),
+            "{pw:?}: {}",
+            r.stderr
+        );
+    }
+    let r = run(
+        &s(&[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--descriptor-file",
+            "/dev/stdin",
+            "--slot",
+            "@0.phrase=@env:F687_SEED",
+            "--ms1",
+            "-",
+            "--",
+            "mk1x",
+        ]),
+        b"x\n",
+        &[],
+    );
+    assert!(
+        r.code != 0 && r.stderr.contains("--descriptor-file /dev/stdin"),
+        "{}",
+        r.stderr
+    );
 }

@@ -64,8 +64,8 @@ nothing and the entry is written back when you exit.
 | `--from <node>=<value>` | `--from <node>=-` and pipe the value on stdin |
 | `--slot @N.<subkey>=<value>` | `--slot @N.<subkey>=-` (one per invocation), or `--slot @N.<subkey>=@env:VAR` |
 | `--passphrase <value>` | `--passphrase -` or `--passphrase-stdin` (stdin), or `--passphrase @env:VAR` |
-| `--bip38-passphrase <value>` | `--bip38-passphrase-stdin` |
-| `--decrypt-password <value>` | `--decrypt-password-stdin` |
+| `--bip38-passphrase <value>` | `--bip38-passphrase -` or `--bip38-passphrase-stdin` (stdin), or `--bip38-passphrase @env:VAR` |
+| `--decrypt-password <value>` | `--decrypt-password -` or `--decrypt-password-stdin` (stdin), `--decrypt-password @env:VAR`, or `--decrypt-password-file` |
 | `--phrase <value>` | `--phrase-stdin` |
 | `--secret <value>` | `--secret-stdin` |
 | `--digits <value>` | `--digits -` |
@@ -85,14 +85,17 @@ cards) is **not** refused: a leak there costs privacy, not the money.
 The same rule holds on every subcommand that takes `--passphrase`
 (`addresses`, `restore`, `derive-child`, `bundle`, `verify-bundle`,
 `convert`, `silent-payment`, `slip39 split` / `combine`, and the three
-`xpub-search` modes), and in `ms derive`:
+`xpub-search` modes), and in `ms derive`. The same rule, with its own flag
+names, holds for `convert --bip38-passphrase` / `--bip38-passphrase-stdin`
+and for `import-wallet` / `electrum-decrypt --decrypt-password` /
+`--decrypt-password-stdin`:
 
 | you write | the passphrase is |
 |---|---|
 | nothing | empty (the no-passphrase wallet) |
 | `--passphrase-stdin` | stdin, with exactly **one** trailing newline (`\n` or `\r\n`) removed; every other byte kept |
 | `--passphrase -` | the same as `--passphrase-stdin`, byte for byte |
-| `--passphrase @env:VAR` | the value of `VAR`, resolved once, with the same one-newline rule. `VAR` unset, not valid UTF-8, or not a valid name (`[A-Z_][A-Z0-9_]*`) is an error naming it; set but empty is the empty passphrase |
+| `--passphrase @env:VAR` | the value of `VAR`, resolved once, with the same one-newline rule. `VAR` unset, not valid UTF-8, or not a valid name (`[A-Z_][A-Z0-9_]*`) is an error naming it; set but empty is the empty passphrase (warned, see below) |
 | `--passphrase <anything else>` | refused as argv material (exit 2) unless `--allow-argv-secret` is given; with it, that string, verbatim, plus one stderr line: `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 
 A passphrase that differs by one byte is a different wallet, so leading and
@@ -103,7 +106,29 @@ stdin per invocation) — including a file path that is stdin, such as
 `--secret-file /dev/stdin` or `--import-json -` — as is `--passphrase -`
 together with `--passphrase-stdin`. Since F-687 there is no way to pass the one-character
 passphrase `-`, or one beginning `@env:`, on the command line; pipe it on
-stdin instead.
+stdin instead. As a separate argument, a value that begins with `-` (other
+than `-` itself) is a usage error (exit 64); write `--passphrase=<value>`.
+
+**An empty passphrase from a private channel is announced, not refused.**
+When `-`, `--passphrase-stdin` or `@env:VAR` yields an empty value (empty
+stdin, a lone newline, an empty variable), one stderr line says so and the
+command proceeds with the empty value — for `--passphrase`, the
+no-passphrase wallet:
+
+```text
+warning: --passphrase from stdin is empty; proceeding with the EMPTY passphrase
+warning: --passphrase from environment variable PP is empty; proceeding with the EMPTY passphrase
+```
+
+**On a terminal, you are prompted.** When the passphrase is read from stdin
+and stdin is a terminal, `Enter passphrase:` (for the other flags,
+`Enter BIP-38 passphrase:` / `Enter decryption password:`) is printed on
+stderr, what you type is not echoed (where the terminal allows; otherwise
+the prompt adds `(input will be visible)`), and one line is read — press
+Enter, not Ctrl-D. Ctrl-C at the prompt restores the terminal's echo before
+the command exits (by the signal, status 130 in a shell); so do SIGTERM,
+SIGHUP and SIGQUIT. With stdin a pipe or file nothing is printed.
+`verify-bundle --ms1 -` reads its ms1 the same way (`Enter ms1:`, echo off).
 
 ### `--allow-argv-secret`
 
@@ -824,7 +849,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0** (as on [`restore`](#mnemonic-restore)): accepted so existing scripts do not fail, but there is no search-time ceiling any more; the completion reports a measured estimate and progress instead |
 | `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
-| `--ms1 <STRING>` | repeating; one ms1 card |
+| `--ms1 <STRING>` | repeating; one ms1 card. `--ms1 -` reads one card from stdin (at most one; empty or separator-only stdin is refused) |
 | `--mk1 <STRING>` | repeating; one mk1 card |
 | `--md1 <STRING>` | repeating; one md1 card |
 | `--json` | JSON output |
@@ -1038,7 +1063,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
-| `--bip38-passphrase <BIP38_PASSPHRASE>` | distinct BIP-38 Scrypt passphrase channel (v0.8 BREAKING — separate from `--passphrase`). On a composite `(seedqr\|phrase\|entropy)→bip38` edge, `--bip38-passphrase` is **required**; an unset value is refused (it would otherwise encrypt the BIP-38 layer with the empty passphrase, since `--passphrase` feeds only BIP-39 PBKDF2). Pass `--bip38-passphrase ""` to deliberately use an empty BIP-38 passphrase. |
+| `--bip38-passphrase <BIP38_PASSPHRASE>` | distinct BIP-38 Scrypt passphrase channel (v0.8 BREAKING — separate from `--passphrase`). On a composite `(seedqr\|phrase\|entropy)→bip38` edge, `--bip38-passphrase` is **required**; an unset value is refused (it would otherwise encrypt the BIP-38 layer with the empty passphrase, since `--passphrase` feeds only BIP-39 PBKDF2). Pass `--bip38-passphrase ""` to deliberately use an empty BIP-38 passphrase. `-` reads it from stdin and `@env:VAR` from the environment (the `--passphrase` rule); a literal emits the argv-leakage advisory. |
 | `--bip38-passphrase-stdin` | read `--bip38-passphrase` from stdin (raw, NULL-byte preserving); closes the BIP-38 V3 spec NULL-byte passphrase argv gap |
 | `--electrum-version <ELECTRUM_VERSION>` | Electrum seed-version selector for `(Entropy, ElectrumPhrase)` |
 | `--electrum-language <ELECTRUM_LANGUAGE>` | Electrum-specific wordlist (English + 4 non-English) |
@@ -1610,7 +1635,7 @@ mnemonic import-wallet --blob <FILE|-> [OPTIONS]
 | `--bsms-encryption-token <FILE\|->` | (v0.31.0) BIP-129 §Encryption decrypt token; reads session TOKEN from PATH (or `-` for stdin); applies PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 per BIP-129 §Encryption. Combine with `--format bsms` to decrypt encrypted Round-2 wallet shares (`--blob`), **OR (v0.32.1)** with `--bsms-round1` to decrypt encrypted Round-1 key records. **(v0.32.2) repeatable** (BIP-129 line 74: one shared TOKEN or one per Signer): a SINGLE `--bsms-encryption-token` is SHARED — it decrypts every encrypted Round-1 record AND the Round-2 blob (backward-compatible). MULTIPLE tokens are paired POSITIONALLY with `--bsms-round1` records (the Nth token decrypts the Nth record); per-Signer mode requires every `--bsms-round1` record to be encrypted, the token count to equal the record count, and NO encrypted Round-2 `--blob` in the same invocation (a single Round-2 share carries a single token → supplying multiple tokens with an encrypted blob is refused). Token file contents: lowercase ASCII hex (16 chars STANDARD, 32 chars EXTENDED); whitespace stripped; uppercase normalized. At most one token may read from stdin (`-`). Encrypted Round-2 blobs lack the `BSMS 1.0` header so `--format bsms` is REQUIRED for the encrypted Round-2 path. MAC verify failure → exit 2 (typed `BsmsMacMismatch`). |
 | `--bsms-round1 <FILE>` | (v0.27.0) BIP-129 Round-1 key record (Signer → Coordinator) for BIP-322 ECDSA signature verification; repeating flag — one per record; each record verified independently; verify state propagates to `--json` envelope's `bsms_round1_verifications` field; standalone mode (no `--blob` supplied) emits per-record verify envelope and exits 0 when every record verifies. v0.27.0 accepts a file path only — stdin form `-` is rejected, supply a file path per record (FOLLOWUP: multi-record stdin intake). **(v0.32.1)** the record file may be EITHER plaintext (5-line `BSMS 1.0\n…`) OR an ENCRYPTED Round-1 wire (hex `MAC \|\| ciphertext`); encrypted records are auto-detected (raw hex, no `BSMS 1.0` header) and decrypted with `--bsms-encryption-token` (MAC-verified per BIP-129 §Encryption) before the BIP-322 verify. An encrypted record supplied without `--bsms-encryption-token` → `BadInput` (exit 1); MAC verify failure → exit 2 (`BsmsMacMismatch`). **(v0.85.0)** in the default lenient mode, if ANY record's `signature_verified` is `false`, the full per-record report/envelope is still printed but the invocation now exits **4** (VERIFY-ME — do not trust) instead of 0 — this applies in BOTH standalone mode (no `--blob`) AND combined mode (`--blob` + `--bsms-round1` together; the parsed bundle/card is still synthesized and emitted, only the exit code changes). `$?`-gated scripts that previously treated exit 0 as "all signatures verified" must check for exit 4. `--bsms-verify-strict` is unaffected — a failed signature under strict mode was already fatal (exit 2) before this point. |
 | `--bsms-verify-strict` | (v0.27.0) make BIP-129 Round-1 SIG verification failures fatal; without this flag, verify mismatches emit a stderr NOTICE and proceed with `signature_verified: false` (exit 4 per the `--bsms-round1` row above, v0.85.0); requires `--bsms-round1` to be meaningful |
-| `--decrypt-password <VALUE>` | (v0.33.2) password for an Electrum **BIE1** (user-password) storage-encrypted wallet file. A storage-encrypted Electrum wallet is a single base64 blob (decoded magic `BIE1`), NOT JSON; the toolkit auto-detects it and decrypts it to the wallet JSON (ECIES: PBKDF2-HMAC-SHA512 → secp256k1 key → AES-128-CBC + HMAC-SHA256 + zlib) BEFORE sniff/parse, then imports watch-only as usual. Only consumed when a `BIE1` blob is detected; ignored (with a stderr notice) otherwise. Inline form emits an argv-leakage advisory — prefer `--decrypt-password-file` / `--decrypt-password-stdin`. Wrong password → `decryption failed (wrong password or corrupted wallet file)`. Mutually exclusive with the other two `--decrypt-password*` forms. |
+| `--decrypt-password <VALUE>` | (v0.33.2) password for an Electrum **BIE1** (user-password) storage-encrypted wallet file. A storage-encrypted Electrum wallet is a single base64 blob (decoded magic `BIE1`), NOT JSON; the toolkit auto-detects it and decrypts it to the wallet JSON (ECIES: PBKDF2-HMAC-SHA512 → secp256k1 key → AES-128-CBC + HMAC-SHA256 + zlib) BEFORE sniff/parse, then imports watch-only as usual. Only consumed when a `BIE1` blob is detected; ignored (with a stderr notice) otherwise. `-` reads it from stdin and `@env:VAR` from the environment (the `--passphrase` rule); any other inline value emits the argv-leakage advisory. Wrong password → `decryption failed (wrong password or corrupted wallet file)`. Mutually exclusive with the other two `--decrypt-password*` forms. |
 | `--decrypt-password-file <PATH>` | (v0.33.2) read the BIE1 decryption password from a file (one trailing newline stripped). |
 | `--decrypt-password-stdin` | (v0.33.2) read the BIE1 decryption password from stdin (NULL-byte preserving). Cannot co-exist with any other stdin consumer (`--blob=-`, `--bsms-encryption-token=-`). |
 | `--network <mainnet\|testnet\|signet\|regtest>` | (v0.34.6) re-bind the imported network to disambiguate **signet/regtest** from the coin-type-1→testnet collapse (BIP-129 BSMS + Bitcoin Core `listdescriptors` use coin-type `1` for testnet/signet/regtest alike, so the network is collapsed to testnet by default). Honored ONLY within the parsed coin-type class (testnet ↔ {testnet, signet, regtest}; mainnet ↔ mainnet) — a cross-class request (e.g. `--network mainnet` on a testnet-coin-type blob) is refused (exit 1, `ImportWalletNetworkClassMismatch`) because the blob's xpub prefix is coin-type-bound. Absent = use the coin-type-derived network. Note: signet shares testnet's address params (`tb1…`), so `testnet→signet` changes only the network label; `testnet→regtest` changes the HRP to `bcrt1…`. |
@@ -1878,7 +1903,7 @@ mnemonic electrum-decrypt --ciphertext <VALUE|-> (--decrypt-password <VAL> | --d
 | Flag | Purpose |
 |---|---|
 | `--ciphertext <VALUE\|->` | the Electrum field-encrypted secret as base64; `-` reads from stdin. NOT secret (it is ciphertext) — no argv advisory |
-| `--decrypt-password <VALUE>` | decryption password (inline); emits an argv-leakage advisory — prefer the stdin/file forms. Exactly one password form is required |
+| `--decrypt-password <VALUE>` | decryption password; `-` reads stdin, `@env:VAR` the environment (the `--passphrase` rule); any other value emits an argv-leakage advisory. Exactly one password form is required |
 | `--decrypt-password-file <PATH>` | read the password from a file (single trailing newline stripped) |
 | `--decrypt-password-stdin` | read the password from stdin (raw, NULL-byte preserving); single stdin per invocation (mutually exclusive with `--ciphertext -`) |
 | `--json-out <PATH>` | emit a JSON envelope (`{schema_version, operation, plaintext}`; no password echo) instead of plain text on stdout; emits a world-readable-permissions advisory if the file is group/other-readable |

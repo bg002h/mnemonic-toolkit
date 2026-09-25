@@ -14,9 +14,9 @@
 //! express. Mirrors the `cmd/seed_xor.rs` / `cmd/slip39.rs` secret-handling
 //! template (Zeroizing + mlock + argv/stdout/world-readable advisories).
 
-use crate::cmd::convert::{read_stdin_passphrase, read_stdin_to_string};
+use crate::cmd::convert::read_stdin_to_string;
 use crate::error::ToolkitError;
-use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
+use crate::secret_advisory::warn_if_world_readable;
 use clap::{ArgGroup, Args};
 use mnemonic_toolkit::electrum_crypto::{decrypt_field, ElectrumDecryptError};
 use std::io::{Read, Write};
@@ -38,8 +38,11 @@ pub struct ElectrumDecryptArgs {
     #[arg(long = "ciphertext", value_name = "VALUE|-")]
     pub ciphertext: String,
 
-    /// Decryption password (inline). Emits an argv-leakage advisory —
-    /// prefer `--decrypt-password-file` or `--decrypt-password-stdin`.
+    /// Decryption password. `-` reads it from stdin (same as
+    /// `--decrypt-password-stdin`); `@env:VAR` reads it from an environment
+    /// variable. Any other value is taken literally and emits an
+    /// argv-leakage advisory — prefer `-`, `@env:VAR`,
+    /// `--decrypt-password-file` or `--decrypt-password-stdin`.
     #[arg(long = "decrypt-password", value_name = "VALUE")]
     pub decrypt_password: Option<String>,
 
@@ -89,18 +92,36 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Single-stdin-per-invocation guard: `--ciphertext -` and
     // `--decrypt-password-stdin` both consume stdin.
     let ciphertext_uses_stdin = args.ciphertext == "-";
-    if ciphertext_uses_stdin && args.decrypt_password_stdin {
-        return Err(ToolkitError::BadInput(
-            "--ciphertext=- and --decrypt-password-stdin cannot both read from stdin".to_string(),
-        ));
+    // F-687b: `--decrypt-password -` and a `--decrypt-password-file` that IS
+    // stdin read stdin too.
+    let pw_reads_stdin = crate::passphrase_input::reads_stdin(
+        args.decrypt_password.as_deref(),
+        args.decrypt_password_stdin,
+    ) || args
+        .decrypt_password_file
+        .as_deref()
+        .is_some_and(crate::passphrase_input::path_is_stdin);
+    if ciphertext_uses_stdin && pw_reads_stdin {
+        return Err(ToolkitError::BadInput(if args.decrypt_password_stdin {
+            "--ciphertext=- and --decrypt-password-stdin cannot both read from stdin".to_string()
+        } else {
+            "--ciphertext=- and --decrypt-password - (or a --decrypt-password-file that is stdin) \
+             cannot both read from stdin"
+                .to_string()
+        }));
     }
 
     // Resolve the password (exactly one form per the ArgGroup). Inline form
     // emits the argv-leakage advisory.
-    let password: zeroize::Zeroizing<String> = if let Some(pw) = &args.decrypt_password {
-        secret_in_argv_warning(stderr, "--decrypt-password ", "--decrypt-password-stdin");
-        zeroize::Zeroizing::new(pw.clone())
-    } else if let Some(path) = &args.decrypt_password_file {
+    // F-687b: `-` / `@env:VAR` / literal / `--decrypt-password-stdin` follow
+    // the shared passphrase rule; only a literal gets the argv note.
+    crate::passphrase_input::emit_argv_note_for(
+        &crate::passphrase_input::DECRYPT_PASSWORD,
+        args.decrypt_password.as_deref(),
+        args.decrypt_password_stdin,
+        stderr,
+    );
+    let password: zeroize::Zeroizing<String> = if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             ToolkitError::BadInput(format!(
                 "--decrypt-password-file: cannot read {}: {e}",
@@ -110,9 +131,15 @@ pub fn run<R: Read, W: Write, E: Write>(
         // Strip a single trailing newline (mirrors token/file conventions).
         zeroize::Zeroizing::new(raw.strip_suffix('\n').unwrap_or(&raw).to_string())
     } else {
-        // `--decrypt-password-stdin` (ArgGroup guarantees this is the
-        // remaining case). NULL-byte-preserving stdin read.
-        zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?)
+        // `--decrypt-password <v>` or `--decrypt-password-stdin` (the ArgGroup
+        // guarantees exactly one source).
+        crate::passphrase_input::resolve_for(
+            &crate::passphrase_input::DECRYPT_PASSWORD,
+            args.decrypt_password.as_deref(),
+            args.decrypt_password_stdin,
+            stdin,
+        )?
+        .ok_or_else(|| ToolkitError::BadInput("electrum-decrypt: no password source".into()))?
     };
     let _pin_pw = mnemonic_toolkit::mlock::pin_pages_for(password.as_bytes());
 

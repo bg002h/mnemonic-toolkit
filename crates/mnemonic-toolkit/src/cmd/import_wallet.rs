@@ -47,7 +47,6 @@
 //!   - When `--json` is set: round-trip diff goes ONLY in the envelope;
 //!     stderr is silent for the diff (SPEC §7.4).
 
-use crate::cmd::convert::read_stdin_passphrase;
 use crate::error::ToolkitError;
 use crate::format::{BundleJson, CosignerEntry, MultisigInfo};
 use crate::language::CliLanguage;
@@ -239,10 +238,11 @@ pub struct ImportWalletArgs {
     #[arg(long = "bsms-verify-strict")]
     pub bsms_verify_strict: bool,
 
-    /// v0.33.2 — password for an Electrum BIE1 storage-encrypted wallet
-    /// (inline). Only used when `--blob` is a `BIE1` storage blob; ignored
-    /// otherwise. Emits an argv-leakage advisory — prefer
-    /// `--decrypt-password-file` or `--decrypt-password-stdin`.
+    /// v0.33.2 — password for an Electrum BIE1 storage-encrypted wallet.
+    /// Only used when `--blob` is a `BIE1` storage blob; ignored otherwise.
+    /// `-` reads it from stdin (same as `--decrypt-password-stdin`);
+    /// `@env:VAR` reads it from an environment variable. Any other value is
+    /// taken literally and emits an argv-leakage advisory.
     #[arg(long = "decrypt-password", value_name = "VALUE")]
     pub decrypt_password: Option<String>,
 
@@ -353,19 +353,35 @@ pub fn run<R: Read, W: Write, E: Write>(
     // consumer. The password is resolved later (at the BIE1 decrypt site,
     // after `read_blob` + the token read have already drained stdin), so this
     // guard MUST be hoisted here. Covers every pair with blob=- and token=-.
-    if args.decrypt_password_stdin {
+    // F-687b: `--decrypt-password -` and a `--decrypt-password-file` that IS
+    // stdin are stdin consumers too; the message names what was typed.
+    let pw_spelling = if args.decrypt_password_stdin {
+        "--decrypt-password-stdin"
+    } else if args.decrypt_password.as_deref() == Some("-") {
+        "--decrypt-password -"
+    } else {
+        "--decrypt-password-file /dev/stdin"
+    };
+    if crate::passphrase_input::reads_stdin(
+        args.decrypt_password.as_deref(),
+        args.decrypt_password_stdin,
+    ) || args
+        .decrypt_password_file
+        .as_deref()
+        .is_some_and(crate::passphrase_input::path_is_stdin)
+    {
         if let Some(blob_p) = &args.blob {
-            if blob_p.as_os_str() == "-" {
-                return Err(ToolkitError::BadInput(
-                    "--blob=- and --decrypt-password-stdin cannot both read from stdin".to_string(),
-                ));
+            // F-687b fold 1 (review M2): a blob PATH that is stdin too.
+            if blob_p.as_os_str() == "-" || crate::passphrase_input::path_is_stdin(blob_p) {
+                return Err(ToolkitError::BadInput(format!(
+                    "--blob=- and {pw_spelling} cannot both read from stdin"
+                )));
             }
         }
         if token_stdin_count > 0 {
-            return Err(ToolkitError::BadInput(
-                "--bsms-encryption-token=- and --decrypt-password-stdin cannot both read from stdin"
-                    .to_string(),
-            ));
+            return Err(ToolkitError::BadInput(format!(
+                "--bsms-encryption-token=- and {pw_spelling} cannot both read from stdin"
+            )));
         }
     }
 
@@ -503,13 +519,12 @@ pub fn run<R: Read, W: Write, E: Write>(
             {
                 // An inline --decrypt-password still leaked via argv even though
                 // it goes unused — warn about the leak that already happened.
-                if args.decrypt_password.is_some() {
-                    secret_in_argv_warning(
-                        stderr,
-                        "--decrypt-password ",
-                        "--decrypt-password-stdin",
-                    );
-                }
+                crate::passphrase_input::emit_argv_note_for(
+                    &crate::passphrase_input::DECRYPT_PASSWORD,
+                    args.decrypt_password.as_deref(),
+                    args.decrypt_password_stdin,
+                    stderr,
+                );
                 writeln!(
                     stderr,
                     "notice: import-wallet: no BIE1 storage-encrypted wallet detected; \
@@ -2327,10 +2342,16 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
     stdin: &mut R,
     stderr: &mut E,
 ) -> Result<Option<Zeroizing<String>>, ToolkitError> {
-    if let Some(pw) = &args.decrypt_password {
-        secret_in_argv_warning(stderr, "--decrypt-password ", "--decrypt-password-stdin");
-        Ok(Some(Zeroizing::new(pw.clone())))
-    } else if let Some(path) = &args.decrypt_password_file {
+    // F-687b: the shared passphrase rule for `--decrypt-password` (`-` =
+    // stdin, `@env:VAR` = env, literal + one argv note) and
+    // `--decrypt-password-stdin`.
+    crate::passphrase_input::emit_argv_note_for(
+        &crate::passphrase_input::DECRYPT_PASSWORD,
+        args.decrypt_password.as_deref(),
+        args.decrypt_password_stdin,
+        stderr,
+    );
+    if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
             ToolkitError::BadInput(format!(
                 "--decrypt-password-file: cannot read {}: {e}",
@@ -2340,10 +2361,13 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
         Ok(Some(Zeroizing::new(
             raw.strip_suffix('\n').unwrap_or(&raw).to_string(),
         )))
-    } else if args.decrypt_password_stdin {
-        Ok(Some(Zeroizing::new(read_stdin_passphrase(stdin)?)))
     } else {
-        Ok(None)
+        crate::passphrase_input::resolve_for(
+            &crate::passphrase_input::DECRYPT_PASSWORD,
+            args.decrypt_password.as_deref(),
+            args.decrypt_password_stdin,
+            stdin,
+        )
     }
 }
 

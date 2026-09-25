@@ -259,6 +259,10 @@ pub struct ConvertArgs {
     /// `""` (BREAKING CHANGE from v0.7's dual-purpose dispatch). On direct
     /// `(wif, bip38)` and `(bip38, wif)` edges, `--bip38-passphrase` falls back
     /// to `--passphrase` when unset.
+    ///
+    /// F-687b: `-` reads it from stdin (same as `--bip38-passphrase-stdin`);
+    /// `@env:VAR` reads it from an environment variable. Any other value is
+    /// taken literally and emits an argv-leakage advisory.
     #[arg(long = "bip38-passphrase")]
     pub bip38_passphrase: Option<String>,
 
@@ -791,6 +795,8 @@ pub fn run<R: Read, W: Write, E: Write>(
     // F-687: the `--passphrase` value as written, before `@env:` resolution —
     // a variable whose VALUE is `-` is that literal passphrase, not stdin.
     let pp_argv: Option<&str> = args.passphrase.as_deref();
+    // F-687b: the same, for `--bip38-passphrase` (`-` = stdin, `@env:` = env).
+    let bip38_argv: Option<&str> = args.bip38_passphrase.as_deref();
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
     // consumption.
@@ -841,14 +847,20 @@ pub fn run<R: Read, W: Write, E: Write>(
             "{pp_spelling} cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv",
         )));
     }
-    if args.bip38_passphrase_stdin && primary_uses_stdin {
-        return Err(ToolkitError::BadInput(
-            "--bip38-passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv".into(),
-        ));
-    }
-    if pp_reads_stdin && args.bip38_passphrase_stdin {
+    let bip38_reads_stdin =
+        crate::passphrase_input::reads_stdin(bip38_argv, args.bip38_passphrase_stdin);
+    let bip38_spelling = crate::passphrase_input::stdin_spelling_for(
+        &crate::passphrase_input::BIP38_PASSPHRASE,
+        args.bip38_passphrase_stdin,
+    );
+    if bip38_reads_stdin && primary_uses_stdin {
         return Err(ToolkitError::BadInput(format!(
-            "{pp_spelling} and --bip38-passphrase-stdin cannot both be set (single stdin per invocation); pick the channel that needs the NULL-byte-preserving route",
+            "{bip38_spelling} cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv",
+        )));
+    }
+    if pp_reads_stdin && bip38_reads_stdin {
+        return Err(ToolkitError::BadInput(format!(
+            "{pp_spelling} and {bip38_spelling} cannot both be set (single stdin per invocation); pick the channel that needs the NULL-byte-preserving route",
         )));
     }
     // cycle-14 (L22): wrap the stdin/argv passphrase secret in Zeroizing so it
@@ -864,12 +876,16 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.9.0 §1 item 1 — `--bip38-passphrase-stdin` populates the
     // BIP-38 Scrypt passphrase channel from stdin (preserves NULLs).
-    let effective_bip38_passphrase: Option<zeroize::Zeroizing<String>> =
-        if args.bip38_passphrase_stdin {
-            Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?))
-        } else {
-            args.bip38_passphrase.clone().map(zeroize::Zeroizing::new)
-        };
+    let effective_bip38_passphrase: Option<zeroize::Zeroizing<String>> = if bip38_reads_stdin {
+        Some(zeroize::Zeroizing::new(
+            crate::passphrase_input::read_stdin_secret(
+                &crate::passphrase_input::BIP38_PASSPHRASE,
+                stdin,
+            )?,
+        ))
+    } else {
+        args.bip38_passphrase.clone().map(zeroize::Zeroizing::new)
+    };
 
     // 2.b) Stdin if `--from <node>=-`.
     let primary_value: zeroize::Zeroizing<String> = if primary.value == "-" {
@@ -1859,11 +1875,12 @@ fn emit_secret_in_argv_advisories<E: Write>(args: &ConvertArgs, stderr: &mut E) 
         args.passphrase_stdin,
         stderr,
     );
-    if let Some(bpp) = args.bip38_passphrase.as_deref() {
-        if !bpp.starts_with("@env:") {
-            secret_in_argv_warning(stderr, "--bip38-passphrase", "--bip38-passphrase-stdin");
-        }
-    }
+    crate::passphrase_input::emit_argv_note_for(
+        &crate::passphrase_input::BIP38_PASSPHRASE,
+        args.bip38_passphrase.as_deref(),
+        args.bip38_passphrase_stdin,
+        stderr,
+    );
 }
 
 /// v0.26.0 §3 — cheap pre-check for `@env:` sentinels on `convert`'s
@@ -1900,7 +1917,14 @@ fn resolve_env_sentinels(args: &ConvertArgs) -> Result<ConvertArgs, ToolkitError
         }
     }
     if let Some(bp) = owned.bip38_passphrase.as_ref() {
-        owned.bip38_passphrase = Some(resolve_env_var_sentinel(bp, "--bip38-passphrase")?);
+        // F-687b: the shared rule (one newline stripped, empty warned); `-`
+        // is stdin, read in `run`.
+        if bp.starts_with("@env:") {
+            owned.bip38_passphrase = Some(crate::passphrase_input::resolve_env_for(
+                &crate::passphrase_input::BIP38_PASSPHRASE,
+                bp,
+            )?);
+        }
     }
     for f in owned.from.iter_mut() {
         if f.node.is_secret_bearing() {
