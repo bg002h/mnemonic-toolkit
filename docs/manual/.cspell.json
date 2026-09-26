@@ -191,6 +191,7 @@
     "miscorrections",
     "MDS",
     "checkpointing",
-    "reencode"
+    "reencode",
+    "minisign"
   ]
 }

@@ -31,8 +31,26 @@ its pinned GitHub release and checks it against the `SHA256SUMS` file
 published with that release. It refuses a download whose digest does
 not match, or that no published checksum covers, and it runs each
 binary once before installing it, refusing one that does not report
-the pinned version. The releases are not signed, so the check proves
-the file is the one the release published, not who built it. Binaries
+the pinned version.
+
+If `minisign` is installed, the installer first checks that the
+`SHA256SUMS` file carries a valid signature from the constellation's
+release key, which is pinned in the installer:
+
+```text
+RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+```
+
+The signature proves who published the checksums, where the checksum
+alone proves only that the download is intact. A signature that does
+not verify is refused. A missing one is refused for any release at or
+after that component's first signed release; older releases were
+published unsigned, and install with a note saying so. Without
+`minisign`, the installer says once that signatures were not checked
+and relies on the checksum. Pass `--require-signature` to refuse
+instead: then a missing `minisign`, or a release with no signature, is
+an error. (A source build downloads no checksum file, so the flag does
+not affect it.) Binaries
 land in `~/.cargo/bin/` (`--root DIR` or `$CARGO_INSTALL_ROOT` puts them
 in `DIR/bin/` instead; cargo's `install.root` config setting is not read);
 the installer warns if that directory is not on your `PATH`.

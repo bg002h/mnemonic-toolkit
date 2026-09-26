@@ -19,16 +19,35 @@
 # then `gh release upload --clobber` idiom, so whichever workflow reaches the tag
 # first creates the release and the rest attach their own assets.
 #
-# UNSIGNED FOR NOW (operator decision). Only `mnemonic-engrave` carries
-# MINISIGN_SECRET_KEY. SHA256SUMS ships anyway, and VERIFY.txt says plainly that
-# a checksum proves integrity and NOT origin. Add the secret and signing starts
-# with no change here.
+# SIGNED (operator, 2026-09-25: "sign every release"). SHA256SUMS.portable is
+# minisign-signed with the constellation key (the one mnemonic-engrave uses) and
+# the signature is VERIFIED against the pinned MINISIGN_PUBKEY in the same job.
+#
+#   run that PUBLISHES (tag push, or dispatch with `tag`, i.e. a backfill):
+#       MINISIGN_SECRET_KEY missing  -> the job FAILS before anything uploads
+#       signing or verify fails       -> the job FAILS before anything uploads
+#   run that does NOT publish (dispatch with sign_dry_run):
+#       secret present               -> signs + verifies, uploads NOTHING
+#       secret missing               -> warns, stays unsigned, uploads NOTHING
+#
+# `sign_dry_run` exists to prove the secret works without cutting a release;
+# it uploads the signed SHA256SUMS.portable + .minisig as a WORKFLOW ARTIFACT
+# (`signed-sums-dry-run`), so a reviewer can verify a real signature offline.
+#
+# ONLY `mnemonic-toolkit-v*` tags release this CLI. Other tags in this repo (codec,
+# manual and doc tags) must not produce binaries: a signed SHA256SUMS for a
+# CLI version that was never released would be an authenticated false claim.
+# A backfill dispatch refuses any other tag for the same reason.
+#
+# A tag runs the workflow files AT THE TAGGED COMMIT. Tag only commits that
+# contain this signing workflow; a tag on an older commit runs the old,
+# unsigned workflows (and the installer refuses it once first_signed covers it).
 name: release
 
 on:
   push:
     tags:
-      - '*v[0-9]*'
+      - 'mnemonic-toolkit-v*'
     branches:
       - master
       - 'ci/**'
@@ -39,6 +58,18 @@ on:
         description: 'Existing tag to build and BACKFILL binaries onto. Empty = just exercise the matrix.'
         required: false
         default: ''
+      sign_dry_run:
+        description: 'Assemble, SIGN and VERIFY the checksums, but create and upload NOTHING (no release, no attestation). Proves the signing secret works.'
+        type: boolean
+        required: false
+        default: false
+
+# One release run per tag at a time (a tag push and a backfill dispatch of the
+# same tag would otherwise interleave their --clobber uploads). Non-release
+# runs get a unique group and never queue behind each other.
+concurrency:
+  group: ${{ (startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '') && format('release-{0}', github.event.inputs.tag || github.ref_name) || github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -48,10 +79,9 @@ permissions:
 env:
   RUST_TOOLCHAIN: '1.85.0'
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-  # The constellation's release-signing key, pinned. Signing is SKIPPED entirely
-  # when MINISIGN_SECRET_KEY is absent, so this works unsigned today and starts
-  # signing the moment the secret is added -- no change here.
-  MINISIGN_PUBKEY: 'RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW'
+  # The constellation's release-signing key, pinned. Every signature this
+  # workflow makes is verified against THIS key before anything is uploaded.
+  MINISIGN_PUBKEY: 'RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5'
 
 jobs:
   # THE SUITE, ON EACH OS THAT CAN RUN IT.
@@ -174,20 +204,38 @@ jobs:
   assemble:
     name: assemble + release
     needs: [test, build]
-    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != ''
+    if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '' || github.event.inputs.sign_dry_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Resolve tag
+      - name: Resolve tag, and whether this run publishes
         id: meta
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          DRY_RUN: ${{ github.event.inputs.sign_dry_run }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag }}"
+          TAG="$INPUT_TAG"
           [ -n "$TAG" ] || TAG="${GITHUB_REF_NAME}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          # publish=true only for a tag push or a backfill dispatch. Such a run
+          # uploads to a release, so it may not go out unsigned.
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "sign_dry_run: will sign + verify, and upload NOTHING"
+          else
+            # Only this CLI's own tags release it (see the header): a backfill
+            # of a doc or codec tag would sign binaries for a version that does
+            # not exist.
+            case "$TAG" in
+              mnemonic-toolkit-v*) ;;
+              *) echo "::error::$TAG is not a mnemonic-toolkit-v* tag; refusing to publish mnemonic binaries to it"; exit 1 ;;
+            esac
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -198,12 +246,17 @@ jobs:
         id: signing
         env:
           MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          PUBLISH: ${{ steps.meta.outputs.publish }}
         run: |
+          set -euo pipefail
           if [ -n "$MINISIGN_SECRET_KEY" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
+          elif [ "$PUBLISH" = "true" ]; then
+            echo "::error::MINISIGN_SECRET_KEY is not set, and this run publishes to a release. A release may not ship unsigned checksums; refusing before anything is uploaded."
+            exit 1
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::MINISIGN_SECRET_KEY is not set -- publishing checksums UNSIGNED."
+            echo "::warning::MINISIGN_SECRET_KEY is not set -- this non-publishing run leaves the checksums UNSIGNED."
           fi
 
       - name: Install minisign
@@ -301,8 +354,20 @@ jobs:
           TAG: ${{ steps.meta.outputs.tag }}
         run: |
           set -euo pipefail
-          printf '%s\n' "$MINISIGN_PASSWORD" |             minisign -S -s "$KEYFILE" -m SHA256SUMS.portable -t "mnemonic ${TAG} SHA256SUMS.portable"
+          if ! printf '%s\n' "$MINISIGN_PASSWORD" | \
+               minisign -S -s "$KEYFILE" -m SHA256SUMS.portable -t "mnemonic ${TAG} SHA256SUMS.portable"; then
+            [ -n "$MINISIGN_PASSWORD" ] || echo "::error::MINISIGN_SECRET_KEY_PASSWORD is empty; the key is password-protected, so it cannot sign until that secret is set."
+            echo "::error::minisign could not sign SHA256SUMS.portable"
+            exit 1
+          fi
+
+      - name: Verify SHA256SUMS.portable.minisig against the pinned public key
+        if: steps.signing.outputs.enabled == 'true'
+        working-directory: release
+        run: |
+          set -euo pipefail
           minisign -Vm SHA256SUMS.portable -P "$MINISIGN_PUBKEY"
+          echo "signature verified against pinned key $MINISIGN_PUBKEY"
 
       - name: Remove minisign secret key
         if: always()
@@ -310,20 +375,45 @@ jobs:
           KEYFILE: ${{ steps.minisign_key.outputs.keyfile }}
         run: rm -f "$KEYFILE" || true
 
+      - name: Dry run -- nothing uploaded
+        if: steps.meta.outputs.publish != 'true'
+        env:
+          SIGNED: ${{ steps.signing.outputs.enabled }}
+        run: |
+          set -euo pipefail
+          ls -l release
+          echo "sign_dry_run: signed=$SIGNED; no release created, nothing uploaded, no attestation."
+
+      - name: Dry run -- keep the signed checksums as a workflow artifact
+        if: steps.meta.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-sums-dry-run
+          path: release/SHA256SUMS.portable*
+          if-no-files-found: error
+
       - name: Attest build provenance
+        if: steps.meta.outputs.publish == 'true'
         uses: actions/attest-build-provenance@v1
         with:
           subject-path: 'release/mnemonic-*'
 
       - name: Ensure a release exists, then upload
+        if: steps.meta.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.meta.outputs.tag }}
         run: |
           set -euo pipefail
           gh release view "$TAG" >/dev/null 2>&1 ||             gh release create "$TAG" --title "$TAG" --generate-notes || true
-          gh release upload "$TAG" release/mnemonic-*.tar.gz --clobber 2>/dev/null || true
-          gh release upload "$TAG" release/mnemonic-*.zip --clobber 2>/dev/null || true
-          gh release upload "$TAG" release/SHA256SUMS.portable --clobber
-          [ -f release/SHA256SUMS.portable.minisig ] &&             gh release upload "$TAG" release/SHA256SUMS.portable.minisig --clobber || true
+          # Every archive upload must succeed: a signed sums file beside an
+          # archive that silently failed to upload lists a digest nobody can get.
+          gh release upload "$TAG" release/mnemonic-*.tar.gz --clobber
+          gh release upload "$TAG" release/mnemonic-*.zip --clobber
+          # The sums file and its signature go up in one call. A publishing run
+          # always has the .minisig (the signing step refuses otherwise); if an
+          # upload fails the job fails loudly, rather than passing with a stale
+          # or missing signature beside a new sums file.
+          [ -f release/SHA256SUMS.portable.minisig ] || { echo "::error::no SHA256SUMS.portable.minisig to publish"; exit 1; }
+          gh release upload "$TAG" release/SHA256SUMS.portable release/SHA256SUMS.portable.minisig --clobber
           gh release view "$TAG" --json assets -q '.assets[].name'

@@ -37,6 +37,39 @@ base_of() {
     sed -n "s/.*echo \"[a-z-]*|\(https:[^|]*\)|\([^|]*\)|$1|.*/\1\/releases\/download\/\2/p" "$INSTALL_SH"
 }
 
+# Signed releases, BOTH directions (review I1):
+#   * the pinned release publishes <sums>.minisig -> first_signed <component>
+#     must be filled and <= the pin. Otherwise a stripped signature on this
+#     SIGNED release would be accepted as "predates signed releases".
+#   * first_signed says the pin is signed -> the .minisig must be published.
+# signed_pin_gate is the rule; scripts/install-assets-gate.test.sh exercises
+# (and mutation-tests) it offline.
+eval "$(sed -n '/^first_signed() {/,/^}/p; /^version_ge() {/,/^}/p' "$INSTALL_SH")"
+command -v first_signed >/dev/null 2>&1 && command -v version_ge >/dev/null 2>&1 \
+    || { echo "cannot read first_signed / version_ge from install.sh" >&2; exit 1; }
+
+# signed_pin_gate <component> <pinned version> <.minisig published: yes|no>
+# echoes "ok <why>" or "bad <why>".
+signed_pin_gate() {
+    _g_first=$(first_signed "$1")
+    if [ "$3" = yes ]; then
+        if [ -z "$_g_first" ]; then
+            echo "bad $1 $2 publishes a .minisig but first_signed $1 is empty; set it to a version <= $2 in install.sh, or a stripped signature on this release is accepted as unsigned"
+        elif ! version_ge "$2" "$_g_first"; then
+            echo "bad $1 $2 publishes a .minisig but first_signed $1 is $_g_first, above the pin"
+        else
+            echo "ok $1 $2: signed, first_signed $_g_first <= pin"
+        fi
+    else
+        if [ -n "$_g_first" ] && version_ge "$2" "$_g_first"; then
+            echo "bad $1 $2 publishes no .minisig, but install.sh says $1 is signed from $_g_first"
+        else
+            echo "ok $1 $2: unsigned release, first_signed '${_g_first}' does not cover it"
+        fi
+    fi
+}
+sigchecked=0
+
 echo "[install-assets.test] $INSTALL_SH"
 checked=0
 for p in $PLATFORMS; do
@@ -75,6 +108,13 @@ for p in $PLATFORMS; do
         if [ $# -eq 1 ]; then
             ok "$n@$p: $asset (listed in $1)"
             checked=$((checked + 1))
+            tag=${base##*/}; ver=${tag##*-v}
+            if curl -fsSLI --proto '=https' -o /dev/null "$base/$1.minisig"; then pub=yes; else pub=no; fi
+            verdict=$(signed_pin_gate "$n" "$ver" "$pub")
+            case "$verdict" in
+                ok\ *) ok "$n@$p: ${verdict#ok }"; sigchecked=$((sigchecked + 1)) ;;
+                *)     bad "$n@$p: ${verdict#bad }" ;;
+            esac
         else
             bad "$n@$p: $asset listed in $# SHA256SUMS files (want exactly 1):${hits:- none}"
         fi
@@ -123,6 +163,8 @@ else bad "only $floors of 17 Linux assets checked for their glibc floor"; fi
 want=$(( $(echo "$PLATFORMS" | wc -w) * 5 - $(echo "$EXPECT_NONE" | wc -w) ))
 if [ "$checked" -eq "$want" ]; then ok "$checked of $want mapped assets verified"
 else bad "only $checked of $want mapped assets verified"; fi
+if [ "$sigchecked" -eq "$want" ]; then ok "$sigchecked of $want mapped assets passed the signed-pin gate (both directions)"
+else bad "only $sigchecked of $want mapped assets passed the signed-pin gate"; fi
 
 if [ "$fail" -eq 0 ]; then
     echo "[install-assets.test] OK"

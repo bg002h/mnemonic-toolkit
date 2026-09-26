@@ -8,6 +8,42 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Signed releases, and the installer checks the signatures
+
+- **Every release now signs its checksum files with minisign**, with the constellation
+  key every m-format repo now shares (`RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5`, key id `EF2B8D34D8409754`, from the
+  2026-09-26 rotation):
+  `SHA256SUMS.portable` (macOS / Windows, `release.yml`) and the reproducible Linux
+  `SHA256SUMS.x86_64` / `SHA256SUMS.aarch64` (`man-pages.yml`), each with a `.minisig`.
+  Signing is a host step after the digest is final; it asserts that no byte of the tarball,
+  the sums file or `PROVENANCE.<arch>.txt` moved, and the signature is verified against the
+  pinned key in the same job. A release tag with no signing secret, or a signature that does
+  not verify, now FAILS instead of shipping unsigned. `release.yml` gains a `sign_dry_run`
+  dispatch input and `man-pages.yml` a dispatch trigger: both sign and verify, and upload
+  nothing.
+- **`scripts/install.sh` verifies the signature** of the `SHA256SUMS*` file it checks a
+  download against, when `minisign` is installed, before trusting any digest in it. A bad
+  signature is refused; a missing one is refused for a pin at or after that component's
+  first signed release (the `first_signed` table, empty until those releases exist), and
+  allowed with a note before it. The trusted keys are one table, `signing_keys`, each
+  with the component and version range it covers: the new key for everything, and the
+  previous key (`CA39ECB257009A0F`) only for the mnemonic-engrave releases it signed
+  (<= 0.12.0). Without `minisign` it says once that signatures were not
+  checked. **`--require-signature`** makes a missing `minisign` or signature fatal.
+  `scripts/install-signature.test.sh` covers it offline with throwaway keys; the Examples
+  golden shows the new `--dry-run` line.
+- **A stripped or undelivered signature is never read as "unsigned".** Only an HTTP 404 for
+  the `.minisig` counts as missing; any other download failure is refused.
+  `install-assets.test.sh` now also fails when a pinned release publishes a `.minisig` but
+  that component's `first_signed` is empty or above the pin, so the pin bump onto the first
+  signed release must fill it (`scripts/install-assets-gate.test.sh` covers the rule offline).
+- **`release.yml` fires only on `mnemonic-toolkit-v*` tags** (it used to match every
+  `*v[0-9]*` tag, so doc tags such as `manual-gui-v1.4.0` built and attached `mnemonic-1.4.0-*`
+  binaries), holds one release run per tag at a time, fails if an archive upload fails, and a
+  `sign_dry_run` keeps the signed `SHA256SUMS.portable` + `.minisig` as a workflow artifact.
+  Tag only commits that contain these workflows: a tag runs the workflow files at the tagged
+  commit.
+
 ### Installer pins: mnemonic-gui v0.63.0
 
 - **`scripts/install.sh` installs mnemonic-gui v0.63.0**, which pins mnemonic 0.105.1,

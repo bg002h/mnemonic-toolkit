@@ -7,9 +7,13 @@
 # DEFAULT: the PREBUILT BINARY attached to each pinned GitHub release,
 # checked against that release's SHA256SUMS* file before it is installed.
 # A download whose digest does not match, or that no published checksum
-# covers, is refused (fail closed). The releases are NOT signed: a checksum
-# from the same release proves integrity, not origin (each release's
-# VERIFY.txt says the same).
+# covers, is refused (fail closed). When `minisign` is installed, that
+# checksum file must first verify against a pinned release key covering that
+# release (signing_keys below), which proves origin as well as integrity; a bad
+# signature is always refused, and a missing one is refused for any pin at or
+# after that component's first signed release (first_signed). Without
+# minisign, the installer says once that signatures were not checked;
+# --require-signature makes that, and any missing signature, fatal.
 #
 # FALLBACK: when a release has no binary for this platform (e.g. FreeBSD,
 # or md on a musl-libc x86_64 host), that one component is built from the
@@ -135,6 +139,60 @@ glibc_floor() {
 # listing it is a refusal, not a fallback.
 SUMS_FILES="SHA256SUMS.x86_64 SHA256SUMS.aarch64 SHA256SUMS.portable SHA256SUMS"
 
+# ── Release signatures ──────────────────────────────────────────────────
+# Every constellation release signs each SHA256SUMS* file it publishes with
+# minisign (`<file>.minisig`). `signing_keys` is the ONE list of the public
+# keys this installer trusts, each with the releases it covers, one per line:
+#     <component>|<first version>|<last version>|<public key>
+# `*` is every component, and an empty bound is open. When `minisign` is on
+# PATH, the checksum file a download is checked against must verify against
+# a key whose range covers that release BEFORE any digest in it is trusted.
+#   * EF2B8D34D8409754, the constellation key since the 2026-09-26 rotation:
+#     every component, every release.
+#   * CA39ECB257009A0F, the previous key: it signed mnemonic-engrave up to and
+#     including 0.12.0 and nothing else. The installer does not install
+#     mnemonic-engrave today; the entry keeps that one fact in the one table,
+#     so a key can never verify a release it did not sign.
+# A rotation adds a line (and bounds the old one); nothing else changes.
+signing_keys() {
+    cat <<'EOF'
+*|||RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+mnemonic-engrave||0.12.0|RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW
+EOF
+}
+
+# trusted_keys <name> <version>: the keys from signing_keys whose component
+# and version range cover that release, one per line (possibly none).
+trusted_keys() {
+    signing_keys | while IFS='|' read -r _kc _kf _kt _kk; do
+        case "$_kc" in "*"|"$1") ;; *) continue ;; esac
+        [ -z "$_kf" ] || version_ge "$2" "$_kf" || continue
+        [ -z "$_kt" ] || version_ge "$_kt" "$2" || continue
+        [ -n "$_kk" ] && echo "$_kk"
+    done
+}
+
+# `first_signed <short-name>` echoes the first VERSION of that component whose
+# release carries a .minisig beside its SHA256SUMS* files, or nothing while no
+# signed release of it exists. For a pin at or after that version, a MISSING
+# signature is refused (it was published, so someone removed it); before it,
+# a missing signature is allowed with a note, since those releases shipped
+# unsigned. Fill each one IN THE SAME COMMIT that moves a pin onto that
+# component's first signed release: install-assets.test.sh fails a pinned
+# release that publishes a .minisig while its entry is empty or above the pin
+# (otherwise a stripped signature on it would pass as "unsigned"). No signed
+# release exists yet (2026-09-26), so all five are empty. Bare versions only,
+# never tags: the pin gates grep this file for the first `<name>-v<x.y.z>`.
+first_signed() {
+    case "$1" in
+        mnemonic)     echo "" ;;
+        md)           echo "" ;;
+        ms)           echo "" ;;
+        mk)           echo "" ;;
+        mnemonic-gui) echo "" ;;
+    esac
+}
+
 # Minimum rustc minor for BUILDING the mnemonic-gui overlay from source (its
 # --locked deps' MSRV; icu_*@2.2.0 / idna_adapter@1.2.2 / image@0.25.10
 # require rustc >= 1.88). The 4 CLIs build on the lower toolkit MSRV
@@ -154,6 +212,7 @@ DRY_RUN=""
 LOCKED="--locked"
 FROM_SOURCE=""
 ROOT_ARG=""
+REQUIRE_SIG=""
 # v0.73.0 man-page install: after a successful install, each CLI self-emits
 # its roff man pages (`<bin> gen-man --out`) into the XDG user manpath. No
 # sudo / no system files (preserves the install.sh invariant).
@@ -179,8 +238,14 @@ SOURCE (default behavior):
     The prebuilt binary from each component's pinned GitHub release. Each
     download is checked against the SHA256SUMS file published with that
     release, and refused if the digest does not match or no checksum
-    covers it. The releases are not signed: this proves the download is
-    the file the release published, not who built it.
+    covers it. When minisign is installed, that SHA256SUMS file must first
+    carry a valid minisign signature from the constellation's release key
+    (pinned in this script), which proves who published it, not just that
+    the download is intact. A bad signature is always refused; a missing
+    one is refused for any release at or after that component's first
+    signed release (older releases were published unsigned, and are
+    installed with a note). Without minisign, the installer says once that
+    signatures were not checked and continues on sha256 alone.
     If a release has no binary for this platform, that component is
     built from the same pinned tag with cargo instead (said on stderr).
     The same happens where a binary needs a newer glibc than this host
@@ -214,6 +279,13 @@ OPTIONS:
                       pages into the XDG user manpath, no sudo)
     --man-dir DIR     Directory to write man pages into
                       (default: \${XDG_DATA_HOME:-\$HOME/.local/share}/man/man1)
+    --require-signature
+                      Refuse to install a release binary unless its
+                      SHA256SUMS file's minisign signature is present and
+                      verifies: minisign not installed, or a release
+                      published unsigned, becomes an error instead of a
+                      note. (Source builds download no checksum file and
+                      are unaffected.)
     --dry-run         Print what would be downloaded, verified and
                       installed (or built) without doing it
     --list            Print the pin table, with each component's binary
@@ -238,6 +310,8 @@ EXAMPLES:
 
 REQUIREMENTS:
     - curl or wget; tar (unzip on Windows); sha256sum, shasum or openssl
+    - Recommended: minisign (https://jedisct1.github.io/minisign/), to check
+      each release's signature; required with --require-signature
     - Source builds only (--from-source, or a platform with no binary):
       cargo (https://rustup.rs/), git and a C toolchain. The 4 CLIs build
       on rustc >= 1.85; the mnemonic-gui overlay needs rustc >= 1.88, and
@@ -301,6 +375,18 @@ fi
 version_lt() {
     _a1=${1%%.*}; _a2=${1#*.}; _b1=${2%%.*}; _b2=${2#*.}
     [ "$_a1" -lt "$_b1" ] || { [ "$_a1" -eq "$_b1" ] && [ "$_a2" -lt "$_b2" ]; }
+}
+
+# version_ge A B: A >= B, both dotted numeric versions ("0.105.1"); fields
+# compare as integers, a missing field counts as 0.
+version_ge() {
+    awk -v a="$1" -v b="$2" 'BEGIN {
+        na = split(a, x, "."); nb = split(b, y, "."); n = (na > nb) ? na : nb
+        for (i = 1; i <= n; i++) {
+            if (x[i] + 0 > y[i] + 0) exit 0
+            if (x[i] + 0 < y[i] + 0) exit 1
+        }
+        exit 0 }'
 }
 
 # floor_unmet <name>: 0 when this host's known glibc is older than the
@@ -367,6 +453,8 @@ while [ $# -gt 0 ]; do
             LOCKED=""; shift ;;
         --dry-run)
             DRY_RUN="1"; shift ;;
+        --require-signature)
+            REQUIRE_SIG="1"; shift ;;
         --list)
             LIST="1"; shift ;;
         -h|--help)
@@ -502,6 +590,28 @@ if selected mnemonic-gui && [ -z "$DRY_RUN" ] && [ -z "$(plan_for mnemonic-gui)"
     fi
 fi
 
+# ── Signature checking: is minisign here? (said once, up front) ──────────
+NEED_BINARY=""
+for n in $ALL; do
+    selected "$n" || continue
+    [ -n "$(plan_for "$n")" ] && NEED_BINARY="${NEED_BINARY:+$NEED_BINARY }$n"
+done
+HAVE_MINISIGN=""
+command -v minisign >/dev/null 2>&1 && HAVE_MINISIGN="1"
+if [ -n "$NEED_BINARY" ] && [ -z "$HAVE_MINISIGN" ]; then
+    if [ -n "$REQUIRE_SIG" ]; then
+        echo "error: --require-signature was given, and \`minisign\` is not on PATH, so the" >&2
+        echo "       release signatures of $NEED_BINARY cannot be checked. Nothing installed." >&2
+        echo "       Install minisign (https://jedisct1.github.io/minisign/) and re-run." >&2
+        exit 1
+    fi
+    if [ -z "$DRY_RUN" ]; then
+        echo "note: minisign is not installed, so release signatures will NOT be checked;" >&2
+        echo "      each download is checked against its release's SHA256SUMS file only." >&2
+        echo "      Install minisign to check them, or pass --require-signature to refuse." >&2
+    fi
+fi
+
 # ── Download + verify helpers ───────────────────────────────────────────
 # fetch <url> <dest>: 0 on success; non-zero (quietly) on any failure, incl.
 # a 404. Only https URLs are ever passed in.
@@ -521,6 +631,34 @@ fetch() {
         echo "error: neither curl nor wget is on PATH; cannot download $1" >&2
         return 3
     fi
+}
+
+# fetch_sig <url> <dest>: fetch a signature file and classify the outcome,
+# echoing exactly one of:
+#   ok       downloaded (HTTP 200)
+#   missing  the server answered 404: the release has no such asset
+#   error    anything else (no network, 5xx, 403 rate limit, TLS failure...)
+# Only `missing` may be read as "this release is unsigned". A signature that
+# exists but did not arrive is never mistaken for one that was never published.
+fetch_sig() {
+    rm -f "$2"
+    if command -v curl >/dev/null 2>&1; then
+        _fc=$(curl -sSL --proto '=https' --tlsv1.2 -o "$2" -w '%{http_code}' "$1" 2>/dev/null) || _fc="err"
+        case "$_fc" in
+            200) echo ok; return 0 ;;
+            404) rm -f "$2"; echo missing; return 0 ;;
+            *)   rm -f "$2"; echo error; return 0 ;;
+        esac
+    elif command -v wget >/dev/null 2>&1; then
+        if _fh=$(wget -S -O "$2" "$1" 2>&1); then echo ok; return 0; fi
+        rm -f "$2"
+        case "$_fh" in
+            *" 404 "*|*" 404") echo missing ;;
+            *) echo error ;;
+        esac
+        return 0
+    fi
+    echo error
 }
 
 # sha256_of <file>: the lowercase hex digest, or non-zero with no tool.
@@ -559,6 +697,58 @@ make_tmp_root() {
     TMP_ROOT=""
     echo "error: cannot create a temporary directory (mktemp -d failed; TMPDIR=${TMPDIR:-unset})." >&2
     echo "       Nothing was installed. Point TMPDIR at a writable directory and re-run." >&2
+    return 1
+}
+
+# check_signature <name> <version> <release-base-url> <workdir> <sums-file> <asset>:
+# 0 when the checksum file may be trusted, non-zero (after saying why) when it
+# may not. Without minisign it returns 0 at once: that was said up front, and
+# --require-signature already refused. With minisign:
+#   * <sums-file>.minisig present -> must verify against a key trusted_keys
+#                                    lists for <name> <version>;
+#   * absent, pin >= first_signed <name> -> refused (a signed release lost it);
+#   * absent, --require-signature  -> refused;
+#   * absent otherwise              -> a note; sha256 alone, as before.
+# "Absent" means the server answered 404 (fetch_sig `missing`); any other
+# download failure is refused, never read as "unsigned".
+check_signature() {
+    _cn="$1"; _cv="$2"; _cb="$3"; _cw="$4"; _cs="$5"; _ca="$6"
+    [ -n "$HAVE_MINISIGN" ] || return 0
+    _csig="$_cw/$_cs.minisig"
+    _cst=$(fetch_sig "$_cb/$_cs.minisig" "$_csig")
+    if [ "$_cst" = error ]; then
+        echo "  error: REFUSED $_ca: could not download $_cs.minisig (network or server" >&2
+        echo "         error, not a 404); refusing rather than treating the release as unsigned" >&2
+        return 1
+    fi
+    if [ "$_cst" = missing ]; then
+        _cfirst=$(first_signed "$_cn")
+        if [ -n "$_cfirst" ] && version_ge "$_cv" "$_cfirst"; then
+            echo "  error: REFUSED $_ca: $_cs has no signature ($_cs.minisig), but $_cn" >&2
+            echo "         releases are signed from $_cfirst on, and this is $_cv" >&2
+            return 1
+        fi
+        if [ -n "$REQUIRE_SIG" ]; then
+            echo "  error: REFUSED $_ca: $_cs has no signature ($_cs.minisig)," >&2
+            echo "         and --require-signature was given" >&2
+            return 1
+        fi
+        echo "  note: $_cs is not signed (the $_cn $_cv release predates signed releases);" >&2
+        echo "        checked by sha256 only" >&2
+        return 0
+    fi
+    _ckeys=$(trusted_keys "$_cn" "$_cv")
+    for _ck in $_ckeys; do
+        if minisign -V -q -P "$_ck" -m "$_cw/$_cs" -x "$_csig" >/dev/null 2>&1; then
+            echo "  verified signature on $_cs (minisign, pinned release key $_ck)"
+            return 0
+        fi
+    done
+    echo "  error: REFUSED $_ca: $_cs.minisig does not verify against any pinned" >&2
+    echo "         release key for $_cn $_cv:" >&2
+    for _ck in $_ckeys; do echo "           $_ck" >&2; done
+    [ -n "$_ckeys" ] || echo "           (none: no key in signing_keys covers this release)" >&2
+    echo "         (the checksum file was altered, or signed by someone else)" >&2
     return 1
 }
 
@@ -601,6 +791,9 @@ install_binary() {
         echo "         $SUMS_FILES at $_base/" >&2
         return 1
     fi
+    # The file is only SEARCHED above; nothing in it is trusted until its
+    # signature has been checked.
+    check_signature "$_name" "$_ver" "$_base" "$_w" "$_sums" "$_asset" || return 1
     if ! _got=$(sha256_of "$_w/$_asset"); then
         echo "  error: no sha256 tool (sha256sum, shasum or openssl) to verify $_asset" >&2
         return 1
@@ -807,6 +1000,7 @@ for name in $ALL; do
         printf 'install  %s (release %s: %s)\n' "$name" "$tag" "$asset"
         if [ -n "$DRY_RUN" ]; then
             echo "  [dry-run] download $base/$asset"
+            echo "  [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one"
             echo "  [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry"
             case "$PLATFORM:$bin" in
                 windows-*:mnemonic-gui) ;;

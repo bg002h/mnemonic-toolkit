@@ -178,6 +178,35 @@ Each release attaches, per arch:
 sha256sum -c SHA256SUMS.x86_64        # OK ⇒ your rebuild matches the published artifact
 ```
 
+**Signature.** The rebuild proves the tarball came from this source; the signature proves the published `SHA256SUMS.<arch>` you compared against came from the project: from the first release built by the signing
+workflows on, every checksum file is signed with
+[minisign](https://jedisct1.github.io/minisign/) by the m-format constellation's
+release key (key id `EF2B8D34D8409754`, shared by every constellation repo):
+
+```text
+RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+```
+
+| your download | checksum file | its signature |
+|---|---|---|
+| Linux x86_64 / aarch64, static musl (`mnemonic-<ver>-<arch>-linux-musl.tar.gz`) | `SHA256SUMS.x86_64` / `SHA256SUMS.aarch64` | `SHA256SUMS.x86_64.minisig` / `SHA256SUMS.aarch64.minisig` |
+| macOS amd64 / arm64, Windows amd64 | `SHA256SUMS.portable` | `SHA256SUMS.portable.minisig` |
+
+Verify the signature first, then the checksum it vouches for:
+
+```sh
+minisign -Vm SHA256SUMS.x86_64 -P RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+sha256sum -c SHA256SUMS.x86_64 --ignore-missing
+```
+
+(Swap in the checksum file for your platform from the table. On macOS, where
+`sha256sum` is usually absent, use `shasum -a 256 -c <file> --ignore-missing`.) A signature
+proves who published the checksums; the checksum alone proves only that the
+download is intact. Releases from before signing began have no `.minisig`.
+The toolkit's `scripts/install.sh` runs this check for you when `minisign` is
+installed.
+
+
 On a mismatch, `diffoscope` the two tarballs. **Ignore** `target/.fingerprint`
 and `.rustc_info.json` — they are non-reproducible cache artifacts, not part of
 the shipped binary or tarball. Also check the gzip header: the mtime field

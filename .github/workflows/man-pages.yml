@@ -15,9 +15,16 @@ on:
   push:
     tags:
       - 'mnemonic-toolkit-v*'
+  # workflow_dispatch = a NON-PUBLISHING rehearsal: the repro gate, both musl
+  # legs, and the minisign sign + verify of SHA256SUMS.<arch> all run; the man
+  # tarball job and every ensure-release / upload step are tag-only, so a
+  # dispatch creates no release and uploads nothing. (Added for "sign every
+  # release": proving the signing secret works before a tag relies on it.)
+  workflow_dispatch:
 
 jobs:
   man-tarball:
+    if: startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -369,16 +376,100 @@ jobs:
           } > "PROVENANCE.${ARCH}.txt"
           cat "PROVENANCE.${ARCH}.txt"
 
+      # ── minisign SHA256SUMS.<arch> ─────────────────────────────────────────
+      # A HOST step: it runs after build+package has written the final digest,
+      # and before anything is uploaded. The secret never enters the
+      # --network=none build container or the cross container, and the
+      # reproducibility gate (the `repro` job) runs in other jobs entirely.
+      # Signing only ADDS SHA256SUMS.<arch>.minisig; the step hashes the
+      # tarball, SHA256SUMS.<arch> and PROVENANCE.<arch>.txt before and after,
+      # and fails if a single byte moved.
+      #   release tag : secret missing, or sign/verify failing -> job FAILS
+      #                 before ensure-release, so nothing from this leg uploads
+      #   dispatch    : secret present -> sign + verify, upload nothing
+      #                 secret missing -> warning, unsigned, upload nothing
+      - name: install minisign
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: sign SHA256SUMS.${{ matrix.arch }} (host, after the digest is final)
+        id: sign
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_SECRET_KEY_PASSWORD }}
+          IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v') }}
+          ARCH: ${{ matrix.arch }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          SUMS="SHA256SUMS.${ARCH}"
+          [ -s "$SUMS" ] || { echo "::error::$SUMS was not produced"; exit 1; }
+          if [ -z "$MINISIGN_SECRET_KEY" ]; then
+            if [ "$IS_RELEASE" = "true" ]; then
+              echo "::error::MINISIGN_SECRET_KEY is not set, and this is a release tag. Refusing to publish $SUMS unsigned."
+              exit 1
+            fi
+            echo "::warning::MINISIGN_SECRET_KEY is not set -- $SUMS stays UNSIGNED (not a release; nothing is uploaded)."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          shopt -s nullglob
+          surface=( mnemonic-*-"${ARCH}"-linux-musl.tar.gz "$SUMS" )
+          [ -f "PROVENANCE.${ARCH}.txt" ] && surface+=( "PROVENANCE.${ARCH}.txt" )
+          [ "${#surface[@]}" -ge 2 ] || { echo "::error::no mnemonic-*-${ARCH}-linux-musl.tar.gz to sign for"; exit 1; }
+          before="$(sha256sum "${surface[@]}")"
+          KEYFILE="$(mktemp)"
+          trap 'rm -f "$KEYFILE"' EXIT
+          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$KEYFILE"
+          if ! printf '%s\n' "$MINISIGN_PASSWORD" | \
+               minisign -S -s "$KEYFILE" -m "$SUMS" -t "mnemonic ${REF_NAME} $SUMS"; then
+            [ -n "$MINISIGN_PASSWORD" ] || echo "::error::MINISIGN_SECRET_KEY_PASSWORD is empty; the key is password-protected, so it cannot sign until that secret is set."
+            echo "::error::minisign could not sign $SUMS"
+            exit 1
+          fi
+          rm -f "$KEYFILE"
+          after="$(sha256sum "${surface[@]}")"
+          if [ "$before" != "$after" ]; then
+            echo "::error::signing changed a file the reproducibility gate hashes"
+            diff <(echo "$before") <(echo "$after") || true
+            exit 1
+          fi
+          echo "$before"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - name: verify SHA256SUMS.${{ matrix.arch }}.minisig against the pinned public key
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          MINISIGN_PUBKEY: 'RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5'
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          minisign -Vm "SHA256SUMS.${ARCH}" -P "$MINISIGN_PUBKEY"
+          echo "signature verified against pinned key $MINISIGN_PUBKEY"
+
+      # A dispatch uploads nothing to a release, but keeps the signed sums +
+      # .minisig as a workflow artifact so a reviewer can verify a real
+      # signature offline. (A tag runs the workflow AT THE TAGGED COMMIT: tag
+      # only commits containing this signing step, or the old unsigned one runs.)
+      - name: dispatch -- keep the signed SHA256SUMS.${{ matrix.arch }} as a workflow artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v') && steps.sign.outputs.signed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-sums-${{ matrix.arch }}
+          path: SHA256SUMS.${{ matrix.arch }}*
+          if-no-files-found: error
+
       - name: ensure-release
+        if: startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v')
         env:
           REF_NAME: ${{ github.ref_name }}
         run: gh release view "$REF_NAME" >/dev/null 2>&1 || gh release create "$REF_NAME" --title "$REF_NAME" --generate-notes || true
       - name: upload
+        if: startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v')
         env:
           REF_NAME: ${{ github.ref_name }}
         run: |
           gh release upload "$REF_NAME" mnemonic-*-${{ matrix.arch }}-linux-musl.tar.gz --clobber
-          gh release upload "$REF_NAME" "SHA256SUMS.${{ matrix.arch }}" --clobber
+          # The sums file and its signature in one call; if it fails the job
+          # fails loudly rather than passing with a stale or missing .minisig.
+          gh release upload "$REF_NAME" "SHA256SUMS.${{ matrix.arch }}" "SHA256SUMS.${{ matrix.arch }}.minisig" --clobber
           if [ -f "PROVENANCE.${{ matrix.arch }}.txt" ]; then
             gh release upload "$REF_NAME" "PROVENANCE.${{ matrix.arch }}.txt" --clobber
           fi

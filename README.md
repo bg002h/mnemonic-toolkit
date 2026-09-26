@@ -33,9 +33,14 @@ For each component the script downloads the prebuilt binary from its
 reports the pinned version, and installs it into `~/.cargo/bin` (`--root DIR`
 puts it in `DIR/bin`); no `sudo`, no system files touched, no Rust toolchain
 needed. A digest mismatch, or an asset no published checksum covers, is
-refused. The releases are not signed: the check proves the download is the
-file the release published, not who built it. Nothing installs from
-crates.io, whose copies lag these pins.
+refused. With `minisign` installed, the `SHA256SUMS` file must first verify
+against the constellation's pinned release key
+(`RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5`, key id `EF2B8D34D8409754`), which proves who
+published it; a bad signature is refused, and so is a missing one for any
+release at or after that component's first signed release. Without `minisign`
+the installer says once that signatures were not checked; `--require-signature`
+makes that an error. Nothing installs from crates.io, whose copies lag these
+pins.
 
 `--from-source` (and any platform a release has no binary for, e.g. FreeBSD)
 builds the same pinned tags with `cargo install --locked --git … --tag …`,
@@ -114,6 +119,34 @@ attaches `SHA256SUMS.x86_64`, `SHA256SUMS.aarch64`, and `PROVENANCE.<arch>.txt`.
 ```sh
 sha256sum -c SHA256SUMS.x86_64      # or SHA256SUMS.aarch64
 ```
+
+**Origin** (did the project publish these checksums?): from the first release built by the signing
+workflows on, every checksum file is signed with
+[minisign](https://jedisct1.github.io/minisign/) by the m-format constellation's
+release key (key id `EF2B8D34D8409754`, shared by every constellation repo):
+
+```text
+RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+```
+
+| your download | checksum file | its signature |
+|---|---|---|
+| Linux x86_64 / aarch64, static musl (`mnemonic-<ver>-<arch>-linux-musl.tar.gz`) | `SHA256SUMS.x86_64` / `SHA256SUMS.aarch64` | `SHA256SUMS.x86_64.minisig` / `SHA256SUMS.aarch64.minisig` |
+| macOS amd64 / arm64, Windows amd64 | `SHA256SUMS.portable` | `SHA256SUMS.portable.minisig` |
+
+Verify the signature first, then the checksum it vouches for:
+
+```sh
+minisign -Vm SHA256SUMS.x86_64 -P RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+sha256sum -c SHA256SUMS.x86_64 --ignore-missing
+```
+
+(Swap in the checksum file for your platform from the table. On macOS, where
+`sha256sum` is usually absent, use `shasum -a 256 -c <file> --ignore-missing`.) A signature
+proves who published the checksums; the checksum alone proves only that the
+download is intact. Releases from before signing began have no `.minisig`.
+The toolkit's `scripts/install.sh` runs this check for you when `minisign` is
+installed.
 
 **Provenance** (was it really built from this source — no hidden changes?):
 independently rebuild and confirm you get the *same* hash. See
