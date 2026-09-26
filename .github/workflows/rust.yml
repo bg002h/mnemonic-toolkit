@@ -42,6 +42,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/rust.yml'
+      # The install-sh-harnesses job tests scripts/install.sh; without these a
+      # push that changes only the installer never ran its own harnesses.
+      - 'scripts/install.sh'
+      - 'scripts/install-*.test.sh'
   pull_request:
     # NO paths — this workflow's `test`/`clippy` contexts are REQUIRED status
     # checks (branch protection), and a path-filtered required check wedges a
