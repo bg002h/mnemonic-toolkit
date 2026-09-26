@@ -120,12 +120,32 @@ attaches `SHA256SUMS.x86_64`, `SHA256SUMS.aarch64`, and `PROVENANCE.<arch>.txt`.
 sha256sum -c SHA256SUMS.x86_64      # or SHA256SUMS.aarch64
 ```
 
-**Origin** (did the project publish these checksums?): from signed releases on,
-each `SHA256SUMS.<arch>` has a `.minisig` beside it:
+**Origin** (did the project publish these checksums?): from the first release built by the signing
+workflows on, every checksum file is signed with
+[minisign](https://jedisct1.github.io/minisign/) by the m-format constellation's
+release key (key id `EF2B8D34D8409754`, shared by every constellation repo):
+
+```text
+RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+```
+
+| your download | checksum file | its signature |
+|---|---|---|
+| Linux x86_64 / aarch64, static musl (`mnemonic-<ver>-<arch>-linux-musl.tar.gz`) | `SHA256SUMS.x86_64` / `SHA256SUMS.aarch64` | `SHA256SUMS.x86_64.minisig` / `SHA256SUMS.aarch64.minisig` |
+| macOS amd64 / arm64, Windows amd64 | `SHA256SUMS.portable` | `SHA256SUMS.portable.minisig` |
+
+Verify the signature first, then the checksum it vouches for:
 
 ```sh
 minisign -Vm SHA256SUMS.x86_64 -P RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+sha256sum -c SHA256SUMS.x86_64 --ignore-missing
 ```
+
+(Swap in the checksum file for your platform from the table.) A signature
+proves who published the checksums; the checksum alone proves only that the
+download is intact. Releases from before signing began have no `.minisig`.
+The toolkit's `scripts/install.sh` runs this check for you when `minisign` is
+installed.
 
 **Provenance** (was it really built from this source — no hidden changes?):
 independently rebuild and confirm you get the *same* hash. See
