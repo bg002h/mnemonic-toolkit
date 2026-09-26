@@ -199,7 +199,8 @@ minisign -Vm SHA256SUMS.x86_64 -P RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEM
 sha256sum -c SHA256SUMS.x86_64 --ignore-missing
 ```
 
-(Swap in the checksum file for your platform from the table.) A signature
+(Swap in the checksum file for your platform from the table. On macOS, where
+`sha256sum` is usually absent, use `shasum -a 256 -c <file> --ignore-missing`.) A signature
 proves who published the checksums; the checksum alone proves only that the
 download is intact. Releases from before signing began have no `.minisig`.
 The toolkit's `scripts/install.sh` runs this check for you when `minisign` is
