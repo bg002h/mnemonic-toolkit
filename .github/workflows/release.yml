@@ -63,7 +63,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
   # The constellation's release-signing key, pinned. Every signature this
   # workflow makes is verified against THIS key before anything is uploaded.
-  MINISIGN_PUBKEY: 'RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW'
+  MINISIGN_PUBKEY: 'RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5'
 
 jobs:
   # THE SUITE, ON EACH OS THAT CAN RUN IT.

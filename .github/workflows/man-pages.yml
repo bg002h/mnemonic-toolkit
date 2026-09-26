@@ -437,7 +437,7 @@ jobs:
       - name: verify SHA256SUMS.${{ matrix.arch }}.minisig against the pinned public key
         if: steps.sign.outputs.signed == 'true'
         env:
-          MINISIGN_PUBKEY: 'RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW'
+          MINISIGN_PUBKEY: 'RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5'
           ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
