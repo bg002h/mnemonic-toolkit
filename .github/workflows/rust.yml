@@ -226,6 +226,11 @@ jobs:
       # minisign absent (said once), and --require-signature.
       - name: install-signature harness (offline)
         run: sh scripts/install-signature.test.sh
+      # install-assets.test.sh's signed-pin gate (a pinned release that
+      # publishes a .minisig must have first_signed filled and <= the pin),
+      # exercised offline, since no signed release exists yet to hit it live.
+      - name: install-assets signed-pin gate (offline)
+        run: sh scripts/install-assets-gate.test.sh
       # Every platform mapping names a real asset of the PINNED release, listed
       # in exactly one of its SHA256SUMS files. Network (plain HTTPS). This is
       # what breaks when a pin moves to a release that names assets differently.

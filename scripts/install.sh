@@ -177,9 +177,12 @@ trusted_keys() {
 # signed release of it exists. For a pin at or after that version, a MISSING
 # signature is refused (it was published, so someone removed it); before it,
 # a missing signature is allowed with a note, since those releases shipped
-# unsigned. Fill each one in when that component's first signed release is
-# out. Bare versions only, never tags: the pin gates grep this file for the
-# first `<name>-v<x.y.z>` they find.
+# unsigned. Fill each one IN THE SAME COMMIT that moves a pin onto that
+# component's first signed release: install-assets.test.sh fails a pinned
+# release that publishes a .minisig while its entry is empty or above the pin
+# (otherwise a stripped signature on it would pass as "unsigned"). No signed
+# release exists yet (2026-09-26), so all five are empty. Bare versions only,
+# never tags: the pin gates grep this file for the first `<name>-v<x.y.z>`.
 first_signed() {
     case "$1" in
         mnemonic)     echo "" ;;
@@ -630,6 +633,34 @@ fetch() {
     fi
 }
 
+# fetch_sig <url> <dest>: fetch a signature file and classify the outcome,
+# echoing exactly one of:
+#   ok       downloaded (HTTP 200)
+#   missing  the server answered 404: the release has no such asset
+#   error    anything else (no network, 5xx, 403 rate limit, TLS failure...)
+# Only `missing` may be read as "this release is unsigned". A signature that
+# exists but did not arrive is never mistaken for one that was never published.
+fetch_sig() {
+    rm -f "$2"
+    if command -v curl >/dev/null 2>&1; then
+        _fc=$(curl -sSL --proto '=https' --tlsv1.2 -o "$2" -w '%{http_code}' "$1" 2>/dev/null) || _fc="err"
+        case "$_fc" in
+            200) echo ok; return 0 ;;
+            404) rm -f "$2"; echo missing; return 0 ;;
+            *)   rm -f "$2"; echo error; return 0 ;;
+        esac
+    elif command -v wget >/dev/null 2>&1; then
+        if _fh=$(wget -S -O "$2" "$1" 2>&1); then echo ok; return 0; fi
+        rm -f "$2"
+        case "$_fh" in
+            *" 404 "*|*" 404") echo missing ;;
+            *) echo error ;;
+        esac
+        return 0
+    fi
+    echo error
+}
+
 # sha256_of <file>: the lowercase hex digest, or non-zero with no tool.
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then
@@ -678,12 +709,19 @@ make_tmp_root() {
 #   * absent, pin >= first_signed <name> -> refused (a signed release lost it);
 #   * absent, --require-signature  -> refused;
 #   * absent otherwise              -> a note; sha256 alone, as before.
+# "Absent" means the server answered 404 (fetch_sig `missing`); any other
+# download failure is refused, never read as "unsigned".
 check_signature() {
     _cn="$1"; _cv="$2"; _cb="$3"; _cw="$4"; _cs="$5"; _ca="$6"
     [ -n "$HAVE_MINISIGN" ] || return 0
     _csig="$_cw/$_cs.minisig"
-    if ! fetch "$_cb/$_cs.minisig" "$_csig"; then
-        rm -f "$_csig"
+    _cst=$(fetch_sig "$_cb/$_cs.minisig" "$_csig")
+    if [ "$_cst" = error ]; then
+        echo "  error: REFUSED $_ca: could not download $_cs.minisig (network or server" >&2
+        echo "         error, not a 404); refusing rather than treating the release as unsigned" >&2
+        return 1
+    fi
+    if [ "$_cst" = missing ]; then
         _cfirst=$(first_signed "$_cn")
         if [ -n "$_cfirst" ] && version_ge "$_cv" "$_cfirst"; then
             echo "  error: REFUSED $_ca: $_cs has no signature ($_cs.minisig), but $_cn" >&2

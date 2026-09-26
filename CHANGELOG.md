@@ -32,6 +32,17 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   checked. **`--require-signature`** makes a missing `minisign` or signature fatal.
   `scripts/install-signature.test.sh` covers it offline with throwaway keys; the Examples
   golden shows the new `--dry-run` line.
+- **A stripped or undelivered signature is never read as "unsigned".** Only an HTTP 404 for
+  the `.minisig` counts as missing; any other download failure is refused.
+  `install-assets.test.sh` now also fails when a pinned release publishes a `.minisig` but
+  that component's `first_signed` is empty or above the pin, so the pin bump onto the first
+  signed release must fill it (`scripts/install-assets-gate.test.sh` covers the rule offline).
+- **`release.yml` fires only on `mnemonic-toolkit-v*` tags** (it used to match every
+  `*v[0-9]*` tag, so doc tags such as `manual-gui-v1.4.0` built and attached `mnemonic-1.4.0-*`
+  binaries), holds one release run per tag at a time, fails if an archive upload fails, and a
+  `sign_dry_run` keeps the signed `SHA256SUMS.portable` + `.minisig` as a workflow artifact.
+  Tag only commits that contain these workflows: a tag runs the workflow files at the tagged
+  commit.
 
 ### Installer pins: mnemonic-gui v0.63.0
 

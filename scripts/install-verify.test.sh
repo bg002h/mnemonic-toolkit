@@ -56,12 +56,19 @@ REL="$T/fixture/mnemonic-key/$MK_TAG"
 mkdir -p "$T/stub"
 cat > "$T/stub/curl" <<EOF
 #!/bin/sh
-out=""; url=""; prev=""; fail=""
+out=""; url=""; prev=""; fail=""; wcode=""
 for a in "\$@"; do
     case "\$a" in --*) ;; -*f*) fail=1 ;; esac
-    [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; url="\$a"
+    [ "\$prev" = "-o" ] && out="\$a"
+    [ "\$prev" = "-w" ] && wcode=1
+    prev="\$a"; url="\$a"
 done
 echo "\$url" >> "$T/curl.log"
+# CURL_STUB_SIGERR=<http code>|net: a .minisig download fails that way.
+case "\$url:\${CURL_STUB_SIGERR:-}" in
+    *.minisig:net) exit 7 ;;
+    *.minisig:[0-9]*) echo "err" > "\$out"; echo "\$CURL_STUB_SIGERR"; exit 0 ;;
+esac
 [ -n "\${CURL_STUB_SLEEP:-}" ] && sleep "\$CURL_STUB_SLEEP"
 if [ -n "\${CURL_STUB_RMTMP:-}" ]; then
     tmproot=\$(dirname "\$(dirname "\$out")")
@@ -75,14 +82,17 @@ case "\$src" in
     *.minisig)
         # Sign the fixture sums file on demand (throwaway key), if it exists.
         if [ ! -f "\$src" ] && [ -f "$T/sig.key" ] && [ -f "\${src%.minisig}" ]; then
-            minisign -S -s "$T/sig.key" -m "\${src%.minisig}" -x "\$out" >/dev/null 2>&1 </dev/null && exit 0
+            minisign -S -s "$T/sig.key" -m "\${src%.minisig}" -x "\$out" >/dev/null 2>&1 </dev/null \
+                && { [ -n "\$wcode" ] && echo 200; exit 0; }
         fi ;;
 esac
 if [ ! -f "\$src" ]; then
     [ -n "\$fail" ] && exit 22
-    echo "Not Found" > "\$out"; exit 0
+    echo "Not Found" > "\$out"; [ -n "\$wcode" ] && echo 404; exit 0
 fi
 cp "\$src" "\$out"
+[ -n "\$wcode" ] && echo 200
+exit 0
 EOF
 cat > "$T/stub/cargo" <<EOF
 #!/bin/sh

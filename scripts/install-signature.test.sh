@@ -25,6 +25,10 @@
 #  11  good signature + --require-signature    -> installed
 #  12  signed by a key pinned only for OTHER versions -> refused
 #  13  two keys pinned; the second, ranged to this version, signed -> installed
+#  14  signed by a key scoped to ANOTHER component (mnemonic-engrave) -> refused
+#  15  signed by a key whose LOWER bound is above this version       -> refused
+#  16  .minisig download fails (no network)          -> refused, not "unsigned"
+#  17  .minisig download fails (HTTP 500)            -> refused, not "unsigned"
 #
 # Needs minisign on PATH (it generates the test keys). Usage:
 #   sh scripts/install-signature.test.sh
@@ -99,20 +103,29 @@ fresh() {  # fresh <signing key or none>: both releases, same signing state
 mkdir -p "$T/stub"
 cat > "$T/stub/curl" <<EOF
 #!/bin/sh
-out=""; url=""; prev=""; fail=""
+out=""; url=""; prev=""; fail=""; wcode=""
 for a in "\$@"; do
     case "\$a" in --*) ;; -*f*) fail=1 ;; esac
-    [ "\$prev" = "-o" ] && out="\$a"; prev="\$a"; url="\$a"
+    [ "\$prev" = "-o" ] && out="\$a"
+    [ "\$prev" = "-w" ] && wcode=1
+    prev="\$a"; url="\$a"
 done
 echo "\$url" >> "$T/curl.log"
+# CURL_STUB_SIGERR=<http code>|net: a .minisig download fails that way.
+case "\$url:\${CURL_STUB_SIGERR:-}" in
+    *.minisig:net) exit 7 ;;
+    *.minisig:[0-9]*) echo "err" > "\$out"; echo "\$CURL_STUB_SIGERR"; exit 0 ;;
+esac
 rel=\${url#https://github.com/bg002h/}
 repo=\${rel%%/*}; rest=\${rel#*/releases/download/}
 src="$T/fixture/\$repo/\$rest"
 if [ ! -f "\$src" ]; then
     [ -n "\$fail" ] && exit 22
-    echo "Not Found" > "\$out"; exit 0
+    echo "Not Found" > "\$out"; [ -n "\$wcode" ] && echo 404; exit 0
 fi
 cp "\$src" "\$out"
+[ -n "\$wcode" ] && echo 200
+exit 0
 EOF
 chmod +x "$T/stub/curl"
 
@@ -236,6 +249,40 @@ run mk with
 if [ "$rc" -eq 0 ] && installed mk && has "pinned release key $TESTPUB"; then
     ok "13 second key, ranged to mk $MK_VER, verifies: installed"
 else bad "13 ranged second key (rc=$rc): $out"; fi
+
+# 14. component scope: the only key that signed is scoped to mnemonic-engrave
+#     (the shape of the retired key's entry), so it must not verify mk.
+installer_copy "" "*|||$OTHERPUB" "mnemonic-engrave||999.0.0|$TESTPUB"
+fresh "$T/test.key"
+run mk with
+if [ "$rc" -ne 0 ] && ! installed mk && has "does not verify against any pinned"; then
+    ok "14 key scoped to mnemonic-engrave does not verify mk: refused"
+else bad "14 component scope (rc=$rc): $out"; fi
+
+# 15. lower bound: the signing key covers mk only from 999.0.0 on
+installer_copy "" "*|||$OTHERPUB" "mk|999.0.0||$TESTPUB"
+run mk with
+if [ "$rc" -ne 0 ] && ! installed mk && has "does not verify against any pinned"; then
+    ok "15 key ranged mk >= 999.0.0 does not verify mk $MK_VER: refused"
+else bad "15 lower bound (rc=$rc): $out"; fi
+
+# 16-17. the signature exists but its download fails: never read as unsigned
+installer_copy ""
+fresh "$T/test.key"
+sigerr() {
+    [ -d "$T/root" ] && find "$T/root" -delete
+    rc=0; out=$(CURL_STUB_SIGERR=$1 PATH="$T/stub:$PATH" MNEMONIC_INSTALL_PLATFORM=linux-x86_64-gnu \
+        sh "$T/install.sh" --only mk --no-man --root "$T/root" 2>&1) || rc=$?
+}
+sigerr net
+if [ "$rc" -ne 0 ] && ! installed mk && has "could not download SHA256SUMS.x86_64.minisig" \
+   && ! has "is not signed"; then
+    ok "16 .minisig download fails (network): refused, not treated as unsigned"
+else bad "16 sig download error (rc=$rc): $out"; fi
+sigerr 500
+if [ "$rc" -ne 0 ] && ! installed mk && has "could not download SHA256SUMS.x86_64.minisig"; then
+    ok "17 .minisig download fails (HTTP 500): refused"
+else bad "17 sig HTTP 500 (rc=$rc): $out"; fi
 
 # The shipped table: the rotated key for everything, and the previous key
 # only for the mnemonic-engrave releases it signed (<= 0.12.0).
