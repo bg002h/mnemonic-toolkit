@@ -444,6 +444,18 @@ jobs:
           minisign -Vm "SHA256SUMS.${ARCH}" -P "$MINISIGN_PUBKEY"
           echo "signature verified against pinned key $MINISIGN_PUBKEY"
 
+      # A dispatch uploads nothing to a release, but keeps the signed sums +
+      # .minisig as a workflow artifact so a reviewer can verify a real
+      # signature offline. (A tag runs the workflow AT THE TAGGED COMMIT: tag
+      # only commits containing this signing step, or the old unsigned one runs.)
+      - name: dispatch -- keep the signed SHA256SUMS.${{ matrix.arch }} as a workflow artifact
+        if: ${{ !startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v') && steps.sign.outputs.signed == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-sums-${{ matrix.arch }}
+          path: SHA256SUMS.${{ matrix.arch }}*
+          if-no-files-found: error
+
       - name: ensure-release
         if: startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v')
         env:
@@ -455,8 +467,8 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           gh release upload "$REF_NAME" mnemonic-*-${{ matrix.arch }}-linux-musl.tar.gz --clobber
-          # The sums file and its signature in ONE call: the release never
-          # carries a new SHA256SUMS.<arch> beside a stale or missing .minisig.
+          # The sums file and its signature in one call; if it fails the job
+          # fails loudly rather than passing with a stale or missing .minisig.
           gh release upload "$REF_NAME" "SHA256SUMS.${{ matrix.arch }}" "SHA256SUMS.${{ matrix.arch }}.minisig" --clobber
           if [ -f "PROVENANCE.${{ matrix.arch }}.txt" ]; then
             gh release upload "$REF_NAME" "PROVENANCE.${{ matrix.arch }}.txt" --clobber

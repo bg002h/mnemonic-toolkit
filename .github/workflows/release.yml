@@ -30,13 +30,24 @@
 #       secret present               -> signs + verifies, uploads NOTHING
 #       secret missing               -> warns, stays unsigned, uploads NOTHING
 #
-# `sign_dry_run` exists to prove the secret works without cutting a release.
+# `sign_dry_run` exists to prove the secret works without cutting a release;
+# it uploads the signed SHA256SUMS.portable + .minisig as a WORKFLOW ARTIFACT
+# (`signed-sums-dry-run`), so a reviewer can verify a real signature offline.
+#
+# ONLY `mnemonic-toolkit-v*` tags release this CLI. Other tags in this repo (codec,
+# manual and doc tags) must not produce binaries: a signed SHA256SUMS for a
+# CLI version that was never released would be an authenticated false claim.
+# A backfill dispatch refuses any other tag for the same reason.
+#
+# A tag runs the workflow files AT THE TAGGED COMMIT. Tag only commits that
+# contain this signing workflow; a tag on an older commit runs the old,
+# unsigned workflows (and the installer refuses it once first_signed covers it).
 name: release
 
 on:
   push:
     tags:
-      - '*v[0-9]*'
+      - 'mnemonic-toolkit-v*'
     branches:
       - master
       - 'ci/**'
@@ -52,6 +63,13 @@ on:
         type: boolean
         required: false
         default: false
+
+# One release run per tag at a time (a tag push and a backfill dispatch of the
+# same tag would otherwise interleave their --clobber uploads). Non-release
+# runs get a unique group and never queue behind each other.
+concurrency:
+  group: ${{ (startsWith(github.ref, 'refs/tags/') || github.event.inputs.tag != '') && format('release-{0}', github.event.inputs.tag || github.ref_name) || github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -209,6 +227,13 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "sign_dry_run: will sign + verify, and upload NOTHING"
           else
+            # Only this CLI's own tags release it (see the header): a backfill
+            # of a doc or codec tag would sign binaries for a version that does
+            # not exist.
+            case "$TAG" in
+              mnemonic-toolkit-v*) ;;
+              *) echo "::error::$TAG is not a mnemonic-toolkit-v* tag; refusing to publish mnemonic binaries to it"; exit 1 ;;
+            esac
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -359,6 +384,14 @@ jobs:
           ls -l release
           echo "sign_dry_run: signed=$SIGNED; no release created, nothing uploaded, no attestation."
 
+      - name: Dry run -- keep the signed checksums as a workflow artifact
+        if: steps.meta.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-sums-dry-run
+          path: release/SHA256SUMS.portable*
+          if-no-files-found: error
+
       - name: Attest build provenance
         if: steps.meta.outputs.publish == 'true'
         uses: actions/attest-build-provenance@v1
@@ -373,12 +406,14 @@ jobs:
         run: |
           set -euo pipefail
           gh release view "$TAG" >/dev/null 2>&1 ||             gh release create "$TAG" --title "$TAG" --generate-notes || true
-          gh release upload "$TAG" release/mnemonic-*.tar.gz --clobber 2>/dev/null || true
-          gh release upload "$TAG" release/mnemonic-*.zip --clobber 2>/dev/null || true
-          # The sums file and its signature go up in ONE call, so the release
-          # never carries a new SHA256SUMS.portable beside a stale signature. A
-          # publishing run always has the .minisig (the signing step refuses
-          # otherwise); a failed upload fails the job, never `|| true`.
+          # Every archive upload must succeed: a signed sums file beside an
+          # archive that silently failed to upload lists a digest nobody can get.
+          gh release upload "$TAG" release/mnemonic-*.tar.gz --clobber
+          gh release upload "$TAG" release/mnemonic-*.zip --clobber
+          # The sums file and its signature go up in one call. A publishing run
+          # always has the .minisig (the signing step refuses otherwise); if an
+          # upload fails the job fails loudly, rather than passing with a stale
+          # or missing signature beside a new sums file.
           [ -f release/SHA256SUMS.portable.minisig ] || { echo "::error::no SHA256SUMS.portable.minisig to publish"; exit 1; }
           gh release upload "$TAG" release/SHA256SUMS.portable release/SHA256SUMS.portable.minisig --clobber
           gh release view "$TAG" --json assets -q '.assets[].name'
