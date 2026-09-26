@@ -8,8 +8,8 @@
 # checked against that release's SHA256SUMS* file before it is installed.
 # A download whose digest does not match, or that no published checksum
 # covers, is refused (fail closed). When `minisign` is installed, that
-# checksum file must first verify against the constellation's pinned release
-# key (MINISIGN_PUBKEY below), which proves origin as well as integrity; a bad
+# checksum file must first verify against a pinned release key covering that
+# release (signing_keys below), which proves origin as well as integrity; a bad
 # signature is always refused, and a missing one is refused for any pin at or
 # after that component's first signed release (first_signed). Without
 # minisign, the installer says once that signatures were not checked;
@@ -141,11 +141,36 @@ SUMS_FILES="SHA256SUMS.x86_64 SHA256SUMS.aarch64 SHA256SUMS.portable SHA256SUMS"
 
 # ── Release signatures ──────────────────────────────────────────────────
 # Every constellation release signs each SHA256SUMS* file it publishes with
-# minisign (`<file>.minisig`), all with one key. This is its public half,
-# pinned here and in every repo's release workflow. When `minisign` is on
+# minisign (`<file>.minisig`). `signing_keys` is the ONE list of the public
+# keys this installer trusts, each with the releases it covers, one per line:
+#     <component>|<first version>|<last version>|<public key>
+# `*` is every component, and an empty bound is open. When `minisign` is on
 # PATH, the checksum file a download is checked against must verify against
-# this key BEFORE any digest in it is trusted.
-MINISIGN_PUBKEY="RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW"
+# a key whose range covers that release BEFORE any digest in it is trusted.
+#   * EF2B8D34D8409754, the constellation key since the 2026-09-26 rotation:
+#     every component, every release.
+#   * CA39ECB257009A0F, the previous key: it signed mnemonic-engrave up to and
+#     including 0.12.0 and nothing else. The installer does not install
+#     mnemonic-engrave today; the entry keeps that one fact in the one table,
+#     so a key can never verify a release it did not sign.
+# A rotation adds a line (and bounds the old one); nothing else changes.
+signing_keys() {
+    cat <<'EOF'
+*|||RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
+mnemonic-engrave||0.12.0|RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW
+EOF
+}
+
+# trusted_keys <name> <version>: the keys from signing_keys whose component
+# and version range cover that release, one per line (possibly none).
+trusted_keys() {
+    signing_keys | while IFS='|' read -r _kc _kf _kt _kk; do
+        case "$_kc" in "*"|"$1") ;; *) continue ;; esac
+        [ -z "$_kf" ] || version_ge "$2" "$_kf" || continue
+        [ -z "$_kt" ] || version_ge "$_kt" "$2" || continue
+        [ -n "$_kk" ] && echo "$_kk"
+    done
+}
 
 # `first_signed <short-name>` echoes the first VERSION of that component whose
 # release carries a .minisig beside its SHA256SUMS* files, or nothing while no
@@ -648,7 +673,8 @@ make_tmp_root() {
 # 0 when the checksum file may be trusted, non-zero (after saying why) when it
 # may not. Without minisign it returns 0 at once: that was said up front, and
 # --require-signature already refused. With minisign:
-#   * <sums-file>.minisig present -> must verify against MINISIGN_PUBKEY;
+#   * <sums-file>.minisig present -> must verify against a key trusted_keys
+#                                    lists for <name> <version>;
 #   * absent, pin >= first_signed <name> -> refused (a signed release lost it);
 #   * absent, --require-signature  -> refused;
 #   * absent otherwise              -> a note; sha256 alone, as before.
@@ -673,13 +699,19 @@ check_signature() {
         echo "        checked by sha256 only" >&2
         return 0
     fi
-    if ! minisign -V -q -P "$MINISIGN_PUBKEY" -m "$_cw/$_cs" -x "$_csig" >/dev/null 2>&1; then
-        echo "  error: REFUSED $_ca: $_cs.minisig does not verify against the pinned" >&2
-        echo "         release key $MINISIGN_PUBKEY" >&2
-        echo "         (the checksum file was altered, or signed by someone else)" >&2
-        return 1
-    fi
-    echo "  verified signature on $_cs (minisign, pinned release key)"
+    _ckeys=$(trusted_keys "$_cn" "$_cv")
+    for _ck in $_ckeys; do
+        if minisign -V -q -P "$_ck" -m "$_cw/$_cs" -x "$_csig" >/dev/null 2>&1; then
+            echo "  verified signature on $_cs (minisign, pinned release key $_ck)"
+            return 0
+        fi
+    done
+    echo "  error: REFUSED $_ca: $_cs.minisig does not verify against any pinned" >&2
+    echo "         release key for $_cn $_cv:" >&2
+    for _ck in $_ckeys; do echo "           $_ck" >&2; done
+    [ -n "$_ckeys" ] || echo "           (none: no key in signing_keys covers this release)" >&2
+    echo "         (the checksum file was altered, or signed by someone else)" >&2
+    return 1
 }
 
 # install_binary <name> <bin> <version> <release-base-url> <asset>: download,

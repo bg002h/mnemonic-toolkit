@@ -35,7 +35,7 @@ puts it in `DIR/bin`); no `sudo`, no system files touched, no Rust toolchain
 needed. A digest mismatch, or an asset no published checksum covers, is
 refused. With `minisign` installed, the `SHA256SUMS` file must first verify
 against the constellation's pinned release key
-(`RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW`), which proves who
+(`RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5`, key id `EF2B8D34D8409754`), which proves who
 published it; a bad signature is refused, and so is a missing one for any
 release at or after that component's first signed release. Without `minisign`
 the installer says once that signatures were not checked; `--require-signature`
@@ -124,7 +124,7 @@ sha256sum -c SHA256SUMS.x86_64      # or SHA256SUMS.aarch64
 each `SHA256SUMS.<arch>` has a `.minisig` beside it:
 
 ```sh
-minisign -Vm SHA256SUMS.x86_64 -P RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW
+minisign -Vm SHA256SUMS.x86_64 -P RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
 ```
 
 **Provenance** (was it really built from this source — no hidden changes?):

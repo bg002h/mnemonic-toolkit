@@ -23,6 +23,8 @@
 #   9  minisign absent + --require-signature   -> refused before any download
 #  10  missing .minisig + --require-signature  -> refused
 #  11  good signature + --require-signature    -> installed
+#  12  signed by a key pinned only for OTHER versions -> refused
+#  13  two keys pinned; the second, ranged to this version, signed -> installed
 #
 # Needs minisign on PATH (it generates the test keys). Usage:
 #   sh scripts/install-signature.test.sh
@@ -46,19 +48,27 @@ command -v minisign >/dev/null 2>&1 || { echo "install-signature.test: minisign 
 minisign -G -W -p "$T/test.pub" -s "$T/test.key" >/dev/null 2>&1
 minisign -G -W -p "$T/other.pub" -s "$T/other.key" >/dev/null 2>&1
 TESTPUB=$(sed -n 2p "$T/test.pub")
-REALPUB=$(sed -n 's/^MINISIGN_PUBKEY="\(.*\)"$/\1/p' "$REAL_SH")
+OTHERPUB=$(sed -n 2p "$T/other.pub")
+REALPUB=$(sed -n 's/^\*|||\(.*\)$/\1/p' "$REAL_SH")
 [ -n "$TESTPUB" ] && [ -n "$REALPUB" ] && [ "$TESTPUB" != "$REALPUB" ] \
     || { echo "cannot set up keys (test=$TESTPUB real=$REALPUB)" >&2; exit 1; }
 
-# installer_copy <mk first_signed version, or empty>: $T/install.sh with the
-# test key pinned. Both rewrites are asserted.
+# installer_copy <mk first_signed version, or empty> [signing_keys line...]:
+# $T/install.sh with its `*|||<key>` entry replaced by the given lines
+# (default: `*|||$TESTPUB`). Both rewrites are asserted.
 installer_copy() {
-    sed -e "s|^MINISIGN_PUBKEY=\".*\"\$|MINISIGN_PUBKEY=\"$TESTPUB\"|" \
-        -e "s|^        mk)           echo \"\" ;;\$|        mk)           echo \"$1\" ;;|" \
-        "$REAL_SH" > "$T/install.sh"
-    grep -qx "MINISIGN_PUBKEY=\"$TESTPUB\"" "$T/install.sh" \
-        || { echo "pubkey rewrite did not apply" >&2; exit 1; }
-    grep -qx "        mk)           echo \"$1\" ;;" "$T/install.sh" \
+    _first=$1; shift
+    [ $# -gt 0 ] || set -- "*|||$TESTPUB"
+    printf '%s\n' "$@" > "$T/keys"
+    awk -v kf="$T/keys" '
+        /^\*\|\|\|/ { while ((getline l < kf) > 0) print l; n++; next }
+        { print }
+        END { if (n != 1) exit 1 }' "$REAL_SH" |
+    sed -e "s|^        mk)           echo \"\" ;;\$|        mk)           echo \"$_first\" ;;|" > "$T/install.sh"
+    for _l in "$@"; do
+        grep -qxF "$_l" "$T/install.sh" || { echo "signing_keys rewrite did not apply: $_l" >&2; exit 1; }
+    done
+    grep -qx "        mk)           echo \"$_first\" ;;" "$T/install.sh" \
         || { echo "first_signed rewrite did not apply" >&2; exit 1; }
 }
 
@@ -151,7 +161,7 @@ else bad "2 tampered sums (rc=$rc, installed=$(installed mk && echo yes || echo 
 # 3. signed, but by a key that is not the pinned one
 fresh "$T/other.key"
 run mk with
-if [ "$rc" -ne 0 ] && ! installed mk && has "does not verify against the pinned"; then
+if [ "$rc" -ne 0 ] && ! installed mk && has "does not verify against any pinned"; then
     ok "3 signature by another key: refused, nothing installed"
 else bad "3 other key (rc=$rc): $out"; fi
 
@@ -212,10 +222,27 @@ if [ "$rc" -eq 0 ] && installed mk && has "verified signature on SHA256SUMS.x86_
     ok "11 good signature + --require-signature: installed"
 else bad "11 good + require (rc=$rc): $out"; fi
 
-# The shipped installer pins the real key, not a test one.
-if [ "$REALPUB" = "RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW" ]; then
-    ok "install.sh pins the constellation release key"
-else bad "install.sh pins an unexpected key: $REALPUB"; fi
+# 12. the only key that signed is pinned for mk versions that exclude this one
+installer_copy "" "*|||$OTHERPUB" "mk||0.0.1|$TESTPUB"
+fresh "$T/test.key"
+run mk with
+if [ "$rc" -ne 0 ] && ! installed mk && has "does not verify against any pinned"; then
+    ok "12 signing key pinned only for mk <= 0.0.1: refused for $MK_VER"
+else bad "12 out-of-range key (rc=$rc): $out"; fi
+
+# 13. two keys pinned; the second one, ranged to exactly this version, signed
+installer_copy "" "*|||$OTHERPUB" "mk|$MK_VER|$MK_VER|$TESTPUB"
+run mk with
+if [ "$rc" -eq 0 ] && installed mk && has "pinned release key $TESTPUB"; then
+    ok "13 second key, ranged to mk $MK_VER, verifies: installed"
+else bad "13 ranged second key (rc=$rc): $out"; fi
+
+# The shipped table: the rotated key for everything, and the previous key
+# only for the mnemonic-engrave releases it signed (<= 0.12.0).
+if [ "$REALPUB" = "RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5" ] \
+   && grep -qxF "mnemonic-engrave||0.12.0|RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW" "$REAL_SH"; then
+    ok "install.sh trusts EF2B8D34D8409754 for all, CA39ECB257009A0F only for engrave <= 0.12.0"
+else bad "install.sh signing_keys is not the expected table (all-key: $REALPUB)"; fi
 
 if [ "$fail" -eq 0 ]; then
     echo "[install-signature.test] OK"

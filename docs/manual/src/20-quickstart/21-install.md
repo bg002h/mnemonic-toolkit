@@ -38,7 +38,7 @@ If `minisign` is installed, the installer first checks that the
 release key, which is pinned in the installer:
 
 ```text
-RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW
+RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5
 ```
 
 The signature proves who published the checksums, where the checksum

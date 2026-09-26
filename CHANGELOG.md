@@ -11,7 +11,8 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 ### Signed releases, and the installer checks the signatures
 
 - **Every release now signs its checksum files with minisign**, with the constellation
-  key that `mnemonic-engrave` already uses (`RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW`):
+  key every m-format repo now shares (`RWRUl0DYNI0r72HYC0ou+T/7pHEf0km3a8RWHwqGwZmIEMWtiSd4k0B5`, key id `EF2B8D34D8409754`, from the
+  2026-09-26 rotation):
   `SHA256SUMS.portable` (macOS / Windows, `release.yml`) and the reproducible Linux
   `SHA256SUMS.x86_64` / `SHA256SUMS.aarch64` (`man-pages.yml`), each with a `.minisig`.
   Signing is a host step after the digest is final; it asserts that no byte of the tarball,
@@ -24,7 +25,10 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   download against, when `minisign` is installed, before trusting any digest in it. A bad
   signature is refused; a missing one is refused for a pin at or after that component's
   first signed release (the `first_signed` table, empty until those releases exist), and
-  allowed with a note before it. Without `minisign` it says once that signatures were not
+  allowed with a note before it. The trusted keys are one table, `signing_keys`, each
+  with the component and version range it covers: the new key for everything, and the
+  previous key (`CA39ECB257009A0F`) only for the mnemonic-engrave releases it signed
+  (<= 0.12.0). Without `minisign` it says once that signatures were not
   checked. **`--require-signature`** makes a missing `minisign` or signature fatal.
   `scripts/install-signature.test.sh` covers it offline with throwaway keys; the Examples
   golden shows the new `--dry-run` line.
