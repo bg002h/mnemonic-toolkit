@@ -9,13 +9,37 @@
 # asserts the exit status, a message, AND what landed in <root>/bin, so a
 # refusal that still installs something reads as a failure.
 #
+# SIGNATURES. When minisign is on PATH, the stub curl answers a request for
+# `<sums file>.minisig` by signing that fixture sums file with a THROWAWAY key
+# generated here, and the installer under test is a copy whose signing_keys
+# table trusts only that key (the rewrite is asserted). So every fixture is a
+# correctly SIGNED release, and these cases keep passing once a component's
+# first_signed version is filled in. INSTALL_VERIFY_FIRST_SIGNED=<version>
+# fills mk's first_signed in the copy, to prove exactly that. Without
+# minisign, the installer skips signatures and the stub serves none.
+#
 # Usage: sh scripts/install-verify.test.sh
 set -eu
 
-here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-INSTALL_SH="$here/install.sh"
+here=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+REAL_SH="$here/install.sh"
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
+INSTALL_SH="$T/install.sh"
+if command -v minisign >/dev/null 2>&1; then
+    minisign -G -W -p "$T/sig.pub" -s "$T/sig.key" >/dev/null 2>&1
+    SIGPUB=$(sed -n 2p "$T/sig.pub")
+    awk -v k="*|||$SIGPUB" '/^\*\|\|\|/ { print k; n++; next } { print } END { exit n != 1 }' \
+        "$REAL_SH" > "$INSTALL_SH" || { echo "cannot rewrite signing_keys" >&2; exit 1; }
+    grep -qxF "*|||$SIGPUB" "$INSTALL_SH" || { echo "signing_keys rewrite did not apply" >&2; exit 1; }
+else
+    cp "$REAL_SH" "$INSTALL_SH"
+fi
+if [ -n "${INSTALL_VERIFY_FIRST_SIGNED:-}" ]; then
+    sed -i "s|^        mk)           echo \"\" ;;\$|        mk)           echo \"$INSTALL_VERIFY_FIRST_SIGNED\" ;;|" "$INSTALL_SH"
+    grep -qx "        mk)           echo \"$INSTALL_VERIFY_FIRST_SIGNED\" ;;" "$INSTALL_SH" \
+        || { echo "first_signed rewrite did not apply" >&2; exit 1; }
+fi
 
 fail=0
 ok()  { printf '  ok   %s\n' "$1"; }
@@ -47,6 +71,13 @@ fi
 rel=\${url#https://github.com/bg002h/}
 repo=\${rel%%/*}; rest=\${rel#*/releases/download/}
 src="$T/fixture/\$repo/\$rest"
+case "\$src" in
+    *.minisig)
+        # Sign the fixture sums file on demand (throwaway key), if it exists.
+        if [ ! -f "\$src" ] && [ -f "$T/sig.key" ] && [ -f "\${src%.minisig}" ]; then
+            minisign -S -s "$T/sig.key" -m "\${src%.minisig}" -x "\$out" >/dev/null 2>&1 </dev/null && exit 0
+        fi ;;
+esac
 if [ ! -f "\$src" ]; then
     [ -n "\$fail" ] && exit 22
     echo "Not Found" > "\$out"; exit 0
