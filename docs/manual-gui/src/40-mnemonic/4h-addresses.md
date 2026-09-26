@@ -18,8 +18,9 @@ account path; for an `xpub=` source the xpub *is* the account key, so
 The worked example in this chapter uses a public account-level xpub —
 no secret material. When you supply a `phrase=` / `entropy=` /
 `seedqr=` seed source instead, the GUI renders the secret value as a
-masked `SecretLineEdit` and the run-confirm modal redacts it to a
-fixed `••••` sentinel (see [§14 Defense 2](#secret-handling)). Use the
+masked `SecretLineEdit`, and the run-confirm modal shows only a private
+reference on Linux and `••••` on macOS and Windows (see
+[Secret channels](#secret-channels)). Use the
 canonical all-`abandon` test vector for practice; **never fund** a
 wallet derived from it.
 :::

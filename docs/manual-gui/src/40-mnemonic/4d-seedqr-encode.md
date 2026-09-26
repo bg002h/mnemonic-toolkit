@@ -16,10 +16,10 @@ BIP-39 test vector. **Never engrave or fund** a wallet derived from
 this phrase — chain watchers have swept it continuously since 2017.
 The `--from phrase=` field is a secret-bearing input: pasting a real
 phrase into it produces a SeedQR that reconstructs the same wallet,
-so the QR payload is secret-equivalent to the seed. The run-confirm
-modal redacts the secret-bearing argv token as a fixed `••••`
-sentinel, so the literal phrase is never drawn on screen (see [§14
-Defense 2](#secret-handling)). Treat the emitted SeedQR string — and
+so the QR payload is secret-equivalent to the seed. The literal phrase
+is never drawn on screen: on Linux it reaches `mnemonic` privately and
+the run-confirm modal shows only a reference; on macOS and Windows the
+modal masks it as `••••` (see [Secret channels](#secret-channels)). Treat the emitted SeedQR string — and
 any QR rendered from it — as master-seed material.
 :::
 
@@ -111,8 +111,9 @@ on encrypted, access-controlled storage.
    mnemonic seedqr encode --from "phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
    ```
 
-5. Click **Run**. The run-confirm modal appears with the secret-bearing
-   `--from` token redacted to `••••`. Click **Run** in the modal.
+5. Click **Run**. The run-confirm modal appears; the `--from` value is
+   a private reference on Linux and `••••` on macOS and Windows. Click
+   **Run** in the modal.
 
 The output panel renders the 48-digit Standard SeedQR payload on
 stdout (each group of four digits is one BIP-39 word index). Round-trip

@@ -18,9 +18,9 @@ splits as a plain `entr` share-set.
 The worked example uses the canonical zero-entropy 24-word master
 (`abandon × 23 + art`). **Never engrave or fund** a wallet derived from
 it. The whole N-share SET is secret-equivalent to the master seed, and
-the `--from` input is master key material. The run-confirm modal redacts
-the secret-bearing argv token as a fixed `••••` sentinel (see [§14
-Defense 2](#secret-handling)). Engrave each share on its own backup
+the `--from` input is master key material. The secret is never drawn
+on screen — a private reference in the run-confirm modal on Linux,
+`••••` on macOS and Windows (see [Secret channels](#secret-channels)). Engrave each share on its own backup
 medium; storing K shares together re-creates a single point of failure.
 :::
 

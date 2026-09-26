@@ -11,9 +11,9 @@ selector.
 \index{mnemonic xpub-search path-of-xpub}
 
 This mode takes secret seed material. The GUI renders the secret
-inputs as masked `SecretLineEdit` widgets, and the run-confirm modal
-redacts secret-bearing argv tokens as a fixed `••••` sentinel (see
-[§14 Defense 2](#secret-handling)). Read-only search: **no private
+inputs as masked `SecretLineEdit` widgets, and the seed is never drawn
+on screen — it goes over `--phrase-stdin` on Linux, and the modal masks
+it as `••••` on macOS and Windows (see [Secret channels](#secret-channels)). Read-only search: **no private
 keys reach stdout.**
 
 :::danger

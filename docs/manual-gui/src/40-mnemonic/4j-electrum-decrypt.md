@@ -14,9 +14,10 @@ required.
 The worked example decrypts a throwaway demonstration blob. **Never
 engrave or fund** any wallet recovered from demonstration ciphertext.
 The recovered plaintext on stdout is private key material; the
-`--decrypt-password` field is secret-bearing. The run-confirm modal
-redacts the secret-bearing password argv token as a fixed `••••`
-sentinel (see [§14 Defense 2](#secret-handling)). For a whole-file
+`--decrypt-password` field is secret-bearing. The password is never drawn
+on screen: on Linux it goes over `--decrypt-password-stdin`, on macOS
+and Windows the modal masks it as `••••` (see
+[Secret channels](#secret-channels)). For a whole-file
 encrypted Electrum wallet (Format B) use [`mnemonic
 import-wallet`](#mnemonic-import-wallet), not this subcommand.
 :::

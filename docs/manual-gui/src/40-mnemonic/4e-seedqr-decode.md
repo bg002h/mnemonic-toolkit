@@ -12,8 +12,9 @@ decodes to the canonical all-`abandon` test vector. **Never engrave or
 fund** any wallet recovered from a demonstration payload. A real SeedQR
 payload IS secret-equivalent to the seed it encodes; the value pasted
 into `--from seedqr=` (and the recovered phrase on stdout) is master
-key material. The run-confirm modal redacts the secret-bearing argv
-token as a fixed `••••` sentinel (see [§14 Defense 2](#secret-handling));
+key material. The secret is never drawn on screen — a private reference
+in the run-confirm modal on Linux, `••••` on macOS and Windows (see
+[Secret channels](#secret-channels));
 the cold/airgapped operational practice remains good hygiene for every
 secret-bearing decode.
 :::

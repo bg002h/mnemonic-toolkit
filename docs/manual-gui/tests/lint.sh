@@ -258,7 +258,7 @@ if [ ! -d "${FIGURES_GUI:-}" ]; then
 elif [ ! -d "$SNAP_DIR" ]; then
   err "pinned snapshot corpus missing: $SNAP_DIR (MANUAL_GUI_UPSTREAM_ROOT must be a mnemonic-gui checkout at a pinned tag >= v0.54.0)"
 else
-  expected_figs="${EXPECTED_GUI_RENDER_COUNT:-61}"
+  expected_figs="${EXPECTED_GUI_RENDER_COUNT:-66}"
   fig_stems=$(find "$FIGURES_GUI" -maxdepth 1 -type f -name '*.png' | sed 's|.*/||; s/\.png$//' | sort)
   snap_stems=$(find "$SNAP_DIR" -maxdepth 1 -type f -name '*.png' | sed 's|.*/||; s/\.png$//' | sort)
   fig_count=$(printf '%s\n' "$fig_stems" | grep -c . || true)

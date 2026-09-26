@@ -6,7 +6,21 @@ pinned against. The manual itself ships under
 Tags advance in lockstep when GUI surface (schema, conditional,
 help-icon URL) changes in a way that affects the manual.
 
-## Unreleased — GUI pin `mnemonic-gui-v0.62.0`
+## `manual-gui-v1.4.0` — GUI pin `mnemonic-gui-v0.63.0`
+
+**Release date**: 2026-09-25.
+
+Pin bump `mnemonic-gui-v0.62.0` → `mnemonic-gui-v0.63.0` (F-694). The
+tag pins `mnemonic-toolkit-v0.105.1`, `descriptor-mnemonic-md-cli-v0.20.3`,
+`ms-cli-v0.20.1` and `mk-cli-v0.13.0`, the installer's own tags, so the
+manual no longer carries an "installer is ahead" section. New:
+chapters for `md compose`, `md shape-key`, `md descriptor`,
+`md decompose` and `ms hashlock` (61 → 66 forms), and the
+[Secret channels](#secret-channels) section — on Linux every secret now
+reaches the CLI privately. The release also carries the v0.62.0 pin
+below, which was never tagged on its own.
+
+### GUI pin `mnemonic-gui-v0.62.0` (in v1.4.0)
 
 Pin bump `mnemonic-gui-v0.57.0` → `mnemonic-gui-v0.62.0` (F-679). The
 four implied CLI tags advance in lockstep to `mnemonic-toolkit-v0.104.0`,

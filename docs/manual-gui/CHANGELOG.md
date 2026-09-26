@@ -8,7 +8,15 @@ numbers.
 
 ## [Unreleased]
 
-**F-694 — written against mnemonic-gui master `3ca1d60`, ahead of its release (the GUI pin still reads `mnemonic-gui-v0.62.0`; the pin step follows the GUI release).**
+## [1.4.0] - 2026-09-25
+
+**Minor — GUI pin bump `mnemonic-gui-v0.62.0` → `mnemonic-gui-v0.63.0` (F-694), five new form chapters, and the secret-channels section.** v0.63.0 (`d82c889`) pins mnemonic 0.105.1, md 0.20.3, ms 0.20.1 and mk 0.13.0 — the installer's own tags — so `[installer-ahead]` and the §82 *When the installer is ahead of the GUI* section are gone, and the toolkit installer now installs mnemonic-gui v0.63.0. This release also carries the never-tagged v0.62.0 pin (entries below).
+
+- **Pin step:** `pinned-upstream.toml` → v0.63.0 and its four CLI tags; the render/figure census 61 → 66 in the Makefile, `lint.sh` and `manual-gui.yml` (whose `verify-examples` tier moves to toolkit v0.105.1 / ms v0.20.1); 50 tutorial figures re-synced from the tag (the `Pinned:` labels); every prose line naming the old pins updated or listed as history; the `4e-xpub-search-passphrase-advisory` transcript regenerated.
+- **Per-form pages** that said the confirm dialog shows a secret as `••••` now match §14: a private reference on Linux, `••••` on macOS and Windows. §12 no longer says the GUI puts secrets on argv.
+- **Secret channels at v0.63.0:** a value read from `@env:VAR` for a passphrase or password is given the CLI's own rule (one trailing newline stripped) before the trailing-newline refusal; Copy spells a passphrase from `$VAR` as `--passphrase @env:VAR`.
+
+**F-694 content (written against mnemonic-gui master `3ca1d60`, re-checked against the v0.63.0 tag):**
 
 - **Five new form chapters:** `md compose` (§5C), `md shape-key` (§5D), `md descriptor` (§5E), `md decompose` (§5F) and `ms hashlock` (§6c), with gallery sections, overview and index entries. All 80 schema anchors and all 20 help-icon anchors the GUI builds for them resolve. `extract_gui_schema.py` now resolves `&str` consts inside a variant slice (it had dropped hashlock's "all kinds — lookup only").
 - **Secret channels (§14, `#secret-channels`):** on Linux every secret goes to the CLI over the GUI's own environment variable, stdin or a pipe, never on argv; `-` in a secret field is refused and `@env:VAR` is read by the GUI; the lookalike, trailing-CR/LF, NUL and name refusals; what Preview, the confirm dialog and Copy show (Copy never carries a secret, except an `xprv` pasted into a public md field, which relabels the buttons); the macOS/Windows interim path; and the CLIs' own `-` / `@env:` / terminal prompt / paste drain (toolkit 0.105.1, ms 0.20.1). Tour, troubleshooting and per-form pages that said otherwise are corrected, as are five worked examples that told the reader to tick a GUI-managed `*-stdin` toggle.

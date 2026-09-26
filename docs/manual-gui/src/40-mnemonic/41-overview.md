@@ -131,7 +131,8 @@ input. The watch-only / public-only subcommands (`export-wallet` with
 xpub-only slots, `decode-address`, `verify-message`, the
 `xpub-search-*` family on public inputs) are the ones most likely to
 fire **Run** without the modal in practice. The threat-model coverage in
-[§14 Defense 2](#secret-handling) — the `••••` modal redaction and the
+[§14 Defense 2](#secret-handling) — the modal that never shows a secret
+value ([Secret channels](#secret-channels)) and the
 recommended cold-node operational mitigation — applies to **every**
 secret-bearing invocation under this tab.
 

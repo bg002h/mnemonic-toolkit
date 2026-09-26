@@ -29,11 +29,11 @@ those chrome elements are out of the generated form render and are
 described in prose below.
 
 The `Pinned: <cli> <version>` banner the GUI shows above each form
-(e.g. `Pinned: mnemonic 0.104.0`) is the CLI release the GUI was
+(e.g. `Pinned: mnemonic 0.105.1`) is the CLI release the GUI was
 **built against**, written in the same format as that CLI's
 `--version` output. The GUI does not read the installed binary's
 version; compare it yourself (`mnemonic --version`). The banner is
-distinct from the git-tag form `mnemonic-toolkit-v0.104.0` that lives
+distinct from the git-tag form `mnemonic-toolkit-v0.105.1` that lives
 in `docs/manual-gui/pinned-upstream.toml` and drives CI install. The
 two artifacts pin the same release; only their string formats
 differ.

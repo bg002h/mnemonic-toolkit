@@ -245,8 +245,7 @@ failure → exit 2 (`BsmsMacMismatch`).
 
 The GUI renders this as a Path widget with `repeating: true` and
 `stdio_sentinel: true`. The token is BIP-129 key material; treat it as
-secret-class operationally (the run-confirm modal masks any
-secret-bearing argv token as `••••`).
+secret-class operationally.
 
 ## `--bsms-round1` {#mnemonic-import-wallet-bsms-round1}
 
@@ -284,9 +283,10 @@ file)`. Mutually exclusive with the other two `--decrypt-password*`
 forms.
 
 Schema-`secret: true`. The GUI renders this as a `SecretLineEdit`; any
-non-empty value triggers the run-confirm modal, where the password is
-masked as a fixed `••••` sentinel. Prefer `--decrypt-password-file` /
-`--decrypt-password-stdin` to keep the password off argv entirely.
+non-empty value triggers the run-confirm modal. On Linux the GUI sends
+the password privately (never on argv); on macOS and Windows it goes
+on argv, masked `••••` on screen — there, prefer
+`--decrypt-password-file` to keep it off argv.
 
 ## `--decrypt-password-file` {#mnemonic-import-wallet-decrypt-password-file}
 

@@ -12,9 +12,9 @@ form under the **mnemonic** tab's subcommand selector.
 \index{mnemonic xpub-search passphrase-of-xpub}
 
 This mode takes secret seed + passphrase material. The GUI renders the
-secret inputs as masked `SecretLineEdit` widgets, and the run-confirm
-modal redacts secret-bearing argv tokens as a fixed `••••` sentinel —
-the literal secret is never drawn on screen (see
+secret inputs as masked `SecretLineEdit` widgets, and the literal
+secret is never drawn on screen — private channels on Linux, `••••` in
+the modal on macOS and Windows (see
 [§14 Defense 2](#secret-handling)). Read-only verification: **no
 private keys reach stdout.**
 

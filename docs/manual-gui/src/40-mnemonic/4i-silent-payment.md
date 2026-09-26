@@ -19,8 +19,9 @@ chain scanning are out of scope.
 The worked example uses the canonical all-`abandon` BIP-39 test
 vector. **Never engrave or fund** a wallet derived from this phrase.
 The GUI renders the secret input as a masked `SecretLineEdit`; the
-run-confirm modal redacts secret-bearing argv tokens to a fixed
-`••••` sentinel (see [§14 Defense 2](#secret-handling)). The command
+secret goes over `--secret-stdin` on Linux, and the run-confirm modal
+masks it as `••••` on macOS and Windows (see
+[Secret channels](#secret-channels)). The command
 emits the **spend private key** (`b_spend`, the COLD key with full
 spending authority) behind the `warning: stdout carries private key
 material` advisory — never paste `b_spend` into a scanning service.

@@ -24,10 +24,11 @@ TEMPLATE `md1`** (no concrete keys, from
 :::danger
 The worked example uses the canonical all-`abandon` BIP-39 test vector.
 **Never engrave or fund** a wallet derived from this phrase — chain
-watchers have swept it continuously since 2017. The run-confirm modal
-redacts secret-bearing argv tokens — the `--from` own-seed and any
-`--passphrase` — as a fixed `••••` sentinel, so the literal secret is
-never drawn on screen (see [§14 Defense 2](#secret-handling) for the
+watchers have swept it continuously since 2017. The literal secret — the `--from` own-seed and any `--passphrase` —
+is never drawn on screen: on Linux both go to `mnemonic` privately
+(`phrase=@env:MNEMONIC_GUI_S0`, `--passphrase-stdin`) and the
+run-confirm modal shows only those references; on macOS and Windows
+the modal masks them as `••••` (see [§14 Defense 2](#secret-handling) for the
 masking semantics and the residual flag-name exposure). Restore is
 watch-only-out: no `xprv` / WIF / seed reaches stdout, stderr, or
 `--json`. The cold/airgapped operational practice remains good hygiene
@@ -82,8 +83,10 @@ md1's slots).
 The GUI renders this as a NodeValueComposite widget (a Dropdown
 selecting the node + a value field). Schema-`secret: true` — the value
 is the master secret. The value field renders as a `SecretLineEdit`;
-any non-empty value triggers the run-confirm modal, where the token is
-masked as `••••`. Suffix `=-` reads from stdin.
+any non-empty value triggers the run-confirm modal, which shows
+`phrase=@env:MNEMONIC_GUI_S0` on Linux and `••••` on macOS and Windows.
+On the command line the suffix `=-` reads from stdin; in the GUI a
+typed `-` is refused.
 
 ## `--format` {#mnemonic-restore-format}
 
@@ -607,8 +610,9 @@ the recorded value looks wrong.
 3. Set `--template` to `bip84`, `--network` to `mainnet`. Optionally
    set `--expect-fingerprint` to `73c5da0a` to hard-gate the
    passphrase-correctness oracle.
-4. Click **Run**. The run-confirm modal appears with the `--from`
-   token masked as `••••`. Click **Run** in the modal.
+4. Click **Run**. The run-confirm modal appears; on Linux its argv
+   shows `--from phrase=@env:MNEMONIC_GUI_S0` (on macOS and Windows,
+   `--from ••••`). Click **Run** in the modal.
 
 The output panel renders the watch-only restore document on stdout (the
 concrete `wpkh([73c5da0a/84'/0'/0']xpub6CatW…/<0;1>/*)#…` descriptor +

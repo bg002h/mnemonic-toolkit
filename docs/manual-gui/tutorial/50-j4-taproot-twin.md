@@ -23,7 +23,7 @@ under the cooperative internal key `Kint` (`[73c5da0a/84'/0'/4']`).
 Each spend then reveals exactly one tier. Earlier toolkit releases
 refused this descriptor up front, because the `rust-miniscript` they
 pinned mis-formatted depth-≥2 taptrees (the upstream PR-#953 bug). The
-revision toolkit 0.104.0 pins carries that fix, so the tree now
+revision pinned since toolkit 0.104.0 carries that fix, so the tree now
 exports.
 
 Select **Export Wallet (watch-only)**, take the Template drop-down's

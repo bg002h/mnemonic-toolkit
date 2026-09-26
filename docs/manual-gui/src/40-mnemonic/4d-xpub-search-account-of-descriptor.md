@@ -11,9 +11,9 @@ range knobs; output is the matched cosigner index/path on stdout
 \index{mnemonic xpub-search account-of-descriptor}
 
 This mode takes secret seed material. The GUI renders the secret
-inputs as masked `SecretLineEdit` widgets, and the run-confirm modal
-redacts secret-bearing argv tokens as a fixed `••••` sentinel — the
-literal seed is never drawn on screen (see
+inputs as masked `SecretLineEdit` widgets, and the literal seed is never
+drawn on screen — it goes over `--phrase-stdin` on Linux, and the modal
+masks it as `••••` on macOS and Windows (see
 [§14 Defense 2](#secret-handling) for the masking semantics and the
 residual flag-name exposure). Read-only search: **no private keys
 reach stdout and `mnemonic` never signs.**

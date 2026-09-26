@@ -38,3 +38,8 @@ src/90-appendices/94-release-history.md	- `mnemonic-toolkit-v0.13.0` — `mnemon
 src/90-appendices/94-release-history.md	- `descriptor-mnemonic-md-cli-v0.5.0` — `md` CLI (wallet-policy
 src/90-appendices/94-release-history.md	- `ms-cli-v0.2.1` — `ms` CLI (BIP-39 entropy backups).
 src/90-appendices/94-release-history.md	- `mk-cli-v0.3.1` — `mk` CLI (xpub backups).
+src/40-mnemonic/42-bundle.md	dense line), the default since toolkit 0.104.0; set `5` for the
+src/40-mnemonic/44-convert.md	default since toolkit 0.104.0.
+src/90-appendices/94-release-history.md	four implied CLI tags advance in lockstep to `mnemonic-toolkit-v0.104.0`,
+src/90-appendices/94-release-history.md	`descriptor-mnemonic-md-cli-v0.20.3`, `ms-cli-v0.19.1`, `mk-cli-v0.13.0`
+tutorial/50-j4-taproot-twin.md	revision pinned since toolkit 0.104.0 carries that fix, so the tree now

@@ -249,7 +249,7 @@ the value into `restore --passphrase` in the GUI:
 | `@env:my_var` (not `[A-Z_][A-Z0-9_]*`) | `C1-bad-name` | `"my_var" is not a valid name ([A-Z_][A-Z0-9_]*)` |
 | `@env:MNEMONIC_GUI_S0` | `C1-reserved-name` | MNEMONIC_GUI_* names are the GUI's own |
 | a value that reads like `-` or `@env…` after normalizing: ` - `, `@ENV:X`, `@environment`, a zero-width space before `-`, a full-width hyphen-minus (U+FF0D), or a variable holding `@env:OTHER` | `value-looks-like-a-channel` | after trimming and case-folding this value reads like `-` or `@env…`, which a CLI may treat as a channel; nobody wants that as a secret |
-| a value ending in CR or LF — typed, or a variable that kept a trailing newline | `value-ends-in-newline` | the value ends in a newline or CR (check how the variable was set); CLIs differ in how many they strip, so the GUI does not send it |
+| a value ending in CR or LF: typed, or read from a variable that still ends in one after the CLI's `@env:` rule (see below) | `value-ends-in-newline` | the value ends in a newline or CR (check how the variable was set); CLIs differ in how many they strip, so the GUI does not send it |
 | a value containing a NUL byte | `nul-in-value` | the value contains a NUL byte |
 
 The **lookalike rule** normalizes the value first (Unicode NFKC,
@@ -259,6 +259,14 @@ or starts with `@env`. It applies to typed values and to values read
 from `@env:VAR` alike, so a variable can never smuggle a channel
 spelling to the CLI. A value that merely *starts* with `-` (such as
 `-lead`) is not a lookalike and goes privately on Linux.
+
+A value read from `@env:VAR` is first given the same treatment the
+CLI's own `@env:VAR` would give it on that input. For passphrase and
+password inputs (`--passphrase`, `--bip38-passphrase`,
+`--decrypt-password`) that strips **one** trailing newline, so a
+variable set from a file with one newline works; a variable holding
+`hunter2` and two newlines is refused. Seed, share and card inputs are
+taken verbatim, so a variable ending in a newline is refused there.
 
 The `@env:MNEMONIC_GUI_…` refusal applies in **every** field, public
 ones included, because those names belong to the GUI's own channels.
@@ -295,8 +303,12 @@ ones included, because those names belong to the GUI's own channels.
   ```
 
   A secret you supplied as `@env:MY_PW` is copied as your own
-  reference instead: `# --passphrase: stdin from $MY_PW` and
-  `printf '%s\r\n' "$MY_PW" | mnemonic restore …`. A file-bound
+  reference instead. Where the CLI itself reads `@env:` for that input
+  (every passphrase), that is `--passphrase @env:MY_PW` with the
+  comment `# --passphrase: read by the CLI from $MY_PW`; otherwise the
+  value is piped, for example `# --phrase: stdin from $MY_SEED` and
+  `printf '%s\r\n' "$MY_SEED" | mnemonic xpub-search path-of-xpub
+  --phrase-stdin …`. A file-bound
   secret becomes `--in <FILE>` with a comment naming what the file
   must hold. Copy is **disabled** when the plan is refused (the tooltip
   is the refusal), when a typed value that would go through an

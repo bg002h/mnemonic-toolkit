@@ -13,10 +13,11 @@ stderr and an optional JSON envelope when `--json` is set.
 The worked examples in this chapter use the canonical all-`abandon`
 BIP-39 test vector. **Never engrave or fund** a wallet derived
 from this phrase — chain watchers have swept it continuously since
-2017. The run-confirm modal redacts secret-bearing argv tokens —
-including pasted BIP-39 phrases on the slot editor's secret-bearing
-rows — as a fixed `••••` sentinel, so the literal secret is never
-drawn on screen (see [§14 Defense 2](#secret-handling) for the exact
+2017. The literal secret — including a BIP-39 phrase on the slot editor's
+secret-bearing rows — is never drawn on screen: on Linux each goes to
+`mnemonic` privately and the run-confirm modal shows only a reference
+(`--slot @0.phrase=@env:MNEMONIC_GUI_S0`); on macOS and Windows the
+modal masks it as `••••` (see [§14 Defense 2](#secret-handling) for the exact
 masking semantics and the residual flag-name exposure). The
 cold/airgapped operational practice remains good hygiene for every
 secret-bearing invocation under this subcommand, even though it is no

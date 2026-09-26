@@ -154,8 +154,8 @@ jobs:
   # pins the GUI *output* (worked-example stdout/stderr a GUI user sees).
   #
   # The four CLI tags below MUST equal pinned-upstream.toml's
-  # [manual-gui] *-tag-implied fields (toolkit-v0.104.0 / md-cli-v0.20.3 with
-  # --features cli-compiler / ms-cli-v0.19.1 / mk-cli-v0.13.0). A GUI-pin bump
+  # [manual-gui] *-tag-implied fields (toolkit-v0.105.1 / md-cli-v0.20.3 with
+  # --features cli-compiler / ms-cli-v0.20.1 / mk-cli-v0.13.0). A GUI-pin bump
   # re-pins all four here in lockstep with that file (and with Job 1's
   # schema clone).
   #
@@ -194,21 +194,21 @@ jobs:
             --tag descriptor-mnemonic-md-cli-v0.20.3 md-cli --features cli-compiler
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-secret \
-            --tag ms-cli-v0.19.1 ms-cli
+            --tag ms-cli-v0.20.1 ms-cli
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-key \
             --tag mk-cli-v0.13.0 mk-cli
 
-      - name: Install GUI-pinned mnemonic binary (toolkit v0.104.0)
+      - name: Install GUI-pinned mnemonic binary (toolkit v0.105.1)
         # The `mnemonic` binary the GUI subprocess-runs on the mnemonic tab.
-        # mnemonic-toolkit-v0.104.0 is the toolkit tag the pinned GUI ships
+        # mnemonic-toolkit-v0.105.1 is the toolkit tag the pinned GUI ships
         # (pinned-upstream.toml [manual-gui] toolkit-tag-implied).
         env:
           DOCBIN_ROOT: ${{ runner.temp }}/docbins
         run: |
           cargo install --locked --root "$DOCBIN_ROOT" \
             --git https://github.com/bg002h/mnemonic-toolkit \
-            --tag mnemonic-toolkit-v0.104.0 mnemonic-toolkit
+            --tag mnemonic-toolkit-v0.105.1 mnemonic-toolkit
 
       - name: Verify worked-example transcripts against the GUI-pinned tier
         working-directory: docs/manual-gui
@@ -226,7 +226,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 1c — verify-examples-gui (generated GUI form-render fidelity gate)
   #
-  # Regenerates the 61 committed structural form renders
+  # Regenerates the 66 committed structural form renders
   # (docs/manual-gui/transcripts/gui/<tab>-<sub>.gui — the ones the manual
   # embeds via `include="gui/<stem>.gui"`) with the PINNED, headless,
   # egui-free `gui-render` binary and byte-diffs == the committed tree
@@ -348,7 +348,7 @@ jobs:
           ls -lh build/m-format-gui-manual.pdf build/m-format-gui-manual.html \
                  build/gui_example.pdf build/gui_example.html
 
-      - name: Embed census — 61 figure PNGs are data-URI-embedded in the HTML
+      - name: Embed census — 66 figure PNGs are data-URI-embedded in the HTML
         # pandoc exits 0 with a WARNING on a missing image, so a green
         # `make html` proves nothing about embeds (visual-track plan I5);
         # the positive census is the gate. `src="data:image/png` matches
@@ -357,8 +357,8 @@ jobs:
         working-directory: docs/manual-gui
         run: |
           count=$(grep -o 'src="data:image/png' build/m-format-gui-manual.html | wc -l)
-          echo "embed census: ${count} data-URI PNG figures (expect 61)"
-          test "${count}" -eq 61
+          echo "embed census: ${count} data-URI PNG figures (expect 66)"
+          test "${count}" -eq 66
 
       - name: Embed census — every tutorial figure is data-URI-embedded in gui_example.html
         # Same positive-census discipline for the tutorial book. The

@@ -34,7 +34,7 @@ active and **Convert (between formats)** selected, clicking the `?`
 opens `…/manual-gui/#mnemonic-convert`.
 
 ```text
-Pinned: mnemonic 0.104.0  |  subcommand: convert ▾  [?]
+Pinned: mnemonic 0.105.1  |  subcommand: convert ▾  [?]
                                                    ↑
                          per-subcommand `?` button
 ```

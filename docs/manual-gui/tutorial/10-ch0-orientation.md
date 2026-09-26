@@ -18,7 +18,7 @@ four regions, top to bottom:
   marked with `◀`. Every journey in this book stays on the `mnemonic`
   tab. A CLI missing from your `$PATH` would render greyed out; in this
   book all four are present.
-- **The subcommand row.** A `Pinned: mnemonic 0.104.0` label, the
+- **The subcommand row.** A `Pinned: mnemonic 0.105.1` label, the
   **subcommand** ComboBox (the drop-down that selects `bundle`,
   `convert`, `export-wallet`, `restore`, and so on), and a `?`
   help-icon that deep-links into the reference manual.
@@ -66,7 +66,7 @@ bytes; read the screenshot for what the panel looks like in the app.
 
 ## Why the outputs are reproducible
 
-The book pins a single **tier**: the `Pinned: mnemonic 0.104.0` line you
+The book pins a single **tier**: the `Pinned: mnemonic 0.105.1` line you
 see in every shot is the command-line release the GUI was built
 against. The capture harness refuses to render or run a single step
 unless every spawned CLI reports that exact version — a wrong-tier

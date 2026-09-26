@@ -27,9 +27,9 @@ The worked example uses a canonical zero-entropy `ms1` card. **Never
 engrave or fund** any wallet derived from a demonstration card. An
 `ms1` card is master key material; the `--ms1` field is secret-bearing
 and [`--reveal-secret`](#mnemonic-inspect-reveal-secret) prints the raw
-entropy hex on stdout. The run-confirm modal redacts the secret-bearing
-`--ms1` argv token as a fixed `••••` sentinel (see [§14 Defense
-2](#secret-handling)). `mk1` and `md1` carry no secret material.
+entropy hex on stdout. The card is never drawn on screen — on Linux it
+goes over stdin (`--ms1 -`), on macOS and Windows the modal masks it as
+`••••` (see [Secret channels](#secret-channels)). `mk1` and `md1` carry no secret material.
 :::
 
 > **GUI form:** see [GUI Forms › mnemonic › inspect](#gui-form-mnemonic-inspect).
@@ -100,10 +100,12 @@ leaving it in the output panel.
 
 3. Leave `--reveal-secret` unchecked (so the entropy hex stays
    suppressed).
-4. The `Preview:` line resembles:
+4. On Linux the `Preview:` line resembles (on macOS and Windows the
+   card shows as `--ms1 ••••`):
 
    ```text
-   mnemonic inspect --ms1 ••••
+   mnemonic inspect --ms1 -
+     --ms1 ← stdin via `-` (typed)
    ```
 
 5. Click **Run**; redact-confirm in the modal.
