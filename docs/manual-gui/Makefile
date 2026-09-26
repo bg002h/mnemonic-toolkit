@@ -9,7 +9,7 @@
 #   make pdf-docker    — same as `make pdf`, inside Dockerfile.build (pinned, reproducible)
 #   make figures-cache — pre-render mermaid blocks to figures/cache/ (rare; needs mmdc + chromium locally)
 #   make verify-examples — re-run worked-example transcripts against locally-built CLIs
-#   make verify-examples-gui — regenerate the 61 GUI form renders with the pinned gui-render and diff == committed (census + secret-hygiene)
+#   make verify-examples-gui — regenerate the 66 GUI form renders with the pinned gui-render and diff == committed (census + secret-hygiene)
 #   make gui-example-md    — gui_example tutorial book to build/gui_example.md
 #   make gui-example-html  — gui_example tutorial book to build/gui_example.html (embeds the tutorial figures as data-URIs)
 #   make gui-example-pdf   — gui_example tutorial book to build/gui_example.pdf (RELEASE-ATTACH ONLY; never committed)
@@ -209,7 +209,7 @@ html: $(BUILD_DIR)/m-format-gui-manual.html
 # form to resolve (`src/75-gui-forms/../../figures/gui/…` == the
 # committed figure). NOTE: pandoc exits 0 with a WARNING on a missing
 # image — a green `make html` proves nothing about embeds; the gate is
-# the positive embed census (grep -c 'img src="data:' == 61).
+# the positive embed census (grep -c 'img src="data:' == 66).
 $(BUILD_DIR)/m-format-gui-manual.html: $(PDF_SRC) $(FILTERS_DIR)/include-transcript.lua $(FILTERS_DIR)/primer-box.lua $(PANDOC_DIR)/metadata.yaml | $(BUILD_DIR)
 	$(PANDOC) \
 		--from markdown \
@@ -298,7 +298,7 @@ verify-examples:
 # affects the local default. EXPECTED_GUI_RENDER_COUNT is the pinned GUI's
 # subcommand total (census key; bumps in lockstep with the GUI pin).
 TRANSCRIPTS_GUI            := $(TRANSCRIPTS)/gui
-EXPECTED_GUI_RENDER_COUNT ?= 61
+EXPECTED_GUI_RENDER_COUNT ?= 66
 GUI_RENDER_TOOLCHAIN      ?= stable
 GUI_RENDER_BIN            ?= env RUSTUP_TOOLCHAIN=$(GUI_RENDER_TOOLCHAIN) cargo run --quiet --manifest-path $(MANUAL_GUI_UPSTREAM_ROOT)/Cargo.toml --no-default-features --bin gui-render --
 

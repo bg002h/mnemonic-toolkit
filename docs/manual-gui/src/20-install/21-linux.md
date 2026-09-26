@@ -33,9 +33,7 @@ graphics-stack notes you may need.
    `cargo install md-cli` (or `ms-cli`, `mk-cli`): the crates.io copies
    are several releases older than the GUI expects.
 
-   The installer puts the tags this GUI is built against in place, or
-   newer ones where it has moved ahead (see
-   [When the installer is ahead of the GUI](#installer-ahead)); if you
+   The installer puts the tags this GUI is built against in place; if you
    install the CLIs another way, stay at or above them
    (see [Version pinning](#version-pinning)). Verify with
    `mnemonic --version` etc.
@@ -58,7 +56,7 @@ graphics-stack notes you may need.
 Path A — install from source via `cargo` (recommended pre-v1.0):
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.62.0 mnemonic-gui
+cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.63.0 mnemonic-gui
 ```
 
 Always pass `--tag`: without it cargo builds the repository's default

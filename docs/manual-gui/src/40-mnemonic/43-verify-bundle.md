@@ -13,10 +13,11 @@ when the other has any value.
 :::danger
 The worked examples reuse the canonical all-`abandon` BIP-39 test
 vector. **Never engrave or fund** the wallets verified here — the
-phrase is public. The run-confirm modal redacts secret-bearing argv
-tokens — the master `ms1`, any `--passphrase`, any secret-bearing
-`--slot` row, and the `--from` own-seed — as a fixed `••••` sentinel,
-so the literal secret is never drawn on screen (see
+phrase is public. The literal secret — the master `ms1`, any `--passphrase`, any
+secret-bearing `--slot` row, and the `--from` own-seed — is never
+drawn on screen: on Linux each goes to `mnemonic` privately and the
+run-confirm modal shows only references; on macOS and Windows it masks
+each as `••••` (see
 [§14 Defense 2](#secret-handling) for the masking semantics). The
 cold-node operational practice remains good hygiene for every
 secret-bearing verification, even though it is no longer the
@@ -284,7 +285,9 @@ different preimage). The GUI renders this as a Text widget.
 ([`bundle --md1-form=template`](#mnemonic-bundle-md1-form-template),
 n≥2). Same grammar + semantics as
 [`restore --from`](#mnemonic-restore-from) (`ms1=` / `phrase=` /
-`entropy=` / `seedqr=`; `@env:VAR` or stdin). REQUIRED to complete a
+`entropy=` / `seedqr=`; `@env:VAR` or stdin on the command line, and
+in a GUI field `@env:VAR` only — see
+[Secret channels](#secret-channels-typed-sentinels)). REQUIRED to complete a
 multisig template; ignored for a single-sig template or a keyed
 wallet-policy bundle. The own key is derived at `--account` (a single
 own account for verify) honoring `--origin`. Distinct from
@@ -293,8 +296,8 @@ check validates).
 
 Schema-`secret: true` — the `--from` value is the master secret. The
 GUI renders this as a `SecretLineEdit`; any non-empty value triggers
-the run-confirm modal, where the secret token is masked as a fixed
-`••••` sentinel.
+the run-confirm modal, which shows only a private reference on Linux
+and `••••` on macOS and Windows (see [Secret channels](#secret-channels)).
 
 ## `--cosigner` {#mnemonic-verify-bundle-cosigner}
 
@@ -385,8 +388,8 @@ The GUI renders this as a Text widget.
 
 Per-slot `ms1` card. Repeating flag — one occurrence per slot.
 Schema-`secret: true`. The card encodes the BIP-39 entropy plus a
-checksum; the run-confirm modal masks the token as a fixed `••••`
-sentinel so the secret is never drawn on screen.
+checksum; the secret is never drawn on screen (a private reference in
+the run-confirm modal on Linux, `••••` on macOS and Windows).
 
 The empty string is the **watch-only sentinel** (`--ms1 ""` for
 schema-2/3 single-use and per-slot for schema-4 length-N): it

@@ -11,9 +11,9 @@ selector.
 \index{mnemonic xpub-search path-of-xpub}
 
 This mode takes secret seed material. The GUI renders the secret
-inputs as masked `SecretLineEdit` widgets, and the run-confirm modal
-redacts secret-bearing argv tokens as a fixed `••••` sentinel (see
-[§14 Defense 2](#secret-handling)). Read-only search: **no private
+inputs as masked `SecretLineEdit` widgets, and the seed is never drawn
+on screen — it goes over `--phrase-stdin` on Linux, and the modal masks
+it as `••••` on macOS and Windows (see [Secret channels](#secret-channels)). Read-only search: **no private
 keys reach stdout.**
 
 :::danger
@@ -213,12 +213,13 @@ renders this as a checkbox.
 
 1. Switch to the **mnemonic** tab; pick **xpub-search:
    path-of-xpub** in the subcommand selector.
-2. Set the seed-intake to **`--phrase-stdin`** (the seed flows via
-   stdin, never argv).
+2. Type the seed into **`--phrase`**. On Linux the GUI sends it over
+   `--phrase-stdin` itself (the toggle stays greyed: the GUI manages
+   it), so it never reaches argv; see [Secret channels](#secret-channels).
 3. Paste the target xpub (or `mk1` card) into `--target-xpub`.
 4. Leave the range knobs at their defaults.
-5. Click **Run** and confirm the modal (the pasted phrase shows as
-   `••••`).
+5. Click **Run** and confirm the modal; its **Secrets:** line reads
+   `--phrase ← stdin via --phrase-stdin + '\r\n' (typed)`.
 
 Stdout (text form, match):
 

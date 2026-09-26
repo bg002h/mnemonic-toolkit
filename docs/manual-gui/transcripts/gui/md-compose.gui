@@ -1,0 +1,9 @@
+[ md > compose ]
+  --wrapper       dropdown[tr,wsh,sh-wsh,sh]  (required) -> tr
+  --path          text  (required, repeating) -> <empty>
+  --preset        text  (required) -> <empty>
+  --experimental  checkbox  -> [ ] off
+  --json          checkbox  -> [ ] off
+  --unspendable   dropdown[(none),nums,liana]  -> <empty>
+  --md-only       checkbox  -> [ ] off
+  [ Run ]

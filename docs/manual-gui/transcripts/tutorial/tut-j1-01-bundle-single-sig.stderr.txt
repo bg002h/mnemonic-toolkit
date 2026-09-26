@@ -1,4 +1,3 @@
-warning: secret material on argv (--slot @0.phrase=) — pipe via --slot @0.phrase=- to avoid /proc/$PID/cmdline exposure
 # === Wallet bundle: bip84, mainnet ===
 # ms1: 1c017
 # mk1: 1c017

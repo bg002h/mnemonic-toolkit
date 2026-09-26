@@ -17,7 +17,7 @@ shell session.
 
 Every screenshot and every captured transcript in this book is
 machine-generated from the pinned `mnemonic-gui` release, driving the
-real application window against the pinned `mnemonic 0.104.0`
+real application window against the pinned `mnemonic 0.105.1`
 command-line tier, and byte-checked in CI. Nothing here is hand-drawn
 or hand-pasted; if the application changed, these pages would fail to
 build.

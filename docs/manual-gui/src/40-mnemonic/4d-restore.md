@@ -24,10 +24,11 @@ TEMPLATE `md1`** (no concrete keys, from
 :::danger
 The worked example uses the canonical all-`abandon` BIP-39 test vector.
 **Never engrave or fund** a wallet derived from this phrase — chain
-watchers have swept it continuously since 2017. The run-confirm modal
-redacts secret-bearing argv tokens — the `--from` own-seed and any
-`--passphrase` — as a fixed `••••` sentinel, so the literal secret is
-never drawn on screen (see [§14 Defense 2](#secret-handling) for the
+watchers have swept it continuously since 2017. The literal secret — the `--from` own-seed and any `--passphrase` —
+is never drawn on screen: on Linux both go to `mnemonic` privately
+(`phrase=@env:MNEMONIC_GUI_S0`, `--passphrase-stdin`) and the
+run-confirm modal shows only those references; on macOS and Windows
+the modal masks them as `••••` (see [§14 Defense 2](#secret-handling) for the
 masking semantics and the residual flag-name exposure). Restore is
 watch-only-out: no `xprv` / WIF / seed reaches stdout, stderr, or
 `--json`. The cold/airgapped operational practice remains good hygiene
@@ -68,8 +69,11 @@ for every secret-bearing invocation.
 ## `--from` {#mnemonic-restore-from}
 
 The seed source, in `<node>=<value>` form. One of `ms1=<v>` /
-`phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; the value supports
-`@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` /
+`phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; on the command
+line the value supports `@env:VAR` and `-` (stdin). In a GUI field,
+`@env:VAR` is read by the GUI itself and `-` is refused (the GUI has
+no stdin to forward); see [Secret channels](#secret-channels-typed-sentinels).
+Non-seed nodes (`xpub` / `xprv` / `wif` /
 …) are refused — restore needs a master secret. REQUIRED for single-sig
 restore **and for multisig-template completion** (the OWN seed);
 OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the
@@ -79,8 +83,10 @@ md1's slots).
 The GUI renders this as a NodeValueComposite widget (a Dropdown
 selecting the node + a value field). Schema-`secret: true` — the value
 is the master secret. The value field renders as a `SecretLineEdit`;
-any non-empty value triggers the run-confirm modal, where the token is
-masked as `••••`. Suffix `=-` reads from stdin.
+any non-empty value triggers the run-confirm modal, which shows
+`phrase=@env:MNEMONIC_GUI_S0` on Linux and `••••` on macOS and Windows.
+On the command line the suffix `=-` reads from stdin; in the GUI a
+typed `-` is refused.
 
 ## `--format` {#mnemonic-restore-format}
 
@@ -440,12 +446,16 @@ reference itself is wrong. The GUI renders this as a Boolean toggle.
 
 ## `--passphrase` {#mnemonic-restore-passphrase}
 
-The BIP-39 mnemonic-extension passphrase. `@env:VAR` supported. Empty
-(default) = no passphrase. The TREZOR-passphrase wallet has a different
+The BIP-39 mnemonic-extension passphrase. On the command line `-`
+reads it from stdin and `@env:VAR` from the environment (see
+[The CLIs on their own](#secret-channels-cli)); in the GUI field,
+`@env:VAR` is read by the GUI and `-` is refused. Empty (default) = no
+passphrase. The TREZOR-passphrase wallet has a different
 fingerprint than the empty-passphrase wallet from the same phrase.
 Schema-`secret: true`; XOR with `--passphrase-stdin`. The GUI renders
 this as a `SecretLineEdit`; any non-empty value triggers the
-run-confirm modal (token masked as `••••`).
+run-confirm modal. On Linux it is sent over `--passphrase-stdin`,
+never on the command line.
 
 ## `--passphrase-stdin` {#mnemonic-restore-passphrase-stdin}
 
@@ -453,7 +463,8 @@ Boolean. Read the BIP-39 passphrase from stdin (raw, NULL-byte
 preserving). Conflicts with `--passphrase`; mutually exclusive with
 `--from <node>=-` (a single stdin per invocation — use `@env:` for one
 of the two channels when both must stay off the argv). Schema-`secret:
-true`. The GUI surfaces stdin routing through the secret-bearing widget.
+true`. The GUI renders it disabled: it sets the flag itself when it
+sends the passphrase over stdin (see [Secret channels](#secret-channels-linux)).
 
 ## `--output` {#mnemonic-restore-output}
 
@@ -599,8 +610,9 @@ the recorded value looks wrong.
 3. Set `--template` to `bip84`, `--network` to `mainnet`. Optionally
    set `--expect-fingerprint` to `73c5da0a` to hard-gate the
    passphrase-correctness oracle.
-4. Click **Run**. The run-confirm modal appears with the `--from`
-   token masked as `••••`. Click **Run** in the modal.
+4. Click **Run**. The run-confirm modal appears; on Linux its argv
+   shows `--from phrase=@env:MNEMONIC_GUI_S0` (on macOS and Windows,
+   `--from ••••`). Click **Run** in the modal.
 
 The output panel renders the watch-only restore document on stdout (the
 concrete `wpkh([73c5da0a/84'/0'/0']xpub6CatW…/<0;1>/*)#…` descriptor +
@@ -628,10 +640,12 @@ you know the reference itself is wrong.
 
 Restore emits the watch-only `note: stdout is watch-only` advisory on
 every run, plus the argv-leakage advisory when a secret-bearing
-`--from` value or `--passphrase` is passed inline (the GUI's preview
-uses the inline form). It also emits the non-blocking consensus-masked
-`older()` intake advisory in `--md1` mode (see the CLI manual). Use
-`@env:VAR` or stdin to keep the seed off argv.
+`--from` value or `--passphrase` is passed inline — from a shell, or
+from the GUI on macOS and Windows; a Linux GUI run passes neither
+inline and gets no such advisory. It also emits the non-blocking
+consensus-masked `older()` intake advisory in `--md1` mode (see the
+CLI manual). From a shell, use `@env:VAR` or stdin to keep the seed
+off argv.
 
 ## See also
 

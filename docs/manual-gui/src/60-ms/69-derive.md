@@ -36,7 +36,9 @@ depend on [`--language`](#ms-derive-language); when omitted,
 A single `ms1` string to derive from. **Secret-bearing** —
 schema-`secret: true` on the positional. Optional at the clap
 level; when omitted or set to a literal `-`, the binary reads the
-string from stdin. Alternative to [`--hex`](#ms-derive-hex) /
+string from stdin. In the GUI a typed `-` is refused (the GUI has no
+stdin of its own to forward); on Linux the GUI itself sends the typed
+card as a positional `-` over stdin (see [Secret channels](#secret-channels)). Alternative to [`--hex`](#ms-derive-hex) /
 [`--phrase`](#ms-derive-phrase). Any non-empty value triggers the
 run-confirm modal.
 

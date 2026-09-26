@@ -1,0 +1,6 @@
+[ md > decompose ]
+  --in         path  (required) -> <empty>
+  --emit       dropdown[all,template,keys,fingerprints,descriptor,commands]  -> all
+  --network    dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  descriptors  positional  (required) -> <empty>
+  [ Run ]

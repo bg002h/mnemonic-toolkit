@@ -23,36 +23,20 @@ The GUI's `Pinned:` labels are the CLI releases it was built
 against; `docs/manual-gui/pinned-upstream.toml` records the same tags
 for this manual:
 
-- `mnemonic-toolkit-v0.104.0`
+- `mnemonic-toolkit-v0.105.1`
 - `descriptor-mnemonic-md-cli-v0.20.3`
-- `ms-cli-v0.19.1`
+- `ms-cli-v0.20.1`
 - `mk-cli-v0.13.0`
 
-Run each binary with `--version` to compare; the GUI does not check
-them for you. Below `mnemonic` 0.104.0 every secret-bearing run fails
-(the GUI adds `--allow-argv-secret`, which older releases reject), and
-below `ms` 0.19.1 `ms verify` with `--phrase` fails; see
-[Version pinning](#version-pinning). Re-run the toolkit installer to
-put its releases in place; the next section lists the ones it
-installs newer than these.
-
-## When the installer is ahead of the GUI {#installer-ahead}
-
-The toolkit installer currently installs two CLI releases newer than
-this GUI was built against: `mnemonic-toolkit-v0.105.1` (the GUI's
-label reads `Pinned: mnemonic 0.104.0`) and `ms-cli-v0.20.1` (label
-`Pinned: ms 0.19.1`). The forms run unchanged, and `mnemonic --version`
-and `ms --version` printing the newer versions is expected.
-
-One behavior differs. In these releases a passphrase or password
-value of exactly `-` means "read it from stdin", and a value beginning
-with `@env:` means "read it from that environment variable"; before,
-both were taken literally. The GUI passes what you type as that value,
-so if your passphrase is exactly `-` or begins with `@env:`, a run
-from the GUI no longer uses it and derives a different wallet (an
-empty stdin is reported with a `warning: … EMPTY passphrase` line in
-the output panel). Derive such a wallet in a terminal instead, piping
-the passphrase on stdin with `--passphrase-stdin`.
+The toolkit installer installs exactly these. Run each binary with
+`--version` to compare; the GUI does not check them for you. The GUI's
+secret channels were measured against exactly these binaries, so an
+older release can misread or refuse the channel spellings the GUI
+writes (for example `ms derive --passphrase @env:…` before `ms`
+0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
+fails (older releases reject its `--allow-argv-secret`). See
+[Version pinning](#version-pinning), and re-run the toolkit installer
+to put the pinned releases in place.
 
 ## When the GUI is older than the CLI
 

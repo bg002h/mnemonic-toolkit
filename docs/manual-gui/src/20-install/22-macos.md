@@ -42,7 +42,7 @@ extra GPU configuration is required.
 Path A — install from source via `cargo`:
 
 ```sh
-cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.62.0 mnemonic-gui
+cargo install --locked --git https://github.com/bg002h/mnemonic-gui --tag mnemonic-gui-v0.63.0 mnemonic-gui
 ```
 
 Always pass `--tag`: without it cargo builds the repository's default

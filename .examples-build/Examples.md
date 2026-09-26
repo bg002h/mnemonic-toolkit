@@ -108,7 +108,7 @@ mnemonic        mnemonic-toolkit     (none)         mnemonic-toolkit-v0.105.1   
 md              md-cli               cli-compiler   descriptor-mnemonic-md-cli-v0.20.3   md-0.20.3-linux-amd64.tar.gz
 ms              ms-cli               (none)         ms-cli-v0.20.1                       ms-0.20.1-x86_64-linux-musl.tar.gz
 mk              mk-cli               (none)         mk-cli-v0.13.0                       mk-0.13.0-x86_64-linux-musl.tar.gz
-mnemonic-gui    mnemonic-gui         (none)         mnemonic-gui-v0.62.0                 mnemonic-gui-v0.62.0-x86_64-linux.tar.gz
+mnemonic-gui    mnemonic-gui         (none)         mnemonic-gui-v0.63.0                 mnemonic-gui-v0.63.0-x86_64-linux.tar.gz
 ```
 
 ```

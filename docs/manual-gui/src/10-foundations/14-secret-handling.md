@@ -76,57 +76,44 @@ requiring a deliberate click. This guards against:
 - Forms reloaded from disk that you'd forgotten contained a secret.
 - Unintentional invocations from a stuck **Run** button.
 
-The modal **redacts secret values**: every argv token that carries a
-secret (the BIP-39 phrase, `ms1` string, passphrase, `--share`, raw
-`minikey` / `xprv` / WIF, or a secret `--from <node>=<value>` token)
-renders as a fixed `••••` sentinel, not in plaintext. The literal
-secret is never drawn on screen in the confirmation modal. Internally
-the GUI builds a parallel display-mask alongside the real argv and
-substitutes the sentinel for each masked token; the *unredacted* argv
-is still what spawns when you click **Run**.
+What the modal shows depends on how the secret travels (see
+[Secret channels](#secret-channels) below). On Linux no secret is on
+the command line at all: the modal's argv carries only a private
+reference such as `phrase=@env:MNEMONIC_GUI_S0` or
+`--passphrase-stdin`, its first line reads *"This invocation sends
+these secrets privately to mnemonic:"*, and a **Secrets:** list names
+each secret and its channel. On macOS and Windows, where the secret
+still goes on the command line for now, the modal's first line reads
+*"This invocation passes secret-bearing arguments to …"* and every
+argv token that carries a secret renders as a fixed `••••` sentinel;
+the *unredacted* argv is what spawns when you click **Run**.
 
-**Residual exposure — flag names are still visible; only the secret
-VALUE is masked.** The modal shows e.g. `--passphrase ••••` or
-`--share ••••`: the flag NAME appears in cleartext, only its secret
-value is replaced by the sentinel. (For composite `--from
-<node>=<value>` tokens the entire `node=value` token is masked, so
-even the `phrase=` / `minikey=` prefix is hidden in that one case.)
-The presence of a secret-class flag — and therefore the *fact* that
-you are running a secret-bearing invocation — remains observable to
-anything that can read the screen, even though the secret bytes
-themselves do not. The mask is a *redaction* of the on-screen value,
-not proof the secret has left no other trace: it is still in process
-memory until the on-exit zeroize sweep runs (see Defense 3), and the
-*unredacted* argv is what is actually passed to the spawned subprocess
-— so on a shared or multi-user host the secret is briefly observable in
-that child's `/proc/<pid>/cmdline` (or `ps`) exactly as a direct CLI
-invocation would be. The modal redaction closes the *on-screen* exposure
-only; closing the spawned-argv exposure (rewriting secret values to an
-`@env:`-style channel) is tracked separately and not yet shipped.
+**Residual exposure.** The flag NAMES stay visible (`--passphrase`,
+`--slot @N.phrase=`), so anything that can read the screen can tell a
+secret-bearing run is in progress. On macOS and Windows the secret is
+also briefly readable in the child process's command line (`ps`),
+exactly as in a direct CLI invocation. On Linux it is not: it reaches
+the child through its environment, its standard input, or a pipe,
+none of which another user's `ps` shows. In every case the secret is
+still in the GUI's memory until the on-exit zeroize sweep runs (see
+Defense 3).
 
 ### The CLI's argv refusal and the GUI's `--allow-argv-secret` {#secret-argv-opt-in}
 
-The pinned `mnemonic` and `ms` (see [Version
-pinning](#version-pinning)) **refuse** a secret on the command line — before parsing, reading or writing
-anything — unless the invocation carries `--allow-argv-secret`. In a
-shell that refusal is exactly right: the shell has already written
-the line to its history.
+The `mnemonic` and `ms` CLIs **refuse** a secret on the command line
+— before parsing, reading or writing anything — unless the invocation
+carries `--allow-argv-secret`. In a shell that refusal is exactly
+right: the shell has already written the line to its history.
 
-The GUI spawns its child with no shell, so there is no history to
-leak into, and every such run already goes through this modal. So the
-**Run** path adds `--allow-argv-secret` itself, directly after the
-subcommand, whenever the assembled argv carries secret material; the
-modal shows it. It is **GUI-managed**: there is no widget for it, and
-it is never taken from form state. A token that only names a private
-channel (`-`, `@env:VAR`) carries no material and does not earn it.
-
-The **Copy command** buttons never include it. A copied command is
-text you paste into a shell, and there the CLI's refusal is what you
-want: it names private channels instead (`--in FILE`, stdin `-`,
-`@env:VAR`) and prints a recipe for purging the line from your shell
-history. With the flag, the CLI still prints its
-`warning: secret material on argv …` advisory, which the output
-panel shows.
+On Linux the GUI never needs the flag, because no secret goes on the
+command line. On macOS and Windows (the interim path, see
+[Secret channels](#secret-channels-other-os)) the **Run** path adds
+`--allow-argv-secret` itself, directly after the subcommand, whenever
+the assembled argv carries secret material; the GUI spawns its child
+with no shell, so there is no history to leak into, and the modal
+shows the flag. It is **GUI-managed**: there is no widget for it, and
+it is never taken from form state. The **Copy command** buttons never
+include it (see [What you see](#secret-channels-what-you-see)).
 
 **General hygiene (no longer load-bearing).** With the modal redaction
 in place, running secret-bearing flows on a cold / airgapped machine is
@@ -185,6 +172,230 @@ It does **not** protect against:
   what your OS exposes).
 - Anyone with a camera looking at your monitor.
 
+## Secret channels — how a secret reaches the CLI {#secret-channels}
+
+A form's secret — a phrase, an `ms1` card, a passphrase, a share, a
+hashlock phrase — has to reach the CLI somehow. The command line is
+the one place it must not go: other users' `ps`, `/proc` and crash
+reports can read it. Since mnemonic-gui v0.63.0 the GUI chooses a
+**private channel** for every secret on Linux, and never falls back
+to the command line: if it cannot send a secret privately, it refuses
+to run.
+
+### On Linux: every secret goes privately {#secret-channels-linux}
+
+For each secret the GUI picks one of three channels, using only the
+ones measured to deliver the exact bytes to that input of the pinned
+CLI:
+
+- **Its own environment variable.** The GUI puts the value in a
+  variable of the child process, `MNEMONIC_GUI_S0`, `MNEMONIC_GUI_S1`,
+  …, and passes the CLI's own reference to it: `--from
+  phrase=@env:MNEMONIC_GUI_S0`, `--slot @0.phrase=@env:MNEMONIC_GUI_S0`.
+  Before spawning it removes every `MNEMONIC_GUI_*` variable it
+  inherited, so only its own are set.
+- **Standard input.** One secret per run can go on stdin, through the
+  input's own switch (`--passphrase-stdin`, `--hashlock-phrase-stdin`)
+  or a `-` in its place (`--hex -`, a positional `-`). The GUI adds the
+  line ending the CLI strips, so the CLI receives the exact value.
+- **A pipe.** Where neither fits, a pipe the child inherits, named on
+  the command line as `/dev/fd/N` (for example `--in /dev/fd/3`). The
+  payload is written and closed before the child starts; it is limited
+  to 4096 bytes.
+
+The command line then carries only these references. For example,
+`restore` with a typed phrase and passphrase runs as
+
+```text
+mnemonic restore --from 'phrase=@env:MNEMONIC_GUI_S0' --format bitcoin-core --template bip84 --network mainnet --language english --passphrase-stdin
+```
+
+with no `--allow-argv-secret` and no CLI warning about argv.
+
+### `-` and `@env:VAR` in a secret field {#secret-channels-typed-sentinels}
+
+On the command line, `-` means "read it from stdin" and `@env:VAR`
+means "read it from the environment variable `VAR`". In a GUI secret
+field these spellings keep their meaning, and the GUI **never sends
+the characters themselves as your secret**, on any OS:
+
+- **`@env:VAR`** — the GUI reads `VAR` from **its own** environment
+  when you click **Run** (so export it before you start the GUI), and
+  sends the value over the private channel as if you had typed it. The
+  value never appears on screen; the Preview says where it came from,
+  as `(value of $VAR)`. `VAR` must match `[A-Z_][A-Z0-9_]*`, must be
+  set, and must not be empty.
+- **`-`** — refused. The GUI has no standard input of its own to
+  forward, so there is nothing to read. Type the value, or use
+  `@env:VAR`.
+
+A consequence: a secret that is literally `-`, or that starts with
+`@env`, cannot be entered in the GUI at all (see the lookalike rule
+below). Nobody should choose such a passphrase.
+
+### Refusals {#secret-channels-refusals}
+
+When a secret cannot be sent safely, **Run** is disabled, the form
+shows *"Run refused — `<code>`: `<field>`: `<reason>`"*, both Copy
+buttons are disabled with the same reason as their tooltip, and
+nothing is sent anywhere. Each refusal below was reproduced by typing
+the value into `restore --passphrase` in the GUI:
+
+| You typed | Refusal code | The form says |
+|---|---|---|
+| `-` | `C1-dash` | the GUI has no stdin of its own to forward; type the value, or use @env:VAR |
+| `@env:VAR`, `VAR` not set | `C1-env-unset` | `$VAR` is not set in the GUI's environment |
+| `@env:VAR`, `VAR` empty | `C1-env-empty` | `$VAR` is empty (after the CLI's @env: rule) |
+| `@env:my_var` (not `[A-Z_][A-Z0-9_]*`) | `C1-bad-name` | `"my_var" is not a valid name ([A-Z_][A-Z0-9_]*)` |
+| `@env:MNEMONIC_GUI_S0` | `C1-reserved-name` | MNEMONIC_GUI_* names are the GUI's own |
+| a value that reads like `-` or `@env…` after normalizing: ` - `, `@ENV:X`, `@environment`, a zero-width space before `-`, a full-width hyphen-minus (U+FF0D), or a variable holding `@env:OTHER` | `value-looks-like-a-channel` | after trimming and case-folding this value reads like `-` or `@env…`, which a CLI may treat as a channel; nobody wants that as a secret |
+| a value ending in CR or LF: typed, or read from a variable that still ends in one after the CLI's `@env:` rule (see below) | `value-ends-in-newline` | the value ends in a newline or CR (check how the variable was set); CLIs differ in how many they strip, so the GUI does not send it |
+| a value containing a NUL byte | `nul-in-value` | the value contains a NUL byte |
+
+The **lookalike rule** normalizes the value first (Unicode NFKC,
+control and invisible format characters removed, surrounding
+whitespace stripped, case folded) and refuses it if the result is `-`
+or starts with `@env`. It applies to typed values and to values read
+from `@env:VAR` alike, so a variable can never smuggle a channel
+spelling to the CLI. A value that merely *starts* with `-` (such as
+`-lead`) is not a lookalike and goes privately on Linux.
+
+A value read from `@env:VAR` is first given the same treatment the
+CLI's own `@env:VAR` would give it on that input. For passphrase and
+password inputs (`--passphrase`, `--bip38-passphrase`,
+`--decrypt-password`) that strips **one** trailing newline, so a
+variable set from a file with one newline works; a variable holding
+`hunter2` and two newlines is refused. Seed, share and card inputs are
+taken verbatim, so a variable ending in a newline is refused there.
+
+The `@env:MNEMONIC_GUI_…` refusal applies in **every** field, public
+ones included, because those names belong to the GUI's own channels.
+
+### What you see: Preview, the dialog, and Copy {#secret-channels-what-you-see}
+
+- **Preview.** The `Preview:` line shows the command line as it will
+  run — with references, not secrets — and under it one line per
+  secret: the field, its channel, and where the value came from.
+
+  ```text
+  Preview: mnemonic restore --from 'phrase=@env:MNEMONIC_GUI_S0' … --passphrase-stdin
+    --from phrase= ← env MNEMONIC_GUI_S0 (typed)
+    --passphrase ← stdin via --passphrase-stdin + '\r\n' (value of $MY_PW)
+  ```
+
+  `(typed)` means you typed the value; `(value of $MY_PW)` means the
+  GUI read it from `$MY_PW`. `+ '\r\n'` is the line ending the GUI
+  appends for the CLI to strip.
+- **The confirm dialog.** Its first line reads *"This invocation sends
+  these secrets privately to mnemonic:"*. It lists the command line
+  (references only) and, under **Secrets:**, the same per-secret lines
+  as the Preview. **Run** and **Cancel** work as described under
+  Defense 2.
+- **Copy command.** The copied text never contains a secret value and
+  never contains `--allow-argv-secret`. It is built from the Linux
+  plan on **every** OS, with one comment line per secret telling you
+  how to supply it in your shell:
+
+  ```text
+  # --from phrase=: IFS= read -rs MNEMONIC_GUI_S0; export MNEMONIC_GUI_S0   (fish: read -s -x --delimiter \n MNEMONIC_GUI_S0)
+  # stdin (--passphrase): type it, then Enter, then Ctrl-D
+  mnemonic restore --from 'phrase=@env:MNEMONIC_GUI_S0' … --passphrase-stdin
+  ```
+
+  A secret you supplied as `@env:MY_PW` is copied as your own
+  reference instead. Where the CLI itself reads `@env:` for that input
+  (every passphrase), that is `--passphrase @env:MY_PW` with the
+  comment `# --passphrase: read by the CLI from $MY_PW`; otherwise the
+  value is piped, for example `# --phrase: stdin from $MY_SEED` and
+  `printf '%s\r\n' "$MY_SEED" | mnemonic xpub-search path-of-xpub
+  --phrase-stdin …`. A file-bound
+  secret becomes `--in <FILE>` with a comment naming what the file
+  must hold. Copy is **disabled** when the plan is refused (the tooltip
+  is the refusal), when a typed value that would go through an
+  environment variable spans several lines (*"this value spans lines;
+  use Run, or paste it into the command's own stdin prompt"*), and, for
+  **Copy command (Windows)** only, when a secret needs stdin (*"needs a
+  pipe; use the POSIX copy"*).
+
+  **The one exception** is not a secret field: a private extended key
+  (`xprv…`) pasted into a public `md` field
+  ([`md descriptor --key`](#md-descriptor-key),
+  [`md shape-key --descriptor`](#md-shape-key-descriptor), the
+  [`md decompose`](#md-decompose) positional). md reads those only
+  from the command line, so the GUI masks the key on screen, but a
+  copied command would carry it; the buttons then read
+  *"Copy command (POSIX) — reveals secret"* and *"Copy command
+  (Windows) — reveals secret"*, and the confirm dialog uses the
+  *"passes secret-bearing arguments"* wording.
+
+### On macOS and Windows: the interim path {#secret-channels-other-os}
+
+Private channels are switched on per OS, and only for an OS whose
+continuous-integration job runs the GUI's real-binary channel tests.
+Today that is Linux only. On macOS and Windows the GUI still resolves
+`-` and `@env:VAR` exactly as above and applies every refusal above,
+but then puts the resolved secret on the command line, with
+`--allow-argv-secret`:
+
+- the Preview and the confirm dialog show each secret as `••••`, and
+  the per-secret lines read `← argv + --allow-argv-secret (interim)`;
+- the dialog's first line reads *"This invocation passes
+  secret-bearing arguments to …"*;
+- the secret is briefly visible in the child's command line to `ps`
+  on a multi-user machine;
+- one extra refusal applies, `value-starts-with-dash`: a secret that
+  starts with `-` would read as a flag on the command line. The GUI
+  sends it as `--flag=VALUE` where that form was measured to deliver
+  the exact bytes, and refuses it where it was not (for example
+  `ms hashlock --hashlock-phrase`).
+
+Copy command behaves the same on every OS: it is built from the
+private plan, so a pasted command behaves like a Linux run.
+
+### The CLIs on their own: `-`, `@env:VAR`, and the terminal prompt {#secret-channels-cli}
+
+The same spellings work when you run the CLIs yourself, in
+mnemonic-toolkit v0.105.1 and ms-cli v0.20.1 and later. Measured with
+the all-`abandon` phrase and the passphrase `TREZOR` (fingerprint
+`b4e3f5ed`; with no passphrase, `73c5da0a`):
+
+- **`--passphrase -`** reads the passphrase from standard input, the
+  same as `--passphrase-stdin`; **`--passphrase @env:VAR`** reads it
+  from the environment variable `VAR`. Both apply to `--passphrase` in
+  `mnemonic` and `ms`, and to `--bip38-passphrase` and
+  `--decrypt-password` in `mnemonic`. (Before these releases both
+  spellings were taken literally, as a passphrase of `-` or
+  `@env:VAR`, which derived a different wallet.)
+- **Exactly one line ending is stripped** from stdin: `TREZOR` followed
+  by `\n` or `\r\n` gives `b4e3f5ed`; `TREZOR` followed by two `\n`
+  gives another wallet.
+- **An empty passphrase is a warning, not a refusal:**
+  `warning: --passphrase from stdin is empty; proceeding with the
+  EMPTY passphrase` (or `… from environment variable VAR is empty …`),
+  and the run derives the no-passphrase wallet. An unset variable is
+  refused: `error: --passphrase: env-var VAR referenced by sentinel is
+  not set`, exit 1.
+- **A passphrase typed on the command line** is refused before parsing
+  unless you add `--allow-argv-secret`; with it, the CLI warns
+  `warning: secret material on argv (--passphrase) — read it privately
+  with --passphrase - or --passphrase-stdin (stdin), or --passphrase
+  @env:VAR (environment variable)` and proceeds.
+- **At a terminal**, `--passphrase -` (or `--passphrase-stdin`) prints
+  `Enter passphrase:` on stderr and reads one line without echoing it.
+  Anything typed or pasted after that line is **discarded** rather than
+  left for your shell to run, and a masked preview of each discarded
+  line is printed:
+
+  ```text
+  Enter passphrase:
+  note: discarded 2 line(s) typed after the passphrase (not run, not used):
+    curl exa… (2 words, 16 chars)
+    echo hel… (3 words, 16 chars)
+  ```
+
+The GUI never relies on your typing `-` at such a prompt: it has no
+terminal to prompt on, which is why a `-` in a GUI field is refused.
+
 ## The reveal toggle — deliberate, display-only exposure {#secret-reveal-toggle}
 
 Every secret-class field masks its value on load (see Defense 2's
@@ -221,8 +432,9 @@ surface.** Regardless of whether a field is revealed:
 
 - the **run-confirm modal** (Defense 2) still renders every secret token
   as `••••`;
-- the output panel's **`argv:` echo** and the **copy-command** string
-  stay masked (`••••`) in both shell flavors;
+- the output panel's **`argv:` echo** never shows the secret, and the
+  **Copy command** text never contains it (see
+  [What you see](#secret-channels-what-you-see));
 - the **paste-warn** modal, the **never-persist** invariant (Defense 1),
   and the **on-exit zeroize sweep** (Defense 3) are entirely unaffected —
   the reveal state is transient UI chrome, not part of `FormState`, so it

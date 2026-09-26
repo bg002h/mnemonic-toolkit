@@ -620,14 +620,18 @@ section cross-references each edge.
 
 ## Advisories
 
-All `warning:` strings below are byte-exact mirrors of
-`crates/mnemonic-toolkit/src/secret_advisory.rs::secret_in_argv_warning`'s
+The `warning:` strings below are byte-exact mirrors of the toolkit's
+`secret_advisory.rs::secret_in_argv_warning` (seeds) and
+`passphrase_input.rs` (passphrases). A seed-bearing
+`--from` uses the
 `warning: secret material on argv ({flag}) — pipe via {alternative} to avoid /proc/$PID/cmdline exposure`
-format.
+form; a passphrase uses the form that names its private spellings
+(`-`, `-stdin`, `@env:VAR`). None fires on a Linux GUI run, which puts
+no secret on the command line (see [Secret channels](#secret-channels)).
 
 | Trigger | Stderr advisory |
 |---|---|
 | Inline `--from <secret-class>=<value>` | `warning: secret material on argv (--from <name>=) — pipe via --from <name>=- to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
-| Inline `--bip38-passphrase <value>` | `warning: secret material on argv (--bip38-passphrase) — pipe via --bip38-passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+| Inline `--bip38-passphrase <value>` | `warning: secret material on argv (--bip38-passphrase) — read it privately with --bip38-passphrase - or --bip38-passphrase-stdin (stdin), or --bip38-passphrase @env:VAR (environment variable)` |
 | `--from minikey=<value>` (the wider `is_argv_secret_bearing` predicate fires here, even though `is_secret_bearing` returns false) | argv-leakage advisory in the same `pipe via` format as the secret-class rows above |

@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline below; the rendered PDF artifact (`m-format-technical-manual.pdf`) ships as a GitHub release asset.
 
+## [Unreleased]
+
+### Installer pins: mnemonic-gui v0.63.0
+
+- **`scripts/install.sh` installs mnemonic-gui v0.63.0**, which pins mnemonic 0.105.1,
+  md 0.20.3, ms 0.20.1 and mk 0.13.0 — the installer's own CLI pins, so the installer no
+  longer runs ahead of the GUI. v0.63.0 sends every secret over a private channel on
+  Linux and surfaces `md compose`, `shape-key`, `descriptor`, `decompose` and
+  `ms hashlock`. The Examples golden shows the new pin; the GUI manual re-pins to it
+  (`[installer-ahead]` and its §82 section are gone).
+
 ## mnemonic-toolkit [0.105.1] — 2026-09-25
 
 ### Installer pins: mnemonic-toolkit v0.105.1, ms 0.20.1

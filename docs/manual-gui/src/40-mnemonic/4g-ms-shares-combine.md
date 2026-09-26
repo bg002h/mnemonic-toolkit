@@ -14,9 +14,9 @@ Combine** form on the `mnemonic` tab. A recovered single-string `ms1`
 The worked example recombines the shares of the canonical zero-entropy
 master. **Never engrave or fund** any recovered wallet from a
 demonstration share set. Each `--share` input, and the recovered secret
-on stdout, is master key material. The run-confirm modal redacts the
-secret-bearing argv tokens as a fixed `••••` sentinel (see [§14 Defense
-2](#secret-handling)). Combining shares re-materialises the single point
+on stdout, is master key material. The shares are never drawn on
+screen — private references in the run-confirm modal on Linux, `••••`
+on macOS and Windows (see [Secret channels](#secret-channels)). Combining shares re-materialises the single point
 of failure — do it on an airgapped machine and re-disperse afterward.
 :::
 
@@ -170,10 +170,13 @@ plain recovered-secret line.
    the [`ms-shares-split`](#mnemonic-ms-shares-split) worked example into
    the masked value editors.
 3. Leave `--to` at its default `phrase` and `--language` at `english`.
-4. The `Preview:` line resembles:
+4. On Linux the `Preview:` line resembles (each share goes through its
+   own environment variable; on macOS and Windows each shows as `••••`):
 
    ```text
-   mnemonic ms-shares combine --share "••••" --share "••••" --to phrase --language english
+   mnemonic ms-shares combine --share @env:MNEMONIC_GUI_S0 --share @env:MNEMONIC_GUI_S1 …
+     --share ← env MNEMONIC_GUI_S0 (typed)
+     --share ← env MNEMONIC_GUI_S1 (typed)
    ```
 
 5. Click **Run**; redact-confirm in the modal.

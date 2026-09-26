@@ -21,27 +21,26 @@ When you click **Run**, the GUI:
    output panel at the bottom of the window.
 
 Secrets enter through the GUI's `SecretLineEdit` widget (a masked
-text field). The GUI passes them through the argv exactly as the CLI
-expects: e.g. `--passphrase <plaintext>` for `mnemonic convert`, or
-`--ms1 <ms1-string>` for `mnemonic bundle`. **The argv is therefore
-visible to other processes on the same machine via `/proc/<pid>/cmdline`
-(Linux) or equivalent.** This is a documented CLI surface property and
-is not GUI-specific; treat it as you would any CLI invocation with a
-secret on the command line.
+text field). On Linux the GUI never puts one on the command line: it
+hands each secret to the CLI through the CLI's own private spellings —
+an environment variable of the child (`--passphrase
+@env:MNEMONIC_GUI_S0`), standard input (`--passphrase-stdin`), or a
+pipe. On macOS and Windows it still passes the secret on the command
+line (with `--allow-argv-secret`), where other processes on the same
+machine can read it, exactly as with a CLI invocation that has the
+secret on the command line. See [Secret channels](#secret-channels).
 
 ## Version pinning {#version-pinning}
 
 The GUI is built against specific CLI releases. `pinned-upstream.toml`
 declares the exact tags this manual matches. The toolkit's installer
-(`scripts/install.sh`) installs these, except where it has already
-moved to a newer CLI release (see
-[When the installer is ahead of the GUI](#installer-ahead)):
+(`scripts/install.sh`) installs exactly these:
 
 | CLI | Pinned tag | Oldest release that works with this GUI |
 |---|---|---|
-| `mnemonic` (this toolkit) | `mnemonic-toolkit-v0.104.0` | the pinned tag — the GUI's forms mirror this release's flags, and no older release has been tested with this GUI |
+| `mnemonic` (this toolkit) | `mnemonic-toolkit-v0.105.1` | the pinned tag — the GUI's forms mirror this release's flags, and its secret channels were measured against this exact binary |
 | `md` | `descriptor-mnemonic-md-cli-v0.20.3` | the pinned tag — older releases lack flags the form offers (`--in`, `--experimental`, `address --from-mk1`) |
-| `ms` | `ms-cli-v0.19.1` | `0.19.1` — `ms verify` with an `ms1` card and `--phrase` fails on `0.19.0` (`cannot read both ms1 and --phrase from stdin`) |
+| `ms` | `ms-cli-v0.20.1` | the pinned tag — the secret channels were measured against it (`ms derive --passphrase @env:` needs 0.20), and `ms verify` with an `ms1` card and `--phrase` fails on `0.19.0` |
 | `mk` | `mk-cli-v0.13.0` | the pinned tag — older releases lack flags the form offers (`encode --chunk-set-id`) |
 
 Do not install these CLIs from crates.io: the copies there are several
@@ -59,9 +58,7 @@ and `mk --version`. A mismatch shows up as either:
 
 Both surface as the CLI's own error message in the output panel.
 **Re-run the toolkit installer** (`install.sh`, or `install.sh --only
-<cli>` for one CLI) to put its releases in place: the pinned ones, or
-the newer ones listed under
-[When the installer is ahead of the GUI](#installer-ahead).
+<cli>` for one CLI) to put the pinned releases in place.
 
 :::primer
 The pin is *which CLI release* the GUI knows about, not *which

@@ -29,10 +29,13 @@ does not match --phrase)`.
 
 The GUI renders this as a `SecretLineEdit` widget (masked text
 field). Any non-empty value triggers the run-confirm modal at
-click-Run time. A literal `-` value reads the phrase from stdin
-(rarely useful from the GUI). Note that supplying both `ms1` and
-`--phrase` as `-` simultaneously is refused (exit 1 with
-`error: cannot read both ms1 and --phrase from stdin`).
+click-Run time. On the command line a literal `-` reads the phrase
+from stdin, and supplying both `ms1` and `--phrase` as `-` is refused
+(exit 1 with `error: cannot read both ms1 and --phrase from stdin`).
+In the GUI a typed `-` is refused before Run; with both the card and
+`--phrase` filled, the GUI sends the phrase over stdin and the card
+through a pipe (`--in /dev/fd/N`) on Linux (see
+[Secret channels](#secret-channels)).
 
 ## `--language` {#ms-verify-language}
 
@@ -125,7 +128,9 @@ grey out, because the CLI refuses `--in` alongside them.
 
 A single `ms1` string to verify. Optional at the clap level; when
 omitted or set to literal `-`, the binary reads the string from
-stdin.
+stdin. In the GUI a typed `-` is refused (the GUI has no stdin of its
+own to forward); on Linux the GUI itself sends the typed card as a
+positional `-` over stdin (see [Secret channels](#secret-channels)).
 
 ## Worked example — bare verify
 
@@ -138,9 +143,11 @@ stdin.
 
 3. Leave `--phrase` empty.
 4. Click **Run**. The run-confirm modal fires, because the `ms1`
-   positional is secret-bearing even with `--phrase` empty; its argv
-   shows the GUI-added `--allow-argv-secret` (see
-   [Secret handling](#secret-argv-opt-in)). Confirm to proceed.
+   positional is secret-bearing even with `--phrase` empty. On Linux
+   the card goes over stdin (argv ends in `-- -`); on macOS and Windows
+   the argv carries it masked `••••` with the GUI-added
+   `--allow-argv-secret` (see [Secret handling](#secret-argv-opt-in)).
+   Confirm to proceed.
 
 The output panel emits the simple OK line on stdout and exit 0:
 

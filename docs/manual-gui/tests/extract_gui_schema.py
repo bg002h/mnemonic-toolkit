@@ -61,6 +61,15 @@ def _collect_named_slices(src: str) -> dict[str, list[str]]:
     Returns mapping NAME -> [values].
     """
     out: dict[str, list[str]] = {}
+    # Scalar string consts (`const NAME: &str = "…";`), so a slice element
+    # that names one resolves to its value (F-694: `ms hashlock --kind`
+    # lists `HASHLOCK_KIND_ALL`, and without this the variant was dropped).
+    scalars = dict(
+        re.findall(
+            r'const\s+([A-Z][A-Z0-9_]+)\s*:\s*&(?:\'static\s+)?str\s*=\s*"([^"]*)"\s*;',
+            src,
+        )
+    )
     # Match: `const NAME: &[&str] = &[ "v1", "v2", ... ];` (multiline).
     pattern = re.compile(
         r"const\s+([A-Z][A-Z0-9_]+)\s*:\s*&\[&str\]\s*=\s*&\[\s*([^\]]+)\]\s*;",
@@ -69,8 +78,24 @@ def _collect_named_slices(src: str) -> dict[str, list[str]]:
     for match in pattern.finditer(src):
         name = match.group(1)
         body = match.group(2)
-        # Extract "...".
-        values = re.findall(r'"([^"]*)"', body)
+        # Each element is a "..." literal or the name of a scalar const, in
+        # source order. An element naming no known const is a hard error:
+        # silently dropping it is how the gap above went unseen.
+        values: list[str] = []
+        # `//` comments are consumed (and skipped) so their words are not
+        # read as const names; a literal is matched first, so a `//` inside
+        # one stays part of the value.
+        for lit, _comment, ident in re.findall(
+            r'"([^"]*)"|(//[^\n]*)|\b([A-Z][A-Z0-9_]+)\b', body
+        ):
+            if _comment:
+                continue
+            if ident:
+                if ident not in scalars:
+                    raise SystemExit(f"slice {name}: element {ident} is not a known &str const")
+                values.append(scalars[ident])
+            else:
+                values.append(lit)
         out[name] = values
     return out
 

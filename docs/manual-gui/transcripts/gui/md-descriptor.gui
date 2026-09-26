@@ -1,0 +1,20 @@
+[ md > descriptor ]
+  --template        text  (required) -> <empty>
+  --key             text  (repeating) -> <empty> [disabled]
+  --fingerprint     text  (repeating) -> <empty> [disabled]
+  --path            text  -> <empty>
+  --from-mk1        text  (repeating) -> <empty>
+  --from-mk1-file   path  -> <empty>
+  --seat            text  (repeating) -> <empty> [disabled]
+  --network         dropdown[mainnet,testnet,signet,regtest]  -> mainnet
+  --chain           number  -> <unset>
+  --change          checkbox  -> [ ] off
+  --emit            dropdown[(none),md1]  -> <empty> [disabled]
+  --out             path  -> <empty> [disabled]
+  --group-size      number  -> <unset> [disabled]
+  --separator       dropdown[space]  -> space [disabled]
+  --json            checkbox  -> [ ] off
+  --verify-against  text  -> <empty>
+  --experimental    checkbox  -> [ ] off
+  phrases           positional...  (required) -> <empty>
+  [ Run ]

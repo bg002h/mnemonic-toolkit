@@ -346,7 +346,7 @@ and `crates/mnemonic-toolkit/src/cmd/{convert,derive_child}.rs`.
 | Trigger | Stderr advisory |
 |---|---|
 | Inline `--from <secret-class>=<value>` (xprv or phrase) | `warning: secret material on argv (--from <name>=) — pipe via --from <name>=- to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 
 The advisories use the byte-exact `pipe via` format from
 `crates/mnemonic-toolkit/src/secret_advisory.rs::secret_in_argv_warning`.

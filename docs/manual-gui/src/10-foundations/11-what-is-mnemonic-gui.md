@@ -10,8 +10,8 @@ as a subprocess, streaming stdout and stderr back into an output panel.
 
 The GUI is **not** a re-implementation. It runs the same binaries the
 CLI manual documents, at the releases this GUI is built against —
-`mnemonic-toolkit-v0.104.0`, `descriptor-mnemonic-md-cli-v0.20.3`,
-`ms-cli-v0.19.1`, `mk-cli-v0.13.0` (per `pinned-upstream.toml`; see
+`mnemonic-toolkit-v0.105.1`, `descriptor-mnemonic-md-cli-v0.20.3`,
+`ms-cli-v0.20.1`, `mk-cli-v0.13.0` (per `pinned-upstream.toml`; see
 [Version pinning](#version-pinning) for the minimums). Anything the
 CLI does, the GUI exposes the same way; anything the GUI shows in a
 dropdown corresponds 1:1 to a CLI flag value.
@@ -43,11 +43,11 @@ no CLI equivalent:
    not invoke the subprocess immediately.
    Instead a modal lists the full argv as it will be passed to the
    subprocess, and asks for explicit **Run** / **Cancel**
-   confirmation. **The modal redacts secret values**: each
-   secret-bearing argv token renders as a fixed `••••` sentinel
-   rather than in plaintext, so the literal phrase / `ms1` /
-   passphrase is never drawn on screen — the flag NAME stays visible,
-   only its secret value is masked. See
+   confirmation. **The modal never shows a secret value**: on Linux
+   the argv carries no secret at all (each one reaches the CLI over a
+   private channel, listed under **Secrets:**), and on macOS and
+   Windows each secret-bearing token renders as a fixed `••••`
+   sentinel — the flag NAME stays visible either way. See
    [§14 Secret handling](#secret-handling) Defense 2 for the exact
    masking semantics and the residual (flag-name) exposure. The modal
    also guards against muscle-memory clicks on a form pre-populated

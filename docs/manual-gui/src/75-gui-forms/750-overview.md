@@ -1,6 +1,6 @@
 # GUI Forms reference {#gui-forms-reference}
 
-This Part is the visual gallery for every GUI form in the m-format constellation: each form section pairs a **screenshot** of the real GUI with the **generated structural render**. The per-subcommand chapters (Parts 4–7) keep their prose, per-flag reference, and worked example; the screenshot and form render for each subcommand live here, one section per form, reached by the `> **GUI form:**` cross-link at the top of each subcommand chapter. The four chapters split by tab: [`mnemonic`](#gui-forms-mnemonic) (32 forms), [`md`](#gui-forms-md) (10), [`ms`](#gui-forms-ms) (10), and [`mk`](#gui-forms-mk) (9).
+This Part is the visual gallery for every GUI form in the m-format constellation: each form section pairs a **screenshot** of the real GUI with the **generated structural render**. The per-subcommand chapters (Parts 4–7) keep their prose, per-flag reference, and worked example; the screenshot and form render for each subcommand live here, one section per form, reached by the `> **GUI form:**` cross-link at the top of each subcommand chapter. The four chapters split by tab: [`mnemonic`](#gui-forms-mnemonic) (32 forms), [`md`](#gui-forms-md) (14), [`ms`](#gui-forms-ms) (11), and [`mk`](#gui-forms-mk) (9).
 
 ## What the screenshot shows
 

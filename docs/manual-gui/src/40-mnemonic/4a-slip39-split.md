@@ -233,5 +233,5 @@ combined via `mnemonic slip39-combine` reconstruct the master.
 | Trigger | Stderr advisory |
 |---|---|
 | Inline `--from <node>=<value>` | `warning: secret material on argv (--from <node>=) — pipe via --from <node>=- to avoid /proc/$PID/cmdline exposure` |
-| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — pipe via --passphrase-stdin to avoid /proc/$PID/cmdline exposure` |
+| Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `--iteration-exponent ≥ 5` | byte-exact per `cmd/slip39.rs:480-484`: `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second). Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values. E >= 10 may exceed 30s on weak hardware.` |

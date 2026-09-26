@@ -182,24 +182,23 @@ stderr NOTICE; cosigner stays watch-only).
 The GUI renders this as a Text widget with `repeatable: true` and
 `secret: true`. The `secret: true` flag triggers the paste-warn
 modal at paste time and opens the run-confirm modal before
-subprocess spawn. The run-confirm modal masks the secret-bearing
-`--ms1` token as a fixed `••••` sentinel (shipped at GUI v0.39.0), so
-the seed is never drawn on screen. To additionally keep the seed out
-of argv / `ps` output, use the
-[Env-var seed channel](#iw-env-var-channel) below (the
-`@env:VAR` sentinel).
+subprocess spawn. The seed is never drawn on screen, and on Linux it
+never reaches argv either: each `--ms1` row goes to the toolkit
+through the GUI's own environment variable (see
+[Env-var seed channel](#iw-env-var-channel) below).
 
 ### Env-var seed channel {#iw-env-var-channel}
 
-The v0.11.0 GUI emits user-typed values verbatim on argv; the
-toolkit-side resolves `@env:VAR` if the user types the sentinel
-explicitly. To avoid argv-leak in the v0.11.0 GUI, type
-`@env:MY_VAR` directly into the `--ms1` row with `MY_VAR` exported
-in the calling shell before launching the GUI; the toolkit
-resolves the sentinel at clap-parse time and the secret never
-appears on argv or in the run-confirm modal. Auto-rewriting of
-literal seeds to per-cosigner `@env:MNEMONIC_MS1_<i>` sentinels
-is FOLLOWUP `gui-import-wallet-env-var-secret-channel` (v0.12.0+).
+On Linux the GUI does this for you: a seed typed into a `--ms1` or
+secret `--slot` row is placed in a variable of the child process
+(`MNEMONIC_GUI_S0`, `MNEMONIC_GUI_S1`, …) and the toolkit is handed
+`--ms1 @env:MNEMONIC_GUI_S0`, so the seed never appears on argv (see
+[Secret channels](#secret-channels-linux)). You can also type
+`@env:MY_VAR` into the row, with `MY_VAR` exported in the shell that
+launched the GUI: the **GUI** then reads `MY_VAR` itself and sends its
+value the same way. On macOS and Windows the resolved seed still goes
+on argv (masked `••••` on screen) with `--allow-argv-secret`; see
+[the interim path](#secret-channels-other-os).
 
 ## `--slot` {#mnemonic-import-wallet-slot}
 
@@ -246,8 +245,7 @@ failure → exit 2 (`BsmsMacMismatch`).
 
 The GUI renders this as a Path widget with `repeating: true` and
 `stdio_sentinel: true`. The token is BIP-129 key material; treat it as
-secret-class operationally (the run-confirm modal masks any
-secret-bearing argv token as `••••`).
+secret-class operationally.
 
 ## `--bsms-round1` {#mnemonic-import-wallet-bsms-round1}
 
@@ -285,9 +283,10 @@ file)`. Mutually exclusive with the other two `--decrypt-password*`
 forms.
 
 Schema-`secret: true`. The GUI renders this as a `SecretLineEdit`; any
-non-empty value triggers the run-confirm modal, where the password is
-masked as a fixed `••••` sentinel. Prefer `--decrypt-password-file` /
-`--decrypt-password-stdin` to keep the password off argv entirely.
+non-empty value triggers the run-confirm modal. On Linux the GUI sends
+the password privately (never on argv); on macOS and Windows it goes
+on argv, masked `••••` on screen — there, prefer
+`--decrypt-password-file` to keep it off argv.
 
 ## `--decrypt-password-file` {#mnemonic-import-wallet-decrypt-password-file}
 
@@ -362,19 +361,17 @@ embedded in the descriptor's key sources.
    `all` anyway with a stderr NOTICE).
 5. Optional: to re-attach the cosigner @0 seed, add a `--ms1` row
    with the cosigner's `ms1xxx...` value, OR add a `--slot
-   @0.phrase=<words>` row with the BIP-39 phrase. To keep the seed
-   off argv in v0.11.0, type `@env:MY_MS1_0` instead and export
-   `MY_MS1_0=<ms1-value>` in the calling shell.
+   @0.phrase=<words>` row with the BIP-39 phrase. On Linux the GUI
+   keeps it off argv itself; you may also type `@env:MY_MS1_0` and
+   export `MY_MS1_0=<ms1-value>` in the shell that launches the GUI.
 6. Leave `--json` unset for engraving-card stdout (recommended
    for visual inspection); toggle on for machine-readable output.
 7. Click **Run**.
    - If a `--ms1` or secret-bearing `--slot` row is filled, the
-     run-confirm modal opens and masks the secret token as a fixed
-     `••••` sentinel (the seed is never drawn on screen). To
-     additionally keep the seed out of `ps` / `/proc/$PID/cmdline`,
-     type `@env:MY_MS1_0` rather than the literal seed (with
-     `MY_MS1_0` exported in the shell that launched the GUI).
-     Confirm.
+     run-confirm modal opens. On Linux its argv shows only
+     `--ms1 @env:MNEMONIC_GUI_S0`, and its **Secrets:** line names the
+     channel; on macOS and Windows the token is masked `••••`. The
+     seed is never drawn on screen. Confirm.
    - Output panel renders the synthesized engraving cards (stdout)
      and the BSMS 2-line WARNING (stderr).
 
@@ -398,12 +395,10 @@ Screenshot: TODO post-v0.11.0-GUI tag.
 
 The full refusal + advisory matrix lives in the CLI manual at
 [`mnemonic import-wallet` refusals](#mnemonic-import-wallet). Key
-GUI-relevant behaviors: inline `--ms1 ms1xxx...` values are masked as
-`••••` in the run-confirm modal but still appear in argv / `ps` unless
-the user types the `@env:VAR` sentinel explicitly (see
-[§9.3](#iw-env-var-channel)). Auto-rewriting of literal seeds to
-per-cosigner `@env:MNEMONIC_MS1_<i>` sentinels is FOLLOWUP
-`gui-import-wallet-env-var-secret-channel` (v0.12.0+). Bitcoin
+GUI-relevant behaviors: on Linux a typed `--ms1` value never reaches
+argv (the GUI sends it through its own environment variable); on
+macOS and Windows it goes on argv, masked `••••` on screen (see
+[§9.3](#iw-env-var-channel)). Bitcoin
 Core round-trip DROPS the `timestamp` / `next` / `next_index`
 wallet-state fields with a stderr NOTICE. BSMS round-trip DROPS
 the audit envelope; the `--json` envelope preserves these verbatim

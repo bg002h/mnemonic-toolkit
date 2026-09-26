@@ -17,9 +17,9 @@ engraved card against its source bundle before committing to steel.
 The worked example repairs a deliberately-corrupted zero-entropy `ms1`
 card. **Never engrave or fund** any wallet recovered from a
 demonstration card. A corrected `ms1` is master key material; the
-`--ms1` field is secret-bearing. The run-confirm modal redacts the
-secret-bearing `--ms1` argv token as a fixed `••••` sentinel (see [§14
-Defense 2](#secret-handling)). `mk1` and `md1` carry no secret material.
+`--ms1` field is secret-bearing. The card is never drawn on
+screen — on Linux it goes over stdin (`--ms1 -`), on macOS and Windows
+the modal masks it as `••••` (see [Secret channels](#secret-channels)). `mk1` and `md1` carry no secret material.
 :::
 
 > **GUI form:** see [GUI Forms › mnemonic › repair](#gui-form-mnemonic-repair).
@@ -134,10 +134,12 @@ predates both legs.
 
 3. Leave `--max-indel` and `--max-subst` at `0` (a single substitution
    is within the base BCH correction budget).
-4. The `Preview:` line resembles:
+4. On Linux the `Preview:` line resembles (on macOS and Windows the
+   card shows as `--ms1 ••••`):
 
    ```text
-   mnemonic repair --ms1 ••••
+   mnemonic repair --ms1 -
+     --ms1 ← stdin via `-` (typed)
    ```
 
 5. Click **Run**; redact-confirm in the modal.

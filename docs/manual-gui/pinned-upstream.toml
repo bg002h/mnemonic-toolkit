@@ -88,28 +88,27 @@
 # Run path adds it; Copy command never does), --group-size defaults to 0,
 # and --separator offers `space` only on mnemonic/md/ms.
 #
+# v0.62.0 -> v0.63.0 (F-694): NOT pin-neutral. The tag (d82c889) pins
+# mnemonic-toolkit-v0.105.1 / descriptor-mnemonic-md-cli-v0.20.3 /
+# ms-cli-v0.20.1 / mk-cli-v0.13.0 (verified against the tag's own
+# pinned-upstream.toml), which are exactly the installer's pins, so the
+# [installer-ahead] table and its section in
+# src/80-troubleshooting/82-binary-and-launch.md are gone. The schema
+# gains five forms (md compose / shape-key / descriptor / decompose, ms
+# hashlock: 61 -> 66 renders and figures) and every secret now goes over a
+# private channel on Linux (manual section #secret-channels); the tutorial
+# corpus re-syncs (the J1/J2 private-channel re-drive at master, then the
+# v0.63.0 `Pinned:` labels: 50 figures).
+#
 # Source-path resolution for the lint:
 #   $MANUAL_GUI_UPSTREAM_ROOT override env var, OR sibling-checkout
 #   default `../mnemonic-gui` relative to docs/manual-gui/.
 
 [mnemonic-gui]
-tag = "mnemonic-gui-v0.62.0"
+tag = "mnemonic-gui-v0.63.0"
 
 [manual-gui]
-toolkit-tag-implied = "mnemonic-toolkit-v0.104.0"
-md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.20.3"
-ms-cli-tag-implied  = "ms-cli-v0.19.1"
-mk-cli-tag-implied  = "mk-cli-v0.13.0"
-
-# The installer runs AHEAD of mnemonic-gui v0.62.0 on two CLIs: toolkit 0.105.1
-# and ms 0.20.1 (F-687, then the F-687e macOS fix) shipped before the GUI
-# re-pinned to them. This manual
-# keeps documenting the GUI's tier above; the installer installs the tags
-# below, and src/80-troubleshooting/82-binary-and-launch.md's
-# {#installer-ahead} section tells the reader what differs. Read by
-# tests/check_cli_pins.py: each entry must equal install.sh's pin and be newer
-# than [manual-gui]'s. Delete this table (and that section) when the GUI
-# re-pins.
-[installer-ahead]
 toolkit-tag-implied = "mnemonic-toolkit-v0.105.1"
+md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.20.3"
 ms-cli-tag-implied  = "ms-cli-v0.20.1"
+mk-cli-tag-implied  = "mk-cli-v0.13.0"

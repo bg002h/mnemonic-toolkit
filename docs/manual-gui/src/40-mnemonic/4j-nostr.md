@@ -18,9 +18,8 @@ normalization negates the key.
 :::danger
 The worked examples use public NIP-19 test keys (no funds). When you
 supply an `nsec` via `--secret`, the GUI renders it as a masked
-`SecretLineEdit` and the run-confirm modal redacts secret-bearing
-argv tokens to a fixed `••••` sentinel (see
-[§14 Defense 2](#secret-handling)). WIF output is private-key material
+`SecretLineEdit` and the run-confirm modal shows only a private reference on Linux and
+`••••` on macOS and Windows (see [Secret channels](#secret-channels)). WIF output is private-key material
 — the toolkit emits the `warning: stdout carries private key material`
 advisory. **Never engrave or fund** a wallet from a published-key
 example.
