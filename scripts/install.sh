@@ -57,7 +57,7 @@ component_info() {
             echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.13.0|mk|"
             ;;
         mnemonic-gui)
-            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.62.0|mnemonic-gui|"
+            echo "mnemonic-gui|https://github.com/bg002h/mnemonic-gui|mnemonic-gui-v0.63.0|mnemonic-gui|"
             ;;
         *)
             return 1
