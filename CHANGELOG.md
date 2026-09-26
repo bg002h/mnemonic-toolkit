@@ -8,6 +8,27 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Signed releases, and the installer checks the signatures
+
+- **Every release now signs its checksum files with minisign**, with the constellation
+  key that `mnemonic-engrave` already uses (`RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW`):
+  `SHA256SUMS.portable` (macOS / Windows, `release.yml`) and the reproducible Linux
+  `SHA256SUMS.x86_64` / `SHA256SUMS.aarch64` (`man-pages.yml`), each with a `.minisig`.
+  Signing is a host step after the digest is final; it asserts that no byte of the tarball,
+  the sums file or `PROVENANCE.<arch>.txt` moved, and the signature is verified against the
+  pinned key in the same job. A release tag with no signing secret, or a signature that does
+  not verify, now FAILS instead of shipping unsigned. `release.yml` gains a `sign_dry_run`
+  dispatch input and `man-pages.yml` a dispatch trigger: both sign and verify, and upload
+  nothing.
+- **`scripts/install.sh` verifies the signature** of the `SHA256SUMS*` file it checks a
+  download against, when `minisign` is installed, before trusting any digest in it. A bad
+  signature is refused; a missing one is refused for a pin at or after that component's
+  first signed release (the `first_signed` table, empty until those releases exist), and
+  allowed with a note before it. Without `minisign` it says once that signatures were not
+  checked. **`--require-signature`** makes a missing `minisign` or signature fatal.
+  `scripts/install-signature.test.sh` covers it offline with throwaway keys; the Examples
+  golden shows the new `--dry-run` line.
+
 ### Installer pins: mnemonic-gui v0.63.0
 
 - **`scripts/install.sh` installs mnemonic-gui v0.63.0**, which pins mnemonic 0.105.1,

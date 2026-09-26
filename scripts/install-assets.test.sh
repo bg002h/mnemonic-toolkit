@@ -37,6 +37,15 @@ base_of() {
     sed -n "s/.*echo \"[a-z-]*|\(https:[^|]*\)|\([^|]*\)|$1|.*/\1\/releases\/download\/\2/p" "$INSTALL_SH"
 }
 
+# Signed releases: for a pin at or after its component's first_signed version,
+# the installer REFUSES a SHA256SUMS* file with no .minisig -- so the pinned
+# release must really carry one. This is what catches a first_signed entry
+# filled in wrong (or a signed release that lost its signature).
+eval "$(sed -n '/^first_signed() {/,/^}/p; /^version_ge() {/,/^}/p' "$INSTALL_SH")"
+command -v first_signed >/dev/null 2>&1 && command -v version_ge >/dev/null 2>&1 \
+    || { echo "cannot read first_signed / version_ge from install.sh" >&2; exit 1; }
+sigchecked=0
+
 echo "[install-assets.test] $INSTALL_SH"
 checked=0
 for p in $PLATFORMS; do
@@ -75,6 +84,15 @@ for p in $PLATFORMS; do
         if [ $# -eq 1 ]; then
             ok "$n@$p: $asset (listed in $1)"
             checked=$((checked + 1))
+            first=$(first_signed "$n"); tag=${base##*/}; ver=${tag##*-v}
+            if [ -n "$first" ] && version_ge "$ver" "$first"; then
+                if curl -fsSLI --proto '=https' -o /dev/null "$base/$1.minisig"; then
+                    ok "$n@$p: $1.minisig published (pin $ver >= first signed $first)"
+                    sigchecked=$((sigchecked + 1))
+                else
+                    bad "$n@$p: $base/$1.minisig does not resolve, but install.sh says $n is signed from $first"
+                fi
+            fi
         else
             bad "$n@$p: $asset listed in $# SHA256SUMS files (want exactly 1):${hits:- none}"
         fi
@@ -123,6 +141,7 @@ else bad "only $floors of 17 Linux assets checked for their glibc floor"; fi
 want=$(( $(echo "$PLATFORMS" | wc -w) * 5 - $(echo "$EXPECT_NONE" | wc -w) ))
 if [ "$checked" -eq "$want" ]; then ok "$checked of $want mapped assets verified"
 else bad "only $checked of $want mapped assets verified"; fi
+echo "  info $sigchecked mapped assets checked for a published .minisig (pins at/after first_signed)"
 
 if [ "$fail" -eq 0 ]; then
     echo "[install-assets.test] OK"

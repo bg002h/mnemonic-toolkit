@@ -120,24 +120,28 @@ source: pinned GitHub release binaries, sha256-verified
 
 install  mnemonic (release mnemonic-toolkit-v0.105.1: mnemonic-0.105.1-x86_64-linux-musl.tar.gz)
   [dry-run] download https://github.com/bg002h/mnemonic-toolkit/releases/download/mnemonic-toolkit-v0.105.1/mnemonic-0.105.1-x86_64-linux-musl.tar.gz
+  [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
   [dry-run] run 'mnemonic --version'; refuse unless it prints 'mnemonic 0.105.1'
   [dry-run] install /home/user/.cargo/bin/mnemonic
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
 install  md (release descriptor-mnemonic-md-cli-v0.20.3: md-0.20.3-linux-amd64.tar.gz)
   [dry-run] download https://github.com/bg002h/descriptor-mnemonic/releases/download/descriptor-mnemonic-md-cli-v0.20.3/md-0.20.3-linux-amd64.tar.gz
+  [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
   [dry-run] run 'md --version'; refuse unless it prints 'md 0.20.3'
   [dry-run] install /home/user/.cargo/bin/md
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/md" gen-man --out "/home/user/.local/share/man/man1"
 install  ms (release ms-cli-v0.20.1: ms-0.20.1-x86_64-linux-musl.tar.gz)
   [dry-run] download https://github.com/bg002h/mnemonic-secret/releases/download/ms-cli-v0.20.1/ms-0.20.1-x86_64-linux-musl.tar.gz
+  [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
   [dry-run] run 'ms --version'; refuse unless it prints 'ms 0.20.1'
   [dry-run] install /home/user/.cargo/bin/ms
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/ms" gen-man --out "/home/user/.local/share/man/man1"
 install  mk (release mk-cli-v0.13.0: mk-0.13.0-x86_64-linux-musl.tar.gz)
   [dry-run] download https://github.com/bg002h/mnemonic-key/releases/download/mk-cli-v0.13.0/mk-0.13.0-x86_64-linux-musl.tar.gz
+  [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
   [dry-run] run 'mk --version'; refuse unless it prints 'mk 0.13.0'
   [dry-run] install /home/user/.cargo/bin/mk

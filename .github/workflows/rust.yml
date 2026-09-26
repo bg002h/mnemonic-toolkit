@@ -213,6 +213,15 @@ jobs:
       # back to cargo at the pinned tag, and no crates.io path remains.
       - name: install-verify harness (offline)
         run: sh scripts/install-verify.test.sh
+      # Release signatures: a SHA256SUMS* file must verify against the pinned
+      # minisign key before any digest in it is trusted. Offline, with
+      # THROWAWAY keypairs the harness generates (never the real key): good,
+      # tampered, wrong-key, missing before/at/after the first-signed pin,
+      # minisign absent (said once), and --require-signature.
+      - name: Install minisign (signature harness generates its own test keys)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: install-signature harness (offline)
+        run: sh scripts/install-signature.test.sh
       # Every platform mapping names a real asset of the PINNED release, listed
       # in exactly one of its SHA256SUMS files. Network (plain HTTPS). This is
       # what breaks when a pin moves to a release that names assets differently.

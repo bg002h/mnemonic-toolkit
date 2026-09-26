@@ -33,9 +33,14 @@ For each component the script downloads the prebuilt binary from its
 reports the pinned version, and installs it into `~/.cargo/bin` (`--root DIR`
 puts it in `DIR/bin`); no `sudo`, no system files touched, no Rust toolchain
 needed. A digest mismatch, or an asset no published checksum covers, is
-refused. The releases are not signed: the check proves the download is the
-file the release published, not who built it. Nothing installs from
-crates.io, whose copies lag these pins.
+refused. With `minisign` installed, the `SHA256SUMS` file must first verify
+against the constellation's pinned release key
+(`RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW`), which proves who
+published it; a bad signature is refused, and so is a missing one for any
+release at or after that component's first signed release. Without `minisign`
+the installer says once that signatures were not checked; `--require-signature`
+makes that an error. Nothing installs from crates.io, whose copies lag these
+pins.
 
 `--from-source` (and any platform a release has no binary for, e.g. FreeBSD)
 builds the same pinned tags with `cargo install --locked --git … --tag …`,
@@ -113,6 +118,13 @@ attaches `SHA256SUMS.x86_64`, `SHA256SUMS.aarch64`, and `PROVENANCE.<arch>.txt`.
 
 ```sh
 sha256sum -c SHA256SUMS.x86_64      # or SHA256SUMS.aarch64
+```
+
+**Origin** (did the project publish these checksums?): from signed releases on,
+each `SHA256SUMS.<arch>` has a `.minisig` beside it:
+
+```sh
+minisign -Vm SHA256SUMS.x86_64 -P RWQPmgBXsuw5yi8W0SfDr8KF+IqY/Z5U2p724emSODS1UPfJBP3agbKW
 ```
 
 **Provenance** (was it really built from this source — no hidden changes?):
