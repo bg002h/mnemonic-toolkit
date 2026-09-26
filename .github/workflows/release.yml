@@ -110,8 +110,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
-      - name: cargo test
-        run: cargo test --locked --workspace
+      # F-696: cargo nextest runs the test binaries CONCURRENTLY; `cargo test`
+      # runs them one at a time. Pinned by commit SHA; install-action checks the
+      # downloaded archive against the sha256 in its own manifest, and
+      # `fallback: none` refuses the unverified cargo-binstall path.
+      - name: Install cargo-nextest (pinned, checksum-verified)
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-nextest@0.9.146
+          fallback: none
+      - name: cargo nextest run
+        run: cargo nextest run --locked --workspace --no-fail-fast
+      # nextest does not run doc-tests; this step keeps them.
+      - name: cargo test --doc
+        run: cargo test --locked --workspace --doc
 
   build:
     name: build mnemonic (${{ matrix.name }})

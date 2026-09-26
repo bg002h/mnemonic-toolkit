@@ -131,6 +131,16 @@ jobs:
       - name: Show ulimit -l (diagnostic)
         run: ulimit -l || true
 
+      # F-696: cargo nextest runs the test binaries CONCURRENTLY; `cargo test`
+      # runs them one at a time. Pinned by commit SHA; install-action checks the
+      # downloaded archive against the sha256 in its own manifest, and
+      # `fallback: none` refuses the unverified cargo-binstall path.
+      - name: Install cargo-nextest (pinned, checksum-verified)
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-nextest@0.9.146
+          fallback: none
+
       - name: cargo build --tests
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
@@ -138,7 +148,7 @@ jobs:
           fi
           cargo build --tests --workspace
 
-      - name: cargo test (default tests; G2.1 #[ignore]-gated)
+      - name: cargo nextest run (default tests; G2.1 #[ignore]-gated)
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
@@ -147,7 +157,13 @@ jobs:
           # the nested crates/wc-codec/fuzz/ is its OWN workspace, invisible
           # here. Anti-recurrence: a future member is auto-covered (eval #2
           # existed because wc-codec was a member never `-p`'d in CI).
-          cargo test --workspace
+          # nextest skips #[ignore] exactly as `cargo test` does, so the
+          # env-gated g2_* legs below still run only in their own steps.
+          cargo nextest run --workspace --no-fail-fast
+
+      # nextest does not run doc-tests; this step keeps them.
+      - name: cargo test --doc
+        run: cargo test --workspace --doc
 
       - name: G2.1 eperm fault injection (fresh subprocess; env set before cargo)
         # Per SPEC §4 P2 + plan P2.T2: cfg(test) FAIL_MODE injection is only
@@ -416,21 +432,22 @@ jobs:
     #     cc-rs builds the ONLY C dep — the vendored libsecp256k1 in
     #     `secp256k1-sys` — against musl (else cc silently falls back to host
     #     gcc → glibc-linked). Honors the `ulimit -l 65536` dance (mlock tests).
-    #   * aarch64-musl — `cross test` under QEMU user-mode emulation (cross
-    #     bundles the musl cross C toolchain AND the qemu-aarch64 runner; no apt
-    #     step). This RUNS the package test suite on aarch64-Linux so the
-    #     md1/address golden vectors are output-verified for the shipped aarch64
-    #     binary — not merely compiled.
+    #   * aarch64-musl — `cargo nextest run` on a NATIVE arm64 runner
+    #     (`ubuntu-24.04-arm`, musl-gcc from musl-tools). Until F-696 this row
+    #     was `cross test` under QEMU user-mode emulation; cross cannot drive
+    #     nextest (cross-rs#716). This RUNS the package test suite on
+    #     aarch64-Linux so the md1/address golden vectors are output-verified
+    #     for the shipped aarch64 binary — not merely compiled.
     #
-    #     The mlock / page-pinning acceptance gates are SKIPPED here — they are
-    #     POSIX-`mlock(2)` syscall + runtime-page-size tests, not meaningfully
-    #     testable under QEMU (qemu-user forwards `mlock` to the host kernel
-    #     inside the cross Docker container, which can EPERM under the
-    #     container's RLIMIT_MEMLOCK; emulated page size / heap alignment can
+    #     The mlock / page-pinning acceptance gates are SKIPPED here — they were
+    #     skipped under QEMU (qemu-user forwarded `mlock` to the host kernel
+    #     inside the cross Docker container, which could EPERM under the
+    #     container's RLIMIT_MEMLOCK; emulated page size / heap alignment could
     #     also differ — `g4_a` asserts a 64-byte buf pins exactly 1 page), and
-    #     mlock behavior is not this job's target (the output goldens are). Two
-    #     `--skip` filters are needed because libtest matches a filter against
-    #     the per-test name WITHIN each binary, not the binary name:
+    #     F-696 kept the executed set unchanged when it moved the row; mlock
+    #     behavior is not this job's target (the output goldens are). Two
+    #     `--skip` filters are needed because the filter matches the per-test
+    #     name WITHIN each binary, not the binary name:
     #       - `--skip mlock` drops the lib unit tests `mlock::tests::*`
     #         (incl. `g4_a_*`); the `#[ignore]`-gated `g2_*` fault-injection
     #         tests are already skipped (no `--include-ignored`).
@@ -451,51 +468,61 @@ jobs:
     # Security note: this job uses only GitHub-provided trusted context. No
     # interpolation of untrusted user input.
     name: musl build+test (${{ matrix.target }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-musl
+            runner: ubuntu-latest
             musl_native: true
+          # F-696: the aarch64 row runs on a NATIVE arm64 runner instead of
+          # `cross test` under QEMU. cross cannot drive nextest (cross-rs#716),
+          # and under emulation the ~200 test binaries ran one at a time for 17
+          # of this job's 23 minutes. Same target triple, same --release profile,
+          # same skip filters; the tests now execute on real aarch64 hardware.
           - target: aarch64-unknown-linux-musl
-            cross: true
+            runner: ubuntu-24.04-arm
+            arm_native: true
     steps:
       - uses: actions/checkout@v6
       - name: install-rust pinned toolchain
         uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
-      - name: install musl-tools (x86_64-musl native)
-        if: ${{ matrix.musl_native }}
+      # Both rows build natively, so both need musl-gcc for the vendored
+      # libsecp256k1 (on the arm64 runner it targets aarch64-musl).
+      - name: install musl-tools
         run: sudo apt-get update && sudo apt-get install -y musl-tools
-      - name: install cross (aarch64-musl)
-        if: ${{ matrix.cross }}
-        run: cargo install --locked cross
-      # Register QEMU/binfmt_misc for aarch64 so `cross test` tests that spawn
-      # the binary as a subprocess (raw std::Command) don't hit ENOEXEC
-      # ("Exec format error") — cross/QEMU only auto-translates the test
-      # harness, not children it forks, unless binfmt_misc is registered.
-      - name: register binfmt (qemu) for aarch64 subprocess exec
-        if: ${{ matrix.cross }}      # only the aarch64 cross leg, NOT x86_64-native
-        uses: docker/setup-qemu-action@v3
+      # F-696: cargo nextest runs the test binaries CONCURRENTLY; `cargo test`
+      # runs them one at a time. Pinned by commit SHA; install-action checks the
+      # downloaded archive against the sha256 in its own manifest, and
+      # `fallback: none` refuses the unverified cargo-binstall path.
+      - name: Install cargo-nextest (pinned, checksum-verified)
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
         with:
-          platforms: arm64
-      - name: cargo test --target x86_64-musl (native, full package suite)
+          tool: cargo-nextest@0.9.146
+          fallback: none
+      # No doc-test step on either row: with an explicit --target, cargo test
+      # never ran doc-tests here either (0 "Doc-tests" lines in the logs).
+      - name: cargo nextest run --target x86_64-musl (native, full package suite)
         if: ${{ matrix.musl_native }}
         env:
           CC_x86_64_unknown_linux_musl: musl-gcc
         run: |
           ulimit -l 65536 || true
-          cargo test --target ${{ matrix.target }} -p mnemonic-toolkit
-      # Run the package test suite on aarch64-Linux under QEMU user-mode so the
-      # md1/address golden vectors are OUTPUT-verified for the shipped aarch64
-      # binary. `--skip mlock` drops the lib `mlock::tests::*` POSIX-syscall /
+          cargo nextest run --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast
+      # Run the package test suite on aarch64-Linux so the md1/address golden
+      # vectors are OUTPUT-verified for the shipped aarch64 binary.
+      # `--skip mlock` drops the lib `mlock::tests::*` POSIX-syscall /
       # page-size gates; `--skip g1_` drops the `tests/mlock_unit.rs` G1.x
       # page-pinning integration gates (their fn names lack "mlock", so the
-      # first filter misses them) — both untestable-meaningfully under
-      # emulation. Every golden/integration test still runs. No
+      # first filter misses them). They were skipped under QEMU and stay
+      # skipped here, so the executed set is unchanged by the F-696 runner
+      # move. Every golden/integration test still runs. No
       # `--include-ignored`, so the `g2_*` fault-injection tests stay skipped.
-      - name: cross test --target aarch64-musl (QEMU; output goldens, mlock skipped)
-        if: ${{ matrix.cross }}
-        run: cross test --release --target ${{ matrix.target }} -p mnemonic-toolkit -- --skip mlock --skip g1_
+      - name: cargo nextest run --target aarch64-musl (native arm64; output goldens, mlock skipped)
+        if: ${{ matrix.arm_native }}
+        env:
+          CC_aarch64_unknown_linux_musl: musl-gcc
+        run: cargo nextest run --release --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast -- --skip mlock --skip g1_
