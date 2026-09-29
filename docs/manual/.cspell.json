@@ -61,6 +61,7 @@
     "keypath",
     "keyspace",
     "importdescriptors",
+    "scantxoutset",
     "getdescriptorinfo",
     "lockstep",
     "memorised",
