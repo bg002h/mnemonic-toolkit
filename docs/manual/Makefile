@@ -17,6 +17,8 @@
 #
 # Variables (override on the command line or in CI):
 #   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings used by verify-examples and flag-coverage.
+#   MR_BIN          — optional `mr` (mnemonic-refugium) CLI for flag-coverage; empty (the default)
+#                      skips the mr lines of tests/cli-subcommands.list with a WARN.
 #   MERMAID_FILTER  — 'skip' (default) consumes figures/cache/ snapshots; 'on' runs mermaid-filter
 #                      (needs chromium + mermaid-filter locally — rare, only for cache regen review).
 #   PANDOC, XELATEX, MAKEINDEX — tool paths (override if not on $PATH).
@@ -45,6 +47,9 @@ MNEMONIC_BIN ?= cargo run --quiet --manifest-path $(TOOLKIT_ROOT)/Cargo.toml -p 
 MD_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/descriptor-mnemonic/Cargo.toml -p md-cli --bin md --
 MS_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-secret/Cargo.toml -p ms-cli --bin ms --
 MK_BIN       ?= cargo run --quiet --manifest-path $(WORKSPACE_ROOT)/mnemonic-key/Cargo.toml -p mk-cli --bin mk --
+# Optional: empty skips the mr checks (WARN). e.g. MR_BIN="cargo run --quiet --manifest-path
+# $(WORKSPACE_ROOT)/mnemonic-refugium/Cargo.toml -p mr-cli --bin mr --"
+MR_BIN       ?=
 
 # Cross-format-recipes fixture corpus (consumed by verify-examples.sh).
 FIXTURES_DIR ?= $(TOOLKIT_ROOT)/crates/mnemonic-toolkit/tests/fixtures/wallet_import
@@ -285,7 +290,8 @@ lint:
 		MNEMONIC_BIN="$(MNEMONIC_BIN)" \
 		MD_BIN="$(MD_BIN)" \
 		MS_BIN="$(MS_BIN)" \
-		MK_BIN="$(MK_BIN)"
+		MK_BIN="$(MK_BIN)" \
+		MR_BIN="$(MR_BIN)"
 
 # ---------------------------------------------------------------------------
 # Filter smoke test (Phase 0 verification)

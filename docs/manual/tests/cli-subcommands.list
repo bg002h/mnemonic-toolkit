@@ -83,3 +83,16 @@ mk address
 mk derive
 mk gui-schema
 mk gen-man
+
+# mr (mnemonic-refugium) -- checked only when MR_BIN is set (tests/lint.sh);
+# create, upgrade and export are stubs until mr's phases M12/M13.
+mr create
+mr upgrade
+mr verify
+mr decode
+mr repair
+mr member
+mr address
+mr current
+mr units
+mr export

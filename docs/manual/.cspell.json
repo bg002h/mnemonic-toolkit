@@ -8,12 +8,27 @@
     "transcripts/**"
   ],
   "ignoreRegExpList": [
-    "(ms1|mk1|md1)[a-z0-9]+",
+    "(ms1|mk1|md1|mr1)[a-z0-9]+",
     "0x[a-fA-F0-9]+",
     "https?://[^\\s)]+",
-    "`[^`]+`"
+    "`[^`]+`",
+    "``[^`](?:[^`]|`(?!`))*``"
   ],
   "words": [
+    "createwallet",
+    "getblockchaininfo",
+    "getwalletinfo",
+    "listunspent",
+    "locktime",
+    "mediantime",
+    "psbt",
+    "rescanblockchain",
+    "rpcport",
+    "rpcwallet",
+    "sendall",
+    "unspents",
+    "vout",
+    "walletcreatefundedpsbt",
     "sysw",
     "seedhammer",
     "brainwallet",
@@ -61,6 +76,7 @@
     "keypath",
     "keyspace",
     "importdescriptors",
+    "scantxoutset",
     "getdescriptorinfo",
     "lockstep",
     "memorised",
@@ -192,6 +208,8 @@
     "MDS",
     "checkpointing",
     "reencode",
-    "minisign"
+    "minisign",
+    "Refugium",
+    "refugium"
   ]
 }

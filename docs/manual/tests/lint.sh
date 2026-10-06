@@ -13,6 +13,10 @@
 #   SRC_DIR       — absolute path to src/
 #   TESTS_DIR     — absolute path to tests/
 #   MNEMONIC_BIN, MD_BIN, MS_BIN, MK_BIN — CLI invocation strings.
+#   MR_BIN        — optional: the `mr` (mnemonic-refugium) CLI. Unset or empty,
+#                   the `mr` lines of cli-subcommands.list are skipped with a
+#                   WARN and every other check runs unchanged; set, `mr` is
+#                   checked exactly like the other four (a missing flag FAILS).
 
 set -euo pipefail
 
@@ -24,11 +28,13 @@ for arg in "$@"; do
     MD_BIN=*)       MD_BIN="${arg#*=}" ;;
     MS_BIN=*)       MS_BIN="${arg#*=}" ;;
     MK_BIN=*)       MK_BIN="${arg#*=}" ;;
+    MR_BIN=*)       MR_BIN="${arg#*=}" ;;
   esac
 done
 
 : "${SRC_DIR:?SRC_DIR is required}"
 : "${TESTS_DIR:?TESTS_DIR is required}"
+MR_BIN="${MR_BIN:-}"
 
 fail=0
 step() { printf '\n[lint] === %s ===\n' "$1"; }
@@ -124,7 +130,7 @@ section_of() {
 }
 
 declare -A SEC_FLAGS=() SEC_BODY=() SEC_BIN=() SEC_LABEL=() PINNED=()
-crate_of() { case "$1" in mnemonic) echo mnemonic-toolkit ;; md) echo md-cli ;; ms) echo ms-cli ;; mk) echo mk-cli ;; esac; }
+crate_of() { case "$1" in mnemonic) echo mnemonic-toolkit ;; md) echo md-cli ;; ms) echo ms-cli ;; mk) echo mk-cli ;; mr) echo mr-cli ;; esac; }
 
 # leaves BIN-NAME BIN-INVOCATION -> every leaf subcommand the binary exposes,
 # one "<name> <sub>[ <subsub>]" per line (clap `Commands:` blocks, `help` skipped).
@@ -145,8 +151,15 @@ else
   # missing from it is a verb nobody checks -- exactly how `md compose` went
   # undocumented (F-647). Every leaf subcommand each pinned binary exposes must
   # be listed, and every listed verb must exist.
-  listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | sort -u)
-  exposed_verbs=$( { leaves mnemonic "$MNEMONIC_BIN"; leaves md "$MD_BIN"; leaves ms "$MS_BIN"; leaves mk "$MK_BIN"; } | sort -u)
+  # `mr` is optional (MR_BIN): unset, its listed verbs leave the comparison
+  # (they are skipped below, with a WARN), and the other four are unaffected.
+  if [ -n "$MR_BIN" ]; then
+    listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | sort -u)
+  else
+    listed_verbs=$(grep -vE '^[[:space:]]*(#|$)' "$LIST" | grep -vE '^mr( |$)' | sort -u || true)
+    warn "MR_BIN unset; skipping the mr lines of $(basename "$LIST") ($(grep -cE '^mr( |$)' "$LIST" || true) verbs); set MR_BIN to check 45-mr.md"
+  fi
+  exposed_verbs=$( { leaves mnemonic "$MNEMONIC_BIN"; leaves md "$MD_BIN"; leaves ms "$MS_BIN"; leaves mk "$MK_BIN"; [ -z "$MR_BIN" ] || leaves mr "$MR_BIN"; } | sort -u)
   if [ -z "$exposed_verbs" ]; then
     err "no subcommands enumerated from the binaries (are the *_BIN real binaries?)"
   else
@@ -166,6 +179,9 @@ else
       md)         binv="$MD_BIN"       ; chapter="$CLI_REF_DIR/42-md.md" ;;
       ms)         binv="$MS_BIN"       ; chapter="$CLI_REF_DIR/43-ms.md" ;;
       mk|mk-cli)  binv="$MK_BIN"       ; chapter="$CLI_REF_DIR/44-mk-cli.md" ;;
+      mr)
+        [ -z "$MR_BIN" ] && continue   # optional; the WARN above says so
+        binv="$MR_BIN" ; chapter="$CLI_REF_DIR/45-mr.md" ;;
       *) err "unknown binary in cli-subcommands.list: $bin"; continue ;;
     esac
     if [ ! -f "$chapter" ]; then
