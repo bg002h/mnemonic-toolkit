@@ -250,6 +250,7 @@ jobs:
   build-container:
     name: build-container (resolve BUILT-DIGEST)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -361,6 +362,7 @@ jobs:
     name: repro-substrate (${{ inputs.target }})
     needs: build-container
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # `packages: read` + container registry creds: the BUILT image lives in
     # GHCR (private-by-default), so the runner MUST authenticate to pull it
     # for the job-level `container:`. Without this the gate falsely REDs on a
@@ -474,6 +476,7 @@ jobs:
     name: repro-x86_64-musl (${{ inputs.target }})
     needs: build-container
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # `packages: read` + container registry creds to pull the private-by-default
     # GHCR BUILT image for this job-level `container:` (see repro-substrate).
     permissions:
@@ -637,6 +640,7 @@ jobs:
     # run_aarch64: false`) can run the x86_64 gate alone. Default true ⇒ active.
     if: ${{ inputs.run_aarch64 }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
     env:

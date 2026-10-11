@@ -48,9 +48,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel a pull request's superseded run when a newer commit is pushed to it.
+# Every other event gets a group of its own (the run id), so pushes, tags,
+# schedules and dispatches are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   technical-manual:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
     env:
@@ -115,6 +123,31 @@ jobs:
             MS_BIN=true \
             MK_BIN=true
 
+      - name: Put cached sibling CLIs on PATH
+        # The three Install *-cli steps below install into
+        # $RUNNER_TEMP/sibling-clis (their CARGO_INSTALL_ROOT); this puts its
+        # bin/ first on PATH. It also reads the runner image name for the
+        # cache key, so a cache built on one image is never restored on
+        # another.
+        id: sibling
+        if: steps.guard.outputs.relevant == 'true'
+        run: |
+          echo "$RUNNER_TEMP/sibling-clis/bin" >> "$GITHUB_PATH"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached sibling CLIs
+        # On a hit each `cargo install` below finds its pinned package
+        # already installed and skips the build (it still fetches the git
+        # repo); a changed tag or feature set reinstalls. cargo does not
+        # reinstall for a newer rustc, so the key also hashes
+        # rust-toolchain.toml. Skipped on tags, so release assets are always
+        # built from fresh installs.
+        if: steps.guard.outputs.relevant == 'true' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sibling-clis
+          key: sibling-clis-${{ steps.sibling.outputs.image }}-${{ github.job }}-${{ hashFiles('.github/workflows/technical-manual.yml', 'rust-toolchain.toml') }}
+
       # ---- Real-bin output-fidelity gate (mirrors manual.yml's audit step) ----
       # Cycle C P1a: the 15 technical-manual goldens (11 CLI + 4 cargo-example)
       # are now CI-replayed against the CURRENT-release-tier pins. `make lint`
@@ -124,16 +157,22 @@ jobs:
         if: steps.guard.outputs.relevant == 'true'
         # Package-name selector (multi-binary workspace; --bin refuses
         # disambig). Current-release tier pin — mirrors manual.yml:79.
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 mk-cli
 
       - name: Install md-cli
         if: steps.guard.outputs.relevant == 'true'
         # `--features cli-compiler` matches scripts/install.sh's component pin
         # (the technical-manual md1 transcripts exercise the compiler path).
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.3 md-cli --features cli-compiler
 
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.1 ms-cli
 
       - name: Build mnemonic binary (debug)
@@ -152,7 +191,7 @@ jobs:
       - name: Verify technical-manual examples (real current-tier bins)
         if: steps.guard.outputs.relevant == 'true'
         working-directory: docs/technical-manual
-        # MD/MS/MK resolve via $PATH to the cargo-installed ~/.cargo/bin
+        # MD/MS/MK resolve via $PATH to the cargo-installed $RUNNER_TEMP/sibling-clis/bin
         # binaries above (no md→mkdir alias in CI). EXAMPLES_DIR is absolute so
         # the per-cmd mktemp -d cwd resolves the cargo manifest. All flag
         # values are constants / controlled built-ins ($GITHUB_WORKSPACE).
@@ -169,6 +208,7 @@ jobs:
       # (push / PR / tag); only the two release steps are tag-gated. The frontmatter
       # promises build/m-format-technical-manual.pdf ships under tech-manual-vX.Y.Z.
       - name: Install pandoc + texlive
+        timeout-minutes: 15
         if: steps.guard.outputs.relevant == 'true'
         # No chromium / mermaid-filter: the build runs MERMAID_FILTER=skip
         # (the Makefile default) and consumes the checked-in figures/cache/.

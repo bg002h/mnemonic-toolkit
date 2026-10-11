@@ -39,9 +39,17 @@ on:
   pull_request:                       # NO paths — a REQUIRED check must report on every PR
   workflow_dispatch:
 
+# Cancel a pull request's superseded run when a newer commit is pushed to it.
+# Every other event gets a group of its own (the run id), so pushes, tags,
+# schedules and dispatches are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   examples:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write                 # release-asset upload on examples-v* tags
     env:
@@ -59,6 +67,7 @@ jobs:
         run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
 
       - name: Install pandoc + texlive + DejaVu mono
+        timeout-minutes: 15
         # Monofont "DejaVu Sans Mono" (gen.sh:116) needs fonts-dejavu; jq is
         # runner-preinstalled but pinned explicitly (gen.sh preflight requires
         # it). No chromium/mermaid — Examples.pdf has no figures.

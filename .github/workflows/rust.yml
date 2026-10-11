@@ -55,6 +55,13 @@ on:
     # push-side path filter above keeps code-push efficiency; docs-only DIRECT
     # pushes to master are covered by admin bypass (enforce_admins:false).
 
+# Cancel a pull request's superseded run when a newer commit is pushed to it.
+# Every other event gets a group of its own (the run id), so pushes, tags,
+# schedules and dispatches are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   # Dedicated rustfmt gate, pinned to a CANONICAL formatter version (1.95.0,
   # matching mnemonic-key's CI). rustfmt output drifts between toolchain
@@ -96,6 +103,7 @@ jobs:
   fmt:
     name: fmt (pinned 1.95.0)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust 1.95.0 (canonical fmt toolchain)
@@ -117,6 +125,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
 
@@ -215,6 +224,7 @@ jobs:
     # the drift these two guard.
     name: "install.sh harnesses (man-step + MSRV guard)"
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Install pinned Rust toolchain
@@ -263,6 +273,7 @@ jobs:
     # cfg(test) FAIL_MODE branch is platform-uniform.
     name: "test (release, ubuntu-latest, mlock einval)"
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - name: Show ulimit -l (diagnostic)
@@ -277,6 +288,7 @@ jobs:
   miri:
     name: miri (mlock unsafe)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
 
@@ -294,6 +306,7 @@ jobs:
   clippy:
     name: clippy
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
 
@@ -311,6 +324,7 @@ jobs:
     # the lib for the platforms downstream consumers actually target.
     name: lib cross-platform check
     runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -375,6 +389,7 @@ jobs:
     # from $SIBLING_REPO_PATH.
     name: "g6 invariant (cross-repo mlock.rs)"
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - name: Checkout own (mnemonic-toolkit)
         uses: actions/checkout@v6
@@ -469,6 +484,7 @@ jobs:
     # interpolation of untrusted user input.
     name: musl build+test (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
