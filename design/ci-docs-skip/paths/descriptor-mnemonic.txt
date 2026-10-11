@@ -1,0 +1,14 @@
+# ci/docs-only-paths.txt -- which changed files count as documentation for
+# ci/docs-only.sh. A change whose every file matches a + rule and no - rule
+# skips the build and test steps the guard protects. Rules are grep -E
+# patterns on the repo-relative path. A - rule protects a path that a test or
+# CI step reads, so changing it always runs everything.
+#
+# Keep a path off this list unless you have checked that no test, build
+# script or CI step reads it.
++ ^design/
++ ^docs/
++ ^bip/
++ ^[^/]+\.md$
+# read by crates/md-codec/tests/display_grouping_conformance.rs; its .sha256 by ci.yml fmt
+- ^design/display-grouping-vectors\.tsv
