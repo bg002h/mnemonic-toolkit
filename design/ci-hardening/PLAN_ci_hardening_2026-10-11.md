@@ -15,9 +15,12 @@ already has `cancel-in-progress` and runs on self-hosted runners).
   `claude/fold-i-manual`, 2026-10-08) spent **15,316 s (4 h 15 m)** in the
   step "Install pandoc + texlive" (an apt hang); that step normally takes
   97–164 s.
-- Across 2,147 successful runs (all events, last 300 per repo, sampled
-  2026-10-11), the slowest successful job other than that hang took **14.0
-  min** (mnemonic-gui schema-mirror). 60 minutes is over 4x that.
+- The slowest successful job found is mnemonic-toolkit `rust.yml`
+  `musl build+test (aarch64-unknown-linux-musl)` at **24.2 min** (run
+  36210086244, 2026-09-26; all 1,287 successful rust.yml jobs in its last 100
+  successful runs measured). That job has taken about 5 min since 2026-09-26.
+  Across the last 300 runs of each repo, no other successful job took over
+  14.0 min. 60 minutes is about 2.5x the slowest job ever seen.
 - None of the seven repos cancels a superseded pull-request run. The only
   `concurrency` blocks are the `release.yml` release-serialisation blocks
   (`cancel-in-progress: false`), which this plan does not touch.
@@ -30,9 +33,11 @@ already has `cancel-in-progress` and runs on self-hosted runners).
   `cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.1 ms-cli`
   exits 0 in 0.29 s ("Ignored package ... is already installed"). The first
   install took 23 s on a 24-core box. So restoring a cached install root
-  turns each install step into a no-op, and a pin change still reinstalls
-  (cargo tracks source, version, features and rustc in the root's
-  `.crates.toml` / `.crates2.json`).
+  skips the build in each install step; cargo still fetches the sibling's git
+  repo, so a hit costs seconds, not zero. A changed tag or feature set still
+  reinstalls. A changed rustc does **not** (review r1 I3, reproduced with
+  1.85 → 1.88), so the keys hash `rust-toolchain.toml` where the toolchain
+  comes from it.
 
 ## Repos, base branches, worktrees, branch name
 
@@ -46,14 +51,20 @@ already has `cancel-in-progress` and runs on self-hosted runners).
 | mnemonic-engrave | `origin/master` | `/scratch/code/shibboleth/me-worktrees/ci-hardening` |
 | mnemonic-transaction | `origin/main` | `/scratch/code/shibboleth/mt-worktrees/ci-hardening` |
 
-In every repo: `git fetch origin`, then
-`git worktree add -b ci/hardening-2026-10-11 <path> <base>`. Never work in the
+**mnemonic-toolkit already has its worktree and branch**:
+`/scratch/code/shibboleth/tk-worktrees/ci-hardening` on
+`ci/hardening-2026-10-11`, holding this plan, the gate and the review reports.
+Work there. In each of the **other six** repos: `git fetch origin`, then
+`git worktree add -b ci/hardening-2026-10-11 <path> <base>`. Never work in a
 main checkout. Never under `/tmp`.
+
+Commit policy: every change is a new commit; never amend, rebase or
+force-push.
 
 ## The edits
 
-Edit only files under `.github/workflows/`, plus the toolkit `design/` files
-named in "Commits". Do not reformat, reorder, re-quote or re-indent anything
+Edit only files under `.github/workflows/`, plus
+`mnemonic-engrave/scripts/release-workflows/gen.py` (G below). Do not reformat, reorder, re-quote or re-indent anything
 else. Do not touch comments except the one named in K4.
 
 ### T — job timeout (all seven repos)
@@ -136,26 +147,39 @@ Every cache-restore step is skipped on tag refs, so release assets are always
 built from fresh installs.
 
 **K1. `manual.yml`, `quickstart.yml`, `technical-manual.yml`** (one job each:
-`manual`, `quickstart`, `technical-manual`). In each, insert these two steps
-directly above the step `- name: Install mk-cli`, with one blank line between
-steps as the file already does:
+`manual`, `quickstart`, `technical-manual`). In each, insert these two steps,
+in this order, with one blank line between steps as the file already does.
+In `manual.yml` and `quickstart.yml` they go directly above the line
+`      - name: Install mk-cli`. In `technical-manual.yml` they go directly above
+the comment line that starts `      # ---- Real-bin output-fidelity gate`
+(the section comment that sits above `Install mk-cli`), so that comment stays
+with the installs it introduces.
 
 ```yaml
+      - name: Put cached sibling CLIs on PATH
+        # The three Install *-cli steps below install into
+        # $RUNNER_TEMP/sibling-clis (their CARGO_INSTALL_ROOT); this puts its
+        # bin/ first on PATH. It also reads the runner image name for the
+        # cache key, so a cache built on one image is never restored on
+        # another.
+        id: sibling
+        if: steps.guard.outputs.relevant == 'true'
+        run: |
+          echo "$RUNNER_TEMP/sibling-clis/bin" >> "$GITHUB_PATH"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
       - name: Restore cached sibling CLIs
-        # The three Install *-cli steps below install into this root
-        # (CARGO_INSTALL_ROOT). On a hit each `cargo install` finds its pinned
-        # package already installed and exits at once; a pin, feature or
-        # rustc change still reinstalls. Skipped on tags, so release assets
-        # are always built from fresh installs.
+        # On a hit each `cargo install` below finds its pinned package
+        # already installed and skips the build (it still fetches the git
+        # repo); a changed tag or feature set reinstalls. cargo does not
+        # reinstall for a newer rustc, so the key also hashes
+        # rust-toolchain.toml. Skipped on tags, so release assets are always
+        # built from fresh installs.
         if: steps.guard.outputs.relevant == 'true' && !startsWith(github.ref, 'refs/tags/')
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/sibling-clis
-          key: sibling-clis-${{ runner.os }}-${{ github.job }}-${{ hashFiles('.github/workflows/<FILE>') }}
-
-      - name: Put cached sibling CLIs on PATH
-        if: steps.guard.outputs.relevant == 'true'
-        run: echo "$RUNNER_TEMP/sibling-clis/bin" >> "$GITHUB_PATH"
+          key: sibling-clis-${{ steps.sibling.outputs.image }}-${{ github.job }}-${{ hashFiles('.github/workflows/<FILE>', 'rust-toolchain.toml') }}
 ```
 
 where `<FILE>` is the file's own name (`manual.yml`, `quickstart.yml`,
@@ -175,31 +199,42 @@ Do not change the `run:` lines. `sibling-pin-check.yml` scans those exact
 `cargo install --git ... --tag ...` lines; they must stay byte-identical.
 
 **K3. `manual-gui.yml`**:
-- In job `verify-examples`, directly above `- name: Install GUI-pinned CLI tier (md / ms / mk) into an isolated root`, insert:
+- In job `verify-examples`, directly above `      - name: Install GUI-pinned CLI tier (md / ms / mk) into an isolated root`, insert:
 
 ```yaml
+      - name: Read runner image for the cache key
+        id: img
+        run: echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
       - name: Restore cached GUI-pinned CLI tier
         # DOCBIN_ROOT below. On a hit the four `cargo install`s find their
-        # pinned packages already installed and exit at once; a pin change
-        # still reinstalls. Skipped on tags.
+        # pinned packages already installed and skip the build; a changed
+        # tag reinstalls. cargo does not reinstall for a newer rustc, so the
+        # key also hashes rust-toolchain.toml. Skipped on tags.
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/docbins
-          key: docbins-${{ runner.os }}-${{ hashFiles('.github/workflows/manual-gui.yml') }}
+          key: docbins-${{ steps.img.outputs.image }}-${{ hashFiles('.github/workflows/manual-gui.yml', 'rust-toolchain.toml') }}
 ```
 
-- In job `verify-examples-gui`, directly above `- name: Install pinned gui-render (headless, --no-default-features)`, insert:
+- In job `verify-examples-gui`, directly above `      - name: Install pinned gui-render (headless, --no-default-features)`, insert:
 
 ```yaml
+      - name: Read runner image for the cache key
+        id: img
+        run: echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
       - name: Restore cached GUI-pinned gui-render
         # GUIBIN_ROOT below. The pinned tag comes from pinned-upstream.toml,
-        # so the key hashes it too. Skipped on tags.
+        # so the key hashes it too. gui-render builds with
+        # RUSTUP_TOOLCHAIN=stable, and a new stable release does not rebuild
+        # it; only a changed tag does. Skipped on tags.
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/guibin
-          key: guibin-${{ runner.os }}-${{ hashFiles('.github/workflows/manual-gui.yml', 'docs/manual-gui/pinned-upstream.toml') }}
+          key: guibin-${{ steps.img.outputs.image }}-${{ hashFiles('.github/workflows/manual-gui.yml', 'docs/manual-gui/pinned-upstream.toml') }}
 ```
 
 No other change in `manual-gui.yml` beyond T, X and C. Its install steps
@@ -214,29 +249,65 @@ leave the following comment lines as they are.)
 
 `cross-tool-differential.yml` gets no K change (one install, low value).
 
+### G — the release-workflow generator (mnemonic-engrave only)
+
+The `release.yml` files of descriptor-mnemonic, mnemonic-secret, mnemonic-key,
+mnemonic-transaction and mnemonic-toolkit are generated by
+`mnemonic-engrave/scripts/release-workflows/emit.py` from the template in
+`gen.py` (review r1 I1; at base all five are byte-identical to its output).
+So T in those five files must also be made in the template, or the next
+`emit.py` run strips it. In the engrave worktree's
+`scripts/release-workflows/gen.py`, insert the line `    timeout-minutes: 60`
+directly below each of its three lines that start with `    runs-on:`
+(jobs `test`, `build`, `assemble`). Change nothing else in it. Do **not**
+run `emit.py`: it writes into the main checkouts under
+`/scratch/code/shibboleth/<repo>/`. The gate's `release-gen` mode runs the
+generator in memory instead.
+
+mnemonic-engrave's own `release.yml` is hand-written (not generated) and gets
+T and C like any other workflow.
+
+**Merge order:** the engrave PR and the five repos' PRs are consistent only as
+a set. Merge them the same day; nothing breaks in between (CI never runs
+`emit.py`), but the generator and its outputs disagree until all six are in.
+
 ## The gate (run before every commit that touches workflows)
 
-Copy `/scratch/code/shibboleth/_work/ci-hardening/ci-hardening-gate.py` into
-the toolkit worktree as `design/ci-hardening/ci-hardening-gate.py` (commit 1)
-and run it from there for every repo:
+The only authoritative gate is the toolkit worktree's
+`design/ci-hardening/ci-hardening-gate.py`. Run it from there; never copy it
+from anywhere else. For each repo `<name>` with worktree `<wt>` and base
+`<base>` from the table above:
 
 ```sh
-python3 <toolkit-worktree>/design/ci-hardening/ci-hardening-gate.py <worktree> <base>            # six repos
-python3 <toolkit-worktree>/design/ci-hardening/ci-hardening-gate.py <worktree> origin/master --toolkit   # toolkit
+G=/scratch/code/shibboleth/tk-worktrees/ci-hardening/design/ci-hardening/ci-hardening-gate.py
+python3 $G workflows <name> <wt> <base>
 ```
 
-It proves that, after the planned keys and steps are stripped, every workflow
-parses to exactly its base, and that every planned edit is present. Expected
-counts, from the base trees as of descriptor-mnemonic `957a0831`,
+It builds the expected parsed YAML of every workflow from the base by
+applying exactly the edits above (T, X, C, and K at their exact positions),
+and asserts each edited file equals it (types included, so `1` is not
+`true`). It also asserts the file set is unchanged, the counts equal this
+table, and that `git diff` removed no line except the one K4 comment line.
+For the generator, once the engrave and the five generated repos are edited:
+
+```sh
+python3 $G release-gen <engrave-wt> descriptor-mnemonic=<dm-wt> mnemonic-secret=<ms-wt> mnemonic-key=<mk-wt> mnemonic-transaction=<mt-wt> mnemonic-toolkit=<tk-wt>
+```
+
+It must print `identical` for all five. `python3 $G self-test /scratch/code/shibboleth/mnemonic-toolkit 4d703bb4`
+proves the gate itself: GREEN on the plan, RED on each of 11 known-bad
+mutations (review r1's M1–M8 and three more).
+
+Expected counts (bases as of descriptor-mnemonic `957a0831`,
 mnemonic-toolkit `4d703bb4`, mnemonic-gui `fc25b2b`, mnemonic-key `340d9da`,
 mnemonic-secret `8fef227`, mnemonic-engrave `21136827`, mnemonic-transaction
-`e0200b6` (if a base has moved, recount and report the new numbers rather than
-forcing these):
+`e0200b6`; if a base has moved and the gate goes RED on counts, STOP and
+report):
 
-| Repo | T | X | C | K-steps | K-env |
+| Repo | T | X | C | K_steps | K_env |
 |---|---|---|---|---|---|
 | descriptor-mnemonic | 16 | 0 | 4 | 0 | 0 |
-| mnemonic-toolkit | 42 | 6 | 12 | 8 | 9 |
+| mnemonic-toolkit | 42 | 6 | 12 | 10 | 9 |
 | mnemonic-gui | 8 | 0 | 2 | 0 | 0 |
 | mnemonic-key | 13 | 0 | 3 | 0 | 0 |
 | mnemonic-secret | 20 | 0 | 3 | 0 | 0 |
@@ -244,30 +315,34 @@ forcing these):
 | mnemonic-transaction | 4 | 0 | 1 | 0 | 0 |
 
 (T was machine-counted two ways, `grep -c '^    runs-on:'` and parsing the YAML
-for jobs with `runs-on`; both agree.)
+for jobs with `runs-on`; both agree. K_steps is 2 per K1 file plus 2 per K3
+job.)
 
-The gate does **not** cover comments, blank lines, quoting or key order, and it
-does not check the contents of the K steps beyond their names. Read
-`git diff` yourself for those before committing.
+NOT COVERED by the gate: the wording of added comments, blank lines and
+quoting. Read `git diff` yourself for those before committing.
 
 Also run `actionlint .github/workflows/*.yml` in each worktree before and after
 the edit, and confirm the after-output has no line the before-output lacks.
 
 ## Commits and PRs
 
-- mnemonic-toolkit, commit 1: `design/ci-hardening/PLAN_ci_hardening_2026-10-11.md`
-  (this file, as reviewed) and `design/ci-hardening/ci-hardening-gate.py`.
-  Review reports for this plan go to `design/agent-reports/` in their own
-  commits.
+- mnemonic-toolkit: the plan, the gate and the review reports are already
+  committed on the branch (one new commit per report and per fold). Add
+  nothing to `design/`.
 - Every repo, then one commit with the workflow edits, message:
 
   ```
   ci: job timeouts, cancel superseded PR runs[, texlive step timeout, cached sibling-CLI roots]
 
   Per design/ci-hardening/PLAN_ci_hardening_2026-10-11.md (mnemonic-toolkit).
-  <one line each for T / X / C / K, with the count>
+  T: <n> jobs, timeout-minutes 60
+  C: <n> workflows, cancel superseded PR runs
+  (toolkit also) X: 6 texlive steps, timeout-minutes 15
+  (toolkit also) K: 10 cache/PATH steps, CARGO_INSTALL_ROOT on 9 install steps
+  (engrave also) G: gen.py template gets the same 3 job timeouts
 
-  Gate: <paste the gate's two output lines>
+  Gate: <paste the gate's counts line and GATE line>
+  (in the engrave commit, also the release-gen lines)
   actionlint: no new findings
   ```
 
