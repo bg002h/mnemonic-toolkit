@@ -5991,3 +5991,28 @@ stops at one position per seed.
 composer-minted card reports `policy_id_stub_count: 2`; `mk decode` reports
 `policy_id_stubs: b02b4403, 9db5d8b6` -- the template and policy stubs the
 screen printed. Print the values.
+
+### `mr-root-procedures-doc` — the manual half of the thirteen root-mode procedures (companion of bg002h/mnemonic-refugium `mr-root-procedures-doc`)
+
+- **Surfaced:** 2026-10-08, refugium fold I build, FI-12.
+- **Where:** `docs/manual/src/40-cli-reference/45-mr.md`, "Root-mode procedures" (beside "If a seat's key is in doubt"), "Root-mode texts", `mr root`, `mr child`, and the `create` sections "Shapes" and "Root mode"; `docs/manual/tests/cli-subcommands.list` (`mr root`, `mr child`).
+- **What:** the chapter carries the thirteen procedures word for word as `mr --help` prints them (copied from the built binary's help, refugium `cc232588`, not from the procedures doc), every root-mode text, both root-plate labels and T24, the recommended-route sentence opening `mr create`, and the changed existing texts (the ms1 restore note and recipe step (4) with `ms decode -` and Ctrl-D, the display id on `address` and `member` lines, the per-shape signer-screen line, the `ms encode --phrase -` mint line). Procedure 9, "Recovery without mr", is the sheet the root-plate note points to as "also in the toolkit manual's `mr` chapter".
+- **Status:** `resolved` — `make lint` with `MR_BIN` set to the refugium `cc232588` debug `mr`: markdownlint, cspell, lychee and the `mr` flag-coverage pass. Lockstep remains: a refugium change to any of these texts or to `mr --help` must update the chapter (copy the help block again).
+- **Tier:** `v0.1-blocker` (the root phase)
+
+### `mr-published-roots-manual-lint` — the manual uses only the spec's root vectors (companion of bg002h/mnemonic-refugium `mr-published-roots-manual-lint`)
+
+- **Surfaced:** 2026-10-08, refugium fold I build, FI-12.
+- **Where:** `docs/manual/src/40-cli-reference/45-mr.md`; `docs/manual/tests/lint.sh` (the lint half).
+- **What:** the chapter prints no root at all: `mr` refuses the spec's own vectors (published roots are refused on every network) and the fixture roots must not appear in the manual, so every root-bearing example is a placeholder (`MR1_CARD`, `ROOT`, `PASS`) or a text with `<n>`. A scan of the chapter at the FI-12 commit found no 24-word run and no 237-character H/T string. The lint's refusal of an `mr root` example input or a letter-A 24-word phrase whose tail is not in `PUBLISHED_TEST_TAILS` is not built: it needs mr-codec's tails and the BIP-39 list, which `lint.sh` does not have.
+- **Why deferred:** the check wants `mr` itself (a `mr`-side scan of the manual, or a tails file the lint reads); owed with the refugium side's decision on where the list lives.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+
+### `mr-wipe-line-shells` — the history-off and wipe lines under bash, zsh and fish (manual half; refugium `mr-wipe-line-shells`)
+
+- **Surfaced:** 2026-10-08, refugium fold I build, FI-12.
+- **Where:** `docs/manual/src/40-cli-reference/45-mr.md`, "Root-mode procedures" (the paragraph after the thirteenth).
+- **What:** run here under bash 5.3.15, zsh 5.9.2 and fish 4.9.2 in a scratch `$HOME` on a pty. `unset HISTFILE` as the first command keeps every later command out of the history file in bash and in zsh (zsh with `INC_APPEND_HISTORY` or `SHARE_HISTORY` still saves the `unset HISTFILE` line itself). `fish --private` writes no history file; plain fish writes `~/.local/share/fish/fish_history`. A history file deleted while its bash or zsh is open comes back on exit with the session in it (so "close every shell first and only then delete" is right); in fish a deletion while open does not bring the earlier commands back; `history clear` in a new fish empties the file. Not checked: dash and a live system with no persistent storage (the lines say they keep none); the `mr` side of the "never pipe from `printf`/`echo`" line beyond the shell's own saving of the whole command line.
+- **Status:** `resolved` for bash, zsh and fish (the procedure's "(The zsh and fish forms are owed a check, `mr-wipe-line-shells`.)" parenthesis stays word for word in the chapter, since `mr --help` prints it; the refugium entry closes it on its side).
+- **Tier:** `cross-repo`
