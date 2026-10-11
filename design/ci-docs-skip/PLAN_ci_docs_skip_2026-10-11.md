@@ -222,8 +222,12 @@ with:
 In `mnemonic-engrave/scripts/release-workflows/gen.py`, job `test` of the
 template:
 
-- Directly below the checkout step (its last line is
-  `          ref: ${{{{ github.event.inputs.tag || github.ref }}}}`), insert:
+- Directly below the `test` job's checkout step, insert the block below.
+  The checkout's last line is
+  `          ref: ${{{{ github.event.inputs.tag || github.ref }}}}`. That line
+  occurs three times in gen.py (jobs `test`, `build`, `assemble`); use the
+  one inside `test`, the first. Each of the four lines named next also
+  occurs exactly once inside `test`; edit only that occurrence.
 
   ```
         - name: Self-test the docs-only guard
@@ -252,6 +256,10 @@ template:
 In `mnemonic-engrave/scripts/release-workflows/emit.py`, `TEST_SETUP["mt"]`:
 add the line `        if: steps.docs.outputs.docs_only != 'true'` directly
 below `      - name: Install the shells the history-purge tests drive`.
+
+(Build-gated here: these gen.py and emit.py edits, applied to scratch
+copies, make the generator's output parse equal to the gate's expected
+`release.yml` in all five repos.)
 
 Then make the **same** text change by hand in the `test` job of
 `release.yml` in descriptor-mnemonic, mnemonic-toolkit, mnemonic-key,
