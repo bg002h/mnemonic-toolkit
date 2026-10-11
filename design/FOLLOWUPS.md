@@ -6032,3 +6032,11 @@ screen printed. Print the values.
 - **What:** M-A (YAML 1.1 spellings such as `timeout-minutes: 6_0` pass the gate, and `6_0` also passes actionlint; an added-lines whitelist over `git diff` would close it); M-C (`release-gen` does not bound the generator's own diff: assert `git diff --numstat <base> -- scripts/release-workflows` is exactly three added lines in gen.py); N-a (the commit template's "10 cache/PATH steps" includes two image-reading steps); N-b (engrave's PR title does not name the generator); N-c ("the slowest job ever seen" should be "the slowest job measured"); N-d (the blank line after the technical-manual K1 insert is not stated). M-B's NOT COVERED wording was folded with r2 (a claim fix, not a behaviour change).
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless`
+
+### `ci-hardening-r3-deferred-minors` — Minor and Nits deferred from the CI hardening plan review r3
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-plan-review-r3.md` (the GREEN round).
+- **Where:** `design/ci-hardening/ci-hardening-gate.py` (`_Unique` loader, error messages, docstring).
+- **What:** M-1 (keys that differ only in YAML 1.1 typing, e.g. bare `on:` beside quoted `"on":`, or `1:` beside `'1':`, pass the duplicate check though GitHub reads them as one key; actionlint flags them; the plan's "a repeated mapping key is rejected" is broader than the check); Nits: a `<<` merge key now crashes the loader; error messages print the file name twice; a misleading duplicate message for sequence keys; the docstring says "exact positions" where the plan says "exact step order".
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
