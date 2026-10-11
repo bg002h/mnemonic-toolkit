@@ -6016,3 +6016,20 @@ screen printed. Print the values.
 - **What:** run here under bash 5.3.15, zsh 5.9.2 and fish 4.9.2 in a scratch `$HOME` on a pty. `unset HISTFILE` as the first command keeps every later command out of the history file in bash and in zsh (zsh with `INC_APPEND_HISTORY` or `SHARE_HISTORY` still saves the `unset HISTFILE` line itself). `fish --private` writes no history file; plain fish writes `~/.local/share/fish/fish_history`. A history file deleted while its bash or zsh is open comes back on exit with the session in it (so "close every shell first and only then delete" is right); in fish a deletion while open does not bring the earlier commands back; `history clear` in a new fish empties the file. Not checked: dash and a live system with no persistent storage (the lines say they keep none); the `mr` side of the "never pipe from `printf`/`echo`" line beyond the shell's own saving of the whole command line.
 - **Status:** `resolved` for bash, zsh and fish (the procedure's "(The zsh and fish forms are owed a check, `mr-wipe-line-shells`.)" parenthesis stays word for word in the chapter, since `mr --help` prints it; the refugium entry closes it on its side).
 - **Tier:** `cross-repo`
+
+### `manual-lint-trusts-version-string` — the flag-coverage lint takes the "pinned" release from `<bin> --version`, so a dev build that never bumped its version passes as the pin (tier: tooling; owning phase: none, ownerless residue)
+
+- **Surfaced:** 2026-10-11, PR #100 review round 1 (M1, N1), `design/agent-reports/mk-cli-lint-pr100-review-round-1.md`.
+- **Where:** `docs/manual/tests/lint.sh` (`PINNED[$bin]`, taken from `<bin> --version`); `.github/workflows/manual.yml:110` (the real pin: `--tag mk-cli-v0.13.0`).
+- **What:** a local `mk` that was a path build of mnemonic-key `main` still reported `0.13.0`, so `make lint` ran as if it were the tagged release and reported 10 "stale marker" FAILs on a master that is green in CI. A first PR (#100, closed unmerged) removed the markers on that false premise. mk-cli closed the version hazard at source (mnemonic-key `1b8c524`, F-677); the lint still has no check of its own. Provenance of any lint result attributed to "the pinned binary" should be stated (`~/.cargo/.crates.toml` source), not assumed.
+- **Fix options:** the lint WARNs when a binary's `--version` disagrees with the tag pinned in `manual.yml`; or the Makefile `lint` help says local runs must use the tagged binaries (`MK_BIN=<tagged mk>`).
+- **Status:** `deferred-minor`
+- **Tier:** `tooling`
+
+### `mk-cli-pin-bump-checklist` — what the PR that bumps the manual's mk-cli pin past 0.13.0 must do (tier: build; owning phase: the mk-cli pin-bump PR)
+
+- **Surfaced:** 2026-10-11, PR #100 review round 1 (C1, I1, M2) and Opus consult (`design/agent-reports/mk-cli-lint-consult-opus-1.md`).
+- **Where:** `docs/manual/src/40-cli-reference/44-mk-cli.md` (the ten `(unreleased: mk-cli after 0.13.0: …)` rows at lines 43-46, 134, 183, 241, 412, 503, 553, and the marker-convention paragraph at lines 16-18); `docs/manual/ci/doc-flag-lint.test.sh` (mutations R2, R4, R6, R7 anchor on `(unreleased: mk-cli after 0.13.0: --in)` and `(… --keys)`); `.github/workflows/manual.yml:110`; `scripts/install.sh`; `44-mk-cli.md:12`.
+- **What:** the markers are correct today and must stay until the pin moves. The PR that moves the pin to an mk-cli release shipping `--from-md1-set`, `--keys`, `--in`, `--out` must in the same change: (1) remove the ten markers (and re-mark any flag still unreleased at the new pin as `after <new pin>`); (2) re-anchor R2, R4, R6 and R7 on a marker still live at the new pin, or inject a synthetic marked row into the copied `src/` as R1 does for an unmarked row; (3) move the pin at `manual.yml:110`, `scripts/install.sh` and `44-mk-cli.md:12`; (4) drop or reword the marker-convention paragraph if no marker remains; (5) run `make lint` and `ci/doc-flag-lint.test.sh` with the TAGGED binary, not a local dev build (e.g. `MK_BIN=/scratch/code/shibboleth/mk-tag-rv/root/bin/mk` for the current pin). Changing `.github/` needs Brian's typed go-ahead naming the change.
+- **Status:** `open`
+- **Tier:** `build`
