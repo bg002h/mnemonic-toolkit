@@ -267,6 +267,10 @@ generator in memory instead.
 mnemonic-engrave's own `release.yml` is hand-written (not generated) and gets
 T and C like any other workflow.
 
+**Work order:** edit, gate and commit the six other repos first, in any
+order. Do mnemonic-engrave last, and run `release-gen` immediately before its
+commit (it needs all five generated repos already edited).
+
 **Merge order:** the engrave PR and the five repos' PRs are consistent only as
 a set. Merge them the same day; nothing breaks in between (CI never runs
 `emit.py`), but the generator and its outputs disagree until all six are in.
@@ -284,9 +288,9 @@ python3 $G workflows <name> <wt> <base>
 ```
 
 It builds the expected parsed YAML of every workflow from the base by
-applying exactly the edits above (T, X, C, and K at their exact positions),
+applying exactly the edits above (T, X, C, and K in their exact step order),
 and asserts each edited file equals it (types included, so `1` is not
-`true`). It also asserts the file set is unchanged, the counts equal this
+`true`; a repeated mapping key is rejected). It also asserts the file set is unchanged, the counts equal this
 table, and that `git diff` removed no line except the one K4 comment line.
 For the generator, once the engrave and the five generated repos are edited:
 
@@ -295,8 +299,8 @@ python3 $G release-gen <engrave-wt> descriptor-mnemonic=<dm-wt> mnemonic-secret=
 ```
 
 It must print `identical` for all five. `python3 $G self-test /scratch/code/shibboleth/mnemonic-toolkit 4d703bb4`
-proves the gate itself: GREEN on the plan, RED on each of 11 known-bad
-mutations (review r1's M1–M8 and three more).
+proves the gate itself: GREEN on the plan, RED on each of 14 known-bad
+mutations (review r1's M1–M8, with three variants of M6, and four more).
 
 Expected counts (bases as of descriptor-mnemonic `957a0831`,
 mnemonic-toolkit `4d703bb4`, mnemonic-gui `fc25b2b`, mnemonic-key `340d9da`,
@@ -318,8 +322,11 @@ report):
 for jobs with `runs-on`; both agree. K_steps is 2 per K1 file plus 2 per K3
 job.)
 
-NOT COVERED by the gate: the wording of added comments, blank lines and
-quoting. Read `git diff` yourself for those before committing.
+NOT COVERED by the gate: the wording of added comments, blank lines,
+quoting, YAML 1.1 spellings (`6_0`, `yes`), key order inside a mapping, and
+where added lines sit relative to existing comments (C above `jobs:`, `env:`
+above `run:`, K1 above the technical-manual section comment). Read `git diff`
+yourself for those before committing.
 
 Also run `actionlint .github/workflows/*.yml` in each worktree before and after
 the edit, and confirm the after-output has no line the before-output lacks.

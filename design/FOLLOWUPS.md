@@ -6024,3 +6024,11 @@ screen printed. Print the values.
 - **What:** M-5 (the gate's base ref can move after a fetch: pass `git merge-base HEAD <base>` to avoid a spurious RED); M-6 (concurrency-cancelled manual-gui PR runs show as failed, since the `manual-gui` aggregator job runs `if: always()`; `if: ${{ !cancelled() }}` would fix it); M-7 (`actions/cache@v4` adds a "forced to run on Node.js 24" warning to each doc job that gains a cache step); N-2 (`shellcheck` is not installed here, so actionlint does not lint `run:` scripts); N-3 (the `ci/` branch prefix gives each PR uncancellable push runs too, and the plan's cache-hit measurement does not say which run to re-run); N-4 (fixed with the r1 fold: the commit template now names K's two counts). N-1 (the gate accepted `cancel-in-progress: 1`) was fixed by the r1 gate rewrite, which compares types.
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless`
+
+### `ci-hardening-r2-deferred-minors` — Minors and Nits deferred from the CI hardening plan review r2
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-plan-review-r2.md`.
+- **Where:** `design/ci-hardening/ci-hardening-gate.py`, `design/ci-hardening/PLAN_ci_hardening_2026-10-11.md`.
+- **What:** M-A (YAML 1.1 spellings such as `timeout-minutes: 6_0` pass the gate, and `6_0` also passes actionlint; an added-lines whitelist over `git diff` would close it); M-C (`release-gen` does not bound the generator's own diff: assert `git diff --numstat <base> -- scripts/release-workflows` is exactly three added lines in gen.py); N-a (the commit template's "10 cache/PATH steps" includes two image-reading steps); N-b (engrave's PR title does not name the generator); N-c ("the slowest job ever seen" should be "the slowest job measured"); N-d (the blank line after the technical-manual K1 insert is not stated). M-B's NOT COVERED wording was folded with r2 (a claim fix, not a behaviour change).
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
