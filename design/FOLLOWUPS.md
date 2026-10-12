@@ -6040,3 +6040,11 @@ screen printed. Print the values.
 - **What:** the r3 report's two Minors and two Nits on the probe text; see the report for each.
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless`
+
+### `ci-docs-skip-whole-diff-r1-deferred-minors` — Minors and Nits deferred from the docs-skip whole-diff review r1
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-docs-skip-whole-diff-review.md` (C1 folded separately).
+- **Where:** the six `ci/docs-skip` PRs (dm #37, tk #103, mk #13, ms #12, mt #3, engrave #19) and refugium #82.
+- **What:** M1 (`test (ubuntu-latest)` names a job in both rust.yml and release.yml in toolkit and secret), M2 (a mnemonic-key ci.yml comment contradicts the new top-level permissions), M3 (refugium README PATH line: `.env` must end in a newline; `.Replace` is case-sensitive and silent on no match), M4 (a future emit.py `TEST_SETUP` entry needs its `if:` by hand), and two Nits; see the report for each.
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
