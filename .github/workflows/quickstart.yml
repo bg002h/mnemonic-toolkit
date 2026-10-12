@@ -25,9 +25,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel a pull request's superseded run when a newer commit is pushed to it.
+# Every other event gets a group of its own (the run id), so pushes, tags,
+# schedules and dispatches are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   quickstart:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
     env:
@@ -47,6 +55,7 @@ jobs:
         run: bash ci/doc-gate-guard.sh --book docs/quickstart --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/quickstart\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
 
       - name: Install pandoc + texlive
+        timeout-minutes: 15
         if: steps.guard.outputs.relevant == 'true'
         # No chromium / mermaid-filter / mermaid-cli — the build runs
         # MERMAID_FILTER=skip and consumes the checked-in figures/cache/
@@ -84,12 +93,39 @@ jobs:
             | sudo tar -xz --strip-components=1 -C /usr/local/bin "lychee-${LARCH}/lychee"
           sudo chmod +x /usr/local/bin/lychee
 
+      - name: Put cached sibling CLIs on PATH
+        # The three Install *-cli steps below install into
+        # $RUNNER_TEMP/sibling-clis (their CARGO_INSTALL_ROOT); this puts its
+        # bin/ first on PATH. It also reads the runner image name for the
+        # cache key, so a cache built on one image is never restored on
+        # another.
+        id: sibling
+        if: steps.guard.outputs.relevant == 'true'
+        run: |
+          echo "$RUNNER_TEMP/sibling-clis/bin" >> "$GITHUB_PATH"
+          echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+
+      - name: Restore cached sibling CLIs
+        # On a hit each `cargo install` below finds its pinned package
+        # already installed and skips the build (it still fetches the git
+        # repo); a changed tag or feature set reinstalls. cargo does not
+        # reinstall for a newer rustc, so the key also hashes
+        # rust-toolchain.toml. Skipped on tags, so release assets are always
+        # built from fresh installs.
+        if: steps.guard.outputs.relevant == 'true' && !startsWith(github.ref, 'refs/tags/')
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sibling-clis
+          key: sibling-clis-${{ steps.sibling.outputs.image }}-${{ github.job }}-${{ hashFiles('.github/workflows/quickstart.yml', 'rust-toolchain.toml') }}
+
       - name: Install mk-cli
         if: steps.guard.outputs.relevant == 'true'
         # Use package-name selector (`mk-cli`) instead of `--bin mk`: the
         # mnemonic-key workspace ships multiple binaries (mk-codec's
         # gen_mk_vectors + mk-cli's mk), and cargo refuses --bin disambig
         # against a multi-binary workspace.
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 mk-cli
 
       - name: Install md-cli
@@ -97,11 +133,15 @@ jobs:
         # Mirrors the mk-cli install pattern above. Use package-name selector
         # (`md-cli`); the descriptor-mnemonic workspace ships multiple binaries.
         # `--features cli-compiler` matches scripts/install.sh's component pin.
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.3 md-cli --features cli-compiler
 
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'
         # Mirrors the mk-cli + md-cli install patterns above.
+        env:
+          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.1 ms-cli
 
       - name: Build mnemonic binary (debug)

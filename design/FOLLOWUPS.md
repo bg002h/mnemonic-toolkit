@@ -6040,3 +6040,36 @@ screen printed. Print the values.
   Changing `.github/` needs Brian's typed go-ahead naming the change.
 - **Status:** `open`
 - **Tier:** `build`
+
+### `ci-hardening-r1-deferred-minors` — Minors and Nits deferred from the CI hardening plan review r1
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-plan-review-r1.md`.
+- **Where:** `design/ci-hardening/PLAN_ci_hardening_2026-10-11.md`, `design/ci-hardening/ci-hardening-gate.py`, `.github/workflows/manual-gui.yml`.
+- **What:** M-5 (the gate's base ref can move after a fetch: pass `git merge-base HEAD <base>` to avoid a spurious RED); M-6 (concurrency-cancelled manual-gui PR runs show as failed, since the `manual-gui` aggregator job runs `if: always()`; `if: ${{ !cancelled() }}` would fix it); M-7 (`actions/cache@v4` adds a "forced to run on Node.js 24" warning to each doc job that gains a cache step); N-2 (`shellcheck` is not installed here, so actionlint does not lint `run:` scripts); N-3 (the `ci/` branch prefix gives each PR uncancellable push runs too, and the plan's cache-hit measurement does not say which run to re-run); N-4 (fixed with the r1 fold: the commit template now names K's two counts). N-1 (the gate accepted `cancel-in-progress: 1`) was fixed by the r1 gate rewrite, which compares types.
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
+
+### `ci-hardening-r2-deferred-minors` — Minors and Nits deferred from the CI hardening plan review r2
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-plan-review-r2.md`.
+- **Where:** `design/ci-hardening/ci-hardening-gate.py`, `design/ci-hardening/PLAN_ci_hardening_2026-10-11.md`.
+- **What:** M-A (YAML 1.1 spellings such as `timeout-minutes: 6_0` pass the gate, and `6_0` also passes actionlint; an added-lines whitelist over `git diff` would close it); M-C (`release-gen` does not bound the generator's own diff: assert `git diff --numstat <base> -- scripts/release-workflows` is exactly three added lines in gen.py); N-a (the commit template's "10 cache/PATH steps" includes two image-reading steps); N-b (engrave's PR title does not name the generator); N-c ("the slowest job ever seen" should be "the slowest job measured"); N-d (the blank line after the technical-manual K1 insert is not stated). M-B's NOT COVERED wording was folded with r2 (a claim fix, not a behaviour change).
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
+
+### `ci-hardening-r3-deferred-minors` — Minor and Nits deferred from the CI hardening plan review r3
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-plan-review-r3.md` (the GREEN round).
+- **Where:** `design/ci-hardening/ci-hardening-gate.py` (`_Unique` loader, error messages, docstring).
+- **What:** M-1 (keys that differ only in YAML 1.1 typing, e.g. bare `on:` beside quoted `"on":`, or `1:` beside `'1':`, pass the duplicate check though GitHub reads them as one key; actionlint flags them; the plan's "a repeated mapping key is rejected" is broader than the check); Nits: a `<<` merge key now crashes the loader; error messages print the file name twice; a misleading duplicate message for sequence keys; the docstring says "exact positions" where the plan says "exact step order".
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
+
+### `ci-hardening-whole-diff-deferred-minors` — Minors and Nits deferred from the CI hardening whole-diff review
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-whole-diff-review.md` (0 Critical, 0 Important).
+- **Where:** `.github/workflows/manual.yml`, `quickstart.yml`, `technical-manual.yml` (K1 cache comment); `examples.yml:87`, `manual-gui.yml:111`; the seven PR bodies.
+- **What:** Minor: the K1 comment "a cache built on one image is never restored on another" overstates, since `$ImageOS` is the OS family (`ubuntu24`), not the weekly image build; reword to "a cache built on one OS image (e.g. ubuntu22) is never restored on another (ubuntu24)". Minor: the #102 body claimed workflow-only files (corrected in the body before merge). Nits: the X line separates `- name:` from its explanatory comment in `examples.yml`/`manual-gui.yml`; the bodies' "24.2 min across the last 300 runs" conflates two measurements; the plan link points at the branch, not `master`; "on 1 pull-request workflows" grammar; #102 body's 0.29 s figure is the local hit (CI: 8/3/2 s) and its K bullet should name the 9 Install mk/md/ms-cli steps.
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
+- **Companion:** the refugium README Minor is filed as `ci-windows-runner-2-path` in `bg002h/mnemonic-refugium` `design/FOLLOWUPS.md`.

@@ -33,6 +33,7 @@ jobs:
   self-pin-matches-tag:
     name: install.sh self-pin matches tag
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
 

@@ -26,6 +26,7 @@ jobs:
   man-tarball:
     if: startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v')
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: write
     env:
@@ -104,6 +105,7 @@ jobs:
   # updated. Two hand-copies of one pin is the defect; this job is the copy.
   pin:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     outputs:
       md_url: ${{ steps.p.outputs.url }}
       md_rev: ${{ steps.p.outputs.rev }}
@@ -192,6 +194,7 @@ jobs:
     name: musl-binary (${{ matrix.target }})
     needs: [pin, repro]
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     # `contents: write` to upload release assets; `packages: read` so the
     # x86_64 (musl_native) leg can authenticate to GHCR and `docker pull` the
     # private-by-default BUILT repro image (the re-homed build runs INSIDE it).

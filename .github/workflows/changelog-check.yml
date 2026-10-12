@@ -23,6 +23,7 @@ jobs:
   changelog-has-section:
     name: CHANGELOG.md has a section for this tag
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
       - name: Verify CHANGELOG section exists for tag
