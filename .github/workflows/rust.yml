@@ -26,34 +26,17 @@ on:
     #
     # enforce_admins is false here DELIBERATELY — the maintainer's own escape
     # hatch — so this path is what AUTOMATION uses; the no-bypass rule binds
-    # agents, not the human. The `paths:` filter below is UNCHANGED and
-    # deliberate: a staged commit must touch a gated path to build, which every
-    # code change does.
+    # agents, not the human. There is no `paths:` filter: every job runs and
+    # reports, and ci/docs-only.sh skips the build and test steps when every
+    # changed file is documentation (ci/docs-only-paths.txt).
     branches: [main, master, 'ci/**']
-    paths:
-      - 'crates/**'
-      # `.gitattributes` is gated because it CHANGES CHECKED-OUT BYTES and so can
-      # change test outcomes. Measured 2026-08-27: the shared conformance corpus
-      # lacked an `eol=lf` rule, so Windows checkouts CRLF-converted it and three
-      # windows-latest jobs went RED on a byte-level hash while every other
-      # platform stayed green. A commit fixing that touches no gated path under
-      # the old filter, so the fix itself could not earn its required contexts.
-      - '.gitattributes'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - '.github/workflows/rust.yml'
-      # The install-sh-harnesses job tests scripts/install.sh; without these a
-      # push that changes only the installer never ran its own harnesses.
-      - 'scripts/install.sh'
-      - 'scripts/install-*.test.sh'
   pull_request:
     # NO paths — this workflow's `test`/`clippy` contexts are REQUIRED status
     # checks (branch protection), and a path-filtered required check wedges a
     # docs-only PR forever at "Expected — waiting for status" (mirror
     # examples.yml's ruling). Running the full matrix on a docs-only PR is
-    # green (unchanged code) — the cost is CI minutes, not correctness. The
-    # push-side path filter above keeps code-push efficiency; docs-only DIRECT
-    # pushes to master are covered by admin bypass (enforce_admins:false).
+    # green (unchanged code). ci/docs-only.sh now skips the build and test
+    # steps of a documentation-only change on push and pull_request alike.
 
 # Cancel a pull request's superseded run when a newer commit is pushed to it.
 # Every other event gets a group of its own (the run id), so pushes, tags,
@@ -61,6 +44,10 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: read
 
 jobs:
   # Dedicated rustfmt gate, pinned to a CANONICAL formatter version (1.95.0,
@@ -106,12 +93,24 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: fmt (pinned 1.95.0)
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
       - name: Install Rust 1.95.0 (canonical fmt toolchain)
+        if: steps.docs.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.95.0
           components: rustfmt
       - name: Rustfmt (pinned 1.95.0, overriding rust-toolchain.toml)
+        if: steps.docs.outputs.docs_only != 'true'
         # Whole workspace, no exclusions, plain exit code. `--all` handles each
         # crate's edition automatically. mlock.rs is included like every other
         # file now that it is formatted by this same pinned formatter on both
@@ -128,6 +127,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: test (${{ matrix.os }})
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
 
       # FOLLOWUP cargo-lock-version-bump-lockstep: fail CI when Cargo.lock is
       # stale relative to Cargo.toml (e.g. a version bump that forgot to
@@ -135,9 +144,11 @@ jobs:
       # need to change the committed lock; `cargo metadata` resolves without
       # compiling, so this is a fast fail-fast guard before the build.
       - name: Verify Cargo.lock is up to date (--locked guard)
+        if: steps.docs.outputs.docs_only != 'true'
         run: cargo metadata --locked --format-version 1 > /dev/null
 
       - name: Show ulimit -l (diagnostic)
+        if: steps.docs.outputs.docs_only != 'true'
         run: ulimit -l || true
 
       # F-696: cargo nextest runs the test binaries CONCURRENTLY; `cargo test`
@@ -145,12 +156,14 @@ jobs:
       # downloaded archive against the sha256 in its own manifest, and
       # `fallback: none` refuses the unverified cargo-binstall path.
       - name: Install cargo-nextest (pinned, checksum-verified)
+        if: steps.docs.outputs.docs_only != 'true'
         uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
         with:
           tool: cargo-nextest@0.9.146
           fallback: none
 
       - name: cargo build --tests
+        if: steps.docs.outputs.docs_only != 'true'
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
@@ -158,6 +171,7 @@ jobs:
           cargo build --tests --workspace
 
       - name: cargo nextest run (default tests; G2.1 #[ignore]-gated)
+        if: steps.docs.outputs.docs_only != 'true'
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
             ulimit -l 65536 || true
@@ -172,9 +186,11 @@ jobs:
 
       # nextest does not run doc-tests; this step keeps them.
       - name: cargo test --doc
+        if: steps.docs.outputs.docs_only != 'true'
         run: cargo test --workspace --doc
 
       - name: G2.1 eperm fault injection (fresh subprocess; env set before cargo)
+        if: steps.docs.outputs.docs_only != 'true'
         # Per SPEC §4 P2 + plan P2.T2: cfg(test) FAIL_MODE injection is only
         # reachable from library unit tests (cfg(test) is per-crate-not-per-
         # build, RFC 1604). G2.1 is #[ignore]-gated and filtered to the
@@ -189,6 +205,7 @@ jobs:
           cargo test -p mnemonic-toolkit --lib mlock::tests::g2_1 -- --include-ignored
 
       - name: G2.3-debug einval debug_assert (fresh subprocess)
+        if: steps.docs.outputs.docs_only != 'true'
         # Per SPEC §6 G2.3: debug builds trip debug_assert when mlock returns
         # EINVAL under fault injection. #[should_panic(expected = "EINVAL")]
         # asserts the panic message contains the substring.
@@ -201,6 +218,7 @@ jobs:
           cargo test -p mnemonic-toolkit --lib mlock::tests::g2_3 -- --include-ignored
 
       - name: G2.4 off control (fresh subprocess)
+        if: steps.docs.outputs.docs_only != 'true'
         # Per SPEC §6 G2.4: control case — FAIL_MODE=off must not synthesize
         # failures. Verifies the wrapper does not increment failure_count
         # spuriously in a healthy ulimit environment.
@@ -227,23 +245,39 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: "install.sh harnesses (man-step + MSRV guard)"
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
       - name: Install pinned Rust toolchain
+        if: steps.docs.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@1.85.0
       - name: Build mnemonic (man-step canary needs a real binary)
+        if: steps.docs.outputs.docs_only != 'true'
         run: cargo build --bin mnemonic
       - name: MSRV-guard harness
+        if: steps.docs.outputs.docs_only != 'true'
         # Self-contained: stubs rustc/cargo on PATH, asserts warn+skip+exit 0 on
         # an old toolchain and no spurious warning on a new one. No network.
         run: sh scripts/install-msrv-guard.test.sh
       - name: man-step harness
+        if: steps.docs.outputs.docs_only != 'true'
         run: sh scripts/install-man-step.test.sh
       # F-676: the binary path. Offline (stub curl + fixture release): a good
       # archive installs, one flipped byte / an unlisted asset / no SHA256SUMS
       # are refused with nothing installed, a platform with no binary falls
       # back to cargo at the pinned tag, and no crates.io path remains.
       - name: Install minisign (the harnesses sign fixtures with throwaway keys)
+        if: steps.docs.outputs.docs_only != 'true'
         run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
       - name: install-verify harness (offline)
+        if: steps.docs.outputs.docs_only != 'true'
         run: sh scripts/install-verify.test.sh
       # Release signatures: a SHA256SUMS* file must verify against the pinned
       # minisign key before any digest in it is trusted. Offline, with
@@ -251,16 +285,19 @@ jobs:
       # tampered, wrong-key, missing before/at/after the first-signed pin,
       # minisign absent (said once), and --require-signature.
       - name: install-signature harness (offline)
+        if: steps.docs.outputs.docs_only != 'true'
         run: sh scripts/install-signature.test.sh
       # install-assets.test.sh's signed-pin gate (a pinned release that
       # publishes a .minisig must have first_signed filled and <= the pin),
       # exercised offline, since no signed release exists yet to hit it live.
       - name: install-assets signed-pin gate (offline)
+        if: steps.docs.outputs.docs_only != 'true'
         run: sh scripts/install-assets-gate.test.sh
       # Every platform mapping names a real asset of the PINNED release, listed
       # in exactly one of its SHA256SUMS files. Network (plain HTTPS). This is
       # what breaks when a pin moves to a release that names assets differently.
       - name: install-assets check (every platform mapping, against the pinned releases)
+        if: steps.docs.outputs.docs_only != 'true'
         run: sh scripts/install-assets.test.sh
 
   test-release-mlock-einval:
@@ -276,9 +313,21 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: "test (release, ubuntu-latest, mlock einval)"
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
       - name: Show ulimit -l (diagnostic)
+        if: steps.docs.outputs.docs_only != 'true'
         run: ulimit -l || true
       - name: G2.3-release einval soft-fail
+        if: steps.docs.outputs.docs_only != 'true'
         env:
           MNEMONIC_TEST_MLOCK_FAIL_MODE: "einval"
         run: |
@@ -291,13 +340,25 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: miri (mlock unsafe)
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
 
       - name: Install nightly + miri component
+        if: steps.docs.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: miri
 
       - name: "cargo +nightly miri test mlock::"
+        if: steps.docs.outputs.docs_only != 'true'
         # Per SPEC §6 G4.b: Miri verifies the Rust-side safety of mlock's
         # 2 unsafe blocks (libc::mlock in pin_pages_for; libc::munlock in
         # PinnedPageRange::drop). cfg(miri) shims stub the syscalls.
@@ -309,8 +370,22 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Self-test the docs-only guard
+        shell: bash
+        run: bash ci/docs-only.test.sh
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: clippy
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
 
       - name: cargo clippy --all-targets -- -D warnings
+        if: steps.docs.outputs.docs_only != 'true'
         run: cargo clippy --all-targets -- -D warnings
 
   lib-cross-platform:
@@ -350,7 +425,18 @@ jobs:
             runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: lib cross-platform check (${{ matrix.target }}, ${{ matrix.runs-on }})
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
       - name: install-rust pinned toolchain
+        if: steps.docs.outputs.docs_only != 'true'
         # Use the toolkit's pinned `rust-toolchain.toml` channel (1.85.0)
         # so the cross-platform check matches the version used by the
         # primary [ubuntu, macos] test matrix.
@@ -365,10 +451,11 @@ jobs:
         # but doesn't install it by default. windows-latest doesn't need
         # an explicit cross-compiler (MSVC is preinstalled); the freebsd row
         # needs none either (cargo check stops before link).
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        if: (matrix.target == 'aarch64-unknown-linux-gnu') && steps.docs.outputs.docs_only != 'true'
         shell: bash
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
       - name: cargo check --lib (cross-platform)
+        if: steps.docs.outputs.docs_only != 'true'
         # Compile-only (no test execution); the bin target is intentionally
         # excluded — `mnemonic` CLI is unix-only by virtue of mlock.
         shell: bash
@@ -502,19 +589,32 @@ jobs:
             arm_native: true
     steps:
       - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: musl build+test (${{ matrix.target }})
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
       - name: install-rust pinned toolchain
+        if: steps.docs.outputs.docs_only != 'true'
         uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
       # Both rows build natively, so both need musl-gcc for the vendored
       # libsecp256k1 (on the arm64 runner it targets aarch64-musl).
       - name: install musl-tools
+        if: steps.docs.outputs.docs_only != 'true'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
       # F-696: cargo nextest runs the test binaries CONCURRENTLY; `cargo test`
       # runs them one at a time. Pinned by commit SHA; install-action checks the
       # downloaded archive against the sha256 in its own manifest, and
       # `fallback: none` refuses the unverified cargo-binstall path.
       - name: Install cargo-nextest (pinned, checksum-verified)
+        if: steps.docs.outputs.docs_only != 'true'
         uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
         with:
           tool: cargo-nextest@0.9.146
@@ -522,7 +622,7 @@ jobs:
       # No doc-test step on either row: with an explicit --target, cargo test
       # never ran doc-tests here either (0 "Doc-tests" lines in the logs).
       - name: cargo nextest run --target x86_64-musl (native, full package suite)
-        if: ${{ matrix.musl_native }}
+        if: (matrix.musl_native) && steps.docs.outputs.docs_only != 'true'
         env:
           CC_x86_64_unknown_linux_musl: musl-gcc
         run: |
@@ -538,7 +638,7 @@ jobs:
       # move. Every golden/integration test still runs. No
       # `--include-ignored`, so the `g2_*` fault-injection tests stay skipped.
       - name: cargo nextest run --target aarch64-musl (native arm64; output goldens, mlock skipped)
-        if: ${{ matrix.arm_native }}
+        if: (matrix.arm_native) && steps.docs.outputs.docs_only != 'true'
         env:
           CC_aarch64_unknown_linux_musl: musl-gcc
         run: cargo nextest run --release --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast -- --skip mlock --skip g1_
