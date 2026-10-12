@@ -8,6 +8,8 @@
 #   4. flag-coverage  (every CLI flag in cli-subcommands.list is documented)
 #   5. glossary-coverage (every defined term has a glossary entry)
 #   6. index bidirectional (\index{X} markers ↔ 69-index-table.md entries)
+#   7. root-shaped (no root-shaped text in 45-mr.md: tests/root-shaped.sh, after
+#      its self-test tests/root-shaped-test.sh)
 #
 # Called from the Makefile as `make lint`. Args (NAME=value):
 #   SRC_DIR       — absolute path to src/
@@ -42,7 +44,7 @@ warn() { printf '[lint] WARN: %s\n' "$1" >&2; }
 err()  { printf '[lint] FAIL: %s\n' "$1" >&2; fail=1; }
 
 # 1. markdownlint
-step "1/6 markdownlint"
+step "1/7 markdownlint"
 if command -v markdownlint-cli2 >/dev/null; then
   markdownlint-cli2 "$SRC_DIR/**/*.md" || err "markdownlint reported issues"
 else
@@ -50,7 +52,7 @@ else
 fi
 
 # 2. cspell
-step "2/6 cspell"
+step "2/7 cspell"
 if command -v cspell >/dev/null; then
   cspell --no-progress "$SRC_DIR/**/*.md" || err "cspell reported issues"
 else
@@ -58,7 +60,7 @@ else
 fi
 
 # 3. lychee
-step "3/6 lychee"
+step "3/7 lychee"
 if command -v lychee >/dev/null; then
   lychee --offline --no-progress "$SRC_DIR" || err "lychee reported issues"
 else
@@ -109,7 +111,7 @@ fi
 # flag; its version is not the pin (the pin moved -- re-check the row); it
 # names a flag the row does not document; or a listed flag is now defined by
 # the pinned binary (the release shipped -- drop it from the marker).
-step "4/6 flag-coverage"
+step "4/7 flag-coverage"
 LIST="$TESTS_DIR/cli-subcommands.list"
 CLI_REF_DIR="$SRC_DIR/40-cli-reference"
 
@@ -302,7 +304,7 @@ else
 fi
 
 # 5. glossary-coverage
-step "5/6 glossary-coverage"
+step "5/7 glossary-coverage"
 GLOSSARY="$SRC_DIR/60-appendices/61-glossary.md"
 if [ -f "$GLOSSARY" ]; then
   # Token list — keep deliberately small; expand by curating, not by regex.
@@ -316,7 +318,7 @@ else
 fi
 
 # 6. index bidirectional
-step "6/6 index bidirectional"
+step "6/7 index bidirectional"
 INDEX_TABLE="$SRC_DIR/60-appendices/69-index-table.md"
 if [ -f "$INDEX_TABLE" ]; then
   # Every \index{TERM} in src/ must be in 69-index-table.md, and vice versa.
@@ -341,6 +343,26 @@ if [ -f "$INDEX_TABLE" ]; then
   done <<<"$tbl_terms"
 else
   warn "$INDEX_TABLE missing; skipping index bidirectional check"
+fi
+
+# 7. root-shaped text
+#
+# Refugium spec §5c *Root mode*, "Published roots" (batch 1, item (3)): the
+# `mr` chapter shows no root at all, so any root-shaped text in it fails: a
+# run of 22 or more BIP-39 English words (or their four-letter prefixes), 237
+# or more coin flips, 92 or more dice rolls, or an ms1 string of a 32-byte
+# secret. The rules, and what they
+# do not cover, are in tests/root-shaped.sh; its self-test runs first, so a
+# scanner that cannot fail fails here.
+step "7/7 root-shaped"
+MR_CHAPTER="$SRC_DIR/40-cli-reference/45-mr.md"
+if ! bash "$TESTS_DIR/root-shaped-test.sh"; then
+  err "tests/root-shaped-test.sh failed: the root-shaped scanner is broken"
+elif [ ! -f "$MR_CHAPTER" ]; then
+  err "$MR_CHAPTER missing: the root-shaped check has nothing to scan"
+else
+  bash "$TESTS_DIR/root-shaped.sh" "$MR_CHAPTER" \
+    || err "root-shaped text in $(basename "$MR_CHAPTER"): the chapter shows no root; use a placeholder (ROOT, PASS, MR1_CARD)"
 fi
 
 if [ "$fail" -ne 0 ]; then
