@@ -112,10 +112,11 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Self-test the docs-only guard
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event.inputs.tag == ''
         shell: bash
         run: bash ci/docs-only.test.sh
       - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        if: github.event.inputs.tag == ''
         id: docs
         shell: bash
         env:
