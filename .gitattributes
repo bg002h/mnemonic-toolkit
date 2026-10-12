@@ -7,3 +7,7 @@
 # assertion while Linux, macOS, musl and FreeBSD stayed green.
 # MUST sort after any `* text=auto` (last-match-wins per attribute).
 design/display-grouping-vectors.tsv text eol=lf
+# ci/docs-only*: LF on every OS (Git Bash cannot run a CRLF script).
+ci/docs-only.sh text eol=lf
+ci/docs-only.test.sh text eol=lf
+ci/docs-only-paths.txt text eol=lf
