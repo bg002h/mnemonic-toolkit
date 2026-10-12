@@ -6032,3 +6032,11 @@ screen printed. Print the values.
 - **What:** M1 key `ci.yml`'s comment saying workflow-level permissions are not granted becomes false after D5; M2 the plan says the guard reads "this job's own check run", but `check_name` matches every same-named run on the reference from any workflow or event (safe, wording only).
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless`
+
+### `ci-docs-skip-r3-deferred-minors` — Minors and Nits deferred from the docs-skip plan review r3
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-docs-skip-plan-review-r3.md` (the GREEN round).
+- **Where:** the plan's "After the owner merges: the probe" section.
+- **What:** the r3 report's two Minors and two Nits on the probe text; see the report for each.
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
