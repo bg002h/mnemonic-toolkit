@@ -424,12 +424,21 @@ Do not merge.
 
 ## After the owner merges: the probe
 
-For each of the six repos, from a fresh clone of the new default tip:
+For each of the six repos, from a fresh clone of the new default tip R:
+0. Wait until every workflow run on R has completed. Then list R's check runs:
+   `gh api -X GET repos/bg002h/<repo>/commits/<R>/check-runs -f filter=latest -f per_page=100 --jq '.check_runs[] | "\(.name) \(.status)/\(.conclusion)"'`.
+   Note every guarded job whose run on R is not `completed/success`. Do not
+   re-run anything.
 1. Create a commit that adds one line to `design/docs-only-probe.md` (new
    file). Push it to a new branch `ci/docs-only-probe`.
-2. Wait for the push run. In every guarded job: the log shows
-   `docs-only: all 1 changed files are documentation`, every later step shows
-   as skipped, and the job succeeds. Record each required job's duration.
+2. Wait for the push run. In every guarded job not noted in step 0: the log
+   shows `docs-only: all 1 changed files are documentation`, every later step
+   shows as skipped (except, in engrave `test`, `SH2 demo install links
+   resolve and are current` and `docs-only verdict`, which run), and the job
+   succeeds. A job noted in step 0 must instead log
+   `docs-only: full run ('<NAME>' on <R> is …, not completed/success)`; that
+   is the guard working, not a probe failure. Record each required job's
+   duration. Anything else is a stop point.
 3. Delete the remote branch (`git push origin --delete ci/docs-only-probe`).
    This deletes a branch, so it needs the owner's go-ahead. Ask, naming the
    six branches. The commit never lands on the default branch.

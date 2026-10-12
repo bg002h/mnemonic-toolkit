@@ -6024,3 +6024,11 @@ screen printed. Print the values.
 - **What:** M1 release.yml `test` checks out `github.ref`, so HEAD may not be `GITHUB_SHA` (add a HEAD = GITHUB_SHA check on push); M2 the self-test never runs on the required macOS legs' bash 3.2.57; M3 `-` rules are case-sensitive while macOS checkouts are not (`grep -qiE`); M4 nothing keeps the protected lists current (a test that greps first-party sources for allow-listed paths; owning phase: next CI cycle); M5 the dumped self-test cases cannot show `expected()` encodes the plan (partly addressed by the textual case added in the r1 fold). Nits: N1 "drop the guard step" popped index 1 (the r1 fold's rewrite now removes the step by `id: docs`); N2 D1.1 does not place the guard relative to comment lines after the checkout; N3 engrave's comments and `docs-only verdict` echo still say "identical to the green parent"; N4 the removed-lines filter drops any line starting `--`.
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless` (M4: next CI cycle)
+
+### `ci-docs-skip-r2-deferred-minors` — Minors deferred from the docs-skip plan review r2
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-docs-skip-plan-review-r2.md`.
+- **Where:** mnemonic-key `.github/workflows/ci.yml` permissions comment; the plan's safety-rule wording.
+- **What:** M1 key `ci.yml`'s comment saying workflow-level permissions are not granted becomes false after D5; M2 the plan says the guard reads "this job's own check run", but `check_name` matches every same-named run on the reference from any workflow or event (safe, wording only).
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
