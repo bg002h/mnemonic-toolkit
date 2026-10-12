@@ -6064,3 +6064,12 @@ screen printed. Print the values.
 - **What:** M-1 (keys that differ only in YAML 1.1 typing, e.g. bare `on:` beside quoted `"on":`, or `1:` beside `'1':`, pass the duplicate check though GitHub reads them as one key; actionlint flags them; the plan's "a repeated mapping key is rejected" is broader than the check); Nits: a `<<` merge key now crashes the loader; error messages print the file name twice; a misleading duplicate message for sequence keys; the docstring says "exact positions" where the plan says "exact step order".
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless`
+
+### `ci-hardening-whole-diff-deferred-minors` — Minors and Nits deferred from the CI hardening whole-diff review
+
+- **Surfaced:** 2026-10-11, `design/agent-reports/ci-hardening-whole-diff-review.md` (0 Critical, 0 Important).
+- **Where:** `.github/workflows/manual.yml`, `quickstart.yml`, `technical-manual.yml` (K1 cache comment); `examples.yml:87`, `manual-gui.yml:111`; the seven PR bodies.
+- **What:** Minor: the K1 comment "a cache built on one image is never restored on another" overstates, since `$ImageOS` is the OS family (`ubuntu24`), not the weekly image build; reword to "a cache built on one OS image (e.g. ubuntu22) is never restored on another (ubuntu24)". Minor: the #102 body claimed workflow-only files (corrected in the body before merge). Nits: the X line separates `- name:` from its explanatory comment in `examples.yml`/`manual-gui.yml`; the bodies' "24.2 min across the last 300 runs" conflates two measurements; the plan link points at the branch, not `master`; "on 1 pull-request workflows" grammar; #102 body's 0.29 s figure is the local hit (CI: 8/3/2 s) and its K bullet should name the 9 Install mk/md/ms-cli steps.
+- **Status:** `deferred-minor`
+- **Tier:** `ownerless`
+- **Companion:** the refugium README Minor is filed as `ci-windows-runner-2-path` in `bg002h/mnemonic-refugium` `design/FOLLOWUPS.md`.
