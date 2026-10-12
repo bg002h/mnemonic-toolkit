@@ -279,10 +279,11 @@ template:
 
   ```
         - name: Self-test the docs-only guard
-          if: runner.os == 'Linux'
+          if: runner.os == 'Linux' && github.event.inputs.tag == ''
           shell: bash
           run: bash ci/docs-only.test.sh
         - name: Docs-only change? (skips the steps below when every changed file is documentation)
+          if: github.event.inputs.tag == ''
           id: docs
           shell: bash
           env:
@@ -296,6 +297,13 @@ template:
 
   The `{{{{`/`}}}}` are the f-string escapes the template already uses; they
   render as `${{ … }}`.
+
+  Both steps carry `github.event.inputs.tag == ''` (whole-diff review r1,
+  C1): a backfill dispatch checks out `inputs.tag`, and a tag cut before
+  this change has no `ci/docs-only*`, so running either step there exits
+  127 and fails the release. Skipping the guard loses nothing: a dispatch
+  is always a full run, and a skipped guard leaves every guarded step
+  running.
 - Add the line `        if: steps.docs.outputs.docs_only != 'true'`
   directly below each of these template lines:
   `      - uses: dtolnay/rust-toolchain@master`,

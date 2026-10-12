@@ -78,7 +78,10 @@ ATTRS = [
 CI_FILES = ["ci/docs-only.sh", "ci/docs-only.test.sh", "ci/docs-only-paths.txt"]
 EXTRA_CHANGED = {"mnemonic-engrave": ["scripts/release-workflows/emit.py", "scripts/release-workflows/gen.py"]}
 SELFTEST = {"name": "Self-test the docs-only guard", "shell": "bash", "run": "bash ci/docs-only.test.sh"}
-SELFTEST_LINUX = {"name": "Self-test the docs-only guard", "if": "runner.os == 'Linux'", "shell": "bash",
+# release.yml `test` checks out `inputs.tag` on a backfill dispatch; a tag cut before this change has no
+# ci/docs-only*, so both new steps are skipped there (a skipped guard means every guarded step runs).
+RELEASE_IF = "github.event.inputs.tag == ''"
+SELFTEST_LINUX = {"name": "Self-test the docs-only guard", "if": f"runner.os == 'Linux' && {RELEASE_IF}", "shell": "bash",
                   "run": "bash ci/docs-only.test.sh"}
 
 # repo -> {workflow file: {job: "self-test" | "guard" | "skip"}}; "*" = every other job without a job-level `if`
@@ -212,13 +215,15 @@ def check_name(repo, fname, jn, job):
     return job["name"]
 
 
-def guarded_step(name):
+def guarded_step(name, guard_if=None):
     g = copy.deepcopy(GUARD)
     g["env"]["CHECK_NAME"] = name
+    if guard_if:
+        g = {"name": g.pop("name"), "if": guard_if, **g}
     return g
 
 
-def guard_job(job, selftest, counts, where, name, ifs):
+def guard_job(job, selftest, counts, where, name, ifs, guard_if=None):
     steps = job["steps"]
     if not steps or not str(steps[0].get("uses", "")).startswith("actions/checkout@"):
         raise GateError(f"{where}: first step is not actions/checkout (plan: STOP)")
@@ -230,7 +235,7 @@ def guard_job(job, selftest, counts, where, name, ifs):
         else:
             st["if"] = COND
         counts["steps"] += 1
-    new = ([copy.deepcopy(selftest)] if selftest else []) + [guarded_step(name)]
+    new = ([copy.deepcopy(selftest)] if selftest else []) + [guarded_step(name, guard_if)]
     steps[1:1] = new
     counts["jobs"] += 1
     counts["selftests"] += 1 if selftest else 0
@@ -282,7 +287,7 @@ def expected(repo, fname, old):
         set_perms(e, None, fname)
     if repo in GENERATED and fname == "release.yml":
         t = e["jobs"]["test"]
-        guard_job(t, SELFTEST_LINUX, counts, "release.yml:test", check_name(repo, fname, "test", t), ifs)
+        guard_job(t, SELFTEST_LINUX, counts, "release.yml:test", check_name(repo, fname, "test", t), ifs, RELEASE_IF)
         set_perms(t, None, "release.yml:test")
     if repo == "mnemonic-toolkit" and fname == "rust.yml":
         if "paths" not in e["on"]["push"]:
@@ -520,7 +525,7 @@ SELFTEST_TEXT = """\
         run: bash ci/docs-only.test.sh"""
 SELFTEST_LINUX_TEXT = """\
       - name: Self-test the docs-only guard
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && github.event.inputs.tag == ''
         shell: bash
         run: bash ci/docs-only.test.sh"""
 PERMS_TEXT = ["  contents: read", "  checks: read"]
@@ -528,7 +533,7 @@ PERMS_TEXT = ["  contents: read", "  checks: read"]
 
 def apply_text(text, jobs, top_perms):
     """The plan's D1/D4(release.yml)/D5 edits applied line by line, as an implementer would.
-    jobs: {job id: (self-test text or None, job-level permissions?)}."""
+    jobs: {job id: (self-test text or None, job-level permissions?, guard `if:` or None)}."""
     L = text.split("\n")
     ind = lambda l: len(l) - len(l.lstrip(" "))
     j0 = L.index("jobs:")
@@ -541,7 +546,8 @@ def apply_text(text, jobs, top_perms):
         if jn not in jobs:
             out += blk
             continue
-        selftest, jperms = jobs[jn]
+        selftest, jperms, gif = jobs[jn]
+        guard = GUARD_TEXT if not gif else GUARD_TEXT.replace("\n        id: docs", f"\n        if: {gif}\n        id: docs", 1)
         name = next(l.split("name: ", 1)[1] for l in blk if l.startswith("    name: "))
         si = blk.index("    steps:")
         st = [i for i in range(si + 1, len(blk)) if blk[i].startswith("      - ")] + [len(blk)]
@@ -549,7 +555,7 @@ def apply_text(text, jobs, top_perms):
         for k, (s0, s1) in enumerate(zip(st, st[1:])):
             content = [i for i in range(s0 + 1, s1) if blk[i].strip() and ind(blk[i]) >= 8]
             if k == 0:
-                after[content[-1] if content else s0] = ((selftest + "\n") if selftest else "") + GUARD_TEXT % name
+                after[content[-1] if content else s0] = ((selftest + "\n") if selftest else "") + guard % name
                 continue
             iff = [i for i in content if ind(blk[i]) == 8 and blk[i].lstrip().startswith("if: ")]
             if iff:
@@ -672,10 +678,10 @@ def self_test(scratch):
         _scratch_repo(repo, "origin/main", d)
         wf = d / ".github/workflows"
         ci = wf / "ci.yml"
-        ci.write_text(apply_text(ci.read_text(), {j: (SELFTEST_TEXT if j == "clippy" else None, False)
+        ci.write_text(apply_text(ci.read_text(), {j: (SELFTEST_TEXT if j == "clippy" else None, False, None)
                                                   for j in load(ci.read_text())["jobs"]}, True))
         rel = wf / "release.yml"
-        rel.write_text(apply_text(rel.read_text(), {"test": (SELFTEST_LINUX_TEXT, True)}, False))
+        rel.write_text(apply_text(rel.read_text(), {"test": (SELFTEST_LINUX_TEXT, True, RELEASE_IF)}, False))
         _commit(d, None)
         ok &= _want(f"{repo}: plan applied textually", check_workflows(repo, d, "HEAD") and check_files(repo, d), True)
         good = ci.read_text()
@@ -692,6 +698,18 @@ def self_test(scratch):
         ci.write_text(good.replace(dup, dup + "        if: true\n", 1))
         _commit(d, None)
         ok &= _want(f"{repo} textual mutation: a repeated if key", check_workflows(repo, d, "HEAD"), False)
+        ci.write_text(good)
+        rgood = rel.read_text()
+        for label, a, b in (("the release guard loses its tag condition", f"        if: {RELEASE_IF}\n        id: docs\n", "        id: docs\n"),
+                            ("the release self-test loses its tag condition", f"        if: runner.os == 'Linux' && {RELEASE_IF}\n", "        if: runner.os == 'Linux'\n")):
+            if rgood.count(a) != 1:
+                print(f"SELF-TEST BROKEN: textual mutation {label!r} found its line {rgood.count(a)} times")
+                ok = False
+                continue
+            rel.write_text(rgood.replace(a, b, 1))
+            _commit(d, None)
+            ok &= _want(f"{repo} textual mutation: {label}", check_workflows(repo, d, "HEAD"), False)
+        rel.write_text(rgood)
     print("SELF-TEST: " + ("PASS" if ok else "FAIL"))
     return ok
 
