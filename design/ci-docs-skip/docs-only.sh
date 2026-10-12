@@ -8,15 +8,28 @@
 # also run when this script writes nothing at all. A crash fails the step,
 # which fails the job.
 #
-# The reference commit is one whose tree already passed the required checks:
-#   pull_request               PR_BASE_SHA, the base branch tip the PR targets
-#   push to the default branch PUSH_BEFORE, the previous tip
-#   push to any other branch   the current tip of origin/$DEFAULT_BRANCH
-#   anything else              (tags, dispatch, schedule, workflow_call) full run
+# The reference commit R:
+#   pull_request into the default branch   PR_BASE_SHA, the tip it targets
+#   push to the default branch             PUSH_BEFORE, the previous tip
+#   push to any other branch               the current tip of origin/$DEFAULT_BRANCH
+#   anything else (a PR into another branch, tags, dispatch, schedule): full run
 # A push to a non-default branch (ci/staging) is compared with the default
 # branch, never with its own previous tip: that tip may never have passed.
 # The diff is tree to tree (`git diff R HEAD`), so a depth-1 checkout is
 # enough; only R itself is fetched, at depth 1.
+#
+# R is not assumed to be good. Before writing `true`, the guard asks the
+# GitHub API for this job's own check run on R (CHECK_NAME, the job's
+# rendered name) and requires every latest run of that name to be completed
+# with conclusion success. A red, pending or missing run, or any API error,
+# means a full run. (With branch protection `strict: false`, a PR merged on a
+# moved base puts an untested tree at the default tip; this check is what
+# stops a docs-only change from reporting green on top of it.) A reference
+# that was itself docs-skipped green is fine: its tree differs from a tested
+# one only in documentation. Needs GH_TOKEN with `checks: read`;
+# DOCS_ONLY_GH overrides the `gh` command (the tests use a stub).
+#
+# Any changed path that contains a newline forces a full run.
 #
 # ci/docs-only-paths.txt: one rule per line. `+ <ERE>` marks a path as
 # documentation, `- <ERE>` protects a path even when a `+` rule matches it,
@@ -28,6 +41,7 @@
 # associative arrays, no `mapfile`.
 
 out=${GITHUB_OUTPUT:-/dev/stdout}
+gh_cmd=${DOCS_ONLY_GH:-gh}
 paths_file=${DOCS_ONLY_PATHS:-ci/docs-only-paths.txt}
 zero=0000000000000000000000000000000000000000
 
@@ -49,6 +63,7 @@ match() {
 nallow=0
 ndeny=0
 while IFS= read -r line || [ -n "$line" ]; do
+  line=${line%$'\r'}
   case $line in
     '+ '?*) allow[nallow]=${line#+ }; nallow=$((nallow + 1)) ;;
     '- '?*) deny[ndeny]=${line#- }; ndeny=$((ndeny + 1)) ;;
@@ -59,9 +74,11 @@ done < "$paths_file"
 [ "$nallow" -gt 0 ] || full "no + rules in $paths_file"
 
 [ -n "${DEFAULT_BRANCH:-}" ] || full "DEFAULT_BRANCH is not set"
+[ -n "${CHECK_NAME:-}" ] || full "CHECK_NAME is not set"
 base=
 case ${GITHUB_EVENT_NAME:-} in
   pull_request)
+    [ "${GITHUB_BASE_REF:-}" = "$DEFAULT_BRANCH" ] || full "pull_request into ${GITHUB_BASE_REF:-an unset base}, not $DEFAULT_BRANCH"
     [ -n "${PR_BASE_SHA:-}" ] || full "PR_BASE_SHA is not set"
     fetch=$PR_BASE_SHA ;;
   push)
@@ -80,16 +97,14 @@ esac
 git fetch --no-tags --depth=1 origin "$fetch" > /dev/null 2>&1 || full "cannot fetch $fetch"
 base=$(git rev-parse --verify -q 'FETCH_HEAD^{commit}') || full "fetched $fetch but FETCH_HEAD is not a commit"
 
-listing=$(git -c core.quotePath=false diff --no-renames --name-only -z "$base" HEAD | tr '\0' '\n'; echo "rc=${PIPESTATUS[0]}")
-case $listing in
-  *rc=0) listing=${listing%rc=0} ;;
-  *) full "git diff $base HEAD failed" ;;
-esac
-[ -n "${listing%$'\n'}" ] || full "no file differs from $base"
+list=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/docs-only.XXXXXX") || full "mktemp failed"
+trap 'rm -f "$list"' EXIT
+git -c core.quotePath=false diff --no-renames --name-only -z "$base" HEAD > "$list" || full "git diff $base HEAD failed"
+[ -s "$list" ] || full "no file differs from $base"
 
 n=0
-while IFS= read -r f; do
-  [ -n "$f" ] || continue
+while IFS= read -r -d '' f; do
+  case $f in *$'\n'*) full "a changed path contains a newline" ;; esac
   n=$((n + 1))
   ok=
   i=0
@@ -103,8 +118,18 @@ while IFS= read -r f; do
     if match "${deny[i]}" "$f"; then full "protected: $f"; fi
     i=$((i + 1))
   done
-done <<<"$listing"
+done < "$list"
+[ "$n" -gt 0 ] || full "no file differs from $base"
+
+# Every changed file is documentation. Now prove R itself passed this job.
+runs=$("$gh_cmd" api -X GET "repos/${GITHUB_REPOSITORY:-}/commits/$base/check-runs" \
+  -f check_name="$CHECK_NAME" -f filter=latest \
+  --jq '.check_runs[] | "\(.status)/\(.conclusion)"' 2> /dev/null) || full "cannot read check runs for $base"
+[ -n "$runs" ] || full "no '$CHECK_NAME' check run on $base"
+while IFS= read -r r; do
+  [ "$r" = "completed/success" ] || full "'$CHECK_NAME' on $base is $r, not completed/success"
+done <<<"$runs"
 
 echo "docs_only=true" >> "$out"
-echo "docs-only: all $n changed files are documentation (against $base); skipping the guarded steps"
+echo "docs-only: all $n changed files are documentation, and '$CHECK_NAME' passed on $base; skipping the guarded steps"
 exit 0

@@ -40,7 +40,8 @@ writes nothing. The reference commit is:
 
 | Event | Reference commit |
 |---|---|
-| `pull_request` | `github.event.pull_request.base.sha` |
+| `pull_request` into the default branch | `github.event.pull_request.base.sha` |
+| `pull_request` into any other branch | none: full run |
 | `push` to the default branch | `github.event.before` (the previous tip) |
 | `push` to any other branch (`ci/staging`) | the current tip of `origin/<default branch>` |
 | anything else (tags, dispatch, schedule) | none: full run |
@@ -50,9 +51,18 @@ own previous tip, because that tip may never have passed. That closes the
 stale-base hole in engrave's current detector (recon H7). The comparison is
 tree to tree, so a depth-1 checkout is enough.
 
-The assumption it rests on: the default branch's tip passed the required
-checks. Branch protection gives that, except for an admin push that bypasses
-it, which the operator does knowingly.
+The reference is **verified, not assumed** (owner ruling on review r1 C1,
+"Verify the reference"). Branch protection is `strict: false`, so a PR
+merged on a moved base, or an admin push, can put a tree that never passed
+at the default tip. So, only after every changed file classifies as
+documentation, the guard asks the GitHub API for this job's own check run on
+the reference (`CHECK_NAME`, the job's rendered name; `filter=latest`) and
+writes `docs_only=true` only if there is at least one such run and every one
+is `completed` with conclusion `success`. A red, pending, skipped or missing
+run, or any API error, means a full run. A reference that was itself
+docs-skipped green is fine: its tree differs from a tested one only in
+documentation. Any changed path that contains a newline also means a full
+run.
 
 ## Files, machine-verified
 
@@ -61,11 +71,13 @@ All in this directory (`design/ci-docs-skip/` on toolkit branch
 
 - `docs-only.sh`: the guard. In every repo it is copied byte for byte to
   `ci/docs-only.sh`, mode 100755.
-- `docs-only.test.sh`: 28 scenarios against a scratch `file://` origin.
-  Copied byte for byte to `ci/docs-only.test.sh`, mode 100755. Run here: 28
-  passed. Four mutations of the guard (deny rules ignored, staging compared
-  with its own previous tip, a bad pattern read as no-match, an empty diff
-  read as docs) each turned at least one scenario RED.
+- `docs-only.test.sh`: 42 scenarios against a scratch `file://` origin, with
+  `gh` replaced by a stub (`DOCS_ONLY_GH`) that prints canned check runs.
+  Copied byte for byte to `ci/docs-only.test.sh`, mode 100755. Run here: 42
+  passed. Nine mutations of the guard each turned at least one scenario RED:
+  deny rules ignored, staging compared with its own previous tip, a bad
+  pattern read as no-match, an empty diff read as docs, no reference check,
+  any conclusion accepted, no CR strip, no base-branch check, no newline check.
 - `paths/<repo>.txt`: each repo's `ci/docs-only-paths.txt`, copied byte for
   byte. The protected (`-`) entries are the recon's item-3 paths. They were
   checked again here: every `design/`, `docs/`, `bip/` or root `*.md` path
@@ -73,8 +85,19 @@ All in this directory (`design/ci-docs-skip/` on toolkit branch
   or is not a path read (a label or a message). `paths-check` (below) runs
   the real guard on 5–13 sample paths per repo. All six repos: GREEN.
 - `docs-skip-gate.py`: the gate. Its self-test applies the plan to the
-  toolkit, engrave and key bases (GREEN), then applies five mutations to each
-  (all RED).
+  toolkit, engrave and key bases by dumping the gate's own expected YAML
+  (GREEN), then applies eleven mutations to each (all RED). It also applies
+  the plan **textually**, line by line, to the descriptor-mnemonic base
+  (GREEN, with the real removed-lines check), then deletes an unrelated
+  comment line and adds a repeated `if:` key (both RED). The dumped cases
+  prove the checks fire, not that the gate's expected YAML encodes the plan;
+  the textual case is the one cross-check of that.
+- Check-run names: every guarded job's check run is named by its `name:`
+  exactly as rendered, except toolkit `lib-cross-platform`, whose `name:`
+  names no matrix value, so GitHub appends them:
+  `lib cross-platform check (aarch64-unknown-linux-gnu, ubuntu-latest)`.
+  Read from the check-runs API on the six default tips and on toolkit PR 102's
+  head, 2026-10-11.
 
 ## Repos, bases, worktrees, branch
 
@@ -104,9 +127,21 @@ S=/scratch/code/shibboleth/tk-worktrees/ci-docs-skip/design/ci-docs-skip
 mkdir -p <wt>/ci
 cp $S/docs-only.sh $S/docs-only.test.sh <wt>/ci/
 cp $S/paths/<repo>.txt <wt>/ci/docs-only-paths.txt
-git -C <wt> add ci/docs-only.sh ci/docs-only.test.sh ci/docs-only-paths.txt
+chmod 755 <wt>/ci/docs-only.sh <wt>/ci/docs-only.test.sh
+cat >> <wt>/.gitattributes <<'ATTR'
+# ci/docs-only*: LF on every OS (Git Bash cannot run a CRLF script).
+ci/docs-only.sh text eol=lf
+ci/docs-only.test.sh text eol=lf
+ci/docs-only-paths.txt text eol=lf
+ATTR
+git -C <wt> add .gitattributes ci/docs-only.sh ci/docs-only.test.sh ci/docs-only-paths.txt
 git -C <wt> update-index --chmod=+x ci/docs-only.sh ci/docs-only.test.sh
 ```
+
+The `cat >>` creates `.gitattributes` in engrave and mnemonic-transaction,
+which have none. In the other four it appends after the file's last line;
+each of those ends in a newline (checked). Windows checkouts would otherwise
+CRLF-convert the three files, and Git Bash cannot run a CRLF script.
 
 ### D1 — guard every listed job (four repos)
 
@@ -115,14 +150,20 @@ The **guarded jobs** are:
 | Repo | File | Jobs |
 |---|---|---|
 | descriptor-mnemonic | `ci.yml` | every job (6) |
-| mnemonic-toolkit | `rust.yml` | every job (9) |
+| mnemonic-toolkit | `rust.yml` | every job except `g6-invariant`: 8 |
 | mnemonic-key | `ci.yml` | every job except `release-on-tag` (it has a job-level `if:`): 5 |
-| mnemonic-secret | `rust.yml` | every job (11) |
+| mnemonic-secret | `rust.yml` | every job except `g6-invariant`: 10 |
+
+`g6-invariant` (toolkit and secret) is left alone: it checks out into a
+subdirectory, so `ci/docs-only.sh` is not at the path the guard step runs.
 
 In each guarded job:
 
-1. Directly below the job's first step (it is `actions/checkout` in every
-   one; if not, STOP), insert the guard step:
+1. Directly below the last line of the job's first step (it is
+   `actions/checkout` in every one; if not, STOP), insert the guard step.
+   `<NAME>` is the job's `name:` value, copied exactly as written on its
+   `name:` line, except toolkit `lib-cross-platform`, where it is
+   `lib cross-platform check (${{ matrix.target }}, ${{ matrix.runs-on }})`:
 
    ```yaml
          - name: Docs-only change? (skips the steps below when every changed file is documentation)
@@ -132,6 +173,8 @@ In each guarded job:
              DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
              PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
              PUSH_BEFORE: ${{ github.event.before }}
+             CHECK_NAME: <NAME>
+             GH_TOKEN: ${{ github.token }}
            run: bash ci/docs-only.sh
    ```
 
@@ -146,8 +189,9 @@ In each guarded job:
    ```
 
 3. Give every step **after** the guard step the condition. If the step has no
-   `if:`, add, as the step's line directly below its `- name:` (or
-   `- uses:` when it has no name):
+   `if:`, add it as the line directly below the step's first line, the one
+   that starts with `- ` (`- name:`, `- uses:` or `- run:`; every `- run:`
+   step in these files is a single line):
 
    ```yaml
            if: steps.docs.outputs.docs_only != 'true'
@@ -215,6 +259,10 @@ with:
   `signing key copies agree with minisign.pub` step stays before the
   self-test, unconditional.
 - Job `picotool-probe`: apply D1.1 and D1.3 (no self-test).
+- `<NAME>` is `test (rust + go)` in `test` and `picotool argv probe` in
+  `picotool-probe`.
+- In both jobs, add the line `      checks: read` directly below the job's
+  `      contents: read` line (D5).
 - No other job changes.
 
 ### D4 — the release-workflow generator, and the five generated `release.yml`
@@ -241,6 +289,8 @@ template:
             DEFAULT_BRANCH: ${{{{ github.event.repository.default_branch }}}}
             PR_BASE_SHA: ${{{{ github.event.pull_request.base.sha }}}}
             PUSH_BEFORE: ${{{{ github.event.before }}}}
+            CHECK_NAME: test (${{{{ matrix.os }}}})
+            GH_TOKEN: ${{{{ github.token }}}}
           run: bash ci/docs-only.sh
   ```
 
@@ -252,6 +302,17 @@ template:
   `      - name: Install cargo-nextest (pinned, checksum-verified)`,
   `      - name: cargo nextest run`,
   `      - name: cargo test --doc`.
+- Directly above the `test` job's `    strategy:` line (the first of the
+  template's `    strategy:` lines; edit only the one inside `test`), insert:
+
+  ```
+      permissions:
+        contents: read
+        checks: read
+  ```
+
+  The workflow's top-level permissions (`contents: write`, `id-token: write`,
+  `attestations: write`) then no longer reach `test`, which needs none of them.
 
 In `mnemonic-engrave/scripts/release-workflows/emit.py`, `TEST_SETUP["mt"]`:
 add the line `        if: steps.docs.outputs.docs_only != 'true'` directly
@@ -267,6 +328,24 @@ mnemonic-secret and mnemonic-transaction (with `${{`/`}}` in place of the
 escapes). The gate's `release-gen` mode proves the six agree. Do not run
 `emit.py`: it writes into the main checkouts.
 
+### D5 — let the guard read check runs
+
+The guard step's `GH_TOKEN` needs `checks: read`. Directly above the line
+`jobs:` in descriptor-mnemonic `ci.yml`, mnemonic-toolkit `rust.yml`,
+mnemonic-key `ci.yml` and mnemonic-secret `rust.yml` (none has a top-level
+`permissions:`; if one does, STOP), insert these four lines, the last one
+blank:
+
+```yaml
+permissions:
+  contents: read
+  checks: read
+
+```
+
+mnemonic-key `release-on-tag` keeps its own job-level `contents: write`. The
+release.yml `test` jobs get theirs in D4, and engrave's two jobs in D3.
+
 ## The gate
 
 ```sh
@@ -278,18 +357,21 @@ python3 $G workflows   <repo> <wt> <B>
 python3 $G release-gen <engrave-wt> descriptor-mnemonic=<dm-wt> mnemonic-secret=<ms-wt> mnemonic-key=<mk-wt> mnemonic-transaction=<mt-wt> mnemonic-toolkit=<tk-wt>
 ```
 
-`workflows` builds the expected parsed YAML from `<B>` with D1–D4 applied
+`workflows` builds the expected parsed YAML from `<B>` with D1–D5 applied
 and asserts equality, rejecting repeated keys. It also asserts the counts
-below, and that `git diff` removed exactly the lines D2 and D3 replace and
-nothing else. Expected counts (machine-computed from the pre-hardening bases;
+below; that `git diff` removed exactly the lines D1.3, D2 and D3 replace and
+nothing else; that `.gitattributes` gained exactly F's four lines; and that
+the files differing from `<B>` are exactly the planned set, which it prints.
+`workflows`, `files` and `release-gen` refuse a worktree with unstaged
+changes or untracked files, so they certify exactly what the commit holds. Expected counts (machine-computed from the pre-hardening bases;
 hardening adds no steps to these jobs):
 
 | Repo | guarded jobs | steps given the condition | of which combined with an existing `if` | self-test steps |
 |---|---|---|---|---|
 | descriptor-mnemonic | 7 | 30 | 2 | 2 |
-| mnemonic-toolkit | 10 | 40 | 3 | 2 |
+| mnemonic-toolkit | 9 | 37 | 3 | 2 |
 | mnemonic-key | 6 | 28 | 2 | 2 |
-| mnemonic-secret | 12 | 37 | 2 | 2 |
+| mnemonic-secret | 11 | 35 | 2 | 2 |
 | mnemonic-engrave | 2 | 18 | 0 | 1 |
 | mnemonic-transaction | 1 | 5 | 0 | 1 |
 
@@ -307,10 +389,15 @@ everything. The post-merge probe below proves the skip.
 
 1. descriptor-mnemonic, mnemonic-key, mnemonic-secret, mnemonic-toolkit,
    mnemonic-transaction, each: F, then D1 (and D2 for the toolkit), then the
-   `release.yml` part of D4. Run the gate (`files`, `paths-check`,
-   `workflows`) and actionlint, then make one commit.
-2. mnemonic-engrave last: F, D3, D4 (gen.py and emit.py), then `files`,
-   `paths-check`, `workflows` and `release-gen`, then one commit.
+   `release.yml` part of D4, then D5. Stage every edited path explicitly.
+   Run the gate (`files`, `paths-check`, `workflows`) and actionlint, then
+   make one commit.
+2. mnemonic-engrave last: F, D3, D4 (gen.py and emit.py), then stage, then
+   `files`, `paths-check`, `workflows` and `release-gen`, then one commit.
+
+After each commit, `git status --porcelain` must print nothing, and
+`git diff --name-only <B> HEAD` must list exactly the files the gate's
+`changed files` line printed. Otherwise STOP.
 
 Commit message:
 
@@ -350,6 +437,7 @@ For each of the six repos, from a fresh clone of the new default tip:
 ## Stop-and-ask points
 
 A guarded job whose first step is not a checkout; a later step with an `if:`
-not in D1.3's list; a gate RED that is not your own slip; a count that
+not in D1.3's list; a workflow D5 names that already has a top-level
+`permissions:`; a gate RED that is not your own slip; a count that
 differs; a new actionlint line; a failing CI job; any base that does not yet
 contain the hardening merge.

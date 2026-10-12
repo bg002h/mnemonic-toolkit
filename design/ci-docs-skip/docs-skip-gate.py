@@ -9,14 +9,18 @@ Usage:
   docs-skip-gate.py self-test <scratch-dir>
 
 `workflows`: builds the expected parsed YAML of every workflow from the base
-(PLAN_ci_docs_skip_2026-10-11.md, D1-D4) and asserts each edited file equals
+(PLAN_ci_docs_skip_2026-10-11.md, D1-D5) and asserts each edited file equals
 it, types included, with repeated mapping keys rejected; asserts the counts
-equal the plan's table, and that `git diff` removed no line except the ones
-the plan replaces (toolkit rust.yml trigger lines, engrave's detection step
-and its `steps.detect` conditions).
+equal the plan's table, that `git diff` removed no line except the ones the
+plan replaces (toolkit rust.yml trigger lines, the replaced `if:` lines of
+combined steps, engrave's detection step and its `steps.detect`
+conditions), that `.gitattributes` gained exactly ATTRS and lost nothing,
+and that the set of files differing from the base is exactly the planned set.
 `files`: ci/docs-only.sh and ci/docs-only.test.sh are byte-identical to this
-directory's docs-only.sh / docs-only.test.sh, and ci/docs-only-paths.txt is
-byte-identical to paths/<repo>.txt.
+directory's docs-only.sh / docs-only.test.sh, ci/docs-only-paths.txt is
+byte-identical to paths/<repo>.txt, and git resolves `eol=lf` for all three.
+`workflows`, `files` and `release-gen` refuse a tree with unstaged changes or
+untracked files, so what they certify is exactly what the commit will hold.
 `paths-check`: runs the worktree's real ci/docs-only.sh, in pull_request
 mode on a scratch repo, once per sample path in SAMPLES[repo], and asserts
 each sample is classified as the plan says.
@@ -25,14 +29,18 @@ output is byte-identical to that repo's release.yml.
 `self-test`: proves this gate goes GREEN on the plan and RED on mutations.
 
 NOT COVERED: added comments, blank lines, quoting, key order and YAML 1.1
-spellings (YAML parsing drops them; the reviewer reads the diff), and the
-guard's behaviour on real GitHub runners (the PR's own CI runs the guard on
+spellings (YAML parsing drops them; the reviewer reads the diff; the textual
+self-test applies the plan line by line to one base, descriptor-mnemonic),
+whether CHECK_NAME renders to the job's real check-run name (checked by hand
+against the API, see the plan), and the guard's behaviour on real GitHub runners (the PR's own CI runs the guard on
 every OS leg, and the post-merge probe in the plan exercises the skip).
 """
 import copy
 import hashlib
 import os
 import pathlib
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -49,19 +57,36 @@ GUARD = {
         "DEFAULT_BRANCH": "${{ github.event.repository.default_branch }}",
         "PR_BASE_SHA": "${{ github.event.pull_request.base.sha }}",
         "PUSH_BEFORE": "${{ github.event.before }}",
+        "CHECK_NAME": None,  # set per job: check_name()
+        "GH_TOKEN": "${{ github.token }}",
     },
     "run": "bash ci/docs-only.sh",
 }
+PERMS = {"contents": "read", "checks": "read"}
+# D5: the workflow files that gain a top-level `permissions:` block
+TOP_PERMS = {("descriptor-mnemonic", "ci.yml"), ("mnemonic-toolkit", "rust.yml"), ("mnemonic-key", "ci.yml"),
+             ("mnemonic-secret", "rust.yml")}
+# the one guarded job whose check-run name is not its `name:` (GitHub appends the matrix values)
+CHECK_NAME_OVERRIDE = {("mnemonic-toolkit", "rust.yml", "lib-cross-platform"):
+                       "lib cross-platform check (${{ matrix.target }}, ${{ matrix.runs-on }})"}
+ATTRS = [
+    "# ci/docs-only*: LF on every OS (Git Bash cannot run a CRLF script).",
+    "ci/docs-only.sh text eol=lf",
+    "ci/docs-only.test.sh text eol=lf",
+    "ci/docs-only-paths.txt text eol=lf",
+]
+CI_FILES = ["ci/docs-only.sh", "ci/docs-only.test.sh", "ci/docs-only-paths.txt"]
+EXTRA_CHANGED = {"mnemonic-engrave": ["scripts/release-workflows/emit.py", "scripts/release-workflows/gen.py"]}
 SELFTEST = {"name": "Self-test the docs-only guard", "shell": "bash", "run": "bash ci/docs-only.test.sh"}
 SELFTEST_LINUX = {"name": "Self-test the docs-only guard", "if": "runner.os == 'Linux'", "shell": "bash",
                   "run": "bash ci/docs-only.test.sh"}
 
-# repo -> {workflow file: {job: "self-test" | "guard"}}; None = every job without a job-level `if`
+# repo -> {workflow file: {job: "self-test" | "guard" | "skip"}}; "*" = every other job without a job-level `if`
 GUARDED = {
     "descriptor-mnemonic": {"ci.yml": {"clippy": "self-test", "*": "guard"}},
-    "mnemonic-toolkit": {"rust.yml": {"clippy": "self-test", "*": "guard"}},
+    "mnemonic-toolkit": {"rust.yml": {"clippy": "self-test", "g6-invariant": "skip", "*": "guard"}},
     "mnemonic-key": {"ci.yml": {"fmt": "self-test", "*": "guard"}},
-    "mnemonic-secret": {"rust.yml": {"clippy": "self-test", "*": "guard"}},
+    "mnemonic-secret": {"rust.yml": {"clippy": "self-test", "g6-invariant": "skip", "*": "guard"}},
     "mnemonic-engrave": {"release.yml": {"test": "engrave", "picotool-probe": "guard"}},
     "mnemonic-transaction": {},
 }
@@ -94,9 +119,9 @@ TK_REMOVED = [
 
 EXPECTED_COUNTS = {  # guarded jobs, steps given COND, of which combined with an existing if, self-test steps
     "descriptor-mnemonic": dict(jobs=7, steps=30, combined=2, selftests=2),
-    "mnemonic-toolkit": dict(jobs=10, steps=40, combined=3, selftests=2),
+    "mnemonic-toolkit": dict(jobs=9, steps=37, combined=3, selftests=2),
     "mnemonic-key": dict(jobs=6, steps=28, combined=2, selftests=2),
-    "mnemonic-secret": dict(jobs=12, steps=37, combined=2, selftests=2),
+    "mnemonic-secret": dict(jobs=11, steps=35, combined=2, selftests=2),
     "mnemonic-engrave": dict(jobs=2, steps=18, combined=0, selftests=1),
     "mnemonic-transaction": dict(jobs=1, steps=5, combined=0, selftests=1),
 }
@@ -176,18 +201,36 @@ def unwrap(expr):
     return e
 
 
-def guard_job(job, selftest, counts, where):
+def check_name(repo, fname, jn, job):
+    o = CHECK_NAME_OVERRIDE.get((repo, fname, jn))
+    if o:
+        return o
+    if "name" not in job:
+        raise GateError(f"{fname}:{jn}: guarded job has no name: (plan: STOP)")
+    if "strategy" in job and "${{" not in job["name"]:
+        raise GateError(f"{fname}:{jn}: matrix job whose name: names no matrix value (plan: STOP)")
+    return job["name"]
+
+
+def guarded_step(name):
+    g = copy.deepcopy(GUARD)
+    g["env"]["CHECK_NAME"] = name
+    return g
+
+
+def guard_job(job, selftest, counts, where, name, ifs):
     steps = job["steps"]
     if not steps or not str(steps[0].get("uses", "")).startswith("actions/checkout@"):
         raise GateError(f"{where}: first step is not actions/checkout (plan: STOP)")
     for st in steps[1:]:
         if "if" in st:
+            ifs.append(st["if"])
             st["if"] = f"({unwrap(st['if'])}) && {COND}"
             counts["combined"] += 1
         else:
             st["if"] = COND
         counts["steps"] += 1
-    new = ([copy.deepcopy(selftest)] if selftest else []) + [copy.deepcopy(GUARD)]
+    new = ([copy.deepcopy(selftest)] if selftest else []) + [guarded_step(name)]
     steps[1:1] = new
     counts["jobs"] += 1
     counts["selftests"] += 1 if selftest else 0
@@ -206,50 +249,98 @@ def engrave_test(job, counts):
             st["if"] = st["if"].replace("steps.detect.outputs.docs_only", "steps.docs.outputs.docs_only")
             if st["if"] == COND:
                 counts["steps"] += 1
-    steps[i:i + 1] = [copy.deepcopy(SELFTEST), copy.deepcopy(GUARD)]
+    steps[i:i + 1] = [copy.deepcopy(SELFTEST), guarded_step(job["name"])]
     counts["jobs"] += 1
     counts["selftests"] += 1
 
 
+def set_perms(holder, want_before, where):
+    if holder.get("permissions") != want_before:
+        raise GateError(f"{where}: permissions are {holder.get('permissions')!r}, plan expects {want_before!r} (plan: STOP)")
+    holder["permissions"] = dict(PERMS)
+
+
 def expected(repo, fname, old):
+    """Returns (expected YAML, counts, the original `if:` text of every combined step)."""
     e = copy.deepcopy(old)
     counts = dict(jobs=0, steps=0, combined=0, selftests=0)
+    ifs = []
     spec = GUARDED[repo].get(fname)
     if spec:
         for jn, job in e["jobs"].items():
             mode = spec.get(jn, spec.get("*"))
-            if mode is None or ("if" in job and jn not in spec):
+            if mode in (None, "skip") or ("if" in job and jn not in spec):
                 continue
             if mode == "engrave":
                 engrave_test(job, counts)
             else:
-                guard_job(job, SELFTEST if mode == "self-test" else None, counts, f"{fname}:{jn}")
+                guard_job(job, SELFTEST if mode == "self-test" else None, counts, f"{fname}:{jn}",
+                          check_name(repo, fname, jn, job), ifs)
+            if repo == "mnemonic-engrave":
+                set_perms(job, {"contents": "read"}, f"{fname}:{jn}")
+    if (repo, fname) in TOP_PERMS:
+        set_perms(e, None, fname)
     if repo in GENERATED and fname == "release.yml":
-        guard_job(e["jobs"]["test"], SELFTEST_LINUX, counts, "release.yml:test")
+        t = e["jobs"]["test"]
+        guard_job(t, SELFTEST_LINUX, counts, "release.yml:test", check_name(repo, fname, "test", t), ifs)
+        set_perms(t, None, "release.yml:test")
     if repo == "mnemonic-toolkit" and fname == "rust.yml":
         if "paths" not in e["on"]["push"]:
             raise GateError("rust.yml: push has no paths filter in base (plan: STOP)")
         del e["on"]["push"]["paths"]
-    return e, counts
+    return e, counts, ifs
 
 
-def allowed_removed(repo, fname, base_text):
+def allowed_removed(repo, fname, base_text, ifs=()):
+    """The base lines the plan's edits remove: one `if:` line per combined step, plus D2/D3's lines."""
+    lines = base_text.splitlines()
+    rem, used = [], set()
+    for o in ifs:
+        forms = {f"if: {o}", f"if: '{o}'", f'if: "{o}"'}
+        hit = [i for i, l in enumerate(lines) if l.strip() in forms and i not in used]
+        if not hit:
+            raise GateError(f"{fname}: no base line holds the combined step's `if: {o}`")
+        used.add(hit[0])
+        rem.append(lines[hit[0]])
     if repo == "mnemonic-toolkit" and fname == "rust.yml":
-        return list(TK_REMOVED)
+        return rem + list(TK_REMOVED)
     if repo == "mnemonic-engrave" and fname == "release.yml":
         lines = base_text.splitlines()
         start = lines.index("      - name: docs-only detection")
         end = lines.index("      - name: Install Rust toolchain") - 1  # the blank line before it stays
-        rem = lines[start:end]
+        rem += lines[start:end]
         rem += [l for l in lines if l.strip() in ("if: steps.detect.outputs.docs_only != 'true'",
                                                   "if: steps.detect.outputs.docs_only == 'true'")]
         return rem
-    return []
+    return rem
+
+
+def unstaged(tree):
+    """Lines of `git status` that make the worktree differ from the index (unstaged or untracked)."""
+    st = git("-C", str(tree), "status", "--porcelain=v1", "--untracked-files=all")
+    return [l for l in st.splitlines() if l[:2] == "??" or l[1] != " "]
+
+
+def refuse_unstaged(tree):
+    bad = unstaged(tree)
+    for l in bad[:5]:
+        print(f"FAIL: {tree}: not staged: {l}")
+    return bool(bad)
+
+
+def diff_lines(tree, base, path, sign):
+    diff = git("-C", str(tree), "diff", "--cached", "-U0", base, "--", path)
+    head = "+++" if sign == "+" else "---"
+    return [l[1:] for l in diff.splitlines() if l.startswith(sign) and not l.startswith(head)]
 
 
 def check_workflows(repo, tree, base):
     tree = pathlib.Path(tree)
+    if refuse_unstaged(tree):
+        print("GATE: RED")
+        return False
     errs = []
+    planned = set(CI_FILES) | {".gitattributes"} | set(EXTRA_CHANGED.get(repo, []))
     names = sorted(git("-C", str(tree), "ls-tree", "--name-only", f"{base}:.github/workflows/").split())
     cur = sorted(p.name for p in (tree / ".github/workflows").iterdir())
     if names != cur:
@@ -263,25 +354,35 @@ def check_workflows(repo, tree, base):
         try:
             old = load(base_text)
             new = load((tree / ".github/workflows" / f).read_text())
-            exp, counts = expected(repo, f, old)
+            exp, counts, ifs = expected(repo, f, old)
+            allowed[f] = sorted(allowed_removed(repo, f, base_text, ifs))
         except GateError as ex:
             errs.append(f"{f}: {ex}")
             continue
         for k in total:
             total[k] += counts[k]
+        if not same(exp, old):
+            planned.add(f".github/workflows/{f}")
         if not same(new, exp):
             errs.append(f"{f}: parsed YAML differs from base + planned edits")
-        allowed[f] = sorted(allowed_removed(repo, f, base_text))
     if total != EXPECTED_COUNTS[repo]:
         errs.append(f"counts {total} != plan table {EXPECTED_COUNTS[repo]}")
     for f in allowed:
-        diff = git("-C", str(tree), "diff", "-U0", base, "--", f".github/workflows/{f}")
-        removed = sorted(l[1:] for l in diff.splitlines() if l.startswith("-") and not l.startswith("---"))
+        removed = sorted(diff_lines(tree, base, f".github/workflows/{f}", "-"))
         if removed != allowed[f]:
             extra = sorted(set(removed) - set(allowed[f]))
             missing = sorted(set(allowed[f]) - set(removed))
             errs.append(f"{f}: removed lines differ from the plan (unplanned: {extra[:3]}, not removed: {missing[:3]})")
+    if diff_lines(tree, base, ".gitattributes", "-"):
+        errs.append(".gitattributes: lines removed (the plan only appends)")
+    if diff_lines(tree, base, ".gitattributes", "+") != ATTRS:
+        errs.append(".gitattributes: added lines are not exactly the plan's four")
+    changed = set(git("-C", str(tree), "diff", "--cached", "--name-only", base).split("\n")) - {""}
+    if changed != planned:
+        errs.append(f"changed files differ from the plan (unplanned: {sorted(changed - planned)}, "
+                    f"not changed: {sorted(planned - changed)})")
     print(f"{repo}: files={len(names)} " + " ".join(f"{k}={v}" for k, v in total.items()))
+    print(f"{repo}: changed files ({len(changed)}): {' '.join(sorted(changed))}")
     for e in errs:
         print("FAIL:", e)
     print("GATE: " + ("RED" if errs else "GREEN"))
@@ -294,6 +395,9 @@ def sha(p):
 
 def check_files(repo, tree):
     tree = pathlib.Path(tree)
+    if refuse_unstaged(tree):
+        print("GATE: RED")
+        return False
     pairs = [(HERE / "docs-only.sh", tree / "ci/docs-only.sh"),
              (HERE / "docs-only.test.sh", tree / "ci/docs-only.test.sh"),
              (HERE / "paths" / f"{repo}.txt", tree / "ci/docs-only-paths.txt")]
@@ -307,6 +411,10 @@ def check_files(repo, tree):
         good = mode == ["100755"]
         ok &= good
         print(f"files {repo}: {p} mode {mode[0] if mode else 'untracked'}{'' if good else ' (want 100755, staged)'}")
+    for line in git("-C", str(tree), "check-attr", "--cached", "eol", "--", *CI_FILES).splitlines():
+        good = line.endswith(": eol: lf")
+        ok &= good
+        print(f"files {repo}: {line}{'' if good else '  (want eol: lf)'}")
     print("GATE: " + ("GREEN" if ok else "RED"))
     return ok
 
@@ -341,8 +449,12 @@ def check_paths(repo, tree):
             run("git", "commit", "-qm", path, cwd=w)
             out = d / "out"
             out.write_text("")
+            stub = d / "gh"
+            stub.write_text("#!/usr/bin/env bash\necho completed/success\n")
+            stub.chmod(0o755)
             e2 = dict(env, GITHUB_OUTPUT=str(out), DOCS_ONLY_PATHS=str(rules), GITHUB_EVENT_NAME="pull_request",
-                      DEFAULT_BRANCH="main", PR_BASE_SHA=base)
+                      DEFAULT_BRANCH="main", GITHUB_BASE_REF="main", PR_BASE_SHA=base, CHECK_NAME="gate",
+                      DOCS_ONLY_GH=str(stub), GITHUB_REPOSITORY="o/r")
             subprocess.run(["bash", str(guard)], cwd=w, env=e2, capture_output=True, text=True, check=True)
             got = out.read_text().strip()
             good = got == f"docs_only={'true' if want else 'false'}"
@@ -353,6 +465,9 @@ def check_paths(repo, tree):
 
 
 def check_release_gen(engrave_tree, pairs):
+    if any(refuse_unstaged(t) for t in [engrave_tree] + [p.split("=", 1)[1] for p in pairs]):
+        print("GATE: RED")
+        return False
     rw = pathlib.Path(engrave_tree) / "scripts/release-workflows"
     src = (rw / "emit.py").read_text()
     marker = "\nfor repo, kw in REPOS.items():\n"
@@ -388,57 +503,195 @@ def check_release_gen(engrave_tree, pairs):
     return ok
 
 
-def self_test(scratch):
-    """GREEN on expected() output written back as YAML; RED on each mutation.
-    The removed-lines check is exercised separately: a dumped file rewrites
-    every line, so here it is switched off and tested on its own."""
-    ok = True
-    bases = {"mnemonic-toolkit": "origin/master", "mnemonic-engrave": "origin/master", "mnemonic-key": "origin/main"}
+GUARD_TEXT = """\
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: %s
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh"""
+SELFTEST_TEXT = """\
+      - name: Self-test the docs-only guard
+        shell: bash
+        run: bash ci/docs-only.test.sh"""
+SELFTEST_LINUX_TEXT = """\
+      - name: Self-test the docs-only guard
+        if: runner.os == 'Linux'
+        shell: bash
+        run: bash ci/docs-only.test.sh"""
+PERMS_TEXT = ["  contents: read", "  checks: read"]
+
+
+def apply_text(text, jobs, top_perms):
+    """The plan's D1/D4(release.yml)/D5 edits applied line by line, as an implementer would.
+    jobs: {job id: (self-test text or None, job-level permissions?)}."""
+    L = text.split("\n")
+    ind = lambda l: len(l) - len(l.lstrip(" "))
+    j0 = L.index("jobs:")
+    starts = [i for i in range(j0 + 1, len(L)) if re.match(r"^  [A-Za-z0-9_-]+:\s*$", L[i])] + [len(L)]
+    out = L[:j0] + (["permissions:"] + PERMS_TEXT + [""] if top_perms else []) + ["jobs:"]
+    out += L[j0 + 1:starts[0]]
+    for a, b in zip(starts, starts[1:]):
+        blk = L[a:b]
+        jn = blk[0].strip().rstrip(":")
+        if jn not in jobs:
+            out += blk
+            continue
+        selftest, jperms = jobs[jn]
+        name = next(l.split("name: ", 1)[1] for l in blk if l.startswith("    name: "))
+        si = blk.index("    steps:")
+        st = [i for i in range(si + 1, len(blk)) if blk[i].startswith("      - ")] + [len(blk)]
+        after, repl = {}, {}
+        for k, (s0, s1) in enumerate(zip(st, st[1:])):
+            content = [i for i in range(s0 + 1, s1) if blk[i].strip() and ind(blk[i]) >= 8]
+            if k == 0:
+                after[content[-1] if content else s0] = ((selftest + "\n") if selftest else "") + GUARD_TEXT % name
+                continue
+            iff = [i for i in content if ind(blk[i]) == 8 and blk[i].lstrip().startswith("if: ")]
+            if iff:
+                repl[iff[0]] = f"        if: ({unwrap(blk[iff[0]].split('if: ', 1)[1])}) && {COND}"
+            else:
+                after[s0] = f"        if: {COND}"
+        for i, l in enumerate(blk):
+            if jperms and l == "    strategy:":
+                out += ["    permissions:"] + ["    " + x for x in PERMS_TEXT]
+            out.append(repl.get(i, l))
+            if i in after:
+                out += after[i].split("\n")
+    return "\n".join(out)
+
+
+def _scratch_repo(repo, base, d):
     root = pathlib.Path("/scratch/code/shibboleth")
+    subprocess.run(["git", "init", "-q", str(d)], check=True)
+    arch = subprocess.run(["git", "-C", str(root / repo), "archive", base, ".github"], capture_output=True, check=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(d)], input=arch, check=True)
+    ga = subprocess.run(["git", "-C", str(root / repo), "show", f"{base}:.gitattributes"], capture_output=True)
+    if ga.returncode == 0:
+        (d / ".gitattributes").write_bytes(ga.stdout)
+    _commit(d, "base")
+    (d / "ci").mkdir()
+    for src, dst in ((HERE / "docs-only.sh", "ci/docs-only.sh"), (HERE / "docs-only.test.sh", "ci/docs-only.test.sh"),
+                     (HERE / "paths" / f"{repo}.txt", "ci/docs-only-paths.txt")):
+        shutil.copyfile(src, d / dst)
+        (d / dst).chmod(0o755 if dst.endswith(".sh") else 0o644)
+    ga = d / ".gitattributes"
+    ga.write_text((ga.read_text() if ga.exists() else "") + "\n".join(ATTRS) + "\n")
+    for f in EXTRA_CHANGED.get(repo, []):
+        (d / f).parent.mkdir(parents=True, exist_ok=True)
+        (d / f).write_text("stand-in for the plan's generator edit\n")
+
+
+def _commit(d, msg):
+    subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
+    if msg:
+        subprocess.run(["git", "-C", str(d), "-c", "user.email=g@t", "-c", "user.name=g", "commit", "-qm", msg], check=True)
+    else:
+        subprocess.run(["git", "-C", str(d), "update-index", "--chmod=+x", "ci/docs-only.sh", "ci/docs-only.test.sh"], check=True)
+
+
+def _want(label, got, want):
+    print(f"== self-test {label} (want {'GREEN' if want else 'RED'})")
+    if got != want:
+        print(f"SELF-TEST FAIL: {label}")
+    return got == want
+
+
+def self_test(scratch):
+    """GREEN on the plan, RED on each mutation, for three bases dumped from expected()
+    (the removed-lines check switched off, since a dump rewrites every line) and one
+    base, descriptor-mnemonic, edited TEXTUALLY with apply_text(), where the real
+    removed-lines check runs. It proves the checks fire; it cannot prove expected()
+    encodes the plan, except where the textual applier and expected() agree."""
+    global allowed_removed
+    ok = True
+    file_muts = {
+        "a file outside the plan changed": lambda d: (d / "Cargo.toml").write_text("x\n"),
+        ".gitattributes lost a rule": lambda d: (d / ".gitattributes").write_text(
+            (d / ".gitattributes").read_text().replace(ATTRS[-1] + "\n", "")),
+        "the guard script differs": lambda d: (d / "ci/docs-only.sh").write_text("#!/bin/sh\n"),
+    }
+    bases = {"mnemonic-toolkit": "origin/master", "mnemonic-engrave": "origin/master", "mnemonic-key": "origin/main"}
     for repo, base in bases.items():
         with tempfile.TemporaryDirectory(dir=scratch) as d:
             d = pathlib.Path(d)
-            subprocess.run(["git", "init", "-q", str(d)], check=True)
-            arch = subprocess.run(["git", "-C", str(root / repo), "archive", base, ".github"], capture_output=True, check=True).stdout
-            subprocess.run(["tar", "-x", "-C", str(d)], input=arch, check=True)
-            subprocess.run(["git", "-C", str(d), "add", "-A"], check=True)
-            subprocess.run(["git", "-C", str(d), "-c", "user.email=g@t", "-c", "user.name=g", "commit", "-qm", "b"], check=True)
+            _scratch_repo(repo, base, d)
             wf = d / ".github/workflows"
             for p in wf.glob("*.yml"):
-                exp, _ = expected(repo, p.name, load(p.read_text()))
-                p.write_text(yaml.safe_dump(exp, sort_keys=False, allow_unicode=True))
-            global allowed_removed
+                old = load(p.read_text())
+                exp, _, _ = expected(repo, p.name, old)
+                if not same(exp, old):
+                    p.write_text(yaml.safe_dump(exp, sort_keys=False, allow_unicode=True))
+            _commit(d, None)
             real = allowed_removed
-            allowed_removed = lambda r, f, t: sorted(l[1:] for l in git("-C", str(d), "diff", "-U0", "HEAD", "--", f".github/workflows/{f}").splitlines() if l.startswith("-") and not l.startswith("---"))
+            allowed_removed = lambda r, f, t, i=(): sorted(diff_lines(d, "HEAD", f".github/workflows/{f}", "-"))
             try:
-                print(f"== self-test {repo}: plan applied (want GREEN)")
-                ok &= check_workflows(repo, d, "HEAD")
-                green = {p.name: p.read_text() for p in wf.glob("*.yml")}
+                ok &= _want(f"{repo}: plan applied", check_workflows(repo, d, "HEAD") and check_files(repo, d), True)
+                green = {p: p.read_bytes() for p in d.rglob("*") if p.is_file() and ".git" not in p.parts}
                 f = GUARDED[repo] and next(iter(GUARDED[repo])) or "release.yml"
                 muts = {
-                    "drop the guard step": lambda y: y["jobs"][next(iter(y["jobs"]))]["steps"].pop(1 if "test" not in y["jobs"] else 1),
+                    "drop the guard step": lambda y: [j["steps"].remove(s) for j in y["jobs"].values() for s in list(j.get("steps", [])) if s.get("id") == "docs"][:1],
                     "one step loses its if": lambda y: [s.pop("if", None) for s in y["jobs"][next(j for j in y["jobs"] if any("if" in s for s in y["jobs"][j]["steps"]))]["steps"][-1:]],
                     "guard keyed on another output": lambda y: [s.__setitem__("if", s["if"].replace("docs_only != 'true'", "docs_only == 'false'")) for j in y["jobs"].values() for s in j.get("steps", []) if s.get("if") == COND][:1],
                     "guard env PUSH_BEFORE wrong": lambda y: [s["env"].__setitem__("PUSH_BEFORE", "${{ github.sha }}") for j in y["jobs"].values() for s in j.get("steps", []) if s.get("id") == "docs"][:1],
+                    "guard CHECK_NAME wrong": lambda y: [s["env"].__setitem__("CHECK_NAME", "build") for j in y["jobs"].values() for s in j.get("steps", []) if s.get("id") == "docs"][:1],
+                    "checks: read dropped": lambda y: [p.pop("checks") for p in [y.get("permissions")] + [j.get("permissions") for j in y["jobs"].values()] if isinstance(p, dict) and "checks" in p][:1],
                     "selftest dropped": lambda y: [j["steps"].remove(s) for j in y["jobs"].values() for s in list(j.get("steps", [])) if s.get("name") == "Self-test the docs-only guard"][:1],
                 }
-                for name, mut in muts.items():
-                    for p in wf.glob("*.yml"):
-                        p.write_text(green[p.name])
-                    y = load((wf / f).read_text())
-                    before = copy.deepcopy(y)
-                    mut(y)
-                    if same(before, y):
-                        print(f"SELF-TEST BROKEN: mutation {name!r} changed nothing in {repo} {f}")
-                        ok = False
-                        continue
-                    (wf / f).write_text(yaml.safe_dump(y, sort_keys=False, allow_unicode=True))
-                    print(f"== self-test {repo} mutation: {name} (want RED)")
-                    if check_workflows(repo, d, "HEAD"):
-                        print(f"SELF-TEST FAIL: {name!r} passed")
-                        ok = False
+                for name, mut in list(muts.items()) + list(file_muts.items()):
+                    for p, b in green.items():
+                        p.write_bytes(b)
+                    if name in muts:
+                        y = load((wf / f).read_text())
+                        before = copy.deepcopy(y)
+                        mut(y)
+                        if same(before, y):
+                            print(f"SELF-TEST BROKEN: mutation {name!r} changed nothing in {repo} {f}")
+                            ok = False
+                            continue
+                        (wf / f).write_text(yaml.safe_dump(y, sort_keys=False, allow_unicode=True))
+                    else:
+                        mut(d)
+                    _commit(d, None)
+                    ok &= _want(f"{repo} mutation: {name}", check_workflows(repo, d, "HEAD") and check_files(repo, d), False)
+                for p, b in green.items():
+                    p.write_bytes(b)
+                _commit(d, None)
+                (wf / f).write_text((wf / f).read_text() + "\n")
+                ok &= _want(f"{repo} mutation: an unstaged edit", check_workflows(repo, d, "HEAD"), False)
             finally:
                 allowed_removed = real
+    # textual: descriptor-mnemonic, real removed-lines check
+    repo = "descriptor-mnemonic"
+    with tempfile.TemporaryDirectory(dir=scratch) as d:
+        d = pathlib.Path(d)
+        _scratch_repo(repo, "origin/main", d)
+        wf = d / ".github/workflows"
+        ci = wf / "ci.yml"
+        ci.write_text(apply_text(ci.read_text(), {j: (SELFTEST_TEXT if j == "clippy" else None, False)
+                                                  for j in load(ci.read_text())["jobs"]}, True))
+        rel = wf / "release.yml"
+        rel.write_text(apply_text(rel.read_text(), {"test": (SELFTEST_LINUX_TEXT, True)}, False))
+        _commit(d, None)
+        ok &= _want(f"{repo}: plan applied textually", check_workflows(repo, d, "HEAD") and check_files(repo, d), True)
+        good = ci.read_text()
+        ci.write_text(good.replace("    # Required contexts here: `cargo test (ubuntu-latest)` and `cargo clippy`.\n", "", 1))
+        if ci.read_text() == good:
+            print("SELF-TEST BROKEN: textual mutation found no comment line")
+            ok = False
+        _commit(d, None)
+        ok &= _want(f"{repo} textual mutation: an unrelated comment line deleted", check_workflows(repo, d, "HEAD"), False)
+        dup = f"        if: (matrix.musl_native) && {COND}\n"
+        if dup not in good:
+            print("SELF-TEST BROKEN: textual mutation found no combined if line")
+            ok = False
+        ci.write_text(good.replace(dup, dup + "        if: true\n", 1))
+        _commit(d, None)
+        ok &= _want(f"{repo} textual mutation: a repeated if key", check_workflows(repo, d, "HEAD"), False)
     print("SELF-TEST: " + ("PASS" if ok else "FAIL"))
     return ok
 
