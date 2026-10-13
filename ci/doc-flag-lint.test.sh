@@ -56,11 +56,15 @@ EOF
 # Only step 4 is judged: in a copied src/ outside docs/manual, cspell and lychee
 # lose their config and relative figure paths and report noise; flag-coverage
 # does not depend on either.
-step4() { sed -n '/=== 4\/6 flag-coverage ===/,/=== 5\/6/p' <<<"$1"; }
+# The step total ("4/7") is not part of the match: lint.sh renumbers when a step
+# is added, and an empty slice here makes every mutation look rejected-by-nothing.
+step4() { sed -n '/=== 4\/[0-9][0-9]* flag-coverage ===/,/=== 5\/[0-9]/p' <<<"$1"; }
 
 # baseline
 out=$(run_lint "$(fresh)")
-if ! grep -qF '[lint] FAIL' <<<"$(step4 "$out")" && grep -qF 'flag exemption(s)' <<<"$out"; then
+if [ -z "$(step4 "$out")" ]; then
+  fail=$((fail + 1)); echo "FAIL baseline: step 4 (flag-coverage) header not found in the lint output; the mutation cases would judge an empty slice"
+elif ! grep -qF '[lint] FAIL' <<<"$(step4 "$out")" && grep -qF 'flag exemption(s)' <<<"$out"; then
   pass=$((pass + 1)); echo "ok   baseline: unmutated manual passes flag-coverage"
 else fail=$((fail + 1)); echo "FAIL baseline: unmutated manual fails flag-coverage"; step4 "$out" | grep -F FAIL | head; fi
 

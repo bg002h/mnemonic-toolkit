@@ -6004,9 +6004,9 @@ screen printed. Print the values.
 
 - **Surfaced:** 2026-10-08, refugium fold I build, FI-12.
 - **Where:** `docs/manual/src/40-cli-reference/45-mr.md`; `docs/manual/tests/lint.sh` (the lint half).
-- **What:** the chapter prints no root at all: `mr` refuses the spec's own vectors (published roots are refused on every network) and the fixture roots must not appear in the manual, so every root-bearing example is a placeholder (`MR1_CARD`, `ROOT`, `PASS`) or a text with `<n>`. A scan of the chapter at the FI-12 commit found no 24-word run and no 237-character H/T string. The lint's refusal of an `mr root` example input or a letter-A 24-word phrase whose tail is not in `PUBLISHED_TEST_TAILS` is not built: it needs mr-codec's tails and the BIP-39 list, which `lint.sh` does not have.
-- **Why deferred:** the check wants `mr` itself (a `mr`-side scan of the manual, or a tails file the lint reads); owed with the refugium side's decision on where the list lives.
-- **Status:** `open`
+- **What:** (refugium spec "Batch 1", item (3); ruled, owner, 2026-10-11, option 1, replacing the tails reading) the chapter shows no root at all, and `lint.sh` step 7 refuses any root-shaped text in it: a run of 22 or more BIP-39 English words, each whole or as its unique four-letter prefix (a root's 24 words, or 22 pill draws), 237 or more coin flips (`H`, `T`, `1`, `0`), 92 or more dice rolls (`1` to `6`), whitespace inside a run of flips or rolls skipped, or an ms1 string of a 32-byte secret (`ms1` and 72 or more bech32 characters). There is no `PUBLISHED_TEST_TAILS` allow-list and no tails file shared with the refugium repo. The rules and what they do not cover are in `docs/manual/tests/root-shaped.sh`; its self-test `root-shaped-test.sh` (17 cases, every root-shaped input generated, none committed) runs first; the BIP-39 English list `docs/manual/tests/bip39-english.txt` is pinned by SHA-256.
+- **Why deferred:** n/a: built.
+- **Status:** `resolved` (this repo's batch 1 manual PR; the refugium entry closes with it)
 - **Tier:** `cross-repo`
 
 ### `mr-wipe-line-shells` — the history-off and wipe lines under bash, zsh and fish (manual half; refugium `mr-wipe-line-shells`)
