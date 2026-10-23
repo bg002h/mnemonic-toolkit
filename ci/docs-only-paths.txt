@@ -17,3 +17,8 @@
 - ^design/PLAN_v0_26_0_three_way_merge\.md$
 # read by tests/display_grouping_conformance.rs and tests/cli_p3_grouping_surface.rs
 - ^design/display-grouping-vectors\.tsv
+# Named in ci/repro/vendor-freshness.sh (ci/code-docs-check.sh).
+- ^docs/verify-reproducibility\.md$
+# Named in crates/mnemonic-toolkit/tests/design_artifacts_presence.rs
+# (ci/code-docs-check.sh).
+- ^CLAUDE\.md$

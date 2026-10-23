@@ -9,7 +9,9 @@
 # which fails the job.
 #
 # The reference commit R:
-#   pull_request into the default branch   PR_BASE_SHA, the tip it targets
+#   pull_request into the default branch   PR_BASE_SHA, the tip it targets;
+#                                          failing that, PUSH_BEFORE, the
+#                                          previous PR head (rule A', below)
 #   push to the default branch             PUSH_BEFORE, the previous tip
 #   push to any other branch               the current tip of origin/$DEFAULT_BRANCH
 #   anything else (a PR into another branch, tags, dispatch, schedule): full run
@@ -17,6 +19,22 @@
 # branch, never with its own previous tip: that tip may never have passed.
 # The diff is tree to tree (`git diff R HEAD`), so a depth-1 checkout is
 # enough; only R itself is fetched, at depth 1.
+#
+# Rule A' (a docs-only push to a PR that already changes code): when the
+# PR_BASE_SHA rule fails, R is the previous PR head (github.event.before,
+# passed as PUSH_BEFORE). HEAD is the PR's test-merge commit, so a base that
+# gained code since R makes the diff non-docs and the job runs. A' also needs
+# HEAD to be a two-parent merge, and the GitHub compare API to report
+# <HEAD's first parent>...R as `ahead` or `identical`: the base this run
+# merged is an ancestor of R. (Not PR_BASE_SHA: on a push to a PR it can be
+# the base the PR was opened on.) Then, when R's run was for this PR into the
+# default branch, every base it tested was an ancestor of R too, so it tested
+# R's tree, and HEAD differs from that only in documentation. Two cases are
+# not covered: an admin force push that rewinds the default branch during an
+# open PR, and a PR retargeted onto the default branch after R's run (that
+# run tested another base). Both are accepted limits (SPEC §5); the default
+# branch's own push run after the merge still runs fully. Needs
+# `contents: read` for the compare.
 #
 # R is not assumed to be good. Before writing `true`, the guard asks the
 # GitHub API for this job's own check run on R (CHECK_NAME, the job's
@@ -51,6 +69,12 @@ full() {
   exit 0
 }
 
+skip() {
+  echo "docs_only=true" >> "$out"
+  echo "docs-only: $1; skipping the guarded steps"
+  exit 0
+}
+
 # match <ERE> <path>: 0 on a match, 1 on none; a bad pattern forces a full run.
 match() {
   grep -qE -- "$1" <<<"$2"
@@ -75,12 +99,94 @@ done < "$paths_file"
 
 [ -n "${DEFAULT_BRANCH:-}" ] || full "DEFAULT_BRANCH is not set"
 [ -n "${CHECK_NAME:-}" ] || full "CHECK_NAME is not set"
-base=
+
+list=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/docs-only.XXXXXX") || full "mktemp failed"
+trap 'rm -f "$list"' EXIT
+
+# docs_since <ref>: fetch <ref> at depth 1 and return 0 when at least one file
+# differs between it and HEAD and every such file is documentation. Sets
+# $base (the fetched commit) and $n (the file count). Otherwise returns 1 and
+# says why in $why. A path containing a newline, or a bad pattern, ends the
+# run (full) at once.
+docs_since() {
+  why=
+  base=
+  n=0
+  git fetch --no-tags --depth=1 origin "$1" > /dev/null 2>&1 || { why="cannot fetch $1"; return 1; }
+  base=$(git rev-parse --verify -q 'FETCH_HEAD^{commit}') || { why="fetched $1 but FETCH_HEAD is not a commit"; return 1; }
+  git -c core.quotePath=false diff --no-renames --name-only -z "$base" HEAD > "$list" ||
+    { why="git diff $base HEAD failed"; return 1; }
+  [ -s "$list" ] || { why="no file differs from $base"; return 1; }
+  while IFS= read -r -d '' f; do
+    case $f in *$'\n'*) full "a changed path contains a newline" ;; esac
+    n=$((n + 1))
+    ok=
+    i=0
+    while [ "$i" -lt "$nallow" ]; do
+      if match "${allow[i]}" "$f"; then ok=1; break; fi
+      i=$((i + 1))
+    done
+    [ -n "$ok" ] || { why="not documentation: $f"; return 1; }
+    i=0
+    while [ "$i" -lt "$ndeny" ]; do
+      if match "${deny[i]}" "$f"; then why="protected: $f"; return 1; fi
+      i=$((i + 1))
+    done
+  done < "$list"
+  [ "$n" -gt 0 ] || { why="no file differs from $base"; return 1; }
+  return 0
+}
+
+# passed <sha>: 0 when every latest CHECK_NAME check run on <sha> is
+# completed with conclusion success; otherwise 1, with the reason in $why.
+passed() {
+  runs=$("$gh_cmd" api -X GET "repos/${GITHUB_REPOSITORY:-}/commits/$1/check-runs" \
+    -f check_name="$CHECK_NAME" -f filter=latest \
+    --jq '.check_runs[] | "\(.status)/\(.conclusion)"' 2> /dev/null) ||
+    { why="cannot read check runs for $1"; return 1; }
+  [ -n "$runs" ] || { why="no '$CHECK_NAME' check run on $1"; return 1; }
+  while IFS= read -r r; do
+    [ "$r" = "completed/success" ] || { why="'$CHECK_NAME' on $1 is $r, not completed/success"; return 1; }
+  done <<<"$runs"
+  return 0
+}
+
 case ${GITHUB_EVENT_NAME:-} in
   pull_request)
     [ "${GITHUB_BASE_REF:-}" = "$DEFAULT_BRANCH" ] || full "pull_request into ${GITHUB_BASE_REF:-an unset base}, not $DEFAULT_BRANCH"
     [ -n "${PR_BASE_SHA:-}" ] || full "PR_BASE_SHA is not set"
-    fetch=$PR_BASE_SHA ;;
+    if docs_since "$PR_BASE_SHA" && passed "$base"; then
+      skip "all $n changed files are documentation, and '$CHECK_NAME' passed on $base"
+    fi
+    why_base=$why
+    # Rule A': the previous PR head.
+    prev=${PUSH_BEFORE:-}
+    [ -n "$prev" ] || full "base: $why_base; previous PR head: none"
+    case $prev in
+      *[!0-9a-f]*) full "base: $why_base; previous PR head: '$prev' is not a commit SHA" ;;
+    esac
+    [ "${#prev}" -eq 40 ] || [ "${#prev}" -eq 64 ] ||
+      full "base: $why_base; previous PR head: '$prev' is not a commit SHA"
+    # The base this run merged is HEAD's first parent: HEAD is the test-merge
+    # commit. (github.event.pull_request.base.sha can be the base the PR was
+    # opened on, not the one merged now.) Its object holds its parents' ids
+    # even in a depth-1 clone.
+    parents=$(git cat-file -p HEAD 2> /dev/null | sed -n 's/^parent //p')
+    set -- $parents
+    [ $# -eq 2 ] || full "base: $why_base; previous PR head: HEAD has $# parent(s), not a two-parent test-merge commit"
+    merged=$1
+    # An all-zeros SHA cannot be fetched, so docs_since refuses it.
+    docs_since "$prev" || full "base: $why_base; previous PR head: $why"
+    status=$("$gh_cmd" api "repos/${GITHUB_REPOSITORY:-}/compare/$merged...$base" \
+      --jq .status 2> /dev/null) ||
+      full "base: $why_base; previous PR head: cannot compare $merged...$base"
+    case $status in
+      ahead | identical) ;;
+      *) full "base: $why_base; previous PR head: $merged...$base is '$status', not ahead or identical" ;;
+    esac
+    passed "$base" || full "base: $why_base; previous PR head: $why"
+    skip "all $n files changed since the previous PR head $base are documentation, the merged base $merged is an ancestor of it, and '$CHECK_NAME' passed on it"
+    ;;
   push)
     case ${GITHUB_REF:-} in
       "refs/heads/$DEFAULT_BRANCH")
@@ -90,46 +196,10 @@ case ${GITHUB_EVENT_NAME:-} in
         fetch=$PUSH_BEFORE ;;
       refs/heads/?*) fetch="refs/heads/$DEFAULT_BRANCH" ;;
       *) full "push to ${GITHUB_REF:-an unset ref}" ;;
-    esac ;;
+    esac
+    docs_since "$fetch" || full "$why"
+    passed "$base" || full "$why"
+    skip "all $n changed files are documentation, and '$CHECK_NAME' passed on $base"
+    ;;
   *) full "event ${GITHUB_EVENT_NAME:-unset}" ;;
 esac
-
-git fetch --no-tags --depth=1 origin "$fetch" > /dev/null 2>&1 || full "cannot fetch $fetch"
-base=$(git rev-parse --verify -q 'FETCH_HEAD^{commit}') || full "fetched $fetch but FETCH_HEAD is not a commit"
-
-list=$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/docs-only.XXXXXX") || full "mktemp failed"
-trap 'rm -f "$list"' EXIT
-git -c core.quotePath=false diff --no-renames --name-only -z "$base" HEAD > "$list" || full "git diff $base HEAD failed"
-[ -s "$list" ] || full "no file differs from $base"
-
-n=0
-while IFS= read -r -d '' f; do
-  case $f in *$'\n'*) full "a changed path contains a newline" ;; esac
-  n=$((n + 1))
-  ok=
-  i=0
-  while [ "$i" -lt "$nallow" ]; do
-    if match "${allow[i]}" "$f"; then ok=1; break; fi
-    i=$((i + 1))
-  done
-  [ -n "$ok" ] || full "not documentation: $f"
-  i=0
-  while [ "$i" -lt "$ndeny" ]; do
-    if match "${deny[i]}" "$f"; then full "protected: $f"; fi
-    i=$((i + 1))
-  done
-done < "$list"
-[ "$n" -gt 0 ] || full "no file differs from $base"
-
-# Every changed file is documentation. Now prove R itself passed this job.
-runs=$("$gh_cmd" api -X GET "repos/${GITHUB_REPOSITORY:-}/commits/$base/check-runs" \
-  -f check_name="$CHECK_NAME" -f filter=latest \
-  --jq '.check_runs[] | "\(.status)/\(.conclusion)"' 2> /dev/null) || full "cannot read check runs for $base"
-[ -n "$runs" ] || full "no '$CHECK_NAME' check run on $base"
-while IFS= read -r r; do
-  [ "$r" = "completed/success" ] || full "'$CHECK_NAME' on $base is $r, not completed/success"
-done <<<"$runs"
-
-echo "docs_only=true" >> "$out"
-echo "docs-only: all $n changed files are documentation, and '$CHECK_NAME' passed on $base; skipping the guarded steps"
-exit 0

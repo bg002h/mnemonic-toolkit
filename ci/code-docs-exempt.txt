@@ -1,0 +1,19 @@
+# ci/code-docs-exempt.txt -- files ci/code-docs-check.sh does not scan. One
+# ERE per line, matched against the repo-relative path; # starts a comment.
+# List a file here only when no step that ci/docs-only.sh guards runs it, and
+# say why in the comment above it.
+
+# Not run by CI.
+^scripts/followup-reconcile\.sh$
+^scripts/spec-citation-gate\.py$
+
+# Run only by the doc workflows (manual, quickstart, technical-manual,
+# manual-gui, examples), which ci/doc-gate-guard.sh guards, not
+# ci/docs-only.sh. The docs files they name are those workflows' inputs.
+^ci/doc-flag-lint\.test\.sh$
+^ci/doc-gate-guard\.test\.sh$
+^ci/doc-gate-paths\.py$
+
+# Workflows with no ci/docs-only.sh guard (the doc workflows, a tag-only
+# changelog check and a pin check).
+^\.github/workflows/(changelog-check|examples|manual|manual-gui|quickstart|sibling-pin-check)\.yml$
