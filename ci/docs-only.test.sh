@@ -23,10 +23,23 @@ cat > "$tmp/paths.txt" <<'EOF'
 - ^design/protected\.tsv$
 EOF
 
-# A stand-in for `gh`: records its arguments, prints $FAKE_RUNS (one
-# "status/conclusion" line per check run) and exits $FAKE_RC.
-printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\n" "$@" > "$GH_ARGS"' \
-  '[ "${FAKE_RC:-0}" -eq 0 ] || exit "$FAKE_RC"' 'printf "%s\n" "$FAKE_RUNS"' > "$tmp/gh"
+# A stand-in for `gh`: appends its arguments to $GH_ARGS and exits $FAKE_RC.
+# A compare call prints $FAKE_COMPARE (default "ahead") or exits
+# $FAKE_CMP_RC. A check-runs call for commit $FAKE_PREV prints
+# $FAKE_RUNS_PREV (default "completed/success"); any other call prints
+# $FAKE_RUNS (one "status/conclusion" line per check run).
+cat > "$tmp/gh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >> "$GH_ARGS"
+[ "${FAKE_RC:-0}" -eq 0 ] || exit "$FAKE_RC"
+case "$*" in
+  *compare/*)
+    [ "${FAKE_CMP_RC:-0}" -eq 0 ] || exit "$FAKE_CMP_RC"
+    printf '%s\n' "${FAKE_COMPARE-ahead}" ;;
+  *"commits/${FAKE_PREV:-none}/"*) printf '%s\n' "${FAKE_RUNS_PREV-completed/success}" ;;
+  *) printf '%s\n' "$FAKE_RUNS" ;;
+esac
+EOF
 chmod +x "$tmp/gh"
 
 git init -q --bare "$tmp/origin.git"
@@ -52,7 +65,7 @@ check() { # check <name> <want true|false> <env...>
   rm -rf "$tmp/c"
   git clone -q --depth=1 --no-local --branch "$branch" "file://$tmp/origin.git" "$tmp/c" 2> /dev/null
   [ -z "${detach:-}" ] || git -C "$tmp/c" -c advice.detachedHead=false checkout -q "$detach"
-  : > "$tmp/out"
+  : > "$tmp/out"; : > "$tmp/ghargs"
   (cd "$tmp/c" && env -i PATH="$PATH" HOME="$tmp" GIT_CONFIG_GLOBAL="$GIT_CONFIG_GLOBAL" GIT_CONFIG_NOSYSTEM=1 \
      GITHUB_OUTPUT="$tmp/out" DOCS_ONLY_PATHS="${paths:-$tmp/paths.txt}" \
      DOCS_ONLY_GH="$tmp/gh" GH_ARGS="$tmp/ghargs" GITHUB_REPOSITORY=o/r CHECK_NAME=test \
@@ -139,6 +152,86 @@ branch=pr-nl detach= check "changed path contains a newline" false $D
 printf '+ ^design/\r\n- ^design/protected\\.tsv$\r\n' > "$tmp/crlf.txt"
 paths=$tmp/crlf.txt branch=pr-docs detach= check "CRLF rules file" true $D
 paths=$tmp/crlf.txt branch=pr-prot detach= check "CRLF rules file, deny rule still applies" false $D
+
+# --- (A') a docs-only push to a PR that already holds code -----------------
+# PR_BASE_SHA's rule fails (the PR changes code), so the guard compares HEAD
+# with the previous PR head (PUSH_BEFORE, github.event.before).
+args_have() { # args_have <row name> <line>... : each line is one gh argument
+  local n=$1 l; shift
+  for l in "$@"; do
+    grep -qxF -- "$l" "$tmp/ghargs" || { fail=$((fail + 1)); echo "FAIL $n: gh was not given '$l':"; cat "$tmp/ghargs"; return; }
+  done
+  pass=$((pass + 1)); echo "ok   $n"
+}
+args_lack() { # args_lack <row name> <pattern> : no gh argument contains it
+  if grep -qF -- "$2" "$tmp/ghargs"; then fail=$((fail + 1)); echo "FAIL $1: gh was given '$2':"; cat "$tmp/ghargs"
+  else pass=$((pass + 1)); echo "ok   $1"; fi
+}
+# HEAD is the PR's test-merge commit, as on GitHub: base first, PR head second.
+tmerge() { # tmerge <base> <pr head> <branch>: push merge(base, head) as <branch>
+  git checkout -q --detach "$1"
+  git merge -q --no-ff --no-edit "$2" > /dev/null
+  git push -q -f origin "HEAD:refs/heads/$3"
+  tm=$(git rev-parse HEAD)
+  git checkout -q --detach "$2"
+}
+git reset -q --hard "$c2"
+a1=$(commit acode src/lib.rs); a2=$(commit adocs design/notes.md README.md); tmerge "$c2" "$a2" pr-a
+A="$PR PR_BASE_SHA=$c2 FAKE_PREV=$a1"
+branch=pr-a detach= check "A': code then docs, previous head passed" true $A PUSH_BEFORE=$a1
+args_have "A': gh asked about the previous head's run and compared the merged base...previous head" \
+  "repos/o/r/compare/$c2...$a1" "repos/o/r/commits/$a1/check-runs" "check_name=test" "filter=latest"
+# github.event.pull_request.base.sha can be stale (the base the PR was opened
+# on): A' must compare the base this run merged, HEAD's first parent.
+branch=pr-a detach= check "A': a stale PR_BASE_SHA is not used for the compare" true $PR PR_BASE_SHA=$c0 FAKE_PREV=$a1 PUSH_BEFORE=$a1
+args_have "A': the compare names HEAD's first parent, not PR_BASE_SHA" "repos/o/r/compare/$c2...$a1"
+args_lack "A': the stale PR_BASE_SHA is not compared" "compare/$c0..."
+branch=pr-a detach= check "A': previous head's run failed" false $A PUSH_BEFORE=$a1 FAKE_RUNS_PREV=completed/failure
+branch=pr-a detach= check "A': previous head's run cancelled" false $A PUSH_BEFORE=$a1 FAKE_RUNS_PREV=completed/cancelled
+branch=pr-a detach= check "A': previous head's run pending" false $A PUSH_BEFORE=$a1 FAKE_RUNS_PREV=in_progress/null
+branch=pr-a detach= check "A': previous head has no run" false $A PUSH_BEFORE=$a1 FAKE_RUNS_PREV=
+branch=pr-a detach= check "A': previous head, one of two same-name runs failed" false $A PUSH_BEFORE=$a1 FAKE_RUNS_PREV=$'completed/success\ncompleted/failure'
+branch=pr-a detach= check "A': merged base is not an ancestor of the previous head (compare behind)" false $A PUSH_BEFORE=$a1 FAKE_COMPARE=behind
+branch=pr-a detach= check "A': merged base and previous head diverged" false $A PUSH_BEFORE=$a1 FAKE_COMPARE=diverged
+branch=pr-a detach= check "A': compare says identical" true $A PUSH_BEFORE=$a1 FAKE_COMPARE=identical
+branch=pr-a detach= check "A': compare prints nothing" false $A PUSH_BEFORE=$a1 FAKE_COMPARE=
+branch=pr-a detach= check "A': compare API error" false $A PUSH_BEFORE=$a1 FAKE_CMP_RC=1
+branch=pr-a detach= check "A': no PUSH_BEFORE (opened, reopened)" false $A
+branch=pr-a detach= check "A': PUSH_BEFORE all zeros" false $A PUSH_BEFORE=0000000000000000000000000000000000000000
+# Fetchable branch names that are not SHAs: one fails only the hex check (40
+# characters), one only the length check (all hex).
+nonhex=prev-a1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+git push -q origin "$a1:refs/heads/$nonhex" "$a1:refs/heads/abc123"
+branch=pr-a detach= check "A': PUSH_BEFORE a 40-character branch name, not hex" false $A PUSH_BEFORE=$nonhex FAKE_PREV=$a1
+branch=pr-a detach= check "A': PUSH_BEFORE a short all-hex branch name" false $A PUSH_BEFORE=abc123 FAKE_PREV=$a1
+branch=pr-a detach= check "A': PUSH_BEFORE unfetchable" false $A PUSH_BEFORE=1234567890123456789012345678901234567890
+# HEAD must be a two-parent test-merge commit; a PR head checked out
+# directly (one parent) gives no merged base.
+git push -q -f origin "$a2:refs/heads/pr-a-tip"
+branch=pr-a-tip detach= check "A': HEAD is not a test-merge commit" false $A PUSH_BEFORE=$a1
+git checkout -q --detach "$a2"
+a3=$(commit acode2 src/lib.rs); tmerge "$c2" "$a3" pr-a
+branch=pr-a detach= check "A': the new push changes code" false $A PUSH_BEFORE=$a2 FAKE_PREV=$a2
+branch=pr-a detach= check "A': code since an older previous head" false $A PUSH_BEFORE=$a1
+git checkout -q --detach "$a2"; a4=$(commit aprot design/protected.tsv); tmerge "$c2" "$a4" pr-a
+branch=pr-a detach= check "A': the new push changes a protected path" false $A PUSH_BEFORE=$a2 FAKE_PREV=$a2
+# The base gained code after the previous head: the test merge holds it.
+git checkout -q --detach "$c2"; m1=$(commit mcode src/main.rs); git push -q origin HEAD:main
+git checkout -q --detach "$a2"; a5=$(commit adocs2 design/notes.md); tmerge "$m1" "$a5" pr-a
+branch=pr-a detach= check "A': test-merge HEAD holds code the base gained since the previous head" false $A PUSH_BEFORE=$a2 FAKE_PREV=$a2
+# Main added code X before the previous head's run and reverted it since:
+# the merged base (main after the revert) is not an ancestor of the previous
+# head, so the compare (here answered as GitHub would) refuses.
+git checkout -q --detach "$m1"; git revert --no-edit "$m1" > /dev/null; mx=$(git rev-parse HEAD); git push -q origin HEAD:main
+tmerge "$mx" "$a5" pr-a
+branch=pr-a detach= check "A': main added and reverted code since the previous head's run" false $A PR_BASE_SHA=$c2 PUSH_BEFORE=$a2 FAKE_PREV=$a2 FAKE_COMPARE=diverged
+args_have "A': that compare names the merged base" "repos/o/r/compare/$mx...$a2"
+git checkout -q --detach "$c2"
+d1=$(commit ddocs1 design/notes.md); d2=$(commit ddocs2 README.md); tmerge "$c2" "$d2" pr-d
+branch=pr-d detach= check "A': docs-only PR, base rule wins first" true $PR PR_BASE_SHA=$c2 PUSH_BEFORE=$d1 FAKE_PREV=$d1
+args_lack "A': base rule wins, no compare call" "compare/"
+branch=pr-d detach= check "A': docs-only PR, base's run failed, previous head passed" true $PR PR_BASE_SHA=$c2 PUSH_BEFORE=$d1 FAKE_PREV=$d1 FAKE_RUNS=completed/failure
+branch=pr-a detach= check "A': not used for a push event" false $PUSH GITHUB_REF=refs/heads/pr-a PUSH_BEFORE=$a2 FAKE_PREV=$a2
 
 echo "docs-only.test.sh: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

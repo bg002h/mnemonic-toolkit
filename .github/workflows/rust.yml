@@ -373,6 +373,12 @@ jobs:
       - name: Self-test the docs-only guard
         shell: bash
         run: bash ci/docs-only.test.sh
+      - name: Shared CI files, and no code names a docs file
+        shell: bash
+        run: |
+          sha256sum --check --strict ci/shared-ci.sha256
+          bash ci/code-docs-check.test.sh
+          bash ci/code-docs-check.sh
       - name: Docs-only change? (skips the steps below when every changed file is documentation)
         id: docs
         shell: bash
