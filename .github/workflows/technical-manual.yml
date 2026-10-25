@@ -61,6 +61,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
+      checks: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -78,7 +79,11 @@ jobs:
         # --book + --also are this gate's whole path scope -- there is no
         # `paths:` filter on the triggers any more, so the context reports on
         # every push and PR and can be a REQUIRED check.
-        run: bash ci/doc-gate-guard.sh --book docs/technical-manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$)'
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: technical-manual
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/doc-gate-guard.sh --book docs/technical-manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
 
       - name: Install make
         if: steps.guard.outputs.relevant == 'true'
