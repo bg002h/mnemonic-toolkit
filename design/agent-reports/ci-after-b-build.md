@@ -84,3 +84,11 @@ run 40221060356    sibling-pin-check              push           success    ok
   sibling-pin-check/sibling pins match install.sh  success    ok
 pr-checks: PASS (mnemonic-toolkit 13c33a5c3ada992fa85c84cf9338b256f6b88ac6)
 ```
+
+## L2 (docs head fb67da362994cce73789e6b5c4f855e08ca6cef3, previous head 13c33a5c3ada992fa85c84cf9338b256f6b88ac6)
+
+- run 40222098721 job 121255686829 `examples/examples`: `doc-gate-guard: relevant=false (A': no watched path changed since the previous PR head 13c33a5c3ada992fa85c84cf9338b256f6b88ac6, the merged base 101f9c7530c24ccc5dc663f5af2fe3bcb2ad4471 is an ancestor of it, and 'examples' passed on it)`
+- run 40222098685 job 121255686658 `manual/manual`: `doc-gate-guard: relevant=false (A': no watched path changed since the previous PR head 13c33a5c3ada992fa85c84cf9338b256f6b88ac6, the merged base 101f9c7530c24ccc5dc663f5af2fe3bcb2ad4471 is an ancestor of it, and 'manual' passed on it)`
+- run 40222098707 job 121255686784 `quickstart/quickstart`: `doc-gate-guard: relevant=false (A': no watched path changed since the previous PR head 13c33a5c3ada992fa85c84cf9338b256f6b88ac6, the merged base 101f9c7530c24ccc5dc663f5af2fe3bcb2ad4471 is an ancestor of it, and 'quickstart' passed on it)`
+- run 40222098682 job 121255686647 `technical-manual/technical-manual`: `doc-gate-guard: relevant=false (A': no watched path changed since the previous PR head 13c33a5c3ada992fa85c84cf9338b256f6b88ac6, the merged base 101f9c7530c24ccc5dc663f5af2fe3bcb2ad4471 is an ancestor of it, and 'technical-manual' passed on it)`
+- run 40222098745 job 121255686868 `manual-gui/changes`: `doc-gate-guard: relevant=false (A': no watched path changed since the previous PR head 13c33a5c3ada992fa85c84cf9338b256f6b88ac6, the merged base 101f9c7530c24ccc5dc663f5af2fe3bcb2ad4471 is an ancestor of it, and 'manual-gui' passed on it)`
