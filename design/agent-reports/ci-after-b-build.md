@@ -186,3 +186,81 @@ pr-checks: PASS (mnemonic-toolkit 642f0588100fde1c4d6124d65e2cea07132e3296)
 - run 40234810813 job 121293984570 `rust/musl build+test (x86_64-unknown-linux-musl)`: `docs-only: all 1 files changed since the previous PR head 642f0588100fde1c4d6124d65e2cea07132e3296 are documentation, the merged base 63459eced79a0d749b632c5270e8bedc38c44c22 is an ancestor of it, and 'musl build+test (x86_64-unknown-linux-musl)' passed on it; skipping the guarded steps`
 - run 40234810813 job 121293984582 `rust/test (ubuntu-latest)`: `docs-only: all 1 files changed since the previous PR head 642f0588100fde1c4d6124d65e2cea07132e3296 are documentation, the merged base 63459eced79a0d749b632c5270e8bedc38c44c22 is an ancestor of it, and 'test (ubuntu-latest)' passed on it; skipping the guarded steps`
 - run 40234810813 job 121293984589 `rust/musl build+test (aarch64-unknown-linux-musl)`: `docs-only: all 1 files changed since the previous PR head 642f0588100fde1c4d6124d65e2cea07132e3296 are documentation, the merged base 63459eced79a0d749b632c5270e8bedc38c44c22 is an ancestor of it, and 'musl build+test (aarch64-unknown-linux-musl)' passed on it; skipping the guarded steps`
+
+# Re-run after: ci: daily cross-repo drift check of the shared CI files
+
+PR #115. Copies ci-skip-constellation reference/after-b/T2 (SPEC-after-b.md).
+
+## Change
+
+```
+ .github/workflows/shared-drift.yml |  25 ++++++++
+ ci/shared-drift.sh                 |  50 ++++++++++++++++
+ ci/shared-drift.test.sh            | 114 +++++++++++++++++++++++++++++++++++++
+ 3 files changed, 189 insertions(+)
+```
+
+## Gate
+
+`make-after-b-reference --check: PASS (12 files)`
+
+## Local checks
+
+```
+ci/docs-only.sh: OK
+ci/docs-only.test.sh: OK
+ci/code-docs-check.sh: OK
+ci/code-docs-check.test.sh: OK
+docs-only.test.sh: 73 passed, 0 failed
+code-docs-check.test.sh: 41 passed, 0 failed
+code-docs check: ok (434 files scanned, 2488 docs files)
+shared-drift.test.sh: 6 passed, 0 failed
+```
+
+## L1 (code head 6a19b8b6b1571349e5011153aa66a9057174cc92)
+
+```
+run 40237523759    manual-gui                     pull_request   success    ok
+run 40237523634    technical-manual               pull_request   success    ok
+run 40237523704    shared-drift                   pull_request   success    ok
+run 40237523658    examples                       pull_request   success    ok
+run 40237523640    quickstart                     pull_request   success    ok
+run 40237523616    sibling-pin-check              pull_request   success    ok
+run 40237523625    manual                         pull_request   success    ok
+run 40237523606    release                        pull_request   success    ok
+run 40237523654    rust                           pull_request   success    ok
+run 40237520048    sibling-pin-check              push           success    ok
+  manual-gui/changes                               success    ok
+  manual-gui/manual-gui                            success    ok
+  manual-gui/release                               skipped    ok (allowed skip)
+  manual-gui/build                                 skipped    ok (allowed skip)
+  manual-gui/lint                                  skipped    ok (allowed skip)
+  manual-gui/verify-examples                       skipped    ok (allowed skip)
+  manual-gui/verify-examples-gui                   skipped    ok (allowed skip)
+  technical-manual/technical-manual                success    ok
+  shared-drift/shared CI files match the other public repos success    ok
+  examples/examples                                success    ok
+  quickstart/quickstart                            success    ok
+  sibling-pin-check/sibling pins match install.sh  success    ok
+  manual/manual                                    success    ok
+  release/release test (ubuntu-latest)             success    ok
+  release/build mnemonic (windows-x86_64)          success    ok
+  release/build mnemonic (macos-x86_64)            success    ok
+  release/build mnemonic (macos-aarch64)           success    ok
+  release/assemble + release                       skipped    ok (allowed skip)
+  rust/g6 invariant (cross-repo mlock.rs)          success    ok
+  rust/test (ubuntu-latest)                        success    ok
+  rust/miri (mlock unsafe)                         success    ok
+  rust/lib cross-platform check (x86_64-unknown-freebsd, ubuntu-latest) success    ok
+  rust/fmt (pinned 1.95.0)                         success    ok
+  rust/test (release, ubuntu-latest, mlock einval) success    ok
+  rust/lib cross-platform check (aarch64-unknown-linux-gnu, ubuntu-latest) success    ok
+  rust/lib cross-platform check (x86_64-pc-windows-msvc, windows-latest) success    ok
+  rust/install.sh harnesses (man-step + MSRV guard) success    ok
+  rust/test (macos-latest)                         success    ok
+  rust/musl build+test (x86_64-unknown-linux-musl) success    ok
+  rust/clippy                                      success    ok
+  rust/musl build+test (aarch64-unknown-linux-musl) success    ok
+  sibling-pin-check/sibling pins match install.sh  success    ok
+pr-checks: PASS (mnemonic-toolkit 6a19b8b6b1571349e5011153aa66a9057174cc92)
+```
