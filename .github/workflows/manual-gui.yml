@@ -44,6 +44,9 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      checks: read
     outputs:
       relevant: ${{ steps.guard.outputs.relevant }}
     steps:
@@ -54,7 +57,11 @@ jobs:
 
       - name: Detect relevant changes
         id: guard
-        run: bash ci/doc-gate-guard.sh --book docs/manual-gui --also '^(\.github/workflows/manual-gui\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: manual-gui
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/doc-gate-guard.sh --book docs/manual-gui --also '^(\.github/workflows/manual-gui\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|rust-toolchain\.toml$)'
 
   # ---------------------------------------------------------------------------
   # Job 1 — lint

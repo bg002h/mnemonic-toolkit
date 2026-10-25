@@ -52,6 +52,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write                 # release-asset upload on examples-v* tags
+      checks: read
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -64,7 +65,11 @@ jobs:
         id: guard
         # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
         # --book + --also are this gate's whole path scope; see the header.
-        run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: examples
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
 
       - name: Install pandoc + texlive + DejaVu mono
         timeout-minutes: 15
