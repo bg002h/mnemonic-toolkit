@@ -1,0 +1,25 @@
+name: shared-drift
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths: ['ci/shared-drift.sh', 'ci/shared-drift.test.sh', '.github/workflows/shared-drift.yml']
+permissions:
+  contents: read
+jobs:
+  drift:
+    name: shared CI files match the other public repos
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Self-test the drift check
+        shell: bash
+        run: bash ci/shared-drift.test.sh
+      - name: Compare the shared CI files with the other public repos
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/shared-drift.sh
