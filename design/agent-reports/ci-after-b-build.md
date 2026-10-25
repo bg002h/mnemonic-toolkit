@@ -264,3 +264,7 @@ run 40237520048    sibling-pin-check              push           success    ok
   sibling-pin-check/sibling pins match install.sh  success    ok
 pr-checks: PASS (mnemonic-toolkit 6a19b8b6b1571349e5011153aa66a9057174cc92)
 ```
+
+## L2 (docs head db63cc6bd23621029e671525df8fb347ac498e13, previous head 6a19b8b6b1571349e5011153aa66a9057174cc92)
+
+- no live skip test for T2 (SPEC-after-b.md §7 step 5: T1 and B-* only)
