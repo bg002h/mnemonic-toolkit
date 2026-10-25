@@ -268,3 +268,83 @@ pr-checks: PASS (mnemonic-toolkit 6a19b8b6b1571349e5011153aa66a9057174cc92)
 ## L2 (docs head db63cc6bd23621029e671525df8fb347ac498e13, previous head 6a19b8b6b1571349e5011153aa66a9057174cc92)
 
 - no live skip test for T2 (SPEC-after-b.md §7 step 5: T1 and B-* only)
+
+# Re-run after: Fold L3 r1 I-1: shared-drift sha() fails closed; test row D7
+
+PR #115. Copies ci-skip-constellation reference/after-b/T2 (SPEC-after-b.md).
+
+## Change
+
+```
+ .github/workflows/shared-drift.yml              |  25 +++++
+ ci/shared-drift.sh                              |  50 ++++++++++
+ ci/shared-drift.test.sh                         | 122 ++++++++++++++++++++++++
+ design/agent-reports/ci-after-b-T2-review-r1.md | 120 +++++++++++++++++++++++
+ design/agent-reports/ci-after-b-build.md        |  82 ++++++++++++++++
+ 5 files changed, 399 insertions(+)
+```
+
+## Gate
+
+`make-after-b-reference --check: PASS (12 files)`
+
+## Local checks
+
+```
+ci/docs-only.sh: OK
+ci/docs-only.test.sh: OK
+ci/code-docs-check.sh: OK
+ci/code-docs-check.test.sh: OK
+docs-only.test.sh: 73 passed, 0 failed
+code-docs-check.test.sh: 41 passed, 0 failed
+code-docs check: ok (434 files scanned, 2489 docs files)
+shared-drift.test.sh: 7 passed, 0 failed
+```
+
+## L1 (code head 9eead365075fdd32222c64ba390cdee013b2b0fc)
+
+```
+run 40240410780    shared-drift                   pull_request   success    ok
+run 40240410730    sibling-pin-check              pull_request   success    ok
+run 40240411000    technical-manual               pull_request   success    ok
+run 40240410635    quickstart                     pull_request   success    ok
+run 40240410675    examples                       pull_request   success    ok
+run 40240410606    manual-gui                     pull_request   success    ok
+run 40240410624    release                        pull_request   success    ok
+run 40240410609    manual                         pull_request   success    ok
+run 40240410693    rust                           pull_request   success    ok
+run 40240406323    sibling-pin-check              push           success    ok
+  shared-drift/shared CI files match the other public repos success    ok
+  sibling-pin-check/sibling pins match install.sh  success    ok
+  technical-manual/technical-manual                success    ok
+  quickstart/quickstart                            success    ok
+  examples/examples                                success    ok
+  manual-gui/changes                               success    ok
+  manual-gui/manual-gui                            success    ok
+  manual-gui/verify-examples-gui                   skipped    ok (allowed skip)
+  manual-gui/lint                                  skipped    ok (allowed skip)
+  manual-gui/verify-examples                       skipped    ok (allowed skip)
+  manual-gui/build                                 skipped    ok (allowed skip)
+  manual-gui/release                               skipped    ok (allowed skip)
+  release/release test (ubuntu-latest)             success    ok
+  release/build mnemonic (macos-aarch64)           success    ok
+  release/build mnemonic (macos-x86_64)            success    ok
+  release/build mnemonic (windows-x86_64)          success    ok
+  release/assemble + release                       skipped    ok (allowed skip)
+  manual/manual                                    success    ok
+  rust/test (ubuntu-latest)                        success    ok
+  rust/lib cross-platform check (x86_64-pc-windows-msvc, windows-latest) success    ok
+  rust/test (release, ubuntu-latest, mlock einval) success    ok
+  rust/musl build+test (x86_64-unknown-linux-musl) success    ok
+  rust/clippy                                      success    ok
+  rust/g6 invariant (cross-repo mlock.rs)          success    ok
+  rust/miri (mlock unsafe)                         success    ok
+  rust/lib cross-platform check (aarch64-unknown-linux-gnu, ubuntu-latest) success    ok
+  rust/install.sh harnesses (man-step + MSRV guard) success    ok
+  rust/test (macos-latest)                         success    ok
+  rust/musl build+test (aarch64-unknown-linux-musl) success    ok
+  rust/fmt (pinned 1.95.0)                         success    ok
+  rust/lib cross-platform check (x86_64-unknown-freebsd, ubuntu-latest) success    ok
+  sibling-pin-check/sibling pins match install.sh  success    ok
+pr-checks: PASS (mnemonic-toolkit 9eead365075fdd32222c64ba390cdee013b2b0fc)
+```
