@@ -18,7 +18,7 @@ trap 'rm -f "$tmp"' EXIT
 
 sha() { # sha <file>: print the file's sha256
   local h
-  h=$(sha256sum < "$1")
+  h=$(sha256sum < "$1") || exit 1 # $(...) does not inherit -e
   printf '%s\n' "${h%% *}"
 }
 

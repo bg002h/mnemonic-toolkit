@@ -110,5 +110,13 @@ done
 if [ "$d6" -eq 0 ]; then pass=$((pass + 1)); echo "ok   D6 gh got api, -H, the raw Accept header and the contents path"
 else fail=$((fail + 1)); echo "gh arguments in D1:"; cat "$tmp/ghargs.d1"; fi
 
+# D7: sha256sum fails. The check must not print PASS.
+fresh; mkdir -p "$tmp/bin"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/bin/sha256sum"; chmod +x "$tmp/bin/sha256sum"
+opath=$PATH; PATH="$tmp/bin:$PATH"; run "$root"; PATH=$opath
+if [ "$rc" -eq 1 ] && ! has_prefix 'shared-drift: PASS'; then
+  ok "D7 sha256sum fails: exit 1, no PASS"
+else bad "D7 sha256sum fails"; fi
+
 echo "shared-drift.test.sh: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]
