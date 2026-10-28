@@ -99,7 +99,7 @@ If a seat's key is in doubt
    --root -`, the root check (`mr child --check`)). A wrong passphrase
    --from coins|dice|pills`, LETTERS the letters the root makes (step 1).
    --letters YOUR_LETTERS MR1_CARD`, the root plate's ms1 string typed at
-   --check --network NET MR1_CARD` with it: it prints "this root makes
+   --network NET --letters LETTERS MR1_CARD` with each, LETTERS the
 """)
 EOF
   cat >"$d/mr" <<'EOF'
