@@ -192,7 +192,7 @@ else
     fi
     if [ -z "${GLOBALS[$bin]+x}" ]; then
       # shellcheck disable=SC2086
-      GLOBALS[$bin]=$(eval $binv --help 2>&1 | sed -n '/^Options:/,$p' | grep -oE -- '^ +(-[a-zA-Z], )?--[a-z][a-z0-9-]+' | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
+      GLOBALS[$bin]=$(eval $binv --help 2>&1 | sed -n '/^Options:/,/^$/p' | grep -oE -- '^ +(-[a-zA-Z], )?--[a-z][a-z0-9-]+' | grep -oE -- '--[a-z][a-z0-9-]+' | sort -u || true)
       # shellcheck disable=SC2086
       PINNED[$bin]=$(eval $binv --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
     fi
