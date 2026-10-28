@@ -6073,3 +6073,11 @@ screen printed. Print the values.
 - **Status:** `deferred-minor`
 - **Tier:** `ownerless`
 - **Companion:** the refugium README Minor is filed as `ci-windows-runner-2-path` in `bg002h/mnemonic-refugium` `design/FOLLOWUPS.md`.
+
+### `verify-examples-skips-mr` — the manual's worked-example replay (`verify-examples.sh`) never runs `mr`, so no `mr` transcript can be replayed in CI (tier: tooling; owning phase: none, ownerless residue)
+
+- **Surfaced:** 2026-10-27, the `manual` CI job now sets `MR_BIN` (branch `ci/manual-mr-bin`), which checks `45-mr.md` through the flag-coverage lint only.
+- **Where:** `docs/manual/tests/verify-examples.sh` (the `$MNEMONIC_BIN`/`$MD_BIN`/`$MS_BIN`/`$MK_BIN` substitution list and the bare-binary guard name four CLIs, no `$MR_BIN`); `docs/manual/Makefile` (`verify-examples` passes four `*_BIN` values; `MR_BIN` reaches only the `lint` target); `docs/manual/transcripts/` (no `mr` transcript).
+- **What:** `mr` examples in `45-mr.md` are prose and code blocks that no job re-runs, so a change in `mr` output text is not caught where the chapter shows a command's output (the flag-coverage lint compares flags and verbs only). Extending `verify-examples.sh` (an `$MR_BIN` substitution, `mr` in the bare-binary guard, a Makefile pass-through, `mr` transcripts) was out of scope for the CI change and is not decided here.
+- **Status:** `open`
+- **Tier:** `tooling`
