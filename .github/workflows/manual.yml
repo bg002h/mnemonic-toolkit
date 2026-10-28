@@ -167,6 +167,8 @@ jobs:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.1 ms-cli
 
+      # `mr` is private, and its chapter is linted by mnemonic-refugium's CI (job `manual-mr`).
+
       - name: Build mnemonic binary (debug)
         if: steps.guard.outputs.relevant == 'true'
         # Debug binary is sufficient for transcript-replay byte-comparison.
