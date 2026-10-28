@@ -6081,3 +6081,11 @@ screen printed. Print the values.
 - **What:** `mr` examples in `45-mr.md` are prose and code blocks that no job re-runs, so a change in `mr` output text is not caught where the chapter shows a command's output (the flag-coverage lint compares flags and verbs only). Extending `verify-examples.sh` (an `$MR_BIN` substitution, `mr` in the bare-binary guard, a Makefile pass-through, `mr` transcripts) was out of scope for the CI change and is not decided here.
 - **Status:** `open`
 - **Tier:** `tooling`
+
+### `manual-lint-flags-outside-tables` — the flag-coverage lint's reverse check reads only flag-table first columns, so a flag the chapter prints in a synopsis, prose or example is never checked (tier: tooling; owning phase: none)
+
+- **Surfaced:** 2026-10-27, mnemonic-refugium review `design/agent-reports/whole-diff-ci-manual-mr-lint-r1.md` (I-3), on its CI job `manual-mr` (which runs this lint against `mr`).
+- **Where:** `docs/manual/tests/lint.sh` step 4 (flag coverage), reverse direction: it reads only the first column of `` | `--flag` | `` rows in each verb's section.
+- **What:** a flag that a CLI drops or renames stays green wherever the chapter still prints it outside a flag table (a synopsis, a prose sentence, an example command). Reproduction (control b3): rename `mr units --template-preset` to `--preset` in `mr` and update only the flag-table row of `45-mr.md`. The forward check (`--preset` is in the section) and the reverse check (the table row's flag is defined) both pass, and the lint exits 0. The synopsis `mr units [OPTIONS] --template-preset <name>` (`45-mr.md` l.2688) stays in the chapter, and run on that `mr` it exits 2 (`unexpected argument '--template-preset'`). Dropping a flag and deleting only its table row (control b2) is green the same way. There is no live instance today: 0 stale among 298 `mr <verb> ... --flag` usages in `45-mr.md` at mr 63efdab6. Possible fix, not decided here: for every `<bin> <verb>` invocation in a code span or fenced line, each `--flag` after it on that span or line must be defined by that verb's `--help` or be a global option. The reviewer's prototype scanned the 298 usages with 0 false positives and caught b3 (`/scratch/cache/review-ci-manual-scratch/scan-usages.py`, scratch, not committed).
+- **Status:** `open`
+- **Tier:** `tooling`
