@@ -116,7 +116,7 @@ jobs:
           sudo chmod +x /usr/local/bin/lychee
 
       - name: Put cached sibling CLIs on PATH
-        # The four Install steps below (mk-cli, md-cli, ms-cli, mr) install into
+        # The three Install *-cli steps below install into
         # $RUNNER_TEMP/sibling-clis (their CARGO_INSTALL_ROOT); this puts its
         # bin/ first on PATH. It also reads the runner image name for the
         # cache key, so a cache built on one image is never restored on
@@ -130,7 +130,7 @@ jobs:
       - name: Restore cached sibling CLIs
         # On a hit each `cargo install` below finds its pinned package
         # already installed and skips the build (it still fetches the git
-        # repo); a changed tag, rev or feature set reinstalls. cargo does not
+        # repo); a changed tag or feature set reinstalls. cargo does not
         # reinstall for a newer rustc, so the key also hashes
         # rust-toolchain.toml. Skipped on tags, so release assets are always
         # built from fresh installs.
@@ -167,18 +167,7 @@ jobs:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
         run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.1 ms-cli
 
-      - name: Install mr
-        if: steps.guard.outputs.relevant == 'true'
-        # Mirrors the mk-cli + md-cli + ms-cli install patterns above, with
-        # two differences. mnemonic-refugium has no release tags, so the pin is
-        # a full commit (`--rev`; 6b210222 is origin/master as of 2026-10-27),
-        # which also means sibling-pin-check.yml (it scans `--tag` lines) and
-        # scripts/install.sh (the installer's pin table) do not cover it. The
-        # package-name selector (`mr-cli`) builds the `mr` binary that
-        # `MR_BIN=mr` below hands to the manual lint, which checks 45-mr.md.
-        env:
-          CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/mnemonic-refugium --rev 6b210222c03e16f53f79ead4836b51d7339f4945 mr-cli
+      # `mr` is private, and its chapter is linted by mnemonic-refugium's CI (job `manual-mr`).
 
       - name: Build mnemonic binary (debug)
         if: steps.guard.outputs.relevant == 'true'
@@ -199,7 +188,6 @@ jobs:
             MD_BIN=md \
             MS_BIN=ms \
             MK_BIN=mk \
-            MR_BIN=mr \
             FIXTURES_DIR="$GITHUB_WORKSPACE/crates/mnemonic-toolkit/tests/fixtures/wallet_import"
 
       - name: Mutation-test the flag lint (ci/doc-flag-lint.test.sh)
@@ -212,7 +200,6 @@ jobs:
         run: |
           MNEMONIC_BIN="$GITHUB_WORKSPACE/target/debug/mnemonic" \
           MD_BIN="$(command -v md)" MS_BIN="$(command -v ms)" MK_BIN="$(command -v mk)" \
-          MR_BIN="$(command -v mr)" \
             bash ci/doc-flag-lint.test.sh
 
       - name: Build PDF
