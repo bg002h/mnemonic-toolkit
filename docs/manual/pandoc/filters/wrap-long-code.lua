@@ -12,15 +12,29 @@
 -- the moving-argument hang we just escaped (xelatex infinite-loops when
 -- a char-splitter macro is re-read from .aux/.toc/.out files).
 --
--- For CodeBlock long-string overflows: NOT addressed here. fvextra's
--- breakanywhere is already enabled on the Highlighting environment
--- and partially handles those. Worst-case 150pt overflows from a
--- single >100-char mk1/xpub on a code line still happen and are
--- tracked in docs/manual/FOLLOWUPS.md.
+-- CodeBlock content gets two line-breaking rules, applied in this order:
+--   1. Any non-space run of MIN_BLOCK_RUN or more characters is chunked with
+--      a real newline every BLOCK_CHUNK_SIZE characters (mk1q..., xpub6...
+--      single-token overflows).
+--   2. Any line still longer than MAX_BLOCK_LINE characters is split with a
+--      real newline at the last whitespace character at or before each
+--      MAX_BLOCK_LINE-character limit (that one space becomes the newline);
+--      a segment with no whitespace is hard-broken at the limit. fvextra's
+--      breaklines boxes a whole logical line (\FV@LineBox) before it breaks
+--      it, and a line wider than TeX's maximum dimension (about 16383pt, about
+--      2,700 characters at \footnotesize DejaVu Sans Mono) aborts the build
+--      with "Dimension too large" (a 3,038-character line of short words in
+--      45-mr.md did this). Rule 1 cannot help there because no single run is
+--      long. The markdown source and the HTML build are unchanged.
+-- fvextra's breakanywhere is already enabled on the Highlighting environment
+-- and handles the remaining overflows on lines of ordinary length. Worst-case
+-- 150pt overflows from a single >100-char mk1/xpub on a code line still
+-- happen and are tracked in docs/manual/FOLLOWUPS.md.
 
 local MIN_RUN          = 12  -- inline Code: chunk if any non-space run >= 12
 local MIN_BLOCK_RUN    = 40  -- CodeBlock: chunk lines with a non-space run >= 40
 local BLOCK_CHUNK_SIZE = 64  -- CodeBlock: insert a newline every N chars in long runs
+local MAX_BLOCK_LINE   = 1000 -- CodeBlock: split any line longer than N characters at whitespace
 
 -- Detect whether the text has any contiguous non-space run >= MIN_RUN chars.
 local function has_long_run(s)
@@ -36,6 +50,39 @@ local function has_long_run_min(s, min)
     if #run >= min then return true end
   end
   return false
+end
+
+-- Length in characters (UTF-8 aware; falls back to bytes on invalid UTF-8).
+local function char_len(s)
+  return utf8.len(s) or #s
+end
+
+-- Split one line into pieces of at most MAX_BLOCK_LINE characters. Each cut
+-- replaces the last whitespace character at or before the limit; a segment
+-- with no whitespace in its first MAX_BLOCK_LINE characters is hard-broken at
+-- the limit (the limit always falls on a character boundary).
+local function split_long_line(line)
+  local pieces = {}
+  while char_len(line) > MAX_BLOCK_LINE do
+    -- Byte offset of the last byte of the first MAX_BLOCK_LINE characters.
+    local limit = (utf8.offset(line, MAX_BLOCK_LINE + 1) or (MAX_BLOCK_LINE + 1)) - 1
+    local cut = nil
+    for k = limit, 1, -1 do
+      if line:sub(k, k):match('%s') then
+        cut = k
+        break
+      end
+    end
+    if cut then
+      table.insert(pieces, line:sub(1, cut - 1))
+      line = line:sub(cut + 1)
+    else
+      table.insert(pieces, line:sub(1, limit))
+      line = line:sub(limit + 1)
+    end
+  end
+  table.insert(pieces, line)
+  return pieces
 end
 
 -- Escape characters that need escaping inside \texttt{...} / \brktt{...}.
@@ -74,7 +121,8 @@ return {
     -- Highlighting environment honors real newlines in Verbatim content
     -- (each becomes a wrap point), so the long mk1q…/xpub6… single-line
     -- tokens that overflow by 150pt+ get split into multiple visible
-    -- wrapped lines instead.
+    -- wrapped lines instead. Then split any line longer than MAX_BLOCK_LINE
+    -- characters at whitespace (see the header comment).
     CodeBlock = function(el)
       local changed = false
       local out_lines = {}
@@ -110,8 +158,21 @@ return {
           table.insert(out_lines, table.concat(out))
         end
       end
+      -- Rule 2: split lines longer than MAX_BLOCK_LINE characters. Re-walk
+      -- the lines because rule 1 may have inserted newlines.
+      local final_lines = {}
+      for line in (table.concat(out_lines, '\n') .. '\n'):gmatch('(.-)\n') do
+        if char_len(line) > MAX_BLOCK_LINE then
+          for _, piece in ipairs(split_long_line(line)) do
+            table.insert(final_lines, piece)
+          end
+          changed = true
+        else
+          table.insert(final_lines, line)
+        end
+      end
       if not changed then return nil end
-      el.text = table.concat(out_lines, '\n')
+      el.text = table.concat(final_lines, '\n')
       return el
     end,
   },
