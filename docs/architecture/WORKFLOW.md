@@ -32,6 +32,9 @@ default-branch URLs is also possible after their target files exist; update
 `documentation_branch` in inventory.json at that point. The checker validates that
 branch name without hardcoding this task's branch, and checks branch URLs against
 tracked local files (including staged additions), not remote HTTP state.
+Branch targets must match literal index entries and their file/directory kind;
+symlink targets are unsupported. Commit-shaped branch names are rejected; put
+immutable documentation pins in `documentation_refs` instead.
 
 ## Inherited essentials
 

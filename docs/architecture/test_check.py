@@ -140,6 +140,40 @@ class CheckerTests(unittest.TestCase):
         self.inventory["documentation_branch"] = "master"
         self.assertEqual([], self.link(self.url("blob", "docs/architecture/README.md", "master")))
 
+    def test_sha_shaped_branch_cannot_bypass_immutable_validation(self):
+        self.inventory["documentation_refs"] = []
+        for rev in [self.docs_rev, "0123456789abcdef0123456789abcdef01234567"]:
+            with self.subTest(rev=rev):
+                self.inventory["documentation_branch"] = rev
+                self.assertTrue(self.link(self.url("blob", "src/lib.rs", rev)))
+
+    def test_glob_filename_requires_its_own_index_entry(self):
+        self.write("docs/a.md", "# Tracked\n")
+        self.git("add", "docs/a.md")
+        self.write("docs/[ab].md", "# Literal filename\n")
+        target = self.url("blob", "docs/[ab].md")
+        self.assertTrue(self.link(target))
+        self.git("--literal-pathspecs", "add", "docs/[ab].md")
+        self.assertEqual([], self.link(target))
+
+    def test_symlinks_are_not_implicit_files_or_trees(self):
+        for name, destination, kind in [("alias", "architecture", "tree"),
+                                        ("alias.md", "architecture/README.md", "blob")]:
+            with self.subTest(kind=kind):
+                path = self.repo / "docs" / name
+                path.symlink_to(destination)
+                self.git("add", "docs/" + name)
+                self.assertTrue(self.link(self.url(kind, "docs/" + name)))
+
+    def test_directory_replacing_indexed_file_requires_staging(self):
+        path = "docs/architecture/README.md"
+        (self.repo / path).unlink()
+        self.write(path + "/scratch.md", "# Untracked child\n")
+        target = self.url("tree", path)
+        self.assertTrue(self.link(target))
+        self.git("add", "--", path)
+        self.assertEqual([], self.link(target))
+
     def test_approved_documentation_snapshot(self):
         self.assertEqual([], self.link(self.url("blob", "docs/architecture/README.md", self.docs_rev)))
 

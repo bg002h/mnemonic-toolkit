@@ -41,3 +41,18 @@ Navigation and scope:
 
 Final independent execution review, workspace-template installation and remote
 delivery checks are recorded separately after this validation record.
+
+Execution-review corrections (I1–I3):
+- Preserved the 0C/3I/0M execution report before the correction commit.
+- Added four regression tests first; all six new negative subcases failed on
+  the reviewed checker, reproducing the SHA collision, glob, symlink and
+  filesystem/index type mismatches.
+- After fixes, all 19 tests pass, including acceptance after staging the literal
+  glob filename and after staging a legitimate file-to-directory replacement.
+- Full checker still passes 7 repos / 35 hashes / 1 gitlink / 4 documentation refs
+  / 294 links / 14 Markdown files (including the fold plan).
+- A black-box CLI fixture with a nonexistent SHA-shaped branch plus a source URL
+  exits nonzero with the explicit branch diagnostic. The ordinary master branch
+  fixture still passes. Temporary fixtures were cleaned up.
+- The corrected shared-guide commit replaces the first fold's fallback pin in
+  the following mechanical reference update, before final review and publication.

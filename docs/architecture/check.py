@@ -194,20 +194,37 @@ def check_link(source, target, workspace, inventory):
             raise ValueError(f"unsupported GitHub target: {target}")
         name, kind, rest = match.groups()
         branch = inventory["documentation_branch"]
-        if rest.startswith(branch + "/"):
+        # A full SHA always identifies an immutable revision, even if the
+        # configurable branch happens to have the same spelling.
+        if not re.fullmatch(r"[0-9a-f]{40}", rest.split("/", 1)[0]) and rest.startswith(branch + "/"):
             require(name in REPOSITORIES, f"{source}: unknown documentation repository {name}")
             repo = workspace / name
-            relative = rest[len(branch) + 1:]
+            relative = PurePosixPath(rest[len(branch) + 1:]).as_posix()
             path = repo / relative
             require(path.resolve().is_relative_to(repo.resolve()),
                     f"{source}: documentation target leaves repository: {target}")
             require(path.exists(), f"{source}: missing documentation branch target {target}")
             require(path.is_file() if kind == "blob" else path.is_dir(),
                     f"{source}: {kind} link has wrong target kind: {target}")
-            git(repo, "ls-files", "--error-unmatch", "--", relative)
+            require(not path.is_symlink(), f"{source}: branch symlink targets are unsupported: {target}")
+            indexed = {}
+            for entry in git(repo, "--literal-pathspecs", "ls-files", "--stage", "-z",
+                             "--error-unmatch", "--", relative).split(b"\0"):
+                if not entry:
+                    continue
+                metadata, name = entry.decode().split("\t", 1)
+                mode, _, stage = metadata.split()
+                if stage == "0":
+                    indexed[name] = mode
+            if kind == "blob":
+                require(indexed.get(relative) in {"100644", "100755"},
+                        f"{source}: blob target is not an exact indexed regular file: {target}")
+            else:
+                require(relative not in indexed and any(name.startswith(relative + "/") for name in indexed),
+                        f"{source}: tree target has no indexed directory descendants: {target}")
             if parsed.fragment:
                 require(path.is_file(), f"{source}: fragment requires a file: {target}")
-                if path.is_file():
+                if path.is_file() and not path.is_symlink():
                     check_fragment(path.read_text(), parsed.fragment, source, target)
             return
         parts = rest.split("/", 1)
@@ -251,7 +268,10 @@ def main():
     rows = inventory["repositories"]
     require(len(rows) == len(REPOSITORIES) and {r["repository"] for r in rows} == REPOSITORIES,
             "inventory must contain exactly the seven scoped repositories")
-    git(workspace / "mnemonic-toolkit", "check-ref-format", "--branch", inventory["documentation_branch"])
+    branch = inventory["documentation_branch"]
+    if re.match(r"^[0-9a-f]{40}(?:/|$)", branch):
+        raise ValueError("documentation_branch must not start with a full commit SHA")
+    git(workspace / "mnemonic-toolkit", "check-ref-format", "refs/heads/" + branch)
     check_documentation_refs(inventory, workspace)
     for row in rows:
         try:
