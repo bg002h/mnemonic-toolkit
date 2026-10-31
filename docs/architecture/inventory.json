@@ -5,7 +5,7 @@
   "documentation_refs": [
     {
       "repository": "mnemonic-toolkit",
-      "commit": "6bc1c940e207131bf55a1b5d7d1fc023c524a9ec",
+      "commit": "99b4801cb9fa14b17d48d7b11dc793112eb2bafd",
       "paths": [
         "docs/architecture"
       ]

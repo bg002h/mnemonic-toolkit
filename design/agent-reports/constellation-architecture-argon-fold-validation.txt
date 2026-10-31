@@ -1,0 +1,43 @@
+Argon review fold validation — 2026-10-30
+
+Scope: M1–M4 in the user-supplied constellation architecture review.
+Runtime source baselines, package/consumer pins and the preview gitlink are unchanged.
+
+Before implementation:
+- Reproduced false acceptance of a tree URL to a file, blob URL to a directory,
+  branch/local directory fragments and a wrong default_branch.
+- Wrote synthetic Git regression tests before changing check.py.
+  Baseline result: 15 tests ran; 14 subtest/test failures and 1 missing-new-API error.
+- Independent R0 approved the fold: 0 Critical / 0 Important / 1 Minor.
+  Included its explicit staged-addition acceptance refinement.
+
+After implementation:
+- python3 -B -m unittest discover -s docs/architecture -p test_check.py
+  15 tests passed. These cover cached default metadata, ancestry, blob/tree kinds,
+  untracked rejection and staged acceptance, directory/file fragments, source
+  baselines and path-scoped immutable documentation exceptions.
+- python3 -B docs/architecture/check.py --workspace /scratch/code/shibboleth/architecture-worktrees --extra-markdown design/PLAN_constellation_architecture_argon_fold.md
+  PASS: {"documentation_refs": 4, "gitlinks": 1, "hashes": 35, "links": 294, "markdown": 14, "repositories": 7}
+  Passed before and after pinning fallbacks to shared-guide commit
+  99b4801cb9fa14b17d48d7b11dc793112eb2bafd.
+- Black-box CLI fixtures: documentation_branch=master accepted; malformed branch,
+  wrong dependency version, fabricated gitlink, missing boundary and broken link
+  all returned nonzero. Temporary fixtures were cleaned up.
+- bash ci/code-docs-check.sh passed in all six repositories carrying the guard:
+  mnemonic-secret, mnemonic-key, descriptor-mnemonic, mnemonic-toolkit,
+  mnemonic-transaction and mnemonic-engrave.
+- Whitespace checks passed for the fold. Only explicit task paths are staged.
+
+Navigation and scope:
+- Sibling/workspace fallbacks pin the corrected shared guide rather than its
+  temporary branch. WORKFLOW.md covers retaining or repinning the commit before
+  deleting the final ref after squash/rebase integration.
+- Firmware submission links are pinned and accompanied by the correction reports.
+  The unverified Go-port pin summary from the supplied review is not adopted.
+- Default-branch validation uses cached origin/HEAD, not a live API. The checker
+  requires local Git objects, including the firmware documentation snapshots;
+  it neither fetches objects nor proves remote URL availability.
+- Runtime suites, full Markdown/Mermaid rendering and hardware were not exercised.
+
+Final independent execution review, workspace-template installation and remote
+delivery checks are recorded separately after this validation record.

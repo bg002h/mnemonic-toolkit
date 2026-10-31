@@ -8,8 +8,8 @@ Do not treat duplicate worktrees or scratch clones as additional product reposit
 The architecture entry point is `mnemonic-toolkit/docs/architecture/README.md`.
 While the documentation branches are awaiting integration, use
 `architecture-worktrees/mnemonic-toolkit/docs/architecture/README.md`.
-A standalone fallback is the [shared guide](https://github.com/bg002h/mnemonic-toolkit/blob/6bc1c940e207131bf55a1b5d7d1fc023c524a9ec/docs/architecture/README.md).
-Read its [workflow](https://github.com/bg002h/mnemonic-toolkit/blob/6bc1c940e207131bf55a1b5d7d1fc023c524a9ec/docs/architecture/WORKFLOW.md) and the relevant source-map section.
+A standalone fallback is the [shared guide](https://github.com/bg002h/mnemonic-toolkit/blob/99b4801cb9fa14b17d48d7b11dc793112eb2bafd/docs/architecture/README.md).
+Read its [workflow](https://github.com/bg002h/mnemonic-toolkit/blob/99b4801cb9fa14b17d48d7b11dc793112eb2bafd/docs/architecture/WORKFLOW.md) and the relevant source-map section.
 
 For the current architecture project:
 - In scope: mnemonic-secret (ms), mnemonic-key (mk), descriptor-mnemonic (md),

@@ -9,7 +9,7 @@ Read applicable ancestor guidance too. Existing process rules remain applicable;
 verify historical architecture/status statements against source.
 Read the shared [guide](docs/architecture/README.md) and [workflow](docs/architecture/WORKFLOW.md).
 For sibling checkouts/worktrees, prefer local `../mnemonic-toolkit/docs/architecture/`;
-remote links support standalone checkouts while documentation branches await integration.
+remote fallbacks pin a delivered guide revision. See its workflow for refreshing the pin.
 Check Git status, the current branch, Cargo.toml and Cargo.lock before editing.
 Preserve unrelated work and use explicit task-owned paths when staging.
 
