@@ -31,6 +31,14 @@
       "paths": [
         "GEMINI.md"
       ]
+    },
+    {
+      "repository": "mnemonic-refugium",
+      "commit": "da096f765183c8d52f292f97453db7586bb4b5ff",
+      "paths": [
+        "docs/architecture"
+      ],
+      "purpose": "Separate Refugium onboarding delivery, with independent runtime baselines."
     }
   ],
   "repositories": [

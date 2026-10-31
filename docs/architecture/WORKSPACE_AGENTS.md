@@ -1,26 +1,38 @@
-# Constellation workspace
+# Constellation and Refugium workspace
 
 This directory contains independent Git repositories and scratch worktrees.
 Before editing, identify the target Git root and branch, check its status, and read
 its AGENTS.md plus CLAUDE.md and applicable ancestor guidance explicitly.
 Do not treat duplicate worktrees or scratch clones as additional product repositories.
 
-The architecture entry point is `mnemonic-toolkit/docs/architecture/README.md`.
+The constellation entry point is `mnemonic-toolkit/docs/architecture/README.md`.
 While the documentation branches are awaiting integration, use
 `architecture-worktrees/mnemonic-toolkit/docs/architecture/README.md`.
 A standalone fallback is the [shared guide](https://github.com/bg002h/mnemonic-toolkit/blob/a619f6eefdc8a2c58c9ff8f290376ed371a1c677/docs/architecture/README.md).
 Read its [workflow](https://github.com/bg002h/mnemonic-toolkit/blob/a619f6eefdc8a2c58c9ff8f290376ed371a1c677/docs/architecture/WORKFLOW.md) and the relevant source-map section.
 
-For the current architecture project:
-- In scope: mnemonic-secret (ms), mnemonic-key (mk), descriptor-mnemonic (md),
+The separate Refugium entry point is `mnemonic-refugium/docs/architecture/README.md`.
+Until integration, use
+`refugium-architecture-worktrees/mnemonic-refugium/docs/architecture/README.md`.
+Standalone fallbacks: [Refugium guide](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/README.md),
+[workflow](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/WORKFLOW.md)
+and [onboarding prompt](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/ONBOARDING.md).
+The dated source maps distinguish repository HEADs from consumer lockfile pins.
+
+The maintained maps cover:
+- Constellation: mnemonic-secret (ms), mnemonic-key (mk), descriptor-mnemonic (md),
   mnemonic-toolkit, mnemonic-transaction (mt), mnemonic-engrave host/shared packages.
 - Lower priority: mnemonic-gui, the utility GUI.
-- Refugium is included only at shared dependency/API boundaries.
-- General mr/mr-gui and SeedHammer firmware implementation are outside scope.
-  Gemini owns mnemonic-engrave/design/firmware-architecture/ and its GEMINI.md.
+- Refugium: mnemonic-refugium (mr CLI and mr-codec), refugium-wallet
+  (mr-gui, refugium-view and refugium-node). mr-gui is not a third repository.
+- SeedHammer firmware is a separate handoff. Gemini owns
+  mnemonic-engrave/design/firmware-architecture/ and the firmware GEMINI.md;
+  read the recorded review status before relying on the pinned submission.
 
-Architecture work is isolated under `architecture-worktrees/<repository>` on
-`docs/constellation-architecture`. Read each worktree's AGENTS.md for this task.
+Constellation documentation is isolated under `architecture-worktrees/<repository>`
+on `docs/constellation-architecture`; Refugium documentation is under
+`refugium-architecture-worktrees/<repository>` on `docs/refugium-architecture`.
+Read each worktree's AGENTS.md and the corresponding delivery receipt.
 These instructions are not automatically installed into the original checkouts;
 after integration, use each repository's tracked root entry point.
 Preserve other agents' work, unrelated untracked files, default branches and releases.
