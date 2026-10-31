@@ -1,0 +1,17 @@
+ok   baseline: unmutated manual passes flag-coverage
+ok   R1 reverse: a documented --no-such-flag row in md compose
+ok   R2 reverse: an unreleased marker naming the wrong version
+ok   R3 reverse: a stale marker on a flag the pinned binary defines
+ok   R4 reverse: an unreleased row with its marker removed
+ok   R5 reverse (fix1 NEW-2): a fake flag added to a MARKED row's cell
+ok   R6 reverse (fix1 NEW-2): a marker naming a flag its row does not document
+ok   R7 reverse (fix1 NEW-2): the old row-wide marker form (no flag named)
+ok   C1 completeness: md compose dropped from cli-subcommands.list
+ok   C2 completeness: a listed verb the binary does not have
+ok   F1 forward: --kind removed from the ms hashlock section
+ok   F2 forward: md compose section heading removed
+ok   G0: unmutated manual passes flag-coverage against the mr stub
+ok   G1 reverse (g1b): mr child drops --letters, which the chapter's child table keeps
+ok   G3 reverse (g3): the chapter's mr child table gains --root, which child never defines
+
+15 passed, 0 failed

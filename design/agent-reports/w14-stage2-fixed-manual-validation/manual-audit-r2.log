@@ -1,0 +1,53 @@
+make: Entering directory '/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual'
+  10 mermaid block(s) across 42 source file(s)
+
+[lint] === 1/7 markdownlint ===
+markdownlint-cli2 v0.13.0 (markdownlint v0.34.0)
+Finding: /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/**/*.md !build/** !tests/fixtures/**
+Linting: 42 file(s)
+Summary: 0 error(s)
+
+[lint] === 2/7 cspell ===
+CSpell: Files checked: 42, Issues found: 0 in 0 files.
+
+[lint] === 3/7 lychee ===
+🔍 307 Total (in 4ms) 🔗 167 Unique ✅ 285 OK 🚫 0 Errors 👻 22 Excluded
+
+
+[lint] === 4/7 flag-coverage ===
+[lint] WARN: MR_BIN unset; skipping the mr lines of cli-subcommands.list (14 verbs); set MR_BIN to check 45-mr.md
+[lint] exempt: --in in 44-mk-cli.md (mk repair), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk address), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk derive), unreleased after mk-cli 0.13.0
+[lint] exempt: --from-md1-set in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --keys in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --out in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk decode), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk verify), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk inspect), unreleased after mk-cli 0.13.0
+[lint] shared section (union of flags): mnemonic seedqr encode, mnemonic seedqr decode
+[lint] flag-coverage: 10 flag exemption(s) for unreleased flags
+
+[lint] === 5/7 glossary-coverage ===
+
+[lint] === 6/7 index bidirectional ===
+
+[lint] === 7/7 root-shaped ===
+[root-shaped-test] OK: 17 cases
+
+[lint] OK
+[verify-examples] OK (62 transcripts pass)
+mkdir -p /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build
+pandoc \
+	--from markdown \
+	--to html \
+	--standalone \
+	--toc \
+	--toc-depth=3 \
+	--lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/include-transcript.lua --lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/strip-latex-from-md.lua --lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/primer-box.lua \
+	--metadata-file=/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/metadata.yaml \
+	--output /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build/m-format-manual.html \
+	/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/00-disclaimer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/00-frontmatter.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/10-foundations/11-welcome.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/10-foundations/12-how-to-read.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/10-foundations/13-concept-signposts.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/21-install.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/22-first-bundle.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/23-verify.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/24-recover.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/31-singlesig-steel.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/32-multisig-2of3.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/33-taproot-multi.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/34-watch-only.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/35-recovery-paths.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/36-migration.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/37-wallet-export.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/38-bip85-children.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/39-cross-format-conversion.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/3A-bsms-round1-verify.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/3B-payload-unlock-refusals.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/41-mnemonic.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/42-md.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/43-ms.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/44-mk-cli.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/45-mr.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/45-foreign-formats.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/51-format-decision.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/52-toolkit-vs-ms-cli.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/53-toolkit-vs-md-cli.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/54-mformat-vs-others.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/55-singlesig-vs-multi.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/56-bip39-vs-bip38-pass.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/57-coredesc-vs-bip388.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/61-glossary.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/62-bip39-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/63-bip32-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/64-descriptors-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/65-bch-codex-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/66-test-seeds.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/67-troubleshooting.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/68-release-history.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/69-index-table.md
+OK anchor-check: 9 danglers in current run match baseline (no new, no shrunk)
+make: Leaving directory '/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual'

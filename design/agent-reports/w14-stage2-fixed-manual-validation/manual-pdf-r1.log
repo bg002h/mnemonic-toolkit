@@ -1,0 +1,2524 @@
+make: Entering directory '/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual'
+pandoc \
+	--from markdown \
+	--to latex \
+	--standalone \
+	--toc \
+	--toc-depth=3 \
+	--top-level-division=chapter \
+	--template=/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/templates/manual.latex \
+	-H /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/preamble.tex \
+	--lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/include-transcript.lua --lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/primer-box.lua --lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/wrap-long-code.lua --lua-filter /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/filters/mermaid-cache-filter.lua \
+	--metadata-file=/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/pandoc/metadata.yaml \
+	--output /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build/m-format-manual.tex \
+	/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/00-disclaimer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/00-frontmatter.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/10-foundations/11-welcome.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/10-foundations/12-how-to-read.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/10-foundations/13-concept-signposts.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/21-install.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/22-first-bundle.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/23-verify.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/20-quickstart/24-recover.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/31-singlesig-steel.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/32-multisig-2of3.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/33-taproot-multi.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/34-watch-only.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/35-recovery-paths.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/36-migration.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/37-wallet-export.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/38-bip85-children.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/39-cross-format-conversion.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/3A-bsms-round1-verify.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/30-workflows/3B-payload-unlock-refusals.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/41-mnemonic.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/42-md.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/43-ms.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/44-mk-cli.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/40-cli-reference/45-mr.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/45-foreign-formats.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/51-format-decision.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/52-toolkit-vs-ms-cli.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/53-toolkit-vs-md-cli.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/54-mformat-vs-others.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/55-singlesig-vs-multi.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/56-bip39-vs-bip38-pass.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/50-comparing/57-coredesc-vs-bip388.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/61-glossary.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/62-bip39-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/63-bip32-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/64-descriptors-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/65-bch-codex-primer.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/66-test-seeds.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/67-troubleshooting.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/68-release-history.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/60-appendices/69-index-table.md /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/99-build-banner.md
+cd /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build && xelatex -interaction=nonstopmode -halt-on-error m-format-manual.tex
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex)
+ restricted \write18 enabled.
+entering extended mode
+(./m-format-manual.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2026-03-20>
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/book.cls
+Document Class: book 2025/01/22 v1.4n Standard LaTeX document class
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/bk11.clo)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3packages/xparse/xparse.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3kernel/expl3.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3backend/l3backend-xetex.def))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec-xetex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/fontenc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec.cfg))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math-xetex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3packages/l3keys2e/l3keys2e.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/fix-cm.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/ts1enc.def)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsmath.sty
+For additional information on amsmath, use the `?' option.
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amstext.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsgen.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsbsy.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsopn.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math-table.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/geometry/geometry.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/keyval.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/iftex/ifvtex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/iftex/iftex.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/hyperref.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/kvsetkeys/kvsetkeys.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/kvdefinekeys/kvdefinekeys.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pdfescape/pdfescape.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pdftexcmds/pdftexcmds.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/infwarerr/infwarerr.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hycolor/hycolor.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/nameref.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/refcount/refcount.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/kvoptions/kvoptions.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/etoolbox/etoolbox.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/stringenc/stringenc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/pd1enc.def) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/intcalc/intcalc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/puenc.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/url/url.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/bitset/bitset.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/hxetex.def (/home/bcg/.TinyTeX/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/longtable.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/booktabs/booktabs.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/calc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/array.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fancyvrb/fancyvrb.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/xcolor/xcolor.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-cfg/color.cfg) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-def/xetex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/mathcolor.ltx)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/upquote/upquote.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/textcomp.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype-xetex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype.cfg)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/parskip/parskip.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/makeidx.sty)
+Writing index file m-format-manual.idx
+(/home/bcg/.TinyTeX/texmf-dist/tex/generic/ulem/ulem.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/mdframed/mdframed.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/zref/zref-abspage.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/zref/zref-base.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/etexcmds/etexcmds.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/auxhook/auxhook.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/needspace/needspace.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/mdframed/md-frame-0.mdf)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fvextra/fvextra.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/lineno/lineno.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/seqsplit/seqsplit.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/xurl/xurl.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/graphicx.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/graphics.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/trig.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-cfg/graphics.cfg))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/svg/svg.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrbase.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlfile.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlfile-hook.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlogo.sty)))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/trimspaces/trimspaces.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/shellesc.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/transparent/transparent.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/transparent/transparent-nometadata.sty
+
+Package transparent Warning: Loading aborted, because pdfTeX is not running in PDF mode.
+
+)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/systemlayer/pgfsys.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgfrcs.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfutil-common.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfutil-latex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfrcs.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/pgf.revision.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeyslibraryfiltered.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgf.cfg) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-xetex.def (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-dvipdfmx.def (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-common-pdf.def)))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsyssoftpath.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsysprotocol.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/frontendlayer/tikz.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/basiclayer/pgf.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/basiclayer/pgfcore.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcore.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathutil.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathparser.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.basic.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.trigonometric.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.random.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.comparison.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.base.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.round.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.misc.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.integerarithmetics.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathcalc.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfloat.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfint.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepoints.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathconstruct.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathusage.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorescopes.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoregraphicstate.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransformations.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorequick.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreobjects.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathprocessing.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorearrows.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreshade.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreimage.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreexternal.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorelayers.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransparency.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepatterns.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorerdf.code.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmoduleshapes.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmoduleplot.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version-0-65.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version-1-18.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgffor.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgfkeys.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/math/pgfmath.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgffor.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/libraries/pgflibraryplothandlers.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmodulematrix.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarytopaths.code.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryshapes.geometric.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/libraries/shapes/pgflibraryshapes.geometric.code.tex))
+No file m-format-manual.aux.
+*geometry* driver: auto-detecting
+*geometry* detected driver: xetex
+
+Package hyperref Warning: Rerun to get /PageLabels entry.
+
+[1]
+No file m-format-manual.toc.
+[1]
+Chapter 1.
+[2] [3]
+Chapter 2.
+
+LaTeX Warning: Hyper reference `appendix-b-bip-39-entropy-primer' on page 4 undefined on input line 363.
+
+
+LaTeX Warning: Hyper reference `appendix-c-bip-32-derivation-primer' on page 4 undefined on input line 364.
+
+
+LaTeX Warning: Hyper reference `appendix-d-descriptors-and-bip-388-primer' on page 4 undefined on input line 366.
+
+[4] [5]
+Chapter 3.
+[6] [7]
+
+LaTeX Warning: Hyper reference `appendix-e-codex32-bch-m-codec-error-correction' on page 8 undefined on input line 495.
+
+
+LaTeX Warning: Hyper reference `recovery-paths-by-damaged-card-scenario' on page 8 undefined on input line 500.
+
+[8]
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 9 undefined on input line 528.
+
+
+LaTeX Warning: Hyper reference `appendix-h-release-history' on page 9 undefined on input line 546.
+
+[9]
+Chapter 4.
+[10]
+
+LaTeX Warning: Hyper reference `appendix-i-index-of-terms' on page 11 undefined on input line 639.
+
+
+LaTeX Warning: Hyper reference `appendix-i-index-of-terms' on page 11 undefined on input line 649.
+
+[11]
+Chapter 5.
+
+LaTeX Warning: Hyper reference `appendix-b-bip-39-entropy-primer' on page 12 undefined on input line 660.
+
+
+LaTeX Warning: Hyper reference `appendix-b-bip-39-entropy-primer' on page 12 undefined on input line 670.
+
+
+LaTeX Warning: Hyper reference `appendix-c-bip-32-derivation-primer' on page 12 undefined on input line 683.
+
+
+LaTeX Warning: Hyper reference `appendix-d-descriptors-and-bip-388-primer' on page 12 undefined on input line 698.
+
+
+LaTeX Warning: Hyper reference `appendix-d-descriptors-and-bip-388-primer' on page 12 undefined on input line 710.
+
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 12 undefined on input line 712.
+
+[12]
+
+LaTeX Warning: Hyper reference `appendix-e-codex32-bch-m-codec-error-correction' on page 13 undefined on input line 724.
+
+
+LaTeX Warning: Hyper reference `installing-the-toolkit' on page 13 undefined on input line 729.
+
+[13]
+Chapter 6.
+
+Overfull \hbox (1.56982pt too wide) in paragraph at lines 785--804
+[]\TU/DejaVuSerif(0)/m/n/10.95 The signature proves who published the checksums, where the checksum alone proves
+[14]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 6.1 on input line 822.
+
+[15] [16]
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 17 undefined on input line 953.
+
+[17]
+Chapter 7.
+
+LaTeX Warning: Hyper reference `appendix-f-test-seeds-and-example-data' on page 18 undefined on input line 969.
+
+
+LaTeX Warning: Hyper reference `installing-the-toolkit' on page 18 undefined on input line 975.
+
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 18 undefined on input line 1001.
+
+[18] [19]
+
+LaTeX Warning: Hyper reference `single-sig-steel-engraved-backup' on page 20 undefined on input line 1112.
+
+
+LaTeX Warning: Hyper reference `verifying-a-bundle' on page 20 undefined on input line 1117.
+
+[20]
+Chapter 8.
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 21 undefined on input line 1132.
+
+[21]
+Overfull \hbox (9.02393pt too wide) in paragraph at lines 1243--1247
+[]\TU/DejaVuSerif(0)/b/n/10.95 Wrong template / network. \TU/DejaVuSerif(0)/m/n/10.95 If you bundled BIP-84 mainnet but typed \TU/DejaVuSansMono(0)/m/n/10.95 --template
+
+LaTeX Warning: Hyper reference `recovery-paths-by-damaged-card-scenario' on page 22 undefined on input line 1251.
+
+[22]
+Chapter 9.
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 23 undefined on input line 1261.
+
+
+LaTeX Warning: Hyper reference `recovery-paths-by-damaged-card-scenario' on page 23 undefined on input line 1264.
+
+[23]
+
+LaTeX Warning: Hyper reference `verifying-a-bundle' on page 24 undefined on input line 1390.
+
+[24]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 25 undefined on input line 1399.
+
+
+LaTeX Warning: Hyper reference `single-sig-steel-engraved-backup' on page 25 undefined on input line 1413.
+
+
+LaTeX Warning: Hyper reference `recovery-paths-by-damaged-card-scenario' on page 25 undefined on input line 1417.
+
+[25]
+Chapter 10.
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 26 undefined on input line 1428.
+
+
+LaTeX Warning: Hyper reference `verifying-a-bundle' on page 26 undefined on input line 1428.
+
+[26] [27]
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 28 undefined on input line 1474.
+
+[28] [29]
+
+LaTeX Warning: Hyper reference `recovery-paths-by-damaged-card-scenario' on page 30 undefined on input line 1623.
+
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 30 undefined on input line 1655.
+
+[30]
+Chapter 11.
+
+LaTeX Warning: Hyper reference `air-gapped-variant' on page 31 undefined on input line 1669.
+
+[31] [32]
+
+LaTeX Warning: Hyper reference `taproot-multisig' on page 33 undefined on input line 1702.
+
+[33]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 11.1 on input line 1800.
+
+
+LaTeX Warning: Hyper reference `single-sig-steel-engraved-backup' on page 34 undefined on input line 1808.
+
+[34]
+
+LaTeX Warning: Hyper reference `recovery-paths-by-damaged-card-scenario' on page 35 undefined on input line 1850.
+
+[35]
+Overfull \hbox (9.41348pt too wide) in paragraph at lines 1923--1927
+[]\TU/DejaVuSansMono(0)/b/n/10.95 wsh-multi \TU/DejaVuSerif(0)/b/n/10.95 (unsorted) \TU/DejaVuSerif(0)/m/n/10.95 — replace \TU/DejaVuSansMono(0)/m/n/10.95 w s h - s o r t e d m u l t i \TU/DejaVuSerif(0)/m/n/10.95 with \TU/DejaVuSansMono(0)/m/n/10.95 wsh-multi\TU/DejaVuSerif(0)/m/n/10.95 . The cosigner
+
+LaTeX Warning: Hyper reference `taproot-multisig' on page 36 undefined on input line 1932.
+
+[36]
+Chapter 12.
+[37] [38]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 39 undefined on input line 2037.
+
+[39]
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 40 undefined on input line 2090.
+
+
+LaTeX Warning: Hyper reference `appendix-d-descriptors-and-bip-388-primer' on page 40 undefined on input line 2118.
+
+[40]
+
+LaTeX Warning: Hyper reference `single-sig-steel-engraved-backup' on page 41 undefined on input line 2133.
+
+
+Overfull \hbox (6.14078pt too wide) in paragraph at lines 2130--2135
+[]\TU/DejaVuSerif(0)/b/n/10.95 Single-sig taproot \TU/DejaVuSerif(0)/m/n/10.95 — for a one-cosigner taproot wallet, prefer \TU/DejaVuSansMono(0)/m/n/10.95 --template bip86
+[41]
+Chapter 13.
+
+Overfull \hbox (9.2114pt too wide) in paragraph at lines 2151--2156
+[]\TU/DejaVuSerif(0)/b/n/10.95 Background — why watch-only matters. \TU/DejaVuSerif(0)/m/n/10.95 A watch-only wallet sees the blockchain
+
+Overfull \hbox (15.45195pt too wide) in paragraph at lines 2151--2156
+\TU/DejaVuSerif(0)/m/n/10.95 as the spending wallet does, but cannot move funds. Useful for monitoring (incoming-
+[42]
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 43 undefined on input line 2167.
+
+[43]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 44 undefined on input line 2230.
+
+
+Overfull \hbox (22.41692pt too wide) in paragraph at lines 2234--2237
+\TU/DejaVuSerif(0)/m/n/10.95 For a watch-only bundle that does not reveal the master fingerprint (useful for coordinator-
+[44] [45]
+Chapter 14.
+[46] [47] [48] [49] [50] [51]
+Chapter 15.
+[52] [53]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 15.1 on input line 2606.
+
+[54] [55]
+Chapter 16.
+[56] [57] [58] [59] [60]
+
+LaTeX Warning: Hyper reference `taproot-multisig' on page 61 undefined on input line 2965.
+
+
+LaTeX Warning: Hyper reference `appendix-f-test-seeds-and-example-data' on page 61 undefined on input line 3010.
+
+[61]
+
+LaTeX Warning: Hyper reference `from-a-user-supplied-descriptor' on page 62 undefined on input line 3082.
+
+[62] [63] [64]
+Overfull \hbox (2.97379pt too wide) in paragraph at lines 3310--3315
+[]\TU/DejaVuSerif(0)/m/n/10.95 The same text is byte-identical to Jade’s \TU/DejaVuSansMono(0)/m/n/10.95 r e g i s t e r _ m u l t i s i g . m u l t i s i g _ f i l e \TU/DejaVuSerif(0)/m/n/10.95 — switch
+[65]
+Chapter 17.
+[66]
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 67 undefined on input line 3437.
+
+[67]
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 68 undefined on input line 3536.
+
+
+LaTeX Warning: Hyper reference `taproot-multisig' on page 68 undefined on input line 3537.
+
+[68] [69]
+Chapter 18.
+[70] [71] [72]
+Overfull \hbox (6.69823pt too wide) in paragraph at lines 3705--3720
+\TU/DejaVuSerif(0)/m/n/10.95 only sinks require an intermediate step through one of the descriptor-capable
+[73]
+Overfull \hbox (11.69522pt too wide) in paragraph at lines 3781--3781
+[]\TU/DejaVuSerif(0)/b/n/14.4 Recipe 6 — Coldcard single-sig → BIP-388 wallet-policy 
+
+Overfull \hbox (11.0754pt too wide) in paragraph at lines 3796--3802
+[]\TU/DejaVuSerif(0)/m/n/10.95 The resulting \TU/DejaVuSansMono(0)/m/n/10.95 policy.json \TU/DejaVuSerif(0)/m/n/10.95 carries the canonical \TU/DejaVuSansMono(0)/m/n/10.95 d e s c r i p t i o n _ t e m p l a t e \TU/DejaVuSerif(0)/m/n/10.95 (\TU/DejaVuSansMono(0)/m/n/10.95 wpkh(@0/**)\TU/DejaVuSerif(0)/m/n/10.95 )
+[74] [75]
+Overfull \hbox (15.0349pt too wide) in paragraph at lines 3926--3933
+\TU/DejaVuSansMono(0)/m/n/10.95 requires --template \TU/DejaVuSerif(0)/m/n/10.95 error. The v0.28.0 envelope is always descriptor-mode (\TU/DejaVuSansMono(0)/m/n/10.95 template:
+[76]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-vendor-formats' on page 77 undefined on input line 3980.
+
+[77]
+Chapter 19.
+[78] [79] [80] [81]
+Chapter 20.
+[82] [83]
+Chapter 21.
+
+LaTeX Warning: Hyper reference `mnemonic-bundle' on page 84 undefined on input line 4366.
+
+
+LaTeX Warning: Hyper reference `mnemonic-verify-bundle' on page 84 undefined on input line 4367.
+
+
+LaTeX Warning: Hyper reference `mnemonic-convert' on page 84 undefined on input line 4368.
+
+
+LaTeX Warning: Hyper reference `mnemonic-export-wallet' on page 84 undefined on input line 4369.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 84 undefined on input line 4370.
+
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet' on page 84 undefined on input line 4371.
+
+
+LaTeX Warning: Hyper reference `mnemonic-derive-child' on page 84 undefined on input line 4372.
+
+
+LaTeX Warning: Hyper reference `mnemonic-electrum-decrypt' on page 84 undefined on input line 4373.
+
+
+LaTeX Warning: Hyper reference `mnemonic-final-word' on page 84 undefined on input line 4374.
+
+
+LaTeX Warning: Hyper reference `mnemonic-seed-xor' on page 84 undefined on input line 4375.
+
+
+LaTeX Warning: Hyper reference `mnemonic-seedqr' on page 84 undefined on input line 4376.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 84 undefined on input line 4377.
+
+
+LaTeX Warning: Hyper reference `mnemonic-ms-shares' on page 84 undefined on input line 4378.
+
+
+LaTeX Warning: Hyper reference `mnemonic-nostr' on page 84 undefined on input line 4379.
+
+
+LaTeX Warning: Hyper reference `mnemonic-silent-payment' on page 84 undefined on input line 4380.
+
+
+LaTeX Warning: Hyper reference `mnemonic-addresses' on page 84 undefined on input line 4381.
+
+
+LaTeX Warning: Hyper reference `mnemonic-decode-address' on page 84 undefined on input line 4382.
+
+
+LaTeX Warning: Hyper reference `mnemonic-verify-message' on page 84 undefined on input line 4383.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair' on page 84 undefined on input line 4384.
+
+
+LaTeX Warning: Hyper reference `mnemonic-inspect' on page 84 undefined on input line 4385.
+
+
+LaTeX Warning: Hyper reference `mnemonic-compare-cost' on page 84 undefined on input line 4386.
+
+
+LaTeX Warning: Hyper reference `mnemonic-xpub-search' on page 84 undefined on input line 4387.
+
+
+LaTeX Warning: Hyper reference `mnemonic-build-descriptor' on page 84 undefined on input line 4388.
+
+
+LaTeX Warning: Hyper reference `mnemonic-gui-schema' on page 84 undefined on input line 4389.
+
+
+LaTeX Warning: Hyper reference `mnemonic-xpub-search-passphrase-of-xpub' on page 84 undefined on input line 4401.
+
+[84] [85]
+Overfull \hbox (5.31804pt too wide) in paragraph at lines 4554--4571
+\TU/DejaVuSerif(0)/m/n/10.95 stdin is a terminal, \TU/DejaVuSansMono(0)/m/n/10.95 Enter passphrase: \TU/DejaVuSerif(0)/m/n/10.95 (for the other flags, \TU/DejaVuSansMono(0)/m/n/10.95 Enter BIP-38 passphrase:
+[86]
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 87 undefined on input line 4625.
+
+[87]
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 88 undefined on input line 4655.
+
+
+LaTeX Warning: Hyper reference `custom-use-site-nums-taproot' on page 88 undefined on input line 4670.
+
+
+Overfull \hbox (11.69142pt too wide) in paragraph at lines 4661--4671
+[]\TU/DejaVuSerif(0)/m/n/10.95 Non-hardened \TU/DejaVuSerif(0)/b/n/10.95 per-cosigner use-site path overrides \TU/DejaVuSerif(0)/m/n/10.95 (cosigners with divergent deriva-
+
+LaTeX Warning: Hyper reference `multisig-cosigner-restore' on page 88 undefined on input line 4673.
+
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet' on page 88 undefined on input line 4675.
+
+
+LaTeX Warning: Hyper reference `mnemonic-bundle' on page 88 undefined on input line 4697.
+
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet' on page 88 undefined on input line 4698.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 88 undefined on input line 4700.
+
+[88]
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 89 undefined on input line 4725.
+
+
+LaTeX Warning: Hyper reference `bitcoin-core-listdescriptors' on page 89 undefined on input line 4799.
+
+[89]
+
+LaTeX Warning: Hyper reference `exit-codes' on page 90 undefined on input line 4810.
+
+
+LaTeX Warning: Hyper reference `template-only-md1' on page 90 undefined on input line 4880.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 90 undefined on input line 4881.
+
+
+LaTeX Warning: Hyper reference `non-representable-use-site-steps' on page 90 undefined on input line 4941.
+
+ [90] [91]
+
+LaTeX Warning: Hyper reference `your-first-bundle' on page 92 undefined on input line 4952.
+
+
+LaTeX Warning: Hyper reference `multi-source-2-of-3-multisig' on page 92 undefined on input line 4954.
+
+[92]
+
+LaTeX Warning: Hyper reference `entr-vs-mnem-payload-kind-auto-routing' on page 93 undefined on input line 4971.
+
+
+Overfull \hbox (4.39731pt too wide) in paragraph at lines 4969--4974
+\TU/DejaVuSerif(0)/m/n/10.95 LOWUP \TU/DejaVuSansMono(0)/m/n/10.95 t o o l k i t - m n e m - m s 1 - w i r e - s h a p e - d o w n s t r e a m - c o n s u m e r s \TU/DejaVuSerif(0)/m/n/10.95 for the downstream-
+
+LaTeX Warning: Hyper reference `mnemonic-verify-bundle' on page 93 undefined on input line 5007.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 93 undefined on input line 5020.
+
+[93]
+Overfull \hbox (27.88385pt too wide) in paragraph at lines 5075--5082
+[]\TU/DejaVuSerif(0)/b/n/10.95 address-search \TU/DejaVuSerif(0)/m/n/10.95 — \TU/DejaVuSansMono(0)/m/n/10.95 - - s e a r c h - a d d r e s s < a d d r > \TU/DejaVuSerif(0)/m/n/10.95 (collision-free, recommended) matches
+[94]
+
+LaTeX Warning: Hyper reference `subset-search-over-supply-completion' on page 95 undefined on input line 5120.
+
+
+LaTeX Warning: Hyper reference `mnemonic-verify-bundle' on page 95 undefined on input line 5123.
+
+
+Overfull \hbox (5.82533pt too wide) in paragraph at lines 5153--5160
+[]\TU/DejaVuSerif(0)/b/n/10.95 Opt-in cosigner subset — \TU/DejaVuSansMono(0)/b/n/10.95 - - s e a r c h - c o s i g n e r - s u b s e t\TU/DejaVuSerif(0)/b/n/10.95 . \TU/DejaVuSerif(0)/m/n/10.95 For uncertain \TU/DejaVuSerif(0)/b/n/10.95 cosigner
+[95]
+
+LaTeX Warning: Hyper reference `appendix-f-test-seeds-and-example-data' on page 96 undefined on input line 5258.
+
+[96] [97] [98] [99] [100] [101]
+
+LaTeX Warning: Hyper reference `non-representable-use-site-steps' on page 102 undefined on input line 5708.
+
+ [102]
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 103 undefined on input line 5720.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5781.
+
+
+LaTeX Warning: Hyper reference `template-only-md1' on page 103 undefined on input line 5783.
+
+
+LaTeX Warning: Hyper reference `template-only-md1' on page 103 undefined on input line 5792.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5796.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 103 undefined on input line 5802.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5807.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5819.
+
+
+LaTeX Warning: Hyper reference `subset-search-over-supply-completion' on page 103 undefined on input line 5826.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5834.
+
+
+LaTeX Warning: Hyper reference `subset-search-over-supply-completion' on page 103 undefined on input line 5840.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5844.
+
+
+LaTeX Warning: Hyper reference `mnemonic-restore' on page 103 undefined on input line 5859.
+
+ [103] [104] [105] [106]
+
+LaTeX Warning: Hyper reference `non-representable-use-site-steps' on page 107 undefined on input line 5891.
+
+
+LaTeX Warning: Hyper reference `verifying-a-bundle' on page 107 undefined on input line 5914.
+
+[107]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 108 undefined on input line 5951.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 108 undefined on input line 5976.
+
+
+Overfull \hbox (4.30661pt too wide) in paragraph at lines 5963--5980
+\TU/DejaVuSerif(0)/m/n/10.95 hash or content-id check; a unique full-checksum \TU/DejaVuSansMono(0)/m/n/10.95 --max-indel \TU/DejaVuSerif(0)/m/n/10.95 recovery) \TU/DejaVuSerif(0)/b/n/10.95 or verifiable-
+[108]
+
+LaTeX Warning: Hyper reference `mnemonic-inspect' on page 109 undefined on input line 5984.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-mk1-set-level-reverify' on page 109 undefined on input line 6015.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 109 undefined on input line 6024.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 109 undefined on input line 6027.
+
+
+LaTeX Warning: Hyper reference `auto-fire-behavior-all-three-subcommands-v0250' on page 109 undefined on input line 6051.
+
+[109]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 21.7 on input line 6080.
+
+
+Overfull \hbox (1.95457pt too wide) in paragraph at lines 6082--6084
+[]\TU/DejaVuSerif(0)/m/n/10.95 Known consumers (the public-API contract guarantees these continue to work through
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 110 undefined on input line 6149.
+
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 110 undefined on input line 6169.
+
+ [110] [111] [112]
+
+LaTeX Warning: Hyper reference `minimal-recovery-walkthrough' on page 113 undefined on input line 6293.
+
+
+LaTeX Warning: Hyper reference `migrating-from-bip-39-to-the-m-format' on page 113 undefined on input line 6295.
+
+[113]
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 114 undefined on input line 6316.
+
+ [114] [115] [116]
+Overfull \hbox (2.4671pt too wide) in paragraph at lines 6476--6479
+[]\TU/DejaVuSansMono(0)/b/n/10.95 --template\TU/DejaVuSerif(0)/b/n/10.95 /\TU/DejaVuSansMono(0)/b/n/10.95 --slot \TU/DejaVuSerif(0)/b/n/10.95 is gated too, and cannot trip the rule. \TU/DejaVuSerif(0)/m/n/10.95 A builder-produced
+[117]
+Overfull \hbox (17.6703pt too wide) in paragraph at lines 6551--6558
+[]\TU/DejaVuSerif(0)/b/n/10.95 Both chains are emitted \TU/DejaVuSerif(0)/m/n/10.95 — N receive (\TU/DejaVuSansMono(0)/m/n/10.95 internal: false\TU/DejaVuSerif(0)/m/n/10.95 ) and N change (\TU/DejaVuSansMono(0)/m/n/10.95 internal:
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+[118]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 119 undefined on input line 6637.
+
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 119 undefined on input line 6654.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 119 undefined on input line 6674.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 119 undefined on input line 6723.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 119 undefined on input line 6731.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 119 undefined on input line 6771.
+
+
+LaTeX Warning: Hyper reference `template-only-md1' on page 119 undefined on input line 6779.
+
+
+LaTeX Warning: Hyper reference `template-only-md1' on page 119 undefined on input line 6790.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 119 undefined on input line 6792.
+
+
+LaTeX Warning: Hyper reference `subset-search-over-supply-completion' on page 119 undefined on input line 6807.
+
+
+LaTeX Warning: Hyper reference `subset-search-over-supply-completion' on page 119 undefined on input line 6823.
+
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 119 undefined on input line 6831.
+
+[119] [120] [121] [122] [123]
+Overfull \hbox (5.67162pt too wide) in paragraph at lines 6913--6917
+[]\TU/DejaVuSansMono(0)/b/n/10.95 - - a l l o w - m i s m a t c h \TU/DejaVuSerif(0)/m/n/10.95 override → emit the descriptors the supplied seed+passphrase
+[124]
+Overfull \hbox (10.77545pt too wide) in paragraph at lines 6988--6991
+[]\TU/DejaVuSerif(0)/b/n/10.95 Passphrase via stdin\TU/DejaVuSerif(0)/m/n/10.95 , seed via \TU/DejaVuSansMono(0)/m/n/10.95 @env: \TU/DejaVuSerif(0)/m/n/10.95 (both secret channels — the TREZOR-passphrase
+[125]
+Overfull \hbox (16.89926pt too wide) in paragraph at lines 7105--7129
+[]\TU/DejaVuSerif(0)/b/n/10.95 General wallet policies (v0.54.0; taproot v0.55.1). \TU/DejaVuSerif(0)/m/n/10.95 Beyond plain \TU/DejaVuSansMono(0)/m/n/10.95 multi\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 sortedmulti\TU/DejaVuSerif(0)/m/n/10.95 ,
+
+Overfull \hbox (97.76172pt too wide) in paragraph at lines 7105--7129
+\TU/DejaVuSerif(0)/m/n/10.95 an \TU/DejaVuSansMono(0)/m/n/10.95 md1 \TU/DejaVuSerif(0)/m/n/10.95 for a \TU/DejaVuSerif(0)/m/it/10.95 general \TU/DejaVuSerif(0)/m/n/10.95 policy — timelocks (\TU/DejaVuSansMono(0)/m/n/10.95 older\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 after\TU/DejaVuSerif(0)/m/n/10.95 ), hashlocks (\TU/DejaVuSansMono(0)/m/n/10.95 sha256\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 hash256\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ripemd160\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 hash160\TU/DejaVuSerif(0)/m/n/10.95 ),
+[126] [127]
+
+LaTeX Warning: Hyper reference `multisig-template-completion' on page 128 undefined on input line 7209.
+
+
+LaTeX Warning: Hyper reference `foreign-wallet-formats' on page 128 undefined on input line 7246.
+
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 128 undefined on input line 7250.
+
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet-seed-overlay' on page 128 undefined on input line 7259.
+
+[128]
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 129 undefined on input line 7267.
+
+
+LaTeX Warning: Hyper reference `unrestorable-shapes' on page 129 undefined on input line 7268.
+
+
+LaTeX Warning: Hyper reference `non-representable-use-site-steps' on page 129 undefined on input line 7269.
+
+
+LaTeX Warning: Hyper reference `foreign-wallet-formats' on page 129 undefined on input line 7281.
+
+ [129] [130] [131] [132] [133]
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 134 undefined on input line 7537.
+
+ [134] [135]
+Overfull \vbox (311.80475pt too high) has occurred while \output is active
+Overfull \vbox (311.80475pt too high) has occurred while \output is active [136] [137]
+
+LaTeX Warning: Hyper reference `non-representable-use-site-steps' on page 138 undefined on input line 7758.
+
+
+LaTeX Warning: Hyper reference `foreign-wallet-formats' on page 138 undefined on input line 7765.
+
+
+LaTeX Warning: Hyper reference `foreign-wallet-formats' on page 138 undefined on input line 7769.
+
+ [138]
+
+LaTeX Warning: Hyper reference `foreign-wallet-formats' on page 139 undefined on input line 7793.
+
+ [139]
+
+LaTeX Warning: Hyper reference `deterministic-child-secrets-via-bip-85' on page 140 undefined on input line 7857.
+
+ [140] [141] [142] [143] [144] [145]
+
+LaTeX Warning: Hyper reference `mnemonic-seed-xor' on page 146 undefined on input line 8312.
+
+
+LaTeX Warning: Hyper reference `trezor-interop' on page 146 undefined on input line 8318.
+
+[146] [147]
+
+LaTeX Warning: Hyper reference `mnemonic-seed-xor' on page 148 undefined on input line 8449.
+
+[148]
+Overfull \hbox (26.15897pt too wide) in paragraph at lines 8535--8541
+[]\TU/DejaVuSerif(0)/b/n/10.95 Passphrase has no authentication tag. \TU/DejaVuSansMono(0)/m/n/10.95 combine \TU/DejaVuSerif(0)/m/n/10.95 with the WRONG passphrase
+[149]
+
+LaTeX Warning: Hyper reference `trezor-interop' on page 150 undefined on input line 8663.
+
+[150] [151] [152] [153]
+Overfull \hbox (2.50288pt too wide) in paragraph at lines 8885--8888
+[]\TU/DejaVuSerif(0)/b/n/10.95 Recipe \TU/DejaVuSerif(0)/m/n/10.95 (validated 2026-05-14 against \TU/DejaVuSansMono(0)/m/n/10.95 s h a m i r - m n e m o n i c \TU/DejaVuSerif(0)/m/n/10.95 0.3.0 on Linux x86_64; toolkit
+[154]
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 155 undefined on input line 8958.
+
+
+LaTeX Warning: Hyper reference `ms-split' on page 155 undefined on input line 8964.
+
+[155]
+Overfull \hbox (1.67236pt too wide) in paragraph at lines 9002--9006
+[]\TU/DejaVuSerif(0)/b/n/10.95 Secret share (index \TU/DejaVuSansMono(0)/b/n/10.95 s\TU/DejaVuSerif(0)/b/n/10.95 ) \TU/DejaVuSerif(0)/m/n/10.95 — the codex32 secret-carrying share at index \TU/DejaVuSansMono(0)/m/n/10.95 s \TU/DejaVuSerif(0)/m/n/10.95 is NEVER
+
+LaTeX Warning: Hyper reference `mnemonic-verify-bundle' on page 156 undefined on input line 9057.
+
+ [156]
+
+LaTeX Warning: Hyper reference `mnemonic-seed-xor' on page 157 undefined on input line 9109.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 157 undefined on input line 9110.
+
+[157] [158]
+
+LaTeX Warning: Hyper reference `scope-v0300-widened-in-v0315-v0320' on page 159 undefined on input line 9239.
+
+
+Overfull \hbox (2.11916pt too wide) in paragraph at lines 9237--9241
+[]\TU/DejaVuSansMono(0)/m/n/10.95 - - v a r i a n t < s t a n d a r d | c o m p a c t >\TU/DejaVuSerif(0)/m/n/10.95 : \TU/DejaVuSerif(0)/b/n/10.95 (v0.32.0+) \TU/DejaVuSerif(0)/m/n/10.95 SeedQR variant (default \TU/DejaVuSansMono(0)/m/n/10.95 standard\TU/DejaVuSerif(0)/m/n/10.95 ).
+
+Overfull \hbox (2.11916pt too wide) in paragraph at lines 9268--9272
+[]\TU/DejaVuSansMono(0)/m/n/10.95 - - v a r i a n t < s t a n d a r d | c o m p a c t >\TU/DejaVuSerif(0)/m/n/10.95 : \TU/DejaVuSerif(0)/b/n/10.95 (v0.32.0+) \TU/DejaVuSerif(0)/m/n/10.95 SeedQR variant (default \TU/DejaVuSansMono(0)/m/n/10.95 standard\TU/DejaVuSerif(0)/m/n/10.95 ).
+[159] [160]
+Overfull \hbox (7.41545pt too wide) in paragraph at lines 9459--9461
+[]\TU/DejaVuSerif(0)/m/n/10.95 Expected: \TU/DejaVuSansMono(0)/m/n/10.95 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3\TU/DejaVuSerif(0)/m/n/10.95 . Compare against
+[161] [162] [163]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 21.33 on input line 9648.
+
+[164] [165] [166] [167] [168] [169] [170] [171] [172] [173]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 174 undefined on input line 10417.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 174 undefined on input line 10420.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-unreadable-version' on page 174 undefined on input line 10424.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-mk1-set-level-reverify' on page 174 undefined on input line 10435.
+
+ [174]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 175 undefined on input line 10455.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 175 undefined on input line 10461.
+
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 175 undefined on input line 10474.
+
+
+Overfull \hbox (9.80783pt too wide) in paragraph at lines 10481--10484
+[]\TU/DejaVuSerif(0)/b/n/10.95 A COMPLETE group (every chunk of the card supplied) reassembles cleanly
+[175]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 176 undefined on input line 10526.
+
+
+Overfull \hbox (6.02405pt too wide) in paragraph at lines 10537--10544
+[]\TU/DejaVuSansMono(0)/b/n/10.95 mnemonic repair --ms1 \TU/DejaVuSerif(0)/m/n/10.95 (and \TU/DejaVuSansMono(0)/b/n/10.95 ms repair\TU/DejaVuSerif(0)/m/n/10.95 , ms-cli’s standalone binary): any touched
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 176 undefined on input line 10554.
+
+[176]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-max-indel' on page 177 undefined on input line 10633.
+
+[177]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 178 undefined on input line 10669.
+
+[178]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 179 undefined on input line 10716.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-non-chunked-demotion' on page 179 undefined on input line 10728.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-md1-unreadable-version' on page 179 undefined on input line 10732.
+
+
+Overfull \hbox (32.78409pt too wide) in paragraph at lines 10722--10734
+\TU/DejaVuSansMono(0)/m/n/10.95 "candidate" \TU/DejaVuSerif(0)/m/n/10.95 for a touched-but-unverified correction — reachable for every \TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 substitution-
+[179] [180] [181]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 182 undefined on input line 10952.
+
+
+Overfull \hbox (2.50645pt too wide) in paragraph at lines 10977--10982
+\TU/DejaVuSerif(0)/m/n/10.95 criminate the envelope from the standalone \TU/DejaVuSansMono(0)/m/n/10.95 mnemonic repair --json \TU/DejaVuSerif(0)/m/n/10.95 envelope (which
+[182]
+Overfull \hbox (21.52138pt too wide) in paragraph at lines 11043--11047
+[]\TU/DejaVuSansMono(0)/m/n/10.95 mk1 \TU/DejaVuSerif(0)/m/n/10.95 — policy-id-stub count, origin fingerprint (or \TU/DejaVuSansMono(0)/m/n/10.95 <absent> \TU/DejaVuSerif(0)/m/n/10.95 for the privacy-preserving
+[183] [184]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 185 undefined on input line 11194.
+
+[185]
+Overfull \hbox (20.71098pt too wide) in paragraph at lines 11238--11244
+[]\TU/DejaVuSerif(0)/m/n/10.95 Card intake is case-tolerant (v0.53.3 routing; \TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 end-to-end since v0.53.5): all-uppercase
+
+Overfull \hbox (2.06387pt too wide) in paragraph at lines 11238--11244
+\TU/DejaVuSansMono(0)/m/n/10.95 mk1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 md1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 all decode end-to-end. The codecs remain the authority on case — \TU/DejaVuSansMono(0)/m/n/10.95 mk1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ms1
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 186 undefined on input line 11271.
+
+[186]
+Overfull \hbox (45.08644pt too wide) in paragraph at lines 11329--11332
+\TU/DejaVuSansMono(0)/m/n/10 xpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 tpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 vpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Vpub\TU/DejaVuSerif(0)/m/n/10 ) 
+[187] [188]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 189 undefined on input line 11465.
+
+
+Overfull \hbox (2.48895pt too wide) in paragraph at lines 11522--11527
+[]\TU/DejaVuSerif(0)/b/n/10.95 Templates: \TU/DejaVuSerif(0)/m/n/10.95 BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at \TU/DejaVuSansMono(0)/m/n/10.95 script_type
+[189] [190] [191]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 192 undefined on input line 11727.
+
+[192] [193] [194] [195]
+Overfull \hbox (45.08644pt too wide) in paragraph at lines 12055--12058
+\TU/DejaVuSansMono(0)/m/n/10 xpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 tpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 vpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Vpub\TU/DejaVuSerif(0)/m/n/10 ) 
+ [196] [197] [198] [199]
+
+LaTeX Warning: Hyper reference `mnemonic-repair-ms1-substitution-demotion' on page 200 undefined on input line 12256.
+
+
+Overfull \hbox (13.1844pt too wide) in paragraph at lines 12254--12257
+[]\TU/DejaVuSerif(0)/m/n/10.95 Exit \TU/DejaVuSansMono(0)/m/n/10.95 5 \TU/DejaVuSerif(0)/m/n/10.95 is \TU/DejaVuSerif(0)/b/n/10.95 not reachable \TU/DejaVuSerif(0)/m/n/10.95 by this subcommand (Cycle F) — see ms1 substitution-correction
+[200]
+
+LaTeX Warning: Hyper reference `consensus-masked-relative-timelocks' on page 201 undefined on input line 12325.
+
+[201]
+Overfull \hbox (10.86545pt too wide) in paragraph at lines 12404--12408
+[]\TU/DejaVuSerif(0)/b/n/10.95 Preimages \TU/DejaVuSerif(0)/m/n/10.95 — \TU/DejaVuSansMono(0)/m/n/10.95 p r e i m a g e ( h < i > ) \TU/DejaVuSerif(0)/m/n/10.95 in AST-order, one per \TU/DejaVuSansMono(0)/m/n/10.95 sha256 \TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 hash256 \TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 ripemd160
+[202] [203]
+Overfull \hbox (8.0877pt too wide) in paragraph at lines 12585--12592
+[]\TU/DejaVuSerif(0)/m/n/10.95 The internal key is reverse-projected from x-only (32B) to compressed (33B) by prepend-
+[204] [205]
+Overfull \hbox (0.5422pt too wide) in paragraph at lines 12740--12741
+\TU/DejaVuSansMono(0)/m/n/10 hash256\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 hash160\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ripemd160\TU/DejaVuSerif(0)/m/n/10 )|  
+[206] [207] [208]
+Overfull \hbox (7.77275pt too wide) in paragraph at lines 12949--12960
+\TU/DejaVuSerif(0)/b/n/10.95 watch-only screen \TU/DejaVuSerif(0)/m/n/10.95 (an \TU/DejaVuSansMono(0)/m/n/10.95 xprv \TU/DejaVuSerif(0)/m/n/10.95 / extended-private key is refused here, never echoed). 
+[209]
+Overfull \hbox (9.18109pt too wide) in paragraph at lines 12964--12971
+[]\TU/DejaVuSansMono(0)/b/n/10.95 s a n i t y _ c h e c k \TU/DejaVuSerif(0)/m/n/10.95 — the BIP-built-in funds-footgun rules: \TU/DejaVuSansMono(0)/m/n/10.95 s i g l e s s _ b r a n c h \TU/DejaVuSerif(0)/m/n/10.95 (an anyone-
+[210] [211]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 21.68 on input line 13168.
+
+[212]
+
+LaTeX Warning: Hyper reference `mnemonic-verify-bundle' on page 213 undefined on input line 13269.
+
+ [213] [214] [215] [216]
+Chapter 22.
+ [217] [218] [219]
+
+LaTeX Warning: Hyper reference `minimal-recovery-walkthrough' on page 220 undefined on input line 13606.
+
+[220]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 22.3 on input line 13662.
+
+ [221] [222]
+Overfull \hbox (20.25496pt too wide) in paragraph at lines 13794--13801
+\TU/DejaVuSansMono(0)/m/n/10.95 key\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 - - f i n g e r p r i n t\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --path\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --from-mk1\TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 - - f r o m - m k 1 - f i l e\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --seat\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --network\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --chain\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 -
+ [223] [224]
+
+LaTeX Warning: Hyper reference `md-compose' on page 225 undefined on input line 13926.
+
+[225] [226]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 22.7 on input line 14051.
+
+[227] [228]
+
+LaTeX Warning: Hyper reference `md-compile' on page 229 undefined on input line 14214.
+
+[229] [230]
+
+LaTeX Warning: Hyper reference `md-descriptor' on page 231 undefined on input line 14312.
+
+[231]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 22.11 on input line 14420.
+
+[232] [233] [234] [235] [236]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 22.16 on input line 14726.
+
+[237]
+Chapter 23.
+
+LaTeX Warning: Hyper reference `ms-split' on page 238 undefined on input line 14733.
+
+
+LaTeX Warning: Hyper reference `ms-combine' on page 238 undefined on input line 14734.
+
+[238]
+
+LaTeX Warning: Hyper reference `ms-argv-guard' on page 239 undefined on input line 14851.
+
+
+LaTeX Warning: Hyper reference `ms-argv-guard' on page 239 undefined on input line 14863.
+
+ [239]
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+[240]
+
+LaTeX Warning: Hyper reference `ms-argv-guard' on page 241 undefined on input line 14969.
+
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+[241]
+
+LaTeX Warning: Hyper reference `ms-argv-guard' on page 242 undefined on input line 15045.
+
+ [242]
+
+LaTeX Warning: Hyper reference `ms-combine' on page 243 undefined on input line 15133.
+
+
+LaTeX Warning: Hyper reference `mnemonic-ms-shares' on page 243 undefined on input line 15143.
+
+[243]
+
+LaTeX Warning: Hyper reference `ms-combine' on page 244 undefined on input line 15215.
+
+
+LaTeX Warning: Hyper reference `ms-split' on page 244 undefined on input line 15222.
+
+
+LaTeX Warning: Hyper reference `mnemonic-ms-shares' on page 244 undefined on input line 15228.
+
+[244]
+
+LaTeX Warning: Hyper reference `ms-argv-guard' on page 245 undefined on input line 15255.
+
+[245]
+
+LaTeX Warning: Hyper reference `ms-split' on page 246 undefined on input line 15338.
+
+
+LaTeX Warning: Hyper reference `ms-combine' on page 246 undefined on input line 15348.
+
+
+LaTeX Warning: Hyper reference `ms-hashlock' on page 246 undefined on input line 15352.
+
+[246] [247] [248] [249] [250] [251]
+Overfull \hbox (5.3314pt too wide) in paragraph at lines 15754--15758
+[]\TU/DejaVuSerif(0)/m/n/10.95 hash 3cf5d421..b70a4c12 method: hardened chars: 28 Before you cut plates,
+ [252] [253] [254]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 23.14 on input line 15991.
+
+
+LaTeX Warning: Hyper reference `ms-argv-guard' on page 255 undefined on input line 16038.
+
+[255] [256] [257]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 23.18 on input line 16224.
+
+[258]
+Chapter 24.
+ [259] [260]
+Overfull \hbox (3.3639pt too wide) in paragraph at lines 16398--16407
+[]\TU/DejaVuSerif(0)/m/n/10.95 In mk1 the script type is conveyed by the card’s origin path (\TU/DejaVuSansMono(0)/m/n/10.95 m/49[]/… \TU/DejaVuSerif(0)/m/n/10.95 → P2SH-P2WPKH,
+[261] [262] [263] [264]
+
+LaTeX Warning: Hyper reference `set-level-re-verify' on page 265 undefined on input line 16653.
+
+
+LaTeX Warning: Hyper reference `set-level-re-verify' on page 265 undefined on input line 16660.
+
+
+LaTeX Warning: Hyper reference `mnemonic-repair-mk1-set-level-reverify' on page 265 undefined on input line 16673.
+
+[265]
+Overfull \hbox (9.80783pt too wide) in paragraph at lines 16714--16717
+[]\TU/DejaVuSerif(0)/b/n/10.95 A COMPLETE group (every chunk of the card supplied) reassembles cleanly
+[266]
+
+LaTeX Warning: Hyper reference `set-level-re-verify' on page 267 undefined on input line 16770.
+
+[267]
+
+LaTeX Warning: Hyper reference `slip-0132-prefix-acceptance---xpub' on page 268 undefined on input line 16897.
+
+
+Overfull \hbox (62.02466pt too wide) in paragraph at lines 16893--16900
+[]\TU/DejaVuSansMono(0)/m/n/10.95 --xpub \TU/DejaVuSerif(0)/m/n/10.95 accepts SLIP-0132 prefixes (ypub/zpub/Ypub/Zpub and the testnet upub/vpub/Upub/Vpub)
+[268] [269] [270] [271] [272]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 24.12 on input line 17283.
+
+[273]
+Chapter 25.
+[274] [275] [276] [277] [278] [279] [280] [281] [282] [283] [284] [285] [286] [287] [288] [289] [290] [291] [292] [293] [294] [295] [296] [297] [298] [299] [300] [301] [302] [303] [304] [305] [306] [307] [308] [309] [310] [311] [312] [313] [314] [315] [316] [317] [318] [319] [320] [321] [322] [323] [324] [325] [326] [327] [328] [329] [330] [331] [332] [333] [334] [335] [336] [337] [338] [339] [340] [341] [342] [343] [344] [345] [346] [347] [348] [349] [350] [351] [352] [353] [354] [355] [356] [357] [358] [359] [360] [361]
+Missing character: There is no 李 (U+674E) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 明 (U+660E) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 张 (U+5F20) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 伟 (U+4F1F) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 的 (U+7684) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 手 (U+624B) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 机 (U+673A) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+[362] [363] [364] [365] [366] [367] [368] [369] [370] [371] [372] [373] [374] [375] [376] [377] [378] [379] [380] [381] [382] [383] [384] [385] [386] [387] [388] [389] [390] [391] [392] [393] [394] [395] [396] [397] [398] [399] [400] [401] [402] [403] [404] [405] [406] [407] [408] [409] [410] [411] [412] [413] [414] [415] [416] [417] [418] [419] [420] [421] [422] [423] [424] [425] [426] [427] [428] [429] [430] [431] [432] [433] [434] [435] [436] [437] [438] [439] [440] [441] [442] [443] [444] [445] [446]
+Overfull \hbox (14.89203pt too wide) in paragraph at lines 27760--27763
+[]\TU/DejaVuSerif(0)/m/n/10.95 not checked against this card (no fingerprint): check with \TU/DejaVuSansMono(0)/m/n/10.95 mr verify MR1_CARD
+[447] [448] [449] [450] [451] [452] [453]
+Overfull \hbox (1.45175pt too wide) in paragraph at lines 28353--28362
+[]\TU/DejaVuSerif(0)/m/n/10.95 later cards are addenda or successors, with ordinary seeds; root-made seeds
+[454]
+Overfull \hbox (6.41518pt too wide) in paragraph at lines 28436--28454
+\TU/DejaVuSerif(0)/m/n/10.95 xpub the signer shows at each of this kit’s seat-key lines’ origin path, matched
+[455]
+Overfull \hbox (135.73027pt too wide) in paragraph at lines 28510--28515
+\TU/DejaVuSerif(0)/m/n/10.95 <NAME>_PLATES (that bag’s ms1 plates) and <NAME>_BAG_MK1_PLATE_1, <NAME>_BAG_MK1_PLATE_2
+[456] [457]
+Chapter 26.
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet' on page 458 undefined on input line 28608.
+
+
+LaTeX Warning: Hyper reference `mnemonic-export-wallet' on page 458 undefined on input line 28610.
+
+
+Overfull \hbox (11.25063pt too wide) in paragraph at lines 28657--28660
+[]\TU/DejaVuSerif(0)/b/n/10.95 Electrum 4.x wallet file. \TU/DejaVuSerif(0)/m/n/10.95 Electrum’s on-disk JSON (\TU/DejaVuSansMono(0)/m/n/10.95 s e e d _ v e r s i o n \TU/DejaVuSerif(0)/m/n/10.95 + \TU/DejaVuSansMono(0)/m/n/10.95 wallet_type
+[458]
+
+LaTeX Warning: Hyper reference `bitcoin-core-listdescriptors' on page 459 undefined on input line 28666.
+
+
+LaTeX Warning: Hyper reference `electrum-wallet-file' on page 459 undefined on input line 28668.
+
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet-seed-overlay' on page 459 undefined on input line 28676.
+
+[459] [460] [461]
+
+LaTeX Warning: Hyper reference `mnemonic-import-wallet' on page 462 undefined on input line 28926.
+
+
+Overfull \hbox (5.39058pt too wide) in paragraph at lines 28920--28929
+\TU/DejaVuSerif(0)/m/n/10.95 A Bitcoin Core wallet typically exports four descriptor entries (BIP-84 receive + change,
+[462]
+
+LaTeX Warning: Hyper reference `commented-descriptor' on page 463 undefined on input line 28995.
+
+[463]
+Overfull \hbox (2.00008pt too wide) in paragraph at lines 29043--29047
+\TU/DejaVuSerif(0)/m/n/10.95 The \TU/DejaVuSansMono(0)/m/n/10.95 --json \TU/DejaVuSerif(0)/m/n/10.95 envelope’s \TU/DejaVuSansMono(0)/m/n/10.95 b u n d l e . i m p o r t _ p r o v e n a n c e . s p a r r o w \TU/DejaVuSerif(0)/m/n/10.95 field preserves Sparrow-
+[464]
+Overfull \hbox (37.91516pt too wide) in paragraph at lines 29143--29151
+[]\TU/DejaVuSerif(0)/m/n/10.95 The direct export-wallet path requires a recognized \TU/DejaVuSansMono(0)/m/n/10.95 --template \TU/DejaVuSerif(0)/m/n/10.95 (no descriptor-passthrough);
+
+Overfull \hbox (4.45772pt too wide) in paragraph at lines 29152--29158
+[]\TU/DejaVuSerif(0)/b/n/10.95 Round-trip note: \TU/DejaVuSerif(0)/m/n/10.95 import → JSON envelope works for both taproot shapes; re-emission
+[465]
+Overfull \hbox (16.80705pt too wide) in paragraph at lines 29234--29237
+[]\TU/DejaVuSansMono(0)/m/n/10.95 blockheight \TU/DejaVuSerif(0)/m/n/10.95 is preserved in the provenance metadata but DROPPED on the canonicalize-
+
+LaTeX Warning: Hyper reference `bitcoin-core-receive-change-hard-fail' on page 466 undefined on input line 29243.
+
+[466]
+
+LaTeX Warning: Hyper reference `coldcard-multisig' on page 467 undefined on input line 29315.
+
+
+Overfull \hbox (11.50647pt too wide) in paragraph at lines 29334--29337
+\TU/DejaVuSerif(0)/m/n/10.95 The \TU/DejaVuSansMono(0)/m/n/10.95 --json \TU/DejaVuSerif(0)/m/n/10.95 envelope’s \TU/DejaVuSansMono(0)/m/n/10.95 b u n d l e . i m p o r t _ p r o v e n a n c e . c o l d c a r d \TU/DejaVuSerif(0)/m/n/10.95 field preserves Coldcard-
+[467] [468] [469]
+
+LaTeX Warning: Hyper reference `coldcard-multisig' on page 470 undefined on input line 29571.
+
+[470]
+
+LaTeX Warning: Hyper reference `mnemonic-electrum' on page 471 undefined on input line 29652.
+
+[471] [472]
+Overfull \hbox (7.51085pt too wide) in paragraph at lines 29795--29804
+\TU/DejaVuSerif(0)/m/n/10.95 xpub/derivation/fingerprint/label; encrypted seed/xprv/passphrase/keypairs fields
+[473]
+Overfull \hbox (15.91702pt too wide) in paragraph at lines 29846--29852
+[]\TU/DejaVuSerif(0)/b/n/10.95 Singlesig and multisig. \TU/DejaVuSerif(0)/m/n/10.95 Unlike \TU/DejaVuSansMono(0)/m/n/10.95 e x p o r t - w a l l e t - - f o r m a t g r e e n \TU/DejaVuSerif(0)/m/n/10.95 (which is singlesig-
+[474]
+Overfull \hbox (14.99771pt too wide) in paragraph at lines 29955--29959
+[]\TU/DejaVuSerif(0)/b/n/10.95 BSMS Round-1 token-only \TU/DejaVuSerif(0)/m/n/10.95 (\TU/DejaVuSansMono(0)/m/n/10.95 w a l l e t - i m p o r t - b s m s - r o u n d - 1\TU/DejaVuSerif(0)/m/n/10.95 ) — the pre-descriptor
+
+Overfull \hbox (2.60146pt too wide) in paragraph at lines 29959--29976
+\TU/DejaVuSansMono(0)/m/n/10.95 n c r y p t i o n - t o k e n < F I L E | - > \TU/DejaVuSerif(0)/m/n/10.95 (PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256
+[475]
+
+LaTeX Warning: Hyper reference `taproot-import-shipped-v0311' on page 476 undefined on input line 29981.
+
+
+LaTeX Warning: Hyper reference `electrum-wallet-file' on page 476 undefined on input line 29992.
+
+
+Overfull \hbox (13.03403pt too wide) in paragraph at lines 29987--29994
+[]|   [] \TU/DejaVuSerif(0)/m/n/10.95 — shipped in v0.30.1 as watch-only passthrough
+
+Overfull \hbox (44.30086pt too wide) in paragraph at lines 29987--29994
+\TU/DejaVuSerif(0)/m/n/10.95 (parses plaintext xpub/derivation/etc., ignores encrypted seed/xprv/passphrase/keypairs,
+
+LaTeX Warning: Hyper reference `electrum-wallet-file' on page 476 undefined on input line 29996.
+
+
+LaTeX Warning: Hyper reference `bch-codex32-primer' on page 476 undefined on input line 30036.
+
+
+LaTeX Warning: Hyper reference `descriptors-primer' on page 476 undefined on input line 30037.
+
+[476]
+Chapter 27.
+ [477]
+
+LaTeX Warning: Hyper reference `mnemonic-toolkit-vs-ms-cli' on page 478 undefined on input line 30158.
+
+
+LaTeX Warning: Hyper reference `mnemonic-toolkit-vs-md-cli' on page 478 undefined on input line 30159.
+
+
+LaTeX Warning: Hyper reference `m-format-vs-slip-39-vs-naked-bip-39-vs-shamir' on page 478 undefined on input line 30161.
+
+
+LaTeX Warning: Hyper reference `single-sig-vs-multisig-decision-tree' on page 478 undefined on input line 30162.
+
+
+LaTeX Warning: Hyper reference `bip-39-vs-bip-38-passphrases' on page 478 undefined on input line 30163.
+
+
+LaTeX Warning: Hyper reference `bitcoin-core-importdescriptors-vs-bip-388-wallet-policy' on page 478 undefined on input line 30165.
+
+[478]
+Chapter 28.
+[479] [480]
+Chapter 29.
+
+Overfull \hbox (3.05861pt too wide) in paragraph at lines 30299--30303
+[]\TU/DejaVuSerif(0)/m/n/10.95 You’re building a watch-only artifact for Bitcoin Core / BIP-388 / Sparrow / Specter
+[481] [482]
+Chapter 30.
+[483]
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 30.2 on input line 30467.
+
+[484] [485]
+Chapter 31.
+[486] [487]
+Overfull \hbox (3.84535pt too wide) in paragraph at lines 30556--30560
+[]\TU/DejaVuSerif(0)/m/n/10.95 The wallet’s value justifies recurring operational cost (each cosigner runs through
+[488] [489]
+Chapter 32.
+[490] [491] [492]
+Chapter 33.
+[493] [494] [495]
+Chapter 34.
+
+LaTeX Warning: Hyper reference `appendix-b-bip-39-entropy-primer' on page 496 undefined on input line 30941.
+
+
+LaTeX Warning: Hyper reference `appendix-e-codex32-bch-m-codec-error-correction' on page 496 undefined on input line 30942.
+
+
+LaTeX Warning: Hyper reference `appendix-c-bip-32-derivation-primer' on page 496 undefined on input line 30957.
+
+
+LaTeX Warning: Hyper reference `appendix-b-bip-39-entropy-primer' on page 496 undefined on input line 30971.
+
+[496] [497] [498] [499] [500] [501] [502]
+Chapter 35.
+[503]
+Overfull \hbox (4.87416pt too wide) in paragraph at lines 31335--31335
+[]\TU/DejaVuSerif(0)/b/n/14.4 Why ms1 instead of just engraving the BIP-39 phrase? 
+[504]
+Chapter 36.
+[505] [506]
+Chapter 37.
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 37.1 on input line 31561.
+
+ [507] [508]
+Chapter 38.
+[509]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 510
+[510]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 511
+[511]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 512
+[512]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 513
+[513]
+Overfull \hbox (15.69852pt too wide) in paragraph at lines 32027--32031
+\TU/DejaVuSerif(0)/m/n/10.95 fork with rust-codex32) was considered and retired on 2026-05-03; see CLAUDE.md
+
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 514
+[514]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 515
+[515]
+Chapter 39.
+[516] [517]
+Chapter 40.
+
+Overfull \hbox (6.38963pt too wide) in paragraph at lines 32168--32171
+\TU/DejaVuSansMono(0)/m/n/10 bip44\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip49\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip84\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip86\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 wsh- 
+[518] [519]
+
+LaTeX Warning: Hyper reference `appendix-h-release-history' on page 520 undefined on input line 32358.
+
+[520]
+Chapter 41.
+ [521] [522] [523]
+Chapter 42.
+
+LaTeX Warning: Hyper reference `welcome-to-the-m-format-constellation' on page 524 undefined on input line 32551.
+
+
+LaTeX Warning: Hyper reference `single-sig-steel-engraved-backup' on page 524 undefined on input line 32554.
+
+
+LaTeX Warning: Hyper reference `concept-signposts' on page 524 undefined on input line 32555.
+
+
+LaTeX Warning: Hyper reference `concept-signposts' on page 524 undefined on input line 32556.
+
+
+LaTeX Warning: Hyper reference `mnemonic-ms-shares' on page 524 undefined on input line 32557.
+
+
+LaTeX Warning: Hyper reference `concept-signposts' on page 524 undefined on input line 32558.
+
+
+LaTeX Warning: Hyper reference `mnemonic-ms-shares' on page 524 undefined on input line 32560.
+
+
+LaTeX Warning: Hyper reference `single-sig-steel-engraved-backup' on page 524 undefined on input line 32563.
+
+
+LaTeX Warning: Hyper reference `concept-signposts' on page 524 undefined on input line 32564.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 524 undefined on input line 32566.
+
+
+LaTeX Warning: Hyper reference `deterministic-child-secrets-via-bip-85' on page 524 undefined on input line 32569.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 524 undefined on input line 32570.
+
+
+LaTeX Warning: Hyper reference `about-this-manual' on page 524 undefined on input line 32572.
+
+
+LaTeX Warning: Hyper reference `welcome-to-the-m-format-constellation' on page 524 undefined on input line 32574.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 524 undefined on input line 32576.
+
+
+LaTeX Warning: Hyper reference `welcome-to-the-m-format-constellation' on page 524 undefined on input line 32578.
+
+
+LaTeX Warning: Hyper reference `welcome-to-the-m-format-constellation' on page 524 undefined on input line 32581.
+
+
+LaTeX Warning: Hyper reference `welcome-to-the-m-format-constellation' on page 524 undefined on input line 32583.
+
+
+LaTeX Warning: Hyper reference `concept-signposts' on page 524 undefined on input line 32584.
+
+
+LaTeX Warning: Hyper reference `welcome-to-the-m-format-constellation' on page 524 undefined on input line 32587.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 524 undefined on input line 32588.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 524 undefined on input line 32589.
+
+
+LaTeX Warning: Hyper reference `concept-signposts' on page 524 undefined on input line 32590.
+
+
+LaTeX Warning: Hyper reference `mnemonic-ms-shares' on page 524 undefined on input line 32592.
+
+
+LaTeX Warning: Hyper reference `mnemonic-slip39' on page 524 undefined on input line 32594.
+
+[524]
+Chapter 43.
+[525]
+No file m-format-manual.ind.
+
+Package longtable Warning: Table widths have changed. Rerun LaTeX.
+
+(./m-format-manual.aux)
+
+LaTeX Warning: There were undefined references.
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+
+Package rerunfilecheck Warning: File `m-format-manual.out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+ )
+(see the transcript file for additional information)
+Output written on m-format-manual.pdf (526 pages).
+Transcript written on m-format-manual.log.
+# Run makeindex only if the .idx file was produced (xelatex emits it
+# only when the source contains at least one \index{} marker).
+cd /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build && if [ -f m-format-manual.idx ]; then \
+    makeindex m-format-manual.idx; \
+else \
+    echo '[pdf] no \\index{} markers in source; skipping makeindex'; \
+fi
+This is makeindex, version 2.18 [TeX Live 2026] (kpathsea + Thai support).
+Scanning input file m-format-manual.idx....done (26 entries accepted, 0 rejected).
+Sorting entries....done (124 comparisons).
+Generating output file m-format-manual.ind....done (56 lines written, 0 warnings).
+Output written in m-format-manual.ind.
+Transcript written in m-format-manual.ilg.
+cd /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build && xelatex -interaction=nonstopmode -halt-on-error m-format-manual.tex
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex)
+ restricted \write18 enabled.
+entering extended mode
+(./m-format-manual.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2026-03-20>
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/book.cls
+Document Class: book 2025/01/22 v1.4n Standard LaTeX document class
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/bk11.clo)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3packages/xparse/xparse.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3kernel/expl3.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3backend/l3backend-xetex.def))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec-xetex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/fontenc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec.cfg))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math-xetex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3packages/l3keys2e/l3keys2e.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/fix-cm.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/ts1enc.def)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsmath.sty
+For additional information on amsmath, use the `?' option.
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amstext.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsgen.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsbsy.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsopn.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math-table.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/geometry/geometry.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/keyval.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/iftex/ifvtex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/iftex/iftex.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/hyperref.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/kvsetkeys/kvsetkeys.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/kvdefinekeys/kvdefinekeys.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pdfescape/pdfescape.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pdftexcmds/pdftexcmds.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/infwarerr/infwarerr.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hycolor/hycolor.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/nameref.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/refcount/refcount.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/kvoptions/kvoptions.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/etoolbox/etoolbox.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/stringenc/stringenc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/pd1enc.def) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/intcalc/intcalc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/puenc.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/url/url.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/bitset/bitset.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/hxetex.def (/home/bcg/.TinyTeX/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/longtable.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/booktabs/booktabs.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/calc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/array.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fancyvrb/fancyvrb.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/xcolor/xcolor.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-cfg/color.cfg) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-def/xetex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/mathcolor.ltx)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/upquote/upquote.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/textcomp.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype-xetex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype.cfg)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/parskip/parskip.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/makeidx.sty)
+Writing index file m-format-manual.idx
+(/home/bcg/.TinyTeX/texmf-dist/tex/generic/ulem/ulem.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/mdframed/mdframed.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/zref/zref-abspage.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/zref/zref-base.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/etexcmds/etexcmds.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/auxhook/auxhook.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/needspace/needspace.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/mdframed/md-frame-0.mdf)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fvextra/fvextra.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/lineno/lineno.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/seqsplit/seqsplit.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/xurl/xurl.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/graphicx.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/graphics.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/trig.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-cfg/graphics.cfg))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/svg/svg.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrbase.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlfile.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlfile-hook.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlogo.sty)))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/trimspaces/trimspaces.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/shellesc.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/transparent/transparent.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/transparent/transparent-nometadata.sty
+
+Package transparent Warning: Loading aborted, because pdfTeX is not running in PDF mode.
+
+)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/systemlayer/pgfsys.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgfrcs.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfutil-common.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfutil-latex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfrcs.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/pgf.revision.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeyslibraryfiltered.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgf.cfg) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-xetex.def (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-dvipdfmx.def (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-common-pdf.def)))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsyssoftpath.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsysprotocol.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/frontendlayer/tikz.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/basiclayer/pgf.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/basiclayer/pgfcore.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcore.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathutil.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathparser.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.basic.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.trigonometric.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.random.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.comparison.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.base.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.round.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.misc.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.integerarithmetics.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathcalc.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfloat.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfint.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepoints.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathconstruct.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathusage.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorescopes.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoregraphicstate.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransformations.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorequick.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreobjects.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathprocessing.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorearrows.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreshade.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreimage.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreexternal.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorelayers.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransparency.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepatterns.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorerdf.code.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmoduleshapes.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmoduleplot.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version-0-65.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version-1-18.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgffor.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgfkeys.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/math/pgfmath.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgffor.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/libraries/pgflibraryplothandlers.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmodulematrix.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarytopaths.code.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryshapes.geometric.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/libraries/shapes/pgflibraryshapes.geometric.code.tex)) (./m-format-manual.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: xetex
+(./m-format-manual.out) (./m-format-manual.out) [1] (./m-format-manual.toc [1] [2] [3]
+Overfull \hbox (13.80032pt too wide) in paragraph at lines 144--144
+ [][] [][][]\TU/DejaVuSerif(0)/m/n/10.95 The part with no room on the screen: sealing again changes the passphrase[][] [][]  
+[4] [5]
+Overfull \hbox (7.15169pt too wide) detected at line 267
+\TU/DejaVuSerif(0)/m/n/10.95 21.14.10 
+[6]
+Overfull \hbox (7.15169pt too wide) detected at line 308
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.10 
+
+Overfull \hbox (7.15169pt too wide) detected at line 309
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.11 
+
+Overfull \hbox (7.15169pt too wide) detected at line 311
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.12 
+
+Overfull \hbox (7.15169pt too wide) detected at line 312
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.13 
+
+Overfull \hbox (7.15169pt too wide) detected at line 313
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.14 
+
+Overfull \hbox (7.15169pt too wide) detected at line 314
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.15 
+
+Overfull \hbox (7.15169pt too wide) detected at line 315
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.16 
+
+Overfull \hbox (7.15169pt too wide) detected at line 316
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.17 
+[7] [8] [9] [10] [11] [12]
+Overfull \hbox (7.15169pt too wide) detected at line 637
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.10 
+
+Overfull \hbox (7.15169pt too wide) detected at line 638
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.11 
+
+Overfull \hbox (7.15169pt too wide) detected at line 639
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.12 
+
+Overfull \hbox (7.15169pt too wide) detected at line 640
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.13 
+
+Overfull \hbox (7.15169pt too wide) detected at line 641
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.14 
+
+Overfull \hbox (7.15169pt too wide) detected at line 642
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.15 
+[13] [14] [15] [16] [17]) [18]
+Chapter 1.
+[19] [20]
+Chapter 2.
+[21] [22]
+Chapter 3.
+[23] [24] [25] [26]
+Chapter 4.
+[27] [28]
+Chapter 5.
+[29] [30]
+Chapter 6.
+
+Overfull \hbox (1.56982pt too wide) in paragraph at lines 785--804
+[]\TU/DejaVuSerif(0)/m/n/10.95 The signature proves who published the checksums, where the checksum alone proves
+[31] [32] [33] [34]
+Chapter 7.
+[35] [36] [37]
+Chapter 8.
+[38]
+Overfull \hbox (9.02393pt too wide) in paragraph at lines 1243--1247
+[]\TU/DejaVuSerif(0)/b/n/10.95 Wrong template / network. \TU/DejaVuSerif(0)/m/n/10.95 If you bundled BIP-84 mainnet but typed \TU/DejaVuSansMono(0)/m/n/10.95 --template
+[39]
+Chapter 9.
+[40] [41]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 42 undefined on input line 1399.
+
+[42]
+Chapter 10.
+[43] [44] [45] [46] [47]
+Chapter 11.
+[48] [49] [50] [51] [52]
+Overfull \hbox (9.41348pt too wide) in paragraph at lines 1923--1927
+[]\TU/DejaVuSansMono(0)/b/n/10.95 wsh-multi \TU/DejaVuSerif(0)/b/n/10.95 (unsorted) \TU/DejaVuSerif(0)/m/n/10.95 — replace \TU/DejaVuSansMono(0)/m/n/10.95 w s h - s o r t e d m u l t i \TU/DejaVuSerif(0)/m/n/10.95 with \TU/DejaVuSansMono(0)/m/n/10.95 wsh-multi\TU/DejaVuSerif(0)/m/n/10.95 . The cosigner
+[53]
+Chapter 12.
+[54] [55]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 56 undefined on input line 2037.
+
+[56] [57]
+Overfull \hbox (6.14078pt too wide) in paragraph at lines 2130--2135
+[]\TU/DejaVuSerif(0)/b/n/10.95 Single-sig taproot \TU/DejaVuSerif(0)/m/n/10.95 — for a one-cosigner taproot wallet, prefer \TU/DejaVuSansMono(0)/m/n/10.95 --template bip86
+[58]
+Chapter 13.
+
+Overfull \hbox (9.2114pt too wide) in paragraph at lines 2151--2156
+[]\TU/DejaVuSerif(0)/b/n/10.95 Background — why watch-only matters. \TU/DejaVuSerif(0)/m/n/10.95 A watch-only wallet sees the blockchain
+
+Overfull \hbox (15.45195pt too wide) in paragraph at lines 2151--2156
+\TU/DejaVuSerif(0)/m/n/10.95 as the spending wallet does, but cannot move funds. Useful for monitoring (incoming-
+[59] [60]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 61 undefined on input line 2230.
+
+
+Overfull \hbox (22.41692pt too wide) in paragraph at lines 2234--2237
+\TU/DejaVuSerif(0)/m/n/10.95 For a watch-only bundle that does not reveal the master fingerprint (useful for coordinator-
+[61] [62]
+Chapter 14.
+[63] [64] [65] [66] [67] [68]
+Chapter 15.
+[69] [70] [71] [72]
+Chapter 16.
+[73] [74] [75] [76] [77] [78] [79] [80] [81]
+Overfull \hbox (2.97379pt too wide) in paragraph at lines 3310--3315
+[]\TU/DejaVuSerif(0)/m/n/10.95 The same text is byte-identical to Jade’s \TU/DejaVuSansMono(0)/m/n/10.95 r e g i s t e r _ m u l t i s i g . m u l t i s i g _ f i l e \TU/DejaVuSerif(0)/m/n/10.95 — switch
+[82]
+Chapter 17.
+[83] [84] [85] [86]
+Chapter 18.
+[87] [88] [89]
+Overfull \hbox (6.69823pt too wide) in paragraph at lines 3705--3720
+\TU/DejaVuSerif(0)/m/n/10.95 only sinks require an intermediate step through one of the descriptor-capable
+[90]
+Overfull \hbox (11.69522pt too wide) in paragraph at lines 3781--3781
+[]\TU/DejaVuSerif(0)/b/n/14.4 Recipe 6 — Coldcard single-sig → BIP-388 wallet-policy 
+
+Overfull \hbox (11.0754pt too wide) in paragraph at lines 3796--3802
+[]\TU/DejaVuSerif(0)/m/n/10.95 The resulting \TU/DejaVuSansMono(0)/m/n/10.95 policy.json \TU/DejaVuSerif(0)/m/n/10.95 carries the canonical \TU/DejaVuSansMono(0)/m/n/10.95 d e s c r i p t i o n _ t e m p l a t e \TU/DejaVuSerif(0)/m/n/10.95 (\TU/DejaVuSansMono(0)/m/n/10.95 wpkh(@0/**)\TU/DejaVuSerif(0)/m/n/10.95 )
+[91] [92]
+Overfull \hbox (15.0349pt too wide) in paragraph at lines 3926--3933
+\TU/DejaVuSansMono(0)/m/n/10.95 requires --template \TU/DejaVuSerif(0)/m/n/10.95 error. The v0.28.0 envelope is always descriptor-mode (\TU/DejaVuSansMono(0)/m/n/10.95 template:
+[93] [94]
+Chapter 19.
+[95] [96] [97] [98]
+Chapter 20.
+[99] [100]
+Chapter 21.
+[101] [102]
+Overfull \hbox (5.31804pt too wide) in paragraph at lines 4554--4571
+\TU/DejaVuSerif(0)/m/n/10.95 stdin is a terminal, \TU/DejaVuSansMono(0)/m/n/10.95 Enter passphrase: \TU/DejaVuSerif(0)/m/n/10.95 (for the other flags, \TU/DejaVuSansMono(0)/m/n/10.95 Enter BIP-38 passphrase:
+[103] [104]
+Overfull \hbox (11.69142pt too wide) in paragraph at lines 4661--4671
+[]\TU/DejaVuSerif(0)/m/n/10.95 Non-hardened \TU/DejaVuSerif(0)/b/n/10.95 per-cosigner use-site path overrides \TU/DejaVuSerif(0)/m/n/10.95 (cosigners with divergent deriva-
+[105] [106] [107] [108] [109]
+Overfull \hbox (4.39731pt too wide) in paragraph at lines 4969--4974
+\TU/DejaVuSerif(0)/m/n/10.95 LOWUP \TU/DejaVuSansMono(0)/m/n/10.95 t o o l k i t - m n e m - m s 1 - w i r e - s h a p e - d o w n s t r e a m - c o n s u m e r s \TU/DejaVuSerif(0)/m/n/10.95 for the downstream-
+[110]
+Overfull \hbox (27.88385pt too wide) in paragraph at lines 5075--5082
+[]\TU/DejaVuSerif(0)/b/n/10.95 address-search \TU/DejaVuSerif(0)/m/n/10.95 — \TU/DejaVuSansMono(0)/m/n/10.95 - - s e a r c h - a d d r e s s < a d d r > \TU/DejaVuSerif(0)/m/n/10.95 (collision-free, recommended) matches
+[111]
+Overfull \hbox (5.82533pt too wide) in paragraph at lines 5153--5160
+[]\TU/DejaVuSerif(0)/b/n/10.95 Opt-in cosigner subset — \TU/DejaVuSansMono(0)/b/n/10.95 - - s e a r c h - c o s i g n e r - s u b s e t\TU/DejaVuSerif(0)/b/n/10.95 . \TU/DejaVuSerif(0)/m/n/10.95 For uncertain \TU/DejaVuSerif(0)/b/n/10.95 cosigner
+[112] [113] [114] [115] [116] [117] [118] [119] [120] [121] [122] [123] [124]
+Overfull \hbox (4.30661pt too wide) in paragraph at lines 5963--5980
+\TU/DejaVuSerif(0)/m/n/10.95 hash or content-id check; a unique full-checksum \TU/DejaVuSansMono(0)/m/n/10.95 --max-indel \TU/DejaVuSerif(0)/m/n/10.95 recovery) \TU/DejaVuSerif(0)/b/n/10.95 or verifiable-
+[125]
+
+LaTeX Warning: Hyper reference `auto-fire-behavior-all-three-subcommands-v0250' on page 126 undefined on input line 6051.
+
+[126]
+Overfull \hbox (1.95457pt too wide) in paragraph at lines 6082--6084
+[]\TU/DejaVuSerif(0)/m/n/10.95 Known consumers (the public-API contract guarantees these continue to work through
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 127 undefined on input line 6169.
+
+ [127] [128] [129] [130] [131] [132] [133]
+Overfull \hbox (2.4671pt too wide) in paragraph at lines 6476--6479
+[]\TU/DejaVuSansMono(0)/b/n/10.95 --template\TU/DejaVuSerif(0)/b/n/10.95 /\TU/DejaVuSansMono(0)/b/n/10.95 --slot \TU/DejaVuSerif(0)/b/n/10.95 is gated too, and cannot trip the rule. \TU/DejaVuSerif(0)/m/n/10.95 A builder-produced
+[134]
+Overfull \hbox (17.6703pt too wide) in paragraph at lines 6551--6558
+[]\TU/DejaVuSerif(0)/b/n/10.95 Both chains are emitted \TU/DejaVuSerif(0)/m/n/10.95 — N receive (\TU/DejaVuSansMono(0)/m/n/10.95 internal: false\TU/DejaVuSerif(0)/m/n/10.95 ) and N change (\TU/DejaVuSansMono(0)/m/n/10.95 internal:
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+[135]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 136 undefined on input line 6637.
+
+[136] [137] [138] [139] [140]
+Overfull \hbox (5.67162pt too wide) in paragraph at lines 6913--6917
+[]\TU/DejaVuSansMono(0)/b/n/10.95 - - a l l o w - m i s m a t c h \TU/DejaVuSerif(0)/m/n/10.95 override → emit the descriptors the supplied seed+passphrase
+[141]
+Overfull \hbox (10.77545pt too wide) in paragraph at lines 6988--6991
+[]\TU/DejaVuSerif(0)/b/n/10.95 Passphrase via stdin\TU/DejaVuSerif(0)/m/n/10.95 , seed via \TU/DejaVuSansMono(0)/m/n/10.95 @env: \TU/DejaVuSerif(0)/m/n/10.95 (both secret channels — the TREZOR-passphrase
+[142]
+Overfull \hbox (16.89926pt too wide) in paragraph at lines 7105--7129
+[]\TU/DejaVuSerif(0)/b/n/10.95 General wallet policies (v0.54.0; taproot v0.55.1). \TU/DejaVuSerif(0)/m/n/10.95 Beyond plain \TU/DejaVuSansMono(0)/m/n/10.95 multi\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 sortedmulti\TU/DejaVuSerif(0)/m/n/10.95 ,
+
+Overfull \hbox (97.76172pt too wide) in paragraph at lines 7105--7129
+\TU/DejaVuSerif(0)/m/n/10.95 an \TU/DejaVuSansMono(0)/m/n/10.95 md1 \TU/DejaVuSerif(0)/m/n/10.95 for a \TU/DejaVuSerif(0)/m/it/10.95 general \TU/DejaVuSerif(0)/m/n/10.95 policy — timelocks (\TU/DejaVuSansMono(0)/m/n/10.95 older\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 after\TU/DejaVuSerif(0)/m/n/10.95 ), hashlocks (\TU/DejaVuSansMono(0)/m/n/10.95 sha256\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 hash256\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ripemd160\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 hash160\TU/DejaVuSerif(0)/m/n/10.95 ),
+[143] [144] [145] [146] [147] [148] [149] [150]
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 151 undefined on input line 7537.
+
+ [151] [152]
+Overfull \vbox (311.80475pt too high) has occurred while \output is active
+Overfull \vbox (311.80475pt too high) has occurred while \output is active [153] [154] [155] [156] [157] [158] [159] [160] [161] [162] [163] [164] [165]
+Overfull \hbox (26.15897pt too wide) in paragraph at lines 8535--8541
+[]\TU/DejaVuSerif(0)/b/n/10.95 Passphrase has no authentication tag. \TU/DejaVuSansMono(0)/m/n/10.95 combine \TU/DejaVuSerif(0)/m/n/10.95 with the WRONG passphrase
+[166] [167] [168] [169] [170]
+Overfull \hbox (2.50288pt too wide) in paragraph at lines 8885--8888
+[]\TU/DejaVuSerif(0)/b/n/10.95 Recipe \TU/DejaVuSerif(0)/m/n/10.95 (validated 2026-05-14 against \TU/DejaVuSansMono(0)/m/n/10.95 s h a m i r - m n e m o n i c \TU/DejaVuSerif(0)/m/n/10.95 0.3.0 on Linux x86_64; toolkit
+[171] [172]
+Overfull \hbox (1.67236pt too wide) in paragraph at lines 9002--9006
+[]\TU/DejaVuSerif(0)/b/n/10.95 Secret share (index \TU/DejaVuSansMono(0)/b/n/10.95 s\TU/DejaVuSerif(0)/b/n/10.95 ) \TU/DejaVuSerif(0)/m/n/10.95 — the codex32 secret-carrying share at index \TU/DejaVuSansMono(0)/m/n/10.95 s \TU/DejaVuSerif(0)/m/n/10.95 is NEVER
+ [173] [174] [175]
+
+LaTeX Warning: Hyper reference `scope-v0300-widened-in-v0315-v0320' on page 176 undefined on input line 9239.
+
+
+Overfull \hbox (2.11916pt too wide) in paragraph at lines 9237--9241
+[]\TU/DejaVuSansMono(0)/m/n/10.95 - - v a r i a n t < s t a n d a r d | c o m p a c t >\TU/DejaVuSerif(0)/m/n/10.95 : \TU/DejaVuSerif(0)/b/n/10.95 (v0.32.0+) \TU/DejaVuSerif(0)/m/n/10.95 SeedQR variant (default \TU/DejaVuSansMono(0)/m/n/10.95 standard\TU/DejaVuSerif(0)/m/n/10.95 ).
+
+Overfull \hbox (2.11916pt too wide) in paragraph at lines 9268--9272
+[]\TU/DejaVuSansMono(0)/m/n/10.95 - - v a r i a n t < s t a n d a r d | c o m p a c t >\TU/DejaVuSerif(0)/m/n/10.95 : \TU/DejaVuSerif(0)/b/n/10.95 (v0.32.0+) \TU/DejaVuSerif(0)/m/n/10.95 SeedQR variant (default \TU/DejaVuSansMono(0)/m/n/10.95 standard\TU/DejaVuSerif(0)/m/n/10.95 ).
+[176] [177]
+Overfull \hbox (7.41545pt too wide) in paragraph at lines 9459--9461
+[]\TU/DejaVuSerif(0)/m/n/10.95 Expected: \TU/DejaVuSansMono(0)/m/n/10.95 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3\TU/DejaVuSerif(0)/m/n/10.95 . Compare against
+[178] [179] [180] [181] [182] [183] [184] [185] [186] [187] [188] [189] [190] [191]
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 192 undefined on input line 10474.
+
+
+Overfull \hbox (9.80783pt too wide) in paragraph at lines 10481--10484
+[]\TU/DejaVuSerif(0)/b/n/10.95 A COMPLETE group (every chunk of the card supplied) reassembles cleanly
+[192]
+Overfull \hbox (6.02405pt too wide) in paragraph at lines 10537--10544
+[]\TU/DejaVuSansMono(0)/b/n/10.95 mnemonic repair --ms1 \TU/DejaVuSerif(0)/m/n/10.95 (and \TU/DejaVuSansMono(0)/b/n/10.95 ms repair\TU/DejaVuSerif(0)/m/n/10.95 , ms-cli’s standalone binary): any touched
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 193 undefined on input line 10554.
+
+[193] [194] [195]
+Overfull \hbox (32.78409pt too wide) in paragraph at lines 10722--10734
+\TU/DejaVuSansMono(0)/m/n/10.95 "candidate" \TU/DejaVuSerif(0)/m/n/10.95 for a touched-but-unverified correction — reachable for every \TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 substitution-
+[196] [197] [198]
+Overfull \hbox (2.50645pt too wide) in paragraph at lines 10977--10982
+\TU/DejaVuSerif(0)/m/n/10.95 criminate the envelope from the standalone \TU/DejaVuSansMono(0)/m/n/10.95 mnemonic repair --json \TU/DejaVuSerif(0)/m/n/10.95 envelope (which
+[199]
+Overfull \hbox (21.52138pt too wide) in paragraph at lines 11043--11047
+[]\TU/DejaVuSansMono(0)/m/n/10.95 mk1 \TU/DejaVuSerif(0)/m/n/10.95 — policy-id-stub count, origin fingerprint (or \TU/DejaVuSansMono(0)/m/n/10.95 <absent> \TU/DejaVuSerif(0)/m/n/10.95 for the privacy-preserving
+[200] [201] [202]
+Overfull \hbox (20.71098pt too wide) in paragraph at lines 11238--11244
+[]\TU/DejaVuSerif(0)/m/n/10.95 Card intake is case-tolerant (v0.53.3 routing; \TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 end-to-end since v0.53.5): all-uppercase
+
+Overfull \hbox (2.06387pt too wide) in paragraph at lines 11238--11244
+\TU/DejaVuSansMono(0)/m/n/10.95 mk1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 md1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 all decode end-to-end. The codecs remain the authority on case — \TU/DejaVuSansMono(0)/m/n/10.95 mk1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ms1
+[203]
+Overfull \hbox (45.08644pt too wide) in paragraph at lines 11329--11332
+\TU/DejaVuSansMono(0)/m/n/10 xpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 tpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 vpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Vpub\TU/DejaVuSerif(0)/m/n/10 ) 
+[204] [205]
+Overfull \hbox (2.48895pt too wide) in paragraph at lines 11522--11527
+[]\TU/DejaVuSerif(0)/b/n/10.95 Templates: \TU/DejaVuSerif(0)/m/n/10.95 BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at \TU/DejaVuSansMono(0)/m/n/10.95 script_type
+[206] [207] [208] [209] [210] [211] [212]
+Overfull \hbox (45.08644pt too wide) in paragraph at lines 12055--12058
+\TU/DejaVuSansMono(0)/m/n/10 xpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 tpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 vpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Vpub\TU/DejaVuSerif(0)/m/n/10 ) 
+ [213] [214] [215] [216]
+Overfull \hbox (13.1844pt too wide) in paragraph at lines 12254--12257
+[]\TU/DejaVuSerif(0)/m/n/10.95 Exit \TU/DejaVuSansMono(0)/m/n/10.95 5 \TU/DejaVuSerif(0)/m/n/10.95 is \TU/DejaVuSerif(0)/b/n/10.95 not reachable \TU/DejaVuSerif(0)/m/n/10.95 by this subcommand (Cycle F) — see [][]ms1 substitution-correction
+[217] [218]
+Overfull \hbox (10.86545pt too wide) in paragraph at lines 12404--12408
+[]\TU/DejaVuSerif(0)/b/n/10.95 Preimages \TU/DejaVuSerif(0)/m/n/10.95 — \TU/DejaVuSansMono(0)/m/n/10.95 p r e i m a g e ( h < i > ) \TU/DejaVuSerif(0)/m/n/10.95 in AST-order, one per \TU/DejaVuSansMono(0)/m/n/10.95 sha256 \TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 hash256 \TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 ripemd160
+[219] [220]
+Overfull \hbox (8.0877pt too wide) in paragraph at lines 12585--12592
+[]\TU/DejaVuSerif(0)/m/n/10.95 The internal key is reverse-projected from x-only (32B) to compressed (33B) by prepend-
+[221] [222]
+Overfull \hbox (0.5422pt too wide) in paragraph at lines 12740--12741
+\TU/DejaVuSansMono(0)/m/n/10 hash256\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 hash160\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ripemd160\TU/DejaVuSerif(0)/m/n/10 )|  
+[223] [224] [225]
+Overfull \hbox (7.77275pt too wide) in paragraph at lines 12949--12960
+\TU/DejaVuSerif(0)/b/n/10.95 watch-only screen \TU/DejaVuSerif(0)/m/n/10.95 (an \TU/DejaVuSansMono(0)/m/n/10.95 xprv \TU/DejaVuSerif(0)/m/n/10.95 / extended-private key is refused here, never echoed). 
+[226]
+Overfull \hbox (9.18109pt too wide) in paragraph at lines 12964--12971
+[]\TU/DejaVuSansMono(0)/b/n/10.95 s a n i t y _ c h e c k \TU/DejaVuSerif(0)/m/n/10.95 — the BIP-built-in funds-footgun rules: \TU/DejaVuSansMono(0)/m/n/10.95 s i g l e s s _ b r a n c h \TU/DejaVuSerif(0)/m/n/10.95 (an anyone-
+[227] [228] [229] [230] [231] [232] [233]
+Chapter 22.
+ [234] [235] [236] [237] [238] [239]
+Overfull \hbox (20.25496pt too wide) in paragraph at lines 13794--13801
+\TU/DejaVuSansMono(0)/m/n/10.95 key\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 - - f i n g e r p r i n t\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --path\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --from-mk1\TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 - - f r o m - m k 1 - f i l e\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --seat\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --network\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --chain\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 -
+ [240] [241] [242] [243] [244] [245] [246] [247] [248] [249] [250] [251] [252] [253] [254]
+Chapter 23.
+[255] [256]
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+[257]
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+[258] [259] [260] [261] [262] [263] [264] [265] [266] [267] [268]
+Overfull \hbox (5.3314pt too wide) in paragraph at lines 15754--15758
+[]\TU/DejaVuSerif(0)/m/n/10.95 hash 3cf5d421..b70a4c12 method: hardened chars: 28 Before you cut plates,
+ [269] [270] [271] [272] [273] [274] [275]
+Chapter 24.
+ [276] [277]
+Overfull \hbox (3.3639pt too wide) in paragraph at lines 16398--16407
+[]\TU/DejaVuSerif(0)/m/n/10.95 In mk1 the script type is conveyed by the card’s origin path (\TU/DejaVuSansMono(0)/m/n/10.95 m/49[]/… \TU/DejaVuSerif(0)/m/n/10.95 → P2SH-P2WPKH,
+[278] [279] [280] [281] [282]
+Overfull \hbox (9.80783pt too wide) in paragraph at lines 16714--16717
+[]\TU/DejaVuSerif(0)/b/n/10.95 A COMPLETE group (every chunk of the card supplied) reassembles cleanly
+[283] [284]
+Overfull \hbox (62.02466pt too wide) in paragraph at lines 16893--16900
+[]\TU/DejaVuSansMono(0)/m/n/10.95 --xpub \TU/DejaVuSerif(0)/m/n/10.95 accepts SLIP-0132 prefixes (ypub/zpub/Ypub/Zpub and the testnet upub/vpub/Upub/Vpub)
+[285] [286] [287] [288] [289] [290]
+Chapter 25.
+[291] [292] [293] [294] [295] [296] [297] [298] [299] [300] [301] [302] [303] [304] [305] [306] [307] [308] [309] [310] [311] [312] [313] [314] [315] [316] [317] [318] [319] [320] [321] [322] [323] [324] [325] [326] [327] [328] [329] [330] [331] [332] [333] [334] [335] [336] [337] [338] [339] [340] [341] [342] [343] [344] [345] [346] [347] [348] [349] [350] [351] [352] [353] [354] [355] [356] [357] [358] [359] [360] [361] [362] [363] [364] [365] [366] [367] [368] [369] [370] [371] [372] [373] [374] [375] [376] [377] [378]
+Missing character: There is no 李 (U+674E) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 明 (U+660E) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 张 (U+5F20) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 伟 (U+4F1F) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 的 (U+7684) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 手 (U+624B) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 机 (U+673A) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+[379] [380] [381] [382] [383] [384] [385] [386] [387] [388] [389] [390] [391] [392] [393] [394] [395] [396] [397] [398] [399] [400] [401] [402] [403] [404] [405] [406] [407] [408] [409] [410] [411] [412] [413] [414] [415] [416] [417] [418] [419] [420] [421] [422] [423] [424] [425] [426] [427] [428] [429] [430] [431] [432] [433] [434] [435] [436] [437] [438] [439] [440] [441] [442] [443] [444] [445] [446] [447] [448] [449] [450] [451] [452] [453] [454] [455] [456] [457] [458] [459] [460] [461] [462] [463]
+Overfull \hbox (14.89203pt too wide) in paragraph at lines 27760--27763
+[]\TU/DejaVuSerif(0)/m/n/10.95 not checked against this card (no fingerprint): check with \TU/DejaVuSansMono(0)/m/n/10.95 mr verify MR1_CARD
+[464] [465] [466] [467] [468] [469] [470]
+Overfull \hbox (1.45175pt too wide) in paragraph at lines 28353--28362
+[]\TU/DejaVuSerif(0)/m/n/10.95 later cards are addenda or successors, with ordinary seeds; root-made seeds
+[471]
+Overfull \hbox (6.41518pt too wide) in paragraph at lines 28436--28454
+\TU/DejaVuSerif(0)/m/n/10.95 xpub the signer shows at each of this kit’s seat-key lines’ origin path, matched
+[472]
+Overfull \hbox (135.73027pt too wide) in paragraph at lines 28510--28515
+\TU/DejaVuSerif(0)/m/n/10.95 <NAME>_PLATES (that bag’s ms1 plates) and <NAME>_BAG_MK1_PLATE_1, <NAME>_BAG_MK1_PLATE_2
+[473] [474]
+Chapter 26.
+
+Overfull \hbox (11.25063pt too wide) in paragraph at lines 28657--28660
+[]\TU/DejaVuSerif(0)/b/n/10.95 Electrum 4.x wallet file. \TU/DejaVuSerif(0)/m/n/10.95 Electrum’s on-disk JSON (\TU/DejaVuSansMono(0)/m/n/10.95 s e e d _ v e r s i o n \TU/DejaVuSerif(0)/m/n/10.95 + \TU/DejaVuSansMono(0)/m/n/10.95 wallet_type
+[475] [476] [477] [478]
+Overfull \hbox (5.39058pt too wide) in paragraph at lines 28920--28929
+\TU/DejaVuSerif(0)/m/n/10.95 A Bitcoin Core wallet typically exports four descriptor entries (BIP-84 receive + change,
+[479] [480]
+Overfull \hbox (2.00008pt too wide) in paragraph at lines 29043--29047
+\TU/DejaVuSerif(0)/m/n/10.95 The \TU/DejaVuSansMono(0)/m/n/10.95 --json \TU/DejaVuSerif(0)/m/n/10.95 envelope’s \TU/DejaVuSansMono(0)/m/n/10.95 b u n d l e . i m p o r t _ p r o v e n a n c e . s p a r r o w \TU/DejaVuSerif(0)/m/n/10.95 field preserves Sparrow-
+[481]
+Overfull \hbox (37.91516pt too wide) in paragraph at lines 29143--29151
+[]\TU/DejaVuSerif(0)/m/n/10.95 The direct export-wallet path requires a recognized \TU/DejaVuSansMono(0)/m/n/10.95 --template \TU/DejaVuSerif(0)/m/n/10.95 (no descriptor-passthrough);
+
+Overfull \hbox (4.45772pt too wide) in paragraph at lines 29152--29158
+[]\TU/DejaVuSerif(0)/b/n/10.95 Round-trip note: \TU/DejaVuSerif(0)/m/n/10.95 import → JSON envelope works for both taproot shapes; re-emission
+[482]
+Overfull \hbox (16.80705pt too wide) in paragraph at lines 29234--29237
+[]\TU/DejaVuSansMono(0)/m/n/10.95 blockheight \TU/DejaVuSerif(0)/m/n/10.95 is preserved in the provenance metadata but DROPPED on the canonicalize-
+[483]
+Overfull \hbox (11.50647pt too wide) in paragraph at lines 29334--29337
+\TU/DejaVuSerif(0)/m/n/10.95 The \TU/DejaVuSansMono(0)/m/n/10.95 --json \TU/DejaVuSerif(0)/m/n/10.95 envelope’s \TU/DejaVuSansMono(0)/m/n/10.95 b u n d l e . i m p o r t _ p r o v e n a n c e . c o l d c a r d \TU/DejaVuSerif(0)/m/n/10.95 field preserves Coldcard-
+[484] [485] [486] [487]
+
+LaTeX Warning: Hyper reference `mnemonic-electrum' on page 488 undefined on input line 29652.
+
+[488] [489]
+Overfull \hbox (7.51085pt too wide) in paragraph at lines 29795--29804
+\TU/DejaVuSerif(0)/m/n/10.95 xpub/derivation/fingerprint/label; encrypted seed/xprv/passphrase/keypairs fields
+[490]
+Overfull \hbox (15.91702pt too wide) in paragraph at lines 29846--29852
+[]\TU/DejaVuSerif(0)/b/n/10.95 Singlesig and multisig. \TU/DejaVuSerif(0)/m/n/10.95 Unlike \TU/DejaVuSansMono(0)/m/n/10.95 e x p o r t - w a l l e t - - f o r m a t g r e e n \TU/DejaVuSerif(0)/m/n/10.95 (which is singlesig-
+[491]
+Overfull \hbox (14.99771pt too wide) in paragraph at lines 29955--29959
+[]\TU/DejaVuSerif(0)/b/n/10.95 BSMS Round-1 token-only \TU/DejaVuSerif(0)/m/n/10.95 (\TU/DejaVuSansMono(0)/m/n/10.95 w a l l e t - i m p o r t - b s m s - r o u n d - 1\TU/DejaVuSerif(0)/m/n/10.95 ) — the pre-descriptor
+
+Overfull \hbox (2.60146pt too wide) in paragraph at lines 29959--29976
+\TU/DejaVuSansMono(0)/m/n/10.95 n c r y p t i o n - t o k e n < F I L E | - > \TU/DejaVuSerif(0)/m/n/10.95 (PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256
+[492]
+Overfull \hbox (13.03403pt too wide) in paragraph at lines 29987--29994
+[]|   [] \TU/DejaVuSerif(0)/m/n/10.95 — shipped in v0.30.1 as watch-only passthrough
+
+Overfull \hbox (44.30086pt too wide) in paragraph at lines 29987--29994
+\TU/DejaVuSerif(0)/m/n/10.95 (parses plaintext xpub/derivation/etc., ignores encrypted seed/xprv/passphrase/keypairs,
+
+LaTeX Warning: Hyper reference `bch-codex32-primer' on page 493 undefined on input line 30036.
+
+
+LaTeX Warning: Hyper reference `descriptors-primer' on page 493 undefined on input line 30037.
+
+[493]
+Chapter 27.
+ [494]
+
+LaTeX Warning: Hyper reference `mnemonic-toolkit-vs-ms-cli' on page 495 undefined on input line 30158.
+
+
+LaTeX Warning: Hyper reference `mnemonic-toolkit-vs-md-cli' on page 495 undefined on input line 30159.
+
+
+LaTeX Warning: Hyper reference `single-sig-vs-multisig-decision-tree' on page 495 undefined on input line 30162.
+
+
+LaTeX Warning: Hyper reference `bip-39-vs-bip-38-passphrases' on page 495 undefined on input line 30163.
+
+
+LaTeX Warning: Hyper reference `bitcoin-core-importdescriptors-vs-bip-388-wallet-policy' on page 495 undefined on input line 30165.
+
+[495]
+Chapter 28.
+[496] [497]
+Chapter 29.
+
+Overfull \hbox (3.05861pt too wide) in paragraph at lines 30299--30303
+[]\TU/DejaVuSerif(0)/m/n/10.95 You’re building a watch-only artifact for Bitcoin Core / BIP-388 / Sparrow / Specter
+[498] [499]
+Chapter 30.
+[500] [501] [502]
+Chapter 31.
+[503] [504]
+Overfull \hbox (3.84535pt too wide) in paragraph at lines 30556--30560
+[]\TU/DejaVuSerif(0)/m/n/10.95 The wallet’s value justifies recurring operational cost (each cosigner runs through
+[505] [506]
+Chapter 32.
+[507] [508] [509]
+Chapter 33.
+[510] [511] [512]
+Chapter 34.
+[513] [514] [515] [516] [517] [518] [519]
+Chapter 35.
+[520]
+Overfull \hbox (4.87416pt too wide) in paragraph at lines 31335--31335
+[]\TU/DejaVuSerif(0)/b/n/14.4 Why ms1 instead of just engraving the BIP-39 phrase? 
+[521]
+Chapter 36.
+[522] [523]
+Chapter 37.
+ [524] [525]
+Chapter 38.
+[526]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 527
+[527]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 528
+[528]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 529
+[529]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 530
+[530]
+Overfull \hbox (15.69852pt too wide) in paragraph at lines 32027--32031
+\TU/DejaVuSerif(0)/m/n/10.95 fork with rust-codex32) was considered and retired on 2026-05-03; see CLAUDE.md
+
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 531
+[531]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 532
+[532]
+Chapter 39.
+[533] [534]
+Chapter 40.
+
+Overfull \hbox (6.38963pt too wide) in paragraph at lines 32168--32171
+\TU/DejaVuSansMono(0)/m/n/10 bip44\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip49\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip84\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip86\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 wsh- 
+[535] [536] [537]
+Chapter 41.
+ [538] [539] [540]
+Chapter 42.
+[541]
+Chapter 43.
+[542] (./m-format-manual.ind [543]) (./m-format-manual.aux)
+
+LaTeX Warning: There were undefined references.
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+ )
+(see the transcript file for additional information)
+Output written on m-format-manual.pdf (544 pages).
+Transcript written on m-format-manual.log.
+cd /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/build && xelatex -interaction=nonstopmode -halt-on-error m-format-manual.tex
+This is XeTeX, Version 3.141592653-2.6-0.999998 (TeX Live 2026) (preloaded format=xelatex)
+ restricted \write18 enabled.
+entering extended mode
+(./m-format-manual.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2026-03-20>
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/book.cls
+Document Class: book 2025/01/22 v1.4n Standard LaTeX document class
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/bk11.clo)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3packages/xparse/xparse.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3kernel/expl3.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3backend/l3backend-xetex.def))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec-xetex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/fontenc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fontspec/fontspec.cfg))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math-xetex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/l3packages/l3keys2e/l3keys2e.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/fix-cm.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/ts1enc.def)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsmath.sty
+For additional information on amsmath, use the `?' option.
+(/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amstext.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsgen.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsbsy.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/amsmath/amsopn.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/unicode-math/unicode-math-table.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/geometry/geometry.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/keyval.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/iftex/ifvtex.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/iftex/iftex.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/hyperref.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/kvsetkeys/kvsetkeys.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/kvdefinekeys/kvdefinekeys.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pdfescape/pdfescape.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pdftexcmds/pdftexcmds.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/infwarerr/infwarerr.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hycolor/hycolor.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/nameref.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/refcount/refcount.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/kvoptions/kvoptions.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/etoolbox/etoolbox.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/stringenc/stringenc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/pd1enc.def) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/intcalc/intcalc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/puenc.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/url/url.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/bitset/bitset.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/hyperref/hxetex.def (/home/bcg/.TinyTeX/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/longtable.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/booktabs/booktabs.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/calc.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/array.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fancyvrb/fancyvrb.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/xcolor/xcolor.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-cfg/color.cfg) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-def/xetex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/mathcolor.ltx)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/upquote/upquote.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/textcomp.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype-xetex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/microtype/microtype.cfg)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/parskip/parskip.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/base/makeidx.sty)
+Writing index file m-format-manual.idx
+(/home/bcg/.TinyTeX/texmf-dist/tex/generic/ulem/ulem.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/mdframed/mdframed.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/zref/zref-abspage.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/zref/zref-base.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/etexcmds/etexcmds.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/auxhook/auxhook.sty))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/needspace/needspace.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/mdframed/md-frame-0.mdf)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/fvextra/fvextra.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/lineno/lineno.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/seqsplit/seqsplit.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/xurl/xurl.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/graphicx.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/graphics.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics/trig.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/graphics-cfg/graphics.cfg))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/svg/svg.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrbase.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlfile.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlfile-hook.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/koma-script/scrlogo.sty)))) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/trimspaces/trimspaces.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/tools/shellesc.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/transparent/transparent.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/transparent/transparent-nometadata.sty
+
+Package transparent Warning: Loading aborted, because pdfTeX is not running in PDF mode.
+
+)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/systemlayer/pgfsys.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgfrcs.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfutil-common.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfutil-latex.def) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfrcs.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/pgf.revision.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeyslibraryfiltered.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgf.cfg) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-xetex.def (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-dvipdfmx.def (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsys-common-pdf.def)))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsyssoftpath.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/systemlayer/pgfsysprotocol.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/frontendlayer/tikz.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/basiclayer/pgf.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/basiclayer/pgfcore.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcore.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathutil.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathparser.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.basic.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.trigonometric.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.random.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.comparison.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.base.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.round.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.misc.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfunctions.integerarithmetics.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathcalc.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmathfloat.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfint.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepoints.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathconstruct.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathusage.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorescopes.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoregraphicstate.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransformations.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorequick.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreobjects.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepathprocessing.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorearrows.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreshade.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreimage.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoreexternal.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorelayers.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcoretransparency.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorepatterns.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/basiclayer/pgfcorerdf.code.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmoduleshapes.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmoduleplot.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version-0-65.sty) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/compatibility/pgfcomp-version-1-18.sty)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgffor.sty (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/utilities/pgfkeys.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgfkeys.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/latex/pgf/math/pgfmath.sty (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/math/pgfmath.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/utilities/pgffor.code.tex)) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/tikz.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/libraries/pgflibraryplothandlers.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/modules/pgfmodulematrix.code.tex) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibrarytopaths.code.tex))) (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/frontendlayer/tikz/libraries/tikzlibraryshapes.geometric.code.tex (/home/bcg/.TinyTeX/texmf-dist/tex/generic/pgf/libraries/shapes/pgflibraryshapes.geometric.code.tex)) (./m-format-manual.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: xetex
+(./m-format-manual.out) (./m-format-manual.out) [1] (./m-format-manual.toc [1] [2] [3]
+Overfull \hbox (13.80032pt too wide) in paragraph at lines 144--144
+ [][] [][][]\TU/DejaVuSerif(0)/m/n/10.95 The part with no room on the screen: sealing again changes the passphrase[][] [][]  
+[4] [5]
+Overfull \hbox (7.15169pt too wide) detected at line 267
+\TU/DejaVuSerif(0)/m/n/10.95 21.14.10 
+[6]
+Overfull \hbox (7.15169pt too wide) detected at line 308
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.10 
+
+Overfull \hbox (7.15169pt too wide) detected at line 309
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.11 
+
+Overfull \hbox (7.15169pt too wide) detected at line 311
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.12 
+
+Overfull \hbox (7.15169pt too wide) detected at line 312
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.13 
+
+Overfull \hbox (7.15169pt too wide) detected at line 313
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.14 
+
+Overfull \hbox (7.15169pt too wide) detected at line 314
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.15 
+
+Overfull \hbox (7.15169pt too wide) detected at line 315
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.16 
+
+Overfull \hbox (7.15169pt too wide) detected at line 316
+\TU/DejaVuSerif(0)/m/n/10.95 21.21.17 
+[7] [8] [9] [10] [11] [12]
+Overfull \hbox (7.15169pt too wide) detected at line 637
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.10 
+
+Overfull \hbox (7.15169pt too wide) detected at line 638
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.11 
+
+Overfull \hbox (7.15169pt too wide) detected at line 639
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.12 
+
+Overfull \hbox (7.15169pt too wide) detected at line 640
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.13 
+
+Overfull \hbox (7.15169pt too wide) detected at line 641
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.14 
+
+Overfull \hbox (7.15169pt too wide) detected at line 642
+\TU/DejaVuSerif(0)/m/n/10.95 25.15.15 
+[13] [14] [15] [16] [17]) [18]
+Chapter 1.
+[19] [20]
+Chapter 2.
+[21] [22]
+Chapter 3.
+[23] [24] [25] [26]
+Chapter 4.
+[27] [28]
+Chapter 5.
+[29] [30]
+Chapter 6.
+
+Overfull \hbox (1.56982pt too wide) in paragraph at lines 785--804
+[]\TU/DejaVuSerif(0)/m/n/10.95 The signature proves who published the checksums, where the checksum alone proves
+[31] [32] [33] [34]
+Chapter 7.
+[35] [36] [37]
+Chapter 8.
+[38]
+Overfull \hbox (9.02393pt too wide) in paragraph at lines 1243--1247
+[]\TU/DejaVuSerif(0)/b/n/10.95 Wrong template / network. \TU/DejaVuSerif(0)/m/n/10.95 If you bundled BIP-84 mainnet but typed \TU/DejaVuSansMono(0)/m/n/10.95 --template
+[39]
+Chapter 9.
+[40] [41]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 42 undefined on input line 1399.
+
+[42]
+Chapter 10.
+[43] [44] [45] [46] [47]
+Chapter 11.
+[48] [49] [50] [51] [52]
+Overfull \hbox (9.41348pt too wide) in paragraph at lines 1923--1927
+[]\TU/DejaVuSansMono(0)/b/n/10.95 wsh-multi \TU/DejaVuSerif(0)/b/n/10.95 (unsorted) \TU/DejaVuSerif(0)/m/n/10.95 — replace \TU/DejaVuSansMono(0)/m/n/10.95 w s h - s o r t e d m u l t i \TU/DejaVuSerif(0)/m/n/10.95 with \TU/DejaVuSansMono(0)/m/n/10.95 wsh-multi\TU/DejaVuSerif(0)/m/n/10.95 . The cosigner
+[53]
+Chapter 12.
+[54] [55]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 56 undefined on input line 2037.
+
+[56] [57]
+Overfull \hbox (6.14078pt too wide) in paragraph at lines 2130--2135
+[]\TU/DejaVuSerif(0)/b/n/10.95 Single-sig taproot \TU/DejaVuSerif(0)/m/n/10.95 — for a one-cosigner taproot wallet, prefer \TU/DejaVuSansMono(0)/m/n/10.95 --template bip86
+[58]
+Chapter 13.
+
+Overfull \hbox (9.2114pt too wide) in paragraph at lines 2151--2156
+[]\TU/DejaVuSerif(0)/b/n/10.95 Background — why watch-only matters. \TU/DejaVuSerif(0)/m/n/10.95 A watch-only wallet sees the blockchain
+
+Overfull \hbox (15.45195pt too wide) in paragraph at lines 2151--2156
+\TU/DejaVuSerif(0)/m/n/10.95 as the spending wallet does, but cannot move funds. Useful for monitoring (incoming-
+[59] [60]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 61 undefined on input line 2230.
+
+
+Overfull \hbox (22.41692pt too wide) in paragraph at lines 2234--2237
+\TU/DejaVuSerif(0)/m/n/10.95 For a watch-only bundle that does not reveal the master fingerprint (useful for coordinator-
+[61] [62]
+Chapter 14.
+[63] [64] [65] [66] [67] [68]
+Chapter 15.
+[69] [70] [71] [72]
+Chapter 16.
+[73] [74] [75] [76] [77] [78] [79] [80] [81]
+Overfull \hbox (2.97379pt too wide) in paragraph at lines 3310--3315
+[]\TU/DejaVuSerif(0)/m/n/10.95 The same text is byte-identical to Jade’s \TU/DejaVuSansMono(0)/m/n/10.95 r e g i s t e r _ m u l t i s i g . m u l t i s i g _ f i l e \TU/DejaVuSerif(0)/m/n/10.95 — switch
+[82]
+Chapter 17.
+[83] [84] [85] [86]
+Chapter 18.
+[87] [88] [89]
+Overfull \hbox (6.69823pt too wide) in paragraph at lines 3705--3720
+\TU/DejaVuSerif(0)/m/n/10.95 only sinks require an intermediate step through one of the descriptor-capable
+[90]
+Overfull \hbox (11.69522pt too wide) in paragraph at lines 3781--3781
+[]\TU/DejaVuSerif(0)/b/n/14.4 Recipe 6 — Coldcard single-sig → BIP-388 wallet-policy 
+
+Overfull \hbox (11.0754pt too wide) in paragraph at lines 3796--3802
+[]\TU/DejaVuSerif(0)/m/n/10.95 The resulting \TU/DejaVuSansMono(0)/m/n/10.95 policy.json \TU/DejaVuSerif(0)/m/n/10.95 carries the canonical \TU/DejaVuSansMono(0)/m/n/10.95 d e s c r i p t i o n _ t e m p l a t e \TU/DejaVuSerif(0)/m/n/10.95 (\TU/DejaVuSansMono(0)/m/n/10.95 wpkh(@0/**)\TU/DejaVuSerif(0)/m/n/10.95 )
+[91] [92]
+Overfull \hbox (15.0349pt too wide) in paragraph at lines 3926--3933
+\TU/DejaVuSansMono(0)/m/n/10.95 requires --template \TU/DejaVuSerif(0)/m/n/10.95 error. The v0.28.0 envelope is always descriptor-mode (\TU/DejaVuSansMono(0)/m/n/10.95 template:
+[93] [94]
+Chapter 19.
+[95] [96] [97] [98]
+Chapter 20.
+[99] [100]
+Chapter 21.
+[101] [102]
+Overfull \hbox (5.31804pt too wide) in paragraph at lines 4554--4571
+\TU/DejaVuSerif(0)/m/n/10.95 stdin is a terminal, \TU/DejaVuSansMono(0)/m/n/10.95 Enter passphrase: \TU/DejaVuSerif(0)/m/n/10.95 (for the other flags, \TU/DejaVuSansMono(0)/m/n/10.95 Enter BIP-38 passphrase:
+[103] [104]
+Overfull \hbox (11.69142pt too wide) in paragraph at lines 4661--4671
+[]\TU/DejaVuSerif(0)/m/n/10.95 Non-hardened \TU/DejaVuSerif(0)/b/n/10.95 per-cosigner use-site path overrides \TU/DejaVuSerif(0)/m/n/10.95 (cosigners with divergent deriva-
+[105] [106] [107] [108] [109]
+Overfull \hbox (4.39731pt too wide) in paragraph at lines 4969--4974
+\TU/DejaVuSerif(0)/m/n/10.95 LOWUP \TU/DejaVuSansMono(0)/m/n/10.95 t o o l k i t - m n e m - m s 1 - w i r e - s h a p e - d o w n s t r e a m - c o n s u m e r s \TU/DejaVuSerif(0)/m/n/10.95 for the downstream-
+[110]
+Overfull \hbox (27.88385pt too wide) in paragraph at lines 5075--5082
+[]\TU/DejaVuSerif(0)/b/n/10.95 address-search \TU/DejaVuSerif(0)/m/n/10.95 — \TU/DejaVuSansMono(0)/m/n/10.95 - - s e a r c h - a d d r e s s < a d d r > \TU/DejaVuSerif(0)/m/n/10.95 (collision-free, recommended) matches
+[111]
+Overfull \hbox (5.82533pt too wide) in paragraph at lines 5153--5160
+[]\TU/DejaVuSerif(0)/b/n/10.95 Opt-in cosigner subset — \TU/DejaVuSansMono(0)/b/n/10.95 - - s e a r c h - c o s i g n e r - s u b s e t\TU/DejaVuSerif(0)/b/n/10.95 . \TU/DejaVuSerif(0)/m/n/10.95 For uncertain \TU/DejaVuSerif(0)/b/n/10.95 cosigner
+[112] [113] [114] [115] [116] [117] [118] [119] [120] [121] [122] [123] [124]
+Overfull \hbox (4.30661pt too wide) in paragraph at lines 5963--5980
+\TU/DejaVuSerif(0)/m/n/10.95 hash or content-id check; a unique full-checksum \TU/DejaVuSansMono(0)/m/n/10.95 --max-indel \TU/DejaVuSerif(0)/m/n/10.95 recovery) \TU/DejaVuSerif(0)/b/n/10.95 or verifiable-
+[125]
+
+LaTeX Warning: Hyper reference `auto-fire-behavior-all-three-subcommands-v0250' on page 126 undefined on input line 6051.
+
+[126]
+Overfull \hbox (1.95457pt too wide) in paragraph at lines 6082--6084
+[]\TU/DejaVuSerif(0)/m/n/10.95 Known consumers (the public-API contract guarantees these continue to work through
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 127 undefined on input line 6169.
+
+ [127] [128] [129] [130] [131] [132] [133]
+Overfull \hbox (2.4671pt too wide) in paragraph at lines 6476--6479
+[]\TU/DejaVuSansMono(0)/b/n/10.95 --template\TU/DejaVuSerif(0)/b/n/10.95 /\TU/DejaVuSansMono(0)/b/n/10.95 --slot \TU/DejaVuSerif(0)/b/n/10.95 is gated too, and cannot trip the rule. \TU/DejaVuSerif(0)/m/n/10.95 A builder-produced
+[134]
+Overfull \hbox (17.6703pt too wide) in paragraph at lines 6551--6558
+[]\TU/DejaVuSerif(0)/b/n/10.95 Both chains are emitted \TU/DejaVuSerif(0)/m/n/10.95 — N receive (\TU/DejaVuSansMono(0)/m/n/10.95 internal: false\TU/DejaVuSerif(0)/m/n/10.95 ) and N change (\TU/DejaVuSansMono(0)/m/n/10.95 internal:
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 🤐 (U+1F910) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+[135]
+
+LaTeX Warning: Hyper reference `exporting-to-bitcoin-core-bip-388-sparrow-specter' on page 136 undefined on input line 6637.
+
+[136] [137] [138] [139] [140]
+Overfull \hbox (5.67162pt too wide) in paragraph at lines 6913--6917
+[]\TU/DejaVuSansMono(0)/b/n/10.95 - - a l l o w - m i s m a t c h \TU/DejaVuSerif(0)/m/n/10.95 override → emit the descriptors the supplied seed+passphrase
+[141]
+Overfull \hbox (10.77545pt too wide) in paragraph at lines 6988--6991
+[]\TU/DejaVuSerif(0)/b/n/10.95 Passphrase via stdin\TU/DejaVuSerif(0)/m/n/10.95 , seed via \TU/DejaVuSansMono(0)/m/n/10.95 @env: \TU/DejaVuSerif(0)/m/n/10.95 (both secret channels — the TREZOR-passphrase
+[142]
+Overfull \hbox (16.89926pt too wide) in paragraph at lines 7105--7129
+[]\TU/DejaVuSerif(0)/b/n/10.95 General wallet policies (v0.54.0; taproot v0.55.1). \TU/DejaVuSerif(0)/m/n/10.95 Beyond plain \TU/DejaVuSansMono(0)/m/n/10.95 multi\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 sortedmulti\TU/DejaVuSerif(0)/m/n/10.95 ,
+
+Overfull \hbox (97.76172pt too wide) in paragraph at lines 7105--7129
+\TU/DejaVuSerif(0)/m/n/10.95 an \TU/DejaVuSansMono(0)/m/n/10.95 md1 \TU/DejaVuSerif(0)/m/n/10.95 for a \TU/DejaVuSerif(0)/m/it/10.95 general \TU/DejaVuSerif(0)/m/n/10.95 policy — timelocks (\TU/DejaVuSansMono(0)/m/n/10.95 older\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 after\TU/DejaVuSerif(0)/m/n/10.95 ), hashlocks (\TU/DejaVuSansMono(0)/m/n/10.95 sha256\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 hash256\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ripemd160\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 hash160\TU/DejaVuSerif(0)/m/n/10.95 ),
+[143] [144] [145] [146] [147] [148] [149] [150]
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 151 undefined on input line 7537.
+
+ [151] [152]
+Overfull \vbox (311.80475pt too high) has occurred while \output is active
+Overfull \vbox (311.80475pt too high) has occurred while \output is active [153] [154] [155] [156] [157] [158] [159] [160] [161] [162] [163] [164] [165]
+Overfull \hbox (26.15897pt too wide) in paragraph at lines 8535--8541
+[]\TU/DejaVuSerif(0)/b/n/10.95 Passphrase has no authentication tag. \TU/DejaVuSansMono(0)/m/n/10.95 combine \TU/DejaVuSerif(0)/m/n/10.95 with the WRONG passphrase
+[166] [167] [168] [169] [170]
+Overfull \hbox (2.50288pt too wide) in paragraph at lines 8885--8888
+[]\TU/DejaVuSerif(0)/b/n/10.95 Recipe \TU/DejaVuSerif(0)/m/n/10.95 (validated 2026-05-14 against \TU/DejaVuSansMono(0)/m/n/10.95 s h a m i r - m n e m o n i c \TU/DejaVuSerif(0)/m/n/10.95 0.3.0 on Linux x86_64; toolkit
+[171] [172]
+Overfull \hbox (1.67236pt too wide) in paragraph at lines 9002--9006
+[]\TU/DejaVuSerif(0)/b/n/10.95 Secret share (index \TU/DejaVuSansMono(0)/b/n/10.95 s\TU/DejaVuSerif(0)/b/n/10.95 ) \TU/DejaVuSerif(0)/m/n/10.95 — the codex32 secret-carrying share at index \TU/DejaVuSansMono(0)/m/n/10.95 s \TU/DejaVuSerif(0)/m/n/10.95 is NEVER
+ [173] [174] [175]
+
+LaTeX Warning: Hyper reference `scope-v0300-widened-in-v0315-v0320' on page 176 undefined on input line 9239.
+
+
+Overfull \hbox (2.11916pt too wide) in paragraph at lines 9237--9241
+[]\TU/DejaVuSansMono(0)/m/n/10.95 - - v a r i a n t < s t a n d a r d | c o m p a c t >\TU/DejaVuSerif(0)/m/n/10.95 : \TU/DejaVuSerif(0)/b/n/10.95 (v0.32.0+) \TU/DejaVuSerif(0)/m/n/10.95 SeedQR variant (default \TU/DejaVuSansMono(0)/m/n/10.95 standard\TU/DejaVuSerif(0)/m/n/10.95 ).
+
+Overfull \hbox (2.11916pt too wide) in paragraph at lines 9268--9272
+[]\TU/DejaVuSansMono(0)/m/n/10.95 - - v a r i a n t < s t a n d a r d | c o m p a c t >\TU/DejaVuSerif(0)/m/n/10.95 : \TU/DejaVuSerif(0)/b/n/10.95 (v0.32.0+) \TU/DejaVuSerif(0)/m/n/10.95 SeedQR variant (default \TU/DejaVuSansMono(0)/m/n/10.95 standard\TU/DejaVuSerif(0)/m/n/10.95 ).
+[176] [177]
+Overfull \hbox (7.41545pt too wide) in paragraph at lines 9459--9461
+[]\TU/DejaVuSerif(0)/m/n/10.95 Expected: \TU/DejaVuSansMono(0)/m/n/10.95 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 3\TU/DejaVuSerif(0)/m/n/10.95 . Compare against
+[178] [179] [180] [181] [182] [183] [184] [185] [186] [187] [188] [189] [190] [191]
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 192 undefined on input line 10474.
+
+
+Overfull \hbox (9.80783pt too wide) in paragraph at lines 10481--10484
+[]\TU/DejaVuSerif(0)/b/n/10.95 A COMPLETE group (every chunk of the card supplied) reassembles cleanly
+[192]
+Overfull \hbox (6.02405pt too wide) in paragraph at lines 10537--10544
+[]\TU/DejaVuSansMono(0)/b/n/10.95 mnemonic repair --ms1 \TU/DejaVuSerif(0)/m/n/10.95 (and \TU/DejaVuSansMono(0)/b/n/10.95 ms repair\TU/DejaVuSerif(0)/m/n/10.95 , ms-cli’s standalone binary): any touched
+
+LaTeX Warning: Hyper reference `auto-fire-on-decode-failure-v0221' on page 193 undefined on input line 10554.
+
+[193] [194] [195]
+Overfull \hbox (32.78409pt too wide) in paragraph at lines 10722--10734
+\TU/DejaVuSansMono(0)/m/n/10.95 "candidate" \TU/DejaVuSerif(0)/m/n/10.95 for a touched-but-unverified correction — reachable for every \TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 substitution-
+[196] [197] [198]
+Overfull \hbox (2.50645pt too wide) in paragraph at lines 10977--10982
+\TU/DejaVuSerif(0)/m/n/10.95 criminate the envelope from the standalone \TU/DejaVuSansMono(0)/m/n/10.95 mnemonic repair --json \TU/DejaVuSerif(0)/m/n/10.95 envelope (which
+[199]
+Overfull \hbox (21.52138pt too wide) in paragraph at lines 11043--11047
+[]\TU/DejaVuSansMono(0)/m/n/10.95 mk1 \TU/DejaVuSerif(0)/m/n/10.95 — policy-id-stub count, origin fingerprint (or \TU/DejaVuSansMono(0)/m/n/10.95 <absent> \TU/DejaVuSerif(0)/m/n/10.95 for the privacy-preserving
+[200] [201] [202]
+Overfull \hbox (20.71098pt too wide) in paragraph at lines 11238--11244
+[]\TU/DejaVuSerif(0)/m/n/10.95 Card intake is case-tolerant (v0.53.3 routing; \TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 end-to-end since v0.53.5): all-uppercase
+
+Overfull \hbox (2.06387pt too wide) in paragraph at lines 11238--11244
+\TU/DejaVuSansMono(0)/m/n/10.95 mk1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 md1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ms1 \TU/DejaVuSerif(0)/m/n/10.95 all decode end-to-end. The codecs remain the authority on case — \TU/DejaVuSansMono(0)/m/n/10.95 mk1\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 ms1
+[203]
+Overfull \hbox (45.08644pt too wide) in paragraph at lines 11329--11332
+\TU/DejaVuSansMono(0)/m/n/10 xpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 tpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 vpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Vpub\TU/DejaVuSerif(0)/m/n/10 ) 
+[204] [205]
+Overfull \hbox (2.48895pt too wide) in paragraph at lines 11522--11527
+[]\TU/DejaVuSerif(0)/b/n/10.95 Templates: \TU/DejaVuSerif(0)/m/n/10.95 BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at \TU/DejaVuSansMono(0)/m/n/10.95 script_type
+[206] [207] [208] [209] [210] [211] [212]
+Overfull \hbox (45.08644pt too wide) in paragraph at lines 12055--12058
+\TU/DejaVuSansMono(0)/m/n/10 xpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 tpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Ypub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Zpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Upub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 vpub\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 Vpub\TU/DejaVuSerif(0)/m/n/10 ) 
+ [213] [214] [215] [216]
+Overfull \hbox (13.1844pt too wide) in paragraph at lines 12254--12257
+[]\TU/DejaVuSerif(0)/m/n/10.95 Exit \TU/DejaVuSansMono(0)/m/n/10.95 5 \TU/DejaVuSerif(0)/m/n/10.95 is \TU/DejaVuSerif(0)/b/n/10.95 not reachable \TU/DejaVuSerif(0)/m/n/10.95 by this subcommand (Cycle F) — see [][]ms1 substitution-correction
+[217] [218]
+Overfull \hbox (10.86545pt too wide) in paragraph at lines 12404--12408
+[]\TU/DejaVuSerif(0)/b/n/10.95 Preimages \TU/DejaVuSerif(0)/m/n/10.95 — \TU/DejaVuSansMono(0)/m/n/10.95 p r e i m a g e ( h < i > ) \TU/DejaVuSerif(0)/m/n/10.95 in AST-order, one per \TU/DejaVuSansMono(0)/m/n/10.95 sha256 \TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 hash256 \TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 ripemd160
+[219] [220]
+Overfull \hbox (8.0877pt too wide) in paragraph at lines 12585--12592
+[]\TU/DejaVuSerif(0)/m/n/10.95 The internal key is reverse-projected from x-only (32B) to compressed (33B) by prepend-
+[221] [222]
+Overfull \hbox (0.5422pt too wide) in paragraph at lines 12740--12741
+\TU/DejaVuSansMono(0)/m/n/10 hash256\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 hash160\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 ripemd160\TU/DejaVuSerif(0)/m/n/10 )|  
+[223] [224] [225]
+Overfull \hbox (7.77275pt too wide) in paragraph at lines 12949--12960
+\TU/DejaVuSerif(0)/b/n/10.95 watch-only screen \TU/DejaVuSerif(0)/m/n/10.95 (an \TU/DejaVuSansMono(0)/m/n/10.95 xprv \TU/DejaVuSerif(0)/m/n/10.95 / extended-private key is refused here, never echoed). 
+[226]
+Overfull \hbox (9.18109pt too wide) in paragraph at lines 12964--12971
+[]\TU/DejaVuSansMono(0)/b/n/10.95 s a n i t y _ c h e c k \TU/DejaVuSerif(0)/m/n/10.95 — the BIP-built-in funds-footgun rules: \TU/DejaVuSansMono(0)/m/n/10.95 s i g l e s s _ b r a n c h \TU/DejaVuSerif(0)/m/n/10.95 (an anyone-
+[227] [228] [229] [230] [231] [232] [233]
+Chapter 22.
+ [234] [235] [236] [237] [238] [239]
+Overfull \hbox (20.25496pt too wide) in paragraph at lines 13794--13801
+\TU/DejaVuSansMono(0)/m/n/10.95 key\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 - - f i n g e r p r i n t\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --path\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --from-mk1\TU/DejaVuSerif(0)/m/n/10.95 / \TU/DejaVuSansMono(0)/m/n/10.95 - - f r o m - m k 1 - f i l e\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --seat\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --network\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 --chain\TU/DejaVuSerif(0)/m/n/10.95 /\TU/DejaVuSansMono(0)/m/n/10.95 -
+ [240] [241] [242] [243] [244] [245] [246] [247] [248] [249] [250] [251] [252] [253] [254]
+Chapter 23.
+[255] [256]
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+[257]
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no い (U+3044) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no こ (U+3053) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no く (U+304F) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no し (U+3057) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ん (U+3093) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no あ (U+3042) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no お (U+304A) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ぞ (U+305E) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+Missing character: There is no ら (U+3089) in font DejaVu Sans Mono Oblique/OT:script=latn;language=dflt;!
+[258] [259] [260] [261] [262] [263] [264] [265] [266] [267] [268]
+Overfull \hbox (5.3314pt too wide) in paragraph at lines 15754--15758
+[]\TU/DejaVuSerif(0)/m/n/10.95 hash 3cf5d421..b70a4c12 method: hardened chars: 28 Before you cut plates,
+ [269] [270] [271] [272] [273] [274] [275]
+Chapter 24.
+ [276] [277]
+Overfull \hbox (3.3639pt too wide) in paragraph at lines 16398--16407
+[]\TU/DejaVuSerif(0)/m/n/10.95 In mk1 the script type is conveyed by the card’s origin path (\TU/DejaVuSansMono(0)/m/n/10.95 m/49[]/… \TU/DejaVuSerif(0)/m/n/10.95 → P2SH-P2WPKH,
+[278] [279] [280] [281] [282]
+Overfull \hbox (9.80783pt too wide) in paragraph at lines 16714--16717
+[]\TU/DejaVuSerif(0)/b/n/10.95 A COMPLETE group (every chunk of the card supplied) reassembles cleanly
+[283] [284]
+Overfull \hbox (62.02466pt too wide) in paragraph at lines 16893--16900
+[]\TU/DejaVuSansMono(0)/m/n/10.95 --xpub \TU/DejaVuSerif(0)/m/n/10.95 accepts SLIP-0132 prefixes (ypub/zpub/Ypub/Zpub and the testnet upub/vpub/Upub/Vpub)
+[285] [286] [287] [288] [289] [290]
+Chapter 25.
+[291] [292] [293] [294] [295] [296] [297] [298] [299] [300] [301] [302] [303] [304] [305] [306] [307] [308] [309] [310] [311] [312] [313] [314] [315] [316] [317] [318] [319] [320] [321] [322] [323] [324] [325] [326] [327] [328] [329] [330] [331] [332] [333] [334] [335] [336] [337] [338] [339] [340] [341] [342] [343] [344] [345] [346] [347] [348] [349] [350] [351] [352] [353] [354] [355] [356] [357] [358] [359] [360] [361] [362] [363] [364] [365] [366] [367] [368] [369] [370] [371] [372] [373] [374] [375] [376] [377] [378]
+Missing character: There is no 李 (U+674E) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 明 (U+660E) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 张 (U+5F20) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 伟 (U+4F1F) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 的 (U+7684) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 手 (U+624B) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+Missing character: There is no 机 (U+673A) in font DejaVu Sans Mono/OT:script=latn;language=dflt;!
+[379] [380] [381] [382] [383] [384] [385] [386] [387] [388] [389] [390] [391] [392] [393] [394] [395] [396] [397] [398] [399] [400] [401] [402] [403] [404] [405] [406] [407] [408] [409] [410] [411] [412] [413] [414] [415] [416] [417] [418] [419] [420] [421] [422] [423] [424] [425] [426] [427] [428] [429] [430] [431] [432] [433] [434] [435] [436] [437] [438] [439] [440] [441] [442] [443] [444] [445] [446] [447] [448] [449] [450] [451] [452] [453] [454] [455] [456] [457] [458] [459] [460] [461] [462] [463]
+Overfull \hbox (14.89203pt too wide) in paragraph at lines 27760--27763
+[]\TU/DejaVuSerif(0)/m/n/10.95 not checked against this card (no fingerprint): check with \TU/DejaVuSansMono(0)/m/n/10.95 mr verify MR1_CARD
+[464] [465] [466] [467] [468] [469] [470]
+Overfull \hbox (1.45175pt too wide) in paragraph at lines 28353--28362
+[]\TU/DejaVuSerif(0)/m/n/10.95 later cards are addenda or successors, with ordinary seeds; root-made seeds
+[471]
+Overfull \hbox (6.41518pt too wide) in paragraph at lines 28436--28454
+\TU/DejaVuSerif(0)/m/n/10.95 xpub the signer shows at each of this kit’s seat-key lines’ origin path, matched
+[472]
+Overfull \hbox (135.73027pt too wide) in paragraph at lines 28510--28515
+\TU/DejaVuSerif(0)/m/n/10.95 <NAME>_PLATES (that bag’s ms1 plates) and <NAME>_BAG_MK1_PLATE_1, <NAME>_BAG_MK1_PLATE_2
+[473] [474]
+Chapter 26.
+
+Overfull \hbox (11.25063pt too wide) in paragraph at lines 28657--28660
+[]\TU/DejaVuSerif(0)/b/n/10.95 Electrum 4.x wallet file. \TU/DejaVuSerif(0)/m/n/10.95 Electrum’s on-disk JSON (\TU/DejaVuSansMono(0)/m/n/10.95 s e e d _ v e r s i o n \TU/DejaVuSerif(0)/m/n/10.95 + \TU/DejaVuSansMono(0)/m/n/10.95 wallet_type
+[475] [476] [477] [478]
+Overfull \hbox (5.39058pt too wide) in paragraph at lines 28920--28929
+\TU/DejaVuSerif(0)/m/n/10.95 A Bitcoin Core wallet typically exports four descriptor entries (BIP-84 receive + change,
+[479] [480]
+Overfull \hbox (2.00008pt too wide) in paragraph at lines 29043--29047
+\TU/DejaVuSerif(0)/m/n/10.95 The \TU/DejaVuSansMono(0)/m/n/10.95 --json \TU/DejaVuSerif(0)/m/n/10.95 envelope’s \TU/DejaVuSansMono(0)/m/n/10.95 b u n d l e . i m p o r t _ p r o v e n a n c e . s p a r r o w \TU/DejaVuSerif(0)/m/n/10.95 field preserves Sparrow-
+[481]
+Overfull \hbox (37.91516pt too wide) in paragraph at lines 29143--29151
+[]\TU/DejaVuSerif(0)/m/n/10.95 The direct export-wallet path requires a recognized \TU/DejaVuSansMono(0)/m/n/10.95 --template \TU/DejaVuSerif(0)/m/n/10.95 (no descriptor-passthrough);
+
+Overfull \hbox (4.45772pt too wide) in paragraph at lines 29152--29158
+[]\TU/DejaVuSerif(0)/b/n/10.95 Round-trip note: \TU/DejaVuSerif(0)/m/n/10.95 import → JSON envelope works for both taproot shapes; re-emission
+[482]
+Overfull \hbox (16.80705pt too wide) in paragraph at lines 29234--29237
+[]\TU/DejaVuSansMono(0)/m/n/10.95 blockheight \TU/DejaVuSerif(0)/m/n/10.95 is preserved in the provenance metadata but DROPPED on the canonicalize-
+[483]
+Overfull \hbox (11.50647pt too wide) in paragraph at lines 29334--29337
+\TU/DejaVuSerif(0)/m/n/10.95 The \TU/DejaVuSansMono(0)/m/n/10.95 --json \TU/DejaVuSerif(0)/m/n/10.95 envelope’s \TU/DejaVuSansMono(0)/m/n/10.95 b u n d l e . i m p o r t _ p r o v e n a n c e . c o l d c a r d \TU/DejaVuSerif(0)/m/n/10.95 field preserves Coldcard-
+[484] [485] [486] [487]
+
+LaTeX Warning: Hyper reference `mnemonic-electrum' on page 488 undefined on input line 29652.
+
+[488] [489]
+Overfull \hbox (7.51085pt too wide) in paragraph at lines 29795--29804
+\TU/DejaVuSerif(0)/m/n/10.95 xpub/derivation/fingerprint/label; encrypted seed/xprv/passphrase/keypairs fields
+[490]
+Overfull \hbox (15.91702pt too wide) in paragraph at lines 29846--29852
+[]\TU/DejaVuSerif(0)/b/n/10.95 Singlesig and multisig. \TU/DejaVuSerif(0)/m/n/10.95 Unlike \TU/DejaVuSansMono(0)/m/n/10.95 e x p o r t - w a l l e t - - f o r m a t g r e e n \TU/DejaVuSerif(0)/m/n/10.95 (which is singlesig-
+[491]
+Overfull \hbox (14.99771pt too wide) in paragraph at lines 29955--29959
+[]\TU/DejaVuSerif(0)/b/n/10.95 BSMS Round-1 token-only \TU/DejaVuSerif(0)/m/n/10.95 (\TU/DejaVuSansMono(0)/m/n/10.95 w a l l e t - i m p o r t - b s m s - r o u n d - 1\TU/DejaVuSerif(0)/m/n/10.95 ) — the pre-descriptor
+
+Overfull \hbox (2.60146pt too wide) in paragraph at lines 29959--29976
+\TU/DejaVuSansMono(0)/m/n/10.95 n c r y p t i o n - t o k e n < F I L E | - > \TU/DejaVuSerif(0)/m/n/10.95 (PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256
+[492]
+Overfull \hbox (13.03403pt too wide) in paragraph at lines 29987--29994
+[]|   [] \TU/DejaVuSerif(0)/m/n/10.95 — shipped in v0.30.1 as watch-only passthrough
+
+Overfull \hbox (44.30086pt too wide) in paragraph at lines 29987--29994
+\TU/DejaVuSerif(0)/m/n/10.95 (parses plaintext xpub/derivation/etc., ignores encrypted seed/xprv/passphrase/keypairs,
+
+LaTeX Warning: Hyper reference `bch-codex32-primer' on page 493 undefined on input line 30036.
+
+
+LaTeX Warning: Hyper reference `descriptors-primer' on page 493 undefined on input line 30037.
+
+[493]
+Chapter 27.
+ [494]
+
+LaTeX Warning: Hyper reference `mnemonic-toolkit-vs-ms-cli' on page 495 undefined on input line 30158.
+
+
+LaTeX Warning: Hyper reference `mnemonic-toolkit-vs-md-cli' on page 495 undefined on input line 30159.
+
+
+LaTeX Warning: Hyper reference `single-sig-vs-multisig-decision-tree' on page 495 undefined on input line 30162.
+
+
+LaTeX Warning: Hyper reference `bip-39-vs-bip-38-passphrases' on page 495 undefined on input line 30163.
+
+
+LaTeX Warning: Hyper reference `bitcoin-core-importdescriptors-vs-bip-388-wallet-policy' on page 495 undefined on input line 30165.
+
+[495]
+Chapter 28.
+[496] [497]
+Chapter 29.
+
+Overfull \hbox (3.05861pt too wide) in paragraph at lines 30299--30303
+[]\TU/DejaVuSerif(0)/m/n/10.95 You’re building a watch-only artifact for Bitcoin Core / BIP-388 / Sparrow / Specter
+[498] [499]
+Chapter 30.
+[500] [501] [502]
+Chapter 31.
+[503] [504]
+Overfull \hbox (3.84535pt too wide) in paragraph at lines 30556--30560
+[]\TU/DejaVuSerif(0)/m/n/10.95 The wallet’s value justifies recurring operational cost (each cosigner runs through
+[505] [506]
+Chapter 32.
+[507] [508] [509]
+Chapter 33.
+[510] [511] [512]
+Chapter 34.
+[513] [514] [515] [516] [517] [518] [519]
+Chapter 35.
+[520]
+Overfull \hbox (4.87416pt too wide) in paragraph at lines 31335--31335
+[]\TU/DejaVuSerif(0)/b/n/14.4 Why ms1 instead of just engraving the BIP-39 phrase? 
+[521]
+Chapter 36.
+[522] [523]
+Chapter 37.
+ [524] [525]
+Chapter 38.
+[526]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 527
+[527]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 528
+[528]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 529
+[529]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 530
+[530]
+Overfull \hbox (15.69852pt too wide) in paragraph at lines 32027--32031
+\TU/DejaVuSerif(0)/m/n/10.95 fork with rust-codex32) was considered and retired on 2026-05-03; see CLAUDE.md
+
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 531
+[531]
+Overfull \hbox (4.07614pt too wide) has occurred while \output is active
+\TU/DejaVuSerif(0)/m/it/10.95 CHAPTER 38.  APPENDIX E — CODEX32 / BCH / M-CODEC ERROR CORRECTION \TU/DejaVuSerif(0)/m/n/10.95 532
+[532]
+Chapter 39.
+[533] [534]
+Chapter 40.
+
+Overfull \hbox (6.38963pt too wide) in paragraph at lines 32168--32171
+\TU/DejaVuSansMono(0)/m/n/10 bip44\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip49\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip84\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 bip86\TU/DejaVuSerif(0)/m/n/10 /\TU/DejaVuSansMono(0)/m/n/10 wsh- 
+[535] [536] [537]
+Chapter 41.
+ [538] [539] [540]
+Chapter 42.
+[541]
+Chapter 43.
+[542] (./m-format-manual.ind [543]) (./m-format-manual.aux)
+
+LaTeX Warning: There were undefined references.
+
+ )
+(see the transcript file for additional information)
+Output written on m-format-manual.pdf (544 pages).
+Transcript written on m-format-manual.log.
+make: Leaving directory '/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual'

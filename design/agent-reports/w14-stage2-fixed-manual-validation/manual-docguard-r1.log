@@ -1,0 +1,160 @@
+ok   S0 technical-manual watches manual verify-examples.sh
+ok   S0 technical-manual watches include-transcript.lua
+ok   S0 quickstart watches manual transcripts/
+ok   S0 manual-gui watches manual verify-examples.sh
+ok   S0 docs/quickstart symlink docs/quickstart/.markdownlint-cli2.jsonc -> docs/manual/.markdownlint-cli2.jsonc is watched
+ok   S0 docs/quickstart symlink docs/quickstart/.puppeteer.json -> docs/manual/.puppeteer.json is watched
+ok   S0 docs/quickstart symlink docs/quickstart/Dockerfile.build -> docs/manual/Dockerfile.build is watched
+ok   S0 docs/quickstart symlink docs/quickstart/pandoc/filters -> docs/manual/pandoc/filters is watched
+ok   S0 docs/quickstart symlink docs/quickstart/tests/verify-examples.sh -> docs/manual/tests/verify-examples.sh is watched
+ok   S0 docs/quickstart symlink docs/quickstart/transcripts -> docs/manual/transcripts is watched
+ok   S0 docs/technical-manual symlink docs/technical-manual/pandoc/filters/include-transcript.lua -> docs/manual/pandoc/filters/include-transcript.lua is watched
+ok   S0 docs/technical-manual symlink docs/technical-manual/tests/verify-examples.sh -> docs/manual/tests/verify-examples.sh is watched
+ok   S0 docs/manual-gui symlink docs/manual-gui/tests/verify-examples.sh -> docs/manual/tests/verify-examples.sh is watched
+ok   S1 manual, ci/staging push, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 manual, PR, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 quickstart, ci/staging push, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 quickstart, PR, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 technical-manual, ci/staging push, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 technical-manual, PR, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 manual-gui, ci/staging push, only docs/manual/tests/verify-examples.sh -> true
+ok   S1 manual-gui, PR, only docs/manual/tests/verify-examples.sh -> true
+ok   S1-control technical-manual with the pre-fix guard (the defect) -> false
+ok   S1-control manual-gui with the pre-fix guard (the defect) -> false
+ok   S2 manual, rename out of docs/manual/ -> true
+ok   S2 quickstart, rename out of docs/manual/transcripts/ -> true
+ok   S2-control manual with the pre-fix guard (the defect) -> false
+ok   S3 manual, ci/staging push D with before=C (C unchecked) -> true
+ok   S3-control manual with the pre-fix guard (the defect) -> false
+ok   S4 manual, the shared verify-examples.sh deleted -> true
+ok   S4 quickstart, the shared verify-examples.sh deleted -> true
+ok   S4 technical-manual, the shared verify-examples.sh deleted -> true
+ok   S4 manual-gui, the shared verify-examples.sh deleted -> true
+ok   S4-control quickstart with the round-1 guard (the defect) -> false
+ok   S4-control technical-manual with the round-1 guard (the defect) -> false
+ok   S5 technical-manual, its verify-examples.sh symlink retargeted -> true
+ok   S5b quickstart, transcripts symlink retargeted -> true
+ok   S6 quickstart, its verify-examples.sh symlink deleted -> true
+ok   S6 technical-manual, its verify-examples.sh symlink deleted -> true
+ok   S6 manual-gui, its verify-examples.sh symlink deleted -> true
+ok   S7 quickstart, its imported ../manual/.cspell.json deleted -> true
+ok   S7-control quickstart with the round-1 guard (the defect) -> false
+ok   S8 manual, only docs/tools/render-mermaid-cache.py changed -> true
+ok   S8 quickstart, only docs/tools/render-mermaid-cache.py changed -> true
+ok   S8 technical-manual, only docs/tools/render-mermaid-cache.py changed -> true
+ok   S8 manual-gui, only docs/tools/render-mermaid-cache.py changed -> true
+ok   S8-control manual-gui with the round-1 guard (the defect) -> false
+ok   N1 manual, ci/staging push, README-only from master -> false
+ok   N1 manual, PR, README-only -> false
+ok   N1 quickstart, ci/staging push, README-only from master -> false
+ok   N1 quickstart, PR, README-only -> false
+ok   N1 technical-manual, ci/staging push, README-only from master -> false
+ok   N1 technical-manual, PR, README-only -> false
+ok   N1 manual-gui, ci/staging push, README-only from master -> false
+ok   N1 manual-gui, PR, README-only -> false
+ok   N2 manual, master push, before=parent, README-only -> false
+ok   P1 manual, master push, before=master~1 of s3 C (docs change) -> true
+ok   P2 technical-manual, master push, README-only but the code crates/ touched -> true
+ok   F1 tag push -> true
+ok   F2 workflow_dispatch -> true
+ok   F3 master push with no previous tip -> true
+ok   F4 master push with an unfetchable previous tip -> true
+ok   F5 PR against a base that does not exist -> true
+ok   S9 examples.yml: no paths filter on any trigger; heavy steps gated only on the guard
+ok   S9-control the pre-fix examples.yml (15443535) filtered push by paths (the defect)
+ok   S9 examples, ci/staging push, docs-only (context reports, heavy steps skip) -> false
+ok   S9 examples, PR, docs-only -> false
+ok   S9 examples, ci/staging push, only .examples-build/Examples.md -> true
+ok   S9 examples, master push (before=parent), only .examples-build/Examples.md -> true
+ok   S9 examples, ci/staging push, only docs/Examples.pdf -> true
+ok   S9 examples, master push (before=parent), only docs/Examples.pdf -> true
+ok   S9 examples, ci/staging push, only scripts/install.sh -> true
+ok   S9 examples, master push (before=parent), only scripts/install.sh -> true
+ok   S9 examples, ci/staging push, only crates/x.txt -> true
+ok   S9 examples, master push (before=parent), only crates/x.txt -> true
+ok   S9 examples, ci/staging push, only Cargo.lock -> true
+ok   S9 examples, master push (before=parent), only Cargo.lock -> true
+ok   S9 examples, ci/staging push, only Cargo.toml -> true
+ok   S9 examples, master push (before=parent), only Cargo.toml -> true
+ok   S9 examples, ci/staging push, only rust-toolchain.toml -> true
+ok   S9 examples, master push (before=parent), only rust-toolchain.toml -> true
+ok   S9 examples, ci/staging push, only .gitattributes -> true
+ok   S9 examples, master push (before=parent), only .gitattributes -> true
+ok   S9 examples, ci/staging push, only .github/workflows/examples.yml -> true
+ok   S9 examples, master push (before=parent), only .github/workflows/examples.yml -> true
+ok   S9 examples, ci/staging push, only ci/doc-gate-guard.sh -> true
+ok   S9 examples, master push (before=parent), only ci/doc-gate-guard.sh -> true
+ok   S9 examples, ci/staging push, only ci/doc-gate-paths.py -> true
+ok   S9 examples, master push (before=parent), only ci/doc-gate-paths.py -> true
+ok   S9 examples, examples-v* tag push -> true
+ok   S9 examples, workflow_dispatch -> true
+ok   S10a examples: its guard step's CHECK_NAME is examples
+ok   S10a manual: its guard step's CHECK_NAME is manual
+ok   S10a quickstart: its guard step's CHECK_NAME is quickstart
+ok   S10a technical-manual: its guard step's CHECK_NAME is technical-manual
+ok   S10a manual-gui: its guard step's CHECK_NAME is manual-gui
+ok   S10 AP1 examples, PR push, nothing watched changed since the previous head P1 -> false
+ok   S10 AP1c examples, as AP1 with the guard before A' (always ran) -> true
+ok   S10 AP1 manual, PR push, nothing watched changed since the previous head P1 -> false
+ok   S10 AP1c manual, as AP1 with the guard before A' (always ran) -> true
+ok   S10 AP1 quickstart, PR push, nothing watched changed since the previous head P1 -> false
+ok   S10 AP1c quickstart, as AP1 with the guard before A' (always ran) -> true
+ok   S10 AP1 technical-manual, PR push, nothing watched changed since the previous head P1 -> false
+ok   S10 AP1c technical-manual, as AP1 with the guard before A' (always ran) -> true
+ok   S10 AP1 manual-gui, PR push, nothing watched changed since the previous head P1 -> false
+ok   S10 AP1c manual-gui, as AP1 with the guard before A' (always ran) -> true
+ok   S10 AP2 manual, 'manual' failed on P1 -> true
+ok   S10 AP3 manual, no 'manual' check run on P1 -> true
+ok   S10 AP4 manual, one of two latest runs still in progress -> true
+ok   S10 AP5 manual, merged base...P1 diverged -> true
+ok   S10 AP6 manual, merged base...P1 behind -> true
+ok   S10 AP7 manual, gh fails -> true
+ok   S10 AP8 manual, no previous head -> true
+ok   S10 AP9 manual, previous head is P1 in upper case -> true
+ok   S10 AP10 manual, previous head is 40 zeros -> true
+ok   S10 AP11 manual, CHECK_NAME empty -> true
+ok   S10 AP12 examples, a watched path changed since P1 -> true
+ok   S10 AP12 manual, a watched path changed since P1 -> true
+ok   S10 AP12 quickstart, a watched path changed since P1 -> true
+ok   S10 AP12 technical-manual, a watched path changed since P1 -> true
+ok   S10 AP12 manual-gui, a watched path changed since P1 -> true
+ok   S10 AP13 examples, rust-toolchain.toml changed since P1 -> true
+ok   S10 AP13 manual, rust-toolchain.toml changed since P1 -> true
+ok   S10 AP13 quickstart, rust-toolchain.toml changed since P1 -> true
+ok   S10 AP13 technical-manual, rust-toolchain.toml changed since P1 -> true
+ok   S10 AP13 manual-gui, rust-toolchain.toml changed since P1 -> true
+ok   S10 AP14 manual, HEAD P2 has one parent -> true
+ok   S10 AP15 manual, push to ci/staging (A' is PR-only) -> true
+ok   S10 AP16 manual, the merged base gained a watched change (stub still says ahead) -> true
+ok   S10 AP17 manual, no file differs from P1 -> true
+ok   S10 AP18 manual, gh asked for P1's 'manual' check runs and compared MASTER...P1
+ok   S10 AP19 manual, PR into side, not master -> true
+ok   S11 examples, PR, only rust-toolchain.toml -> true
+ok   S11 examples, ci/staging push, only rust-toolchain.toml -> true
+ok   S11-control examples, PR, with the guard before §3.1 (the defect) -> false
+ok   S11 manual, PR, only rust-toolchain.toml -> true
+ok   S11 manual, ci/staging push, only rust-toolchain.toml -> true
+ok   S11-control manual, PR, with the guard before §3.1 (the defect) -> false
+ok   S11 quickstart, PR, only rust-toolchain.toml -> true
+ok   S11 quickstart, ci/staging push, only rust-toolchain.toml -> true
+ok   S11-control quickstart, PR, with the guard before §3.1 (the defect) -> false
+ok   S11 technical-manual, PR, only rust-toolchain.toml -> true
+ok   S11 technical-manual, ci/staging push, only rust-toolchain.toml -> true
+ok   S11-control technical-manual, PR, with the guard before §3.1 (the defect) -> false
+ok   S11 manual-gui, PR, only rust-toolchain.toml -> true
+ok   S11 manual-gui, ci/staging push, only rust-toolchain.toml -> true
+ok   S11-control manual-gui, PR, with the guard before §3.1 (the defect) -> false
+ok   S12 examples, PR, only crates/é.rs -> true
+ok   S12-control examples, PR, with the guard before -z (the defect) -> false
+ok   S12 manual, PR, only crates/é.rs -> true
+ok   S12-control manual, PR, with the guard before -z (the defect) -> false
+ok   S12 quickstart, PR, only crates/é.rs -> true
+ok   S12-control quickstart, PR, with the guard before -z (the defect) -> false
+ok   S12 technical-manual, PR, only crates/é.rs -> true
+ok   S12-control technical-manual, PR, with the guard before -z (the defect) -> false
+ok   S12 AP examples, only crates/é2.rs changed since P1 -> true
+ok   S12 AP manual, only crates/é2.rs changed since P1 -> true
+ok   S12 AP quickstart, only crates/é2.rs changed since P1 -> true
+ok   S12 AP technical-manual, only crates/é2.rs changed since P1 -> true
+
+158 passed, 0 failed
