@@ -1,6 +1,6 @@
 # Constellation architecture and agent onboarding plan
 
-Status: draft for independent review. Scope approved in the 2026-10-30 Codex conversation.
+Status: R0 reviewed (0 Critical / 0 Important); minor clarifications folded for re-review. Scope approved in the 2026-10-30 Codex conversation.
 This task produces documentation and agent entry points; it does not change runtime code,
 dependencies, firmware, wallet behavior, release configuration, or existing process policies.
 
@@ -62,12 +62,24 @@ Do not edit Gemini's firmware documents or its GEMINI.md.
    recheck. Do not embed volatile commit pins or whole design histories in AGENTS.md.
    Support sibling checkouts and isolated worktrees; provide repository identity and
    a durable remote fallback when shared documentation is absent locally.
+   Explicitly instruct the agent to read adjacent CLAUDE.md and applicable ancestor
+   guidance; neither is automatically loaded by adding AGENTS.md. Provide a compact
+   tracked WORKFLOW.md for inherited requirements, including mt without CLAUDE.md.
+   Check reading routes from repo roots, shared-package directories, sibling
+   worktrees, and standalone checkouts.
 
 5. Verification and independent review.
    Validate new Markdown links, source paths, diagram relationships, baseline hashes,
    package names and resolved pins against the worktrees. Trace substantive claims
    to code and existing tests. Keep the guide navigation-oriented; use references
    to existing validation scripts instead of adding unexecuted executable recipes.
+   Add a small standard-library documentation checker in docs/architecture/check.py.
+   It checks all seven AGENTS files, shared Markdown navigation, baseline Git objects,
+   manifests, resolved dependencies, and immutable source references against local
+   repositories; explicitly distinguish this from remote HTTP and runtime checks.
+   Exercise its failure reporting with a deliberately invalid temporary fixture.
+   Persist its coverage/results in a validation record. Confirm delivered branch
+   references after pushing; absent or skipped CI is not validation.
    Run documentation checks appropriate to changed files. No runtime changes are
    planned, so runtime suite results are not claimed by this task.
    A separate Codex context reviews the plan and later the whole documentation diff.
