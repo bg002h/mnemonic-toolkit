@@ -20,6 +20,7 @@ REPOSITORIES = {
     "mnemonic-secret", "mnemonic-key", "descriptor-mnemonic",
     "mnemonic-toolkit", "mnemonic-transaction", "mnemonic-engrave", "mnemonic-gui",
 }
+BOUNDARIES = {"mnemonic-refugium", "refugium-wallet", "seedhammer", "rust-miniscript-fork"}
 PACKAGES = {
     "ms-codec", "mk-codec", "md-codec", "mt-codec", "wc-codec",
     "mnemonic-toolkit", "mnemonic-engrave", "mnemonic-io-lib", "miniscript",
@@ -33,7 +34,7 @@ OPTIONAL_SNAPSHOT_FILES = {
 }
 LINK = re.compile(r"!?\[[^\]\n]*\]\(([^\s)]+)\)")
 errors = []
-counts = {"repositories": 0, "hashes": 0, "markdown": 0, "links": 0}
+counts = {"repositories": 0, "hashes": 0, "gitlinks": 0, "markdown": 0, "links": 0}
 
 
 def require(condition, message):
@@ -89,7 +90,7 @@ def check_inventory(row, workspace):
             version = root["workspace"]["package"]["version"]
         expected_packages.append({
             "name": package["name"], "version": version, "manifest": path,
-            "binaries": [item["name"] for item in manifest.get("bin", [])],
+            "explicit_binary_declarations": [item["name"] for item in manifest.get("bin", [])],
         })
     require(row["packages"] == expected_packages, f"{name}: package manifest mismatch")
     require(row["patches"] == root.get("patch", {}), f"{name}: patch mismatch")
@@ -111,6 +112,22 @@ def check_inventory(row, workspace):
     require(row["resolved_packages"] == selected, f"{name}: resolved dependency mismatch")
     require(row["url"] == f"https://github.com/bg002h/{name}", f"{name}: repository URL mismatch")
     counts["repositories"] += 1
+
+
+def check_boundaries(inventory, workspace):
+    rows = inventory["boundaries"]
+    require(len(rows) == len(BOUNDARIES) and {r["repository"] for r in rows} == BOUNDARIES,
+            "inventory must contain exactly the four recorded boundaries")
+    seed = next(r for r in rows if r["repository"] == "seedhammer")
+    me = next(r for r in inventory["repositories"] if r["repository"] == "mnemonic-engrave")
+    repo = workspace / "mnemonic-engrave"
+    path = "third_party/seedhammer"
+    tree = git(repo, "ls-tree", me["source_commit"], "--", path).decode().strip()
+    expected = f"160000 commit {seed['source_commit']}\t{path}"
+    require(tree == expected, "seedhammer: boundary SHA does not match the recorded me gitlink")
+    current = git(repo, "ls-tree", "HEAD", "--", path).decode().strip()
+    require(current == expected, "seedhammer: current me gitlink differs from documented baseline")
+    counts["gitlinks"] += 1
 
 
 def check_link(source, target, workspace, inventory):
@@ -178,6 +195,10 @@ def main():
             check_inventory(row, workspace)
         except (ValueError, OSError, KeyError) as exc:
             errors.append(f"{row.get('repository')}: {exc}")
+    try:
+        check_boundaries(inventory, workspace)
+    except (ValueError, OSError, KeyError, StopIteration) as exc:
+        errors.append(f"boundary inventory: {exc}")
     arch = workspace / "mnemonic-toolkit/docs/architecture"
     for name in REQUIRED_DOCS:
         require((arch / name).is_file(), f"missing required guide: {name}")
@@ -204,7 +225,7 @@ def main():
     for message in errors:
         print("FAIL:", message, file=sys.stderr)
     print(("FAIL" if errors else "PASS") + ": " + json.dumps(counts, sort_keys=True))
-    print("Coverage: inventory Git objects, current manifest/lock drift, selected pins, inline Markdown targets.")
+    print("Coverage: inventory Git objects, current manifest/lock drift, selected pins, submodule gitlink, inline Markdown targets.")
     print("Excluded: remote HTTP/branch existence, full Markdown/Mermaid parsing, runtime tests and architectural semantics.")
     return bool(errors)
 

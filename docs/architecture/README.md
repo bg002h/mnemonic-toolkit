@@ -18,7 +18,7 @@ that handoff does not make the host guide a hardware validation record.
 | --- | --- | --- |
 | mnemonic-secret | ms-codec; ms-cli → ms | Secret payload encoding, recovery, shares, hashlock primitives; CLI mnemonic and passphrase handling |
 | mnemonic-key | mk-codec; mk-cli → mk | Public extended-key cards, origins, policy stubs, chunk reconstruction; CLI intake and derivation |
-| descriptor-mnemonic | md-codec; md-cli → md; xtask | Descriptor serialization, identities, composition/rendering; CLI parsing and seating; generated coordinator evidence |
+| descriptor-mnemonic | md-codec; md-cli → md; xtask | Descriptor serialization, identities, composition/rendering; CLI parsing and seating; verdict-table generation from recorded coordinator evidence |
 | mnemonic-toolkit | mnemonic-toolkit → mnemonic; wc-codec | Multi-format bundle/recovery workflows and selected reusable utilities; public word-card transport |
 | mnemonic-transaction | mt-codec; mt-cli → mt | Signed-transaction backup format; CLI refusal policy and optional node observations |
 | mnemonic-engrave | mnemonic-engrave → me; mnemonic-io-lib; Go preview | Host delivery, containers, public bundles and preview; reusable I/O mechanisms |

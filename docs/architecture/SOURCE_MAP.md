@@ -4,7 +4,9 @@ Companion to the [guide](README.md). This map identifies observed implementation
 normative design locations, and existing validation surfaces. Test links mean
 **coverage to consult**, not tests executed by this documentation task.
 [inventory.json](inventory.json) holds full SHAs, manifest/lock hashes, selected
-resolved dependencies, and manifest patches.
+resolved dependencies, and manifest patches. Package `explicit_binary_declarations`
+records only explicit `[[bin]]` entries, not Cargo's automatically discovered targets
+(such as xtask or auxiliary files in src/bin). It is not a complete executable inventory.
 
 ## Inspected checkouts
 
@@ -81,9 +83,11 @@ Validation: [vectors](https://github.com/bg002h/mnemonic-key/blob/bdb1df7f61e4ee
 Implementation: [Descriptor and canonical encoding](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/encode.rs); [DecodeOpts](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/decode.rs); [sparse metadata](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/tlv.rs); [identity types](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/identity.rs); [SkeletonKey](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/skeleton.rs); [composition](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/compose/mod.rs); [concrete descriptor route](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/descriptor_route.rs); [seating ambiguity](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-cli/src/seat/matching.rs); [stub confirmation levels](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-cli/src/seat/disposition.rs).
 
 Design: [wire format](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/design/SPEC_v0_30_wire_format.md); [wallet policy](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/design/SPEC_v0_13_wallet_policy.md); [form conversion](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/design/SPEC_wallet_form_converter.md); [seating](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/design/SPEC_seat_auto_partition.md).
-Later source/tests establish wire8 support; see the missing-spec question.
+The [wire-8 design](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/design/SPEC_liana_unspendable_internal_key.md) is hosted in me; its implementation cycle belongs to md, with Rust-primary ordering.
+Current source/tests establish implemented behavior; the design's historical status
+is not evidence that every described gate or downstream implementation is complete.
 
-Validation: [vector manifest](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/test_vectors.rs); [wire8](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/wire_version_8.rs); [mint/recovery separation](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/mint_policy_does_not_reach_decode.rs); [partial origins](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/partial_decode.rs); [seating corpus](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-cli/tests/seating_vectors.rs); [coordinator evidence generation](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/xtask/src/main.rs).
+Validation: [vector manifest](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/test_vectors.rs); [wire8](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/wire_version_8.rs); [mint/recovery separation](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/mint_policy_does_not_reach_decode.rs); [partial origins](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/partial_decode.rs); [seating corpus](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-cli/tests/seating_vectors.rs); [verdict-table generation from recorded evidence](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/xtask/src/main.rs).
 
 ### toolkit and wc-codec
 
@@ -165,7 +169,14 @@ Keep that comment's intended relationship distinct from the observed graph.
 
 Run `python3 docs/architecture/check.py` from the toolkit checkout with all seven
 repositories as siblings, or pass `--workspace /path/to/siblings`. Python 3.11+ is
-required. The checker reads Git objects and current documentation, never builds the
+required. For complete source-link validation, also make boundary-only checkouts
+`mnemonic-refugium` at `0e99b034c9ebb25a8cfa2a289e792ac840a43a2d` and
+`refugium-wallet` at `f081c7bea12c9328c118575b8fe0ecdfcf054997` available as siblings
+or under the workspace's parent. Their recorded Git objects must exist; their HEADs
+need not match. The checker fails if these objects are unavailable. SeedHammer itself
+need not be checked out: its pin is verified against me's recorded Git tree entry.
+
+The checker reads Git objects and current documentation, never builds the
 wallet utilities, fetches dependencies, edits source, or accesses real key material.
 
 When adopting a new source baseline, inspect the changed manifests, lockfiles,

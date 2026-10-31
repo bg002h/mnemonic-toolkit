@@ -27,16 +27,20 @@ before deleting its documentation branch.
 
 ## Inherited essentials
 
-For substantial development, follow brainstorm → specification → plan → phased
-implementation → whole-diff review → delivery. Scope ceremony to the work, but
+For substantial development, follow brainstorm → specification → plan → phased,
+test-first implementation → whole-diff review → delivery. Write tests before the
+implementation they constrain. Scope ceremony to the work, but
 preserve applicable gates. Independent review means author and reviewer are different
-contexts for the artifact under review. Resolve Critical/Important findings before
+contexts for the artifact under review. Every written artifact from specification
+onward passes independent review. Resolve Critical/Important findings before
 advancing the relevant gate; required validation must also pass.
 
 Persist a review verbatim under `design/agent-reports/` **before** folding it.
 Persist and fold are separate commits. Record what the check actually covered.
 Run machine-checkable executable material before review; repeat the relevant checks
-after a fold and follow the repository's re-review policy. Do not silently replace a
+after a fold. The inherited default requires re-review after every fold, including
+the final fold; apply an explicit repository-specific override where one governs.
+A standalone mt checkout uses this default. Do not silently replace a
 required reviewer/model or call self-review independent. Report unavailable formal
 gates accurately.
 

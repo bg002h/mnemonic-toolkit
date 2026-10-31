@@ -1,6 +1,6 @@
 # Constellation architecture and agent onboarding plan
 
-Status: R0 reviewed (0 Critical / 0 Important); minor clarifications folded for re-review. Scope approved in the 2026-10-30 Codex conversation.
+Status: plan approved by independent Codex R1 review (0 Critical / 0 Important). Scope approved in the 2026-10-30 Codex conversation.
 This task produces documentation and agent entry points; it does not change runtime code,
 dependencies, firmware, wallet behavior, release configuration, or existing process policies.
 

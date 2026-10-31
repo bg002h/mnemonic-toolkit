@@ -36,3 +36,19 @@ Remote HTTP access/remote branch existence before delivery; full Markdown or Mer
 parsing/rendering; architectural semantics; runtime builds/tests; hardware/device work;
 consensus conformance and secret erasure. Independent review covers source claims and
 diagram meaning; this task does not claim an Opus-specific implementation/release gate.
+
+Review fold validation — I1/I2 and M1–M4:
+- Reproduced I2 before changing the checker: a fabricated SeedHammer SHA incorrectly passed.
+- After the fix, checker PASS:
+  {"gitlinks": 1, "hashes": 35, "links": 278, "markdown": 13, "repositories": 7}
+- Fabricated gitlink, missing boundary, wrong dependency, and broken-link fixtures
+  each returned nonzero with the expected diagnostic; temporary fixtures were cleaned up.
+- Python syntax compiled without writing bytecode; staged whitespace checks passed.
+- SeedHammer revision now compared with me's source-baseline gitlink and HEAD gitlink.
+  This is Git metadata validation, without inspecting firmware internals or requiring
+  a populated SeedHammer worktree. Boundary-only mr/rw prerequisites are documented.
+- Inventory binary field explicitly describes manifest declarations, excluding
+  automatically discovered Cargo targets; no claim of a complete executable inventory.
+- Portable workflow includes test-first development, independent artifact review,
+  and default re-review after each fold. Source routes now locate the me-hosted
+  wire-8 design and correctly describe xtask's evidence-to-verdict-table data flow.
