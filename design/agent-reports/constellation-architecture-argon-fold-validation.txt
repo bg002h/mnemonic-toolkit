@@ -56,3 +56,17 @@ Execution-review corrections (I1–I3):
   fixture still passes. Temporary fixtures were cleaned up.
 - The corrected shared-guide commit replaces the first fold's fallback pin in
   the following mechanical reference update, before final review and publication.
+
+R2 residual correction (uppercase SHA spelling):
+- Preserved the 0C/1I/0M R2 report before folding the remaining case-sensitivity
+  finding. Its tracking and index-kind findings were already closed.
+- Uppercase and mixed-case subcases reproduced three failures before the fix.
+  Both dispatch guards now share case-insensitive full-SHA recognition; canonical
+  inventory/source SHA spelling remains lowercase.
+- All 19 tests pass. Full checker remains at 7/35/1/4/294/14 as above.
+- Black-box CLI tests reject lowercase, uppercase, mixed-case and SHA-leading
+  branch spellings, HEAD and reflog shorthand; master remains accepted. SHA
+  fixtures include the nonexistent-commit source URL and assert the explicit
+  rejection diagnostic. Both literal ref syntax and branch-name rules are checked.
+- Fallback references advance once more to this corrected shared-guide snapshot
+  before narrow closure review. No runtime/source inventory changes were made.

@@ -142,7 +142,9 @@ class CheckerTests(unittest.TestCase):
 
     def test_sha_shaped_branch_cannot_bypass_immutable_validation(self):
         self.inventory["documentation_refs"] = []
-        for rev in [self.docs_rev, "0123456789abcdef0123456789abcdef01234567"]:
+        fake = "0123456789abcdef0123456789abcdef01234567"
+        for rev in [self.docs_rev, self.docs_rev.upper(), fake, fake.upper(),
+                    "0123456789aBcDeF0123456789AbCdEf01234567"]:
             with self.subTest(rev=rev):
                 self.inventory["documentation_branch"] = rev
                 self.assertTrue(self.link(self.url("blob", "src/lib.rs", rev)))

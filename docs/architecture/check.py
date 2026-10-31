@@ -34,6 +34,7 @@ OPTIONAL_SNAPSHOT_FILES = {
     "rust-toolchain.toml", "pinned-upstream.toml", ".gitmodules", "preview/go.mod",
 }
 LINK = re.compile(r"!?\[[^\]\n]*\]\(([^\s)]+)\)")
+COMMIT_REF = re.compile(r"[0-9a-f]{40}", re.IGNORECASE)
 errors = []
 counts = {"repositories": 0, "hashes": 0, "gitlinks": 0, "documentation_refs": 0,
           "markdown": 0, "links": 0}
@@ -196,7 +197,7 @@ def check_link(source, target, workspace, inventory):
         branch = inventory["documentation_branch"]
         # A full SHA always identifies an immutable revision, even if the
         # configurable branch happens to have the same spelling.
-        if not re.fullmatch(r"[0-9a-f]{40}", rest.split("/", 1)[0]) and rest.startswith(branch + "/"):
+        if not COMMIT_REF.fullmatch(rest.split("/", 1)[0]) and rest.startswith(branch + "/"):
             require(name in REPOSITORIES, f"{source}: unknown documentation repository {name}")
             repo = workspace / name
             relative = PurePosixPath(rest[len(branch) + 1:]).as_posix()
@@ -269,9 +270,10 @@ def main():
     require(len(rows) == len(REPOSITORIES) and {r["repository"] for r in rows} == REPOSITORIES,
             "inventory must contain exactly the seven scoped repositories")
     branch = inventory["documentation_branch"]
-    if re.match(r"^[0-9a-f]{40}(?:/|$)", branch):
+    if COMMIT_REF.fullmatch(branch.split("/", 1)[0]):
         raise ValueError("documentation_branch must not start with a full commit SHA")
     git(workspace / "mnemonic-toolkit", "check-ref-format", "refs/heads/" + branch)
+    git(workspace / "mnemonic-toolkit", "check-ref-format", "--branch", branch)
     check_documentation_refs(inventory, workspace)
     for row in rows:
         try:
