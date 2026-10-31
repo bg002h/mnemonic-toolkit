@@ -136,6 +136,27 @@ class CheckerTests(unittest.TestCase):
                 self.assertTrue(self.link(prefix + "#missing"))
                 self.assertTrue(self.link(prefix + "#L999"))
 
+    def test_encoded_delimiters_remain_filename_data(self):
+        prefixes = ["README.md", self.url("blob", "docs/architecture/README.md"),
+                    self.url("blob", "docs/architecture/README.md", self.docs_rev)]
+        for prefix in prefixes:
+            with self.subTest(prefix=prefix):
+                self.assertEqual([], self.link(prefix+"#L1"))
+                self.assertTrue(self.link(prefix+"%23L1"))
+        for name in ("README.md#L1", "README.md?query"):
+            self.write("docs/architecture/"+name, "# Actual file\n")
+        self.git("add", "docs/architecture")
+        self.git("commit", "-qm", "Literal delimiter filenames")
+        rev = self.git("rev-parse", "HEAD")
+        self.inventory["documentation_refs"].append({"repository": "mnemonic-toolkit",
+            "commit": rev, "paths": ["docs/architecture"]})
+        for encoded in ("README.md%23L1", "README.md%3Fquery"):
+            for target in (encoded, self.url("blob", "docs/architecture/"+encoded),
+                           self.url("blob", "docs/architecture/"+encoded, rev)):
+                with self.subTest(target=target):
+                    self.assertEqual([], self.link(target+"#actual-file"))
+        self.assertEqual([], self.link("README.md#%64etails"))
+
     def test_configured_default_documentation_branch_links(self):
         self.inventory["documentation_branch"] = "master"
         self.assertEqual([], self.link(self.url("blob", "docs/architecture/README.md", "master")))

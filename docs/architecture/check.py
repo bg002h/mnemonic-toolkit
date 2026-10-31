@@ -186,7 +186,10 @@ def check_boundaries(inventory, workspace):
 
 
 def check_link(source, target, workspace, inventory):
-    parsed = urlsplit(unquote(target))
+    # Identify delimiters before decoding: %23 and %3F in a path are filename
+    # data, not a fragment/query boundary. Decode each component only once.
+    parsed = urlsplit(target)
+    parsed = parsed._replace(path=unquote(parsed.path), fragment=unquote(parsed.fragment))
     if parsed.scheme:
         if parsed.netloc != "github.com":
             raise ValueError(f"external URL needs separate verification: {target}")
