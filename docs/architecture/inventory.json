@@ -34,11 +34,19 @@
     },
     {
       "repository": "mnemonic-refugium",
-      "commit": "da096f765183c8d52f292f97453db7586bb4b5ff",
+      "commit": "cdf7649c93f27b2bb9c6d03670c960b072ae5cdc",
       "paths": [
         "docs/architecture"
       ],
       "purpose": "Separate Refugium onboarding delivery, with independent runtime baselines."
+    },
+    {
+      "repository": "mnemonic-toolkit",
+      "commit": "a97b6176646baee1824e7cade2c11b2a17bcbb8d",
+      "paths": [
+        "docs/architecture"
+      ],
+      "purpose": "Workspace fallback includes corrected delimiter parsing in the delivered checker."
     }
   ],
   "repositories": [

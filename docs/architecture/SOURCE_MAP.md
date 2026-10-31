@@ -175,8 +175,8 @@ The [me manifest](https://github.com/bg002h/mnemonic-engrave/blob/a7571999630408
 [Refugium manifest](https://github.com/bg002h/mnemonic-refugium/blob/0e99b034c9ebb25a8cfa2a289e792ac840a43a2d/Cargo.toml) align md-codec at
 `6cf6599ab71eb37adef836641095fb3c8756784f`.
 This boundary-only inspection does not map Refugium internals.
-The later, separately maintained [Refugium guide](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/README.md)
-and [source map](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/SOURCE_MAP.md)
+The later, separately maintained [Refugium guide](https://github.com/bg002h/mnemonic-refugium/blob/cdf7649c93f27b2bb9c6d03670c960b072ae5cdc/docs/architecture/README.md)
+and [source map](https://github.com/bg002h/mnemonic-refugium/blob/cdf7649c93f27b2bb9c6d03670c960b072ae5cdc/docs/architecture/SOURCE_MAP.md)
 cover mr, mr-codec and refugium-wallet at their own recorded baselines; this
 constellation inventory retains its original boundary observations.
 The inspected [Refugium GUI workspace manifest](https://github.com/bg002h/refugium-wallet/blob/f081c7bea12c9328c118575b8fe0ecdfcf054997/Cargo.toml) and

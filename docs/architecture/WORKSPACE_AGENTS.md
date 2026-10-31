@@ -8,15 +8,15 @@ Do not treat duplicate worktrees or scratch clones as additional product reposit
 The constellation entry point is `mnemonic-toolkit/docs/architecture/README.md`.
 While the documentation branches are awaiting integration, use
 `architecture-worktrees/mnemonic-toolkit/docs/architecture/README.md`.
-A standalone fallback is the [shared guide](https://github.com/bg002h/mnemonic-toolkit/blob/a619f6eefdc8a2c58c9ff8f290376ed371a1c677/docs/architecture/README.md).
-Read its [workflow](https://github.com/bg002h/mnemonic-toolkit/blob/a619f6eefdc8a2c58c9ff8f290376ed371a1c677/docs/architecture/WORKFLOW.md) and the relevant source-map section.
+A standalone fallback is the [shared guide](https://github.com/bg002h/mnemonic-toolkit/blob/a97b6176646baee1824e7cade2c11b2a17bcbb8d/docs/architecture/README.md).
+Read its [workflow](https://github.com/bg002h/mnemonic-toolkit/blob/a97b6176646baee1824e7cade2c11b2a17bcbb8d/docs/architecture/WORKFLOW.md) and the relevant source-map section.
 
 The separate Refugium entry point is `mnemonic-refugium/docs/architecture/README.md`.
 Until integration, use
 `refugium-architecture-worktrees/mnemonic-refugium/docs/architecture/README.md`.
-Standalone fallbacks: [Refugium guide](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/README.md),
-[workflow](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/WORKFLOW.md)
-and [onboarding prompt](https://github.com/bg002h/mnemonic-refugium/blob/da096f765183c8d52f292f97453db7586bb4b5ff/docs/architecture/ONBOARDING.md).
+Standalone fallbacks: [Refugium guide](https://github.com/bg002h/mnemonic-refugium/blob/cdf7649c93f27b2bb9c6d03670c960b072ae5cdc/docs/architecture/README.md),
+[workflow](https://github.com/bg002h/mnemonic-refugium/blob/cdf7649c93f27b2bb9c6d03670c960b072ae5cdc/docs/architecture/WORKFLOW.md)
+and [onboarding prompt](https://github.com/bg002h/mnemonic-refugium/blob/cdf7649c93f27b2bb9c6d03670c960b072ae5cdc/docs/architecture/ONBOARDING.md).
 The dated source maps distinguish repository HEADs from consumer lockfile pins.
 
 The maintained maps cover:
