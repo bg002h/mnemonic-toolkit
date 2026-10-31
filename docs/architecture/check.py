@@ -3,13 +3,14 @@
 
 Read-only, no network/build/runtime checks. Markdown support covers inline links
 used by these documents, local heading fragments, and GitHub blob/tree links.
-Remote branch links are checked against local deliverables, not by HTTP.
+Remote branch links are checked against tracked local deliverables, not by HTTP.
+Default branches are compared with cached origin/HEAD, not live remote state.
 Architectural semantics and instruction loading still need independent review.
 """
 import argparse
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
@@ -34,7 +35,8 @@ OPTIONAL_SNAPSHOT_FILES = {
 }
 LINK = re.compile(r"!?\[[^\]\n]*\]\(([^\s)]+)\)")
 errors = []
-counts = {"repositories": 0, "hashes": 0, "gitlinks": 0, "markdown": 0, "links": 0}
+counts = {"repositories": 0, "hashes": 0, "gitlinks": 0, "documentation_refs": 0,
+          "markdown": 0, "links": 0}
 
 
 def require(condition, message):
@@ -71,11 +73,63 @@ def headings(body):
     }
 
 
+def repository_path(workspace, name):
+    repo = workspace / name
+    return repo if (repo / ".git").exists() else workspace.parent / name
+
+
+def check_fragment(body, fragment, source, target):
+    line = re.fullmatch(r"L([0-9]+)(?:-L([0-9]+))?", fragment)
+    if line:
+        require(0 < int(line[1]) <= int(line[2] or line[1]) <= len(body.splitlines()),
+                f"{source}: invalid line fragment: {target}")
+    else:
+        require(fragment in headings(body), f"{source}: missing heading: {target}")
+
+
+def check_documentation_refs(inventory, workspace):
+    seen = set()
+    for row in inventory.get("documentation_refs", []):
+        name, rev, paths = row["repository"], row["commit"], row["paths"]
+        if name not in REPOSITORIES | BOUNDARIES or not re.fullmatch(r"[0-9a-f]{40}", rev):
+            require(False, f"invalid documentation repository/revision: {name}@{rev}")
+            continue
+        require((name, rev) not in seen, f"duplicate documentation snapshot: {name}@{rev}")
+        seen.add((name, rev))
+        repo = repository_path(workspace, name)
+        git(repo, "cat-file", "-e", rev + "^{commit}")
+        if not isinstance(paths, list) or not paths:
+            require(False, f"{name}@{rev}: documentation paths must be a nonempty list")
+            continue
+        for path in paths:
+            p = PurePosixPath(path)
+            valid = (path == p.as_posix() and bool(p.parts) and not p.is_absolute() and ".." not in p.parts
+                     and (p.parts[0] in {"docs", "design"} or path in {"AGENTS.md", "GEMINI.md"}))
+            if not valid:
+                require(False, f"{name}@{rev}: invalid documentation path: {path}")
+                continue
+            require(git(repo, "cat-file", "-t", f"{rev}:{path}").decode().strip() in {"blob", "tree"},
+                    f"{name}@{rev}: unsupported documentation object: {path}")
+        counts["documentation_refs"] += 1
+
+
 def check_inventory(row, workspace):
     name, rev = row["repository"], row["source_commit"]
     repo = workspace / name
     require(bool(re.fullmatch(r"[0-9a-f]{40}", rev)), f"{name}: invalid source SHA")
     git(repo, "cat-file", "-e", rev + "^{commit}")
+    git(repo, "check-ref-format", "--branch", row["default_branch"])
+    try:
+        default = git(repo, "symbolic-ref", "refs/remotes/origin/HEAD").decode().strip()
+    except ValueError as exc:
+        raise ValueError(f"{name}: cached origin/HEAD is unavailable; refresh local remote metadata") from exc
+    require(default == "refs/remotes/origin/" + row["default_branch"],
+            f"{name}: default branch differs from cached origin/HEAD")
+    git(repo, "cat-file", "-e", default + "^{commit}")
+    try:
+        git(repo, "merge-base", "--is-ancestor", rev, "HEAD")
+    except ValueError:
+        require(False, f"{name}: source commit is not an ancestor of HEAD")
     root = tomllib.loads(snapshot(repo, rev, "Cargo.toml").decode())
     manifests = (
         ["Cargo.toml"] if "package" in root
@@ -142,38 +196,47 @@ def check_link(source, target, workspace, inventory):
         branch = inventory["documentation_branch"]
         if rest.startswith(branch + "/"):
             require(name in REPOSITORIES, f"{source}: unknown documentation repository {name}")
-            path = workspace / name / rest[len(branch) + 1:]
+            repo = workspace / name
+            relative = rest[len(branch) + 1:]
+            path = repo / relative
+            require(path.resolve().is_relative_to(repo.resolve()),
+                    f"{source}: documentation target leaves repository: {target}")
             require(path.exists(), f"{source}: missing documentation branch target {target}")
-            if parsed.fragment and path.is_file():
-                require(parsed.fragment in headings(path.read_text()),
-                        f"{source}: missing heading {target}")
+            require(path.is_file() if kind == "blob" else path.is_dir(),
+                    f"{source}: {kind} link has wrong target kind: {target}")
+            git(repo, "ls-files", "--error-unmatch", "--", relative)
+            if parsed.fragment:
+                require(path.is_file(), f"{source}: fragment requires a file: {target}")
+                if path.is_file():
+                    check_fragment(path.read_text(), parsed.fragment, source, target)
             return
         parts = rest.split("/", 1)
         rev, path = parts[0], parts[1] if len(parts) == 2 else ""
         require(bool(re.fullmatch(r"[0-9a-f]{40}", rev)), f"{source}: source link is not immutable: {target}")
         rows = inventory["repositories"] + inventory["boundaries"]
         record = next((r for r in rows if r["repository"] == name), None)
-        require(record is not None and record.get("source_commit") == rev,
+        documented = any(
+            row["repository"] == name and row["commit"] == rev
+            and any(path == prefix or path.startswith(prefix + "/") for prefix in row["paths"])
+            for row in inventory.get("documentation_refs", [])
+        )
+        require((record is not None and record.get("source_commit") == rev) or documented,
                 f"{source}: source link outside recorded baseline: {target}")
-        repo = workspace / name
-        if not (repo / ".git").exists():
-            repo = workspace.parent / name  # boundary-only original checkouts
+        repo = repository_path(workspace, name)
         obj = f"{rev}:{path}" if path else rev + "^{tree}"
         actual_kind = git(repo, "cat-file", "-t", obj).decode().strip()
         require(actual_kind == kind, f"{source}: {kind} link points at {actual_kind}: {target}")
         if parsed.fragment:
-            blob = git(repo, "show", obj).decode()
-            line = re.fullmatch(r"L([0-9]+)(?:-L([0-9]+))?", parsed.fragment)
-            if line:
-                require(0 < int(line[1]) <= int(line[2] or line[1]) <= len(blob.splitlines()),
-                        f"{source}: invalid source line fragment: {target}")
-            else:
-                require(parsed.fragment in headings(blob), f"{source}: missing source heading: {target}")
+            require(actual_kind == "blob", f"{source}: fragment requires a file: {target}")
+            if actual_kind == "blob":
+                check_fragment(git(repo, "show", obj).decode(), parsed.fragment, source, target)
     else:
         path = source.parent / parsed.path if parsed.path else source
         require(path.exists(), f"{source}: missing local target {target}")
-        if parsed.fragment and path.is_file():
-            require(parsed.fragment in headings(path.read_text()), f"{source}: missing local heading {target}")
+        if parsed.fragment:
+            require(path.is_file(), f"{source}: fragment requires a file: {target}")
+            if path.is_file():
+                check_fragment(path.read_text(), parsed.fragment, source, target)
 
 
 def main():
@@ -188,8 +251,8 @@ def main():
     rows = inventory["repositories"]
     require(len(rows) == len(REPOSITORIES) and {r["repository"] for r in rows} == REPOSITORIES,
             "inventory must contain exactly the seven scoped repositories")
-    require(inventory["documentation_branch"] == "docs/constellation-architecture",
-            "unexpected documentation branch; update checker when integration changes navigation")
+    git(workspace / "mnemonic-toolkit", "check-ref-format", "--branch", inventory["documentation_branch"])
+    check_documentation_refs(inventory, workspace)
     for row in rows:
         try:
             check_inventory(row, workspace)
@@ -225,8 +288,8 @@ def main():
     for message in errors:
         print("FAIL:", message, file=sys.stderr)
     print(("FAIL" if errors else "PASS") + ": " + json.dumps(counts, sort_keys=True))
-    print("Coverage: inventory Git objects, current manifest/lock drift, selected pins, submodule gitlink, inline Markdown targets.")
-    print("Excluded: remote HTTP/branch existence, full Markdown/Mermaid parsing, runtime tests and architectural semantics.")
+    print("Coverage: inventory Git objects, cached default branches, source ancestry, manifest/lock drift, selected pins, gitlink, declared documentation snapshots, tracked branch targets and inline Markdown links.")
+    print("Excluded: remote HTTP/branch existence or cache freshness, full Markdown/Mermaid parsing, runtime tests and architectural semantics.")
     return bool(errors)
 
 

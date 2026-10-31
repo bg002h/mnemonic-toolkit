@@ -27,7 +27,10 @@ advance separately. A future coordinated release should establish its own compat
 matrix from exact artifact revisions. This guide's snapshot is source evidence,
 not a release certification.
 
-Firmware ownership remains separate. Once Gemini's map is delivered, connect its
-entry point and provenance matrix here without duplicating the device architecture.
-Device parsing, rendering, physical engraving and recovery on hardware remain
-unvalidated by this host-only documentation work.
+Firmware ownership remains separate. The delivered guide, provenance matrix,
+initialization file and correction reports are connected in the
+[firmware handoff](SOURCE_MAP.md#firmware-and-refugium-handoff). The linked submission
+still needs factual corrections; its port-pin summary is not imported as verified
+inventory. The firmware owner should update these pinned links after the corrections
+are reviewed. Device parsing, rendering, physical engraving and recovery on hardware
+remain unvalidated by this host-only documentation work.

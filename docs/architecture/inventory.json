@@ -2,6 +2,37 @@
   "schema_version": 1,
   "captured_on": "2026-10-30",
   "documentation_branch": "docs/constellation-architecture",
+  "documentation_refs": [
+    {
+      "repository": "mnemonic-toolkit",
+      "commit": "6bc1c940e207131bf55a1b5d7d1fc023c524a9ec",
+      "paths": [
+        "docs/architecture"
+      ]
+    },
+    {
+      "repository": "mnemonic-engrave",
+      "commit": "03776d704d2bf85a32f89c900b0a7368d06e0b5c",
+      "paths": [
+        "design/firmware-architecture"
+      ]
+    },
+    {
+      "repository": "mnemonic-engrave",
+      "commit": "7fa58f5e4c371b39ee543b0343a423418cc475b6",
+      "paths": [
+        "design/agent-reports/gemini-firmware-architecture-codex-review.md",
+        "design/agent-reports/gemini-firmware-host-interfaces-codex-review.md"
+      ]
+    },
+    {
+      "repository": "seedhammer",
+      "commit": "ec4fffddcd10b36409ae6d3dba9b8354f6367af2",
+      "paths": [
+        "GEMINI.md"
+      ]
+    }
+  ],
   "repositories": [
     {
       "repository": "mnemonic-secret",

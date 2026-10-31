@@ -113,7 +113,7 @@ Do not run live-node scripts merely to validate documentation.
 
 ### me and mnemonic-io-lib
 
-Implementation: [library facade](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/lib.rs); [CLI orchestration](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/main.rs); [public bundle admission](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/bundle.rs); [systemwide record classes](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/sysw/record.rs); [systemwide wire](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/sysw/wire.rs); [sidecar protocol](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/preview.rs); [mechanism/policy boundary](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/mnemonic-io-lib/src/lib.rs).
+Implementation: [library facade](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/lib.rs); [CLI orchestration](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/main.rs); [public bundle admission](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/bundle.rs); [sealed containers](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/seal/mod.rs); [descriptor intake](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/descriptor/mod.rs); [NDEF framing](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/ndef.rs); [systemwide record classes](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/sysw/record.rs); [systemwide wire](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/sysw/wire.rs); [sidecar protocol](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/preview.rs); [mechanism/policy boundary](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/mnemonic-io-lib/src/lib.rs).
 
 Design: [systemwide delivery](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/design/SPEC_systemwide_payloads.md); [encrypted delivery](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/design/SPEC_encrypted_payload_delivery.md); [descriptor intake](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/design/SPEC_descriptor_input.md); [shared CLI mechanisms](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/design/SPEC_constellation_cli_uniformity.md).
 
@@ -151,10 +151,25 @@ do not establish that documentation, runtime code, or a release passed validatio
 Host preview uses [Go module replacement](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/preview/go.mod) and
 [the SeedHammer submodule declaration](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/.gitmodules).
 The recorded submodule commit is `7b6f2fbbdb909ef812ccc8c90768280c5fa7a4d4`.
-Gemini owns firmware architecture under `mnemonic-engrave/design/firmware-architecture/`
-and its GEMINI.md. Those files may be in another worktree while this branch is reviewed.
-Use the shared format specs and vector sources above when aligning host/device behavior;
-do not infer device support from host acceptance or from preview rendering.
+Gemini's delivered firmware documentation is a separate snapshot:
+[architecture](https://github.com/bg002h/mnemonic-engrave/blob/03776d704d2bf85a32f89c900b0a7368d06e0b5c/design/firmware-architecture/ARCHITECTURE.md),
+[source map and Go provenance matrix](https://github.com/bg002h/mnemonic-engrave/blob/03776d704d2bf85a32f89c900b0a7368d06e0b5c/design/firmware-architecture/SOURCE_MAP.md#5-constellation-go-codec-provenance--update-procedure),
+[host interfaces](https://github.com/bg002h/mnemonic-engrave/blob/03776d704d2bf85a32f89c900b0a7368d06e0b5c/design/firmware-architecture/HOST_INTERFACES.md),
+and [open questions](https://github.com/bg002h/mnemonic-engrave/blob/03776d704d2bf85a32f89c900b0a7368d06e0b5c/design/firmware-architecture/OPEN_QUESTIONS.md).
+Its [Gemini entry file](https://github.com/bg002h/seedhammer/blob/ec4fffddcd10b36409ae6d3dba9b8354f6367af2/GEMINI.md)
+is in the firmware repository. These documentation commits are distinct from
+me's preview gitlink and from the firmware source baseline they describe.
+
+**Review status of these pinned submissions: corrections required.** Read the
+[architecture review](https://github.com/bg002h/mnemonic-engrave/blob/7fa58f5e4c371b39ee543b0343a423418cc475b6/design/agent-reports/gemini-firmware-architecture-codex-review.md)
+and [interface review](https://github.com/bg002h/mnemonic-engrave/blob/7fa58f5e4c371b39ee543b0343a423418cc475b6/design/agent-reports/gemini-firmware-host-interfaces-codex-review.md)
+alongside them. They identify substantive errors in OTP/signing guidance, interface
+contracts, commands, navigation and repository ownership. These links locate the
+handoff; they do not endorse those disputed claims or copy its unverified codec-pin
+summary into this host inventory. Refresh the handoff references after corrections
+and review. Use the shared format specs and vector sources above when aligning
+host/device behavior; do not infer device support from host acceptance or preview
+rendering. Gemini retains ownership of the device guide and initialization file.
 
 The [me manifest](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/Cargo.toml) and
 [Refugium manifest](https://github.com/bg002h/mnemonic-refugium/blob/0e99b034c9ebb25a8cfa2a289e792ac840a43a2d/Cargo.toml) align md-codec at
@@ -173,8 +188,19 @@ required. For complete source-link validation, also make boundary-only checkouts
 `mnemonic-refugium` at `0e99b034c9ebb25a8cfa2a289e792ac840a43a2d` and
 `refugium-wallet` at `f081c7bea12c9328c118575b8fe0ecdfcf054997` available as siblings
 or under the workspace's parent. Their recorded Git objects must exist; their HEADs
-need not match. The checker fails if these objects are unavailable. SeedHammer itself
-need not be checked out: its pin is verified against me's recorded Git tree entry.
+need not match. The firmware documentation links additionally require a `seedhammer`
+Git checkout containing `ec4fffddcd10b36409ae6d3dba9b8354f6367af2`, in either location.
+The me Git database must contain the submission and review commits linked above.
+The checker fails if recorded objects are unavailable; it does not fetch them.
+The preview pin is still checked separately against me's recorded Git tree entry.
+
+`inventory.json` records documentation snapshots and their allowed paths separately
+from runtime source baselines. The toolkit snapshot is the standalone fallback;
+keep its Git object locally for validation. Each repository also needs cached
+`origin/HEAD` metadata matching its recorded default branch. That offline check
+proves local consistency, not remote freshness. Source baselines must be ancestors
+of the current checkout. See [workflow](WORKFLOW.md) for retaining or repinning
+fallback commits during integration.
 
 The checker reads Git objects and current documentation, never builds the
 wallet utilities, fetches dependencies, edits source, or accesses real key material.

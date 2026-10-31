@@ -20,10 +20,18 @@ The portable essentials below cover that case. mnemonic-transaction currently ha
 no repository CLAUDE file; also read its design/PROVENANCE.md for spec/vector ownership.
 
 The [architecture guide](README.md) is shared in mnemonic-toolkit. Try the sibling
-checkout first; repository AGENTS files also provide a remote fallback. Documentation
-branches keep that fallback on `docs/constellation-architecture` until integration.
-When merging the guide into the default branch, update the fallback links together
-before deleting its documentation branch.
+checkout first; repository AGENTS files also provide a remote fallback pinned to a
+delivered documentation commit. The fallback does not depend on the temporary branch
+name. Record the commit and allowed documentation paths in inventory.json, and refresh
+sibling/workspace fallbacks deliberately when delivering a newer guide.
+
+Before deleting the last ref after squash/rebase integration, retain the pinned
+commit through an archival ref or repin the fallbacks to a reachable merged guide
+commit. Do not assume permanent retention of unreferenced Git objects. A switch to
+default-branch URLs is also possible after their target files exist; update
+`documentation_branch` in inventory.json at that point. The checker validates that
+branch name without hardcoding this task's branch, and checks branch URLs against
+tracked local files (including staged additions), not remote HTTP state.
 
 ## Inherited essentials
 
@@ -79,3 +87,10 @@ For this documentation change, the [checker](check.py) covers links and the reco
 source inventory; independent review covers the architectural claims. No runtime
 suite, hardware, consensus, or erasure result is implied. See the
 [plan](../../design/PLAN_constellation_architecture_guide.md) for its acceptance scope.
+
+Run `python3 -B -m unittest discover -s docs/architecture -p test_check.py` from
+toolkit for the checker's synthetic Git regression tests. The architecture checker
+requires the recorded Git objects and cached origin/HEAD metadata locally; see the
+[source-map prerequisites](SOURCE_MAP.md#refreshing-and-checking-the-map). It checks
+file/directory kinds and fragments, tracked branch targets and source ancestry; it
+does not establish live remote defaults or runtime compatibility.
