@@ -1,0 +1,448 @@
+{
+  "schema_version": 1,
+  "captured_on": "2026-10-30",
+  "documentation_branch": "docs/constellation-architecture",
+  "repositories": [
+    {
+      "repository": "mnemonic-secret",
+      "default_branch": "master",
+      "source_commit": "85efbd42ea0e5a3da96af4d4a65c4b45ea338ccf",
+      "packages": [
+        {
+          "name": "ms-codec",
+          "version": "0.10.0",
+          "manifest": "crates/ms-codec/Cargo.toml",
+          "binaries": []
+        },
+        {
+          "name": "ms-cli",
+          "version": "0.20.1",
+          "manifest": "crates/ms-cli/Cargo.toml",
+          "binaries": [
+            "ms"
+          ]
+        }
+      ],
+      "file_sha256": {
+        "Cargo.lock": "fa8a6753ad7719ddc07369dce30e9aa53237c62ed59f61d326c107ef15a96bde",
+        "Cargo.toml": "c0a98b3c5e56ff6ef86a442cd06f70c94e9415d8362f1230491afc8b201ce669",
+        "crates/ms-cli/Cargo.toml": "d24bc22bb0e11e70751444ff4d1ee1db55902c34f167ee3c6c6b5436de180c2b",
+        "crates/ms-codec/Cargo.toml": "3ed10bab4dafa036342d13385565f803a71dc92f77a90c65414e5f0068db3902",
+        "rust-toolchain.toml": "a458040d8678a00adf76f8041cc4ecca3d42b392683db7896a7e2d637006a4f2"
+      },
+      "resolved_packages": [
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "git+https://github.com/bg002h/mnemonic-engrave?rev=6c24e62823e6c1ac02aa3862cd6020674bf58544#6c24e62823e6c1ac02aa3862cd6020674bf58544"
+        },
+        {
+          "name": "ms-codec",
+          "version": "0.10.0",
+          "source": "workspace"
+        }
+      ],
+      "url": "https://github.com/bg002h/mnemonic-secret",
+      "patches": {}
+    },
+    {
+      "repository": "mnemonic-key",
+      "default_branch": "main",
+      "source_commit": "bdb1df7f61e4eef94509e589a5d7b0d1f626cfd6",
+      "packages": [
+        {
+          "name": "mk-codec",
+          "version": "0.5.0",
+          "manifest": "crates/mk-codec/Cargo.toml",
+          "binaries": [
+            "gen_mk_vectors"
+          ]
+        },
+        {
+          "name": "mk-cli",
+          "version": "0.14.0-dev",
+          "manifest": "crates/mk-cli/Cargo.toml",
+          "binaries": [
+            "mk"
+          ]
+        }
+      ],
+      "file_sha256": {
+        "Cargo.lock": "59122689e09a9ea93f68b39072f98b2787a23e181f1f20397e7cab827fa65b37",
+        "Cargo.toml": "d6c35c3ca9ae54761bbf57c2133b8a28dc1fc0715e89664efe51980ad86ac4c7",
+        "crates/mk-cli/Cargo.toml": "e680043e14de0c785008e7adc41be0eed823c8eec986380ee623bbb653bd0746",
+        "crates/mk-codec/Cargo.toml": "6add2e17b7295353e60256d5f02edb93d67b1052b86babd75a6f03ad40a96e39",
+        "rust-toolchain.toml": "527c7a145afbf48ccb98acb74452a9868bf2a39babcc419f47c63ea007a905aa"
+      },
+      "resolved_packages": [
+        {
+          "name": "md-codec",
+          "version": "0.42.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "miniscript",
+          "version": "13.0.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mk-codec",
+          "version": "0.5.0",
+          "source": "workspace"
+        },
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        }
+      ],
+      "url": "https://github.com/bg002h/mnemonic-key",
+      "patches": {}
+    },
+    {
+      "repository": "descriptor-mnemonic",
+      "default_branch": "main",
+      "source_commit": "5dfb1fde7dccf3664c6547b065169717452e00ae",
+      "packages": [
+        {
+          "name": "md-codec",
+          "version": "0.48.4",
+          "manifest": "crates/md-codec/Cargo.toml",
+          "binaries": []
+        },
+        {
+          "name": "md-cli",
+          "version": "0.20.3",
+          "manifest": "crates/md-cli/Cargo.toml",
+          "binaries": [
+            "md"
+          ]
+        },
+        {
+          "name": "xtask",
+          "version": "0.0.0",
+          "manifest": "crates/xtask/Cargo.toml",
+          "binaries": []
+        }
+      ],
+      "file_sha256": {
+        "Cargo.lock": "fe702e8cf6041f0ea48ffda598d3a2e2e1ad4a75ca7fd89a60a8f60c6c394ba3",
+        "Cargo.toml": "1feb093ce10b613d7f8836107fd06fa9d8324f4a97aca88f420eefb746a7138c",
+        "crates/md-cli/Cargo.toml": "4886ab01716e7626ca8fa235935997145379f67b6c0201edf6c5eaf52e41fef9",
+        "crates/md-codec/Cargo.toml": "28d680b2a0b9cfd2a371a168e3423a58b517a0c31c2244bf712603d5b889fe9a",
+        "crates/xtask/Cargo.toml": "8405c927a35d24441a9f2e1b4083365f98eec2bcdbefbae71ec4d29de78cf878",
+        "rust-toolchain.toml": "527c7a145afbf48ccb98acb74452a9868bf2a39babcc419f47c63ea007a905aa"
+      },
+      "resolved_packages": [
+        {
+          "name": "md-codec",
+          "version": "0.48.4",
+          "source": "workspace"
+        },
+        {
+          "name": "miniscript",
+          "version": "13.0.0",
+          "source": "git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5#ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+        },
+        {
+          "name": "mk-codec",
+          "version": "0.5.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        }
+      ],
+      "url": "https://github.com/bg002h/descriptor-mnemonic",
+      "patches": {
+        "crates-io": {
+          "miniscript": {
+            "git": "https://github.com/rust-bitcoin/rust-miniscript",
+            "rev": "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+          }
+        }
+      }
+    },
+    {
+      "repository": "mnemonic-toolkit",
+      "default_branch": "master",
+      "source_commit": "ef99021a26f733594ca6b711b9d3b82a494f39b1",
+      "packages": [
+        {
+          "name": "mnemonic-toolkit",
+          "version": "0.105.1",
+          "manifest": "crates/mnemonic-toolkit/Cargo.toml",
+          "binaries": [
+            "mnemonic"
+          ]
+        },
+        {
+          "name": "wc-codec",
+          "version": "0.1.1",
+          "manifest": "crates/wc-codec/Cargo.toml",
+          "binaries": []
+        }
+      ],
+      "file_sha256": {
+        "Cargo.lock": "258af1338a9d20e5581801704aabfee3abaf1df4a58af8b94b50ba4dad3ec0d1",
+        "Cargo.toml": "61df366bacd0c40adf07bb2ea991fe78235a36bad7090ae5db11b6a090eba454",
+        "crates/mnemonic-toolkit/Cargo.toml": "b8af4bfff4db1cdcb36a4988cfcafde8e32a0b07ceddf11b007ba7f3f1827f9c",
+        "crates/wc-codec/Cargo.toml": "321f370ac437754e79929845e5dbeeeb4ad3fe071f70c7f240c732b431ce790a",
+        "rust-toolchain.toml": "a458040d8678a00adf76f8041cc4ecca3d42b392683db7896a7e2d637006a4f2"
+      },
+      "resolved_packages": [
+        {
+          "name": "md-codec",
+          "version": "0.47.0",
+          "source": "git+https://github.com/bg002h/descriptor-mnemonic?rev=cf35d61af0f058029df841f4882945e53f86cd4b#cf35d61af0f058029df841f4882945e53f86cd4b"
+        },
+        {
+          "name": "miniscript",
+          "version": "13.0.0",
+          "source": "git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5#ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+        },
+        {
+          "name": "mk-codec",
+          "version": "0.4.1",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mnemonic-toolkit",
+          "version": "0.105.1",
+          "source": "workspace"
+        },
+        {
+          "name": "ms-codec",
+          "version": "0.7.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "wc-codec",
+          "version": "0.1.1",
+          "source": "workspace"
+        }
+      ],
+      "url": "https://github.com/bg002h/mnemonic-toolkit",
+      "patches": {
+        "crates-io": {
+          "miniscript": {
+            "git": "https://github.com/rust-bitcoin/rust-miniscript",
+            "rev": "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+          }
+        }
+      }
+    },
+    {
+      "repository": "mnemonic-transaction",
+      "default_branch": "main",
+      "source_commit": "56886b826d1c47fdf7ee8246a4a78f5b768bae2d",
+      "packages": [
+        {
+          "name": "mt-codec",
+          "version": "0.1.0",
+          "manifest": "crates/mt-codec/Cargo.toml",
+          "binaries": []
+        },
+        {
+          "name": "mt-cli",
+          "version": "0.1.1",
+          "manifest": "crates/mt-cli/Cargo.toml",
+          "binaries": [
+            "mt"
+          ]
+        }
+      ],
+      "file_sha256": {
+        "Cargo.lock": "ed146f0e4d84283bbfa806666605503ee842f300573a0023e6c9313acdf56804",
+        "Cargo.toml": "3d864aa2a46b099be839b3edaa4cde89825a6a6cac57cd341ab57b8715ea1655",
+        "crates/mt-cli/Cargo.toml": "5de6af4490f3beb3c27d7e0add6b847ed6365089fb0fbd673dcb9b2d3440d021",
+        "crates/mt-codec/Cargo.toml": "080ccb1182faa902261f895c5ee322dd60f6e60e9c611d65ff9c1f47e39223f1",
+        "rust-toolchain.toml": "527c7a145afbf48ccb98acb74452a9868bf2a39babcc419f47c63ea007a905aa"
+      },
+      "resolved_packages": [
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "git+https://github.com/bg002h/mnemonic-engrave?rev=6c24e62823e6c1ac02aa3862cd6020674bf58544#6c24e62823e6c1ac02aa3862cd6020674bf58544"
+        },
+        {
+          "name": "mt-codec",
+          "version": "0.1.0",
+          "source": "workspace"
+        }
+      ],
+      "url": "https://github.com/bg002h/mnemonic-transaction",
+      "patches": {}
+    },
+    {
+      "repository": "mnemonic-engrave",
+      "default_branch": "master",
+      "source_commit": "a75719996304086e5f293aaf26812ff242a25244",
+      "packages": [
+        {
+          "name": "mnemonic-engrave",
+          "version": "0.12.0",
+          "manifest": "crates/me-cli/Cargo.toml",
+          "binaries": [
+            "me"
+          ]
+        },
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "manifest": "crates/mnemonic-io-lib/Cargo.toml",
+          "binaries": []
+        }
+      ],
+      "file_sha256": {
+        ".gitmodules": "7873b50383cf05c28667fadd0fc6b55d3652df7afc9544b9d7d5548496a61199",
+        "Cargo.lock": "f385b544cf18d4a4826ebca3ba2d99b05a3b4ec33920414f474b4e5f788d087b",
+        "Cargo.toml": "7aa44573b06e129ae7493775f7a28bc6920af70bb33b5cf3a7df6315d67e095f",
+        "crates/me-cli/Cargo.toml": "7c0341352cf88803683c4541281980992e33d20826dc431efe28b5b5701f6538",
+        "crates/mnemonic-io-lib/Cargo.toml": "04fd8cc23d6faa11f9b71bee643d3e2fe6d8405714716c9c83d8dc79a22d4e38",
+        "preview/go.mod": "8865a0184c7da601fb567a095069398d0c0d25ffe215a981f653644e52407e23"
+      },
+      "resolved_packages": [
+        {
+          "name": "md-codec",
+          "version": "0.48.4",
+          "source": "git+https://github.com/bg002h/descriptor-mnemonic?rev=6cf6599ab71eb37adef836641095fb3c8756784f#6cf6599ab71eb37adef836641095fb3c8756784f"
+        },
+        {
+          "name": "miniscript",
+          "version": "13.0.0",
+          "source": "git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5#ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+        },
+        {
+          "name": "mk-codec",
+          "version": "0.5.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mnemonic-engrave",
+          "version": "0.12.0",
+          "source": "workspace"
+        },
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "workspace"
+        },
+        {
+          "name": "ms-codec",
+          "version": "0.10.0",
+          "source": "git+https://github.com/bg002h/mnemonic-secret?rev=e5dff6f9c2b7ae7dc02a4a137e7322abab32211e#e5dff6f9c2b7ae7dc02a4a137e7322abab32211e"
+        },
+        {
+          "name": "mt-codec",
+          "version": "0.1.0",
+          "source": "git+https://github.com/bg002h/mnemonic-transaction?rev=72b79b8762ec208b6143afade8c4b66a551bd29d#72b79b8762ec208b6143afade8c4b66a551bd29d"
+        }
+      ],
+      "url": "https://github.com/bg002h/mnemonic-engrave",
+      "patches": {
+        "crates-io": {
+          "miniscript": {
+            "git": "https://github.com/rust-bitcoin/rust-miniscript",
+            "rev": "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+          }
+        }
+      }
+    },
+    {
+      "repository": "mnemonic-gui",
+      "default_branch": "master",
+      "source_commit": "46e1c0f31b5688c447309fdae3bcb439c43f7e4a",
+      "packages": [
+        {
+          "name": "mnemonic-gui",
+          "version": "0.63.0",
+          "manifest": "Cargo.toml",
+          "binaries": [
+            "mnemonic-gui",
+            "gui-render"
+          ]
+        }
+      ],
+      "file_sha256": {
+        "Cargo.lock": "6bd16838c99c5e4627c97526c74ba00220626303b75e6e7692f24cec3b224a89",
+        "Cargo.toml": "0837b5e3042c120ee0e9ab7efa3ffb10527ae0a72558ef90c85001ab24d0c452",
+        "pinned-upstream.toml": "568839c1df28e3408e18dae4a98f5d03da0e92032c3a78c34254cf8b8ee5a677"
+      },
+      "resolved_packages": [
+        {
+          "name": "md-codec",
+          "version": "0.47.0",
+          "source": "git+https://github.com/bg002h/descriptor-mnemonic?rev=cf35d61af0f058029df841f4882945e53f86cd4b#cf35d61af0f058029df841f4882945e53f86cd4b"
+        },
+        {
+          "name": "miniscript",
+          "version": "13.0.0",
+          "source": "git+https://github.com/rust-bitcoin/rust-miniscript?rev=ff4732e5f75aa555682343cb180fa72ee3e8e9d5#ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+        },
+        {
+          "name": "mk-codec",
+          "version": "0.4.1",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mnemonic-io-lib",
+          "version": "0.1.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "mnemonic-toolkit",
+          "version": "0.105.1",
+          "source": "git+https://github.com/bg002h/mnemonic-toolkit?tag=mnemonic-toolkit-v0.105.1#1402d547471bcf69adc7ba291012aeca0a5f6ee4"
+        },
+        {
+          "name": "ms-codec",
+          "version": "0.7.0",
+          "source": "registry+https://github.com/rust-lang/crates.io-index"
+        },
+        {
+          "name": "wc-codec",
+          "version": "0.1.1",
+          "source": "git+https://github.com/bg002h/mnemonic-toolkit?tag=mnemonic-toolkit-v0.105.1#1402d547471bcf69adc7ba291012aeca0a5f6ee4"
+        }
+      ],
+      "url": "https://github.com/bg002h/mnemonic-gui",
+      "patches": {
+        "crates-io": {
+          "miniscript": {
+            "git": "https://github.com/rust-bitcoin/rust-miniscript",
+            "rev": "ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+          }
+        }
+      }
+    }
+  ],
+  "boundaries": [
+    {
+      "repository": "mnemonic-refugium",
+      "source_commit": "0e99b034c9ebb25a8cfa2a289e792ac840a43a2d",
+      "scope": "Cargo.toml dependency boundary only"
+    },
+    {
+      "repository": "refugium-wallet",
+      "source_commit": "f081c7bea12c9328c118575b8fe0ecdfcf054997",
+      "scope": "Cargo.toml and Cargo.lock boundary check only"
+    },
+    {
+      "repository": "seedhammer",
+      "source_commit": "7b6f2fbbdb909ef812ccc8c90768280c5fa7a4d4",
+      "scope": "mnemonic-engrave submodule pin only; firmware mapping owned separately"
+    },
+    {
+      "repository": "rust-miniscript-fork",
+      "scope": "discovered historical checkout; active consumers patch rust-bitcoin/rust-miniscript at ff4732e5f75aa555682343cb180fa72ee3e8e9d5"
+    }
+  ]
+}

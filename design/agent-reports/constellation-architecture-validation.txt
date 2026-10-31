@@ -1,0 +1,38 @@
+Constellation architecture documentation validation — 2026-10-30
+
+Baseline: source-baseline.json / docs/architecture/inventory.json; seven independent repositories.
+Scope: architecture docs, seven AGENTS.md entries, and standard-library documentation checker.
+Runtime sources, dependencies, releases and firmware are unchanged.
+
+Executed:
+- python3 docs/architecture/check.py from mnemonic-toolkit.
+  PASS: {"hashes": 35, "links": 277, "markdown": 13, "repositories": 7}
+- Compiled check.py with Python's compile() without creating bytecode.
+- Temporary inventory fixture changed a selected dependency version to 999.0.0.
+  Checker returned nonzero and reported "resolved dependency mismatch".
+- Temporary Markdown fixture linked a nonexistent target.
+  Checker returned nonzero and reported "missing local target".
+  Temporary fixtures were removed by TemporaryDirectory cleanup.
+- All seven staged diffs checked for whitespace before their draft commits.
+
+Instruction routes:
+- Each Git root has an AGENTS.md below 3 KiB with explicit CLAUDE/workflow routes.
+- Shared-package directories use repository-relative routes from their Git root.
+- Sibling worktrees resolve the local toolkit guide; individual standalone clones
+  have a GitHub fallback on docs/constellation-architecture.
+- Parent workspace template points at the unmerged documentation worktrees.
+  Installation follows independent review; original checkouts remain unmodified.
+These are static route checks, not a claim that a fresh Codex process was launched
+in every directory. Remote branch references remain a delivery check after pushing.
+
+Checker coverage:
+Recorded Git objects and manifest/lock hashes; comparison to current hashed files;
+package manifests and selected Cargo.lock resolutions; patches; required doc inventory;
+inline Markdown local/immutable GitHub targets; local branch-link deliverables;
+entry-file size, final newline and Markdown trailing whitespace.
+
+Excluded:
+Remote HTTP access/remote branch existence before delivery; full Markdown or Mermaid
+parsing/rendering; architectural semantics; runtime builds/tests; hardware/device work;
+consensus conformance and secret erasure. Independent review covers source claims and
+diagram meaning; this task does not claim an Opus-specific implementation/release gate.
