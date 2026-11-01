@@ -55,7 +55,7 @@ component_info() {
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.3|md|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.20.1|ms|"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.20.2|ms|"
             ;;
         mk)
             echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.13.0|mk|"
@@ -180,14 +180,15 @@ trusted_keys() {
 # unsigned. Fill each one IN THE SAME COMMIT that moves a pin onto that
 # component's first signed release: install-assets.test.sh fails a pinned
 # release that publishes a .minisig while its entry is empty or above the pin
-# (otherwise a stripped signature on it would pass as "unsigned"). No signed
-# release exists yet (2026-09-26), so all five are empty. Bare versions only,
-# never tags: the pin gates grep this file for the first `<name>-v<x.y.z>`.
+# (otherwise a stripped signature on it would pass as "unsigned"). ms 0.20.2
+# (2026-11-01) is the first pinned release that is signed; the other four are
+# empty. Bare versions only, never tags: the pin gates grep this file for the
+# first `<name>-v<x.y.z>`.
 first_signed() {
     case "$1" in
         mnemonic)     echo "" ;;
         md)           echo "" ;;
-        ms)           echo "" ;;
+        ms)           echo "0.20.2" ;;
         mk)           echo "" ;;
         mnemonic-gui) echo "" ;;
     esac
