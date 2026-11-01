@@ -6107,3 +6107,22 @@ screen printed. Print the values.
 - **Why deferred:** No code change in this PR; owning phase: the toolkit's next `mnemonic repair` change.
 - **Status:** `deferred-minor`
 - **Tier:** `cross-repo`, text / behaviour (non-gating)
+
+### `toolkit-repair-ms1-stdin-second-line-ignored` — `mnemonic repair --ms1 -` ignores every stdin line after the first, so a one-string `ms1` card typed over two lines fails in way 1 of the primer 5.6.6 but not in way 2 (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Status:** `deferred-minor`
+- **Source:** mnemonic-secret `design/agent-reports/whole-diff-bughunt-ms-s1.md` (commit 3bca6ae), M-1; filed 2026-11-01 from the bug-hunt ms whole-diff review.
+- **What (verbatim from the report):**
+
+  **M-1: way 1 drops every line after the first of a one-string `ms1` card typed over two lines; way 2 joins them.** Measured on a clean E16 typed as two rows of five groups:
+  - `ms repair --in card.txt` exits 0 and prints the right string.
+  - `mnemonic repair --ms1 - < card.txt` exits 2 ("too many errors … singleton bound").
+  - With one character left out, `--max-indel 1` and `--max-indel 1 --max-subst 1` both exit 2, while `ms repair --in` says "more than 8 errors", exit 2.
+
+  `--ms1 -` reads one chunk, so the second line is silently ignored. This fails closed: no wrong string, and the printed command works on a card typed as the text says ("its one `ms1` string, … one per line"). Likelihood-test conditions: (a) the holder types an engraved `ms1` string over two lines because the plate wraps, against "one per line"; (b) the holder takes way 1. The same holds for a wrapped `mk1` or `md1` string, which becomes an extra chunk. Fix (for later, FOLLOWUPS `deferred-minor`): in 5.6.6, after "one per line (not only the damaged one)", add "; type each string on a single line even where the plate wraps it". Optionally, `mnemonic repair --ms1 -` could refuse a second non-empty stdin line rather than ignore it.
+
+### `toolkit-repair-mk1-max-indel-4-slow-vs-few-seconds` — `mnemonic repair --mk1 - --max-indel 4` took 75 s on the 111-character mk1 string, against the tool's own "this may take a few seconds" note (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Status:** `deferred-minor`
+- **Source:** mnemonic-secret `design/agent-reports/whole-diff-bughunt-ms-s1.md` (commit 3bca6ae), third bullet of "Design lines (ungraded)"; filed 2026-11-01 from the bug-hunt ms whole-diff review.
+- **What:** `mnemonic repair --mk1 - --max-indel 4` on the 111-character mk1 string took 75 s here (dev, opt-level 2), against its own "this may take a few seconds" note. This is pre-existing tool text.
