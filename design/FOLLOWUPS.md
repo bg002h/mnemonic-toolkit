@@ -6089,3 +6089,40 @@ screen printed. Print the values.
 - **What:** a flag that a CLI drops or renames stays green wherever the chapter still prints it outside a flag table (a synopsis, a prose sentence, an example command). Reproduction (control b3): rename `mr units --template-preset` to `--preset` in `mr` and update only the flag-table row of `45-mr.md`. The forward check (`--preset` is in the section) and the reverse check (the table row's flag is defined) both pass, and the lint exits 0. The synopsis `mr units [OPTIONS] --template-preset <name>` (`45-mr.md` l.2688) stays in the chapter, and run on that `mr` it exits 2 (`unexpected argument '--template-preset'`). Dropping a flag and deleting only its table row (control b2) is green the same way. There is no live instance today: 0 stale among 298 `mr <verb> ... --flag` usages in `45-mr.md` at mr 63efdab6. Possible fix, not decided here: for every `<bin> <verb>` invocation in a code span or fenced line, each `--flag` after it on that span or line must be defined by that verb's `--help` or be a global option. The reviewer's prototype scanned the 298 usages with 0 false positives and caught b3 (`/scratch/cache/review-ci-manual-scratch/scan-usages.py`, scratch, not committed).
 - **Status:** `open`
 - **Tier:** `tooling`
+
+### `toolkit-ms-codec-bump-bughunt-ms-fixes` — what the ms bug-hunt fixes change in the toolkit at its next ms-codec bump (companion)
+
+- **Surfaced:** 2026-11-01, mnemonic-secret `design/FIX_bughunt_ms.md` (branch `bughunt/triage`). **Companion:** `mnemonic-secret/design/FOLLOWUPS.md::bughunt-ms-fix`.
+- **Where:** `crates/mnemonic-toolkit/Cargo.toml` `ms-codec = "0.7"` (`Cargo.lock` 0.7.0).
+- **What:** the ms-codec half reaches the toolkit only through an ms-codec release and this pin. (a) `decode_with_correction` refuses any data-part character outside the codex32 alphabet as `Codex32(InvalidChar(c))` (c as typed) instead of `UnexpectedStringLength`, and never reads a non-ASCII character as a symbol. `repair_card`'s ms1 path is unaffected (its `parse_chunk` pre-gate refuses such characters first, `repair.rs:709-722`); `Ms1IndelOracle::validate` (`repair.rs:1389`) maps every `Err` to `None`, so a candidate holding a non-ASCII character is rejected where 0.7.0 could read it as an alphabet symbol. (b) `encode_shares(_, Threshold::ZERO, ..)` refuses what `encode` refuses; the toolkit calls it only with `Threshold::new(k)`. No toolkit test or manual text pins either old behaviour (grep at `c2b09861`, recorded in the FIX §8 item 9). The ms-cli half (`ms combine --to` on preimage shares, `ms inspect` of the secret share) reaches the manual's pinned binary when the toolkit's `ms-cli-v0.20.1` tag pins move to the release that carries it; this PR's 43-ms.md text describes that release.
+- **Why deferred:** the ms-codec release and the pin bump (0.7 → 0.10.x) are separate toolkit work.
+- **Status:** `open`
+- **Tier:** `cross-repo`
+
+### `toolkit-repair-indel-search-rejects-capitals` — `mnemonic repair --max-indel` exits 2 on an all-capitals card that the same tool repairs without `--max-indel` (companion)
+
+- **Surfaced:** 2026-11-01, FIX review r2 (`design/agent-reports/bughunt-fix-review-r2-ms.md`, I-1, graded Important; this entry is the tool half, filed deferred-minor by coordinator routing).
+- **Where:** the indel search of `mnemonic repair --max-indel`; the primer text that relies on it is FIX 5.6.6 (`design/FIX_bughunt_ms.md` in mnemonic-secret).
+- **What:** `mnemonic repair --max-indel` exits 2 on an all-capitals `ms1`, `mk1` or `md1` card that the same tool repairs without `--max-indel`; the primer tells the holder to retype in lowercase (FIX 5.6.6). Measured: the engraved capitals entr-16 card with one character left out exits 2 at `--max-indel 1`, also with `--max-subst 1`; the same card in lowercase exits 5.
+- **Why deferred:** No code change in this PR; owning phase: the toolkit's next `mnemonic repair` change.
+- **Status:** `deferred-minor`
+- **Tier:** `cross-repo`, text / behaviour (non-gating)
+
+### `toolkit-repair-ms1-stdin-second-line-ignored` — `mnemonic repair --ms1 -` ignores every stdin line after the first, so a one-string `ms1` card typed over two lines fails in way 1 of the primer 5.6.6 but not in way 2 (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Status:** `deferred-minor`
+- **Source:** mnemonic-secret `design/agent-reports/whole-diff-bughunt-ms-s1.md` (commit 3bca6ae), M-1; filed 2026-11-01 from the bug-hunt ms whole-diff review.
+- **What (verbatim from the report):**
+
+  **M-1: way 1 drops every line after the first of a one-string `ms1` card typed over two lines; way 2 joins them.** Measured on a clean E16 typed as two rows of five groups:
+  - `ms repair --in card.txt` exits 0 and prints the right string.
+  - `mnemonic repair --ms1 - < card.txt` exits 2 ("too many errors … singleton bound").
+  - With one character left out, `--max-indel 1` and `--max-indel 1 --max-subst 1` both exit 2, while `ms repair --in` says "more than 8 errors", exit 2.
+
+  `--ms1 -` reads one chunk, so the second line is silently ignored. This fails closed: no wrong string, and the printed command works on a card typed as the text says ("its one `ms1` string, … one per line"). Likelihood-test conditions: (a) the holder types an engraved `ms1` string over two lines because the plate wraps, against "one per line"; (b) the holder takes way 1. The same holds for a wrapped `mk1` or `md1` string, which becomes an extra chunk. Fix (for later, FOLLOWUPS `deferred-minor`): in 5.6.6, after "one per line (not only the damaged one)", add "; type each string on a single line even where the plate wraps it". Optionally, `mnemonic repair --ms1 -` could refuse a second non-empty stdin line rather than ignore it.
+
+### `toolkit-repair-mk1-max-indel-4-slow-vs-few-seconds` — `mnemonic repair --mk1 - --max-indel 4` took 75 s on the 111-character mk1 string, against the tool's own "this may take a few seconds" note (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Status:** `deferred-minor`
+- **Source:** mnemonic-secret `design/agent-reports/whole-diff-bughunt-ms-s1.md` (commit 3bca6ae), third bullet of "Design lines (ungraded)"; filed 2026-11-01 from the bug-hunt ms whole-diff review.
+- **What:** `mnemonic repair --mk1 - --max-indel 4` on the 111-character mk1 string took 75 s here (dev, opt-level 2), against its own "this may take a few seconds" note. This is pre-existing tool text.

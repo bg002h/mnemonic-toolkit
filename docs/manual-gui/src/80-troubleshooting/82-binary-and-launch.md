@@ -28,15 +28,41 @@ for this manual:
 - `ms-cli-v0.20.1`
 - `mk-cli-v0.13.0`
 
-The toolkit installer installs exactly these. Run each binary with
+The toolkit installer installs these, except `ms`, which it already
+installs at a newer release (next section). Run each binary with
 `--version` to compare; the GUI does not check them for you. The GUI's
 secret channels were measured against exactly these binaries, so an
 older release can misread or refuse the channel spellings the GUI
 writes (for example `ms derive --passphrase @env:…` before `ms`
 0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
 fails (older releases reject its `--allow-argv-secret`). See
-[Version pinning](#version-pinning), and re-run the toolkit installer
-to put the pinned releases in place.
+[Version pinning](#version-pinning). Re-run the toolkit installer to
+put its releases in place; the next section lists the one it installs
+newer than these.
+
+## When the installer is ahead of the GUI {#installer-ahead}
+
+The toolkit installer currently installs one CLI release newer than
+this GUI was built against: `ms-cli-v0.20.2` (the GUI's label reads
+`Pinned: ms 0.20.1`). The forms run unchanged, and `ms --version`
+printing `0.20.2` is expected.
+
+Three outputs differ, all on invalid or unusual input; none changes a
+derived wallet.
+
+- **`ms inspect`.** A share at share index `s` (the secret itself,
+  which `ms combine` refuses) now reads `FAIL: would NOT combine`,
+  where it read `OK: K-of-N share (would combine: …)`. A mnem string
+  whose language code `ms decode` refuses now reads `FAIL: would NOT
+  decode v0.1`, where it read `OK: would decode v0.2`.
+- **`ms combine`.** For a hashlock preimage share set, `--to entropy`
+  now prints the 64-hex preimage (with a `warning:` line that it is a
+  preimage, not seed entropy) and `--to ms1` prints the `hash` plate
+  string; both used to print the preimage record, which `--to phrase`
+  (the default) still prints.
+- **`ms repair`.** A character outside the codex32 alphabet is now
+  named (`error: invalid character 'b' (not in codex32 alphabet)`),
+  where it used to be reported as a string-length error.
 
 ## When the GUI is older than the CLI
 
