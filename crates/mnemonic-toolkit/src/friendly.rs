@@ -1230,3 +1230,7 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "friendly_bughunt_s4.rs"]
+mod bughunt_s4;
