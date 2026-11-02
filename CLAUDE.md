@@ -4,6 +4,13 @@ This file is auto-loaded by Claude Code when starting a session in this reposito
 
 @AGENTS.md
 
+## Known hazards
+
+- **Slot and material integrity (bundle and recovery).** Bundle and recovery code preserves slot ordering, the empty-string sentinel that marks missing or watch-only material, the origin, language and passphrase distinctions, and verification against the ground truth the user typed.
+- **Word-card bit counts (wc-codec and its adapter).** wc-codec is codec-agnostic; the toolkit adapter owns the mk1/md1 conversion. Preserve the source kind, and carry md1's exact payload bit count verbatim (never `bytes * 8`); mk1 payloads are byte-aligned.
+- **Consumer pins differ from the siblings.** The toolkit resolves its sibling codecs (md-codec by git rev, mk-codec and ms-codec from crates.io) independently of the sibling checkouts, so the newest sibling API may not exist here. Inspect `Cargo.lock` and vendored code before assuming it does.
+- **GUI manual lockstep.** A CLI surface change also updates the GUI manual (`docs/manual-gui`), which keeps anchor parity with mnemonic-gui's schema and its own pinned-upstream, in addition to the user manual and the GUI schema mirror described below.
+
 ## What this is
 
 `mnemonic-toolkit` is the top-level integration crate of the **m-format constellation**:
