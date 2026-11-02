@@ -530,3 +530,54 @@ fn r3_help_account_refused_with_path() {
         "help:\n{h}"
     );
 }
+
+// QT1-QT3 precedence guard rows (architect bughunt-fixdocs).
+#[test]
+fn r4_before_r3_xprv_to_xpub_path_and_account() {
+    let from = format!("xprv={XPRV_84}");
+    let o = convert(&[
+        "--from",
+        &from,
+        "--network",
+        "signet",
+        "--to",
+        "xpub",
+        "--path",
+        "m/0",
+        "--account",
+        "3",
+    ]);
+    assert_refused(&o, 2, R4_TEXT);
+}
+
+#[test]
+fn r4_before_xpub_prefix_network() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--to",
+        "fingerprint",
+        "--path",
+        "m/0",
+        "--xpub-prefix",
+        "zpub",
+    ]);
+    assert_refused(&o, 2, R4_TEXT);
+}
+
+#[test]
+fn r3_before_r5_named_path_with_account() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--network",
+        "signet",
+        "--to",
+        "wif",
+        "--path",
+        "bip84",
+        "--account",
+        "3",
+    ]);
+    assert_refused(&o, 2, R3_TEXT);
+}

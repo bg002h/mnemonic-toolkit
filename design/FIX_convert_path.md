@@ -151,7 +151,7 @@ fn refusal_account_with_path() -> ToolkitError {
     }
 ```
 
-The order of 5.0a and 5.0b, and their placement before 5.a, are the proposals of STOP-1 and STOP-2. Build them as written unless the architect rules otherwise.
+The order of 5.0a and 5.0b, and their placement before 5.a, are ruled (section 10, STOP-1 and STOP-2: proposals stand; architect bughunt-fixdocs QT1, QT2). Build them as written. The R3 check also runs before the R5 parse error (STOP-3, QT3).
 
 3.6 In `compute_outputs`, the seed arm (lines 1302-1311). Old:
 
@@ -309,6 +309,9 @@ The keys are the test file's constants: `XPUB_87`, `XPRV_87`, `WIF_87` at `m/87'
 | `r5_named_path_form_refused` | `--from P S --template bip84 --to xpub --path bip84` | 1; R5 text | exit 0, `XPUB_84` (path ignored) |
 | `r5_hex_path_form_refused` | `--from P S --template bip84 --to xpub --path 0x54` | 1; R5 text | exit 0, `XPUB_84` |
 | `r5_bare_m_is_master` | `--from P S --to xpub --path m` | 0; `xpub: XPUB_M` | exit 1, `--template is required…` |
+| `r4_before_r3_xprv_to_xpub_path_and_account` (QT1 guard) | `--from xprv=XPRV_84 S --to xpub --path m/0 --account 3` | 2; R4 text | exit 0, `xpub: XPUB_84` (path ignored) |
+| `r4_before_xpub_prefix_network` (QT2 guard) | `--from P --to fingerprint --path m/0 --xpub-prefix zpub` (no `--network`) | 2; R4 text | exit 2, the 5.a text (`--xpub-prefix <variant> requires explicit --network …`) |
+| `r3_before_r5_named_path_with_account` (QT3 guard) | `--from P S --to wif --path bip84 --account 3` | 2; R3 text | exit 1, R5 text |
 | `r5_help_path_block_literal_only` | `convert --help` | the four lines of 5.2 in order; no `named:`, no `hex:` | old block present |
 | `r3_help_account_refused_with_path` | `convert --help` | the `--account` line of 5.2 | old line |
 
@@ -321,7 +324,7 @@ Source-arm coverage:
 - wif: covered by the existing §4 refusal, unchanged.
 - electrum-phrase, bip38 and minikey: the general R4 rule (`_ => false`). There is no row per source because the code path is the same match arm as xprv/mk1/ms1.
 
-The RED rows avoid the three overlaps of section 10.
+The three overlaps of section 10 are covered by the guard rows `r4_before_r3_xprv_to_xpub_path_and_account` (STOP-1), `r4_before_xpub_prefix_network` (STOP-2) and `r3_before_r5_named_path_with_account` (STOP-3). The row `r4_before_xpub_prefix_network` has no `--network` on purpose: the `S` shorthand is not used in it.
 
 ## 7. Tests that change
 
@@ -335,7 +338,7 @@ Use `PATH=$HOME/.cargo/bin:$PATH`. `cargo --version` must be 1.85.0. Never pass 
 2. `cargo clippy --locked --all-targets --workspace -- -D warnings`
 3. `cargo nextest run --locked --workspace --no-fail-fast`: 0 failed.
 4. `cargo test --locked --doc --workspace`
-5. `cargo nextest run --locked -p mnemonic-toolkit -E 'binary(cli_convert_path)'`: exactly **27 run, 27 passed**. Quote the count in the GREEN commit message. A short count is a FAIL.
+5. `cargo nextest run --locked -p mnemonic-toolkit -E 'binary(cli_convert_path)'`: exactly **30 run, 30 passed**. Quote the count in the GREEN commit message. A short count is a FAIL.
 6. The docs CI jobs on the head, run locally where the environment allows, else as green CI on the PR:
    - `manual.yml` (lint, verify-examples, anchor-check, pdf, html)
    - `quickstart.yml`
@@ -354,7 +357,7 @@ F1 (build impact, closed by the GREEN commit):
 ```
 ### `convert-path-fix` — `convert --path` honoured on seed xpub/xprv (R1/R2), refused where unused (R4) or with non-zero `--account` (R3), literal-only help (R5) (repo: **mnemonic-toolkit**; owning phase: **FIX_convert_path build**)
 - Surfaced: triage `design/agent-reports/triage-convert-path.md`; grade `grade-convert-path.md` (C, I, M).
-- Build impact (1): code delta section 3, spec delta S1-S8, manual rows 1102-1103, RED rows `cli_convert_path` (27).
+- Build impact (1): code delta section 3, spec delta S1-S8, manual rows 1102-1103, RED rows `cli_convert_path` (30).
 - Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
 - Tier: `toolkit`.
 ```
@@ -368,10 +371,14 @@ F2 (Minor, deferred):
 - Tier: `toolkit`.
 ```
 
-## 10. STOPs (undecided by the ruling; the architect decides; the build uses each proposal unless ruled otherwise)
+## 10. STOPs (all three ruled: proposal stands; architect `reports/architect-bughunt-fixdocs.md`, QT1-QT3)
 
-**STOP-1. R3 vs R4 order.** Example: `--from xprv=… --to xpub --path m/0 --account 3` breaks both rules, so it can show only one text. **Proposal:** R4 first (section 3.5 order). The holder's first problem is that `--path` does nothing here; the R3 text, which tells them to put the account in `--path`, would mislead them. No RED row covers the overlap.
+Final order in `run()`: section 3 classify_edge, the wif+path refusal, 5.0a R4, 5.0b R3, 5.a `--xpub-prefix` needs `--network`, 5.b bip38; the R5 parse error comes later, in `compute_outputs`.
 
-**STOP-2. R3/R4 vs the `--xpub-prefix` refusal (5.a, exit 2, needs `--network`).** Example: `--from P --to fingerprint --path m/0 --xpub-prefix vpub` with no `--network`. **Proposal:** R4/R3 before 5.a (section 3.5 placement), so the path errors come first. Neither choice can yield a wrong key, since both refuse. No RED row covers the overlap.
+**STOP-1. R3 vs R4 order. Ruled (QT1): R4 first.** Example: `--from xprv=… --to xpub --path m/0 --account 3` breaks both rules and shows the R4 text (exit 2). Why: with R3 first the holder moves the account into `--path` and R4 then refuses `--path` anyway; with R4 first, dropping `--path` is the whole fix. Guard row: `r4_before_r3_xprv_to_xpub_path_and_account`.
 
-**STOP-3. R3 vs the R5 parse error.** Example: `--path bip84 --account 3` on a seed `--to wif`. R3 runs in `run()`, before `compute_outputs` parses the path, so the holder sees the R3 text, which suggests `m/84'/1'/3'`, not the parse error. **Proposal:** keep this order. The R3 text already shows the literal form. No RED row covers the overlap.
+**STOP-2. R3/R4 vs the `--xpub-prefix` refusal (5.a, exit 2, needs `--network`). Ruled (QT2): R4/R3 before 5.a.** Example (corrected: the earlier `vpub` is rejected by clap with exit 64 before `run()`, so it could not show the order): `--from P --to fingerprint --path m/0 --xpub-prefix zpub` with no `--network` shows the R4 text (exit 2). With `--account 3` and a literal path it shows R3; without the path error it shows 5.a. Guard row: `r4_before_xpub_prefix_network`.
+
+**STOP-3. R3 vs the R5 parse error. Ruled (QT3): R3 first.** Example: `--path bip84 --account 3` on a seed `--to wif` shows the R3 text (exit 2); without `--account` it shows R5 (exit 1). R3 shows the literal form, so one step fixes both. Guard row: `r3_before_r5_named_path_with_account`.
+
+Section 3.5 code is unchanged.
