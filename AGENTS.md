@@ -7,9 +7,8 @@ Paths below are relative to this Git root, including when working inside a crate
 Read [CLAUDE.md](CLAUDE.md) explicitly; AGENTS.md does not load it automatically.
 Read applicable ancestor guidance too. Existing process rules remain applicable;
 verify historical architecture/status statements against source.
-Read the shared [guide](docs/architecture/README.md) and [workflow](docs/architecture/WORKFLOW.md).
-For sibling checkouts/worktrees, prefer local `../mnemonic-toolkit/docs/architecture/`;
-remote fallbacks pin a delivered guide revision. See its workflow for refreshing the pin.
+Read the shared [architecture guide](docs/architecture/README.md).
+For sibling checkouts/worktrees, prefer local `../mnemonic-toolkit/docs/architecture/`.
 Check Git status, the current branch, Cargo.toml and Cargo.lock before editing.
 Preserve unrelated work and use explicit task-owned paths when staging.
 
@@ -30,10 +29,10 @@ Preserve unrelated work and use explicit task-owned paths when staging.
 
 ## Contracts and checks
 
-The [architecture source map](docs/architecture/SOURCE_MAP.md) routes to specs and
-bundle/restore/verification/word-card tests. Use current CI definitions, including
+The [architecture guide](docs/architecture/README.md) routes to the specs and
+manuals. Use current CI definitions, including
 vendor provenance, shared drift and cross-tool checks, for implementation validation.
 CLI changes must update [the shared manual](docs/manual/README.md) in lockstep;
 coordinate mnemonic-gui schema, JSON consumers, binary pins and [GUI manual](docs/manual-gui/README.md).
-Update the architecture guide with ownership or contract changes; refresh its dated
-inventory deliberately. Keep init instructions small and route detail into the guide.
+Update the architecture guide when an owner, dependency edge or invariant changes.
+Keep init instructions small and route detail into the guide.
