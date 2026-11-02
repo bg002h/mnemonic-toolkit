@@ -1,0 +1,99 @@
+# Workflow and instruction loading
+
+This is a portable reading route and compact summary of inherited constellation
+workflow. It does not replace a repository's detailed rules, expand the task's scope,
+or grant publication authority. Current user instructions and existing task
+authorization take precedence over local guidance.
+
+## Load the applicable instructions
+
+From the target repository root, explicitly read its CLAUDE.md when present and any
+applicable workspace/ancestor guidance. If the repository has STANDARD_WORKFLOW.md,
+read that detailed policy. Merely adding AGENTS.md does not load other file formats,
+and an instruction above a separate Git root cannot be assumed to load automatically.
+Paths in a repository's AGENTS file are relative to that repository root, including
+when starting inside a shared crate or using a worktree.
+
+In this workspace the inherited policy is `/scratch/code/CLAUDE.md`; read it when
+available. A standalone clone must not depend on that absolute path existing.
+The portable essentials below cover that case. mnemonic-transaction currently has
+no repository CLAUDE file; also read its design/PROVENANCE.md for spec/vector ownership.
+
+The [architecture guide](README.md) is shared in mnemonic-toolkit. Try the sibling
+checkout first; repository AGENTS files also provide a remote fallback pinned to a
+delivered documentation commit. The fallback does not depend on the temporary branch
+name. Record the commit and allowed documentation paths in inventory.json, and refresh
+sibling/workspace fallbacks deliberately when delivering a newer guide.
+
+Before deleting the last ref after squash/rebase integration, retain the pinned
+commit through an archival ref or repin the fallbacks to a reachable merged guide
+commit. Do not assume permanent retention of unreferenced Git objects. A switch to
+default-branch URLs is also possible after their target files exist; update
+`documentation_branch` in inventory.json at that point. The checker validates that
+branch name without hardcoding this task's branch, and checks branch URLs against
+tracked local files (including staged additions), not remote HTTP state.
+Branch targets must match literal index entries and their file/directory kind;
+symlink targets are unsupported. Commit-shaped branch names are rejected; put
+immutable documentation pins in `documentation_refs` instead.
+
+## Inherited essentials
+
+For substantial development, follow brainstorm → specification → plan → phased,
+test-first implementation → whole-diff review → delivery. Write tests before the
+implementation they constrain. Scope ceremony to the work, but
+preserve applicable gates. Independent review means author and reviewer are different
+contexts for the artifact under review. Every written artifact from specification
+onward passes independent review. Resolve Critical/Important findings before
+advancing the relevant gate; required validation must also pass.
+
+Persist a review verbatim under `design/agent-reports/` **before** folding it.
+Persist and fold are separate commits. Record what the check actually covered.
+Run machine-checkable executable material before review; repeat the relevant checks
+after a fold. The inherited default requires re-review after every fold, including
+the final fold; apply an explicit repository-specific override where one governs.
+A standalone mt checkout uses this default. Do not silently replace a
+required reviewer/model or call self-review independent. Report unavailable formal
+gates accurately.
+
+Existing policy applies independent orchestration to funds/keys/addresses, normative
+codec behavior, irreversible actions and work spanning many files/repos; the later
+risk-scoped policy is recorded in mnemonic-engrave/CLAUDE.md. Routine work can stay
+solo where applicable. The 2026-10-30 architecture task specifically uses independent
+Codex documentation review, without asserting an Opus or runtime-release approval.
+
+Assign follow-ups to the phase that owns them and resolve gating/phase-owned work
+before that phase closes. The operator's inherited severity ruling treats secret
+leakage findings as non-gating follow-ups; it does not stop finding or recording them.
+Wrong results, data loss, funds-safety regressions, unmet guarantees and false claims
+of validation remain blocking. This guide introduces no new severity policy.
+
+For shared normative Rust/Go codec changes, Rust is primary and supplies vectors.
+For a suspected Go-only convergence defect, check the Rust counterpart before making
+that classification. Firmware/device work remains outside this architecture task.
+
+## Validation and delivery
+
+Use current CI/workflow files for actual suites and toolchains; historical prose and
+test counts can be stale. Preserve independent vectors/oracles. Do not substitute
+self-generated codec vectors for their independent source, or a round trip for
+identity/address evidence. Follow repository test parallelism and debug-assertion
+requirements. Avoid duplicating a passed suite without a new reason.
+
+Use isolated worktrees when concurrent work warrants them; preserve unrelated files.
+Stage explicit task-owned paths. Check the target repository's current branch policy
+and prescribed staging script before a default-branch push; one repository's policy
+does not establish another's. Respect existing authorization without repeatedly
+asking for actions already covered. Tags, releases, merges and hardware operations
+must stay within the authorized task.
+
+For this documentation change, the [checker](check.py) covers links and the recorded
+source inventory; independent review covers the architectural claims. No runtime
+suite, hardware, consensus, or erasure result is implied. See the
+[plan](../../design/PLAN_constellation_architecture_guide.md) for its acceptance scope.
+
+Run `python3 -B -m unittest discover -s docs/architecture -p test_check.py` from
+toolkit for the checker's synthetic Git regression tests. The architecture checker
+requires the recorded Git objects and cached origin/HEAD metadata locally; see the
+[source-map prerequisites](SOURCE_MAP.md#refreshing-and-checking-the-map). It checks
+file/directory kinds and fragments, tracked branch targets and source ancestry; it
+does not establish live remote defaults or runtime compatibility.
