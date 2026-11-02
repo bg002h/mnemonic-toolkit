@@ -159,8 +159,10 @@ boundary.
 ## Utility GUI and shared-library boundaries
 
 `mnemonic-gui` is the egui utility front end, separate from Refugium's GUI.
-[CliTab](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/app.rs) selects mnemonic/md/ms/mk, forms construct a
-RunPlan, and [the runner](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/runner.rs) invokes subprocesses.
+[CliTab](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/app.rs) selects mnemonic/md/ms/mk, forms assemble argv, the channel planner
+([form/channels/mod.rs](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/form/channels/mod.rs)) turns it into a RunPlan
+that decides how each secret reaches the child, and
+[the runner](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/runner.rs) invokes subprocesses.
 It also links the toolkit library for selected utilities such as secret taxonomy.
 Toolkit's [lib.rs](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/lib.rs) does not export
 the complete CLI implementation; many workflow modules remain binary-private.

@@ -2,6 +2,8 @@
 
 This file is auto-loaded by Claude Code when starting a session in this repository.
 
+@AGENTS.md
+
 ## What this is
 
 `mnemonic-toolkit` is the top-level integration crate of the **m-format constellation**:
