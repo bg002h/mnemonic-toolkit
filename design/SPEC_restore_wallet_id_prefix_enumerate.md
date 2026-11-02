@@ -254,7 +254,7 @@ signal for the other modes it needs its own field name and its own justification
 
 | line | text mode | `--json` |
 | --- | --- | --- |
-| candidate rows | **stdout** (they are the payload) | in `candidates[]` |
+| candidate rows | **stdout** (they are the payload), or `--output <FILE>` when given | in `candidates[]`, routed the same way |
 | the sortedmulti annotation | stderr | `order_independent: true` |
 | the §3.3 summary line | stderr | mirrored by the fields below |
 | the §3.8 warning | stderr | `warning` |
@@ -263,7 +263,7 @@ signal for the other modes it needs its own field name and its own justification
 Rationale: stdout carries what a script consumes and stderr carries what a human
 reads, which is the convention the rest of the command already follows. An empty
 stdout with exit 0 — the alternative reading — would be indistinguishable from
-success-with-no-output.
+success-with-no-output. `--output <FILE>` moves the payload (the text rows or the `--json` object) to FILE, as it does for a reconstructed wallet; stderr is unchanged (FIX_bughunt_tk_g1 #10).
 
 **(c) `candidates[]` shape, and the sub-fork that matters (L8).**
 

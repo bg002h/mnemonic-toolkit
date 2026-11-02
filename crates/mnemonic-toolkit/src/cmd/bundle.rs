@@ -969,7 +969,12 @@ fn emit_unified<W: Write, E: Write>(
                 template: template.unwrap_or("descriptor"),
                 threshold,
                 cosigner_count: n,
-                path_family: args.multisig_path_family.unwrap_or_default().human_name(),
+                // FIX #54: SPEC v0.3 §5.3 — descriptor mode reports "descriptor".
+                path_family: if template.is_none() {
+                    "descriptor"
+                } else {
+                    args.multisig_path_family.unwrap_or_default().human_name()
+                },
                 cosigners: cosigners.clone(),
             };
             let paths: Vec<String> = cosigners.iter().map(|c| c.origin_path.clone()).collect();
@@ -1612,10 +1617,15 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let xpub = BipXpub::from_str(&xpub_str)
                 .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             // Explicit `--slot @N.fingerprint=` (if supplied).
-            let slot_fp = slot_inputs
+            let slot_fp: Option<Fingerprint> = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
-                .and_then(|s| Fingerprint::from_str(&s.value).ok());
+                .map(|s| {
+                    Fingerprint::from_str(&s.value).map_err(|e| {
+                        ToolkitError::BadInput(format!("--slot @{idx}.fingerprint parse: {e}"))
+                    })
+                })
+                .transpose()?;
             // H7 (cycle-2): if BOTH a descriptor `@N` fingerprint annotation
             // (prefix `[fp/path]@N` or suffix `@N[fp/path]`) AND an explicit
             // `--slot @N.fingerprint=` are present, they MUST AGREE. The
@@ -1666,6 +1676,14 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
             let master = BipXpriv::new_master(args.network.network_kind(), &seed[..])
                 .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
             let master_fp = master.fingerprint(&secp);
+            // Scratch fix (report #6): same cross-check as the Phrase arm.
+            if let Some(anno) = anno_fp {
+                if anno != master_fp {
+                    return Err(ToolkitError::DescriptorParse(format!(
+                        "--slot @{idx}.entropy derives master fingerprint {master_fp} but descriptor @{idx} annotation specifies {anno}"
+                    )));
+                }
+            }
             // SAFETY: third-party-blocked — `bitcoin::bip32::Xpriv` is Copy
             // + no Drop; FOLLOWUP `rust-bitcoin-xpriv-zeroize-upstream`.
             let acct_xpriv = master
@@ -1702,6 +1720,14 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 &anno_path,
             )?;
             let (_acc_entropy, master_fp, xpub, _path) = acc.into_parts();
+            // Scratch fix (report #6): same cross-check as the Phrase arm.
+            if let Some(anno) = anno_fp {
+                if anno != master_fp {
+                    return Err(ToolkitError::DescriptorParse(format!(
+                        "--slot @{idx}.ms1 derives master fingerprint {master_fp} but descriptor @{idx} annotation specifies {anno}"
+                    )));
+                }
+            }
             (
                 xpub,
                 master_fp,
@@ -2010,6 +2036,27 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     // mainnet on the bundle subcommand; we use envelope.network as the
     // source-of-truth for the consumer path).
     let envelope_network = cli_network_from_str(&envelope.bundle.network)?;
+    // FIX #45: the required --network must agree with the envelope.
+    if args.network != envelope_network {
+        let flag = args.network.human_name();
+        let env = envelope_network.human_name();
+        // An envelope imported without `--network` records every coin-type-1
+        // wallet as testnet, so signet/regtest against it gets the longer text.
+        let same_class = matches!(envelope_network, CliNetwork::Testnet)
+            && matches!(args.network, CliNetwork::Signet | CliNetwork::Regtest);
+        return Err(ToolkitError::BadInput(if same_class {
+            format!(
+                "--network {flag} disagrees with the --import-json envelope's bundle.network \
+                 ({env}); if the wallet is on {flag}, re-create the envelope with import-wallet \
+                 --network {flag} from the same blob, otherwise re-run with --network {env}"
+            )
+        } else {
+            format!(
+                "--network {flag} disagrees with the --import-json envelope's bundle.network \
+                 ({env}); re-run with --network {env}"
+            )
+        }));
+    }
     let secp = Secp256k1::new();
 
     // §3.6 — decode envelope's ms1[i] != "" entries first (envelope-
@@ -2061,6 +2108,32 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         };
         resolved_slots[i].entropy = Some(entropy_bytes);
         resolved_slots[i].language = Some(slot_lang);
+    }
+
+    // FIX #46: refuse every overlay this path does not apply.
+    if let Some(s) = args
+        .slot
+        .iter()
+        .find(|s| s.subkey != crate::slot_input::SlotSubkey::Phrase)
+    {
+        use crate::slot_input::SlotSubkey as K;
+        let sub = s.subkey.as_str();
+        return Err(ToolkitError::BadInput(match s.subkey {
+            K::Entropy | K::Ms1 | K::Seedqr => format!(
+                "--slot @{n}.{sub}=: not supported with --import-json; only --slot @N.phrase= can \
+                 add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert \
+                 --from {sub}=- --to phrase (it reads the value from stdin and prints \"phrase: <words>\"), \
+                 then give the words alone, without the \"phrase: \" label, on stdin to \
+                 --slot @{n}.phrase=-",
+                n = s.index
+            ),
+            _ => format!(
+                "--slot @{}.{sub}=: not supported with --import-json; the envelope already \
+                 supplies every cosigner's key, fingerprint and path (only --slot @N.phrase= is \
+                 accepted)",
+                s.index
+            ),
+        }));
     }
 
     // §3.6 + Q5 — apply user seed overlay (--slot @N.phrase=) on

@@ -68,6 +68,7 @@ pub struct EncodeOpts {
     pub integrity_bits: u8,
     /// The number of reserved ledger slots `U` (default 3 = creation + 2
     /// upgrades; use 1 for tiny / never-upgrade cards). Each slot is `2` words.
+    /// Must be 1..=7: the GEOM header stores U in 3 bits.
     pub u_slots: u8,
 }
 
@@ -144,7 +145,7 @@ pub enum WcError {
     /// step 5). The funds-safety net: refuse, NEVER return wrong payload.
     IntegrityMismatch,
     /// An encode/decode parameter was out of range (e.g. `integrity_bits` below
-    /// the 33-bit floor, `u_slots == 0`, `payload_bits` exceeding the payload or
+    /// the 33-bit floor, `u_slots` outside 1..=7, `payload_bits` exceeding the payload or
     /// the 16-bit GEOM capacity).
     InvalidParams,
     /// During RAID reconstruct the supplied plates did not form a single coherent

@@ -215,6 +215,16 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                 )));
             }
         }
+        // Scratch fix (report #3, minimal form), placed AFTER the residue check
+        // so `@0/<0;1>/0/*` keeps its residue message: an explicit `/<a;b>`
+        // multipath with no trailing `/*` is not representable in md1.
+        if caps.name("mpath").is_some() && caps.name("wild").is_none() {
+            return Err(ToolkitError::DescriptorParse(format!(
+                "@{i}: a multipath use-site `/<a;b>` with no trailing `/*` (a non-ranged \
+                 multipath) is not representable in md1, which encodes only a ranged \
+                 `/<a;b>/*` or bare `/*` use-site"
+            )));
+        }
         out.push(PlaceholderOccurrence {
             i,
             fingerprint_anno,
@@ -1920,13 +1930,16 @@ mod tests {
     }
 
     #[test]
-    fn lex_residue_floor_accepts_multipath_sans_wildcard() {
-        // `@0/<0;1>` with no trailing `/*` — the terminator immediately
-        // follows the multipath body; still lex-passes (D1-adjacent, but
-        // orthogonal: the residue floor does not itself mandate a wildcard).
-        let occs = lex_placeholders("wpkh(@0/<0;1>)").unwrap();
-        assert_eq!(occs.len(), 1);
-        assert_eq!(occs[0].multipath_alts, vec![0, 1]);
+    fn lex_rejects_multipath_sans_wildcard() {
+        // a multipath with no trailing wildcard is refused (FIX_bughunt_tk_g1 #3);
+        // bare `@N` is the D1-deferred idiom and still lexes.
+        match lex_placeholders("wpkh(@0/<0;1>)") {
+            Err(ToolkitError::DescriptorParse(m)) => assert_eq!(
+                m,
+                "@0: a multipath use-site `/<a;b>` with no trailing `/*` (a non-ranged multipath) is not representable in md1, which encodes only a ranged `/<a;b>/*` or bare `/*` use-site"
+            ),
+            other => panic!("expected DescriptorParse, got {other:?}"),
+        }
     }
 
     #[test]

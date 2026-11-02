@@ -673,7 +673,8 @@ pub(crate) fn encode_inner(
     if !(MIN_INTEGRITY_BITS..=MAX_INTEGRITY_BITS).contains(&t) {
         return Err(WcError::InvalidParams);
     }
-    if opts.u_slots == 0 {
+    // The GEOM header stores U in 3 bits: U must be 1..=7.
+    if opts.u_slots == 0 || opts.u_slots > 7 {
         return Err(WcError::InvalidParams);
     }
     if payload_bits > payload.len() * 8 {

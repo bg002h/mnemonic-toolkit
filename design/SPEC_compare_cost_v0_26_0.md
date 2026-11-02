@@ -156,7 +156,7 @@ let mut rows = Vec::new();
 
 Walk the `Miniscript` AST collecting:
 - `signers`: every `pk(K)`, `pk_k(K)`, `pk_h(K)` — these are signers that may be required.
-- `preimages`: every `sha256(H)`, `hash256(H)`, `ripemd160(H)`, `hash160(H)` — these are preimage requirements.
+- `preimages`: every distinct `sha256(H)`, `hash256(H)`, `ripemd160(H)`, `hash160(H)` — these are preimage requirements; a digest repeated in several leaves is one preimage (FIX_bughunt_tk_g2 #28).
 - `absolute_timelocks`: every `after(N)` — block-height or median-time-past lock targets.
 - `relative_timelocks`: every `older(N)` — relative-time lock targets.
 

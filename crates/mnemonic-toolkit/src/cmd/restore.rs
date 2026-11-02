@@ -606,25 +606,22 @@ pub fn run<R: Read, W: Write, E: Write>(
     // ---- Verification gate (§3.4) -------------------------------------------
     // Compute the reference comparison (if any). `--expect-xpub` is gated to a
     // single `--template` above, so `rows[0]` is the only row when it is set.
-    let mismatch: Option<(&'static str, String, String)> =
-        if let Some(expected) = args.expect_fingerprint.as_deref() {
-            let expected_norm = expected.trim().to_lowercase();
-            if expected_norm != fp_str {
-                Some(("fingerprint", fp_str.clone(), expected_norm))
-            } else {
-                None
-            }
-        } else if let Some(expected) = args.expect_xpub.as_deref() {
+    let mut mismatch: Option<(&'static str, String, String)> = None;
+    if let Some(expected) = args.expect_fingerprint.as_deref() {
+        let expected_norm = expected.trim().to_lowercase();
+        if expected_norm != fp_str {
+            mismatch = Some(("fingerprint", fp_str.clone(), expected_norm));
+        }
+    }
+    if mismatch.is_none() {
+        if let Some(expected) = args.expect_xpub.as_deref() {
             let derived = rows[0].account_xpub.to_string();
             let expected = expected.trim().to_string();
             if expected != derived {
-                Some(("xpub", derived, expected))
-            } else {
-                None
+                mismatch = Some(("xpub", derived, expected));
             }
-        } else {
-            None
-        };
+        }
+    }
 
     let has_reference = args.expect_fingerprint.is_some() || args.expect_xpub.is_some();
 
@@ -838,6 +835,25 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     let template = crate::synthesize::cli_template_from_tree(&d.tree)
         .ok_or_else(|| bad("template md1 tree is not a canonical single-sig shape"))?;
 
+    // FIX 11b: single-sig template completion rebuilds only `/<0;1>/*`.
+    if d.use_site_path != md_codec::use_site_path::UseSitePath::standard_multipath()
+        || d.tlv.use_site_path_overrides.is_some()
+    {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "this keyless single-sig template md1 has a use-site path other than /<0;1>/*, which single-sig template completion cannot rebuild (it would print a different wallet); use the wallet's full descriptor or a --md1-form=policy card instead",
+        });
+    }
+    // FIX #2: --format is refused in template completion.
+    if args.format.is_some() {
+        return Err(ToolkitError::ModeViolation {
+            mode: "restore",
+            flag: "--format",
+            message: "--format is not supported when completing a keyless single-sig template md1; run without --format to print the completed descriptor, or (canonical origin only) restore with --template <bip44|bip84|bip86> --account <N> --format <FORMAT> and no --md1",
+        });
+    }
+
     // --- (b) `--from` REQUIRED (the C2 funds-safety hole) -------------------
     let from_raw = args.from.as_deref().ok_or(ToolkitError::ModeViolation {
         mode: "restore",
@@ -1016,6 +1032,45 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         None,
     )?;
 
+    // FIX #2: honour --expect-fingerprint / --expect-xpub / --allow-mismatch.
+    let mut ref_mismatch: Option<(&'static str, String, String)> = None;
+    if let Some(expected) = args.expect_fingerprint.as_deref() {
+        let expected_norm = expected.trim().to_lowercase();
+        if expected_norm != fp_str {
+            ref_mismatch = Some(("fingerprint", fp_str.clone(), expected_norm));
+        }
+    }
+    if ref_mismatch.is_none() {
+        if let Some(expected) = args.expect_xpub.as_deref() {
+            let derived = acct.account_xpub.to_string();
+            let expected = expected.trim().to_string();
+            if expected != derived {
+                ref_mismatch = Some(("xpub", derived, expected));
+            }
+        }
+    }
+    if let Some((reference, derived, expected)) = &ref_mismatch {
+        if !args.allow_mismatch {
+            writeln!(stderr, "✗ MISMATCH").map_err(ToolkitError::Io)?;
+            writeln!(
+                stderr,
+                "master fingerprint: {fp_str}  (passphrase: {})",
+                if passphrase_applied {
+                    "applied"
+                } else {
+                    "none"
+                }
+            )
+            .map_err(ToolkitError::Io)?;
+            return Err(ToolkitError::RestoreMismatch {
+                reference,
+                derived: derived.clone(),
+                expected: expected.clone(),
+                slot: None,
+            });
+        }
+    }
+
     // --- --expect-wallet-id (D7 recompute-and-match) ------------------------
     // Only checked for the canonical (no --origin) path: D7 was computed by the
     // bundle from the canonical `m/<purpose>'/<coin>'/account'` origin, so an
@@ -1113,7 +1168,17 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
             .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
     }
 
-    if args.expect_wallet_id.is_none() {
+    if ref_mismatch.is_some() {
+        writeln!(
+            stderr,
+            "✗ MISMATCH (overridden): derived material does NOT match the supplied reference; \
+             descriptors above were produced by the passphrase you provided, NOT the expected wallet"
+        )
+        .map_err(ToolkitError::Io)?;
+    } else if args.expect_wallet_id.is_none()
+        && args.expect_fingerprint.is_none()
+        && args.expect_xpub.is_none()
+    {
         writeln!(
             stderr,
             "UNVERIFIED: no --expect-wallet-id supplied; verify the master fingerprint above \
@@ -1593,36 +1658,40 @@ fn emit_candidate_list<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
+    let mut body = String::new();
     if args.json {
         let envelope = candidate_list_envelope(list, network);
-        writeln!(
-            stdout,
-            "{}",
-            serde_json::to_string(&envelope)
-                .map_err(|e| bad(format!("json serialization: {e}")))?
-        )
-        .map_err(ToolkitError::Io)?;
+        body.push_str(
+            &serde_json::to_string(&envelope)
+                .map_err(|e| bad(format!("json serialization: {e}")))?,
+        );
+        body.push('\n');
     } else {
         for (i, r) in list.rows.iter().enumerate() {
-            writeln!(stdout, "  [{}] wallet-id {}", i + 1, r.wallet_policy_id)
-                .map_err(ToolkitError::Io)?;
+            body.push_str(&format!("  [{}] wallet-id {}\n", i + 1, r.wallet_policy_id));
             let asg = r
                 .assignment
                 .iter()
                 .map(|(slot, fp)| format!("@{slot}={fp}"))
                 .collect::<Vec<_>>()
                 .join(" ");
-            writeln!(stdout, "      {asg}").map_err(ToolkitError::Io)?;
-            writeln!(stdout, "      first recv {}", r.first_address).map_err(ToolkitError::Io)?;
+            body.push_str(&format!("      {asg}\n"));
+            body.push_str(&format!("      first recv {}\n", r.first_address));
         }
         if list.truncated {
-            writeln!(
-                stdout,
-                "  … and {} more; supply more id",
+            body.push_str(&format!(
+                "  … and {} more; supply more id\n",
                 list.match_count - list.rows.len()
-            )
-            .map_err(ToolkitError::Io)?;
+            ));
         }
+    }
+    if args.output == "-" {
+        stdout
+            .write_all(body.as_bytes())
+            .map_err(ToolkitError::Io)?;
+    } else {
+        std::fs::write(&args.output, &body)
+            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
     }
 
     // The annotation and the summary go to stderr: stdout carries what a script
@@ -1825,6 +1894,15 @@ pub(crate) fn complete_multisig_template<E: Write>(
     // (`--own-account-max`) OR the opt-in cosigner-subset (`--search-cosigner-
     // subset`): the search PLACES keys, but @N= ASSERTS placements — combining
     // them is a contradiction. Refuse up front (BadInput).
+    // scratch fix #41: refuse the combination (the address would be ignored).
+    if any_assigned && ctx.search_address.is_some() {
+        return Err(bad(
+            "explicit @N= assignment cannot combine with --search-address: @N= asserts the \
+             key→slot placement, so the address would not be checked. Drop the @N= prefixes \
+             to let --search-address place the cosigners, or keep them and check the \
+             placement with --expect-wallet-id instead of --search-address.",
+        ));
+    }
     if any_assigned && (own_account_max.is_some() || ctx.search_cosigner_subset) {
         return Err(bad(
             "explicit @N= assignment cannot combine with subset-search \
@@ -1933,7 +2011,12 @@ pub(crate) fn complete_multisig_template<E: Write>(
         } else if let Some(fam) = &cosigner_family {
             match own_origin_from_family(fam, acct) {
                 Some(o) => Ok(o),
-                None => canonical_fallback(),
+                // scratch fix #40: substitute the account into the fallback too
+                // (a bare-xpub cosigner has an empty origin => no family).
+                None => {
+                    let fb = canonical_fallback()?;
+                    Ok(own_origin_from_family(&fb, acct).unwrap_or(fb))
+                }
             }
         } else {
             // All-own multi-account, no --origin: substitute the account into
@@ -3067,9 +3150,14 @@ fn emit_completed_multisig<W: Write, E: Write>(
         }
         s
     };
-    stdout
-        .write_all(stdout_content.as_bytes())
-        .map_err(ToolkitError::Io)?;
+    if args.output == "-" {
+        stdout
+            .write_all(stdout_content.as_bytes())
+            .map_err(ToolkitError::Io)?;
+    } else {
+        std::fs::write(&args.output, &stdout_content)
+            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+    }
 
     let _ = writeln!(stderr, "✓ wallet-id (completed): {id_hex}");
     if let Some(p) = own_pos {
@@ -3091,7 +3179,7 @@ fn address_to_script_pubkey(addr: &str, network: CliNetwork) -> Result<Vec<u8>, 
 /// #28 — decode an `--expect-wallet-id` hex prefix into bytes. Accepts an
 /// even-length lowercase/uppercase hex string (any length ≥1 byte). Odd-length
 /// or non-hex → BadInput (exit 1).
-fn decode_wallet_id_prefix(s: &str) -> Result<Vec<u8>, ToolkitError> {
+pub(crate) fn decode_wallet_id_prefix(s: &str) -> Result<Vec<u8>, ToolkitError> {
     let t = s.trim();
     if t.is_empty() {
         return Err(bad("--expect-wallet-id must not be empty"));
@@ -3243,6 +3331,18 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
             ))
         }
     };
+    // scratch fix #53: a repeated leaf key index cannot be rebuilt by the
+    // Template arm (it emits each cosigner once) -- refuse.
+    if let md_codec::tree::Body::MultiKeys { indices, .. } = &inner.body {
+        let mut seen = std::collections::BTreeSet::new();
+        if !indices.iter().all(|i| seen.insert(*i)) {
+            return Err(ToolkitError::ModeViolation {
+                mode: "restore",
+                flag: "--md1",
+                message: "taproot md1 repeats a key index inside its multi_a/sortedmulti_a leaf; the toolkit cannot reconstruct it faithfully",
+            });
+        }
+    }
     match inner.tag {
         md_codec::Tag::MultiA => {
             refuse_at_in_both(&internal_key, inner)?;
@@ -3892,6 +3992,14 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             (None, Some(TaprootInternalKey::Nums))
         } else if is_taproot {
             match classify_taproot_restore(&d.tree)? {
+                // scratch fix #38: the Template arm hard-codes `/<0;1>/*`; a card
+                // with any other baseline use-site must go the faithful arm.
+                TaprootRestore::Template(_, ik)
+                    if d.use_site_path
+                        != md_codec::use_site_path::UseSitePath::standard_multipath() =>
+                {
+                    (None, Some(ik))
+                }
                 TaprootRestore::Template(t, ik) => (Some(t), Some(ik)),
                 TaprootRestore::GeneralFaithful(ik) => (None, Some(ik)),
             }
@@ -4080,12 +4188,29 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 &c.origin,
             )?;
             if crate::synthesize::xpub_to_65(&acct.account_xpub) == c.key65 {
+                // scratch fix #42: the engraved fingerprint must match too.
+                if acct.master_fingerprint != c.fingerprint {
+                    mismatch = Some((
+                        "cosigner-fingerprint",
+                        format!(
+                            "seed master fp {}",
+                            acct.master_fingerprint.to_string().to_lowercase()
+                        ),
+                        format!(
+                            "md1 cosigner @{} engraved fingerprint {}",
+                            c.idx,
+                            c.fingerprint.to_string().to_lowercase()
+                        ),
+                        Some(c.idx),
+                    ));
+                    break;
+                }
                 own_pos = Some(c.idx);
                 verified_positions.insert(c.idx);
                 break;
             }
         }
-        if own_pos.is_none() {
+        if own_pos.is_none() && mismatch.is_none() {
             // The supplied seed is not a cosigner of this wallet.
             let derived_fp = {
                 // Recompute master fp once for the message (path-independent).

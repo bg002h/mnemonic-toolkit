@@ -42,6 +42,8 @@ pub(crate) struct BsmsRound1Record {
     /// Line 3 — parsed `[fingerprint/path]KEY`. KEY is either a raw 33-byte
     /// compressed pubkey or a BIP-32 xpub.
     pub(crate) key_field: KeyField,
+    /// Line 3 exactly as written (the bytes the signer signed).
+    pub(crate) key_line: String,
     /// Line 4 — text description, <= 80 chars, no `\n` / `\r`.
     pub(crate) description: String,
     /// Line 5 — base64-encoded 65-byte BIP-322 legacy-format recoverable
@@ -150,6 +152,7 @@ pub(crate) fn parse_round1(text: &str) -> Result<BsmsRound1Record, ToolkitError>
         version: lines[0].to_string(),
         token_hex,
         key_field,
+        key_line: lines[2].to_string(),
         description,
         signature_b64,
     })
@@ -172,45 +175,11 @@ pub(crate) fn signer_pubkey(record: &BsmsRound1Record) -> PublicKey {
 /// joined by `\n` with NO trailing newline, per BIP-129 line 81 *"sign the
 /// first four lines"* + Coinkite ref impl's `"\n".join(...)` convention.
 pub(crate) fn signed_body(record: &BsmsRound1Record) -> String {
-    let key_line = key_field_to_line(&record.key_field);
+    let key_line = record.key_line.clone();
     format!(
         "{}\n{}\n{}\n{}",
         record.version, record.token_hex, key_line, record.description
     )
-}
-
-/// Re-serialize a `KeyField` back to its `[fp/path]KEY` line-3 wire shape.
-/// Used to construct the BIP-322 signed body verbatim.
-fn key_field_to_line(field: &KeyField) -> String {
-    match field {
-        KeyField::RawPubkey {
-            fingerprint,
-            path,
-            pubkey,
-        } => format!(
-            "[{}/{}]{}",
-            fingerprint,
-            format_path_no_m_prefix(path),
-            hex::encode(pubkey.serialize())
-        ),
-        KeyField::Xpub {
-            fingerprint,
-            path,
-            xpub,
-        } => format!(
-            "[{}/{}]{}",
-            fingerprint,
-            format_path_no_m_prefix(path),
-            xpub
-        ),
-    }
-}
-
-fn format_path_no_m_prefix(path: &DerivationPath) -> String {
-    // bitcoin::bip32::DerivationPath::Display emits "m/84'/0'/0'"; BIP-129
-    // line-3 KEY uses "[fp/84'/0'/0']xpub..." (no leading "m/"). Strip it.
-    let full = path.to_string();
-    full.strip_prefix("m/").unwrap_or(&full).to_string()
 }
 
 fn is_valid_token_hex(s: &str) -> bool {

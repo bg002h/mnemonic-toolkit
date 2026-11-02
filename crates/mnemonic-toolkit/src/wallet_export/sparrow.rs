@@ -66,7 +66,7 @@ struct SparrowWallet<'a> {
     script_type: &'static str,
     #[serde(rename = "defaultPolicy")]
     default_policy: SparrowPolicy,
-    keystores: Vec<SparrowKeystore<'a>>,
+    keystores: Vec<SparrowKeystore>,
 }
 
 #[derive(Serialize)]
@@ -81,8 +81,8 @@ struct SparrowMiniscript {
 }
 
 #[derive(Serialize)]
-struct SparrowKeystore<'a> {
-    label: &'a str,
+struct SparrowKeystore {
+    label: String,
     source: &'static str,
     #[serde(rename = "walletModel")]
     wallet_model: &'static str,
@@ -122,11 +122,15 @@ pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, To
     let network = sparrow_network(inputs.network);
     let script = build_miniscript_script(inputs, template)?;
 
+    // Keystore labels: Sparrow's own default `Keystore <n>` (1-based slot
+    // order). Always unique and within drongo's 16-non-space-char cap
+    // (`Keystore.MAX_LABEL_LENGTH`); a wallet name can be longer than that.
     let keystores: Vec<SparrowKeystore> = inputs
         .resolved_slots
         .iter()
-        .map(|s| SparrowKeystore {
-            label: inputs.wallet_name,
+        .enumerate()
+        .map(|(i, s)| SparrowKeystore {
+            label: format!("Keystore {}", i + 1),
             source: "SW_WATCH",
             wallet_model: "SPARROW",
             key_derivation: SparrowKeyDerivation {

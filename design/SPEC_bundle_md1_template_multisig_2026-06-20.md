@@ -31,7 +31,7 @@ Extend `bundle --md1-form=template` from single-sig to **multisig and general po
 - `--search-chain <receive|change|both>` (new, default `receive`).
 - `--accept-search-time <duration>` (new) — cap override; must be ≥ the estimated exhaustive time (§6.4), which the tool prints and the operator must restate (forced acknowledgment).
 
-**Mode/trigger precedence at completion:** (a) `--expect-wallet-id` → id-search; (b) else `--search-address` → address-search; (c) else all keys given as `--cosigner @N=` → explicit (Mode B) + warning; (d) else REFUSE (`bad`): "supply a recorded `--expect-wallet-id`, a `--search-address`, or explicit `--cosigner @N=` assignments." Sorted shapes (§6.1) skip the search.
+**Mode/trigger precedence at completion:** any `--cosigner @N=` selects explicit mode (Mode B) + warning; it checks a supplied `--expect-wallet-id` against the built wallet (a mismatch refuses, exit 4) and REFUSES `--search-address` (`bad`, exit 1: the address would not be checked; FIX_bughunt_tk_g1 #41). Without `@N=`: (a) `--expect-wallet-id` → id-search; (b) else `--search-address` → address-search; (c) else REFUSE (`bad`): "supply a recorded `--expect-wallet-id`, a `--search-address`, or explicit `--cosigner @N=` assignments." Sorted shapes (§6.1) skip the search.
 
 **Locksteps:** the new completion flags on BOTH `restore` and `verify-bundle` are clap-surface changes → **GUI `schema_mirror` (`mnemonic-gui/src/schema/mnemonic.rs`) + manual mirror (`docs/manual/src/40-cli-reference/41-mnemonic.md`) updated in the same PR** (§8).
 

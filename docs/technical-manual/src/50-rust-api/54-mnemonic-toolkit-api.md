@@ -342,7 +342,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
 | `template` | `&'static str` | template name (multisig only) |
 | `threshold` | `u8` | `K` in `K-of-N` |
 | `cosigner_count` | `usize` | `N` |
-| `path_family` | `&'static str` | `"bip48"` or `"bip87"` |
+| `path_family` | `&'static str` | `"bip48"` or `"bip87"` (`--template` mode); `"descriptor"` in descriptor mode (`--descriptor`, `--descriptor-file`, `--import-json`), per SPEC v0.3 §5.3 |
 | `cosigners` | `Vec<CosignerEntry>` | per-cosigner descriptor |
 
 (Source: `format.rs::MultisigInfo`.)
@@ -562,7 +562,7 @@ The emitted text is byte-identical to the Coldcard `--format coldcard` multisig 
 | Accepted shapes | every template (bip44 / bip49 / bip84 / bip86 / wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti / tr-multi-a / tr-sortedmulti-a) |
 | Refused shapes | descriptor passthrough without `--template` → `BadInput` (`wallet_export/sparrow.rs::emit_sparrow_wallet_json`); multisig templates without `--threshold` → `ExportWalletMissingFields { format: "sparrow", missing: [Threshold] }` (`wallet_export/sparrow.rs::SparrowEmitter::collect_missing`) |
 | `collect_missing` | returns `[Threshold]` when `template.is_multisig() && !inputs.threshold_user_supplied` (`wallet_export/sparrow.rs::SparrowEmitter::collect_missing`) |
-| Vendor-specific flags | `--wallet-name <STRING>` (label); `--threshold <K>` (required for multisig — Sparrow publishes `K` in `defaultPolicy.miniscript.script`'s `multi(K,...)` / `sortedmulti(K,...)` argument, so silent K=N defaulting would emit a wallet that bypasses the K-of-N rule) |
+| Vendor-specific flags | `--wallet-name <STRING>` (wallet `name`; every keystore `label` is `Keystore <n>`, 1-based slot order); `--threshold <K>` (required for multisig — Sparrow publishes `K` in `defaultPolicy.miniscript.script`'s `multi(K,...)` / `sortedmulti(K,...)` argument, so silent K=N defaulting would emit a wallet that bypasses the K-of-N rule) |
 
 Representative singlesig output (`emit_sparrow_wallet_json` at `wallet_export/sparrow.rs::emit_sparrow_wallet_json`):
 
@@ -578,7 +578,7 @@ Representative singlesig output (`emit_sparrow_wallet_json` at `wallet_export/sp
   },
   "keystores": [
     {
-      "label": "bip84-0",
+      "label": "Keystore 1",
       "source": "SW_WATCH",
       "walletModel": "SPARROW",
       "keyDerivation": {

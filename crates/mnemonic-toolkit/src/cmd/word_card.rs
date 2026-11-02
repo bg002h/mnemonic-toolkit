@@ -179,14 +179,42 @@ fn run_encode<R: Read, W: Write, E: Write>(
     }
 }
 
+/// When some `--from` value is not a whole card on its own,
+/// join the single-chunk values that share an HRP into one chunk list, so
+/// `--from c0 --from c1` equals `--from "c0 c1"` (the help says "chunks are
+/// auto-grouped by HRP"). Values that already hold whitespace-joined chunks are
+/// kept as they are.
+fn group_chunks_by_hrp(sources: &[String]) -> Vec<String> {
+    if sources.iter().all(|s| string_to_canonical(s).is_ok()) {
+        return sources.to_vec();
+    }
+    let mut groups: Vec<(String, String)> = Vec::new();
+    for s in sources {
+        if s.contains(char::is_whitespace) {
+            groups.push((String::new(), s.clone()));
+            continue;
+        }
+        let hrp = s.get(..3).unwrap_or("").to_lowercase();
+        match groups.iter_mut().find(|g| g.0 == hrp) {
+            Some(g) => {
+                g.1.push(' ');
+                g.1.push_str(s);
+            }
+            None => groups.push((hrp, s.clone())),
+        }
+    }
+    groups.into_iter().map(|g| g.1).collect()
+}
+
 /// Encode each `--from` card as an independent solo Word Card.
 fn run_encode_solo<W: Write>(
     args: &WordCardArgs,
     sources: &[String],
     stdout: &mut W,
 ) -> Result<u8, ToolkitError> {
-    let mut cards: Vec<EncodedCardJson> = Vec::with_capacity(sources.len());
-    for s in sources {
+    let grouped = group_chunks_by_hrp(sources);
+    let mut cards: Vec<EncodedCardJson> = Vec::with_capacity(grouped.len());
+    for s in &grouped {
         let cp = string_to_canonical(s)?;
         let k = data_symbol_count(cp.payload_bits, args.integrity_bits);
         let opts = EncodeOpts {

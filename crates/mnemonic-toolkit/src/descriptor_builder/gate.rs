@@ -559,10 +559,12 @@ fn localize(
 /// still trips `ConditionsTooMany` in the Phase-3 preview, or vice versa). To be
 /// drift-proof, on the same parsed AST we: classify timelocks via the same
 /// `is_block_height`/`is_height_locked` methods; dedup keys via the same
-/// `BTreeSet<DescriptorPublicKey>` over `for_each_key` (M1); and count hash
-/// LEAVES (not distinct digests) to match enumerate's non-deduping hash walk
-/// (Phase-2 review I1). Boundary agreement tests pin both the no-hash and the
-/// repeated-digest cases against `run_compare_cost`.
+/// `BTreeSet<DescriptorPublicKey>` over `for_each_key` (M1); and count
+/// DISTINCT (hash kind, digest) pairs, matching enumerate's deduping hash walk
+/// (digests are deduped on both sides; FIX_bughunt_tk_g2 #28: one digest is
+/// one preimage). Boundary agreement
+/// tests pin both the no-hash and the repeated-digest cases against
+/// `run_compare_cost`.
 fn check_cap(
     doc: &SpecDoc,
     descriptor: &MsDescriptor<DescriptorPublicKey>,
@@ -605,28 +607,34 @@ fn distinct_keys(descriptor: &MsDescriptor<DescriptorPublicKey>) -> usize {
     set.len()
 }
 
-/// `(n_hash_leaves, n_tl_states)` from the parsed AST — matching
+/// `(n_distinct_hashes, n_tl_states)` from the parsed AST — matching
 /// `cost::enumerate`'s `collect_ast_assets` classification EXACTLY.
 ///
-/// **Hashes are counted as LEAVES, not distinct digests** — `enumerate`'s
-/// `walk_segv0_for_hash_leaves` (`enumerate.rs:422-444`) unconditionally pushes
-/// every hash leaf into a `Vec` (no dedup) and `n_hashes = hashes.len()`
-/// (`enumerate.rs:90`). The same digest in two leaves counts as 2 on both sides,
-/// so the gate cap and the Phase-3 preview agree (Phase-2 review I1). (Keys ARE
-/// deduped — `BTreeSet<DescriptorPublicKey>` — on both sides; see
-/// `distinct_keys`.) Timelock states: `n_abs × n_rel`, each `1..=3`, same
+/// **Hash digests are deduped on both sides** (FIX_bughunt_tk_g2 #28,
+/// superseding the Phase-2 review I1 leaf count): `enumerate`'s
+/// `walk_segv0_for_hash_leaves` keeps each (hash kind, digest) once, and this
+/// counts the same distinct pairs, so the gate cap and the Phase-3 preview
+/// agree. One digest in two leaves is one preimage. (Keys are deduped too —
+/// `BTreeSet<DescriptorPublicKey>` — on both sides; see `distinct_keys`.)
+/// Timelock states: `n_abs × n_rel`, each `1..=3`, same
 /// `is_block_height`/`is_height_locked` classification.
 fn hash_and_timelock_counts(ms: &Miniscript<DescriptorPublicKey, Segwitv0>) -> (usize, usize) {
-    let mut n_hash_leaves = 0usize;
+    let mut digests: Vec<(u8, String)> = Vec::new();
     let (mut abs_h, mut abs_t, mut rel_b, mut rel_t) = (false, false, false, false);
     for sub in ms.iter() {
-        match &sub.node {
-            Terminal::Sha256(_)
-            | Terminal::Hash256(_)
-            | Terminal::Ripemd160(_)
-            | Terminal::Hash160(_) => {
-                n_hash_leaves += 1;
+        let d: Option<(u8, String)> = match &sub.node {
+            Terminal::Sha256(h) => Some((0, h.to_string())),
+            Terminal::Hash256(h) => Some((1, h.to_string())),
+            Terminal::Ripemd160(h) => Some((2, h.to_string())),
+            Terminal::Hash160(h) => Some((3, h.to_string())),
+            _ => None,
+        };
+        if let Some(d) = d {
+            if !digests.contains(&d) {
+                digests.push(d);
             }
+        }
+        match &sub.node {
             Terminal::After(abs) => {
                 if abs.is_block_height() {
                     abs_h = true;
@@ -646,7 +654,7 @@ fn hash_and_timelock_counts(ms: &Miniscript<DescriptorPublicKey, Segwitv0>) -> (
     }
     let n_abs = 1 + abs_h as usize + abs_t as usize;
     let n_rel = 1 + rel_b as usize + rel_t as usize;
-    (n_hash_leaves, n_abs * n_rel)
+    (digests.len(), n_abs * n_rel)
 }
 
 // ======================================================================
@@ -1261,12 +1269,12 @@ mod tests {
         ));
     }
 
-    /// Phase-2 review I1 regression: hashes are counted as LEAVES, not distinct
-    /// digests (enumerate does not dedup). The SAME sha256 digest in two leaves
-    /// must count as 2 on both sides. Shape: `and_v(v:sha256(H),and_v(v:sha256(H),pk(A)))`
-    /// = 1 key, 2 hash leaves (same H), 0 timelocks → raw = 2^(1+2) × 1 = 8.
-    /// (The old `BTreeSet` dedup gave n_hashes=1 → raw=4, which would pass a
-    /// cap=4 the Phase-3 preview refuses.)
+    /// Gate and enumerate agree that a repeated digest is one preimage
+    /// (FIX_bughunt_tk_g2 #28, superseding the Phase-2 review I1 leaf count):
+    /// digests are deduped on both sides. The SAME sha256 digest in two leaves
+    /// counts once. Shape: `and_v(v:sha256(H),and_v(v:sha256(H),pk(A)))`
+    /// = 1 key, 1 distinct digest (2 leaves), 0 timelocks → raw = 2^(1+1) × 1 = 4.
+    /// So cap 4 passes and cap 3 is refused, on the gate and on enumerate alike.
     #[test]
     fn repeated_digest_cap_agrees_with_enumerate() {
         use crate::cost::{self, CompareCostArgs, InputForm};
@@ -1279,23 +1287,18 @@ mod tests {
         let d = doc(&json);
         let parsed = SpecDoc::parse(&d).unwrap();
 
-        // Gate side: raw == 8 (would be 4 under the buggy dedup).
+        // Gate side: raw == 4 (one distinct digest).
         assert!(
-            validate_with_cap(&parsed, 8).is_ok(),
-            "gate raw must be ≤ 8"
+            validate_with_cap(&parsed, 4).is_ok(),
+            "gate raw must be ≤ 4"
         );
-        let over = validate_with_cap(&parsed, 7)
+        let over = validate_with_cap(&parsed, 3)
             .err()
-            .expect("gate refuses at 7");
+            .expect("gate refuses at 3");
         assert_eq!(over[0].kind, DiagnosticKind::OverEnvelope);
-        // Crucially, the buggy dedup would have PASSED at cap 4:
-        let over4 = validate_with_cap(&parsed, 4)
-            .err()
-            .expect("gate must refuse at 4 (leaf count)");
-        assert_eq!(over4[0].kind, DiagnosticKind::OverEnvelope);
 
-        // Enumerate side: single-path projection, raw == 8.
-        let single = validate_with_cap(&parsed, 8)
+        // Enumerate side: single-path projection, raw == 4.
+        let single = validate_with_cap(&parsed, 4)
             .unwrap()
             .descriptor
             .into_single_descriptors()
@@ -1314,16 +1317,45 @@ mod tests {
                 &mut Vec::<u8>::new(),
             )
         };
-        assert!(run(8).is_ok(), "enumerate raw must be ≤ 8");
+        assert!(run(4).is_ok(), "enumerate raw must be ≤ 4");
         assert!(
             matches!(
-                run(7),
+                run(3),
                 Err(ToolkitError::CompareCost(
                     cost::CompareCostError::ConditionsTooMany { .. }
                 ))
             ),
-            "enumerate raw == 8 == gate raw (hash leaves counted, not deduped)"
+            "enumerate raw == 4 == gate raw (a repeated digest counted once)"
         );
+    }
+
+    /// I3 (s2 whole-diff): the gate counts a repeated digest once for EVERY
+    /// hash kind. Shape per kind: 1 key, 1 distinct digest, 0 timelocks ->
+    /// raw 2^(1+1) = 4, so cap 4 passes and cap 3 is refused.
+    #[test]
+    fn s2_red_gate_counts_every_hash_kind() {
+        let h32 = "926a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084dbc";
+        let h20 = "926a54995ca48600920a19bf7bc502ca5f2f7d07";
+        for (kind, h) in [
+            ("sha256", h32),
+            ("hash256", h32),
+            ("ripemd160", h20),
+            ("hash160", h20),
+        ] {
+            let json = format!(
+                r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"{kind}":"{h}"}}}}}},{{"pk":"{A}"}}]}}"#
+            );
+            let d = doc(&json);
+            let parsed = SpecDoc::parse(&d).unwrap();
+            assert!(
+                validate_with_cap(&parsed, 4).is_ok(),
+                "{kind}: cap 4 must pass"
+            );
+            let over = validate_with_cap(&parsed, 3)
+                .err()
+                .unwrap_or_else(|| panic!("{kind}: cap 3 must be refused"));
+            assert_eq!(over[0].kind, DiagnosticKind::OverEnvelope, "{kind}");
+        }
     }
 
     // ---- M1: the Malleable + ResourceLimit dispatch arms -----------------

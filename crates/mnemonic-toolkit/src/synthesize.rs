@@ -985,6 +985,13 @@ pub fn synthesize_unified(
 /// called on the post-mutation keyless template.
 fn template_admissible(descriptor: &Descriptor) -> bool {
     if descriptor.n == 1 {
+        // FIX #11 / 11b: a single-sig template completes only at `/<0;1>/*`
+        // (restore hard-codes it); any other use-site, `/*h` included, is refused.
+        if descriptor.use_site_path != md_codec::use_site_path::UseSitePath::standard_multipath()
+            || descriptor.tlv.use_site_path_overrides.is_some()
+        {
+            return false;
+        }
         // Phase-1 single-sig gate, verbatim: only the canonical-elidable types.
         return cli_template_from_tree(&descriptor.tree).is_some();
     }
@@ -1048,9 +1055,11 @@ fn synthesize_template_descriptor(
         return Err(ToolkitError::TemplateFormUnsupportedShape {
             message: "--md1-form=template cannot template this descriptor shape: it either \
                  does not render (e.g. tr(sortedmulti_a) — the rust-miniscript v13 \
-                 SortedMultiA gap — or sortedmulti inside a combinator) or it uses a \
+                 SortedMultiA gap — or sortedmulti inside a combinator), or it uses a \
                  hardened use-site path (/*h or a hardened multipath alt) which an xpub \
-                 cannot derive; use --md1-form=policy for a faithful keyed backup"
+                 cannot derive, or it is single-sig with a use-site other than /<0;1>/* (a \
+                 single-sig template completes only at /<0;1>/*); use --md1-form=policy for \
+                 a faithful keyed backup"
                 .into(),
         });
     }

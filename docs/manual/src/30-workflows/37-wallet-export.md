@@ -127,6 +127,11 @@ watch-only — public keys only, cannot spend` line to stderr as a
 reminder; that note is suppressed when the payload is written to a
 file as above.
 
+The wallet's name is `--wallet-name`; each keystore is labelled with
+Sparrow's own default, `Keystore 1` … `Keystore N` in slot order,
+because Sparrow refuses duplicate keystore labels and labels longer
+than 16 characters.
+
 Import into Sparrow via *File → Import Wallet → Sparrow → Import
 File* (or paste the JSON). `--format specter` likewise emits
 Specter's native single-object shape (`label`, `descriptor`,

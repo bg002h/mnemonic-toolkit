@@ -11,7 +11,7 @@
   },
   "keystores": [
     {
-      "label": "bip86-0",
+      "label": "Keystore 1",
       "source": "SW_WATCH",
       "walletModel": "SPARROW",
       "keyDerivation": {
