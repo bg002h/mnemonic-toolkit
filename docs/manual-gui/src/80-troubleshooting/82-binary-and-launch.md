@@ -65,7 +65,7 @@ derived wallet. First `ms`, three outputs:
   named (`error: invalid character 'b' (not in codex32 alphabet)`),
   where it used to be reported as a string-length error.
 
-Then `md`, six outputs:
+Then `md`, four outputs:
 
 - **`md encode`.** `--fingerprint` takes hex digits only: `@0=+f+f+f+f`
   is now refused (`md: --fingerprint @0: invalid hex byte: +f`) where
@@ -74,20 +74,22 @@ Then `md`, six outputs:
   the alternative as hardened), where the error was a `md: codec error:`
   saying the value 2147483648 exceeds the single-extension range.
   With `--policy-id-fingerprint`, the `policy-id-fingerprint: 0x…` line
-  now goes to stderr, so stdout carries only the md1 string.
+  now goes to stderr, so stdout carries only the md1 string(s).
 - **`md encode --json`.** `older(65536)` is now refused with `md: codec
   error: older(65536) is not what consensus enforces: …`, where it
   printed a card that locks for 0 blocks. A card that needs several
   chunks now prints `chunk_set_id` and `chunks`, where it failed with
-  `md: codec error: payload is 129 data symbols; the codex32 regular
+  `md: codec error: payload is N data symbols; the codex32 regular
   code caps single strings at 80 …`.
 - **`md inspect`.** A card that carries keys now ends with the stderr
   note `note: stdout is watch-only — public keys only, cannot spend`,
   where it read `note: stdout is a keyless descriptor template (no
   keys)`.
-- **`md decode`.** A single key at its canonical origin (for example
-  `wpkh` at `m/84'/0'/0'`) no longer prints the stderr note `key origins
-  carried by this card …` and its `--path` hint.
+- **`md decode`.** A single key at its canonical origin, on a card that
+  carries no fingerprint for it (for example `wpkh` at `m/84'/0'/0'`
+  minted without `--fingerprint`), no longer prints the stderr note
+  `key origins carried by this card …` and its `--path` hint. A card
+  that carries the fingerprint still prints both.
 
 ## When the GUI is older than the CLI
 

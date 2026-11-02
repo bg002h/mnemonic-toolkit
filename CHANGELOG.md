@@ -74,7 +74,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   path does, a bare multipath alternative of 2^31 or more is refused as hardened,
   `--policy-id-fingerprint` prints on stderr, `md inspect` calls a keyed card watch-only,
   `--fingerprint` takes hex digits only, and `md decode` drops the origins note for a single
-  key at its canonical origin. The md pin is mirrored in `manual.yml`, `quickstart.yml`,
+  key at its canonical origin when the card carries no fingerprint for it. The md pin is mirrored in `manual.yml`, `quickstart.yml`,
   `technical-manual.yml` and `cross-tool-differential.yml`; the Examples golden shows the
   new pin. It is the first pinned md release that is signed, so `first_signed` for md is now
   `0.20.4`: with `minisign` installed, the installer refuses a missing signature on it.

@@ -635,7 +635,7 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Surfaced:** 2026-11-02, md bug hunt FIX-A whole-diff review (descriptor-mnemonic `design/agent-reports/whole-diff-md-fix-a.md` M1, Minor).
 - **Where:** `docs/manual-gui/src/50-md/53-encode.md` lines 34 and 209-210 (and 218-220: the `--json` entry says nothing about chunks).
 - **What:** md bug-hunt R-10 moved the `policy_id_fingerprint` line to stderr; the GUI manual still says "after the phrase ... on stdout". Documentation only. Proposed wording for 209-210: "Prints the freshly-computed `policy_id_fingerprint` on stderr after the card (stdout carries only the md1 artifact). Default off."
-- **Status:** `deferred-minor`. **Owner:** the md-cli pin bump that follows the md release (or the next manual-gui pass).
+- **Status:** `deferred-minor`. **Owner:** the mnemonic-gui re-pin to md-cli >= 0.20.4 (when `[installer-ahead]` md is deleted).
 - **Tier:** `v1+`
 
 ### `bsd-process-hardening-parity-procctl-rlimit-core` — `set_non_dumpable()` was a silent no-op on the BSDs (no anti-ptrace / anti-core-dump protection off-Linux)
@@ -6433,3 +6433,9 @@ screen printed. Print the values.
 - Failure scenario and fix: the reviewer's scratch copy ran 4174 tests and the worktree 4175; the extra test was not identified. Identify it by diffing the two `--list` outputs.
 - Status: `deferred-minor`
 - Owning phase: none, ownerless residue.
+
+### `md-encode-help-policy-id-fingerprint-after-the-phrase` — tk PR #131 review N3: md 0.20.4 `md encode --help` still says `--policy-id-fingerprint` prints "after the phrase"
+- Surfaced 2026-11-02, class A review of tk PR #131 (`design/agent-reports/review-pr131-gui-manual.md` N3, Nit).
+- What: md-side, not this PR: md 0.20.4 `md encode --help` still says `--policy-id-fingerprint` prints "after the phrase"; 42-md.md:40 (stderr) is the accurate text.
+- Status: `deferred-minor`
+- Owning phase: descriptor-mnemonic next md-cli release.
