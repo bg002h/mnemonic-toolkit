@@ -6105,7 +6105,7 @@ screen printed. Print the values.
 - **Where:** the indel search of `mnemonic repair --max-indel`; the primer text that relies on it is FIX 5.6.6 (`design/FIX_bughunt_ms.md` in mnemonic-secret).
 - **What:** `mnemonic repair --max-indel` exits 2 on an all-capitals `ms1`, `mk1` or `md1` card that the same tool repairs without `--max-indel`; the primer tells the holder to retype in lowercase (FIX 5.6.6). Measured: the engraved capitals entr-16 card with one character left out exits 2 at `--max-indel 1`, also with `--max-subst 1`; the same card in lowercase exits 5.
 - **Why deferred:** No code change in this PR; owning phase: the toolkit's next `mnemonic repair` change.
-- **Status:** `deferred-minor`
+- **Status:** `resolved` by FIX_bughunt_tk_g2 X4 (`mnemonic repair --max-indel` lowercases an all-capitals card before searching; a mixed-case card is refused with the X1 text).
 - **Tier:** `cross-repo`, text / behaviour (non-gating)
 
 ### `toolkit-repair-ms1-stdin-second-line-ignored` — `mnemonic repair --ms1 -` ignores every stdin line after the first, so a one-string `ms1` card typed over two lines fails in way 1 of the primer 5.6.6 but not in way 2 (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
@@ -6120,6 +6120,8 @@ screen printed. Print the values.
   - With one character left out, `--max-indel 1` and `--max-indel 1 --max-subst 1` both exit 2, while `ms repair --in` says "more than 8 errors", exit 2.
 
   `--ms1 -` reads one chunk, so the second line is silently ignored. This fails closed: no wrong string, and the printed command works on a card typed as the text says ("its one `ms1` string, … one per line"). Likelihood-test conditions: (a) the holder types an engraved `ms1` string over two lines because the plate wraps, against "one per line"; (b) the holder takes way 1. The same holds for a wrapped `mk1` or `md1` string, which becomes an extra chunk. Fix (for later, FOLLOWUPS `deferred-minor`): in 5.6.6, after "one per line (not only the damaged one)", add "; type each string on a single line even where the plate wraps it". Optionally, `mnemonic repair --ms1 -` could refuse a second non-empty stdin line rather than ignore it.
+
+- **Re-scoped (FIX_bughunt_tk_g2, X5 residual):** the bug hunt's X5 ("second stdin line ignored") is a FALSE POSITIVE: `repair.rs:360` `expand_dashes` repairs every stdin line as its own string (row `bughunt_tk_x5_repair_ms1_stdin_second_line_not_ignored` pins it). The residual is a card wrapped over two lines, which is read as two strings ("too many errors", exit 2). Ruled fix (owning phase: the erasure-fill spec): when `--ms1 -` reads 2 or more non-empty lines, join them only if no line alone has a valid ms1 length and their concatenation does; otherwise each line stays its own string, as today. The manual's "use `-` to read one chunk from stdin" (the `--ms1` rows of `mnemonic repair` and `mnemonic inspect` in `41-mnemonic.md`) is decided in the same spec.
 
 ### `toolkit-repair-mk1-max-indel-4-slow-vs-few-seconds` — `mnemonic repair --mk1 - --max-indel 4` took 75 s on the 111-character mk1 string, against the tool's own "this may take a few seconds" note (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
 
@@ -6181,6 +6183,160 @@ screen printed. Print the values.
 - **Source:** `design/FIX_bughunt_tk_g1.md` #54 (2.23). `manual-gui.yml` installs the pinned toolkit release (`mnemonic-toolkit-v0.105.1` today), so these files reflect the release, not this branch, and must not change in the fix PR.
 - **What:** `bundle --json` in descriptor mode (incl. `--import-json`) reports `multisig.path_family: "descriptor"` after the fix. Files that carry `"template":"descriptor","path_family":"bip87"` today: `docs/manual-gui/transcripts/tutorial/tut-j2-restore-feed-bundle-json.stdout.txt`, `tut-j3-restore-feed-bundle-json.stdout.txt`, `tut-j4-restore-feed-bundle-json.stdout.txt`, `tut-j4-nums-feed-bundle-json.stdout.txt`, `tut-j5-22-bundle-json.stdout.txt`, and the same five under `mnemonic-gui/tests/snapshots/tutorial/`. At the pin bump, re-run `manual-gui` verify-examples and the GUI tutorial snapshots: the expected drift is exactly this value in these files (and any output FIX_bughunt_tk_g1 §2 changes on a path the tutorial drives); anything else is a finding.
 - **Tier:** `docs`, `cross-repo`
+
+### `bughunt-tk-fix-g2` — tk bug-hunt Importants of slices S3/S4/S5: import-wallet taproot threshold (#16 #17), BSMS Round-1 line 3 as written (#18), Coldcard BIP-45 multisig (#19), Sparrow keystore labels (#20), Coldcard account/xfp/master xpub (#29 #31 #49, closes #30), Core different-script merge (#57), convert passphrase warning (#26), compare-cost repeated digest (#28), silent-payment non-master xprv (#56), word-card chunk grouping (#50), inspect second ms1 (#51), repair mixed case / K-of-N shares / capitals under --max-indel (X1 X3 X4): build obligations (repo: **mnemonic-toolkit**; owning phase: **the build of branch `bughunt/triage`**)
+
+- **Surfaced:** 2026-10-31 bug hunt (`design/agent-reports/bughunt-2026-10-31-tk.md`), triage `bughunt-triage-tk-s3.md` / `-s4.md` / `-s5.md`, grades `bughunt-grade-tk-g2.md` (`2814a2c0`). FIX: `design/FIX_bughunt_tk_g2.md` (small-fix track).
+- **Grade:** Important ×17; #30 (Minor) closed by #31's fix.
+- **Build impact (1):** production code, FIX §3 items 1-13: `owed-to-build`.
+- **Build impact (2):** spec sentences, FIX §4 S1-S9: `owed-to-build`.
+- **Build impact (3):** RED rows of FIX §6 and the three test changes of FIX §7: `owed-to-build`.
+- **Build impact (4):** manual, technical manual and transcripts, FIX §5.1-5.4: `owed-to-build`.
+- **Build impact (5):** `.examples-build/Examples.md` regenerated with `gen.sh` after both FIX documents (FIX §5.5): `owed-to-build`.
+- **Build impact (6):** FOLLOWUPS entries and edits of FIX §9: `owed-to-build`.
+- **Status:** `open`; owed to the build.
+- **Tier:** `toolkit`
+
+### `bip388-literal-nums-key-refusal-text` — `export-wallet --format bip388 --descriptor` refuses a NUMS taproot multisig with a text that blames a "descriptor key" use-site (repo: **mnemonic-toolkit**; owning phase: **the next export-wallet spec**)
+
+- **Surfaced:** 2026-10-31 bug hunt #21; triage CONFIRMED; graded Minor (`design/agent-reports/bughunt-grade-tk-g2.md`): fails closed (exit 1), and the refusal itself is correct by BIP-388 (lines 149-151 and 310: only `@N` key placeholders).
+- **Fix (ruled):** keep the refusal (exit 1) with the text ``error: --format bip388 cannot express the literal key <hex> (a taproot internal key with no origin, e.g. the BIP-341 NUMS key): a BIP-388 wallet policy allows only @N key placeholders; use --format descriptor or --format bitcoin-core for this wallet``. Do NOT ship the triage's fix-21 (it emits a BIP-388-invalid policy).
+- **Open for the architect:** `--template tr-*-multi-a --taproot-internal-key nums --format bip388` emits the literal NUMS hex in `description_template`, which BIP-388 line 310 lists as invalid. Decide whether that path should refuse too.
+- **Row:** `bughunt_tk_21_bip388_export_from_descriptor_taproot_nums_multisig` (rewritten to the ruled text, ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `specter-export-descriptor-mode-device-count` — `export-wallet --format specter --descriptor` lists one `devices` entry for an N-key wallet (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #22; graded Minor: every entry is the placeholder `"unknown"`, and Specter reads the list behind a length guard.
+- **Fix (ruled):** in `--descriptor` mode, one `"unknown"` per descriptor key, except origin-less single keys (the NUMS internal key is not a device); at least 1. A taproot internal key that has an origin counts.
+- **Row:** `bughunt_tk_22_specter_export_descriptor_mode_device_count` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `electrum-import-wallet-name-trailing-digits` — `import-wallet --format electrum` strips trailing digits from the lifted wallet name (`Vault2` → `Vault`) (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #23; graded Minor: descriptor, keys and threshold are right; only the free-text label changes.
+- **Fix (ruled):** strip only a `-<digits>` suffix (triage fix-23).
+- **Row:** `bughunt_tk_23_electrum_import_wallet_name_digits_preserved` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `core-import-error-index-after-merge` — after a Bitcoin Core receive/change merge, a later entry's error names its index in the merged list, not in the original `descriptors` (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #58; graded Minor: fails closed with the right reason; the quoted bad checksum still locates the entry.
+- **Fix (ruled):** carry the original index into `parse_entry` (triage fix-58).
+- **Row:** `bughunt_tk_58_bitcoin_core_error_names_original_descriptor_index` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `derive-child-dice-length-cap` — `derive-child --application dice` with a huge `--length` aborts on allocation (SIGABRT) or spins (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #15; graded Minor (an abort on an absurd argument, no output, no data).
+- **Fix (ruled):** cap rolls at 1..=1000000: ``error: --length <N> out of range for --application dice (valid: 1..=1000000 rolls)`` (exit 2); `Vec::with_capacity(rolls.min(1024))`.
+- **Row:** `bughunt_tk_15_dice_huge_length_is_refused_cleanly` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `xpub-search-sh-wsh-default-origin-notice` — `xpub-search account-of-descriptor` says it defaults origin-elided `sh(wsh(...))` cosigners to `m/48'/…/2'`; BIP-48 script type for nested segwit is `1'` (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #24; graded Minor: the search results are right; only the notice is wrong.
+- **Fix (ruled):** `sh(wsh(...))` → `1'` (triage fix-24); plain `sh(...)` keeps `2'`.
+- **Row:** `bughunt_tk_24_xpub_search_sh_wsh_default_origin_is_1prime` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `convert-minikey-env-sentinel` — `convert --from minikey=@env:VAR` hands the literal sentinel to the mini-key parser (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #25; graded Minor: fails closed; secret-channel class (operator ruling 2026-08-27).
+- **Fix (ruled):** resolve sentinels for every `is_argv_secret_bearing` node (triage fix-25).
+- **Row:** `bughunt_tk_25_convert_minikey_env_sentinel_resolves` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `compare-cost-tr-leaf-hash-arg-inflated` — `compare-cost --descriptor tr(…)` glues the x-only `02` prefix onto a 64-hex hash argument and refuses a valid leaf (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #27; graded Minor: fails closed (exit 3) on an advisory cost tool; `--miniscript` works.
+- **Fix (ruled):** do not prefix hash-fragment arguments (triage fix-27).
+- **Row:** `bughunt_tk_27_compare_cost_tr_leaf_hash_arg_not_inflated` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `xpub-search-account-window-2p31-panic` — `xpub-search` panics (exit 101) for an account window reaching 2^31 (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #32 (sites `template.rs:78` and `descriptor_intake.rs:434`); graded Minor (a panic on an absurd argument).
+- **Fix (ruled):** refuse, never clamp: ``error: --min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits`` (exit 1), when `--min-account` ≥ 2^31, `--max-account` ≥ 2^31, or `--min-account + --number-of-accounts` > 2^31.
+- **Rows:** `bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic`, `bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `gui-schema-bundle-import-json-template-required` — `gui-schema` marks `bundle --template` required when only `--import-json` is given (repo: **mnemonic-toolkit** + **mnemonic-gui** lockstep; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #33; graded Minor: the GUI's "required" is a marker only; Run is not blocked.
+- **Fix (ruled):** add `--import-json` to the rule's `any_of` (triage fix-33); rationale "--template is required unless --descriptor, --descriptor-file or --import-json is supplied (bundle's primary-mode selection invariant)."; `tests/cli_gui_schema_conditional_rules.rs::bundle_template_required_unless_uses_not_any_of_predicate` `predicates.len()` 2 → 3 and asserts `--import-json`; GUI `src/form/conditional.rs::bundle()` in lockstep.
+- **Row:** `bughunt_tk_33_gui_schema_bundle_import_json_does_not_require_template` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `cross-repo`
+
+### `gui-schema-verify-bundle-template-required` — `gui-schema` marks `verify-bundle --template` required when `--md1`, `--bundle-json` or a positional is given (repo: **mnemonic-toolkit** + **mnemonic-gui** lockstep; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #34; graded Minor (GUI marker only; the CLI refuses a keyed bundle without `--template` itself).
+- **Fix (ruled):** add `--md1`, `--bundle-json` and `positional_present 0` (triage fix-34); GUI `src/form/conditional.rs::verify_bundle()` in lockstep.
+- **Row:** `bughunt_tk_34_gui_schema_verify_bundle_alternatives_do_not_require_template` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `cross-repo`
+
+### `compare-cost-concrete-keys-mixed-input` — `compare-cost` omits the "input had concrete keys" note for mixed abstract-label + hex input (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #35; graded Nit (one advisory note; every number is right).
+- **Fix (ruled):** triage fix-35.
+- **Row:** `bughunt_tk_35_compare_cost_mixed_input_reports_concrete_keys` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `friendly-ms1-length-set-uses-allowed` — `friendly_ms_codec` prints the entr length set for `UnexpectedStringLength` whatever set the error carries (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #36; graded Nit: latent (no input reaches the self-contradictory form). The reachable cousin is ms-codec's own `ms-length-error-lists-entr-set-only` (mnemonic-secret FOLLOWUPS).
+- **Fix (ruled):** print the error's `allowed` field (triage fix-36).
+- **Row:** `friendly::bughunt_s4::bughunt_tk_36_friendly_length_set_follows_error_allowed` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `verify-message-legacy-signature-trim` — `verify-message --format legacy|auto` refuses a genuine signature with a trailing newline that the BIP-322 path accepts (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Surfaced:** 2026-10-31 bug hunt #48; graded Minor: a refusal, not an INVALID verdict.
+- **Fix (ruled):** trim leading and trailing whitespace only, as the BIP-322 path does (`verify_message.rs:212`; triage fix-48).
+- **Row:** `bughunt_tk_48_verify_message_legacy_tolerates_trailing_newline` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `toolkit-repair-inspect-ms1-env-sentinel` — `mnemonic repair --ms1 @env:VAR` (and `inspect`) never resolves the sentinel (repo: **mnemonic-toolkit**; owning phase: **the erasure-fill spec**)
+
+- **Surfaced:** 2026-10-31 bug hunt X2; graded Minor: fails closed; secret-channel class; no toolkit text advertises it, and the GUI reads the variable itself (`mnemonic-gui src/schema/mnemonic.rs:2545-2547`).
+- **Fix (ruled):** resolve `@env:VAR` for `--ms1` on `repair` and `inspect` (triage fix-x2); no argv advisory for an `@env:` value; no GUI change.
+- **Row:** `bughunt_tk_x2_repair_ms1_resolves_env_sentinel` (ignored).
+- **Status:** `deferred-minor`
+- **Tier:** `toolkit`
+
+### `specter-export-devices-strings-vs-objects` — Specter's importer indexes `devices[i]["label"]` / `["type"]` as objects; `export-wallet --format specter` writes plain strings `"unknown"` (repo: **mnemonic-toolkit**; owning phase: **the next tk triage pass**)
+
+- **Surfaced:** `design/agent-reports/bughunt-triage-tk-s3.md` §4 ("Noticed, not tested"); routed by `bughunt-grade-tk-g2.md`, not graded.
+- **What:** Specter's `wallet_importer.py:152-160` (cached copy `/scratch/cache/bughunt/tk/s3/ext/specter_wi.py`) reads `cosigners_types[i]["label"]` and `["type"]` for every descriptor key no existing device matches; `"unknown"["label"]` raises a Python TypeError. If confirmed against Specter's current release, every import of a toolkit Specter file whose keys are new to that Specter fails. Needs a two-direction triage (and an upstream source check) before a grade.
+- **Status:** `needs-triage`
+- **Tier:** `toolkit`
+
+### `xpub-search-max-account-unbounded-allocation` — `xpub-search path-of-xpub --max-account 2147483648` aborts on a 841813590408-byte allocation (exit 134) (repo: **mnemonic-toolkit**; owning phase: **the next tk triage pass**)
+
+- **Surfaced:** `design/agent-reports/bughunt-triage-tk-s4.md` §4 ("Noticed, not tested"); routed by `bughunt-grade-tk-g2.md`, not graded. Sibling of #15, not #32: the candidate `Vec::with_capacity` in `build_candidate_paths` is unbounded for any very large `--max-account` / `--number-of-accounts`.
+- **Status:** `needs-triage`
+- **Tier:** `toolkit`
+
+### `gui-snapshot-tut-j3-09-distinct-hash-count` — after FIX_bughunt_tk_g2 #28, `build-descriptor`'s over-envelope text for the j3 degrading vault reads `1 hashes`; the GUI tutorial snapshot and the manual-gui copy still read `2 hashes` (repo: **mnemonic-gui**, then **mnemonic-toolkit** `docs/manual-gui`; owning phase: **the mnemonic-gui cycle that pins a toolkit carrying #28**)
+
+- **Where:** mnemonic-gui `tests/snapshots/tutorial/tut-j3-09-build-descriptor-refusal.stderr.txt`, then toolkit `docs/manual-gui/transcripts/tutorial/tut-j3-09-build-descriptor-refusal.stderr.txt` when manual-gui re-pins that GUI tag (manual-gui lint step 11 byte-compares the two; `docs/manual-gui/tests/lint.sh:345-355`).
+- **What:** the one line `  [over_envelope] root: policy exceeds the always-previewable envelope (2^(11 keys + 2 hashes) × 9 timelock-states > cap 4096); use the raw `--descriptor` path for arbitrarily complex policies` becomes `… (2^(11 keys + 1 hashes) × 9 timelock-states > cap 4096) …`; the refusal itself and its exit code (2) are unchanged. Do not edit the manual-gui copy in the toolkit PR (FIX_bughunt_tk_g2 §5.6).
+- **Status:** `open`
+- **Tier:** `cross-repo`
 
 ### `bughunt-tk-fix-review-r1-minors` — tk bug-hunt FIX reviews r1: G1 M-1, N-1; G2 M1-M5, N1-N4
 
