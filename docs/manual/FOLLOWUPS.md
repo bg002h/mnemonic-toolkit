@@ -121,6 +121,15 @@ receiving wallets. Either light up the stubs in a v0.8.x patch
 (emitting Sparrow-/Specter-native JSON shapes) or change the clap
 definition to remove the `sparrow` / `specter` choices entirely.
 
+### `verb-ownership-review-minors` — manual-side
+
+From the whole-diff review of the verb-ownership docs PRs (coordinator `agent-reports/whole-diff-arch-docs-s1.md`, 0C/1I/2M/4N; I-1 fixed in this PR). Deferred minors, not fixed:
+
+- m-1: the `verb-ownership-stale-lines` entry cites recon IDs (TK-8, TK-26, TK-30, MD-2, MK-2) defined only in the coordinator repo, and lines in other repos with no companion entries. Rewrite each bullet as file + what is stale (the review lists the eight resolved bullets).
+- n-1: that entry's heading tag "— deferred-minor" and its Status line differ from the file's convention.
+- n-2: `51-format-decision.md`: the "Which tool owns which verb" section sits after the chapter's lead-out sentence; place it before.
+- n-4: the README placeholders `<mk1 strings>`, `<md1 strings>`, `<mr1 strings>` (mk, md, mr) redirect from a file if pasted unedited; fails closed.
+
 ### `verb-ownership-stale-lines` — deferred-minor
 
 **Status:** deferred-minor. **Owning phase:** none.
