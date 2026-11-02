@@ -1,223 +1,163 @@
 # Constellation architecture
 
-This is a developer navigation guide for the source snapshot recorded on **2026-10-30**.
-It explains ownership, data flow, and compatibility boundaries. Start here, then use
-[SOURCE_MAP.md](SOURCE_MAP.md) for implementation, specification, and test anchors.
-The [inventory](inventory.json) records checkout commits separately from each consumer's
-resolved dependencies. It is a dated snapshot, not a claim about every installed release.
+An overview of how the m-format constellation is organised: what each repository
+owns, how the repositories depend on one another, which invariants hold across them,
+and where a change usually starts. It names no versions, revisions or counts, because
+those change with every release; read manifests, lockfiles, CI definitions and the
+specifications linked below for them. Where this guide and the code disagree, the
+code and the specifications win.
 
-The scope is `ms`, `mk`, `md`, `mnemonic`, `mt`, `me`, shared packages, and the
-utility GUI `mnemonic-gui`. Refugium is included only where shared dependencies matter.
-Refugium wallet behavior, `mr-gui`, and SeedHammer firmware internals have separate owners.
-The firmware mapping belongs under `mnemonic-engrave/design/firmware-architecture/`;
-that handoff does not make the host guide a hardware validation record.
+**Scope.** The `ms1`, `mk1`, `md1` and `mt1` formats, public word cards, the
+`mnemonic` toolkit, `me` host delivery and the `mnemonic-gui` front end. Refugium
+(`mr1` cards and the desktop wallet) has
+[its own guide](https://github.com/bg002h/mnemonic-refugium/tree/master/docs/architecture)
+and consumes some of the same codecs. SeedHammer firmware internals have a separate owner.
 
-## Repositories and layers
+## Repositories
 
-| Repository | Packages / entry points | Responsibility |
+| Repository | Packages (binary) | Owns |
 | --- | --- | --- |
-| mnemonic-secret | ms-codec; ms-cli → ms | Secret payload encoding, recovery, shares, hashlock primitives; CLI mnemonic and passphrase handling |
-| mnemonic-key | mk-codec; mk-cli → mk | Public extended-key cards, origins, policy stubs, chunk reconstruction; CLI intake and derivation |
-| descriptor-mnemonic | md-codec; md-cli → md; xtask | Descriptor serialization, identities, composition/rendering; CLI parsing and seating; verdict-table generation from recorded coordinator evidence |
-| mnemonic-toolkit | mnemonic-toolkit → mnemonic; wc-codec | Multi-format bundle/recovery workflows and selected reusable utilities; public word-card transport |
-| mnemonic-transaction | mt-codec; mt-cli → mt | Signed-transaction backup format; CLI refusal policy and optional node observations |
-| mnemonic-engrave | mnemonic-engrave → me; mnemonic-io-lib; Go preview | Host delivery, containers, public bundles and preview; reusable I/O mechanisms |
-| mnemonic-gui | mnemonic-gui; gui-render | Utility GUI that drives four CLIs and links a limited toolkit library surface |
+| [mnemonic-secret](https://github.com/bg002h/mnemonic-secret/tree/master/crates) | `ms-codec`; `ms-cli` (`ms`) | The `ms1` secret format: entropy, mnemonic and hashlock-preimage payloads, shares. CLI: secret and passphrase handling |
+| [mnemonic-key](https://github.com/bg002h/mnemonic-key/tree/main/crates) | `mk-codec`; `mk-cli` (`mk`) | The `mk1` public-key card: origin, policy-ID stubs, chunk reconstruction. CLI: intake and derivation |
+| [descriptor-mnemonic](https://github.com/bg002h/descriptor-mnemonic/tree/main/crates) | `md-codec`; `md-cli` (`md`); `xtask` | The `md1` descriptor card: serialization, identities, canonical origins, rendering. CLI: parsing and seating. `xtask` generates the verdict table from recorded evidence |
+| [mnemonic-toolkit](../../crates) | `mnemonic-toolkit` (`mnemonic`); `wc-codec` | Multi-format bundle, restore, verify and repair workflows; wallet import and export; the public word-card engine; the manuals |
+| [mnemonic-transaction](https://github.com/bg002h/mnemonic-transaction/tree/main/crates) | `mt-codec`; `mt-cli` (`mt`) | The `mt1` signed-transaction backup implementation. CLI: input validation, refusals, optional read-only node observations |
+| [mnemonic-engrave](https://github.com/bg002h/mnemonic-engrave/tree/master/crates) | `mnemonic-engrave` (`me`); `mnemonic-io-lib`; Go `preview` | Host delivery: classification, NDEF, public bundles, sealed and systemwide containers, preview. Shared I/O mechanisms. The normative `mt1` specification and its independent vector generator |
+| [mnemonic-gui](https://github.com/bg002h/mnemonic-gui/tree/master/src) | `mnemonic-gui` (`mnemonic-gui`, `gui-render`) | An egui front end that drives the `mnemonic`, `md`, `ms` and `mk` CLIs |
 
-The codec crates own representations and format operations. Their CLIs own parsing,
-operational policy, streams, diagnostics, and user choices. A crate directory is not
-necessarily its package name: `crates/me-cli` is package `mnemonic-engrave`, exposing
-library `mnemonic_engrave` and binary `me`. Inspect the manifest before choosing a
-package selector or assuming a CLI operation is a library API.
+Codec crates own representations and format operations. CLIs own parsing, policy,
+streams, diagnostics and exit codes. A crate directory is not always its package
+name (`crates/me-cli` is the package `mnemonic-engrave`), so check the manifest
+before choosing a package selector or assuming a CLI operation is a library API.
 
-This diagram selects the main integration edges; the source map records the exact pins.
+## Dependencies
 
 ```mermaid
 flowchart LR
-  GUI["mnemonic-gui"] -->|"subprocess: argv / stdin / status"| CLI["md, ms, mk CLIs"]
-  GUI -->|"subprocess"| MN["mnemonic CLI"]
-  GUI -->|"linked utilities"| TL["toolkit partial library"]
-  CLI -->|"linked codecs; versions vary"| CODECS["ms-codec / mk-codec / md-codec"]
-  MN --> CODECS
-  MN -->|"canonical payload adapter"| WC["wc-codec"]
+  GUI["mnemonic-gui"] -->|"subprocess"| CLIS["ms / mk / md CLIs"]
+  GUI -->|"subprocess + linked library"| TK["mnemonic (toolkit)"]
+  TK --> CODECS["ms / mk / md codecs"]
+  CLIS --> CODECS
+  TK --> WC["wc-codec"]
   MT["mt CLI"] --> MTC["mt-codec"]
-  ME["me CLI / host library"] --> CODECS
+  ME["me"] --> CODECS
   ME --> MTC
-  ME --> IO["mnemonic-io-lib"]
-  ME -->|"preview subprocess"| PREVIEW["me-preview (Go)"]
-  PREVIEW -->|"source dependency"| SH["pinned SeedHammer submodule"]
+  TK --> IO["mnemonic-io-lib"]
+  CLIS --> IO
+  MT --> IO
+  ME --> IO
+  ME -->|"preview subprocess"| PV["Go preview"]
+  PV -->|"Go module replace"| SH["SeedHammer submodule"]
 ```
 
-`mnemonic-io-lib` is also consumed by constellation CLIs. It supplies channel, file
-descriptor, observation, record, remedy, exit, and write mechanisms; callers retain
-classification, refusal and output policy. Sharing this crate does not make every
-CLI's exit semantics or secret policy identical. See its
-[explicit ownership boundary](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/mnemonic-io-lib/src/lib.rs).
+Codec crates depend on no other constellation crate. Each CLI links its own codec
+and `mnemonic-io-lib`, which supplies channel, file-descriptor, observation, record,
+remedy, exit and write mechanisms. Callers keep classification, refusal and output policy, so sharing
+it does not make exit codes or secret handling identical. Beyond that: `mk` also
+links `md-codec`, `md` links `mk-codec`, the toolkit links the `ms`, `mk`, `md` and
+word-card codecs, and `me` links the `ms`, `mk`, `md` and `mt` codecs.
 
-## Follow a backup and recovery
+Each consumer pins codecs on its own (registry version, git revision or vendored
+source), so it may resolve a different codec than a sibling checkout builds. Read the
+consumer's `Cargo.lock` and vendored sources before assuming an API or wire version
+exists there. The `md-codec` revision in `me` is kept equal to Refugium's.
 
-A toolkit bundle begins in [cmd/bundle.rs](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/cmd/bundle.rs).
-Input resolution and [synthesis](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/synthesize.rs)
-combine the requested policy, per-slot keys or secret material, origins, and network
-into related `ms1`, `mk1`, and `md1` artifacts. Full, watch-only, descriptor and
-multisig routes share machinery but carry different available material. Preserve slot
-ordering and missing-material semantics across them: the
-[JSON types](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/format.rs) use a dense secret-slot
-array with an empty watch-only sentinel, while the key field distinguishes a single
-key's strings from nested multisig sets.
+## Main flows
 
-The secret card does not contain the whole wallet. `Entr` stores entropy without a
-wordlist language; `Mnem` carries language with entropy. A separately supplied
-passphrase remains a separate input to derivation. The current ms checkout also
-supports `Preimage`, which must not be treated as a mnemonic. Toolkit's resolved
-older ms-codec only has the entropy/mnemonic variants; do not infer preimage support
-there from the sibling checkout. The codec owns payload reconstruction, while the
-CLI owns the interpretation needed for mnemonic derivation.
+**Backup.** `mnemonic bundle` resolves a policy, per-slot keys or secret material,
+origins and a network, then synthesizes related `ms1`, `mk1` and `md1` artifacts.
+Full, watch-only, descriptor and multisig routes share machinery but carry different
+material. The bundle JSON keeps a dense per-slot array in which an empty string marks
+a watch-only slot; preserve slot order and that sentinel. Entry points: the toolkit's
+`cmd/` subcommands, `synthesize` and `format`.
 
-A key card carries the public extended key, origin path, optional fingerprint, and
-policy-ID stubs. Compact xpub reconstruction depends on agreement between the path
-and omitted header information. Stubs help associate material; the information in a
-sparse descriptor cannot establish every membership claim. Follow
-[KeyCard](https://github.com/bg002h/mnemonic-key/blob/bdb1df7f61e4eef94509e589a5d7b0d1f626cfd6/crates/mk-codec/src/key_card.rs) and
-[CLI membership checks](https://github.com/bg002h/mnemonic-key/blob/bdb1df7f61e4eef94509e589a5d7b0d1f626cfd6/crates/mk-cli/src/cmd/encode.rs)
-when changing how origins or keys enter a bundle.
+**What a card holds.** An `ms1` card holds a secret payload, not a wallet; a
+passphrase stays a separate input. An `mk1` card holds an extended public key, its
+origin and policy-ID stubs. An `md1` card holds a policy template, optionally with
+sparse keys and origins; its payload is bytes plus an exact bit count. `Md1EncodingId`,
+`WalletDescriptorTemplateId`, `WalletPolicyId` and `SkeletonKey` deliberately include
+different information; none is a display string, and comparing them is not comparing
+text.
 
-A descriptor card describes policy and may carry sparse key/origin information.
-Its canonical payload includes **bytes and an exact bit count**. Distinguish
-`Md1EncodingId`, `WalletDescriptorTemplateId`, `WalletPolicyId`, and `SkeletonKey`:
-they intentionally include or omit different information. A shape key is not a
-wallet identity, and identity comparison must not silently become equality of
-display strings. The [identity module](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/src/identity.rs)
-is the implementation anchor.
+**Recovery and verification.** `restore` turns secret seed material (or, for a
+multisig cosigner, the shared `md1` card) into a watch-only document of descriptors
+and first addresses, never private keys. `verify-bundle` re-derives expected card
+content from a seed or a partial card set and reports per-card results. A valid
+checksum or an applied correction (`repair`) is not that evidence. Rules that limit
+minting a new artifact must not stop decoding or identifying an existing one.
 
-Recovery starts in [restore](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/cmd/restore.rs);
-descriptor seating additionally lives in the md CLI. Reassemble complete chunk sets,
-preserve origins and language, and distinguish missing information from invalid
-information. Current md decoding permits partial origins only through its explicit
-option. Restrictions on minting a new artifact must not accidentally prevent
-decoding or identifying an existing one; see
-[the admission/recovery regression](https://github.com/bg002h/descriptor-mnemonic/blob/5dfb1fde7dccf3664c6547b065169717452e00ae/crates/md-codec/tests/mint_policy_does_not_reach_decode.rs).
+**Word cards.** The toolkit's `word_card_adapter` converts canonical `mk1` and `md1`
+payloads to `wc-codec`, which turns a source kind, payload bytes and exact bit length
+into BIP-39 word sequences with error correction and RAID. Word cards are a transport
+separate from seed phrases and own no descriptor policy.
 
-Verification must establish the intended relationship between recovered material
-and the wallet. [verify-bundle](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/cmd/verify_bundle.rs)
-re-synthesizes from supplied ground truth and compares structured material.
-A valid checksum or successful correction alone is not that evidence. The ms repair
-CLI explicitly reports an applied correction as an unverified candidate. When
-changing recovery, retain independent identity/address checks and the existing
-forensics/refusal tests, rather than treating a codec round trip as sufficient.
+**Signed transactions.** `mt` backs up an already signed transaction. `mt-codec`
+holds the format; `mt-cli` handles input sniffing, validation, refusals and locktime
+reporting, and may read a node through `bitcoin-cli`. Nothing broadcasts. `mt1`
+strings and the QR transaction record reach `me`'s systemwide path, but `me bundle`
+accepts only public `md1` and `mk1` input and refuses `ms1` and `mt1`.
 
-## Public word cards and signed transactions
+**Host delivery.** `me` classifies and validates constellation input, builds NDEF
+records and public bundles, and handles sealed and systemwide containers, which are
+distinct formats. A public bundle decodes policy and origin data before it reports a
+layout or plate count. Preview is a Go sidecar that the host locates, version-checks
+and runs.
 
-Toolkit's [word-card adapter](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/word_card_adapter.rs)
-bridges canonical mk/md payloads to `wc-codec`. The engine works with bytes, bit
-lengths, framing, and recovery/RAID operations; it does not own descriptor policy.
-These public word cards are a separate transport from mnemonic seed phrases.
-Changing an adapter requires keeping the source kind and md bit length intact.
-Existing word-card and backup/restore tests are listed in the source map.
+**GUI.** Forms assemble argv, a channel planner decides how each secret reaches the
+child process, and a runner spawns the CLI. The form schema mirrors each CLI's
+`gui-schema` output, and descriptor building parses JSON results, so a JSON change
+can break the GUI without any flag changing. `pinned-upstream.toml` governs the CLI
+schema expectations and the Cargo manifest separately pins the linked toolkit; check
+both when changing either side. The toolkit's library
+exports only selected utilities; its workflows stay binary-private.
 
-`mt` backs up an already signed transaction. The codec contains the format; CLI
-modules handle input sniffing, validation, refusal reporting, locktime information,
-and optional read-only `bitcoin-cli` observations. The node adapter does not
-broadcast. Binary PSBT detection precedes whitespace cleanup, so changing input
-normalization can change which refusal an input reaches.
+## Invariants
 
-The two handoff forms are `mt1` strings and the CLI's QR `tx:` transaction-hex
-record. Both relate to me's systemwide delivery path. They do **not** become public
-wallet bundles: `me bundle` accepts md/mk and explicitly refuses ms/mt.
-The normative mt specification and independent vector generator live in
-mnemonic-engrave; mnemonic-transaction's design copies have recorded provenance.
-Change the owner, then update the copies and corpus. The
-[provenance record](https://github.com/bg002h/mnemonic-transaction/blob/56886b826d1c47fdf7ee8246a4a78f5b768bae2d/design/PROVENANCE.md) also explains that the BCH
-port comes from mk-codec and why sibling implementations must be checked together.
+- Rust is primary for normative codec behavior. The SeedHammer fork's Go
+  reimplementations follow it, and a suspected Go-only defect is checked against
+  the Rust code first.
+- Test vectors come from a source independent of the implementation under test; a
+  round trip is not identity or address evidence.
+- `md`, `mk` and `mt` fork their BCH string layers rather than share a crate; a
+  defect in one prompts checking the others.
+- Checksum-valid, corrected, decoded and verified are four different claims.
+- Consumers of a shared contract (the GUI, `me`, Refugium) change in lockstep with
+  the owner; the owner row below names the coupled work.
 
-## Host delivery and firmware boundary
-
-The me library classifies and validates constellation input, converts admitted text
-to NDEF, constructs public bundles, handles sealed and systemwide containers, and
-supports preview. CLI stream selection, final output and operator reporting live in
-`main.rs`. `seal` and `sysw` are distinct container formats despite reusing some
-cryptographic/passphrase machinery. The systemwide record model distinguishes
-secret-bearing and bearer material; signed transactions must not inherit policy
-merely because they are not mnemonic seeds.
-
-Public bundle construction must decode supported policy and origin data before
-reporting a layout or plate count. See
-[bundle admission](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/bundle.rs) and
-[systemwide record classes](https://github.com/bg002h/mnemonic-engrave/blob/a75719996304086e5f293aaf26812ff242a25244/crates/me-cli/src/sysw/record.rs).
-Preview is a Go sidecar: the host locates an explicitly selected executable or one
-beside itself, checks its version, then validates the output artifact.
-`preview/go.mod` uses the pinned `third_party/seedhammer` source.
-A preview image is not proof of successful engraving or device-side admission.
-
-The firmware handoff is the relevant format specification, Rust implementation,
-vectors, and dependency/provenance pin. Existing project policy makes Rust the
-primary implementation for shared normative codec behavior. A Go convergence fix
-still requires checking the Rust counterpart. Gemini owns the device call graph,
-hardware behavior, and firmware initialization file; this guide stops at that
-boundary.
-
-## Utility GUI and shared-library boundaries
-
-`mnemonic-gui` is the egui utility front end, separate from Refugium's GUI.
-[CliTab](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/app.rs) selects mnemonic/md/ms/mk, forms assemble argv, the channel planner
-([form/channels/mod.rs](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/form/channels/mod.rs)) turns it into a RunPlan
-that decides how each secret reaches the child, and
-[the runner](https://github.com/bg002h/mnemonic-gui/blob/46e1c0f31b5688c447309fdae3bcb439c43f7e4a/src/runner.rs) invokes subprocesses.
-It also links the toolkit library for selected utilities such as secret taxonomy.
-Toolkit's [lib.rs](https://github.com/bg002h/mnemonic-toolkit/blob/ef99021a26f733594ca6b711b9d3b82a494f39b1/crates/mnemonic-toolkit/src/lib.rs) does not export
-the complete CLI implementation; many workflow modules remain binary-private.
-
-The GUI consumes structured output for descriptor building, including emitted
-specifications and validation results. Consequently a JSON change may break the GUI
-without changing any flag. `pinned-upstream.toml` governs its CLI schema expectations;
-the Cargo manifest/lock separately govern its linked toolkit version. Check both
-when changing either side, and update the GUI manual as needed.
-
-Refugium and me align on a shared md-codec revision. That is a dependency coordination
-boundary, not evidence that the inspected Refugium GUI currently links the me library.
-The source map records the narrow manifest inspection; broader wallet architecture
-is outside this guide.
-
-## Compatibility and change ownership
-
-Checkout version, resolved library version, wire version, CLI release tag, and the
-`1` separator in a string are different concepts. At this snapshot, toolkit resolves
-ms-codec 0.7.0, mk-codec 0.4.1 and md-codec 0.47.0; sibling checkouts declare 0.10.0,
-0.5.0 and 0.48.4. The older mk encoder uses random string framing; mk0.5 derives a
-content ID. Compare canonical payloads when exact strings are not the contract.
-
-A concrete compatibility limit: mk CLI resolves md-codec 0.42.0, whose decoder accepts
-wire version 4 only. Current md and toolkit's md0.47 accept 4 and 8. A new descriptor
-card therefore does not automatically work in every sibling CLI. Inspect consumer
-lockfiles and vendored code before promising interoperability.
+## Where to change X
 
 | Change | Primary owner | Coupled work |
 | --- | --- | --- |
-| Payload, chunking, correction or wire rule | Owning codec | Specs, independent vectors, CLI admission/recovery, consumer pins, downstream Go |
-| Descriptor identity, origins or rendering | md-codec / md-cli | mk stubs, toolkit recovery, me admission, shared Refugium pin |
-| Bundle composition or JSON | toolkit | Restore/verify contracts, utility GUI consumers, manuals |
-| Public word-card transport | wc-codec + toolkit adapter | Source-kind/bit-length contract, RAID and CLI tests |
-| Transaction refusal or mt1 format | mt-cli / mt-codec; me owns spec | Independent me generator, copied provenance, sysw transport |
-| Delivery/container or shared I/O | me / mnemonic-io-lib | Each caller's policy, Go vectors, firmware handoff |
-| CLI flags or structured output | Implementing CLI | Shared manual, GUI schema/JSON handling and binary pins |
+| Payload, chunking, correction or wire rule | The owning codec crate (`ms`, `mk`, `md`, `mt`, `wc`) | Specs, independent vectors, CLI admission and recovery, consumer pins, downstream Go ports |
+| Descriptor identity, origins or rendering | `md-codec` identity, origin and render modules; `md-cli` | `mk` stubs, toolkit recovery, `me` admission, the shared Refugium pin |
+| Bundle composition or JSON | Toolkit `cmd/bundle`, `synthesize`, `format` | Restore and verify contracts, GUI consumers, manuals |
+| Public word-card transport | `wc-codec` and the toolkit `word_card_adapter` | Source-kind and bit-length contract, RAID and CLI tests |
+| Transaction refusal or `mt1` format | `mt-cli` refusal and validation modules, `mt-codec`; `me` owns the spec | Independent `me` generator, copied provenance, systemwide transport |
+| Delivery, container or shared I/O | `me` (`bundle`, `seal`, `sysw`, `ndef`, `preview`); `mnemonic-io-lib` | Each caller's policy, Go vectors, firmware handoff |
+| CLI flags or structured output | Implementing CLI | Shared manual, GUI schema and JSON handling, binary pins |
+| A user-facing verb that several formats share (repair first) | toolkit (`mnemonic`) | Per-format CLI removal and printed advice, [verb table](../manual/src/50-comparing/51-format-decision.md#which-tool-owns-which-verb), manual chapters, GUI schema |
 
-Consumer pin changes include manifest, lockfile, vendoring/source-replacement
-configuration, and provenance checks. The miniscript patch is an upstream Git
-revision; a nearby historical fork checkout is not the active dependency by default.
-Use existing CI definitions for toolchains and checks, not old test counts in prose.
+## Specifications and further reading
 
-## Keeping this useful
+- `ms1`: [SPEC_ms_v0_1.md](https://github.com/bg002h/mnemonic-secret/blob/master/design/SPEC_ms_v0_1.md).
+- `mk1`: [BIP draft](https://github.com/bg002h/mnemonic-key/blob/main/bip/bip-mnemonic-key.mediawiki)
+  and [SPEC_mk_v0_1.md](https://github.com/bg002h/mnemonic-key/blob/main/design/SPEC_mk_v0_1.md).
+- `md1`: [BIP draft](https://github.com/bg002h/descriptor-mnemonic/blob/main/bip/bip-mnemonic-descriptor.mediawiki).
+  The wire-version-8 design, [SPEC_liana_unspendable_internal_key.md](https://github.com/bg002h/mnemonic-engrave/blob/master/design/SPEC_liana_unspendable_internal_key.md),
+  is hosted in `me`; `md` owns its implementation.
+- `mt1`: [SPEC_mt_v0_1.md](https://github.com/bg002h/mnemonic-engrave/blob/master/design/SPEC_mt_v0_1.md)
+  in `me`, with [vectors](https://github.com/bg002h/mnemonic-engrave/tree/master/design/vectors); copies in
+  [mnemonic-transaction](https://github.com/bg002h/mnemonic-transaction/blob/main/design/PROVENANCE.md) record their provenance.
+- `me` delivery: [systemwide payloads](https://github.com/bg002h/mnemonic-engrave/blob/master/design/SPEC_systemwide_payloads.md),
+  [encrypted delivery](https://github.com/bg002h/mnemonic-engrave/blob/master/design/SPEC_encrypted_payload_delivery.md),
+  [descriptor input](https://github.com/bg002h/mnemonic-engrave/blob/master/design/SPEC_descriptor_input.md).
+- Toolkit: [design specifications](../../design), the [user manual](../manual/README.md),
+  [technical manual](../technical-manual/README.md) and [GUI manual](../manual-gui/README.md).
+- Process and instruction loading: each repository's `AGENTS.md` and `CLAUDE.md`.
 
-Read [WORKFLOW.md](WORKFLOW.md) and the target repository's AGENTS/CLAUDE files before
-implementation. Use the [user manual](../manual/README.md),
-[technical manual](../technical-manual/README.md), and
-[GUI manual](../manual-gui/README.md) for their detailed reference material.
-This guide records source-observed structure; specifications describe intended
-contracts. [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md) tracks known mismatches.
+## Keeping this guide useful
 
-Update the affected flow and owner row with a contract change. Refresh the inventory
-deliberately when revising the baseline; keep full revisions and provenance evidence.
-The [documentation checker](check.py) validates local references and the recorded
-snapshot. Review the dependency diagram and claims independently: a passing static
-check cannot prove their semantics. Source inspection establishes neither consensus
-conformance, secret erasure, hardware behavior, nor a passing runtime test suite.
+Update it when an owner, a dependency edge or an invariant changes, not for releases.
+Put questions not yet decided in [OPEN_QUESTIONS.md](OPEN_QUESTIONS.md). Check links
+with `python3 docs/architecture/check.py`; it validates paths, not claims, so review
+the diagram and owner table against the manifests when editing them.
