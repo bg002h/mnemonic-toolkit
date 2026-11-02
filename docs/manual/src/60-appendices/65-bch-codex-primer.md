@@ -19,10 +19,13 @@ recomputes the polynomial and:
 
 - If no errors: the recomputed checksum matches; data is intact.
 - If a few errors: the polynomial syndrome *locates* the error
-  positions. BIP-93 guarantees correction of up to 4 unknown-position
+  positions. BIP-93's code can correct up to 4 unknown-position
   substitutions, or up to 8 errors at known positions ("erasures"),
-  or up to 13 consecutive erasures. See *Error detection and
-  correction guarantees per card* below for the precise table.
+  or up to 13 consecutive erasures. The repair tools implement the
+  first of these only: up to 4 wrong characters in a string. See
+  *Error detection and correction guarantees per card* below for
+  the precise table, and *Unreadable characters: what to type* for
+  a character you cannot read.
 - If many errors: the polynomial mismatch is uncorrectable; decode
   fails.
 
@@ -105,8 +108,8 @@ characters.
 | Detection — characters affected | ≥ 1 and ≤ 8 errors guaranteed detected | BIP-93 §"Generating the Checksum" |
 | Detection — random patterns beyond 8 errors | < 3 × 10⁻²⁰ probability of missed detection | BIP-93 §"Generating the Checksum" |
 | Correction — substitutions (unknown positions) | up to **4** substitutions corrected | BIP-93 §"Error Correction" |
-| Correction — erasures (known positions, e.g., `?`) | up to **8** erasures corrected | BIP-93 §"Error Correction" |
-| Correction — consecutive erasures (a single scratch) | up to **13** consecutive erasures corrected | BIP-93 §"Error Correction" |
+| Correction — erasures (known positions) | up to **8** erasures, by the code; no repair tool decodes erasures yet (see *Unreadable characters: what to type*) | BIP-93 §"Error Correction" |
+| Correction — consecutive erasures (a single scratch) | up to **13** consecutive erasures, by the code; no repair tool decodes erasures yet | BIP-93 §"Error Correction" |
 
 ### Long code (n=108 symbols, k=93, 15-symbol checksum)
 
@@ -118,7 +121,7 @@ fit in the regular bracket.
 |---|---|---|
 | Detection — characters affected | ≥ 1 and ≤ 8 errors guaranteed detected | BIP-93 §"Long codex32 Strings" |
 | Detection — random patterns beyond 8 errors | < 3 × 10⁻²³ probability of missed detection | BIP-93 §"Long codex32 Strings" |
-| Correction (substitutions / erasures / consecutive erasures) | same as regular code: 4 / 8 / 13 | BIP-93 §"Error Correction" applied to the longer code |
+| Correction (substitutions / erasures / consecutive erasures) | same as regular code: 4 / 8 / 13 by the code; the repair tools implement the 4 substitutions only | BIP-93 §"Error Correction" applied to the longer code |
 
 ### How the code variant is chosen per card
 
@@ -152,8 +155,10 @@ disagree.
 ### Errors the BCH code does NOT handle: deletions and insertions
 
 An "erasure" in the table above means *the character at a known
-position is unreadable, but the position itself is preserved*
-(typically rendered `?`). The string length is unchanged.
+position is unreadable, but the position itself is preserved*.
+BIP-93 suggests marking one with `?`, but `ms repair` and
+`mnemonic repair` refuse a `?`; see *Unreadable characters: what to
+type* below.
 
 A **deletion** (a missing character that causes everything after
 it to shift left) is a length-changing event and is **outside the
@@ -188,6 +193,53 @@ In practice:
   copy-paste) and the chunked-in-fives form (handy for engraving)
   of every string: chunking makes character counts trivially
   auditable on the plate.
+
+### Unreadable characters: what to type
+
+No repair tool decodes erasures yet, so do not type `?` for a
+character you cannot read. Two things work, for up to 4 unreadable
+characters in one string; any other wrong character in that string
+counts toward the 4. Put the card in `card.txt` as you read it: its
+one `ms1` string, or every string of an `mk1` or `md1` card, one per
+line (not only the damaged one).
+
+- **Leave each unreadable character out** and let `mnemonic repair`
+  search for the gaps. Give `--max-indel` the number you left out (1
+  to 4; this example left out 1):
+
+  ```sh
+  mnemonic repair --ms1 - --max-indel 1 < card.txt
+  ```
+
+  For an `mk1` or `md1` card write `--mk1 -` or `--md1 -` in place of
+  `--ms1 -`. A unique recovery prints the full string and exits 5;
+  several equally valid candidates are all printed, exit 4, and you
+  keep the one that matches every character you can read. Exit 2
+  means nothing was found: if the string may also hold a wrong
+  character, run the command again with `--max-subst 1` added (raise
+  it for more wrong characters; the characters left out plus the
+  wrong ones may be at most 4); such a recovery usually exits 4, a
+  candidate you confirm before use. This search reads lowercase only:
+  if your plate is engraved in capitals, type the card in lowercase
+  for this command (the second way takes either case). It does not
+  work for a hashlock preimage plate (`ms10hash…`), nor for an `md1`
+  card of a single string; use the second way for those.
+- **Type your best guess** for each unreadable character: any
+  character of the card's alphabet, in the same case as the rest.
+  Then run `ms repair --in card.txt` for an `ms1` card, or
+  `mnemonic repair --mk1 - < card.txt` (`--md1 -` for an `md1` card).
+  Up to 4 wrong characters in total are corrected, and exit 0 means
+  every guess was right. A corrected `ms1` is a candidate, exit 4,
+  which you confirm before use. For an `mk1` or `md1` card, exit 5
+  means the correction checked itself across the card's strings;
+  exit 4 means it could not, so confirm it before use.
+
+Neither way works yet for one share of a K-of-N `ms1` set (a string
+that starts `ms12` to `ms19`): `ms repair` and `mnemonic repair` both
+refuse a share, exit 2. If you hold K other shares that read cleanly,
+recover the secret from them with `ms combine`.
+
+Either way, compare the result with the plate before you rely on it.
 
 ## Hand-decodability of ms1 via the bundled codex32 paper-computer
 
@@ -278,8 +330,9 @@ uses BIP-93 unchanged. The practical recipe today is:
 
 ## Operational fallbacks
 
-When stamping errors exceed the per-card correction radius (4
-substitutions or 8 erasures in known positions), the fall-backs are:
+When stamping errors exceed what the repair tools can fix (4 wrong
+or unreadable characters in one string; see *Unreadable characters:
+what to type* above), the fall-backs are:
 
 - **Single-sig:** re-derive the lost card from the seed phrase
   plus the wallet template — `mk1` and `md1` are public material

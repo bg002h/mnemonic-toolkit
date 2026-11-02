@@ -1,0 +1,44 @@
+make: Entering directory '/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual'
+  10 mermaid block(s) across 42 source file(s)
+
+[lint] === 1/7 markdownlint ===
+markdownlint-cli2 v0.13.0 (markdownlint v0.34.0)
+Finding: /scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual/src/**/*.md !build/** !tests/fixtures/**
+Linting: 42 file(s)
+Summary: 2 error(s)
+src/40-cli-reference/45-mr.md:4324:34 MD038/no-space-in-code Spaces inside code span elements [Context: "`refuge <k>: `"]
+src/40-cli-reference/45-mr.md:4325:1 MD038/no-space-in-code Spaces inside code span elements [Context: "`refuges <k-list>: `"]
+[lint] FAIL: markdownlint reported issues
+
+[lint] === 2/7 cspell ===
+CSpell: Files checked: 42, Issues found: 0 in 0 files.
+
+[lint] === 3/7 lychee ===
+🔍 307 Total (in 5ms) 🔗 167 Unique ✅ 285 OK 🚫 0 Errors 👻 22 Excluded
+
+
+[lint] === 4/7 flag-coverage ===
+[lint] WARN: MR_BIN unset; skipping the mr lines of cli-subcommands.list (14 verbs); set MR_BIN to check 45-mr.md
+[lint] exempt: --in in 44-mk-cli.md (mk repair), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk address), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk derive), unreleased after mk-cli 0.13.0
+[lint] exempt: --from-md1-set in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --keys in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --out in 44-mk-cli.md (mk encode), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk decode), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk verify), unreleased after mk-cli 0.13.0
+[lint] exempt: --in in 44-mk-cli.md (mk inspect), unreleased after mk-cli 0.13.0
+[lint] shared section (union of flags): mnemonic seedqr encode, mnemonic seedqr decode
+[lint] flag-coverage: 10 flag exemption(s) for unreleased flags
+
+[lint] === 5/7 glossary-coverage ===
+
+[lint] === 6/7 index bidirectional ===
+
+[lint] === 7/7 root-shaped ===
+[root-shaped-test] OK: 17 cases
+
+[lint] FAILED
+make: *** [Makefile:287: lint] Error 1
+make: Leaving directory '/scratch/code/shibboleth/toolkit-w14s2-fixed-manual/docs/manual'

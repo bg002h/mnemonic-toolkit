@@ -8,6 +8,8 @@ numbers.
 
 ## [Unreleased]
 
+**The installer runs ahead of the GUI on one CLI.** ms 0.20.2 (the ms bug-hunt fixes: `ms inspect` of the secret share and of an unknown mnem language, `ms combine --to` on a preimage share set, `ms repair` naming a character outside the alphabet) shipped before the GUI re-pinned, and the installer pins it. The manual keeps documenting `mnemonic-gui-v0.63.0`'s tier (ms 0.20.1); `pinned-upstream.toml` re-adds the `[installer-ahead]` table with `ms-cli-tag-implied = "ms-cli-v0.20.2"`, which `check_cli_pins.py` accepts only while it matches `scripts/install.sh`. A new §82 section, *When the installer is ahead of the GUI*, names it and the three outputs that differ. §12, §21 and §82 no longer say the installer installs exactly the GUI's pins.
+
 ## [1.4.0] - 2026-09-25
 
 **Minor — GUI pin bump `mnemonic-gui-v0.62.0` → `mnemonic-gui-v0.63.0` (F-694), five new form chapters, and the secret-channels section.** v0.63.0 (`d82c889`) pins mnemonic 0.105.1, md 0.20.3, ms 0.20.1 and mk 0.13.0 — the installer's own tags — so `[installer-ahead]` and the §82 *When the installer is ahead of the GUI* section are gone, and the toolkit installer now installs mnemonic-gui v0.63.0. This release also carries the never-tagged v0.62.0 pin (entries below).

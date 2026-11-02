@@ -53,6 +53,20 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `ms hashlock`. The Examples golden shows the new pin; the GUI manual re-pins to it
   (`[installer-ahead]` and its §82 section are gone).
 
+### Installer pins: ms 0.20.2
+
+- **`scripts/install.sh` installs ms 0.20.2**, the release of the ms bug-hunt fixes
+  (ms-codec 0.10.1): `ms inspect` FAILs the secret share (index `s`) and an unknown mnem
+  language, `ms combine --to entropy|ms1` works on a hashlock preimage share set, and
+  `ms repair` names a character outside the codex32 alphabet. The ms pin is mirrored in
+  `manual.yml`, `quickstart.yml` and `technical-manual.yml`; the Examples golden shows the
+  new pin. It is the first pinned release that is signed, so `first_signed` for ms is now
+  `0.20.2`: with `minisign` installed, the installer refuses a missing signature on it.
+  The GUI manual stays on mnemonic-gui v0.63.0's tier (ms 0.20.1): `[installer-ahead]` and
+  its §82 section name the new tag, and `manual-gui.yml`'s `verify-examples` tier stays at
+  the GUI's tags. The manual's `ms` chapter (`combine`, `inspect`) and the BCH primer
+  already describe this release.
+
 ## mnemonic-toolkit [0.105.1] — 2026-09-25
 
 ### Installer pins: mnemonic-toolkit v0.105.1, ms 0.20.1

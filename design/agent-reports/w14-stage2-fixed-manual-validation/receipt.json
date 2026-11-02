@@ -1,0 +1,48 @@
+{
+  "source_commit": "76c2698c",
+  "pull_request": 121,
+  "accepted_spec": "mnemonic-refugium 914b2db3, design/SPEC_w14_stage2_fixed_advice.md",
+  "advice_text_comparison": "all 7 exact paragraphs present after Markdown whitespace/angle escape normalization",
+  "audit": "PASS after two MD038 code-span spaces corrected; no changed semantics",
+  "doc_guard_self_tests": {
+    "passed": 158,
+    "failed": 0
+  },
+  "flag_lint_mutations": {
+    "passed": 15,
+    "failed": 0
+  },
+  "pdf": {
+    "status": "PASS",
+    "pages": 544,
+    "spot_checked_pages": [
+      353,
+      401
+    ],
+    "observed": "New destination-choice and per-shape checklist paragraphs render legibly, within margins. Other inherited inline-code formatting is outside this correction."
+  },
+  "html": "PASS",
+  "artifacts": {
+    "m-format-manual.pdf": {
+      "sha256": "0055f86495c3406c35f905ef885572a60faf98985df791c02fefffb0480be2bc",
+      "bytes": 1931359
+    },
+    "m-format-manual.html": {
+      "sha256": "142aa6fd59397edd19a0a61d135da1b43c1a19df143ca7ed53772493281c54a3",
+      "bytes": 1927139
+    }
+  },
+  "limits": [
+    "Required remote CI and independent whole-diff review pending.",
+    "MR manual flag lint against corrected CLI and final toolkit-master pin remain MR obligations.",
+    "No tag, release or wallet operation."
+  ],
+  "log_sha256": {
+    "manual-audit-r1.log": "a8ee1c8ea5360398f5bfd6b3408adddc8e996299fe2ac8acca5e9a1ef5d3def9",
+    "manual-audit-r2.log": "0045889dd3e9bbe7af209ab6c5746b69ffaeb02af867b88d7262958c5486f297",
+    "manual-flag-mutants-r1.log": "fd26173a8a70da170ff1e8970707e2f6950cf51b8905a86b30dbd1b052457bc4",
+    "manual-docguard-r1.log": "f7fb33e2ba3cc1473ad915a62933c91c17a29fb5291ce1c2f7890d79aaa4858f",
+    "manual-pdf-r1.log": "9a6a102db93460fcae4a6eaee693c8d845da2efffd1a208d3ae3c6a5604b9ca4",
+    "manual-html-r1.log": "6e21e28ebceefb8edd522a7e6c3b8fa320a3c69070007a12b5dd71af7aa13ccb"
+  }
+}
