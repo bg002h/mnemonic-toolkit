@@ -215,6 +215,16 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                 )));
             }
         }
+        // Scratch fix (report #3, minimal form), placed AFTER the residue check
+        // so `@0/<0;1>/0/*` keeps its residue message: an explicit `/<a;b>`
+        // multipath with no trailing `/*` is not representable in md1.
+        if caps.name("mpath").is_some() && caps.name("wild").is_none() {
+            return Err(ToolkitError::DescriptorParse(format!(
+                "@{i}: a multipath use-site `/<a;b>` with no trailing `/*` (a non-ranged \
+                 multipath) is not representable in md1, which encodes only a ranged \
+                 `/<a;b>/*` or bare `/*` use-site"
+            )));
+        }
         out.push(PlaceholderOccurrence {
             i,
             fingerprint_anno,
