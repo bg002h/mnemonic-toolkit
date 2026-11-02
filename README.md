@@ -89,6 +89,8 @@ The `mnemonic` subcommands, grouped below. Run any with `--help`, or see the
 **[CLI reference chapter](docs/manual/src/40-cli-reference/41-mnemonic.md)** for
 the authoritative, per-flag documentation.
 
+Which verbs belong to `mnemonic` and which stay with the per-format CLIs (`ms`, `mk`, `md`, `mt`, `mr`): [Which tool owns which verb](docs/manual/src/50-comparing/51-format-decision.md#which-tool-owns-which-verb).
+
 - **Bundle** — `bundle` (synthesize the 3-card ms1+mk1+md1 backup, or watch-only 2-card from xpub), `verify-bundle` (re-derive + parity-check across cards).
 - **Convert / derive** — `convert` (seed/key conversions across the typed graph: phrase / entropy / xpub / xprv / wif / fingerprint / path / ms1 / mk1 / bip38 / minikey / electrum-phrase / address), `addresses` (list a wallet's receive/change addresses, batch watch-only), `derive-child` (BIP-85 child entropy/keys).
 - **Wallet import / export** — `import-wallet` (third-party blob → m-format bundle: Bitcoin Core, BSMS/BIP-129, Coldcard, Sparrow, Specter, Electrum), `export-wallet` (watch-only artifacts: Bitcoin Core importdescriptors, BIP-388 wallet_policy, BSMS), `restore` (watch-only restore documents — single-sig from a seed + passphrase, fingerprint-gated; multisig from the shared md1 card alone, incl. taproot NUMS), `decode-address` (address → network / script type / witness version / scriptPubKey).
