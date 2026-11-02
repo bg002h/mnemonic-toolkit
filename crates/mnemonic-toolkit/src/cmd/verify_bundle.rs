@@ -509,7 +509,15 @@ pub fn run<W: Write, E: Write>(
                 && md_codec::canonical_origin::canonical_origin(&d.tree).is_some()
                 && crate::synthesize::cli_template_from_tree(&d.tree).is_some();
             if is_singlesig_template {
-                return verify_singlesig_template(&d, args, stdin, stdout, stderr, json_context);
+                return verify_singlesig_template(
+                    &d,
+                    args,
+                    stdin,
+                    stdout,
+                    stderr,
+                    json_context,
+                    effective_no_auto_repair,
+                );
             }
             // #28 phase 2 — keyless MULTISIG / general TEMPLATE bundle (n≥2,
             // canonical OR general — same routing as restore P3b). The supplied
@@ -713,6 +721,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
     stdout: &mut W,
     stderr: &mut E,
     json_context: bool,
+    no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
     use crate::synthesize::ResolvedSlot;
     use std::str::FromStr;
@@ -826,6 +835,21 @@ fn verify_singlesig_template<W: Write, E: Write>(
         crate::format::MkField::Multi(_) => false,
     };
     let mut checks: Vec<VerifyCheck> = Vec::new();
+    // FIX #37: a supplied --ms1 is checked against the canonical seed slot's
+    // card (`resolved`, which carries the entropy even under --origin).
+    if args.ms1.first().is_some_and(|m| !m.is_empty()) {
+        let expected_seed = crate::synthesize::synthesize_unified(
+            &resolved,
+            template,
+            1,
+            args.network,
+            args.privacy_preserving,
+            args.language.unwrap_or_default().into(),
+            crate::synthesize::Md1Form::Template,
+        )?;
+        let expected_ms1 = expected_seed.ms1.first().map(String::as_str).unwrap_or("");
+        checks.extend(ms1_card_checks(&args.ms1[0], expected_ms1, no_auto_repair));
+    }
     checks.push(VerifyCheck {
         name: "md1_template_match".into(),
         passed: md1_match,
@@ -888,8 +912,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
                  account path (the wallet-id was computed for the canonical origin)."
             );
         } else {
-            let prefix = hex::decode(prefix_hex.trim())
-                .map_err(|e| ToolkitError::BadInput(format!("--expect-wallet-id hex: {e}")))?;
+            let prefix = crate::cmd::restore::decode_wallet_id_prefix(prefix_hex)?;
             if prefix.len() < 4 {
                 let _ = writeln!(
                     stderr,
@@ -1118,15 +1141,16 @@ fn verify_multisig_template<W: Write, E: Write>(
     // SET of csis equals the expected per-slot set. Empty --mk1 → not checked.
     let mk1_bind =
         check_mk1_template_stubs(&args.mk1, completed_template_id.as_bytes(), d.n as usize);
-    if let Some(passed) = mk1_bind {
+    if let Some(bind) = mk1_bind {
+        let (passed, detail) = match bind {
+            StubBind::Bound => (true, "supplied mk1 template stub(s) bind via the template-id stub"),
+            StubBind::NotBound => (false, "supplied mk1 stub(s) do NOT bind via the template-id stub (card mismatch or policy/template cross-mix)"),
+            StubBind::Unreadable => (false, "supplied mk1 stub(s) do NOT bind via the template-id stub: an --mk1 value has no readable chunk_set_id (damaged card or not a template stub)"),
+        };
         checks.push(VerifyCheck {
             name: "mk1_template_stub_bind".into(),
             passed,
-            detail: if passed {
-                "supplied mk1 template stub(s) bind via the template-id stub".into()
-            } else {
-                "supplied mk1 stub(s) do NOT bind via the template-id stub (card mismatch or policy/template cross-mix)".into()
-            },
+            detail: detail.into(),
             ..Default::default()
         });
     }
@@ -1207,7 +1231,13 @@ fn verify_multisig_template<W: Write, E: Write>(
 /// stubs are slot-ordered, so the SET of supplied csis must equal the expected
 /// per-slot set `{ csi(i) : i in 0..n }`. Returns `None` when no `--mk1` is
 /// supplied (the check is skipped — completion still gates funds-safety).
-fn check_mk1_template_stubs(mk1: &[String], template_id: &[u8], n: usize) -> Option<bool> {
+enum StubBind {
+    Bound,
+    NotBound,
+    Unreadable,
+}
+
+fn check_mk1_template_stubs(mk1: &[String], template_id: &[u8], n: usize) -> Option<StubBind> {
     if mk1.is_empty() {
         return None;
     }
@@ -1220,11 +1250,23 @@ fn check_mk1_template_stubs(mk1: &[String], template_id: &[u8], n: usize) -> Opt
     let expected: std::collections::BTreeSet<u32> = (0..n as u32)
         .map(|i| crate::synthesize::derive_mk1_chunk_set_id_for_slot(&stub, i))
         .collect();
-    let supplied: std::collections::BTreeSet<u32> =
-        mk1.iter().filter_map(|s| chunk_set_id_extract(s)).collect();
+    // FIX #52: a card whose chunk_set_id cannot be read fails the check.
+    let mut supplied: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    for s in mk1 {
+        match chunk_set_id_extract(s) {
+            Some(c) => {
+                supplied.insert(c);
+            }
+            None => return Some(StubBind::Unreadable),
+        }
+    }
     // Every supplied stub csi must be one of the expected per-slot csis, and the
     // supplied set must cover all n slots (one stub per cosigner).
-    Some(supplied == expected)
+    Some(if supplied == expected {
+        StubBind::Bound
+    } else {
+        StubBind::NotBound
+    })
 }
 
 fn run_full<W: Write, E: Write>(
@@ -1752,11 +1794,27 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             let (xpub_str, _) = crate::slip0132::normalize_xpub_prefix(xpub_str)?;
             let xpub = BipXpub::from_str(&xpub_str)
                 .map_err(|e| ToolkitError::Bitcoin(crate::error::BitcoinErrorKind::Bip32(e)))?;
-            let fp = slot_inputs
+            // FIX #44 (mirrors bundle.rs H7): parse the slot fingerprint strictly,
+            // require it to agree with the descriptor annotation, and fall back to
+            // the annotation when no slot fingerprint is given.
+            let slot_fp: Option<bitcoin::bip32::Fingerprint> = slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Fingerprint)
-                .and_then(|s| bitcoin::bip32::Fingerprint::from_str(&s.value).ok())
-                .unwrap_or_default();
+                .map(|s| {
+                    bitcoin::bip32::Fingerprint::from_str(&s.value).map_err(|e| {
+                        ToolkitError::BadInput(format!("--slot @{idx}.fingerprint parse: {e}"))
+                    })
+                })
+                .transpose()?;
+            let anno_fp = descriptor_resolved.fingerprint_annos[idx as usize];
+            if let (Some(anno), Some(slot)) = (anno_fp, slot_fp) {
+                if anno != slot {
+                    return Err(ToolkitError::DescriptorParse(format!(
+                        "--slot @{idx}.fingerprint specifies {slot} but descriptor @{idx} annotation specifies {anno}"
+                    )));
+                }
+            }
+            let fp = slot_fp.or(anno_fp).unwrap_or_default();
             let path = match slot_inputs
                 .iter()
                 .find(|s| s.subkey == crate::slot_input::SlotSubkey::Path)
@@ -2274,6 +2332,123 @@ pub struct SuppliedCards<'a> {
 /// The corrected candidate is carried in the repair engine's `SecretString`
 /// (zeroize-on-drop + redacting Debug; secret-hygiene — SPEC §8 risk 6 / G5)
 /// even though it is only ever compared here, never emitted.
+/// `ms1_decode` + `ms1_entropy_match` for a seed-bearing single-sig slot: the
+/// supplied card against the expected (typed-seed) card. Shared by the keyed
+/// single-sig check list and the single-sig TEMPLATE verify (FIX #37).
+fn ms1_card_checks(
+    supplied_ms1: &str,
+    expected_ms1: &str,
+    no_auto_repair: bool,
+) -> Vec<VerifyCheck> {
+    let mut checks: Vec<VerifyCheck> = Vec::with_capacity(2);
+    match ms_codec::decode(supplied_ms1) {
+        Ok(_) => {
+            checks.push(VerifyCheck {
+                name: "ms1_decode".into(),
+                passed: true,
+                detail: "decoded successfully".into(),
+                ..Default::default()
+            });
+            if supplied_ms1 == expected_ms1 {
+                checks.push(VerifyCheck {
+                    name: "ms1_entropy_match".into(),
+                    passed: true,
+                    detail: "ms1 byte-identical".into(),
+                    ..Default::default()
+                });
+            } else {
+                let diff = VerifyCheck::diff_offset(expected_ms1, supplied_ms1);
+                checks.push(VerifyCheck {
+                    name: "ms1_entropy_match".into(),
+                    passed: false,
+                    detail: "expected ms1 bytes differ from supplied".into(),
+                    expected: Some(expected_ms1.to_string()),
+                    actual: Some(supplied_ms1.to_string()),
+                    diff_byte_offset: Some(diff),
+                    decode_error: None,
+                });
+            }
+        }
+        Err(e) => {
+            // v0.22.1 Phase 4 site #1 → Cycle F C1 (SPEC §0.4/§3) — a
+            // direct, non-advisory `repair_card` call replaces the
+            // short-circuiting helper here: the corrected candidate is
+            // compared against the user's TYPED seed (`expected_ms1`)
+            // and surfaced via the check rows, never silently applied.
+            // Invariant (SPEC §3/§8.1): this site is only reached for a
+            // non-watch-only slot, so the typed-seed ground truth is present.
+            debug_assert!(
+                !expected_ms1.is_empty(),
+                "verify-bundle ms1 compare reached with empty ground truth (watch-only must skip)"
+            );
+            let ground_truth = if !no_auto_repair {
+                ms1_ground_truth_compare(supplied_ms1, expected_ms1)
+            } else {
+                None
+            };
+            match ground_truth {
+                Some(true) => {
+                    // Match — the repair recovered the right card,
+                    // confirmed by the ground truth the user typed.
+                    checks.push(VerifyCheck {
+                        name: "ms1_decode".into(),
+                        passed: true,
+                        detail: "recovered via auto-repair, confirmed against expected seed".into(),
+                        ..Default::default()
+                    });
+                    checks.push(VerifyCheck {
+                        name: "ms1_entropy_match".into(),
+                        passed: true,
+                        detail: "recovered via auto-repair, confirmed against expected seed".into(),
+                        ..Default::default()
+                    });
+                }
+                Some(false) => {
+                    // Mismatch (SPEC §5.5 funds anchor / wrong-bundle
+                    // attack) — a failed check row, full table, exit 4.
+                    // REDACTED: no seed bytes, diff_byte_offset pinned
+                    // None (G5 — the offset would leak positional info
+                    // about two secret strings).
+                    checks.push(VerifyCheck {
+                        name: "ms1_decode".into(),
+                        passed: true,
+                        detail: "recovered via auto-repair (unconfirmed)".into(),
+                        ..Default::default()
+                    });
+                    checks.push(VerifyCheck {
+                        name: "ms1_entropy_match".into(),
+                        passed: false,
+                        detail: "auto-repair candidate did not match the expected seed — \
+                            this card is not a card for this seed"
+                            .into(),
+                        ..Default::default()
+                    });
+                }
+                None => {
+                    // Uncorrectable, or auto-repair disabled — original
+                    // decode-error behavior, unchanged.
+                    let err_msg = format!("{:?}", e);
+                    checks.push(VerifyCheck {
+                        name: "ms1_decode".into(),
+                        passed: false,
+                        detail: err_msg.clone(),
+                        decode_error: Some(err_msg),
+                        ..Default::default()
+                    });
+                    checks.push(VerifyCheck {
+                        name: "ms1_entropy_match".into(),
+                        passed: true,
+                        detail: "ms1 decode failed; entropy match cannot run".into(),
+                        decode_error: Some("skipped: ms1 decode failed".into()),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    checks
+}
+
 fn ms1_ground_truth_compare(supplied_ms1: &str, expected_ms1: &str) -> Option<bool> {
     let outcome =
         crate::repair::repair_card(crate::repair::CardKind::Ms1, &[supplied_ms1.to_string()])
@@ -2347,113 +2522,7 @@ pub fn emit_verify_checks(
     } else {
         let supplied_ms1 = supplied.ms1.first().map(|s| s.as_str()).unwrap_or("");
         let expected_ms1 = expected.ms1.first().map(|s| s.as_str()).unwrap_or("");
-        match ms_codec::decode(supplied_ms1) {
-            Ok(_) => {
-                checks.push(VerifyCheck {
-                    name: "ms1_decode".into(),
-                    passed: true,
-                    detail: "decoded successfully".into(),
-                    ..Default::default()
-                });
-                if supplied_ms1 == expected_ms1 {
-                    checks.push(VerifyCheck {
-                        name: "ms1_entropy_match".into(),
-                        passed: true,
-                        detail: "ms1 byte-identical".into(),
-                        ..Default::default()
-                    });
-                } else {
-                    let diff = VerifyCheck::diff_offset(expected_ms1, supplied_ms1);
-                    checks.push(VerifyCheck {
-                        name: "ms1_entropy_match".into(),
-                        passed: false,
-                        detail: "expected ms1 bytes differ from supplied".into(),
-                        expected: Some(expected_ms1.to_string()),
-                        actual: Some(supplied_ms1.to_string()),
-                        diff_byte_offset: Some(diff),
-                        decode_error: None,
-                    });
-                }
-            }
-            Err(e) => {
-                // v0.22.1 Phase 4 site #1 → Cycle F C1 (SPEC §0.4/§3) — a
-                // direct, non-advisory `repair_card` call replaces the
-                // short-circuiting helper here: the corrected candidate is
-                // compared against the user's TYPED seed (`expected_ms1`)
-                // and surfaced via the check rows, never silently applied.
-                // Invariant (SPEC §3/§8.1): this site is only reached for a
-                // non-watch-only slot, so the typed-seed ground truth is present.
-                debug_assert!(
-                    !expected_ms1.is_empty(),
-                    "verify-bundle ms1 compare reached with empty ground truth (watch-only must skip)"
-                );
-                let ground_truth = if !no_auto_repair {
-                    ms1_ground_truth_compare(supplied_ms1, expected_ms1)
-                } else {
-                    None
-                };
-                match ground_truth {
-                    Some(true) => {
-                        // Match — the repair recovered the right card,
-                        // confirmed by the ground truth the user typed.
-                        checks.push(VerifyCheck {
-                            name: "ms1_decode".into(),
-                            passed: true,
-                            detail: "recovered via auto-repair, confirmed against expected seed"
-                                .into(),
-                            ..Default::default()
-                        });
-                        checks.push(VerifyCheck {
-                            name: "ms1_entropy_match".into(),
-                            passed: true,
-                            detail: "recovered via auto-repair, confirmed against expected seed"
-                                .into(),
-                            ..Default::default()
-                        });
-                    }
-                    Some(false) => {
-                        // Mismatch (SPEC §5.5 funds anchor / wrong-bundle
-                        // attack) — a failed check row, full table, exit 4.
-                        // REDACTED: no seed bytes, diff_byte_offset pinned
-                        // None (G5 — the offset would leak positional info
-                        // about two secret strings).
-                        checks.push(VerifyCheck {
-                            name: "ms1_decode".into(),
-                            passed: true,
-                            detail: "recovered via auto-repair (unconfirmed)".into(),
-                            ..Default::default()
-                        });
-                        checks.push(VerifyCheck {
-                            name: "ms1_entropy_match".into(),
-                            passed: false,
-                            detail: "auto-repair candidate did not match the expected seed — \
-                                this card is not a card for this seed"
-                                .into(),
-                            ..Default::default()
-                        });
-                    }
-                    None => {
-                        // Uncorrectable, or auto-repair disabled — original
-                        // decode-error behavior, unchanged.
-                        let err_msg = format!("{:?}", e);
-                        checks.push(VerifyCheck {
-                            name: "ms1_decode".into(),
-                            passed: false,
-                            detail: err_msg.clone(),
-                            decode_error: Some(err_msg),
-                            ..Default::default()
-                        });
-                        checks.push(VerifyCheck {
-                            name: "ms1_entropy_match".into(),
-                            passed: true,
-                            detail: "ms1 decode failed; entropy match cannot run".into(),
-                            decode_error: Some("skipped: ms1 decode failed".into()),
-                            ..Default::default()
-                        });
-                    }
-                }
-            }
-        }
+        checks.extend(ms1_card_checks(supplied_ms1, expected_ms1, no_auto_repair));
     }
 
     // 3. mk1_decode — must succeed for checks 4/5/6 to run.
@@ -2665,16 +2734,21 @@ fn emit_multisig_checks(
     // Group supplied.mk1 by chunk_set_id; remember per-group decode outcome
     // (Ok(card) or Err(message)) so the mapping diagnostic can distinguish
     // DecodeFailed from NotSupplied.
-    use std::collections::BTreeMap;
-    let mut chunked: BTreeMap<u32, Vec<&str>> = BTreeMap::new();
-    let mut singles: Vec<Vec<&str>> = Vec::new();
+    // scratch fix #13: group in FIRST-SEEN order, not chunk_set_id order.
+    let mut groups: Vec<Vec<&str>> = Vec::new();
+    let mut index_of: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
     for s in supplied.mk1 {
         match chunk_set_id_extract(s) {
-            Some(csi) => chunked.entry(csi).or_default().push(s.as_str()),
-            None => singles.push(vec![s.as_str()]),
+            Some(csi) => {
+                let gi = *index_of.entry(csi).or_insert_with(|| {
+                    groups.push(Vec::new());
+                    groups.len() - 1
+                });
+                groups[gi].push(s.as_str());
+            }
+            None => groups.push(vec![s.as_str()]),
         }
     }
-    let groups: Vec<Vec<&str>> = chunked.into_values().chain(singles).collect();
     // v0.22.1 Phase 4 site #5 — auto-fire on per-group supplied mk1 decode-fail.
     // The closure-return is `Result<Result<KeyCard, String>, ToolkitError>`:
     // outer Result threads RepairShortCircuit via `?` after collect; inner
@@ -2753,12 +2827,14 @@ fn emit_multisig_checks(
             .as_ref()
             .expect("Some per needs_positional_fallback");
         // First pass: place decoded groups into matching cosigner slots by xpub.
+        let mut unplaced_groups = 0usize;
         for (gi, decode_res) in supplied_decoded.iter().enumerate() {
             if let Ok(card) = decode_res {
                 let want = crate::synthesize::xpub_to_65(&card.xpub);
                 // Prefer slot gi if it matches.
                 if let Some((_, b)) = pubkeys.get(gi) {
                     if b == &want
+                        && gi < n
                         && matches!(card_for_cosigner[gi], Err(MappingFailure::NotSupplied))
                     {
                         card_for_cosigner[gi] = Ok(card);
@@ -2768,6 +2844,7 @@ fn emit_multisig_checks(
                 // Otherwise scan for first unfilled matching slot.
                 if let Some((idx, _)) = pubkeys.iter().find(|(slot, b)| {
                     b == &want
+                        && (*slot as usize) < n
                         && matches!(
                             card_for_cosigner[*slot as usize],
                             Err(MappingFailure::NotSupplied)
@@ -2775,14 +2852,17 @@ fn emit_multisig_checks(
                 }) {
                     card_for_cosigner[*idx as usize] = Ok(card);
                 } else {
-                    // Decoded successfully but xpub not in any policy slot.
-                    // Promote any NotSupplied slot to XpubNotInPolicy (precedence).
-                    for slot in card_for_cosigner.iter_mut() {
-                        if matches!(slot, Err(MappingFailure::NotSupplied)) {
-                            *slot = Err(MappingFailure::XpubNotInPolicy);
-                            break;
-                        }
-                    }
+                    // scratch fix #12: defer the blame until every matching card
+                    // has been placed.
+                    unplaced_groups += 1;
+                }
+            }
+        }
+        for _ in 0..unplaced_groups {
+            for slot in card_for_cosigner.iter_mut() {
+                if matches!(slot, Err(MappingFailure::NotSupplied)) {
+                    *slot = Err(MappingFailure::XpubNotInPolicy);
+                    break;
                 }
             }
         }
@@ -3362,12 +3442,39 @@ fn emit_md1_checks(
                     .and_then(|v| v.first())
                     .map(|(_, b)| *b);
                 let xpub_match = exp_xpub == act_xpub;
-                if xpub_match {
+                // FIX #39: the policy (tree + use-site path + overrides) must match too.
+                let policy_match = exp_desc.tree == desc.tree
+                    && exp_desc.use_site_path == desc.use_site_path
+                    && exp_desc.tlv.use_site_path_overrides == desc.tlv.use_site_path_overrides;
+                if xpub_match && policy_match {
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
                         passed: true,
                         detail: "65-byte xpub matches expected".into(),
                         ..Default::default()
+                    });
+                } else if !policy_match {
+                    let mut classes: Vec<&str> = Vec::new();
+                    if exp_desc.tree != desc.tree {
+                        classes.push("policy tree (threshold/script-type/order)");
+                    }
+                    if exp_desc.use_site_path != desc.use_site_path {
+                        classes.push("use-site path (change-chain/multipath)");
+                    }
+                    if exp_desc.tlv.use_site_path_overrides != desc.tlv.use_site_path_overrides {
+                        classes.push("per-cosigner use-site override");
+                    }
+                    checks.push(VerifyCheck {
+                        name: "md1_xpub_match".into(),
+                        passed: false,
+                        detail: format!(
+                            "md1 reconstructs a DIFFERENT wallet — structural policy mismatch: {}",
+                            classes.join(", ")
+                        ),
+                        expected: Some(format!("{:?}", exp_desc.tree)),
+                        actual: Some(format!("{:?}", desc.tree)),
+                        diff_byte_offset: None,
+                        decode_error: None,
                     });
                 } else {
                     let exp_hex = exp_xpub.map(hex::encode).unwrap_or_default();
