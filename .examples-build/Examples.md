@@ -789,7 +789,7 @@ Running the guided builder on it:
 ```
 $ mnemonic build-descriptor --spec policy.json --network mainnet
 build-descriptor: refused — 1 diagnostic(s):
-  [over_envelope] root: policy exceeds the always-previewable envelope (2^(11 keys + 2 hashes) × 9 timelock-states > cap 4096); use the raw `--descriptor` path for arbitrarily complex policies
+  [over_envelope] root: policy exceeds the always-previewable envelope (2^(11 keys + 1 hashes) × 9 timelock-states > cap 4096); use the raw `--descriptor` path for arbitrarily complex policies
 ```
 
 (For a policy *within* the envelope -- fewer keys -- `build-descriptor --spec`
