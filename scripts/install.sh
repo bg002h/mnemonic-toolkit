@@ -52,7 +52,7 @@ component_info() {
             echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.105.1|mnemonic|"
             ;;
         md)
-            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.3|md|cli-compiler"
+            echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.4|md|cli-compiler"
             ;;
         ms)
             echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.20.2|ms|"
@@ -187,7 +187,7 @@ trusted_keys() {
 first_signed() {
     case "$1" in
         mnemonic)     echo "" ;;
-        md)           echo "" ;;
+        md)           echo "0.20.4" ;;
         ms)           echo "0.20.2" ;;
         mk)           echo "" ;;
         mnemonic-gui) echo "" ;;

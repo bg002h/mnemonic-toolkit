@@ -67,6 +67,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   the GUI's tags. The manual's `ms` chapter (`combine`, `inspect`) and the BCH primer
   already describe this release.
 
+### Installer pins: md 0.20.4
+
+- **`scripts/install.sh` installs md 0.20.4**, the release of the md bug-hunt fixes
+  (md-codec 0.48.5): `md encode --json` checks relative timelocks and chunks as the text
+  path does, a bare multipath alternative of 2^31 or more is refused as hardened,
+  `--policy-id-fingerprint` prints on stderr, `md inspect` calls a keyed card watch-only,
+  `--fingerprint` takes hex digits only, and `md decode` drops the origins note for a single
+  key at its canonical origin. The md pin is mirrored in `manual.yml`, `quickstart.yml`,
+  `technical-manual.yml` and `cross-tool-differential.yml`; the Examples golden shows the
+  new pin. It is the first pinned md release that is signed, so `first_signed` for md is now
+  `0.20.4`: with `minisign` installed, the installer refuses a missing signature on it.
+  The GUI manual and `manual-gui.yml` stay on the GUI's tier (md 0.20.3).
+
 ## mnemonic-toolkit [0.105.1] — 2026-09-25
 
 ### Installer pins: mnemonic-toolkit v0.105.1, ms 0.20.1
