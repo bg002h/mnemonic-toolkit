@@ -6397,3 +6397,31 @@ screen printed. Print the values.
 - Failure scenario and fix: `assert_refused` does not check that stdout is empty, though §2 says refusals print "nothing on stdout". Fix: assert empty stdout in `assert_refused`.
 - Status: `deferred-minor`
 - Owning phase: none, ownerless residue.
+
+### `convert-path-wd-s1-help-master-key-wording` — whole-diff s1 M1: "path from the master key" is false for `--from xpub --to address`
+- Surfaced 2026-11-02 whole-diff s1 (`design/agent-reports/whole-diff-convert-path-s1.md`).
+- Location: the `--path` help text, `docs/manual/src/40-cli-reference/41-mnemonic.md:1102`, SPEC S7.
+- Failure scenario and fix: from an xpub source with the address target the path is relative to that xpub. Following "from the master key" literally (`--path m/84'/1'/0'/0/0`) exits 1 with "BIP-32 error: cannot derive hardened key from public key" (fails closed). Wording: "BIP-32 path from the master key (from an xpub source: relative to that xpub, e.g. `m/0/0`)". Help, manual and spec change together.
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-wd-s1-assert-refused-stdout` — whole-diff s1 N1: `assert_refused` does not assert an empty stdout
+- Surfaced 2026-11-02 whole-diff s1. Same item as `convert-path-assert-refused-stdout` above; the new `r5_*` and `r4_fingerprint_only_*` rows assert it explicitly.
+- Location: `crates/mnemonic-toolkit/tests/cli_convert_path.rs` (`assert_refused`).
+- Failure scenario and fix: see the entry above (assert empty stdout inside `assert_refused`).
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-wd-s1-bip38-signet-path` — whole-diff s1 N2: signet `--to bip38` with `--path` says "bip38: invalid wif private key"
+- Surfaced 2026-11-02 whole-diff s1. Pre-existing, outside the diff (the bip38 arm is unchanged); mainnet round-trips.
+- Location: the bip38 arm of `crates/mnemonic-toolkit/src/cmd/convert.rs`.
+- Failure scenario and fix: on signet the error text names a wif problem that the holder did not cause. Fix: a network-specific refusal or a correct message.
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-wd-s2-extra-workspace-test` — whole-diff s2 N2: one workspace test unaccounted for (4175 vs 4174)
+- Surfaced 2026-11-02 whole-diff s2 (`design/agent-reports/whole-diff-convert-path-s2.md`).
+- Location: the workspace nextest count.
+- Failure scenario and fix: the reviewer's scratch copy ran 4174 tests and the worktree 4175; the extra test was not identified. Identify it by diffing the two `--list` outputs.
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
