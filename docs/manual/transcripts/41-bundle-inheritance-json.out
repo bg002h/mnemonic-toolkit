@@ -40,7 +40,7 @@
         "template": "descriptor",
         "threshold": 3,
         "cosigner_count": 3,
-        "path_family": "bip87",
+        "path_family": "descriptor",
         "cosigners": [
             {
                 "index": 0,

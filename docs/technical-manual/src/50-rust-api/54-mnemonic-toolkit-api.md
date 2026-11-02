@@ -342,7 +342,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
 | `template` | `&'static str` | template name (multisig only) |
 | `threshold` | `u8` | `K` in `K-of-N` |
 | `cosigner_count` | `usize` | `N` |
-| `path_family` | `&'static str` | `"bip48"` or `"bip87"` |
+| `path_family` | `&'static str` | `"bip48"` or `"bip87"` (`--template` mode); `"descriptor"` in descriptor mode (`--descriptor`, `--descriptor-file`, `--import-json`), per SPEC v0.3 §5.3 |
 | `cosigners` | `Vec<CosignerEntry>` | per-cosigner descriptor |
 
 (Source: `format.rs::MultisigInfo`.)
