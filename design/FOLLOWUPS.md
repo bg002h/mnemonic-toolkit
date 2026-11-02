@@ -630,6 +630,14 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `md-bughunt-fixa-wd-m1-manual-gui-fingerprint-stdout` — manual-gui md encode page still says the fingerprint prints on stdout
+
+- **Surfaced:** 2026-11-02, md bug hunt FIX-A whole-diff review (descriptor-mnemonic `design/agent-reports/whole-diff-md-fix-a.md` M1, Minor).
+- **Where:** `docs/manual-gui/src/50-md/53-encode.md` lines 34 and 209-210 (and 218-220: the `--json` entry says nothing about chunks).
+- **What:** md bug-hunt R-10 moved the `policy_id_fingerprint` line to stderr; the GUI manual still says "after the phrase ... on stdout". Documentation only. Proposed wording for 209-210: "Prints the freshly-computed `policy_id_fingerprint` on stderr after the card (stdout carries only the md1 artifact). Default off."
+- **Status:** `deferred-minor`. **Owner:** the mnemonic-gui re-pin to md-cli >= 0.20.4 (when `[installer-ahead]` md is deleted).
+- **Tier:** `v1+`
+
 ### `bsd-process-hardening-parity-procctl-rlimit-core` — `set_non_dumpable()` was a silent no-op on the BSDs (no anti-ptrace / anti-core-dump protection off-Linux)
 
 - **Surfaced:** 2026-06-23, the musl/BSD secret-hygiene recon (`design/SPEC_bsd_hygiene_and_freebsd_gate.md`, Cycle A). `set_non_dumpable()` in the shared, duplicated `process_hardening.rs` was fenced `#[cfg(target_os = "linux")]` and used `prctl(PR_SET_DUMPABLE, 0)`. On FreeBSD/OpenBSD/NetBSD the function compiled but was a silent no-op — the anti-core-dump + anti-ptrace-introspection protection did not run, so a custody process on a BSD could (a) be ptrace/ktrace-introspected and (b) drop a core file the BIP-39 seed / xpriv spills into. A first-class secret-hygiene gap (not deferrable defense-in-depth) per `feedback_secret_hygiene_first_class_bar`.
@@ -6425,3 +6433,9 @@ screen printed. Print the values.
 - Failure scenario and fix: the reviewer's scratch copy ran 4174 tests and the worktree 4175; the extra test was not identified. Identify it by diffing the two `--list` outputs.
 - Status: `deferred-minor`
 - Owning phase: none, ownerless residue.
+
+### `md-encode-help-policy-id-fingerprint-after-the-phrase` — tk PR #131 review N3: md 0.20.4 `md encode --help` still says `--policy-id-fingerprint` prints "after the phrase"
+- Surfaced 2026-11-02, class A review of tk PR #131 (`design/agent-reports/review-pr131-gui-manual.md` N3, Nit).
+- What: md-side, not this PR: md 0.20.4 `md encode --help` still says `--policy-id-fingerprint` prints "after the phrase"; 42-md.md:40 (stderr) is the accurate text.
+- Status: `deferred-minor`
+- Owning phase: descriptor-mnemonic next md-cli release.

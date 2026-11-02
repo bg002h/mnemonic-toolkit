@@ -28,8 +28,8 @@ for this manual:
 - `ms-cli-v0.20.1`
 - `mk-cli-v0.13.0`
 
-The toolkit installer installs these, except `ms`, which it already
-installs at a newer release (next section). Run each binary with
+The toolkit installer installs these, except `md` and `ms`, which it already
+installs at newer releases (next section). Run each binary with
 `--version` to compare; the GUI does not check them for you. The GUI's
 secret channels were measured against exactly these binaries, so an
 older release can misread or refuse the channel spellings the GUI
@@ -37,18 +37,19 @@ writes (for example `ms derive --passphrase @env:…` before `ms`
 0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
 fails (older releases reject its `--allow-argv-secret`). See
 [Version pinning](#version-pinning). Re-run the toolkit installer to
-put its releases in place; the next section lists the one it installs
+put its releases in place; the next section lists the two it installs
 newer than these.
 
 ## When the installer is ahead of the GUI {#installer-ahead}
 
-The toolkit installer currently installs one CLI release newer than
-this GUI was built against: `ms-cli-v0.20.2` (the GUI's label reads
-`Pinned: ms 0.20.1`). The forms run unchanged, and `ms --version`
-printing `0.20.2` is expected.
+The toolkit installer currently installs two CLI releases newer than
+this GUI was built against: `descriptor-mnemonic-md-cli-v0.20.4` (the
+GUI's label reads `Pinned: md 0.20.3`) and `ms-cli-v0.20.2` (label
+`Pinned: ms 0.20.1`). The forms run unchanged, and `md --version` and
+`ms --version` printing the newer versions is expected.
 
-Three outputs differ, all on invalid or unusual input; none changes a
-derived wallet.
+Outputs differ, all on invalid or unusual input; none changes a
+derived wallet. First `ms`, three outputs:
 
 - **`ms inspect`.** A share at share index `s` (the secret itself,
   which `ms combine` refuses) now reads `FAIL: would NOT combine`,
@@ -63,6 +64,32 @@ derived wallet.
 - **`ms repair`.** A character outside the codex32 alphabet is now
   named (`error: invalid character 'b' (not in codex32 alphabet)`),
   where it used to be reported as a string-length error.
+
+Then `md`, four outputs:
+
+- **`md encode`.** `--fingerprint` takes hex digits only: `@0=+f+f+f+f`
+  is now refused (`md: --fingerprint @0: invalid hex byte: +f`) where
+  it was read as a fingerprint. A multipath alternative of 2^31 or more
+  is now refused as hardened (`md: template parse error: …`, naming
+  the alternative as hardened), where the error was a `md: codec error:`
+  saying the value 2147483648 exceeds the single-extension range.
+  With `--policy-id-fingerprint`, the `policy-id-fingerprint: 0x…` line
+  now goes to stderr, so stdout carries only the md1 string(s).
+- **`md encode --json`.** `older(65536)` is now refused with `md: codec
+  error: older(65536) is not what consensus enforces: …`, where it
+  printed a card that locks for 0 blocks. A card that needs several
+  chunks now prints `chunk_set_id` and `chunks`, where it failed with
+  `md: codec error: payload is N data symbols; the codex32 regular
+  code caps single strings at 80 …`.
+- **`md inspect`.** A card that carries keys now ends with the stderr
+  note `note: stdout is watch-only — public keys only, cannot spend`,
+  where it read `note: stdout is a keyless descriptor template (no
+  keys)`.
+- **`md decode`.** A single key at its canonical origin, on a card that
+  carries no fingerprint for it (for example `wpkh` at `m/84'/0'/0'`
+  minted without `--fingerprint`), no longer prints the stderr note
+  `key origins carried by this card …` and its `--path` hint. A card
+  that carries the fingerprint still prints both.
 
 ## When the GUI is older than the CLI
 

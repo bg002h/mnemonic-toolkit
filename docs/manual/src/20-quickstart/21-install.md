@@ -16,7 +16,7 @@ documents are the ones pinned in the toolkit's installer,
 
 **Do not install these CLIs from crates.io.** The copies there are
 several releases older than this manual (for example `md` 0.13 against
-the 0.20.3 documented here) and lack flags it describes.
+the 0.20.4 documented here) and lack flags it describes.
 
 ## Path A — the installer (prebuilt binaries)
 
