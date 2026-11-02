@@ -65,6 +65,7 @@ fn bughunt_tk_03_multipath_without_wildcard_rejected() {
     let slot_xpub = format!("@0.xpub={XPUB_A}");
     let slot_fp = format!("@0.fingerprint={FP_A}");
     let concrete = format!("wpkh([{FP_A}/84'/0'/0']{XPUB_A}/<0;1>)");
+    let want = "error: @0: a multipath use-site `/<a;b>` with no trailing `/*` (a non-ranged multipath) is not representable in md1, which encodes only a ranged `/<a;b>/*` or bare `/*` use-site";
     let mut failures: Vec<String> = Vec::new();
     for (label, desc, slots) in [
         (
@@ -88,6 +89,13 @@ fn bughunt_tk_03_multipath_without_wildcard_rejected() {
             failures.push(format!(
                 "{label}: `{desc}` exited 0 (md1 {})",
                 json(&o)["md1"][0]
+            ));
+        } else if o.status.code() != Some(2) || !out_s(&o).is_empty() || !err_s(&o).contains(want) {
+            failures.push(format!(
+                "{label}: want exit 2, empty stdout and `{want}`; got {:?}\nstdout: {}\nstderr: {}",
+                o.status.code(),
+                out_s(&o),
+                err_s(&o)
             ));
         }
     }
@@ -181,6 +189,15 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
          \"standard\" wallet that Electrum reads as p2pkh (wrong addresses). stdout:\n{}",
         out_s(&o)
     );
+    assert_eq!(o.status.code(), Some(1), "stderr:\n{}", err_s(&o));
+    assert!(out_s(&o).is_empty(), "nothing on stdout:\n{}", out_s(&o));
+    assert!(
+        err_s(&o).contains(
+            "error: --format electrum does not support --template bip86 (P2TR): a plain xpub \"standard\" wallet is read by Electrum as p2pkh. Use --format bitcoin-core (descriptor) or --format sparrow for taproot watch-only setup."
+        ),
+        "stderr:\n{}",
+        err_s(&o)
+    );
 }
 
 // ===========================================================================
@@ -216,6 +233,17 @@ fn bughunt_tk_06_descriptor_anno_fp_checked_for_entropy_and_ms1_slots() {
                  master_fingerprint {}",
                 v["multisig"]["cosigners"][0]["master_fingerprint"]
             ));
+        } else {
+            let want = format!(
+                "--slot @0.{label} derives master fingerprint 73c5da0a but descriptor @0 annotation specifies deadbeef"
+            );
+            if o.status.code() != Some(2) || !err_s(&o).contains(&want) {
+                failures.push(format!(
+                    "@0.{label}: want exit 2 and `{want}`; got {:?}: {}",
+                    o.status.code(),
+                    err_s(&o)
+                ));
+            }
         }
     }
     assert!(
@@ -259,6 +287,13 @@ fn bughunt_tk_09_unparseable_slot_fingerprint_refused() {
         "--slot @0.fingerprint=zzzz is not a fingerprint and must be refused (template mode \
          refuses it); descriptor mode instead: {detail}"
     );
+    assert_eq!(o.status.code(), Some(1), "stderr:\n{}", err_s(&o));
+    assert!(out_s(&o).is_empty(), "nothing on stdout:\n{}", out_s(&o));
+    assert!(
+        err_s(&o).contains("error: --slot @0.fingerprint parse: "),
+        "stderr:\n{}",
+        err_s(&o)
+    );
 }
 
 // ===========================================================================
@@ -300,6 +335,106 @@ fn bughunt_tk_11_singlesig_hardened_usesite_template_form_refused() {
 }
 
 // ===========================================================================
+// 11b -- a single-sig template exists only at the standard `/<0;1>/*` use-site:
+// `bundle --md1-form=template` refuses every other use-site (this also closes
+// #11), and `restore` refuses such a card instead of printing another wallet.
+// ===========================================================================
+
+#[test]
+fn bughunt_tk_11b_singlesig_nonstandard_usesite_template_form_refused() {
+    const PHRASE_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    for desc in [
+        "wpkh(@0)",
+        "wpkh(@0/*)",
+        "wpkh([73c5da0a/84'/0'/0']@0/<2;3>/*)",
+    ] {
+        let o = mn(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--md1-form",
+            "template",
+            "--slot",
+            &format!("@0.phrase={PHRASE_A}"),
+            "--json",
+        ]);
+        assert_eq!(o.status.code(), Some(2), "{desc}: stderr:\n{}", err_s(&o));
+        assert!(out_s(&o).is_empty(), "{desc}: stdout:\n{}", out_s(&o));
+        let e = err_s(&o);
+        assert!(
+            e.contains("cannot template this descriptor shape"),
+            "{desc}: stderr:\n{e}"
+        );
+        assert!(
+            e.contains("or it is single-sig with a use-site other than /<0;1>/*"),
+            "{desc}: stderr:\n{e}"
+        );
+    }
+    // Control: the standard use-site still mints the standard card.
+    let o = mn(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wpkh([73c5da0a/84'/0'/0']@0/<0;1>/*)",
+        "--md1-form",
+        "template",
+        "--slot",
+        &format!("@0.phrase={PHRASE_A}"),
+        "--json",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "control: {}", err_s(&o));
+    assert_eq!(
+        json(&o)["md1"],
+        serde_json::json!(["md1fvwrwqqpqqgqpsqqq3uaau4ctxyl7"])
+    );
+}
+
+#[test]
+fn bughunt_tk_11b_restore_refuses_nonstandard_usesite_singlesig_template() {
+    const PHRASE_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    // Literals: the fixed `bundle` no longer mints these two cards.
+    let want = "error: this keyless single-sig template md1 has a use-site path other than /<0;1>/*, which single-sig template completion cannot rebuild (it would print a different wallet); use the wallet's full descriptor or a --md1-form=policy card instead";
+    let restore = |m: &str, extra: &[&str]| -> Output {
+        let mut a = vec!["restore", "--network", "mainnet", "--md1", m, "--from"];
+        let from = format!("phrase={PHRASE_A}");
+        a.push(&from);
+        a.extend(["--account", "0"]);
+        a.extend(extra);
+        mn(&a)
+    };
+    for m in [
+        "md1fkykhqqpqqgzskqqzxcjnwq6cq0gv",
+        "md1fu85lqqpqqqqqnm3nr4htwmp8w",
+    ] {
+        let o = restore(m, &[]);
+        assert_eq!(o.status.code(), Some(2), "{m}: stderr:\n{}", err_s(&o));
+        assert!(out_s(&o).is_empty(), "{m}: stdout:\n{}", out_s(&o));
+        assert!(err_s(&o).contains(want), "{m}: stderr:\n{}", err_s(&o));
+    }
+    let o = restore(
+        "md1fkykhqqpqqgzskqqzxcjnwq6cq0gv",
+        &["--expect-wallet-id", "1c0170fe"],
+    );
+    assert_eq!(o.status.code(), Some(2), "stderr:\n{}", err_s(&o));
+    assert!(
+        !err_s(&o).contains("wallet-id verified"),
+        "stderr:\n{}",
+        err_s(&o)
+    );
+    // Control: the standard template card still completes.
+    let o = restore("md1fvwrwqqpqqgqpsqqq3uaau4ctxyl7", &[]);
+    assert_eq!(o.status.code(), Some(0), "control: {}", err_s(&o));
+    assert!(
+        out_s(&o).contains("first recv: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"),
+        "control stdout:\n{}",
+        out_s(&o)
+    );
+}
+
+// ===========================================================================
 // #45 -- `bundle --import-json` labels testnet and signet bundles "mainnet"
 // (emit_args.network is never set from the envelope).
 //
@@ -310,14 +445,21 @@ fn bughunt_tk_11_singlesig_hardened_usesite_template_form_refused() {
 
 #[test]
 fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
-    let imported = mn(&[
-        "import-wallet",
-        "--format",
-        "bsms",
-        "--blob",
-        "tests/fixtures/wallet_import/bsms-testnet-2of2.txt",
-        "--json",
-    ]);
+    let import = |network: Option<&str>| -> Output {
+        let mut a = vec![
+            "import-wallet",
+            "--format",
+            "bsms",
+            "--blob",
+            "tests/fixtures/wallet_import/bsms-testnet-2of2.txt",
+        ];
+        if let Some(n) = network {
+            a.extend(["--network", n]);
+        }
+        a.push("--json");
+        mn(&a)
+    };
+    let imported = import(None);
     assert!(
         imported.status.success(),
         "import-wallet: {}",
@@ -331,23 +473,58 @@ fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
         env[0]["bundle"]["network"], "testnet",
         "fixture precondition: the envelope itself says testnet"
     );
+    let bundle = |net: &str, env_file: &std::path::Path| -> Output {
+        mn(&[
+            "bundle",
+            "--network",
+            net,
+            "--import-json",
+            env_file.to_str().unwrap(),
+            "--json",
+        ])
+    };
 
-    let o = mn(&[
-        "bundle",
-        "--network",
-        "mainnet",
-        "--import-json",
-        env_path.to_str().unwrap(),
-        "--json",
-    ]);
-    if o.status.success() {
-        let v = json(&o);
-        assert_eq!(
-            v["network"], "testnet",
-            "bundle --import-json of a testnet envelope exited 0 but labels the bundle {}",
-            v["network"]
-        );
-    }
+    // mainnet against a testnet envelope: refused.
+    let o = bundle("mainnet", &env_path);
+    assert_eq!(o.status.code(), Some(1), "stdout:\n{}", out_s(&o));
+    assert!(out_s(&o).is_empty(), "stdout:\n{}", out_s(&o));
+    assert!(
+        err_s(&o).contains(
+            "error: --network mainnet disagrees with the --import-json envelope's bundle.network (testnet); re-run with --network testnet"
+        ),
+        "stderr:\n{}",
+        err_s(&o)
+    );
+
+    // testnet: fine.
+    let o = bundle("testnet", &env_path);
+    assert_eq!(o.status.code(), Some(0), "stderr:\n{}", err_s(&o));
+    assert_eq!(json(&o)["network"], "testnet");
+
+    // signet against a default (testnet) envelope: the longer text.
+    let o = bundle("signet", &env_path);
+    assert_eq!(o.status.code(), Some(1), "stdout:\n{}", out_s(&o));
+    assert!(out_s(&o).is_empty(), "stdout:\n{}", out_s(&o));
+    assert!(
+        err_s(&o).contains(
+            "error: --network signet disagrees with the --import-json envelope's bundle.network (testnet); if the wallet is on signet, re-create the envelope with import-wallet --network signet from the same blob, otherwise re-run with --network testnet"
+        ),
+        "stderr:\n{}",
+        err_s(&o)
+    );
+
+    // The remedy, as printed: an envelope imported with --network signet.
+    let imported = import(Some("signet"));
+    assert!(
+        imported.status.success(),
+        "import-wallet --network signet: {}",
+        err_s(&imported)
+    );
+    let env_signet = dir.path().join("env-signet.json");
+    std::fs::write(&env_signet, &imported.stdout).unwrap();
+    let o = bundle("signet", &env_signet);
+    assert_eq!(o.status.code(), Some(0), "stderr:\n{}", err_s(&o));
+    assert_eq!(json(&o)["network"], "signet");
 }
 
 // ===========================================================================
@@ -384,9 +561,27 @@ fn bughunt_tk_46_import_json_slot_overlays_other_than_phrase_not_silently_droppe
     let env_path = dir.path().join("env.json");
     std::fs::write(&env_path, skip_middle_3of3_envelope()).unwrap();
     let mut failures: Vec<String> = Vec::new();
-    for (label, slot) in [
-        ("entropy", format!("@0.entropy={ZERO_ENTROPY_HEX}")),
-        ("ms1", format!("@0.ms1={ZERO_ENTROPY_MS1}")),
+    let seed_text = |sub: &str| {
+        format!(
+            "error: --slot @0.{sub}=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from {sub}=- --to phrase (it reads the value from stdin and prints \"phrase: <words>\"), then give the words alone, without the \"phrase: \" label, on stdin to --slot @0.phrase=-"
+        )
+    };
+    for (label, slot, want) in [
+        (
+            "entropy",
+            format!("@0.entropy={ZERO_ENTROPY_HEX}"),
+            seed_text("entropy"),
+        ),
+        (
+            "ms1",
+            format!("@0.ms1={ZERO_ENTROPY_MS1}"),
+            seed_text("ms1"),
+        ),
+        (
+            "fingerprint",
+            "@1.fingerprint=97139860".to_string(),
+            "error: --slot @1.fingerprint=: not supported with --import-json; the envelope already supplies every cosigner's key, fingerprint and path (only --slot @N.phrase= is accepted)".to_string(),
+        ),
     ] {
         let o = mn(&[
             "bundle",
@@ -401,13 +596,19 @@ fn bughunt_tk_46_import_json_slot_overlays_other_than_phrase_not_silently_droppe
         if o.status.success() {
             let v = json(&o);
             let ms1_0 = v["ms1"][0].as_str().unwrap_or("<missing>");
-            if ms1_0.is_empty() {
-                failures.push(format!(
-                    "--slot @0.{label}=...: exit 0 but ms1[0] is the empty watch-only sentinel \
-                     (mode {})",
-                    v["mode"]
-                ));
-            }
+            failures.push(format!(
+                "--slot @0.{label}=...: exit 0 but ms1[0] is {ms1_0:?} (mode {})",
+                v["mode"]
+            ));
+        } else if o.status.code() != Some(1)
+            || !out_s(&o).is_empty()
+            || !err_s(&o).contains(&want)
+        {
+            failures.push(format!(
+                "{label}: want exit 1, empty stdout and `{want}`; got {:?}\nstderr: {}",
+                o.status.code(),
+                err_s(&o)
+            ));
         }
     }
     assert!(
@@ -603,6 +804,21 @@ fn bughunt_tk_52_template_stub_check_not_passed_by_garbage_mk1() {
          mk1_template_stub_bind check must fail (or the run must refuse). stdout:\n{}",
         out_s(&bad)
     );
+    assert_eq!(bad.status.code(), Some(4), "stdout:\n{}", out_s(&bad));
+    let j = json(&bad);
+    assert_eq!(j["result"], "mismatch", "stdout:\n{}", out_s(&bad));
+    let row = j["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "mk1_template_stub_bind")
+        .expect("mk1_template_stub_bind row");
+    assert_eq!(row["passed"], false, "row: {row}");
+    assert_eq!(
+        row["detail"],
+        "supplied mk1 stub(s) do NOT bind via the template-id stub: an --mk1 value has no readable chunk_set_id (damaged card or not a template stub)",
+        "row: {row}"
+    );
 }
 
 // ===========================================================================
@@ -639,8 +855,8 @@ fn bughunt_tk_54_descriptor_mode_path_family_not_bip87_for_bip48_origin() {
         v["multisig"]["cosigners"][0]["origin_path"], "m/48'/0'/0'/2'",
         "fixture precondition: BIP-48 origin"
     );
-    assert_ne!(
-        v["multisig"]["path_family"], "bip87",
-        "a BIP-48 (m/48'/..) descriptor is reported with path_family \"bip87\""
+    assert_eq!(
+        v["multisig"]["path_family"], "descriptor",
+        "descriptor mode reports the literal path_family \"descriptor\" (SPEC v0.3 5.3)"
     );
 }
