@@ -299,6 +299,9 @@ disagreeing `internal` flags. Anything else is left untouched:
 - A receive/change-*shaped* pair whose keys or origins **differ** is
   refused (exit 2) with a distinct-key message rather than merged —
   distinct keys are different wallets, never combined.
+- A same-key pair whose scripts differ apart from the final step
+  (e.g. `wsh(pk(A/0/*))` + `wsh(pkh(A/1/*))`) is not merged; its
+  entries fall through to the use-site residue reject (exit 2).
 - A lone fixed-step entry with no receive/change partner, a hardened
   final step, three-or-more entries sharing a key, or a script-path
   `tr` (tapscript leaves) all fall through to the ordinary
@@ -380,11 +383,15 @@ diff <(jq -S . sparrow-singlesig-p2wpkh.json) \
      <(jq -S . sparrow_re.json)
 ```
 
-> **Note on the diff.** As written above, the `diff` is **empty** —
-> the recipe round-trips the wallet name verbatim through the envelope
-> (the v0.37.8 universal source-name lift carries
-> `sparrow_source_metadata.label` back into the re-emitted `name` /
-> `label` fields). To override the lifted name on re-emit, pass
+> **Note on the diff.** As written above, the `diff` shows only the
+> keystore `label` lines: `export-wallet --format sparrow` labels
+> every keystore with Sparrow's own default, `Keystore <n>` (`n`
+> counting from 1 in cosigner order), because Sparrow refuses
+> duplicate keystore labels and labels longer than 16 characters
+> (spaces not counted). The wallet name round-trips verbatim through
+> the envelope (the v0.37.8 universal source-name lift carries
+> `sparrow_source_metadata.label` back into the re-emitted `name`
+> field). To override the lifted name on re-emit, pass
 > `--wallet-name "<chosen-name>"` explicitly: the CLI flag always
 > beats the envelope-lifted name. The same lift covers Specter, Jade,
 > Electrum, Bitcoin Core, and Coldcard-multisig sources — Specter no
@@ -533,7 +540,10 @@ Coldcard typically exports several per-BIP blocks side-by-side. The
 parser picks ONE dominant block per the heuristic at SPEC §11.3.1:
 `bip86` (taproot) > `bip84` (P2WPKH) > `bip49` (P2SH-P2WPKH) > `bip44`
 (P2PKH); fall back to legacy top-level `xpub` with SLIP-132-prefix
-inference (`zpub` → BIP-84, `ypub` → BIP-49, `xpub` → BIP-44). The
+inference (`zpub` → BIP-84, `ypub` → BIP-49, `xpub` → BIP-44). A
+top-level `xpub` at depth 0 is the master xpub that current firmware
+writes beside its per-BIP blocks, not an account xpub: with no
+`bip44`/`bip49`/`bip84`/`bip86` block it is refused (exit 2). The
 `bip48_*` multisig-hint blocks are IGNORED by the single-sig parser
 (use [Coldcard multisig text](#coldcard-multisig) instead).
 
@@ -558,7 +568,7 @@ preserves Coldcard-specific metadata:
 | `chain` | top-level `chain` | `Btc` (mainnet) / `Xtn` (testnet) |
 | `xfp` | top-level `xfp` | 4-byte master fingerprint |
 | `bip_derivation` | dominant block | `Bip44` / `Bip49` / `Bip84` / `Bip86` |
-| `raw_account` | dominant block | `account` integer (typically 0) |
+| `raw_account` | dominant block | `account` integer (typically 0); a present `account` that is not a non-negative JSON integer (`"5"`, `-1`, `1.5`, `null`) is refused (exit 2) |
 | `dropped_fields` | runtime | per-BIP blocks not selected as dominant |
 
 ### Round-trip example
@@ -615,6 +625,13 @@ mnemonic import-wallet --format coldcard-multisig \
 For the 2-of-3 P2WSH fixture, the parser synthesizes
 `wsh(sortedmulti(2, [34a3a4f1/48'/0'/0'/2']xpub6FQya..., ...))` and
 populates `mk1` with all three cosigner xpubs.
+
+A legacy BIP-45 P2SH export (`Derivation: m/45'`, Coldcard's P2SH
+path) has no coin-type component. When every cosigner is at `m/45'`,
+the network comes from the xpubs' version bytes (`xpub` → mainnet,
+`tpub` → testnet) and the descriptor is
+`sh(sortedmulti(K, [xfp/45']xpub…/<0;1>/*, …))`. A file that mixes
+`m/45'` with other derivation paths is refused (exit 2).
 
 ### XFP-header policy (depth-gated truth table)
 
