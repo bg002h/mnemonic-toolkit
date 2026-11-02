@@ -139,9 +139,14 @@ exports only selected utilities; its workflows stay binary-private.
 
 ## Specifications and further reading
 
-- `ms1`: [SPEC_ms_v0_1.md](https://github.com/bg002h/mnemonic-secret/blob/master/design/SPEC_ms_v0_1.md).
+- `ms1`: [SPEC_ms_v0_1.md](https://github.com/bg002h/mnemonic-secret/blob/master/design/SPEC_ms_v0_1.md),
+  extended by the other `SPEC_ms_*.md` files in its
+  [design directory](https://github.com/bg002h/mnemonic-secret/tree/master/design)
+  (shares, the `mnem` language hint, the hashlock preimage kind). The base spec alone does not describe them.
 - `mk1`: [BIP draft](https://github.com/bg002h/mnemonic-key/blob/main/bip/bip-mnemonic-key.mediawiki)
-  and [SPEC_mk_v0_1.md](https://github.com/bg002h/mnemonic-key/blob/main/design/SPEC_mk_v0_1.md).
+  and [SPEC_mk_v0_1.md](https://github.com/bg002h/mnemonic-key/blob/main/design/SPEC_mk_v0_1.md),
+  refined by the other `SPEC_mk_*.md` files in its
+  [design directory](https://github.com/bg002h/mnemonic-key/tree/main/design).
 - `md1`: [BIP draft](https://github.com/bg002h/descriptor-mnemonic/blob/main/bip/bip-mnemonic-descriptor.mediawiki).
   The wire-version-8 design, [SPEC_liana_unspendable_internal_key.md](https://github.com/bg002h/mnemonic-engrave/blob/master/design/SPEC_liana_unspendable_internal_key.md),
   is hosted in `me`; `md` owns its implementation.
