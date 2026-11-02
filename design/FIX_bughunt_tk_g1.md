@@ -831,7 +831,7 @@ stderr: note: stdout is watch-only — public keys only, cannot spend
 
 ### 2.10 #37 (C) `verify-bundle` of a single-sig template bundle checks the `--ms1` card
 
-**Behaviour.** In `verify_singlesig_template`, when the first `--ms1` value is non-empty, two rows are pushed first, before `md1_template_match`: `ms1_decode` and `ms1_entropy_match`, built by the keyed single-sig logic (decode; byte compare; on a decode error, unless `--no-auto-repair`, the auto-repair ground-truth compare). That logic moves unchanged from `emit_checks` (`verify_bundle.rs` ≈2348-2464) into one function both call. The expected card is the canonical seed slot's (`resolved`, which keeps the entropy under `--origin`), never `resolved_for_synth`. With no `--ms1` there are no ms1 rows (unchanged). Row texts are the existing ones: `decoded successfully`, `ms1 byte-identical`, `expected ms1 bytes differ from supplied`, `recovered via auto-repair, confirmed against expected seed`, `recovered via auto-repair (unconfirmed)`, `auto-repair candidate did not match the expected seed — this card is not a card for this seed`, `ms1 decode failed; entropy match cannot run`. A failed row gives `mismatch`, exit 4. Spec: 4.1 (d). Manual: 5.3.
+**Behaviour.** In `verify_singlesig_template`, when the first `--ms1` value is non-empty, two rows are pushed first, before `md1_template_match`: `ms1_decode` and `ms1_entropy_match`, built by the keyed single-sig logic (decode; byte compare; on a decode error, unless `--no-auto-repair`, the auto-repair ground-truth compare). That logic moves unchanged from `emit_checks` (`verify_bundle.rs` ≈2348-2464) into one function both call. The expected card is the canonical seed slot's (`resolved`, which keeps the entropy under `--origin`), never `resolved_for_synth`. Compute it as `ms1[0]` of a second `crate::synthesize::synthesize_unified(&resolved, template, 1, args.network, args.privacy_preserving, args.language.unwrap_or_default().into(), crate::synthesize::Md1Form::Template)` call. Use the same arguments as the existing `expected` call, with `resolved` in place of `resolved_for_synth`, and never encode the entropy directly. The card carries the wordlist language (`Mnem` for a non-English seed), and the compare is by string. With no `--ms1` there are no ms1 rows (unchanged). Row texts are the existing ones: `decoded successfully`, `ms1 byte-identical`, `expected ms1 bytes differ from supplied`, `recovered via auto-repair, confirmed against expected seed`, `recovered via auto-repair (unconfirmed)`, `auto-repair candidate did not match the expected seed — this card is not a card for this seed`, `ms1 decode failed; entropy match cannot run`. A failed row gives `mismatch`, exit 4. Spec: 4.1 (d). Manual: 5.3.
 
 Fixtures: `st_ms1.txt`, `st_mk1.txt`, `st_md1.txt` — the `# ms1`, `# mk1`, `# md1` sections of `bundle --template bip84 --md1-form template --group-size 0` for `$PA`; `sa_ms1.txt` — the `# ms1` section of the same for `$SA` (another seed).
 
@@ -1197,7 +1197,7 @@ stderr: error: --slot @0.fingerprint parse: failed to parse hex
 
 ### 2.21 #45 (I) `bundle --import-json` refuses a `--network` that disagrees with the envelope
 
-**Behaviour.** In `bundle_run_from_import_json`, right after the envelope network is read: if `--network` differs, `BadInput`, exit 1, nothing on stdout, text `--network <flag> disagrees with the --import-json envelope's bundle.network (<env>); re-run with --network <env>` (names from `CliNetwork::human_name()`: `mainnet`, `testnet`, `signet`, `regtest`). Spec: none. Manual: 5.1.
+**Behaviour.** In `bundle_run_from_import_json`, right after the envelope network is read: if `--network` differs, `BadInput`, exit 1, nothing on stdout, text `--network <flag> disagrees with the --import-json envelope's bundle.network (<env>); re-run with --network <env>` (names from `CliNetwork::human_name()`: `mainnet`, `testnet`, `signet`, `regtest`). When the envelope's `bundle.network` is `testnet` and `--network` is `signet` or `regtest` (an envelope imported without `--network` records every coin-type-1 wallet as testnet), the text is instead `--network <flag> disagrees with the --import-json envelope's bundle.network (testnet); if the wallet is on <flag>, re-create the envelope with import-wallet --network <flag> from the same blob, otherwise re-run with --network testnet`. Spec: none. Manual: 5.1.
 
 Fixture `env-testnet.json`: `import-wallet --format bsms --blob tests/fixtures/wallet_import/bsms-testnet-2of2.txt --json`.
 
@@ -1223,11 +1223,33 @@ stdout: {"schema_version":"4","mode"…
 stderr: note: stdout is watch-only — public keys only, cannot spend
 ~~~
 
+A signet or regtest `--network` against a default (testnet) envelope:
+
+~~~text
+$ mnemonic bundle --network signet --import-json env-testnet.json --json
+-- current
+exit=0
+stdout: {"schema_version":"4", … "network":"signet" …}
+-- after the fix
+exit=1
+stdout: (empty)
+stderr: error: --network signet disagrees with the --import-json envelope's bundle.network (testnet); if the wallet is on signet, re-create the envelope with import-wallet --network signet from the same blob, otherwise re-run with --network testnet
+~~~
+
+The remedy, run as printed:
+
+~~~text
+$ mnemonic import-wallet --format bsms --blob tests/fixtures/wallet_import/bsms-testnet-2of2.txt --network signet --json > env-signet.json
+$ mnemonic bundle --network signet --import-json env-signet.json --json
+exit=0
+stdout: {"schema_version":"4", … "network":"signet" …}
+~~~
+
 ### 2.22 #46 (I) `bundle --import-json` refuses every `--slot` subkey except `phrase`
 
 **Behaviour.** In `bundle_run_from_import_json`, before the phrase overlay: the first `--slot` whose subkey is not `phrase` is refused, `BadInput`, exit 1, nothing on stdout, with one of two texts:
 
-- `entropy`, `ms1`, `seedqr`: `--slot @<N>.<subkey>=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from <subkey>=- --to phrase (it reads the value from stdin), then pass it as --slot @<N>.phrase=-`
+- `entropy`, `ms1`, `seedqr`: `--slot @<N>.<subkey>=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from <subkey>=- --to phrase (it reads the value from stdin and prints "phrase: <words>"), then give the words alone, without the "phrase: " label, on stdin to --slot @<N>.phrase=-`
 - any other subkey (`xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`): `--slot @<N>.<subkey>=: not supported with --import-json; the envelope already supplies every cosigner's key, fingerprint and path (only --slot @N.phrase= is accepted)`
 
 `<subkey>` is `SlotSubkey::as_str()`. Spec: none. Manual: 5.1.
@@ -1243,7 +1265,7 @@ stderr: note: stdout is watch-only — public keys only, cannot spend
 -- after the fix
 exit=1
 stdout: (empty)
-stderr: error: --slot @0.entropy=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from entropy=- --to phrase (it reads the value from stdin), then pass it as --slot @0.phrase=-
+stderr: error: --slot @0.entropy=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from entropy=- --to phrase (it reads the value from stdin and prints "phrase: <words>"), then give the words alone, without the "phrase: " label, on stdin to --slot @0.phrase=-
 ~~~
 
 ~~~text
@@ -1255,7 +1277,7 @@ stderr: note: stdout is watch-only — public keys only, cannot spend
 -- after the fix
 exit=1
 stdout: (empty)
-stderr: error: --slot @0.ms1=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from ms1=- --to phrase (it reads the value from stdin), then pass it as --slot @0.phrase=-
+stderr: error: --slot @0.ms1=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from ms1=- --to phrase (it reads the value from stdin and prints "phrase: <words>"), then give the words alone, without the "phrase: " label, on stdin to --slot @0.phrase=-
 ~~~
 
 ~~~text
@@ -1426,31 +1448,32 @@ supplying overlay for an already-seeded slot is `BadInput`. The replayed
 with:
 
 ~~~text
-supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` and overlay it with `--slot @N.phrase=-`. `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). The replayed
+supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the `phrase: ` label, on stdin to `--slot @N.phrase=-`. `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed
 ~~~
 
-**5.2 #3 — `bundle` § Non-representable use-site steps (a new paragraph before the `Remedy:` paragraph)** (`docs/manual/src/40-cli-reference/41-mnemonic.md`). Replace, once:
+**5.2 #3 — `bundle` § Non-representable use-site steps (a new paragraph after the `Remedy:` paragraph)** (`docs/manual/src/40-cli-reference/41-mnemonic.md`). Replace, once:
 
 ~~~text
-rejects: the `/**` expands to `/0/<0;1>/*`, whose leading `/0` fixed
-step is un-representable.)
+the `/**` shorthand for the same thing.
 
-**Remedy:**
+**Sparrow is unaffected.**
 ~~~
 
 with:
 
 ~~~text
-rejects: the `/**` expands to `/0/<0;1>/*`, whose leading `/0` fixed
-step is un-representable.)
+the `/**` shorthand for the same thing.
 
 A **multipath with no trailing wildcard** — `@0/<0;1>` (or an inline
 `[fp/path]xpub/<0;1>`) with no `/*` after it — names a non-ranged wallet
 that md1 cannot encode either. It used to be encoded silently as the
 ranged `/<0;1>/*` wallet; it is now refused (exit 2, `DescriptorParse`) on
-the same surfaces. Bare `@N`, with no use-site at all, is unaffected.
+the same surfaces. Bare `@N`, with no use-site at all, is unaffected. The
+remedy above does **not** apply: adding `/*` describes a different wallet
+(`/<0;1>/*` ranges over `/0/i` and `/1/i`; `/<0;1>` is the two keys `/0`
+and `/1`). md1 has no card for it; keep the full descriptor.
 
-**Remedy:**
+**Sparrow is unaffected.**
 ~~~
 
 **5.3 #2, #37 — `bundle` § Template-only md1: the verify-bundle paragraph (corrected) and a new paragraph** (`docs/manual/src/40-cli-reference/41-mnemonic.md`). Replace, once:
@@ -1655,7 +1678,7 @@ Rows are in `crates/mnemonic-toolkit/tests/bughunt_s1.rs`, `bughunt_s2.rs` and `
 | `bughunt_tk_13_positional_fallback_keeps_supplied_card_order` | GREEN (unchanged) | as written | `variant 2: mk1_xpub_match[0] = Some(false) although cards were supplied in slot order` |
 | `bughunt_tk_14_multisig_json_has_md1_origin_row_when_md1_does_not_decode` | `#[ignore = "deferred-minor: verify-bundle-multisig-json-md1-origin-row-on-decode-fail"]`, body unchanged | — | still fails when run ignored |
 | `bughunt_tk_43_supplied_md1_with_extra_cosigner_does_not_panic` | GREEN (tightened) | exit 4 (not 101); stderr does not contain `panicked`; stdout JSON `result == "mismatch"` | `index out of bounds: the len is 2 but the index is 2` |
-| `bughunt_tk_37_singlesig_template_verify_checks_the_ms1_card` | GREEN (tightened) | control: exit 0 and stderr contains `✓ ms1_entropy_match: ms1 byte-identical`; other seed: exit 4, stdout == `mismatch\n`, stderr contains `✓ ms1_decode: decoded successfully` and `✗ ms1_entropy_match: expected ms1 bytes differ from supplied` | `an --ms1 card from a DIFFERENT seed must fail verification (exit 4)`, got 0 |
+| `bughunt_tk_37_singlesig_template_verify_checks_the_ms1_card` | GREEN (tightened) | control: exit 0 and stderr contains `✓ ms1_entropy_match: ms1 byte-identical`; other seed: exit 4, stdout == `mismatch\n`, stderr contains `✓ ms1_decode: decoded successfully` and `✗ ms1_entropy_match: expected ms1 bytes differ from supplied`; Japanese control (JP = the Japanese phrase of 16 zero bytes, `あいこくしん` ×11 then `あおぞら`): `mnemonic bundle --network mainnet --template bip84 --md1-form template --group-size 0 --language japanese --slot @0.phrase=@env:JP --json`, then `mnemonic verify-bundle --network mainnet --language japanese --slot @0.phrase=@env:JP --ms1 - <its mk1, md1>` with that bundle's `ms1[0]` on stdin: exit 0, stderr contains `✓ ms1_entropy_match: ms1 byte-identical` | `an --ms1 card from a DIFFERENT seed must fail verification (exit 4)`, got 0 |
 | `bughunt_tk_39_singlesig_md1_with_other_usesite_or_script_does_not_pass` | GREEN (tightened) | each alternative: exit 4, `result == "mismatch"`, the `md1_xpub_match` row has `passed: false` and detail `md1 reconstructs a DIFFERENT wallet — structural policy mismatch: use-site path (change-chain/multipath)` (use-site case) / `… policy tree (threshold/script-type/order)` (pkh case) | `use-site <2;3>: … verify-bundle says result="ok" (exit Some(0))` |
 | `bughunt_tk_44_descriptor_mode_verify_uses_annotation_fingerprint` | GREEN (unchanged) | as written | `failed checks: ["mk1_fingerprint_match[1]" …]` |
 | **NEW** `bughunt_tk_44b_descriptor_mode_verify_refuses_fingerprint_annotation_disagreement` | GREEN | the #44 fixture; the verify command adds `--slot @1.fingerprint=deadbeef`: exit 2, stdout empty, stderr contains `error: --slot @1.fingerprint specifies deadbeef but descriptor @1 annotation specifies <fp_b>` (fp_b = `28645006`) | (new; today exit 4, 2.12) |
@@ -1669,8 +1692,8 @@ Rows are in `crates/mnemonic-toolkit/tests/bughunt_s1.rs`, `bughunt_s2.rs` and `
 | `bughunt_tk_11_singlesig_hardened_usesite_template_form_refused` | GREEN (unchanged; its substring is kept) | as written | `accepted a hardened use-site (/*h)` |
 | **NEW** `bughunt_tk_11b_singlesig_nonstandard_usesite_template_form_refused` | GREEN | `bundle --network mainnet --descriptor <D> --md1-form template --slot @0.phrase=<PHRASE_A> --json` for D ∈ {`wpkh(@0)`, `wpkh(@0/*)`, `wpkh([73c5da0a/84'/0'/0']@0/<2;3>/*)`}: each exit 2, stdout empty, stderr contains `cannot template this descriptor shape` and `or it is single-sig with a use-site other than /<0;1>/*`. Control D = `wpkh([73c5da0a/84'/0'/0']@0/<0;1>/*)`: exit 0 and JSON `md1 == ["md1fvwrwqqpqqgqpsqqq3uaau4ctxyl7"]` | (new; today each D exits 0, 2.9) |
 | **NEW** `bughunt_tk_11b_restore_refuses_nonstandard_usesite_singlesig_template` | GREEN | `restore --network mainnet --md1 <M> --from phrase=<PHRASE_A> --account 0` for the literals M ∈ {`md1fkykhqqpqqgzskqqzxcjnwq6cq0gv`, `md1fu85lqqpqqqqqnm3nr4htwmp8w`}: each exit 2, stdout empty, stderr contains `error: ` + the 2.9 restore text; the first M with `--expect-wallet-id 1c0170fe` too: exit 2, stderr not containing `wallet-id verified`. Control M = `md1fvwrwqqpqqgqpsqqq3uaau4ctxyl7`: exit 0, stdout contains `first recv: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`. The cards are literals because the fixed bundle no longer mints them | (new; today exit 0 and `✓ wallet-id verified`, 2.9) |
-| `bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet` | GREEN (rewritten: today it passes vacuously on any refusal) | `--network mainnet`: exit 1, stdout empty, stderr contains `error: --network mainnet disagrees with the --import-json envelope's bundle.network (testnet); re-run with --network testnet`; `--network testnet`: exit 0 and JSON `network == "testnet"` | `left: String("mainnet") right: "testnet"` |
-| `bughunt_tk_46_import_json_slot_overlays_other_than_phrase_not_silently_dropped` | GREEN (tightened) | entropy: exit 1, stderr contains `error: --slot @0.entropy=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from entropy=- --to phrase (it reads the value from stdin), then pass it as --slot @0.phrase=-`; ms1: the same with `ms1` in both places; add `--slot @1.fingerprint=97139860`: exit 1, stderr contains `error: --slot @1.fingerprint=: not supported with --import-json; the envelope already supplies every cosigner's key, fingerprint and path (only --slot @N.phrase= is accepted)` | `--slot @0.entropy=...: exit 0 but ms1[0] is the empty watch-only sentinel` |
+| `bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet` | GREEN (rewritten: today it passes vacuously on any refusal) | `--network mainnet`: exit 1, stdout empty, stderr contains `error: --network mainnet disagrees with the --import-json envelope's bundle.network (testnet); re-run with --network testnet`; `--network testnet`: exit 0 and JSON `network == "testnet"`; `--network signet`: exit 1, stdout empty, stderr contains `error: --network signet disagrees with the --import-json envelope's bundle.network (testnet); if the wallet is on signet, re-create the envelope with import-wallet --network signet from the same blob, otherwise re-run with --network testnet`; remedy: the envelope from `import-wallet --format bsms --blob tests/fixtures/wallet_import/bsms-testnet-2of2.txt --network signet --json`, then `bundle --network signet` on it: exit 0 and JSON `network == "signet"` | `left: String("mainnet") right: "testnet"` |
+| `bughunt_tk_46_import_json_slot_overlays_other_than_phrase_not_silently_dropped` | GREEN (tightened) | entropy: exit 1, stderr contains `error: --slot @0.entropy=: not supported with --import-json; only --slot @N.phrase= can add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert --from entropy=- --to phrase (it reads the value from stdin and prints "phrase: <words>"), then give the words alone, without the "phrase: " label, on stdin to --slot @0.phrase=-`; ms1: the same with `ms1` in both places; add `--slot @1.fingerprint=97139860`: exit 1, stderr contains `error: --slot @1.fingerprint=: not supported with --import-json; the envelope already supplies every cosigner's key, fingerprint and path (only --slot @N.phrase= is accepted)` | `--slot @0.entropy=...: exit 0 but ms1[0] is the empty watch-only sentinel` |
 | `bughunt_tk_52_template_stub_check_not_passed_by_garbage_mk1` | GREEN (tightened) | the experiment: exit 4, `result == "mismatch"`, the `mk1_template_stub_bind` row has `passed: false` and detail `supplied mk1 stub(s) do NOT bind via the template-id stub: an --mk1 value has no readable chunk_set_id (damaged card or not a template stub)`; control unchanged | `verify-bundle reports result=ok with an unparseable extra --mk1 card` |
 | `bughunt_tk_54_descriptor_mode_path_family_not_bip87_for_bip48_origin` | GREEN (tightened) | `v["multisig"]["path_family"] == "descriptor"` (rename optional: `…_path_family_is_descriptor`) | `left: String("bip87")` |
 | wc-codec `bughunt_tk_07_single_insertion_never_aligned_with_unerased_wrong_positions` | `#[ignore = "deferred-minor: wc-codec-sync-h1-unverified-later-checkpoints"]`, body unchanged | — | `Aligned grid has wrong positions [4, 5, 6, 7, 8, 9, 10, 11] that are not in erasures [0, 1, 2, 3]` |
@@ -1800,7 +1823,7 @@ None. No fix adds a flag, a user-visible type or a command, and none changes mor
 
 Changes from the grade report (`bughunt-grade-tk-g1.md`), found while running the printed advice:
 
-1. **#46 seed-subkey text.** The report's "(get the phrase with: mnemonic convert --from <subkey>=<value> --to phrase)" prints a command the argv guard refuses before parsing (measured: `convert --from entropy=<hex> --to phrase` exits 2, "argument 2 on ARGV (--from entropy=) is raw seed entropy"; the same for `ms1=` and `seedqr=`). The text now says `--from <subkey>=- --to phrase (it reads the value from stdin), then pass it as --slot @<N>.phrase=-`; both steps run (2.22).
+1. **#46 seed-subkey text.** The report's "(get the phrase with: mnemonic convert --from <subkey>=<value> --to phrase)" prints a command the argv guard refuses before parsing (measured: `convert --from entropy=<hex> --to phrase` exits 2, "argument 2 on ARGV (--from entropy=) is raw seed entropy"; the same for `ms1=` and `seedqr=`). The text now says `--from <subkey>=- --to phrase (it reads the value from stdin and prints "phrase: <words>"), then give the words alone, without the "phrase: " label, on stdin to --slot @<N>.phrase=-`; both steps run (2.22).
 2. **#41 text.** The report's "or check the placement with --expect-wallet-id" read literally (add the id, keep `--search-address`) is still refused; it now says "or keep them and check the placement with --expect-wallet-id instead of --search-address", and all three branches run (2.5).
 3. **Manual 5.3** also corrects the sentence it extends: "The same completion works on verify-bundle via its `--from` …" is wrong for a single-sig template (measured: `verify-bundle … --from phrase=@env:PA …` exits 2, "requires the seed (`--slot @0.phrase=…` …)"); it now names `--slot @0.phrase=`.
 4. Every other text (#2, #3, #42, #45, #47, #52, 11b) is the report's verbatim.

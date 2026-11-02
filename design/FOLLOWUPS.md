@@ -6126,3 +6126,10 @@ screen printed. Print the values.
 - **Status:** `deferred-minor`
 - **Source:** mnemonic-secret `design/agent-reports/whole-diff-bughunt-ms-s1.md` (commit 3bca6ae), third bullet of "Design lines (ungraded)"; filed 2026-11-01 from the bug-hunt ms whole-diff review.
 - **What:** `mnemonic repair --mk1 - --max-indel 4` on the 111-character mk1 string took 75 s here (dev, opt-level 2), against its own "this may take a few seconds" note. This is pre-existing tool text.
+
+### `bughunt-tk-fix-review-r1-minors` — tk bug-hunt FIX reviews r1: G1 M-1, N-1; G2 M1-M5, N1-N4
+
+- **Status:** `deferred-minor`
+- **Source:** `design/agent-reports/bughunt-fix-review-r1-tk-g1.md` (0C/4I/1M/1N; the four Importants are folded) and `design/agent-reports/bughunt-fix-review-r1-tk-g2.md` (0C/0I/5M/4N); filed 2026-11-01.
+- **What:** the Minors and Nits as the two reports state them (wording gaps in the FIX documents that fail closed, and small inconsistencies), not fixed. G1 N-1: the reference patch lacks the wc-codec `lib.rs` rustdoc hunk that FIX G1 2.24 specifies; the build writes it from 2.24.
+- **Owning phase:** none — ownerless residue.
