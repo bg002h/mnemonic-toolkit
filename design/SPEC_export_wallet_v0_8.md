@@ -255,6 +255,7 @@ Format reference: <https://github.com/spesmilo/electrum/blob/master/electrum/wal
 - `wallet_type`: `"standard"` for singlesig.
 - `keystore.type`: `"bip32"` (toolkit emits xpub-based watch-only; never `"hardware"` since we don't know which HW).
 - `keystore.xpub`: **SLIP-132 form** matching script-type × network (`vpub`/`zpub`/`upub`/`ypub`/`tpub`). Conversion via `crate::slip0132`.
+- `--template bip86` (P2TR) is REFUSED (`BadInput`, exit 1; FIX_bughunt_tk_g1 #5): Electrum reads a plain `xpub` "standard" keystore as p2pkh (`electrum/wallet.py` line 4241 at `e1099925`: `self.txin_type = 'p2pkh' if xtype == 'standard' else xtype`). Text: `--format electrum does not support --template bip86 (P2TR): a plain xpub "standard" wallet is read by Electrum as p2pkh. Use --format bitcoin-core (descriptor) or --format sparrow for taproot watch-only setup.`
 - `keystore.derivation`: BIP-32 origin path as string.
 - `keystore.root_fingerprint`: lowercase 8-hex.
 
