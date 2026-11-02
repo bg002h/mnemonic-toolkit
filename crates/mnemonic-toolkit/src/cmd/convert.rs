@@ -624,6 +624,18 @@ fn refusal_electrum_phrase_to_address() -> ToolkitError {
     )
 }
 
+/// `--path` accepts only the literal form `m` or `m/<child>...` (SPEC_convert_v0_6
+/// §4); `DerivationPath::from_str` alone also accepts "", "m/" and a missing `m/`.
+fn parse_literal_path(s: &str) -> Result<bip32::DerivationPath, ToolkitError> {
+    let path = bip32::DerivationPath::from_str(s)
+        .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+    if s != "m" && !(s.starts_with("m/") && s.len() > 2) {
+        let e = bip32::Error::InvalidDerivationPathFormat;
+        return Err(ToolkitError::BadInput(format!("--path parse: {e}")));
+    }
+    Ok(path)
+}
+
 // SPEC v0.7 §10.a / §3.d — Address derivation refusals.
 fn refusal_address_no_path() -> ToolkitError {
     ToolkitError::ConvertRefusal(
@@ -1339,8 +1351,7 @@ fn compute_outputs(
                 // Ruling R1: --path overrides the template path; R2: the
                 // fingerprint stays the master fingerprint.
                 let path_str = args.path.as_deref().unwrap_or_default();
-                let path = bip32::DerivationPath::from_str(path_str)
-                    .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                let path = parse_literal_path(path_str)?;
                 Some(derive_bip32_from_entropy_at_path(
                     &entropy,
                     pbkdf2_passphrase,
@@ -1349,11 +1360,17 @@ fn compute_outputs(
                     &path,
                 )?)
             } else if needs_derive {
+                // A fingerprint-only request does not read --path (R4), so the
+                // refusal names --template alone there.
+                let reads_path = targets.iter().any(|t| matches!(t, Xpub | Xprv));
                 let template = args.template.ok_or_else(|| {
-                    ToolkitError::BadInput(
+                    ToolkitError::BadInput(if reads_path {
                         "--template or --path is required for derivation targets (xpub/xprv/fingerprint)"
-                            .into(),
-                    )
+                            .into()
+                    } else {
+                        "--template is required for --to fingerprint (the master fingerprint; --path is not read)"
+                            .into()
+                    })
                 })?;
                 Some(derive_bip32_from_entropy(
                     &entropy,
@@ -1418,8 +1435,7 @@ fn compute_outputs(
                             .path
                             .as_deref()
                             .ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
-                        let path = bip32::DerivationPath::from_str(path_str)
-                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let path = parse_literal_path(path_str)?;
                         let leaf_xpriv = derive_bip32_at_path(
                             &entropy,
                             pbkdf2_passphrase,
@@ -1473,8 +1489,7 @@ fn compute_outputs(
                             .path
                             .as_deref()
                             .ok_or_else(refusal_phrase_entropy_to_wif_no_path)?;
-                        let path = bip32::DerivationPath::from_str(path_str)
-                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let path = parse_literal_path(path_str)?;
                         let leaf_xpriv = derive_bip32_at_path(
                             &entropy,
                             pbkdf2_passphrase,
@@ -1514,8 +1529,7 @@ fn compute_outputs(
                         // leaf pubkey. `--script-type` (or `--template`-inferred)
                         // selects the address dispatch.
                         let path_str = args.path.as_deref().ok_or_else(refusal_address_no_path)?;
-                        let path = bip32::DerivationPath::from_str(path_str)
-                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let path = parse_literal_path(path_str)?;
                         let script_type = resolve_script_type(args)?;
                         let leaf_xpriv = derive_bip32_at_path(
                             &entropy,
@@ -1575,8 +1589,7 @@ fn compute_outputs(
                         // build address per --script-type. Network is
                         // inferred from the xpub when --network is absent.
                         let path_str = args.path.as_deref().ok_or_else(refusal_address_no_path)?;
-                        let path = bip32::DerivationPath::from_str(path_str)
-                            .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                        let path = parse_literal_path(path_str)?;
                         let script_type = resolve_script_type(args)?;
                         let child = xpub
                             .derive_pub(&secp, &path)

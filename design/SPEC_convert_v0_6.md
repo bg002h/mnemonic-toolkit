@@ -229,9 +229,13 @@ error: --from bip38 --to bip38 is an identity pivot. To re-encrypt with a differ
   error: --account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path.
   ```
 - `--path` accepts only the literal form `m/...` (bare `m` is the master key); any other string is refused at the edge that reads it with `error: --path parse: <e>` (exit 1), `<e>` being the `bitcoin::bip32` parse error (e.g. `invalid child number format`). No coin-type check.
-- A seed source with a derivation target (`xpub`/`xprv`/`fingerprint`) and neither `--template` nor `--path`: REFUSED (exit 1). Stderr (byte-exact):
+- A seed source with an `xpub` or `xprv` target and neither `--template` nor `--path`: REFUSED (exit 1). Stderr (byte-exact):
   ```
   error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)
+  ```
+- A seed source whose only derivation target is `fingerprint`, without `--template`: REFUSED (exit 1). Stderr (byte-exact):
+  ```
+  error: --template is required for --to fingerprint (the master fingerprint; --path is not read)
   ```
 - Any `--to <node>` not reachable from the supplied `--from` via the edge table or any composite traversal: REFUSED with the appropriate refusal-class message from §3.
 

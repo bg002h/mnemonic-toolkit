@@ -31,7 +31,7 @@ Grades: **C** for the phrase, seedqr and entropy edges; **I** for the xprv sourc
 2. **I. On an xprv source, `--to xpub --path m/0` prints the parent xpub and exits 0.** The Xprv arm never reads `--path`. Fix (R4): `--path` that no requested target reads is refused (exit 2). This covers the xprv, xpub-to-non-address, mk1 and ms1 edges, and non-derivation targets from a seed.
 3. **R2.** `--to fingerprint` stays the master fingerprint whether or not `--path` is given. The no-template refusal becomes `--template or --path is required for derivation targets (xpub/xprv/fingerprint)` (exit 1).
 4. **R3.** A non-zero `--account` together with `--path` is refused (exit 2). An explicit `--account 0` is accepted: clap's default leaves it indistinguishable from an omitted `--account`.
-5. **M / R5.** `--path` takes only the literal `m/...` form, bare `m` included. `--help` stops listing the named (`bip84`) and hex (`0x54`) forms. These were never accepted by convert: every read uses `DerivationPath::from_str`, which refuses them with `error: --path parse: invalid child number format` (exit 1). That behaviour is unchanged. There is no coin-type check.
+5. **M / R5.** `--path` takes only the literal `m/...` form, bare `m` included. `--help` stops listing the named (`bip84`) and hex (`0x54`) forms. These were never accepted by convert: every read uses `DerivationPath::from_str`, which refuses them with `error: --path parse: invalid child number format` (exit 1). That behaviour is unchanged. Anything else that is not `m` or `m/<child>...` (`""`, `m/`, a missing `m/` prefix) is refused with `error: --path parse: invalid derivation path format` (exit 1). There is no coin-type check.
 
 ## 2. Holder-visible behaviour (after the fix)
 
@@ -41,10 +41,12 @@ All refusals print `error: <text>` on stderr and nothing on stdout. Exit 2 is `C
 |---|---|---|
 | seed source (phrase / seedqr / entropy), `--to xpub` and/or `xprv`, `--path P` (with or without `--template`) | 0 | the key at P from the master key. Every target in the call (xpub, xprv, wif, bip38, address) uses the same P |
 | the same, `--to fingerprint` among the targets | 0 | `fingerprint: <master fingerprint>` (unchanged by P) |
-| seed source, a derivation target, neither `--template` nor `--path` | 1 | `error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)` |
+| seed source, an `xpub` or `xprv` target, neither `--template` nor `--path` | 1 | `error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)` |
+| seed source, `fingerprint` as the only derivation target, no `--template` | 1 | `error: --template is required for --to fingerprint (the master fingerprint; --path is not read)` |
 | `--path` given, and no requested `--to` target reads it from this source (table below) | 2 | `error: --path is not used by any requested --to target from this --from source; drop --path.` |
 | `--path` given, `--account` non-zero | 2 | `error: --account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path.` |
 | `--path` in a non-literal form (`bip84`, `0x54`, anything `DerivationPath::from_str` refuses) on an edge that reads it | 1 | `error: --path parse: <bitcoin error>` (for example `invalid child number format`); unchanged |
+| `--path` anything other than `m` or `m/<child>...` (e.g. `""`, `m/`, `84'/1'/0'`) on an edge that reads it | 1 | `error: --path parse: invalid derivation path format` |
 | `--from wif … --path` | 2 | the existing wif refusal (§4). It is checked before R4 and R3 and is unchanged |
 
 The (source, target) edges that read `--path` (R4) are the following. Every other source, including xprv, mk1, ms1, wif, electrum-phrase, bip38 and minikey, reads it on no target.
@@ -222,9 +224,13 @@ New fragment:
   error: --account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path.
   ```
 - `--path` accepts only the literal form `m/...` (bare `m` is the master key); any other string is refused at the edge that reads it with `error: --path parse: <e>` (exit 1), `<e>` being the `bitcoin::bip32` parse error (e.g. `invalid child number format`). No coin-type check.
-- A seed source with a derivation target (`xpub`/`xprv`/`fingerprint`) and neither `--template` nor `--path`: REFUSED (exit 1). Stderr (byte-exact):
+- A seed source with an `xpub` or `xprv` target and neither `--template` nor `--path`: REFUSED (exit 1). Stderr (byte-exact):
   ```
   error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)
+  ```
+- A seed source whose only derivation target is `fingerprint`, without `--template`: REFUSED (exit 1). Stderr (byte-exact):
+  ```
+  error: --template is required for --to fingerprint (the master fingerprint; --path is not read)
   ```
 ````
 

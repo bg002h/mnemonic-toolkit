@@ -33,6 +33,7 @@ const R3_TEXT: &str = "error: --account has no effect when --path is given; put 
 const R4_TEXT: &str =
     "error: --path is not used by any requested --to target from this --from source; drop --path.";
 const R5_TEXT: &str = "error: --path parse: invalid child number format";
+const R5_FORM_TEXT: &str = "error: --path parse: invalid derivation path format";
 
 struct Out {
     code: i32,
@@ -580,4 +581,176 @@ fn r3_before_r5_named_path_with_account() {
         "3",
     ]);
     assert_refused(&o, 2, R3_TEXT);
+}
+
+#[test]
+fn s2_path_alone_xprv_accepted() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--network",
+        "signet",
+        "--to",
+        "xprv",
+        "--path",
+        "m/84'/1'/0'",
+    ]);
+    assert_ok(&o, &[format!("xprv: {XPRV_84}")]);
+}
+
+#[test]
+fn s2_path_alone_bip38_accepted() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--to",
+        "bip38",
+        "--bip38-passphrase",
+        "x",
+        "--path",
+        "m/84'/0'/0'/0/0",
+    ]);
+    assert_ok(
+        &o,
+        &["bip38: 6PYP8fdoWkbfb1nGtgRPgSRUsHK113HqGCvrY6YHWMm3BvnKGRnH564c8J".to_string()],
+    );
+}
+
+#[test]
+fn s2_path_alone_address_accepted() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--network",
+        "signet",
+        "--to",
+        "address",
+        "--script-type",
+        "p2wpkh",
+        "--path",
+        "m/84'/1'/0'/0/0",
+    ]);
+    assert_ok(
+        &o,
+        &["address: tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl".to_string()],
+    );
+}
+
+#[test]
+fn s2_account_one_with_path_refused() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--network",
+        "signet",
+        "--to",
+        "xpub",
+        "--path",
+        "m/84'/1'/0'",
+        "--account",
+        "1",
+    ]);
+    assert_refused(&o, 2, R3_TEXT);
+}
+
+#[test]
+fn s2_path_honours_passphrase() {
+    let o = convert(&[
+        "--from",
+        &phrase(),
+        "--network",
+        "signet",
+        "--to",
+        "xpub,xprv",
+        "--passphrase",
+        "TREZOR",
+        "--path",
+        "m/84'/1'/0'",
+    ]);
+    assert_ok(&o, &[
+        "xpub: tpubDC3QUzyNJLFENW1qz75ATkef1wkGURb2bvPiBd7ty35wpR9oTzV12aHjzWFr9eZDnL5H9Wqbq6riaHcfa4FR4iv22uFLufe7Ldor9jr2MJF".to_string(),
+        "xprv: tprv8fMNLaw89xZZV2z46TQa4LzYSvELK6Q82cnvu75bYmHYyvu2qbfQr5fspNnjRRF9D4Fte48koK2tWB6ya3xY43KdPvTmFiH76h8W48rLLRQ".to_string(),
+    ]);
+}
+
+#[test]
+fn s2_path_honours_language() {
+    let o = convert(&[
+        "--from",
+        "phrase=ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco ábaco abierto",
+        "--language",
+        "spanish",
+        "--network",
+        "signet",
+        "--to",
+        "xpub",
+        "--path",
+        "m/84'/1'/0'",
+    ]);
+    assert_ok(&o, &["xpub: tpubDCbgL9wqirauBJJQHwtmGoTJx7rqvTAJ1PabwjpnVCu2prdzKRseAyqBsDFpPjstykf4k5LCZpg69GaDD6pXuzddbphbZv6BRuczCnPyKvG".to_string()]);
+}
+
+// ---- whole-diff s1 additions: literal path form (I1) and fingerprint-only refusal (I2).
+
+#[test]
+fn r5_empty_path_refused() {
+    let p = phrase();
+    let o = convert(&[
+        "--from",
+        &p,
+        "--network",
+        "signet",
+        "--to",
+        "xpub",
+        "--path",
+        "",
+    ]);
+    assert_refused(&o, 1, R5_FORM_TEXT);
+    assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
+}
+
+#[test]
+fn r5_m_slash_path_refused() {
+    let p = phrase();
+    let o = convert(&[
+        "--from",
+        &p,
+        "--network",
+        "signet",
+        "--to",
+        "wif",
+        "--path",
+        "m/",
+    ]);
+    assert_refused(&o, 1, R5_FORM_TEXT);
+    assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
+}
+
+#[test]
+fn r5_unprefixed_path_refused() {
+    let p = phrase();
+    let o = convert(&[
+        "--from",
+        &p,
+        "--network",
+        "signet",
+        "--to",
+        "xpub",
+        "--path",
+        "84'/1'/0'",
+    ]);
+    assert_refused(&o, 1, R5_FORM_TEXT);
+    assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
+}
+
+#[test]
+fn r4_fingerprint_only_no_template_names_template_only() {
+    let p = phrase();
+    let o = convert(&["--from", &p, "--network", "signet", "--to", "fingerprint"]);
+    assert_refused(
+        &o,
+        1,
+        "error: --template is required for --to fingerprint (the master fingerprint; --path is not read)",
+    );
+    assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
 }
