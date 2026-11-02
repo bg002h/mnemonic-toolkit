@@ -74,8 +74,8 @@ Bidirectional and one-way edges with required side-inputs:
 |------|----|--------------------|-----------|
 | `phrase` | `entropy` | `--language` (optional; default english) | BIP-39 wordlist reverse mapping |
 | `entropy` | `phrase` | `--language` (optional; default english) | BIP-39 wordlist forward mapping |
-| `phrase` | `xprv` / `xpub` / `fingerprint` | `--passphrase` (optional, default ""), `--path` OR (`--template` + optional `--account`) | parse phrase → entropy via `Mnemonic::parse_in(language, phrase)?.to_entropy()`, then `derive_slot::derive_bip32_from_entropy` (yields `DerivedAccount` with `account_xpriv` + `account_xpub`); equivalent to calling `derive::derive_full` |
-| `entropy` | `xprv` / `xpub` / `fingerprint` | same as `phrase` | feed entropy bytes directly to `derive_slot::derive_bip32_from_entropy` (no parse step) |
+| `phrase` | `xprv` / `xpub` / `fingerprint` | `--passphrase` (optional, default ""), `--path` OR (`--template` + optional `--account`) | parse phrase → entropy via `Mnemonic::parse_in(language, phrase)?.to_entropy()`, then `derive_slot::derive_bip32_from_entropy` (yields `DerivedAccount` with `account_xpriv` + `account_xpub`); equivalent to calling `derive::derive_full`. With `--path`, `derive_slot::derive_bip32_from_entropy_at_path` at that path from the master key instead; `--path` overrides `--template`/`--account` and `fingerprint` stays the master fingerprint |
+| `entropy` | `xprv` / `xpub` / `fingerprint` | same as `phrase` | feed entropy bytes directly to `derive_slot::derive_bip32_from_entropy` (or `derive_bip32_from_entropy_at_path` when `--path` is given; no parse step) |
 | `xprv` | `xpub` | none | `Xpub::from_priv` (EC derive) |
 | `xprv` | `fingerprint` | none | hash160 of pubkey |
 | `xpub` | `fingerprint` | none | hash160 of pubkey |
@@ -108,7 +108,7 @@ Exit code: 2 (refusal class via `ToolkitError::ConvertRefusal`). NOT exit 1 (Bad
 
 Edges not directly in the table are realized by graph traversal. Examples:
 - `phrase → ms1` = `phrase → entropy → ms1`
-- `entropy → xprv` and `entropy → xpub` are both produced by a single `derive_slot::derive_bip32_from_entropy` call (the returned `DerivedAccount` carries both `account_xpriv` and `account_xpub`).
+- `entropy → xprv` and `entropy → xpub` are both produced by a single `derive_slot::derive_bip32_from_entropy` call (or `derive_bip32_from_entropy_at_path` when `--path` is given) (the returned `DerivedAccount` carries both `account_xpriv` and `account_xpub`).
 
 The dispatcher walks the graph BFS from `--from` to each requested `--to` node, emitting in `--to` argument order.
 
@@ -220,6 +220,23 @@ error: --from bip38 --to bip38 is an identity pivot. To re-encrypt with a differ
   ```
   error: --from wif does not retain a chain code; --path-driven derivation is impossible.
   ```
+- `--path` given and no requested `--to` target reads it from the `--from` source: REFUSED (exit 2). Only these edges read `--path`: `phrase`/`seedqr`/`entropy` → `xpub`, `xprv`, `wif`, `bip38`, `address`; `xpub` → `address`. Checked after the wif refusal above. Stderr (byte-exact):
+  ```
+  error: --path is not used by any requested --to target from this --from source; drop --path.
+  ```
+- `--path` given with a non-zero `--account`: REFUSED (exit 2). An explicit `--account 0` is accepted (indistinguishable from the default). Stderr (byte-exact):
+  ```
+  error: --account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path.
+  ```
+- `--path` accepts only the literal form `m/...` (bare `m` is the master key); any other string is refused at the edge that reads it with `error: --path parse: <e>` (exit 1), `<e>` being the `bitcoin::bip32` parse error (e.g. `invalid child number format`). No coin-type check.
+- A seed source with an `xpub` or `xprv` target and neither `--template` nor `--path`: REFUSED (exit 1). Stderr (byte-exact):
+  ```
+  error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)
+  ```
+- A seed source whose only derivation target is `fingerprint`, without `--template`: REFUSED (exit 1). Stderr (byte-exact):
+  ```
+  error: --template is required for --to fingerprint (the master fingerprint; --path is not read)
+  ```
 - Any `--to <node>` not reachable from the supplied `--from` via the edge table or any composite traversal: REFUSED with the appropriate refusal-class message from §3.
 
 ## §5 Grammar
@@ -301,11 +318,11 @@ Per-edge meaningfulness:
 | `--passphrase` | edge traverses PBKDF2: `phrase → xprv/xpub/fingerprint`, `entropy → xprv/xpub/fingerprint` |
 | `--language` | `phrase` is `--from` or `--to` |
 | `--network` | edge derives a BIP-32 xpub/xprv (network is encoded in the version bytes), OR emits `wif` (the WIF version byte is network-dependent), OR `--xpub-prefix` is non-default per §11.a (selects the SLIP-0132 mainnet/testnet swap target) |
-| `--template` + `--account` | edge derives at a template path (substitutes for explicit `--path`) |
-| `--path` | edge derives at a custom BIP-32 path (mutually exclusive with `--template`) |
+| `--template` + `--account` | edge derives at a template path when `--path` is absent |
+| `--path` | edge derives at a custom BIP-32 path from the master key, literal `m/...` only; overrides `--template`/`--account` for `xpub`/`xprv`; `fingerprint` stays the master fingerprint |
 | `--fingerprint` | side-input for compound `--from` invocations (e.g., assembling KeyCard inputs) |
 
-Side-inputs that are not meaningful for the chosen edge are IGNORED (not refused). Refusing on irrelevant flags adds friction without preventing user error; ignoring matches the existing toolkit pattern (e.g., `bundle` ignores `--passphrase` for watch-only invocations).
+Side-inputs that are not meaningful for the chosen edge are IGNORED (not refused), except `--path` (refused when no requested target reads it) and a non-zero `--account` given with `--path` (§4). Refusing on irrelevant flags adds friction without preventing user error; ignoring matches the existing toolkit pattern (e.g., `bundle` ignores `--passphrase` for watch-only invocations).
 
 **`--passphrase` warning policy (per architect r1 I-5):** when `--passphrase` is supplied but the chosen edge does NOT traverse PBKDF2 (e.g., `--from xpub --to fingerprint --passphrase ...`), the toolkit emits a one-line stderr warning:
 ```
@@ -323,7 +340,7 @@ Convert subcommand at `crates/mnemonic-toolkit/src/cmd/convert.rs`. Top-level di
 2. Parse `--to` into `Vec<TargetNode>` preserving argument order.
 3. Validate the (from, to) pair against the edge-table adjacency. Refusal taxonomy emits §3 stderr verbatim.
 4. Dispatch per edge:
-   - BIP-39-rooted (`phrase` / `entropy` source): call `crate::derive_slot::derive_bip32_from_entropy` once; reuse the resulting `DerivedAccount` for any cascading `--to` requests.
+   - BIP-39-rooted (`phrase` / `entropy` source): call `crate::derive_slot::derive_bip32_from_entropy` (or `derive_bip32_from_entropy_at_path` when `--path` is given) once; reuse the resulting `DerivedAccount` for any cascading `--to` requests.
    - Pure encode (`entropy → ms1`): call `ms_codec::encode(Tag::ENTR, &Payload::Entr(bytes))`.
    - Pure decode (`ms1 → entropy`, `mk1 → xpub+...`): call codec library `decode`, pattern-match outputs.
    - Pure BIP-32 (`xprv → xpub`, etc.): instantiate `Secp256k1::new()`, derive directly.
