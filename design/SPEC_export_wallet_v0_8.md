@@ -185,7 +185,7 @@ Format reference: <https://github.com/sparrowwallet/drongo/blob/master/src/main/
   },
   "keystores": [
     {
-      "label": "<wallet-name>",
+      "label": "Keystore 1",
       "source": "SW_WATCH",
       "walletModel": "SPARROW",
       "keyDerivation": {
@@ -203,6 +203,7 @@ Format reference: <https://github.com/sparrowwallet/drongo/blob/master/src/main/
 - `scriptType`: `"P2PKH"` / `"P2SH_P2WPKH"` / `"P2WPKH"` / `"P2TR"` (singlesig) or `"P2SH"` / `"P2SH_P2WSH"` / `"P2WSH"` (multisig).
 - `defaultPolicy.miniscript.script`: `wpkh(@0/**)` (singlesig wpkh) / `wsh(sortedmulti(K, @0/**, @1/**, ...))` (multisig wsh-sortedmulti) / `wsh(multi(K, @0/**, ...))` (multisig wsh-multi) / `tr(@0/**)` (singlesig p2tr); the per-template miniscript expression is derived from `EmitInputs.script_type` + `threshold` + cosigner count. Threshold is conveyed implicitly via the `multi(K, ...)` / `sortedmulti(K, ...)` argument count — Sparrow's `Policy` class (`Policy.java`) has only two serialized fields (`name`, `miniscript`); `numSignaturesRequired` is a derived getter, NOT a JSON field, and must not appear in the emitted shape.
 - `keystores`: 1 element for `SINGLE`, K elements for `MULTI` (one per cosigner, slot-index order).
+- `keystores[i].label`: `Keystore <i+1>`, Sparrow's own default label (FIX_bughunt_tk_g2 #20). Always unique, which `Wallet.checkWallet()` requires ("Wallet keystores have duplicate labels"), and within drongo's `Keystore.MAX_LABEL_LENGTH` of 16 non-space characters; `--wallet-name` fills the top-level `name` only.
 - `masterFingerprint`: lowercase 8-hex (Sparrow convention).
 - `extendedPublicKey`: BIP-32 xpub form (Sparrow refuses SLIP-132 in import path).
 

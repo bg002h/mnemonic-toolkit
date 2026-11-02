@@ -369,7 +369,7 @@ The disjunction in the third clause absorbs Coldcard firmware variance (differen
 | Coldcard Mk4 (2023+) | + `bip86` (taproot) | adds `bip86` block |
 | Coldcard Q (2024+) | + `bip48_1`/`bip48_2` (multisig hints) | adds `bip48_*` blocks |
 
-**Parse contract:** Extract `chain` → network mapping (BTC → mainnet, XTN → testnet). Extract `xfp` → master fingerprint. Dominant-BIP selection per heuristic at SPEC §11.3.1 below.
+**Parse contract:** Extract `chain` → network mapping (BTC → mainnet, XTN → testnet). Extract `xfp` → master fingerprint; `xfp` must be exactly 8 hex digits, and any other character is refused (`ImportWalletParse`, exit 2). A present `account` must be a non-negative JSON integer that fits in a u32, wherever it appears; anything else (a string, a negative or fractional number, `null`, a boolean) is refused (`ImportWalletParse`, exit 2), never read as 0 (FIX_bughunt_tk_g2 #29, #31). Dominant-BIP selection per heuristic at SPEC §11.3.1 below.
 
 **§11.3.1 Dominant-BIP selection:**
 
@@ -379,7 +379,7 @@ Coldcard single-sig exports list multiple BIP-derivation blocks side-by-side. Th
 2. Else if `bip84` block present → select BIP-84 (P2WPKH).
 3. Else if `bip49` block present → select BIP-49 (P2SH-P2WPKH).
 4. Else if `bip44` block present → select BIP-44 (P2PKH).
-5. Else if top-level `xpub` present (legacy firmware) → infer BIP from xpub's SLIP-132 prefix (zpub→BIP-84, ypub→BIP-49, xpub→BIP-44).
+5. Else if top-level `xpub` present (legacy firmware) → infer BIP from xpub's SLIP-132 prefix (zpub→BIP-84, ypub→BIP-49, xpub→BIP-44). A depth-0 top-level `xpub` is the master xpub current firmware writes beside its per-BIP blocks, never an account xpub: it is refused (`ImportWalletParse`, exit 2) (FIX_bughunt_tk_g2 #49).
 6. `bip48_1` / `bip48_2` blocks (multisig-context) → IGNORED by single-sig parser; the multisig text file (Phase P4) is the authoritative multisig surface.
 
 **Provenance:** `ImportProvenance::Coldcard(ColdcardSourceMetadata)`:
@@ -414,7 +414,7 @@ Followed by N per-cosigner blocks of:
 
 Some firmware variants prefix a `XFP: <hex>` header line; sniff tolerates both (header-present and header-absent).
 
-**Parse contract:** line-oriented parser. Extract Name, Policy (K-of-N), Format (P2WSH / P2SH-P2WSH / P2SH), per-cosigner Derivation+xpub pairs. Synthesize descriptor: `wsh(sortedmulti(K, [xfp/path]xpub, ...))` or `sh(wsh(...))` per Format header.
+**Parse contract:** line-oriented parser. Extract Name, Policy (K-of-N), Format (P2WSH / P2SH-P2WSH / P2SH), per-cosigner Derivation+xpub pairs. Synthesize descriptor: `wsh(sortedmulti(K, [xfp/path]xpub, ...))` or `sh(wsh(...))` per Format header. When EVERY cosigner's derivation is exactly `m/45'` (BIP-45, Coldcard's legacy P2SH path, which has no coin-type component), the network comes from the xpub version (xpub → mainnet, tpub → testnet) instead of the BIP-48 coin-type; a set that mixes `m/45'` with other paths keeps the coin-type refusal (FIX_bughunt_tk_g2 #19).
 
 **§11.4.1 — xfp policy (cycle-13a H14 DEPTH-GATED truth table):**
 

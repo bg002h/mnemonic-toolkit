@@ -122,7 +122,7 @@ Two entries `A` and `B` sharing a grouping key merge into one `<stepA;stepB>/*` 
 condition holds; ANY deviation ⇒ do **not** merge (leave both entries as-is → they reject at the floor per
 §7):
 
-1. **Script/threshold identical** — implied by identical grouping key (same template kind + threshold).
+1. **Script/threshold identical** — identical grouping key (same template kind + threshold) AND identical script bodies: with each side's final step replaced by the merged `<stepA;stepB>`, the two bodies must be byte-identical (`wsh(pk(…))` and `wsh(pkh(…))` share a template kind but are different scripts; FIX_bughunt_tk_g2 #57).
    Covers `wpkh`, `wsh(multi/sortedmulti)`, `sh(...)`, nested `sh(wsh(...))`, and single-key `tr` (key-path
    bip86). Script-path `tr` (tapscript leaves) → floor-reject (§4.2 cond. 7; out of scope).
 2. **All key material identical** — for every key expression, identical `(fingerprint, full origin path,
