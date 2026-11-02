@@ -6351,3 +6351,49 @@ screen printed. Print the values.
 - **Source:** `design/agent-reports/whole-diff-bughunt-tk-s1.md` (0C/0I/1M/2N) and `design/agent-reports/whole-diff-bughunt-tk-s2.md` (0C/5I/3M/0N; the five Importants are folded as RED rows); filed 2026-11-01.
 - **What:** s1 (a) the restore.rs 11b refusal names no command that mints the policy card; s1 (b) the #2 `--format` refusal could name the one matching template; s1 (c) comments cite "scratch fix #NN" (restore.rs, verify_bundle.rs #12/#13) instead of FIX_bughunt_tk_g1.md §2.x; s2 M1 verify_bundle.rs `gi < n` guard (differs only when a policy repeats an xpub); s2 M2 gate.rs relative-timelock count `1 + rel_b + rel_t` untested (pre-existing); s2 M3 the moved `ms1_card_checks` failure-branch text is untested at the #37 call site. Not fixed.
 - **Owning phase:** none — ownerless residue.
+
+### `convert-path-fix` — `convert --path` honoured on seed xpub/xprv (R1/R2), refused where unused (R4) or with non-zero `--account` (R3), literal-only help (R5) (repo: **mnemonic-toolkit**; owning phase: **FIX_convert_path build**)
+- Surfaced: triage `design/agent-reports/triage-convert-path.md`; grade `grade-convert-path.md` (C, I, M).
+- Build impact (1): code delta section 3, spec delta S1-S8, manual rows 1102-1103, RED rows `cli_convert_path` (30).
+- Status: `owed-to-build`, closed by this build's GREEN commit 918832b0 (code; spec 4ae2f484, manual and these entries in the last GREEN commit).
+- Tier: `toolkit`.
+
+### `convert-path-gui-manual-refusals` — the GUI manual's convert page does not mention the new `--path` refusals (repo: **mnemonic-toolkit** `docs/manual-gui`; owning phase: **next manual-gui pass**)
+- Surfaced: FIX_convert_path section 5.3. `docs/manual-gui/src/40-mnemonic/44-convert.md:380-385` (`--path`) and `:472` (`--account`) omit R3 (non-zero `--account` with `--path`, exit 2) and R4 (`--path` unused, exit 2).
+- Status: `deferred-minor`.
+- Tier: `toolkit`.
+
+### `convert-path-guard-row-r3-before-xpub-prefix` — M1: only R4-before-5.a is guarded, R3-before-5.a is not
+- Surfaced 2026-11-02 FIX review r1 (`design/agent-reports/fix-review-r1-tk.md`).
+- Location: FIX_convert_path §6 last paragraph and §10 STOP-2.
+- Failure scenario and fix: the doc says "The three overlaps of section 10 are covered by the guard rows". QT2 rules "R4/R3 before 5.a", but only R4-before-5.a is guarded. Under the `a5mid` plant (R4, 5.a, R3) all 30 rows pass. The `a5mid` build then refuses `--from P --to xpub --path m/84'/1'/0' --account 3 --xpub-prefix zpub` with 5.a, but the ruling requires R3. It is Minor because it fails closed (exit 2 either way) and needs a builder to depart from §3.5's exact code. Fix: add a §6 row after `r4_before_xpub_prefix_network`: `| r3_before_xpub_prefix_network (QT2 guard) | --from P --to xpub --path m/84'/1'/0' --account 3 --xpub-prefix zpub (no --network) | 2; R3 text | exit 2, the 5.a text |`. Add the matching test, change "30" to "31" in §8 step 5 and in F1, and replace the §6 sentence with "…and `r4_before_xpub_prefix_network` plus `r3_before_xpub_prefix_network` (STOP-2)…". I ran this row as a scratch test (`extra-*.txt`). Unmodified code: fails, the stderr has the 5.a text. Fixed code: 31/31 pass. `a5mid` plant: only this row fails.
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-doc-stop2-example-wrong` — M2: §10 STOP-2 example sentence is wrong for its own `--to fingerprint` example
+- Surfaced 2026-11-02 FIX review r1 (`design/agent-reports/fix-review-r1-tk.md`).
+- Location: FIX_convert_path §10 STOP-2, line 380.
+- Failure scenario and fix: the doc says: "With `--account 3` and a literal path it shows R3". Applied to its own example (`--to fingerprint`), it shows R4. I ran `--from P --to fingerprint --account 3 --path m/0 --xpub-prefix zpub` and got rc 2 with the R4 text. The architect's probe used `--to xpub`. Fix: "With `--to xpub --path "m/84'/1'/0'" --account 3` instead it shows R3; without `--account` it shows 5.a." (Probed: R3, then 5.a.)
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-doc-header-stale-counts` — M3: FIX_convert_path header lines 8, 15, 16 are stale
+- Surfaced 2026-11-02 FIX review r1 (`design/agent-reports/fix-review-r1-tk.md`).
+- Location: FIX_convert_path lines 8, 15 and 16.
+- Failure scenario and fix: they still say "Section 10 lists the three points the ruling leaves open", "27 run, 2 passed, 25 failed" and "27/27 passed". §8 and the fold captures say 30 / 2 / 28 and 30/30. A builder who checks their RED run against line 15 sees a mismatch. Fix: line 8 → "Section 10 records the three precedence points, each ruled by the architect (QT1-QT3)". Lines 15-16 → "…gave 30 run, 2 passed, 28 failed … (`fold-red.txt`)" and "…30/30 passed (`fold-green.txt`)". Either recompute the sha256 values or drop them.
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-spec-s5-precedence-order` — M4: SPEC S5 omits the ruled refusal precedence
+- Surfaced 2026-11-02 FIX review r1 (`design/agent-reports/fix-review-r1-tk.md`).
+- Location: FIX_convert_path §4 S5 (lands in `design/SPEC_convert_v0_6.md` §4).
+- Failure scenario and fix: the ruled precedence (R4 before R3 before §11.a's `--xpub-prefix` refusal, and R3 before the `--path parse` error) is holder-visible. It reaches only the code, not `SPEC_convert_v0_6.md`. S5 says only that R4 is "checked after the wif refusal". Fix: append to S5's R3 bullet: "Order: the wif refusal, then the unused-`--path` refusal, then this one, then §11.a's `--xpub-prefix` refusal; the `--path parse` error comes after all of them."
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
+
+### `convert-path-assert-refused-stdout` — N1: `assert_refused` does not check stdout is empty
+- Surfaced 2026-11-02 FIX review r1 (`design/agent-reports/fix-review-r1-tk.md`).
+- Location: `crates/mnemonic-toolkit/tests/cli_convert_path.rs:73`.
+- Failure scenario and fix: `assert_refused` does not check that stdout is empty, though §2 says refusals print "nothing on stdout". Fix: assert empty stdout in `assert_refused`.
+- Status: `deferred-minor`
+- Owning phase: none, ownerless residue.
