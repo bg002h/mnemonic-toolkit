@@ -2,7 +2,9 @@
 //!
 //! Realizes `design/SPEC_convert_v0_6.md`.
 
-use crate::derive_slot::{derive_bip32_at_path, derive_bip32_from_entropy};
+use crate::derive_slot::{
+    derive_bip32_at_path, derive_bip32_from_entropy, derive_bip32_from_entropy_at_path,
+};
 use crate::electrum::{self, SeedVersion};
 use crate::error::{BitcoinErrorKind, ToolkitError};
 use crate::language::CliLanguage;
@@ -231,13 +233,9 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub template: Option<CliTemplate>,
 
-    /// BIP-32 derivation path. Accepts:
-    ///   named:    `bip44` / `bip49` / `bip84` / `bip86`
-    ///   hex:      `0xNN` (raw purpose byte)
-    ///   literal:  `m/...` (full BIP-32 path string)
-    ///
-    /// Required for `--to wif` (no template-implied path) and for
-    /// `(xpub, address)` derivation when no `--template` is supplied.
+    /// BIP-32 derivation path from the master key, literal form `m/...`. Overrides the
+    /// --template/--account path for --to xpub/xprv; required for --to wif, --to address
+    /// (from a seed) and composite --to bip38. Refused where no requested target uses it.
     #[arg(long, verbatim_doc_comment)]
     pub path: Option<String>,
 
@@ -283,7 +281,8 @@ pub struct ConvertArgs {
     pub bip38_passphrase_stdin: bool,
 
     /// BIP-32 account index (default 0). Used to compute the
-    /// template-derived path when `--path` is omitted.
+    /// template-derived path when `--path` is omitted. Refused (non-zero)
+    /// together with --path.
     #[arg(long, default_value = "0")]
     pub account: u32,
 
@@ -503,6 +502,30 @@ fn refusal_phrase_entropy_to_wif_no_path() -> ToolkitError {
 fn refusal_xpub_prefix_no_network() -> ToolkitError {
     ToolkitError::ConvertRefusal(
         "--xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).".into(),
+    )
+}
+
+/// Ruling R4: which (source, target) edges read `--path`.
+fn reads_path(from: NodeType, to: NodeType) -> bool {
+    use NodeType::*;
+    match from {
+        Seedqr | Phrase | Entropy => matches!(to, Xpub | Xprv | Wif | Bip38 | Address),
+        Xpub => to == Address,
+        _ => false,
+    }
+}
+
+fn refusal_path_unused() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--path is not used by any requested --to target from this --from source; drop --path."
+            .into(),
+    )
+}
+
+fn refusal_account_with_path() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path."
+            .into(),
     )
 }
 
@@ -952,6 +975,16 @@ pub fn run<R: Read, W: Write, E: Write>(
         return Err(refusal_wif_with_path());
     }
 
+    // 5.0a) Ruling R4: `--path` must be read by at least one requested target.
+    if args.path.is_some() && !targets.iter().any(|&t| reads_path(primary.node, t)) {
+        return Err(refusal_path_unused());
+    }
+
+    // 5.0b) Ruling R3: a non-zero `--account` is refused together with `--path`.
+    if args.path.is_some() && args.account != 0 {
+        return Err(refusal_account_with_path());
+    }
+
     // 5.a) SPEC §11.a — `--xpub-prefix` (non-default) requires explicit `--network`.
     if let Some(prefix) = args.xpub_prefix {
         if !prefix.is_default() && args.network.is_none() {
@@ -1302,10 +1335,23 @@ fn compute_outputs(
             let needs_derive = targets
                 .iter()
                 .any(|t| matches!(t, Xpub | Xprv | Fingerprint));
-            let derived = if needs_derive {
+            let derived = if needs_derive && args.path.is_some() {
+                // Ruling R1: --path overrides the template path; R2: the
+                // fingerprint stays the master fingerprint.
+                let path_str = args.path.as_deref().unwrap_or_default();
+                let path = bip32::DerivationPath::from_str(path_str)
+                    .map_err(|e| ToolkitError::BadInput(format!("--path parse: {e}")))?;
+                Some(derive_bip32_from_entropy_at_path(
+                    &entropy,
+                    pbkdf2_passphrase,
+                    language.into(),
+                    network,
+                    &path,
+                )?)
+            } else if needs_derive {
                 let template = args.template.ok_or_else(|| {
                     ToolkitError::BadInput(
-                        "--template is required for derivation targets (xpub/xprv/fingerprint)"
+                        "--template or --path is required for derivation targets (xpub/xprv/fingerprint)"
                             .into(),
                     )
                 })?;
