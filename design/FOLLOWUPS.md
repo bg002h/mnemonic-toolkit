@@ -630,6 +630,14 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 
 ## Open items
 
+### `md-bughunt-fixa-wd-m1-manual-gui-fingerprint-stdout` — manual-gui md encode page still says the fingerprint prints on stdout
+
+- **Surfaced:** 2026-11-02, md bug hunt FIX-A whole-diff review (descriptor-mnemonic `design/agent-reports/whole-diff-md-fix-a.md` M1, Minor).
+- **Where:** `docs/manual-gui/src/50-md/53-encode.md` lines 34 and 209-210 (and 218-220: the `--json` entry says nothing about chunks).
+- **What:** md bug-hunt R-10 moved the `policy_id_fingerprint` line to stderr; the GUI manual still says "after the phrase ... on stdout". Documentation only. Proposed wording for 209-210: "Prints the freshly-computed `policy_id_fingerprint` on stderr after the card (stdout carries only the md1 artifact). Default off."
+- **Status:** `deferred-minor`. **Owner:** the md-cli pin bump that follows the md release (or the next manual-gui pass).
+- **Tier:** `v1+`
+
 ### `bsd-process-hardening-parity-procctl-rlimit-core` — `set_non_dumpable()` was a silent no-op on the BSDs (no anti-ptrace / anti-core-dump protection off-Linux)
 
 - **Surfaced:** 2026-06-23, the musl/BSD secret-hygiene recon (`design/SPEC_bsd_hygiene_and_freebsd_gate.md`, Cycle A). `set_non_dumpable()` in the shared, duplicated `process_hardening.rs` was fenced `#[cfg(target_os = "linux")]` and used `prctl(PR_SET_DUMPABLE, 0)`. On FreeBSD/OpenBSD/NetBSD the function compiled but was a silent no-op — the anti-core-dump + anti-ptrace-introspection protection did not run, so a custody process on a BSD could (a) be ptrace/ktrace-introspected and (b) drop a core file the BIP-39 seed / xpriv spills into. A first-class secret-hygiene gap (not deferrable defense-in-depth) per `feedback_secret_hygiene_first_class_bar`.
