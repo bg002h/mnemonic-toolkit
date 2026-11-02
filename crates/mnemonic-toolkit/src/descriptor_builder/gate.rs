@@ -1329,6 +1329,35 @@ mod tests {
         );
     }
 
+    /// I3 (s2 whole-diff): the gate counts a repeated digest once for EVERY
+    /// hash kind. Shape per kind: 1 key, 1 distinct digest, 0 timelocks ->
+    /// raw 2^(1+1) = 4, so cap 4 passes and cap 3 is refused.
+    #[test]
+    fn s2_red_gate_counts_every_hash_kind() {
+        let h32 = "926a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084dbc";
+        let h20 = "926a54995ca48600920a19bf7bc502ca5f2f7d07";
+        for (kind, h) in [
+            ("sha256", h32),
+            ("hash256", h32),
+            ("ripemd160", h20),
+            ("hash160", h20),
+        ] {
+            let json = format!(
+                r#"{{"and_v":[{{"wrap":{{"w":"v","sub":{{"{kind}":"{h}"}}}}}},{{"pk":"{A}"}}]}}"#
+            );
+            let d = doc(&json);
+            let parsed = SpecDoc::parse(&d).unwrap();
+            assert!(
+                validate_with_cap(&parsed, 4).is_ok(),
+                "{kind}: cap 4 must pass"
+            );
+            let over = validate_with_cap(&parsed, 3)
+                .err()
+                .unwrap_or_else(|| panic!("{kind}: cap 3 must be refused"));
+            assert_eq!(over[0].kind, DiagnosticKind::OverEnvelope, "{kind}");
+        }
+    }
+
     // ---- M1: the Malleable + ResourceLimit dispatch arms -----------------
     // miniscript's type system resists producing a malleable-but-otherwise-sane
     // tree via the builder IR (every natural shape is non-malleable), and a

@@ -1693,3 +1693,86 @@ fn bughunt_tk_47_empty_expect_wallet_id_is_rejected_by_verify_bundle() {
     let (rcode, _o, rerr) = run(&rargs);
     assert_ne!(rcode, Some(0), "restore refuses an empty prefix: {rerr}");
 }
+
+// ===========================================================================
+// s2 whole-diff I5 — RED rows for the #12 scan-placement / blame rules.
+// ===========================================================================
+
+#[test]
+fn s2_red_multisig_scan_places_cards_out_of_slot_order() {
+    let script = "wsh-sortedmulti";
+    let mut failures: Vec<String> = Vec::new();
+    for k in 1u8..=8 {
+        let phrases_owned = [stray_phrase(k), SEED_B.to_string(), SEED_C.to_string()];
+        let phrases: Vec<&str> = phrases_owned.iter().map(|x| x.as_str()).collect();
+        let good = full_multisig_bundle(script, "2", &phrases);
+        let ms1 = strs(&good["ms1"]);
+        let md1 = strs(&good["md1"]);
+        let mut groups = mk1_groups_of(&good);
+        groups.reverse(); // supplied C, B, A: the scan fallback must place them
+        let mut args = full_verify_base(script, "2", &phrases);
+        push_cards(&mut args, &ms1, &groups, &md1);
+        let (_code, stdout, stderr) = run(&args);
+        let j: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
+            panic!("verify --json parse: {e}\nstdout:{stdout}\nstderr:{stderr}")
+        });
+        for i in 0..3 {
+            let name = format!("mk1_decode[{i}]");
+            if check_passed(&j, &name) != Some(true) {
+                failures.push(format!(
+                    "variant {k}: {name} = {:?} with cards supplied out of slot order",
+                    check_passed(&j, &name)
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn s2_red_multisig_stray_card_blames_xpub_absent_on_the_empty_slot() {
+    let script = "wsh-sortedmulti";
+    let good = full_multisig_bundle(script, "2", &[SEED_A, SEED_B, SEED_C]);
+    let ms1 = strs(&good["ms1"]);
+    let md1 = strs(&good["md1"]);
+    let groups = mk1_groups_of(&good);
+    let mut failures: Vec<String> = Vec::new();
+    for k in 1u8..=8 {
+        let stray = mk1_groups_of(&full_multisig_bundle(
+            script,
+            "2",
+            &[&stray_phrase(k), SEED_B, SEED_C],
+        ))[0]
+            .clone();
+        let mut args = full_verify_base(script, "2", &[SEED_A, SEED_B, SEED_C]);
+        push_cards(
+            &mut args,
+            &ms1,
+            &[groups[0].clone(), stray, groups[2].clone()],
+            &md1,
+        );
+        let (_code, stdout, stderr) = run(&args);
+        let j: Value = serde_json::from_str(&stdout).unwrap_or_else(|e| {
+            panic!("verify --json parse: {e}\nstdout:{stdout}\nstderr:{stderr}")
+        });
+        let failing: Vec<usize> = (0..3)
+            .filter(|i| check_passed(&j, &format!("mk1_decode[{i}]")) != Some(true))
+            .collect();
+        if failing.len() != 1 {
+            failures.push(format!(
+                "stray #{k}: failing slots {failing:?} (want exactly one)"
+            ));
+            continue;
+        }
+        let detail = check(&j, &format!("mk1_decode[{}]", failing[0]))
+            .map(|c| c["detail"].to_string())
+            .unwrap_or_default();
+        if !detail.contains("absent from descriptor policy") {
+            failures.push(format!(
+                "stray #{k}: slot {} detail lacks 'absent from descriptor policy': {detail}",
+                failing[0]
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}

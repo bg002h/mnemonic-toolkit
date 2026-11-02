@@ -6344,3 +6344,10 @@ screen printed. Print the values.
 - **Source:** `design/agent-reports/bughunt-fix-review-r1-tk-g1.md` (0C/4I/1M/1N; the four Importants are folded) and `design/agent-reports/bughunt-fix-review-r1-tk-g2.md` (0C/0I/5M/4N); filed 2026-11-01.
 - **What:** the Minors and Nits as the two reports state them (wording gaps in the FIX documents that fail closed, and small inconsistencies), not fixed. G1 N-1: the reference patch lacks the wc-codec `lib.rs` rustdoc hunk that FIX G1 2.24 specifies; the build writes it from 2.24.
 - **Owning phase:** none — ownerless residue.
+
+### `bughunt-tk-whole-diff-minors` — tk bug-hunt whole-diff s1 Minor (a), Nits (b)-(c); s2 M1-M3
+
+- **Status:** `deferred-minor`
+- **Source:** `design/agent-reports/whole-diff-bughunt-tk-s1.md` (0C/0I/1M/2N) and `design/agent-reports/whole-diff-bughunt-tk-s2.md` (0C/5I/3M/0N; the five Importants are folded as RED rows); filed 2026-11-01.
+- **What:** s1 (a) the restore.rs 11b refusal names no command that mints the policy card; s1 (b) the #2 `--format` refusal could name the one matching template; s1 (c) comments cite "scratch fix #NN" (restore.rs, verify_bundle.rs #12/#13) instead of FIX_bughunt_tk_g1.md §2.x; s2 M1 verify_bundle.rs `gi < n` guard (differs only when a policy repeats an xpub); s2 M2 gate.rs relative-timelock count `1 + rel_b + rel_t` untested (pre-existing); s2 M3 the moved `ms1_card_checks` failure-branch text is untested at the #37 call site. Not fixed.
+- **Owning phase:** none — ownerless residue.
