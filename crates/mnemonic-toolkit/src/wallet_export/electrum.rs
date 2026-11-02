@@ -67,6 +67,17 @@ impl WalletFormatEmitter for ElectrumEmitter {
             )));
         }
 
+        // Scratch fix (report #5): Electrum reads a plain-xpub "standard" keystore
+        // as p2pkh; there is no taproot singlesig wallet type to write.
+        if matches!(inputs.script_type, WalletScriptType::P2tr) {
+            return Err(ToolkitError::BadInput(
+                "--format electrum does not support --template bip86 (P2TR): a plain xpub \
+                 \"standard\" wallet is read by Electrum as p2pkh. Use --format bitcoin-core \
+                 (descriptor) or --format sparrow for taproot watch-only setup."
+                    .into(),
+            ));
+        }
+
         if template.is_multisig() {
             emit_electrum_multisig_json(inputs)
         } else {
