@@ -477,11 +477,33 @@ pub(super) fn parse_text(
 
     // Network detection: BIP-48 coin-type from the first cosigner's
     // derivation path (component index 1, hardened).
-    let network = network_from_path(&resolved[0].path)?;
+    // BIP-45 root `m/45'` has no coin-type component: when EVERY cosigner is
+    // at `m/45'`, take the network from the xpub version instead (the
+    // `assert_slots_network_agrees` cross-check below covers every xpub).
+    let is_bip45_root = |p: &DerivationPath| {
+        let c: Vec<&ChildNumber> = p.into_iter().collect();
+        c.len() == 1 && matches!(c[0], ChildNumber::Hardened { index: 45 })
+    };
+    let bip45 = resolved.iter().all(|c| is_bip45_root(&c.path));
+    let network = if bip45 {
+        match resolved[0].xpub.network {
+            bitcoin::NetworkKind::Main => bitcoin::Network::Bitcoin,
+            bitcoin::NetworkKind::Test => bitcoin::Network::Testnet,
+        }
+    } else {
+        network_from_path(&resolved[0].path)?
+    };
 
     // Heterogeneity check: all cosigners must share the same coin-type.
-    let first_ct = coin_type_index(&resolved[0].path)?;
+    let first_ct = if bip45 {
+        0
+    } else {
+        coin_type_index(&resolved[0].path)?
+    };
     for (i, cs) in resolved.iter().enumerate().skip(1) {
+        if bip45 {
+            continue;
+        }
         let ct = coin_type_index(&cs.path)?;
         if ct != first_ct {
             return Err(ToolkitError::ImportWalletParse(format!(

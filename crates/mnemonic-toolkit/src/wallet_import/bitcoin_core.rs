@@ -517,6 +517,13 @@ fn merge_receive_change_pairs(
             continue;
         }
         let merged_body_no_csum = recv.body_no_csum.replace(&recv_step_pat, &merged_pat);
+        // The change body, with ITS step widened the same
+        // way, must be byte-identical to the merged receive body; otherwise
+        // the two entries differ in script structure and must not merge.
+        let chg_step_pat = format!("/{}/*", chg.step);
+        if chg.body_no_csum.replace(&chg_step_pat, &merged_pat) != merged_body_no_csum {
+            continue;
+        }
         let merged_desc_with_csum = recompute_descriptor_checksum(&merged_body_no_csum)?;
         merges.push(Merge {
             first_idx: recv.idx.min(chg.idx),
@@ -902,7 +909,8 @@ fn coin_type_from_path(path: &DerivationPath, entry_idx: usize) -> Result<u32, T
 pub(super) fn extract_threshold(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
     static R: OnceLock<Regex> = OnceLock::new();
     let re = R.get_or_init(|| {
-        Regex::new(r"(?:thresh|multi|sortedmulti)\((\d+)\s*,").expect("threshold regex is fixed")
+        Regex::new(r"(?:thresh|multi|sortedmulti|multi_a|sortedmulti_a)\((\d+)\s*,")
+            .expect("threshold regex is fixed")
     });
     let cap = match re.captures(descriptor_body) {
         Some(c) => c,

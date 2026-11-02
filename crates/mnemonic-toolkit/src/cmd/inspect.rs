@@ -205,6 +205,12 @@ pub enum InspectPayload {
 fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, ToolkitError> {
     match kind {
         CardKind::Ms1 => {
+            if chunks.len() != 1 {
+                return Err(ToolkitError::BadInput(format!(
+                    "inspect: expected 1 ms1 card, got {}; inspect each ms1 card in its own run",
+                    chunks.len()
+                )));
+            }
             let (tag, payload) = ms_codec::decode(chunks[0])?;
             // Read the small display bits BEFORE moving the entropy out (the
             // move-match consumes `payload`).

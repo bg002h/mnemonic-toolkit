@@ -680,6 +680,14 @@ fn parse_chunk(
     chunk_index: usize,
     kind: CardKind,
 ) -> Result<(Vec<u8>, BchCode), RepairError> {
+    if chunk.chars().any(|c| c.is_ascii_lowercase())
+        && chunk.chars().any(|c| c.is_ascii_uppercase())
+    {
+        return Err(RepairError::UnparseableInput {
+            chunk_index,
+            detail: "string mixes upper and lower case (BIP-173 forbids mixed case)".into(),
+        });
+    }
     let s_lower = chunk.to_lowercase();
     let sep_pos = s_lower
         .rfind('1')
@@ -1241,6 +1249,15 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
             // reports `Blessed` (exit 0 unchanged).
             let set_verify = if repairs.is_empty() {
                 SetVerify::Blessed
+            } else if repairs.iter().any(|d| ms1_is_share(&d.corrected_chunk)) {
+                SetVerify::Unverified {
+                    reason: "correction UNVERIFIED — a corrected K-of-N share cannot be \
+                        self-verified; recombine it with the other shares (mnemonic ms-shares \
+                        combine --share <SHARE> --share <SHARE> …) and confirm the recovered \
+                        seed's address/xpub against a known-good copy before use; BIP-93 \
+                        recommends confirming a corrected codex32 string"
+                        .to_string(),
+                }
             } else {
                 SetVerify::Unverified {
                     reason: "correction UNVERIFIED — a corrected seed card cannot be \
@@ -1309,6 +1326,104 @@ fn scrub_payload_husk(payload: ms_codec::Payload) {
     };
 }
 
+/// BCH-correct a K-of-N codex32 share (ms-codec's
+/// `decode_with_correction` refuses shares after the checksum step, so its
+/// corrections are lost). Same polymod / BM solve as ms-codec uses.
+fn repair_share_natively(
+    chunk: &str,
+    chunk_index: usize,
+) -> Result<Option<RepairDetail>, RepairError> {
+    const ALPHA: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    let lower = chunk.to_ascii_lowercase();
+    let rest = &lower[3..];
+    let mut symbols: Vec<u8> = Vec::with_capacity(rest.len());
+    for c in rest.bytes() {
+        symbols.push(ALPHA.iter().position(|&b| b == c).ok_or_else(|| {
+            RepairError::UnparseableInput {
+                chunk_index,
+                detail: format!("non-bech32 char '{}'", c as char),
+            }
+        })? as u8);
+    }
+    let mut input = ms_codec::bch::hrp_expand("ms");
+    input.extend_from_slice(&symbols);
+    let residue = ms_codec::bch::polymod_run(&input) ^ ms_codec::bch::MS_REGULAR_CONST;
+    if residue == 0 {
+        check_is_share(chunk, chunk_index)?;
+        return Ok(None);
+    }
+    let (positions, mags) = ms_codec::bch_decode::decode_regular_errors(residue, symbols.len())
+        .ok_or(RepairError::TooManyErrors {
+            chunk_index,
+            bound: 8,
+        })?;
+    let mut corrected = symbols.clone();
+    let mut corrections: Vec<ms_codec::CorrectionDetail> = Vec::new();
+    for (&p, &m) in positions.iter().zip(&mags) {
+        // (a) bound check, as ms-codec `decode_with_correction` does.
+        if p >= corrected.len() {
+            return Err(RepairError::TooManyErrors {
+                chunk_index,
+                bound: 8,
+            });
+        }
+        let was = ALPHA[corrected[p] as usize] as char;
+        corrected[p] ^= m;
+        let now = ALPHA[corrected[p] as usize] as char;
+        corrections.push(ms_codec::CorrectionDetail {
+            position: p,
+            was,
+            now,
+        });
+    }
+    // (b) re-verify the corrected codeword.
+    let mut verify = ms_codec::bch::hrp_expand("ms");
+    verify.extend_from_slice(&corrected);
+    if ms_codec::bch::polymod_run(&verify) ^ ms_codec::bch::MS_REGULAR_CONST != 0 {
+        return Err(RepairError::TooManyErrors {
+            chunk_index,
+            bound: 8,
+        });
+    }
+    let (corrected_chunk, corrected_positions) = apply_ms_corrections(chunk, &corrections);
+    check_is_share(&corrected_chunk, chunk_index)?;
+    Ok(Some(RepairDetail {
+        chunk_index,
+        original_chunk: SecretString::new(chunk.to_string()),
+        corrected_chunk: SecretString::new(corrected_chunk),
+        corrected_positions,
+    }))
+}
+
+/// (c) The (corrected or clean) string must decode as ONE share of a K-of-N
+/// set; any other outcome is a post-correction decode failure.
+fn check_is_share(s: &str, chunk_index: usize) -> Result<(), RepairError> {
+    match ms_codec::decode(s) {
+        Err(ms_codec::Error::IsShareNotSingleString { .. }) => Ok(()),
+        Err(e) => Err(RepairError::PostCorrectionDecodeFailed {
+            chunk_index: Some(chunk_index),
+            detail: e.to_string(),
+        }),
+        Ok((_tag, payload)) => {
+            scrub_payload_husk(payload);
+            Err(RepairError::PostCorrectionDecodeFailed {
+                chunk_index: Some(chunk_index),
+                detail: "corrected string decodes as a single ms1, not a K-of-N share".to_string(),
+            })
+        }
+    }
+}
+
+/// True when a (valid) ms1 string's threshold character (the first data-part
+/// character, BIP-93) is not `0`, i.e. it is one share of a K-of-N set.
+fn ms1_is_share(s: &str) -> bool {
+    let lower = s.to_lowercase();
+    match lower.rfind('1') {
+        Some(sep) => lower[sep + 1..].chars().next().is_some_and(|c| c != '0'),
+        None => false,
+    }
+}
+
 fn repair_via_ms_codec(
     chunk: &str,
     chunk_index: usize,
@@ -1328,6 +1443,7 @@ fn repair_via_ms_codec(
                 corrected_positions,
             }))
         }
+        Err(MsErr::IsShareNotSingleString { .. }) => repair_share_natively(chunk, chunk_index),
         Err(MsErr::TooManyErrors { bound }) => Err(RepairError::TooManyErrors {
             chunk_index,
             bound: bound as usize,
@@ -1621,6 +1737,22 @@ pub(crate) fn recover_indel_card(
     max_indel: usize,
     e_subst: usize,
 ) -> Result<crate::indel::IndelOutcome, ToolkitError> {
+    // X1: a chunk that mixes upper and lower case is refused before any
+    // search, with the same text as the normal repair path. Every remaining
+    // chunk is single-case; an all-capitals one (the BIP-93 handwritten / QR
+    // form) is searched in lowercase, as the non-indel path does.
+    for (i, c) in chunks.iter().enumerate() {
+        if c.chars().any(|ch| ch.is_ascii_lowercase())
+            && c.chars().any(|ch| ch.is_ascii_uppercase())
+        {
+            return Err(ToolkitError::Repair(RepairError::UnparseableInput {
+                chunk_index: i,
+                detail: "string mixes upper and lower case (BIP-173 forbids mixed case)".into(),
+            }));
+        }
+    }
+    let lowered: Vec<String> = chunks.iter().map(|c| c.to_lowercase()).collect();
+    let chunks = &lowered[..];
     match kind {
         CardKind::Ms1 => {
             // ms1 is single-chunk; recover on the sole chunk.

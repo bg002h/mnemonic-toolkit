@@ -648,7 +648,8 @@ fn coin_type_from_path(path: &DerivationPath) -> Result<u32, ToolkitError> {
 fn extract_threshold_local(descriptor_body: &str) -> Result<Option<u8>, ToolkitError> {
     static R: OnceLock<Regex> = OnceLock::new();
     let re = R.get_or_init(|| {
-        Regex::new(r"(?:thresh|multi|sortedmulti)\((\d+)\s*,").expect("threshold regex is fixed")
+        Regex::new(r"(?:thresh|multi|sortedmulti|multi_a|sortedmulti_a)\((\d+)\s*,")
+            .expect("threshold regex is fixed")
     });
     let cap = match re.captures(descriptor_body) {
         Some(c) => c,

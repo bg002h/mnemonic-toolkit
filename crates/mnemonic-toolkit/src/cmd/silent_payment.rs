@@ -124,6 +124,13 @@ fn resolve_master_xpriv<E: Write>(
 
     // 1. xprv/tprv master (unambiguous base58check + version prefix).
     if let Ok(xpriv) = Xpriv::from_str(s) {
+        if xpriv.depth != 0 {
+            return Err(ToolkitError::SilentPayment(format!(
+                "the xprv/tprv is at depth {}, not a master key (depth 0); supply the master \
+                 xprv/tprv, or the seed phrase, ms1 or entropy it came from",
+                xpriv.depth
+            )));
+        }
         if !passphrase.is_empty() {
             writeln!(
                 stderr,

@@ -242,6 +242,13 @@ impl WalletFormatParser for ColdcardParser {
         // rewriting the user's account index in the baked origin annotation. A
         // backup tool must NEVER silently rewrite an index — reject on
         // out-of-range (ImportWalletParse, exit 2) instead of saturating.
+        if let Some(v) = obj.get("account") {
+            if v.as_u64().is_none() {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: coldcard: parse error: `account` must be a non-negative integer, got {v}"
+                )));
+            }
+        }
         let raw_account: u32 = match obj.get("account").and_then(|v| v.as_u64()) {
             Some(n) => u32::try_from(n).map_err(|_| {
                 ToolkitError::ImportWalletParse(format!(
@@ -401,6 +408,11 @@ fn parse_xfp_hex(s: &str) -> Result<[u8; 4], ToolkitError> {
             s.len()
         )));
     }
+    if !s.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(ToolkitError::ImportWalletParse(
+            "import-wallet: coldcard: parse error: `xfp` must contain only hex digits".to_string(),
+        ));
+    }
     let mut out = [0u8; 4];
     for i in 0..4 {
         out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).map_err(|e| {
@@ -458,6 +470,19 @@ fn select_dominant_bip(
     // Fallback: legacy top-level xpub (Mk1/Mk2 firmware). Infer BIP from
     // SLIP-132 prefix.
     if let Some(xpub_str) = obj.get("xpub").and_then(|v| v.as_str()) {
+        // A depth-0 top-level `xpub` is the MASTER xpub
+        // (Coldcard generic-wallet-export.md), never an account xpub.
+        if let Ok((neutral, _)) = crate::slip0132::normalize_xpub_prefix(xpub_str) {
+            use std::str::FromStr;
+            if let Ok(x) = Xpub::from_str(&neutral) {
+                if x.depth == 0 {
+                    return Err(ToolkitError::ImportWalletParse(
+                        "import-wallet: coldcard: parse error: top-level `xpub` is a depth-0 master xpub, not an account xpub; no bip44/bip49/bip84/bip86 block to import"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
         let bip = infer_bip_from_xpub_prefix(xpub_str, network)?;
         return Ok((bip, xpub_str.to_string(), None));
     }

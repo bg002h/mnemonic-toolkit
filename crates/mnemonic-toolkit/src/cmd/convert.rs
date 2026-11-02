@@ -980,7 +980,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     ) && targets.iter().any(|t| {
         matches!(
             t,
-            NodeType::Xpub | NodeType::Xprv | NodeType::Fingerprint | NodeType::Wif
+            NodeType::Xpub
+                | NodeType::Xprv
+                | NodeType::Fingerprint
+                | NodeType::Wif
+                | NodeType::Address
         )
     });
     // SPEC v0.7 §12 — BIP-38 uses Scrypt (not PBKDF2) but the passphrase IS

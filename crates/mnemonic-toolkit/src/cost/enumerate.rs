@@ -51,7 +51,7 @@ pub const SEGWIT_INPUT_BASE_WU: usize = 164;
 
 /// Hash-leaf assets the user "knows preimages of". Each variant is enumerated
 /// over the powerset of hashes-known.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum HashAsset {
     Sha256(sha256::Hash),
     Hash256(miniscript::hash256::Hash),
@@ -439,12 +439,15 @@ fn walk_segv0_for_hash_leaves(
             + miniscript::MiniscriptKey<Ripemd160 = ripemd160::Hash>
             + miniscript::MiniscriptKey<Hash160 = hash160::Hash>,
     {
-        match t {
-            Terminal::Sha256(h) => out.push(HashAsset::Sha256(*h)),
-            Terminal::Hash256(h) => out.push(HashAsset::Hash256(*h)),
-            Terminal::Ripemd160(h) => out.push(HashAsset::Ripemd160(*h)),
-            Terminal::Hash160(h) => out.push(HashAsset::Hash160(*h)),
-            _ => {}
+        let asset = match t {
+            Terminal::Sha256(h) => HashAsset::Sha256(*h),
+            Terminal::Hash256(h) => HashAsset::Hash256(*h),
+            Terminal::Ripemd160(h) => HashAsset::Ripemd160(*h),
+            Terminal::Hash160(h) => HashAsset::Hash160(*h),
+            _ => return,
+        };
+        if !out.contains(&asset) {
+            out.push(asset);
         }
     }
     for sub in m.iter() {
