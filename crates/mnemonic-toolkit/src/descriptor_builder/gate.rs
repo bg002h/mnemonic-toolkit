@@ -1261,12 +1261,12 @@ mod tests {
         ));
     }
 
-    /// Phase-2 review I1 regression: hashes are counted as LEAVES, not distinct
-    /// digests (enumerate does not dedup). The SAME sha256 digest in two leaves
-    /// must count as 2 on both sides. Shape: `and_v(v:sha256(H),and_v(v:sha256(H),pk(A)))`
-    /// = 1 key, 2 hash leaves (same H), 0 timelocks → raw = 2^(1+2) × 1 = 8.
-    /// (The old `BTreeSet` dedup gave n_hashes=1 → raw=4, which would pass a
-    /// cap=4 the Phase-3 preview refuses.)
+    /// Gate and enumerate agree that a repeated digest is one preimage
+    /// (FIX_bughunt_tk_g2 #28, superseding the Phase-2 review I1 leaf count):
+    /// digests are deduped on both sides. The SAME sha256 digest in two leaves
+    /// counts once. Shape: `and_v(v:sha256(H),and_v(v:sha256(H),pk(A)))`
+    /// = 1 key, 1 distinct digest (2 leaves), 0 timelocks → raw = 2^(1+1) × 1 = 4.
+    /// So cap 4 passes and cap 3 is refused, on the gate and on enumerate alike.
     #[test]
     fn repeated_digest_cap_agrees_with_enumerate() {
         use crate::cost::{self, CompareCostArgs, InputForm};
@@ -1279,23 +1279,18 @@ mod tests {
         let d = doc(&json);
         let parsed = SpecDoc::parse(&d).unwrap();
 
-        // Gate side: raw == 8 (would be 4 under the buggy dedup).
+        // Gate side: raw == 4 (one distinct digest).
         assert!(
-            validate_with_cap(&parsed, 8).is_ok(),
-            "gate raw must be ≤ 8"
+            validate_with_cap(&parsed, 4).is_ok(),
+            "gate raw must be ≤ 4"
         );
-        let over = validate_with_cap(&parsed, 7)
+        let over = validate_with_cap(&parsed, 3)
             .err()
-            .expect("gate refuses at 7");
+            .expect("gate refuses at 3");
         assert_eq!(over[0].kind, DiagnosticKind::OverEnvelope);
-        // Crucially, the buggy dedup would have PASSED at cap 4:
-        let over4 = validate_with_cap(&parsed, 4)
-            .err()
-            .expect("gate must refuse at 4 (leaf count)");
-        assert_eq!(over4[0].kind, DiagnosticKind::OverEnvelope);
 
-        // Enumerate side: single-path projection, raw == 8.
-        let single = validate_with_cap(&parsed, 8)
+        // Enumerate side: single-path projection, raw == 4.
+        let single = validate_with_cap(&parsed, 4)
             .unwrap()
             .descriptor
             .into_single_descriptors()
@@ -1314,15 +1309,15 @@ mod tests {
                 &mut Vec::<u8>::new(),
             )
         };
-        assert!(run(8).is_ok(), "enumerate raw must be ≤ 8");
+        assert!(run(4).is_ok(), "enumerate raw must be ≤ 4");
         assert!(
             matches!(
-                run(7),
+                run(3),
                 Err(ToolkitError::CompareCost(
                     cost::CompareCostError::ConditionsTooMany { .. }
                 ))
             ),
-            "enumerate raw == 8 == gate raw (hash leaves counted, not deduped)"
+            "enumerate raw == 4 == gate raw (a repeated digest counted once)"
         );
     }
 

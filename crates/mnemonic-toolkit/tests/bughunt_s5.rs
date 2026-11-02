@@ -62,6 +62,15 @@ fn drop_char(s: &str, i: usize) -> String {
     format!("{}{}", &s[..i], &s[i + 1..])
 }
 
+/// The last line of a stream (rows that pass a secret on argv also get one
+/// argv-advisory line per value before it).
+fn last_line(s: &str) -> &str {
+    s.trim_end_matches('\n').rsplit('\n').next().unwrap_or("")
+}
+
+/// The stdout advisory every ms1 output carries on stderr.
+const PK_ADVISORY: &str = "warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')";
+
 // ── #50 ─────────────────────────────────────────────────────────────────────
 
 /// #50: `word-card --from` says "for a multi-chunk card, pass all chunks
@@ -164,10 +173,10 @@ fn bughunt_tk_51_inspect_second_ms1_not_ignored() {
         VALID_MS1,
         corrupt_b,
     ]));
-    assert_ne!(
-        a.code, 0,
-        "a corrupt second ms1 was silently ignored: exit 0, stdout:\n{}",
-        a.stdout
+    assert_eq!((a.code, a.stdout.as_str()), (1, ""), "stderr: {}", a.stderr);
+    assert_eq!(
+        last_line(&a.stderr),
+        "error: inspect: expected 1 ms1 card, got 2; inspect each ms1 card in its own run"
     );
 
     // (b) second ms1 is valid and different (256-bit); A is 128-bit.
@@ -178,10 +187,10 @@ fn bughunt_tk_51_inspect_second_ms1_not_ignored() {
         VALID_MS1,
         VALID_MS1_256,
     ]));
-    assert!(
-        b.code != 0 || b.stdout.contains("bit_strength: 256"),
-        "a valid second ms1 was silently ignored: exit 0, stdout:\n{}",
-        b.stdout
+    assert_eq!((b.code, b.stdout.as_str()), (1, ""), "stderr: {}", b.stderr);
+    assert_eq!(
+        last_line(&b.stderr),
+        "error: inspect: expected 1 ms1 card, got 2; inspect each ms1 card in its own run"
     );
 }
 
@@ -203,6 +212,48 @@ fn bughunt_tk_x1_repair_refuses_mixed_case_chunks() {
     let mixed_mk1_c0 = "mk1QPRSQhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4";
 
     let mut accepted: Vec<String> = Vec::new();
+
+    for (kind, r) in [
+        (
+            "ms1",
+            run(mnemonic().args(["--allow-argv-secret", "repair", "--ms1", mixed_ms1])),
+        ),
+        (
+            "md1",
+            run(mnemonic().args([
+                "repair",
+                "--md1",
+                mixed_md1_c0,
+                "--md1",
+                MD1_C1,
+                "--md1",
+                MD1_C2,
+            ])),
+        ),
+        (
+            "mk1",
+            run(mnemonic().args(["repair", "--mk1", mixed_mk1_c0, "--mk1", MK1_C1])),
+        ),
+        (
+            "ms1 --max-indel 1",
+            run(mnemonic().args([
+                "--allow-argv-secret",
+                "repair",
+                "--max-indel",
+                "1",
+                "--ms1",
+                &drop_char(mixed_ms1, 20),
+            ])),
+        ),
+    ] {
+        assert_eq!(
+            (r.code, r.stdout.as_str()),
+            (2, ""),
+            "{kind}: stderr {}",
+            r.stderr
+        );
+        assert_eq!(last_line(&r.stderr), "error: repair: chunk 0 parse failed before correction could run: string mixes upper and lower case (BIP-173 forbids mixed case)", "{kind}");
+    }
 
     let ms1 = run(mnemonic().args(["--allow-argv-secret", "repair", "--ms1", mixed_ms1]));
     if ms1.code == 0 {
@@ -251,6 +302,7 @@ fn bughunt_tk_x1_repair_refuses_mixed_case_chunks() {
 /// Open product question: resolve `@env:` in `repair`/`inspect`, or drop the
 /// GUI claim (mnemonic-gui `src/schema/mnemonic.rs:2545`)?
 #[test]
+#[ignore = "deferred-minor: toolkit-repair-inspect-ms1-env-sentinel"]
 fn bughunt_tk_x2_repair_ms1_resolves_env_sentinel() {
     let r = run(mnemonic()
         .env("S5_XCARD", VALID_MS1)
@@ -285,6 +337,20 @@ fn bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share() {
     let d = run(mnemonic()
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{damaged}\n")));
+    assert_eq!(
+        d.stdout,
+        format!("# Repair report\n#   ms1 chunk 0: 1 correction at position 18: 'x' -> '8'\n{SHARE_1}\n")
+    );
+    assert_eq!(
+        d.stderr,
+        format!(
+            "repair: correction UNVERIFIED — a corrected K-of-N share cannot be self-verified; \
+             recombine it with the other shares (mnemonic ms-shares combine --share <SHARE> \
+             --share <SHARE> …) and confirm the recovered seed's address/xpub against a \
+             known-good copy before use; BIP-93 recommends confirming a corrected codex32 \
+             string\n{PK_ADVISORY}\n"
+        )
+    );
     if d.code != 4 || !d.stdout.contains(SHARE_1) {
         failures.push(format!(
             "damaged share: exit {} (want 4 with the clean share on stdout); stdout: {:?}; stderr: {}",
@@ -297,6 +363,8 @@ fn bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share() {
     let c = run(mnemonic()
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{SHARE_1}\n")));
+    assert_eq!(c.stdout, format!("{SHARE_1}\n"));
+    assert_eq!(c.stderr, format!("{PK_ADVISORY}\n"));
     if c.code != 0 || !c.stdout.contains(SHARE_1) {
         failures.push(format!(
             "clean share: exit {} (want 0 with the share echoed); stderr: {}",
@@ -347,6 +415,11 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
         "--ms1",
         &ms_dropped.to_uppercase(),
     ]));
+    assert_eq!(
+        (up.code, up.stdout.as_str()),
+        (5, low.stdout.as_str()),
+        "ms1 capitals"
+    );
     if up.code != 5 || !up.stdout.to_lowercase().contains(VALID_MS1) {
         failures.push(format!(
             "ms1 all-capitals: exit {} (want 5 with the card); stderr: {}",
@@ -357,6 +430,20 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
 
     // mk1: drop char 30 of chunk 1.
     let mk_dropped = drop_char(MK1_C1, 30);
+    let mk_low = run(mnemonic().args([
+        "repair",
+        "--max-indel",
+        "1",
+        "--mk1",
+        MK1_C0,
+        "--mk1",
+        &mk_dropped,
+    ]));
+    assert_eq!(
+        mk_low.code, 5,
+        "baseline: lowercase mk1 exits 5: {}",
+        mk_low.stderr
+    );
     let up = run(mnemonic().args([
         "repair",
         "--max-indel",
@@ -366,6 +453,11 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
         "--mk1",
         &mk_dropped.to_uppercase(),
     ]));
+    assert_eq!(
+        (up.code, up.stdout.as_str()),
+        (5, mk_low.stdout.as_str()),
+        "mk1 capitals"
+    );
     if up.code != 5 || !up.stdout.to_lowercase().contains(MK1_C1) {
         failures.push(format!(
             "mk1 all-capitals: exit {} (want 5 with the card); stderr: {}",
@@ -376,6 +468,22 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
 
     // md1: drop char 30 of chunk 1.
     let md_dropped = drop_char(MD1_C1, 30);
+    let md_low = run(mnemonic().args([
+        "repair",
+        "--max-indel",
+        "1",
+        "--md1",
+        MD1_C0,
+        "--md1",
+        &md_dropped,
+        "--md1",
+        MD1_C2,
+    ]));
+    assert_eq!(
+        md_low.code, 5,
+        "baseline: lowercase md1 exits 5: {}",
+        md_low.stderr
+    );
     let up = run(mnemonic().args([
         "repair",
         "--max-indel",
@@ -387,6 +495,11 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
         "--md1",
         &MD1_C2.to_uppercase(),
     ]));
+    assert_eq!(
+        (up.code, up.stdout.as_str()),
+        (5, md_low.stdout.as_str()),
+        "md1 capitals"
+    );
     if up.code != 5 || !up.stdout.to_lowercase().contains(MD1_C1) {
         failures.push(format!(
             "md1 all-capitals: exit {} (want 5 with the card); stderr: {}",

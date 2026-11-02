@@ -11,7 +11,7 @@
   },
   "keystores": [
     {
-      "label": "tr-multi-a-0",
+      "label": "Keystore 1",
       "source": "SW_WATCH",
       "walletModel": "SPARROW",
       "keyDerivation": {
@@ -21,7 +21,7 @@
       "extendedPublicKey": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"
     },
     {
-      "label": "tr-multi-a-0",
+      "label": "Keystore 2",
       "source": "SW_WATCH",
       "walletModel": "SPARROW",
       "keyDerivation": {
@@ -31,7 +31,7 @@
       "extendedPublicKey": "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6"
     },
     {
-      "label": "tr-multi-a-0",
+      "label": "Keystore 3",
       "source": "SW_WATCH",
       "walletModel": "SPARROW",
       "keyDerivation": {

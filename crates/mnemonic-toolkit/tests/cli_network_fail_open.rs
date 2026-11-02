@@ -60,7 +60,7 @@ const MAINNET_XPUB: &str = "xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHw
 /// BIP-84 testnet account tpub, m/84'/1'/0'.
 const TESTNET_TPUB: &str = "tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M";
 /// BIP-84 testnet account tprv, m/84'/1'/0'.
-const TESTNET_TPRV: &str = "tprv8fSjiqEQ8YG7Ro7gw2ScwcvweYuuWi1ZzGUtrPz918HvDtBzL5s2voFTrN4y3yUwj5cYD54pLhxk6NKCzHUjcka3zbKjbTEcsuAnkzbjhkL";
+const TESTNET_TPRV: &str = "tprv8ZgxMBicQKsPe5YMU9gHen4Ez3ApihUfykaqUorj9t6FDqy3nP6eoXiAo2ssvpAjoLroQxHqr3R5nE3a5dU3DHTjTgJDd7zrbniJr6nrCzd";
 
 // BIP-84 §"Test vectors" reference (bitcoin/bips): account 0 zpub + its first
 // receive address at m/0/0. <https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki>
