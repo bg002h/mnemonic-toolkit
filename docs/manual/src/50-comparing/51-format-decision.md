@@ -9,7 +9,7 @@ format a given task targets — and then jump to the right tool.
 | Format | Carries | Reach (network) | Standalone CLI | Library |
 |---|---|---|---|---|
 | `ms1` | BIP-39 entropy | mainnet / testnet / signet / regtest | `ms` | `ms-codec` (Rust) |
-| `mk1` | xpub + origin (fingerprint + path) | mainnet / testnet / signet / regtest | (none in v0.1) | `mk-codec` (Rust) |
+| `mk1` | xpub + origin (fingerprint + path) | mainnet / testnet / signet / regtest | `mk` | `mk-codec` (Rust) |
 | `md1` | wallet policy (template + bound xpub) | mainnet / testnet / signet / regtest | `md` | `md-codec` (Rust) |
 | `mnemonic-toolkit` | integration over the three card formats | all four; multi-source slot inputs | `mnemonic` | `mnemonic-toolkit` (Rust) |
 
@@ -60,3 +60,23 @@ The next chapters compare narrower pairs:
 [single-sig vs multisig](#single-sig-vs-multisig-decision-tree),
 [BIP-39 vs BIP-38 passphrases](#bip-39-vs-bip-38-passphrases),
 [Bitcoin Core importdescriptors vs BIP-388](#bitcoin-core-importdescriptors-vs-bip-388-wallet-policy).
+
+## Which tool owns which verb
+
+Each per-format tool (`ms`, `mk`, `md`, `mt`) centres on `encode` and `decode` for its own format, plus the verbs only that format has. A verb that several formats implement with largely the same code belongs to the toolkit (`mnemonic`), so that one engine serves every format. `repair` moves first. `inspect`, `verify`, `address` and `derive` are candidates to move later, each only where its code is largely the same across formats; a part that is specific to one format stays with its tool. `mr`, the Refugium tool, keeps its own verbs; only its `repair` moves.
+
+| Tool | Keeps | Moving to `mnemonic` (planned) | Candidates to move later |
+|---|---|---|---|
+| `ms` | `encode`, `decode`, `hashlock`, `split`, `combine` | `repair` | `inspect`, `verify`, `derive` |
+| `mk` | `encode`, `decode` | `repair` | `inspect`, `verify`, `address`, `derive` |
+| `md` | `encode`, `decode`, `bytecode`, `compile`, `compose`, `shape-key`, `descriptor`, `decompose` | `repair` | `inspect`, `verify`, `address` |
+| `mt` | `encode`, `decode` | none: `mt` has no `repair` | `inspect`, `verify` |
+| `mr` | `create`, `upgrade`, `verify`, `decode`, `member`, `address`, `current`, `units`, `export`, `root`, `child`, `lost-or-stolen`, `procedure` | `repair` | none |
+
+Each tool also keeps its own `vectors`, `gui-schema` and `gen-man` where it has them: they describe that tool, not a format.
+
+Today `mnemonic repair` repairs `ms1`, `mk1` and `md1` strings. It does not accept `mr1` or `mt1` yet: repair an `mr1` string with `mr repair`, and `mt` corrects substituted characters in `mt1` strings while it reads them. `mnemonic repair` is planned to accept `mr1` and `mt1`, and `ms repair`, `mk repair`, `md repair` and `mr repair` are planned for removal.
+
+Every other `mnemonic` verb (bundles, conversion, wallet import and export, BIP-85 and more; the `mnemonic` reference chapter lists them) is the toolkit's own. `mnemonic ms-shares` splits and combines the same codex32 shares as `ms split` and `ms combine`, through the same `ms-codec` engine; no move is planned for either.
+
+`me` (mnemonic-engrave) is not a per-format tool: it prepares wallet backups and signed transactions for a SeedHammer II, owns no card format, and none of its verbs moves.

@@ -121,6 +121,17 @@ receiving wallets. Either light up the stubs in a v0.8.x patch
 (emitting Sparrow-/Specter-native JSON shapes) or change the clap
 definition to remove the `sparrow` / `specter` choices entirely.
 
+### `verb-ownership-stale-lines` — deferred-minor
+
+**Status:** deferred-minor. **Owning phase:** none.
+
+- the "The four surfaces" table in 51 lacks mt1 and mr1 rows;
+- 53:42 lists `md inspect` under raw bytes;
+- TK-8, TK-26 and TK-30;
+- MD-2 (which also omits compile, shape-key and gui-schema);
+- MK-2;
+- ms CLAUDE.md:49 says the manual "mirrors all four CLIs".
+
 ## Closed
 
 ### `ci-chromium-drop` — Resolved by manual-v0.1.10
