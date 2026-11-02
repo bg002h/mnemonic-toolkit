@@ -28,7 +28,7 @@ backup strings.
 ### Synopsis
 
 ```sh
-mk encode --xpub <XPUB> --origin-path <PATH> [OPTIONS]
+mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --privacy-preserving) [OPTIONS]
 ```
 
 ### Flags
@@ -36,7 +36,7 @@ mk encode --xpub <XPUB> --origin-path <PATH> [OPTIONS]
 | Flag | Purpose |
 |---|---|
 | `--xpub <XPUB>` | BIP-32 extended public key (xpub-prefixed string) |
-| `--origin-fingerprint <HEX>` | 8-hex-char master fingerprint; mutually exclusive with `--privacy-preserving` |
+| `--origin-fingerprint <HEX>` | 8-hex-char master fingerprint; mutually exclusive with `--privacy-preserving`; a single-card encode needs one of the two (exit 64 otherwise); refused with `--keys`/`--in`, whose records carry their own |
 | `--origin-path <PATH>` | derivation path (e.g., `m/84'/0'/0'`) |
 | `--policy-id-stub <HEX>` | 8 hex chars (4 bytes) for one stub; repeatable |
 | `--from-md1 <MD1-STRING>` | derive a stub from an md1 wallet-policy string; repeatable |
@@ -44,7 +44,7 @@ mk encode --xpub <XPUB> --origin-path <PATH> [OPTIONS]
 | `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored (unreleased: mk-cli after 0.13.0: --keys) |
 | `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive (unreleased: mk-cli after 0.13.0: --in) |
 | `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; overwrites an existing file (operator ruling 2026-08-26) (unreleased: mk-cli after 0.13.0: --out) |
-| `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint` |
+| `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint`; a single-card encode needs one of the two (exit 64 otherwise) |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
 | `--chunk-set-id <HEX>` | pin the 20-bit `chunk_set_id` (`0x` prefix optional) instead of deriving it from the payload. Chunked output only. A value over 20 bits is refused, not truncated. Rarely needed: since mk-codec 0.5.0 the derived default is already deterministic, so re-encoding a card reproduces its strings byte for byte. |
@@ -496,8 +496,8 @@ Use `-` as a positional argument to read one mk1 string per line from stdin.
 | Flag | Purpose |
 |---|---|
 | `--address-type <TYPE>` | `p2pkh` \| `p2sh-p2wpkh` \| `p2wpkh` \| `p2tr`; defaults to the account-depth purpose heuristic |
-| `--count <N>` | number of addresses per chain, starting at index 0 (default 10); conflicts with `--range` |
-| `--range <A,B>` | inclusive index range `A..=B`; conflicts with `--count` |
+| `--count <N>` | number of addresses per chain, starting at index 0 (default 10, max 1000000); conflicts with `--range` |
+| `--range <A,B>` | inclusive index range `A..=B`, at most 1000000 indices; conflicts with `--count` |
 | `--chain <WHICH>` | `receive` (default) \| `change` \| `both` |
 | `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes and must agree with its network kind |
 | `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
