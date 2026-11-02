@@ -6127,6 +6127,61 @@ screen printed. Print the values.
 - **Source:** mnemonic-secret `design/agent-reports/whole-diff-bughunt-ms-s1.md` (commit 3bca6ae), third bullet of "Design lines (ungraded)"; filed 2026-11-01 from the bug-hunt ms whole-diff review.
 - **What:** `mnemonic repair --mk1 - --max-indel 4` on the 111-character mk1 string took 75 s here (dev, opt-level 2), against its own "this may take a few seconds" note. This is pre-existing tool text.
 
+### `bughunt-tk-g1-fix` — tk bug-hunt G1 (slices S1 + S2): restore reference checks (#1, #2), single-sig template use-site (#11, 11b), verify-bundle seed card (#37), taproot use-site (#38) and 23 Importants: build obligations (repo: **mnemonic-toolkit**; owning phase: **the build of branch `bughunt/triage`**)
+
+- **Surfaced:** 2026-10-31 Claude API bug hunt (`design/agent-reports/bughunt-2026-10-31-tk.md`), triage `bughunt-triage-tk-s1.md` / `-s2.md`, grades `bughunt-grade-tk-g1.md` (`d78646bd`). FIX: `design/FIX_bughunt_tk_g1.md` (small-fix track; built before `FIX_bughunt_tk_g2.md` in the same PR).
+- **Grade:** Critical ×4 (#1, #37, #38, 11b), Important ×23 (#2 #3 #4 #5 #6 #8 #9 #10 #11 #12 #13 #39 #40 #41 #42 #43 #44 #45 #46 #47 #52 #53 #54).
+- **Build impact (1):** `cmd/restore.rs` — #1, #2, 11b restore guard, #10, #38, #40, #41, #42, #47, #53: `owed-to-build`.
+- **Build impact (2):** `cmd/verify_bundle.rs` — #12, #13, #37, #39, #43, #44, #47, #52: `owed-to-build`.
+- **Build impact (3):** `cmd/bundle.rs` — #6, #9, #45, #46, #54: `owed-to-build`.
+- **Build impact (4):** `parse_descriptor.rs` — #3, with the `lex_rejects_multipath_sans_wildcard` flip: `owed-to-build`.
+- **Build impact (5):** `synthesize.rs` — #11 / 11b template gate and message: `owed-to-build`.
+- **Build impact (6):** `electrum.rs` #4 and `wallet_export/electrum.rs` #5: `owed-to-build`.
+- **Build impact (7):** `wc-codec` `pipeline.rs` #8 and its `lib.rs` rustdoc: `owed-to-build`.
+- **Build impact (8):** the spec edits of FIX §4 (five specs): `owed-to-build`.
+- **Build impact (9):** the manual edits of FIX §5 (CLI manual, `41-bundle-inheritance-json.out`, technical manual): `owed-to-build`.
+- **Build impact (10):** the RED rows of FIX §6 (tightened, new, ignored) and the FIX §7 flip: `owed-to-build`.
+- **Build impact (11):** the FOLLOWUPS entries of FIX §9.2 and §9.3: `owed-to-build`.
+- **Status:** `open`; owed to the build.
+- **Tier:** `funds-safety`
+
+### `verify-bundle-multisig-json-md1-origin-row-on-decode-fail` — verify-bundle multisig `--json` omits `md1_origin_match` when the md1 does not decode, although the check list is documented as fixed (repo: **mnemonic-toolkit**; owning phase: **none — ownerless residue**)
+
+- **Status:** `deferred-minor`
+- **Source:** 2026-10-31 bug hunt #14 (and its duplicate #55); triage S1 CONFIRMED; graded Minor in `design/agent-reports/bughunt-grade-tk-g1.md` (`d78646bd`).
+- **What:** `emit_multisig_checks`' `Err` arm of the supplied-md1 decode pushes `md1_decode`, `md1_wallet_policy` and `md1_xpub_match` but not `md1_origin_match`, which the `Ok` arm emits on every branch ("`--json` consumers read a FIXED list"). The list is one row shorter when the md1 is damaged or incomplete.
+- **Likelihood conditions:** fails closed (exit 4, `md1_decode` names the problem); (a) the md1 does not decode, and (b) a `--json` consumer reads the list by position or length (none in the constellation).
+- **Fix (for later):** in that `Err` arm push `md1_origin_match` with `passed: true`, detail and `decode_error` `skipped: md1 decode failed`, like its siblings (`/scratch/cache/bughunt/tk/s1/fix-14.patch`).
+- **RED row:** `crates/mnemonic-toolkit/tests/bughunt_s1.rs::bughunt_tk_14_multisig_json_has_md1_origin_row_when_md1_does_not_decode`, `#[ignore = "deferred-minor: verify-bundle-multisig-json-md1-origin-row-on-decode-fail"]`.
+- **Tier:** `correctness` (non-gating)
+
+### `wc-codec-sync-h1-unverified-later-checkpoints` — `sync_classify` can return `Aligned` with wrong positions left unerased after a single insertion (repo: **mnemonic-toolkit** `crates/wc-codec`; owning phase: **none — ownerless residue**)
+
+- **Status:** `deferred-minor`
+- **Source:** 2026-10-31 bug hunt #7; triage S2 CONFIRMED (contract of the public `sync_classify`); graded Minor in `bughunt-grade-tk-g1.md`.
+- **What:** `classify_single_insertion`'s H1 branch (`sync.rs`) accepts the first checkpoint whose marker and index parse after the block, without the CRC and without checking later checkpoints. A data word that looks like a checkpoint yields an `Aligned` grid whose wrong positions are not erased. End to end, RS plus the 44-bit integrity tag refuse (CLI exit 2, "uncorrectable", measured by the triage).
+- **Likelihood conditions:** fails closed end to end; (a) a damaged word in block 0, (b) an inserted word, and (c) a data word whose top six bits look like a checkpoint at block 1's first data slot (about 1/64).
+- **Fix (for later):** after the trim, check every later checkpoint. Erase a later block whose checkpoint sits at its slot with the right index but fails its CRC; refuse (`AmbiguousRealignment`) only when a later checkpoint is missing or misplaced. Do not use the triage's `fix-07.patch` (it refuses on any later failure, including an insertion plus independent damage in a later block); the follow-up adds a row proving such a card still decodes if it decodes today.
+- **RED row:** `crates/wc-codec/tests/bughunt_s2.rs::bughunt_tk_07_single_insertion_never_aligned_with_unerased_wrong_positions`, `#[ignore = "deferred-minor: wc-codec-sync-h1-unverified-later-checkpoints"]`.
+- **Tier:** `correctness` (non-gating)
+
+### `manual-gui-82-installer-ahead-text-gaps` — GUI manual §82 "When the installer is ahead of the GUI" and the CHANGELOG entry of `99310923` say less than the release does (repo: **mnemonic-toolkit** `docs/manual-gui` + `CHANGELOG.md`; owning phase: **the next edit of §82's installer-ahead section, or its removal at the GUI's ms 0.20.2 pin**)
+
+- **Status:** `deferred-minor`
+- **Source:** `coordinator/agent-reports/review-tk-pin-99310923.md` (scoped review of `99310923`, merged as `df05e813`): M1 and N1-N3, 0 C / 0 I.
+- **M1:** `docs/manual-gui/src/80-troubleshooting/82-binary-and-launch.md`, the `ms repair` bullet: "where it used to be reported as a string-length error" holds only for ASCII characters; ms 0.20.1 read a non-ASCII character (U+0133 `ĳ`) as the symbol `3`, printed a repaired UNVERIFIED candidate and exited 4, where 0.20.2 refuses it (exit 1). Likelihood: fails closed; no printed command fails; (a) a non-ASCII character in the repair input and (b) a reader acting on the description of the old release. Fix: replace the bullet's last clause with "A character outside the codex32 alphabet is now named (`error: invalid character 'b' (not in codex32 alphabet)`, exit 1). Before, a letter or symbol outside the alphabet was reported as a string-length error, and a non-ASCII character could be read as an alphabet symbol and repaired."
+- **N1:** the same section's `ms combine` bullet describes text mode only; with `--json` ms 0.20.2 prints a JSON object (`"kind":"preimage"` with `entropy_hex`, plus `ms1` for `--to ms1`) and no preimage `warning:` line. Fix: say "in text mode", as `43-ms.md` does.
+- **N2:** `CHANGELOG.md` [Unreleased]: the v0.63.0 entry says `[installer-ahead]` and its §82 section "are gone", and the new entry says they "name the new tag" without saying they were re-added. Fix: "are re-added for it".
+- **N3:** (outside the diff, ungraded) §82's symptom-matrix row "version differs from the chapter's pinned upstream → Re-install the matching pinned version per `pinned-upstream.toml`" points a holder whose `ms --version` prints 0.20.2 toward 0.20.1 while the new section says 0.20.2 is expected. The row's symptom cannot occur (the banner is a compile-time constant); no wrong result. Fix: add "(unless the installer-ahead section above names this version)".
+- **Tier:** `docs` (non-gating)
+
+### `manual-gui-transcripts-path-family-descriptor` — at the GUI manual's next toolkit pin bump, five tutorial transcripts change `"path_family":"bip87"` to `"descriptor"` (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_bughunt_tk_g1**)
+
+- **Status:** `open`
+- **Source:** `design/FIX_bughunt_tk_g1.md` #54 (2.23). `manual-gui.yml` installs the pinned toolkit release (`mnemonic-toolkit-v0.105.1` today), so these files reflect the release, not this branch, and must not change in the fix PR.
+- **What:** `bundle --json` in descriptor mode (incl. `--import-json`) reports `multisig.path_family: "descriptor"` after the fix. Files that carry `"template":"descriptor","path_family":"bip87"` today: `docs/manual-gui/transcripts/tutorial/tut-j2-restore-feed-bundle-json.stdout.txt`, `tut-j3-restore-feed-bundle-json.stdout.txt`, `tut-j4-restore-feed-bundle-json.stdout.txt`, `tut-j4-nums-feed-bundle-json.stdout.txt`, `tut-j5-22-bundle-json.stdout.txt`, and the same five under `mnemonic-gui/tests/snapshots/tutorial/`. At the pin bump, re-run `manual-gui` verify-examples and the GUI tutorial snapshots: the expected drift is exactly this value in these files (and any output FIX_bughunt_tk_g1 §2 changes on a path the tutorial drives); anything else is a finding.
+- **Tier:** `docs`, `cross-repo`
+
 ### `bughunt-tk-fix-review-r1-minors` — tk bug-hunt FIX reviews r1: G1 M-1, N-1; G2 M1-M5, N1-N4
 
 - **Status:** `deferred-minor`
