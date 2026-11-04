@@ -6576,3 +6576,9 @@ screen printed. Print the values.
 - s2 M-1: `replace_whole_word` end-of-input/word-boundary arms unpinned (translate.rs:271; two unit tests given in s2). s2 M-2: the `collect_abstract_labels` half of E9 is pinned by one row that fails as a panic. s2 M-3: row 30's comment promises Δ values it does not assert. s2 N-1: `- varint_len(elems) + varint_len(elems + 1)` nets to zero for every accepted input.
 - Status: `deferred-minor`.
 - Tier: `toolkit`.
+
+### `import-json-self-check-default` — should `bundle --self-check` be on by default for `--import-json`? (architect 2026-11-04)
+- Surfaced: `design/agent-reports/` architect report 2026-11-04-v7-md1-descriptor-mismatch (coordinator repo): open question 3. FIX-V7 2.5 (E1-E3) now covers the measured inconsistent-envelope cases without it, so the default is unchanged.
+- Owner: the next toolkit cycle.
+- Status: `deferred-minor`.
+- Tier: `toolkit`.

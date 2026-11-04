@@ -8,6 +8,10 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Inconsistent import-json envelopes are refused
+
+- **`bundle --import-json` and `export-wallet --from-import-json` now refuse an envelope whose parts disagree** (exit 1, nothing on stdout). Before, an edited, spliced or corrupted envelope printed wrong cards or wrong wallet files at exit 0: the `md1` was never read, a swapped `mk1` card or edited origin path flowed into some outputs and not others, and a foreign `ms1` seed card was emitted beside the original `mk1`. Three checks (FIX-V7 2.5): `md1` must encode the policy of `descriptor` (by wallet policy id); the `mk1` cards must match the descriptor's keys in number, key, fingerprint and origin path; for `bundle`, each `ms1` must derive its cosigner's key with the empty passphrase. Every envelope `import-wallet` wrote, including the v0.27.0 envelope as released, passes. A `bundle --md1-form template --json` output hand-wrapped as an envelope is refused. The envelope has no MAC, so a writer who re-encodes every part consistently is not detected. Re-create a refused envelope with `import-wallet` from the same blob.
+
 ### Signed releases, and the installer checks the signatures
 
 - **Every release now signs its checksum files with minisign**, with the constellation

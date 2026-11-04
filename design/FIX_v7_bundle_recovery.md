@@ -53,7 +53,7 @@ The general Recovery line is one line: there is no wrap and the line ends with `
   - `mnemonic bundle --import-json`;
   - `mnemonic export-wallet --from-import-json`.
 - `mnemonic bundle --import-json` ignores the envelope's `threshold`, as today, and now also ignores `--threshold`, which used to set k on this path (architect STOP-2 (b)). It recomputes k from the descriptor by 2.1, so a stale integer or a `--threshold` value still yields the descriptor's card, at exit 0.
-- `export-wallet --from-import-json` also takes K from the envelope's descriptor by 2.1 and ignores the envelope's `threshold` (whole-diff s1 I-2, 2026-11-04).
+- `export-wallet --from-import-json` also takes K from the envelope's descriptor by 2.1 and ignores the envelope's `threshold` (whole-diff s1 I-2, 2026-11-04); an envelope whose `md1` disagrees with its descriptor is refused by 2.5.
   - `--format descriptor` / `bitcoin-core` / `bip388` output is byte-identical to the same envelope carrying an integer.
   - `--format sparrow` and the other template formats keep their existing general-policy refusal, at exit 1, with the unchanged text:
     `error: --from-import-json: --format sparrow cannot represent a general wallet policy (timelocks/hashlocks/non-multisig miniscript); it is a plain k-of-n multisig format. Use --format descriptor / bitcoin-core / bip388 for faithful descriptor passthrough.`
@@ -64,6 +64,21 @@ The general Recovery line is one line: there is no wrap and the line ends with `
 - `--json`: `[i].bundle.multisig.threshold` is k or `null` by the same rule (via 2.3's type).
 - Text summary: the existing `none` arm prints `bundles[{i}].threshold=none` and `threshold=none` for general entries; plain entries print the integer as today.
 - n == 1 entries print as today. `wsh(multi(1,K0))` is plain, k = 1. A single-key entry prints `none`.
+
+### 2.5 Envelope consistency (architect 2026-11-04)
+
+`<L>` is `--from-import-json` (export-wallet) or `--import-json` (bundle). All three refusals are `BadInput`: exit 1, stderr `error: <text>`, stdout empty. They run in this order, after every existing descriptor, checksum, network and taproot refusal and after bundle's descriptor re-parse, and before template derivation, the admission gate and any stdout.
+
+- E1: reassemble `bundle.md1` and compute `md_codec::compute_wallet_policy_id`; compare with the id of the md_codec Descriptor parsed from `bundle.descriptor`. Unequal, or md1 empty or undecodable:
+  `<L>: envelope.bundle.md1 does not match envelope.bundle.descriptor, so the envelope is not as import-wallet wrote it; re-create it with import-wallet from the same blob`
+- E2a: the number of mk1 cosigners (after `envelope_to_resolved_slots`) differs from the number of keys in the descriptor:
+  `<L>: envelope.bundle.mk1 has <m> cosigners but envelope.bundle.descriptor has <n> keys, so the envelope is not as import-wallet wrote it; re-create it with import-wallet from the same blob`
+- E2b: for each i, key @i of the descriptor gives (xpub, fp, path); slot i (mk1, with the `origin_path(s)` override applied) must have equal 65-byte xpub, equal fp and equal path. The first i that differs:
+  `<L>: cosigner <i> of envelope.bundle.mk1 (its key, fingerprint or origin path) does not match key @<i> of envelope.bundle.descriptor, so the envelope is not as import-wallet wrote it; re-create it with import-wallet from the same blob`
+- E3 (`bundle` only): for each non-empty `ms1[i]`, the BIP-39 mnemonic of its entropy in slot i's language (English if none), seed with the EMPTY passphrase (as import-wallet's overlay does), master on the envelope network, derive slot i's path, compare the 65-byte xpub with slot i:
+  `--import-json: envelope.bundle.ms1[<i>] is not the seed of cosigner <i> of envelope.bundle.mk1, so the envelope is not as import-wallet wrote it; re-create it with import-wallet from the same blob`
+
+A `bundle --md1-form template --json` output hand-wrapped as an envelope is refused by E1. Not read: `account`, `multisig.threshold` / `template` / `cosigners`, `master_fingerprint`, `mode`, `privacy_preserving`. The envelope has no MAC: a writer who re-encodes descriptor, md1, mk1 and ms1 consistently is not detected.
 
 ## 3. Production change (what, not how)
 
@@ -133,6 +148,27 @@ Counts: 30 rows; 18 new (13-30), of which 13 fail on base (13-24, 30); 24 fail o
 
 Row 24 accepts both STOP-2 outcomes (a refusal, or a card with `# Threshold: 2 of 3`); it fails on base only because the card takes k from the flag. When STOP-2 is ruled, the builder narrows row 24 to the ruled outcome in the GREEN commit, with the exact text the ruling gives (section 8).
 
+
+### 4.1 Envelope-consistency rows (2.5)
+
+New file `crates/mnemonic-toolkit/tests/cli_import_json_envelope_consistency.rs`. On the unmodified base: 13 tests run, 1 passed (the control), 12 failed; with 2.5: 13 passed. Every refusal row asserts exit 1, empty stdout and the exact stderr line, for export in all 6 formats.
+
+| row | input edit | expected |
+|---|---|---|
+| `envc_export_refuses_descriptor_edited_to_1_of_3` | descriptor := 1-of-3, md1 kept | E1, `--from-import-json` |
+| `envc_bundle_refuses_descriptor_edited_to_1_of_3` | same | E1, `--import-json` |
+| `envc_export_refuses_md1_of_another_wallet` | md1 of another wallet | E1 |
+| `envc_bundle_refuses_md1_of_another_wallet` | same | E1 |
+| `envc_export_refuses_swapped_mk1_card` | mk1[2] from another wallet | E2b i=2 |
+| `envc_bundle_refuses_swapped_mk1_card` | same | E2b i=2 |
+| `envc_export_refuses_edited_origin_path` | origin_path := m/48'/1'/7'/2' | E2b i=0 |
+| `envc_bundle_refuses_edited_origin_path` | same | E2b i=0 |
+| `envc_export_refuses_missing_mk1_card` | mk1 truncated to 2 | E2a m=2 n=3 |
+| `envc_bundle_refuses_missing_mk1_card` | mk1 and ms1 truncated to 2 | E2a m=2 n=3 |
+| `envc_bundle_refuses_foreign_ms1` | ms1[0] foreign | E3 i=0 |
+| `envc_template_md1_envelope_refused` | hand-wrapped `bundle --md1-form template --json` | E1, both commands |
+| `envc_honest_envelopes_pass` (control) | plain, 1-of-3, seed, or_d, v0.27.0 envelope, v0.27.0 as released | exit 0 |
+
 ## 5. Tests that change
 
 Measured with the evidence dir's production, tests and docs patches applied: the whole workspace passes (`4215 tests run: 4215 passed, 38 skipped`). Exactly these existing tests change. No other test, insta snapshot or fixture changes.
@@ -166,6 +202,15 @@ GUI tutorial transcripts that the fix moves are not changed in this PR (STOP-1).
 | `tut-j4-restore-feed-bundle-json.stdout.txt` | `"threshold": 3` (12 cosigners) | `"threshold": null` |
 
 The two restore-feed bundle-json files are not in ruling 7's list; this author found them. These tutorial bundle-json transcripts are measured unchanged: `tut-j2-restore-feed`, `tut-j4-nums-feed` and `tut-j5-22`. mnemonic-gui does not read `multisig.threshold` (`rg '"threshold"|\.threshold\b' src` in mnemonic-gui `c9914ca` matches only archetype form parameters), so no GUI code depends on the type change.
+
+### 5.1 Envelope-consistency changes (2.5)
+
+Eleven existing tests change (measured: the whole workspace passes, 4264 run, 4264 passed, 38 skipped):
+
+- Fixture `tests/fixtures/export_wallet_allow/envelope_sigless_wsh.json` (hand-built, md1 and mk1 empty) is regenerated as the stdout of `mnemonic import-wallet --format descriptor --blob - --json` of its own descriptor. This fixes 8 rows: `cli_export_wallet_allow::{from_import_json_sigless_wsh_exports_with_the_flag, from_import_json_sigless_wsh_refuses_flagless, note_matrix_row1_allow_sigless_branch_every_arm, note_matrix_row2_columns_are_identical, note_matrix_row2_unenforced_rule_every_arm, passes_that_rule_is_never_printed_for_a_rule_that_did_not_run, requesting_one_rule_admits_no_other}` and `cli_export_wallet_bitcoin_core_addresses::the_from_import_json_arm_is_gated_and_emits_like_the_others`.
+- `cli_bundle_import_json.rs` `masked_older_envelope_json` builds the envelope by `import-wallet --format descriptor --blob - --json` of the masked-older body. This fixes `bundle_import_json_clean_older_emits_no_advisory` and `bundle_import_json_masked_older_emits_advisory`.
+- `cli_bundle_recovery_threshold_text.rs` `v7_export_wallet_k_ignores_disagreeing_md1` becomes `v7_export_wallet_refuses_disagreeing_md1`: for sparrow, coldcard and electrum it asserts exit 1, empty stdout and the E1 `--from-import-json` line. The rule "K from the descriptor, envelope threshold ignored" stands for consistent envelopes.
+- Comment only: `cli_export_wallet_older_advisory.rs` `export_wallet_from_import_json_clean_no_advisory`.
 
 ## 6. Lockstep files and build steps
 
