@@ -6486,7 +6486,7 @@ screen printed. Print the values.
 ### `compare-cost-wrapper-chain-label-scan` — `compare-cost --miniscript` refuses valid multi-letter wrapper chains (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part B**)
 - Surfaced: triage E9 (`triage/e9-wrapper-chain` cc6a3882; RED file 3a2ceced); grade `grade-2026-11-03-tk-e9.md`: CONFIRMED, grade **I**, rulings (a)-(b).
 - Build impact (1): `cost/translate.rs` treats an identifier whose next non-whitespace character is `:` as a wrapper chain, in both `collect_abstract_labels` and `replace_whole_word` (FIX §2, Appendix B). FIX §3 rows 15-26 (`cli_compare_cost_wrapper_chain.rs`, 12 tests) pass.
-- Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
+- Status: `closed`, by GREEN commit 9b1be357.
 - Tier: `toolkit`.
 
 ### `compare-cost-wsh-witness-script-omitted` — `compare-cost` wsh figures omit the witnessScript and its length (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part A**)
@@ -6495,7 +6495,7 @@ screen printed. Print the values.
 - Build impact (2): the ruling-4 `sh(wsh)` note, in `notes[]` and as a text `note:` line (FIX §1 A1b). FIX §3 rows 27-29 pass.
 - Build impact (3): the lockstep files of FIX §5. The regenerated transcripts equal Appendix D, and `.examples-build/Examples.md` equals Appendix E's result. The GUI tutorial J4 step 20 (FIX §5 rows 7-8) moved to `manual-gui-j4-20-compare-cost-v5-figures` (architect 2026-11-04 STOP-5).
 - Build impact (4): none in this build; the ruling-5/6 self-check moved to `compare-cost-wsh-cost-self-check` (architect 2026-11-04 STOP-1).
-- Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
+- Status: `closed`, by GREEN commit ce2e9a54.
 - Tier: `toolkit`.
 
 ### `compare-cost-wsh-cost-self-check` — compare-cost's ruling-5/6 wsh cost self-check, held until the pinned `max_weight_to_satisfy` is exact for `d:` and `thresh` (repo: **mnemonic-toolkit**; owning phase: **the next cycle that moves miniscript**)
