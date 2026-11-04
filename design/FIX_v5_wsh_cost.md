@@ -19,9 +19,9 @@ Sources (coordinator `agent-reports/` unless a path is given):
   the appendices. `bash design/agent-reports/fix-doc-tk-v5-evidence/doc-gate.sh` checks that each appendix
   fence equals its file and that the build patches apply to `ac3ff70a`, alone and together. It does not check
   figure correctness, Bitcoin Core agreement, the GUI byte gate or runtime behaviour; the runs below do.
-- The 30-row RED filter (§3.1) on base: `30 tests run: 11 passed, 19 failed, 4235 skipped`; with Appendices A
+- The 30-row RED filter (§3.1) on this branch's head (no production patch): `30 tests run: 11 passed, 19 failed, 4235 skipped`; with Appendices A
   and B applied: `30 tests run: 30 passed, 4235 skipped`.
-- The E9 file alone (§3.2) on base: `12 tests run: 5 passed, 7 failed, 0 skipped`; with Appendix B only:
+- The E9 file alone (§3.2) on the same head: `12 tests run: 5 passed, 7 failed, 0 skipped`; with Appendix B only:
   `12 tests run: 12 passed, 0 skipped`.
 - The full suite with A and B: `4227 tests run: 4216 passed, 11 failed, 38 skipped`. The 11 failures are the
   FIX-V7 triage rows in `cli_bundle_recovery_threshold_text.rs`, red on base already (STOP-7). `cargo clippy
@@ -172,7 +172,8 @@ every valid wrapper chain and gives the same figures as `--descriptor 'wsh(..)'`
 spelled like a chain is still a label where it is not followed by `:` (`and_b(pk(sdv),sdv:older(10))` gives
 one condition labelled `sdv + older(blocks)`). An invalid chain is still refused with exit 2
 (`or_i(pk(A),sdv:pk(B))`). No flag, printed text or exit code changes for any other input. No lockstep file
-changes, and `41-mnemonic.md:4616` stays true as written (E9-a).
+changes, and `41-mnemonic.md:4616` stays true as written (E9-a). That line number is the grade's, at
+`12e013bc`: it is the `--miniscript` flag row, which is `41-mnemonic.md:4614` at `ac3ff70a`.
 
 ## 3. RED rows
 
@@ -180,7 +181,7 @@ changes, and `41-mnemonic.md:4616` stays true as written (E9-a).
 exact-name filter is `test(/^<row>$/)`. The list is `row-names.txt` in the evidence directory, and
 `row-alt.txt` is the same list joined with `|`; `doc-gate.sh` checks that both equal this table.
 
-| # | file (`crates/mnemonic-toolkit/tests/`) | row | origin | on base `ac3ff70a` (assert site: message) | after A+B |
+| # | file (`crates/mnemonic-toolkit/tests/`) | row | origin | production code at `ac3ff70a` (assert site: message) | after A+B |
 |---|---|---|---|---|---|
 | 1 | `cli_compare_cost_wsh_witness_script.rs` | `v5_wsh_pk_vbytes_match_core` | V5 triage | FAIL :80: `Core spends wsh(pk) as 273 WU = 69 vB; got [("A", 60, 75, 15)]` | PASS |
 | 2 | same | `v5_wsh_or_d_vbytes_match_core` | V5 triage | FAIL :91: `Core: both or_d branches are 78 vB (+1 for the tool's 73-byte dummy sig); got [("A", 60, 84, 24), ("B", 60, 85, 25)]` | PASS |
@@ -240,7 +241,8 @@ PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked --workspace --no-fail-fas
 PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked -p mnemonic-toolkit --test cli_compare_cost_wrapper_chain --no-fail-fast
 ```
 
-- On base: `12 tests run: 5 passed, 7 failed, 0 skipped` (rows 17-22 and 26 fail as in the table).
+- On this branch's head (no production patch): `12 tests run: 5 passed, 7 failed, 0 skipped` (rows 17-22 and
+  26 fail as in the table). The file does not exist on `ac3ff70a`; this branch adds it.
 - With Appendix B only: `12 tests run: 12 passed, 0 skipped`.
 - If E9 ships alone on another base (STOP-2), re-run this on that base before quoting it; a GREEN expires when
   its inputs move (grade e9 :76-78).
