@@ -463,3 +463,167 @@ every `pull_request`) must be green on the PR head. `fuzz-smoke.yml`, `bitcoind-
 `cross-tool-differential.yml` are path-filtered and none of their paths is touched here (`cost/` is not in
 any list), so they do not run; `man-pages.yml`, `changelog-check.yml` and `install-pin-check.yml` run only on
 tags. None of these is a local step of this gate.
+
+## 8. Out of scope
+
+- **L1 / OQ-1** (grade e9 :116-125; L1 :118-122, OQ-1 :125). Lowercase labels that spell a single-letter wrapper
+  (`or_b(pk(a),s:pk(b))`, `multi(2,a,b,c)`) are refused with `compare-cost: parse error: key too short`. Whether
+  to accept them is an undecided product point that needs triage and a ruling. Appendix B leaves `KEYWORDS`
+  (`translate.rs:213-222`) unchanged, so this FIX does not move L1 either way (not measured after B).
+- **FIX-V7** (`cmd/bundle.rs` recovery-threshold text). It is a separate FIX by ruling 7 (grade v5-v7 :141-145);
+  only its effect on this FIX's base is here (STOP-7).
+- **E10**, mr's thresh backstop `largest <= BASE + mw + 73` (grade v5-v7 :74, :136, :152). It is mr code, not
+  toolkit code, and has its own triage.
+- **The vendored `cast_dupif` undercount** (`vendor/miniscript/src/miniscript/types/extra_props.rs:550`, against
+  `or_i` at :763). It is an upstream rust-miniscript defect. This FIX does not touch `vendor/` unless STOP-1
+  rules option (c).
+- **The cause of the four `thresh` shapes at +1** (STOP-1). It is not traced here.
+- **Release work**: version, `CHANGELOG.md`, tag, install line (§6 step 5).
+
+## 9. FOLLOWUPS (the builder appends these to `design/FOLLOWUPS.md` in the GREEN commit)
+
+F1 (Part B, E9; appended by §6 step 2, closed by the GREEN commit that turns rows 15-26 green):
+
+```
+### `compare-cost-wrapper-chain-label-scan` — `compare-cost --miniscript` refuses valid multi-letter wrapper chains (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part B**)
+- Surfaced: triage E9 (`triage/e9-wrapper-chain` cc6a3882; RED file 3a2ceced); grade `grade-2026-11-03-tk-e9.md`: CONFIRMED, grade **I**, rulings (a)-(b).
+- Build impact (1): `cost/translate.rs` treats an identifier whose next non-whitespace character is `:` as a wrapper chain, in both `collect_abstract_labels` and `replace_whole_word` (FIX §2, Appendix B). FIX §3 rows 15-26 (`cli_compare_cost_wrapper_chain.rs`, 12 tests) pass.
+- Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
+- Tier: `toolkit`.
+```
+
+F2 (Part A, V5; appended by §6 step 3, only after STOP-1 and STOP-5 are ruled):
+
+```
+### `compare-cost-wsh-witness-script-omitted` — `compare-cost` wsh figures omit the witnessScript and its length (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part A**)
+- Surfaced: triage V5 (`triage/v5-v7` ac3ff70a); grade `grade-2026-11-03-tk-v5-v7.md`: V5-1..V5-7 each **I**, rulings 4-7.
+- Build impact (1): the wsh witness weight counts the witnessScript and its length varint (`witness_weight_wu`, FIX §1 A1, Appendix A). FIX §3 rows 1-14 and 30 pass.
+- Build impact (2): the ruling-4 `sh(wsh)` note, in `notes[]` and as a text `note:` line (FIX §1 A1b). FIX §3 rows 27-29 pass.
+- Build impact (3): the lockstep files of FIX §5. The regenerated transcripts equal Appendix D, and `.examples-build/Examples.md` equals Appendix E's result. The GUI tutorial follows the STOP-5 ruling (write the ruling's reference here).
+- Build impact (4): the ruling-5/6 cost self-check (FIX §1 A2), as the STOP-1 ruling decides (write the ruling's reference, and either the rows that pass or where the item was refiled).
+- Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
+- Tier: `toolkit`.
+```
+
+## 10. STOPs (undecided points; the builder does not choose)
+
+### STOP-1. Ruling 6's rule fails on the corpus (blocks Part A)
+
+Ruling 6 (grade v5-v7 :133-139): "If the FIX's corpus finds a thresh-free shape with L != mw + 1, STOP and
+report: do not widen the rule." The corpus finds seven such shapes.
+
+- **Corpus.** `corpus-rows-d-final.tsv` has 70 lines and 63 unique planned shapes, produced by the scratch
+  harness `corpus-scratch.patch` on Appendix F's build. `python3 -I count-plus-one.py corpus-rows-d-final.tsv`
+  prints:
+
+  ```text
+  lines 70 by status {'OK': 64, 'ERRTRANSLATE': 4, 'SKIPPED': 2}; unique OK shapes 63
+  thresh-free 51: L == mw+1 44, L != mw+1 7
+    free  L=123 mw=121 +1  and_b(pk(@A),sdv:after(500000))
+    free  L=120 mw=118 +1  and_b(pk(@A),sdv:older(10))
+    free  L=122 mw=120 +1  and_b(pk(@A),sdv:older(144))
+    free  L=120 mw=118 +1  and_v(v:pk(@A),dv:older(144))
+    free  L=158 mw=156 +1  andor(pk(@A),dv:older(144),pk(@B))
+    free  L=159 mw=157 +1  or_d(pk(@A),and_v(v:pk(@B),dv:older(144)))
+    free  L=159 mw=157 +1  or_i(pk(@A),and_v(v:pk(@B),dv:older(144)))
+  thresh 12: offsets L-(mw+1) {-144: 1, -72: 6, -71: 1, 1: 4}
+    thresh L=236 mw=234 +1  thresh(2,pk(@A),s:pk(@B),sln:older(32768))
+    thresh L=237 mw=235 +1  thresh(2,pk(@A),s:pk(@B),snl:after(1700000000))
+    thresh L=345 mw=343 +1  thresh(3,pk(@A),s:pk(@B),s:pk(@C),snl:older(12960))
+    thresh L=455 mw=453 +1  thresh(4,pk(@A),s:pk(@B),s:pk(@C),s:pk(@D),sln:older(1000))
+  ```
+
+  Each "+1" is L - (mw + 1). All seven thresh-free misses contain a `d:` wrapper. The four `thresh` rows at +1
+  also break ruling 6's thresh clause (every row <= mw + 1). They contain no `d:`, and their cause is not traced.
+- **What the CLI does.** On Appendix F's build, all seven `d:` shapes exit 3 with R5's text, for example
+  `and_b(pk(A),sdv:older(10))`: `largest wsh witness 120 WU, max_weight_to_satisfy + 1 = 119 WU`. Controls
+  without `d:` (`s:pk`, `snl:older(10)`, `a:older(10)`) exit 0 (`d-wrapper-probe.txt`). So Appendix F would
+  refuse valid, common inputs with "this is a toolkit bug".
+- **Which side is right (the `d:` rows).** The tool's figure matches Bitcoin Core. On regtest, Core's spends of
+  `wsh(and_b(pk,sdv:older(10)))`, `wsh(and_v(v:pk,dv:older(144)))`, `wsh(and_v(v:pk,older(144)))` and
+  `wsh(and_b(pk,snl:older(10)))` are 71, 71, 70 and 71 vB. Appendix A's wsh figures for the same shapes are
+  71, 71, 70 and 71 vB (`d-wrapper-v5a.txt`). The vendored `max_weight_to_satisfy` is 1 WU low. `cast_dupif`
+  (`vendor/miniscript/src/miniscript/types/extra_props.rs:544`) adds `max_witness_stack_size + 1` (:550) for
+  the `1` push that `d:` satisfies with. `or_i` adds `2 +` (:763) for the same one-byte push (`1 +` for its empty
+  push, :756). A one-byte witness item serialises as 2 bytes (length and data), so mw counts each `d:` one byte
+  short.
+- **The rows that stay either way.** Ruling 6 keeps the Core-measured rows (rows 1-14), since only they catch a
+  double count on a `thresh` (E7).
+- **Options (none chosen):**
+  - (a) Ship Part A as Appendix A (the formula and the R4 note) plus §5's lockstep, without the self-check.
+    Rulings 5 and 6 are then unmet in this FIX. The ruling also decides whether A2 is dropped or refiled, and to
+    which owner. §6 step 3 is written for this path.
+  - (b) Widen the rule, for example L == mw + 1 + (the number of `d:` wrappers). Ruling 6 forbids this. It would
+    need a new architect ruling, and it would still not explain the four `thresh` rows.
+  - (c) Correct the undercount: patch the vendored `cast_dupif` to count 2 (`vendor/`, risk class B, and
+    `vendor-freshness`), or carry an upstream fix, then re-run the corpus. This does not touch the four `thresh`
+    rows, which have no `d:`.
+  - (d) Use another basis for the check (a new rule text, for example a check that does not use
+    `max_weight_to_satisfy`).
+- **Needed:** a ruling naming the option. For (a), the ruling also names A2's fate and owner. For (b)-(d), it
+  gives the new rule text, and the four `thresh` +1 rows are traced before any self-check ships.
+
+### STOP-2. E9 alone: branch, file name and base
+
+If Part A waits on STOP-1, Part B ships alone with the same text (grade e9 ruling (a), :68-69). Undecided:
+
+- the branch name;
+- the FIX file name: this document with Part A marked held, or a new file carrying §2, §3.2, Appendix B and F1
+  unchanged;
+- the base: `origin/master` (`12e013bc`), or `ac3ff70a`, which is only on `origin/triage/v5-v7` and carries
+  FIX-V7's red rows (STOP-7).
+
+Measured facts: Appendix B applies to both bases (`doc-gate.sh`). `translate.rs` is identical on both (grade e9
+:76). `cli_compare_cost_wrapper_chain.rs` is on neither base. On this branch it is `567dbf3d`'s file, which is
+`3a2ceced`'s file plus the 45-line row (`git diff --stat 3a2ceced 567dbf3d` shows 45 insertions). On any base,
+the steps are: add that file (`git show 567dbf3d:crates/mnemonic-toolkit/tests/cli_compare_cost_wrapper_chain.rs`),
+run §3.2 to see `12 tests run: 5 passed, 7 failed`, apply Appendix B, run §3.2 to see `12 passed`, and append F1.
+
+### STOP-3. A `max_weight_to_satisfy` error (contingent on A2)
+
+Appendix F :25-27 maps an `Err` from `max_weight_to_satisfy()` to `CompareCostError::NoSatisfyingConditions`
+(exit 3, `compare-cost: no satisfying conditions for this miniscript`, `cost/mod.rs:82-84`, `:98`). That mapping
+is a placeholder. Rulings 5 and 6 do not say what the holder sees when the bound itself cannot be computed. The
+choices include `NoSatisfyingConditions`, `CostSelfCheck` (which has no figure to print for M1) or a new
+variant with its own text. Moot under STOP-1 option (a).
+
+### STOP-4. build-descriptor's human header before the `?` (contingent on A2)
+
+Ruling 5 says build-descriptor propagates the error "unchanged through its existing `?`
+(`build_descriptor.rs:477-486, 512-521`), exit 3, in both the human and `--json` views, with no degraded
+preview." In the human view the preview header is printed before that `?` runs, so a self-check failure would
+leave the header on stdout above the exit-3 error. Undecided: whether the header counts as a "degraded preview"
+(moving the cost call before the header changes build-descriptor's print order), or whether the header may stay.
+Moot under STOP-1 option (a).
+
+### STOP-5. GUI tutorial J4 step 20 against the pinned GUI
+
+Ruling 7 puts the GUI tutorial J4 step 20 prose (`50-j4-taproot-twin.md:241`) and its transcript in lockstep.
+`docs/manual-gui/pinned-upstream.toml:107-108` pins `[mnemonic-gui] tag = "mnemonic-gui-v0.63.0"`, and
+`manual-gui.yml` phases 10 and 11 (:66-80; the byte compare is :75-78) compare the tutorial figures and
+transcripts byte for byte against that pinned clone's snapshots. Appendix D's `tut-j4-20-compare-cost.stdout.txt`
+hunk therefore fails phase 11 (§7 item 12) until the GUI side moves. Options (none chosen):
+
+- (i) a mnemonic-gui companion PR that regenerates the J4 step-20 snapshots and PNGs, a new mnemonic-gui tag, and
+  a pin bump in `pinned-upstream.toml` (the tag needs Brian's go-ahead);
+- (ii) defer the GUI tutorial lockstep: revert Appendix D's tutorial hunk and the `50-j4-taproot-twin.md` hunk
+  of Appendix C, and file the deferral with an owner (a departure from ruling 7);
+- (iii) another route the ruling names.
+
+### STOP-6. No CLI test seam for exit 3 (contingent on A2)
+
+Once STOP-1 is ruled so that every corpus shape passes the check, no valid input reaches exit 3, so no CLI row
+can show R5's text. §3.3's first two rows need a seam. The choices are a `#[cfg(test)]` unit test that calls the
+check with forged L and mw (no production surface), or a fault-injection hook in production (a new surface).
+Moot under STOP-1 option (a).
+
+### STOP-7. V5 and V7 order, and the build base
+
+`ac3ff70a` is the tip of `origin/triage/v5-v7`, not of master (`12e013bc`; master is not its ancestor; the four
+commits are `a34bd61e`, `d19256e8`, `123c258d`, `ac3ff70a`). It carries FIX-V7's triage file
+`cli_bundle_recovery_threshold_text.rs`: 11 rows red on base, and the file is not rustfmt-clean (:50, :164).
+On `ac3ff70a`, `cargo nextest run` and `cargo fmt --check` therefore fail whatever this FIX does (§7). Appendices
+A-E apply to `origin/master` too, but rows 1-14's file `cli_compare_cost_wsh_witness_script.rs` is not on master.
+Undecided: whether this FIX builds after FIX-V7's GREEN is in `ac3ff70a`, builds on `ac3ff70a` with V7's lines as
+the only allowed failures (§7's rule), or rebases onto master with the triage file cherry-picked; and which PR
+merges first.
