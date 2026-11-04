@@ -367,7 +367,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
 | `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. |
-| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) |
+| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
 
@@ -666,16 +666,27 @@ back to the same payload.
 
 Stderr (info notice + bundle-summary engraving card):
 
-```{.text include="41-bundle-inheritance-cards.err" lines="1-11"}
-PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-11 at build
+```{.text include="41-bundle-inheritance-cards.err" lines="1-10"}
+PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-10 at build
 ```
 
 The engraving-card block on stderr is a wallet-level summary the user
 copies onto a separate piece of paper kept with the bundle; it lists
-the threshold, per-cosigner fingerprint+origin triples, and the
-recovery rule. The `6e6be` / `6e6b` short tags are chunk-set-id hex
-prefixes for the corresponding cards, useful when matching a
-recovered card-set back to its bundle.
+the per-cosigner fingerprint+origin triples and the recovery rule.
+This inheritance descriptor is a general policy, not k-of-n (its
+timelocked branches decide which key sets can spend), so the card
+prints no `# Threshold:` line, and its Recovery line tells the holder
+to keep all 3 signing keys, any hash preimages the policy names, and
+md1. A plain k-of-n descriptor prints `# Threshold: K of N` and
+`# Recovery: any K of N signing keys + md1 (template card).` instead;
+so does every multisig `--template`. A descriptor is plain k-of-n when
+the only child of `wsh`, `sh` or `sh(wsh)` is `multi`, `sortedmulti`,
+`multi_a`, `sortedmulti_a`, or a `thresh` whose children are all
+`pk`/`pkh` keys with only `s:`/`a:` wrappers, or when that operator is
+the only leaf of a `tr` whose internal key is the NUMS point. A
+single-key bundle prints neither line. The `6e6be` / `6e6b` short tags
+are chunk-set-id hex prefixes for the corresponding cards, useful when
+matching a recovered card-set back to its bundle.
 
 ##### JSON envelope form (`--json`)
 
@@ -759,6 +770,9 @@ Things to notice in the envelope:
   BIP-39 phrases at the inferred path. These are the watch-only
   binding records used by external wallets (Sparrow, Specter, etc.)
   when importing the descriptor.
+- **`multisig.threshold`** is `null` here, because this descriptor is a
+  general policy, not k-of-n. It is the integer K for a plain k-of-n
+  descriptor and for every multisig `--template`.
 
 #### Verifying the inheritance bundle (v0.20.0+)
 
@@ -1698,7 +1712,7 @@ match, a unified diff is printed to stderr.
 `--json` mode replaces the engraving-card stdout with a JSON array,
 one envelope per emitted bundle. Each envelope carries:
 
-- `bundle` — parse-side summary of the shape `{cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold}` (v0.26.0 ships this summary; the full toolkit-native `BundleJson` shape is FOLLOWUP `wallet-import-json-envelope-full-bundle`, v0.27+).
+- `bundle` — parse-side summary of the shape `{cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold}` (v0.26.0 ships this summary; the full toolkit-native `BundleJson` shape is FOLLOWUP `wallet-import-json-envelope-full-bundle`, v0.27+). `bundle.multisig.threshold` is K for a plain k-of-n descriptor (the rule the `mnemonic bundle` card's `# Threshold:` line uses) and `null` for a general policy; a single-key bundle has `multisig: null`. The text summary's two `threshold=` lines print K for a plain descriptor (a 1-of-1 `multi` prints `1`) and `none` otherwise.
 - `source_format` — `"bsms"` or `"bitcoin-core"`.
 - `roundtrip` — `{byte_exact: bool, semantic_match: bool, diff: Option<String>, status: "ok" | "blocked_no_emitter" | "canonicalize_failed"}`. The `diff` field is `Some(...)` iff `byte_exact == false`; under `--json` the diff lives in the envelope only (stderr is silent).
 - `bsms_audit?` — BSMS source only: `{token, signature, first_address, derivation_path, signature_verified: false}`. v0.26.0 preserves these fields verbatim from the Round-2 blob but does not verify the signature (FOLLOWUP `bsms-verify-signatures`) or the first-address (FOLLOWUP `bsms-first-address-verify`).

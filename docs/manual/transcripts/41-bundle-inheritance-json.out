@@ -38,7 +38,7 @@
     ],
     "multisig": {
         "template": "descriptor",
-        "threshold": 3,
+        "threshold": null,
         "cosigner_count": 3,
         "path_family": "descriptor",
         "cosigners": [

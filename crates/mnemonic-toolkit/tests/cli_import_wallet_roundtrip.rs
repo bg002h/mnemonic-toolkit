@@ -149,7 +149,7 @@ fn fixture_bsms_2line_decay_144_parses_clean() {
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
     assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
-    assert!(stdout.contains("threshold=2"));
+    assert!(stdout.contains("threshold=none"));
 }
 
 #[test]

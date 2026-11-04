@@ -1,0 +1,177 @@
+diff --git i/design/SPEC_mnemonic_toolkit_v0_5.md w/design/SPEC_mnemonic_toolkit_v0_5.md
+index 7f6750ba..0fe74152 100644
+--- i/design/SPEC_mnemonic_toolkit_v0_5.md
++++ w/design/SPEC_mnemonic_toolkit_v0_5.md
+@@ -165,7 +165,7 @@ Both forms produce the same wire-level result (`ms1[i] == ""` for skipped slots)
+ **Card sections (in order):**
+ 
+ 1. **Header line:** `# === Wallet bundle: <template-or-descriptor-summary>, <network> ===`
+-2. **Threshold line** (multisig only): `# Threshold: {T} of {N}`
++2. **Threshold line** (plain k-of-n only, see below): `# Threshold: {T} of {N}`
+ 3. **Cosigners block:** `# Cosigners:` followed by N indented lines, one per slot:
+    - `#   @{i}: <ms1-card-id>{,}<mk1-card-id> (<fp-or-anon> @ <path>)` where:
+      - `<ms1-card-id>` = the ms1 card's `chunk_set_id` (4 hex chars) if present; OR `(no ms1; watch-only)` if `ms1[i] == ""`
+@@ -176,7 +176,9 @@ Both forms produce the same wire-level result (`ms1[i] == ""` for skipped slots)
+ 5. **Descriptor line** (descriptor mode): `# Descriptor: <descriptor-string-or-summary>`
+    - **Truncation policy:** if descriptor string length > 80 characters, render as `<first 60 chars>... [md1: <chunk-set-id>] (<descriptor_len> chars total)` and rely on the md1 card to carry the full descriptor. If ≤ 80 chars, render verbatim.
+ 6. **Md1 reference line** (always): `# md1: <chunk_set_id>`
+-7. **Recovery hint line** (always): `# Recovery: any {T} of {N} signing keys + md1 (template card).`
++7. **Recovery hint line** (N > 1): for a plain k-of-n bundle, `# Recovery: any {T} of {N} signing keys + md1 (template card).`; for any other bundle with N > 1 (a general policy), `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all {N} signing keys, any hash preimages it names, and md1 (template card).`
++
++**Plain k-of-n (FIX-V7, 2026-11-03).** A bundle is plain k-of-n when it is in template mode with N > 1 (every multisig template is plain; T is `--threshold`), or when its descriptor's only child of `wsh`, `sh` or `sh(wsh)` is `multi`, `sortedmulti`, `multi_a`, `sortedmulti_a`, or a `thresh` whose every child is `pk(K)` or `pkh(K)` with only `s:` or `a:` wrappers, or when that operator is the only leaf of a `tr` whose internal key is the NUMS point; T is that operator's k. Every other descriptor is a general policy: an internal key other than the NUMS point (a slot key, or Liana's unspendable key) counts as general, and so does a `thresh` with any other child (a timelock, a hash, a nested fragment, or a wrapper such as `n:`). A general policy prints no Threshold line (item 2) and the general Recovery line (item 7). A single-key bundle (N = 1) prints neither line. The JSON envelope's `multisig.threshold` follows the same rule: T for a plain k-of-n bundle, `null` for a general policy (a single-key bundle has `multisig: null`).
+ 
+ **Privacy-preserving rendering:** under `--privacy-preserving`, fingerprint columns render as `anon` (3 ASCII chars); ms1/mk1 chunk_set_ids still render (they don't leak provenance). Card layout shape is otherwise identical.
+ 
+diff --git i/docs/manual/src/40-cli-reference/41-mnemonic.md w/docs/manual/src/40-cli-reference/41-mnemonic.md
+index 688a29c3..3e0ca054 100644
+--- i/docs/manual/src/40-cli-reference/41-mnemonic.md
++++ w/docs/manual/src/40-cli-reference/41-mnemonic.md
+@@ -666,16 +666,27 @@ back to the same payload.
+ 
+ Stderr (info notice + bundle-summary engraving card):
+ 
+-```{.text include="41-bundle-inheritance-cards.err" lines="1-11"}
+-PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-11 at build
++```{.text include="41-bundle-inheritance-cards.err" lines="1-10"}
++PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-10 at build
+ ```
+ 
+ The engraving-card block on stderr is a wallet-level summary the user
+ copies onto a separate piece of paper kept with the bundle; it lists
+-the threshold, per-cosigner fingerprint+origin triples, and the
+-recovery rule. The `6e6be` / `6e6b` short tags are chunk-set-id hex
+-prefixes for the corresponding cards, useful when matching a
+-recovered card-set back to its bundle.
++the per-cosigner fingerprint+origin triples and the recovery rule.
++This inheritance descriptor is a general policy, not k-of-n (its
++timelocked branches decide which key sets can spend), so the card
++prints no `# Threshold:` line, and its Recovery line tells the holder
++to keep all 3 signing keys, any hash preimages the policy names, and
++md1. A plain k-of-n descriptor prints `# Threshold: K of N` and
++`# Recovery: any K of N signing keys + md1 (template card).` instead;
++so does every multisig `--template`. A descriptor is plain k-of-n when
++the only child of `wsh`, `sh` or `sh(wsh)` is `multi`, `sortedmulti`,
++`multi_a`, `sortedmulti_a`, or a `thresh` whose children are all
++`pk`/`pkh` keys with only `s:`/`a:` wrappers, or when that operator is
++the only leaf of a `tr` whose internal key is the NUMS point. A
++single-key bundle prints neither line. The `6e6be` / `6e6b` short tags
++are chunk-set-id hex prefixes for the corresponding cards, useful when
++matching a recovered card-set back to its bundle.
+ 
+ ##### JSON envelope form (`--json`)
+ 
+@@ -759,6 +770,9 @@ Things to notice in the envelope:
+   BIP-39 phrases at the inferred path. These are the watch-only
+   binding records used by external wallets (Sparrow, Specter, etc.)
+   when importing the descriptor.
++- **`multisig.threshold`** is `null` here, because this descriptor is a
++  general policy, not k-of-n. It is the integer K for a plain k-of-n
++  descriptor and for every multisig `--template`.
+ 
+ #### Verifying the inheritance bundle (v0.20.0+)
+ 
+@@ -1698,7 +1712,7 @@ match, a unified diff is printed to stderr.
+ `--json` mode replaces the engraving-card stdout with a JSON array,
+ one envelope per emitted bundle. Each envelope carries:
+ 
+-- `bundle` — parse-side summary of the shape `{cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold}` (v0.26.0 ships this summary; the full toolkit-native `BundleJson` shape is FOLLOWUP `wallet-import-json-envelope-full-bundle`, v0.27+).
++- `bundle` — parse-side summary of the shape `{cosigners: [{fingerprint, path_raw, xpub, has_entropy}], network, threshold}` (v0.26.0 ships this summary; the full toolkit-native `BundleJson` shape is FOLLOWUP `wallet-import-json-envelope-full-bundle`, v0.27+). `bundle.multisig.threshold` is K for a plain k-of-n descriptor (the rule the `mnemonic bundle` card's `# Threshold:` line uses) and `null` for a general policy; a single-key bundle has `multisig: null`. The text summary's two `threshold=` lines print K for a plain descriptor (a 1-of-1 `multi` prints `1`) and `none` otherwise.
+ - `source_format` — `"bsms"` or `"bitcoin-core"`.
+ - `roundtrip` — `{byte_exact: bool, semantic_match: bool, diff: Option<String>, status: "ok" | "blocked_no_emitter" | "canonicalize_failed"}`. The `diff` field is `Some(...)` iff `byte_exact == false`; under `--json` the diff lives in the envelope only (stderr is silent).
+ - `bsms_audit?` — BSMS source only: `{token, signature, first_address, derivation_path, signature_verified: false}`. v0.26.0 preserves these fields verbatim from the Round-2 blob but does not verify the signature (FOLLOWUP `bsms-verify-signatures`) or the first-address (FOLLOWUP `bsms-first-address-verify`).
+diff --git i/docs/manual/transcripts/41-bundle-inheritance-cards.err w/docs/manual/transcripts/41-bundle-inheritance-cards.err
+index 6cdf41db..a12bb674 100644
+--- i/docs/manual/transcripts/41-bundle-inheritance-cards.err
++++ w/docs/manual/transcripts/41-bundle-inheritance-cards.err
+@@ -1,12 +1,11 @@
+ info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+ # === Wallet bundle: descriptor, mainnet ===
+-# Threshold: 3 of 3
+ # Cosigners:
+ #   @0: ms1:6e6be,mk1:6e6be (73c5da0a @ m/48'/0'/0'/2')
+ #   @1: ms1:6e6bf,mk1:6e6bf (b8688df1 @ m/48'/0'/0'/2')
+ #   @2: ms1:6e6bc,mk1:6e6bc (28645006 @ m/48'/0'/0'/2')
+ # Template: descriptor
+ # md1: 6e6b
+-# Recovery: any 3 of 3 signing keys + md1 (template card).
++# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 3 signing keys, any hash preimages it names, and md1 (template card).
+ # Language: english
+ warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
+diff --git i/docs/manual/transcripts/41-bundle-inheritance-json.out w/docs/manual/transcripts/41-bundle-inheritance-json.out
+index 34aaed2f..29a89188 100644
+--- i/docs/manual/transcripts/41-bundle-inheritance-json.out
++++ w/docs/manual/transcripts/41-bundle-inheritance-json.out
+@@ -38,7 +38,7 @@
+     ],
+     "multisig": {
+         "template": "descriptor",
+-        "threshold": 3,
++        "threshold": null,
+         "cosigner_count": 3,
+         "path_family": "descriptor",
+         "cosigners": [
+diff --git i/docs/technical-manual/.cspell.json w/docs/technical-manual/.cspell.json
+index b38f3005..f2ee1710 100644
+--- i/docs/technical-manual/.cspell.json
++++ w/docs/technical-manual/.cspell.json
+@@ -165,6 +165,7 @@
+     "polymod",
+     "polymod",
+     "preimage",
++    "preimages",
+     "primerbox",
+     "privkey",
+     "privkeys",
+diff --git i/docs/technical-manual/src/40-bundle-formation/41-bundle-anatomy.md w/docs/technical-manual/src/40-bundle-formation/41-bundle-anatomy.md
+index 7e636837..0bdd229c 100644
+--- i/docs/technical-manual/src/40-bundle-formation/41-bundle-anatomy.md
++++ w/docs/technical-manual/src/40-bundle-formation/41-bundle-anatomy.md
+@@ -111,7 +111,7 @@ The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry
+ 
+ \index{ms1 dense layout}The `ms1` field's **dense length-N layout** (`format.rs::MsField`) is the v0.4 simplification: the slot index `i` in `ms1[i]` corresponds to `mk1[i]` and to the slot `@i` indexed in `BundleJson.multisig.cosigners`. An empty string at position `i` marks slot `@i` as watch-only; verify-bundle's `emit_verify_checks` discriminates on `expected.ms1.first().map(|s| s.is_empty())` in the single-sig arm (`verify_bundle.rs::emit_verify_checks`) and emits `passed: true, decode_error: Some("skipped: watch-only slot")` for both ms1 checks (`verify_bundle.rs::emit_verify_checks`). The per-cosigner indexed equivalent for multisig lives in `emit_multisig_checks`. Both `["ms1abc..."]` (single-sig full) and `[""]` (single-sig watch-only) are legal at N=1.
+ 
+-The `MultisigInfo`\index{MultisigInfo} block at `format.rs::MultisigInfo` is the lookup-table consumers use to reassemble a wallet from a JSON envelope: it carries the `template` name, the `threshold` K, `cosigner_count` N, the `path_family` string (`"bip48"` or `"bip87"`), and a `Vec<CosignerEntry>` (one entry per slot, holding `index`, `master_fingerprint` (None under privacy mode), `origin_path`, `xpub`). The `cosigners` ordering matches slot indices `@0..@N-1`.
++The `MultisigInfo`\index{MultisigInfo} block at `format.rs::MultisigInfo` is the lookup-table consumers use to reassemble a wallet from a JSON envelope: it carries the `template` name, the `threshold` (`Option<u8>`: K for a plain k-of-n bundle, `null` for a general policy; SPEC §5.5), `cosigner_count` N, the `path_family` string (`"bip48"` or `"bip87"`), and a `Vec<CosignerEntry>` (one entry per slot, holding `index`, `master_fingerprint` (None under privacy mode), `origin_path`, `xpub`). The `cosigners` ordering matches slot indices `@0..@N-1`.
+ 
+ ## The engraving card
+ 
+@@ -121,7 +121,7 @@ Anatomy of a multisig card (sections in the order they emit):
+ 
+ ```text
+ # === Wallet bundle: wsh-sortedmulti, mainnet ===     ← header line
+-# Threshold: 2 of 3                                   ← multisig only
++# Threshold: 2 of 3                                   ← plain k-of-n only
+ # Cosigners:                                          ← multisig only
+ #   @0: ms1:1c017,mk1:1c017 (73c5da0a @ 48'/0'/0'/2')
+ #   @1: ms1:abcd1,mk1:abcd1 (deadbeef @ 48'/0'/0'/2')
+@@ -133,6 +133,8 @@ Anatomy of a multisig card (sections in the order they emit):
+ # Passphrase: USED — not engraved on any card; record separately.
+ ```
+ 
++A general policy (a multisig descriptor that is not plain k-of-n, SPEC §5.5) prints no `# Threshold:` line, and its Recovery line reads `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all {N} signing keys, any hash preimages it names, and md1 (template card).` (`format.rs::engraving_card_unified`; the K comes from `bundle.rs::plain_multisig_threshold`). A single-sig card prints neither line.
++
+ The single-sig card collapses the cosigners block to up to four lines (`ms1`, `mk1`, `fingerprint`, `origin path`; `format.rs::engraving_card_unified`). The `fingerprint` line is suppressed under `--privacy-preserving` and the `origin path` line is suppressed when the slot carries no path; both fields are guarded by `if let Some(...)` at `format.rs::engraving_card_unified`. A taproot-multisig template (`tr-multi-a` / `tr-sortedmulti-a`) appends a hardware-wallet caveat block (`format.rs::engraving_card_unified`) flagging that signing-side support is nascent at v0.4.
+ 
+ The `chunk_set_id`\index{chunk\_set\_id} short-hashes printed inline (the **engraved** card identifiers) are the **bundle-level binding key**. The md1 engraved identifier is the first 2 bytes of the wallet `policy_id` rendered as 4 hex chars (`bundle.rs::build_unified_card`); the ms1/mk1 engraved identifier is the 20-bit value `derive_mk1_chunk_set_id` packs from the first 4 bytes of the same `policy_id` (`synthesize.rs::derive_mk1_chunk_set_id`), rendered as 5 hex chars. Both derive from the *same* policy_id, so the leading 16 bits agree across all three cards in one bundle — that shared prefix is the visible cross-card binding. (The md1 *wire* `chunk_set_id` carried in the chunked-string headers is a separate, `Md1EncodingId`-derived value — see §IV.2.) A separate helper `chunk_set_id_extract` (`format.rs::chunk_set_id_extract`) recovers an mk1 chunked-string's `chunk_set_id` from the wire string itself; verify-bundle uses that to group cosigner cards in multisig. Their cross-format meaning is the subject of §IV.2.
+diff --git i/docs/technical-manual/src/50-rust-api/54-mnemonic-toolkit-api.md w/docs/technical-manual/src/50-rust-api/54-mnemonic-toolkit-api.md
+index 819e9fde..023ca52c 100644
+--- i/docs/technical-manual/src/50-rust-api/54-mnemonic-toolkit-api.md
++++ w/docs/technical-manual/src/50-rust-api/54-mnemonic-toolkit-api.md
+@@ -340,7 +340,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
+ | Field | Type | Semantics |
+ |---|---|---|
+ | `template` | `&'static str` | template name (multisig only) |
+-| `threshold` | `u8` | `K` in `K-of-N` |
++| `threshold` | `Option<u8>` | `K` in `K-of-N` for a plain k-of-n bundle; `None` (`null`) for a general policy (SPEC §5.5) |
+ | `cosigner_count` | `usize` | `N` |
+ | `path_family` | `&'static str` | `"bip48"` or `"bip87"` (`--template` mode); `"descriptor"` in descriptor mode (`--descriptor`, `--descriptor-file`, `--import-json`), per SPEC v0.3 §5.3 |
+ | `cosigners` | `Vec<CosignerEntry>` | per-cosigner descriptor |
+@@ -733,7 +733,7 @@ All refusals route to exit code 2 (per `ToolkitError::exit_code` in §V.4.4). Re
+ 
+ The `mnemonic bundle` subcommand emits a unified engraving card on **stderr** (the `--quiet` flag suppresses it). The card is a three-card mental model — ms1, mk1, md1 cards laid out alongside each other physically — rendered as a single human-readable text block. The sole producing function is `format::engraving_card_unified` (`format.rs::engraving_card_unified`); `BundleJson.engraving_card` was removed in v0.5.0 Phase A.3.
+ 
+-The renderer accepts `BundleInputForCard` (header + threshold + N + language + passphrase-used + privacy + per-slot blocks + md1 chunk_set_id) and emits eight ordered sections: header line, threshold (multisig only), cosigners block (N ≥ 2) or single-slot summary (N == 1), template-or-descriptor line, md1 reference line, recovery hint (multisig only), language / passphrase footer, hardware-wallet caveat for `tr-multi-a` and `tr-sortedmulti-a`. Descriptor strings over 80 characters truncate to a 60-char prefix plus `... [md1: <id>] (<n> chars total)` annotation.
++The renderer accepts `BundleInputForCard` (header + threshold + N + language + passphrase-used + privacy + per-slot blocks + md1 chunk_set_id) and emits eight ordered sections: header line, threshold (plain k-of-n only), cosigners block (N ≥ 2) or single-slot summary (N == 1), template-or-descriptor line, md1 reference line, recovery hint (N ≥ 2: `any K of N` for a plain k-of-n bundle, the general-policy text otherwise, SPEC §5.5), language / passphrase footer, hardware-wallet caveat for `tr-multi-a` and `tr-sortedmulti-a`. Descriptor strings over 80 characters truncate to a 60-char prefix plus `... [md1: <id>] (<n> chars total)` annotation.
+ 
+ Cross-reference: §IV.1 (bundle anatomy), §IV.2 (anti-collision invariants), §IV.3 (future shares) hold the deep technical details (`chunk_set_id` derivation, ms1/mk1/md1 card-id collision invariants, recovery procedure). This chapter shows only the stderr-emitted text.
+ 

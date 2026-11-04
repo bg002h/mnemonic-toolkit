@@ -6477,6 +6477,65 @@ screen printed. Print the values.
 - **Tier:** `v0.5` / hygiene.
 - **Companion:** none.
 
+### `manual-gui-tutorial-v7-general-recovery` — at the GUI manual's next re-pin, the J3 and J4 engraving cards take FIX-V7's general-policy Recovery line (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v7_bundle_recovery**)
+
+- **Surfaced:** FIX_v7_bundle_recovery STOP-1, ruled by `architect-2026-11-04-fix-v7-stops.md`. Ruling 7's GUI items (`grade-2026-11-03-tk-v5-v7.md`) are met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
+- **What:** mnemonic-gui regenerates the snapshots behind `tut-j3-12-engrave.stderr.txt` and `tut-j4-16-engrave.stderr.txt`, their two PNGs, and the j3/j4 restore-feed bundle-json snapshots against that toolkit release. The re-pin copies them into `docs/manual-gui/` and deletes the two interim notes FIX-V7 put after the engrave stderr blocks of `40-j3-degrading-vault.md` and `50-j4-taproot-twin.md` (architect STOP-1): the regenerated cards print the general line (FIX section 2.2) and no `# Threshold` line.
+- **Status:** `open`.
+- **Tier:** `docs`, `cross-repo`.
+
+### `v7-fix-review-minors` — FIX-V7 review r1: Minors M-1..M-3 and Nits N-1..N-4 deferred unfixed
+
+- **Surfaced:** 2026-11-04, independent review of the FIX-V7 document (`design/agent-reports/review-fix-v7-r1.md`; 0C/2I/3M/4N). The two Importants were folded at 044162e7; these were not.
+- **What:** M-1 CSpell expects `Files checked: 26` but a run in item 12's order gets 25 (26 once `make pdf`/`make html` generate `src/99-build-banner.md`). M-2 no row pins `InternalKey::LianaUnspendable` as general. M-3 the GUI interim notes say "Toolkit releases after 0.105.1" where "that carry FIX-V7" is exact. N-1 section 2.3 over-generalises the template-format refusal text (specter exits 2, green exits 1 with its own text). N-2 `git status --short docs/manual-gui` prints repo-root paths. N-3 section 6.2 step 2 omits `cargo +1.95.0 fmt --all` after narrowing row 24. N-4 the CI tools root to reuse is `/scratch/cache/tk-v5-build-ci-tools`.
+- **Action:** read the report's Minors and Nits section; fix or close each.
+- **Status:** `deferred-minor`
+- **Owning phase:** next toolkit cleanup cycle.
+- **Tier:** `v0.5` / hygiene.
+- **Companion:** none.
+
+### `v7-s1-m1-restore-md1-threshold-null` — FIX-V7 whole-diff s1 M-1: `restore --md1` writes `threshold: null` for a pure-key `thresh`
+
+- Surfaced: 2026-11-04, whole-diff s1 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s1.md` M-1). No wrong number reaches a holder, but `bundle`/`import-wallet` report K and `restore` does not.
+- What: `restore.rs:4021` should use `plain_multisig_threshold`, as the other emitters do.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s1-n1-anatomy-k-source-doc` — FIX-V7 whole-diff s1 N-1: manual says K always comes from `plain_multisig_threshold`
+
+- Surfaced: 2026-11-04, whole-diff s1 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s1.md` N-1).
+- What: `docs/technical-manual/src/40-bundle-formation/41-bundle-anatomy.md:136` should add "(descriptor and `--import-json` modes)"; template mode takes K from `--threshold`.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s1-n2-fix-2-3-multisig-absent-wording` — FIX-V7 whole-diff s1 N-2: FIX 2.3 says `multisig` is absent when n == 1
+
+- Surfaced: 2026-11-04, whole-diff s1 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s1.md` N-2).
+- What: both emitters write `"multisig": null` for n == 1. The FIX-doc wording is wrong; the manual (`41-mnemonic.md:1715`) is right. FIX-doc wording only.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s2-n1-dead-threshold-fallbacks` — FIX-V7 whole-diff s2 N-1: template-mode threshold fallbacks are dead code
+
+- Surfaced: 2026-11-04, whole-diff s2 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s2.md` N-1).
+- What: the `.or(if n > 1 ...)` fallback at `bundle.rs:1384` and the `unwrap_or(n as u8)` default at `bundle.rs:954` never run, because `--threshold` is mandatory for a multisig template. Write `args.threshold` at 1384; the defensive default may stay.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s2-n2-redundant-tapTree-guard` — FIX-V7 whole-diff s2 N-2: redundant `Tag::TapTree` guard at bundle.rs:1323
+
+- Surfaced: 2026-11-04, whole-diff s2 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s2.md` N-2).
+- What: the `leaf.tag != Tag::TapTree` guard is covered by `kofn` (S2). Writing `) => kofn(leaf),` removes a permanent mutation survivor. Keeping it as documentation is also acceptable.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s2-n3-plain-multisig-threshold-unit-test` — FIX-V7 whole-diff s2 N-3: no unit test for the `c.len() == 1` guard in `plain_multisig_threshold`
+
+- Surfaced: 2026-11-04, whole-diff s2 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s2.md` N-3).
+- What: the guard at `bundle.rs:1272` is defensive for hand-built trees. A `#[cfg(test)]` unit test on a hand-built two-child `Wsh` expecting `None` would silence the survivor. Not required.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
 ### `fix-v5-r1-minors` — FIX_v5_wsh_cost review r1's Minors and Nits (M-1..M-4, N-1..N-3), not folded
 - Surfaced 2026-11-04, FIX review r1 (`design/agent-reports/review-fix-v5-r1.md` "Minor", "Nit"; each has its location and fix text there).
 - What: M-1 stale skipped counts (`4235`; measured 4223 on 12e013bc) in §3.1 and the header; M-2 stale STOP wording at `:72`, `:242-245`, `:360-361`, `:378`, `:425-427`; M-3 carried by I-2's STOP-7 line (closed by the r1 fold); M-4 §7 item 12 runs `make lint` before `make html` and needs a `mnemonic-gui-v0.63.0` checkout at `MANUAL_GUI_UPSTREAM_ROOT`; N-1..N-3 wording and line-cite offsets. All fail closed.

@@ -69,7 +69,9 @@ pub struct CosignerEntry {
 #[derive(Debug, Serialize)]
 pub struct MultisigInfo {
     pub template: &'static str,
-    pub threshold: u8,
+    /// K for a plain k-of-n descriptor; `null` for a general policy
+    /// (FIX-V7 ruling 2).
+    pub threshold: Option<u8>,
     pub cosigner_count: usize,
     /// `"bip48"` | `"bip87"`.
     pub path_family: &'static str,
@@ -343,13 +345,17 @@ pub fn engraving_card_unified(input: &BundleInputForCard) -> String {
     // 5. md1 reference line.
     s.push_str(&format!("# md1: {}\n", input.md1_chunk_set_id));
 
-    // 6. Recovery hint line.
-    if let Some(t) = input.threshold {
-        if input.n > 1 {
-            s.push_str(&format!(
+    // 6. Recovery hint line (multisig only; FIX-V7 ruling 1).
+    if input.n > 1 {
+        match input.threshold {
+            Some(t) => s.push_str(&format!(
                 "# Recovery: any {} of {} signing keys + md1 (template card).\n",
                 t, input.n
-            ));
+            )),
+            None => s.push_str(&format!(
+                "# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all {} signing keys, any hash preimages it names, and md1 (template card).\n",
+                input.n
+            )),
         }
     }
 
@@ -480,6 +486,38 @@ mod tests {
             card.contains("#   @2: (no ms1; watch-only),mk1:abcde (cccccccc @ m/48'/0'/0'/2')\n")
         );
         assert!(card.contains("# Recovery: any 2 of 3 signing keys + md1 (template card).\n"));
+    }
+
+    /// FIX-V7 (design/FIX_v7_bundle_recovery.md): a general policy
+    /// (threshold None, n > 1) prints no Threshold line and the general
+    /// Recovery line.
+    #[test]
+    fn unified_card_general_policy_prints_general_recovery_line_without_threshold() {
+        let input = BundleInputForCard {
+            network: "mainnet",
+            template_or_descriptor: TemplateOrDescriptor::Descriptor(
+                "wsh(or_d(pk(@2/<0;1>/*),multi(2,@0/<0;1>/*,@1/<0;1>/*)))".into(),
+            ),
+            threshold: None,
+            n: 3,
+            language: Some("english"),
+            passphrase_used: false,
+            privacy_preserving: false,
+            per_slot: vec![
+                slot_block(0, true, Some("aaaaaaaa"), Some("m/48'/0'/0'/2'")),
+                slot_block(1, false, Some("bbbbbbbb"), Some("m/48'/0'/0'/2'")),
+                slot_block(2, false, Some("cccccccc"), Some("m/48'/0'/0'/2'")),
+            ],
+            md1_chunk_set_id: "9999".into(),
+        };
+        let card = engraving_card_unified(&input);
+        assert!(!card.contains("# Threshold:"), "{card}");
+        assert!(!card.contains("# Recovery: any"), "{card}");
+        assert!(card.contains(
+            "# Recovery: general policy, not k-of-n (the md1 policy decides which key sets \
+             can spend); keep all 3 signing keys, any hash preimages it names, and md1 \
+             (template card).\n"
+        ));
     }
 
     #[test]

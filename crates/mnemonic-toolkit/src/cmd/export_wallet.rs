@@ -1002,8 +1002,34 @@ fn run_from_import_json<W: Write, E: Write>(
         .or_else(|| lifted_wallet_name.clone())
         .unwrap_or_else(|| "imported-descriptor".to_string());
 
-    // Threshold from envelope's bundle.multisig.threshold (None for N=1).
-    let threshold = envelope.bundle.multisig.as_ref().map(|m| m.threshold);
+    // FIX-V7 2.1 / 2.3: K comes from the envelope's DESCRIPTOR, the same one
+    // that is emitted (`parsed_ms` above was parsed from this body), by the
+    // plain k-of-n rule. The envelope's md1 and threshold fields are not
+    // consulted, so a hand-edited envelope whose md1 disagrees with its
+    // descriptor cannot put a foreign K on the emitted script. The descriptor
+    // is encoded the way `bundle --import-json` encodes it; if that fails the
+    // export refuses rather than falling back to no K.
+    let threshold: Option<u8> = {
+        let (placeholder_form, parsed_keys, parsed_fps) =
+            crate::wallet_import::pipeline::concrete_keys_to_placeholders(
+                &canonical_descriptor_body,
+            )
+            .map_err(|e| {
+                ToolkitError::BadInput(format!(
+                    "--from-import-json: cannot encode the envelope descriptor to derive K: {}",
+                    e.message()
+                ))
+            })?;
+        let md_desc =
+            crate::parse_descriptor::parse_descriptor(&placeholder_form, &parsed_keys, &parsed_fps)
+                .map_err(|e| {
+                    ToolkitError::BadInput(format!(
+                        "--from-import-json: cannot encode the envelope descriptor to derive K: {}",
+                        e.message()
+                    ))
+                })?;
+        crate::cmd::bundle::plain_multisig_threshold(&md_desc.tree)
+    };
 
     // SPEC v0.37 §2.3 — derive the template from the envelope descriptor for
     // template-requiring formats (sparrow/coldcard/jade/electrum) so they can
