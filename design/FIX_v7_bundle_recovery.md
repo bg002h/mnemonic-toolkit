@@ -1,13 +1,16 @@
 # FIX-V7: bundle card recovery summary for general policies
 
-Status: draft (author). Base: `ac3ff70a` + RED commit `283132e7`, branch `fix/v7-bundle-recovery`.
+Status: draft (author). FIX branch `fix/v7-bundle-recovery` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v7-bundle-recovery` (architect STOP-7, `architect-2026-11-04-fix-v5-stops.md`):
+`git fetch origin && git switch -c build/v7-bundle-recovery origin/master && git cherry-pick d19256e8 ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v7-bundle-recovery head>`.
+Do not take `a34bd61e` or `123c258d` (V5's rows). The evidence below was measured on an equivalent tree: `origin/master` `12e013bc` plus `d19256e8`, `ac3ff70a` and `283132e7`, cherry-picked.
+Merge order: whichever of the V5 and V7 PRs is first green with 0C/0I merges first. The second merges `origin/master` in, re-runs all of section 7, regenerates `.examples-build/Examples.md` with `gen.sh`, and resolves the `design/FOLLOWUPS.md` append. T3 waits for this FIX.
 
 ## 1. Inputs and scope
 
 - Grade and rulings (bind): coordinator `agent-reports/grade-2026-11-03-tk-v5-v7.md`, rulings 1, 2, 3 and 7. V7-1..V7-11 are Critical.
 - Small-fix track: no new flag, type or command. One repo (mnemonic-toolkit) plus its manual lockstep.
 - Code files (ruling 7): `crates/mnemonic-toolkit/src/cmd/bundle.rs`, `src/format.rs` (card), `src/format.rs` `MultisigInfo` (JSON writer), `src/wallet_import/json_envelope.rs` `MultisigInfoView` (JSON reader), `src/cmd/export_wallet.rs` (reader consumer), `src/cmd/import_wallet.rs` (emitter).
-- The builder works from this document and the committed appendix `design/FIX_v7_appendix/`. Nothing in the appendix is production code.
+- The builder works from this document and the committed evidence directory `design/agent-reports/fix-doc-tk-v7-evidence/` (the evidence dir below). Its patches are the measured GREEN; this document's texts are normative where they differ.
 - Not in scope: T3 (lifting the `sortedmulti_a` whole-leaf gate) waits for this FIX to merge.
 
 ## 2. Spec delta (exact texts)
@@ -67,18 +70,68 @@ The general Recovery line is one line: there is no wrap and the line ends with `
 - `bundle.rs`: add the 2.1 predicate as one function over the md `tree::Node`. It returns `Option<u8>`: k when plain, `None` when general.
   - Descriptor mode and the `--import-json` path take k from it.
   - Template mode keeps `--threshold`, or n when the flag is absent.
-  - A hint implementation sits outside the repo, at `/scratch/cache/tk-fix-v7-logs/fix-v7-production.hint.patch`; it is not normative.
+  - A hint implementation is the evidence dir's `fix-v7-production.patch` (adds `pub(crate) fn plain_multisig_threshold(root: &md_codec::tree::Node) -> Option<u8>`). It is not normative, and on the `--import-json` path it ignores `--threshold`, which is one of STOP-2's two options, not a ruling.
 - `format.rs`:
   - `MultisigInfo.threshold: Option<u8>`.
   - The unified card prints the 2.2 table.
 - `json_envelope.rs`:
   - `MultisigInfoView.threshold: Option<u8>`.
-  - Its two existing unit tests that build a view change `2` to `Some(2)`.
+  - Its one unit test `bundle_json_view_round_trips_every_field_of_bundle_json` changes two lines (717 `threshold: 2,` to `threshold: Some(2),`; 763 `assert_eq!(m.threshold, 2);` to `assert_eq!(m.threshold, Some(2));`).
 - `export_wallet.rs`: read the threshold as `Option` (`and_then`).
 - `import_wallet.rs`: the 2.4 recompute. The emitter uses the recomputed value.
 - STOP-2 (section 8) decides how `bundle --import-json` treats `--threshold`. Until it is ruled, the builder does not start (section 8).
 
 ## 4. RED rows
+
+All 30 rows are committed (`d19256e8`: rows 1-12; `283132e7`: rows 13-30). Rows 1-29 are in `crates/mnemonic-toolkit/tests/cli_bundle_recovery_threshold_text.rs`; row 30 is a unit test in `crates/mnemonic-toolkit/src/format.rs` (`mod tests`). The names are in the evidence dir's `row-names.txt`; `fix-rows-filter.txt` is the nextest filter `test(/(^|::)(row1|...|row30)$/)` over them.
+
+Command (from the worktree root):
+
+`PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked -p mnemonic-toolkit -E "$(cat design/agent-reports/fix-doc-tk-v7-evidence/fix-rows-filter.txt)"`
+
+- On the build base before the GREEN commit: the summary line reads `30 tests run: 6 passed, 24 failed, <S> skipped`, and the 24 failures are exactly the rows marked FAIL below, each for the reason given. Measured: `Summary [   0.023s] 30 tests run: 6 passed, 24 failed, 4111 skipped`.
+- After the GREEN commit: `30 tests run: 30 passed, <S> skipped`, no failure. Measured: `Summary [   0.045s] 30 tests run: 30 passed, 4111 skipped`.
+- `<S>` moves with the base; the matched count 30 is the invariant. A matched count other than 30 is a FAIL.
+
+The "base" column is the measured outcome on unmodified production code. Reasons cite the test file's assertion line (`t:` = `cli_bundle_recovery_threshold_text.rs`).
+
+| # | row | origin | base | reason on base |
+|---|---|---|---|---|
+| 1 | `v7_tr_two_pk_leaves_not_2_of_2` | triage | FAIL | t:96 `assert_no_false_claim`: card prints the false `# Threshold: K of N` |
+| 2 | `v7_tr_three_pk_leaves_depth2_not_3_of_3` | triage | FAIL | t:96, as row 1 |
+| 3 | `v7_wsh_or_d_two_keys_not_2_of_2` | triage | FAIL | t:96, as row 1 |
+| 4 | `v7_wsh_or_d_key_or_multi_not_2_of_3` | triage | FAIL | t:96, as row 1 |
+| 5 | `v7_wsh_or_i_multi_or_key_not_2_of_3` | triage | FAIL | t:96, as row 1 |
+| 6 | `v7_tr_multi_a_leaf_plus_pk_leaf_not_2_of_3` | triage | FAIL | t:96, as row 1 |
+| 7 | `v7_tr_sortedmulti_a_leaf_plus_pk_leaf_not_2_of_3` | triage | FAIL | t:96, as row 1 |
+| 8 | `v7_tr_non_nums_internal_key_plus_multi_a_not_2_of_3` | triage | FAIL | t:96, as row 1 |
+| 9 | `v7_wsh_and_v_with_or_branch_not_3_of_3` | triage | FAIL | t:96, as row 1 |
+| 10 | `v7_two_disjoint_multi_leaves_not_any_2_of_4` | triage | FAIL | t:167: card claims any 2 of 4 keys recover, but {K0,K2} cannot spend |
+| 11 | `v7_and_of_two_multis_not_2_of_4_understated` | triage | FAIL | t:96, as row 1 |
+| 12 | `v7_control_plain_shapes_keep_threshold_and_recovery_lines` | triage | PASS | control: plain `wsh`/`tr` shapes keep both lines |
+| 13 | `v7_general_shapes_print_exact_general_recovery_line` | new | FAIL | t:218 `assert_general_card`: a general policy must print no `# Threshold:` line |
+| 14 | `v7_non_pure_thresh_gets_general_line` | new | FAIL | t:218, as row 13 |
+| 15 | `v7_archetypes_get_general_line` | new | FAIL | t:218, as row 13 |
+| 16 | `v7_e3_timelocked_inheritance_gets_general_line` | new | FAIL | t:218, as row 13 |
+| 17 | `v7_bundle_json_threshold_null_for_general_policy` | new | FAIL | t:424: `multisig.threshold` left `Number(2)`, right `Null` |
+| 18 | `v7_import_wallet_text_threshold_none_for_general` | new | FAIL | t:433: stdout carries `bundles[0].threshold=2`, not `=none` |
+| 19 | `v7_import_wallet_json_threshold_null_for_general` | new | FAIL | t:453: left `Some(Number(2))`, right `Some(Null)` |
+| 20 | `v7_null_threshold_envelope_accepted_by_bundle_import_json` | new | FAIL | t:467: exit 1, `error: --import-json: envelope JSON parse: invalid type: null, expected u8 at line 1 column 2490` |
+| 21 | `v7_null_threshold_envelope_accepted_by_export_wallet_descriptor` | new | FAIL | t:494: null envelope refused, `error: --from-import-json: envelope JSON parse: invalid type: null, expected u8` |
+| 22 | `v7_null_threshold_envelope_template_format_still_refuses_general_policy` | new | FAIL | t:519: the parse error of row 21 appears where the sparrow general-policy refusal (2.3) is expected |
+| 23 | `v7_stale_envelope_threshold_recomputed_by_bundle_import_json` | new | FAIL | t:218, as row 13 (an integer threshold in the envelope for a general descriptor) |
+| 24 | `v7_import_json_threshold_flag_cannot_override_card_k` | new | FAIL | t:240: plain 2-of-3 envelope with `--threshold 1`: want exactly one line `# Threshold: 2 of 3`, left 0, right 1 (the card prints `# Threshold: 1 of 3`). See STOP-2 |
+| 25 | `v7_pure_key_thresh_keeps_any_k_of_n` | new | PASS | guard (ruling 3): `thresh(2,pk,s:pk,s:pk)` keeps both lines |
+| 26 | `v7_sh_plain_shapes_keep_threshold_and_recovery_lines` | new | PASS | guard: `sh(multi)`, `sh(wsh(sortedmulti))` keep both lines |
+| 27 | `v7_single_key_prints_no_threshold_or_recovery_line` | new | PASS | guard: n == 1 unchanged |
+| 28 | `v7_bundle_json_threshold_k_for_plain` | new | PASS | guard: JSON integer k for plain |
+| 29 | `v7_import_wallet_threshold_k_for_plain` | new | PASS | guard: import-wallet integer k for plain |
+| 30 | `format::tests::unified_card_general_policy_prints_general_recovery_line_without_threshold` | new | FAIL | `format.rs:510`: the card does not contain the general Recovery line (the card has no general arm) |
+
+Counts: 30 rows; 18 new (13-30), of which 13 fail on base (13-24, 30); 24 fail on base in all; 6 PASS guards (12, 25-29).
+
+Row 24 accepts both STOP-2 outcomes (a refusal, or a card with `# Threshold: 2 of 3`); it fails on base only because the card takes k from the flag. When STOP-2 is ruled, the builder narrows row 24 to the ruled outcome in the GREEN commit, with the exact text the ruling gives (section 8).
+
 ## 5. Tests that change
 ## 6. Lockstep files and transcripts
 ## 7. Gate
