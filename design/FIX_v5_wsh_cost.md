@@ -17,8 +17,11 @@ Sources (coordinator `agent-reports/` unless a path is given):
 **How this document was checked.**
 - Every code, doc and transcript change is a patch file in the evidence directory, embedded byte for byte in
   the appendices. `bash design/agent-reports/fix-doc-tk-v5-evidence/doc-gate.sh` checks that each appendix
-  fence equals its file and that the build patches apply to `ac3ff70a`, alone and together. It does not check
-  figure correctness, Bitcoin Core agreement, the GUI byte gate or runtime behaviour; the runs below do.
+  fence equals its file, that §3's table equals `row-names.txt` and `row-alt.txt`, and that the build patches
+  A-E apply to `ac3ff70a` and to `12e013bc`, each alone and all five in order (F alone to `ac3ff70a`). Its last
+  line is `doc-gate: PASS` (22 `ok` lines); a planted byte in a fence and a renamed §3 row each made it print
+  `doc-gate: FAIL`. It does not check figure correctness, Bitcoin Core agreement, that the patched tree builds,
+  the GUI byte gate or runtime behaviour; the runs below do.
 - The 30-row RED filter (§3.1) on this branch's head (no production patch): `30 tests run: 11 passed, 19 failed, 4235 skipped`; with Appendices A
   and B applied: `30 tests run: 30 passed, 4235 skipped`.
 - The E9 file alone (§3.2) on the same head: `12 tests run: 5 passed, 7 failed, 0 skipped`; with Appendix B only:
@@ -637,3 +640,555 @@ A-E apply to `origin/master` too, but rows 1-14's file `cli_compare_cost_wsh_wit
 Undecided: whether this FIX builds after FIX-V7's GREEN is in `ac3ff70a`, builds on `ac3ff70a` with V7's lines as
 the only allowed failures (§7's rule), or rebases onto master with the triage file cherry-picked; and which PR
 merges first.
+
+## Appendices (embedded byte for byte from the evidence directory; `doc-gate.sh` checks each fence)
+
+### Appendix A. Part A production code (`fix-v5a-only.patch`)
+
+Applies to `ac3ff70a` and `12e013bc`. Held by STOP-1 (a) until the ruling.
+
+<!-- evidence: fix-v5a-only.patch -->
+~~~~diff
+diff --git i/crates/mnemonic-toolkit/src/cost/enumerate.rs w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+index 4d5fe524..e0628767 100644
+--- i/crates/mnemonic-toolkit/src/cost/enumerate.rs
++++ w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+@@ -16,10 +16,11 @@
+ 
+ use std::collections::BTreeSet;
+ 
++use miniscript::bitcoin::consensus::encode::VarInt;
+ use miniscript::bitcoin::hashes::{hash160, ripemd160, sha256};
+ use miniscript::bitcoin::{absolute, relative};
+ use miniscript::descriptor::{DefiniteDescriptorKey, DescriptorPublicKey};
+-use miniscript::plan::Assets;
++use miniscript::plan::{Assets, Plan};
+ use miniscript::{Descriptor, ForEachKey, Miniscript, Segwitv0};
+ 
+ use super::translate::{pubkey_to_label_segv0, Translated};
+@@ -264,11 +265,36 @@ fn build_and_plan(
+         }
+     }
+     match desc.clone().plan(&a) {
+-        Ok(plan) => Some(plan.witness_size()),
++        Ok(plan) => Some(witness_weight_wu(desc, &plan)),
+         Err(_) => None,
+     }
+ }
+ 
++/// Witness weight (WU) of one planned spend. For `wsh(M)` the plan's
++/// template omits the witnessScript, so add it as one more stack element
++/// (the expression of rust-miniscript PR #1046): `varint(script) + script`,
++/// and re-encode the stack-count varint for `t + 1` elements. `tr` templates
++/// already carry the leaf script and control block.
++fn witness_weight_wu(
++    desc: &Descriptor<DefiniteDescriptorKey>,
++    plan: &Plan<DefiniteDescriptorKey>,
++) -> usize {
++    let template_wu = plan.witness_size();
++    match desc {
++        Descriptor::Wsh(wsh) => {
++            let script_len = wsh.inner_script().len();
++            let elems = plan.witness_template().len();
++            template_wu + varint_len(script_len) + script_len - varint_len(elems)
++                + varint_len(elems + 1)
++        }
++        _ => template_wu,
++    }
++}
++
++fn varint_len(n: usize) -> usize {
++    VarInt(n as u64).size()
++}
++
+ fn is_minimal(
+     wsh_desc: &Descriptor<DefiniteDescriptorKey>,
+     tr_desc: &Descriptor<DefiniteDescriptorKey>,
+diff --git i/crates/mnemonic-toolkit/src/cost/strip.rs w/crates/mnemonic-toolkit/src/cost/strip.rs
+index 3efd1a6c..c4c0abf6 100644
+--- i/crates/mnemonic-toolkit/src/cost/strip.rs
++++ w/crates/mnemonic-toolkit/src/cost/strip.rs
+@@ -13,6 +13,9 @@ use super::translate::Translated;
+ use super::CompareCostError;
+ use super::NUMS_XONLY_HEX;
+ 
++/// Grade ruling 4: `notes[]` entry for a `sh(wsh(M))` input.
++pub const SH_WSH_NOTE: &str = "input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ";
++
+ /// Strip the wrapper from a user-supplied descriptor string; return a
+ /// `Translated` ready for the enumerator (plus any advisory note). Concrete
+ /// hex pubkeys are preserved; no abstract labels are detected (those only
+@@ -68,7 +71,7 @@ pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>),
+         Descriptor::Sh(sh) => match sh.into_inner() {
+             ShInner::Wsh(wsh) => {
+                 let m_segv0 = wsh.into_inner();
+-                translated_from_segv0(input, m_segv0).map(|t| (t, None))
++                translated_from_segv0(input, m_segv0).map(|t| (t, Some(SH_WSH_NOTE.to_string())))
+             }
+             ShInner::Wpkh(_) | ShInner::Ms(_) => Err(CompareCostError::UnsupportedWrapper(
+                 "sh(non-wsh)".to_string(),
+~~~~
+
+### Appendix B. Part B production code (`fix-e9-production.patch`)
+
+Applies to `ac3ff70a` and `12e013bc`, alone or after A.
+
+<!-- evidence: fix-e9-production.patch -->
+~~~~diff
+diff --git i/crates/mnemonic-toolkit/src/cost/translate.rs w/crates/mnemonic-toolkit/src/cost/translate.rs
+index 1bcf9e44..fdb5863a 100644
+--- i/crates/mnemonic-toolkit/src/cost/translate.rs
++++ w/crates/mnemonic-toolkit/src/cost/translate.rs
+@@ -175,6 +175,10 @@ fn collect_abstract_labels(input: &str) -> Vec<String> {
+             if buf.is_empty() {
+                 continue;
+             }
++            let rest = chars.peek().map_or("", |&(j, _)| &input[j..]);
++            if is_wrapper_chain_at(rest) {
++                continue;
++            }
+             let is_hex_pubkey =
+                 (buf.len() == 64 || buf.len() == 66) && buf.chars().all(|c| c.is_ascii_hexdigit());
+             let is_numeric = buf.chars().all(|c| c.is_ascii_digit());
+@@ -265,7 +269,7 @@ fn replace_whole_word(haystack: &str, needle: &str, replacement: &str) -> String
+             let before_ok = i == 0 || !is_ident_char(bytes[i - 1]);
+             let after_ok =
+                 i + needle_b.len() == bytes.len() || !is_ident_char(bytes[i + needle_b.len()]);
+-            if before_ok && after_ok {
++            if before_ok && after_ok && !is_wrapper_chain_at(&haystack[i + needle_b.len()..]) {
+                 result.push_str(replacement);
+                 i += needle_b.len();
+                 continue;
+@@ -277,6 +281,14 @@ fn replace_whole_word(haystack: &str, needle: &str, replacement: &str) -> String
+     result
+ }
+ 
++/// Grade ruling (b) (E9): an identifier whose next non-whitespace character
++/// is `:` is a wrapper chain (`ln:`, `sdv :`), never a key label. BIP-379 puts
++/// wrapper letters only immediately before `:`, and no BIP-380 key form
++/// contains `:`. `rest` is the input after the identifier.
++fn is_wrapper_chain_at(rest: &str) -> bool {
++    rest.chars().find(|c| !c.is_whitespace()) == Some(':')
++}
++
+ fn is_ident_char(b: u8) -> bool {
+     b.is_ascii_alphanumeric() || b == b'_'
+ }
+~~~~
+
+### Appendix C. Part A docs: manual and lockstep text (`fix-v5a-docs.patch`)
+
+<!-- evidence: fix-v5a-docs.patch -->
+~~~~diff
+diff --git i/design/SPEC_compare_cost_v0_26_0.md w/design/SPEC_compare_cost_v0_26_0.md
+index 0ff207ba..c4c4b754 100644
+--- i/design/SPEC_compare_cost_v0_26_0.md
++++ w/design/SPEC_compare_cost_v0_26_0.md
+@@ -145,7 +145,7 @@ let mut rows = Vec::new();
+     let tr_plan  = tr_desc.clone().plan(&provider);
+     if let (Ok(wp), Ok(tp)) = (wsh_plan, tr_plan) {
+         if is_minimal(&cfg, &assets, &wsh_desc, &tr_desc) {    // shrinkage check
+-            rows.push(Row { label: cfg.label(), wsh_witness_bytes: wp.witness_size(), tr_witness_bytes: tp.witness_size() });
++            rows.push(Row { label: cfg.label(), wsh_witness_bytes: witness_weight_wu(&wsh_desc, &wp), tr_witness_bytes: tp.witness_size() });
+             if rows.len() >= hard_cap { break 'outer; }
+         }
+     }
+@@ -180,7 +180,7 @@ Step 1's precheck means: with default `hard_cap=4096`, the user must have `|sign
+ rust-miniscript's `Plan` returns a *non-malleable, optimal* witness for a given `AssetProvider`'s assets. `Plan::witness_size() -> usize` is the byte count of the witness data for that satisfaction in that context (Segwitv0 or Tap), including:
+ - per-stack-item length prefixes
+ - stack-count varint
+-- scriptCode (wsh: serialized script on the stack) or tapscript + control block (tr)
++- tapscript + control block (tr only; for wsh the template omits the witnessScript, which §4 adds as one more stack item)
+ - script-context-specific signature sizes (73 for ECDSA, 64 for Schnorr SIGHASH_DEFAULT)
+ 
+ (`Plan::satisfaction_weight()` returns weight units; per §4, we use `witness_size()` which is byte-count — equivalent to weight-units for witness data since each witness byte contributes 1 wu.)
+@@ -210,7 +210,7 @@ Each minimal configuration is labeled compactly:
+ For each minimal configuration produced by §3:
+ 
+ ```
+-let wsh_witness_bytes = wsh_plan.witness_size();           // includes scriptCode (the witnessScript)
++let wsh_witness_bytes = witness_weight_wu(&wsh_desc, &wsh_plan); // witness_size() + varint(s) + s - varint(n) + varint(n + 1); s = witnessScript bytes, n = template items (the template omits the witnessScript)
+ let tr_witness_bytes  = tr_plan.witness_size();            // includes tapscript + control block
+ 
+ // 41 = 36-byte outpoint + 1-byte scriptSig-length-0 + 4-byte sequence;
+@@ -280,6 +280,7 @@ Header lines: echo the extracted miniscript, the wsh-vs-tr wrapper comparison st
+ - feerate-zero advisory (§4)
+ - soft-cap-reached advisory: `"enumeration capped at 256 conditions; raise --max-conditions to see more"`
+ - concrete-keys advisory: `"input had concrete keys; cost is identical to the abstract case"`
++- sh(wsh) advisory: `"input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ"`
+ 
+ The JSON envelope sets exit 0 on success even when notes are non-empty.
+ 
+diff --git i/docs/manual-gui/tutorial/50-j4-taproot-twin.md w/docs/manual-gui/tutorial/50-j4-taproot-twin.md
+index 9838bb37..3603ca3b 100644
+--- i/docs/manual-gui/tutorial/50-j4-taproot-twin.md
++++ w/docs/manual-gui/tutorial/50-j4-taproot-twin.md
+@@ -238,7 +238,7 @@ spending condition)** and paste the folded miniscript into
+ The panel (standard output only — this subcommand prints no standard
+ error) tabulates, per spend condition, the witness size in virtual
+ bytes and satoshis for `wsh` against `tr`, and the delta. Every
+-condition costs **more** on the script-path (`+68` to `+71` vB) because
++condition costs **more** on the script-path (`+3` to `+6` vB) because
+ a Taproot script-path spend reveals a leaf plus its control block — the
+ trade Taproot makes is a *much* cheaper, private cooperative key-path
+ against slightly dearer fallbacks. The closing notes flag that
+diff --git i/docs/manual/src/40-cli-reference/41-mnemonic.md w/docs/manual/src/40-cli-reference/41-mnemonic.md
+index 0b7e0358..93c31835 100644
+--- i/docs/manual/src/40-cli-reference/41-mnemonic.md
++++ w/docs/manual/src/40-cli-reference/41-mnemonic.md
+@@ -4593,9 +4593,11 @@ See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
+ for the non-blocking `older()` advisory this command emits on intake.
+ 
+ Cost is computed via rust-miniscript v13's `Descriptor::plan(...)`
+-API; `Plan::witness_size()` returns the full witness-data byte count
+-(witness items + length prefixes + stack-count varint + the
+-serialized witnessScript or tapscript + control block). Per-input
++API. `Plan::witness_size()` counts the witness items, their length
++prefixes and the stack-count varint, and for `tr` the tapscript and
++control block. For `wsh` the plan's template omits the witnessScript,
++so `compare-cost` adds it as one more witness item (the script plus its
++length prefix) and re-encodes the stack-count varint. Per-input
+ costs include the constant 41 vB SegWit-input overhead (36-byte
+ outpoint + 1-byte scriptSig-length-zero + 4-byte sequence) so the
+ absolute `wsh vB` and `tr vB` numbers match what Sparrow / Bitcoin
+@@ -4657,7 +4659,7 @@ Stdout:
+ PLACEHOLDER — generated from transcripts/41-compare-cost-orb.out at build
+ ```
+ 
+-Either A or B can sign alone; both pay the same cost. tr costs `+24`
++Either A or B can sign alone; both pay the same cost. tr costs `+6`
+ vB more per spend than wsh because the tr witness carries an extra
+ 33-byte control block.
+ 
+@@ -4749,6 +4751,7 @@ in plaintext output) carry advisory text. Known entries:
+ | `input had concrete keys; cost is identical to the abstract case` | input contained no abstract labels. |
+ | `input contains hash-preimage fragments; …` | input has at least one `sha256` / `hash256` / `ripemd160` / `hash160` leaf. |
+ | `input had a non-NUMS internal key IK; …` | (v0.28.0) `--descriptor tr(IK, {M})` with `IK ≠ NUMS`. The advisory carries the IK hex; the JSON envelope's `keypath_spend` field carries the keypath-spend cost (`{ internal_key_xonly_hex, vbytes: 58, sats }`); plaintext output adds a `Keypath-spend (via IK …): 58 vB \| <SATS> sats` annotation line below the per-condition table. |
++| `input had a p2sh wrapper, sh(wsh(M)); …` | `--descriptor sh(wsh(M))`. The `wsh` column is costed for bare `wsh(M)`; the note gives the +35 vB per-input correction. |
+ 
+ ### Exit codes
+ 
+diff --git i/docs/manual/src/40-cli-reference/42-md.md w/docs/manual/src/40-cli-reference/42-md.md
+index 84d0e69a..c23632c0 100644
+--- i/docs/manual/src/40-cli-reference/42-md.md
++++ w/docs/manual/src/40-cli-reference/42-md.md
+@@ -469,8 +469,8 @@ md encode --from-policy 'or(pk(@0),and(pk(@1),older(144)))' \
+ #    with abstract labels (@0→A, @1→B); cost is key-agnostic:
+ mnemonic compare-cost --miniscript 'or_d(pk(A),and_v(v:pk(B),older(144)))'
+ # Condition         | wsh vB | tr vB |  Δ vB
+-# A                 |     60 |    85 |   +25
+-# B + older(blocks) |     60 |    86 |   +26
++# A                 |     79 |    85 |    +6
++# B + older(blocks) |     80 |    86 |    +6
+ ```
+ 
+ To bring the wallet up watch-only or emit importable artifacts, compile with
+~~~~
+
+### Appendix D. Part A transcripts: expected regeneration diff (`transcript-diffs.txt`)
+
+The builder regenerates the transcripts with the repo's tool; the result must equal this diff.
+
+<!-- evidence: transcript-diffs.txt -->
+~~~~diff
+--- a/docs/manual/transcripts/41-compare-cost-orb.out
++++ b/docs/manual/transcripts/41-compare-cost-orb.out
+@@ -4,7 +4,7 @@
+ 
+ Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------+--------+-------+-------+----------+---------+-------
+-A         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+-B         |     60 |    84 |   +24 |     1500 |    2100 |   +600
++A         |     78 |    84 |    +6 |     1950 |    2100 |   +150
++B         |     78 |    84 |    +6 |     1950 |    2100 |   +150
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+--- a/docs/manual/transcripts/41-compare-cost-ord.out
++++ b/docs/manual/transcripts/41-compare-cost-ord.out
+@@ -4,7 +4,7 @@
+ 
+ Condition         | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ------------------+--------+-------+-------+----------+---------+-------
+-A                 |     60 |    85 |   +25 |       60 |      85 |    +25
+-B + older(blocks) |     60 |    86 |   +26 |       60 |      86 |    +26
++A                 |     79 |    85 |    +6 |       79 |      85 |     +6
++B + older(blocks) |     80 |    86 |    +6 |       80 |      86 |     +6
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+--- a/docs/manual/transcripts/41-compare-cost-tr-ik.out
++++ b/docs/manual/transcripts/41-compare-cost-tr-ik.out
+@@ -5,7 +5,7 @@
+ 
+ Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------+--------+-------+-------+----------+---------+-------
+-key[0]    |     60 |    75 |   +15 |     1500 |    1875 |   +375
++key[0]    |     69 |    75 |    +6 |     1725 |    1875 |   +150
+ 
+ Keypath-spend (via IK f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9): 58 vB | 1450 sats
+ 
+--- a/docs/manual/transcripts/41-compare-cost-json.out
++++ b/docs/manual/transcripts/41-compare-cost-json.out
+@@ -10,12 +10,12 @@
+   "conditions": [
+     {
+       "label": "key[0]",
+-      "wsh_vbytes": 60,
++      "wsh_vbytes": 69,
+       "tr_vbytes": 75,
+-      "delta_vbytes": 15,
+-      "wsh_sats": 60,
++      "delta_vbytes": 6,
++      "wsh_sats": 69,
+       "tr_sats": 75,
+-      "delta_sats": 15
++      "delta_sats": 6
+     }
+   ],
+   "keypath_spend": null,
+--- a/docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt
++++ b/docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt
+@@ -4,11 +4,11 @@
+ 
+ Condition             | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------------------+--------+-------+-------+----------+---------+-------
+-A + B + older(blocks) |     79 |   147 |   +68 |       79 |     147 |    +68
+-C + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-D + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-E + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-F + preimage(h0)      |     69 |   139 |   +70 |       69 |     139 |    +70
++A + B + older(blocks) |    144 |   147 |    +3 |      144 |     147 |     +3
++C + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++D + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++E + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++F + preimage(h0)      |    133 |   139 |    +6 |      133 |     139 |     +6
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+ note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)
+~~~~
+
+### Appendix E. Part A `.examples-build/Examples.md` (`examples.diff`)
+
+<!-- evidence: examples.diff -->
+~~~~diff
+--- a/.examples-build/Examples.md
++++ b/.examples-build/Examples.md
+@@ -1204,11 +1204,11 @@
+ 
+ Condition             | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------------------+--------+-------+-------+----------+---------+-------
+-A + B + older(blocks) |     79 |   147 |   +68 |       79 |     147 |    +68
+-C + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-D + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-E + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-F + preimage(h0)      |     69 |   139 |   +70 |       69 |     139 |    +70
++A + B + older(blocks) |    144 |   147 |    +3 |      144 |     147 |     +3
++C + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++D + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++E + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++F + preimage(h0)      |    133 |   139 |    +6 |      133 |     139 |     +6
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+ note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)
+@@ -1224,7 +1224,7 @@
+ 
+ Condition        | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ -----------------+--------+-------+-------+----------+---------+-------
+-F + preimage(h0) |     68 |    90 |   +22 |       68 |      90 |    +22
++F + preimage(h0) |     84 |    90 |    +6 |       84 |      90 |     +6
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+ note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)
+~~~~
+
+### Appendix F. HELD self-check (A2, R5/R6): do not apply (`fix-v5-production.patch`)
+
+Appendix A plus the R5/R6 self-check. It is the build that produced `d-wrapper-probe.txt`. Do not apply it:
+STOP-1 holds A2.
+
+<!-- evidence: fix-v5-production.patch -->
+~~~~diff
+diff --git i/crates/mnemonic-toolkit/src/cost/enumerate.rs w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+index 4d5fe524..a494fc83 100644
+--- i/crates/mnemonic-toolkit/src/cost/enumerate.rs
++++ w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+@@ -16,10 +16,11 @@
+ 
+ use std::collections::BTreeSet;
+ 
++use miniscript::bitcoin::consensus::encode::VarInt;
+ use miniscript::bitcoin::hashes::{hash160, ripemd160, sha256};
+ use miniscript::bitcoin::{absolute, relative};
+ use miniscript::descriptor::{DefiniteDescriptorKey, DescriptorPublicKey};
+-use miniscript::plan::Assets;
++use miniscript::plan::{Assets, Plan};
+ use miniscript::{Descriptor, ForEachKey, Miniscript, Segwitv0};
+ 
+ use super::translate::{pubkey_to_label_segv0, Translated};
+@@ -173,6 +174,16 @@ pub fn enumerate_minimal_conditions(
+         return Err(CompareCostError::NoSatisfyingConditions);
+     }
+ 
++    // Grade ruling 6: two-sided self-check of the wsh column against
++    // rust-miniscript's own `max_weight_to_satisfy` (which omits the
++    // BIP-144 stack-count byte, hence the +1).
++    let max_weight_wu = wsh_desc
++        .max_weight_to_satisfy()
++        .map_err(|_| CompareCostError::NoSatisfyingConditions)?
++        .to_wu();
++    let wsh_rows_wu: Vec<usize> = rows.iter().map(|r| r.wsh_witness_bytes).collect();
++    wsh_self_check(&wsh_rows_wu, max_weight_wu, has_thresh(&translated.segv0))?;
++
+     Ok(EnumerationReport {
+         rows,
+         soft_cap_reached: soft_reached,
+@@ -264,11 +275,68 @@ fn build_and_plan(
+         }
+     }
+     match desc.clone().plan(&a) {
+-        Ok(plan) => Some(plan.witness_size()),
++        Ok(plan) => Some(witness_weight_wu(desc, &plan)),
+         Err(_) => None,
+     }
+ }
+ 
++/// Witness weight (WU) of one planned spend. For `wsh(M)` the plan's
++/// template omits the witnessScript, so add it as one more stack element
++/// (the expression of rust-miniscript PR #1046): `varint(script) + script`,
++/// and re-encode the stack-count varint for `t + 1` elements. `tr` templates
++/// already carry the leaf script and control block.
++fn witness_weight_wu(
++    desc: &Descriptor<DefiniteDescriptorKey>,
++    plan: &Plan<DefiniteDescriptorKey>,
++) -> usize {
++    let template_wu = plan.witness_size();
++    match desc {
++        Descriptor::Wsh(wsh) => {
++            let script_len = wsh.inner_script().len();
++            let elems = plan.witness_template().len();
++            template_wu + varint_len(script_len) + script_len - varint_len(elems)
++                + varint_len(elems + 1)
++        }
++        _ => template_wu,
++    }
++}
++
++fn varint_len(n: usize) -> usize {
++    VarInt(n as u64).size()
++}
++
++/// Grade ruling 6. `rows_wu` is every wsh row's witness weight (WU);
++/// `max_weight_wu` is `max_weight_to_satisfy().to_wu()` of `wsh(M)`.
++/// Without a `thresh`, the largest row must equal `max_weight_wu + 1`;
++/// with one, every row must be at most `max_weight_wu + 1`.
++fn wsh_self_check(
++    rows_wu: &[usize],
++    max_weight_wu: u64,
++    has_thresh: bool,
++) -> Result<(), CompareCostError> {
++    let largest_wu = rows_wu.iter().copied().max().unwrap_or(0) as u64;
++    let bound = max_weight_wu + 1;
++    let ok = if has_thresh {
++        largest_wu <= bound
++    } else {
++        largest_wu == bound
++    };
++    if ok {
++        Ok(())
++    } else {
++        Err(CompareCostError::CostSelfCheck {
++            largest_wu,
++            max_weight_wu,
++        })
++    }
++}
++
++/// `true` if any fragment of `m` is a `thresh(..)`.
++fn has_thresh(m: &Miniscript<DefiniteDescriptorKey, Segwitv0>) -> bool {
++    use miniscript::miniscript::decode::Terminal;
++    m.iter().any(|sub| matches!(sub.node, Terminal::Thresh(..)))
++}
++
+ fn is_minimal(
+     wsh_desc: &Descriptor<DefiniteDescriptorKey>,
+     tr_desc: &Descriptor<DefiniteDescriptorKey>,
+diff --git i/crates/mnemonic-toolkit/src/cost/mod.rs w/crates/mnemonic-toolkit/src/cost/mod.rs
+index 49dda306..611f2d44 100644
+--- i/crates/mnemonic-toolkit/src/cost/mod.rs
++++ w/crates/mnemonic-toolkit/src/cost/mod.rs
+@@ -53,6 +53,9 @@ pub enum CompareCostError {
+     ConditionsTooMany { raw: usize, cap: usize },
+     /// Miniscript has zero satisfying conditions (degenerate). Exit 3.
+     NoSatisfyingConditions,
++    /// The wsh column failed its self-check against
++    /// `max_weight_to_satisfy` (grade ruling 6). Exit 3.
++    CostSelfCheck { largest_wu: u64, max_weight_wu: u64 },
+ }
+ 
+ impl std::fmt::Display for CompareCostError {
+@@ -82,6 +85,14 @@ impl std::fmt::Display for CompareCostError {
+             CompareCostError::NoSatisfyingConditions => {
+                 write!(f, "compare-cost: no satisfying conditions for this miniscript")
+             }
++            CompareCostError::CostSelfCheck {
++                largest_wu,
++                max_weight_wu,
++            } => write!(
++                f,
++                "compare-cost: cost self-check failed: largest wsh witness {largest_wu} WU, max_weight_to_satisfy + 1 = {} WU; no figures printed (this is a toolkit bug)",
++                max_weight_wu + 1
++            ),
+         }
+     }
+ }
+@@ -95,7 +106,8 @@ impl CompareCostError {
+             | CompareCostError::UnsupportedWrapper(_)
+             | CompareCostError::MultiLeafTr
+             | CompareCostError::ConditionsTooMany { .. }
+-            | CompareCostError::NoSatisfyingConditions => 3,
++            | CompareCostError::NoSatisfyingConditions
++            | CompareCostError::CostSelfCheck { .. } => 3,
+         }
+     }
+ }
+diff --git i/crates/mnemonic-toolkit/src/cost/strip.rs w/crates/mnemonic-toolkit/src/cost/strip.rs
+index 3efd1a6c..c4c0abf6 100644
+--- i/crates/mnemonic-toolkit/src/cost/strip.rs
++++ w/crates/mnemonic-toolkit/src/cost/strip.rs
+@@ -13,6 +13,9 @@ use super::translate::Translated;
+ use super::CompareCostError;
+ use super::NUMS_XONLY_HEX;
+ 
++/// Grade ruling 4: `notes[]` entry for a `sh(wsh(M))` input.
++pub const SH_WSH_NOTE: &str = "input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ";
++
+ /// Strip the wrapper from a user-supplied descriptor string; return a
+ /// `Translated` ready for the enumerator (plus any advisory note). Concrete
+ /// hex pubkeys are preserved; no abstract labels are detected (those only
+@@ -68,7 +71,7 @@ pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>),
+         Descriptor::Sh(sh) => match sh.into_inner() {
+             ShInner::Wsh(wsh) => {
+                 let m_segv0 = wsh.into_inner();
+-                translated_from_segv0(input, m_segv0).map(|t| (t, None))
++                translated_from_segv0(input, m_segv0).map(|t| (t, Some(SH_WSH_NOTE.to_string())))
+             }
+             ShInner::Wpkh(_) | ShInner::Ms(_) => Err(CompareCostError::UnsupportedWrapper(
+                 "sh(non-wsh)".to_string(),
+~~~~
+
+### Appendix G. Expected text output for `sh(wsh(pk(KA)))` after A (`sh-wsh-pk.txt`)
+
+<!-- evidence: sh-wsh-pk.txt -->
+~~~~text
+Input:     sh(wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)))
+Extracted: pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 1.0 sat/vB
+
+Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------+--------+-------+-------+----------+---------+-------
+key[0]    |     69 |    75 |    +6 |       69 |      75 |     +6
+
+note: input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+note: input had concrete keys; cost is identical to the abstract case
+~~~~
