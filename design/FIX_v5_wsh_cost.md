@@ -351,3 +351,110 @@ transcripts with the repo's own targets (§6); a regenerated transcript that dif
    script-path spend reveals a leaf plus its control block … slightly dearer fallbacks") is unchanged and still
    true at these figures.
 9. `42-md.md:471-472`: the two table rows, `79 | 85 | +6` and `80 | 86 | +6`, as the binary prints them.
+
+## 6. Build steps (in this order)
+
+Work on branch `fix/v5-wsh-cost` in a git worktree that is not under `/tmp`. Use `export
+PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2caf9 2024-12-31)`. Never pass
+`--release`. Send every run to a file and grep it; never run a suite twice to count. `E` below is
+`design/agent-reports/fix-doc-tk-v5-evidence`.
+
+1. RED. Run §3.1 on the branch head before any patch. Expect exit 100 and a summary line of
+   `30 tests run: 11 passed, 19 failed, …`; the 19 failures are the rows §3 marks as failing on base. Quote the
+   line in the RED evidence.
+2. Part B (E9), its own commit:
+   - `git apply $E/fix-e9-production.patch` (Appendix B; touches `cost/translate.rs` only).
+   - Run §3.2. Expect `12 tests run: 12 passed, 0 skipped`.
+   - Append F1 (§9) to `design/FOLLOWUPS.md`.
+   - Commit as the E9 GREEN commit; its message quotes the §3.2 summary line.
+3. Part A (V5). Do not start until STOP-1 and STOP-5 (§10) are ruled. The steps below are the ones that apply
+   under STOP-1 option (a) (ship V5a, the formula and the note, without the self-check). Under any other ruling,
+   the ruling's text replaces this step and the FIX review re-checks §3, §4 and §5 first.
+   - `git apply $E/fix-v5a-only.patch` (Appendix A), then `git apply $E/fix-v5a-docs.patch` (Appendix C), then
+     `git apply $E/transcript-diffs.txt` (Appendix D), then `git apply $E/examples.diff` (Appendix E).
+   - The tutorial transcript `tut-j4-20-compare-cost.stdout.txt` in Appendix D, and the J4 step-20 PNGs, follow
+     the STOP-5 ruling. If that ruling keeps the GUI tutorial out of this FIX, revert that file's hunk
+     (`git checkout -- docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt`) and the
+     `50-j4-taproot-twin.md` hunk of Appendix C, and record the deferral as the ruling says.
+   - `cargo build --bin mnemonic`.
+   - Run §3.1. Expect exit 0 and `30 tests run: 30 passed, …`.
+   - Check the transcripts against the patched binary: §7 items 8 and 10. A replayed transcript that differs from
+     Appendix D, or a regenerated `Examples.md` that differs from Appendix E's result, is a FAIL; do not
+     hand-edit a transcript to match.
+   - Append F2 (§9) to `design/FOLLOWUPS.md`.
+   - Commit as the V5 GREEN commit; its message quotes the §3.1 summary line.
+4. Run the whole gate (§7) on the final head, then the mutation gate (§7 item 13).
+5. Do not change the version, `CHANGELOG.md` or any release file (§8).
+
+## 7. Gate (full toolkit CI; the builder runs all of it on the final head)
+
+Capture each run once to a file and grep it. "Expected" is the result on the final head with Parts A and B
+applied. STOP-7 decides the base. If the build runs on `ac3ff70a` before FIX-V7's GREEN is in it, the only
+allowed failures are V7's: items 1 and 3 then show exactly the V7 lines quoted there, and anything else is a
+FAIL. Once V7's GREEN is in the base, item 1 must be clean and item 3 must show 0 failed.
+
+`rust.yml`:
+
+1. `cargo +1.95.0 fmt --all -- --check` (`rust.yml:118`). Expected: exit 0. On `ac3ff70a` before V7 the only
+   diffs are in `crates/mnemonic-toolkit/tests/cli_bundle_recovery_threshold_text.rs` (V7's file, at its
+   lines 50 and 164); no diff may name a file this FIX touches.
+2. `cargo metadata --locked --format-version 1 > /dev/null` (`:148`) and `cargo build --locked --tests
+   --workspace` (`:171`). Expected: exit 0.
+3. `cargo nextest run --locked --workspace --no-fail-fast` (`:185`). Expected: 0 failed. On `ac3ff70a` before V7:
+   exactly 11 failed, all in `cli_bundle_recovery_threshold_text` and all named `v7_*` (measured with A and B
+   applied: `4227 tests run: 4216 passed, 11 failed, 38 skipped`).
+4. `cargo test --locked --workspace --doc` (`:190`). Expected: exit 0 (measured at the head:
+   `Doc-tests mnemonic_toolkit` and `Doc-tests wc_codec`, each `test result: ok. 0 passed; 0 failed; …`).
+5. `cargo clippy --locked --all-targets -- -D warnings` (`:395`). Expected: exit 0, no warnings.
+6. The rest of `rust.yml`, locally where it runs here, else as green CI on the PR:
+   - the mlock rows `cargo test -p mnemonic-toolkit --lib mlock::tests::g2_1 -- --include-ignored` and the
+     same for `g2_3` and `g2_4` (`:205`, `:218`, `:234`);
+   - `cargo test -p mnemonic-toolkit --test mlock_g6_invariant -- --include-ignored` (`:524`);
+   - `cargo build --bin mnemonic` (`:263`), then the six `sh scripts/install-*.test.sh` steps
+     (`:268`-`:301`);
+   - `bash ci/docs-only.test.sh` (`:375`), `bash ci/code-docs-check.test.sh` and `bash ci/code-docs-check.sh`
+     (`:380`-`:381`);
+   - CI only: the release `g2_3` row (`:335`), miri (`:365`), cross (`:473`) and musl.
+   Expected: each exits 0.
+
+`manual.yml` (the manual job and its mutation self-tests), with the pinned `mk` (`mk-cli-v0.13.0`), `md`
+(`descriptor-mnemonic-md-cli-v0.20.4`, `--features cli-compiler`) and `ms` (`ms-cli-v0.20.2`) first in PATH:
+
+7. `bash ci/doc-gate-guard.test.sh` (`manual.yml:61`). Expected: exit 0.
+8. From `docs/manual`: `make audit MNEMONIC_BIN="$PWD/../../target/debug/mnemonic" MD_BIN=md MS_BIN=ms MK_BIN=mk
+   FIXTURES_DIR="$PWD/../../crates/mnemonic-toolkit/tests/fixtures/wallet_import"` (`:186`). Expected:
+   `[lint] OK`, `[verify-examples] OK (62 transcripts pass)` and `OK anchor-check: …` (measured with A, B, C
+   and D applied and the pinned `mk`). The transcript replay is the check that the four `41-compare-cost-*.out`
+   files equal the patched binary's output.
+9. `MNEMONIC_BIN="$PWD/target/debug/mnemonic" MD_BIN="$(command -v md)" MS_BIN="$(command -v ms)"
+   MK_BIN="$(command -v mk)" bash ci/doc-flag-lint.test.sh` (`:200`-`:203`, the doc-flag-lint mutation
+   self-test). Expected: `15 passed, 0 failed` (measured with A, B, C and D applied).
+10. `examples.yml`: `EXAMPLES_BIN_DIR="$PWD/target/debug" bash .examples-build/gen.sh >
+    .examples-build/Examples.md || exit 1`, then `git diff --exit-code -- .examples-build/Examples.md`
+    (`examples.yml:116`-`:125`). Expected: no diff after Appendix E is applied.
+11. From `docs/manual`: `make pdf MERMAID_FILTER=skip` and `make html MERMAID_FILTER=skip` (`:210`, `:226`).
+    Expected: exit 0.
+
+`manual-gui.yml`, `quickstart.yml`, `technical-manual.yml`:
+
+12. From `docs/manual-gui`: `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=true`
+    (`manual-gui.yml:160`), `make html` (`:156`), `make verify-examples` (`:252`) and `make
+    verify-examples-gui` (`:349`); plus `bash ci/doc-gate-guard.test.sh` (`:64`). The lint's
+    `verify-tutorial-transcripts` phase compares the tutorial transcripts byte for byte with the pinned
+    `mnemonic-gui-v0.63.0` corpus (`manual-gui.yml:74-80`); with Appendix D's tutorial hunk applied it fails
+    (measured: `[lint] FAIL: verify-tutorial-transcripts: byte drift vs the pinned corpus for:
+    tut-j4-20-compare-cost.stdout.txt`), and STOP-5 decides what passes here. `quickstart.yml` and
+    `technical-manual.yml` run on CI; neither book mentions `compare-cost` (grep empty), so no figure there
+    moves. Expected: every job green on the PR, item 12's lint as STOP-5 rules.
+
+The FIX rows and the mutation gate:
+
+13. The FIX rows by exact name: §3.1's command. Expected: exit 0, exactly **30 tests run: 30 passed**. If E9
+    ships alone (STOP-2), §3.2's command: exactly **12 tests run: 12 passed**. Quote the line in the GREEN
+    commit message. A short or empty count is a FAIL, whatever the pass count.
+14. `bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/mutation-gate.sh <worktree> ac3ff70a`
+    after items 1-5 pass. Production files touched: `cost/enumerate.rs`, `cost/strip.rs` (Part A) and
+    `cost/translate.rs` (Part B). Its missed list goes into the review brief. Risk class: A (a new printed note,
+    the manual and transcripts) and C (cost code); the coordinator may raise it.
+
+`man-pages.yml`, `changelog-check.yml` and `release.yml` run only on tags and are not part of this gate.
