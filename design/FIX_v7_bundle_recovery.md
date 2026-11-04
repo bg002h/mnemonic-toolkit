@@ -1,6 +1,6 @@
 # FIX-V7: bundle card recovery summary for general policies
 
-Status: author-complete; awaiting STOP-1..3 rulings and the FIX review. FIX branch `fix/v7-bundle-recovery` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v7-bundle-recovery` (architect STOP-7, `architect-2026-11-04-fix-v5-stops.md`):
+Status: STOP-1..3 ruled (architect-2026-11-04-fix-v7-stops.md); awaiting the FIX review. FIX branch `fix/v7-bundle-recovery` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v7-bundle-recovery` (architect STOP-7, `architect-2026-11-04-fix-v5-stops.md`):
 `git fetch origin && git switch -c build/v7-bundle-recovery origin/master && git cherry-pick d19256e8 ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v7-bundle-recovery head>`.
 Do not take `a34bd61e` or `123c258d` (V5's rows). The evidence below was measured on an equivalent tree: `origin/master` `12e013bc` plus `d19256e8`, `ac3ff70a` and `283132e7`, cherry-picked.
 Merge order: whichever of the V5 and V7 PRs is first green with 0C/0I merges first. The second merges `origin/master` in, re-runs all of section 7, regenerates `.examples-build/Examples.md` with `gen.sh`, and resolves the `design/FOLLOWUPS.md` append. T3 waits for this FIX.
@@ -52,7 +52,7 @@ The general Recovery line is one line: there is no wrap and the line ends with `
 - Reader: `MultisigInfoView.threshold` becomes `Option<u8>`. An envelope with `"threshold": null` is accepted by every `--import-json` / `--from-import-json` consumer:
   - `mnemonic bundle --import-json`;
   - `mnemonic export-wallet --from-import-json`.
-- `mnemonic bundle --import-json` ignores the envelope's `threshold`, as today. It recomputes k from the descriptor by 2.1, so a stale integer for a general descriptor still yields the general card.
+- `mnemonic bundle --import-json` ignores the envelope's `threshold`, as today, and now also ignores `--threshold`, which used to set k on this path (architect STOP-2 (b)). It recomputes k from the descriptor by 2.1, so a stale integer or a `--threshold` value still yields the descriptor's card, at exit 0.
 - `export-wallet --from-import-json` passes no threshold (`None`) from a null envelope.
   - `--format descriptor` / `bitcoin-core` / `bip388` output is byte-identical to the same envelope carrying an integer.
   - `--format sparrow` and the other template formats keep their existing general-policy refusal, at exit 1, with the unchanged text:
@@ -79,7 +79,7 @@ The general Recovery line is one line: there is no wrap and the line ends with `
   - Its one unit test `bundle_json_view_round_trips_every_field_of_bundle_json` changes two lines (717 `threshold: 2,` to `threshold: Some(2),`; 763 `assert_eq!(m.threshold, 2);` to `assert_eq!(m.threshold, Some(2));`).
 - `export_wallet.rs`: read the threshold as `Option` (`and_then`).
 - `import_wallet.rs`: the 2.4 recompute. The emitter uses the recomputed value.
-- STOP-2 (section 8) decides how `bundle --import-json` treats `--threshold`. Until it is ruled, the builder does not start (section 8).
+- `bundle --import-json` ignores `--threshold` (STOP-2 (b)), as the hint patch does.
 
 ## 4. RED rows
 
@@ -195,19 +195,20 @@ Build on `build/v7-bundle-recovery` (header), in a git worktree that is not unde
 1. RED. Run section 4's command on the branch head before any patch. Expect exit 100 and `30 tests run: 6 passed, 24 failed, …`. The 24 failures must be the rows section 4 marks FAIL, and the output must contain `Compiling mnemonic-toolkit`. Quote the summary line in the RED evidence.
 2. Production and tests:
    - `git apply $E/fix-v7-production.patch`, then `git apply $E/fix-v7-tests.patch`.
-   - Change the `--import-json` `--threshold` handling to the STOP-2 ruling's text. Narrow row 24 to the ruled outcome, with the ruling's exact text. Under option (b) the patch already ignores the flag, and row 24 keeps only its `# Threshold: 2 of 3` arm.
+   - STOP-2 is ruled (b): the patch already ignores the flag. Narrow row 24 as architect-2026-11-04-fix-v7-stops.md STOP-2 gives.
    - `cargo build --bin mnemonic`.
    - Run section 4's command. Expect exit 0 and `30 tests run: 30 passed, …`.
 3. Docs and transcripts:
    - `git apply $E/fix-v7-docs.patch`, then `git apply $E/examples.diff`.
-   - Check that `git status --short docs/manual-gui` prints nothing. The patches do not touch it; STOP-1's ruling says what, if anything, changes there.
+   - Apply architect T8, T9 and T11 (asserting replaces; each old string occurs once).
+   - Insert the two STOP-1 interim notes (architect-2026-11-04-fix-v7-stops.md T1). Then `git status --short docs/manual-gui` lists exactly `tutorial/40-j3-degrading-vault.md` and `tutorial/50-j4-taproot-twin.md`.
    - Check the transcripts against the patched binary: section 7 item 8.
    - Then `git add .examples-build/Examples.md` and run section 7 item 10. Its `git diff` compares the worktree with the index, so an unstaged `examples.diff` is itself a diff.
    - A replayed transcript that differs from `fix-v7-docs.patch`, or a regenerated `Examples.md` that differs from `examples.diff`'s result, is a FAIL. Do not hand-edit a transcript to match.
-4. Append F1 (section 8, STOP-1, in the form its ruling gives) to `design/FOLLOWUPS.md`. Apply STOP-3's ruling: under option (a) nothing; under (b), `git apply $E/fix-v7-changelog.patch`.
+4. Append F1 (section 8, STOP-1, in the form its ruling gives) to `design/FOLLOWUPS.md`. STOP-3 is ruled (b): `git apply $E/fix-v7-changelog.patch`, then architect T10's two inserts.
 5. Commit as the V7 GREEN commit. Its message quotes the section 4 summary line.
 6. Run the whole gate (section 7) on the final head, then the mutation gate (section 7 item 14).
-7. Do not change the version, any release file, or (unless STOP-3 rules (b)) `CHANGELOG.md`.
+7. Do not change the version or any release file.
 
 ## 7. Gate (full toolkit CI; the builder runs all of it on the final head)
 
@@ -263,7 +264,7 @@ export PATH="$R/bin:$HOME/.cargo/bin:$PATH"
         - Expected and measured: `[symbol-ref-check] OK (301 `::` anchors checked, 427 skipped)`.
       - A local `make lint` with all sibling checkouts present also reports two `fresh_chunk_set_id` misses in the mk chapters. Base has them too, they are not in this FIX's files, and CI skips them.
     - **Quickstart**, from `docs/quickstart`, with the pinned CLIs: `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk` (`quickstart.yml:166`) and `make verify-examples`. Expected and measured: `[lint] OK`, `[verify-examples] OK (62 transcripts pass)`.
-    - **GUI manual**: no file under `docs/manual-gui` changes (STOP-1). Its `verify-examples` replays with the pinned toolkit `mnemonic-toolkit-v0.105.1` (`manual-gui.yml:237`-`:257`), not this PR's binary, and its lint byte-compares the tutorial corpus with `mnemonic-gui-v0.63.0`. Expected: green on the PR, as on base. If STOP-1 is ruled (ii), the ruled prose edit is the only change, and `make lint` (`manual-gui.yml:160`) and `make html` (`:156`) are re-run locally.
+    - **GUI manual**: under `docs/manual-gui` only the two STOP-1 interim notes change (tutorial prose, outside the byte-compared folders). Its `verify-examples` replays with the pinned toolkit `mnemonic-toolkit-v0.105.1` (`manual-gui.yml:237`-`:257`), not this PR's binary, and its lint byte-compares the tutorial corpus with `mnemonic-gui-v0.63.0`. Expected: green on the PR, as on base. STOP-1 is ruled (ii): the two interim notes are the only change, and `make lint` (`manual-gui.yml:160`) and `make html` (`:156`) are re-run locally.
 
 The FIX rows and the mutation gate:
 
@@ -304,8 +305,8 @@ F1 (proposed; section 6.2 step 4 appends it in the form the ruling gives, status
 
 ```
 ### `manual-gui-tutorial-v7-general-recovery` — at the GUI manual's next re-pin, the J3 and J4 engraving cards take FIX-V7's general-policy Recovery line (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v7_bundle_recovery**)
-- Surfaced: FIX_v7_bundle_recovery STOP-1. Ruling 7's GUI items (`grade-2026-11-03-tk-v5-v7.md`) are met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
-- What: mnemonic-gui regenerates the snapshots behind `tut-j3-12-engrave.stderr.txt` and `tut-j4-16-engrave.stderr.txt`, their two PNGs, and the j3/j4 restore-feed bundle-json snapshots against that toolkit release. The re-pin copies them into `docs/manual-gui/` and rewrites the Recovery prose at `40-j3-degrading-vault.md:130-161` and `50-j4-taproot-twin.md:103-128` to the general line (FIX section 2.2). Neither card then prints a `# Threshold` line.
+- Surfaced: FIX_v7_bundle_recovery STOP-1, ruled by `architect-2026-11-04-fix-v7-stops.md`. Ruling 7's GUI items (`grade-2026-11-03-tk-v5-v7.md`) are met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
+- What: mnemonic-gui regenerates the snapshots behind `tut-j3-12-engrave.stderr.txt` and `tut-j4-16-engrave.stderr.txt`, their two PNGs, and the j3/j4 restore-feed bundle-json snapshots against that toolkit release. The re-pin copies them into `docs/manual-gui/` and deletes the two interim notes FIX-V7 put after the engrave stderr blocks of `40-j3-degrading-vault.md` and `50-j4-taproot-twin.md` (architect STOP-1): the regenerated cards print the general line (FIX section 2.2) and no `# Threshold` line.
 - Status: `open`.
 - Tier: `docs`, `cross-repo`.
 ```
