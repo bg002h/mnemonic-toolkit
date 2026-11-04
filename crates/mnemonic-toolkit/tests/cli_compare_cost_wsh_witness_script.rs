@@ -17,6 +17,8 @@
 //! | wsh(or_d(pk(K0),pk(K1))), via K1   | 312           | 78      |
 //! | wsh(multi(2,K0,K1,K2)), K0+K1      | 416           | 104     |
 //! | wsh(multi(3,K0..K4)), K0+K1+K2     | 556           | 139     |
+//! | wsh(and_v(v:pk(K0),pk(K1)))        | 380           | 95      |
+//! | wsh(thresh(2,pk,s:pk,s:pk)), 2 keys| 422           | 106     |
 //! | sh(wsh(pk(K0)))                    | 413           | 104     |
 //! | tr(NUMS,pk(K0))                    | 299           | 75      |
 //! | tr(NUMS,or_d(pk(K0),pk(K1))), K0   | 336           | 84      |
@@ -110,6 +112,30 @@ fn v5_wsh_multi_3of5_vbytes_match_core() {
         assert!(
             (139..=141).contains(&row.1),
             "Core 139 vB (+<=2 for 73-byte dummy sigs); got {r:?}"
+        );
+    }
+}
+
+#[test]
+fn v5_wsh_and_v_vbytes_match_core() {
+    // Core: wsh(and_v(v:pk(K0),pk(K1))) spends as 380 WU = 95 vB.
+    let r = ms_rows("and_v(v:pk(A),pk(B))");
+    assert_eq!(r.len(), 1);
+    assert!(
+        (95..=96).contains(&r[0].1),
+        "Core 95 vB (+1 for the tool's 72/73-byte dummy sigs); got {r:?}"
+    );
+}
+
+#[test]
+fn v5_wsh_thresh_2of3_vbytes_match_core() {
+    // Core: wsh(thresh(2,pk(K0),s:pk(K1),s:pk(K2))) spends as 422 WU = 106 vB.
+    let r = ms_rows("thresh(2,pk(A),s:pk(B),s:pk(C))");
+    assert_eq!(r.len(), 3);
+    for row in &r {
+        assert!(
+            (106..=107).contains(&row.1),
+            "Core 106 vB (+1 for dummy sigs); got {r:?}"
         );
     }
 }
