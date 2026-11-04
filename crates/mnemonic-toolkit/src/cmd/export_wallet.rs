@@ -1028,6 +1028,15 @@ fn run_from_import_json<W: Write, E: Write>(
                         e.message()
                     ))
                 })?;
+        crate::wallet_import::json_envelope::check_envelope_consistency(
+            &envelope,
+            &canonical_descriptor_body,
+            &md_desc,
+            &resolved_slots,
+            network,
+            false,
+            "--from-import-json",
+        )?;
         crate::cmd::bundle::plain_multisig_threshold(&md_desc.tree)
     };
 

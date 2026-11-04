@@ -159,8 +159,10 @@ fn export_wallet_from_import_json_masked_older_advisory_fires_before_taproot_ref
     );
 }
 
-/// Clean case (Site 2): a clean non-taproot envelope exports successfully with
-/// NO advisory on stderr.
+/// Clean case (Site 2): a clean non-taproot envelope emits NO consensus-masked
+/// advisory on stderr. (This hand-built envelope has `md1` [], so the export
+/// itself is refused by the envelope-consistency check; the test asserts only
+/// the absence of the advisory.)
 #[test]
 fn export_wallet_from_import_json_clean_no_advisory() {
     let descriptor = format!("wsh(and_v(v:pk({KEY_A}),older(2016)))");
