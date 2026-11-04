@@ -77,7 +77,10 @@ const NUMS: &str = "50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace80
 fn v5_wsh_pk_vbytes_match_core() {
     let r = ms_rows("pk(A)");
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].1, 69, "Core spends wsh(pk) as 273 WU = 69 vB; got {r:?}");
+    assert_eq!(
+        r[0].1, 69,
+        "Core spends wsh(pk) as 273 WU = 69 vB; got {r:?}"
+    );
 }
 
 #[test]
@@ -144,7 +147,10 @@ fn v5_wsh_thresh_2of3_vbytes_match_core() {
 fn v5_descriptor_wsh_pk_vbytes_match_core() {
     let r = rows("--descriptor", &format!("wsh(pk({KEY_A}))"));
     assert_eq!(r.len(), 1);
-    assert_eq!(r[0].1, 69, "--descriptor wsh(pk(..)) must equal the Core spend; got {r:?}");
+    assert_eq!(
+        r[0].1, 69,
+        "--descriptor wsh(pk(..)) must equal the Core spend; got {r:?}"
+    );
 }
 
 #[test]
@@ -175,7 +181,10 @@ fn v5_delta_matches_core() {
     // multi(2,A,B,C): Core tr 109 - wsh 104 = +5 (tool's 73-byte sigs: +4).
     let r = ms_rows("multi(2,A,B,C)");
     for row in &r {
-        assert!((4..=5).contains(&row.3), "Δ vB for 2-of-3 must be 4..=5; got {r:?}");
+        assert!(
+            (4..=5).contains(&row.3),
+            "Δ vB for 2-of-3 must be 4..=5; got {r:?}"
+        );
     }
 }
 
@@ -198,11 +207,17 @@ fn v5_tr_or_d_vbytes_match_core() {
 fn v5_tr_multi_a_vbytes_match_core() {
     let r = ms_rows("multi(2,A,B,C)");
     for row in &r {
-        assert_eq!(row.2, 109, "tr(NUMS,multi_a(2,..)) is 109 vB in Core; got {r:?}");
+        assert_eq!(
+            row.2, 109,
+            "tr(NUMS,multi_a(2,..)) is 109 vB in Core; got {r:?}"
+        );
     }
     let r = ms_rows("multi(3,A,B,C,D,E)");
     for row in &r {
-        assert_eq!(row.2, 143, "tr(NUMS,multi_a(3,..5 keys)) is 143 vB in Core; got {r:?}");
+        assert_eq!(
+            row.2, 143,
+            "tr(NUMS,multi_a(3,..5 keys)) is 143 vB in Core; got {r:?}"
+        );
     }
 }
 
