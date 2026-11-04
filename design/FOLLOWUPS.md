@@ -6510,3 +6510,10 @@ screen printed. Print the values.
 - What: mnemonic-gui regenerates `tests/snapshots/tutorial/tut-j4-20-compare-cost.stdout.txt` and the two J4 step-20 PNGs against that toolkit release; the re-pin copies them into `docs/manual-gui/` and changes `50-j4-taproot-twin.md:241` "(`+68` to `+71` vB)" to the range the regenerated transcript prints (FIX Appendix D predicts 144 (+3), 126 (+6), 133 (+6), i.e. "(`+3` to `+6` vB)").
 - Status: `open`.
 - Tier: `docs`, `cross-repo`.
+
+### `v5-whole-diff-minors` — Minors and Nits from the V5 (+E9) whole-diff review, deferred unfixed
+- Surfaced: `design/agent-reports/whole-diff-tk-v5-s1.md` (1M/4N) and `whole-diff-tk-v5-s2.md` (3M/1N); each finding's text and proposed fix live there.
+- s1 M-1: the sh(wsh) note gives its correction in vB only; at a feerate other than 1 the sats columns need 35 × feerate (proposed text in s1). s1 N-1..N-4: self-check FOLLOWUP row range (1-7, 9, not 1-9); compare-cost spec lines 119/186 still say `witness_size()`; notes-catalog row omits stdin; note line order.
+- s2 M-1: `replace_whole_word` end-of-input/word-boundary arms unpinned (translate.rs:271; two unit tests given in s2). s2 M-2: the `collect_abstract_labels` half of E9 is pinned by one row that fails as a panic. s2 M-3: row 30's comment promises Δ values it does not assert. s2 N-1: `- varint_len(elems) + varint_len(elems + 1)` nets to zero for every accepted input.
+- Status: `deferred-minor`.
+- Tier: `toolkit`.
