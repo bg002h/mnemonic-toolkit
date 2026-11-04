@@ -49,7 +49,7 @@ set -eu
 component_info() {
     case "$1" in
         mnemonic)
-            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.105.1|mnemonic|"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.106.0|mnemonic|"
             ;;
         md)
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.4|md|cli-compiler"
@@ -186,7 +186,7 @@ trusted_keys() {
 # first `<name>-v<x.y.z>`.
 first_signed() {
     case "$1" in
-        mnemonic)     echo "" ;;
+        mnemonic)     echo "0.106.0" ;;
         md)           echo "0.20.4" ;;
         ms)           echo "0.20.2" ;;
         mk)           echo "" ;;
