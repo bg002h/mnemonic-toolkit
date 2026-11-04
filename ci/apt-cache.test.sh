@@ -5,7 +5,8 @@
 # root, no network). Covers the cache-key digest, the plan file, pruning of
 # stale debs, and that a failing apt step fails the script. It does NOT cover
 # real apt behaviour (hash re-verification of cached debs, _apt sandboxing);
-# that is shown by the PR's own CI runs. Exit 0 = every scenario passed.
+# that is shown by the PR's own CI runs. Last section: the cache warmer's key
+# inputs (runs-on + package list) must equal the doc jobs'. Exit 0 = all passed.
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 script=$here/apt-cache.sh
@@ -106,6 +107,44 @@ plan "$d" pandoc >/dev/null
 check "install fails when apt-get install fails" '! FAKE_INSTALL_RC=100 bash "$script" install "$d" pandoc >/dev/null 2>&1'
 check "install fails without a plan file" '! bash "$script" install "$tmp/c11" pandoc >/dev/null 2>&1'
 check "unknown mode fails" '! bash "$script" frobnicate "$tmp/c12" pandoc >/dev/null 2>&1'
+
+# --- key parity: the cache warmer (apt-cache-warm.yml) must warm exactly the
+# keys the doc jobs use. A key is built from the runner image, the sorted
+# package list and the resolved deb digest; the digest follows from the first
+# two plus the date, so parity of (runs-on, sorted packages) is parity of keys.
+# APT_CACHE_WORKFLOWS_DIR points the check at a copy (used to plant a mismatch).
+wf=${APT_CACHE_WORKFLOWS_DIR:-$here/../.github/workflows}
+warmer=apt-cache-warm.yml
+key_sets() { # key_sets <file>... -> one "runs-on|sorted pkgs" line per apt-cache use
+  awk '
+    function emit(  n, a, i, j, v, s) {
+      n = split(pk, a, " ")
+      for (i = 2; i <= n; i++) { v = a[i]; j = i - 1
+        while (j >= 1 && a[j] > v) { a[j+1] = a[j]; j-- }
+        a[j+1] = v }
+      s = ""; for (i = 1; i <= n; i++) s = s " " a[i]
+      print runs "|" s; inuse = 0; inpk = 0 }
+    FNR == 1 { runs = "" }
+    /^    runs-on:/ { runs = $2 }
+    /uses: \.\/\.github\/actions\/apt-cache/ { inuse = 1; pk = ""; inpk = 0; next }
+    inuse && /^ *packages: *>-/ { inpk = 1; match($0, /^ */); pind = RLENGTH; next }
+    inuse && inpk {
+      match($0, /^ */)
+      if (RLENGTH > pind && $0 !~ /^ *$/) { pk = pk " " $1; next }
+      emit() }
+    END { if (inuse && inpk) emit() }
+  ' "$@"
+}
+doc_files=$(ls "$wf"/*.yml 2>/dev/null | grep -v "/$warmer\$" || true)
+# shellcheck disable=SC2086
+doc_keys=$(key_sets $doc_files | LC_ALL=C sort -u)
+if [ -f "$wf/$warmer" ]; then warm_keys=$(key_sets "$wf/$warmer" | LC_ALL=C sort -u); else warm_keys=; fi
+check "key parity: the doc jobs use at least one apt-cache key" '[ -n "$doc_keys" ]'
+check "key parity: $warmer exists and warms at least one key" '[ -n "$warm_keys" ]'
+check "key parity: $warmer warms every key a doc job uses, and nothing else" '[ "$doc_keys" = "$warm_keys" ]'
+if [ "$doc_keys" != "$warm_keys" ]; then
+  printf '  doc jobs:\n%s\n  warmer:\n%s\n' "$doc_keys" "$warm_keys" | sed 's/^/    /'
+fi
 
 if [ "$fails" -ne 0 ]; then printf '%d scenario(s) failed\n' "$fails"; exit 1; fi
 printf 'all scenarios passed\n'

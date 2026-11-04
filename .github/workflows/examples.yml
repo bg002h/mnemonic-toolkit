@@ -72,7 +72,7 @@ jobs:
         run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
 
       - name: Install pandoc + texlive + DejaVu mono
-        timeout-minutes: 15
+        timeout-minutes: 30
         # Monofont "DejaVu Sans Mono" (gen.sh:116) needs fonts-dejavu; jq is
         # runner-preinstalled but pinned explicitly (gen.sh preflight requires
         # it). No chromium/mermaid — Examples.pdf has no figures.

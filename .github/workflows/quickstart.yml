@@ -60,7 +60,7 @@ jobs:
         run: bash ci/doc-gate-guard.sh --book docs/quickstart --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|docs/tools/render-mermaid-cache\.py$|\.github/workflows/quickstart\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
 
       - name: Install pandoc + texlive
-        timeout-minutes: 15
+        timeout-minutes: 30
         if: steps.guard.outputs.relevant == 'true'
         # No chromium / mermaid-filter / mermaid-cli — the build runs
         # MERMAID_FILTER=skip and consumes the checked-in figures/cache/

@@ -115,7 +115,7 @@ jobs:
             >> "$GITHUB_ENV"
 
       - name: Install pandoc + texlive
-        timeout-minutes: 15
+        timeout-minutes: 30
         # texlive-science brings seqsplit (preamble.tex's \brktt for long
         # monospace identifiers); xurl ships with texlive-latex-recommended
         # (URL line-breaking). Mirrors docs/manual/Dockerfile.build:30-46.
@@ -367,7 +367,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install pandoc + texlive
-        timeout-minutes: 15
+        timeout-minutes: 30
         uses: ./.github/actions/apt-cache
         with:
           packages: >-

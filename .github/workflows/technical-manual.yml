@@ -213,7 +213,7 @@ jobs:
       # (push / PR / tag); only the two release steps are tag-gated. The frontmatter
       # promises build/m-format-technical-manual.pdf ships under tech-manual-vX.Y.Z.
       - name: Install pandoc + texlive
-        timeout-minutes: 15
+        timeout-minutes: 30
         if: steps.guard.outputs.relevant == 'true'
         # No chromium / mermaid-filter: the build runs MERMAID_FILTER=skip
         # (the Makefile default) and consumes the checked-in figures/cache/.

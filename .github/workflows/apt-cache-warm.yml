@@ -1,0 +1,140 @@
+# Keep the apt deb caches the doc jobs use warm on master.
+#
+# GitHub evicts a cache not read for 7 days, and a pull request can restore a
+# cache saved on the default branch but not one saved on another PR's branch.
+# Left alone, a quiet week costs the next doc PR a cold ~900 MB download (it
+# has timed out at 15 minutes). This workflow runs the SAME composite action
+# (.github/actions/apt-cache) with the SAME package list on the SAME runner
+# image as each doc job, so each cache key is identical to the one the doc
+# job computes; a restore that hits refreshes the cache's age, a miss saves.
+# One job per distinct (runs-on, package list); `packages:` is copied verbatim
+# from the doc jobs named in each job comment. ci/apt-cache.test.sh fails if
+# the set of keys here differs from the set the doc jobs use (run by the
+# `manual` workflow). Nothing else runs here: no build, no tests.
+#
+# Master only: the schedule always runs on the default branch, and each job
+# carries `if: github.ref == 'refs/heads/master'` so a workflow_dispatch from
+# another ref is a no-op rather than a cache that PRs cannot read.
+name: apt-cache-warm
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  push:
+    branches: [master]
+    paths:
+      - '.github/actions/apt-cache/**'
+      - 'ci/apt-cache.sh'
+      - '.github/workflows/apt-cache-warm.yml'
+      # The package lists live in the doc workflows' apt-cache steps.
+      - '.github/workflows/quickstart.yml'
+      - '.github/workflows/technical-manual.yml'
+      - '.github/workflows/examples.yml'
+      - '.github/workflows/manual.yml'
+      - '.github/workflows/manual-gui.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apt-cache-warm
+  cancel-in-progress: false
+
+jobs:
+  warm-a:
+    # Same list as quickstart, technical-manual and manual.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+
+      - name: Install pandoc + texlive (warms the cache)
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            make
+
+  warm-b:
+    # Same list as examples.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+
+      - name: Install pandoc + texlive (warms the cache)
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            lmodern
+            fonts-dejavu
+            jq
+
+  warm-c:
+    # Same list as manual-gui (the build job).
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+
+      - name: Install pandoc + texlive (warms the cache)
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            texlive-science
+            make
+            python3
+
+  warm-d:
+    # Same list as manual-gui (the second job).
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout toolkit
+        uses: actions/checkout@v6
+
+      - name: Install pandoc + texlive (warms the cache)
+        timeout-minutes: 30
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            texlive-science
+            make
