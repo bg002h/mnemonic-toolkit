@@ -344,7 +344,7 @@ transcripts with the repo's own targets (§6); a regenerated transcript that dif
 
 ## 6. Build steps (in this order)
 
-FIX branch `fix/v5-wsh-cost` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v5-wsh-cost`: `git fetch origin && git switch -c build/v5-wsh-cost origin/master && git cherry-pick a34bd61e 123c258d ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v5-wsh-cost head>`. Do not take `d19256e8`. Use `export
+FIX branch `fix/v5-wsh-cost` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v5-wsh-cost`, in a git worktree that is not under `/tmp`: `git fetch origin && git switch -c build/v5-wsh-cost origin/master && git cherry-pick a34bd61e 123c258d ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v5-wsh-cost head>`. Do not take `d19256e8`. Use `export
 PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2caf9 2024-12-31)`. Never pass
 `--release`. Send every run to a file and grep it; never run a suite twice to count. `E` below is
 `design/agent-reports/fix-doc-tk-v5-evidence`.
