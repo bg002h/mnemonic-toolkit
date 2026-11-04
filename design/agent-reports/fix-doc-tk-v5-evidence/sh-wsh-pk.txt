@@ -1,0 +1,12 @@
+Input:     sh(wsh(pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)))
+Extracted: pk(02998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9)
+Wrapper comparison: wsh(M)  vs  tr(NUMS, {M})
+Feerate: 1.0 sat/vB
+
+Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+----------+--------+-------+-------+----------+---------+-------
+key[0]    |     69 |    75 |    +6 |       69 |      75 |     +6
+
+note: input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ
+note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+note: input had concrete keys; cost is identical to the abstract case
