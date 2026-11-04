@@ -88,7 +88,9 @@ the triage file from 3a2ceced plus the 45 lines) and `010b6f8b` (rustfmt only, o
 | `sh-wsh-pk.txt` | Appendix G: expected text output for `sh(wsh(pk(KA)))` after A |
 | `row-names.txt`, `row-alt.txt` | the 30 RED row names, and the same names as one regex alternation |
 | `corpus-rows-d-final.tsv`, `count-plus-one.py`, `corpus-scratch.patch` | STOP-1 corpus, its counter and the scratch harness that produced it |
-| `d-wrapper-probe.txt`, `d-wrapper-v5a.txt` | Core's weight for `wsh(and_b(pk,sdv:older(10)))` and A's figure for it |
+| `d-wrapper-probe.txt` | Appendix F's build on the seven `d:` shapes, five `d:` shapes it refuses with exit 2, and the controls: exit code and stderr |
+| `d-wrapper-v5a.txt` | Appendix A's wsh and tr vB for the four Core-spent shapes and `pk(A)` |
+| `core-d-wrapper-figures.txt` | Core's regtest spends of the four shapes: witness item sizes, witness bytes, input WU and vB, Core's tx weight (keys shown as `A`) |
 | `doc-gate.sh` | the fence and apply check above |
 
 ## 1. Part A: V5 spec delta
@@ -539,14 +541,22 @@ report: do not widen the rule." The corpus finds seven such shapes.
   `and_b(pk(A),sdv:older(10))`: `largest wsh witness 120 WU, max_weight_to_satisfy + 1 = 119 WU`. Controls
   without `d:` (`s:pk`, `snl:older(10)`, `a:older(10)`) exit 0 (`d-wrapper-probe.txt`). So Appendix F would
   refuse valid, common inputs with "this is a toolkit bug".
-- **Which side is right (the `d:` rows).** The tool's figure matches Bitcoin Core. On regtest, Core's spends of
-  `wsh(and_b(pk,sdv:older(10)))`, `wsh(and_v(v:pk,dv:older(144)))`, `wsh(and_v(v:pk,older(144)))` and
-  `wsh(and_b(pk,snl:older(10)))` are 71, 71, 70 and 71 vB. Appendix A's wsh figures for the same shapes are
-  71, 71, 70 and 71 vB (`d-wrapper-v5a.txt`). The vendored `max_weight_to_satisfy` is 1 WU low. `cast_dupif`
-  (`vendor/miniscript/src/miniscript/types/extra_props.rs:544`) adds `max_witness_stack_size + 1` (:550) for
-  the `1` push that `d:` satisfies with. `or_i` adds `2 +` (:763) for the same one-byte push (`1 +` for its empty
-  push, :756). A one-byte witness item serialises as 2 bytes (length and data), so mw counts each `d:` one byte
-  short.
+- **Which side is right (the `d:` rows).** The tool's L is right and the vendored `max_weight_to_satisfy` is
+  1 WU low. Whole vB cannot decide this: Core's regtest spends of `wsh(and_b(pk,sdv:older(10)))`,
+  `wsh(and_v(v:pk,dv:older(144)))`, `wsh(and_v(v:pk,older(144)))` and `wsh(and_b(pk,snl:older(10)))` are 71, 71,
+  70 and 71 vB, Appendix A prints the same (`d-wrapper-v5a.txt`), but an input of 283 WU and one of 284 WU both
+  round up to 71 vB. Core's witness items decide it (`core-d-wrapper-figures.txt`, a key-free extract of the
+  regtest log). For `wsh(and_b(pk,sdv:older(10)))` Core's items are 1, 71 and 43 bytes, and its weight agrees
+  with W = 119 = 1 (item count) + (1 + 1) + (1 + 71) + (1 + 43). So the `1` that `d:` pushes costs 2 WU. Core's
+  signature is 71 bytes; the vendored size model assumes 73 with its length prefix
+  (`vendor/miniscript/src/miniscript/types/extra_props.rs:91`), one more than Core's 1 + 71. With that
+  signature the same witness is 1 + 2 + 73 + 44 = 120 WU, which is the corpus's L for the shape (row
+  `and_b(pk(@A),sdv:older(10))`: L 120, mw 118). L = mw + 1 would need 119, i.e. a 1-WU `d:` push, which is
+  not how a witness item serialises. The control without `d:`, `wsh(and_v(v:pk,older(144)))`, has items 71
+  and 39 (W = 113 = 1 + 72 + 40), so the signature alone accounts for L - W = 1. In the `snl:` shape the
+  `l:` push is empty (item 0 bytes, 1 WU) and the corpus has L = mw + 1 (120, 119). The cause is
+  `cast_dupif` (`extra_props.rs:544`), which adds `max_witness_stack_size + 1` (:550) for the `1` push;
+  `or_i` adds `2 +` (:763) for its `1` push and `1 +` (:756) for its empty push.
 - **The rows that stay either way.** Ruling 6 keeps the Core-measured rows (rows 1-14), since only they catch a
   double count on a `thresh` (E7).
 - **Options (none chosen):**
@@ -575,7 +585,7 @@ If Part A waits on STOP-1, Part B ships alone with the same text (grade e9 rulin
 
 Measured facts: Appendix B applies to both bases (`doc-gate.sh`). `translate.rs` is identical on both (grade e9
 :76). `cli_compare_cost_wrapper_chain.rs` is on neither base. On this branch it is `567dbf3d`'s file, which is
-`3a2ceced`'s file plus the 45-line row (`git diff --stat 3a2ceced 567dbf3d` shows 45 insertions). On any base,
+`3a2ceced`'s file plus the 45-line row (`git diff --stat 3a2ceced 567dbf3d -- crates/mnemonic-toolkit/tests/cli_compare_cost_wrapper_chain.rs` shows 45 insertions). On any base,
 the steps are: add that file (`git show 567dbf3d:crates/mnemonic-toolkit/tests/cli_compare_cost_wrapper_chain.rs`),
 run §3.2 to see `12 tests run: 5 passed, 7 failed`, apply Appendix B, run §3.2 to see `12 passed`, and append F1.
 
