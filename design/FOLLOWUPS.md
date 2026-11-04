@@ -6476,3 +6476,9 @@ screen printed. Print the values.
 - **Owning phase:** toolkit T3.
 - **Tier:** `v0.5` / hygiene.
 - **Companion:** none.
+
+### `fix-v5-r1-minors` — FIX_v5_wsh_cost review r1's Minors and Nits (M-1..M-4, N-1..N-3), not folded
+- Surfaced 2026-11-04, FIX review r1 (`design/agent-reports/review-fix-v5-r1.md` "Minor", "Nit"; each has its location and fix text there).
+- What: M-1 stale skipped counts (`4235`; measured 4223 on 12e013bc) in §3.1 and the header; M-2 stale STOP wording at `:72`, `:242-245`, `:360-361`, `:378`, `:425-427`; M-3 carried by I-2's STOP-7 line (closed by the r1 fold); M-4 §7 item 12 runs `make lint` before `make html` and needs a `mnemonic-gui-v0.63.0` checkout at `MANUAL_GUI_UPSTREAM_ROOT`; N-1..N-3 wording and line-cite offsets. All fail closed.
+- Status: `deferred-minor`
+- Owning phase: the FIX_v5_wsh_cost build (the builder may apply M-1/M-4 fix texts as written; otherwise ownerless residue).
