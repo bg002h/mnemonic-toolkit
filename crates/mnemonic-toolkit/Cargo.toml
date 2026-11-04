@@ -55,7 +55,8 @@ mk-codec = "0.4.1"
 # as `taproot-wallet-policy-arm-still-renders-depth0`.
 #
 # DROP this git pin for a plain version when md-codec reaches crates.io again,
-# which is gated on the same miniscript release as the [patch] above.
+# which is gated on the same event as the workspace root's `[patch.crates-io]`:
+# one miniscript release carrying #910, #915, #911 and #929 (13.2.0 does not).
 # PINNED BY COMMIT, not by tag. A tag is mutable and a sha is not, which
 # matters twice here: this is a funds-adjacent dependency, and the reproducible
 # musl build resolves `--offline` against a committed vendor/ tree whose
