@@ -280,5 +280,78 @@ Every other workflow that runs on the PR must be green on the PR head:
 
 Two workflows do not run, because none of their paths is touched: `fuzz-smoke.yml` (`parse_descriptor.rs`, `lib.rs`, `fuzz/`, `wc-codec`) and `cross-tool-differential.yml` (`parse_descriptor.rs`). `man-pages.yml`, `changelog-check.yml` and `install-pin-check.yml` run only on tags.
 
-## 8. STOPs
+## 8. STOPs (undecided points; the builder does not choose)
+
+The builder does not start until all three are ruled (section 6.2's prerequisite).
+
+### STOP-1. GUI tutorial items of ruling 7 against the pinned GUI
+
+Ruling 7 lists these GUI tutorial items:
+
+- `tut-j3-12` and `tut-j4-16`: the stderr transcripts in section 5, and their PNGs `docs/manual-gui/figures/tutorial/tut-j3-12-engrave-run.png` and `tut-j4-16-engrave-run.png`;
+- their prose, `docs/manual-gui/tutorial/40-j3-degrading-vault.md:130-161` and `50-j4-taproot-twin.md:103-128`.
+
+Section 5 also found the j3/j4 restore-feed bundle-json transcripts. `manual-gui.yml:75-78` byte-compares `transcripts/tutorial/` and `figures/tutorial/` with the pinned `mnemonic-gui-v0.63.0` corpus, so any change here fails the GUI book's lint. This is the pattern of FIX-V5's STOP-5, which the architect ruled as a deferral (2026-11-04, V5 option (ii), owned by V5's F4).
+
+Two points are open:
+
+1. **Deferral.** This FIX defers these items the same way. That is a departure from ruling 7 and needs a ruling.
+2. **Interim note.** Until the GUI re-pin, the GUI book keeps printing the C-graded false Recovery claim (`# Recovery: any 3 of 11 signing keys + md1 (template card).` on j3's decaying vault and `any 3 of 12` on j4's taproot twin, section 5). The architect left an interim note to this FIX's ruling (`architect-2026-11-04-fix-v5-stops.md:107-109`). Options (none chosen):
+   - (i) no interim note; F1 alone tracks the items;
+   - (ii) an interim prose note in `40-j3-degrading-vault.md` and `50-j4-taproot-twin.md`, outside the byte-compared directories, with wording and anchors the ruling gives. Section 7 item 12 then re-runs the GUI book's `make lint` and `make html`.
+
+F1 (proposed; section 6.2 step 4 appends it in the form the ruling gives, status `open`):
+
+```
+### `manual-gui-tutorial-v7-general-recovery` — at the GUI manual's next re-pin, the J3 and J4 engraving cards take FIX-V7's general-policy Recovery line (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v7_bundle_recovery**)
+- Surfaced: FIX_v7_bundle_recovery STOP-1. Ruling 7's GUI items (`grade-2026-11-03-tk-v5-v7.md`) are met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
+- What: mnemonic-gui regenerates the snapshots behind `tut-j3-12-engrave.stderr.txt` and `tut-j4-16-engrave.stderr.txt`, their two PNGs, and the j3/j4 restore-feed bundle-json snapshots against that toolkit release. The re-pin copies them into `docs/manual-gui/` and rewrites the Recovery prose at `40-j3-degrading-vault.md:130-161` and `50-j4-taproot-twin.md:103-128` to the general line (FIX section 2.2). Neither card then prints a `# Threshold` line.
+- Status: `open`.
+- Tier: `docs`, `cross-repo`.
+```
+
+F1 names the toolkit-side copies; the mnemonic-gui snapshot paths are whatever its tutorial corpus maps to them.
+
+### STOP-2. `bundle --import-json` with `--threshold`
+
+On the `--import-json` path today, `--threshold` sets the card's k (row 24: a plain 2-of-3 envelope with `--threshold 1` prints `# Threshold: 1 of 3`). That is a false recovery claim, and ruling 1 takes k from the descriptor. Descriptor mode already refuses the flag: `ModeViolation { mode: "descriptor", flag: "--threshold", message: DESCRIPTOR_WITH_THRESHOLD }`, exit 2, text `--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.` (`bundle.rs:195`, `:304-309`). The `--import-json` dispatch (`bundle.rs:277`) runs before that check. Options (none chosen):
+
+- (a) refuse: `ModeViolation`, exit 2, with a mode name and message text the ruling gives (for example, the same `mode: "descriptor"` and message as descriptor mode, or a new `mode: "import-json"` and text);
+- (b) ignore the flag: the card takes k from the descriptor (plain) or prints the general line. The hint patch does this.
+
+Row 24 accepts both outcomes until the ruling. Section 6.2 step 2 narrows it to the ruled outcome.
+
+### STOP-3. CHANGELOG entry
+
+`CHANGELOG.md` has an `## [Unreleased]` block (`:9`), and FIX-V5 (its section 8) leaves it unchanged. Options (none chosen):
+
+- (a) no change in this PR; the release prep writes the entry;
+- (b) apply `E/fix-v7-changelog.patch`: two `### Fixed` bullets, for the card lines and for JSON `multisig.threshold` `null` (its text is in the evidence dir; the ruling may edit it).
+
+### Note (not a STOP): ruling 3 departs from two existing behaviours
+
+Ruling 3 is binding and is built as written. A pure-key `thresh` is plain and keeps "any k of n". This departs from:
+
+- the triage scratch predicate (`scratch-fixes-v5-v7.patch`), which made every `thresh` general;
+- `restore`, which writes a `null` top-level threshold for any `thresh`.
+
+So `bundle --json` writes an integer k for `wsh(thresh(2,pk(K0),s:pk(K1),s:pk(K2)))` (row 25), where `restore` writes `null` for the same descriptor. Aligning `restore` is out of this FIX's scope (ruling 7 does not list it). This FIX files nothing for it, and the reviewer may raise it.
+
 ## 9. Coverage map (ruling -> rows)
+
+| ruling | what | rows (section 4) |
+|---|---|---|
+| 1 | plain shapes keep both lines | 12, 26 (guards) |
+| 1 | general shapes: no Threshold line, the exact general Recovery line | 1-11 (triage), 13, 15, 16, 30 |
+| 1 | `tr` with a non-NUMS internal key is general | 8 |
+| 1 | n == 1 unchanged | 27 |
+| 1 | the card's k comes from the descriptor, not a stale envelope or a flag | 23, 24 (STOP-2) |
+| 2 | `bundle --json` `multisig.threshold`: k for plain, `null` for general | 17, 28 |
+| 2 | second emitter: `import-wallet` JSON `null` and text `threshold=none` | 18, 19, 29 |
+| 2 | readers accept `null`: `bundle --import-json`, `export-wallet` | 20, 21 |
+| 2 | `export-wallet`'s k-of-n formats still refuse a general policy | 22 |
+| 3 | pure-key `thresh` is plain | 25 |
+| 3 | any other `thresh` is general | 14 |
+| 7 | lockstep files | section 6.1 (8 files), section 7 items 8, 10 and 12; GUI items: STOP-1 |
+
+Rulings 4-6 are FIX-V5's. Every row maps to at least one ruling, and every V7 ruling maps to at least one row.
