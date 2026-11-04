@@ -1,0 +1,116 @@
+diff --git i/crates/mnemonic-toolkit/src/cost/enumerate.rs w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+index 4d5fe524..89370091 100644
+--- i/crates/mnemonic-toolkit/src/cost/enumerate.rs
++++ w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+@@ -264,7 +264,18 @@ fn build_and_plan(
+         }
+     }
+     match desc.clone().plan(&a) {
+-        Ok(plan) => Some(plan.witness_size()),
++        Ok(plan) => {
++            let ws = plan.witness_size();
++            Some(match desc {
++                Descriptor::Wsh(_) => {
++                    let vl = |n: usize| miniscript::bitcoin::VarInt(n as u64).size();
++                    let s = desc.explicit_script().expect("wsh has a witness script").len();
++                    let n = plan.witness_template().len();
++                    ws + vl(s) + s - vl(n) + vl(n + 1)
++                }
++                _ => ws,
++            })
++        }
+         Err(_) => None,
+     }
+ }
+@@ -492,3 +503,91 @@ fn walk_relative_timelock_kinds(m: &Miniscript<DefiniteDescriptorKey, Segwitv0>)
+     }
+     (b, t)
+ }
++
++#[cfg(test)]
++mod zz_scratch_v5_corpus {
++// SCRATCH ONLY (FIX-V5 author corpus measurement; never committed).
++use miniscript::miniscript::decode::Terminal;
++use crate::cost::dummy_keys::dummy_compressed;
++use crate::cost::enumerate::enumerate_minimal_conditions;
++use crate::cost::strip::translate_descriptor;
++use crate::cost::translate::{build_tr_descriptor, build_wsh_descriptor};
++use std::io::Write;
++
++const H32: &str = "926a54995ca48600920a19bf7bc502ca5f2f7d07e6f804c4f00ebf0325084dbc";
++const H20: &str = "1111111111111111111111111111111111111111";
++
++fn conc(shape: &str) -> String {
++    let mut s = shape.replace("H32", H32).replace("H20", H20);
++    for l in ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P"] {
++        s = s.replace(&format!("@{l}"), &dummy_compressed(l).to_string());
++    }
++    format!("wsh({s})")
++}
++
++#[test]
++fn scratch_v5_corpus() {
++    let mut shapes: Vec<String> = [
++        "pk(@A)", "pkh(@A)", "or_b(pk(@A),s:pk(@B))", "or_d(pk(@A),pkh(@B))", "or_i(pk(@A),pk(@B))",
++        "and_v(v:pk(@A),pk(@B))", "and_b(pk(@A),s:pk(@B))", "and_v(v:pk(@A),older(144))",
++        "and_v(v:pk(@A),after(1700000000))", "and_v(v:pk(@A),after(800000))",
++        "andor(pk(@A),older(144),pk(@B))", "andor(pk(@A),pk(@B),and_v(v:pk(@C),older(10)))",
++        "multi(1,@A,@B)", "multi(2,@A,@B,@C)", "multi(3,@A,@B,@C,@D,@E)", "multi(5,@A,@B,@C,@D,@E,@F,@G)",
++        "multi(7,@A,@B,@C,@D,@E,@F,@G,@H,@I,@J)", "multi(9,@A,@B,@C,@D,@E,@F,@G,@H,@I,@J,@K,@L)",
++        "multi(6,@A,@B,@C,@D,@E,@F,@G,@H)", "multi(8,@A,@B,@C,@D,@E,@F,@G,@H,@I,@J)",
++        "sortedmulti(2,@A,@B,@C)", "sortedmulti(3,@A,@B,@C,@D,@E)",
++        "or_d(multi(2,@A,@B,@C),and_v(v:pk(@D),older(1000)))",
++        "and_v(v:pk(@A),sha256(H32))", "and_v(v:pk(@A),hash256(H32))", "and_v(v:pk(@A),ripemd160(H20))",
++        "and_v(v:pk(@A),hash160(H20))", "or_i(and_v(v:pkh(@A),older(10)),pk(@B))",
++        "or_b(pk(@A),sdv:older(10))", "and_b(pk(@A),sdv:older(10))", "and_v(or_c(pk(@A),v:older(10)),pk(@B))",
++        "or_d(pk(@A),and_v(v:pkh(@B),older(52560)))", "or_i(pk(@A),and_v(v:multi(2,@B,@C,@D),older(100)))",
++        "or_d(pk(@A),or_d(pk(@B),pk(@C)))", "and_v(v:pk(@A),l:older(10))", "and_b(pk(@A),an:older(10))",
++        "t:or_c(pk(@A),v:pk(@B))", "andor(pk(@A),or_i(and_v(v:pkh(@B),older(10)),pk(@C)),pk(@D))",
++        "or_d(pk(@A),andor(pk(@B),older(10),and_v(v:pk(@C),after(800000))))",
++        "andor(multi(2,@A,@B,@C),or_i(and_v(v:pkh(@D),after(800000)),and_v(v:pkh(@E),older(100))),and_v(v:sha256(H32),pk(@F)))",
++        "or_i(or_i(pk(@A),pk(@B)),or_i(pk(@C),pk(@D)))",
++        "thresh(2,pk(@A),s:pk(@B),s:pk(@C))", "thresh(1,pkh(@A),a:pkh(@B))",
++        "thresh(3,pk(@A),s:pk(@B),s:pk(@C),snl:older(12960))", "thresh(2,pk(@A),s:pk(@B),sln:older(32768))",
++        "thresh(2,pk(@A),s:pk(@B),snl:after(1700000000))", "thresh(2,pk(@A),a:pk(@B),a:thresh(1,pk(@C),s:pk(@D)))",
++        "thresh(3,pk(@A),s:pk(@B),s:pk(@C),s:pk(@D),s:pk(@E))", "thresh(1,pk(@A),s:pk(@B))",
++        "and_v(v:thresh(2,pk(@A),s:pk(@B),s:pk(@C)),older(10))", "thresh(2,pk(@A),s:pk(@B),sdv:older(144))",
++        "thresh(4,pk(@A),s:pk(@B),s:pk(@C),s:pk(@D),sln:older(1000))",
++        "or_d(thresh(2,pk(@A),s:pk(@B),s:pk(@C)),and_v(v:pk(@D),older(100)))",
++    ].iter().map(|s| format!("{}|{}", s, conc(s))).collect();
++    let fx = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/descriptor_builder");
++    let mut names: Vec<_> = std::fs::read_dir(fx).unwrap().filter_map(|e| e.ok()).map(|e| e.path())
++        .filter(|p| p.extension().map(|x| x == "descriptor").unwrap_or(false)).collect();
++    names.sort();
++    for p in names {
++        let raw = std::fs::read_to_string(&p).unwrap();
++        shapes.push(format!("{}|{}", p.file_name().unwrap().to_string_lossy(), raw.trim()));
++    }
++    let mut out = std::fs::File::create("/scratch/cache/tk-fix-v5-logs/corpus-rows.tsv").unwrap();
++    for sp in &shapes {
++        let (s0, s) = sp.split_once('|').unwrap();
++        let s = s.to_string();
++        let mut tries = vec![s.clone()];
++        let nochk = s.split('#').next().unwrap().to_string();
++        tries.push(nochk.replace("/<0;1>/*", "/0/0"));
++        let mut done = false;
++        for t in tries {
++            let (tr, _) = match translate_descriptor(&t) { Ok(x) => x, Err(e) => { writeln!(out, "ERRTRANSLATE\t{}\t{}", &e.to_string()[..e.to_string().len().min(60)], s0).unwrap(); continue; } };
++            let thresh = tr.segv0.iter().any(|n| matches!(n.node, Terminal::Thresh(_)));
++            let w = build_wsh_descriptor(tr.segv0.clone()).unwrap();
++            let tp = build_tr_descriptor(tr.tap.clone()).unwrap();
++            let mw = w.max_weight_to_satisfy().map(|x| x.to_wu() as i64);
++            let rep = enumerate_minimal_conditions(&tr, &w, &tp, 1 << 16).unwrap();
++            let l = rep.rows.iter().map(|r| r.wsh_witness_bytes as i64).max();
++            let line = match (l, mw) {
++                (Some(l), Ok(mw)) => format!("OK\t{}\t{}\t{l}\t{mw}\t{}", if thresh {"thresh"} else {"free"}, rep.rows.len(), l - (mw + 1)),
++                (l, mw) => format!("ODD\t{}\t{}\t{l:?}\t{mw:?}\t-", if thresh {"thresh"} else {"free"}, rep.rows.len()),
++            };
++            writeln!(out, "{line}\t{}", s0).unwrap();
++            done = true;
++            break;
++        }
++        if !done { writeln!(out, "SKIPPED\t{}", s0).unwrap(); }
++    }
++}
++
++}
