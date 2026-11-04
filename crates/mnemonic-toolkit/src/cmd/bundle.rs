@@ -2293,6 +2293,16 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
                 ))
             })?;
 
+    crate::wallet_import::json_envelope::check_envelope_consistency(
+        &envelope,
+        descriptor_body,
+        &descriptor,
+        &resolved_slots,
+        envelope_network,
+        true,
+        "--import-json",
+    )?;
+
     // Synthesize. run_language defaults to English; import-json slots that
     // carry Some(wire_lang) override via unwrap_or in synthesize_descriptor,
     // so import-json behavior is unchanged by this parameter.

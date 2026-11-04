@@ -777,11 +777,11 @@ fn v7_export_wallet_takes_k_from_envelope_descriptor() {
 }
 
 #[test]
-fn v7_export_wallet_k_ignores_disagreeing_md1() {
+fn v7_export_wallet_refuses_disagreeing_md1() {
     // A hand-edited envelope: the descriptor is a plain 3-of-3 sortedmulti but
-    // bundle.md1 encodes a 2-of-3 (and the threshold field says 2). K comes from
-    // the descriptor that is emitted, never from md1, so every template format
-    // emits the honest 3-of-3 file byte for byte, and the sparrow script is 3-of-3.
+    // bundle.md1 encodes a 2-of-3 (and the threshold field says 2). K still
+    // comes from the descriptor (never from md1), but the envelope is now
+    // refused by FIX-V7 2.5 E1 in every template format: exit 1, empty stdout.
     let dir = tempfile::tempdir().unwrap();
     let honest3 = envelope_file(
         dir.path(),
@@ -801,25 +801,15 @@ fn v7_export_wallet_k_ignores_disagreeing_md1() {
     let edited = dir.path().join("edited.json");
     std::fs::write(&edited, serde_json::to_string(&v).unwrap()).unwrap();
     for format in ["sparrow", "coldcard", "electrum"] {
-        let want = export_from_envelope(&honest3, format);
-        assert!(
-            want.status.success(),
-            "{format}: {}",
-            String::from_utf8_lossy(&want.stderr)
-        );
         let got = export_from_envelope(&edited, format);
+        assert_eq!(got.status.code(), Some(1), "{format}");
+        assert!(got.stdout.is_empty(), "{format}: stdout must be empty");
+        let stderr = String::from_utf8_lossy(&got.stderr);
         assert!(
-            got.status.success(),
-            "{format}: {}",
-            String::from_utf8_lossy(&got.stderr)
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&got.stdout),
-            String::from_utf8_lossy(&want.stdout),
-            "{format}"
+            stderr.contains(
+                "error: --from-import-json: envelope.bundle.md1 does not match envelope.bundle.descriptor, so the envelope is not as import-wallet wrote it; re-create it with import-wallet from the same blob"
+            ),
+            "{format}: {stderr}"
         );
     }
-    let sparrow = String::from_utf8(export_from_envelope(&edited, "sparrow").stdout).unwrap();
-    assert!(sparrow.contains("sortedmulti(3,"), "{sparrow}");
-    assert!(!sparrow.contains("sortedmulti(2,"), "{sparrow}");
 }

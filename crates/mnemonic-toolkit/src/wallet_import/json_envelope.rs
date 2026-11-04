@@ -503,6 +503,103 @@ pub(crate) fn derivation_path_from_envelope(
         .map_err(|e| ToolkitError::BadInput(format!("{flag_label}: origin_path parse {s:?}: {e}")))
 }
 
+/// Envelope consistency rule E1-E3 (FIX-V7 2.5): the parts of one envelope
+/// entry must agree, else the entry is refused before any output.
+const ENV_TAIL: &str =
+    "so the envelope is not as import-wallet wrote it; re-create it with import-wallet from the same blob";
+
+pub(crate) fn check_envelope_consistency(
+    envelope: &ImportJsonEnvelope,
+    descriptor_body: &str,
+    md_desc: &md_codec::Descriptor,
+    slots: &[ResolvedSlot],
+    network: CliNetwork,
+    check_seeds: bool,
+    label: &str,
+) -> Result<(), ToolkitError> {
+    use crate::synthesize::xpub_to_65;
+    // E1
+    let refs: Vec<&str> = envelope.bundle.md1.iter().map(String::as_str).collect();
+    let want = md_codec::compute_wallet_policy_id(md_desc).map_err(ToolkitError::from)?;
+    let got = md_codec::chunk::reassemble(&refs)
+        .ok()
+        .and_then(|d| md_codec::compute_wallet_policy_id(&d).ok());
+    if got != Some(want) {
+        return Err(ToolkitError::BadInput(format!(
+            "{label}: envelope.bundle.md1 does not match envelope.bundle.descriptor, {ENV_TAIL}"
+        )));
+    }
+    // E2
+    let origins =
+        crate::wallet_import::pipeline::extract_origin_components(descriptor_body, label)?;
+    if origins.len() != slots.len() {
+        return Err(ToolkitError::BadInput(format!(
+            "{label}: envelope.bundle.mk1 has {} cosigners but envelope.bundle.descriptor has {} keys, {ENV_TAIL}",
+            slots.len(),
+            origins.len()
+        )));
+    }
+    for (i, (fp, path, xs)) in origins.into_iter().enumerate() {
+        let (x, fp, path) =
+            crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xs, label)?;
+        let s = &slots[i];
+        // The slot path was overwritten from the envelope's origin_path(s), so the
+        // card's own path is compared separately, in the form import-wallet emits it
+        // (`mk1_origin_path`: depth-matched to the card's own xpub, which also
+        // covers v0.27.0 cards that carry a full path on a depth-4 xpub).
+        let card_path_ok = mk_codec::decode(
+            &envelope.bundle.mk1[i]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+        )
+        .map(|c| c.origin_path == crate::synthesize::mk1_origin_path(&s.xpub, &path))
+        .unwrap_or(false);
+        if xpub_to_65(&s.xpub) != xpub_to_65(&x)
+            || s.fingerprint != fp
+            || s.path != path
+            || !card_path_ok
+        {
+            return Err(ToolkitError::BadInput(format!(
+                "{label}: cosigner {i} of envelope.bundle.mk1 (its key, fingerprint or origin path) does not match key @{i} of envelope.bundle.descriptor, {ENV_TAIL}"
+            )));
+        }
+    }
+    // E3
+    if check_seeds {
+        let secp = bitcoin::secp256k1::Secp256k1::new();
+        for (i, s) in slots.iter().enumerate() {
+            if envelope.bundle.ms1.get(i).is_none_or(|m| m.is_empty()) {
+                continue;
+            }
+            let Some(entropy) = s.entropy.as_ref() else {
+                continue;
+            };
+            let lang = s.language.unwrap_or(bip39::Language::English);
+            let ok = bip39::Mnemonic::from_entropy_in(lang, entropy)
+                .ok()
+                .and_then(|m| {
+                    let seed = m.to_seed("");
+                    let master =
+                        bitcoin::bip32::Xpriv::new_master(network.network_kind(), &seed[..])
+                            .ok()?;
+                    let child = master.derive_priv(&secp, &s.path).ok()?;
+                    Some(
+                        xpub_to_65(&bitcoin::bip32::Xpub::from_priv(&secp, &child))
+                            == xpub_to_65(&s.xpub),
+                    )
+                })
+                .unwrap_or(false);
+            if !ok {
+                return Err(ToolkitError::BadInput(format!(
+                    "{label}: envelope.bundle.ms1[{i}] is not the seed of cosigner {i} of envelope.bundle.mk1, {ENV_TAIL}"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

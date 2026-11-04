@@ -1,0 +1,77 @@
+[
+  {
+    "bundle": {
+      "account": 0,
+      "descriptor": "sh(multi(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[5436d724/48'/0'/0'/2']xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))#ek6d38cp",
+      "master_fingerprint": null,
+      "md1": [
+        "md1f9ja3zspqjtvyyy4qqxp3sgsc97vts6yd792smdwfy2ry2qrptc0znn9pm0wkz5duhr4qn8f0kc35ekmdw",
+        "md1f9ja3zsvs9qhgfvt63yacv0jzrws489wwl2rcse69e0qvuhzq6k5jt8ymyydynzrv4kuq8f47kaj7v8l5f",
+        "md1f9ja3zskeza6dduqqnvtpl3vsgcj7vs58slt9an6vn9sedxphuj8wcmw78nl0r9ehzrns0u5260hx55czj",
+        "md1f9ja3zsezkwxpadgq0mas50mquq6dwhf275nspy2kuejptvkr8mpxpfc9k0npz4qm5c2quu0nh28zfey2d",
+        "md1f9ja3z3xpm0ufp8fshpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqnc896wtrlvquu85407crn2kd",
+        "md1f9ja3z3wup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5jslklp93892xd3a"
+      ],
+      "mk1": [
+        [
+          "mk1qpxj36pqqsp7gncd50jy7rdru38smgacdzxlzpgy3zepal7ec5v6wv58da6c23hjuw4ypg96ztz75f8wrrussm59fetnkgd8klmdadudhztm",
+          "mk1qpxj36ppag0zr8gh9upnjugr26jfvunvs35jvgdjkm3kghwnt0qqymzc0utyzxyhny9pu8mfkxlcx2fu6ze5286gpu"
+        ],
+        [
+          "mk1qpklmapqqsp7gncd50jy7rdru38smg65xmtjgpgy3zepuga9dymxtm85extpj6vr0eywa3kau0877xtnwy88y2ecc844qgkyqgjd2nhscnsw",
+          "mk1qpklmappqlhmpglkpcp56awj4af8qzg4denyzkevx0kzvznstvlxz92phfs5c8dl3yyaxz74uv3jjs80a7hwec0y69"
+        ],
+        [
+          "mk1qpl7wlpqqsp7gncd50jy7rdru38smgegv3gqvpgy3zepugvevsxpz2zll50ju3dcmghtxtfv0y025ltk2vc8a3ex8yqnccwnxhhvuqy0tkfp",
+          "mk1qpl7wlpprja893lkxup4z7tw6q2yvs4fk9pjhxf00s49ugex8rue307wdslgcj5r8x9t5jhygsqmczupwlwe6r8h2n"
+        ]
+      ],
+      "mode": "watch-only",
+      "ms1": [
+        "",
+        "",
+        ""
+      ],
+      "multisig": {
+        "cosigner_count": 3,
+        "cosigners": [
+          {
+            "index": 0,
+            "master_fingerprint": "b8688df1",
+            "origin_path": "m/48'/0'/0'/2'",
+            "xpub": "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX"
+          },
+          {
+            "index": 1,
+            "master_fingerprint": "5436d724",
+            "origin_path": "m/48'/0'/0'/2'",
+            "xpub": "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx"
+          },
+          {
+            "index": 2,
+            "master_fingerprint": "28645006",
+            "origin_path": "m/48'/0'/0'/2'",
+            "xpub": "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6"
+          }
+        ],
+        "path_family": "bip48",
+        "template": "descriptor",
+        "threshold": 2
+      },
+      "network": "mainnet",
+      "origin_path": "m/48'/0'/0'/2'",
+      "origin_paths": null,
+      "privacy_preserving": false,
+      "schema_version": "4",
+      "template": null
+    },
+    "roundtrip": {
+      "byte_exact": false,
+      "diff": null,
+      "semantic_match": false,
+      "status": "blocked_no_emitter"
+    },
+    "schema_version": "1",
+    "source_format": "bsms"
+  }
+]

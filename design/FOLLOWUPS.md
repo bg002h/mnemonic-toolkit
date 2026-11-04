@@ -6576,3 +6576,18 @@ screen printed. Print the values.
 - s2 M-1: `replace_whole_word` end-of-input/word-boundary arms unpinned (translate.rs:271; two unit tests given in s2). s2 M-2: the `collect_abstract_labels` half of E9 is pinned by one row that fails as a panic. s2 M-3: row 30's comment promises Δ values it does not assert. s2 N-1: `- varint_len(elems) + varint_len(elems + 1)` nets to zero for every accepted input.
 - Status: `deferred-minor`.
 - Tier: `toolkit`.
+
+### `import-json-self-check-default` — should `bundle --self-check` be on by default for `--import-json`? (architect 2026-11-04)
+- Surfaced: `design/agent-reports/` architect report 2026-11-04-v7-md1-descriptor-mismatch (coordinator repo): open question 3. FIX-V7 2.5 (E1-E3) now covers the measured inconsistent-envelope cases without it, so the default is unchanged.
+- Owner: the next toolkit cycle.
+- Status: `deferred-minor`.
+- Tier: `toolkit`.
+
+### `tk-135-138-whole-diff-minors` — Minors and Nit from the #135 + #138 combined whole-diff review, deferred unfixed
+- Surfaced: `design/agent-reports/whole-diff-tk-135-138.md` (head b944de90).
+- M1 FIXED (RED edff64cf, GREEN f2fb51ca): E2 now also compares the card's own origin path with `mk1_origin_path(card xpub, descriptor path)`; row `envelope_mk1_origin_path_only_mismatch_refused`, report `design/agent-reports/fix-envelope-m1.md`. Original finding: `json_envelope.rs:546-549` E2 message says "its key, fingerprint or origin path", but a card-only origin-path mismatch is accepted (the envelope's origin_path overwrites the card's before E2; output byte-identical to the honest envelope's). Optional fix: decode `envelope.bundle.mk1[i]` and require its origin path to equal `slots[i].path` (or its depth-3 truncation), same E2 line.
+- M2: `format.rs` general-policy Recovery line omits timelocks. Fix text: "...any hash preimages it names, mind its timelocks, and md1 (template card)."
+- N1: for `or_d(pk(K2),multi(2,K0,K1))` "keep all 3 signing keys" is conservative (K2 alone spends); noted only.
+- Owner: the next toolkit cycle.
+- Status: `deferred-minor` (M2, N1 open; M1 fixed).
+- Tier: `toolkit`.

@@ -830,26 +830,18 @@ fn bundle_import_json_seeded_ms1_self_check_passes() {
 //
 // Builds an envelope whose `bundle.descriptor` carries an `older()` operand by
 // rewrapping the canonical 2-of-3 fixture's cosigner keys in
-// `wsh(and_v(v:multi(2,...),older(N)))` and re-checksumming. The import-json
+// `wsh(and_v(v:multi(2,...),older(N)))` and running import-wallet on it. The import-json
 // site re-parses this descriptor into an MdDescriptor before emitting, so the
 // Site-2 hook must surface the consensus-masked advisory on stderr (exit 0).
 // ============================================================================
 
-/// Append a BIP-380 descriptor checksum to `body` (`<body>#<csum>`).
-fn with_descriptor_checksum(body: &str) -> String {
-    use miniscript::descriptor::checksum::Engine as ChecksumEngine;
-    let mut e = ChecksumEngine::new();
-    e.input(body).expect("ascii");
-    format!("{body}#{}", e.checksum())
-}
-
-/// Read the canonical 2-of-3 envelope fixture and replace its
-/// `bundle.descriptor` with a `wsh(and_v(v:multi(2, <fixture cosigner keys>),
-/// older(<operand>)))` descriptor (re-checksummed). The 3 cosigner keys are
-/// lifted verbatim from the fixture so the cosigner-count stays consistent.
+/// Read the canonical 2-of-3 envelope fixture and build, through
+/// `import-wallet`, the envelope of a `wsh(and_v(v:multi(2, <fixture cosigner
+/// keys>), older(<operand>)))` descriptor. The 3 cosigner keys are lifted
+/// verbatim from the fixture.
 fn masked_older_envelope_json(operand: u32) -> String {
     let raw = std::fs::read_to_string(fixture_path("envelope_v0_27_0.json")).unwrap();
-    let mut env: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let env: serde_json::Value = serde_json::from_str(&raw).unwrap();
     let orig = env[0]["bundle"]["descriptor"].as_str().unwrap().to_string();
     // Extract `2,<k1>,<k2>,<k3>` from `sh(multi(2,...))#csum`.
     let inner = orig
@@ -858,9 +850,22 @@ fn masked_older_envelope_json(operand: u32) -> String {
     let inner = inner.rsplit_once(")#").map(|(a, _)| a).unwrap_or(inner);
     let inner = inner.strip_suffix(')').unwrap_or(inner);
     let body = format!("wsh(and_v(v:multi({inner}),older({operand})))");
-    let descriptor = with_descriptor_checksum(&body);
-    env[0]["bundle"]["descriptor"] = serde_json::Value::String(descriptor);
-    serde_json::to_string(&env).unwrap()
+    // Build the envelope through import-wallet (not by editing a field of an
+    // honest one): FIX-V7 2.5 refuses an envelope whose parts disagree.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "descriptor",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(format!("{body}\n"))
+        .assert()
+        .success();
+    String::from_utf8(out.get_output().stdout.clone()).unwrap()
 }
 
 #[test]

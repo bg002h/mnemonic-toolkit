@@ -341,6 +341,11 @@ wsh(sortedmulti(2,[b8688df1/48'/0'/0'/2']xpub6FQya.../<0;1>/*,[28645006/48'/0'/0
     --format descriptor
   ```
 
+- **An inconsistent envelope is refused.** If the envelope's
+  md1, mk1 cards or descriptor disagree, both `--from-import-json` and
+  `bundle --import-json` exit 1 and ask you to re-create the envelope
+  with `import-wallet` from the same blob.
+
 - **`--format descriptor` vs `--format green`.** `descriptor` emits the
   raw canonical descriptor for **any** policy (single-sig or multisig).
   `green` emits Blockstream Green's wallet text and is **single-sig
