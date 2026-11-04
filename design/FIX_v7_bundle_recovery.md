@@ -1,6 +1,6 @@
 # FIX-V7: bundle card recovery summary for general policies
 
-Status: draft (author). FIX branch `fix/v7-bundle-recovery` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v7-bundle-recovery` (architect STOP-7, `architect-2026-11-04-fix-v5-stops.md`):
+Status: author-complete; awaiting STOP-1..3 rulings and the FIX review. FIX branch `fix/v7-bundle-recovery` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v7-bundle-recovery` (architect STOP-7, `architect-2026-11-04-fix-v5-stops.md`):
 `git fetch origin && git switch -c build/v7-bundle-recovery origin/master && git cherry-pick d19256e8 ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v7-bundle-recovery head>`.
 Do not take `a34bd61e` or `123c258d` (V5's rows). The evidence below was measured on an equivalent tree: `origin/master` `12e013bc` plus `d19256e8`, `ac3ff70a` and `283132e7`, cherry-picked.
 Merge order: whichever of the V5 and V7 PRs is first green with 0C/0I merges first. The second merges `origin/master` in, re-runs all of section 7, regenerates `.examples-build/Examples.md` with `gen.sh`, and resolves the `design/FOLLOWUPS.md` append. T3 waits for this FIX.
