@@ -209,6 +209,76 @@ Build on `build/v7-bundle-recovery` (header), in a git worktree that is not unde
 6. Run the whole gate (section 7) on the final head, then the mutation gate (section 7 item 14).
 7. Do not change the version, any release file, or (unless STOP-3 rules (b)) `CHANGELOG.md`.
 
-## 7. Gate
+## 7. Gate (full toolkit CI; the builder runs all of it on the final head)
+
+Capture each run once to a file and grep it. "Measured" is this author's run on the header's equivalent tree with the four evidence patches applied (`git diff` of that tree equals `fix-v7-production.patch`, `fix-v7-docs.patch` and `examples.diff` byte for byte; logs in `/scratch/cache/tk-fix-v7-logs/bb-*`). `cargo --version`: `cargo 1.85.0 (d73d2caf9 2024-12-31)`.
+
+`rust.yml`:
+
+1. `cargo +1.95.0 fmt --all -- --check` (`rust.yml:118`). Expected: exit 0. Measured: exit 0.
+2. `cargo metadata --locked --format-version 1 > /dev/null` and `cargo build --locked --tests --workspace`. Expected: exit 0. Measured: exit 0.
+3. `cargo nextest run --locked --workspace --no-fail-fast` (`:185`). Expected: 0 failed. Measured: `Summary [   4.627s] 4215 tests run: 4215 passed, 38 skipped`.
+4. `cargo test --locked --workspace --doc` (`:190`). Expected: exit 0. Measured: `Doc-tests mnemonic_toolkit` and `Doc-tests wc_codec`, each `test result: ok. 0 passed; 0 failed; …`.
+5. `cargo clippy --locked --all-targets -- -D warnings`. Expected: exit 0, no warnings. Measured: exit 0.
+6. The rest of `rust.yml`, locally where it runs here, else as green CI on the PR:
+   - the mlock rows `cargo test -p mnemonic-toolkit --lib mlock::tests::g2_1 -- --include-ignored`, and the same for `g2_3` and `g2_4` (`:205`, `:218`, `:234`). Measured: each `test result: ok. 1 passed`.
+   - `mlock_g6_invariant` (`:524`). It needs the mnemonic-secret sibling at the ms-cli tag that `scripts/install.sh` pins (`ms-cli-v0.20.2`, `install.sh:58`). CI checks it out at `:513`-`:515` and sets `SIBLING_REPO_PATH` (`:518`). Without the sibling the test fails 2 of 2 (measured), so run it locally as:
+     - `git clone --depth 1 --branch ms-cli-v0.20.2 https://github.com/bg002h/mnemonic-secret /scratch/cache/tk-v7-build-ms-sibling`
+     - `SIBLING_REPO_PATH=/scratch/cache/tk-v7-build-ms-sibling cargo test -p mnemonic-toolkit --test mlock_g6_invariant -- --include-ignored`
+     - Measured: `test result: ok. 2 passed; 0 failed`.
+   - `cargo build --bin mnemonic`, then `sh scripts/install-<x>.test.sh` for each of `assets-gate`, `assets`, `man-step`, `msrv-guard`, `signature` and `verify` (`:268`-`:301`). Measured: each exit 0.
+   - `bash ci/docs-only.test.sh`, `bash ci/code-docs-check.test.sh` and `bash ci/code-docs-check.sh`. Measured: each exit 0.
+   - CI only: the release `g2_3` row, miri, the lib cross-platform check, and the musl build and test.
+   - Expected: each exits 0.
+
+`manual.yml` (the manual job and its mutation self-tests). The pinned CLIs go first in PATH. `--version` does not identify them, so install the tags into a fresh root, or reuse the V5 build's root if it exists:
+
+```
+R=/scratch/cache/tk-v7-build-ci-tools
+CARGO_TARGET_DIR="$R/target" cargo install --root "$R" --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 mk-cli
+CARGO_TARGET_DIR="$R/target" cargo install --root "$R" --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.4 md-cli --features cli-compiler
+CARGO_TARGET_DIR="$R/target" cargo install --root "$R" --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.2 ms-cli
+export PATH="$R/bin:$HOME/.cargo/bin:$PATH"
+```
+
+7. `bash ci/doc-gate-guard.test.sh` (`manual.yml:61`). Expected: exit 0. Measured: `158 passed, 0 failed`.
+8. Run from `docs/manual`: `make audit MNEMONIC_BIN="$PWD/../../target/debug/mnemonic" MD_BIN=md MS_BIN=ms MK_BIN=mk FIXTURES_DIR="$PWD/../../crates/mnemonic-toolkit/tests/fixtures/wallet_import"` (`:186`).
+   - Expected: `[lint] OK`, `[verify-examples] OK (62 transcripts pass)` and `OK anchor-check: …`.
+   - Measured: `[lint] OK`, `[verify-examples] OK (62 transcripts pass)`, `OK anchor-check: 9 danglers in current run match baseline (no new, no shrunk)`.
+   - The transcript replay is the check that `41-bundle-inheritance-cards.err` and `41-bundle-inheritance-json.out` equal the patched binary's output.
+9. `MNEMONIC_BIN="$PWD/target/debug/mnemonic" MD_BIN="$(command -v md)" MS_BIN="$(command -v ms)" MK_BIN="$(command -v mk)" bash ci/doc-flag-lint.test.sh` (`:200`-`:203`, the doc-flag-lint mutation self-test). Expected: `15 passed, 0 failed`. Measured: the same.
+10. `examples.yml`: run `EXAMPLES_BIN_DIR="$PWD/target/debug" bash .examples-build/gen.sh > .examples-build/Examples.md || exit 1`, then `git diff --exit-code -- .examples-build/Examples.md`. Expected: no diff, once `examples.diff` is applied and staged (section 6.2 step 3). Measured: the regenerated file's diff from base equals `examples.diff`.
+11. Run from `docs/manual`: `make pdf MERMAID_FILTER=skip` and `make html MERMAID_FILTER=skip` (`:210`, `:226`). Expected: exit 0. Measured: both built.
+
+`technical-manual.yml`, `quickstart.yml`, `manual-gui.yml`:
+
+12. Each book's gate:
+    - **Technical manual**, from `docs/technical-manual`:
+      - Run `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=true` (`technical-manual.yml:124`-`:129`), `make verify-examples`, `make pdf` and `make html`.
+      - Expected and measured: `CSpell: Files checked: 26, Issues found: 0 in 0 files.` (lockstep file 7 adds `preimages`), `[lint] OK`, `[verify-examples] OK (18 transcripts pass)`, and both books built.
+      - The lint's symbol-ref-check resolves source citations only in CI's checkout layout (`technical-manual.yml:69`-`:73`). In a plain worktree it checks 0 anchors. The patched `41-bundle-anatomy.md:136` cites `bundle.rs::plain_multisig_threshold`, so the production function keeps that exact name.
+      - To check it locally, emulate CI's layout:
+        - `W=/scratch/cache/tk-v7-build-symref-ws; mkdir -p "$W"; ln -s "$PWD" "$W/mnemonic-toolkit"`
+        - `python3 "$W/mnemonic-toolkit/docs/technical-manual/tests/symbol-ref-check.py" SRC_DIR="$W/mnemonic-toolkit/docs/technical-manual/src"`
+        - Expected and measured: `[symbol-ref-check] OK (301 `::` anchors checked, 427 skipped)`.
+      - A local `make lint` with all sibling checkouts present also reports two `fresh_chunk_set_id` misses in the mk chapters. Base has them too, they are not in this FIX's files, and CI skips them.
+    - **Quickstart**, from `docs/quickstart`, with the pinned CLIs: `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk` (`quickstart.yml:166`) and `make verify-examples`. Expected and measured: `[lint] OK`, `[verify-examples] OK (62 transcripts pass)`.
+    - **GUI manual**: no file under `docs/manual-gui` changes (STOP-1). Its `verify-examples` replays with the pinned toolkit `mnemonic-toolkit-v0.105.1` (`manual-gui.yml:237`-`:257`), not this PR's binary, and its lint byte-compares the tutorial corpus with `mnemonic-gui-v0.63.0`. Expected: green on the PR, as on base. If STOP-1 is ruled (ii), the ruled prose edit is the only change, and `make lint` (`manual-gui.yml:160`) and `make html` (`:156`) are re-run locally.
+
+The FIX rows and the mutation gate:
+
+13. The FIX rows by exact name: section 4's command. Expected: exit 0, exactly **30 tests run: 30 passed**. Quote the line in the GREEN commit message. A short or empty count is a FAIL, whatever the pass count. Measured: `Summary [   0.045s] 30 tests run: 30 passed, 4111 skipped`.
+14. Run `bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/mutation-gate.sh <worktree> origin/master` after items 1-5 pass.
+    - Production files touched: `cmd/bundle.rs`, `format.rs`, `wallet_import/json_envelope.rs`, `cmd/export_wallet.rs` and `cmd/import_wallet.rs`.
+    - Its missed list goes into the review brief.
+    - Risk class: A (printed card text, the import-wallet summary, the manual and transcripts) and C (the JSON type change). `bitcoind-differential.yml` names `cmd/bundle.rs` and `cmd/export_wallet.rs` as funds-path inputs, so the coordinator may raise this to B.
+
+Every other workflow that runs on the PR must be green on the PR head:
+
+- `release.yml`'s build matrix and `sibling-pin-check.yml` (every `pull_request`).
+- `bitcoind-differential.yml`: path-filtered, and this FIX touches two of its paths, `src/cmd/bundle.rs` and `src/cmd/export_wallet.rs` (`bitcoind-differential.yml:50`, `:55`). It runs the pinned bitcoind v27.0 on CI; it is not a local step.
+
+Two workflows do not run, because none of their paths is touched: `fuzz-smoke.yml` (`parse_descriptor.rs`, `lib.rs`, `fuzz/`, `wc-codec`) and `cross-tool-differential.yml` (`parse_descriptor.rs`). `man-pages.yml`, `changelog-check.yml` and `install-pin-check.yml` run only on tags.
+
 ## 8. STOPs
 ## 9. Coverage map (ruling -> rows)
