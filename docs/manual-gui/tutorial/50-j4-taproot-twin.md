@@ -127,9 +127,10 @@ xpubs the result is watch-only (no `ms1`, one `mk1` per key, one shared
 > The pinned toolkit prints `# Threshold: 3 of 12` and
 > `# Recovery: any 3 of 12 signing keys + md1 (template card).` for
 > this vault, and both are wrong: it is not a 3-of-12. The internal key
-> `Kint` alone can spend at any time, by the key path. Each fallback
-> tier needs its own keys, so three keys from different tiers spend
-> nothing, and tiers 1 and 2 also need the secret word. Keep all twelve
+> `Kint` alone can spend at any time, by the key path. Tiers 1 to 3
+> each need their own keys, so three keys taken one from each of tiers
+> 1, 2 and 3 spend nothing, and tiers 1 and 2 also need the secret
+> word; after tier 4's lock any one of its three keys spends alone. Keep all twelve
 > signing keys, the secret word and the `md1` card. Toolkit releases
 > after 0.105.1 print no `# Threshold` line for this policy, and the
 > Recovery line `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 12 signing keys, any hash preimages it names, and md1 (template card).`

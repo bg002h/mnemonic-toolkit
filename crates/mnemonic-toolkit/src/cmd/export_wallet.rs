@@ -1002,9 +1002,14 @@ fn run_from_import_json<W: Write, E: Write>(
         .or_else(|| lifted_wallet_name.clone())
         .unwrap_or_else(|| "imported-descriptor".to_string());
 
-    // Threshold from envelope's bundle.multisig.threshold (None for N=1, and
-    // null for a general policy, FIX-V7 ruling 2).
-    let threshold = envelope.bundle.multisig.as_ref().and_then(|m| m.threshold);
+    // FIX-V7 2.1: K comes from the envelope's descriptor (its md1), as on the
+    // bundle --import-json path; the envelope's threshold field is ignored.
+    let threshold: Option<u8> = {
+        let md1: Vec<&str> = envelope.bundle.md1.iter().map(|s| s.as_str()).collect();
+        md_codec::chunk::reassemble(&md1)
+            .ok()
+            .and_then(|d| crate::cmd::bundle::plain_multisig_threshold(&d.tree))
+    };
 
     // SPEC v0.37 §2.3 — derive the template from the envelope descriptor for
     // template-requiring formats (sparrow/coldcard/jade/electrum) so they can

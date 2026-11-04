@@ -678,3 +678,100 @@ fn v7_import_wallet_threshold_k_for_plain() {
         "{t}: {v}"
     );
 }
+
+// ---- Template mode keeps `--threshold` (FIX-V7 ruling 1 / 2.1) -------------
+
+const TPL_XPUBS: [(&str, &str); 3] = [
+    ("xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX", "b8688df1"),
+    ("xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx", "5436d724"),
+    ("xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6", "28645006"),
+];
+
+/// `bundle --template wsh-sortedmulti --threshold 2` over three xpub slots.
+fn template_bundle(extra: &[&str]) -> std::process::Output {
+    let mut args: Vec<String> = [
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "wsh-sortedmulti",
+        "--threshold",
+        "2",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    for (i, (xpub, fp)) in TPL_XPUBS.iter().enumerate() {
+        for (field, val) in [
+            ("xpub", *xpub),
+            ("fingerprint", *fp),
+            ("path", "48'/0'/0'/2'"),
+        ] {
+            args.push("--slot".into());
+            args.push(format!("@{i}.{field}={val}"));
+        }
+    }
+    args.extend(extra.iter().map(|s| s.to_string()));
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&args)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    out
+}
+
+#[test]
+fn v7_template_mode_card_keeps_flag_threshold_and_recovery_lines() {
+    let e = String::from_utf8(template_bundle(&[]).stderr).unwrap();
+    assert!(e.lines().any(|l| l == "# Threshold: 2 of 3"), "{e}");
+    assert!(
+        e.lines()
+            .any(|l| l == "# Recovery: any 2 of 3 signing keys + md1 (template card)."),
+        "{e}"
+    );
+    assert!(!e.contains("general policy"), "{e}");
+}
+
+#[test]
+fn v7_template_mode_json_threshold_is_the_flag() {
+    let out = template_bundle(&["--json"]);
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["multisig"]["threshold"], Value::from(2), "{v}");
+}
+
+#[test]
+fn v7_export_wallet_takes_k_from_envelope_descriptor() {
+    // A plain 2-of-3 envelope whose threshold is null or stale: every
+    // template format emits the same file as the honest envelope, because K
+    // comes from the envelope's descriptor (the rule bundle --import-json uses).
+    let dir = tempfile::tempdir().unwrap();
+    let t = "wsh(sortedmulti(2,K0,K1,K2))";
+    let good = envelope_file(dir.path(), "good.json", t, Value::from(2));
+    for (name, th) in [("null.json", Value::Null), ("stale.json", Value::from(3))] {
+        let env = envelope_file(dir.path(), name, t, th);
+        for format in ["sparrow", "coldcard", "electrum"] {
+            let want = export_from_envelope(&good, format);
+            assert!(
+                want.status.success(),
+                "{format}: {}",
+                String::from_utf8_lossy(&want.stderr)
+            );
+            let got = export_from_envelope(&env, format);
+            assert!(
+                got.status.success(),
+                "{name} {format}: {}",
+                String::from_utf8_lossy(&got.stderr)
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&got.stdout),
+                String::from_utf8_lossy(&want.stdout),
+                "{name} {format}"
+            );
+        }
+    }
+}
