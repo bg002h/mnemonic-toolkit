@@ -10,16 +10,20 @@ homepage = "https://github.com/bg002h/mnemonic-toolkit"
 rust-version = "1.85"
 
 # Pinned to rust-miniscript master rev ff4732e (advanced from 95fdd1c on
-# 2026-08-20), carried for taproot fragments not yet in a crates.io release:
-#   - PR #910 (Terminal::SortedMultiA) — present.
+# 2026-08-20), carried for fragments and APIs that no crates.io release has:
+#   - PR #910 (Terminal::SortedMultiA) — present; absent from 13.2.0.
 #   - PR #915 (SortedMulti moved from the descriptor enums into a Terminal) —
-#     present. NOTE: an internal cleanup upstream, NOT a standards change.
-#     BIP-388 l.138 admits sortedmulti "(inside sh or wsh only)" and BIP-379
-#     does not list it as a Miniscript fragment; at this rev upstream parses it
-#     at any depth, so it is MORE PERMISSIVE than the standard. md-codec holds
-#     the BIP rule.
-#   - PR #953 (taptree Display fix for depth-≥2 trees) — present, and the reason
-#     for this bump. It was the blocker for depth-≥2 taproot restore.
+#     present; absent from 13.2.0. NOTE: an internal cleanup upstream, NOT a
+#     standards change. BIP-388 l.138 admits sortedmulti "(inside sh or wsh
+#     only)" and BIP-379 does not list it as a Miniscript fragment; at this rev
+#     upstream parses it at any depth, so it is MORE PERMISSIVE than the
+#     standard. md-codec holds the BIP rule.
+#   - PR #911 (Descriptor::derive_at_index, into_definite) — present; absent
+#     from 13.2.0.
+#   - PR #929 (generic Descriptor::plan) — present; absent from 13.2.0.
+#   - PR #953 (taptree Display fix for depth-≥2 trees) — present. crates.io
+#     13.2.0 (2026-10-17) carries this one only, as backport #1039; the Display
+#     fix is therefore no longer a reason for the pin, #910/#915/#911/#929 are.
 #
 # DEPTH-≥2 TAPROOT RESTORE IS LIVE as of this rev: `restore.rs`'s
 # `ensure_taptree_depth_le_one` gate is lifted (now `ensure_taptree_wellformed`,
@@ -27,10 +31,10 @@ rust-version = "1.85"
 # `tests/cli_restore_taproot.rs` are flipped to reconstruction. The card was
 # always a faithful backup; only the Display side was broken.
 #
-# Latest crates.io is 13.1.0 (2026-06-09) and contains NONE of these. DROP this
-# [patch] when the first release > 13.1.0 ships carrying #953 AND #910 (verify
-# via the miniscript CHANGELOG). Tracked: FOLLOWUP
-# `taproot-coverage-cycle-on-miniscript-gt-13-1-0`.
+# Kept by decision 2026-11-03 (architect miniscript-13-2): no 13.x port; drop
+# when one release carries #910, #915, #911 and #929; the tripwire watches for
+# it (.github/workflows/miniscript-fork-tripwire.yml, BASELINE 13.2.0). Tracked:
+# FOLLOWUP `taproot-coverage-cycle-on-miniscript-gt-13-1-0`.
 [patch.crates-io]
 miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "ff4732e5f75aa555682343cb180fa72ee3e8e9d5" }
 
