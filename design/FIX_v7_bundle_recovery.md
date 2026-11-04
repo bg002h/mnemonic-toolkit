@@ -200,12 +200,12 @@ Build on `build/v7-bundle-recovery` (header), in a git worktree that is not unde
    - Run section 4's command. Expect exit 0 and `30 tests run: 30 passed, …`.
 3. Docs and transcripts:
    - `git apply $E/fix-v7-docs.patch`, then `git apply $E/examples.diff`.
-   - Apply architect T8, T9 and T11 (asserting replaces; each old string occurs once).
+   - Apply architect T8 and T9 (asserting replaces; each old string occurs once). T11 is dropped: no cards made by 0.105.1 or earlier exist (Brian 2026-11-04).
    - Insert the two STOP-1 interim notes (architect-2026-11-04-fix-v7-stops.md T1). Then `git status --short docs/manual-gui` lists exactly `tutorial/40-j3-degrading-vault.md` and `tutorial/50-j4-taproot-twin.md`.
    - Check the transcripts against the patched binary: section 7 item 8.
    - Then `git add .examples-build/Examples.md` and run section 7 item 10. Its `git diff` compares the worktree with the index, so an unstaged `examples.diff` is itself a diff.
    - A replayed transcript that differs from `fix-v7-docs.patch`, or a regenerated `Examples.md` that differs from `examples.diff`'s result, is a FAIL. Do not hand-edit a transcript to match.
-4. Append F1 (section 8, STOP-1, in the form its ruling gives) to `design/FOLLOWUPS.md`. STOP-3 is ruled (b): `git apply $E/fix-v7-changelog.patch`, then architect T10's two inserts.
+4. Append F1 (section 8, STOP-1, in the form its ruling gives) to `design/FOLLOWUPS.md`. STOP-3 is ruled (b): `git apply $E/fix-v7-changelog.patch`, then architect T10's insert (2) only. T10 (1) is dropped: no cards made by 0.105.1 or earlier exist (Brian 2026-11-04).
 5. Commit as the V7 GREEN commit. Its message quotes the section 4 summary line.
 6. Run the whole gate (section 7) on the final head, then the mutation gate (section 7 item 14).
 7. Do not change the version or any release file.
