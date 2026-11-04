@@ -194,8 +194,10 @@ the full descriptor to restore. The shapes are:
 - a **hardened use-site** — a hardened wildcard (`/*h`) on the shared suffix or
   inside a per-cosigner override (a hardened child cannot be derived from an xpub);
 - **per-cosigner use-site overrides on a `tr(sortedmulti_a)` card** — the
-  `tr(sortedmulti_a)` reconstruction renderer is gated on the next rust-miniscript
-  release (`Terminal::SortedMultiA`, > 13.1.0); interim loud-refuse;
+  `tr(sortedmulti_a)` reconstruction renderer is not yet enabled: the build's
+  pinned rust-miniscript already provides `Terminal::SortedMultiA`, and the
+  remaining gate is a tracked follow-up (no release is awaited for it); interim
+  loud-refuse;
 - **per-cosigner use-site overrides on a taproot card whose internal key is a
   real key (non-NUMS)** — the faithful override path (v0.59.1) covers only
   NUMS-internal `tr(multi_a)`, so a non-NUMS internal key combined with
@@ -1537,11 +1539,11 @@ after(N)))`) or a depth-1 **two-leaf** tree (e.g. `tr(NUMS,{pk(K0),pk(K1)})`,
 including a `multi_a` leaf alongside another leaf). The reconstructed
 descriptor prints the NUMS internal key as its x-only **hex**
 (`50929b74…803ac0`), not the engraving-side literal `NUMS` token — the two
-spellings are the same key. Deeper trees (**≥3 leaves / depth ≥2**) are
-refused (exit 2) until an upstream miniscript printing fix ships, and a
-`sortedmulti_a` leaf *inside* a multi-leaf tree is refused (exit 2) pending a
-sibling md-codec rendering fix — the engraved card remains a faithful backup
-in both cases.
+spellings are the same key. Deeper trees (**≥3 leaves / depth ≥2**)
+reconstruct too, since the 2026-08-20 miniscript pin (toolkit v0.55.1 refused
+them). A `sortedmulti_a` leaf *inside* a multi-leaf tree is still refused
+(exit 2) pending a sibling md-codec rendering fix — the engraved card remains
+a faithful backup.
 
 Since v0.55.3 the trunk (internal) key may also be a **real cosigner key**
 (non-NUMS, "key-path") rather than the NUMS sentinel: a general single-leaf /
