@@ -2,8 +2,9 @@
 
 Small-fix track (RULES.md "Process"). FIX branch `fix/v5-wsh-cost` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v5-wsh-cost`: `git fetch origin && git switch -c build/v5-wsh-cost origin/master && git cherry-pick a34bd61e 123c258d ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v5-wsh-cost head>`. Do not take `d19256e8`.
 
-**Status: AUTHOR DRAFT, not reviewed. Part A (V5) waits on STOP-1. Part B (E9) is complete; per grade e9
-ruling (a) it ships alone, with the same text, if Part A waits (STOP-2 decides its branch and file name).**
+**Status: r1 reviewed. STOP-1 (option (a)), STOP-2, STOP-5 (option (ii)) and STOP-7
+are ruled by `architect-2026-11-04-fix-v5-stops.md`; STOP-3, STOP-4 and STOP-6 are moot (they move with A2 to F3).
+Parts A and B build together, in one PR from `build/v5-wsh-cost` (§6).**
 
 Sources (coordinator `agent-reports/` unless a path is given):
 - Grades: `grade-2026-11-03-tk-v5-v7.md` (V5 table :79-91, rulings 4-7 :120-145) and
@@ -361,13 +362,15 @@ PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2c
    the ruling's text replaces this step and the FIX review re-checks §3, §4 and §5 first.
    - `git apply $E/fix-v5a-only.patch` (Appendix A), then `git apply $E/fix-v5a-docs.patch` (Appendix C), then
      `git apply $E/transcript-diffs.txt` (Appendix D), then `git apply $E/examples.diff` (Appendix E).
-   - Revert Appendix D's tutorial hunk (`git checkout -- docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt`) and Appendix C's `50-j4-taproot-twin.md` hunk (`git checkout -- docs/manual-gui/tutorial/50-j4-taproot-twin.md`); append F4 (§9).
+   - Revert Appendix D's tutorial hunk (`git checkout -- docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt`) and Appendix C's `50-j4-taproot-twin.md` hunk (`git checkout -- docs/manual-gui/tutorial/50-j4-taproot-twin.md`).
    - `cargo build --bin mnemonic`.
    - Run §3.1. Expect exit 0 and `30 tests run: 30 passed, …`.
-   - Check the transcripts against the patched binary: §7 items 8 and 10. A replayed transcript that differs from
+   - Check the transcripts against the patched binary: §7
+     item 8; then `git add .examples-build/Examples.md` and run §7 item 10 (its `git diff` compares the worktree with the
+     index, so an unstaged Appendix E is itself a diff). A replayed transcript that differs from
      Appendix D, or a regenerated `Examples.md` that differs from Appendix E's result, is a FAIL; do not
      hand-edit a transcript to match.
-   - Append F2 (§9) to `design/FOLLOWUPS.md`.
+   - Append F2, F3 and F4 (§9) to `design/FOLLOWUPS.md`, in that order, each copied from inside its fence.
    - Commit as the V5 GREEN commit; its message quotes the §3.1 summary line.
 4. Run the whole gate (§7) on the final head, then the mutation gate (§7 item 14).
 5. Do not change the version, `CHANGELOG.md` or any release file (§8).
@@ -398,8 +401,17 @@ applied. STOP-7 decides the base.
      musl build and test (`:526`).
    Expected: each exits 0.
 
-`manual.yml` (the manual job and its mutation self-tests), with the pinned `mk` (`mk-cli-v0.13.0`), `md`
-(`descriptor-mnemonic-md-cli-v0.20.4`, `--features cli-compiler`) and `ms` (`ms-cli-v0.20.2`) first in PATH:
+`manual.yml` (the manual job and its mutation self-tests), with the pinned CLIs first in PATH. `--version` does not
+identify them (a newer mk also prints `mk 0.13.0`), so install the tags into a fresh root:
+
+```
+R=/scratch/cache/tk-v5-build-ci-tools
+CARGO_TARGET_DIR="$R/target" cargo install --root "$R" --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 mk-cli
+CARGO_TARGET_DIR="$R/target" cargo install --root "$R" --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.4 md-cli --features cli-compiler
+CARGO_TARGET_DIR="$R/target" cargo install --root "$R" --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.2 ms-cli
+export PATH="$R/bin:$HOME/.cargo/bin:$PATH"
+mk encode --help | grep -c from-md1-set   # prints 0 on the pin
+```
 
 7. `bash ci/doc-gate-guard.test.sh` (`manual.yml:61`). Expected: exit 0.
 8. From `docs/manual`: `make audit MNEMONIC_BIN="$PWD/../../target/debug/mnemonic" MD_BIN=md MS_BIN=ms MK_BIN=mk
@@ -484,22 +496,31 @@ F2 (Part A, V5; appended by §6 step 3, only after STOP-1 and STOP-5 are ruled):
 - Tier: `toolkit`.
 ```
 
+F3 (A2, held by the STOP-1 ruling; appended by §6 step 3, status `open`):
+
+```
 ### `compare-cost-wsh-cost-self-check` — compare-cost's ruling-5/6 wsh cost self-check, held until the pinned `max_weight_to_satisfy` is exact for `d:` and `thresh` (repo: **mnemonic-toolkit**; owning phase: **the next cycle that moves miniscript**)
 - Surfaced: FIX_v5_wsh_cost STOP-1, ruled option (a) by `architect-2026-11-04-fix-v5-stops.md`. Rulings 5 and 6 of `grade-2026-11-03-tk-v5-v7.md` stand unchanged; only their build moved here.
 - Why held: at pin ff4732e5 `max_weight_to_satisfy` counts `d:`'s `1` push as 1 WU (`extra_props.rs:550`; fixed by rust-miniscript #1015) and folds k+1 satisfactions in `thresh` (`:902`; fixed by #1040), so 11 of the FIX corpus's 63 shapes (7 thresh-free with `d:`, 4 thresh) break ruling 6 although the printed figure is right.
 - Action, in the cycle that moves miniscript: (1) if the new rev carries #1046, reduce `witness_weight_wu` (`cost/enumerate.rs`) to `witness_size()`, since #1046 counts the witness script (FIX rows 1-9 fail on a double count); (2) re-run the FIX corpus (`corpus-scratch.patch`, `count-plus-one.py` in the FIX evidence dir) on the new rev; (3) if the rev carries #1015 and #1040, every thresh-free shape has L == mw + 1 and every thresh row is <= mw + 1, rule FIX STOP-3, STOP-4 and STOP-6, then build rulings 5-6 from FIX Appendix F with the FIX §3.3 rows; otherwise STOP.
 - Status: `open`.
 - Tier: `toolkit` (upstream-dependent).
+```
 
+F4 (the STOP-5 ruling; appended by §6 step 3, status `open`):
+
+```
 ### `manual-gui-j4-20-compare-cost-v5-figures` — at the GUI manual's next re-pin, J4 step 20's compare-cost transcript, figures and prose take FIX-V5's wsh figures (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v5_wsh_cost Part A**)
 - Surfaced: FIX_v5_wsh_cost STOP-5, ruled by `architect-2026-11-04-fix-v5-stops.md`. Ruling 7's GUI item (`grade-2026-11-03-tk-v5-v7.md`) is met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
 - What: mnemonic-gui regenerates `tests/snapshots/tutorial/tut-j4-20-compare-cost.stdout.txt` and the two J4 step-20 PNGs against that toolkit release; the re-pin copies them into `docs/manual-gui/` and changes `50-j4-taproot-twin.md:241` "(`+68` to `+71` vB)" to the range the regenerated transcript prints (FIX Appendix D predicts 144 (+3), 126 (+6), 133 (+6), i.e. "(`+3` to `+6` vB)").
 - Status: `open`.
 - Tier: `docs`, `cross-repo`.
+```
 
 ## 10. STOPs (undecided points; the builder does not choose)
 
 ### STOP-1. Ruling 6's rule fails on the corpus (blocks Part A)
+**Ruled (architect 2026-11-04): option (a).** A2 moves to F3 (§1 A2, §9 F3). The text below is the record.
 
 Ruling 6 (grade v5-v7 :133-139): "If the FIX's corpus finds a thresh-free shape with L != mw + 1, STOP and
 report: do not widen the rule." The corpus finds seven such shapes.
@@ -564,6 +585,7 @@ report: do not widen the rule." The corpus finds seven such shapes.
   gives the new rule text, and the four `thresh` +1 rows are traced before any self-check ships.
 
 ### STOP-2. E9 alone: branch, file name and base
+**Ruled (architect 2026-11-04): E9 ships with V5 in one PR from `build/v5-wsh-cost`; §6 step 2 stays its own commit.** Fallback, the coordinator's call only, if the FIX review leaves Part A at C/I after Part B is clean: branch `build/e9-wrapper-chain` from `origin/master`, add the file and Appendix B and F1 by the steps below, cite this FIX at its `fix/v5-wsh-cost` SHA, and skip §6 step 2 in the V5 PR. The text below is the record.
 
 If Part A waits on STOP-1, Part B ships alone with the same text (grade e9 ruling (a), :68-69). Undecided:
 
@@ -580,6 +602,7 @@ the steps are: add that file (`git show 567dbf3d:crates/mnemonic-toolkit/tests/c
 run §3.2 to see `12 tests run: 5 passed, 7 failed`, apply Appendix B, run §3.2 to see `12 passed`, and append F1.
 
 ### STOP-3. A `max_weight_to_satisfy` error (contingent on A2)
+**Moot under the STOP-1 ruling; F3 rules it before A2 builds.**
 
 Appendix F :25-27 maps an `Err` from `max_weight_to_satisfy()` to `CompareCostError::NoSatisfyingConditions`
 (exit 3, `compare-cost: no satisfying conditions for this miniscript`, `cost/mod.rs:82-84`, `:98`). That mapping
@@ -588,6 +611,7 @@ choices include `NoSatisfyingConditions`, `CostSelfCheck` (which has no figure t
 variant with its own text. Moot under STOP-1 option (a).
 
 ### STOP-4. build-descriptor's human header before the `?` (contingent on A2)
+**Moot under the STOP-1 ruling; F3 rules it before A2 builds.**
 
 Ruling 5 says build-descriptor propagates the error "unchanged through its existing `?`
 (`build_descriptor.rs:477-486, 512-521`), exit 3, in both the human and `--json` views, with no degraded
@@ -597,6 +621,7 @@ leave the header on stdout above the exit-3 error. Undecided: whether the header
 Moot under STOP-1 option (a).
 
 ### STOP-5. GUI tutorial J4 step 20 against the pinned GUI
+**Ruled (architect 2026-11-04): option (ii).** §6 step 3 reverts both GUI hunks; F4 owns them.
 
 Ruling 7 puts the GUI tutorial J4 step 20 prose (`50-j4-taproot-twin.md:241`) and its transcript in lockstep.
 `docs/manual-gui/pinned-upstream.toml:107-108` pins `[mnemonic-gui] tag = "mnemonic-gui-v0.63.0"`, and
@@ -611,6 +636,7 @@ hunk therefore fails phase 11 (§7 item 12) until the GUI side moves. Options (n
 - (iii) another route the ruling names.
 
 ### STOP-6. No CLI test seam for exit 3 (contingent on A2)
+**Moot under the STOP-1 ruling; F3 rules it before A2 builds.**
 
 Once STOP-1 is ruled so that every corpus shape passes the check, no valid input reaches exit 3, so no CLI row
 can show R5's text. §3.3's first two rows need a seam. The choices are a `#[cfg(test)]` unit test that calls the
@@ -618,6 +644,7 @@ check with forged L and mw (no production surface), or a fault-injection hook in
 Moot under STOP-1 option (a).
 
 ### STOP-7. V5 and V7 order, and the build base
+**Ruled (architect 2026-11-04): build on `build/v5-wsh-cost` from `origin/master` (header, §6); V5 and V7 are independent PRs.** Order: whichever PR is first green with 0C/0I merges first. The second merges `origin/master` in, re-runs all of §7, regenerates `.examples-build/Examples.md` with `gen.sh` (§7 item 10) and resolves the `design/FOLLOWUPS.md` append.
 
 `ac3ff70a` is the tip of `origin/triage/v5-v7`, not of master (`12e013bc`; master is not its ancestor; the four
 commits are `a34bd61e`, `d19256e8`, `123c258d`, `ac3ff70a`). It carries FIX-V7's triage file
@@ -632,7 +659,7 @@ merges first.
 
 ### Appendix A. Part A production code (`fix-v5a-only.patch`)
 
-Applies to `ac3ff70a` and `12e013bc`. Held by STOP-1 (a) until the ruling.
+Applies to `ac3ff70a` and `12e013bc`. Applied by §6 step 3 (STOP-1 option (a)).
 
 <!-- evidence: fix-v5a-only.patch -->
 ~~~~diff
