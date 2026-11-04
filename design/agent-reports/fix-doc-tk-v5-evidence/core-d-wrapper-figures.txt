@@ -1,0 +1,7 @@
+# Bitcoin Core regtest spends: key-free extract of a local log that holds regtest keys (every key shown as A)
+# W = witness bytes (item count + each item length prefix + data); input_wu = 4*41 + W
+# shape	witness_item_bytes	W	input_wu	input_vB_ceil	core_tx_weight	core_tx_vsize	weight_formula_matches_core
+wsh(and_b(pk(A),sdv:older(10)))	[1, 71, 43]	119	283	71	449	113	True
+wsh(and_v(v:pk(A),dv:older(144)))	[1, 71, 43]	119	283	71	449	113	True
+wsh(and_v(v:pk(A),older(144)))	[71, 39]	113	277	70	443	111	True
+wsh(and_b(pk(A),snl:older(10)))	[0, 71, 44]	119	283	71	449	113	True
