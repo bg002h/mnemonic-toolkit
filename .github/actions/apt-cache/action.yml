@@ -1,0 +1,45 @@
+# Install apt packages with their .deb files cached between runs (the pandoc +
+# texlive installs fetch ~900 MB and have timed out on a slow mirror).
+# `ci/apt-cache.sh plan` resolves the exact deb set (name, size, hash) after
+# `apt-get update`; that digest is the cache key, so a hit means the same bytes
+# apt would download. `install` runs the same apt-get install as before with
+# the cache dir as apt's archive dir. apt re-verifies cached debs against the
+# signed index, so no skip is needed on tags. A real apt error fails the step.
+# Needs the repo checked out. Set `timeout-minutes` on the calling step.
+name: apt install with cached debs
+description: apt-get install --no-install-recommends, with the debs cached.
+inputs:
+  packages:
+    description: Space-separated package names (the exact list to install).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Resolve the deb set (apt-get update + plan)
+      id: plan
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+        CACHE_DIR: ${{ runner.temp }}/apt-debs
+      run: |
+        # $ImageOS is a runner variable, not in the `env` context.
+        echo "image=$ImageOS" >> "$GITHUB_OUTPUT"
+        read -ra pkgs <<< "$PKGS"
+        bash "$GITHUB_WORKSPACE/ci/apt-cache.sh" plan "$CACHE_DIR" "${pkgs[@]}" \
+          | tee -a "$GITHUB_OUTPUT"
+    - name: Restore cached debs
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/apt-debs
+        key: apt-${{ steps.plan.outputs.image }}-${{ steps.plan.outputs.pkgsum }}-${{ steps.plan.outputs.digest }}
+        restore-keys: |
+          apt-${{ steps.plan.outputs.image }}-${{ steps.plan.outputs.pkgsum }}-
+    - name: Install (apt-get install)
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+        CACHE_DIR: ${{ runner.temp }}/apt-debs
+      run: |
+        read -ra pkgs <<< "$PKGS"
+        bash "$GITHUB_WORKSPACE/ci/apt-cache.sh" install "$CACHE_DIR" "${pkgs[@]}"

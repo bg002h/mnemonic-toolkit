@@ -69,26 +69,26 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           CHECK_NAME: examples
           GH_TOKEN: ${{ github.token }}
-        run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
+        run: bash ci/doc-gate-guard.sh --book .examples-build --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|scripts/install\.sh$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.gitattributes$|\.github/workflows/examples\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$)'
 
       - name: Install pandoc + texlive + DejaVu mono
-        timeout-minutes: 15
+        timeout-minutes: 30
         # Monofont "DejaVu Sans Mono" (gen.sh:116) needs fonts-dejavu; jq is
         # runner-preinstalled but pinned explicitly (gen.sh preflight requires
         # it). No chromium/mermaid — Examples.pdf has no figures.
         if: steps.guard.outputs.relevant == 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-extra-utils \
-            lmodern \
-            fonts-dejavu \
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            lmodern
+            fonts-dejavu
             jq
 
       - name: Install pinned Rust toolchain (1.85.0)
