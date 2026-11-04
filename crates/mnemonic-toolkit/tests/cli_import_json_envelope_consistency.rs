@@ -224,6 +224,29 @@ fn envc_bundle_refuses_edited_origin_path() {
     assert_refused(&bundle(&p, "signet"), &e2_key("--import-json", 0), "bundle");
 }
 
+/// Same tpub and origin path as cosigner 0, different master fingerprint: the
+/// only field that differs between the spliced card and the descriptor key.
+fn fingerprint_only_other_card() -> Value {
+    let other = import(
+        &PLAIN.replace("@0", &K0.replace("73c5da0a", "deadbeef")),
+        false,
+    );
+    other[0]["bundle"]["mk1"][0].clone()
+}
+
+#[test]
+fn envelope_mk1_fingerprint_only_mismatch_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let card = fingerprint_only_other_card();
+    let honest = import(PLAIN, false);
+    assert_ne!(card, honest[0]["bundle"]["mk1"][0], "fixture: card differs");
+    let p = edited(dir.path(), |b| b["mk1"][0] = card.clone());
+    for f in FORMATS {
+        assert_refused(&export(&p, f), &e2_key("--from-import-json", 0), f);
+    }
+    assert_refused(&bundle(&p, "signet"), &e2_key("--import-json", 0), "bundle");
+}
+
 #[test]
 fn envc_export_refuses_missing_mk1_card() {
     let dir = tempfile::tempdir().unwrap();
