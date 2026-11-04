@@ -111,7 +111,7 @@ The synthesis core (`synthesize_unified`) takes a `Vec<ResolvedSlot>` (one entry
 
 \index{ms1 dense layout}The `ms1` field's **dense length-N layout** (`format.rs::MsField`) is the v0.4 simplification: the slot index `i` in `ms1[i]` corresponds to `mk1[i]` and to the slot `@i` indexed in `BundleJson.multisig.cosigners`. An empty string at position `i` marks slot `@i` as watch-only; verify-bundle's `emit_verify_checks` discriminates on `expected.ms1.first().map(|s| s.is_empty())` in the single-sig arm (`verify_bundle.rs::emit_verify_checks`) and emits `passed: true, decode_error: Some("skipped: watch-only slot")` for both ms1 checks (`verify_bundle.rs::emit_verify_checks`). The per-cosigner indexed equivalent for multisig lives in `emit_multisig_checks`. Both `["ms1abc..."]` (single-sig full) and `[""]` (single-sig watch-only) are legal at N=1.
 
-The `MultisigInfo`\index{MultisigInfo} block at `format.rs::MultisigInfo` is the lookup-table consumers use to reassemble a wallet from a JSON envelope: it carries the `template` name, the `threshold` K, `cosigner_count` N, the `path_family` string (`"bip48"` or `"bip87"`), and a `Vec<CosignerEntry>` (one entry per slot, holding `index`, `master_fingerprint` (None under privacy mode), `origin_path`, `xpub`). The `cosigners` ordering matches slot indices `@0..@N-1`.
+The `MultisigInfo`\index{MultisigInfo} block at `format.rs::MultisigInfo` is the lookup-table consumers use to reassemble a wallet from a JSON envelope: it carries the `template` name, the `threshold` (`Option<u8>`: K for a plain k-of-n bundle, `null` for a general policy; SPEC §5.5), `cosigner_count` N, the `path_family` string (`"bip48"` or `"bip87"`), and a `Vec<CosignerEntry>` (one entry per slot, holding `index`, `master_fingerprint` (None under privacy mode), `origin_path`, `xpub`). The `cosigners` ordering matches slot indices `@0..@N-1`.
 
 ## The engraving card
 
@@ -121,7 +121,7 @@ Anatomy of a multisig card (sections in the order they emit):
 
 ```text
 # === Wallet bundle: wsh-sortedmulti, mainnet ===     ← header line
-# Threshold: 2 of 3                                   ← multisig only
+# Threshold: 2 of 3                                   ← plain k-of-n only
 # Cosigners:                                          ← multisig only
 #   @0: ms1:1c017,mk1:1c017 (73c5da0a @ 48'/0'/0'/2')
 #   @1: ms1:abcd1,mk1:abcd1 (deadbeef @ 48'/0'/0'/2')
@@ -132,6 +132,8 @@ Anatomy of a multisig card (sections in the order they emit):
 # Language: english                                   ← if not BIP-39 default
 # Passphrase: USED — not engraved on any card; record separately.
 ```
+
+A general policy (a multisig descriptor that is not plain k-of-n, SPEC §5.5) prints no `# Threshold:` line, and its Recovery line reads `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all {N} signing keys, any hash preimages it names, and md1 (template card).` (`format.rs::engraving_card_unified`; the K comes from `bundle.rs::plain_multisig_threshold`). A single-sig card prints neither line.
 
 The single-sig card collapses the cosigners block to up to four lines (`ms1`, `mk1`, `fingerprint`, `origin path`; `format.rs::engraving_card_unified`). The `fingerprint` line is suppressed under `--privacy-preserving` and the `origin path` line is suppressed when the slot carries no path; both fields are guarded by `if let Some(...)` at `format.rs::engraving_card_unified`. A taproot-multisig template (`tr-multi-a` / `tr-sortedmulti-a`) appends a hardware-wallet caveat block (`format.rs::engraving_card_unified`) flagging that signing-side support is nascent at v0.4.
 

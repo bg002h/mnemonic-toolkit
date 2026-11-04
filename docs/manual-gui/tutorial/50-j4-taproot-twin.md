@@ -123,6 +123,17 @@ xpubs the result is watch-only (no `ms1`, one `mk1` per key, one shared
 (captured transcript — included at build time)
 ```
 
+> **Do not follow this card's `# Threshold` and `# Recovery` lines.**
+> The pinned toolkit prints `# Threshold: 3 of 12` and
+> `# Recovery: any 3 of 12 signing keys + md1 (template card).` for
+> this vault, and both are wrong: it is not a 3-of-12. The internal key
+> `Kint` alone can spend at any time, by the key path. Each fallback
+> tier needs its own keys, so three keys from different tiers spend
+> nothing, and tiers 1 and 2 also need the secret word. Keep all twelve
+> signing keys, the secret word and the `md1` card. Toolkit releases
+> after 0.105.1 print no `# Threshold` line for this policy, and the
+> Recovery line `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 12 signing keys, any hash preimages it names, and md1 (template card).`
+
 **Exit code:**
 
 ```{.text include="tutorial/tut-j4-16-engrave.exit.txt"}

@@ -156,6 +156,17 @@ eleven cosigners with their `84'/0'/N'` origins.
 (captured transcript — included at build time)
 ```
 
+> **Do not follow this card's `# Threshold` and `# Recovery` lines.**
+> The pinned toolkit prints `# Threshold: 3 of 11` and
+> `# Recovery: any 3 of 11 signing keys + md1 (template card).` for
+> this vault, and both are wrong: it is not a 3-of-11. Each tier needs
+> its own keys, so three keys from different tiers (K0, K3 and K6)
+> spend nothing; tiers 1 and 2 also need the secret word; and after
+> tier 4's lock any one of K8, K9 and K10 spends alone. Keep all eleven
+> signing keys, the secret word and the `md1` card. Toolkit releases
+> after 0.105.1 print no `# Threshold` line for this policy, and the
+> Recovery line `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 11 signing keys, any hash preimages it names, and md1 (template card).`
+
 **Exit code:**
 
 ```{.text include="tutorial/tut-j3-12-engrave.exit.txt"}

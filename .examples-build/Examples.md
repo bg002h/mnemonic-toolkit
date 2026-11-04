@@ -922,7 +922,6 @@ md1ffumxt430x4tnf7n9z8y7v6ypn235vam58em2v583vn4e8sye3c64t8u928ma9zqcw3udszulgfsx
 md1ffumxt4lluk3chss0cnthusns607jerrdxzxuh07l4mhgs6ut6pxjq3gs642g78tg45
 
 # === Wallet bundle: descriptor, mainnet ===
-# Threshold: 3 of 11
 # Cosigners:
 #   @0: (no ms1; watch-only),mk1:5a703 (73c5da0a @ m/84'/0'/0')
 #   @1: (no ms1; watch-only),mk1:5a702 (73c5da0a @ m/84'/0'/1')
@@ -937,7 +936,7 @@ md1ffumxt4lluk3chss0cnthusns607jerrdxzxuh07l4mhgs6ut6pxjq3gs642g78tg45
 #   @10: (no ms1; watch-only),mk1:5a709 (28645006 @ m/84'/0'/2')
 # Template: descriptor
 # md1: 5a70
-# Recovery: any 3 of 11 signing keys + md1 (template card).
+# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 11 signing keys, any hash preimages it names, and md1 (template card).
 note: stdout is watch-only — public keys only, cannot spend
 ```
 

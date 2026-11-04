@@ -1,12 +1,11 @@
 info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
 # === Wallet bundle: descriptor, mainnet ===
-# Threshold: 3 of 3
 # Cosigners:
 #   @0: ms1:6e6be,mk1:6e6be (73c5da0a @ m/48'/0'/0'/2')
 #   @1: ms1:6e6bf,mk1:6e6bf (b8688df1 @ m/48'/0'/0'/2')
 #   @2: ms1:6e6bc,mk1:6e6bc (28645006 @ m/48'/0'/0'/2')
 # Template: descriptor
 # md1: 6e6b
-# Recovery: any 3 of 3 signing keys + md1 (template card).
+# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 3 signing keys, any hash preimages it names, and md1 (template card).
 # Language: english
 warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

@@ -165,7 +165,7 @@ Both forms produce the same wire-level result (`ms1[i] == ""` for skipped slots)
 **Card sections (in order):**
 
 1. **Header line:** `# === Wallet bundle: <template-or-descriptor-summary>, <network> ===`
-2. **Threshold line** (multisig only): `# Threshold: {T} of {N}`
+2. **Threshold line** (plain k-of-n only, see below): `# Threshold: {T} of {N}`
 3. **Cosigners block:** `# Cosigners:` followed by N indented lines, one per slot:
    - `#   @{i}: <ms1-card-id>{,}<mk1-card-id> (<fp-or-anon> @ <path>)` where:
      - `<ms1-card-id>` = the ms1 card's `chunk_set_id` (4 hex chars) if present; OR `(no ms1; watch-only)` if `ms1[i] == ""`
@@ -176,7 +176,9 @@ Both forms produce the same wire-level result (`ms1[i] == ""` for skipped slots)
 5. **Descriptor line** (descriptor mode): `# Descriptor: <descriptor-string-or-summary>`
    - **Truncation policy:** if descriptor string length > 80 characters, render as `<first 60 chars>... [md1: <chunk-set-id>] (<descriptor_len> chars total)` and rely on the md1 card to carry the full descriptor. If ≤ 80 chars, render verbatim.
 6. **Md1 reference line** (always): `# md1: <chunk_set_id>`
-7. **Recovery hint line** (always): `# Recovery: any {T} of {N} signing keys + md1 (template card).`
+7. **Recovery hint line** (N > 1): for a plain k-of-n bundle, `# Recovery: any {T} of {N} signing keys + md1 (template card).`; for any other bundle with N > 1 (a general policy), `# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all {N} signing keys, any hash preimages it names, and md1 (template card).`
+
+**Plain k-of-n (FIX-V7, 2026-11-03).** A bundle is plain k-of-n when it is in template mode with N > 1 (every multisig template is plain; T is `--threshold`), or when its descriptor's only child of `wsh`, `sh` or `sh(wsh)` is `multi`, `sortedmulti`, `multi_a`, `sortedmulti_a`, or a `thresh` whose every child is `pk(K)` or `pkh(K)` with only `s:` or `a:` wrappers, or when that operator is the only leaf of a `tr` whose internal key is the NUMS point; T is that operator's k. Every other descriptor is a general policy: an internal key other than the NUMS point (a slot key, or Liana's unspendable key) counts as general, and so does a `thresh` with any other child (a timelock, a hash, a nested fragment, or a wrapper such as `n:`). A general policy prints no Threshold line (item 2) and the general Recovery line (item 7). A single-key bundle (N = 1) prints neither line. The JSON envelope's `multisig.threshold` follows the same rule: T for a plain k-of-n bundle, `null` for a general policy (a single-key bundle has `multisig: null`). With `--import-json`, T comes from the envelope's descriptor by this rule; the envelope's `threshold` and `--threshold` are ignored (FIX-V7 STOP-2).
 
 **Privacy-preserving rendering:** under `--privacy-preserving`, fingerprint columns render as `anon` (3 ASCII chars); ms1/mk1 chunk_set_ids still render (they don't leak provenance). Card layout shape is otherwise identical.
 

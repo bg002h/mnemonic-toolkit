@@ -6476,3 +6476,20 @@ screen printed. Print the values.
 - **Owning phase:** toolkit T3.
 - **Tier:** `v0.5` / hygiene.
 - **Companion:** none.
+
+### `manual-gui-tutorial-v7-general-recovery` — at the GUI manual's next re-pin, the J3 and J4 engraving cards take FIX-V7's general-policy Recovery line (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v7_bundle_recovery**)
+
+- **Surfaced:** FIX_v7_bundle_recovery STOP-1, ruled by `architect-2026-11-04-fix-v7-stops.md`. Ruling 7's GUI items (`grade-2026-11-03-tk-v5-v7.md`) are met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
+- **What:** mnemonic-gui regenerates the snapshots behind `tut-j3-12-engrave.stderr.txt` and `tut-j4-16-engrave.stderr.txt`, their two PNGs, and the j3/j4 restore-feed bundle-json snapshots against that toolkit release. The re-pin copies them into `docs/manual-gui/` and deletes the two interim notes FIX-V7 put after the engrave stderr blocks of `40-j3-degrading-vault.md` and `50-j4-taproot-twin.md` (architect STOP-1): the regenerated cards print the general line (FIX section 2.2) and no `# Threshold` line.
+- **Status:** `open`.
+- **Tier:** `docs`, `cross-repo`.
+
+### `v7-fix-review-minors` — FIX-V7 review r1: Minors M-1..M-3 and Nits N-1..N-4 deferred unfixed
+
+- **Surfaced:** 2026-11-04, independent review of the FIX-V7 document (`design/agent-reports/review-fix-v7-r1.md`; 0C/2I/3M/4N). The two Importants were folded at 044162e7; these were not.
+- **What:** M-1 CSpell expects `Files checked: 26` but a run in item 12's order gets 25 (26 once `make pdf`/`make html` generate `src/99-build-banner.md`). M-2 no row pins `InternalKey::LianaUnspendable` as general. M-3 the GUI interim notes say "Toolkit releases after 0.105.1" where "that carry FIX-V7" is exact. N-1 section 2.3 over-generalises the template-format refusal text (specter exits 2, green exits 1 with its own text). N-2 `git status --short docs/manual-gui` prints repo-root paths. N-3 section 6.2 step 2 omits `cargo +1.95.0 fmt --all` after narrowing row 24. N-4 the CI tools root to reuse is `/scratch/cache/tk-v5-build-ci-tools`.
+- **Action:** read the report's Minors and Nits section; fix or close each.
+- **Status:** `deferred-minor`
+- **Owning phase:** next toolkit cleanup cycle.
+- **Tier:** `v0.5` / hygiene.
+- **Companion:** none.

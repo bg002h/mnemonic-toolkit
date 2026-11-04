@@ -340,7 +340,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
 | Field | Type | Semantics |
 |---|---|---|
 | `template` | `&'static str` | template name (multisig only) |
-| `threshold` | `u8` | `K` in `K-of-N` |
+| `threshold` | `Option<u8>` | `K` in `K-of-N` for a plain k-of-n bundle; `None` (`null`) for a general policy (SPEC §5.5) |
 | `cosigner_count` | `usize` | `N` |
 | `path_family` | `&'static str` | `"bip48"` or `"bip87"` (`--template` mode); `"descriptor"` in descriptor mode (`--descriptor`, `--descriptor-file`, `--import-json`), per SPEC v0.3 §5.3 |
 | `cosigners` | `Vec<CosignerEntry>` | per-cosigner descriptor |
@@ -733,7 +733,7 @@ All refusals route to exit code 2 (per `ToolkitError::exit_code` in §V.4.4). Re
 
 The `mnemonic bundle` subcommand emits a unified engraving card on **stderr** (the `--quiet` flag suppresses it). The card is a three-card mental model — ms1, mk1, md1 cards laid out alongside each other physically — rendered as a single human-readable text block. The sole producing function is `format::engraving_card_unified` (`format.rs::engraving_card_unified`); `BundleJson.engraving_card` was removed in v0.5.0 Phase A.3.
 
-The renderer accepts `BundleInputForCard` (header + threshold + N + language + passphrase-used + privacy + per-slot blocks + md1 chunk_set_id) and emits eight ordered sections: header line, threshold (multisig only), cosigners block (N ≥ 2) or single-slot summary (N == 1), template-or-descriptor line, md1 reference line, recovery hint (multisig only), language / passphrase footer, hardware-wallet caveat for `tr-multi-a` and `tr-sortedmulti-a`. Descriptor strings over 80 characters truncate to a 60-char prefix plus `... [md1: <id>] (<n> chars total)` annotation.
+The renderer accepts `BundleInputForCard` (header + threshold + N + language + passphrase-used + privacy + per-slot blocks + md1 chunk_set_id) and emits eight ordered sections: header line, threshold (plain k-of-n only), cosigners block (N ≥ 2) or single-slot summary (N == 1), template-or-descriptor line, md1 reference line, recovery hint (N ≥ 2: `any K of N` for a plain k-of-n bundle, the general-policy text otherwise, SPEC §5.5), language / passphrase footer, hardware-wallet caveat for `tr-multi-a` and `tr-sortedmulti-a`. Descriptor strings over 80 characters truncate to a 60-char prefix plus `... [md1: <id>] (<n> chars total)` annotation.
 
 Cross-reference: §IV.1 (bundle anatomy), §IV.2 (anti-collision invariants), §IV.3 (future shares) hold the deep technical details (`chunk_set_id` derivation, ms1/mk1/md1 card-id collision invariants, recovery procedure). This chapter shows only the stderr-emitted text.
 

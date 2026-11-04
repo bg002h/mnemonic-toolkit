@@ -80,6 +80,31 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `0.20.4`: with `minisign` installed, the installer refuses a missing signature on it.
   The GUI manual and `manual-gui.yml` stay on the GUI's tier (md 0.20.3).
 
+### Fixed
+
+- **`bundle` no longer prints a k-of-n recovery rule for a policy that is not
+  k-of-n** (FIX-V7). The engraving card printed `# Threshold: K of N` and
+  `# Recovery: any K of N signing keys` for every descriptor with N > 1, taking K
+  from the first `multi`/`thresh` it found or defaulting to N; for a
+  timelocked inheritance, decaying, taproot multi-leaf or nested policy that
+  rule was wrong (it named key sets that cannot spend, or hid ones that can).
+  Only a plain k-of-n descriptor (the only child of `wsh`, `sh` or `sh(wsh)` is
+  `multi`, `sortedmulti`, `multi_a`, `sortedmulti_a` or a pure-key `thresh`, or
+  that operator is the only leaf of a `tr` with the NUMS internal key) and every
+  multisig `--template` keep both lines. Any other descriptor with N > 1 prints
+  no Threshold line and `# Recovery: general policy, not k-of-n (the md1 policy
+  decides which key sets can spend); keep all {N} signing keys, any hash
+  preimages it names, and md1 (template card).`
+- **JSON `multisig.threshold` is `null` for a general policy** (FIX-V7). `bundle
+  --json` and `import-wallet --json` now write K only for a plain k-of-n
+  descriptor and `null` for a general policy; the `import-wallet` text prints
+  `threshold=none`. `bundle --import-json` and `export-wallet` read a `null`
+  threshold; a reader built before this fix refuses an envelope with `null`.
+- **`bundle --import-json` ignores `--threshold`** (FIX-V7). The flag used to
+  set K on this path, so `--threshold 1` on a 2-of-3 envelope printed
+  `# Threshold: 1 of 3`; K now comes from the envelope's descriptor by the
+  rule above.
+
 ## mnemonic-toolkit [0.105.1] — 2026-09-25
 
 ### Installer pins: mnemonic-toolkit v0.105.1, ms 0.20.1
