@@ -260,3 +260,92 @@ rules a private seam. The ruling may rename or drop them; the FIX review then re
 | `v5_self_check_thresh_free_requires_l_eq_mw_plus_1` | for a thresh-free shape the check passes when L == mw + 1 and fails (exit 3) when L != mw + 1 |
 | `v5_self_check_thresh_allows_rows_up_to_mw_plus_1` | for a shape with `thresh`, every row <= mw + 1 passes; a row > mw + 1 fails (exit 3) |
 | `v5_build_descriptor_propagates_cost_self_check` | `build-descriptor` propagates the same error unchanged through its `?` (`cost::run_compare_cost` calls at `cmd/build_descriptor.rs:477` and `:512`) and exits 3 in both the human and `--json` views, with no degraded preview (R5); STOP-4 decides what the human view may already have printed |
+
+## 4. Tests and transcripts that change
+
+No existing test assertion changes. With Appendices A and B applied, the full suite fails only the 11 FIX-V7
+rows that are red on base already (STOP-7). Three test files carry wsh figures
+(`cli_compare_cost.rs`, `cli_compare_cost_wsh_witness_script.rs`, `cli_compare_cost_wrapper_chain.rs`), and none
+of their other assertions moves.
+
+### 4.1 Test files on this branch (no production code)
+
+| file (`crates/mnemonic-toolkit/tests/`) | change | commit |
+|---|---|---|
+| `cli_compare_cost_wsh_witness_script.rs` | on base; rustfmt only (formatting, no assertion or name change) | 010b6f8b |
+| `cli_compare_cost_wrapper_chain.rs` | new on this branch: 3a2ceced's 11 rows (15-25) as-is, plus row 26 | 567dbf3d |
+| `cli_compare_cost_v5_fix.rs` | new: rows 27-30 | 567dbf3d |
+
+The toolkit has no `tests/all.rs` aggregator, so each file is its own test binary and no list file changes.
+
+### 4.2 Transcripts and printed figures that move (Appendices D and E)
+
+Every moved wsh figure goes down: the witnessScript is now counted. tr figures do not move.
+
+| file | before (wsh, tr, Δ in vB; sats where printed) | after |
+|---|---|---|
+| `docs/manual/transcripts/41-compare-cost-orb.out` | A and B: `60 \| 84 \| +24 \| 1500 \| 2100 \| +600` | `78 \| 84 \| +6 \| 1950 \| 2100 \| +150` |
+| `docs/manual/transcripts/41-compare-cost-ord.out` | A: `60 \| 85 \| +25`; B: `60 \| 86 \| +26` | A: `79 \| 85 \| +6`; B: `80 \| 86 \| +6` |
+| `docs/manual/transcripts/41-compare-cost-tr-ik.out` | `60 \| 75 \| +15 \| 1500 \| 1875 \| +375` | `69 \| 75 \| +6 \| 1725 \| 1875 \| +150` |
+| `docs/manual/transcripts/41-compare-cost-json.out` | `wsh_vbytes` 60, `delta_vbytes` 15, `wsh_sats` 60, `delta_sats` 15 | 69, 6, 69, 6 |
+| `docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt` | A + B: wsh 79 (Δ +68); C, D, E: 61 (+71); F + preimage(h0): 69 (+70) | 144 (+3); 126 (+6); 133 (+6) |
+| `.examples-build/Examples.md` @@-1204 | the same J4 rows as `tut-j4-20` | the same as `tut-j4-20` |
+| `.examples-build/Examples.md` @@-1224 | `68 \| 90 \| +22` | `84 \| 90 \| +6` |
+
+The two J4 PNGs (`docs/manual-gui/figures/tutorial/tut-j4-20-compare-cost-form.png` and `-run.png`) show the
+compare-cost panel; whether they are regenerated, and against which GUI binary, is STOP-5.
+
+No `build-descriptor` transcript carries cost figures. The `build-descriptor --json` `cost` field embeds the
+compare-cost JSON (`41-mnemonic.md:4864` at `ac3ff70a`), but no transcript shows it, so ruling 7's "build-descriptor
+transcripts" item changes no file. Measured: `make audit` passes with only the four compare-cost transcripts
+regenerated (128 transcript files checked).
+
+## 5. Lockstep files (ruling 7)
+
+Ten files change; none is production code. Appendix C holds the prose hunks, D the transcripts, E the examples.
+
+| # | file | ruling 7 item, or why it is beyond ruling 7 | appendix, hunk |
+|---|---|---|---|
+| 1 | `docs/manual/src/40-cli-reference/41-mnemonic.md` | `:4596-4602` (the `witness_size()` prose), the notes catalog; plus the worked example at `:4660` (beyond R7: its `+24` moves) | C @@-4593, @@-4657, @@-4749 |
+| 2 | `docs/manual/transcripts/41-compare-cost-orb.out` | compare-cost transcripts | D |
+| 3 | `docs/manual/transcripts/41-compare-cost-ord.out` | compare-cost transcripts | D |
+| 4 | `docs/manual/transcripts/41-compare-cost-tr-ik.out` | compare-cost transcripts | D |
+| 5 | `docs/manual/transcripts/41-compare-cost-json.out` | compare-cost transcripts | D |
+| 6 | `design/SPEC_compare_cost_v0_26_0.md` | `:180-183`, `:213` (lines `:180`, `:210` here); plus `:145` (the same formula in the step-3 sketch) and `:280` (the new note in the notes list), beyond R7 | C @@-145, @@-180, @@-210, @@-280 |
+| 7 | `docs/manual-gui/tutorial/50-j4-taproot-twin.md` | `:241` (J4 step 20 prose; the changed line is `:240` at `ac3ff70a`) | C @@-238 |
+| 8 | `docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt` | its transcript | D |
+| 9 | `.examples-build/Examples.md` | beyond R7: `examples.yml` regenerates it and fails on any diff | E |
+| 10 | `docs/manual/src/40-cli-reference/42-md.md` | beyond R7: its `md compile` recipe prints a compare-cost table at `:471-472` | C @@-469 |
+
+Ruling 7 items that change no file:
+- The exit-code table (`41-mnemonic.md:4753-4767` at `ac3ff70a`) changes only with A2, which is held (STOP-1).
+  The row A2 would add, not in Appendix C: `| wsh cost self-check failed against \`max_weight_to_satisfy\` (a
+  toolkit bug; no figures printed) | \`3\` |`.
+- The build-descriptor transcripts: none carries cost figures (§4.2).
+
+### 5.1 Lockstep texts the builder does not write
+
+Every changed line is in Appendices C, D and E. The builder applies them with `git apply` and regenerates the
+transcripts with the repo's own targets (§6); a regenerated transcript that differs from Appendix D is a FAIL.
+
+### 5.2 Texts the author wrote (the grade gives no wording); for the FIX review
+
+1. `41-mnemonic.md` @@-4593: "API. `Plan::witness_size()` counts the witness items, their length prefixes and
+   the stack-count varint, and for `tr` the tapscript and control block. For `wsh` the plan's template omits the
+   witnessScript, so `compare-cost` adds it as one more witness item (the script plus its length prefix) and
+   re-encodes the stack-count varint. Per-input"
+2. `41-mnemonic.md` @@-4657: "tr costs `+6`" (was `+24`). The sentence's reason ("because the tr witness carries
+   an extra 33-byte control block") is unchanged; at `+6` it is still the larger term.
+3. `41-mnemonic.md` notes catalog row: "| `input had a p2sh wrapper, sh(wsh(M)); …` | `--descriptor sh(wsh(M))`.
+   The `wsh` column is costed for bare `wsh(M)`; the note gives the +35 vB per-input correction. |"
+4. `SPEC_compare_cost_v0_26_0.md:145`: `wsh_witness_bytes: witness_weight_wu(&wsh_desc, &wp)`.
+5. `SPEC_compare_cost_v0_26_0.md:180`: "- tapscript + control block (tr only; for wsh the template omits the
+   witnessScript, which §4 adds as one more stack item)". SPEC §4 "Cost computation" starts at `:208`.
+6. `SPEC_compare_cost_v0_26_0.md:210`: `let wsh_witness_bytes = witness_weight_wu(&wsh_desc, &wsh_plan); //
+   witness_size() + varint(s) + s - varint(n) + varint(n + 1); s = witnessScript bytes, n = template items (the
+   template omits the witnessScript)`.
+7. `SPEC_compare_cost_v0_26_0.md:280` (new list item): the R4 note text verbatim, prefixed "sh(wsh) advisory:".
+8. `50-j4-taproot-twin.md:240`: "(`+3` to `+6` vB)" (was `+68` to `+71`). The rest of the paragraph ("a Taproot
+   script-path spend reveals a leaf plus its control block … slightly dearer fallbacks") is unchanged and still
+   true at these figures.
+9. `42-md.md:471-472`: the two table rows, `79 | 85 | +6` and `80 | 86 | +6`, as the binary prints them.
