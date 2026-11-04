@@ -173,3 +173,88 @@ spelled like a chain is still a label where it is not followed by `:` (`and_b(pk
 one condition labelled `sdv + older(blocks)`). An invalid chain is still refused with exit 2
 (`or_i(pk(A),sdv:pk(B))`). No flag, printed text or exit code changes for any other input. No lockstep file
 changes, and `41-mnemonic.md:4616` stays true as written (E9-a).
+
+## 3. RED rows
+
+30 rows in three files. Test names are bare function names (the toolkit has no `tests/all.rs`), so the
+exact-name filter is `test(/^<row>$/)`. The list is `row-names.txt` in the evidence directory, and
+`row-alt.txt` is the same list joined with `|`; `doc-gate.sh` checks that both equal this table.
+
+| # | file (`crates/mnemonic-toolkit/tests/`) | row | origin | on base `ac3ff70a` (assert site: message) | after A+B |
+|---|---|---|---|---|---|
+| 1 | `cli_compare_cost_wsh_witness_script.rs` | `v5_wsh_pk_vbytes_match_core` | V5 triage | FAIL :80: `Core spends wsh(pk) as 273 WU = 69 vB; got [("A", 60, 75, 15)]` | PASS |
+| 2 | same | `v5_wsh_or_d_vbytes_match_core` | V5 triage | FAIL :91: `Core: both or_d branches are 78 vB (+1 for the tool's 73-byte dummy sig); got [("A", 60, 84, 24), ("B", 60, 85, 25)]` | PASS |
+| 3 | same | `v5_wsh_multi_2of3_vbytes_match_core` | V5 triage | FAIL :103: `Core 104 vB (+1 for the tool's 73-byte dummy sig); got [("A + B", 78, 109, 31), ...]` | PASS |
+| 4 | same | `v5_wsh_multi_3of5_vbytes_match_core` | V5 triage | FAIL :115: `Core 139 vB (+<=2 for 73-byte dummy sigs); got [("A + B + C", 97, 143, 46), ...]` | PASS |
+| 5 | same | `v5_wsh_and_v_vbytes_match_core` | V5 triage | FAIL :127: `Core 95 vB (+1 for the tool's 72/73-byte dummy sigs); got [("A + B", 78, 100, 22)]` | PASS |
+| 6 | same | `v5_wsh_thresh_2of3_vbytes_match_core` | V5 triage | FAIL :139: `Core 106 vB (+1 for dummy sigs); got [("A + B", 78, 110, 32), ...]` | PASS |
+| 7 | same | `v5_descriptor_wsh_pk_vbytes_match_core` | V5 triage | FAIL :150: `--descriptor wsh(pk(..)) must equal the Core spend; got [("key[0]", 60, 75, 15)]` | PASS |
+| 8 | same | `v5_p2wsh_input_never_cheaper_than_p2wpkh_input` | V5 triage | FAIL :167: `pk(A): wsh vB 60 is below the 68 vB P2WPKH input` | PASS |
+| 9 | same | `v5_delta_matches_core` | V5 triage | FAIL :180: `Δ vB for pk(A) must be 75 - 69 = 6; got [("A", 60, 75, 15)]` | PASS |
+| 10 | same | `v5_tr_pk_vbytes_match_core` | V5 triage | PASS (control: tr is already right) | PASS |
+| 11 | same | `v5_tr_or_d_vbytes_match_core` | V5 triage | PASS (control) | PASS |
+| 12 | same | `v5_tr_multi_a_vbytes_match_core` | V5 triage | PASS (control) | PASS |
+| 13 | same | `v5_descriptor_tr_nums_pk_vbytes_match_core` | V5 triage | PASS (control) | PASS |
+| 14 | same | `v5_sh_wsh_descriptor_reports_the_wsh_column` | V5 triage | PASS (control: `sh(wsh(M))` costs as `wsh(M)`) | PASS |
+| 15 | `cli_compare_cost_wrapper_chain.rs` | `oracle_rust_miniscript_parses_every_shape_in_both_contexts` | E9 triage 3a2ceced | PASS (oracle) | PASS |
+| 16 | same | `oracle_descriptor_path_accepts_every_shape` | E9 triage 3a2ceced | PASS (oracle) | PASS |
+| 17 | same | `miniscript_path_accepts_ln_chain` | E9 triage 3a2ceced | FAIL :114: ``compare-cost --miniscript 'or_i(pk(A),ln:pk(B))'` must accept valid miniscript (the --descriptor path and rust-miniscript do); got exit 2 stderr="error: compare-cost: parse error: unknown wrapper «9:»\n"`` | PASS |
+| 18 | same | `miniscript_path_accepts_tv_chain` | E9 triage 3a2ceced | FAIL :114: `'or_i(pk(A),tv:pk(B))'`, exit 2, `unknown wrapper «0:»` | PASS |
+| 19 | same | `miniscript_path_accepts_sdv_chain` | E9 triage 3a2ceced | FAIL :114: `'and_b(pk(A),sdv:older(10))'`, exit 2, `unknown wrapper «4:»` | PASS |
+| 20 | same | `miniscript_path_accepts_snl_chain` | E9 triage 3a2ceced | FAIL :114: `'and_b(pk(A),snl:older(10))'`, exit 2, `unknown wrapper «b:»` | PASS |
+| 21 | same | `miniscript_path_accepts_sj_chain` | E9 triage 3a2ceced | FAIL :114: `'and_b(pk(A),sj:pk(B))'`, exit 2, `unknown wrapper «f:»` | PASS |
+| 22 | same | `miniscript_path_accepts_ln_chain_with_concrete_keys` | E9 triage 3a2ceced | FAIL :182: `concrete-key chain refused: stderr="error: compare-cost: parse error: unknown wrapper «9:»\n"` | PASS |
+| 23 | same | `control_single_letter_wrappers_still_parse` | E9 triage 3a2ceced | PASS (control) | PASS |
+| 24 | same | `control_real_labels_still_substituted` | E9 triage 3a2ceced | PASS (control) | PASS |
+| 25 | same | `control_invalid_chain_still_refused` | E9 triage 3a2ceced | PASS (control: `or_i(pk(A),sdv:pk(B))` exits 2) | PASS |
+| 26 | same | `miniscript_path_accepts_label_spelled_like_chain` | **new** (E9-b) | FAIL :249: ``compare-cost --miniscript 'and_b(pk(sdv),sdv:older(10))'` must accept a label spelled like a chain; got exit 2 stderr="error: compare-cost: parse error: unknown wrapper «4:»\n"`` | PASS |
+| 27 | `cli_compare_cost_v5_fix.rs` | `v5_sh_wsh_note_in_json_notes` | **new** (R4) | FAIL :62: `notes[] must contain the ruling-4 sh(wsh) note exactly; got [...]` (the two existing notes only) | PASS |
+| 28 | same | `v5_sh_wsh_note_in_text_note_lines` | **new** (R4) | FAIL :76: `text output must carry the line "note: input had a p2sh wrapper, ..."` | PASS |
+| 29 | same | `v5_sh_wsh_note_absent_for_wsh_tr_and_miniscript` | **new** (R4) | PASS (guard). Plant: emitting the note for every input makes it fail at `cli_compare_cost_v5_fix.rs:90:9` (`plant-absent-for.log`) | PASS |
+| 30 | same | `v5_delta_negative_for_multi_7_of_10` | **new** (V5-7) | FAIL :103: `7-of-10: tr must be cheaper than wsh (Δ < 0) once the witnessScript is counted; got [81, 81, ...]` | PASS |
+
+Rows 1-14 are on base already (rustfmt'd by 010b6f8b, formatting only). Rows 15-25 are 3a2ceced's file,
+carried in by 567dbf3d; row 26 and rows 27-30 are the previous author's uncommitted work, kept unchanged (§0.2)
+and committed in 567dbf3d. New rows: 5 (26-30); new rows that fail on base: 4 (26, 27, 28, 30); row 29 is a
+guard that passes on base and was proved by the plant above.
+
+The E9 rows never pin a figure: each compares `--miniscript` with the `--descriptor 'wsh(..)'` oracle on the
+same binary, so Part A cannot move them (E9-a).
+
+### 3.1 The FIX filter (all 30 rows)
+
+From the worktree root:
+
+```text
+PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked --workspace --no-fail-fast -E "test(/^($(cat design/agent-reports/fix-doc-tk-v5-evidence/row-alt.txt))\$/)"
+```
+
+- On base (this branch's head, no production patch): exit 100, summary line
+  `30 tests run: 11 passed, 19 failed, 4235 skipped`; the 19 failures are exactly rows 1-9, 17-22, 26-28 and 30.
+- With Appendices A and B applied: exit 0, `30 tests run: 30 passed, 4235 skipped`.
+- A matched count other than 30 is a FAIL, whatever the pass count.
+
+### 3.2 Part B alone (E9 ships alone)
+
+```text
+PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked -p mnemonic-toolkit --test cli_compare_cost_wrapper_chain --no-fail-fast
+```
+
+- On base: `12 tests run: 5 passed, 7 failed, 0 skipped` (rows 17-22 and 26 fail as in the table).
+- With Appendix B only: `12 tests run: 12 passed, 0 skipped`.
+- If E9 ships alone on another base (STOP-2), re-run this on that base before quoting it; a GREEN expires when
+  its inputs move (grade e9 :76-78).
+
+### 3.3 Held rows (A2; not written until STOP-1 is ruled)
+
+These rows have names and behaviour only. No code exists for them, on disk or in any commit, and Appendix F
+contains no `#[test]` function. They are written by the builder once STOP-1 (and STOP-6, the test seam) are
+ruled, in a new file `cli_compare_cost_v5_self_check.rs` or as `#[cfg(test)]` unit tests in `cost/` if STOP-6
+rules a private seam. The ruling may rename or drop them; the FIX review then re-checks §3.
+
+| row | behaviour pinned |
+|---|---|
+| `v5_self_check_failure_exits_3_with_ruling_5_text` | a forced self-check failure prints R5's template (§1 A2) with L and mw + 1 filled in, exactly, on stderr after `error: `, prints no figures, and exits 3 |
+| `v5_self_check_thresh_free_requires_l_eq_mw_plus_1` | for a thresh-free shape the check passes when L == mw + 1 and fails (exit 3) when L != mw + 1 |
+| `v5_self_check_thresh_allows_rows_up_to_mw_plus_1` | for a shape with `thresh`, every row <= mw + 1 passes; a row > mw + 1 fails (exit 3) |
+| `v5_build_descriptor_propagates_cost_self_check` | `build-descriptor` propagates the same error unchanged through its `?` (`cost::run_compare_cost` calls at `cmd/build_descriptor.rs:477` and `:512`) and exits 3 in both the human and `--json` views, with no degraded preview (R5); STOP-4 decides what the human view may already have printed |
