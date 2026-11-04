@@ -247,6 +247,77 @@ fn envelope_mk1_fingerprint_only_mismatch_refused() {
     assert_refused(&bundle(&p, "signet"), &e2_key("--import-json", 0), "bundle");
 }
 
+/// `K0` with its origin path replaced (same xpub and fingerprint).
+fn k0_with_origin(path: &str) -> String {
+    K0.replace("48'/1'/0'/2'", path)
+}
+
+#[test]
+fn envelope_mk1_origin_path_only_mismatch_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    // Card: same xpub and fingerprint as K0, origin path m/48'/1'/7'/2'.
+    let other = import(&PLAIN.replace("@0", &k0_with_origin("48'/1'/7'/2'")), false);
+    let honest = import(PLAIN, false);
+    assert_ne!(
+        other[0]["bundle"]["mk1"][0], honest[0]["bundle"]["mk1"][0],
+        "fixture: card differs"
+    );
+    // Descriptor, md1 and origin_path(s) stay the honest m/48'/1'/0'/2'.
+    let p = edited(dir.path(), |b| {
+        b["mk1"][0] = other[0]["bundle"]["mk1"][0].clone()
+    });
+    for f in FORMATS {
+        assert_refused(&export(&p, f), &e2_key("--from-import-json", 0), f);
+    }
+    assert_refused(&bundle(&p, "signet"), &e2_key("--import-json", 0), "bundle");
+}
+
+/// Signet tpub of the `abandon..about` phrase at `xpub_path`, as a descriptor
+/// key with origin `origin` (fingerprint 73c5da0a).
+fn k0_derived(xpub_path: &str, origin: &str) -> String {
+    use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
+    use std::str::FromStr;
+    let secp = bitcoin::secp256k1::Secp256k1::new();
+    let seed = bip39::Mnemonic::parse(P0).unwrap().to_seed("");
+    let m = Xpriv::new_master(bitcoin::NetworkKind::Test, &seed).unwrap();
+    let x = m
+        .derive_priv(&secp, &DerivationPath::from_str(xpub_path).unwrap())
+        .unwrap();
+    format!("[73c5da0a/{origin}]{}/<0;1>/*", Xpub::from_priv(&secp, &x))
+}
+
+#[test]
+fn envelope_honest_depth_3_and_5_origins_pass() {
+    let dir = tempfile::tempdir().unwrap();
+    // depth-4 xpub with a depth-3 origin, and with a depth-5 origin.
+    for (name, xpub_path, origin) in [
+        ("d3", "m/48'/1'/0'/2'", "48'/1'/0'"),
+        ("d5", "m/48'/1'/0'/2'", "48'/1'/0'/2'/0'"),
+        ("x3", "m/48'/1'/0'", "48'/1'/0'/2'"),
+    ] {
+        let k = k0_derived(xpub_path, origin);
+        let v = import(&PLAIN.replace("@0", &k), false);
+        let p = write(dir.path(), &format!("{name}.json"), &v);
+        let b = bundle(&p, "signet");
+        assert_eq!(
+            b.status.code(),
+            Some(0),
+            "{name} bundle: {}",
+            String::from_utf8_lossy(&b.stderr)
+        );
+        for f in FORMATS {
+            let e = export(&p, f);
+            // Formats that cannot express a key are not this row's concern:
+            // only an E2 refusal is a failure here.
+            assert!(
+                !String::from_utf8_lossy(&e.stderr).contains("does not match key @"),
+                "{name} {f}: {}",
+                String::from_utf8_lossy(&e.stderr)
+            );
+        }
+    }
+}
+
 #[test]
 fn envc_export_refuses_missing_mk1_card() {
     let dir = tempfile::tempdir().unwrap();
