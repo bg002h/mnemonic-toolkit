@@ -543,7 +543,23 @@ pub(crate) fn check_envelope_consistency(
         let (x, fp, path) =
             crate::wallet_import::pipeline::finalize_slot_fields(fp, path, &xs, label)?;
         let s = &slots[i];
-        if xpub_to_65(&s.xpub) != xpub_to_65(&x) || s.fingerprint != fp || s.path != path {
+        // The slot path was overwritten from the envelope's origin_path(s), so the
+        // card's own path is compared separately, in the form import-wallet emits it
+        // (`mk1_origin_path`: depth-matched to the card's own xpub, which also
+        // covers v0.27.0 cards that carry a full path on a depth-4 xpub).
+        let card_path_ok = mk_codec::decode(
+            &envelope.bundle.mk1[i]
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+        )
+        .map(|c| c.origin_path == crate::synthesize::mk1_origin_path(&s.xpub, &path))
+        .unwrap_or(false);
+        if xpub_to_65(&s.xpub) != xpub_to_65(&x)
+            || s.fingerprint != fp
+            || s.path != path
+            || !card_path_ok
+        {
             return Err(ToolkitError::BadInput(format!(
                 "{label}: cosigner {i} of envelope.bundle.mk1 (its key, fingerprint or origin path) does not match key @{i} of envelope.bundle.descriptor, {ENV_TAIL}"
             )));
