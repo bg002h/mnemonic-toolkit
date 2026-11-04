@@ -556,9 +556,7 @@ fn v7_stale_envelope_threshold_recomputed_by_bundle_import_json() {
 
 #[test]
 fn v7_import_json_threshold_flag_cannot_override_card_k() {
-    // FIX-V7 STOP-2: `--threshold` on the `--import-json` path. Whether it is
-    // refused (nonzero exit) or ignored is undecided; either passes. What
-    // fails is the card or the JSON taking K from the flag.
+    // FIX-V7 STOP-2, ruled (b) (architect 2026-11-04): --threshold is ignored on the --import-json path. Exit 0; the card and the JSON take K from the envelope's descriptor.
     let dir = tempfile::tempdir().unwrap();
     let plain = envelope_file(
         dir.path(),
@@ -574,32 +572,41 @@ fn v7_import_json_threshold_flag_cannot_override_card_k() {
     );
     for k in ["1", "9"] {
         let out = bundle_import_json(&plain, &["--threshold", k]);
-        if out.status.success() {
-            assert_plain_card(
-                &String::from_utf8_lossy(&out.stderr),
-                &format!("plain --threshold {k}"),
-                2,
-                3,
-            );
-        }
-        let out = bundle_import_json(&plain, &["--threshold", k, "--json"]);
-        if out.status.success() {
-            let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-            assert_eq!(
-                v["multisig"]["threshold"],
-                Value::from(2),
-                "plain --threshold {k} --json"
-            );
-        }
-    }
-    let out = bundle_import_json(&general, &["--threshold", "2"]);
-    if out.status.success() {
-        assert_general_card(
+        assert!(
+            out.status.success(),
+            "plain --threshold {k}: stderr:\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_plain_card(
             &String::from_utf8_lossy(&out.stderr),
-            "general --threshold 2",
+            &format!("plain --threshold {k}"),
+            2,
             3,
         );
+        let out = bundle_import_json(&plain, &["--threshold", k, "--json"]);
+        assert!(
+            out.status.success(),
+            "plain --threshold {k} --json: stderr:\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(
+            v["multisig"]["threshold"],
+            Value::from(2),
+            "plain --threshold {k} --json"
+        );
     }
+    let out = bundle_import_json(&general, &["--threshold", "2"]);
+    assert!(
+        out.status.success(),
+        "general --threshold 2: stderr:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_general_card(
+        &String::from_utf8_lossy(&out.stderr),
+        "general --threshold 2",
+        3,
+    );
 }
 
 // ---- FIX-V7 controls: must pass before and after the fix ------------------

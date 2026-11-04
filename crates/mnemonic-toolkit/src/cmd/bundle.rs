@@ -947,20 +947,17 @@ fn emit_unified<W: Write, E: Write>(
                 })
                 .collect();
             // M7 (cycle-13): report the real multisig threshold K, not the
-            // cosigner count N. In descriptor / --import-json / concrete-
-            // descriptor mode `args.threshold` is None, so the old
-            // `args.threshold.unwrap_or(n)` fell back to N — wrong for a
-            // K-of-N where K < N. Read K from the descriptor body itself
-            // (same `extract_multisig_threshold(&tree)` the engraving card
-            // path uses at build_unified_card), falling back to args.threshold
-            // then N only when extraction yields nothing.
-            let descriptor_threshold: Option<u8> = {
+            // cosigner count N. FIX-V7 ruling 2: template mode keeps `--threshold` (default N);
+            // every other mode reports K only for a plain k-of-n descriptor
+            // and null for a general policy.
+            let threshold: Option<u8> = if args.template.is_some() {
+                Some(args.threshold.unwrap_or(n as u8))
+            } else {
                 let md1_strs: Vec<&str> = bundle.md1.iter().map(|s| s.as_str()).collect();
                 md_codec::chunk::reassemble(&md1_strs)
                     .ok()
-                    .and_then(|d| extract_multisig_threshold(&d.tree))
+                    .and_then(|d| plain_multisig_threshold(&d.tree))
             };
-            let threshold = args.threshold.or(descriptor_threshold).unwrap_or(n as u8);
             // r1 review I-1 fix: derive path_family from --multisig-path-family
             // (defaults to bip87 when unset). Hardcoded "bip87" was wrong for
             // sh-wsh-* templates (which require bip48) and broke SPEC §5.6
@@ -1260,6 +1257,74 @@ pub(crate) fn extract_multisig_threshold(node: &md_codec::tree::Node) -> Option<
     }
 }
 
+/// FIX-V7 (grade 2026-11-03 rulings 1-3): the threshold K of a PLAIN k-of-n
+/// descriptor, or `None` when the descriptor is a general policy (or has no
+/// k-of-n at all). Plain means the only child under `wsh`, `sh` or
+/// `sh(wsh)`, or the only leaf of a `tr` whose internal key is the NUMS
+/// point, is `multi` / `sortedmulti` / `multi_a` / `sortedmulti_a` or a
+/// pure-key `thresh` (every child `pk(K)` or `pkh(K)` with only `s:` / `a:`
+/// wrappers). A `Slot` or `LianaUnspendable` internal key is general.
+pub(crate) fn plain_multisig_threshold(root: &md_codec::tree::Node) -> Option<u8> {
+    use md_codec::tag::Tag;
+    use md_codec::tree::{Body, InternalKey};
+    fn only_child(node: &md_codec::tree::Node) -> Option<&md_codec::tree::Node> {
+        match &node.body {
+            Body::Children(c) if c.len() == 1 => Some(&c[0]),
+            _ => None,
+        }
+    }
+    fn pure_key(node: &md_codec::tree::Node) -> bool {
+        let mut cur = node;
+        while matches!(cur.tag, Tag::Swap | Tag::Alt) {
+            match only_child(cur) {
+                Some(c) => cur = c,
+                None => return false,
+            }
+        }
+        if cur.tag == Tag::Check {
+            match only_child(cur) {
+                Some(c) => cur = c,
+                None => return false,
+            }
+        }
+        matches!(
+            (&cur.tag, &cur.body),
+            (Tag::PkK | Tag::PkH, Body::KeyArg { .. })
+        )
+    }
+    fn kofn(node: &md_codec::tree::Node) -> Option<u8> {
+        match (&node.tag, &node.body) {
+            (
+                Tag::Multi | Tag::SortedMulti | Tag::MultiA | Tag::SortedMultiA,
+                Body::MultiKeys { k, .. },
+            ) => Some(*k),
+            (Tag::Thresh, Body::Variable { k, children }) if children.iter().all(pure_key) => {
+                Some(*k)
+            }
+            _ => None,
+        }
+    }
+    match (&root.tag, &root.body) {
+        (Tag::Wsh, _) => kofn(only_child(root)?),
+        (Tag::Sh, _) => {
+            let inner = only_child(root)?;
+            if inner.tag == Tag::Wsh {
+                kofn(only_child(inner)?)
+            } else {
+                kofn(inner)
+            }
+        }
+        (
+            Tag::Tr,
+            Body::Tr {
+                internal_key: InternalKey::NumsPoint,
+                tree: Some(leaf),
+            },
+        ) if leaf.tag != Tag::TapTree => kofn(leaf),
+        _ => None,
+    }
+}
+
 /// #28 phase 1 — the 4-byte bundle-binding stub for a reassembled md1
 /// descriptor, FORM-AWARE. A keyed wallet-policy md1 roots its binding on
 /// `WalletPolicyId` (pre-#28); a keyless template md1 (`--md1-form=template`)
@@ -1313,9 +1378,15 @@ fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSl
         .as_ref()
         .and_then(bundle_stub_2hex)
         .unwrap_or_else(|| "????".to_string());
-    let descriptor_threshold: Option<u8> = reassembled_descriptor
-        .as_ref()
-        .and_then(|d| extract_multisig_threshold(&d.tree));
+    // FIX-V7 ruling 1: template mode keeps `--threshold` (default N); every
+    // other mode prints K only for a plain k-of-n descriptor.
+    let card_threshold: Option<u8> = if args.template.is_some() {
+        args.threshold.or(if n > 1 { Some(n) } else { None })
+    } else {
+        reassembled_descriptor
+            .as_ref()
+            .and_then(|d| plain_multisig_threshold(&d.tree))
+    };
 
     let per_slot: Vec<SlotCardBlock> = resolved
         .iter()
@@ -1362,10 +1433,7 @@ fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSl
     let input = BundleInputForCard {
         network: args.network.human_name(),
         template_or_descriptor: TemplateOrDescriptor::Template(template_str),
-        threshold: args
-            .threshold
-            .or(descriptor_threshold)
-            .or(if n > 1 { Some(n) } else { None }),
+        threshold: card_threshold,
         n,
         language: args.language.map(|l| l.human_name()),
         passphrase_used: args

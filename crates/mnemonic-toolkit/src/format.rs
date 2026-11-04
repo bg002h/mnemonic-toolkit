@@ -69,7 +69,9 @@ pub struct CosignerEntry {
 #[derive(Debug, Serialize)]
 pub struct MultisigInfo {
     pub template: &'static str,
-    pub threshold: u8,
+    /// K for a plain k-of-n descriptor; `null` for a general policy
+    /// (FIX-V7 ruling 2).
+    pub threshold: Option<u8>,
     pub cosigner_count: usize,
     /// `"bip48"` | `"bip87"`.
     pub path_family: &'static str,
@@ -343,13 +345,17 @@ pub fn engraving_card_unified(input: &BundleInputForCard) -> String {
     // 5. md1 reference line.
     s.push_str(&format!("# md1: {}\n", input.md1_chunk_set_id));
 
-    // 6. Recovery hint line.
-    if let Some(t) = input.threshold {
-        if input.n > 1 {
-            s.push_str(&format!(
+    // 6. Recovery hint line (multisig only; FIX-V7 ruling 1).
+    if input.n > 1 {
+        match input.threshold {
+            Some(t) => s.push_str(&format!(
                 "# Recovery: any {} of {} signing keys + md1 (template card).\n",
                 t, input.n
-            ));
+            )),
+            None => s.push_str(&format!(
+                "# Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all {} signing keys, any hash preimages it names, and md1 (template card).\n",
+                input.n
+            )),
         }
     }
 

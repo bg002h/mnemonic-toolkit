@@ -1002,8 +1002,9 @@ fn run_from_import_json<W: Write, E: Write>(
         .or_else(|| lifted_wallet_name.clone())
         .unwrap_or_else(|| "imported-descriptor".to_string());
 
-    // Threshold from envelope's bundle.multisig.threshold (None for N=1).
-    let threshold = envelope.bundle.multisig.as_ref().map(|m| m.threshold);
+    // Threshold from envelope's bundle.multisig.threshold (None for N=1, and
+    // null for a general policy, FIX-V7 ruling 2).
+    let threshold = envelope.bundle.multisig.as_ref().and_then(|m| m.threshold);
 
     // SPEC v0.37 §2.3 — derive the template from the envelope descriptor for
     // template-requiring formats (sparrow/coldcard/jade/electrum) so they can

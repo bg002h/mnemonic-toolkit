@@ -112,10 +112,10 @@ fn bsms_2_line_happy_path() {
         stderr.contains("2-line excerpt"),
         "expected 2-line WARNING; stderr was: {stderr}"
     );
-    // Summary should list 2 cosigners + testnet + threshold=2.
+    // Summary should list 2 cosigners + testnet + threshold=none (general policy: thresh with an sln:older leaf, FIX-V7).
     assert!(stdout.contains("cosigners=2"), "stdout: {stdout}");
     assert!(stdout.contains("network=testnet"), "stdout: {stdout}");
-    assert!(stdout.contains("threshold=2"), "stdout: {stdout}");
+    assert!(stdout.contains("threshold=none"), "stdout: {stdout}");
     assert!(stdout.contains("bsms_audit=none"), "stdout: {stdout}");
     // Watch-only invariant: no entropy.
     assert!(stdout.contains("entropy=none"), "stdout: {stdout}");
@@ -300,7 +300,7 @@ fn bsms_decaying_multisig_n_32768() {
     let out = run_import(&p).success();
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     assert!(stdout.contains("cosigners=2"));
-    assert!(stdout.contains("threshold=2"));
+    assert!(stdout.contains("threshold=none"));
 }
 
 // ============================================================================

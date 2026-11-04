@@ -173,7 +173,7 @@ pub(crate) struct BundleJsonView {
 #[derive(Debug, Deserialize)]
 pub(crate) struct MultisigInfoView {
     pub(crate) template: String,
-    pub(crate) threshold: u8,
+    pub(crate) threshold: Option<u8>,
     pub(crate) cosigner_count: usize,
     pub(crate) path_family: String,
     pub(crate) cosigners: Vec<CosignerEntryView>,
@@ -714,7 +714,7 @@ mod tests {
             md1: vec!["md1xyz".to_string()],
             multisig: Some(MultisigInfo {
                 template: "sortedmulti",
-                threshold: 2,
+                threshold: Some(2),
                 cosigner_count: 2,
                 path_family: "bip48",
                 cosigners: vec![
@@ -760,7 +760,7 @@ mod tests {
         assert_eq!(v.md1, vec!["md1xyz".to_string()]);
         let m = v.multisig.expect("multisig view present");
         assert_eq!(m.template, "sortedmulti");
-        assert_eq!(m.threshold, 2);
+        assert_eq!(m.threshold, Some(2));
         assert_eq!(m.cosigner_count, 2);
         assert_eq!(m.path_family, "bip48");
         assert_eq!(m.cosigners.len(), 2);

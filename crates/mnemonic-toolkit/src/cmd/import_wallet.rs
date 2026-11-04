@@ -1294,7 +1294,7 @@ electrum|jade|sparrow|specter>"
     // intent (active-receive / active-change semantics require per-entry
     // metadata that Specter doesn't carry).
     let select = parse_select(&args.select_descriptor)?;
-    let parsed = match format_str {
+    let mut parsed = match format_str {
         "bsms" => match select {
             SelectDescriptor::All => parsed,
             _ => {
@@ -1339,6 +1339,14 @@ electrum|jade|sparrow|specter>"
         },
         _ => apply_select_descriptor(parsed, select)?,
     };
+
+    // FIX-V7 ruling 2: the threshold every output reports (text summary and
+    // JSON `bundle.multisig.threshold`) is K only for a plain k-of-n
+    // descriptor and `None` for a general policy, whatever the format
+    // parser's first-match regex found.
+    for p in &mut parsed {
+        p.threshold = crate::cmd::bundle::plain_multisig_threshold(&p.descriptor.tree);
+    }
 
     // Non-blocking consensus-masked older() advisory (SPEC_older_timelock_advisory,
     // Task 4 / Adapter A). After the descriptor selection is finalized, before
@@ -1584,7 +1592,7 @@ fn emit_json_envelope<W: Write, E: Write>(
                     xpub: s.xpub.to_string(),
                 })
                 .collect();
-            let threshold = p.threshold.unwrap_or(n as u8);
+            let threshold = p.threshold;
             let (path_family, notice) = path_family_from_paths(&paths);
             if let Some(msg) = notice {
                 writeln!(stderr, "{msg}").map_err(ToolkitError::Io)?;
