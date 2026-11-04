@@ -6482,3 +6482,9 @@ screen printed. Print the values.
 - What: M-1 stale skipped counts (`4235`; measured 4223 on 12e013bc) in §3.1 and the header; M-2 stale STOP wording at `:72`, `:242-245`, `:360-361`, `:378`, `:425-427`; M-3 carried by I-2's STOP-7 line (closed by the r1 fold); M-4 §7 item 12 runs `make lint` before `make html` and needs a `mnemonic-gui-v0.63.0` checkout at `MANUAL_GUI_UPSTREAM_ROOT`; N-1..N-3 wording and line-cite offsets. All fail closed.
 - Status: `deferred-minor`
 - Owning phase: the FIX_v5_wsh_cost build (the builder may apply M-1/M-4 fix texts as written; otherwise ownerless residue).
+
+### `compare-cost-wrapper-chain-label-scan` — `compare-cost --miniscript` refuses valid multi-letter wrapper chains (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part B**)
+- Surfaced: triage E9 (`triage/e9-wrapper-chain` cc6a3882; RED file 3a2ceced); grade `grade-2026-11-03-tk-e9.md`: CONFIRMED, grade **I**, rulings (a)-(b).
+- Build impact (1): `cost/translate.rs` treats an identifier whose next non-whitespace character is `:` as a wrapper chain, in both `collect_abstract_labels` and `replace_whole_word` (FIX §2, Appendix B). FIX §3 rows 15-26 (`cli_compare_cost_wrapper_chain.rs`, 12 tests) pass.
+- Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
+- Tier: `toolkit`.
