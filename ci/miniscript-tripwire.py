@@ -63,13 +63,15 @@ def dir_texts(root):
                     yield fh.read()
 
 
-def crate_texts(data, version):
-    """Yield the text of every src/**/*.rs in a .crate, read in memory."""
-    prefix = "miniscript-%s/src/" % version
+def crate_texts(data):
+    """Return the text of every <dir>/src/**/*.rs in a .crate, read in memory."""
+    out = []
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
         for m in tf:
-            if m.isfile() and m.name.startswith(prefix) and m.name.endswith(".rs"):
-                yield tf.extractfile(m).read().decode("utf-8", errors="replace")
+            parts = m.name.split("/")
+            if m.isfile() and len(parts) >= 3 and parts[1] == "src" and m.name.endswith(".rs"):
+                out.append(tf.extractfile(m).read().decode("utf-8", errors="replace"))
+    return out
 
 
 def fetch(version):
@@ -134,7 +136,12 @@ def main():
         print("::error::could not verify miniscript-%s.crate against the crates.io "
               "index checksum. Failing closed." % top)
         return 1
-    found = scan(crate_texts(data, top))
+    texts = crate_texts(data)
+    if not texts:
+        print("::error::miniscript-%s.crate has no src/*.rs files, so a scan of it "
+              "would mean nothing. Failing closed." % top)
+        return 1
+    found = scan(texts)
     missing = [l for _, l in MARKERS if l not in found]
     new_major = key(top)[0] > key(a.baseline)[0]
 

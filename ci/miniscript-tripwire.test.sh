@@ -48,6 +48,8 @@ else
     -e 's/^(\s*)SortedMulti\(Threshold</\1Renamed(Threshold</' \
     -e 's/pub fn derive_at_index\b/pub fn renamed_derive/' \
     -e 's/pub fn into_definite\b/pub fn renamed_definite/' {} +
+  # decoys as in the real 13.2.0 (ShInner/WshInner), which a loosened M2 would match
+  printf '    SortedMulti(SortedMultiVec<Pk, Legacy>),\n' > "$tmp/old-src/decoy.rs"
   mkcrate "$tmp/old-src" 13.2.0 "$tmp/old.crate"
 fi
 mkcrate "$control" 13.3.0 "$tmp/new.crate"       # carries all four markers
@@ -150,8 +152,17 @@ row_g() {  # not in the architect's six: 2/4 markers, same major, stays green
   want_lacks "::error::"
 }
 
+row_h() {  # a sha-correct crate with no src/*.rs: the scan would mean nothing, exit 1
+  mkdir -p "$tmp/nosrc/miniscript-13.3.0/notsrc" && echo x > "$tmp/nosrc/miniscript-13.3.0/notsrc/a.rs"
+  tar -czf "$tmp/nosrc.crate" -C "$tmp/nosrc" miniscript-13.3.0
+  run --index "$(index_with 13.3.0 "$(sha "$tmp/nosrc.crate")")" --crate "$tmp/nosrc.crate" --control-dir "$control"
+  want_rc 1
+  want_has "::error::miniscript-13.3.0.crate has no src/*.rs files, so a scan of it would mean nothing. Failing closed."
+  want_lacks "::notice::"
+}
+
 rows=("$@")
-[ ${#rows[@]} -gt 0 ] || rows=(row_a row_b row_c row_d row_e row_f row_g)
+[ ${#rows[@]} -gt 0 ] || rows=(row_a row_b row_c row_d row_e row_f row_g row_h)
 for r in "${rows[@]}"; do
   before=$fails
   "$r"
