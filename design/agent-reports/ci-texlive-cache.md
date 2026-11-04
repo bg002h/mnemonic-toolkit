@@ -47,3 +47,9 @@ Baseline before the change: median 120 s, 5 of 111 at 600 s or more (max 823 s),
 5. The `make`-only and other small apt installs are intentionally left as they were.
 
 0 Critical, 0 Important (no STOP). Counts: 6 install steps converted, 5 workflows, 23 shim checks, 6 of 6 warm re-runs green, 5 of 5 warm cache hits confirmed in logs.
+
+## Follow-on (head a6231cae): cold-miss hardening
+
+- Apt install step timeout 15 -> 30 min (closes residual risk 1 as a timeout raise; retries/parallel download not done).
+- New `apt-cache-warm` workflow (daily + push to master) re-saves the cache keys so PR runs restore instead of going cold after the 7-day eviction; a key-parity test asserts its keys equal the consuming workflows' keys.
+- CI on a6231cae: 56 pass, 4 skipping, 0 fail, 0 pending (`gh pr checks 136`, list in /scratch/cache/tk-ci-texlive-2/checks-final.txt). Section written by the coordinator from the agent's result.
