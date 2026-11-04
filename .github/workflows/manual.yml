@@ -60,6 +60,13 @@ jobs:
           DOC_GATE_TEST_TMP: ${{ runner.temp }}/doc-gate-test
         run: bash ci/doc-gate-guard.test.sh
 
+      - name: Self-test the apt deb cache (ci/apt-cache.test.sh)
+        # Stand-in sudo/apt-get programs; no root, no network. It covers the
+        # cache-key digest, pruning and loud failure of ci/apt-cache.sh, which
+        # the five pandoc + texlive installs (.github/actions/apt-cache) rely
+        # on. Unconditional, like the guard self-test above.
+        run: bash ci/apt-cache.test.sh
+
       - name: Detect relevant changes (always runs; the heavy steps below are gated on it)
         id: guard
         # Fail-SAFE (ci/doc-gate-guard.sh): errs only toward RUNNING the gate.
@@ -70,7 +77,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           CHECK_NAME: manual
           GH_TOKEN: ${{ github.token }}
-        run: bash ci/doc-gate-guard.sh --book docs/manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|ci/doc-(gate-guard|flag-lint)\.test\.sh$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
+        run: bash ci/doc-gate-guard.sh --book docs/manual --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|docs/tools/render-mermaid-cache\.py$|\.github/workflows/manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|ci/doc-(gate-guard|flag-lint)\.test\.sh$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
 
       - name: Install pandoc + texlive
         timeout-minutes: 15
@@ -79,16 +86,16 @@ jobs:
         # build runs MERMAID_FILTER=skip and consumes the checked-in
         # figures/cache/ PDFs. See `ci-chromium-drop` (closed) in
         # docs/manual/FOLLOWUPS.md for the migration record.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-extra-utils \
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
             make
 
       - name: Set up Node.js

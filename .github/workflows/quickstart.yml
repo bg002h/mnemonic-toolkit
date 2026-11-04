@@ -57,7 +57,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           CHECK_NAME: quickstart
           GH_TOKEN: ${{ github.token }}
-        run: bash ci/doc-gate-guard.sh --book docs/quickstart --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/quickstart\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
+        run: bash ci/doc-gate-guard.sh --book docs/quickstart --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|docs/tools/render-mermaid-cache\.py$|\.github/workflows/quickstart\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
 
       - name: Install pandoc + texlive
         timeout-minutes: 15
@@ -65,16 +65,16 @@ jobs:
         # No chromium / mermaid-filter / mermaid-cli — the build runs
         # MERMAID_FILTER=skip and consumes the checked-in figures/cache/
         # PDFs. See `ci-chromium-drop` (closed) in docs/manual/FOLLOWUPS.md.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-extra-utils \
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
             make
 
       - name: Set up Node.js

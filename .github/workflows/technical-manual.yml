@@ -83,7 +83,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           CHECK_NAME: technical-manual
           GH_TOKEN: ${{ github.token }}
-        run: bash ci/doc-gate-guard.sh --book docs/technical-manual --also '^(docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
+        run: bash ci/doc-gate-guard.sh --book docs/technical-manual --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|docs/tools/render-mermaid-cache\.py$|\.github/workflows/technical-manual\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|crates/|Cargo\.(toml|lock)$|rust-toolchain\.toml$)'
 
       - name: Install make
         if: steps.guard.outputs.relevant == 'true'
@@ -217,16 +217,16 @@ jobs:
         if: steps.guard.outputs.relevant == 'true'
         # No chromium / mermaid-filter: the build runs MERMAID_FILTER=skip
         # (the Makefile default) and consumes the checked-in figures/cache/.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-extra-utils \
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
             make
 
       - name: Build PDF

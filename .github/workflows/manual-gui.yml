@@ -61,7 +61,7 @@ jobs:
           PUSH_BEFORE: ${{ github.event.before }}
           CHECK_NAME: manual-gui
           GH_TOKEN: ${{ github.token }}
-        run: bash ci/doc-gate-guard.sh --book docs/manual-gui --also '^(\.github/workflows/manual-gui\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|rust-toolchain\.toml$)'
+        run: bash ci/doc-gate-guard.sh --book docs/manual-gui --also '^(\.github/actions/apt-cache/|ci/apt-cache(\.test)?\.sh$|\.github/workflows/manual-gui\.yml$|ci/doc-gate-(guard\.sh|paths\.py)$|rust-toolchain\.toml$)'
 
   # ---------------------------------------------------------------------------
   # Job 1 — lint
@@ -119,18 +119,18 @@ jobs:
         # texlive-science brings seqsplit (preamble.tex's \brktt for long
         # monospace identifiers); xurl ships with texlive-latex-recommended
         # (URL line-breaking). Mirrors docs/manual/Dockerfile.build:30-46.
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-extra-utils \
-            texlive-science \
-            make \
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            texlive-science
+            make
             python3
 
       - name: Set up Node.js
@@ -368,17 +368,17 @@ jobs:
 
       - name: Install pandoc + texlive
         timeout-minutes: 15
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            pandoc \
-            texlive-xetex \
-            texlive-latex-recommended \
-            texlive-latex-extra \
-            texlive-fonts-recommended \
-            texlive-fonts-extra \
-            texlive-extra-utils \
-            texlive-science \
+        uses: ./.github/actions/apt-cache
+        with:
+          packages: >-
+            pandoc
+            texlive-xetex
+            texlive-latex-recommended
+            texlive-latex-extra
+            texlive-fonts-recommended
+            texlive-fonts-extra
+            texlive-extra-utils
+            texlive-science
             make
 
       - name: Build PDF + HTML (reference manual + gui_example tutorial book)
