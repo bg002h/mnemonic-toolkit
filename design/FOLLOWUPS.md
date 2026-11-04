@@ -6466,3 +6466,13 @@ screen printed. Print the values.
 - **Owning phase:** the next toolkit cycle that touches `fuzz/` (`fuzz-nightly-quarterly-bump`), else the next cycle that moves miniscript.
 - **Tier:** `v0.5` / hygiene.
 - **Companion:** none.
+
+### `t1-miniscript-tripwire-review-minors` — toolkit PR 133 (T1 tripwire) review: Minors M-1..M-4 and Nits N1..N6 deferred unfixed
+
+- **Surfaced:** 2026-11-03, independent review of toolkit PR 133 (`design/agent-reports/review-t1-miniscript-tripwire.md`, head 8c7dc9b2; 0C/1I/4M/6N). The Important (I-1) was folded in `t1-fold-i1.md`; these were not.
+- **What:** M-1 six surviving mutants in `ci/miniscript-tripwire.py` (the `live` filter, `max(..., key=key)`, `<=`, `len(found) == 4`; the report carries candidate rows i, j, k). M-2 the printed NEXT STEPS fail for a new major unless md-codec moves first. M-3 the FOLLOWUP `fuzz-and-repro-miniscript-pin-realign` misstates what `95fdd1c` lacks and omits two stale defaults. M-4 the workflow's "DELETE this workflow" advice no longer covers the files PR 133 adds. N1..N6 are the report's Nits (workflow `on.push.paths` omits `vendor/miniscript/**`; empty parens in row (d)'s message; three manual/Cargo.toml/FOLLOWUPS wording points).
+- **Action:** read the report's M-1..M-4 and Nits sections; fix or close each in the T3 cycle.
+- **Status:** `deferred-minor`
+- **Owning phase:** toolkit T3.
+- **Tier:** `v0.5` / hygiene.
+- **Companion:** none.
