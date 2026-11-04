@@ -53,7 +53,7 @@ The general Recovery line is one line: there is no wrap and the line ends with `
   - `mnemonic bundle --import-json`;
   - `mnemonic export-wallet --from-import-json`.
 - `mnemonic bundle --import-json` ignores the envelope's `threshold`, as today, and now also ignores `--threshold`, which used to set k on this path (architect STOP-2 (b)). It recomputes k from the descriptor by 2.1, so a stale integer or a `--threshold` value still yields the descriptor's card, at exit 0.
-- `export-wallet --from-import-json` passes no threshold (`None`) from a null envelope.
+- `export-wallet --from-import-json` also takes K from the envelope's descriptor by 2.1 and ignores the envelope's `threshold` (whole-diff s1 I-2, 2026-11-04).
   - `--format descriptor` / `bitcoin-core` / `bip388` output is byte-identical to the same envelope carrying an integer.
   - `--format sparrow` and the other template formats keep their existing general-policy refusal, at exit 1, with the unchanged text:
     `error: --from-import-json: --format sparrow cannot represent a general wallet policy (timelocks/hashlocks/non-multisig miniscript); it is a plain k-of-n multisig format. Use --format descriptor / bitcoin-core / bip388 for faithful descriptor passthrough.`
