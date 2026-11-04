@@ -6476,3 +6476,44 @@ screen printed. Print the values.
 - **Owning phase:** toolkit T3.
 - **Tier:** `v0.5` / hygiene.
 - **Companion:** none.
+
+### `fix-v5-r1-minors` — FIX_v5_wsh_cost review r1's Minors and Nits (M-1..M-4, N-1..N-3), not folded
+- Surfaced 2026-11-04, FIX review r1 (`design/agent-reports/review-fix-v5-r1.md` "Minor", "Nit"; each has its location and fix text there).
+- What: M-1 stale skipped counts (`4235`; measured 4223 on 12e013bc) in §3.1 and the header; M-2 stale STOP wording at `:72`, `:242-245`, `:360-361`, `:378`, `:425-427`; M-3 carried by I-2's STOP-7 line (closed by the r1 fold); M-4 §7 item 12 runs `make lint` before `make html` and needs a `mnemonic-gui-v0.63.0` checkout at `MANUAL_GUI_UPSTREAM_ROOT`; N-1..N-3 wording and line-cite offsets. All fail closed.
+- Status: `deferred-minor`
+- Owning phase: the FIX_v5_wsh_cost build (the builder may apply M-1/M-4 fix texts as written; otherwise ownerless residue).
+
+### `compare-cost-wrapper-chain-label-scan` — `compare-cost --miniscript` refuses valid multi-letter wrapper chains (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part B**)
+- Surfaced: triage E9 (`triage/e9-wrapper-chain` cc6a3882; RED file 3a2ceced); grade `grade-2026-11-03-tk-e9.md`: CONFIRMED, grade **I**, rulings (a)-(b).
+- Build impact (1): `cost/translate.rs` treats an identifier whose next non-whitespace character is `:` as a wrapper chain, in both `collect_abstract_labels` and `replace_whole_word` (FIX §2, Appendix B). FIX §3 rows 15-26 (`cli_compare_cost_wrapper_chain.rs`, 12 tests) pass.
+- Status: `closed`, by GREEN commit 9b1be357.
+- Tier: `toolkit`.
+
+### `compare-cost-wsh-witness-script-omitted` — `compare-cost` wsh figures omit the witnessScript and its length (repo: **mnemonic-toolkit**; owning phase: **FIX_v5_wsh_cost build, Part A**)
+- Surfaced: triage V5 (`triage/v5-v7` ac3ff70a); grade `grade-2026-11-03-tk-v5-v7.md`: V5-1..V5-7 each **I**, rulings 4-7.
+- Build impact (1): the wsh witness weight counts the witnessScript and its length varint (`witness_weight_wu`, FIX §1 A1, Appendix A). FIX §3 rows 1-14 and 30 pass.
+- Build impact (2): the ruling-4 `sh(wsh)` note, in `notes[]` and as a text `note:` line (FIX §1 A1b). FIX §3 rows 27-29 pass.
+- Build impact (3): the lockstep files of FIX §5. The regenerated transcripts equal Appendix D, and `.examples-build/Examples.md` equals Appendix E's result. The GUI tutorial J4 step 20 (FIX §5 rows 7-8) moved to `manual-gui-j4-20-compare-cost-v5-figures` (architect 2026-11-04 STOP-5).
+- Build impact (4): none in this build; the ruling-5/6 self-check moved to `compare-cost-wsh-cost-self-check` (architect 2026-11-04 STOP-1).
+- Status: `closed`, by GREEN commit ce2e9a54.
+- Tier: `toolkit`.
+
+### `compare-cost-wsh-cost-self-check` — compare-cost's ruling-5/6 wsh cost self-check, held until the pinned `max_weight_to_satisfy` is exact for `d:` and `thresh` (repo: **mnemonic-toolkit**; owning phase: **the next cycle that moves miniscript**)
+- Surfaced: FIX_v5_wsh_cost STOP-1, ruled option (a) by `architect-2026-11-04-fix-v5-stops.md`. Rulings 5 and 6 of `grade-2026-11-03-tk-v5-v7.md` stand unchanged; only their build moved here.
+- Why held: at pin ff4732e5 `max_weight_to_satisfy` counts `d:`'s `1` push as 1 WU (`extra_props.rs:550`; fixed by rust-miniscript #1015) and folds k+1 satisfactions in `thresh` (`:902`; fixed by #1040), so 11 of the FIX corpus's 63 shapes (7 thresh-free with `d:`, 4 thresh) break ruling 6 although the printed figure is right.
+- Action, in the cycle that moves miniscript: (1) if the new rev carries #1046, reduce `witness_weight_wu` (`cost/enumerate.rs`) to `witness_size()`, since #1046 counts the witness script (FIX rows 1-9 fail on a double count); (2) re-run the FIX corpus (`corpus-scratch.patch`, `count-plus-one.py` in the FIX evidence dir) on the new rev; (3) if the rev carries #1015 and #1040, every thresh-free shape has L == mw + 1 and every thresh row is <= mw + 1, rule FIX STOP-3, STOP-4 and STOP-6, then build rulings 5-6 from FIX Appendix F with the FIX §3.3 rows; otherwise STOP.
+- Status: `open`.
+- Tier: `toolkit` (upstream-dependent).
+
+### `manual-gui-j4-20-compare-cost-v5-figures` — at the GUI manual's next re-pin, J4 step 20's compare-cost transcript, figures and prose take FIX-V5's wsh figures (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v5_wsh_cost Part A**)
+- Surfaced: FIX_v5_wsh_cost STOP-5, ruled by `architect-2026-11-04-fix-v5-stops.md`. Ruling 7's GUI item (`grade-2026-11-03-tk-v5-v7.md`) is met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
+- What: mnemonic-gui regenerates `tests/snapshots/tutorial/tut-j4-20-compare-cost.stdout.txt` and the two J4 step-20 PNGs against that toolkit release; the re-pin copies them into `docs/manual-gui/` and changes `50-j4-taproot-twin.md:241` "(`+68` to `+71` vB)" to the range the regenerated transcript prints (FIX Appendix D predicts 144 (+3), 126 (+6), 133 (+6), i.e. "(`+3` to `+6` vB)").
+- Status: `open`.
+- Tier: `docs`, `cross-repo`.
+
+### `v5-whole-diff-minors` — Minors and Nits from the V5 (+E9) whole-diff review, deferred unfixed
+- Surfaced: `design/agent-reports/whole-diff-tk-v5-s1.md` (1M/4N) and `whole-diff-tk-v5-s2.md` (3M/1N); each finding's text and proposed fix live there.
+- s1 M-1: the sh(wsh) note gives its correction in vB only; at a feerate other than 1 the sats columns need 35 × feerate (proposed text in s1). s1 N-1..N-4: self-check FOLLOWUP row range (1-7, 9, not 1-9); compare-cost spec lines 119/186 still say `witness_size()`; notes-catalog row omits stdin; note line order.
+- s2 M-1: `replace_whole_word` end-of-input/word-boundary arms unpinned (translate.rs:271; two unit tests given in s2). s2 M-2: the `collect_abstract_labels` half of E9 is pinned by one row that fails as a panic. s2 M-3: row 30's comment promises Δ values it does not assert. s2 N-1: `- varint_len(elems) + varint_len(elems + 1)` nets to zero for every accepted input.
+- Status: `deferred-minor`.
+- Tier: `toolkit`.

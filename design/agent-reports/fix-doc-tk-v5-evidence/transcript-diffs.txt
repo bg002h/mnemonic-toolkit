@@ -1,0 +1,73 @@
+--- a/docs/manual/transcripts/41-compare-cost-orb.out
++++ b/docs/manual/transcripts/41-compare-cost-orb.out
+@@ -4,7 +4,7 @@
+ 
+ Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------+--------+-------+-------+----------+---------+-------
+-A         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+-B         |     60 |    84 |   +24 |     1500 |    2100 |   +600
++A         |     78 |    84 |    +6 |     1950 |    2100 |   +150
++B         |     78 |    84 |    +6 |     1950 |    2100 |   +150
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+--- a/docs/manual/transcripts/41-compare-cost-ord.out
++++ b/docs/manual/transcripts/41-compare-cost-ord.out
+@@ -4,7 +4,7 @@
+ 
+ Condition         | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ------------------+--------+-------+-------+----------+---------+-------
+-A                 |     60 |    85 |   +25 |       60 |      85 |    +25
+-B + older(blocks) |     60 |    86 |   +26 |       60 |      86 |    +26
++A                 |     79 |    85 |    +6 |       79 |      85 |     +6
++B + older(blocks) |     80 |    86 |    +6 |       80 |      86 |     +6
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+--- a/docs/manual/transcripts/41-compare-cost-tr-ik.out
++++ b/docs/manual/transcripts/41-compare-cost-tr-ik.out
+@@ -5,7 +5,7 @@
+ 
+ Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------+--------+-------+-------+----------+---------+-------
+-key[0]    |     60 |    75 |   +15 |     1500 |    1875 |   +375
++key[0]    |     69 |    75 |    +6 |     1725 |    1875 |   +150
+ 
+ Keypath-spend (via IK f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9): 58 vB | 1450 sats
+ 
+--- a/docs/manual/transcripts/41-compare-cost-json.out
++++ b/docs/manual/transcripts/41-compare-cost-json.out
+@@ -10,12 +10,12 @@
+   "conditions": [
+     {
+       "label": "key[0]",
+-      "wsh_vbytes": 60,
++      "wsh_vbytes": 69,
+       "tr_vbytes": 75,
+-      "delta_vbytes": 15,
+-      "wsh_sats": 60,
++      "delta_vbytes": 6,
++      "wsh_sats": 69,
+       "tr_sats": 75,
+-      "delta_sats": 15
++      "delta_sats": 6
+     }
+   ],
+   "keypath_spend": null,
+--- a/docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt
++++ b/docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt
+@@ -4,11 +4,11 @@
+ 
+ Condition             | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
+ ----------------------+--------+-------+-------+----------+---------+-------
+-A + B + older(blocks) |     79 |   147 |   +68 |       79 |     147 |    +68
+-C + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-D + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-E + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
+-F + preimage(h0)      |     69 |   139 |   +70 |       69 |     139 |    +70
++A + B + older(blocks) |    144 |   147 |    +3 |      144 |     147 |     +3
++C + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++D + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++E + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
++F + preimage(h0)      |    133 |   139 |    +6 |      133 |     139 |     +6
+ 
+ note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
+ note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)

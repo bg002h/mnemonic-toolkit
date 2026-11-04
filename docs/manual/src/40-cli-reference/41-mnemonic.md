@@ -4595,9 +4595,11 @@ See [Consensus-masked relative timelocks](#consensus-masked-relative-timelocks)
 for the non-blocking `older()` advisory this command emits on intake.
 
 Cost is computed via rust-miniscript v13's `Descriptor::plan(...)`
-API; `Plan::witness_size()` returns the full witness-data byte count
-(witness items + length prefixes + stack-count varint + the
-serialized witnessScript or tapscript + control block). Per-input
+API. `Plan::witness_size()` counts the witness items, their length
+prefixes and the stack-count varint, and for `tr` the tapscript and
+control block. For `wsh` the plan's template omits the witnessScript,
+so `compare-cost` adds it as one more witness item (the script plus its
+length prefix) and re-encodes the stack-count varint. Per-input
 costs include the constant 41 vB SegWit-input overhead (36-byte
 outpoint + 1-byte scriptSig-length-zero + 4-byte sequence) so the
 absolute `wsh vB` and `tr vB` numbers match what Sparrow / Bitcoin
@@ -4659,7 +4661,7 @@ Stdout:
 PLACEHOLDER — generated from transcripts/41-compare-cost-orb.out at build
 ```
 
-Either A or B can sign alone; both pay the same cost. tr costs `+24`
+Either A or B can sign alone; both pay the same cost. tr costs `+6`
 vB more per spend than wsh because the tr witness carries an extra
 33-byte control block.
 
@@ -4751,6 +4753,7 @@ in plaintext output) carry advisory text. Known entries:
 | `input had concrete keys; cost is identical to the abstract case` | input contained no abstract labels. |
 | `input contains hash-preimage fragments; …` | input has at least one `sha256` / `hash256` / `ripemd160` / `hash160` leaf. |
 | `input had a non-NUMS internal key IK; …` | (v0.28.0) `--descriptor tr(IK, {M})` with `IK ≠ NUMS`. The advisory carries the IK hex; the JSON envelope's `keypath_spend` field carries the keypath-spend cost (`{ internal_key_xonly_hex, vbytes: 58, sats }`); plaintext output adds a `Keypath-spend (via IK …): 58 vB \| <SATS> sats` annotation line below the per-condition table. |
+| `input had a p2sh wrapper, sh(wsh(M)); …` | `--descriptor sh(wsh(M))`. The `wsh` column is costed for bare `wsh(M)`; the note gives the +35 vB per-input correction. |
 
 ### Exit codes
 

@@ -4,7 +4,7 @@ Feerate: 1.0 sat/vB
 
 Condition         | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
 ------------------+--------+-------+-------+----------+---------+-------
-A                 |     60 |    85 |   +25 |       60 |      85 |    +25
-B + older(blocks) |     60 |    86 |   +26 |       60 |      86 |    +26
+A                 |     79 |    85 |    +6 |       79 |      85 |     +6
+B + older(blocks) |     80 |    86 |    +6 |       80 |      86 |     +6
 
 note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct

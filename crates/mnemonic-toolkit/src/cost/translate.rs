@@ -175,6 +175,10 @@ fn collect_abstract_labels(input: &str) -> Vec<String> {
             if buf.is_empty() {
                 continue;
             }
+            let rest = chars.peek().map_or("", |&(j, _)| &input[j..]);
+            if is_wrapper_chain_at(rest) {
+                continue;
+            }
             let is_hex_pubkey =
                 (buf.len() == 64 || buf.len() == 66) && buf.chars().all(|c| c.is_ascii_hexdigit());
             let is_numeric = buf.chars().all(|c| c.is_ascii_digit());
@@ -265,7 +269,7 @@ fn replace_whole_word(haystack: &str, needle: &str, replacement: &str) -> String
             let before_ok = i == 0 || !is_ident_char(bytes[i - 1]);
             let after_ok =
                 i + needle_b.len() == bytes.len() || !is_ident_char(bytes[i + needle_b.len()]);
-            if before_ok && after_ok {
+            if before_ok && after_ok && !is_wrapper_chain_at(&haystack[i + needle_b.len()..]) {
                 result.push_str(replacement);
                 i += needle_b.len();
                 continue;
@@ -275,6 +279,14 @@ fn replace_whole_word(haystack: &str, needle: &str, replacement: &str) -> String
         i += 1;
     }
     result
+}
+
+/// Grade ruling (b) (E9): an identifier whose next non-whitespace character
+/// is `:` is a wrapper chain (`ln:`, `sdv :`), never a key label. BIP-379 puts
+/// wrapper letters only immediately before `:`, and no BIP-380 key form
+/// contains `:`. `rest` is the input after the identifier.
+fn is_wrapper_chain_at(rest: &str) -> bool {
+    rest.chars().find(|c| !c.is_whitespace()) == Some(':')
 }
 
 fn is_ident_char(b: u8) -> bool {

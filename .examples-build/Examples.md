@@ -1204,11 +1204,11 @@ Feerate: 1.0 sat/vB
 
 Condition             | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
 ----------------------+--------+-------+-------+----------+---------+-------
-A + B + older(blocks) |     79 |   147 |   +68 |       79 |     147 |    +68
-C + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
-D + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
-E + older(512s)       |     61 |   132 |   +71 |       61 |     132 |    +71
-F + preimage(h0)      |     69 |   139 |   +70 |       69 |     139 |    +70
+A + B + older(blocks) |    144 |   147 |    +3 |      144 |     147 |     +3
+C + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
+D + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
+E + older(512s)       |    126 |   132 |    +6 |      126 |     132 |     +6
+F + preimage(h0)      |    133 |   139 |    +6 |      133 |     139 |     +6
 
 note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
 note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)
@@ -1224,7 +1224,7 @@ Feerate: 1.0 sat/vB
 
 Condition        | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
 -----------------+--------+-------+-------+----------+---------+-------
-F + preimage(h0) |     68 |    90 |   +22 |       68 |      90 |    +22
+F + preimage(h0) |     84 |    90 |    +6 |       84 |      90 |     +6
 
 note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
 note: input contains hash-preimage fragments; preimage-known rows are enumerated assuming the user can supply each preimage (cost only — no preimage knowledge is implied)
