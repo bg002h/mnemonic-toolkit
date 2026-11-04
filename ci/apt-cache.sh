@@ -27,7 +27,8 @@ plan_file=$dir.plan
 
 case "$mode" in
   plan)
-    sudo apt-get update
+    # stdout of plan is appended to $GITHUB_OUTPUT: apt chatter goes to stderr.
+    sudo apt-get update >&2
     # An empty archives dir makes --print-uris list every deb that is not
     # already installed, whatever an earlier run left behind.
     scratch=$(mktemp -d)

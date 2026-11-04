@@ -26,7 +26,8 @@ cat > "$tmp/bin/apt-get" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$APT_LOG"
 case "$*" in
-  *update*) exit "${FAKE_UPDATE_RC:-0}" ;;
+  *update*) echo "Get:1 http://a.example noble InRelease [126 kB]"; echo "Reading package lists..."
+            exit "${FAKE_UPDATE_RC:-0}" ;;
   *--print-uris*)
     [ "${FAKE_PLAN_RC:-0}" -eq 0 ] || exit "$FAKE_PLAN_RC"
     cat "$FAKE_URIS"; exit 0 ;;
@@ -60,6 +61,7 @@ out=$(plan "$d" pandoc make)
 digest1=$(printf '%s\n' "$out" | sed -n 's/^digest=//p')
 pkgsum1=$(printf '%s\n' "$out" | sed -n 's/^pkgsum=//p')
 check "plan prints a 64-hex digest" '[[ $digest1 =~ ^[0-9a-f]{64}$ ]]'
+check "plan stdout holds only digest= and pkgsum= lines (it is appended to GITHUB_OUTPUT)" '[ -z "$(printf "%s\n" "$out" | grep -vE "^(digest|pkgsum)=[0-9a-f]+$")" ]'
 check "plan prints a pkgsum" '[[ $pkgsum1 =~ ^[0-9a-f]{12}$ ]]'
 check "plan runs apt-get update first" 'head -1 "$APT_LOG" | grep -q update'
 check "plan writes the plan file beside the dir" '[ -s "$d.plan" ]'
