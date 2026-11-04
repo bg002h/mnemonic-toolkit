@@ -383,7 +383,7 @@ PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2c
      hand-edit a transcript to match.
    - Append F2 (§9) to `design/FOLLOWUPS.md`.
    - Commit as the V5 GREEN commit; its message quotes the §3.1 summary line.
-4. Run the whole gate (§7) on the final head, then the mutation gate (§7 item 13).
+4. Run the whole gate (§7) on the final head, then the mutation gate (§7 item 14).
 5. Do not change the version, `CHANGELOG.md` or any release file (§8).
 
 ## 7. Gate (full toolkit CI; the builder runs all of it on the final head)
@@ -414,7 +414,8 @@ FAIL. Once V7's GREEN is in the base, item 1 must be clean and item 3 must show 
      (`:268`-`:301`);
    - `bash ci/docs-only.test.sh` (`:375`), `bash ci/code-docs-check.test.sh` and `bash ci/code-docs-check.sh`
      (`:380`-`:381`);
-   - CI only: the release `g2_3` row (`:335`), miri (`:365`), cross (`:473`) and musl.
+   - CI only: the release `g2_3` row (`:335`), miri (`:365`), the lib cross-platform check (`:397`) and the
+     musl build and test (`:526`).
    Expected: each exits 0.
 
 `manual.yml` (the manual job and its mutation self-tests), with the pinned `mk` (`mk-cli-v0.13.0`), `md`
@@ -441,7 +442,7 @@ FAIL. Once V7's GREEN is in the base, item 1 must be clean and item 3 must show 
     (`manual-gui.yml:160`), `make html` (`:156`), `make verify-examples` (`:252`) and `make
     verify-examples-gui` (`:349`); plus `bash ci/doc-gate-guard.test.sh` (`:64`). The lint's
     `verify-tutorial-transcripts` phase compares the tutorial transcripts byte for byte with the pinned
-    `mnemonic-gui-v0.63.0` corpus (`manual-gui.yml:74-80`); with Appendix D's tutorial hunk applied it fails
+    `mnemonic-gui-v0.63.0` corpus (`manual-gui.yml:75-78`); with Appendix D's tutorial hunk applied it fails
     (measured: `[lint] FAIL: verify-tutorial-transcripts: byte drift vs the pinned corpus for:
     tut-j4-20-compare-cost.stdout.txt`), and STOP-5 decides what passes here. `quickstart.yml` and
     `technical-manual.yml` run on CI; neither book mentions `compare-cost` (grep empty), so no figure there
@@ -457,4 +458,8 @@ The FIX rows and the mutation gate:
     `cost/translate.rs` (Part B). Its missed list goes into the review brief. Risk class: A (a new printed note,
     the manual and transcripts) and C (cost code); the coordinator may raise it.
 
-`man-pages.yml`, `changelog-check.yml` and `release.yml` run only on tags and are not part of this gate.
+Every other workflow that runs on the PR (`release.yml`'s build matrix and `sibling-pin-check.yml` run on
+every `pull_request`) must be green on the PR head. `fuzz-smoke.yml`, `bitcoind-differential.yml` and
+`cross-tool-differential.yml` are path-filtered and none of their paths is touched here (`cost/` is not in
+any list), so they do not run; `man-pages.yml`, `changelog-check.yml` and `install-pin-check.yml` run only on
+tags. None of these is a local step of this gate.
