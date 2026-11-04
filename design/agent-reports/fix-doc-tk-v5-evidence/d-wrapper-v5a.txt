@@ -1,0 +1,5 @@
+and_b(pk(A),sdv:older(10)) [('A + older(blocks)', 71, 78)]
+and_v(v:pk(A),dv:older(144)) [('A + older(blocks)', 71, 78)]
+and_v(v:pk(A),older(144)) [('A + older(blocks)', 70, 76)]
+and_b(pk(A),snl:older(10)) [('A + older(blocks)', 71, 78)]
+pk(A) [('A', 69, 75)]

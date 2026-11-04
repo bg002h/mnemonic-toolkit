@@ -1,0 +1,15 @@
+and_b(pk(A),sdv:older(10))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 120 WU, max_weight_to_satisfy + 1 = 119 WU; no figures printed (this is a toolkit bug)
+and_b(pk(A),sdv:older(144))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 122 WU, max_weight_to_satisfy + 1 = 121 WU; no figures printed (this is a toolkit bug)
+and_b(pk(A),sdv:after(500000))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 123 WU, max_weight_to_satisfy + 1 = 122 WU; no figures printed (this is a toolkit bug)
+or_d(pk(A),and_v(v:pk(B),dv:older(144)))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 159 WU, max_weight_to_satisfy + 1 = 158 WU; no figures printed (this is a toolkit bug)
+and_v(v:pk(A),dv:older(144))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 120 WU, max_weight_to_satisfy + 1 = 119 WU; no figures printed (this is a toolkit bug)
+or_b(pk(A),sdv:older(144))	rc=2	error: compare-cost: parse error: All spend paths must require a signature
+andor(pk(A),dv:older(144),pk(B))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 158 WU, max_weight_to_satisfy + 1 = 157 WU; no figures printed (this is a toolkit bug)
+or_i(pk(A),and_v(v:pk(B),dv:older(144)))	rc=3	error: compare-cost: cost self-check failed: largest wsh witness 159 WU, max_weight_to_satisfy + 1 = 158 WU; no figures printed (this is a toolkit bug)
+and_b(pk(A),sdv:pk_k(B))	rc=2	error: compare-cost: parse error: typecheck: fragment «v:pk_k(03866e7fb9e2fcb94188cef7415beb227b1fe96fa8df7b8a25bdabee8e9aef2be3)» cannot wrap a fragment of type K
+and_b(pk(A),sdv:v:pk(B))	rc=2	error: compare-cost: parse error: separator ':' occurred multiple times (second time at position 83)
+and_v(v:pk(A),dv:pk(B))	rc=2	error: compare-cost: parse error: typecheck: fragment «dv:pk(03866e7fb9e2fcb94188cef7415beb227b1fe96fa8df7b8a25bdabee8e9aef2be3)» represents needs to be `z`, needs to consume zero elements from the stack
+and_b(pk(A),s:pk(B))	rc=0	
+and_b(pk(A),snl:older(10))	rc=0	
+and_b(pk(A),a:older(10))	rc=0	
+thresh(2,pk(A),sdv:older(10))	rc=2	error: compare-cost: parse error: typecheck: fragment «thresh(2,pk(03998512205ec6a5cdb77d5b4f7de63c560d1e846162612ee178c49e7b6cc44fb9),sdv:older(10))» sub-fragment 1 is not a unit (does not put exactly 1 on the stack given a satisfying input)
