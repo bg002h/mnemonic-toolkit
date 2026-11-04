@@ -1,7 +1,6 @@
 # FIX-V5: compare-cost wsh figures include the witness script (+ E9 wrapper chains)
 
-Small-fix track (RULES.md "Process"). Repo mnemonic-toolkit, branch `fix/v5-wsh-cost`, base `ac3ff70a`
-(the tip of `origin/triage/v5-v7`; it is not on master, which is `12e013bc`; see STOP-2 and STOP-7).
+Small-fix track (RULES.md "Process"). FIX branch `fix/v5-wsh-cost` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v5-wsh-cost`: `git fetch origin && git switch -c build/v5-wsh-cost origin/master && git cherry-pick a34bd61e 123c258d ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v5-wsh-cost head>`. Do not take `d19256e8`.
 
 **Status: AUTHOR DRAFT, not reviewed. Part A (V5) waits on STOP-1. Part B (E9) is complete; per grade e9
 ruling (a) it ships alone, with the same text, if Part A waits (STOP-2 decides its branch and file name).**
@@ -58,8 +57,8 @@ Sources (coordinator `agent-reports/` unless a path is given):
 |---|---|---|
 | V5-1..V5-7 | grade v5-v7 :79-91 | each Important: the wsh column omits the witnessScript; V5-7 is the Δ column |
 | R4 | grade v5-v7 :120-125 | the `sh(wsh)` note: its text (:123), in `notes[]` and as a text `note:` line, one notes-catalog row; SPEC :69 stays |
-| R5 | grade v5-v7 :127-131 | new `CostSelfCheck` error, exit 3 (`Parse` stays 2); build-descriptor propagates it through its existing `?` (`build_descriptor.rs:477-486`, `:512-521`), exit 3 in human and `--json` views, no degraded preview; one manual exit-table row |
-| R6 | grade v5-v7 :133-139 | the self-check rule: thresh-free L == mw + 1, with a thresh every row <= mw + 1; STOP if a thresh-free shape breaks it; do not widen; keep the Core-measured rows |
+| R5 | grade v5-v7 :127-131 | new `CostSelfCheck` error, exit 3 (`Parse` stays 2); build-descriptor propagates it through its existing `?` (`build_descriptor.rs:477-486`, `:512-521`), exit 3 in human and `--json` views, no degraded preview; one manual exit-table row. Moved to F3 (STOP-1 ruling). |
+| R6 | grade v5-v7 :133-139 | the self-check rule: thresh-free L == mw + 1, with a thresh every row <= mw + 1; STOP if a thresh-free shape breaks it; do not widen; keep the Core-measured rows. Moved to F3 (STOP-1 ruling). |
 | R7 | grade v5-v7 :141-145 | the lockstep list (§5) |
 | E9-a | grade e9 :66-88 | E9 is a separable section of this FIX; it ships alone if Part A STOPs; it adds no lockstep files |
 | E9-b | grade e9 :90-114 | the wrapper-chain predicate and RED row `miniscript_path_accepts_label_spelled_like_chain` |
@@ -141,23 +140,9 @@ input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35
 The prose, catalog row and transcripts are Appendices C, D and E; the file list is §5. The author wrote these
 texts where the grade gives no wording; each is listed in §5.2 for the FIX review.
 
-### A2. The cost self-check (R5, R6): HELD by STOP-1
+### A2. The cost self-check (R5, R6): not in this FIX
 
-R6's rule fails on the corpus (STOP-1), so none of A2 is built until it is ruled. For the review, the text R5
-fixes, and what Appendix F measured:
-
-- Variant `CompareCostError::CostSelfCheck { largest_wu: u64, max_weight_wu: u64 }`, exit `3`.
-- Display, R5's template verbatim: `compare-cost: cost self-check failed: largest wsh witness {largest_wu} WU,
-  max_weight_to_satisfy + 1 = {max_weight_wu + 1} WU; no figures printed (this is a toolkit bug)`.
-- Check (Appendix F, `cost/enumerate.rs`): L = the largest planned wsh row in WU; mw =
-  `wsh_desc.max_weight_to_satisfy()` in WU; thresh-free requires L == mw + 1; with a `thresh` every row must be
-  <= mw + 1.
-- build-descriptor: the error reaches the holder through the existing `?` at `build_descriptor.rs:477-486` and
-  `:512-521`, exit 3, human and `--json`.
-- Manual exit table (41-mnemonic.md, compare-cost "Exit codes"), author wording: `| wsh cost self-check failed
-  against \`max_weight_to_satisfy\` (a toolkit bug; no figures printed) | \`3\` |`.
-- Open beside STOP-1: STOP-3 (a `max_weight_to_satisfy` error), STOP-4 (the preview header prints before the
-  `?`), STOP-6 (no input reaches exit 3, so no CLI row can see it).
+Architect 2026-11-04 ruled STOP-1 option (a). The self-check moves, with rulings 5 and 6 unchanged, to FOLLOWUP `compare-cost-wsh-cost-self-check` (§9 F3), owned by the next cycle that moves miniscript. The corpus misses come from the pinned `max_weight_to_satisfy`. It counts `d:`'s `1` push as 1 WU (`extra_props.rs:550`; fixed upstream by rust-miniscript #1015). It also folds k+1 satisfactions in `thresh` (`:902`; fixed by #1040). Appendix F is F3's reference code; do not apply it here.
 
 ## 2. Part B: E9 spec delta (separable)
 
@@ -252,9 +237,9 @@ PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked -p mnemonic-toolkit --tes
 - If E9 ships alone on another base (STOP-2), re-run this on that base before quoting it; a GREEN expires when
   its inputs move (grade e9 :76-78).
 
-### 3.3 Held rows (A2; not written until STOP-1 is ruled)
+### 3.3 Rows for F3 (not written in this FIX)
 
-These rows have names and behaviour only. No code exists for them, on disk or in any commit, and Appendix F
+These rows move to F3 unchanged; no code exists for them. No code exists for them, on disk or in any commit, and Appendix F
 contains no `#[test]` function. They are written by the builder once STOP-1 (and STOP-6, the test seam) are
 ruled, in a new file `cli_compare_cost_v5_self_check.rs` or as `#[cfg(test)]` unit tests in `cost/` if STOP-6
 rules a private seam. The ruling may rename or drop them; the FIX review then re-checks §3.
@@ -294,12 +279,12 @@ the same amount. tr figures do not move.
 | `docs/manual/transcripts/41-compare-cost-ord.out` | A: `60 \| 85 \| +25`; B: `60 \| 86 \| +26` | A: `79 \| 85 \| +6`; B: `80 \| 86 \| +6` |
 | `docs/manual/transcripts/41-compare-cost-tr-ik.out` | `60 \| 75 \| +15 \| 1500 \| 1875 \| +375` | `69 \| 75 \| +6 \| 1725 \| 1875 \| +150` |
 | `docs/manual/transcripts/41-compare-cost-json.out` | `wsh_vbytes` 60, `delta_vbytes` 15, `wsh_sats` 60, `delta_sats` 15 | 69, 6, 69, 6 |
-| `docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt` | A + B: wsh 79 (Δ +68); C, D, E: 61 (+71); F + preimage(h0): 69 (+70) | 144 (+3); 126 (+6); 133 (+6) |
+| `docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt` (moved to F4 (STOP-5)) | A + B: wsh 79 (Δ +68); C, D, E: 61 (+71); F + preimage(h0): 69 (+70) | 144 (+3); 126 (+6); 133 (+6) |
 | `.examples-build/Examples.md` @@-1204 | the same J4 rows as `tut-j4-20` | the same as `tut-j4-20` |
 | `.examples-build/Examples.md` @@-1224 | `68 \| 90 \| +22` | `84 \| 90 \| +6` |
 
 The two J4 PNGs (`docs/manual-gui/figures/tutorial/tut-j4-20-compare-cost-form.png` and `-run.png`) show the
-compare-cost panel; whether they are regenerated, and against which GUI binary, is STOP-5.
+compare-cost panel; whether they are regenerated, and against which GUI binary, moved to F4 (STOP-5).
 
 No `build-descriptor` transcript carries cost figures. The `build-descriptor --json` `cost` field embeds the
 compare-cost JSON (`41-mnemonic.md:4864` at `ac3ff70a`), but no transcript shows it, so ruling 7's "build-descriptor
@@ -308,7 +293,7 @@ regenerated (128 transcript files checked).
 
 ## 5. Lockstep files (ruling 7)
 
-Ten files change; none is production code. Appendix C holds the prose hunks, D the transcripts, E the examples.
+Eight files change; none is production code. Appendix C holds the prose hunks, D the transcripts, E the examples.
 
 | # | file | ruling 7 item, or why it is beyond ruling 7 | appendix, hunk |
 |---|---|---|---|
@@ -318,13 +303,13 @@ Ten files change; none is production code. Appendix C holds the prose hunks, D t
 | 4 | `docs/manual/transcripts/41-compare-cost-tr-ik.out` | compare-cost transcripts | D |
 | 5 | `docs/manual/transcripts/41-compare-cost-json.out` | compare-cost transcripts | D |
 | 6 | `design/SPEC_compare_cost_v0_26_0.md` | `:180-183`, `:213` (lines `:180`, `:210` here); plus `:145` (the same formula in the step-3 sketch) and `:280` (the new note in the notes list), beyond R7 | C @@-145, @@-180, @@-210, @@-280 |
-| 7 | `docs/manual-gui/tutorial/50-j4-taproot-twin.md` | `:241` (J4 step 20 prose; the changed line is `:240` at `ac3ff70a`) | C @@-238 |
-| 8 | `docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt` | its transcript | D |
+| 7 | `docs/manual-gui/tutorial/50-j4-taproot-twin.md` | `:241` (J4 step 20 prose; the changed line is `:240` at `ac3ff70a`); moved to F4 (STOP-5) | C @@-238 |
+| 8 | `docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt` | its transcript; moved to F4 (STOP-5) | D |
 | 9 | `.examples-build/Examples.md` | beyond R7: `examples.yml` regenerates it and fails on any diff | E |
 | 10 | `docs/manual/src/40-cli-reference/42-md.md` | beyond R7: its `md compile` recipe prints a compare-cost table at `:471-472` | C @@-469 |
 
 Ruling 7 items that change no file:
-- The exit-code table (`41-mnemonic.md:4753-4767` at `ac3ff70a`) changes only with A2, which is held (STOP-1).
+- The exit-code table (`41-mnemonic.md:4753-4767` at `ac3ff70a`) moves with A2 to F3 (STOP-1 ruling).
   The row A2 would add, not in Appendix C: `| wsh cost self-check failed against \`max_weight_to_satisfy\` (a
   toolkit bug; no figures printed) | \`3\` |`.
 - The build-descriptor transcripts: none carries cost figures (§4.2).
@@ -359,7 +344,7 @@ transcripts with the repo's own targets (§6); a regenerated transcript that dif
 
 ## 6. Build steps (in this order)
 
-Work on branch `fix/v5-wsh-cost` in a git worktree that is not under `/tmp`. Use `export
+FIX branch `fix/v5-wsh-cost` (base `ac3ff70a`) stays as is, so its cited SHAs stay reachable. Build on `build/v5-wsh-cost`: `git fetch origin && git switch -c build/v5-wsh-cost origin/master && git cherry-pick a34bd61e 123c258d ac3ff70a && git cherry-pick ac3ff70a..<reviewed fix/v5-wsh-cost head>`. Do not take `d19256e8`. Use `export
 PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2caf9 2024-12-31)`. Never pass
 `--release`. Send every run to a file and grep it; never run a suite twice to count. `E` below is
 `design/agent-reports/fix-doc-tk-v5-evidence`.
@@ -372,15 +357,11 @@ PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2c
    - Run §3.2. Expect `12 tests run: 12 passed, 0 skipped`.
    - Append F1 (§9) to `design/FOLLOWUPS.md`.
    - Commit as the E9 GREEN commit; its message quotes the §3.2 summary line.
-3. Part A (V5). Do not start until STOP-1 and STOP-5 (§10) are ruled. The steps below are the ones that apply
-   under STOP-1 option (a) (ship V5a, the formula and the note, without the self-check). Under any other ruling,
+3. Part A (V5). STOP-1 is ruled option (a) and STOP-5 option (ii) (architect 2026-11-04). Under any other ruling,
    the ruling's text replaces this step and the FIX review re-checks §3, §4 and §5 first.
    - `git apply $E/fix-v5a-only.patch` (Appendix A), then `git apply $E/fix-v5a-docs.patch` (Appendix C), then
      `git apply $E/transcript-diffs.txt` (Appendix D), then `git apply $E/examples.diff` (Appendix E).
-   - The tutorial transcript `tut-j4-20-compare-cost.stdout.txt` in Appendix D, and the J4 step-20 PNGs, follow
-     the STOP-5 ruling. If that ruling keeps the GUI tutorial out of this FIX, revert that file's hunk
-     (`git checkout -- docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt`) and the
-     `50-j4-taproot-twin.md` hunk of Appendix C, and record the deferral as the ruling says.
+   - Revert Appendix D's tutorial hunk (`git checkout -- docs/manual-gui/transcripts/tutorial/tut-j4-20-compare-cost.stdout.txt`) and Appendix C's `50-j4-taproot-twin.md` hunk (`git checkout -- docs/manual-gui/tutorial/50-j4-taproot-twin.md`); append F4 (§9).
    - `cargo build --bin mnemonic`.
    - Run §3.1. Expect exit 0 and `30 tests run: 30 passed, …`.
    - Check the transcripts against the patched binary: §7 items 8 and 10. A replayed transcript that differs from
@@ -394,20 +375,14 @@ PATH=$HOME/.cargo/bin:$PATH`; `cargo --version` must print `cargo 1.85.0 (d73d2c
 ## 7. Gate (full toolkit CI; the builder runs all of it on the final head)
 
 Capture each run once to a file and grep it. "Expected" is the result on the final head with Parts A and B
-applied. STOP-7 decides the base. If the build runs on `ac3ff70a` before FIX-V7's GREEN is in it, the only
-allowed failures are V7's: items 1 and 3 then show exactly the V7 lines quoted there, and anything else is a
-FAIL. Once V7's GREEN is in the base, item 1 must be clean and item 3 must show 0 failed.
+applied. STOP-7 decides the base.
 
 `rust.yml`:
 
-1. `cargo +1.95.0 fmt --all -- --check` (`rust.yml:118`). Expected: exit 0. On `ac3ff70a` before V7 the only
-   diffs are in `crates/mnemonic-toolkit/tests/cli_bundle_recovery_threshold_text.rs` (V7's file, at its
-   lines 50 and 164); no diff may name a file this FIX touches.
+1. `cargo +1.95.0 fmt --all -- --check` (`rust.yml:118`). Expected: exit 0; no diff may name a file this FIX touches.
 2. `cargo metadata --locked --format-version 1 > /dev/null` (`:148`) and `cargo build --locked --tests
    --workspace` (`:171`). Expected: exit 0.
-3. `cargo nextest run --locked --workspace --no-fail-fast` (`:185`). Expected: 0 failed. On `ac3ff70a` before V7:
-   exactly 11 failed, all in `cli_bundle_recovery_threshold_text` and all named `v7_*` (measured with A and B
-   applied: `4227 tests run: 4216 passed, 11 failed, 38 skipped`).
+3. `cargo nextest run --locked --workspace --no-fail-fast` (`:185`). Expected: 0 failed.
 4. `cargo test --locked --workspace --doc` (`:190`). Expected: exit 0 (measured at the head:
    `Doc-tests mnemonic_toolkit` and `Doc-tests wc_codec`, each `test result: ok. 0 passed; 0 failed; …`).
 5. `cargo clippy --locked --all-targets -- -D warnings` (`:395`). Expected: exit 0, no warnings.
@@ -451,14 +426,14 @@ FAIL. Once V7's GREEN is in the base, item 1 must be clean and item 3 must show 
     (measured: `[lint] FAIL: verify-tutorial-transcripts: byte drift vs the pinned corpus for:
     tut-j4-20-compare-cost.stdout.txt`), and STOP-5 decides what passes here. `quickstart.yml` and
     `technical-manual.yml` run on CI; neither book mentions `compare-cost` (grep empty), so no figure there
-    moves. Expected: every job green on the PR, item 12's lint as STOP-5 rules.
+    moves. Expected: green, phase 11 included (the tutorial transcript is unchanged).
 
 The FIX rows and the mutation gate:
 
 13. The FIX rows by exact name: §3.1's command. Expected: exit 0, exactly **30 tests run: 30 passed**. If E9
     ships alone (STOP-2), §3.2's command: exactly **12 tests run: 12 passed**. Quote the line in the GREEN
     commit message. A short or empty count is a FAIL, whatever the pass count.
-14. `bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/mutation-gate.sh <worktree> ac3ff70a`
+14. `bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/mutation-gate.sh <worktree> origin/master`
     after items 1-5 pass. Production files touched: `cost/enumerate.rs`, `cost/strip.rs` (Part A) and
     `cost/translate.rs` (Part B). Its missed list goes into the review brief. Risk class: A (a new printed note,
     the manual and transcripts) and C (cost code); the coordinator may raise it.
@@ -480,9 +455,8 @@ tags. None of these is a local step of this gate.
 - **E10**, mr's thresh backstop `largest <= BASE + mw + 73` (grade v5-v7 :74, :136, :152). It is mr code, not
   toolkit code, and has its own triage.
 - **The vendored `cast_dupif` undercount** (`vendor/miniscript/src/miniscript/types/extra_props.rs:550`, against
-  `or_i` at :763). It is an upstream rust-miniscript defect. This FIX does not touch `vendor/` unless STOP-1
-  rules option (c).
-- **The cause of the four `thresh` shapes at +1** (STOP-1). It is not traced here.
+  `or_i` at :763). It is an upstream rust-miniscript defect. It is fixed upstream by #1015; F3.
+- The pinned `threshold` folds k+1 satisfactions (`extra_props.rs:902`), fixed upstream by #1040 (architect 2026-11-04).
 - **Release work**: version, `CHANGELOG.md`, tag, install line (§6 step 5).
 
 ## 9. FOLLOWUPS (the builder appends these to `design/FOLLOWUPS.md` in the GREEN commit)
@@ -504,11 +478,24 @@ F2 (Part A, V5; appended by §6 step 3, only after STOP-1 and STOP-5 are ruled):
 - Surfaced: triage V5 (`triage/v5-v7` ac3ff70a); grade `grade-2026-11-03-tk-v5-v7.md`: V5-1..V5-7 each **I**, rulings 4-7.
 - Build impact (1): the wsh witness weight counts the witnessScript and its length varint (`witness_weight_wu`, FIX §1 A1, Appendix A). FIX §3 rows 1-14 and 30 pass.
 - Build impact (2): the ruling-4 `sh(wsh)` note, in `notes[]` and as a text `note:` line (FIX §1 A1b). FIX §3 rows 27-29 pass.
-- Build impact (3): the lockstep files of FIX §5. The regenerated transcripts equal Appendix D, and `.examples-build/Examples.md` equals Appendix E's result. The GUI tutorial follows the STOP-5 ruling (write the ruling's reference here).
-- Build impact (4): the ruling-5/6 cost self-check (FIX §1 A2), as the STOP-1 ruling decides (write the ruling's reference, and either the rows that pass or where the item was refiled).
+- Build impact (3): the lockstep files of FIX §5. The regenerated transcripts equal Appendix D, and `.examples-build/Examples.md` equals Appendix E's result. The GUI tutorial J4 step 20 (FIX §5 rows 7-8) moved to `manual-gui-j4-20-compare-cost-v5-figures` (architect 2026-11-04 STOP-5).
+- Build impact (4): none in this build; the ruling-5/6 self-check moved to `compare-cost-wsh-cost-self-check` (architect 2026-11-04 STOP-1).
 - Status: `owed-to-build`, closed by this build's GREEN commit (write its sha here).
 - Tier: `toolkit`.
 ```
+
+### `compare-cost-wsh-cost-self-check` — compare-cost's ruling-5/6 wsh cost self-check, held until the pinned `max_weight_to_satisfy` is exact for `d:` and `thresh` (repo: **mnemonic-toolkit**; owning phase: **the next cycle that moves miniscript**)
+- Surfaced: FIX_v5_wsh_cost STOP-1, ruled option (a) by `architect-2026-11-04-fix-v5-stops.md`. Rulings 5 and 6 of `grade-2026-11-03-tk-v5-v7.md` stand unchanged; only their build moved here.
+- Why held: at pin ff4732e5 `max_weight_to_satisfy` counts `d:`'s `1` push as 1 WU (`extra_props.rs:550`; fixed by rust-miniscript #1015) and folds k+1 satisfactions in `thresh` (`:902`; fixed by #1040), so 11 of the FIX corpus's 63 shapes (7 thresh-free with `d:`, 4 thresh) break ruling 6 although the printed figure is right.
+- Action, in the cycle that moves miniscript: (1) if the new rev carries #1046, reduce `witness_weight_wu` (`cost/enumerate.rs`) to `witness_size()`, since #1046 counts the witness script (FIX rows 1-9 fail on a double count); (2) re-run the FIX corpus (`corpus-scratch.patch`, `count-plus-one.py` in the FIX evidence dir) on the new rev; (3) if the rev carries #1015 and #1040, every thresh-free shape has L == mw + 1 and every thresh row is <= mw + 1, rule FIX STOP-3, STOP-4 and STOP-6, then build rulings 5-6 from FIX Appendix F with the FIX §3.3 rows; otherwise STOP.
+- Status: `open`.
+- Tier: `toolkit` (upstream-dependent).
+
+### `manual-gui-j4-20-compare-cost-v5-figures` — at the GUI manual's next re-pin, J4 step 20's compare-cost transcript, figures and prose take FIX-V5's wsh figures (repo: **mnemonic-toolkit** `docs/manual-gui` + **mnemonic-gui** `tests/snapshots`; owning phase: **the GUI-manual / mnemonic-gui pin bump to the toolkit release carrying FIX_v5_wsh_cost Part A**)
+- Surfaced: FIX_v5_wsh_cost STOP-5, ruled by `architect-2026-11-04-fix-v5-stops.md`. Ruling 7's GUI item (`grade-2026-11-03-tk-v5-v7.md`) is met here, not in the fix PR: `manual-gui.yml` byte-compares `docs/manual-gui/transcripts/tutorial/` and `figures/tutorial/` with the pinned mnemonic-gui corpus, which reflects the pinned toolkit release.
+- What: mnemonic-gui regenerates `tests/snapshots/tutorial/tut-j4-20-compare-cost.stdout.txt` and the two J4 step-20 PNGs against that toolkit release; the re-pin copies them into `docs/manual-gui/` and changes `50-j4-taproot-twin.md:241` "(`+68` to `+71` vB)" to the range the regenerated transcript prints (FIX Appendix D predicts 144 (+3), 126 (+6), 133 (+6), i.e. "(`+3` to `+6` vB)").
+- Status: `open`.
+- Tier: `docs`, `cross-repo`.
 
 ## 10. STOPs (undecided points; the builder does not choose)
 
