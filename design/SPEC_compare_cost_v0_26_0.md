@@ -145,7 +145,7 @@ let mut rows = Vec::new();
     let tr_plan  = tr_desc.clone().plan(&provider);
     if let (Ok(wp), Ok(tp)) = (wsh_plan, tr_plan) {
         if is_minimal(&cfg, &assets, &wsh_desc, &tr_desc) {    // shrinkage check
-            rows.push(Row { label: cfg.label(), wsh_witness_bytes: wp.witness_size(), tr_witness_bytes: tp.witness_size() });
+            rows.push(Row { label: cfg.label(), wsh_witness_bytes: witness_weight_wu(&wsh_desc, &wp), tr_witness_bytes: tp.witness_size() });
             if rows.len() >= hard_cap { break 'outer; }
         }
     }
@@ -180,7 +180,7 @@ Step 1's precheck means: with default `hard_cap=4096`, the user must have `|sign
 rust-miniscript's `Plan` returns a *non-malleable, optimal* witness for a given `AssetProvider`'s assets. `Plan::witness_size() -> usize` is the byte count of the witness data for that satisfaction in that context (Segwitv0 or Tap), including:
 - per-stack-item length prefixes
 - stack-count varint
-- scriptCode (wsh: serialized script on the stack) or tapscript + control block (tr)
+- tapscript + control block (tr only; for wsh the template omits the witnessScript, which §4 adds as one more stack item)
 - script-context-specific signature sizes (73 for ECDSA, 64 for Schnorr SIGHASH_DEFAULT)
 
 (`Plan::satisfaction_weight()` returns weight units; per §4, we use `witness_size()` which is byte-count — equivalent to weight-units for witness data since each witness byte contributes 1 wu.)
@@ -210,7 +210,7 @@ Each minimal configuration is labeled compactly:
 For each minimal configuration produced by §3:
 
 ```
-let wsh_witness_bytes = wsh_plan.witness_size();           // includes scriptCode (the witnessScript)
+let wsh_witness_bytes = witness_weight_wu(&wsh_desc, &wsh_plan); // witness_size() + varint(s) + s - varint(n) + varint(n + 1); s = witnessScript bytes, n = template items (the template omits the witnessScript)
 let tr_witness_bytes  = tr_plan.witness_size();            // includes tapscript + control block
 
 // 41 = 36-byte outpoint + 1-byte scriptSig-length-0 + 4-byte sequence;
@@ -280,6 +280,7 @@ Header lines: echo the extracted miniscript, the wsh-vs-tr wrapper comparison st
 - feerate-zero advisory (§4)
 - soft-cap-reached advisory: `"enumeration capped at 256 conditions; raise --max-conditions to see more"`
 - concrete-keys advisory: `"input had concrete keys; cost is identical to the abstract case"`
+- sh(wsh) advisory: `"input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ"`
 
 The JSON envelope sets exit 0 on success even when notes are non-empty.
 

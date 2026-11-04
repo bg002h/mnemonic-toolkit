@@ -16,10 +16,11 @@
 
 use std::collections::BTreeSet;
 
+use miniscript::bitcoin::consensus::encode::VarInt;
 use miniscript::bitcoin::hashes::{hash160, ripemd160, sha256};
 use miniscript::bitcoin::{absolute, relative};
 use miniscript::descriptor::{DefiniteDescriptorKey, DescriptorPublicKey};
-use miniscript::plan::Assets;
+use miniscript::plan::{Assets, Plan};
 use miniscript::{Descriptor, ForEachKey, Miniscript, Segwitv0};
 
 use super::translate::{pubkey_to_label_segv0, Translated};
@@ -264,9 +265,34 @@ fn build_and_plan(
         }
     }
     match desc.clone().plan(&a) {
-        Ok(plan) => Some(plan.witness_size()),
+        Ok(plan) => Some(witness_weight_wu(desc, &plan)),
         Err(_) => None,
     }
+}
+
+/// Witness weight (WU) of one planned spend. For `wsh(M)` the plan's
+/// template omits the witnessScript, so add it as one more stack element
+/// (the expression of rust-miniscript PR #1046): `varint(script) + script`,
+/// and re-encode the stack-count varint for `t + 1` elements. `tr` templates
+/// already carry the leaf script and control block.
+fn witness_weight_wu(
+    desc: &Descriptor<DefiniteDescriptorKey>,
+    plan: &Plan<DefiniteDescriptorKey>,
+) -> usize {
+    let template_wu = plan.witness_size();
+    match desc {
+        Descriptor::Wsh(wsh) => {
+            let script_len = wsh.inner_script().len();
+            let elems = plan.witness_template().len();
+            template_wu + varint_len(script_len) + script_len - varint_len(elems)
+                + varint_len(elems + 1)
+        }
+        _ => template_wu,
+    }
+}
+
+fn varint_len(n: usize) -> usize {
+    VarInt(n as u64).size()
 }
 
 fn is_minimal(

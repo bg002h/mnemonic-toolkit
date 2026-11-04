@@ -10,12 +10,12 @@
   "conditions": [
     {
       "label": "key[0]",
-      "wsh_vbytes": 60,
+      "wsh_vbytes": 69,
       "tr_vbytes": 75,
-      "delta_vbytes": 15,
-      "wsh_sats": 60,
+      "delta_vbytes": 6,
+      "wsh_sats": 69,
       "tr_sats": 75,
-      "delta_sats": 15
+      "delta_sats": 6
     }
   ],
   "keypath_spend": null,

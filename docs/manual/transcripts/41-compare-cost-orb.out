@@ -4,7 +4,7 @@ Feerate: 25.0 sat/vB
 
 Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
 ----------+--------+-------+-------+----------+---------+-------
-A         |     60 |    84 |   +24 |     1500 |    2100 |   +600
-B         |     60 |    84 |   +24 |     1500 |    2100 |   +600
+A         |     78 |    84 |    +6 |     1950 |    2100 |   +150
+B         |     78 |    84 |    +6 |     1950 |    2100 |   +150
 
 note: per-condition vbytes are rounded individually; absolute numbers may differ by ±1 from real-tx accounting, Δ values are correct
