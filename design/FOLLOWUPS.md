@@ -6493,3 +6493,45 @@ screen printed. Print the values.
 - **Owning phase:** next toolkit cleanup cycle.
 - **Tier:** `v0.5` / hygiene.
 - **Companion:** none.
+
+### `v7-s1-m1-restore-md1-threshold-null` — FIX-V7 whole-diff s1 M-1: `restore --md1` writes `threshold: null` for a pure-key `thresh`
+
+- Surfaced: 2026-11-04, whole-diff s1 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s1.md` M-1). No wrong number reaches a holder, but `bundle`/`import-wallet` report K and `restore` does not.
+- What: `restore.rs:4021` should use `plain_multisig_threshold`, as the other emitters do.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s1-n1-anatomy-k-source-doc` — FIX-V7 whole-diff s1 N-1: manual says K always comes from `plain_multisig_threshold`
+
+- Surfaced: 2026-11-04, whole-diff s1 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s1.md` N-1).
+- What: `docs/technical-manual/src/40-bundle-formation/41-bundle-anatomy.md:136` should add "(descriptor and `--import-json` modes)"; template mode takes K from `--threshold`.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s1-n2-fix-2-3-multisig-absent-wording` — FIX-V7 whole-diff s1 N-2: FIX 2.3 says `multisig` is absent when n == 1
+
+- Surfaced: 2026-11-04, whole-diff s1 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s1.md` N-2).
+- What: both emitters write `"multisig": null` for n == 1. The FIX-doc wording is wrong; the manual (`41-mnemonic.md:1715`) is right. FIX-doc wording only.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s2-n1-dead-threshold-fallbacks` — FIX-V7 whole-diff s2 N-1: template-mode threshold fallbacks are dead code
+
+- Surfaced: 2026-11-04, whole-diff s2 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s2.md` N-1).
+- What: the `.or(if n > 1 ...)` fallback at `bundle.rs:1384` and the `unwrap_or(n as u8)` default at `bundle.rs:954` never run, because `--threshold` is mandatory for a multisig template. Write `args.threshold` at 1384; the defensive default may stay.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s2-n2-redundant-tapTree-guard` — FIX-V7 whole-diff s2 N-2: redundant `Tag::TapTree` guard at bundle.rs:1323
+
+- Surfaced: 2026-11-04, whole-diff s2 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s2.md` N-2).
+- What: the `leaf.tag != Tag::TapTree` guard is covered by `kofn` (S2). Writing `) => kofn(leaf),` removes a permanent mutation survivor. Keeping it as documentation is also acceptable.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
+
+### `v7-s2-n3-plain-multisig-threshold-unit-test` — FIX-V7 whole-diff s2 N-3: no unit test for the `c.len() == 1` guard in `plain_multisig_threshold`
+
+- Surfaced: 2026-11-04, whole-diff s2 of the FIX-V7 build (`design/agent-reports/whole-diff-tk-v7-s2.md` N-3).
+- What: the guard at `bundle.rs:1272` is defensive for hand-built trees. A `#[cfg(test)]` unit test on a hand-built two-child `Wsh` expecting `None` would silence the survivor. Not required.
+- Status: `deferred-minor`
+- Owning phase: next toolkit cleanup cycle.
