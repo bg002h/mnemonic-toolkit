@@ -518,3 +518,39 @@ fn walk_relative_timelock_kinds(m: &Miniscript<DefiniteDescriptorKey, Segwitv0>)
     }
     (b, t)
 }
+
+#[cfg(test)]
+mod v5_wu_pin_tests {
+    use super::*;
+    use crate::cost::translate::{build_tr_descriptor, build_wsh_descriptor, translate_miniscript};
+
+    /// Exact `wsh_witness_bytes` (WU) of every row of `--miniscript <m>`.
+    fn wsh_wu(m: &str) -> Vec<usize> {
+        let t = translate_miniscript(m).expect("translate");
+        let w = build_wsh_descriptor(t.segv0.clone()).expect("wsh");
+        let tr = build_tr_descriptor(t.tap.clone()).expect("tr");
+        enumerate_minimal_conditions(&t, &w, &tr, 10_000)
+            .expect("enumerate")
+            .rows
+            .iter()
+            .map(|r| r.wsh_witness_bytes)
+            .collect()
+    }
+
+    /// wsh(pk(K)): stack count 1 + (1 + 72 dummy sig) + (1 + 35 script) = 110 WU.
+    /// Core signs the same spend at 109 (71-byte low-R sig, 1 fewer).
+    #[test]
+    fn v5_pin_wsh_pk_witness_wu_exact() {
+        assert_eq!(wsh_wu("pk(A)"), vec![110]);
+    }
+
+    /// multi(7, 10 keys): script = 1 + 10*34 + 1 + 1 = 343 bytes, so its length
+    /// varint is 3 bytes (>= 253). Witness = count 1 + empty dummy 1 +
+    /// 7*(1 + 72) + (3 + 343) = 859 WU for each of the C(10,7) = 120 signer sets.
+    #[test]
+    fn v5_pin_wsh_multi_7_of_10_witness_wu_exact_three_byte_varint() {
+        let got = wsh_wu("multi(7,A,B,C,D,E,F,G,H,I,J)");
+        assert_eq!(got.len(), 120);
+        assert!(got.iter().all(|w| *w == 859), "got {got:?}");
+    }
+}
