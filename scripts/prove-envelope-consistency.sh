@@ -135,6 +135,15 @@ both_refused "mk1[2] swapped from another wallet" "$WORK/t-swap.json" signet "$(
 edit "$WORK/honest.json" "$WORK/t-path.json" "b['origin_path'] = \"m/48'/1'/7'/2'\""
 both_refused "origin path edited" "$WORK/t-path.json" signet "$(e2key 0)"
 
+# Card-only origin-path mismatch: mk1[0] is a card of the same xpub and fingerprint
+# whose origin path is m/48'/1'/7'/2'; descriptor, md1 and origin_path stay at 0'.
+K0P7="${K0/48\'\/1\'\/0\'\/2\'/48\'/1\'/7\'/2\'}"
+[ "$K0P7" != "$K0" ] || { echo "setup failed: K0P7" >&2; exit 2; }
+import "${PLAIN/@0/$K0P7}" 0 "$WORK/cardpath.json"
+CP=$(field "$WORK/cardpath.json" mk1)
+edit "$WORK/honest.json" "$WORK/t-cardpath.json" "b['mk1'][0] = json.loads('''$CP''')[0]"
+both_refused "mk1[0] card path only differs" "$WORK/t-cardpath.json" signet "$(e2key 0)"
+
 edit "$WORK/honest.json" "$WORK/t-drop.json" "b['mk1'] = b['mk1'][:2]; b['ms1'] = b['ms1'][:2]"
 both_refused "one mk1 card dropped" "$WORK/t-drop.json" signet \
   "envelope.bundle.mk1 has 2 cosigners but envelope.bundle.descriptor has 3 keys, $TAIL"
