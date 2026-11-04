@@ -87,7 +87,7 @@ All 30 rows are committed (`d19256e8`: rows 1-12; `283132e7`: rows 13-30). Rows 
 
 Command (from the worktree root):
 
-`PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked -p mnemonic-toolkit -E "$(cat design/agent-reports/fix-doc-tk-v7-evidence/fix-rows-filter.txt)"`
+`PATH=$HOME/.cargo/bin:$PATH cargo nextest run --locked --no-fail-fast -p mnemonic-toolkit -E "$(cat design/agent-reports/fix-doc-tk-v7-evidence/fix-rows-filter.txt)"`
 
 - On the build base before the GREEN commit: the summary line reads `30 tests run: 6 passed, 24 failed, <S> skipped`, and the 24 failures are exactly the rows marked FAIL below, each for the reason given. Measured: `Summary [   0.023s] 30 tests run: 6 passed, 24 failed, 4111 skipped`.
 - After the GREEN commit: `30 tests run: 30 passed, <S> skipped`, no failure. Measured: `Summary [   0.045s] 30 tests run: 30 passed, 4111 skipped`.
@@ -255,7 +255,7 @@ export PATH="$R/bin:$HOME/.cargo/bin:$PATH"
 
 12. Each book's gate:
     - **Technical manual**, from `docs/technical-manual`:
-      - Run `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=true` (`technical-manual.yml:124`-`:129`), `make verify-examples`, `make pdf` and `make html`.
+      - Run `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=true` (`technical-manual.yml:124`-`:129`), `make verify-examples MNEMONIC_BIN="$PWD/../../target/debug/mnemonic" MD_BIN=md MS_BIN=ms MK_BIN=mk EXAMPLES_DIR="$PWD/examples"` (`technical-manual.yml:204-209`), `make pdf` and `make html`.
       - Expected and measured: `CSpell: Files checked: 26, Issues found: 0 in 0 files.` (lockstep file 7 adds `preimages`), `[lint] OK`, `[verify-examples] OK (18 transcripts pass)`, and both books built.
       - The lint's symbol-ref-check resolves source citations only in CI's checkout layout (`technical-manual.yml:69`-`:73`). In a plain worktree it checks 0 anchors. The patched `41-bundle-anatomy.md:136` cites `bundle.rs::plain_multisig_threshold`, so the production function keeps that exact name.
       - To check it locally, emulate CI's layout:
@@ -263,8 +263,8 @@ export PATH="$R/bin:$HOME/.cargo/bin:$PATH"
         - `python3 "$W/mnemonic-toolkit/docs/technical-manual/tests/symbol-ref-check.py" SRC_DIR="$W/mnemonic-toolkit/docs/technical-manual/src"`
         - Expected and measured: `[symbol-ref-check] OK (301 `::` anchors checked, 427 skipped)`.
       - A local `make lint` with all sibling checkouts present also reports two `fresh_chunk_set_id` misses in the mk chapters. Base has them too, they are not in this FIX's files, and CI skips them.
-    - **Quickstart**, from `docs/quickstart`, with the pinned CLIs: `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk` (`quickstart.yml:166`) and `make verify-examples`. Expected and measured: `[lint] OK`, `[verify-examples] OK (62 transcripts pass)`.
-    - **GUI manual**: under `docs/manual-gui` only the two STOP-1 interim notes change (tutorial prose, outside the byte-compared folders). Its `verify-examples` replays with the pinned toolkit `mnemonic-toolkit-v0.105.1` (`manual-gui.yml:237`-`:257`), not this PR's binary, and its lint byte-compares the tutorial corpus with `mnemonic-gui-v0.63.0`. Expected: green on the PR, as on base. STOP-1 is ruled (ii): the two interim notes are the only change, and `make lint` (`manual-gui.yml:160`) and `make html` (`:156`) are re-run locally.
+    - **Quickstart**, from `docs/quickstart`, with the pinned CLIs: `make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=mk` (`quickstart.yml:166`) and `make verify-examples MNEMONIC_BIN="$PWD/../../target/debug/mnemonic" MD_BIN=md MS_BIN=ms MK_BIN=mk FIXTURES_DIR="$PWD/../../crates/mnemonic-toolkit/tests/fixtures/wallet_import"` (`quickstart.yml:179-184`). Expected and measured: `[lint] OK`, `[verify-examples] OK (62 transcripts pass)`.
+    - **GUI manual**: under `docs/manual-gui` only the two STOP-1 interim notes change (tutorial prose, outside the byte-compared folders). Its `verify-examples` replays with the pinned toolkit `mnemonic-toolkit-v0.105.1` (`manual-gui.yml:237`-`:257`), not this PR's binary, and its lint byte-compares the tutorial corpus with `mnemonic-gui-v0.63.0`. Expected: green on the PR, as on base. STOP-1 is ruled (ii): the two interim notes are the only change, and the book is re-checked locally against the pinned GUI: `G=/scratch/cache/tk-v7-build-gui-pinned; git clone --depth 1 --branch mnemonic-gui-v0.63.0 https://github.com/bg002h/mnemonic-gui "$G"`, then, from `docs/manual-gui`, `make html`, then `MANUAL_GUI_UPSTREAM_ROOT="$G" make lint MNEMONIC_BIN=true MD_BIN=true MS_BIN=true MK_BIN=true` (`manual-gui.yml:97-114`, `:156`, `:160`). Expected: `CSpell: Files checked: 104, Issues found: 0 in 0 files.` and `[lint] OK`.
 
 The FIX rows and the mutation gate:
 
