@@ -1002,13 +1002,33 @@ fn run_from_import_json<W: Write, E: Write>(
         .or_else(|| lifted_wallet_name.clone())
         .unwrap_or_else(|| "imported-descriptor".to_string());
 
-    // FIX-V7 2.1: K comes from the envelope's descriptor (its md1), as on the
-    // bundle --import-json path; the envelope's threshold field is ignored.
+    // FIX-V7 2.1 / 2.3: K comes from the envelope's DESCRIPTOR, the same one
+    // that is emitted (`parsed_ms` above was parsed from this body), by the
+    // plain k-of-n rule. The envelope's md1 and threshold fields are not
+    // consulted, so a hand-edited envelope whose md1 disagrees with its
+    // descriptor cannot put a foreign K on the emitted script. The descriptor
+    // is encoded the way `bundle --import-json` encodes it; if that fails the
+    // export refuses rather than falling back to no K.
     let threshold: Option<u8> = {
-        let md1: Vec<&str> = envelope.bundle.md1.iter().map(|s| s.as_str()).collect();
-        md_codec::chunk::reassemble(&md1)
-            .ok()
-            .and_then(|d| crate::cmd::bundle::plain_multisig_threshold(&d.tree))
+        let (placeholder_form, parsed_keys, parsed_fps) =
+            crate::wallet_import::pipeline::concrete_keys_to_placeholders(
+                &canonical_descriptor_body,
+            )
+            .map_err(|e| {
+                ToolkitError::BadInput(format!(
+                    "--from-import-json: cannot encode the envelope descriptor to derive K: {}",
+                    e.message()
+                ))
+            })?;
+        let md_desc =
+            crate::parse_descriptor::parse_descriptor(&placeholder_form, &parsed_keys, &parsed_fps)
+                .map_err(|e| {
+                    ToolkitError::BadInput(format!(
+                        "--from-import-json: cannot encode the envelope descriptor to derive K: {}",
+                        e.message()
+                    ))
+                })?;
+        crate::cmd::bundle::plain_multisig_threshold(&md_desc.tree)
     };
 
     // SPEC v0.37 §2.3 — derive the template from the envelope descriptor for

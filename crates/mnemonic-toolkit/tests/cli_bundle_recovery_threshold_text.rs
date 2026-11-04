@@ -775,3 +775,51 @@ fn v7_export_wallet_takes_k_from_envelope_descriptor() {
         }
     }
 }
+
+#[test]
+fn v7_export_wallet_k_ignores_disagreeing_md1() {
+    // A hand-edited envelope: the descriptor is a plain 3-of-3 sortedmulti but
+    // bundle.md1 encodes a 2-of-3 (and the threshold field says 2). K comes from
+    // the descriptor that is emitted, never from md1, so every template format
+    // emits the honest 3-of-3 file byte for byte, and the sparrow script is 3-of-3.
+    let dir = tempfile::tempdir().unwrap();
+    let honest3 = envelope_file(
+        dir.path(),
+        "honest3.json",
+        "wsh(sortedmulti(3,K0,K1,K2))",
+        Value::from(3),
+    );
+    let two_of_three: Value =
+        serde_json::from_str(&import_wallet_stdout("wsh(sortedmulti(2,K0,K1,K2))", true)).unwrap();
+    let mut v: Value = serde_json::from_str(&std::fs::read_to_string(&honest3).unwrap()).unwrap();
+    assert_ne!(
+        v[0]["bundle"]["md1"], two_of_three[0]["bundle"]["md1"],
+        "fixture: the two md1 must differ"
+    );
+    v[0]["bundle"]["md1"] = two_of_three[0]["bundle"]["md1"].clone();
+    v[0]["bundle"]["multisig"]["threshold"] = Value::from(2);
+    let edited = dir.path().join("edited.json");
+    std::fs::write(&edited, serde_json::to_string(&v).unwrap()).unwrap();
+    for format in ["sparrow", "coldcard", "electrum"] {
+        let want = export_from_envelope(&honest3, format);
+        assert!(
+            want.status.success(),
+            "{format}: {}",
+            String::from_utf8_lossy(&want.stderr)
+        );
+        let got = export_from_envelope(&edited, format);
+        assert!(
+            got.status.success(),
+            "{format}: {}",
+            String::from_utf8_lossy(&got.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&got.stdout),
+            String::from_utf8_lossy(&want.stdout),
+            "{format}"
+        );
+    }
+    let sparrow = String::from_utf8(export_from_envelope(&edited, "sparrow").stdout).unwrap();
+    assert!(sparrow.contains("sortedmulti(3,"), "{sparrow}");
+    assert!(!sparrow.contains("sortedmulti(2,"), "{sparrow}");
+}
