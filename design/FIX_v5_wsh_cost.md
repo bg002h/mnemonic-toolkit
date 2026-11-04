@@ -280,7 +280,8 @@ The toolkit has no `tests/all.rs` aggregator, so each file is its own test binar
 
 ### 4.2 Transcripts and printed figures that move (Appendices D and E)
 
-Every moved wsh figure goes down: the witnessScript is now counted. tr figures do not move.
+Every moved wsh figure goes up, because the witnessScript is now counted; every Δ (tr minus wsh) goes down by
+the same amount. tr figures do not move.
 
 | file | before (wsh, tr, Δ in vB; sats where printed) | after |
 |---|---|---|
@@ -335,7 +336,8 @@ transcripts with the repo's own targets (§6); a regenerated transcript that dif
    witnessScript, so `compare-cost` adds it as one more witness item (the script plus its length prefix) and
    re-encodes the stack-count varint. Per-input"
 2. `41-mnemonic.md` @@-4657: "tr costs `+6`" (was `+24`). The sentence's reason ("because the tr witness carries
-   an extra 33-byte control block") is unchanged; at `+6` it is still the larger term.
+   an extra 33-byte control block") is unchanged; the FIX review judges whether it
+   still reads true at `+6`.
 3. `41-mnemonic.md` notes catalog row: "| `input had a p2sh wrapper, sh(wsh(M)); …` | `--descriptor sh(wsh(M))`.
    The `wsh` column is costed for bare `wsh(M)`; the note gives the +35 vB per-input correction. |"
 4. `SPEC_compare_cost_v0_26_0.md:145`: `wsh_witness_bytes: witness_weight_wu(&wsh_desc, &wp)`.
