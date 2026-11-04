@@ -6582,3 +6582,12 @@ screen printed. Print the values.
 - Owner: the next toolkit cycle.
 - Status: `deferred-minor`.
 - Tier: `toolkit`.
+
+### `tk-135-138-whole-diff-minors` — Minors and Nit from the #135 + #138 combined whole-diff review, deferred unfixed
+- Surfaced: `design/agent-reports/whole-diff-tk-135-138.md` (head b944de90).
+- M1: `json_envelope.rs:546-549` E2 message says "its key, fingerprint or origin path", but a card-only origin-path mismatch is accepted (the envelope's origin_path overwrites the card's before E2; output byte-identical to the honest envelope's). Optional fix: decode `envelope.bundle.mk1[i]` and require its origin path to equal `slots[i].path` (or its depth-3 truncation), same E2 line.
+- M2: `format.rs` general-policy Recovery line omits timelocks. Fix text: "...any hash preimages it names, mind its timelocks, and md1 (template card)."
+- N1: for `or_d(pk(K2),multi(2,K0,K1))` "keep all 3 signing keys" is conservative (K2 alone spends); noted only.
+- Owner: the next toolkit cycle.
+- Status: `deferred-minor`.
+- Tier: `toolkit`.
