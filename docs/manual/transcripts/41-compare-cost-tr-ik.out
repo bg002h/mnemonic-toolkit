@@ -5,7 +5,7 @@ Feerate: 25.0 sat/vB
 
 Condition | wsh vB | tr vB |  Δ vB | wsh sats | tr sats | Δ sats
 ----------+--------+-------+-------+----------+---------+-------
-key[0]    |     60 |    75 |   +15 |     1500 |    1875 |   +375
+key[0]    |     69 |    75 |    +6 |     1725 |    1875 |   +150
 
 Keypath-spend (via IK f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9): 58 vB | 1450 sats
 

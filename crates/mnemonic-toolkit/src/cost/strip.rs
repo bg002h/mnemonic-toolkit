@@ -13,6 +13,9 @@ use super::translate::Translated;
 use super::CompareCostError;
 use super::NUMS_XONLY_HEX;
 
+/// Grade ruling 4: `notes[]` entry for a `sh(wsh(M))` input.
+pub const SH_WSH_NOTE: &str = "input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ";
+
 /// Strip the wrapper from a user-supplied descriptor string; return a
 /// `Translated` ready for the enumerator (plus any advisory note). Concrete
 /// hex pubkeys are preserved; no abstract labels are detected (those only
@@ -68,7 +71,7 @@ pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>),
         Descriptor::Sh(sh) => match sh.into_inner() {
             ShInner::Wsh(wsh) => {
                 let m_segv0 = wsh.into_inner();
-                translated_from_segv0(input, m_segv0).map(|t| (t, None))
+                translated_from_segv0(input, m_segv0).map(|t| (t, Some(SH_WSH_NOTE.to_string())))
             }
             ShInner::Wpkh(_) | ShInner::Ms(_) => Err(CompareCostError::UnsupportedWrapper(
                 "sh(non-wsh)".to_string(),

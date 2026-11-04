@@ -1,0 +1,166 @@
+diff --git i/crates/mnemonic-toolkit/src/cost/enumerate.rs w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+index 4d5fe524..a494fc83 100644
+--- i/crates/mnemonic-toolkit/src/cost/enumerate.rs
++++ w/crates/mnemonic-toolkit/src/cost/enumerate.rs
+@@ -16,10 +16,11 @@
+ 
+ use std::collections::BTreeSet;
+ 
++use miniscript::bitcoin::consensus::encode::VarInt;
+ use miniscript::bitcoin::hashes::{hash160, ripemd160, sha256};
+ use miniscript::bitcoin::{absolute, relative};
+ use miniscript::descriptor::{DefiniteDescriptorKey, DescriptorPublicKey};
+-use miniscript::plan::Assets;
++use miniscript::plan::{Assets, Plan};
+ use miniscript::{Descriptor, ForEachKey, Miniscript, Segwitv0};
+ 
+ use super::translate::{pubkey_to_label_segv0, Translated};
+@@ -173,6 +174,16 @@ pub fn enumerate_minimal_conditions(
+         return Err(CompareCostError::NoSatisfyingConditions);
+     }
+ 
++    // Grade ruling 6: two-sided self-check of the wsh column against
++    // rust-miniscript's own `max_weight_to_satisfy` (which omits the
++    // BIP-144 stack-count byte, hence the +1).
++    let max_weight_wu = wsh_desc
++        .max_weight_to_satisfy()
++        .map_err(|_| CompareCostError::NoSatisfyingConditions)?
++        .to_wu();
++    let wsh_rows_wu: Vec<usize> = rows.iter().map(|r| r.wsh_witness_bytes).collect();
++    wsh_self_check(&wsh_rows_wu, max_weight_wu, has_thresh(&translated.segv0))?;
++
+     Ok(EnumerationReport {
+         rows,
+         soft_cap_reached: soft_reached,
+@@ -264,11 +275,68 @@ fn build_and_plan(
+         }
+     }
+     match desc.clone().plan(&a) {
+-        Ok(plan) => Some(plan.witness_size()),
++        Ok(plan) => Some(witness_weight_wu(desc, &plan)),
+         Err(_) => None,
+     }
+ }
+ 
++/// Witness weight (WU) of one planned spend. For `wsh(M)` the plan's
++/// template omits the witnessScript, so add it as one more stack element
++/// (the expression of rust-miniscript PR #1046): `varint(script) + script`,
++/// and re-encode the stack-count varint for `t + 1` elements. `tr` templates
++/// already carry the leaf script and control block.
++fn witness_weight_wu(
++    desc: &Descriptor<DefiniteDescriptorKey>,
++    plan: &Plan<DefiniteDescriptorKey>,
++) -> usize {
++    let template_wu = plan.witness_size();
++    match desc {
++        Descriptor::Wsh(wsh) => {
++            let script_len = wsh.inner_script().len();
++            let elems = plan.witness_template().len();
++            template_wu + varint_len(script_len) + script_len - varint_len(elems)
++                + varint_len(elems + 1)
++        }
++        _ => template_wu,
++    }
++}
++
++fn varint_len(n: usize) -> usize {
++    VarInt(n as u64).size()
++}
++
++/// Grade ruling 6. `rows_wu` is every wsh row's witness weight (WU);
++/// `max_weight_wu` is `max_weight_to_satisfy().to_wu()` of `wsh(M)`.
++/// Without a `thresh`, the largest row must equal `max_weight_wu + 1`;
++/// with one, every row must be at most `max_weight_wu + 1`.
++fn wsh_self_check(
++    rows_wu: &[usize],
++    max_weight_wu: u64,
++    has_thresh: bool,
++) -> Result<(), CompareCostError> {
++    let largest_wu = rows_wu.iter().copied().max().unwrap_or(0) as u64;
++    let bound = max_weight_wu + 1;
++    let ok = if has_thresh {
++        largest_wu <= bound
++    } else {
++        largest_wu == bound
++    };
++    if ok {
++        Ok(())
++    } else {
++        Err(CompareCostError::CostSelfCheck {
++            largest_wu,
++            max_weight_wu,
++        })
++    }
++}
++
++/// `true` if any fragment of `m` is a `thresh(..)`.
++fn has_thresh(m: &Miniscript<DefiniteDescriptorKey, Segwitv0>) -> bool {
++    use miniscript::miniscript::decode::Terminal;
++    m.iter().any(|sub| matches!(sub.node, Terminal::Thresh(..)))
++}
++
+ fn is_minimal(
+     wsh_desc: &Descriptor<DefiniteDescriptorKey>,
+     tr_desc: &Descriptor<DefiniteDescriptorKey>,
+diff --git i/crates/mnemonic-toolkit/src/cost/mod.rs w/crates/mnemonic-toolkit/src/cost/mod.rs
+index 49dda306..611f2d44 100644
+--- i/crates/mnemonic-toolkit/src/cost/mod.rs
++++ w/crates/mnemonic-toolkit/src/cost/mod.rs
+@@ -53,6 +53,9 @@ pub enum CompareCostError {
+     ConditionsTooMany { raw: usize, cap: usize },
+     /// Miniscript has zero satisfying conditions (degenerate). Exit 3.
+     NoSatisfyingConditions,
++    /// The wsh column failed its self-check against
++    /// `max_weight_to_satisfy` (grade ruling 6). Exit 3.
++    CostSelfCheck { largest_wu: u64, max_weight_wu: u64 },
+ }
+ 
+ impl std::fmt::Display for CompareCostError {
+@@ -82,6 +85,14 @@ impl std::fmt::Display for CompareCostError {
+             CompareCostError::NoSatisfyingConditions => {
+                 write!(f, "compare-cost: no satisfying conditions for this miniscript")
+             }
++            CompareCostError::CostSelfCheck {
++                largest_wu,
++                max_weight_wu,
++            } => write!(
++                f,
++                "compare-cost: cost self-check failed: largest wsh witness {largest_wu} WU, max_weight_to_satisfy + 1 = {} WU; no figures printed (this is a toolkit bug)",
++                max_weight_wu + 1
++            ),
+         }
+     }
+ }
+@@ -95,7 +106,8 @@ impl CompareCostError {
+             | CompareCostError::UnsupportedWrapper(_)
+             | CompareCostError::MultiLeafTr
+             | CompareCostError::ConditionsTooMany { .. }
+-            | CompareCostError::NoSatisfyingConditions => 3,
++            | CompareCostError::NoSatisfyingConditions
++            | CompareCostError::CostSelfCheck { .. } => 3,
+         }
+     }
+ }
+diff --git i/crates/mnemonic-toolkit/src/cost/strip.rs w/crates/mnemonic-toolkit/src/cost/strip.rs
+index 3efd1a6c..c4c0abf6 100644
+--- i/crates/mnemonic-toolkit/src/cost/strip.rs
++++ w/crates/mnemonic-toolkit/src/cost/strip.rs
+@@ -13,6 +13,9 @@ use super::translate::Translated;
+ use super::CompareCostError;
+ use super::NUMS_XONLY_HEX;
+ 
++/// Grade ruling 4: `notes[]` entry for a `sh(wsh(M))` input.
++pub const SH_WSH_NOTE: &str = "input had a p2sh wrapper, sh(wsh(M)); each wsh figure is for bare wsh(M): add 35 vB per input (the scriptSig redeem-script push) and subtract 35 vB from each Δ";
++
+ /// Strip the wrapper from a user-supplied descriptor string; return a
+ /// `Translated` ready for the enumerator (plus any advisory note). Concrete
+ /// hex pubkeys are preserved; no abstract labels are detected (those only
+@@ -68,7 +71,7 @@ pub fn translate_descriptor(input: &str) -> Result<(Translated, Option<String>),
+         Descriptor::Sh(sh) => match sh.into_inner() {
+             ShInner::Wsh(wsh) => {
+                 let m_segv0 = wsh.into_inner();
+-                translated_from_segv0(input, m_segv0).map(|t| (t, None))
++                translated_from_segv0(input, m_segv0).map(|t| (t, Some(SH_WSH_NOTE.to_string())))
+             }
+             ShInner::Wpkh(_) | ShInner::Ms(_) => Err(CompareCostError::UnsupportedWrapper(
+                 "sh(non-wsh)".to_string(),
