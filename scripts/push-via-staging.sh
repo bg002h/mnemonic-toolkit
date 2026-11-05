@@ -54,7 +54,33 @@
 # re-checked immediately before the final push and the run aborts if it moved --
 # measured 2026-08-16, when two commits landed mid-window and reached the remote
 # with no CI signal at all.
+#
+# OPTIONS ARE REFUSED, NEVER TAKEN AS A BRANCH NAME. On 2026-11-05 a reviewer ran
+# `push-via-staging.sh --help`; `BRANCH="${1:-...}"` took `--help` as the branch
+# and pushed HEAD to origin/ci/staging. `-h`/`--help` anywhere on the command
+# line now prints the usage and exits 0 before any git or network command (so it
+# works outside a repo too); any other argument starting with `-` exits 2, as do
+# two or more arguments; nothing is pushed. Test: coordinator/scripts/test-push-via-staging.sh.
 set -euo pipefail
+
+usage() {
+  cat <<'EOT'
+push-via-staging.sh: pushes HEAD to ci/staging, waits for CI, then pushes the branch.
+    scripts/push-via-staging.sh            # current branch
+    scripts/push-via-staging.sh master     # explicit
+EOT
+}
+for arg in "$@"; do
+  case "$arg" in -h|--help) usage; exit 0 ;; esac
+done
+for arg in "$@"; do
+  case "$arg" in
+    -*) echo "push-via-staging.sh: unknown option '$arg'" >&2; usage >&2; exit 2 ;;
+  esac
+done
+if [ "$#" -gt 1 ]; then
+  echo "push-via-staging.sh: expected at most one branch name" >&2; usage >&2; exit 2
+fi
 
 cd "$(git rev-parse --show-toplevel)"
 
