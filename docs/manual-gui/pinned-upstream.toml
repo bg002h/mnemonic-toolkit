@@ -122,5 +122,6 @@ mk-cli-tag-implied  = "mk-cli-v0.13.0"
 # it only while it equals scripts/install.sh's pin and is newer than
 # [manual-gui]'s. Delete this table (and that section) when the GUI re-pins.
 [installer-ahead]
+toolkit-tag-implied = "mnemonic-toolkit-v0.106.0"
 md-cli-tag-implied = "descriptor-mnemonic-md-cli-v0.20.4"
 ms-cli-tag-implied = "ms-cli-v0.20.2"

@@ -1,6 +1,6 @@
 ---
 title: "m-format constellation -- Command-line Examples"
-subtitle: "mnemonic-toolkit v0.105.1 -- worked examples (Linux), exact verbatim I/O"
+subtitle: "mnemonic-toolkit v0.106.0 -- worked examples (Linux), exact verbatim I/O"
 date: "2026-07-05"
 geometry: margin=1.8cm
 fontsize: 10pt
@@ -17,7 +17,7 @@ monofont: "DejaVu Sans Mono"
 This document shows real, copy-pasteable command lines for the **m-format
 constellation** -- a steel-engravable Bitcoin backup system built around four
 CLIs (`mnemonic`, `md`, `ms`, `mk`). Every command below was executed against
-`mnemonic` **v0.105.1** on Linux and **both the command and its full output are
+`mnemonic` **v0.106.0** on Linux and **both the command and its full output are
 reproduced verbatim** -- no abbreviations, no ellipses, no elided keys or
 addresses. Long lines wrap with a grey hook-arrow continuation marker in the
 left margin.
@@ -104,7 +104,7 @@ $ sh "$REPO/scripts/install.sh" --list
 platform: linux-x86_64-gnu
 COMPONENT       CARGO_PACKAGE        FEATURES       GIT_TAG                              BINARY
 ---------       -------------        --------       -------                              ------
-mnemonic        mnemonic-toolkit     (none)         mnemonic-toolkit-v0.105.1            mnemonic-0.105.1-x86_64-linux-musl.tar.gz
+mnemonic        mnemonic-toolkit     (none)         mnemonic-toolkit-v0.106.0            mnemonic-0.106.0-x86_64-linux-musl.tar.gz
 md              md-cli               cli-compiler   descriptor-mnemonic-md-cli-v0.20.4   md-0.20.4-linux-amd64.tar.gz
 ms              ms-cli               (none)         ms-cli-v0.20.2                       ms-0.20.2-x86_64-linux-musl.tar.gz
 mk              mk-cli               (none)         mk-cli-v0.13.0                       mk-0.13.0-x86_64-linux-musl.tar.gz
@@ -118,11 +118,11 @@ install root: /home/user/.cargo (binaries in /home/user/.cargo/bin)
 platform: linux-x86_64-gnu
 source: pinned GitHub release binaries, sha256-verified
 
-install  mnemonic (release mnemonic-toolkit-v0.105.1: mnemonic-0.105.1-x86_64-linux-musl.tar.gz)
-  [dry-run] download https://github.com/bg002h/mnemonic-toolkit/releases/download/mnemonic-toolkit-v0.105.1/mnemonic-0.105.1-x86_64-linux-musl.tar.gz
+install  mnemonic (release mnemonic-toolkit-v0.106.0: mnemonic-0.106.0-x86_64-linux-musl.tar.gz)
+  [dry-run] download https://github.com/bg002h/mnemonic-toolkit/releases/download/mnemonic-toolkit-v0.106.0/mnemonic-0.106.0-x86_64-linux-musl.tar.gz
   [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
-  [dry-run] run 'mnemonic --version'; refuse unless it prints 'mnemonic 0.105.1'
+  [dry-run] run 'mnemonic --version'; refuse unless it prints 'mnemonic 0.106.0'
   [dry-run] install /home/user/.cargo/bin/mnemonic
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/mnemonic" gen-man --out "/home/user/.local/share/man/man1"
 install  md (release descriptor-mnemonic-md-cli-v0.20.4: md-0.20.4-linux-amd64.tar.gz)
@@ -163,7 +163,7 @@ Verify the install and list every subcommand:
 
 ```
 $ mnemonic --version
-mnemonic 0.105.1
+mnemonic 0.106.0
 ```
 
 ```
@@ -1332,7 +1332,7 @@ external oracle sees it.
 
 These are world-known BIP-39 vectors with no funds. Sections 5-6 derive their
 keys from these same three seeds at distinct `m/84'/0'/N'` accounts. Generated
-with `mnemonic` v0.105.1 on Linux. See the in-repo manual (`docs/manual/`) for
+with `mnemonic` v0.106.0 on Linux. See the in-repo manual (`docs/manual/`) for
 the authoritative per-flag reference.
 
 \newpage

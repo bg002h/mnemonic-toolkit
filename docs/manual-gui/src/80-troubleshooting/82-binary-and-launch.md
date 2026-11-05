@@ -28,7 +28,7 @@ for this manual:
 - `ms-cli-v0.20.1`
 - `mk-cli-v0.13.0`
 
-The toolkit installer installs these, except `md` and `ms`, which it already
+The toolkit installer installs these, except `mnemonic`, `md` and `ms`, which it already
 installs at newer releases (next section). Run each binary with
 `--version` to compare; the GUI does not check them for you. The GUI's
 secret channels were measured against exactly these binaries, so an
@@ -37,19 +37,43 @@ writes (for example `ms derive --passphrase @env:…` before `ms`
 0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
 fails (older releases reject its `--allow-argv-secret`). See
 [Version pinning](#version-pinning). Re-run the toolkit installer to
-put its releases in place; the next section lists the two it installs
+put its releases in place; the next section lists the three it installs
 newer than these.
 
 ## When the installer is ahead of the GUI {#installer-ahead}
 
-The toolkit installer currently installs two CLI releases newer than
-this GUI was built against: `descriptor-mnemonic-md-cli-v0.20.4` (the
-GUI's label reads `Pinned: md 0.20.3`) and `ms-cli-v0.20.2` (label
-`Pinned: ms 0.20.1`). The forms run unchanged, and `md --version` and
-`ms --version` printing the newer versions is expected.
+The toolkit installer currently installs three CLI releases newer than
+this GUI was built against: `mnemonic-toolkit-v0.106.0` (the GUI's label
+reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.4`
+(label `Pinned: md 0.20.3`) and `ms-cli-v0.20.2` (label
+`Pinned: ms 0.20.1`). The forms run unchanged, and `mnemonic --version`,
+`md --version` and `ms --version` printing the newer versions is expected.
 
-Outputs differ, all on invalid or unusual input; none changes a
-derived wallet. First `ms`, three outputs:
+Outputs differ, all on invalid or unusual input or on the recovery line
+of a card; none changes a derived wallet. First `mnemonic`, three
+outputs:
+
+- **`bundle` with `--import-json`, and `export-wallet` with
+  `--from-import-json`.** An envelope whose parts disagree is now
+  refused (exit 1, nothing on stdout, so the output panel shows only the
+  error), where it printed wrong cards or wrong wallet files at exit 0.
+  An envelope that `import-wallet --json` wrote still passes. If one is
+  refused, run `import-wallet` again on the same wallet file to make a
+  new one.
+- **`bundle`.** For a descriptor that is not a plain k-of-n (a
+  timelocked inheritance, a decaying or nested policy, a taproot
+  descriptor with several leaves), the card no longer prints
+  `# Threshold: K of N`; its recovery line reads `# Recovery: general
+  policy, not k-of-n (the md1 policy decides which key sets can spend);
+  keep all N signing keys, …`. A plain k-of-n descriptor and every
+  multisig template print both lines as before. In `--json`,
+  `multisig.threshold` is `null` for such a policy.
+- **`bundle` with `--import-json` and `--threshold`.** The
+  `--threshold` field no longer sets K: the card takes K from the
+  envelope's descriptor, so `--threshold 1` on a 2-of-3 envelope prints
+  `# Threshold: 2 of 3`, where it printed `1 of 3`.
+
+Then `ms`, three outputs:
 
 - **`ms inspect`.** A share at share index `s` (the secret itself,
   which `ms combine` refuses) now reads `FAIL: would NOT combine`,
@@ -65,7 +89,7 @@ derived wallet. First `ms`, three outputs:
   named (`error: invalid character 'b' (not in codex32 alphabet)`),
   where it used to be reported as a string-length error.
 
-Then `md`, four outputs:
+Last `md`, four outputs:
 
 - **`md encode`.** `--fingerprint` takes hex digits only: `@0=+f+f+f+f`
   is now refused (`md: --fingerprint @0: invalid hex byte: +f`) where
