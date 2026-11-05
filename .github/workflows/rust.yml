@@ -31,6 +31,9 @@ on:
     # changed file is documentation (ci/docs-only-paths.txt).
     branches: [main, master, 'ci/**']
   pull_request:
+    # ready_for_review: a PR leaving draft gets the Windows leg (the default
+    # types, plus that one).
+    types: [opened, synchronize, reopened, ready_for_review]
     # NO paths — this workflow's `test`/`clippy` contexts are REQUIRED status
     # checks (branch protection), and a path-filtered required check wedges a
     # docs-only PR forever at "Expected — waiting for status" (mirror
@@ -409,26 +412,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - target: x86_64-pc-windows-msvc
-            runs-on: windows-latest
-          - target: aarch64-unknown-linux-gnu
-            runs-on: ubuntu-latest
-          # FreeBSD compile-gate (Cycle C). `x86_64-unknown-freebsd` is Tier 2
-          # with Host Tools, so `rustup target add` ships a precompiled std on
-          # the ubuntu runner — no apt cross-compiler step needed (cargo check
-          # stops before link; the only C step is the vendored libsecp256k1 cc
-          # compile, which builds fine against the Tier-2 std). The toolkit
-          # `--lib` row IS correct here specifically because the toolkit alone
-          # declares `process_hardening` as `pub mod` in `src/lib.rs`, so the
-          # new BSD secret-hygiene arm (procctl/setrlimit) is compiled by --lib.
-          # (The 3 sibling CLIs are bin-only and use bare `cargo check --target`
-          # — see their workflows; --lib there would be silent false-green.)
-          # Fallback if the secp256k1-sys cc cross-build ever needs a freebsd
-          # sysroot: switch this row to `cross check --target …` (cross-rs
-          # bundles a freebsd container). Validated locally with bare rustup.
-          - target: x86_64-unknown-freebsd
-            runs-on: ubuntu-latest
+        # Advisory Windows (Brian 2026-11-04): the Windows leg is built only on a
+        # push to the default branch or a tag, a manual run, and a ready (non-draft)
+        # pull request whose head branch does not start with `release-` and has no
+        # -alpha, -beta or -rc in it. A matrix leg cannot be skipped alone, so on a
+        # draft or prerelease pull request the leg is absent.
+        # FreeBSD compile-gate (Cycle C). `x86_64-unknown-freebsd` is Tier 2
+        # with Host Tools, so `rustup target add` ships a precompiled std on
+        # the ubuntu runner — no apt cross-compiler step needed (cargo check
+        # stops before link; the only C step is the vendored libsecp256k1 cc
+        # compile, which builds fine against the Tier-2 std). The toolkit
+        # `--lib` row IS correct here specifically because the toolkit alone
+        # declares `process_hardening` as `pub mod` in `src/lib.rs`, so the
+        # new BSD secret-hygiene arm (procctl/setrlimit) is compiled by --lib.
+        # (The 3 sibling CLIs are bin-only and use bare `cargo check --target`
+        # — see their workflows; --lib there would be silent false-green.)
+        # Fallback if the secp256k1-sys cc cross-build ever needs a freebsd
+        # sysroot: switch this row to `cross check --target …` (cross-rs
+        # bundles a freebsd container). Validated locally with bare rustup.
+        include: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || (github.event_name == 'pull_request' && !github.event.pull_request.draft && !startsWith(github.head_ref, 'release-') && !contains(github.head_ref, '-alpha') && !contains(github.head_ref, '-beta') && !contains(github.head_ref, '-rc'))) && '[{"target":"x86_64-pc-windows-msvc","runs-on":"windows-latest"},{"target":"aarch64-unknown-linux-gnu","runs-on":"ubuntu-latest"},{"target":"x86_64-unknown-freebsd","runs-on":"ubuntu-latest"}]' || '[{"target":"aarch64-unknown-linux-gnu","runs-on":"ubuntu-latest"},{"target":"x86_64-unknown-freebsd","runs-on":"ubuntu-latest"}]') }}
     steps:
       - uses: actions/checkout@v6
       - name: Docs-only change? (skips the steps below when every changed file is documentation)
