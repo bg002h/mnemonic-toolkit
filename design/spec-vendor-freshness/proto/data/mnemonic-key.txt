@@ -1,0 +1,3 @@
+# ci/repro/vendor-git-sources.txt -- one row per git source Cargo.lock pins, read
+# by ci/repro/vendor-freshness.sh (check 4 re-derives each from upstream).
+# Row: <vendor dir>|<url exactly as in Cargo.lock>|<crate dir in upstream, or .>
