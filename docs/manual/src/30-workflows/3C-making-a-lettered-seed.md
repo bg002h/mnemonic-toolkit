@@ -23,9 +23,14 @@ Each of these words is 11 bits of randomness. Never choose them yourself.
 
 | Source | How to make one word |
 |---|---|
-| Entropia pills | Toss one pill and take the word facing up. 22 draws in all. |
-| Coins | Flip a coin 11 times, heads 1 and tails 0, first flip leftmost. Look the number up in the BIP-39 list. |
-| Dice | Roll a die. A 1, 2, 3 or 4 gives the 2 bits 00, 01, 10 or 11. A 5 gives the bit 0 and a 6 gives the bit 1. Write the bits down in order and roll until you have 11 bits for the word; use the first 11 and drop any bit beyond them. Look the number up in the BIP-39 list. |
+| Entropia pills | Shake the bag, take one pill, toss it in your hand, take only the word facing up (never the other side), and put the pill back. 22 draws in all. |
+| Coins | Flip a coin 11 times, heads 1 and tails 0, first flip leftmost. |
+| Dice | Roll a die. A 1, 2, 3 or 4 gives the 2 bits 00, 01, 10 or 11; a 5 gives the bit 0 and a 6 the bit 1. Write the bits left to right and roll until you have 11. If the last roll gives 2 bits where only 1 is needed, keep its first bit and drop the second: every word starts with fresh rolls. |
+
+Coins and dice give 11 binary digits. Read them as a number from 0 to 2047:
+from left to right the digits are worth 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2
+and 1. Number 0 is the first word of the BIP-39 English list (`abandon`) and 2047
+the last (`zoo`); on a list numbered 1 to 2048, look up the number plus 1.
 
 ## Word 24: 3 coin flips
 
