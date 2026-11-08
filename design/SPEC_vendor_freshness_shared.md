@@ -1,7 +1,7 @@
 # SPEC: one shared vendor-freshness gate for five repos
 
-Status: DRAFT, one open point (STOP S-1, "Shared-file pinning" below). Every
-other point is decided here. Source: script audit 2026-11-08 row 5 and its
+Status: DRAFT. Every point is decided here, including "Shared-file pinning"
+below (STOP S-1, ruled by architect vf-s1). Source: script audit 2026-11-08 row 5 and its
 Reasons "5." (coordinator `agent-reports/architect-script-audit-2026-11-08.md`).
 Supersedes, for check (4) only, `design/SPEC_vendor_freshness_ci_guard.md`
 (its trust-on-first-use digest, §3.3 and §5).
@@ -778,60 +778,338 @@ G4
 G9
 ```
 
-## 10. Shared-file pinning (STOP S-1, open)
+## 10. Shared-file pinning (decided: architect ruling vf-s1)
 
 The audit says "pinned in each repo's `ci/shared-ci.sha256` and added to
 toolkit `ci/shared-drift.sh` `files` for the public repos (key, secret, dm)".
-Measured facts make that design inconsistent as written:
+The two clauses cannot both hold. `ci/shared-ci.sha256` is byte-identical in
+six public repos (toolkit, mnemonic-engrave, mnemonic-transaction, key, secret
+and dm) and `ci/shared-drift.sh` compares it across all five siblings,
+engrave and transaction among them. Engrave and transaction have no `vendor/`
+and no gate. Pinning in that file would put an unrun gate in two repos. The
+decision keeps the audit's intent: a three-repo drift scope, and mr pinning in
+its own file.
 
-- `ci/shared-ci.sha256` is byte-identical in six public repos: toolkit,
-  mnemonic-engrave, mnemonic-transaction, key, secret and dm. Its four lines
-  are docs-only.sh, docs-only.test.sh, code-docs-check.sh and
-  code-docs-check.test.sh.
-- `ci/shared-drift.sh` compares one files list across one repos list:
-  ```
-  repos=(descriptor-mnemonic mnemonic-engrave mnemonic-key mnemonic-secret mnemonic-transaction)
-  files=(ci/docs-only.sh ci/docs-only.test.sh ci/code-docs-check.sh ci/code-docs-check.test.sh ci/shared-ci.sha256)
-  ```
-  The file `ci/shared-ci.sha256` is in that list. Its test
-  (`ci/shared-drift.test.sh`) expects 25 ok lines and
-  `shared-drift: PASS (5 repos, 5 files)`.
-- engrave and transaction have no `vendor/` and no vendor-freshness gate.
+**The pin file.** `ci/repro/shared-vendor.sha256` in toolkit, key, secret and
+dm, byte-identical in all four. It holds exactly the output of
+`sha256sum ci/repro/vendor-freshness.sh ci/repro/vendor-freshness.test.sh`,
+run from the repo root: two LF-terminated lines, 64 lowercase hex digits, two
+spaces, the path; the script first, then the test; no header. Its content is
+this block (its hashes equal the `vf:proto-sha256` block):
 
-So two hash lines added to `ci/shared-ci.sha256` must then be added in engrave
-and transaction too, or that file drifts. Either those repos carry the gate
-files (inert), or the vendor files get a pin file of their own. That is a
-product choice about what engrave and transaction carry, and the brief does
-not decide it.
+<!-- vf:pin-file -->
+```
+9a2761a6e50a5fda600347bd84af90f8b6c72edfd5eb731b263ff63813d11241  ci/repro/vendor-freshness.sh
+14386f525d7278f0aa210b10f658c6d8d0b4dc0c0cbc0de28c954a7f44f86b27  ci/repro/vendor-freshness.test.sh
+```
 
-- **Option A:**
-  - All six public repos carry `ci/repro/vendor-freshness.sh` and
-    `ci/repro/vendor-freshness.test.sh`. engrave and transaction carry them
-    unrun and with no data file.
-  - `ci/shared-ci.sha256` gains their two lines in all six.
-  - shared-drift's `files` gains the two paths: 35 ok lines,
-    `shared-drift: PASS (5 repos, 7 files)`.
-  - Two extra PRs (engrave, transaction).
-- **Option B (recommended):**
-  - A second pin file, `ci/shared-vendor.sha256`, holding the two lines, in
-    toolkit, key, secret and dm.
-  - It is checked by a step `sha256sum --check --strict ci/shared-vendor.sha256`
-    in each `vendor-freshness.yml`, before the gate step.
-  - `ci/shared-drift.sh` gains a second group: repos (descriptor-mnemonic,
-    mnemonic-key, mnemonic-secret) and files (the two scripts and
-    `ci/shared-vendor.sha256`).
-  - Its test's counts change by the corresponding amounts. They are measured
-    in the toolkit PR.
-  - The existing shared set is untouched, and no repo carries a gate it never
-    runs.
+It lives under `ci/repro/` so that the `ci/repro/**` path filter of
+`vendor-freshness.yml` covers it. That filter is toolkit's today, and key's,
+secret's and dm's once section 11 changes their path lists. A PR that edits
+only the pin therefore runs the step that checks it.
 
-Under either option, mr (private, absent from shared-drift) appends the two
-hash lines to its own `ci/shared-ci.sha256`. That file holds only the two
-code-docs lines today and is checked in mr's CI. Section 11's per-repo lists
-are written for option B. Under option A, replace "`ci/shared-vendor.sha256`
-(new)" with "two lines appended to `ci/shared-ci.sha256`", drop the separate
-sha256sum step (rust.yml and release.yml already check that file), and add the
-engrave and transaction PRs.
+**The local check.** In each of the four `vendor-freshness.yml` files, before
+the step `Resolve Cargo.lock against committed vendor/ (offline, locked)`, a
+step named `Shared vendor gate files are unmodified` with this `run:`:
+
+<!-- vf:pin-cmd -->
+```
+sha256sum --check --strict ci/repro/shared-vendor.sha256
+```
+
+Run from the repo root with the shared files installed, it prints:
+
+<!-- vf:pin-check-green -->
+```
+ci/repro/vendor-freshness.sh: OK
+ci/repro/vendor-freshness.test.sh: OK
+```
+
+and exits 0. It fails closed (gate C12, run in each of the four repos): with
+one byte appended to the script it prints
+
+<!-- vf:pin-plant-edit -->
+```
+ci/repro/vendor-freshness.sh: FAILED
+ci/repro/vendor-freshness.test.sh: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+```
+
+and exits 1; with a third line `junk` appended to the pin file, `--strict`
+makes it print
+
+<!-- vf:pin-plant-junk -->
+```
+ci/repro/vendor-freshness.sh: OK
+ci/repro/vendor-freshness.test.sh: OK
+sha256sum: WARNING: 1 line is improperly formatted
+```
+
+and exit 1.
+
+**mr** (private, absent from shared-drift) gets no `shared-vendor.sha256` and
+no new step. The same two lines, script then test, are appended to mr's own
+`ci/shared-ci.sha256` after its existing two lines. mr's `ci.yml:109` already
+runs `sha256sum --check --strict ci/shared-ci.sha256` on every push. With the
+shared files installed it prints (gate C11):
+
+<!-- vf:mr-pin-check -->
+```
+ci/code-docs-check.sh: OK
+ci/code-docs-check.test.sh: OK
+ci/repro/vendor-freshness.sh: OK
+ci/repro/vendor-freshness.test.sh: OK
+```
+
+and with one byte appended to the script (gate C12) it prints
+
+<!-- vf:mr-pin-plant -->
+```
+ci/code-docs-check.sh: OK
+ci/code-docs-check.test.sh: OK
+ci/repro/vendor-freshness.sh: FAILED
+ci/repro/vendor-freshness.test.sh: OK
+sha256sum: WARNING: 1 computed checksum did NOT match
+```
+
+and exits 1.
+
+**engrave and transaction:** no change, no PR. `ci/shared-ci.sha256` is
+unchanged in all six public repos.
+
+**The drift scope.** Toolkit's `ci/shared-drift.sh` gains a second group,
+compared only against descriptor-mnemonic, mnemonic-key and mnemonic-secret.
+Its files are `ci/repro/vendor-freshness.sh`, `ci/repro/vendor-freshness.test.sh`
+and `ci/repro/shared-vendor.sha256`. The existing group (five repos, five
+files) is untouched. `shared-drift.yml`'s path filter and its daily schedule
+are unchanged. The edit to `ci/shared-drift.sh` and `ci/shared-drift.test.sh`
+is this diff, made against toolkit's `ci/` at the SHA above (gate C13 applies
+it with `git apply -p1`):
+
+<!-- vf:drift-diff -->
+```
+diff --git i/ci/shared-drift.sh w/ci/shared-drift.sh
+index 46725d8..d50136e 100644
+--- i/ci/shared-drift.sh
++++ w/ci/shared-drift.sh
+@@ -1,10 +1,13 @@
+ #!/usr/bin/env bash
+-# ci/shared-drift.sh -- check that the five shared CI files on each other
+-# public Part A repo's default branch are byte-identical to this checkout's.
++# ci/shared-drift.sh -- check that the shared CI files on each other public
++# Part A repo's default branch are byte-identical to this checkout's: the five
++# docs-gate files in five repos, and the three vendor-gate files in the three
++# repos that commit vendor/.
+ #
+-# Each repo checks its shared files only against its own ci/shared-ci.sha256,
+-# so a shared file edited together with its hash line in one repo passes
+-# there. This compares the repos with each other. Run from the repo root.
++# Each repo checks its shared files only against its own ci/shared-ci.sha256
++# or ci/repro/shared-vendor.sha256, so a shared file edited together with its
++# hash line in one repo passes there. This compares the repos with each
++# other. Run from the repo root.
+ # Needs bash, sha256sum and an authenticated gh (GH_TOKEN in CI).
+ # Prints one line per repo and file, then a PASS or FAIL line.
+ # Exit 0 = every pair matches.
+@@ -13,6 +16,8 @@ owner=${SHARED_DRIFT_OWNER:-bg002h}
+ gh=${SHARED_DRIFT_GH:-gh}
+ repos=(descriptor-mnemonic mnemonic-engrave mnemonic-key mnemonic-secret mnemonic-transaction)
+ files=(ci/docs-only.sh ci/docs-only.test.sh ci/code-docs-check.sh ci/code-docs-check.test.sh ci/shared-ci.sha256)
++vendor_repos=(descriptor-mnemonic mnemonic-key mnemonic-secret)
++vendor_files=(ci/repro/vendor-freshness.sh ci/repro/vendor-freshness.test.sh ci/repro/shared-vendor.sha256)
+ tmp=$(mktemp "${TMPDIR:-/tmp}/shared-drift.XXXXXX")
+ trap 'rm -f "$tmp"' EXIT
+ 
+@@ -23,27 +28,32 @@ sha() { # sha <file>: print the file's sha256
+ }
+ 
+ k=0
++compare() { # compare <repo> <file>: one ok, DRIFT or ERROR line; counts problems in k
++  local repo=$1 f=$2 here_sha there_sha
++  if [ ! -f "$f" ]; then
++    echo "ERROR $repo $f: missing locally"; k=$((k + 1)); return
++  fi
++  # No ref: the contents API then reads the repo's default branch.
++  if ! "$gh" api -H 'Accept: application/vnd.github.raw' "repos/$owner/$repo/contents/$f" > "$tmp" < /dev/null; then
++    echo "ERROR $repo $f: cannot fetch"; k=$((k + 1)); return
++  fi
++  here_sha=$(sha "$f")
++  there_sha=$(sha "$tmp")
++  if [ "$there_sha" = "$here_sha" ]; then
++    echo "ok    $repo $f"
++  else
++    echo "DRIFT $repo $f: $there_sha, mnemonic-toolkit has $here_sha"; k=$((k + 1))
++  fi
++}
+ for repo in "${repos[@]}"; do
+-  for f in "${files[@]}"; do
+-    if [ ! -f "$f" ]; then
+-      echo "ERROR $repo $f: missing locally"; k=$((k + 1)); continue
+-    fi
+-    # No ref: the contents API then reads the repo's default branch.
+-    if ! "$gh" api -H 'Accept: application/vnd.github.raw' "repos/$owner/$repo/contents/$f" > "$tmp" < /dev/null; then
+-      echo "ERROR $repo $f: cannot fetch"; k=$((k + 1)); continue
+-    fi
+-    here_sha=$(sha "$f")
+-    there_sha=$(sha "$tmp")
+-    if [ "$there_sha" = "$here_sha" ]; then
+-      echo "ok    $repo $f"
+-    else
+-      echo "DRIFT $repo $f: $there_sha, mnemonic-toolkit has $here_sha"; k=$((k + 1))
+-    fi
+-  done
++  for f in "${files[@]}"; do compare "$repo" "$f"; done
++done
++for repo in "${vendor_repos[@]}"; do
++  for f in "${vendor_files[@]}"; do compare "$repo" "$f"; done
+ done
+ 
+ if [ "$k" -eq 0 ]; then
+-  echo "shared-drift: PASS (${#repos[@]} repos, ${#files[@]} files)"
++  echo "shared-drift: PASS (${#repos[@]} repos x ${#files[@]} files, ${#vendor_repos[@]} repos x ${#vendor_files[@]} vendor files)"
+   exit 0
+ fi
+ echo "shared-drift: FAIL: $k problem(s)"
+diff --git i/ci/shared-drift.test.sh w/ci/shared-drift.test.sh
+index 2a2350a..f9b4827 100644
+--- i/ci/shared-drift.test.sh
++++ w/ci/shared-drift.test.sh
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env bash
+ # ci/shared-drift.test.sh -- scenario tests for ci/shared-drift.sh.
+ #
+-# Serves this checkout's own five shared files, for every repo, through a
++# Serves this checkout's own shared files, to each repo of their group, through a
+ # stand-in for `gh`, then changes that copy one row at a time. Needs only
+ # bash and sha256sum. Never calls GitHub. Exit 0 = every row passed.
+ set -eu
+@@ -11,6 +11,8 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/shared-drift-test.XXXXXX")
+ trap 'rm -rf "$tmp"' EXIT
+ repos="descriptor-mnemonic mnemonic-engrave mnemonic-key mnemonic-secret mnemonic-transaction"
+ files="ci/docs-only.sh ci/docs-only.test.sh ci/code-docs-check.sh ci/code-docs-check.test.sh ci/shared-ci.sha256"
++vendor_repos="descriptor-mnemonic mnemonic-key mnemonic-secret"
++vendor_files="ci/repro/vendor-freshness.sh ci/repro/vendor-freshness.test.sh ci/repro/shared-vendor.sha256"
+ 
+ # A stand-in for `gh`: reads the last argument
+ # (repos/<owner>/<repo>/contents/<file>), appends every argument to
+@@ -28,14 +30,14 @@ cat "$REMOTE/$repo/$file"
+ EOF
+ chmod +x "$tmp/gh"
+ 
+-fresh() { # fresh: rebuild $REMOTE from the checkout's five files, per repo
++put() { # put <repo> <file>: copy the checkout's <file> into $REMOTE/<repo>
++  mkdir -p "$(dirname "$tmp/remote/$1/$2")"
++  cp "$root/$2" "$tmp/remote/$1/$2"
++}
++fresh() { # fresh: rebuild $REMOTE from the checkout's shared files, per group
+   rm -rf "$tmp/remote"
+-  for r in $repos; do
+-    for f in $files; do
+-      mkdir -p "$(dirname "$tmp/remote/$r/$f")"
+-      cp "$root/$f" "$tmp/remote/$r/$f"
+-    done
+-  done
++  for r in $repos; do for f in $files; do put "$r" "$f"; done; done
++  for r in $vendor_repos; do for f in $vendor_files; do put "$r" "$f"; done; done
+ }
+ 
+ run() { # run <dir>: run ci/shared-drift.sh from <dir>; sets $out and $rc
+@@ -65,8 +67,9 @@ bad() { fail=$((fail + 1)); echo "FAIL $1: exit $rc:"; printf '%s\n' "$out"; }
+ # D1: every remote file matches.
+ fresh; run "$root"
+ n=$(grep -c '^ok    ' <<<"$out" || true)
+-if [ "$rc" -eq 0 ] && [ "$n" -eq 25 ] && has_line 'shared-drift: PASS (5 repos, 5 files)'; then
+-  ok "D1 no change: 25 ok lines and PASS"
++if [ "$rc" -eq 0 ] && [ "$n" -eq 34 ] &&
++   has_line 'shared-drift: PASS (5 repos x 5 files, 3 repos x 3 vendor files)'; then
++  ok "D1 no change: 34 ok lines and PASS"
+ else bad "D1 no change ($n ok lines)"; fi
+ cp "$tmp/ghargs" "$tmp/ghargs.d1"
+ 
+@@ -93,8 +96,8 @@ else bad "D4 remote file empty"; fi
+ # other than ci/docs-only.test.sh.
+ fresh; mkdir -p "$tmp/d5/ci"
+ cp "$root/ci/shared-drift.sh" "$tmp/d5/ci/"
+-for f in $files; do
+-  [ "$f" = ci/docs-only.test.sh ] || cp "$root/$f" "$tmp/d5/$f"
++for f in $files $vendor_files; do
++  [ "$f" = ci/docs-only.test.sh ] || { mkdir -p "$(dirname "$tmp/d5/$f")"; cp "$root/$f" "$tmp/d5/$f"; }
+ done
+ run "$tmp/d5"
+ if [ "$rc" -eq 1 ] && has_line 'ERROR mnemonic-secret ci/docs-only.test.sh: missing locally'; then
+@@ -118,5 +121,17 @@ if [ "$rc" -eq 1 ] && ! has_prefix 'shared-drift: PASS'; then
+   ok "D7 sha256sum fails: exit 1, no PASS"
+ else bad "D7 sha256sum fails"; fi
+ 
++# D8: one vendor-gate file has one byte more in one repo.
++fresh; printf 'x' >> "$tmp/remote/mnemonic-secret/ci/repro/vendor-freshness.sh"; run "$root"
++if [ "$rc" -eq 1 ] && has_prefix 'DRIFT mnemonic-secret ci/repro/vendor-freshness.sh: ' &&
++   has_line 'shared-drift: FAIL: 1 problem(s)'; then
++  ok "D8 vendor gate file drifted remotely: DRIFT, 1 problem"
++else bad "D8 vendor gate file drifted remotely"; fi
++
++# D9: D1 fetched no ci/repro/ file from a repo without vendor/.
++if grep -qE '^repos/bg002h/mnemonic-(engrave|transaction)/contents/ci/repro/' "$tmp/ghargs.d1"; then
++  fail=$((fail + 1)); echo "FAIL D9: a vendor-gate file was fetched from engrave or transaction"
++else pass=$((pass + 1)); echo "ok   D9 vendor-gate files fetched only from the vendor repos"; fi
++
+ echo "shared-drift.test.sh: $pass passed, $fail failed"
+ [ "$fail" -eq 0 ]
+```
+
+The edited files hash to:
+
+<!-- vf:drift-sha256 -->
+```
+6dc3f8b705f09712541b8df9575a3168fcf8d34b278118b08357218ccbfb9df3  ci/shared-drift.sh
+6e88cb5e14d482f644abed463dc1d4aff86a246b7d4fc8495aa56e10842c34ab  ci/shared-drift.test.sh
+```
+
+The new PASS line is
+`shared-drift: PASS (5 repos x 5 files, 3 repos x 3 vendor files)`. D1 expects
+it with 34 ok lines. The edited test, run in a copy of toolkit's `ci/` with
+the proto installed (gate C13), prints:
+
+<!-- vf:drift-test-green -->
+```
+ok   D1 no change: 34 ok lines and PASS (shared-drift: PASS (5 repos x 5 files, 3 repos x 3 vendor files))
+ok   D2 one byte appended remotely: DRIFT, 1 problem (shared-drift: FAIL: 1 problem(s))
+ok   D3 remote file absent: cannot fetch (shared-drift: FAIL: 1 problem(s))
+ok   D4 remote file empty: DRIFT (shared-drift: FAIL: 1 problem(s))
+ok   D5 local file missing: missing locally (shared-drift: FAIL: 5 problem(s))
+ok   D6 gh got api, -H, the raw Accept header and the contents path
+ok   D7 sha256sum fails: exit 1, no PASS ()
+ok   D8 vendor gate file drifted remotely: DRIFT, 1 problem (shared-drift: FAIL: 1 problem(s))
+ok   D9 vendor-gate files fetched only from the vendor repos
+shared-drift.test.sh: 9 passed, 0 failed
+```
+
+Gate C14 shows the test can fail. Toolkit's unmodified test, against the new
+script, fails D1 and D2 (25 ok lines expected, 34 served):
+
+<!-- vf:drift-red -->
+```
+FAIL D1 D2
+shared-drift.test.sh: 5 passed, 2 failed
+```
+
+Gate C15 plants two faults in the new script. Planted fault M1 turns the
+vendor loop into a loop over nothing; M2 makes the vendor loop run over all
+five repos. The edited test must catch both:
+
+<!-- vf:drift-mutant-M1 -->
+```
+FAIL D1 D8
+shared-drift.test.sh: 7 passed, 2 failed
+```
+
+<!-- vf:drift-mutant-M2 -->
+```
+FAIL D1 D2 D8 D9
+shared-drift.test.sh: 5 passed, 4 failed
+```
+
+Rollout order (section 12) is unchanged.
 
 ## 11. Per-repo changes
 
@@ -857,12 +1135,12 @@ They may be required checks.
 **mnemonic-toolkit (PR-T1):**
 
 - The three files. toolkit's current test is replaced.
-- `ci/shared-vendor.sha256` (new).
+- `ci/repro/shared-vendor.sha256` (new): the `vf:pin-file` block.
 - `.github/workflows/vendor-freshness.yml`:
   - The push and pull_request path lists already hold `ci/repro/**`, so they
     are unchanged.
   - Add the pin step `- name: Shared vendor gate files are unmodified` with
-    `run: sha256sum --check --strict ci/shared-vendor.sha256`, before
+    `run: sha256sum --check --strict ci/repro/shared-vendor.sha256`, before
     `Resolve Cargo.lock against committed vendor/ (offline, locked)`.
   - Replace the comment above `Mutation tests for the gate` (lines 66-70,
     "F-675: prove the gate can fail. Seven cases ...") with:
@@ -887,7 +1165,9 @@ They may be required checks.
 **mnemonic-refugium (PR-R):**
 
 - The three files.
-- Two lines appended to `ci/shared-ci.sha256`, in the order script, test.
+- Two lines appended to `ci/shared-ci.sha256` after its existing two, in the
+  order script, test (section 10, `vf:pin-file` hashes with the `ci/repro/`
+  paths). No `shared-vendor.sha256`, no new pin step.
 - `.github/workflows/ci.yml`, job `vendor-freshness` (line 274): after
   `- run: bash ci/repro/vendor-freshness.sh` (line 283), add
   `- run: bash ci/repro/vendor-freshness.test.sh`. The job's name and comment
@@ -901,7 +1181,7 @@ They may be required checks.
 each:
 
 - The three files.
-- `ci/shared-vendor.sha256` (new).
+- `ci/repro/shared-vendor.sha256` (new): the `vf:pin-file` block.
 - `.github/workflows/vendor-freshness.yml`:
   - In both path lists, `'ci/repro/vendor-freshness.sh'` becomes
     `'ci/repro/**'`.
@@ -956,20 +1236,16 @@ matters only for shared-drift.
 2. **PR-R, PR-K, PR-S, PR-D,** in any order, each independently: mr, key,
    secret and dm. Each PR's own CI runs the gate and the test on its own tree.
 3. **PR-T2, mnemonic-toolkit,** after PR-K, PR-S and PR-D have merged:
-   - shared-drift.sh gains the vendor group (option B) or two files
-     (option A);
-   - its test gains the new counts and a mutation row for a drifted
-     `ci/repro/vendor-freshness.sh` in one repo;
+   - `ci/shared-drift.sh` gains the vendor group and `ci/shared-drift.test.sh`
+     gains the new D1 counts, D8 and D9: the diff in section 10;
    - the FOLLOWUPS entry is resolved.
 
    Merged earlier, shared-drift would be red until all three repos landed.
 4. **PR-C, coordinator.** Catalog rows, after 1 and 2.
 
-Option A adds PR-E (mnemonic-engrave) and PR-X (mnemonic-transaction) to step
-2, and PR-T2 must follow them as well.
+mnemonic-engrave and mnemonic-transaction get no PR.
 
-PR list: PR-T1, PR-R, PR-K, PR-S, PR-D, PR-T2, PR-C, plus PR-E and PR-X under
-option A.
+PR list: PR-T1, PR-R, PR-K, PR-S, PR-D, PR-T2, PR-C.
 
 Each PR's build gate is its repo's full CI. Before it is reviewed it also runs:
 
@@ -989,17 +1265,36 @@ bash design/spec-vendor-freshness/gate.sh <checkouts> <logs>
   SHA above.
 - It needs bash, python3, git, rsync, cargo 1.85.0 (rustup) and network
   access to github.com.
-- It prints PASS or FAIL for each check C1-C10, then `gate: PASS` or
+- It prints PASS or FAIL for each check C1-C15, then `gate: PASS` or
   `gate: FAIL (<n>)`.
 
-The run on this spec's head is in the author report
-(`design/agent-reports/spec-vendor-freshness-author.md`).
+Checks C11 to C15 gate section 10:
+
+- C11 installs the proto in the four public repos, writes the `vf:pin-file`
+  block as `ci/repro/shared-vendor.sha256` (its hashes must equal the
+  `vf:proto-sha256` block), runs the `vf:pin-cmd` command and compares its
+  output to `vf:pin-check-green`; in mr it appends the same two lines to
+  `ci/shared-ci.sha256` and compares `sha256sum --check --strict` to
+  `vf:mr-pin-check`.
+- C12 plants a byte in the script (all four repos and mr) and a `junk` line in
+  the pin file (the four repos), and compares the output and exit 1 to
+  `vf:pin-plant-edit`, `vf:pin-plant-junk` and `vf:mr-pin-plant`.
+- C13 applies the `vf:drift-diff` block to a copy of toolkit's `ci/` with
+  `git apply -p1`, checks `vf:drift-sha256`, installs the proto and the pin
+  file, and requires `bash ci/shared-drift.test.sh` to print the
+  `vf:drift-test-green` block with exit 0.
+- C14 runs toolkit's unmodified test against the new script and compares
+  `vf:drift-red`.
+- C15 plants M1 and M2 in the new script and compares `vf:drift-mutant-M1` and
+  `vf:drift-mutant-M2`.
+
+The run on this spec's head is in the fold report
+(`design/agent-reports/fold-vf-s1.md`).
 
 NOT covered by the gate:
 
-- the `.github/` workflow edits;
-- the `ci/shared-ci.sha256`, `ci/shared-vendor.sha256` and `ci/shared-drift.sh`
-  edits (pinning is OPEN, S-1);
+- the `.github/` workflow edits, except that C11 and C12 run the pin step's
+  `run:` command (the `vf:pin-cmd` block);
 - the catalog and FOLLOWUPS edits;
 - a real network outage (G5 stands in);
 - mr's self-hosted runner having rsync;
