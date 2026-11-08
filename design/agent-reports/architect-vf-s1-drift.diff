@@ -1,0 +1,167 @@
+diff --git i/ci/shared-drift.sh w/ci/shared-drift.sh
+index 46725d8..d50136e 100644
+--- i/ci/shared-drift.sh
++++ w/ci/shared-drift.sh
+@@ -1,10 +1,13 @@
+ #!/usr/bin/env bash
+-# ci/shared-drift.sh -- check that the five shared CI files on each other
+-# public Part A repo's default branch are byte-identical to this checkout's.
++# ci/shared-drift.sh -- check that the shared CI files on each other public
++# Part A repo's default branch are byte-identical to this checkout's: the five
++# docs-gate files in five repos, and the three vendor-gate files in the three
++# repos that commit vendor/.
+ #
+-# Each repo checks its shared files only against its own ci/shared-ci.sha256,
+-# so a shared file edited together with its hash line in one repo passes
+-# there. This compares the repos with each other. Run from the repo root.
++# Each repo checks its shared files only against its own ci/shared-ci.sha256
++# or ci/repro/shared-vendor.sha256, so a shared file edited together with its
++# hash line in one repo passes there. This compares the repos with each
++# other. Run from the repo root.
+ # Needs bash, sha256sum and an authenticated gh (GH_TOKEN in CI).
+ # Prints one line per repo and file, then a PASS or FAIL line.
+ # Exit 0 = every pair matches.
+@@ -13,6 +16,8 @@ owner=${SHARED_DRIFT_OWNER:-bg002h}
+ gh=${SHARED_DRIFT_GH:-gh}
+ repos=(descriptor-mnemonic mnemonic-engrave mnemonic-key mnemonic-secret mnemonic-transaction)
+ files=(ci/docs-only.sh ci/docs-only.test.sh ci/code-docs-check.sh ci/code-docs-check.test.sh ci/shared-ci.sha256)
++vendor_repos=(descriptor-mnemonic mnemonic-key mnemonic-secret)
++vendor_files=(ci/repro/vendor-freshness.sh ci/repro/vendor-freshness.test.sh ci/repro/shared-vendor.sha256)
+ tmp=$(mktemp "${TMPDIR:-/tmp}/shared-drift.XXXXXX")
+ trap 'rm -f "$tmp"' EXIT
+ 
+@@ -23,27 +28,32 @@ sha() { # sha <file>: print the file's sha256
+ }
+ 
+ k=0
++compare() { # compare <repo> <file>: one ok, DRIFT or ERROR line; counts problems in k
++  local repo=$1 f=$2 here_sha there_sha
++  if [ ! -f "$f" ]; then
++    echo "ERROR $repo $f: missing locally"; k=$((k + 1)); return
++  fi
++  # No ref: the contents API then reads the repo's default branch.
++  if ! "$gh" api -H 'Accept: application/vnd.github.raw' "repos/$owner/$repo/contents/$f" > "$tmp" < /dev/null; then
++    echo "ERROR $repo $f: cannot fetch"; k=$((k + 1)); return
++  fi
++  here_sha=$(sha "$f")
++  there_sha=$(sha "$tmp")
++  if [ "$there_sha" = "$here_sha" ]; then
++    echo "ok    $repo $f"
++  else
++    echo "DRIFT $repo $f: $there_sha, mnemonic-toolkit has $here_sha"; k=$((k + 1))
++  fi
++}
+ for repo in "${repos[@]}"; do
+-  for f in "${files[@]}"; do
+-    if [ ! -f "$f" ]; then
+-      echo "ERROR $repo $f: missing locally"; k=$((k + 1)); continue
+-    fi
+-    # No ref: the contents API then reads the repo's default branch.
+-    if ! "$gh" api -H 'Accept: application/vnd.github.raw' "repos/$owner/$repo/contents/$f" > "$tmp" < /dev/null; then
+-      echo "ERROR $repo $f: cannot fetch"; k=$((k + 1)); continue
+-    fi
+-    here_sha=$(sha "$f")
+-    there_sha=$(sha "$tmp")
+-    if [ "$there_sha" = "$here_sha" ]; then
+-      echo "ok    $repo $f"
+-    else
+-      echo "DRIFT $repo $f: $there_sha, mnemonic-toolkit has $here_sha"; k=$((k + 1))
+-    fi
+-  done
++  for f in "${files[@]}"; do compare "$repo" "$f"; done
++done
++for repo in "${vendor_repos[@]}"; do
++  for f in "${vendor_files[@]}"; do compare "$repo" "$f"; done
+ done
+ 
+ if [ "$k" -eq 0 ]; then
+-  echo "shared-drift: PASS (${#repos[@]} repos, ${#files[@]} files)"
++  echo "shared-drift: PASS (${#repos[@]} repos x ${#files[@]} files, ${#vendor_repos[@]} repos x ${#vendor_files[@]} vendor files)"
+   exit 0
+ fi
+ echo "shared-drift: FAIL: $k problem(s)"
+diff --git i/ci/shared-drift.test.sh w/ci/shared-drift.test.sh
+index 2a2350a..f9b4827 100644
+--- i/ci/shared-drift.test.sh
++++ w/ci/shared-drift.test.sh
+@@ -1,7 +1,7 @@
+ #!/usr/bin/env bash
+ # ci/shared-drift.test.sh -- scenario tests for ci/shared-drift.sh.
+ #
+-# Serves this checkout's own five shared files, for every repo, through a
++# Serves this checkout's own shared files, to each repo of their group, through a
+ # stand-in for `gh`, then changes that copy one row at a time. Needs only
+ # bash and sha256sum. Never calls GitHub. Exit 0 = every row passed.
+ set -eu
+@@ -11,6 +11,8 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/shared-drift-test.XXXXXX")
+ trap 'rm -rf "$tmp"' EXIT
+ repos="descriptor-mnemonic mnemonic-engrave mnemonic-key mnemonic-secret mnemonic-transaction"
+ files="ci/docs-only.sh ci/docs-only.test.sh ci/code-docs-check.sh ci/code-docs-check.test.sh ci/shared-ci.sha256"
++vendor_repos="descriptor-mnemonic mnemonic-key mnemonic-secret"
++vendor_files="ci/repro/vendor-freshness.sh ci/repro/vendor-freshness.test.sh ci/repro/shared-vendor.sha256"
+ 
+ # A stand-in for `gh`: reads the last argument
+ # (repos/<owner>/<repo>/contents/<file>), appends every argument to
+@@ -28,14 +30,14 @@ cat "$REMOTE/$repo/$file"
+ EOF
+ chmod +x "$tmp/gh"
+ 
+-fresh() { # fresh: rebuild $REMOTE from the checkout's five files, per repo
++put() { # put <repo> <file>: copy the checkout's <file> into $REMOTE/<repo>
++  mkdir -p "$(dirname "$tmp/remote/$1/$2")"
++  cp "$root/$2" "$tmp/remote/$1/$2"
++}
++fresh() { # fresh: rebuild $REMOTE from the checkout's shared files, per group
+   rm -rf "$tmp/remote"
+-  for r in $repos; do
+-    for f in $files; do
+-      mkdir -p "$(dirname "$tmp/remote/$r/$f")"
+-      cp "$root/$f" "$tmp/remote/$r/$f"
+-    done
+-  done
++  for r in $repos; do for f in $files; do put "$r" "$f"; done; done
++  for r in $vendor_repos; do for f in $vendor_files; do put "$r" "$f"; done; done
+ }
+ 
+ run() { # run <dir>: run ci/shared-drift.sh from <dir>; sets $out and $rc
+@@ -65,8 +67,9 @@ bad() { fail=$((fail + 1)); echo "FAIL $1: exit $rc:"; printf '%s\n' "$out"; }
+ # D1: every remote file matches.
+ fresh; run "$root"
+ n=$(grep -c '^ok    ' <<<"$out" || true)
+-if [ "$rc" -eq 0 ] && [ "$n" -eq 25 ] && has_line 'shared-drift: PASS (5 repos, 5 files)'; then
+-  ok "D1 no change: 25 ok lines and PASS"
++if [ "$rc" -eq 0 ] && [ "$n" -eq 34 ] &&
++   has_line 'shared-drift: PASS (5 repos x 5 files, 3 repos x 3 vendor files)'; then
++  ok "D1 no change: 34 ok lines and PASS"
+ else bad "D1 no change ($n ok lines)"; fi
+ cp "$tmp/ghargs" "$tmp/ghargs.d1"
+ 
+@@ -93,8 +96,8 @@ else bad "D4 remote file empty"; fi
+ # other than ci/docs-only.test.sh.
+ fresh; mkdir -p "$tmp/d5/ci"
+ cp "$root/ci/shared-drift.sh" "$tmp/d5/ci/"
+-for f in $files; do
+-  [ "$f" = ci/docs-only.test.sh ] || cp "$root/$f" "$tmp/d5/$f"
++for f in $files $vendor_files; do
++  [ "$f" = ci/docs-only.test.sh ] || { mkdir -p "$(dirname "$tmp/d5/$f")"; cp "$root/$f" "$tmp/d5/$f"; }
+ done
+ run "$tmp/d5"
+ if [ "$rc" -eq 1 ] && has_line 'ERROR mnemonic-secret ci/docs-only.test.sh: missing locally'; then
+@@ -118,5 +121,17 @@ if [ "$rc" -eq 1 ] && ! has_prefix 'shared-drift: PASS'; then
+   ok "D7 sha256sum fails: exit 1, no PASS"
+ else bad "D7 sha256sum fails"; fi
+ 
++# D8: one vendor-gate file has one byte more in one repo.
++fresh; printf 'x' >> "$tmp/remote/mnemonic-secret/ci/repro/vendor-freshness.sh"; run "$root"
++if [ "$rc" -eq 1 ] && has_prefix 'DRIFT mnemonic-secret ci/repro/vendor-freshness.sh: ' &&
++   has_line 'shared-drift: FAIL: 1 problem(s)'; then
++  ok "D8 vendor gate file drifted remotely: DRIFT, 1 problem"
++else bad "D8 vendor gate file drifted remotely"; fi
++
++# D9: D1 fetched no ci/repro/ file from a repo without vendor/.
++if grep -qE '^repos/bg002h/mnemonic-(engrave|transaction)/contents/ci/repro/' "$tmp/ghargs.d1"; then
++  fail=$((fail + 1)); echo "FAIL D9: a vendor-gate file was fetched from engrave or transaction"
++else pass=$((pass + 1)); echo "ok   D9 vendor-gate files fetched only from the vendor repos"; fi
++
+ echo "shared-drift.test.sh: $pass passed, $fail failed"
+ [ "$fail" -eq 0 ]
