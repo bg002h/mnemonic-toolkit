@@ -292,7 +292,7 @@ lint:
 # ---------------------------------------------------------------------------
 .PHONY: filter-smoke
 filter-smoke:
-	@bash $(TESTS_DIR)/filter-smoke.sh \
+	@bash $(MANUAL_DIR)/../manual-gui/tests/filter-smoke.sh \
 		MANUAL_DIR="$(MANUAL_DIR)" \
 		PANDOC="$(PANDOC)" \
 		XELATEX="$(XELATEX)" \
