@@ -160,6 +160,11 @@ try:
     if not manifests:
         refuse("no vendor/*/.cargo-checksum.json found: is the vendor/ tree "
                "committed? Failing closed.")
+    for root, dirs, files in os.walk("vendor"):
+        for n in dirs + files:
+            if os.path.islink(os.path.join(root, n)):
+                errors.append(f"{os.path.join(root, n)}: SYMLINK in vendor/ (cargo vendor "
+                              f"writes none; the checks above and below walk real files only)")
     loaded = {}
     n_files = 0
     for cj in manifests:

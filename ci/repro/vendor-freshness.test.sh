@@ -178,6 +178,22 @@ json.dump(m, open(p, "w"))
 PY
 }
 
+# S2: src dir replaced by a symlink to an edited copy outside the crate, its src/ entries dropped from the manifest.
+symlink_src() {
+  python3 -I - "vendor/$G" <<'PY'
+import json, os, shutil, sys
+d = sys.argv[1]
+shutil.copytree(d + "/src", "vf-evil-src")
+with open("vf-evil-src/lib.rs", "a") as f: f.write("// tampered\n")
+shutil.rmtree(d + "/src")
+os.symlink("../../vf-evil-src", d + "/src")
+p = d + "/.cargo-checksum.json"
+m = json.load(open(p))
+m["files"] = {k: v for k, v in m["files"].items() if not k.startswith("src/")}
+json.dump(m, open(p, "w"))
+PY
+}
+
 OOS='vendor/ is out of sync with Cargo.lock'
 run_case "A1 control: the unmodified tree is green"            0 '\(4/4\) OK'                      noop
 POISON_HOME="$WORK/poisoned-cargo-home"
@@ -207,6 +223,7 @@ g_case   "G7 $GN crate dir wrong -> check 4"                    1 "vendor/$G: no
 g_case   "G8 $GN unlisted file planted -> check 4"              1 "vendor/$G: file set differs from .cargo-checksum.json: src/vf_planted.rs" plant_file
 g_case   "G9 $GN another version vendored self-consistently -> check 4" 1 "vendor/$G: Cargo.toml: version $G_NEWV is not upstream's" revendor_version
 g_case   "G10 $GN Cargo.toml-only change (a feature added) -> check 4" 1 "vendor/$G: Cargo.toml: 'features' differs from upstream at ${G_REV:0:8}" revendor_feature
+g_case   "G11 $GN src dir symlinked to an edited copy, entries dropped -> refused" 1 "vendor/$G/src: SYMLINK in vendor/" symlink_src
 
 echo "vendor-freshness.test: $pass passed, $fail failed, $skip skipped"
 [ "$fail" -eq 0 ]
