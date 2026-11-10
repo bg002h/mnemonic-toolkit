@@ -17,3 +17,7 @@
 # Workflows with no ci/docs-only.sh guard (the doc workflows, a tag-only
 # changelog check and a pin check).
 ^\.github/workflows/(changelog-check|examples|manual|manual-gui|quickstart|sibling-pin-check)\.yml$
+
+# Not run by CI: the local ci/staging push ritual. It names design/FOLLOWUPS.md
+# only in a citation-gate pathspec that excludes it.
+^scripts/push-via-staging\.sh$
