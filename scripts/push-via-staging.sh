@@ -131,7 +131,7 @@ if [ -x scripts/plan-cite-check.sh ]; then
   DOCS="$(git diff --name-only --diff-filter=d "origin/$BRANCH..HEAD" -- \
             'design/*.md' 'design/**/*.md' \
             ':(exclude)design/agent-reports/**' \
-            ':(exclude)design/FOLLOWUPS.md' 2>/dev/null)"
+            ':(exclude)design/FOLLOWUPS.md' 2>/dev/null)" || DOCS=""
   if [ -n "$DOCS" ]; then
     echo "== citation gate: $(printf '%s\n' "$DOCS" | wc -l | tr -d ' ') changed doc(s) (agent-reports excluded)"
     # shellcheck disable=SC2086
