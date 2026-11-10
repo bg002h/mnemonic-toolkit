@@ -112,6 +112,33 @@ if [ -n "$(git ls-files --others --exclude-standard)" ]; then
   echo "== note: untracked files present -- NOT blocking, NOT pushed:"
   git ls-files --others --exclude-standard | sed 's/^/     /'
 fi
+# CITATION GATE on changed design docs (blocking; skipped when the repo has no
+# executable scripts/plan-cite-check.sh). Moved here from mnemonic-engrave's
+# retired push-master.sh, which ran it as a blocking step (decided 2026-08-18,
+# mnemonic-engrave design/DoNextList.md #8). It runs HERE, locally, rather than
+# in CI: CI would resolve citations against sibling repos' origin HEAD, while
+# the author wrote against the local sibling state.
+#
+# Scope is CHANGED DOCS ONLY (origin/$BRANCH..HEAD): "a fold is authorship and
+# re-earns the gate". design/agent-reports/ and design/FOLLOWUPS.md are
+# excluded: reports are persisted verbatim and never edited, and FOLLOWUPS.md
+# is an append-only log whose old entries cite line numbers that have since
+# moved, so checking it would bill each new entry for the whole history.
+# COST, STATED: citations inside new FOLLOWUPS entries and reports go unchecked.
+# ALSO UNCHECKED: a branch with no origin/$BRANCH yet (the diff cannot be taken,
+# so no doc is gated); this ritual is for a branch that already exists remotely.
+if [ -x scripts/plan-cite-check.sh ]; then
+  DOCS="$(git diff --name-only --diff-filter=d "origin/$BRANCH..HEAD" -- \
+            'design/*.md' 'design/**/*.md' \
+            ':(exclude)design/agent-reports/**' \
+            ':(exclude)design/FOLLOWUPS.md' 2>/dev/null)" || DOCS=""
+  if [ -n "$DOCS" ]; then
+    echo "== citation gate: $(printf '%s\n' "$DOCS" | wc -l | tr -d ' ') changed doc(s) (agent-reports excluded)"
+    # shellcheck disable=SC2086
+    ./scripts/plan-cite-check.sh $DOCS >&2 \
+      || { echo "FATAL: citation gate failed on changed docs -- fix the citations or qualify the paths" >&2; exit 1; }
+  fi
+fi
 echo "== FREEZE $BRANCH now: no commits until this script finishes"
 
 # `gh api` prints its 404 body to STDOUT, so `2>/dev/null` does not suppress it
