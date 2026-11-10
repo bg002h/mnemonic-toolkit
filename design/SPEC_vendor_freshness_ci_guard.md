@@ -1,5 +1,7 @@
 # SPEC — `vendor/` freshness CI guard
 
+> Superseded for check (4), §3.3 and §5 by design/SPEC_vendor_freshness_shared.md (live re-derivation from upstream; no GROUNDED_GIT_SOURCES).
+
 **Status:** SHIPPED. Originally a one-check design (R0'd, merged as
 `1dcf185e`); rewritten to a **four-check** design by F-354
 (`926f6d2a` fix, `2c4510c0` gate rewrite, merged at `1f333ad2`). This revision

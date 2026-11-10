@@ -2,8 +2,8 @@ name: vendor-freshness
 
 # THE LEADING (PR-time) vendor-freshness gate.
 #
-# REDs iff the committed `vendor/` tree cannot satisfy the current `Cargo.lock`
-# under the reproducible build's `--offline --locked` source-replacement config.
+# REDs on any check of ci/repro/vendor-freshness.sh (shared file; spec:
+# mnemonic-toolkit design/SPEC_vendor_freshness_shared.md).
 #
 # WHY THIS EXISTS. v0.74.0 shipped with NO reproducible musl binary: the
 # Word-Card cycle bumped the codec deps (md-codec 0.39.0 -> 0.39.1, mk-codec
@@ -59,15 +59,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      # `cargo metadata` resolution only — no compile, no musl target, no Docker.
+      # Four checks; check (4) fetches each git source from upstream. No compile, no musl target, no Docker.
       - uses: dtolnay/rust-toolchain@1.85.0
+      - name: Shared vendor gate files are unmodified
+        run: sha256sum --check --strict ci/repro/shared-vendor.sha256
       - name: Resolve Cargo.lock against committed vendor/ (offline, locked)
         run: bash ci/repro/vendor-freshness.sh
-      # F-675: prove the gate can fail. Seven cases, each asserting the exit
-      # status AND which check fired: a control that must stay green, vendor/
-      # md-codec removed or stale (check 1), a moved pin and a self-consistent
-      # wrong-rev re-vendor (check 4), a hand edit (check 2), and an ungrounded
-      # git source. Runs after the real gate so a red there is reported first.
+      # F-675: prove the gate can fail. The shared test's rows
+      # (design/SPEC_vendor_freshness_shared.md section 8) assert the exit
+      # status AND which check fired, against a control that must stay
+      # green. Runs after the real gate so a red there is reported first.
       - name: Mutation tests for the gate
         run: bash ci/repro/vendor-freshness.test.sh
 
