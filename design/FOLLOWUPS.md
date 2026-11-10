@@ -6591,3 +6591,10 @@ screen printed. Print the values.
 - Owner: the next toolkit cycle.
 - Status: `deferred-minor` (M2, N1 open; M1 fixed).
 - Tier: `toolkit`.
+
+### `vendor-freshness-shared`
+- Status: open
+- Companion: mnemonic-refugium design/FOLLOWUPS.md::vendor-freshness-shared
+- Companion: mnemonic-key design/FOLLOWUPS.md::vendor-freshness-shared
+- Companion: mnemonic-secret design/FOLLOWUPS.md::vendor-freshness-shared
+- Companion: descriptor-mnemonic design/FOLLOWUPS.md::vendor-freshness-shared

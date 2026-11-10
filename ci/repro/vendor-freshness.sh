@@ -1,311 +1,364 @@
 #!/usr/bin/env bash
-# vendor/ freshness + CONTENT guard — the LEADING (PR-time) gate.
+# vendor/ freshness and CONTENT gate. SHARED FILE: byte-identical in
+# mnemonic-toolkit, mnemonic-refugium, mnemonic-key, mnemonic-secret and
+# descriptor-mnemonic, pinned by its sha256 in each of them. Edit it in all
+# five at once. Spec: mnemonic-toolkit design/SPEC_vendor_freshness_shared.md.
 #
-# Four checks, in ascending cost. Any one RED fails the gate.
+# Usage, from anywhere in the repo: bash ci/repro/vendor-freshness.sh
+# No arguments. VF_SOURCES names the data file (default
+# ci/repro/vendor-git-sources.txt; a relative path is taken from the repo root).
+# Exit 0 = every check passed; 1 = a refusal or any check red.
 #
-#   (1) RESOLUTION  — can the committed vendor/ tree satisfy Cargo.lock under the
-#       reproducible build's `--offline --locked` source-replacement config?
-#   (2) INTEGRITY   — does every vendored file match the sha256 recorded for it in
-#       its crate's `.cargo-checksum.json`?
-#   (3) REGISTRY PROVENANCE — for every crates.io crate, does that manifest's
-#       `package` digest (the sha256 of the published .crate) equal the
-#       `checksum` Cargo.lock pins, and is the SET of crates lacking such an
-#       anchor exactly the one this gate is grounded for?
-#       Honest scope note, measured: the digest comparison itself is REDUNDANT
-#       with cargo. Tampering a `package` digest REDs in check (1) already
-#       ("checksum for `bitcoin v0.32.8` changed between lock files"), because
-#       cargo validates it during resolution. What is NOT redundant, and the
-#       reason (3) stays, is the unanchored-SET assertion: cargo is perfectly
-#       happy with a new git or path dependency that no digest can vouch for,
-#       and that is the shape F-354 arrived in.
-#   (4) GIT-FORK PROVENANCE — check (3) is impossible for a git dependency: a git
-#       source has no published tarball, so BOTH `package` and Cargo.lock's
-#       `checksum` are null. That hole is anchored here instead, against a
-#       digest grounded on upstream by hand (see GROUNDING below).
+# Four checks, in ascending cost. Any one red fails the gate.
+#   (1) RESOLUTION: the committed vendor/ satisfies Cargo.lock under the release
+#       build's --offline --locked source replacement, run under an EMPTY,
+#       throwaway CARGO_HOME (F-675: a warm ~/.cargo/git hid a missing stanza).
+#   (2) INTEGRITY: every vendored file matches the sha256 its crate's
+#       .cargo-checksum.json records.
+#   (3) REGISTRY PROVENANCE: every crates.io crate's `package` digest equals the
+#       `checksum` Cargo.lock pins, and the crates with no such anchor are
+#       exactly the data file's rows.
+#   (4) GIT-SOURCE PROVENANCE: each data-file row's vendored tree is re-derived
+#       from its upstream repo at the rev Cargo.lock pins: the same file set as
+#       its .cargo-checksum.json, every file but Cargo.toml byte-identical to
+#       upstream, Cargo.toml's package name and version equal to upstream's,
+#       and the manifest as cargo reads it (`cargo metadata`: features, normal
+#       and build dependencies, lib and build-script targets, edition, links,
+#       [package.metadata] and the CARGO_PKG_* fields) equal to upstream's.
+#       Needs network access to each row's host; (1)-(3) are offline.
 #
-# WHY (2)-(4) EXIST — F-354. Check (1) alone was green for two months over a
-# vendor/miniscript tree vendored from the WRONG REVISION (95fdd1c5, missing
-# rust-miniscript PR #953) while Cargo.toml/Cargo.lock pinned ff4732e5. Check (1)
-# cannot see this: it compares Cargo.lock resolution, never the vendored BYTES,
-# and name+version+source-id all matched. Every networked build fetched the
-# correct rev from git and was fine; only the `--offline` vendored path — which
-# is what the reproducible RELEASE binary is built from — compiled the old
-# formatter. Depth->=2 taproot restore was measurably broken in that binary while
-# every gate reported green.
+# WHY (2)-(4): F-354. Check (1) was green for two months over a vendor tree
+# vendored from the WRONG REV; it compares resolution, never bytes, and that
+# tree was self-consistent, so (2) passes it too. Only (4) sees it.
 #
-# NOTE check (2) alone would NOT have caught F-354 either, and this was measured,
-# not assumed: the mis-vendored tree was internally SELF-CONSISTENT (168 crates,
-# 7479 files, 0 checksum mismatches) because `cargo vendor` wrote the manifest
-# from the same wrong rev it wrote the files from. Integrity catches corruption
-# and hand-edits; only (3)/(4) catch "vendored from the wrong source".
+# The data file: one row per vendored git source,
+#   <vendor dir>|<url exactly as in Cargo.lock>|<crate dir in upstream, or .>
+# `#` lines and blank lines are ignored. A git source in Cargo.lock with no
+# row, and a row whose url Cargo.lock does not pin, both fail closed.
 #
-# ── BLIND SPOTS. Read these before trusting a green. ────────────────────────
-#
-#  * Check (2) proves the tree matches what `cargo vendor` wrote. It does NOT
-#    prove what `cargo vendor` wrote came from the pinned rev. For crates.io
-#    crates that gap is closed by the published-tarball digest (enforced by cargo
-#    in check (1), restated in (3)). For the git fork there is no such digest,
-#    and (4) closes it only as far as its grounding reaches.
-#  * Check (4) is a TRUST-ON-FIRST-USE anchor, not a live verification. It
-#    compares the vendored tree against a digest a human grounded against GitHub
-#    once. It proves the tree has not CHANGED since that grounding; it cannot by
-#    itself prove the grounding was right. Re-ground it (command below) whenever
-#    the pin moves — the gate REDs and tells you to, rather than passing silently.
-#  * NOTHING here re-proves bit-for-bit build reproducibility. That stays with
-#    repro-drift.yml (scheduled) and the release `repro` gate (tag).
-#  * A dependency added from a NEW git source would have no anchor at all, so
-#    check (3) fails closed on any unanchored crate it does not already know
-#    about, rather than skipping it. A git source in Cargo.lock with no
-#    GROUNDED_GIT_SOURCES row also fails closed, before check (1).
-#  * Check (1) runs under an EMPTY, throwaway CARGO_HOME (F-675). Without that, a
-#    git source the stanzas miss resolves from ~/.cargo/git on any machine that
-#    has built the tree, so a local run passed while CI failed. The mutation
-#    tests in ci/repro/vendor-freshness.test.sh pin every RED, and pin the
-#    hermetic home directly: they run the gate with a caller CARGO_HOME whose
-#    config.toml is malformed, which only passes if that home is ignored.
-#
-# Spec: design/SPEC_vendor_freshness_ci_guard.md
+# NOT covered: bit-for-bit reproducibility (repro-drift, the release repro
+# gate); files on disk that a registry crate's .cargo-checksum.json does not
+# list (check (4) catches them for git sources only); in a git source's
+# Cargo.toml, what a dependent's build never reads (dev-dependencies, example,
+# test, bench and bin targets, [lints], [profile], keywords and the like);
+# upstream files cargo vendor left out under include/exclude (a lib target or
+# build script they would add shows in the manifest comparison).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-# ── GROUNDING for check (4) — one row per tolerated git source ─────────────
-# Format: <vendor dir>|<git URL exactly as in Cargo.lock>|<grounded rev>|<sha256 of
-# vendor/<dir>/.cargo-checksum.json>. Check (1) builds one [source] replacement
-# stanza per row, keyed on the rev CARGO.LOCK carries for that URL; check (4)
-# REDs if that rev is not the grounded one or the manifest digest moved. A git
-# source in Cargo.lock with NO row fails closed before check (1).
-#
-# miniscript — grounded 2026-08-27 while fixing F-354: 97 of the 98 vendored
-#   files were confirmed byte-identical to https://github.com/rust-bitcoin/
-#   rust-miniscript at ff4732e5 by git blob hash (GitHub trees API, recursive).
-#   The 98th is Cargo.toml, which `cargo vendor` rewrites ("THIS FILE IS
-#   AUTOMATICALLY GENERATED BY CARGO").
-# md-codec — grounded 2026-09-24 for F-675 (md-codec became a git dependency in
-#   F-642): 395 of the 396 vendored files are byte-identical, by git blob hash,
-#   to crates/md-codec/ of https://github.com/bg002h/descriptor-mnemonic at
-#   cf35d61a (tag descriptor-mnemonic-md-cli-v0.19.0; the commit was confirmed
-#   present on GitHub via the commits API). The 396th is Cargo.toml, rewritten
-#   by `cargo vendor` as above. No upstream file of that crate is missing.
-#
-# To RE-GROUND after moving a pin:
-#   cargo vendor --locked vendor/
-#   sha256sum vendor/<dir>/.cargo-checksum.json
-# and paste the rev + digest below. Verify the vendored files against upstream
-# at the new rev (git blob hashes) before you do.
-GROUNDED_GIT_SOURCES=(
-  "miniscript|https://github.com/rust-bitcoin/rust-miniscript|ff4732e5f75aa555682343cb180fa72ee3e8e9d5|30cc80f5ea57305f09790b661805b58cfdcd16aaaddd26c3769078eccd9a1277"
-  "md-codec|https://github.com/bg002h/descriptor-mnemonic|cf35d61af0f058029df841f4882945e53f86cd4b|717b40e17d1a32acb7d1ac23aeb538baa08b7e72256efaef7f5a4598aeb41fb5"
-)
+python3 -I - "$@" <<'PY'
+import glob, hashlib, json, os, re, shutil, subprocess, sys, tempfile
 
-# Every git source Cargo.lock pins, as "<url> <rev>" (authoritative, comment-free).
-# Deriving the stanzas' revs from the lock is what makes them auto-track a pin;
-# check (4) is what stops that tracking from quietly accepting an unverified rev.
-mapfile -t LOCK_GIT_SOURCES < <(
-  sed -nE 's/^source = "git\+([^?"#]+)\?rev=([0-9a-f]{40})#[0-9a-f]{40}"$/\1 \2/p' Cargo.lock | sort -u
-)
-if [ "${#LOCK_GIT_SOURCES[@]}" -eq 0 ]; then
-  echo "::error::vendor-freshness: Cargo.lock names no 'git+<url>?rev=<40-hex>' source, but this" \
-       "gate is grounded for ${#GROUNDED_GIT_SOURCES[@]}. Either the pins moved to crates.io (drop" \
-       "the rows) or the lock format changed under this parser. Failing closed." >&2
-  exit 1
-fi
+def err(msg):
+    print(f"::error::vendor-freshness: {msg}", file=sys.stderr)
 
-# A git source in Cargo.lock that no row grounds would get no [source] stanza.
-# Say so by name here, instead of leaving it to check (1)'s cargo error.
-SRC_CONFIG=( --config 'source.crates-io.replace-with="vendored-sources"' )
-LOCK_REVS=""      # "<dir>=<rev>" per grounded row, for check (4)
-for line in "${LOCK_GIT_SOURCES[@]}"; do
-  url="${line% *}"; rev="${line#* }"
-  row=""
-  for g in "${GROUNDED_GIT_SOURCES[@]}"; do
-    IFS='|' read -r gdir gurl _ _ <<<"$g"
-    if [ "$gurl" = "$url" ]; then row="$gdir"; fi
-  done
-  if [ -z "$row" ]; then
-    echo "::error::vendor-freshness: Cargo.lock pins git source $url?rev=$rev, which has no" \
-         "row in GROUNDED_GIT_SOURCES. A git source has no published tarball digest, so the" \
-         "vendored bytes cannot be verified. Ground it (see the header) or drop it." >&2
-    exit 1
-  fi
-  SRC_CONFIG+=(
-    --config "source.\"git+${url}?rev=${rev}\".git=\"${url}\""
-    --config "source.\"git+${url}?rev=${rev}\".rev=\"${rev}\""
-    --config "source.\"git+${url}?rev=${rev}\".replace-with=\"vendored-sources\""
-  )
-  LOCK_REVS+="${row}=${rev} "
-done
-SRC_CONFIG+=( --config 'source.vendored-sources.directory="vendor"' )
-
-# ── (1) RESOLUTION ──────────────────────────────────────────────────────────
-# The replacement stanzas mirror the release build (ci/repro/double-build.sh,
-# man-pages.yml): crates-io + one block per git source + vendored-sources.
-#
-# HERMETIC CARGO_HOME. Under `--offline`, a git source with no replacement stanza
-# resolves from ~/.cargo/git whenever that rev is cached there — which it always
-# is on a developer box that has built the tree. That is how check (1) passed
-# locally while CI (empty cache) failed "can't checkout ... you are in the
-# offline mode" after F-642 made md-codec a git dependency (F-675). An empty,
-# throwaway CARGO_HOME gives every run CI's empty cache, and also keeps a
-# developer's ~/.cargo/config.toml out of the resolution. Toolchains live under
-# RUSTUP_HOME, so the pinned toolchain is unaffected.
-HERMETIC_CARGO_HOME="$(mktemp -d)"
-trap 'rm -rf "$HERMETIC_CARGO_HOME"' EXIT
-
-echo "vendor-freshness: (1/4) resolving Cargo.lock against committed vendor/ (offline, locked, empty CARGO_HOME; git sources: ${LOCK_REVS% }) ..."
-if CARGO_HOME="$HERMETIC_CARGO_HOME" cargo metadata --format-version 1 --locked --offline "${SRC_CONFIG[@]}" >/dev/null; then
-  echo "vendor-freshness: (1/4) OK — vendor/ satisfies Cargo.lock."
-else
-  echo "::error::vendor/ is out of sync with Cargo.lock — the --offline --locked reproducible build" \
-       "cannot resolve a dependency from the committed vendor/ tree. Run 'cargo vendor vendor/' and" \
-       "commit the result (see docs/verify-reproducibility.md). This is the v0.74.0 release-CI failure" \
-       "class, now caught at PR time." >&2
-  exit 1
-fi
-
-# ── (2) INTEGRITY, (3) REGISTRY PROVENANCE, (4) GIT-FORK PROVENANCE ─────────
-# Pure content checks: no compile, no network, no toolchain. Measured at ~0.2s
-# for 168 crates / 7479 files, so every file is verified — nothing is sampled.
-GROUNDED="$(printf '%s\n' "${GROUNDED_GIT_SOURCES[@]}")" \
-LOCK_REVS="$LOCK_REVS" \
-python3 - <<'PY'
-import glob, hashlib, json, os, re, sys
-
-# dir -> (url, grounded rev, grounded manifest sha256)
-grounded = {}
-for row in os.environ["GROUNDED"].splitlines():
-    d, url, rev, sha = row.split("|")
-    grounded[d] = (url, rev, sha)
-lock_revs = dict(kv.split("=", 1) for kv in os.environ["LOCK_REVS"].split())
-
-def sha256_file(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
-
-errors = []
-
-manifests = sorted(glob.glob("vendor/*/.cargo-checksum.json"))
-if not manifests:
-    print("::error::vendor-freshness: no vendor/*/.cargo-checksum.json found — "
-          "is the vendor/ tree committed? Failing closed.", file=sys.stderr)
+def refuse(msg):
+    err(msg)
     sys.exit(1)
 
-# ── (2) INTEGRITY ──────────────────────────────────────────────────────────
-n_files = 0
-for cj in manifests:
-    crate_dir = os.path.dirname(cj)
-    try:
-        files = json.load(open(cj))["files"]
-    except Exception as exc:                       # malformed manifest is itself a defect
-        errors.append(f"{cj}: unreadable checksum manifest ({exc})")
+if len(sys.argv) > 1:
+    refuse(f"takes no arguments; got: {' '.join(sys.argv[1:])}")
+
+SOURCES = os.environ.get("VF_SOURCES") or "ci/repro/vendor-git-sources.txt"
+if not os.path.isfile(SOURCES):
+    refuse(f"data file {SOURCES} not found. Every repo keeps one; it holds only "
+           f"comments when Cargo.lock has no git source.")
+
+# ── the data file ───────────────────────────────────────────────────────────
+ROW = re.compile(r"^([A-Za-z0-9_.+-]+)\|(https://[^|\s]+)\|(\.|[A-Za-z0-9_.+-]+(?:/[A-Za-z0-9_.+-]+)*)$")
+rows = []          # (lineno, dir, url, sub)
+seen = {}
+for n, line in enumerate(open(SOURCES, encoding="utf-8").read().splitlines(), 1):
+    if line == "" or line.startswith("#"):
         continue
-    for rel, expected in files.items():
-        path = os.path.join(crate_dir, rel)
-        n_files += 1
-        if not os.path.isfile(path):
-            errors.append(f"{path}: MISSING (recorded in {cj})")
+    m = ROW.match(line)
+    if not m or ".." in m.group(3).split("/") or m.group(1) in (".", ".."):
+        refuse(f"{SOURCES}:{n}: malformed row '{line}'. A row is "
+               f"<vendor dir>|<url as in Cargo.lock>|<crate dir in upstream>: three "
+               f"fields, no spaces, an https:// url, and a crate dir that is '.' or a "
+               f"relative path without '..'.")
+    d, url, sub = m.groups()
+    if d in seen:
+        refuse(f"{SOURCES}:{n}: vendor dir '{d}' already has a row (line {seen[d]}).")
+    seen[d] = n
+    rows.append((n, d, url, sub))
+
+# ── the lock's git sources ──────────────────────────────────────────────────
+lock = open("Cargo.lock", encoding="utf-8").read()
+GIT = re.compile(r'^source = "git\+([^?"#]+)\?rev=([0-9a-f]{40})#([0-9a-f]{40})"$')
+lock_rev = {}      # url -> rev
+for line in lock.splitlines():
+    if not line.startswith('source = "git+'):
+        continue
+    m = GIT.match(line)
+    if not m or m.group(2) != m.group(3):
+        refuse(f"Cargo.lock has a git source not pinned by a 40-hex rev: "
+               f"{line[len('source = '):]}. Pin it with rev = \"<40-hex>\" or take "
+               f"it from crates.io. Failing closed.")
+    url, rev = m.group(1), m.group(2)
+    if url in lock_rev and lock_rev[url] != rev:
+        a, b = sorted((lock_rev[url], rev))
+        refuse(f"Cargo.lock pins {url} at more than one rev ({a}, {b}). This gate "
+               f"re-derives one rev per url. Failing closed.")
+    lock_rev[url] = rev
+
+row_urls = {url for _, _, url, _ in rows}
+for url in sorted(lock_rev):
+    if url not in row_urls:
+        refuse(f"Cargo.lock pins git source {url}?rev={lock_rev[url]}, which has no "
+               f"row in {SOURCES}. A git source has no published tarball digest, so "
+               f"only check (4) can verify its vendored bytes. Add a row "
+               f"(<vendor dir>|{url}|<crate dir in upstream>) or drop the source.")
+for n, d, url, _ in rows:
+    if url not in lock_rev:
+        refuse(f"{SOURCES}:{n}: row '{d}' names {url}, which Cargo.lock does not pin "
+               f"from git. Drop the row, so the gate's exemptions match the lock.")
+
+for tool in ("cargo", "git"):
+    if shutil.which(tool) is None:
+        refuse(f"{tool} not found on PATH.")
+
+os.makedirs("target", exist_ok=True)
+WORK = tempfile.mkdtemp(prefix="vendor-freshness.", dir="target")
+try:
+    # ── (1) RESOLUTION ──────────────────────────────────────────────────────
+    cfg = ["--config", 'source.crates-io.replace-with="vendored-sources"']
+    for url, rev in sorted(lock_rev.items()):
+        key = f'source."git+{url}?rev={rev}"'
+        cfg += ["--config", f'{key}.git="{url}"',
+                "--config", f'{key}.rev="{rev}"',
+                "--config", f'{key}.replace-with="vendored-sources"']
+    cfg += ["--config", 'source.vendored-sources.directory="vendor"']
+    pins = " ".join(f"{d}={lock_rev[url]}" for _, d, url, _ in sorted(rows, key=lambda r: r[1])) or "none"
+    print(f"vendor-freshness: (1/4) resolving Cargo.lock against committed vendor/ "
+          f"(offline, locked, empty CARGO_HOME; git sources: {pins}) ...", flush=True)
+    home = os.path.join(WORK, "cargo-home")
+    os.mkdir(home)
+    env = dict(os.environ, CARGO_HOME=os.path.abspath(home))
+    r = subprocess.run(["cargo", "metadata", "--format-version", "1", "--locked", "--offline", *cfg],
+                       env=env, stdout=subprocess.PIPE)
+    if r.returncode != 0:
+        refuse("vendor/ is out of sync with Cargo.lock: the --offline --locked release "
+               "build cannot resolve a dependency from the committed vendor/ tree. Run "
+               "'cargo vendor --locked vendor/' and commit the result. This is the "
+               "toolkit v0.74.0 release failure class, caught at PR time.")
+    print("vendor-freshness: (1/4) OK -- vendor/ satisfies Cargo.lock.", flush=True)
+    resolved = r.stdout  # the package graph, read again by check (4)
+
+    # ── (2) INTEGRITY ───────────────────────────────────────────────────────
+    def sha256_file(path):
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    errors = []
+    manifests = sorted(glob.glob("vendor/*/.cargo-checksum.json"))
+    if not manifests:
+        refuse("no vendor/*/.cargo-checksum.json found: is the vendor/ tree "
+               "committed? Failing closed.")
+    loaded = {}
+    n_files = 0
+    for cj in manifests:
+        crate_dir = os.path.dirname(cj)
+        try:
+            loaded[cj] = json.load(open(cj))
+            files = loaded[cj]["files"]
+        except Exception as exc:
+            errors.append(f"{cj}: unreadable checksum manifest ({exc})")
             continue
-        actual = sha256_file(path)
-        if actual != expected:
-            errors.append(
-                f"{path}: CONTENT MISMATCH\n"
-                f"      recorded {expected}\n"
-                f"      on disk  {actual}"
-            )
+        for rel, expected in files.items():
+            path = os.path.join(crate_dir, rel)
+            n_files += 1
+            if not os.path.isfile(path):
+                errors.append(f"{path}: MISSING (recorded in {cj})")
+                continue
+            actual = sha256_file(path)
+            if actual != expected:
+                errors.append(f"{path}: CONTENT MISMATCH\n"
+                              f"      recorded {expected}\n"
+                              f"      on disk  {actual}")
 
-# ── (3) REGISTRY PROVENANCE ────────────────────────────────────────────────
-lock = open("Cargo.lock").read()
-lock_ck = {}
-for block in lock.split("[[package]]")[1:]:
-    name = re.search(r'^name = "(.*)"$', block, re.M)
-    ver = re.search(r'^version = "(.*)"$', block, re.M)
-    ck = re.search(r'^checksum = "(.*)"$', block, re.M)
-    if name and ver:
-        lock_ck[(name.group(1), ver.group(1))] = ck.group(1) if ck else None
-
-anchored = 0
-unanchored = []
-for cj in manifests:
-    crate_dir = os.path.dirname(cj)
-    toml = open(os.path.join(crate_dir, "Cargo.toml")).read()
-    name = re.search(r'^name = "(.*)"$', toml, re.M)
-    ver = re.search(r'^version = "(.*)"$', toml, re.M)
-    if not (name and ver):
-        errors.append(f"{crate_dir}/Cargo.toml: could not read name/version")
-        continue
-    key = (name.group(1), ver.group(1))
-    pkg = json.load(open(cj)).get("package")
-    want = lock_ck.get(key)
-    if pkg is None or want is None:
-        # No published tarball to anchor against — a git/path source.
-        unanchored.append((os.path.basename(crate_dir), key))
-    elif pkg != want:
-        errors.append(
-            f"{crate_dir}: PROVENANCE MISMATCH for {key[0]} {key[1]}\n"
-            f"      .cargo-checksum.json package {pkg}\n"
-            f"      Cargo.lock checksum          {want}"
-        )
-    else:
-        anchored += 1
-
-# The ONLY crates allowed to lack a registry anchor are the grounded git sources.
-# A new unanchored source must fail closed rather than be silently exempted.
-unexpected = [d for d, _ in unanchored if d not in grounded]
-if unexpected:
-    errors.append(
-        "vendored crate(s) with NO offline provenance anchor and no grounding in "
-        "this gate: " + ", ".join(sorted(unexpected)) + "\n"
-        "      A git or path source cannot be checked against Cargo.lock (no published\n"
-        "      tarball digest). Ground it in GROUNDED_GIT_SOURCES, or drop it."
-    )
-
-# ── (4) GIT-FORK PROVENANCE ────────────────────────────────────────────────
-ok4 = []
-for d, (url, rev, want_sha) in sorted(grounded.items()):
-    manifest_path = os.path.join("vendor", d, ".cargo-checksum.json")
-    lock_rev = lock_revs.get(d)
-    if lock_rev is None:
-        errors.append(
-            f"{d}: grounded as a git source ({url}), but Cargo.lock no longer pins it\n"
-            f"      from git. Drop its row from GROUNDED_GIT_SOURCES in\n"
-            f"      ci/repro/vendor-freshness.sh, so the gate's exemptions match the lock."
-        )
-    elif not os.path.isfile(manifest_path):
-        errors.append(f"{manifest_path}: MISSING — cannot verify git-source provenance")
-    elif lock_rev != rev:
-        errors.append(
-            f"the {d} pin MOVED: Cargo.lock is at {lock_rev}, but this gate is\n"
-            f"      grounded at {rev}. The vendored tree cannot be verified against a\n"
-            f"      rev nobody has checked. Re-vendor, verify the tree against upstream at the\n"
-            f"      new rev, then update its GROUNDED_GIT_SOURCES row in\n"
-            f"      ci/repro/vendor-freshness.sh (see GROUNDING in its header)."
-        )
-    else:
-        actual = sha256_file(manifest_path)
-        if actual != want_sha:
-            errors.append(
-                f"{manifest_path}: GIT-SOURCE PROVENANCE MISMATCH\n"
-                f"      grounded {want_sha}\n"
-                f"      on disk  {actual}\n"
-                f"      The vendored {d} tree is not the one grounded against upstream\n"
-                f"      {rev}. This is the F-354 defect class: a tree vendored from the\n"
-                f"      wrong rev is self-consistent and passes every other check."
-            )
+    # ── (3) REGISTRY PROVENANCE ─────────────────────────────────────────────
+    lock_ck = {}
+    for block in lock.split("[[package]]")[1:]:
+        name = re.search(r'^name = "(.*)"$', block, re.M)
+        ver = re.search(r'^version = "(.*)"$', block, re.M)
+        ck = re.search(r'^checksum = "(.*)"$', block, re.M)
+        if name and ver:
+            lock_ck[(name.group(1), ver.group(1))] = ck.group(1) if ck else None
+    row_dirs = {d for _, d, _, _ in rows}
+    anchored = 0
+    unanchored = []
+    for cj in manifests:
+        if cj not in loaded:
+            continue
+        crate_dir = os.path.dirname(cj)
+        toml = open(os.path.join(crate_dir, "Cargo.toml"), encoding="utf-8").read()
+        name = re.search(r'^name = "(.*)"$', toml, re.M)
+        ver = re.search(r'^version = "(.*)"$', toml, re.M)
+        if not (name and ver):
+            errors.append(f"{crate_dir}/Cargo.toml: could not read name/version")
+            continue
+        key = (name.group(1), ver.group(1))
+        pkg = loaded[cj].get("package")
+        want = lock_ck.get(key)
+        if pkg is None or want is None:
+            unanchored.append(os.path.basename(crate_dir))
+        elif pkg != want:
+            errors.append(f"{crate_dir}: PROVENANCE MISMATCH for {key[0]} {key[1]}\n"
+                          f"      .cargo-checksum.json package {pkg}\n"
+                          f"      Cargo.lock checksum          {want}")
         else:
+            anchored += 1
+    unexpected = sorted(d for d in unanchored if d not in row_dirs)
+    if unexpected:
+        errors.append("vendored crate(s) with NO registry anchor and no row in "
+                      f"{SOURCES}: {', '.join(unexpected)}\n"
+                      "      A git or path source cannot be checked against Cargo.lock (no\n"
+                      "      published tarball digest). Add a row for it, or drop it.")
+    if errors:
+        err(f"{len(errors)} content defect(s) in vendor/:")
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"vendor-freshness: (2/4) OK -- {n_files} files across {len(manifests)} crates "
+          f"match their recorded sha256.")
+    print(f"vendor-freshness: (3/4) OK -- {anchored} crates anchored to Cargo.lock checksums; "
+          f"{len(unanchored)} git source(s) exempt by a row in {SOURCES} "
+          f"({', '.join(sorted(unanchored)) or 'none'}).", flush=True)
+
+    # ── (4) GIT-SOURCE PROVENANCE ───────────────────────────────────────────
+    if not rows:
+        print("vendor-freshness: (4/4) OK -- Cargo.lock has no git source; nothing to re-derive.")
+        sys.exit(0)
+    print(f"vendor-freshness: (4/4) re-deriving {len(rows)} git source(s) from upstream at "
+          f"the Cargo.lock rev ...", flush=True)
+    # The caller's GIT_* variables (GIT_DIR from a hook, say) never reach git.
+    genv = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    genv.update(GIT_TERMINAL_PROMPT="0", GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+
+    def git(*args):
+        return subprocess.run(["git", *args], env=genv, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True)
+
+    def version_of(toml):
+        m = re.search(r'^version = "([^"]+)"', toml, re.M)
+        return m.group(1) if m else "none"
+
+    def name_of(toml):
+        m = re.search(r'^name = "([^"]+)"', toml, re.M)
+        return m.group(1) if m else "none"
+
+    # The manifest as cargo reads it, limited to what a dependent's build
+    # compiles or sees. cargo vendor may drop dev-dependencies and example,
+    # test, bench and bin targets; that build never reads them.
+    BUILT = {"lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro", "custom-build"}
+    PKG_FIELDS = ("authors", "description", "edition", "features", "homepage", "license",
+                  "license_file", "links", "metadata", "readme", "repository", "rust_version")
+    DEP_FIELDS = ("name", "rename", "req", "kind", "target", "optional",
+                  "uses_default_features", "features")
+
+    def shape(p):
+        root = os.path.dirname(p["manifest_path"])
+        s = {f: p.get(f) for f in PKG_FIELDS}
+        s["dependencies"] = sorted(json.dumps({f: x.get(f) for f in DEP_FIELDS}, sort_keys=True)
+                                   for x in p["dependencies"] if x.get("kind") != "dev")
+        s["targets"] = sorted(json.dumps({"kind": t["kind"], "crate_types": t["crate_types"],
+                                          "name": t["name"], "edition": t["edition"],
+                                          "src_path": os.path.relpath(t["src_path"], root)},
+                                         sort_keys=True)
+                              for t in p["targets"] if BUILT & set(t["kind"]))
+        return s
+
+    def by_dir(meta):
+        return {os.path.realpath(os.path.dirname(p["manifest_path"])): p
+                for p in json.loads(meta)["packages"]}
+
+    vpkgs = by_dir(resolved)
+    # CARGO_HOME at the checkouts' parent: cargo's workspace search stops there,
+    # so an upstream crate outside any workspace never meets this repo's.
+    uenv = dict(env, CARGO_HOME=os.path.abspath(os.path.join(WORK, "upstream")))
+
+    CAP = 20
+    bad4 = []
+    ok4 = []
+    for _, d, url, sub in sorted(rows, key=lambda r: r[1]):
+        rev = lock_rev[url]
+        vend = os.path.join("vendor", d)
+        cj = os.path.join(vend, ".cargo-checksum.json")
+        if not os.path.isfile(cj):
+            bad4.append(f"vendor/{d}: missing")
+            continue
+        up = os.path.join(WORK, "upstream", d)
+        os.makedirs(up)
+        if (git("init", "-q", up).returncode != 0
+                or git("-C", up, "fetch", "-q", "--depth", "1", url, rev).returncode != 0
+                or git("-C", up, "-c", "advice.detachedHead=false", "checkout", "-q", "FETCH_HEAD").returncode != 0):
+            bad4.append(f"vendor/{d}: cannot fetch {url} at {rev}")
+            continue
+        if git("-C", up, "rev-parse", "HEAD").stdout.strip() != rev:
+            bad4.append(f"vendor/{d}: fetched HEAD is not {rev}")
+            continue
+        crate = os.path.join(up, sub)
+        if not os.path.isfile(os.path.join(crate, "Cargo.toml")):
+            bad4.append(f"vendor/{d}: {sub} is not a crate directory in {url} at {rev}")
+            continue
+        listed = set(json.load(open(cj))["files"])
+        on_disk = set()
+        for root, _, files in os.walk(vend):
+            for f in files:
+                rel = os.path.relpath(os.path.join(root, f), vend)
+                if rel != ".cargo-checksum.json":
+                    on_disk.add(rel)
+        found = []
+        if on_disk != listed:
+            diff = sorted(on_disk ^ listed)
+            found.append(f"file set differs from .cargo-checksum.json: {', '.join(diff[:10])}")
+        for rel in sorted(on_disk - {"Cargo.toml"}):
+            upstream = os.path.join(crate, rel)
+            if not os.path.isfile(upstream):
+                found.append(f"{rel}: not in upstream at {rev[:8]}")
+            elif open(upstream, "rb").read() != open(os.path.join(vend, rel), "rb").read():
+                found.append(f"{rel}: differs from upstream at {rev[:8]}")
+        vt = open(os.path.join(vend, "Cargo.toml"), encoding="utf-8").read()
+        ut = open(os.path.join(crate, "Cargo.toml"), encoding="utf-8").read()
+        if name_of(vt) != name_of(ut):
+            found.append(f"Cargo.toml: package name {name_of(vt)} is not upstream's {name_of(ut)}")
+        if version_of(vt) != version_of(ut) or version_of(ut) == "none":
+            found.append(f"Cargo.toml: version {version_of(vt)} is not upstream's {version_of(ut)}")
+        um = subprocess.run(["cargo", "metadata", "--no-deps", "--format-version", "1", "--offline",
+                             "--manifest-path", os.path.join(crate, "Cargo.toml")],
+                            env=uenv, capture_output=True, text=True)
+        vp = vpkgs.get(os.path.realpath(vend))
+        upk = by_dir(um.stdout).get(os.path.realpath(crate)) if um.returncode == 0 else None
+        if vp is None:
+            found.append("Cargo.toml: not a package in check (1)'s resolution")
+        elif upk is None:
+            why = (um.stderr.strip().splitlines() or ["no package there"])[0] if um.returncode else "no package there"
+            found.append(f"Cargo.toml: cargo metadata cannot read upstream's {sub}/Cargo.toml at {rev[:8]} ({why})")
+        else:
+            vs, us = shape(vp), shape(upk)
+            found += [f"Cargo.toml: '{f}' differs from upstream at {rev[:8]}" for f in sorted(vs) if vs[f] != us[f]]
+        if found:
+            bad4 += [f"vendor/{d}: {f}" for f in found[:CAP]]
+            if len(found) > CAP:
+                bad4.append(f"vendor/{d}: ... and {len(found) - CAP} more")
+        else:
+            print(f"vendor-freshness: (4/4) vendor/{d} matches {url} at {rev[:8]} "
+                  f"({len(on_disk)} files).")
             ok4.append(f"{d}@{rev[:8]}")
-
-if errors:
-    print(f"::error::vendor-freshness: {len(errors)} content defect(s) in vendor/:", file=sys.stderr)
-    for e in errors:
-        print(f"  - {e}", file=sys.stderr)
-    sys.exit(1)
-
-print(f"vendor-freshness: (2/4) OK — {n_files} files across {len(manifests)} crates match their recorded sha256.")
-print(f"vendor-freshness: (3/4) OK — {anchored} crates anchored to Cargo.lock checksums; "
-      f"{len(unanchored)} git source(s) exempt by grounding ({', '.join(sorted(d for d, _ in unanchored))}).")
-print(f"vendor-freshness: (4/4) OK — {', '.join(ok4)} match the trees grounded against upstream.")
+    if bad4:
+        err(f"(4/4) {len(bad4)} git-source defect(s): a vendored git source is not "
+            f"upstream's tree at the Cargo.lock rev. A tree vendored from another rev "
+            f"passes (1)-(3); only this check sees it (F-354).")
+        for b in bad4:
+            print(f"  - {b}", file=sys.stderr)
+        sys.exit(1)
+    print(f"vendor-freshness: (4/4) OK -- {', '.join(ok4)} re-derived from upstream.")
+finally:
+    shutil.rmtree(WORK, ignore_errors=True)
 PY
