@@ -6598,3 +6598,34 @@ screen printed. Print the values.
 - Companion: mnemonic-key design/FOLLOWUPS.md::vendor-freshness-shared
 - Companion: mnemonic-secret design/FOLLOWUPS.md::vendor-freshness-shared
 - Companion: descriptor-mnemonic design/FOLLOWUPS.md::vendor-freshness-shared
+
+### `mk-manual-exit-table-0-14` — 44-mk-cli.md's exit-code table is mk 0.13.0's, and omits 1 (architect 2026-11-13)
+- Surfaced: coordinator `agent-reports/architect-crash-sweep-exit-sets.md` Q3/Q4 E1 (mk-cli 2fc367c5 run).
+- What: replace the table at `44-mk-cli.md` L601-609 with rows 0 Success; 1 invalid artifact (an mk1, or a
+  `--from-md1` md1, the codec rejects, except a newer version) or an I/O error reading stdin or writing `--out`
+  (an unreadable `--in FILE` is 64); 2 `mk repair` only: unrepairable, or a corrected set that does not reassemble;
+  3 FutureFormat (`Error::UnsupportedVersion`); 4 verify content mismatch; 5 `mk repair` only: corrected;
+  64 usage. Set L586's example `"exit_code"` to 1. Lands with the F1 re-pin to mk 0.14.0, in the same commit.
+- Owner: F1 toolkit PR (status/release-followups.md F1); amends architect-release-f1.md L113-114.
+- Status: `open`, Important, blocks the F1 toolkit PR.
+- Tier: `docs`.
+
+### `ms-manual-exit-codes` — 43-ms.md gives no exit-code set for 11 of 12 verbs; repair omits 3 and 64 (architect 2026-11-13)
+- Surfaced: coordinator `agent-reports/architect-crash-sweep-exit-sets.md` Q1/Q4 E2 (ms-cli 548da55a run).
+- What: add an `## Exit codes` section listing 0, 1 (bad input / I/O / codex32 error / argv secret refused),
+  2 (ms1 format violation), 3 (reserved tag, newer format), 4 (verify phrase mismatch; repair Candidate), 64
+  (usage), with the per-verb sets of the report's Q1 table. Repair table L780-787: add 3 and 64. gen-man
+  L885-890: add 64.
+- Owner: the next toolkit docs cycle.
+- Status: `deferred-minor`.
+- Tier: `docs`.
+
+### `md-manual-exit-codes` — 42-md.md's repair and gen-man tables say I/O exits 1; it exits 2 (architect 2026-11-13)
+- Surfaced: coordinator `agent-reports/architect-crash-sweep-exit-sets.md` Q2/Q4 E3 (md-cli 6b70d5d9 run).
+- What: repair table L670-678: delete the `1` row and add "an I/O error reading the input" to the `2` row.
+  gen-man L786-791: the I/O row is `2`. Add an `## Exit codes` section: 0; 1 any refusal or codec error; 2 usage
+  error (clap) or bad argument, including I/O; 4 partial decode (decode, inspect); 5 repair corrected; md has no
+  64. Per-verb sets as in the report's Q2 table.
+- Owner: the next toolkit docs cycle.
+- Status: `deferred-minor`.
+- Tier: `docs`.
