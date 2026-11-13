@@ -6624,8 +6624,27 @@ screen printed. Print the values.
 - Surfaced: coordinator `agent-reports/architect-crash-sweep-exit-sets.md` Q2/Q4 E3 (md-cli 6b70d5d9 run).
 - What: repair table L670-678: delete the `1` row and add "an I/O error reading the input" to the `2` row.
   gen-man L786-791: the I/O row is `2`. Add an `## Exit codes` section: 0; 1 any refusal or codec error; 2 usage
-  error (clap) or bad argument, including I/O; 4 partial decode (decode, inspect); 5 repair corrected; md has no
+  error (clap) or bad argument, including I/O; 4 partial decode (decode, inspect); 5 repair corrected, or `descriptor --verify-against` when the two
+  are not spend-equal (coordinator `agent-reports/review-crash-sweep-ms-md-mk.md` M-B, md-cli run: rc 5); md has no
   64. Per-verb sets as in the report's Q2 table.
 - Owner: the next toolkit docs cycle.
 - Status: `deferred-minor`.
 - Tier: `docs`.
+
+### `ms-manual-when-stdout-fails` — at the ms re-pin carrying the output sink, `43-ms.md` states what ms does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the ms-cli release carrying mnemonic-secret `ms-output-sink`**)
+- Surfaced: coordinator agent-reports/grade-ms-md-output-errors.md section 4 (S1). Companion: mnemonic-secret design/FOLLOWUPS.md::ms-output-sink.
+- What: insert in docs/manual/src/40-cli-reference/43-ms.md, after its last line (today L890): blank, `---`, blank, `## When stdout fails`, blank, the paragraph of section 8 of mnemonic-secret `design/FIX_ms_output_sink.md` verbatim, in the same commit as the scripts/install.sh ms pin. Plain text, no (unreleased: …) marker.
+- Status: `open`.
+- Tier: `docs`, `cross-repo`.
+
+### `mk-manual-when-stdout-fails` — at the mk re-pin carrying the output sink, `44-mk-cli.md` states what mk does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the mk-cli release carrying mnemonic-key `mk-output-sink`**)
+- Surfaced: coordinator agent-reports/grade-ms-md-output-errors.md section 4 (S1). Companion: mnemonic-key design/FOLLOWUPS.md::mk-output-sink.
+- What: insert in docs/manual/src/40-cli-reference/44-mk-cli.md, after the last row of `## Exit codes` (today L609), the paragraph of section 8 of mnemonic-key `design/FIX_mk_output_sink.md` verbatim (the sentence above), in the same commit as the scripts/install.sh mk pin. Plain text, no (unreleased: …) marker.
+- Status: `open`.
+- Tier: `docs`, `cross-repo`.
+
+### `md-manual-when-stdout-fails` — at the md re-pin carrying the output sink, `42-md.md` states what md does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the md-cli release carrying descriptor-mnemonic `md-output-sink`**)
+- Surfaced: coordinator agent-reports/grade-ms-md-output-errors.md section 4 (S1). Companion: descriptor-mnemonic design/FOLLOWUPS.md::md-output-sink.
+- What: insert in docs/manual/src/40-cli-reference/42-md.md, after its last line (today L791: blank, `---`, blank, `## When stdout fails`, blank), the paragraph of section 8 of descriptor-mnemonic `design/FIX_md_output_sink.md` verbatim (the paragraph above), in the same commit as the scripts/install.sh md pin. Plain text, no (unreleased: …) marker.
+- Status: `open`.
+- Tier: `docs`, `cross-repo`.
