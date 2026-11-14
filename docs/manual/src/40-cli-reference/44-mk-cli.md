@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.15.0 --bin mk`.
+`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.16.0 --bin mk`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -443,6 +443,8 @@ mk verify \
 Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success, exits
 4 with a `ContentMismatch` error envelope when an expected-* flag
 disagrees with the decoded value.
+For a chunked card the `--json` envelope also carries `chunk_set_id`: `declared`, `derived`,
+`matches`, and `bundle_stamped` (true when the stamped id is the bundle id `mnemonic bundle` stamps).
 
 ---
 

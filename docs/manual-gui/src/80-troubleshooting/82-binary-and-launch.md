@@ -44,9 +44,9 @@ newer than these.
 
 The toolkit installer currently installs four CLI releases newer than
 this GUI was built against: `mnemonic-toolkit-v0.106.0` (the GUI's label
-reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.6`
+reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.7`
 (label `Pinned: md 0.20.3`), `ms-cli-v0.20.4` (label
-`Pinned: ms 0.20.1`) and `mk-cli-v0.15.0` (label `Pinned: mk 0.13.0`).
+`Pinned: ms 0.20.1`) and `mk-cli-v0.16.0` (label `Pinned: mk 0.13.0`).
 The forms run unchanged except one: on the `mk encode` form, the
 `--separator` dropdown's `hyphen` and `comma` are now refused (see
 below), so choose `space`. `mnemonic --version`, `md --version`,

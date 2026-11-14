@@ -6658,7 +6658,7 @@ screen printed. Print the values.
 ### `mk-chunk-set-id-warning-bundle-stamped` — mk 0.14.0+ warns on a `mnemonic bundle` card whose stamped chunk_set_id is the BIP's bundle id (repo: **mnemonic-key**, companion here; owning phase: **the next mk-cli release; the next toolkit mk pin waits for it**)
 - Surfaced: design/agent-reports/architect-pins-md-0.20.6-mk-0.15.0-stops.md S4 / FU1 (Important, against mk).
 - What: mk's chunk_set_id warning should stay silent on, or name as bundle-stamped, an id equal to the first stub's top 20 bits XOR a slot < 16 (the BIP's own note). Until then `qs-26-recover-mk1` carries the warning and a note telling holders not to re-mint. A companion entry goes in mnemonic-key design/FOLLOWUPS.md.
-- Status: `open`, Important (mk).
+- Status: `closed, by the pins commit of this PR (mk-cli-v0.16.0, md-cli-v0.20.7)`.
 - Tier: `cross-repo`.
 
 ### `pins-md-0.20.6-mk-0.15.0-deferred-minors` — Minors and a Nit from the architect rulings on toolkit#162
