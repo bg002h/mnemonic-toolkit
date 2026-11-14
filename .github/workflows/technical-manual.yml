@@ -164,7 +164,7 @@ jobs:
         # disambig). Current-release tier pin — mirrors manual.yml:79.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.15.0 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.16.0 mk-cli
 
       - name: Install md-cli
         if: steps.guard.outputs.relevant == 'true'
@@ -172,7 +172,7 @@ jobs:
         # (the technical-manual md1 transcripts exercise the compiler path).
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.6 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.7 md-cli --features cli-compiler
 
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'
