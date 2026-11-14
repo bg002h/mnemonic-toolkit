@@ -28,7 +28,7 @@ for this manual:
 - `ms-cli-v0.20.1`
 - `mk-cli-v0.13.0`
 
-The toolkit installer installs these, except `mnemonic`, `md` and `ms`, which it already
+The toolkit installer installs these, except `mnemonic`, `md`, `ms` and `mk`, which it already
 installs at newer releases (next section). Run each binary with
 `--version` to compare; the GUI does not check them for you. The GUI's
 secret channels were measured against exactly these binaries, so an
@@ -37,17 +37,18 @@ writes (for example `ms derive --passphrase @env:…` before `ms`
 0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
 fails (older releases reject its `--allow-argv-secret`). See
 [Version pinning](#version-pinning). Re-run the toolkit installer to
-put its releases in place; the next section lists the three it installs
+put its releases in place; the next section lists the four it installs
 newer than these.
 
 ## When the installer is ahead of the GUI {#installer-ahead}
 
-The toolkit installer currently installs three CLI releases newer than
+The toolkit installer currently installs four CLI releases newer than
 this GUI was built against: `mnemonic-toolkit-v0.106.0` (the GUI's label
-reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.4`
-(label `Pinned: md 0.20.3`) and `ms-cli-v0.20.4` (label
-`Pinned: ms 0.20.1`). The forms run unchanged, and `mnemonic --version`,
-`md --version` and `ms --version` printing the newer versions is expected.
+reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.6`
+(label `Pinned: md 0.20.3`), `ms-cli-v0.20.4` (label
+`Pinned: ms 0.20.1`) and `mk-cli-v0.15.0` (label `Pinned: mk 0.13.0`).
+The forms run unchanged, and `mnemonic --version`, `md --version`,
+`ms --version` and `mk --version` printing the newer versions is expected.
 
 Outputs differ, all on invalid or unusual input or on the recovery line
 of a card; none changes a derived wallet. First `mnemonic`, three
@@ -102,7 +103,30 @@ Then `ms`, five outputs:
   unchanged, and `ms verify` still prints `OK: valid future format
   (v0.2+, tag seed)` and exits 3.
 
-Last `md`, four outputs:
+Then `mk`, five outputs:
+
+- **`mk encode`.** The strings on stdout are now ungrouped, one per
+  line, with nothing else on stdout; the grouped engraving card (with
+  its `group size:` and `separator:` lines) goes to stderr, and the
+  output panel shows it there. `--group-size` and `--separator` shape
+  that card, not stdout.
+- **`mk encode` with `--separator`.** `hyphen` and `comma` (and the
+  literals `-` and `,`) are now refused (exit 64), with a message
+  naming `space`; choose `space`.
+- **An invalid card.** `mk decode`, `mk verify`, `mk inspect` and the
+  other reading verbs now exit 1 for an invalid card, where they
+  exited 2. `mk repair` still exits 2.
+- **Reading verbs on a chunked card.** `mk decode`, `mk inspect`,
+  `mk verify`, `mk derive` and `mk address` now warn on stderr when a
+  card's stamped `chunk_set_id` disagrees with the one derived from its
+  content, and `mk decode` and `mk verify` print a stderr note when
+  error correction fired; exit codes and stdout are unchanged.
+- **`mk address` on a multisig cosigner card.** Still refused
+  (exit 64); the message now says to derive the wallet's addresses
+  with `md address <MD1>... --from-mk1-file FILE`, where it pointed at
+  `mnemonic verify-bundle`.
+
+Last `md`, seven outputs:
 
 - **`md encode`.** `--fingerprint` takes hex digits only: `@0=+f+f+f+f`
   is now refused (`md: --fingerprint @0: invalid hex byte: +f`) where
@@ -127,6 +151,22 @@ Last `md`, four outputs:
   minted without `--fingerprint`), no longer prints the stderr note
   `key origins carried by this card …` and its `--path` hint. A card
   that carries the fingerprint still prints both.
+- **`md compile`, and `md encode` with `--from-policy`.** A policy that
+  nests more than 8 `or`s (for `--context tap`, inside one taproot
+  leaf) is now refused at exit 1 with a message naming the
+  `thresh(1,...)` rewrite, where it ran for minutes with no verdict.
+- **`md address` and `md descriptor` with `--from-mk1` or
+  `--from-mk1-file`.** An mk1 card whose xpub is of the other network
+  kind than `--network` is now refused (exit 1, naming the card and the
+  `--network` to re-run with: `md: seating refused: --from-mk1 card
+  <id>: its xpub is a testnet key, but --network says mainnet. …`),
+  where an address of the wrong network printed at exit 0. A testnet
+  card set needs `--network testnet`, `signet` or `regtest`.
+- **`md encode` of a concrete descriptor.** The remedy lines it
+  prints now run as printed: the `md decompose` lines carry
+  `--network <testnet|signet|regtest>` when every key is a `tpub`, and
+  no `md decompose` line is printed when a key is in another spelling
+  than `xpub`/`tpub`.
 
 ## When the GUI is older than the CLI
 
