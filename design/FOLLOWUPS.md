@@ -6678,3 +6678,15 @@ screen printed. Print the values.
 - What: `mnemonic bundle --descriptor/--descriptor-file` mints cosigner slots 0..=31 (md1 caps keys at 32; only the template paths cap at 16). The technical manual (`42-anti-collision-invariants.md`, `41-bundle-anatomy.md`) and comments in `synthesize.rs` and `cmd/bundle.rs` said the slot touches only the 5th hex char, the leading 16 bits are shared, and cards that disagree there are from different bundles. A 17-key bundle prints `# md1: 29bd` beside `@16: mk1:29bcc`. Brian ruled 2026-11-14: fix the docs; do NOT cap descriptor bundles at 16 keys. Now stated: the slot XORs bits 4..0, every card of one bundle shares the leading 15 bits, and the first four hex chars match md1 only for slots 0..15.
 - Status: `fixed in this PR`.
 - Tier: `toolkit`.
+
+### `tk163-review-minors` — Minors and Nits from the review of toolkit#163 (owning phase: **N1 the next synthesize.rs change; N2 the next technical-manual edit; M1 waits on `gui-slot-editor-index-0-15-vs-31`**)
+- Surfaced: 2026-11-14, toolkit#163 review (`design/agent-reports/review-tk-bundle-slots-docs.md`).
+- What: N1 (Nit): `crates/mnemonic-toolkit/src/synthesize.rs:94` doc line is 109 columns (the other new lines wrap near 80); rewrap the last paragraph. N2 (Nit): `41-bundle-anatomy.md:195` says "For a multisig bundle the shared prefix is the leading 15 bits"; for slots 0..15 it is 16. Say "at least the leading 15 bits". M1 (Minor): `docs/manual-gui/src/40-mnemonic/42-bundle.md:567` is true but silent that the CLI takes `@0..@31`; optional addition: "(the CLI accepts up to `@31` for descriptor bundles; see the GUI follow-up)". Do not add until the mnemonic-gui item is decided.
+- Status: `deferred-minor`.
+- Tier: `docs`.
+
+### `gui-slot-editor-index-0-15-vs-31` — slot-editor index spinner stops at @15; `mnemonic bundle --descriptor` takes @0..@31 (owning phase: **mnemonic-gui (parked 2026-11-09)**)
+- Surfaced: toolkit PR #163 review (review-tk-bundle-slots-docs).
+- What: mnemonic-gui v0.63.0 `src/form/slot_editor.rs:36` uses `egui::DragValue::new(&mut row.index).range(0u8..=15)`, so the GUI cannot enter `--slot @16..@31` for a 17..32-key descriptor bundle that the CLI accepts. Fix: widen to `0u8..=31` (check `SlotState.rows` u8 type and the render_emit/validation path) and update manual-gui `42-bundle.md:567` ("drag-value 0..31") in lockstep.
+- Status: `deferred` (gui parked).
+- Tier: `cross-repo`.
