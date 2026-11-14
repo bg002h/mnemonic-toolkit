@@ -55,7 +55,7 @@ component_info() {
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.20.4|md|cli-compiler"
             ;;
         ms)
-            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.20.2|ms|"
+            echo "ms-cli|https://github.com/bg002h/mnemonic-secret|ms-cli-v0.20.4|ms|"
             ;;
         mk)
             echo "mk-cli|https://github.com/bg002h/mnemonic-key|mk-cli-v0.13.0|mk|"

@@ -106,7 +106,7 @@ COMPONENT       CARGO_PACKAGE        FEATURES       GIT_TAG                     
 ---------       -------------        --------       -------                              ------
 mnemonic        mnemonic-toolkit     (none)         mnemonic-toolkit-v0.106.0            mnemonic-0.106.0-x86_64-linux-musl.tar.gz
 md              md-cli               cli-compiler   descriptor-mnemonic-md-cli-v0.20.4   md-0.20.4-linux-amd64.tar.gz
-ms              ms-cli               (none)         ms-cli-v0.20.2                       ms-0.20.2-x86_64-linux-musl.tar.gz
+ms              ms-cli               (none)         ms-cli-v0.20.4                       ms-0.20.4-x86_64-linux-musl.tar.gz
 mk              mk-cli               (none)         mk-cli-v0.13.0                       mk-0.13.0-x86_64-linux-musl.tar.gz
 mnemonic-gui    mnemonic-gui         (none)         mnemonic-gui-v0.63.0                 mnemonic-gui-v0.63.0-x86_64-linux.tar.gz
 ```
@@ -132,11 +132,11 @@ install  md (release descriptor-mnemonic-md-cli-v0.20.4: md-0.20.4-linux-amd64.t
   [dry-run] run 'md --version'; refuse unless it prints 'md 0.20.4'
   [dry-run] install /home/user/.cargo/bin/md
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/md" gen-man --out "/home/user/.local/share/man/man1"
-install  ms (release ms-cli-v0.20.2: ms-0.20.2-x86_64-linux-musl.tar.gz)
-  [dry-run] download https://github.com/bg002h/mnemonic-secret/releases/download/ms-cli-v0.20.2/ms-0.20.2-x86_64-linux-musl.tar.gz
+install  ms (release ms-cli-v0.20.4: ms-0.20.4-x86_64-linux-musl.tar.gz)
+  [dry-run] download https://github.com/bg002h/mnemonic-secret/releases/download/ms-cli-v0.20.4/ms-0.20.4-x86_64-linux-musl.tar.gz
   [dry-run] check that SHA256SUMS file's minisign signature (if minisign is installed); refuse a bad one
   [dry-run] verify its sha256 against the release's SHA256SUMS file; refuse on mismatch or no entry
-  [dry-run] run 'ms --version'; refuse unless it prints 'ms 0.20.2'
+  [dry-run] run 'ms --version'; refuse unless it prints 'ms 0.20.4'
   [dry-run] install /home/user/.cargo/bin/ms
   [dry-run] mkdir -p "/home/user/.local/share/man/man1" && "/home/user/.cargo/bin/ms" gen-man --out "/home/user/.local/share/man/man1"
 install  mk (release mk-cli-v0.13.0: mk-0.13.0-x86_64-linux-musl.tar.gz)

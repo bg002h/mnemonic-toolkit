@@ -113,8 +113,8 @@ md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.20.3"
 ms-cli-tag-implied  = "ms-cli-v0.20.1"
 mk-cli-tag-implied  = "mk-cli-v0.13.0"
 
-# The installer runs AHEAD of mnemonic-gui v0.63.0 on two CLIs: ms 0.20.2 (the
-# ms bug-hunt fixes) and md 0.20.4 (the md bug-hunt fixes) shipped before the
+# The installer runs AHEAD of mnemonic-gui v0.63.0 on two CLIs: ms 0.20.4 (the
+# ms bug-hunt and output fixes) and md 0.20.4 (the md bug-hunt fixes) shipped before the
 # GUI re-pinned to them. This manual keeps documenting the GUI's tier above;
 # the installer installs the tags below, and
 # src/80-troubleshooting/82-binary-and-launch.md's {#installer-ahead} section
@@ -124,4 +124,4 @@ mk-cli-tag-implied  = "mk-cli-v0.13.0"
 [installer-ahead]
 toolkit-tag-implied = "mnemonic-toolkit-v0.106.0"
 md-cli-tag-implied = "descriptor-mnemonic-md-cli-v0.20.4"
-ms-cli-tag-implied = "ms-cli-v0.20.2"
+ms-cli-tag-implied = "ms-cli-v0.20.4"

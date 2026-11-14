@@ -147,7 +147,7 @@ jobs:
         # Mirrors the mk-cli + md-cli install patterns above.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.2 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.4 ms-cli
 
       - name: Build mnemonic binary (debug)
         if: steps.guard.outputs.relevant == 'true'

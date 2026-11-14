@@ -45,7 +45,7 @@ newer than these.
 The toolkit installer currently installs three CLI releases newer than
 this GUI was built against: `mnemonic-toolkit-v0.106.0` (the GUI's label
 reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.4`
-(label `Pinned: md 0.20.3`) and `ms-cli-v0.20.2` (label
+(label `Pinned: md 0.20.3`) and `ms-cli-v0.20.4` (label
 `Pinned: ms 0.20.1`). The forms run unchanged, and `mnemonic --version`,
 `md --version` and `ms --version` printing the newer versions is expected.
 
@@ -73,7 +73,7 @@ outputs:
   envelope's descriptor, so `--threshold 1` on a 2-of-3 envelope prints
   `# Threshold: 2 of 3`, where it printed `1 of 3`.
 
-Then `ms`, three outputs:
+Then `ms`, five outputs:
 
 - **`ms inspect`.** A share at share index `s` (the secret itself,
   which `ms combine` refuses) now reads `FAIL: would NOT combine`,
@@ -88,6 +88,19 @@ Then `ms`, three outputs:
 - **`ms repair`.** A character outside the codex32 alphabet is now
   named (`error: invalid character 'b' (not in codex32 alphabet)`),
   where it used to be reported as a string-length error.
+- **`ms split` with `--out`.** A file that already exists (a
+  directory, a symlink or `/dev/null` too) is now refused before the
+  secret is read (exit 64, nothing written, the file left as it was):
+  `error: --out shares.txt already exists; a new share set will not
+  overwrite it (choose another file, or move the old one first)`,
+  where it was overwritten at exit 0. Choose a new file name.
+- **`ms decode`, `ms derive`, `ms hashlock` and `ms repair`.** An ms1
+  whose tag is reserved for a later format (`seed`, for example) still
+  exits 3 with nothing on stdout, and now prints `error: tag "seed"
+  reserved-not-emitted in v0.1; deferred to v0.2+` on stderr, where
+  the output panel showed nothing. With `--json` the output is
+  unchanged, and `ms verify` still prints `OK: valid future format
+  (v0.2+, tag seed)` and exits 3.
 
 Last `md`, four outputs:
 
