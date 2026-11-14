@@ -86,7 +86,7 @@ BIP-32's "public parent key → public child key" function: given an xpub (chain
 
 ## chunk_set_id binding (bundle)
 
-The cross-card bundle-level binding role of the **engraved** `chunk_set_id` identifiers: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`. The leading 16 bits agree across all three cards from one bundle. NB this is the engraved display identifier, distinct from the md1 *wire* `chunk_set_id` (the `Md1EncodingId`-derived chunk-grouping value below). Discussed §IV.2.
+The cross-card bundle-level binding role of the **engraved** `chunk_set_id` identifiers: md1 prints 4 hex chars (16 bits = `policy_id[0..2]`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`; ms1/mk1 print 5 hex chars (20 bits = `derive_mk1_chunk_set_id(policy_id[0..4])`) at `crates/mnemonic-toolkit/src/cmd/bundle.rs::build_unified_card`. The leading 15 bits agree across all the cards of one bundle (all 16 for single-sig and for multisig slots 0..15; a slot 16..31 card flips the lowest bit of the fourth hex char). NB this is the engraved display identifier, distinct from the md1 *wire* `chunk_set_id` (the `Md1EncodingId`-derived chunk-grouping value below). Discussed §IV.2.
 
 ## codex32
 
