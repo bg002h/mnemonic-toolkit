@@ -8,6 +8,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Installer pins: md 0.20.7 and mk 0.16.0
+
+- **`scripts/install.sh` installs md 0.20.7 and mk 0.16.0** (tags `descriptor-mnemonic-md-cli-v0.20.7`
+  and `mk-cli-v0.16.0`). A card `mnemonic bundle` makes no longer prints a chunk-set-id warning in `mk` or `md`.
+  `mk decode`, `inspect`, `verify`, `derive`, `address` and `repair` and `md descriptor --from-mk1` and
+  `md address` stay silent on it, and `mk verify --json` gains `chunk_set_id.bundle_stamped`. The pins are mirrored in
+  `manual.yml`, `quickstart.yml`, `technical-manual.yml` and `cross-tool-differential.yml`; the Examples
+  golden shows them; `first_signed` for md stays `0.20.4` and for mk stays `0.14.0`. The quickstart and
+  manual recovery text no longer tells the reader to expect the warning, the `qs-26-recover-mk1` transcript
+  is regenerated without it, and the `mk verify` section names the `chunk_set_id` envelope. The GUI manual
+  stays on mnemonic-gui v0.63.0's tier (md 0.20.3, mk 0.13.0): its §82 section names the new tags, and
+  `manual-gui.yml` stays at the GUI's tags.
+
 ### Installer pins: md 0.20.6 and mk 0.15.0
 
 - **`scripts/install.sh` installs md 0.20.6 and mk 0.15.0** (tags `descriptor-mnemonic-md-cli-v0.20.6`

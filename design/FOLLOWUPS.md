@@ -6658,7 +6658,7 @@ screen printed. Print the values.
 ### `mk-chunk-set-id-warning-bundle-stamped` — mk 0.14.0+ warns on a `mnemonic bundle` card whose stamped chunk_set_id is the BIP's bundle id (repo: **mnemonic-key**, companion here; owning phase: **the next mk-cli release; the next toolkit mk pin waits for it**)
 - Surfaced: design/agent-reports/architect-pins-md-0.20.6-mk-0.15.0-stops.md S4 / FU1 (Important, against mk).
 - What: mk's chunk_set_id warning should stay silent on, or name as bundle-stamped, an id equal to the first stub's top 20 bits XOR a slot < 16 (the BIP's own note). Until then `qs-26-recover-mk1` carries the warning and a note telling holders not to re-mint. A companion entry goes in mnemonic-key design/FOLLOWUPS.md.
-- Status: `open`, Important (mk).
+- Status: `closed, by the pins commit of this PR (mk-cli-v0.16.0, md-cli-v0.20.7)`.
 - Tier: `cross-repo`.
 
 ### `pins-md-0.20.6-mk-0.15.0-deferred-minors` — Minors and a Nit from the architect rulings on toolkit#162
@@ -6690,3 +6690,9 @@ screen printed. Print the values.
 - What: mnemonic-gui v0.63.0 `src/form/slot_editor.rs:36` uses `egui::DragValue::new(&mut row.index).range(0u8..=15)`, so the GUI cannot enter `--slot @16..@31` for a 17..32-key descriptor bundle that the CLI accepts. Fix: widen to `0u8..=31` (check `SlotState.rows` u8 type and the render_emit/validation path) and update manual-gui `42-bundle.md:567` ("drag-value 0..31") in lockstep.
 - Status: `deferred` (gui parked).
 - Tier: `cross-repo`.
+
+### `tk164-review-minors` — Minors and Nits from the review of toolkit#164 (owning phase: **N1 the mnemonic-gui mk re-pin (GUI tier)**)
+- Surfaced: 2026-11-14, toolkit#164 review (`design/agent-reports/review-pins-md-0.20.7-mk-0.16.0.md`).
+- What: N1 (Nit): `docs/manual-gui/pinned-upstream.toml` comment describes mk 0.16.0 as "the mk output and uniformity changes" and does not name the chunk-set-id change (bundle cards no longer warn); name it when the GUI tier moves to mk 0.16.0, together with `82-binary-and-launch.md:122-132`. M1 (wait for pending CI before merge) is met by the land-queue's CI wait; N2 and N3 need no action (precedent form; ruled text).
+- Status: `deferred-minor`.
+- Tier: `docs`.
