@@ -6053,7 +6053,7 @@ screen printed. Print the values.
   4. update the version in the marker-convention paragraph (`44-mk-cli.md:16-18`) to the new pin if any marker survives, or drop the paragraph if none remains (the lint scans only table rows, so this prose goes stale with no error);
   5. run `make lint` and `ci/doc-flag-lint.test.sh` with the TAGGED binaries for the NEW pin: `cargo install --root <dir> --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v<new> mk-cli`, check `<dir>/.crates.toml` shows `?tag=`, then set all four of `MNEMONIC_BIN`, `MD_BIN`, `MS_BIN`, `MK_BIN` (the script aborts if any is unset), with `MK_BIN=<dir>/bin/mk`. Do not use a local dev build.
   Changing `.github/` needs Brian's typed go-ahead naming the change.
-- **Status:** `open`
+- **Status:** `closed, by the fold commit of toolkit#162 (pins md-cli-v0.20.6, mk-cli-v0.15.0)`
 - **Tier:** `build`
 
 ### `ci-hardening-r1-deferred-minors` — Minors and Nits deferred from the CI hardening plan review r1
@@ -6607,7 +6607,7 @@ screen printed. Print the values.
   3 FutureFormat (`Error::UnsupportedVersion`); 4 verify content mismatch; 5 `mk repair` only: corrected;
   64 usage. Set L586's example `"exit_code"` to 1. Lands with the F1 re-pin to mk 0.14.0, in the same commit.
 - Owner: F1 toolkit PR (status/release-followups.md F1); amends architect-release-f1.md L113-114.
-- Status: `open`, Important, blocks the F1 toolkit PR.
+- Status: `closed, by the fold commit of toolkit#162 (pins md-cli-v0.20.6, mk-cli-v0.15.0)`.
 - Tier: `docs`.
 
 ### `ms-manual-exit-codes` — 43-ms.md gives no exit-code set for 11 of 12 verbs; repair omits 3 and 64 (architect 2026-11-13)
@@ -6646,11 +6646,29 @@ screen printed. Print the values.
 ### `mk-manual-when-stdout-fails` — at the mk re-pin carrying the output sink, `44-mk-cli.md` states what mk does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the mk-cli release carrying mnemonic-key `mk-output-sink`**)
 - Surfaced: coordinator agent-reports/grade-ms-md-output-errors.md section 4 (S1). Companion: mnemonic-key design/FOLLOWUPS.md::mk-output-sink.
 - What: insert in docs/manual/src/40-cli-reference/44-mk-cli.md, after the last row of `## Exit codes` (today L609), the paragraph of section 8 of mnemonic-key `design/FIX_mk_output_sink.md` verbatim (the sentence above), in the same commit as the scripts/install.sh mk pin. Plain text, no (unreleased: …) marker.
-- Status: `open`.
+- Status: `closed, by the fold commit of toolkit#162 (pins md-cli-v0.20.6, mk-cli-v0.15.0)`.
 - Tier: `docs`, `cross-repo`.
 
 ### `md-manual-when-stdout-fails` — at the md re-pin carrying the output sink, `42-md.md` states what md does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the md-cli release carrying descriptor-mnemonic `md-output-sink`**)
 - Surfaced: coordinator agent-reports/grade-ms-md-output-errors.md section 4 (S1). Companion: descriptor-mnemonic design/FOLLOWUPS.md::md-output-sink.
 - What: insert in docs/manual/src/40-cli-reference/42-md.md, after its last line (today L791: blank, `---`, blank, `## When stdout fails`, blank), the paragraph of section 8 of descriptor-mnemonic `design/FIX_md_output_sink.md` verbatim (the paragraph above), in the same commit as the scripts/install.sh md pin. Plain text, no (unreleased: …) marker.
-- Status: `open`.
+- Status: `closed, by the fold commit of toolkit#162 (pins md-cli-v0.20.6, mk-cli-v0.15.0)`.
 - Tier: `docs`, `cross-repo`.
+
+### `mk-chunk-set-id-warning-bundle-stamped` — mk 0.14.0+ warns on a `mnemonic bundle` card whose stamped chunk_set_id is the BIP's bundle id (repo: **mnemonic-key**, companion here; owning phase: **the next mk-cli release; the next toolkit mk pin waits for it**)
+- Surfaced: design/agent-reports/architect-pins-md-0.20.6-mk-0.15.0-stops.md S4 / FU1 (Important, against mk).
+- What: mk's chunk_set_id warning should stay silent on, or name as bundle-stamped, an id equal to the first stub's top 20 bits XOR a slot < 16 (the BIP's own note). Until then `qs-26-recover-mk1` carries the warning and a note telling holders not to re-mint. A companion entry goes in mnemonic-key design/FOLLOWUPS.md.
+- Status: `open`, Important (mk).
+- Tier: `cross-repo`.
+
+### `pins-md-0.20.6-mk-0.15.0-deferred-minors` — Minors and a Nit from the architect rulings on toolkit#162
+- Surfaced: design/agent-reports/architect-pins-md-0.20.6-mk-0.15.0-stops.md (FU2-FU4).
+- What: FU2 Minor (mk): `mk encode --help` `--group-size` still says "in each emitted mk1 string" (stdout is unbroken since 0.14.0). FU3 Nit (mk): `mk inspect` labels a derived id "(stamped)". FU4 Minor (toolkit lint): flag-coverage checks flag names only, so value lists (such as `--separator` values) drift silently.
+- Status: `deferred-minor`.
+- Tier: `ownerless`.
+
+### `pins-md-0.20.6-mk-0.15.0-review-minors` — Minors and Nits from the whole-diff review of toolkit#162
+- Surfaced: design/agent-reports/review-pins-md-0.20.6-mk-0.15.0.md (M1, M2, N1, N2).
+- What: M1 (Minor): 44-mk-cli.md JSON error-envelope example shows `"exit_code": 1` only; `mk repair --json` on an uncorrectable card gives 2: add "(2 for `mk repair`)" to the example's lead-in. M2 (Minor): docs/manual/tests/lint.sh:105 comment still cites `(unreleased: mk-cli after 0.13.0: --in)` as its example of the marker form. N1 (Nit): `ci/doc-flag-lint.test.sh` R2 and R4 expect the same text (R4 can still fail). N2 (Nit): scripts/install.sh:183-188 comment has one over-long line.
+- Status: `deferred-minor`.
+- Tier: `ownerless`.

@@ -28,8 +28,8 @@ for this manual:
 - `ms-cli-v0.20.1`
 - `mk-cli-v0.13.0`
 
-The toolkit installer installs these, except `mnemonic`, `md` and `ms`, which it already
-installs at newer releases (next section). Run each binary with
+The toolkit installer installs newer releases of all four (next
+section). Run each binary with
 `--version` to compare; the GUI does not check them for you. The GUI's
 secret channels were measured against exactly these binaries, so an
 older release can misread or refuse the channel spellings the GUI
@@ -37,20 +37,25 @@ writes (for example `ms derive --passphrase @env:…` before `ms`
 0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
 fails (older releases reject its `--allow-argv-secret`). See
 [Version pinning](#version-pinning). Re-run the toolkit installer to
-put its releases in place; the next section lists the three it installs
+put its releases in place; the next section lists the four it installs
 newer than these.
 
 ## When the installer is ahead of the GUI {#installer-ahead}
 
-The toolkit installer currently installs three CLI releases newer than
+The toolkit installer currently installs four CLI releases newer than
 this GUI was built against: `mnemonic-toolkit-v0.106.0` (the GUI's label
-reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.4`
-(label `Pinned: md 0.20.3`) and `ms-cli-v0.20.4` (label
-`Pinned: ms 0.20.1`). The forms run unchanged, and `mnemonic --version`,
-`md --version` and `ms --version` printing the newer versions is expected.
+reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.6`
+(label `Pinned: md 0.20.3`), `ms-cli-v0.20.4` (label
+`Pinned: ms 0.20.1`) and `mk-cli-v0.15.0` (label `Pinned: mk 0.13.0`).
+The forms run unchanged except one: on the `mk encode` form, the
+`--separator` dropdown's `hyphen` and `comma` are now refused (see
+below), so choose `space`. `mnemonic --version`, `md --version`,
+`ms --version` and `mk --version` printing the newer versions is
+expected.
 
-Outputs differ, all on invalid or unusual input or on the recovery line
-of a card; none changes a derived wallet. First `mnemonic`, three
+Outputs differ, mostly on invalid or unusual input or on the recovery
+line of a card, and `mk encode` now prints its grouped card on stderr;
+none changes a derived wallet. First `mnemonic`, three
 outputs:
 
 - **`bundle` with `--import-json`, and `export-wallet` with
@@ -102,7 +107,42 @@ Then `ms`, five outputs:
   unchanged, and `ms verify` still prints `OK: valid future format
   (v0.2+, tag seed)` and exits 3.
 
-Last `md`, four outputs:
+Then `mk`, seven outputs:
+
+- **`mk encode`.** stdout now carries only the unbroken strings, one
+  per line; the grouped engraving card, then `group size:` and
+  `separator:` lines, goes to stderr. `--group-size` and `--separator`
+  shape that card, not stdout. With `--json`, the card also names its
+  `origin_fingerprint` and `origin_path`.
+- **`mk encode` with `--separator`.** `hyphen` and `comma` (and the
+  literals `-` and `,`) are now refused (exit 64), with a message
+  naming `--separator space`.
+- **An invalid card.** `mk decode`, `mk verify`, `mk inspect`,
+  `mk derive` and `mk address` now exit 1 for an invalid card, where
+  they exited 2. `mk repair` still exits 2.
+- **A chunked card.** `mk inspect` now ends with a
+  `chunk_set_id: <id> (stamped)` line. When the stamped id is not the
+  one derived from the card's content, as on every mk1 card
+  `mnemonic bundle` makes, `mk decode`, `mk inspect`, `mk verify`,
+  `mk derive` and `mk address` print a stderr `warning: this key
+  card's stamped chunk-set id (…) was not derived from its content,
+  …` that ends by advising a re-mint, and `mk verify` repeats it on
+  stdout after its `OK:` line; exit codes are unchanged. A bundle card
+  is stamped from its wallet's policy id on purpose: do not re-mint
+  it.
+- **A card that error correction repaired.** `mk decode` and
+  `mk verify` now print a stderr `note: BCH error-correction repaired
+  this card while decoding -- chunk <i>: <n> correction(s). …` that
+  names `mk repair`; exit codes and stdout are unchanged.
+- **`mk verify` with several stubs.** `--policy-id-stub` (or
+  `--from-md1`) values given in another order than the card's now
+  pass (exit 0, with a stderr note), where they failed at exit 4.
+- **`mk address` on a multisig cosigner card.** Still refused
+  (exit 64); the message now says to derive the wallet's addresses
+  with `md address <MD1>... --from-mk1-file FILE`, where it pointed at
+  `mnemonic verify-bundle`.
+
+Last `md`, seven outputs:
 
 - **`md encode`.** `--fingerprint` takes hex digits only: `@0=+f+f+f+f`
   is now refused (`md: --fingerprint @0: invalid hex byte: +f`) where
@@ -127,6 +167,25 @@ Last `md`, four outputs:
   minted without `--fingerprint`), no longer prints the stderr note
   `key origins carried by this card …` and its `--path` hint. A card
   that carries the fingerprint still prints both.
+- **`md compile`, and `md encode` with `--from-policy`.** A policy that
+  nests more than 8 `or`s (for `--context tap`, inside one taproot
+  leaf) is now refused at exit 1 with a message naming the
+  `thresh(1,...)` rewrite, where it compiled in a time that doubles
+  with each further `or`.
+- **`md address` and `md descriptor` with `--from-mk1` or
+  `--from-mk1-file`.** An mk1 card whose xpub is of the other network
+  kind than `--network` is now refused (exit 1, naming the card and the
+  `--network` to re-run with: `md: seating refused: --from-mk1 card
+  <id>: its xpub is a testnet key, but --network says mainnet. …`),
+  where an address of the wrong network printed at exit 0. A testnet
+  card set needs `--network testnet`, `signet` or `regtest`.
+- **`md encode` of a concrete descriptor.** The remedy lines it
+  prints now run as printed: the `md decompose` lines carry
+  `--network <testnet|signet|regtest>` when every key is a `tpub`; no
+  `md decompose` line is printed when a key is in another spelling
+  than `xpub`/`tpub` (the message says to export the descriptor again
+  with xpub or tpub keys); and only the `--emit template` line is
+  printed when a key carries no `[fingerprint/path]` origin.
 
 ## When the GUI is older than the CLI
 

@@ -70,7 +70,11 @@ the toolkit re-assembles them and verifies the BCH checksum on each.
 Alternatively, `mk decode <mk1-string-1> <mk1-string-2>` recovers
 the same fields directly from the standalone `mk-cli` binary
 without bundling the entire toolkit (useful on minimal-surface
-recovery machines).
+recovery machines). On a bundle's mk1 card it also prints a
+`warning:` that the card's stamped chunk-set id was not derived from
+its content: expected, because the bundle stamps the id from the
+wallet's policy id, so it matches the ids the bundle printed for its
+cards. The card decodes correctly; do not re-mint or re-engrave it.
 
 ## Step 3 — re-derive the descriptor from md1
 

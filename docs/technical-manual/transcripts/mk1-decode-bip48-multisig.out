@@ -1,3 +1,4 @@
+warning: this key card's stamped chunk-set id (12345) was not derived from its content, which computes 83bb2. The card decodes fine, but diagnostics that name plates by id will call it 12345. To fix it, re-mint: run mk encode again without --chunk-set-id and the id is derived from the key data automatically.
 xpub:                xpub6Den8YwXbKQvkwukmx7Uukicw4qDgMEPuuUkhMp3Rn557YSN2uVQnCMQNSfgDtennU9nES3Wbbmz1LAPBydhNpED8NU4mf1SFF41hM7vFrc
 origin_fingerprint:  aabbccdd
 origin_path:         48'/0'/0'/2'

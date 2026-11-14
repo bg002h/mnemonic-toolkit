@@ -349,7 +349,7 @@ Decoder bytecode-layer steps (`crates/mk-codec/src/bytecode/decode.rs`):
 5. **xpub_compact** (73 bytes). Version `04 88 b2 1e` (mainnet xpub) → reconstruct `Xpub` with `depth = 3` (path component count) and `child_number = 0h` (last path component).
 6. **Trailing bytes check**: cursor empty. Pass.
 
-The decoded `KeyCard` round-trips through `mk decode` to the human-readable form shown in the transcript at `transcripts/mk1-decode-bip84-no-fingerprint.{cmd,out}`.
+The decoded `KeyCard` round-trips through `mk decode` to the human-readable form shown in the transcript at `transcripts/mk1-decode-bip84-no-fingerprint.{cmd,out}`. Both corpus vectors pin their `chunk_set_id` (`0x12345`, `0x45678`) rather than deriving it from the payload, which an encoder may do; `mk` 0.14.0 and later therefore print a `warning:` that the stamped id was not derived from the content (the derived values are `83bb2` and `c5afb`, the top 20 bits of each vector's `SHA-256(bytecode)`).
 
 ## Cross-references
 

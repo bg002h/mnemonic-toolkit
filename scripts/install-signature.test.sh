@@ -68,7 +68,7 @@ installer_copy() {
         /^\*\|\|\|/ { while ((getline l < kf) > 0) print l; n++; next }
         { print }
         END { if (n != 1) exit 1 }' "$REAL_SH" |
-    sed -e "s|^        mk)           echo \"\" ;;\$|        mk)           echo \"$_first\" ;;|" > "$T/install.sh"
+    sed -e "s|^        mk)           echo \"[0-9.]*\" ;;\$|        mk)           echo \"$_first\" ;;|" > "$T/install.sh"
     for _l in "$@"; do
         grep -qxF "$_l" "$T/install.sh" || { echo "signing_keys rewrite did not apply: $_l" >&2; exit 1; }
     done

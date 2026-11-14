@@ -9,13 +9,9 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.13.0 --bin mk`.
+`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.15.0 --bin mk`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
-
-A flag row marked **(unreleased: mk-cli after 0.13.0: --flag)** documents a flag that
-is on mnemonic-key's `main` but not in the released mk-cli 0.13.0 this manual
-is verified against; the released binary rejects it.
 
 ---
 
@@ -40,16 +36,16 @@ mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --pri
 | `--origin-path <PATH>` | derivation path (e.g., `m/84'/0'/0'`) |
 | `--policy-id-stub <HEX>` | 8 hex chars (4 bytes) for one stub; repeatable |
 | `--from-md1 <MD1-STRING>` | derive a stub from an md1 wallet-policy string; repeatable |
-| `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` (unreleased: mk-cli after 0.13.0: --from-md1-set) |
-| `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored (unreleased: mk-cli after 0.13.0: --keys) |
-| `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive (unreleased: mk-cli after 0.13.0: --in) |
-| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; overwrites an existing file (operator ruling 2026-08-26) (unreleased: mk-cli after 0.13.0: --out) |
+| `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` |
+| `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored |
+| `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive |
+| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; overwrites an existing file (operator ruling 2026-08-26) |
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint`; a single-card encode needs one of the two (exit 64 otherwise) |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
 | `--chunk-set-id <HEX>` | pin the 20-bit `chunk_set_id` (`0x` prefix optional) instead of deriving it from the payload. Chunked output only. A value over 20 bits is refused, not truncated. Rarely needed: since mk-codec 0.5.0 the derived default is already deterministic, so re-encoding a card reproduces its strings byte for byte. |
-| `--group-size <N>` | mstring display grouping: insert a separator every N characters in each emitted `mk1` string; `0` = unbroken (default 5). Display only — `--json` stays unbroken. Separator-stripping on intake means grouped/unbroken cards both re-ingest on `decode`/`verify`/etc. |
-| `--separator <space\|hyphen\|comma>` | the grouping separator for `--group-size` (default `space`); keyword or the literal `-` / `,` or a space. |
+| `--group-size <N>` | grouping for the **stderr engraving card**: a separator every N characters (default 5; `0` = unbroken). Since mk-cli 0.14.0 stdout always carries the unbroken mk1 strings, and so does `--json`. Separator-stripping on intake means grouped and unbroken cards both re-ingest on `decode`/`verify`/etc. |
+| `--separator <space>` | the engraving card's separator for `--group-size`: `space` (keyword, the default) or the literal `" "`. Whitespace only: `hyphen` and `comma` (and the literals `-` and `,`) are refused (exit 64); a card already grouped with them still decodes |
 | `--json` | emit a single JSON object on stdout |
 
 At least one of `--policy-id-stub` or `--from-md1` is required (the
@@ -71,19 +67,28 @@ derives the stub from a wallet-policy md1 string instead of taking the
 
 ### Output
 
-Text mode emits one mk1 string per line, one per chunk. JSON mode emits
-a `{ "schema_version", "mk1_strings", "chunk_count", "code_variant" }`
-object (the per-call `mk1_strings` values are elided here — `mk encode`
-randomizes the chunk-set identifier, so they differ run to run):
+Text mode prints only the artifact on stdout: one unbroken mk1 string
+per line, one per chunk. The engraving card goes to stderr: the same
+strings grouped by `--group-size` and `--separator`, then
+`group size:` and `separator:` lines, then the watch-only note. JSON
+mode emits a `{ "schema_version", "mk1_strings", "chunk_count",
+"code_variant", "origin_fingerprint", "origin_path" }` object (the
+`mk1_strings` values are elided here; the chunk-set identifier is
+derived from the card's content, so the same inputs print the same
+strings every run):
 
 ```json
 {
   "schema_version": 1,
   "mk1_strings": ["mk1...", "mk1..."],
   "chunk_count": 2,
-  "code_variant": "long"
+  "code_variant": "long",
+  "origin_fingerprint": "73c5da0a",
+  "origin_path": "84'/0'/0'"
 }
 ```
+
+`origin_fingerprint` is `null` for a `--privacy-preserving` card.
 
 `code_variant` is `regular` or `long` per the BCH-code dispatch.
 
@@ -131,15 +136,15 @@ from stdin.
 
 | Flag | Purpose |
 |---|---|
-| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit JSON output |
 
 ### Worked example
 
 ```sh
 mk decode \
-  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
-  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx
+  mk1qpu9e2pqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qyle5zxl62t28hpv \
+  mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx
 ```
 
 ### Output
@@ -180,7 +185,7 @@ mk inspect [OPTIONS] <MK1-STRING>...
 
 | Flag | Purpose |
 |---|---|
-| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit JSON output |
 
 ### Output
@@ -188,7 +193,8 @@ mk inspect [OPTIONS] <MK1-STRING>...
 Text mode emits the full decode fields plus the structural commentary
 (`xpub_fingerprint` — the fingerprint *of the card's xpub*, distinct
 from the master `origin_fingerprint`; the spelled-out path components;
-and the per-chunk BCH variant):
+the per-chunk BCH variant; and, for a chunked card, a last
+`chunk_set_id:` line giving the id stamped in its headers):
 
 ```{.text include="44-mk-inspect-text.out"}
 ```
@@ -238,7 +244,7 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Flag | Purpose |
 |---|---|
 | `[MK1_STRINGS]...` | one or more mk1 strings to attempt to repair; use `-` to read one string per line from stdin |
-| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form report; shares the `RepairJson` fields with `mnemonic repair --json` (whose toolkit envelope is a superset since Cycle F — see above) |
 | `--help` | print help |
 
@@ -326,7 +332,7 @@ valid one.
 # recovery workflow (only this plate is legible; the sibling chunk is
 # not being supplied) — so the group is INCOMPLETE and the correction
 # below is an UNVERIFIED candidate per Set-level re-verify above.
-mk repair mk1qp0wrvpqqsqaatd7aqeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq
+mk repair mk1qpu9e2pqqsqaatd7aqeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qyle5zxl62t28hpv
 ```
 
 Stdout (the corrected string is on the LAST line; comment lines
@@ -407,9 +413,9 @@ mk verify [OPTIONS] <MK1-STRING>...
 | `--xpub <EXPECTED-XPUB>` | assert decoded xpub equals this |
 | `--origin-fingerprint <EXPECTED-HEX>` | assert decoded fingerprint equals this |
 | `--origin-path <EXPECTED-PATH>` | assert decoded path equals this |
-| `--policy-id-stub <HEX>` | assert decoded stubs match this set; repeatable, order-sensitive |
-| `--from-md1 <MD1-STRING>` | derive expected stub from md1 string; repeatable, order-sensitive |
-| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
+| `--policy-id-stub <HEX>` | assert decoded stubs match this set; repeatable, in any order (a stderr note says when the card carries them in another order) |
+| `--from-md1 <MD1-STRING>` | derive expected stub from md1 string; repeatable, in any order (a stderr note says when the card carries them in another order) |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit a JSON envelope on stdout |
 
 Without any expected-* flags, `mk verify` performs BCH-checksum and
@@ -430,8 +436,8 @@ mk verify \
   --xpub xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V \
   --origin-fingerprint 73c5da0a \
   --origin-path "m/84'/0'/0'" \
-  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
-  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx
+  mk1qpu9e2pqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qyle5zxl62t28hpv \
+  mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx
 ```
 
 Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success, exits
@@ -481,7 +487,7 @@ single-sig account depth** (`m/44'`→`p2pkh`, `49'`→`p2sh-p2wpkh`, `84'`→`p
 not at account depth requires the explicit flag (and prints a stderr advisory
 that addresses are derived relative to the card's xpub). Multisig-cosigner cards
 (`m/48'`/`m/87'`) are **refused** — single-key addresses would not match the
-wallet; use descriptor tooling instead.
+wallet; derive its addresses with `md address <MD1>... --from-mk1-file FILE` (the md1 policy card, and every cosigner's mk1 card in FILE; for testnet cards add `--network testnet`, `--network signet` or `--network regtest`) instead.
 
 ### Synopsis
 
@@ -500,15 +506,15 @@ Use `-` as a positional argument to read one mk1 string per line from stdin.
 | `--range <A,B>` | inclusive index range `A..=B`, at most 1000000 indices; conflicts with `--count` |
 | `--chain <WHICH>` | `receive` (default) \| `change` \| `both` |
 | `--network <NET>` | `mainnet` \| `testnet` \| `signet` \| `regtest`; defaults to the xpub's version bytes and must agree with its network kind |
-| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit JSON output |
 
 ### Worked example
 
 ```sh
 mk address \
-  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
-  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx \
+  mk1qpu9e2pqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qyle5zxl62t28hpv \
+  mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx \
   --count 3
 ```
 
@@ -550,15 +556,15 @@ mk1 strings from stdin.
 |---|---|
 | `--path <REL>` | relative derivation path, unhardened only (e.g. `m/0/5`) |
 | `--index <N>` | single external-chain index — sugar for `--path m/0/<N>` |
-| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests (unreleased: mk-cli after 0.13.0: --in) |
+| `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit JSON output |
 
 ### Worked example
 
 ```sh
 mk derive \
-  mk1qp0wrvpqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8q82lnyqx86wgywhq \
-  mk1qp0wrvpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dmhwpm2qxcz3xrx \
+  mk1qpu9e2pqqsqaatd7aaeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qyle5zxl62t28hpv \
+  mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx \
   --path m/0/5
 ```
 
@@ -583,7 +589,7 @@ In `--json` mode, errors are emitted as a structured envelope:
   "error": {
     "kind": "<error-kind-name>",
     "message": "<human-readable>",
-    "exit_code": 2,
+    "exit_code": 1,
     "details": { }
   }
 }
@@ -603,10 +609,14 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 | Code | Meaning |
 |---|---|
 | 0 | Success. |
-| 2 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. |
+| 1 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. Also an I/O error reading stdin, or writing `mk vectors --out` / `mk gen-man --out` (an unreadable `--in FILE` and an unwritable `mk encode --out FILE` are `64`). |
+| 2 | `mk repair` only: unrepairable, or a reassembly mismatch (see [`mk repair`](#mk-repair)'s exit codes). |
 | 3 | FutureFormat — string is well-formed but its declared version is newer than this tool. Maps to `Error::UnsupportedVersion`. |
 | 4 | Verify content mismatch (only `mk verify` with expected-* flags emits this). |
+| 5 | `mk repair` only: at least one string corrected (see [`mk repair`](#mk-repair)'s exit codes). |
 | 64 | CLI usage error per clap convention (unrecognized flag, missing required argument, etc.). |
+
+A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code.
 
 ## `mk gui-schema`
 

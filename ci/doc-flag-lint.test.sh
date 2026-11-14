@@ -162,32 +162,55 @@ CMP='40-cli-reference/42-md.md'
 MK='40-cli-reference/44-mk-cli.md'
 MS='40-cli-reference/43-ms.md'
 
+# The marker cases do not depend on a real unreleased row existing: each plants
+# a synthetic one in the temp copy, in the mk encode flag table, with a flag no
+# pinned binary defines and a marker naming the version the pinned binary
+# reports (the lint's PINNED, read the same way). M0 proves the plant alone
+# passes; each R case then breaks one thing in it.
+MD_PIN=$("$MD_BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+MK_PIN=$("$MK_BIN" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+[ -n "$MD_PIN" ] && [ -n "$MK_PIN" ] || { echo "FAIL setup: cannot read the md/mk versions"; exit 1; }
+PLANT_ANCHOR='| `--json` | emit a single JSON object on stdout |'
+PLANT_ROW="| \`--future-flag <X>\` | a flag newer than the pinned release (unreleased: mk-cli after $MK_PIN: --future-flag) |"
+PLANT="edit_file('$MK', '''$PLANT_ANCHOR''', '''$PLANT_ROW\n$PLANT_ANCHOR''')"
+
+src=$(fresh); python3 - "$src" <<EOF2 || { echo "FAIL M0: the plant did not apply"; exit 1; }
+import sys
+p = sys.argv[1] + '/$MK'; s = open(p).read(); a = '''$PLANT_ANCHOR'''
+if s.count(a) != 1: raise SystemExit("plant anchor not found exactly once")
+open(p, 'w').write(s.replace(a, '''$PLANT_ROW\n''' + a))
+EOF2
+out=$(step4 "$(run_lint "$src")")
+if ! grep -qF '[lint] FAIL' <<<"$out" && grep -qF "[lint] exempt: --future-flag in 44-mk-cli.md (mk encode), unreleased after mk-cli $MK_PIN" <<<"$out"; then
+  pass=$((pass + 1)); echo "ok   M0 control: the planted unreleased row passes and is exempted"
+else fail=$((fail + 1)); echo "FAIL M0 control: the planted unreleased row is not accepted"; grep -F '[lint] FAIL' <<<"$out" | head -5; fi
+
 mutate "R1 reverse: a documented --no-such-flag row in md compose" \
   "edit_file('$CMP', '| \`--md-only\` |', '| \`--no-such-flag\` | a flag md compose does not have |\n| \`--md-only\` |')" \
   "flag --no-such-flag is documented for \`md compose\`"
 
 mutate "R2 reverse: an unreleased marker naming the wrong version" \
-  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0: --in)', '(unreleased: mk-cli after 0.12.0: --in)')" \
+  "$PLANT; edit_file('$MK', 'after $MK_PIN: --future-flag)', 'after 0.0.1: --future-flag)')" \
   "does not name the pinned release"
 
 mutate "R3 reverse: a stale marker on a flag the pinned binary defines" \
-  "edit_file('$CMP', '| \`--md-only\` | compose even', '| \`--md-only\` | (unreleased: md-cli after 0.20.4: --md-only) compose even')" \
+  "edit_file('$CMP', '| \`--md-only\` | compose even', '| \`--md-only\` | (unreleased: md-cli after $MD_PIN: --md-only) compose even')" \
   "stale marker"
 
 mutate "R4 reverse: an unreleased row with its marker removed" \
-  "edit_file('$MK', ' (unreleased: mk-cli after 0.13.0: --in) |', ' |')" \
-  "but the pinned binary does not define it"
+  "$PLANT; edit_file('$MK', ' (unreleased: mk-cli after $MK_PIN: --future-flag) |', ' |')" \
+  "flag --future-flag is documented for \`mk encode\` in 44-mk-cli.md but the pinned binary does not define it"
 
 mutate "R5 reverse (fix1 NEW-2): a fake flag added to a MARKED row's cell" \
-  "edit_file('$MK', '| \`--keys <FILE>\` |', '| \`--keys <FILE>\`, \`--bogus-forever\` |')" \
+  "$PLANT; edit_file('$MK', '| \`--future-flag <X>\` |', '| \`--future-flag <X>\`, \`--bogus-forever\` |')" \
   "flag --bogus-forever is documented for \`mk encode\`"
 
 mutate "R6 reverse (fix1 NEW-2): a marker naming a flag its row does not document" \
-  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0: --keys)', '(unreleased: mk-cli after 0.13.0: --keys, --no-such-flag)')" \
+  "$PLANT; edit_file('$MK', ': --future-flag)', ': --future-flag, --no-such-flag)')" \
   "names --no-such-flag, which that row does not document"
 
 mutate "R7 reverse (fix1 NEW-2): the old row-wide marker form (no flag named)" \
-  "edit_file('$MK', '(unreleased: mk-cli after 0.13.0: --keys)', '(unreleased: mk-cli after 0.13.0)')" \
+  "$PLANT; edit_file('$MK', 'after $MK_PIN: --future-flag)', 'after $MK_PIN)')" \
   "names no flag"
 
 mutate "C1 completeness: md compose dropped from cli-subcommands.list" \

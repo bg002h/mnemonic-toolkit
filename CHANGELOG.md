@@ -8,6 +8,30 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Installer pins: md 0.20.6 and mk 0.15.0
+
+- **`scripts/install.sh` installs md 0.20.6 and mk 0.15.0** (tags `descriptor-mnemonic-md-cli-v0.20.6`
+  and `mk-cli-v0.15.0`). md 0.20.6: `md compile` and `md encode --from-policy` refuse a policy nesting more than
+  8 `or`s (exit 1), `md address` and `md descriptor` refuse an mk1 card of the other network kind than
+  `--network` (exit 1), the remedy lines md prints run as printed, and a stdout that cannot take the output
+  exits 1 as `md: cannot write the output: <error>`. mk 0.14.0 and 0.15.0: `mk encode` prints the strings
+  ungrouped with the grouped card on stderr, `--separator` is whitespace-only, an invalid card exits 1,
+  the reading verbs warn when a stamped `chunk_set_id` disagrees with the derived one, `mk address` of a
+  multisig cosigner card prints a command that runs, and a stdout that cannot take the output exits 1. The pins are mirrored in
+  `manual.yml`, `quickstart.yml`, `technical-manual.yml` and `cross-tool-differential.yml`; the Examples
+  golden shows them; `first_signed` for md stays `0.20.4` and for mk becomes `0.14.0` (the first signed mk
+  release; 0.15.0 is signed). The manual's `md compile` section states the 8-`or` bound, its `md address`
+  `--network` row states the mk1 network check, and the `mk` chapter's cosigner-card sentence names the
+  `md address` command and drops its `(unreleased: mk-cli after 0.13.0)` markers. The GUI manual stays on mnemonic-gui
+  v0.63.0's tier (md 0.20.3, mk 0.13.0): its §82 section names the new tags and their outputs, and
+  `manual-gui.yml` stays at the GUI's tags.
+- The 44-mk worked-example card is re-minted with mk 0.15.0, and the `44-mk-*` transcripts are regenerated with it.
+- The mk transcripts are regenerated with mk 0.15.0: the bundle and test-vector cards show the `chunk_set_id` warning.
+- The `doc-flag-lint` marker cases are re-based on a planted row (`ci/doc-flag-lint.test.sh`).
+- `43-ms.md` `--separator` rows match ms 0.20.4 (space only).
+- The manual's *When stdout fails* text is added for md (`42-md.md`) and mk (`44-mk-cli.md`).
+- The mk exit-code table is re-pinned to mk 0.15.0: exit 1 for a bad card, exit 5 for a `mk repair` correction, exit 64 for an unreadable `--in`.
+
 ### Installer pins: ms 0.20.4
 
 - **`scripts/install.sh` installs ms 0.20.4**: `ms split --out FILE` refuses an existing
