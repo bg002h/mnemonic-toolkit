@@ -609,7 +609,7 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 | Code | Meaning |
 |---|---|
 | 0 | Success. |
-| 1 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. Also an I/O error reading stdin or writing `--out` (an unreadable `--in FILE` is `64`). |
+| 1 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. Also an I/O error reading stdin, or writing `mk vectors --out` / `mk gen-man --out` (an unreadable `--in FILE` and an unwritable `mk encode --out FILE` are `64`). |
 | 2 | `mk repair` only: unrepairable, or a reassembly mismatch (see [`mk repair`](#mk-repair)'s exit codes). |
 | 3 | FutureFormat — string is well-formed but its declared version is newer than this tool. Maps to `Error::UnsupportedVersion`. |
 | 4 | Verify content mismatch (only `mk verify` with expected-* flags emits this). |

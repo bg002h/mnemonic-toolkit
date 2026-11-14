@@ -6666,3 +6666,9 @@ screen printed. Print the values.
 - What: FU2 Minor (mk): `mk encode --help` `--group-size` still says "in each emitted mk1 string" (stdout is unbroken since 0.14.0). FU3 Nit (mk): `mk inspect` labels a derived id "(stamped)". FU4 Minor (toolkit lint): flag-coverage checks flag names only, so value lists (such as `--separator` values) drift silently.
 - Status: `deferred-minor`.
 - Tier: `ownerless`.
+
+### `pins-md-0.20.6-mk-0.15.0-review-minors` — Minors and Nits from the whole-diff review of toolkit#162
+- Surfaced: design/agent-reports/review-pins-md-0.20.6-mk-0.15.0.md (M1, M2, N1, N2).
+- What: M1 (Minor): 44-mk-cli.md JSON error-envelope example shows `"exit_code": 1` only; `mk repair --json` on an uncorrectable card gives 2: add "(2 for `mk repair`)" to the example's lead-in. M2 (Minor): docs/manual/tests/lint.sh:105 comment still cites `(unreleased: mk-cli after 0.13.0: --in)` as its example of the marker form. N1 (Nit): `ci/doc-flag-lint.test.sh` R2 and R4 expect the same text (R4 can still fail). N2 (Nit): scripts/install.sh:183-188 comment has one over-long line.
+- Status: `deferred-minor`.
+- Tier: `ownerless`.
