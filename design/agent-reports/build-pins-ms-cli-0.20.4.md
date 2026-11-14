@@ -2,7 +2,7 @@
 
 Base: origin/master 67470572a2e74568c3b2875819deab891da9fc90 (did not move at fetch). Branch `pins/ms-cli-v0.20.4`.
 Worktree: /scratch/cache/wt-toolkit-pins-ms-0.20.4. Logs: /scratch/cache/toolkit-pins-ms-0.20.4-logs/.
-Head / PR number: see the final lines (filled after push).
+PR: #159 (draft) https://github.com/bg002h/mnemonic-toolkit/pull/159. Content head 1cb763ae; this report gets a final PR-number commit on top (see `git log`).
 
 ## What was done (pins and texts)
 - Pin texts applied with the architect's `apply.py` (read-only, run from outside against this tree: tag `ms-cli-v0.20.4`, version `0.20.4`): install.sh:58, the three workflow mirrors (manual.yml, quickstart.yml, technical-manual.yml), pinned-upstream.toml (:127 and :116-117), 82-binary-and-launch.md (:48, :76, the two `{#installer-ahead}` ms bullets = A/B9), 43-ms.md (A1 `--out` paragraph, A2 split row, A3/Q5 *When stdout fails*). Applied by a one-off script (logs/docs.py): CHANGELOG.md and docs/manual-gui/CHANGELOG.md entries (report texts), design/FOLLOWUPS.md (`ms-manual-when-stdout-fails` closed; `ms-split-out-refuses-existing-manual` filed `open`).
