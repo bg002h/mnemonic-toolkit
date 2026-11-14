@@ -85,10 +85,13 @@ pub(crate) fn derive_mk1_chunk_set_id(stub: &[u8; 4]) -> u32 {
 /// per-fingerprint derivation) collide into one group and decode fails (audit
 /// I10). XOR is injective in `slot` ⇒ pairwise-distinct csi for distinct slots.
 ///
-/// The slot index (≤ 15; cosigner count is capped at 16) only touches the low
-/// nibble (bits 3..0 = the 5th hex char), so the **leading 16 bits**
-/// (= `policy_id[0..2]`, the bundle-binding prefix shared with md1) are
-/// preserved across all cosigners. For n=1 (slot 0) this is byte-identical to
+/// The slot index runs 0..=31 (md1 caps a policy at 32 keys; the descriptor
+/// path mints every slot, only the template paths cap at 16 cosigners), so it
+/// touches bits 4..0: the 5th hex char and the lowest bit of the 4th. The
+/// **leading 15 bits** (bits 19..5, the bundle-binding prefix shared with md1)
+/// are preserved across all cosigners. For slots 0..=15 the leading 16 bits
+/// (= `policy_id[0..2]`, md1's four hex chars) are preserved too; for slots
+/// 16..=31 the 4th hex char differs from md1's by its lowest bit. For n=1 (slot 0) this is byte-identical to
 /// `derive_mk1_chunk_set_id`. Unifies the single-sig and multisig derivations
 /// (resolves the prior n=1-stub vs n≥2-fingerprint inconsistency).
 pub(crate) fn derive_mk1_chunk_set_id_for_slot(stub: &[u8; 4], slot: u32) -> u32 {

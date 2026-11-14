@@ -1211,8 +1211,9 @@ fn emit_template_order_warning<E: Write>(template_desc: &md_codec::Descriptor, s
     }
     // Order-dependent: exactly one of N! assignments reproduces the wallet.
     // `checked` guards a pathological descriptor with a huge placeholder count
-    // (a panic in an advisory must never abort the bundle emit); n is realistically
-    // ≤ 16 (the multisig slot cap), so the overflow arm is defensive only.
+    // (a panic in an advisory must never abort the bundle emit); n can reach 32
+    // (md1's key cap, via `--descriptor --md1-form template`), and 21! overflows
+    // u64, so the overflow arm is live for 21..=32 placeholders.
     let factorial: Option<u64> = (1..=n).try_fold(1u64, |acc, k| acc.checked_mul(k));
     let count = match factorial {
         Some(f) => format!("{n}! = {f}"),
@@ -1394,9 +1395,10 @@ fn build_unified_card(args: &BundleArgs, bundle: &Bundle, resolved: &[ResolvedSl
         .map(|(i, s)| {
             // ms1 and mk1 for slot i share the SLOT-aware chunk_set_id
             // (audit I10 / n1-vs-nge2): base = policy-stub-derived, XOR slot i.
-            // The leading 16 bits (first 4 hex) are shared across all slots
-            // (bundle-binding prefix); only the 5th hex char varies by slot —
-            // matching what synthesize actually emits per cosigner.
+            // The leading 15 bits are shared across all slots (bundle-binding
+            // prefix); the slot (0..=31) XORs into bits 4..0, so the 5th hex char
+            // varies by slot and, for slots 16..=31, so does the lowest bit of the
+            // 4th — matching what synthesize actually emits per cosigner.
             // #28 — same WalletPolicyId-vs-template-id discrimination as the
             // md1 prefix above; reuse the reassembled descriptor's binding stub.
             let slot_csi_5hex = match reassembled_descriptor

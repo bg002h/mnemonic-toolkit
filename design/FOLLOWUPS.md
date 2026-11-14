@@ -6672,3 +6672,9 @@ screen printed. Print the values.
 - What: M1 (Minor): 44-mk-cli.md JSON error-envelope example shows `"exit_code": 1` only; `mk repair --json` on an uncorrectable card gives 2: add "(2 for `mk repair`)" to the example's lead-in. M2 (Minor): docs/manual/tests/lint.sh:105 comment still cites `(unreleased: mk-cli after 0.13.0: --in)` as its example of the marker form. N1 (Nit): `ci/doc-flag-lint.test.sh` R2 and R4 expect the same text (R4 can still fail). N2 (Nit): scripts/install.sh:183-188 comment has one over-long line.
 - Status: `deferred-minor`.
 - Tier: `ownerless`.
+
+### `bundle-slot-docs-16-vs-32` — the bundle-id docs and comments said cosigner slots run 0-15; `bundle --descriptor` mints 0-31
+- Surfaced: coordinator agent-reports/grade-mk-chunk-set-id-bundle.md (graded 2026-11-14, Important).
+- What: `mnemonic bundle --descriptor/--descriptor-file` mints cosigner slots 0..=31 (md1 caps keys at 32; only the template paths cap at 16). The technical manual (`42-anti-collision-invariants.md`, `41-bundle-anatomy.md`) and comments in `synthesize.rs` and `cmd/bundle.rs` said the slot touches only the 5th hex char, the leading 16 bits are shared, and cards that disagree there are from different bundles. A 17-key bundle prints `# md1: 29bd` beside `@16: mk1:29bcc`. Brian ruled 2026-11-14: fix the docs; do NOT cap descriptor bundles at 16 keys. Now stated: the slot XORs bits 4..0, every card of one bundle shares the leading 15 bits, and the first four hex chars match md1 only for slots 0..15.
+- Status: `fixed in this PR`.
+- Tier: `toolkit`.
