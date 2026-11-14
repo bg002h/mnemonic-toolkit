@@ -86,7 +86,7 @@ pub(crate) fn derive_mk1_chunk_set_id(stub: &[u8; 4]) -> u32 {
 /// I10). XOR is injective in `slot` ⇒ pairwise-distinct csi for distinct slots.
 ///
 /// The slot index runs 0..=31 (md1 caps a policy at 32 keys; the descriptor
-/// path mints every slot, only the template paths cap at 16 cosigners), so it
+/// path mints every slot, only `--template` multisig caps at 16 cosigners), so it
 /// touches bits 4..0: the 5th hex char and the lowest bit of the 4th. The
 /// **leading 15 bits** (bits 19..5, the bundle-binding prefix shared with md1)
 /// are preserved across all cosigners. For slots 0..=15 the leading 16 bits
@@ -542,7 +542,7 @@ pub fn synthesize_descriptor(
             );
             // Slot-unique csi (audit I10): per-fingerprint derivation collided
             // for same-xpub-different-path cosigners. stub^slot is distinct per
-            // slot and preserves the leading-16-bit bundle-binding prefix.
+            // slot and preserves the leading-15-bit bundle-binding prefix.
             let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
             let chunks =
                 mk_codec::encode_with_chunk_set_id(&card, csi).map_err(ToolkitError::from)?;
@@ -1136,7 +1136,7 @@ fn synthesize_template_descriptor(
                 mk1_origin_path(&c.xpub, &c.path),
                 c.xpub,
             );
-            // Slot-unique csi (audit I10): stub^slot preserves the leading-16-bit
+            // Slot-unique csi (audit I10): stub^slot preserves the leading-15-bit
             // bundle-binding prefix while distinguishing same-xpub slots.
             let csi = derive_mk1_chunk_set_id_for_slot(&stub, i as u32);
             let chunks =
