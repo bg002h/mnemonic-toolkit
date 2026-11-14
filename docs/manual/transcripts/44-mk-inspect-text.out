@@ -9,3 +9,4 @@ policy_id_stubs:     deadbeef
 chunks:              2
   chunk[0]:           long (BCH variant)
   chunk[1]:           regular (BCH variant)
+chunk_set_id:        e172a (stamped)

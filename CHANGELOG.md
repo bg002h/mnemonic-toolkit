@@ -25,6 +25,12 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `md address` command and drops its `(unreleased: mk-cli after 0.13.0)` markers. The GUI manual stays on mnemonic-gui
   v0.63.0's tier (md 0.20.3, mk 0.13.0): its §82 section names the new tags and their outputs, and
   `manual-gui.yml` stays at the GUI's tags.
+- The 44-mk worked-example card is re-minted with mk 0.15.0, and the `44-mk-*` transcripts are regenerated with it.
+- The mk transcripts are regenerated with mk 0.15.0: the bundle and test-vector cards show the `chunk_set_id` warning.
+- The `doc-flag-lint` marker cases are re-based on a planted row (`ci/doc-flag-lint.test.sh`).
+- `43-ms.md` `--separator` rows match ms 0.20.4 (space only).
+- The manual's *When stdout fails* text is added for md (`42-md.md`) and mk (`44-mk-cli.md`).
+- The mk exit-code table is re-pinned to mk 0.15.0: exit 1 for a bad card, exit 5 for a `mk repair` correction, exit 64 for an unreadable `--in`.
 
 ### Installer pins: ms 0.20.4
 

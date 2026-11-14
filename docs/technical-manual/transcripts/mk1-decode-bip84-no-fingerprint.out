@@ -1,3 +1,4 @@
+warning: this key card's stamped chunk-set id (45678) was not derived from its content, which computes c5afb. The card decodes fine, but diagnostics that name plates by id will call it 45678. To fix it, re-mint: run mk encode again without --chunk-set-id and the id is derived from the key data automatically.
 xpub:                xpub6BmeGmSNQzwjso6raQ8ea1aioo7PfaivP5sPryaBZT57AjX3eYRGTyc2T8stCLcQKnA4Pw3a5FA5iChz37gUuJbo5cwqvXdNebE5WBfWeHx
 origin_fingerprint:  (omitted, privacy-preserving mode)
 origin_path:         84'/0'/0'

@@ -52,7 +52,13 @@ Output:
 ```
 
 `mk decode` reassembles the two strings, verifies the BCH checksum
-on each, and emits the decoded card fields. `mk-cli` is the
+on each, and emits the decoded card fields. The `warning:` line is
+expected on every card `mnemonic bundle` makes: the bundle stamps the
+card's chunk-set id from the wallet's policy id, so it matches the ids
+the bundle printed (`# ms1: 1c017`, `# mk1: 1c017`, `# md1: 1c01`),
+where `mk encode` derives the id from the card's content. The card
+decodes correctly. Do not re-mint or re-engrave it: a re-minted card
+would lose the id it shares with its bundle. `mk-cli` is the
 minimal-surface tool for mk1 recovery: it has no secret-material
 dependencies, so it is the cleanest binary to install on an
 air-gapped recovery machine.
