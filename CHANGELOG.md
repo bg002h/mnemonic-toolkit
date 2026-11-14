@@ -8,6 +8,17 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Installer pins: ms 0.20.4
+
+- **`scripts/install.sh` installs ms 0.20.4**: `ms split --out FILE` refuses an existing
+  FILE (exit 64) instead of replacing a share set, the remedy lines ms prints run as printed,
+  a stdout that cannot be written exits 1 with `ms: cannot write the output: <error>`, and a
+  reserved-tag ms1 says why it exits 3. The ms pin is mirrored in `manual.yml`, `quickstart.yml`
+  and `technical-manual.yml`; the Examples golden shows the new pin; `first_signed` for ms stays
+  `0.20.2`. The manual's `ms` chapter describes the release (`--out`, `split --out`, *When
+  stdout fails*). The GUI manual stays on mnemonic-gui v0.63.0's tier (ms 0.20.1): its §82
+  section names the new tag and its two new outputs, and `manual-gui.yml` stays at the GUI's tags.
+
 ## mnemonic-toolkit [0.106.0] — 2026-11-04
 
 ### Inconsistent import-json envelopes are refused

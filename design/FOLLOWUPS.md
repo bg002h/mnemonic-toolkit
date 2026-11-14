@@ -6634,7 +6634,13 @@ screen printed. Print the values.
 ### `ms-manual-when-stdout-fails` — at the ms re-pin carrying the output sink, `43-ms.md` states what ms does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the ms-cli release carrying mnemonic-secret `ms-output-sink`**)
 - Surfaced: coordinator agent-reports/grade-ms-md-output-errors.md section 4 (S1). Companion: mnemonic-secret design/FOLLOWUPS.md::ms-output-sink.
 - What: insert in docs/manual/src/40-cli-reference/43-ms.md, after its last line (today L890): blank, `---`, blank, `## When stdout fails`, blank, the paragraph of section 8 of mnemonic-secret `design/FIX_ms_output_sink.md` verbatim, in the same commit as the scripts/install.sh ms pin. Plain text, no (unreleased: …) marker.
-- Status: `open`.
+- Status: `closed`, by the pin commit `pins: ms-cli-v0.20.4`.
+- Tier: `docs`, `cross-repo`.
+
+### `ms-split-out-refuses-existing-manual` — the manuals say `ms split --out` overwrites; from ms 0.20.4 it refuses an existing FILE (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to ms-cli-v0.20.4, then the manual-gui re-pin to the mnemonic-gui release that pins it**)
+- Surfaced: coordinator `agent-reports/architect-ms-split-out-refusal.md` (lockstep list); `agent-reports/architect-ms-pin-bump-stops.md` Q2. Companion: mnemonic-secret design/FOLLOWUPS.md::ms-split-out-refuses-existing; mnemonic-gui design/FOLLOWUPS.md::ms-split-out-help-mirror.
+- What: (1) 43-ms.md: the `--out` paragraph names `split` and `hashlock --random` as the exceptions that refuse an existing FILE, and the `split` `--out` row says FILE must not exist; done in the pin commit. (2) manual-gui 60-ms/67-split.md: L38 bullet, the `#ms-split-out` paragraph and a refusal-table row; with the GUI re-pin, under that manual's tier rule (82's `{#installer-ahead}` tells the reader until then).
+- Status: `open` (leg 1 done in the pin commit `pins: ms-cli-v0.20.4`).
 - Tier: `docs`, `cross-repo`.
 
 ### `mk-manual-when-stdout-fails` — at the mk re-pin carrying the output sink, `44-mk-cli.md` states what mk does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the mk-cli release carrying mnemonic-key `mk-output-sink`**)

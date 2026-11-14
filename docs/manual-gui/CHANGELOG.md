@@ -8,6 +8,8 @@ numbers.
 
 ## [Unreleased]
 
+**The installer's newer ms tag moves to 0.20.4** (`ms split --out` refuses an existing file; a reserved-tag ms1 says why it exits 3). `[installer-ahead]` and §82 name it, and §82 lists the two outputs; nothing else in the GUI-facing text changes.
+
 **The installer runs ahead of the GUI on a third CLI.** mnemonic 0.106.0 (import-json envelopes whose parts disagree are refused, a general policy's card names no k-of-n rule, `bundle --import-json` ignores `--threshold`) shipped before the GUI re-pinned, and the installer pins it. `pinned-upstream.toml`'s `[installer-ahead]` table already carries `toolkit-tag-implied = "mnemonic-toolkit-v0.106.0"`, and the §82 section *When the installer is ahead of the GUI* now names three CLIs and the three `mnemonic` outputs that differ, each from the 0.106.0 CHANGELOG.
 
 **The installer runs ahead of the GUI on a second CLI.** md 0.20.4 (the md bug-hunt fixes: `md encode --json` checks relative timelocks and chunks as the text path does, a multipath alternative of 2^31 or more is refused as hardened, `--policy-id-fingerprint` prints on stderr, `md inspect` calls a keyed card watch-only, `--fingerprint` takes hex digits only, `md decode` drops the origins note for a single key at its canonical origin when the card carries no fingerprint for it) shipped before the GUI re-pinned, and the installer pins it. `pinned-upstream.toml` adds `md-cli-tag-implied = "descriptor-mnemonic-md-cli-v0.20.4"` to `[installer-ahead]`, and the §82 section *When the installer is ahead of the GUI* now names two CLIs and the four `md` outputs that differ, each measured on md 0.20.3 and 0.20.4.
