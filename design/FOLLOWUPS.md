@@ -6696,3 +6696,9 @@ screen printed. Print the values.
 - What: N1 (Nit): `docs/manual-gui/pinned-upstream.toml` comment describes mk 0.16.0 as "the mk output and uniformity changes" and does not name the chunk-set-id change (bundle cards no longer warn); name it when the GUI tier moves to mk 0.16.0, together with `82-binary-and-launch.md:122-132`. M1 (wait for pending CI before merge) is met by the land-queue's CI wait; N2 and N3 need no action (precedent form; ruled text).
 - Status: `deferred-minor`.
 - Tier: `docs`.
+
+### `mr-sitting-manual-lint` — extend the manual lint to `mr-sitting` (owning phase: **N2 manual lint**)
+- Surfaced: 2026-11-18, toolkit manual page `46-mr-sitting.md` (mnemonic-refugium W1 S30; Claude Sonnet 5.5, claude-sonnet-5-5).
+- What: `docs/manual/tests/lint.sh`'s `crate_of` knows five binaries and `cli-subcommands.list` has no `mr-sitting` lines, so `46-mr-sitting.md`'s flags are not linted against the binary. Extend both when `mr-sitting` ships in a release archive (mnemonic-refugium `w1-bi-13`).
+- Status: `deferred-minor`.
+- Tier: `docs`.
