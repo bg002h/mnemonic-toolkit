@@ -52,7 +52,7 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8> --closing-out <I9
 
 **ST-M-01:**
 
-> how are this seed's random bits drawn? 1 dice, hand-checkable (selected); 2 dice, hashed; 3 coin flips; 4 Entropia pills. Press Enter for 1, or type 2, 3 or 4:
+> how are this seed's random bits drawn? 1 dice, hand-checkable (selected): more rolls, and each word can be checked by hand from its rolls; 2 dice, hashed: fewer rolls, mixed by SHA-256, so no word can be checked by hand; 3 coin flips; 4 Entropia pills. Press Enter for 1, or type 2, 3 or 4:
 
 **ST-D-01:** (line mode adds " Then an empty line:")
 
@@ -84,7 +84,7 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8> --closing-out <I9
 
 **ST-PP-02:**
 
-> passphrase. Only \<person\> types it: the passphrase this seed already uses, or nothing if it has none. It is not shown:
+> passphrase. Only \<person\> types it: exactly the passphrase this seed already uses, or nothing if it has none. A new passphrase here makes another wallet, not this seed's. It is not shown:
 
 **ST-PP-03:**
 
@@ -104,19 +104,19 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8> --closing-out <I9
 
 **ST-PL-01:**
 
-> engrave plate \<TITLE\> now from the plates file (its title: \<TITLE\>), or write these words and the ms1 string on paper. Press Enter when the plate is done
+> make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel, under the title "\<TITLE\>". An engraving machine can read this plate from the plates file, \<path\> (in this computer's RAM; wiped when the session ends); using it is optional. Press Enter when the plate is done
 
 **ST-PL-01b:**
 
-> no plates file: engrave plate \<TITLE\> from this screen (its title: \<TITLE\>), or write these words and the ms1 string on paper. Press Enter when the plate is done
+> make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel, from this screen, under the title "\<TITLE\>" (no plates file: \<why\>). Press Enter when the plate is done
 
 **ST-PL-02:**
 
-> did plate \<TITLE\> engrave correctly? y = yes, check it now; n = no, show its payload again
+> is \<PLATE\> written or engraved correctly? y = yes, check it now; n = no, show it again
 
 **ST-PL-03:**
 
-> check plate \<TITLE\>: type it as engraved, from the steel or the paper, not from memory: its \<24 or 12\> words or its ms1 string, then an empty line:
+> check \<PLATE\>: type it from the steel or the paper, not from memory: either its \<24 or 12\> words or its ms1 string (one of the two, not both), then an empty line. \<next\>
 
 **ST-PL-09:**
 
@@ -124,7 +124,7 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8> --closing-out <I9
 
 **ST-PL-10:**
 
-> skipping leaves plate \<TITLE\> unchecked: the hand-back marks \<the keys it covers\> verified no, and mr-gui warns until it is checked. To skip, type exactly: plate \<TITLE\> is not checked
+> skipping leaves \<PLATE\> unchecked: the hand-back marks \<the keys it covers\> verified no, and mr-gui warns until it is checked. To skip, type exactly: plate \<TITLE\> is not checked
 
 **ST-PL-12:**
 
@@ -148,7 +148,7 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8> --closing-out <I9
 
 **ST-CL-01:**
 
-> phone wallet check, before any deposit: in mr-gui, make the card from the hand-back now. When mr-gui says the closing file is written, type ready; to end now and run this check later from seed \<L\>'s backup, type later:
+> phone wallet check, before any deposit. mr-gui, in its own window on this computer, now makes the card from the hand-back. The check then proves that the card's phone wallet is seed \<L\>'s BIP-85 child, so \<from\> restores it. It needs both programs: the card is only in mr-gui, and seed \<L\> only in this sitting's memory. Make the card in mr-gui; when mr-gui says the closing file is written, type the word ready here. Or type the word later to end the sitting now: you then run this check yourself before any deposit, typing seed \<L\>'s words from \<from\>:
 
 **ST-CL-07:**
 
@@ -156,7 +156,7 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8> --closing-out <I9
 
 **ST-END-01:**
 
-> every plate is checked or skipped and the hand-back is written. Press Enter to end the session: the plates file is wiped and the screen cleared
+> the sitting is done: every plate is checked or its check skipped, and the hand-back is written to \<path\>. Press Enter to end: mr-sitting then wipes the plates file and the seeds in its memory, and clears this screen
 
 ## `mr-sitting verify`
 
