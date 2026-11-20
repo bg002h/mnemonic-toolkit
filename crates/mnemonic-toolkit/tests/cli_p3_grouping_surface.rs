@@ -125,14 +125,12 @@ fn carriers() -> Vec<Carrier> {
         },
         Carrier {
             // `ms-shares combine` needs K >= 2 shares and accepts **at most
-            // one** `-`, so its second share cannot avoid argv. That is a real
-            // gap in the tool's private channels, filed rather than papered
-            // over — P3's argv row reaches this invocation through
-            // `--allow-argv-secret` rather than pretending a channel exists,
-            // and adds that flag to this line when it lands.
+            // one** `-`; the first share rides argv here, so the invocation
+            // is admitted with `--allow-argv-secret` (F-688 made the argv
+            // `--share` a refusal; this test is about grouping, not argv).
             name: "ms-shares-combine",
             args: {
-                let mut a = args(&["ms-shares", "combine", "--share"]);
+                let mut a = args(&["--allow-argv-secret", "ms-shares", "combine", "--share"]);
                 a.push(shares[0].clone());
                 a.extend(args(&["--share", "-", "--to", "ms1"]));
                 a
