@@ -121,8 +121,8 @@ struct Entry {
     shape: Shape,
 }
 
-/// The table. Nine of the eleven argv-material shapes the toolkit ships; the
-/// two omissions are named in this module's header with their reasons.
+/// The table. Ten of the eleven argv-material shapes the toolkit ships; the
+/// omission is named in this module's header with its reason.
 const TABLE: &[Entry] = &[
     Entry {
         flag: "--from",

@@ -1253,7 +1253,8 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                 SetVerify::Unverified {
                     reason: "correction UNVERIFIED — a corrected K-of-N share cannot be \
                         self-verified; recombine it with the other shares (mnemonic ms-shares \
-                        combine --share <SHARE> --share <SHARE> …) and confirm the recovered \
+                        combine --share - --share @env:VAR …, one share on stdin and each \
+                        further share in an exported variable) and confirm the recovered \
                         seed's address/xpub against a known-good copy before use; BIP-93 \
                         recommends confirming a corrected codex32 string"
                         .to_string(),
