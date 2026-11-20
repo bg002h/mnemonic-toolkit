@@ -8,6 +8,14 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Argv secrets: a bare value is no longer echoed by the parser
+
+- **`--from`, `--slot` and `seed-xor combine --share` given a value with no `=`** (a bare phrase, say) reached the flag's
+  value parser, and clap's exit-64 "invalid value" error printed the whole value. The pre-parser guard now refuses it
+  at exit 2 like the `<node>=` forms: the class is "secret key material", the length is named, the value is not, and
+  the channel is that flag's own (`--from phrase=-`, `--slot @N.phrase=-`, `--share phrase=-`). `-`, `@env:VAR` and an
+  empty value pass. `--allow-argv-secret` admits it. The manual's argv-refusal section says so.
+
 ### Argv secrets: the last five are refused (F-688, F-351, F-353)
 
 - **`ms-shares combine --share`, `slip39 combine --share`, `seed-xor combine --share <node>=`, `import-wallet --ms1`

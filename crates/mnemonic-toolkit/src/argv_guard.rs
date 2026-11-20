@@ -385,11 +385,33 @@ pub fn inspect(argv: &[String]) -> Verdict {
     }
 }
 
+/// A value with no `=` on a node-shaped flag. The flag's own value parser
+/// rejects it and clap's exit-64 error ECHOES the whole value, so the guard
+/// cannot tell material from a typo and refuses it, with the flag's own channel
+/// text. The private channels (`-`, `@env:`, empty) hold no material and pass.
+///
+/// `word-card --from` is the one `--from` that is not node-shaped: it takes a
+/// bare public `mk1`/`md1` card (see `word_card.rs`), so it is exempt.
+fn shapeless(flag: &str, value: &str, sub: Option<&str>, position: usize) -> Option<Finding> {
+    if sub == Some("word-card") || is_private_channel_value(value, true) {
+        return None;
+    }
+    Some(Finding {
+        flag: flag.to_string(),
+        class: class_of_token(""),
+        len: value.chars().count(),
+        channel: channel_for(flag, sub, None)?,
+        position,
+    })
+}
+
 fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Option<Finding> {
     let sub = subcommand_word(argv);
     match entry.shape {
         Shape::NodeEquals => {
-            let (token, material) = value.split_once('=')?;
+            let Some((token, material)) = value.split_once('=') else {
+                return shapeless(entry.flag, value, sub, position);
+            };
             if !SECRET_NODE_TYPES_ARGV.contains(&token) {
                 return None;
             }
@@ -406,7 +428,9 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
         }
         Shape::SlotEquals => {
             // `@<index>.<subkey>=<material>`
-            let (head, material) = value.split_once('=')?;
+            let Some((head, material)) = value.split_once('=') else {
+                return shapeless(entry.flag, value, sub, position);
+            };
             let (index, subkey) = head.strip_prefix('@')?.split_once('.')?;
             if !SECRET_SLOT_SUBKEYS.contains(&subkey) {
                 return None;
@@ -424,7 +448,9 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
         }
         Shape::Share => {
             if sub == Some("seed-xor") {
-                let (token, material) = value.split_once('=')?;
+                let Some((token, material)) = value.split_once('=') else {
+                    return shapeless(entry.flag, value, sub, position);
+                };
                 if !SECRET_NODE_TYPES_ARGV.contains(&token) {
                     return None;
                 }
@@ -794,6 +820,41 @@ mod tests {
         );
         let f = findings(&["import-wallet", "--ms1", "ms1abc"]);
         assert_eq!(f[0].channel, "--ms1 @env:VAR");
+    }
+
+    /// A value with no `=` on `--from`, `--slot` and `seed-xor --share` is
+    /// refused (clap would echo it); the private channels pass.
+    #[test]
+    fn a_shapeless_value_is_refused_on_every_node_shaped_flag() {
+        for (a, flag, channel) in [
+            (
+                &["convert", "--from", "a b c"][..],
+                "--from",
+                "--from phrase=-",
+            ),
+            (
+                &["bundle", "--slot", "a b c"][..],
+                "--slot",
+                "--slot @N.phrase=-",
+            ),
+            (
+                &["seed-xor", "combine", "--share", "a b c"][..],
+                "--share",
+                "--share phrase=-   (stdin, one share; or --share phrase=@env:VAR, once per share)",
+            ),
+        ] {
+            let f = findings(a);
+            assert_eq!(f.len(), 1, "{a:?}");
+            assert_eq!(f[0].flag, flag);
+            assert_eq!(f[0].len, 5);
+            assert_eq!(f[0].channel, channel);
+        }
+        for v in ["-", "@env:X", ""] {
+            assert!(matches!(
+                inspect(&argv(&["convert", "--from", v])),
+                Verdict::Clean
+            ));
+        }
     }
 
     /// F-688 / F-351: `--share` on the three `combine` verbs.
