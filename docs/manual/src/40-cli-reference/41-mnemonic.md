@@ -3588,10 +3588,10 @@ self-oracle at all.
 corrected like any `ms1`: a corrected share exits `4` (VERIFY-ME),
 and stderr says `repair: correction UNVERIFIED — a corrected K-of-N
 share cannot be self-verified; recombine it with the other shares
-(mnemonic ms-shares combine --share <SHARE> --share <SHARE> …) and
-confirm the recovered seed's address/xpub against a known-good copy
-before use; BIP-93 recommends confirming a corrected codex32
-string`. A clean share exits `0`, echoed.
+(mnemonic ms-shares combine --share - --share @env:VAR …, one share on
+stdin and each further share in an exported variable) and confirm the
+recovered seed's address/xpub against a known-good copy before use;
+BIP-93 recommends confirming a corrected codex32 string`. A clean share exits `0`, echoed.
 
 ### md1 non-chunked demotion (v0.86.0 funds fix) {#mnemonic-repair-md1-non-chunked-demotion}
 
