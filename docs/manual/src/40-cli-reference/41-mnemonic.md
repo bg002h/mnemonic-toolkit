@@ -84,6 +84,13 @@ the flag supports it, or `--allow-argv-secret`.
 Watch-only material (`--from xpub=`, `--slot @N.xpub=`, `mk1` and `md1`
 cards) is **not** refused: a leak there costs privacy, not the money.
 
+A value with **no `=`** on `--from`, `--slot` or `seed-xor combine --share`
+(for example a bare phrase) is refused the same way, reported as "secret key
+material" and answered with that flag's `<node>=-` channel. Without this the
+flag's own parser would reject the value and print it back in its error
+message. `-`, `@env:VAR` and an empty value carry no material and are not
+refused. A value whose node (`--from`, `--share`) or `@N.<subkey>` (`--slot`) is not one the flag accepts is refused the same way.
+
 ### How `--passphrase` is read (every subcommand)
 
 The same rule holds on every subcommand that takes `--passphrase`
