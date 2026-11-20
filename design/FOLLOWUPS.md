@@ -6720,3 +6720,10 @@ screen printed. Print the values.
 - What: M3: `tests/cli_argv_secrets_f688.rs` `the_override_still_admits_every_refused_form` admits only ms-shares; the name says every. Add slip39, seed-xor, import-wallet, verify-bundle rows or rename. M4: no test pins the per-share argv warning still firing under `--allow-argv-secret` after the advisory moved to the dispatchers (probe shows it does; a plant deleting the loop would likely stay green). Add one stderr assertion to the override row. M5: `import-wallet --ms1 -` is exempt from the guard (sentinel=true) but `-` is taken literally there; it prints "warning: secret material on argv (--ms1)" then a BSMS parse error at exit 2. Harmless (no secret), confusing; set `sentinel:false` is not possible for the shared `--ms1` Entry, so special-case import-wallet or accept.
 - Status: `deferred-minor`.
 - Tier: `tests`.
+
+### `tk175-review-minors` — Minors from the whole-diff review of toolkit#175 (owning phase: **the next argv-guard change (F-352 family)**)
+- Surfaced: 2026-11-20, toolkit#175 whole-diff review.
+- Minor: toolkit argv guard: `word-card --from <phrase or xprv>` is exempt from the shape-less refusal but word-card's own error echoes the first token (up to ~12 chars) of the value; decide a refusal for a value not starting mk1/md1 (F-352 family). Source: agent-reports/review-toolkit175.md @96900e70 (M1).
+- Minor: toolkit argv guard: `export-wallet --slot <bare or typo'd value>` still reaches clap's exit-64 echo because the verb has no private channel (channel_for returns None); decide an advice-free refusal wording (F-352 family). Source: agent-reports/review-toolkit175.md @96900e70 (M2).
+- Status: `deferred-minor`.
+- Tier: `toolkit`.
