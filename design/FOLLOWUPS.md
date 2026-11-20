@@ -6709,6 +6709,12 @@ screen printed. Print the values.
 - Status: `deferred-minor`.
 - Tier: `docs`.
 
+### `tk170-review-minors` — Minors from the review of toolkit#170 (owning phase: **the next mr-sitting manual page edit**)
+- Surfaced: 2026-11-20, toolkit#170 review (`coordinator/agent-reports/review-toolkit170-w1t-manual.md` in the coordinator directory), 0C/2I/5M/0N on head 34420bdf (Claude Sonnet 5.5, claude-sonnet-5-5). I-1, I-2, M-1, M-2 folded; M-5 is `mr-sitting-manual-lint`.
+- What: M-3. 46-mr-sitting.md:431/487: the fills `<regrow>`, `<unchecked>`, `<wait>`, `<next>`, `<names>`, `<result>`, `<fp>` in ST-CL-02, ST-END-01/02/10/13/14 are not explained on the page (its fill list defines only `<hot>`, `<closing>`, `<pp>`); the spec rows define them. A reader cannot tell what prints there. Add one sentence per fill or point to the spec. M-4. 46-mr-sitting.md:370-380 (TUI keys): the table omits the spec's overlay-column notes "Enter nothing" (printable row) and "other overlays: nothing" (Ctrl-Q row); the page's overlay cell for Ctrl-Q reads only "quit question: `n`", which says nothing of the glossary overlay.
+- Status: `deferred-minor`.
+- Tier: `docs`.
+
 ### `tkargv-review-minors` — Minors from the review of toolkit#172 argv-secrets (owning phase: **ownerless**)
 - Surfaced: 2026-11-19, toolkit#172 review (`coordinator/agent-reports/review-directfix-toolkit-argv-secrets.md` in the coordinator directory), 0C/1I/5M/1N on head bc5f70f4 (Claude Sonnet 5.5, claude-sonnet-5-5). M1 regraded Important and folded; M2 listed in the coordinator's status/secret-criticals.md (`tk-argv-shapeless-value-echo`).
 - What: M3: `tests/cli_argv_secrets_f688.rs` `the_override_still_admits_every_refused_form` admits only ms-shares; the name says every. Add slip39, seed-xor, import-wallet, verify-bundle rows or rename. M4: no test pins the per-share argv warning still firing under `--allow-argv-secret` after the advisory moved to the dispatchers (probe shows it does; a plant deleting the loop would likely stay green). Add one stderr assertion to the override row. M5: `import-wallet --ms1 -` is exempt from the guard (sentinel=true) but `-` is taken literally there; it prints "warning: secret material on argv (--ms1)" then a BSMS parse error at exit 2. Harmless (no secret), confusing; set `sentinel:false` is not possible for the shared `--ms1` Entry, so special-case import-wallet or accept.
