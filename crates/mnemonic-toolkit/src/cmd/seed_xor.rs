@@ -71,8 +71,10 @@ pub struct SeedXorSplitArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct SeedXorCombineArgs {
-    /// Share phrase as `phrase=<value>` (inline) or `phrase=-` (stdin).
-    /// Repeating; at most ONE may be `phrase=-` (single stdin per invocation).
+    /// Share phrase as `phrase=-` (stdin) or `phrase=@env:VAR`. Repeating; at
+    /// most ONE may be `phrase=-` (single stdin per invocation). An inline
+    /// `phrase=<value>` on argv is REFUSED (argv is public) unless the global
+    /// `--allow-argv-secret` is given.
     #[arg(
         long = "share",
         action = clap::ArgAction::Append,

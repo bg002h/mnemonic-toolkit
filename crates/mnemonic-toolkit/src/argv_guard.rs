@@ -56,24 +56,20 @@
 //!
 //! # What this row does NOT reach, and why — stated rather than hidden
 //!
-//! Two of the eleven argv-material shapes the toolkit ships are **deliberately
-//! outside** the table, because refusing them would advise a channel that does
+//! One of the eleven argv-material shapes the toolkit ships is **deliberately
+//! outside** the table, because refusing it would advise a channel that does
 //! not exist — the one thing §6h forbids outright:
 //!
-//! - **`--share <ms1-share>`** (`ms-shares combine`, `slip39 combine`). The
-//!   private channel is `--share -`, and the tool accepts **at most one** `-`
-//!   per invocation while a K-of-N recovery needs K ≥ 2 shares. Refusing here
-//!   would leave the primary recovery path reachable only through the override,
-//!   with a remedy line that cannot be followed.
 //! - **A positional `ms1`** (`inspect`, `repair`). Catching material that no
 //!   flag declares is §6d's *second*, value-shape layer; this row's work is the
 //!   first, flag-keyed layer. The shape is also exactly what clap echoes, per
-//!   the measurement above.
+//!   the measurement above (F-352).
 //!
-//! A third exemption is narrower and lives in [`channel_for`] rather than here:
-//! `--ms1` is refused on `inspect`, `repair` and the three `xpub-search` verbs,
-//! and **not** on `verify-bundle` or `import-wallet`, because those two have no
-//! private channel for it — measured, not assumed. Same rule, same reason.
+//! `--share` (`ms-shares combine`, `slip39 combine`, `seed-xor combine`) and
+//! `--ms1` on `verify-bundle` / `import-wallet` WERE in this list (F-351,
+//! F-353) and are now refused (F-688): `--share -` reads one share and
+//! `--share @env:VAR` supplies each further one, `verify-bundle --ms1 -`
+//! reads one card (F-689), and `--ms1 @env:VAR` resolves on both verbs.
 //!
 //! All are filed with owning phases rather than left to be rediscovered.
 
@@ -114,6 +110,10 @@ enum Shape {
     /// stdin channel for this flag (and therefore exempt) or just a
     /// one-character value.
     Whole { class: &'static str, sentinel: bool },
+    /// `--share`: `seed-xor combine` takes `<node>=<material>` (like `--from`);
+    /// `ms-shares combine` and `slip39 combine` take the whole value. Which one
+    /// is decided by the subcommand word.
+    Share,
 }
 
 struct Entry {
@@ -184,6 +184,12 @@ const TABLE: &[Entry] = &[
             sentinel: true,
         },
     },
+    // F-688 / F-351: the per-record private channel is `@env:VAR` (one per
+    // share, resolved by every `combine` verb) plus a single `-`.
+    Entry {
+        flag: "--share",
+        shape: Shape::Share,
+    },
 ];
 
 /// The human-readable class of a `<node>=` / `@N.<subkey>=` token.
@@ -243,13 +249,9 @@ fn subcommand_word(argv: &[String]) -> Option<&str> {
 /// NERVE.** *"The remedy must not forward-reference a channel that does not
 /// exist"* is the rule this file is most exposed to, and a refusal whose remedy
 /// cannot be followed is worse than the advisory it replaced: it stops the
-/// operator without telling them what to do instead. Every `None` below was
-/// **measured on the binary**, and every one is filed:
+/// operator without telling them what to do instead. The remaining `None`s
+/// were **measured on the binary**:
 ///
-/// - **`--ms1` on `verify-bundle`**: `--ms1 -` is not accepted, and the verb
-///   needs `--slot @N.phrase=` at the same time — only one input can be `-`, so
-///   even a working sentinel would name an impossible combination.
-/// - **`--ms1` on `import-wallet`**: same, no sentinel.
 /// - **`--slot` on `export-wallet`**: the verb refuses secret slots itself
 ///   (*"export-wallet is watch-only by definition"*), so there is nothing to
 ///   route and no channel to name.
@@ -261,7 +263,26 @@ fn channel_for(flag: &str, sub: Option<&str>, subkey_form: Option<&str>) -> Opti
         // neither exists on `verify-bundle` or `import-wallet`.
         ("--ms1", Some("inspect" | "repair")) => Some("--ms1 -".into()),
         ("--ms1", Some("xpub-search")) => Some("--ms1-stdin".into()),
+        // F-353 (resolved): `verify-bundle --ms1 -` reads one card from stdin
+        // (F-689) and both verbs resolve `--ms1 @env:VAR`.
+        ("--ms1", Some("verify-bundle")) => {
+            Some("--ms1 -   (stdin, one card; or --ms1 @env:VAR)".into())
+        }
+        ("--ms1", Some("import-wallet")) => Some("--ms1 @env:VAR".into()),
         ("--ms1", _) => None,
+        // F-351 / F-688 (resolved): `-` reads ONE share, `@env:VAR` is the
+        // per-record channel, so a K-of-N recovery is `--share -` once plus
+        // `--share @env:VAR` for each further share (measured: stdin + env
+        // combine recovers the phrase).
+        ("--share", Some("seed-xor")) => {
+            let k = subkey_form.unwrap_or("phrase=");
+            Some(format!(
+                "--share {k}-   (stdin, one share; or --share {k}@env:VAR, once per share)"
+            ))
+        }
+        ("--share", _) => {
+            Some("--share -   (stdin, one share; or --share @env:VAR, once per share)".into())
+        }
         // Measured: `--slot @N.<subkey>=-` reads stdin on `bundle` and
         // `verify-bundle`; on `import-wallet` the `-` is taken literally and
         // the channel is the `@env:` sentinel, which its own shipped advisory
@@ -398,6 +419,34 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
                 class: class_of_token(subkey),
                 len: material.chars().count(),
                 channel: channel_for("--slot", sub, Some(&format!("@{index}.{subkey}=")))?,
+                position,
+            })
+        }
+        Shape::Share => {
+            if sub == Some("seed-xor") {
+                let (token, material) = value.split_once('=')?;
+                if !SECRET_NODE_TYPES_ARGV.contains(&token) {
+                    return None;
+                }
+                if is_private_channel_value(material, true) {
+                    return None;
+                }
+                return Some(Finding {
+                    flag: format!("--share {token}="),
+                    class: class_of_token(token),
+                    len: material.chars().count(),
+                    channel: channel_for("--share", sub, Some(&format!("{token}=")))?,
+                    position,
+                });
+            }
+            if is_private_channel_value(value, true) {
+                return None;
+            }
+            Some(Finding {
+                flag: entry.flag.to_string(),
+                class: "a share of a seed (recovers the secret with K others)",
+                len: value.chars().count(),
+                channel: channel_for(entry.flag, sub, None)?,
                 position,
             })
         }
@@ -724,27 +773,48 @@ mod tests {
     }
 
     /// §6h in its hardest form: where a (subcommand, flag) pair has NO private
-    /// channel, the guard does not refuse. Refusing would print a remedy the
-    /// operator cannot follow, which is worse than the advisory it replaced —
-    /// and the post-clap advisory still fires on these paths.
+    /// channel, the guard does not refuse. `export-wallet` refuses secret slots
+    /// itself, so the guard stays out of its way.
     #[test]
     fn a_pair_with_no_private_channel_is_not_refused() {
-        // `verify-bundle --ms1 -` is not accepted (measured), and the verb needs
-        // `--slot @N.phrase=` at the same time, so only one input could be `-`.
         assert!(matches!(
-            inspect(&argv(&["verify-bundle", "--ms1", "ms1abc"])),
+            inspect(&argv(&["export-wallet", "--slot", "@0.phrase=material"])),
             Verdict::Clean
         ));
-        // `import-wallet --ms1 -` likewise has no sentinel.
-        assert!(matches!(
-            inspect(&argv(&["import-wallet", "--ms1", "ms1abc"])),
-            Verdict::Clean
-        ));
-        // ... but the SAME flag on a verb that HAS a channel is refused.
-        assert!(matches!(
-            inspect(&argv(&["inspect", "--ms1", "ms1abc"])),
-            Verdict::Refuse(_)
-        ));
+    }
+
+    /// F-688 / F-353: `--ms1` on `verify-bundle` and `import-wallet` is refused
+    /// and names the channel each verb really has.
+    #[test]
+    fn ms1_on_verify_bundle_and_import_wallet_is_refused_with_its_channel() {
+        let f = findings(&["verify-bundle", "--ms1", "ms1abc"]);
+        assert_eq!(
+            f[0].channel,
+            "--ms1 -   (stdin, one card; or --ms1 @env:VAR)"
+        );
+        let f = findings(&["import-wallet", "--ms1", "ms1abc"]);
+        assert_eq!(f[0].channel, "--ms1 @env:VAR");
+    }
+
+    /// F-688 / F-351: `--share` on the three `combine` verbs.
+    #[test]
+    fn share_is_refused_on_every_combine_verb() {
+        for sub in ["ms-shares", "slip39"] {
+            let f = findings(&[sub, "combine", "--share", "ms1abc"]);
+            assert_eq!(f[0].flag, "--share");
+            assert!(f[0].channel.contains("--share @env:VAR"));
+        }
+        let f = findings(&["seed-xor", "combine", "--share", "phrase=a b c"]);
+        assert_eq!(f[0].flag, "--share phrase=");
+        assert!(f[0].channel.contains("--share phrase=@env:VAR"));
+        for v in [
+            &["ms-shares", "combine", "--share", "-"][..],
+            &["ms-shares", "combine", "--share", "@env:S"][..],
+            &["seed-xor", "combine", "--share", "phrase=-"][..],
+            &["seed-xor", "combine", "--share", "phrase=@env:S"][..],
+        ] {
+            assert!(matches!(inspect(&argv(v)), Verdict::Clean), "{v:?}");
+        }
     }
 
     /// `--slot`'s channel is the `-` sentinel on `bundle`/`verify-bundle` and
