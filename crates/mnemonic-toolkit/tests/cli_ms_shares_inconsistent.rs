@@ -55,6 +55,7 @@ const SECRET_A_ENTROPY_HEX: &str = "11111111111111111111111111111111";
 fn combine(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
+        .arg("--allow-argv-secret")
         .args(["ms-shares", "combine"])
         .args(args)
         .output()

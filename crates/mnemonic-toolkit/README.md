@@ -49,9 +49,9 @@ mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
     --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
 
 # Round-trip verification: confirm the engraved bundle decodes against the original phrase.
-mnemonic verify-bundle --phrase "abandon abandon ... art" \
+MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
     --network mainnet --template bip84 \
-    --ms1 ms1... --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
+    --ms1 @env:MS1 --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
 ```
 
 `--json` is available on `bundle` / `verify-bundle` for tooling.
@@ -101,9 +101,9 @@ mnemonic bundle --descriptor "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*
 mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84 --self-check
 
 # Round-trip verification: confirm the engraved bundle decodes against the original phrase.
-mnemonic verify-bundle --phrase "abandon abandon ... art" \
+MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
     --network mainnet --template bip84 \
-    --ms1 ms1... --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
+    --ms1 @env:MS1 --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
 ```
 
 `--json` is available on `bundle` / `verify-bundle` for tooling. Schema version `"4"` is the v0.4 wire envelope; `ms1` is a length-N array (empty-string sentinel for watch-only slots).

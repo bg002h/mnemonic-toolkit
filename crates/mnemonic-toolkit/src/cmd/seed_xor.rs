@@ -71,8 +71,10 @@ pub struct SeedXorSplitArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct SeedXorCombineArgs {
-    /// Share phrase as `phrase=<value>` (inline) or `phrase=-` (stdin).
-    /// Repeating; at most ONE may be `phrase=-` (single stdin per invocation).
+    /// Share phrase as `phrase=-` (stdin) or `phrase=@env:VAR`. Repeating; at
+    /// most ONE may be `phrase=-` (single stdin per invocation). An inline
+    /// `phrase=<value>` on argv is REFUSED (argv is public) unless the global
+    /// `--allow-argv-secret` is given.
     #[arg(
         long = "share",
         action = clap::ArgAction::Append,
@@ -115,6 +117,13 @@ pub fn run<R: Read, W: Write, E: Write>(
             run_split(a, stdin, stdout, stderr)
         }
         SeedXorCommand::Combine(a) => {
+            // Argv-leakage advisory per-occurrence for inline share values,
+            // judged on the value AS TYPED (`-` and `@env:VAR` are private).
+            for sh in &a.share {
+                if sh.value != "-" && !sh.value.starts_with("@env:") {
+                    secret_in_argv_warning(stderr, "--share phrase=", "--share phrase=-");
+                }
+            }
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share`
             // values (all are `phrase=` secret-bearing per row 8).
             let owned_a;
@@ -278,13 +287,6 @@ fn run_combine<R: Read, W: Write, E: Write>(
             "seed-xor combine: --shares {} requires exactly {} --share arguments; got {} --share values for --shares {}",
             args.shares, args.shares, args.share.len(), args.shares,
         )));
-    }
-
-    // Argv-leakage advisory per-occurrence for inline share values.
-    for sh in &args.share {
-        if sh.value != "-" {
-            secret_in_argv_warning(stderr, "--share phrase=", "--share phrase=-");
-        }
     }
 
     // Resolve all shares into Zeroizing<String>.

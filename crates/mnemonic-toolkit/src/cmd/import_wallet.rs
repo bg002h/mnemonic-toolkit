@@ -168,7 +168,9 @@ pub struct ImportWalletArgs {
     /// Seed overlay (SPEC §8.3): supply the secret material that matches
     /// the blob's declared xpub at the cosigner's origin path. Repeatable;
     /// positional cosigner-index — the i-th `--ms1` applies to cosigner i.
-    /// Accepts the `@env:VAR` sentinel (resolves to `std::env::var(VAR)`).
+    /// Accepts the `@env:VAR` sentinel (resolves to `std::env::var(VAR)`);
+    /// an inline card on argv is REFUSED (argv is public) unless the global
+    /// `--allow-argv-secret` is given, so use `--ms1 @env:VAR`.
     /// Empty-string `--ms1 ""` preserves v0.25.1 watch-only sentinel
     /// semantics (cosigner left watch-only + stderr NOTICE).
     #[arg(long = "ms1", value_name = "STRING")]
