@@ -163,6 +163,14 @@ pub fn run<R: Read, W: Write, E: Write>(
             run_split(a, stdin, stdout, stderr)
         }
         MsSharesCommand::Combine(a) => {
+            // Per-share inline argv-leakage advisory (under
+            // `--allow-argv-secret`), judged on the value AS TYPED: `-` and
+            // `@env:VAR` are private channels and must not warn.
+            for sh in &a.share {
+                if sh != "-" && !sh.starts_with("@env:") {
+                    secret_in_argv_warning(stderr, "--share", "--share -");
+                }
+            }
             let owned_a;
             let a = if a.share.iter().any(|v| v.starts_with("@env:")) {
                 owned_a = resolve_combine_env_sentinels(a)?;
@@ -356,13 +364,6 @@ fn run_combine<R: Read, W: Write, E: Write>(
         return Err(ToolkitError::BadInput(
             "ms-shares combine: at most one stdin consumer per invocation (across --share)".into(),
         ));
-    }
-
-    // Per-share inline argv-leakage advisory.
-    for sh in &args.share {
-        if sh != "-" {
-            secret_in_argv_warning(stderr, "--share", "--share -");
-        }
     }
 
     // Resolve --share values (stdin or inline) into Zeroizing<String>.

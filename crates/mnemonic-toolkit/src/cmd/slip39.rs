@@ -225,6 +225,13 @@ pub fn run<R: Read, W: Write, E: Write>(
             run_split(a, stdin, stdout, stderr)
         }
         Slip39Command::Combine(a) => {
+            // SPEC §2.6 row 1d: per-share inline advisory, judged on the value
+            // AS TYPED (`-` and `@env:VAR` are private channels).
+            for sh in &a.share {
+                if sh != "-" && !sh.starts_with("@env:") {
+                    secret_in_argv_warning(stderr, "--share", "--share -");
+                }
+            }
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share` +
             // `--passphrase` before downstream consumption.
             let owned_a;
@@ -583,12 +590,8 @@ fn run_combine<R: Read, W: Write, E: Write>(
         )));
     }
 
-    // SPEC §2.6 rows 1d (per-share inline) + 1e (passphrase inline).
-    for sh in &args.share {
-        if sh != "-" {
-            secret_in_argv_warning(stderr, "--share", "--share -");
-        }
-    }
+    // SPEC §2.6 row 1e (passphrase inline). Row 1d (per-share inline) is
+    // emitted by the dispatcher, before `@env:` resolution.
     crate::passphrase_input::emit_argv_note(
         args.passphrase.as_deref(),
         args.passphrase_stdin,

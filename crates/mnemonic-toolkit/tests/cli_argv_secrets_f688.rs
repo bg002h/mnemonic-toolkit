@@ -320,3 +320,61 @@ fn the_override_still_admits_every_refused_form() {
     assert_eq!(code, 0, "{err}");
     assert_eq!(out.lines().next(), Some(PHRASE));
 }
+
+/// The replacement the refusal names must itself be clean: `@env:VAR` and `-`
+/// are private channels, so the tool must not then warn that the secret is on
+/// argv (it warned before, because it judged the value after resolution).
+#[test]
+fn the_named_channels_do_not_warn_about_argv() {
+    let s = ms_shares();
+    let (_, err, code) = run_with(
+        &[
+            "ms-shares",
+            "combine",
+            "--share",
+            "-",
+            "--share",
+            "@env:F688_S1",
+        ],
+        &s[0],
+        &[("F688_S1", &s[1])],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(!err.contains("secret material on argv"), "{err}");
+
+    let s = slip39_shares();
+    let (_, err, code) = run_with(
+        &[
+            "slip39",
+            "combine",
+            "--share",
+            "-",
+            "--share",
+            "@env:F688_S1",
+        ],
+        &s[0],
+        &[("F688_S1", &s[1])],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(!err.contains("secret material on argv"), "{err}");
+
+    let s = xor_shares();
+    let (_, err, code) = run_with(
+        &[
+            "seed-xor",
+            "combine",
+            "--shares",
+            "3",
+            "--share",
+            "phrase=-",
+            "--share",
+            "phrase=@env:F688_S1",
+            "--share",
+            "phrase=@env:F688_S2",
+        ],
+        &s[0],
+        &[("F688_S1", &s[1]), ("F688_S2", &s[2])],
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(!err.contains("secret material on argv"), "{err}");
+}

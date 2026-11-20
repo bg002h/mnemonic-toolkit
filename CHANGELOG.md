@@ -17,6 +17,9 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `--ms1 -` or `--ms1 @env:VAR` on `verify-bundle`, and `--ms1 @env:VAR` on `import-wallet`.
   `--allow-argv-secret` still admits the argv form. The `--help` text of the five flags and the manual say so.
   A positional `ms1` on `inspect` / `repair` is unchanged (F-352).
+- **`--share @env:VAR` no longer warns that the share is on argv** (`ms-shares`, `slip39`, `seed-xor combine`): the warning was
+  judged after the variable was resolved, so the channel the refusal recommends printed the warning it replaces. `-` and
+  `@env:VAR` are now judged as typed.
 
 ### Installer pins: md 0.20.7 and mk 0.16.0
 

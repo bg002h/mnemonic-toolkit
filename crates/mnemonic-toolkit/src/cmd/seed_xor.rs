@@ -117,6 +117,13 @@ pub fn run<R: Read, W: Write, E: Write>(
             run_split(a, stdin, stdout, stderr)
         }
         SeedXorCommand::Combine(a) => {
+            // Argv-leakage advisory per-occurrence for inline share values,
+            // judged on the value AS TYPED (`-` and `@env:VAR` are private).
+            for sh in &a.share {
+                if sh.value != "-" && !sh.value.starts_with("@env:") {
+                    secret_in_argv_warning(stderr, "--share phrase=", "--share phrase=-");
+                }
+            }
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share`
             // values (all are `phrase=` secret-bearing per row 8).
             let owned_a;
@@ -280,13 +287,6 @@ fn run_combine<R: Read, W: Write, E: Write>(
             "seed-xor combine: --shares {} requires exactly {} --share arguments; got {} --share values for --shares {}",
             args.shares, args.shares, args.share.len(), args.shares,
         )));
-    }
-
-    // Argv-leakage advisory per-occurrence for inline share values.
-    for sh in &args.share {
-        if sh.value != "-" {
-            secret_in_argv_warning(stderr, "--share phrase=", "--share phrase=-");
-        }
     }
 
     // Resolve all shares into Zeroizing<String>.
