@@ -71,6 +71,10 @@ nothing and the entry is written back when you exit.
 | `--digits <value>` | `--digits -` |
 | `--ms1 <value>` (on `inspect` / `repair`) | `--ms1 -` |
 | `--ms1 <value>` (on `xpub-search`) | `--ms1-stdin` |
+| `--ms1 <value>` (on `verify-bundle`) | `--ms1 -` (one card on stdin), or `--ms1 @env:VAR` |
+| `--ms1 <value>` (on `import-wallet`) | `--ms1 @env:VAR` |
+| `--share <value>` (on `ms-shares combine` / `slip39 combine`) | `--share -` (one share on stdin) and `--share @env:VAR` for each further share |
+| `--share phrase=<value>` (on `seed-xor combine`) | `--share phrase=-` (one share on stdin) and `--share phrase=@env:VAR` for each further share |
 
 Only **one** input per invocation can come from stdin. When a command
 needs two or more secrets at once — a multi-cosigner `bundle`, or
@@ -161,10 +165,11 @@ line for each inline-secret flag, and those rows are still accurate —
 they are what you see **after** `--allow-argv-secret` admits the material.
 They are also what you see with no override at all on the few flag/verb
 pairs that have **no** private channel and are therefore not refused:
-`--share` (a K-of-N recovery needs K ≥ 2 shares and only one input can be
-stdin), a positional `ms1`, and `--ms1` on `verify-bundle` /
-`import-wallet`. There the tool warns and proceeds exactly as it did
-before.
+a positional `ms1` (on `inspect` / `repair`). There the tool warns and
+proceeds exactly as it did before. `--share` (on `ms-shares combine`,
+`slip39 combine` and `seed-xor combine`) and `--ms1` (on `verify-bundle`
+and `import-wallet`) are refused like the rest: a K-of-N recovery passes
+one share with `-` and every further share with `@env:VAR`.
 
 ---
 
@@ -906,7 +911,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0** (as on [`restore`](#mnemonic-restore)): accepted so existing scripts do not fail, but there is no search-time ceiling any more; the completion reports a measured estimate and progress instead |
 | `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
-| `--ms1 <STRING>` | repeating; one ms1 card. `--ms1 -` reads one card from stdin (at most one; empty or separator-only stdin is refused) |
+| `--ms1 <STRING>` | repeating; one ms1 card. `--ms1 -` reads one card from stdin (at most one; empty or separator-only stdin is refused); `--ms1 @env:VAR` also works. An inline card on argv is refused unless `--allow-argv-secret` is given |
 | `--mk1 <STRING>` | repeating; one mk1 card |
 | `--md1 <STRING>` | repeating; one md1 card |
 | `--json` | JSON output |
@@ -1687,7 +1692,7 @@ mnemonic import-wallet --blob <FILE|-> [OPTIONS]
 | `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
 | `--format <bitcoin-core\|bsms\|coldcard\|coldcard-multisig\|descriptor\|electrum\|jade\|sparrow\|specter>` | format override; if absent, auto-detected via sniff (SPEC §6). **`descriptor` (v0.58.0)** reads a watch-only descriptor from a text file, tolerating leading `#`-comment lines + blank lines (so it accepts `export-wallet --format green` / `--format descriptor` output and any hand-written/foreign commented descriptor); singlesig **and** multisig; the BIP-380 checksum is validated if present (tolerated if absent). `descriptor` is **explicit-only** — it is never auto-sniffed (a bare descriptor is too generic), so `--format descriptor` is required |
 | `--select-descriptor <N\|active-receive\|active-change\|all>` | multi-descriptor selector for Bitcoin Core blobs (SPEC §5.3); accepts integer index, `active-receive`, `active-change`, or `all` (default); BSMS blobs coerce non-default values to `all` with stderr NOTICE |
-| `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; cosigners not addressed by any `--ms1[N]` flag remain watch-only (no entropy attached); accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel |
+| `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; cosigners not addressed by any `--ms1[N]` flag remain watch-only (no entropy attached); accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel An inline card on argv is refused unless `--allow-argv-secret` is given; pass it as `@env:VAR`. |
 | `--slot <@N.phrase=<phrase>>` | per-slot seed overlay; equivalent to `--ms1` but the phrase is converted to entropy and the derived xpub at the cosigner's origin path is compared against the blob's xpub; mutually exclusive with `--ms1[N]` for the same N; accepts `@env:VAR`; only the `phrase` subkey is accepted on `import-wallet` in v0.26.0 |
 | `--json` | emit a JSON envelope array on stdout (SPEC §7.4) instead of the human-readable summary; the v0.27.0 envelope `bundle` field is the full toolkit-native `BundleJson` shape (was a parse-side summary in v0.26.0; the v0.27.0 wire-shape replacement is documented in CHANGELOG `### Changed`) plus a new top-level `schema_version: "1"` field |
 | `--bsms-encryption-token <FILE\|->` | (v0.31.0) BIP-129 §Encryption decrypt token; reads session TOKEN from PATH (or `-` for stdin); applies PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 per BIP-129 §Encryption. Combine with `--format bsms` to decrypt encrypted Round-2 wallet shares (`--blob`), **OR (v0.32.1)** with `--bsms-round1` to decrypt encrypted Round-1 key records. **(v0.32.2) repeatable** (BIP-129 line 74: one shared TOKEN or one per Signer): a SINGLE `--bsms-encryption-token` is SHARED — it decrypts every encrypted Round-1 record AND the Round-2 blob (backward-compatible). MULTIPLE tokens are paired POSITIONALLY with `--bsms-round1` records (the Nth token decrypts the Nth record); per-Signer mode requires every `--bsms-round1` record to be encrypted, the token count to equal the record count, and NO encrypted Round-2 `--blob` in the same invocation (a single Round-2 share carries a single token → supplying multiple tokens with an encrypted blob is refused). Token file contents: lowercase ASCII hex (16 chars STANDARD, 32 chars EXTENDED); whitespace stripped; uppercase normalized. At most one token may read from stdin (`-`). Encrypted Round-2 blobs lack the `BSMS 1.0` header so `--format bsms` is REQUIRED for the encrypted Round-2 path. MAC verify failure → exit 2 (typed `BsmsMacMismatch`). |
@@ -1888,8 +1893,9 @@ on stdout + the round-trip status on stderr.
 
 ### Advisories
 
-The `--ms1` / `--slot @N.phrase=` overlay flags carry secret material
-on argv; pipe entropy via `@env:VAR` sentinel to avoid argv-leak;
+The `--ms1` / `--slot @N.phrase=` overlay flags carry secret material;
+an inline value on argv is refused unless `--allow-argv-secret` is given,
+so pass entropy via the `@env:VAR` sentinel;
 the v0.11.0 GUI emits typed values verbatim, so users must type
 `@env:VAR` explicitly themselves (per FOLLOWUP
 `gui-import-wallet-env-var-secret-channel` v0.12.0+ for
@@ -2118,7 +2124,7 @@ mnemonic seed-xor combine --share <phrase=<value-or-->> ... --shares <N> [OPTION
 
 | Flag | Purpose |
 |---|---|
-| `--share <phrase=<value-or-->>` | share phrase; repeating; at most ONE may be `phrase=-` (single stdin per invocation) |
+| `--share <phrase=<value-or-->>` | share phrase; repeating; at most ONE may be `phrase=-` (single stdin per invocation); use `phrase=@env:VAR` for each further share. An inline `phrase=<value>` on argv is refused unless `--allow-argv-secret` is given |
 | `--shares <N>` | asserted share count; MUST equal the number of `--share` flags (hard refusal on mismatch — catches cardinality omissions, NOT substitution) |
 | `--language <LANGUAGE>` | BIP-39 wordlist of inputs + output (default `english`) |
 | `--json-out <PATH>` | side-effect: write versioned JSON envelope |
@@ -2143,6 +2149,8 @@ mnemonic seed-xor combine \
   --share "phrase=<share-3>" \
   --shares 3
 ```
+
+> **Shares on the command line.** The inline `--share "phrase=<share-N>"` form above is shown for brevity and is refused unless `--allow-argv-secret` is given. Pass the first share as `--share phrase=-` (stdin) and every further share as `--share phrase=@env:VAR`.
 
 Stdout: the original 24-word phrase recovered.
 
@@ -2269,7 +2277,7 @@ mnemonic slip39 combine --share <slip39-mnemonic-or-> ... [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--share <slip39-mnemonic-or->` | repeating share input; at most ONE may be `-` (stdin) |
+| `--share <slip39-mnemonic-or->` | repeating share input; at most ONE may be `-` (stdin); use `@env:VAR` for each further share. An inline share on argv is refused unless `--allow-argv-secret` is given |
 | `--passphrase <P>` | SLIP-39 passphrase used at split time; `-` reads stdin, `@env:VAR` the environment |
 | `--passphrase-stdin` | read `--passphrase` from stdin (incompatible with any `--share -`) |
 | `--to <entropy\|phrase>` | output shape (default `entropy`); `phrase` emits a BIP-39 mnemonic per `--language` |
@@ -2309,6 +2317,8 @@ Stdout: 2 shares, each a 33-word SLIP-39 mnemonic (33 words for the
 mnemonic slip39 combine --share "<share-1>" --share "<share-2>" \
   --to phrase --language english
 ```
+
+> **Shares on the command line.** The inline `--share "<share-N>"` form above is shown for brevity and is refused unless `--allow-argv-secret` is given. Pass the first share as `--share -` (stdin) and every further share as `--share @env:VAR`.
 
 Stdout: the original `abandon × 23 + art` 24-word phrase. (Without
 `--to phrase`, `combine` defaults to `--to entropy` and emits 64 hex
@@ -2713,7 +2723,7 @@ mnemonic ms-shares combine --share <ms1-share-or-> ... [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--share <ms1-share-or->` | repeating share input; supply at least K. At most ONE may be `-` (stdin). Inline values emit a per-occurrence argv-leakage advisory |
+| `--share <ms1-share-or->` | repeating share input; supply at least K. At most ONE may be `-` (stdin); use `@env:VAR` for each further share. An inline share on argv is refused unless `--allow-argv-secret` is given |
 | `--to <phrase\|entropy\|ms1>` | output shape (default `phrase`); `phrase` emits a BIP-39 mnemonic (language per the recovered card / `--language`), `entropy` emits hex, `ms1` re-encodes a recovered single-string ms1 |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase` when the recovered secret is a plain `entr` payload (no wire language); ignored for `mnem` payloads and for `--to entropy`/`--to ms1` |
 | `--json` | emit a JSON object on stdout instead of the plain secret line |
@@ -2746,6 +2756,8 @@ index. Reverse with any 2:
 mnemonic ms-shares combine --share "<share-1>" --share "<share-2>" \
   --to phrase --language english
 ```
+
+> **Shares on the command line.** The inline `--share "<share-N>"` form above is shown for brevity and is refused unless `--allow-argv-secret` is given. Pass the first share as `--share -` (stdin) and every further share as `--share @env:VAR`.
 
 Stdout: the original `abandon × 23 + art` 24-word phrase. (Without
 `--to phrase`, `combine` defaults to `--to phrase`; use `--to entropy`
@@ -3576,10 +3588,10 @@ self-oracle at all.
 corrected like any `ms1`: a corrected share exits `4` (VERIFY-ME),
 and stderr says `repair: correction UNVERIFIED — a corrected K-of-N
 share cannot be self-verified; recombine it with the other shares
-(mnemonic ms-shares combine --share <SHARE> --share <SHARE> …) and
-confirm the recovered seed's address/xpub against a known-good copy
-before use; BIP-93 recommends confirming a corrected codex32
-string`. A clean share exits `0`, echoed.
+(mnemonic ms-shares combine --share - --share @env:VAR …, one share on
+stdin and each further share in an exported variable) and confirm the
+recovered seed's address/xpub against a known-good copy before use;
+BIP-93 recommends confirming a corrected codex32 string`. A clean share exits `0`, echoed.
 
 ### md1 non-chunked demotion (v0.86.0 funds fix) {#mnemonic-repair-md1-non-chunked-demotion}
 
