@@ -345,8 +345,9 @@ fn bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share() {
         d.stderr,
         format!(
             "repair: correction UNVERIFIED — a corrected K-of-N share cannot be self-verified; \
-             recombine it with the other shares (mnemonic ms-shares combine --share <SHARE> \
-             --share <SHARE> …) and confirm the recovered seed's address/xpub against a \
+             recombine it with the other shares (mnemonic ms-shares combine --share - \
+             --share @env:VAR …, one share on stdin and each further share in an exported \
+             variable) and confirm the recovered seed's address/xpub against a \
              known-good copy before use; BIP-93 recommends confirming a corrected codex32 \
              string\n{PK_ADVISORY}\n"
         )

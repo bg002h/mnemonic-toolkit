@@ -8,6 +8,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Argv secrets: the last five are refused (F-688, F-351, F-353)
+
+- **`ms-shares combine --share`, `slip39 combine --share`, `seed-xor combine --share <node>=`, `import-wallet --ms1`
+  and `verify-bundle --ms1` now refuse a secret given on the command line**, like every other argv secret: exit 2,
+  nothing parsed, nothing echoed, one block naming the replacement. The replacement is `--share -` (one share on
+  stdin) plus `--share @env:VAR` for each further share (`--share phrase=-` / `phrase=@env:VAR` on `seed-xor`),
+  `--ms1 -` or `--ms1 @env:VAR` on `verify-bundle`, and `--ms1 @env:VAR` on `import-wallet`.
+  `--allow-argv-secret` still admits the argv form. The `--help` text of the five flags and the manual say so.
+  A positional `ms1` on `inspect` / `repair` is unchanged (F-352).
+- **`--share @env:VAR` no longer warns that the share is on argv** (`ms-shares`, `slip39`, `seed-xor combine`): the warning was
+  judged after the variable was resolved, so the channel the refusal recommends printed the warning it replaces. `-` and
+  `@env:VAR` are now judged as typed.
+
 ### Installer pins: md 0.20.7 and mk 0.16.0
 
 - **`scripts/install.sh` installs md 0.20.7 and mk 0.16.0** (tags `descriptor-mnemonic-md-cli-v0.20.7`
