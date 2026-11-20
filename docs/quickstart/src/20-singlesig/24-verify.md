@@ -15,11 +15,11 @@ in the bundle output:
 
 ```sh
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  | mnemonic verify-bundle \
+  | MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f mnemonic verify-bundle \
       --network mainnet \
       --template bip84 \
       --slot @0.phrase=- \
-  --ms1 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
+  --ms1 @env:MS1 \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
   --mk1 mk1qprsqhpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6nwa2n977sw6zh34rma0nh \
   --md1 md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np \
@@ -29,7 +29,9 @@ printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon aba
 
 The flag set:
 
-- **`--ms1 <STRING>`** — the single ms1 card.
+- **`--ms1 <STRING>`** — the single ms1 card. It is secret material, so
+  `mnemonic` refuses it as a literal on the command line; here it comes from
+  the `MS1` environment variable (`@env:MS1`), and `--ms1 -` reads it from stdin.
 - **`--mk1 <STRING>`** — repeat once per mk1 string. BIP-84 emits
   two, so `--mk1` appears twice.
 - **`--md1 <STRING>`** — repeat once per md1 string. BIP-84 emits
