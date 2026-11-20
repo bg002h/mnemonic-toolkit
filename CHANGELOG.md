@@ -13,7 +13,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 - **`--from`, `--slot` and `seed-xor combine --share` given a value with no `=`** (a bare phrase, say) reached the flag's
   value parser, and clap's exit-64 "invalid value" error printed the whole value. The pre-parser guard now refuses it
   at exit 2 like the `<node>=` forms: the class is "secret key material", the length is named, the value is not, and
-  the channel is that flag's own (`--from phrase=-`, `--slot @N.phrase=-`, `--share phrase=-`). `-`, `@env:VAR` and an
+  the channel is that flag's own (`--from phrase=-`, `--slot @N.phrase=-`, `--share phrase=-`). A value whose node (`--from`, `--share`) or `@N.<subkey>` (`--slot`) is not one the flag accepts is refused the same way. `-`, `@env:VAR` and an
   empty value pass. `--allow-argv-secret` admits it. The manual's argv-refusal section says so.
 
 ### Argv secrets: the last five are refused (F-688, F-351, F-353)

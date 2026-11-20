@@ -392,15 +392,27 @@ pub fn inspect(argv: &[String]) -> Verdict {
 ///
 /// `word-card --from` is the one `--from` that is not node-shaped: it takes a
 /// bare public `mk1`/`md1` card (see `word_card.rs`), so it is exempt.
-fn shapeless(flag: &str, value: &str, sub: Option<&str>, position: usize) -> Option<Finding> {
-    if sub == Some("word-card") || is_private_channel_value(value, true) {
+fn shapeless(
+    flag: &str,
+    value: &str,
+    argv: &[String],
+    sub: Option<&str>,
+    position: usize,
+) -> Option<Finding> {
+    if sub == Some("word-card") || (!value.contains('=') && is_private_channel_value(value, true)) {
         return None;
     }
     Some(Finding {
         flag: flag.to_string(),
         class: class_of_token(""),
         len: value.chars().count(),
-        channel: channel_for(flag, sub, None)?,
+        channel: channel_for(
+            flag,
+            sub,
+            // `seedqr decode --from` accepts only `seedqr=`; advising
+            // `phrase=-` there would name a form the verb rejects.
+            (sub == Some("seedqr") && argv.iter().any(|t| t == "decode")).then_some("seedqr="),
+        )?,
         position,
     })
 }
@@ -410,8 +422,11 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
     match entry.shape {
         Shape::NodeEquals => {
             let Some((token, material)) = value.split_once('=') else {
-                return shapeless(entry.flag, value, sub, position);
+                return shapeless(entry.flag, value, argv, sub, position);
             };
+            if crate::cmd::convert::NodeType::from_token(token).is_none() {
+                return shapeless(entry.flag, value, argv, sub, position);
+            }
             if !SECRET_NODE_TYPES_ARGV.contains(&token) {
                 return None;
             }
@@ -429,9 +444,18 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
         Shape::SlotEquals => {
             // `@<index>.<subkey>=<material>`
             let Some((head, material)) = value.split_once('=') else {
-                return shapeless(entry.flag, value, sub, position);
+                return shapeless(entry.flag, value, argv, sub, position);
             };
-            let (index, subkey) = head.strip_prefix('@')?.split_once('.')?;
+            let Some((index, subkey)) = head
+                .strip_prefix('@')
+                .and_then(|h| h.split_once('.'))
+                .filter(|(i, k)| {
+                    i.parse::<u8>().is_ok()
+                        && crate::slot_input::SlotSubkey::from_token(k).is_some()
+                })
+            else {
+                return shapeless(entry.flag, value, argv, sub, position);
+            };
             if !SECRET_SLOT_SUBKEYS.contains(&subkey) {
                 return None;
             }
@@ -449,8 +473,11 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
         Shape::Share => {
             if sub == Some("seed-xor") {
                 let Some((token, material)) = value.split_once('=') else {
-                    return shapeless(entry.flag, value, sub, position);
+                    return shapeless(entry.flag, value, argv, sub, position);
                 };
+                if crate::cmd::convert::NodeType::from_token(token).is_none() {
+                    return shapeless(entry.flag, value, argv, sub, position);
+                }
                 if !SECRET_NODE_TYPES_ARGV.contains(&token) {
                     return None;
                 }

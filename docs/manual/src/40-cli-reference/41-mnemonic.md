@@ -89,7 +89,7 @@ A value with **no `=`** on `--from`, `--slot` or `seed-xor combine --share`
 material" and answered with that flag's `<node>=-` channel. Without this the
 flag's own parser would reject the value and print it back in its error
 message. `-`, `@env:VAR` and an empty value carry no material and are not
-refused.
+refused. A value whose node (`--from`, `--share`) or `@N.<subkey>` (`--slot`) is not one the flag accepts is refused the same way.
 
 ### How `--passphrase` is read (every subcommand)
 
