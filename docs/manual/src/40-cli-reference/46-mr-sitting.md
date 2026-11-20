@@ -104,10 +104,6 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8>] [--closing-out <
 
 > \<the error's text\> Try \<12 or 24\> words? (y/n)
 
-**ST-PL-01:**
-
-> make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel, under the title "\<TITLE\>". An engraving machine can read this plate from the plates file, \<path\> (in this computer's RAM; wiped when the session ends); using it is optional. Press Enter when the plate is done
-
 **ST-PL-01b:**
 
 > make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel, from this screen, under the title "\<TITLE\>" (no plates file: \<why\>). Press Enter when the plate is done
@@ -147,10 +143,6 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8>] [--closing-out <
 **ST-HB-W2:**
 
 > the hand-back could not be written to \<path\> (\<os error\>): fix the drive and press Enter to try again
-
-**ST-CL-01:**
-
-> phone wallet check, before any deposit. mr-gui, in its own window on this computer, now makes the card from the hand-back. The check then proves that the card's phone wallet is seed \<L\>'s BIP-85 child, so \<from\> restores it. It needs both programs: the card is only in mr-gui, and seed \<L\> only in this sitting's memory. Make the card in mr-gui; when mr-gui says the closing file is written, type the word ready here. Or type the word later to end the sitting now: you then run this check yourself before any deposit, typing seed \<L\>'s words from \<from\>:
 
 **ST-CL-07:**
 
@@ -331,7 +323,7 @@ mr-sitting glossary [<term>]...
 | `[TERM]...` | The term, in any case; a space reads as `-`. The words after `glossary` are one term, joined by one space |
 | `-h, --help` | Print help |
 
-`glossary` reads no secret and takes no hardening, lock or file. With no term it prints every entry, one `<term>: <text>` per line, on stdout (exit 0); with a term it prints that entry alone (exit 0), or ST-G-02 on stderr (exit 2) if there is none. In the sitting, Ctrl-G opens the same entries as an overlay.
+`glossary` reads no secret and takes no hardening, lock or file. With no term it prints every entry, a header line, then one `<term>: <text>` per line, on stdout (exit 0); with a term it prints that entry alone (exit 0), or ST-G-02 on stderr (exit 2) if there is none. In the sitting, Ctrl-G opens the same entries as an overlay.
 
 **ST-G-02:**
 
@@ -558,4 +550,4 @@ The sitting writes the plates file only encrypted, with a plates password it gen
 |---|---|
 | 0 | `sit`: the session ended at ST-END-02. `verify`: exactly one block matched in full. `root`, `child`: as `mr root`, `mr child`. |
 | 1 | A refusal of holder material or a check, or the holder stopped: `sit` stopped (ST-END-03, ST-END-04), a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09); `verify` mismatch (ST-V-04, ST-V-05, ST-V-06), or stopped (ST-V-09). |
-| 2 | Usage and input files: clap errors; a refused I1, I2 or argument (ST-PLAN-…, ST-FILE-…, ST-HB-02, ST-START-02, ST-START-03, ST-START-04, ST-START-07, ST-START-08, ST-START-09, ST-START-11, ST-V-07, ST-V-08); `practice`: ST-PR-04 to ST-PR-07 and ST-PR-12; `glossary`: ST-G-02. Always before any secret is read. |
+| 2 | Usage and input files: clap errors; a refused I1, I2 or argument (ST-PLAN-…, ST-FILE-…, ST-HB-02, ST-START-02, ST-START-03, ST-START-04, ST-START-07, ST-START-11, ST-V-07, ST-V-08); `practice`: ST-PR-04 to ST-PR-07 and ST-PR-12; `glossary`: ST-G-02. Always before any secret is read. |
