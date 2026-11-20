@@ -187,7 +187,9 @@ pub struct VerifyBundleArgs {
     /// `--bundle-json`. `--ms1 -` reads ONE ms1 from stdin (at most one per
     /// invocation; on a terminal it prompts `Enter ms1:` with echo off);
     /// stdin that is empty or only separators is refused, never read as the
-    /// watch-only `""`.
+    /// watch-only `""`. An inline card on argv is REFUSED (argv is public)
+    /// unless the global `--allow-argv-secret` is given; use `--ms1 -` or
+    /// `--ms1 @env:VAR`.
     #[arg(long, action = clap::ArgAction::Append, conflicts_with = "bundle_json")]
     pub ms1: Vec<String>,
 

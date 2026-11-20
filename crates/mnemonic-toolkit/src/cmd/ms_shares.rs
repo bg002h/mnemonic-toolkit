@@ -92,8 +92,9 @@ pub struct MsSharesCombineArgs {
     /// A codex32 K-of-N share string. Repeating; supply at least K. At most
     /// ONE may be `-` (stdin).
     ///
-    /// Inline values emit a per-occurrence argv-leakage advisory; prefer
-    /// `--share -` (stdin) for sensitive shares.
+    /// An inline share on argv is REFUSED (argv is public) unless the global
+    /// `--allow-argv-secret` is given. Use `--share -` (stdin, ONE share) and
+    /// `--share @env:VAR` for each further share.
     #[arg(
         long = "share",
         value_name = "<ms1-share-or->",
@@ -162,6 +163,14 @@ pub fn run<R: Read, W: Write, E: Write>(
             run_split(a, stdin, stdout, stderr)
         }
         MsSharesCommand::Combine(a) => {
+            // Per-share inline argv-leakage advisory (under
+            // `--allow-argv-secret`), judged on the value AS TYPED: `-` and
+            // `@env:VAR` are private channels and must not warn.
+            for sh in &a.share {
+                if sh != "-" && !sh.starts_with("@env:") {
+                    secret_in_argv_warning(stderr, "--share", "--share -");
+                }
+            }
             let owned_a;
             let a = if a.share.iter().any(|v| v.starts_with("@env:")) {
                 owned_a = resolve_combine_env_sentinels(a)?;
@@ -355,13 +364,6 @@ fn run_combine<R: Read, W: Write, E: Write>(
         return Err(ToolkitError::BadInput(
             "ms-shares combine: at most one stdin consumer per invocation (across --share)".into(),
         ));
-    }
-
-    // Per-share inline argv-leakage advisory.
-    for sh in &args.share {
-        if sh != "-" {
-            secret_in_argv_warning(stderr, "--share", "--share -");
-        }
     }
 
     // Resolve --share values (stdin or inline) into Zeroizing<String>.
