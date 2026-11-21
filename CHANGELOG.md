@@ -8,6 +8,8 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+## mnemonic-toolkit [0.107.0] — 2026-11-20
+
 ### Argv secrets: a bare value is no longer echoed by the parser
 
 - **`--from`, `--slot` and `seed-xor combine --share` given a value with no `=`** (a bare phrase, say) reached the flag's
