@@ -29,6 +29,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   judged after the variable was resolved, so the channel the refusal recommends printed the warning it replaces. `-` and
   `@env:VAR` are now judged as typed.
 
+### Installer pins: md 0.20.8 and ms 0.20.5
+
+- **`scripts/install.sh` installs md 0.20.8 and ms 0.20.5** (tags `descriptor-mnemonic-md-cli-v0.20.8`
+  and `ms-cli-v0.20.5`). `md address` in text mode now prints, on stderr and before the addresses,
+  `note: network <NET> (--network, default mainnet): an md1 card does not record its network`; stdout, `--json`
+  and the exit code are unchanged. `ms` no longer echoes a secret it reads from stdin at a terminal; no `ms` flag or
+  printed text changed. The pins are mirrored in `manual.yml`, `quickstart.yml`, `technical-manual.yml` and
+  `cross-tool-differential.yml` (md only); the Examples golden shows them; `first_signed` for md stays `0.20.4` and
+  for ms stays `0.20.2`. The two technical-manual `md address` transcripts
+  (`md1-address-bip44-receive0`, `md1-address-bip84-receive0`) are regenerated with the new stderr note. The GUI manual
+  stays on mnemonic-gui v0.63.0's tier (md 0.20.3, ms 0.20.1): its §82 section and `pinned-upstream.toml`'s
+  `[installer-ahead]` table name the new tags, and `manual-gui.yml` stays at the GUI's tags.
+
 ### Installer pins: md 0.20.7 and mk 0.16.0
 
 - **`scripts/install.sh` installs md 0.20.7 and mk 0.16.0** (tags `descriptor-mnemonic-md-cli-v0.20.7`

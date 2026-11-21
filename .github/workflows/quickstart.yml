@@ -140,14 +140,14 @@ jobs:
         # `--features cli-compiler` matches scripts/install.sh's component pin.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.7 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.8 md-cli --features cli-compiler
 
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'
         # Mirrors the mk-cli + md-cli install patterns above.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.4 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.5 ms-cli
 
       - name: Build mnemonic binary (debug)
         if: steps.guard.outputs.relevant == 'true'
