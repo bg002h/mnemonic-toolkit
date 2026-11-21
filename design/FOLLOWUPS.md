@@ -6727,3 +6727,9 @@ screen printed. Print the values.
 - Minor: toolkit argv guard: `export-wallet --slot <bare or typo'd value>` still reaches clap's exit-64 echo because the verb has no private channel (channel_for returns None); decide an advice-free refusal wording (F-352 family). Source: agent-reports/review-toolkit175.md @96900e70 (M2).
 - Status: `deferred-minor`.
 - Tier: `toolkit`.
+
+### `manual-mr-seeds-mk-refusal-stale` — stale E53 M-k refusal in the mr manual page (owning phase: **secret fix program**)
+- Surfaced: 2026-11-20, review of the mr seeds-on-argv PRs (review-directfix-mr-seeds-argv).
+- What: `manual-mr-seeds-mk-refusal-stale` (deferred-minor, toolkit): "45-mr.md:80 keeps the E53 M-k 'arrived as separate command-line words' refusal and its `--seeds \"SEED_WORDS\"` remedy as live; `mr` no longer reaches it after E92. Owner: secret fix program." Source: review-directfix-mr-seeds-argv.
+- Status: `deferred-minor`.
+- Tier: `docs`.
