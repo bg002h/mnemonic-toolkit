@@ -43,13 +43,19 @@ newer than these.
 ## When the installer is ahead of the GUI {#installer-ahead}
 
 The toolkit installer currently installs four CLI releases newer than
-this GUI was built against: `mnemonic-toolkit-v0.106.0` (the GUI's label
+this GUI was built against: `mnemonic-toolkit-v0.107.0` (the GUI's label
 reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.8`
 (label `Pinned: md 0.20.3`), `ms-cli-v0.20.5` (label
 `Pinned: ms 0.20.1`) and `mk-cli-v0.16.0` (label `Pinned: mk 0.13.0`).
 The forms run unchanged except one: on the `mk encode` form, the
 `--separator` dropdown's `hyphen` and `comma` are now refused (see
-below), so choose `space`. `mnemonic --version`, `md --version`,
+below), so choose `space`. The 0.107.0 `mnemonic` refuses a secret
+typed on the command line at exit 2 for five more flags
+(`ms-shares combine --share`, `slip39 combine --share`, `seed-xor
+combine --share`, `import-wallet --ms1`, `verify-bundle --ms1`), but
+no form is affected: the GUI sends each secret over a private channel
+(`-` or `@env:`) or, on an OS without one, adds `--allow-argv-secret`
+itself. `mnemonic --version`, `md --version`,
 `ms --version` and `mk --version` printing the newer versions is
 expected.
 
