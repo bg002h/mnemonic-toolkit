@@ -164,6 +164,29 @@ pub fn canonicalize_placeholder_indices(d: &mut Descriptor) -> Result<(), Error>
     // ignoring them in walk_collect_first.
     check_placeholder_bounds(&d.tree, d.n)?;
 
+    // Every TLV entry idx must be < n (checked in the order the TLVs are
+    // written): an out-of-range idx is a typed error, never an index panic.
+    let tlv_idxs = d
+        .tlv
+        .use_site_path_overrides
+        .iter()
+        .flatten()
+        .map(|(i, _)| *i)
+        .chain(d.tlv.fingerprints.iter().flatten().map(|(i, _)| *i))
+        .chain(d.tlv.pubkeys.iter().flatten().map(|(i, _)| *i))
+        .chain(
+            d.tlv
+                .origin_path_overrides
+                .iter()
+                .flatten()
+                .map(|(i, _)| *i),
+        );
+    for idx in tlv_idxs {
+        if idx >= d.n {
+            return Err(Error::PlaceholderIndexOutOfRange { idx, n: d.n });
+        }
+    }
+
     let mut seen = vec![false; n];
     let mut first_occurrences: Vec<u8> = Vec::with_capacity(n);
     walk_collect_first(&d.tree, &mut seen, &mut first_occurrences);

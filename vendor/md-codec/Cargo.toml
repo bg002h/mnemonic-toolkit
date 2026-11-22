@@ -13,7 +13,7 @@
 edition = "2024"
 rust-version = "1.85"
 name = "md-codec"
-version = "0.47.0"
+version = "0.48.5"
 build = false
 autolib = false
 autobins = false
@@ -87,6 +87,10 @@ name = "bitcoind_differential"
 path = "tests/bitcoind_differential.rs"
 
 [[test]]
+name = "bughunt"
+path = "tests/bughunt.rs"
+
+[[test]]
 name = "canonical_payload"
 path = "tests/canonical_payload.rs"
 
@@ -117,6 +121,10 @@ path = "tests/compose_support.rs"
 [[test]]
 name = "compose_vectors"
 path = "tests/compose_vectors.rs"
+
+[[test]]
+name = "coordinator"
+path = "tests/coordinator.rs"
 
 [[test]]
 name = "correct_chunks"
@@ -157,6 +165,10 @@ path = "tests/mint_policy_does_not_reach_decode.rs"
 [[test]]
 name = "mixed_case_reject"
 path = "tests/mixed_case_reject.rs"
+
+[[test]]
+name = "network_version_bytes"
+path = "tests/network_version_bytes.rs"
 
 [[test]]
 name = "parity_smoke"
@@ -213,6 +225,10 @@ path = "tests/skeleton_key_conformance.rs"
 [[test]]
 name = "smoke"
 path = "tests/smoke.rs"
+
+[[test]]
+name = "split_unadmitted"
+path = "tests/split_unadmitted.rs"
 
 [[test]]
 name = "wallet_policy"

@@ -8,6 +8,15 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### md-codec 0.47.0 -> 0.48.5 adopted
+
+- **The md-codec pin moves from `cf35d61a` (0.47.0) to `c8bb97a5` (tag `md-codec-v0.48.5`), `Cargo.lock`, `fuzz/Cargo.lock`
+  and `vendor/md-codec` with it.** md-codec 0.48.x adds one `Error` variant, `TlvUnknownTagOutOfRange` (an unknown TLV
+  tag outside the reserved range `0x04..=0x1f`). It routes at exit 2 (`error.rs`) with the sibling TLV decode rejects and
+  prints `md1 unknown TLV tag 0x.. is outside the reserved range 0x04..=0x1f` (`friendly.rs`, table test 51 -> 52 rows).
+  No command emits an unknown TLV, so no existing input reaches it. The manual's `repair` section now names md-codec
+  0.48.5 as the build that reads wire versions 4 and 8.
+
 ## mnemonic-toolkit [0.107.0] — 2026-11-20
 
 ### Argv secrets: a bare value is no longer echoed by the parser

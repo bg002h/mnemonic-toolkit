@@ -82,6 +82,19 @@ pub struct Skeleton {
     /// verdict, it does not make a template-only card a different policy
     /// from the same card seated.
     pub keys_present: bool,
+    /// Whether a `tr` policy's tap-leaf key OCCURRENCES, in wire order
+    /// (left to right, the order Liana's recipe hashes them), have
+    /// compressed public keys in STRICTLY ascending byte order — sorted and
+    /// unique. `None` when the root is not `tr` or no keys are present.
+    ///
+    /// Key material, so NOT in [`SkeletonKey`] (ruling R-1: the key stays
+    /// coordinator-independent). It exists for one rule: libnunchuk
+    /// re-derives a Liana-style unspendable key over its signers' pubkeys
+    /// SORTED and DEDUPLICATED (`GetUnspendableXpub`, libnunchuk `a7cfb49`
+    /// `src/descriptor.cpp:689-712`, `std::sort` + `std::unique` at
+    /// `:700-701`), while Liana hashes them in wire order with duplicates;
+    /// the two chain codes agree exactly when this is `Some(true)`.
+    pub leaf_keys_ascending: Option<bool>,
 }
 
 /// Why [`skeleton`] refused to build a [`Skeleton`].
@@ -211,6 +224,7 @@ pub fn skeleton(d: &Descriptor) -> Result<Skeleton, SkeletonError> {
     // and, per the module doc, it is also simply WRONG: it cannot tell a
     // template-only card from a partial-decoded one.
     let keys_present = d.is_wallet_policy();
+    let leaf_keys_ascending = leaf_keys_ascending(d);
 
     Ok(Skeleton {
         root,
@@ -220,7 +234,51 @@ pub fn skeleton(d: &Descriptor) -> Result<Skeleton, SkeletonError> {
         fp_partition,
         key_partition,
         keys_present,
+        leaf_keys_ascending,
     })
+}
+
+/// See [`Skeleton::leaf_keys_ascending`]. Walks the tap tree in wire order —
+/// the same pre-order, left-first order `to_miniscript`'s
+/// `collect_leaf_pubkeys` gets from `TapTree::leaves()` + `iter_pk()` — and
+/// reads each occurrence's pubkey from the `Pubkeys` TLV's 65-byte
+/// `chain code (32) || compressed key (33)` entry.
+fn leaf_keys_ascending(d: &Descriptor) -> Option<bool> {
+    let Body::Tr { tree, .. } = &d.tree.body else {
+        return None;
+    };
+    if !d.is_wallet_policy() {
+        return None;
+    }
+    let pubkeys = d.tlv.pubkeys.as_ref()?;
+    let mut occurrences = Vec::new();
+    if let Some(t) = tree {
+        collect_key_occurrences(t, &mut occurrences);
+    }
+    let mut prev: Option<[u8; 33]> = None;
+    for index in occurrences {
+        let (_, entry) = pubkeys.iter().find(|(i, _)| *i == index)?;
+        let mut pk = [0u8; 33];
+        pk.copy_from_slice(&entry[32..]);
+        if prev.is_some_and(|p| pk <= p) {
+            return Some(false);
+        }
+        prev = Some(pk);
+    }
+    Some(true)
+}
+
+fn collect_key_occurrences(n: &Node, out: &mut Vec<u8>) {
+    match &n.body {
+        Body::KeyArg { index } => out.push(*index),
+        Body::MultiKeys { indices, .. } => out.extend_from_slice(indices),
+        Body::Children(children) | Body::Variable { children, .. } => {
+            for c in children {
+                collect_key_occurrences(c, out);
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Render one group of slots, already ascending

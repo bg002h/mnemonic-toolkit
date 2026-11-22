@@ -318,6 +318,10 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         E::TlvOrderingViolation { prev, current } => {
             format!("md1 TLV ordering: 0x{:02x} after 0x{:02x}", current, prev)
         }
+        E::TlvUnknownTagOutOfRange { tag } => format!(
+            "md1 unknown TLV tag 0x{:02x} is outside the reserved range 0x04..=0x1f",
+            tag,
+        ),
         E::PlaceholderIndexOutOfRange { idx, n } => {
             format!("md1 placeholder index {} out of range (n={})", idx, n)
         }
@@ -701,7 +705,7 @@ mod tests {
         use md_codec::error::ContextKind;
         use md_codec::Error as E;
         use md_codec::Tag;
-        let rows: [(E, &str, &str); 51] = [
+        let rows: [(E, &str, &str); 52] = [
             (
                 E::BitStreamTruncated {
                     requested: 8,
@@ -769,6 +773,11 @@ mod tests {
                 },
                 "TLV ordering",
                 "TlvOrderingViolation",
+            ),
+            (
+                E::TlvUnknownTagOutOfRange { tag: 0x03 },
+                "unknown TLV tag",
+                "TlvUnknownTagOutOfRange",
             ),
             (
                 E::PlaceholderIndexOutOfRange { idx: 5, n: 3 },

@@ -3660,7 +3660,7 @@ did not actually apply.
 ### md1 at an unreadable wire version (F-642) {#mnemonic-repair-md1-unreadable-version}
 
 BCH correction does not read the payload, so it works on a card whose
-wire version this build cannot decode (md-codec 0.47.0 reads versions 4
+wire version this build cannot decode (md-codec 0.48.5 reads versions 4
 and 8). On a **single-string** `--md1` card at such a version,
 `mnemonic repair` keeps the correction: the report and corrected string
 go to stdout, the JSON `verdict` is `"unreadable_version"`, and the exit

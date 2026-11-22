@@ -178,8 +178,8 @@ pub(crate) fn encode_payload_for_identity(d: &Descriptor) -> Result<(Vec<u8>, us
     encode_payload_inner(d, Admission::SkipPolicy, None)
 }
 
-/// Serialise a card applying NO admission policy -- for COMPARISON and
-/// HASHING of cards that already exist, **never for minting**.
+/// Serialise a card applying NO admission policy -- for COMPARISON, HASHING
+/// and RE-EMITTING of cards that already exist, **never for minting**.
 ///
 /// Same bytes as [`encode_payload`] for every descriptor that function
 /// accepts; the only difference is that the mint-time rules (F-217 origin/key
@@ -195,6 +195,15 @@ pub(crate) fn encode_payload_for_identity(d: &Descriptor) -> Result<(Vec<u8>, us
 /// caller that is about to write a card must use [`encode_payload`] (or
 /// [`encode_md1_string`]); a caller that only asks "are these the same
 /// bytes?" uses this.
+///
+/// Re-emitting a card that already exists is not minting either (Refugium
+/// SPEC §9 Q17): printing the md1 card carried inside an existing `mr1` card
+/// must work even when mint policy would refuse that md1 today. The
+/// single-string form is `codex32::wrap_payload` over this function's
+/// output; the chunked form is [`crate::chunk::split_unadmitted`]. Nothing in
+/// the signature can check that the card already exists, so the mint gate
+/// stays the caller's job: a tool that creates a new card must use
+/// [`encode_payload`], [`encode_md1_string`] or [`crate::chunk::split`].
 pub fn encode_payload_unadmitted(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
     encode_payload_inner(d, Admission::SkipPolicy, None)
 }
