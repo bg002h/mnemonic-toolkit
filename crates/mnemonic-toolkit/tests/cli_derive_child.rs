@@ -875,3 +875,22 @@ fn r4_non_master_xprv_with_passphrase_refused_without_warning() {
             .assert(),
     );
 }
+
+#[test]
+fn r5_non_master_xprv_depth2_refused() {
+    // BIP-32 test vector 1 chain m/0'/1 (depth 2).
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["derive-child", "--from", "xprv=-", "--application", "hex", "--length", "16", "--index", "0"])
+        .write_stdin("xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs\n")
+        .assert()
+        .code(1);
+    let e = String::from_utf8(o.get_output().stderr.clone()).unwrap();
+    assert!(
+        e.trim().starts_with(
+            "error: derive-child: the xprv/tprv is at depth 2, not a master key (depth 0);"
+        ),
+        "{e:?}"
+    );
+    assert!(o.get_output().stdout.is_empty());
+}

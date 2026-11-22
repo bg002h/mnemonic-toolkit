@@ -53,6 +53,7 @@ Run on base 04c56bfa with `target/debug/mnemonic` built `--locked` (cargo 1.85.0
 | `r2_non_master_xprv_env_sentinel_refused` | `XP="$X" mnemonic derive-child --from xprv=@env:XP --application bip39 --length 12 --index 0` | stdout `used moral panda trip raccoon soon render bulb remember math hello unable`, exit 0 | same stderr line, stdout empty, exit 1 |
 | `r3_non_master_tprv_refused` | `echo "$T" \| mnemonic derive-child --from xprv=- --application xprv --length 0 --index 0 --network signet` | stdout `tprv8ZgxMBicQKsPcuHBxrKgWm53dh7gREHMpgnaNC4HZSp9n11qtFAgxucAYvtiTvWnu7MiP29CbMjcJwwzuLMT5b3GavcAp3twiGEUggFpdBQ`, exit 0 | same stderr line, stdout empty, exit 1 |
 | `r4_non_master_xprv_with_passphrase_refused_without_warning` | `echo "$X" \| PP=foo mnemonic derive-child --from xprv=- --application hex --length 16 --index 0 --passphrase @env:PP` | stderr `warning: --passphrase ignored on --from xprv (no BIP-39 mnemonic to extend)`, stdout `ad95c2cd242617af788dc26e9ae95b82`, exit 0 | stderr is only the refusal line (no passphrase warning), stdout empty, exit 1 |
+| `r5_non_master_xprv_depth2_refused` | `echo "$X2" \| mnemonic derive-child --from xprv=- --application hex --length 16 --index 0` | stdout `b54bedab9d71b33970fa784ae8ad1813`, stderr the private-key warning, exit 0 | stderr starts `error: derive-child: the xprv/tprv is at depth 2, not a master key (depth 0);`, stdout empty, exit 1 |
 
 Each test asserts exit code 1, empty stdout, and stderr equal to the refusal line (trimmed). Each RED row fails on base on the exit-code assertion; the builder runs them and records the failure before the GREEN commit.
 
@@ -82,7 +83,7 @@ Not changed: `docs/manual-gui` (pinned to the GUI's release CLI, as for #56, FIX
 
 ## 8. Gate
 
-`bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/build-gate.sh <builder worktree> origin/master --rows 'test(/^r[1-4]_non_master_/)' --rows-expect 4`
+`bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/build-gate.sh <builder worktree> origin/master --rows 'test(/^r[1-5]_non_master_/)' --rows-expect 5`
 
 It runs the `[mnemonic-toolkit]` conf (fmt, clippy `-D warnings`, `cargo nextest run --locked --workspace`, doc tests) and the mutation gate on the diff. Not covered by it: the `manual` CI job (`make -C docs/manual audit`, with `verify-examples` and the doc-flag-lint mutation self-test) and `manual-gui`; run both, locally or as green CI on the head. Class B (derives secrets).
 
