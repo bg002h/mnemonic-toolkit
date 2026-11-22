@@ -95,9 +95,9 @@ error (`use_stderr()`) is printed on stderr as today and exits 64; its print fai
 
 ### 3.4 The 34 discarded stdout writes
 
-Replace each `.ok()` in the section 2 item 1 list with `?` (for `serde_json::to_writer`, map the
-`serde_json::Error` into `ToolkitError::Io` via `std::io::Error::from`; serde_json implements
-`From<serde_json::Error> for io::Error`). Under the sink these never fire in the binary; they stop each verb hiding a
+Replace each `.ok()` in the section 2 item 1 list: a `writeln!`/`write!` site becomes
+`.map_err(ToolkitError::Io)?;` (the repo idiom, `cmd/addresses.rs:381`); a `serde_json::to_writer` site becomes
+`.map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;`. Add no `From<std::io::Error> for ToolkitError`. Under the sink these never fire in the binary; they stop each verb hiding a
 write error from a direct caller (the bin unit tests that pass a `Vec<u8>` or a failing writer), and R22 keeps the
 idiom from returning. Fix the stale comment at `gui_schema.rs:1330-1332` ("Match the `.ok()` pattern ...") to say the
 write is propagated. No other text changes.
@@ -122,7 +122,19 @@ a blank line, `---`, a blank line, `## When stdout fails`, a blank line, then th
 (Exit 5 becomes 1 in every case; md and mk state it the same way, so no sentence is needed for 5.)
 
 No flag changes, so `docs/manual/tests/lint.sh` flag coverage is unaffected; the builder runs it anyway (gate, 8).
-CHANGELOG: the `changelog-check` job wants a section; the builder adds the entry per the repo's release process.
+CHANGELOG: insert after `## [Unreleased]` and its blank line (`CHANGELOG.md:9-10`); no version bump
+(`changelog-check.yml` runs only on tags):
+
+```
+### A failed stdout write no longer exits 0
+
+- **Every verb, `--help` and `--version`**: a write error on stdout other than a closed pipe (a full disk,
+  `> /dev/full`, a read-only stdout) now prints `mnemonic: cannot write the output: <error>` on stderr and exits 1;
+  `derive-child`, `convert`, `bundle`, `gui-schema` and `verify-bundle` used to exit 0 with nothing written. A verb
+  that was already failing keeps its code; exit 4 from `repair` and `inspect` becomes 1, every other exit 4 is kept.
+  A reader that closes the pipe early (`| head`) only stops the output, and the exit code is the verb's own (it was
+  1 with `error: I/O error: Broken pipe` for some verbs). The manual's new "When stdout fails" section says so.
+```
 
 ## 5. RED rows (run at `dbac472f`, signet, public test phrases only)
 
@@ -154,7 +166,7 @@ states what it does not cover). It prints `<row> rc=<exit> stderr=<last stderr l
 | R23 | `inspect --md1 md1yppqqxp3cg2x3r70ckk4kjaf` (a dead pathless md1, cli_inspect_partial.rs:42; exit 4 when stdout works) (`>/dev/full`) | rc=1, `error: I/O error: No space left on device (os error 28)` | rc=1, last stderr line `W`; no `error: I/O error` line |
 
 Measured output at `dbac472f`, verbatim except the long advisory line cut to its start (`warning: stdout carries
-private key material (can spend) — …` is R1-R4's and R12's last line):
+private key material (can spend) — …` is R1-R4's, R12's and R17's last line):
 
     R1-derive-child-full rc=0   R2-convert-text-full rc=0   R3-convert-json-full rc=0   R4-bundle-full rc=0
     R5-gui-schema-full rc=0 stderr=
@@ -166,7 +178,7 @@ private key material (can spend) — …` is R1-R4's and R12's last line):
     R13-verify-bundle-ok-full rc=0 stderr=          R14-verify-bundle-mismatch4-full rc=4 stderr=
     R15-repair-applied5-full rc=1 stderr=error: I/O error: No space left on device (os error 28)
     R16-repair-unverified4-full rc=1 stderr=error: I/O error: No space left on device (os error 28)
-    R17-derive-child-fsize0 rc=0 bytes=0 stderr=
+    R17-derive-child-fsize0 rc=0 bytes=0 stderr=warning: stdout carries private key material (can spend) — …
     R18-gui-schema-closed-fd rc=0 stderr=
     R23-inspect-partial4-full rc=1 stderr=error: I/O error: No space left on device (os error 28)
 
@@ -217,8 +229,10 @@ exit 4 is kept. Rows R14, R16, R21, R23.
     cargo +1.95.0 fmt --all -- --check && cargo clippy --locked --all-targets -- -D warnings \
       && cargo nextest run --locked --workspace --build-jobs 6 -j 6 > gate.log 2>&1; grep -E '^\s+(PASS|FAIL)|Summary' gate.log | tail -5
     cargo build --locked --bin mnemonic && design/fix-tk-stdout-write-errors-red.sh target/debug/mnemonic
-    cargo check --locked --bin mnemonic --target x86_64-pc-windows-msvc   # if the target is installed; else the release CI row
-    make -C docs/manual lint MNEMONIC_BIN=$PWD/target/debug/mnemonic MD_BIN=… MS_BIN=… MK_BIN=…
+    make -C docs/manual lint MNEMONIC_BIN=$PWD/target/debug/mnemonic MD_BIN=md MS_BIN=ms MK_BIN=mk
+Windows: not checkable locally (`secp256k1-sys` needs the MSVC C compiler). The `#[cfg(unix)]` guard is gated by
+release.yml's `windows-x86_64` leg on the PR head, which runs only when the PR is not a draft; rust.yml's cross row
+builds `--lib` only and does not compile `out_sink.rs`.
 
 Plus every other job of `.github/workflows/rust.yml`, `manual.yml`, `changelog-check.yml` locally or green on the PR
 head (RULES.md build gate). Not covered by this gate: Windows behaviour of the sink (no read-only check there, as md),

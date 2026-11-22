@@ -53,10 +53,11 @@ row R14-verify-bundle-mismatch4-full "$Z" full "${VB[@]}"
 row R15-repair-applied5-full "" full repair --mk1 "$K1BAD" "$K2"
 row R16-repair-unverified4-full "${MS%f}q" full repair --ms1 -
 row R23-inspect-partial4-full "" full inspect --md1 md1yppqqxp3cg2x3r70ckk4kjaf
-# The consultant's case: a regular file, RLIMIT_FSIZE 0, SIGXFSZ ignored.
-printf '%s\n' "$P" | sh -c 'trap "" XFSZ; ulimit -f 0; exec "$0" "$@"' "$B" \
-  derive-child --from phrase=- --application hex --length 16 --index 0 >"$T/out" 2>"$T/err"
-printf '%s rc=%s bytes=%s stderr=%s\n' R17-derive-child-fsize0 "$?" "$(wc -c <"$T/out")" "$(tail -n1 "$T/err")"
+# The consultant's case: a regular file, RLIMIT_FSIZE 0, SIGXFSZ ignored. Stderr goes to a pipe
+# (a regular file would hit the same limit and lose the contract line).
+{ printf '%s\n' "$P" | sh -c 'trap "" XFSZ; ulimit -f 0; exec "$0" "$@"' "$B" \
+  derive-child --from phrase=- --application hex --length 16 --index 0 >"$T/out"; echo $? >"$T/rc"; } 2>&1 | cat >"$T/err"
+printf '%s rc=%s bytes=%s stderr=%s\n' R17-derive-child-fsize0 "$(cat "$T/rc")" "$(wc -c <"$T/out")" "$(tail -n1 "$T/err")"
 # Guard: a stdout closed outright (std reopens fd 1 on /dev/null at start-up).
 "$B" gui-schema >&- 2>"$T/err"
 printf '%s rc=%s stderr=%s\n' R18-gui-schema-closed-fd "$?" "$(tail -n1 "$T/err")"
