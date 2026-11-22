@@ -113,7 +113,7 @@ md-cli-tag-implied  = "descriptor-mnemonic-md-cli-v0.20.3"
 ms-cli-tag-implied  = "ms-cli-v0.20.1"
 mk-cli-tag-implied  = "mk-cli-v0.13.0"
 
-# The installer runs AHEAD of mnemonic-gui v0.63.0 on four CLIs: mnemonic 0.107.0,
+# The installer runs AHEAD of mnemonic-gui v0.63.0 on four CLIs: mnemonic 0.107.1,
 # md 0.21.0 (the md bug-hunt and printed-remedy fixes; each md1 printed once),
 # ms 0.21.0 (the ms bug-hunt and output fixes; the ms1 printed once) and mk 0.17.0
 # (the mk output and uniformity changes; each mk1 printed once) shipped before the GUI re-pinned to them. This manual keeps documenting the GUI's tier above;
