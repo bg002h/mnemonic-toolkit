@@ -21,6 +21,7 @@ mod indel;
 mod language;
 mod network;
 mod nostr;
+mod out_sink;
 mod parse;
 mod parse_descriptor;
 mod passphrase_input;
@@ -212,13 +213,27 @@ fn main() -> ExitCode {
         Ok(c) => c,
         Err(e) => {
             // Override clap's default exit code 2 → 64 to keep format-violations distinct.
-            e.print().ok();
-            return ExitCode::from(if e.exit_code() == 0 { 0 } else { 64 });
+            let base = if e.exit_code() == 0 { 0 } else { 64 };
+            if e.use_stderr() {
+                // A usage error goes to stderr as today; a failed stderr print stays ignored.
+                e.print().ok();
+                return ExitCode::from(base);
+            }
+            // `--help` / `--version` on stdout: a failed write follows the T6 contract.
+            let mut sink = out_sink::OutSink::stdout();
+            sink.check_read_only();
+            if sink.error().is_none() {
+                if let Err(pe) = e.print().and_then(|()| io::stdout().flush()) {
+                    sink.record(pe);
+                }
+            }
+            return finish_exit(&sink, base, false);
         }
     };
 
     let stdin = &mut io::stdin();
-    let stdout = &mut io::stdout();
+    let mut sink = out_sink::OutSink::stdout();
+    let stdout = &mut sink;
     let stderr = &mut io::stderr();
 
     let result: Result<u8, ToolkitError> = match &cli.command {
@@ -278,19 +293,33 @@ fn main() -> ExitCode {
         Command::WordCard(args) => cmd::word_card::run(args, stdin, stdout, stderr),
     };
 
-    let exit = match result {
-        Ok(code) => ExitCode::from(code),
+    // The verb's own error line first (RepairShortCircuit prints nothing here), then the
+    // write-error line from `finish_exit`.
+    let code = match result {
+        Ok(code) => code,
         // R2 I1: short-circuit fires a clean repair report on stderr inside
         // the helper; do NOT also emit the ToolkitError Display impl (which
         // would tack on "error: " noise). The exit code is carried in the
         // variant itself.
-        Err(error::ToolkitError::RepairShortCircuit { exit_code }) => ExitCode::from(exit_code),
+        Err(error::ToolkitError::RepairShortCircuit { exit_code }) => exit_code,
         Err(e) => {
             // Emit error per SPEC §6.5 + §5.5.
             let _ = writeln!(io::stderr(), "{}", e);
-            ExitCode::from(e.exit_code())
+            e.exit_code()
         }
     };
+    let _ = sink.flush();
+    let exit4_is_result = matches!(cli.command, Command::Repair(_) | Command::Inspect(_));
+    finish_exit(&sink, code, exit4_is_result)
+}
+
+/// Map the exit code once (T6): a recorded stdout write error prints
+/// `mnemonic: cannot write the output: <error>` on stderr and may turn the code into 1.
+fn finish_exit(sink: &out_sink::OutSink<io::Stdout>, code: u8, exit4_is_result: bool) -> ExitCode {
+    if let Some(err) = sink.error() {
+        let _ = writeln!(io::stderr(), "mnemonic: cannot write the output: {err}");
+    }
+    let exit = ExitCode::from(sink.exit_code(code, exit4_is_result));
 
     // Cycle B SPEC §2 row 3 + §6 G2.5 — emit a 2-line stderr summary iff
     // any pin_pages_for call soft-failed during this invocation. No-op

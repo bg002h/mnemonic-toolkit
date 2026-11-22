@@ -681,18 +681,20 @@ pub fn run<W: Write, E: Write>(
             }),
             checks,
         };
-        serde_json::to_writer(&mut *stdout, &json).ok();
-        writeln!(stdout).ok();
+        serde_json::to_writer(&mut *stdout, &json)
+            .map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;
+        writeln!(stdout).map_err(ToolkitError::Io)?;
     } else {
         for c in &checks {
             let status = if c.passed { "ok" } else { "fail" };
             if c.detail.is_empty() {
-                writeln!(stdout, "{}: {}", c.name, status).ok();
+                writeln!(stdout, "{}: {}", c.name, status).map_err(ToolkitError::Io)?;
             } else {
-                writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok();
+                writeln!(stdout, "{}: {} {}", c.name, status, c.detail)
+                    .map_err(ToolkitError::Io)?;
             }
         }
-        writeln!(stdout, "result: {}", result).ok();
+        writeln!(stdout, "result: {}", result).map_err(ToolkitError::Io)?;
     }
     if partial {
         crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
@@ -2058,18 +2060,20 @@ fn verify_emit_from_expected<W: Write, E: Write>(
             }),
             checks,
         };
-        serde_json::to_writer(&mut *stdout, &json).ok();
-        writeln!(stdout).ok();
+        serde_json::to_writer(&mut *stdout, &json)
+            .map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;
+        writeln!(stdout).map_err(ToolkitError::Io)?;
     } else {
         for c in &checks {
             let status = if c.passed { "ok" } else { "fail" };
             if c.detail.is_empty() {
-                writeln!(stdout, "{}: {}", c.name, status).ok();
+                writeln!(stdout, "{}: {}", c.name, status).map_err(ToolkitError::Io)?;
             } else {
-                writeln!(stdout, "{}: {} {}", c.name, status, c.detail).ok();
+                writeln!(stdout, "{}: {} {}", c.name, status, c.detail)
+                    .map_err(ToolkitError::Io)?;
             }
         }
-        writeln!(stdout, "result: {}", result_str).ok();
+        writeln!(stdout, "result: {}", result_str).map_err(ToolkitError::Io)?;
     }
     if partial {
         crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
