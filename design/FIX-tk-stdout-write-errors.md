@@ -195,7 +195,7 @@ In-crate rows (no binary run; the builder sees each fail before the fix, by test
 
 New, one test function per row, named exactly (TRACE):
 
-- `crates/mnemonic-toolkit/tests/stdout_write_errors.rs`, `#![cfg(unix)]`, runs `env!("CARGO_BIN_EXE_mnemonic")`
+- `crates/mnemonic-toolkit/tests/stdout_write_errors.rs`, `#![cfg(target_os = "linux")]`, runs `env!("CARGO_BIN_EXE_mnemonic")`
   with `Stdio` from `/dev/full`, `/dev/null` opened read-only, a regular file under `sh -c` (R17), a pipe whose
   reader is dropped after one byte (R7, R8):
   `r1_derive_child_dev_full_exits_1`, `r2_convert_text_dev_full_exits_1`, `r3_convert_json_dev_full_exits_1`,
@@ -235,7 +235,7 @@ release.yml's `windows-x86_64` leg on the PR head, which runs only when the PR i
 builds `--lib` only and does not compile `out_sink.rs`.
 
 Plus every other job of `.github/workflows/rust.yml`, `manual.yml`, `changelog-check.yml` locally or green on the PR
-head (RULES.md build gate). Not covered by this gate: Windows behaviour of the sink (no read-only check there, as md),
+head (RULES.md build gate). Not covered by this gate: Windows behaviour of the sink, macOS (no `/dev/full`; the read-only and closed-pipe rows are Linux-only too) (no read-only check there, as md),
 stderr write failures, file outputs.
 
 ## 9. FOLLOWUPS
