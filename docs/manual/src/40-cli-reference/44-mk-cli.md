@@ -51,6 +51,11 @@ mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --pri
 At least one of `--policy-id-stub` or `--from-md1` is required (the
 underlying `KeyCard.policy_id_stubs` slot must be non-empty).
 
+A depth-0 xpub (`--origin-path m`, or a key record with no path) must be a valid BIP 32 master: its parent
+fingerprint must be `00000000`, and a declared origin fingerprint must be the key's own. At depth 1 a declared
+origin fingerprint must be the xpub's parent fingerprint. `mk encode` refuses any of these with exit 64 and mints
+nothing.
+
 ### Worked example
 
 ```sh
@@ -163,6 +168,9 @@ JSON mode:
 ```
 
 `origin_fingerprint` is `null` for privacy-preserving cards.
+
+A card that breaks one of the key-origin rules in `mk encode` (minted before mk-codec 0.6.0) still reads: `mk decode`, `mk inspect`, `mk address`
+and `mk derive` print it as read and add a `warning: this card is invalid (...)` line on stderr.
 
 ---
 
@@ -440,9 +448,9 @@ mk verify \
   mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx
 ```
 
-Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success, exits
-4 with a `ContentMismatch` error envelope when an expected-* flag
-disagrees with the decoded value.
+Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success. Exits 1 when the card breaks one of the key-origin rules in `mk encode` (kind
+`MasterParentFingerprintNonzero`, `MasterFingerprintMismatch` or `OriginParentFingerprintMismatch`), before any expected-\* comparison. Exits 4 with a
+`ContentMismatch` error envelope when an expected-* flag disagrees with the decoded value.
 For a chunked card the `--json` envelope also carries `chunk_set_id`: `declared`, `derived`,
 `matches`, and `bundle_stamped` (true when the stamped id is the bundle id `mnemonic bundle` stamps).
 
