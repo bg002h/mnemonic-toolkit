@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.17.0 --bin mk`.
+`cargo install --locked --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.17.0 mk-cli`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
