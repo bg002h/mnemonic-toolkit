@@ -45,7 +45,7 @@ Source files this FIX changes (for build ordering; tk #15 `fix/tk-stdout-write-e
 
 ## 4. RED rows
 
-Run on base 04c56bfa with `target/debug/mnemonic` built `--locked` (cargo 1.85.0). Keys: `X` = BIP-32 test vector 1 chain `m/0'` (depth 1), `xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7`; `T` = the same key with tprv version bytes (`04358394`), `tprv8bxNLu25VazNnppTCP4fyhyCvBHcYtzE3wr3cwYeL4HA7yf6TLGEUdS4QC1vLT63TkjRssqJe4CvGNEC8DzW5AoPUw56D1Ayg6HY4oy8QZ9`. Both are public test-vector keys holding no funds.
+Run on base 04c56bfa with `target/debug/mnemonic` built `--locked` (cargo 1.85.0). Keys: `X2` = BIP-32 test vector 1 chain `m/0'/1` (depth 2), `xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs`; `X` = BIP-32 test vector 1 chain `m/0'` (depth 1), `xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7`; `T` = the same key with tprv version bytes (`04358394`), `tprv8bxNLu25VazNnppTCP4fyhyCvBHcYtzE3wr3cwYeL4HA7yf6TLGEUdS4QC1vLT63TkjRssqJe4CvGNEC8DzW5AoPUw56D1Ayg6HY4oy8QZ9`. Both are public test-vector keys holding no funds.
 
 | Row (test name in `tests/cli_derive_child.rs`) | Command | Today (seen on base) | After the fix |
 |---|---|---|---|
