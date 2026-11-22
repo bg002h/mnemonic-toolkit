@@ -4,9 +4,10 @@
 # Run from the repository root (reads two committed fixtures by relative path).
 # Prints one line per row:
 #   "<row> rc=<exit> out=<stdout bytes> quorum=<sortedmulti(K> wrap=<wsh(|sh(wsh(> fp0=<first origin fp> paths=<origin paths, comma-joined> name=<name> err=<last stderr line>"
-# Covers: rows R1-R15 of the FIX doc (coldcard-multisig text via --format coldcard-multisig,
+# Covers: rows R1-R18 of the FIX doc (coldcard-multisig text via --format coldcard-multisig,
 # auto-sniff and the jade multisig_file wrapper; repeated Name/Policy/Format/XFP headers in both
-# orders; a case-variant repeated key; the per-cosigner Derivation shape; the original fixture).
+# orders; a case-variant repeated key; the per-cosigner Derivation shape; the original fixture; a lowercase derivation key; the
+# Coldcard render_export path-change shape).
 # Does NOT cover: library callers of parse_text other than the CLI, the bsms/sparrow/specter
 # parsers, Windows, or the cosigner-count predicate (bug-hunt I1 tail, separate line).
 # Public xpubs from committed test fixtures only; no seed is used.
@@ -90,4 +91,13 @@ text R13-control-per-cosigner-derivation    "${PERCOS}"
 text R14-control-xfp-single                 "$(bare 'XFP: 0000AAAA
 ')"
 text R15-derivation-twice-before-cosigners  "${TWODER}
+"
+TWODERLC=$(sed -n 1,3p "$FX"; printf 'derivation: m/48'"'"'/0'"'"'/9'"'"'/2'"'"'\n'; sed -n '4,$p' "$FX")
+text R16-derivation-lowercase-after-shared  "${TWODERLC}
+"
+text R17-derivation-lowercase-per-cosigner  "$(printf '%s\n' "$PERCOS" | sed '6s/^Derivation:/derivation:/')
+"
+# Coldcard render_export shape: Derivation only where the path changes (paths A, B, B).
+RENDER=$(printf 'Name: render-export\nPolicy: 2 of 3\nFormat: P2WSH\nDerivation: m/48'"'"'/0'"'"'/0'"'"'/2'"'"'\n5436D724: %s\nDerivation: m/48'"'"'/0'"'"'/1'"'"'/2'"'"'\n28645006: %s\nB8688DF1: %s\n' "$X1" "$X2" "$X3")
+text R18-render-export-path-change-carries-forward "${RENDER}
 "

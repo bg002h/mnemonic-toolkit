@@ -395,3 +395,248 @@ Derivation: m/48'/0'/1'/2'\n\
         "both divergent cosigner paths must survive into the descriptor; got:\n{descriptor}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// FIX-tk-coldcard-multisig-duplicate-headers (bughunt-1119 bh-tk-I1): rows R1-R18.
+// Blobs are built from the committed export fixture, as
+// `design/fix-tk-coldcard-dup-headers-red.sh` does.
+// ---------------------------------------------------------------------------
+
+const DUP_FX: &str = "tests/export_wallet/coldcard_multisig_2of3_wsh.txt";
+const DUP_JADE: &str = "tests/fixtures/wallet_import/jade-multisig-2of3-p2wsh.json";
+const DUP_X1: &str = "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx";
+const DUP_X2: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
+const DUP_X3: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
+
+fn dup_base() -> String {
+    std::fs::read_to_string(DUP_FX).expect("fixture")
+}
+
+/// Per-cosigner shape with a bare first xpub; `xfp_lines` sits before the first `Derivation:`.
+fn dup_bare(xfp_lines: &str) -> String {
+    format!(
+        "Name: bare-xfp\nPolicy: 2 of 3\nFormat: P2WSH\n{xfp_lines}Derivation: m/48'/0'/0'/2'\n{DUP_X1}\nDerivation: m/48'/0'/1'/2'\n28645006: {DUP_X2}\nDerivation: m/48'/0'/2'/2'\nB8688DF1: {DUP_X3}\n"
+    )
+}
+
+fn dup_percos() -> String {
+    format!(
+        "Name: per-cosigner\nPolicy: 2-of-3\nFormat: P2WSH\nDerivation: m/48'/0'/0'/2'\n5436D724: {DUP_X1}\nDerivation: m/48'/0'/1'/2'\n28645006: {DUP_X2}\nDerivation: m/48'/0'/2'/2'\nB8688DF1: {DUP_X3}\n"
+    )
+}
+
+/// Assert exit 2, empty stdout, and `detail` in stderr behind the standard prefix.
+fn dup_refused(assert: assert_cmd::assert::Assert, detail: &str) {
+    let out = assert.code(2).get_output().clone();
+    assert!(
+        out.stdout.is_empty(),
+        "stdout must be empty, got: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let err = String::from_utf8_lossy(&out.stderr);
+    let want = format!("error: import-wallet: coldcard-multisig: parse error: {detail}");
+    assert!(
+        err.contains(&want),
+        "stderr must contain `{want}`; got:\n{err}"
+    );
+}
+
+/// Origin paths (`48'/0'/N'/2'`) of the descriptor of a successful `--json` import, in key order.
+fn dup_paths(assert: assert_cmd::assert::Assert) -> Vec<String> {
+    let out = assert.success().get_output().clone();
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    let d = v[0]["bundle"]["descriptor"].as_str().expect("descriptor");
+    d.split('[')
+        .skip(1)
+        .map(|s| {
+            let o = &s[..s.find(']').unwrap()];
+            o[o.find('/').unwrap() + 1..].to_string()
+        })
+        .collect()
+}
+
+fn dup_json(blob: &str) -> assert_cmd::assert::Assert {
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "import-wallet",
+            "--format",
+            "coldcard-multisig",
+            "--blob",
+            "-",
+            "--json",
+        ])
+        .write_stdin(blob.to_string())
+        .assert()
+}
+
+const P2: &str = "repeated `Policy:` header (first given at line 2)";
+
+#[test]
+fn dup_headers_r1_policy_conflict_appended() {
+    let blob = format!("{}Policy: 1 of 3\n", dup_base());
+    dup_refused(run_stdin(&blob), &format!("line 8: {P2}"));
+}
+
+#[test]
+fn dup_headers_r2_policy_conflict_prepended() {
+    let blob = format!("Policy: 1 of 3\n{}", dup_base());
+    dup_refused(
+        run_stdin(&blob),
+        "line 3: repeated `Policy:` header (first given at line 1)",
+    );
+}
+
+#[test]
+fn dup_headers_r3_policy_conflict_autosniff() {
+    let blob = format!("{}Policy: 1 of 3\n", dup_base());
+    let a = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--blob", "-", "--json"])
+        .write_stdin(blob)
+        .assert();
+    dup_refused(a, &format!("line 8: {P2}"));
+}
+
+#[test]
+fn dup_headers_r4_policy_conflict_jade() {
+    let inner = format!("{}Policy: 1 of 3\n", dup_base());
+    let mut j: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(DUP_JADE).unwrap()).unwrap();
+    j["multisig_file"] = serde_json::Value::String(inner);
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().join("jade.json");
+    std::fs::write(&p, j.to_string()).unwrap();
+    let a = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["import-wallet", "--format", "jade", "--blob"])
+        .arg(&p)
+        .arg("--json")
+        .assert();
+    dup_refused(a, &format!("line 8: {P2}"));
+}
+
+#[test]
+fn dup_headers_r5_format_conflict_appended() {
+    let blob = format!("{}Format: P2SH-P2WSH\n", dup_base());
+    dup_refused(
+        run_stdin(&blob),
+        "line 8: repeated `Format:` header (first given at line 4)",
+    );
+}
+
+#[test]
+fn dup_headers_r6_format_conflict_prepended() {
+    let blob = format!("Format: P2SH-P2WSH\n{}", dup_base());
+    dup_refused(
+        run_stdin(&blob),
+        "line 5: repeated `Format:` header (first given at line 1)",
+    );
+}
+
+#[test]
+fn dup_headers_r7_xfp_conflict() {
+    let blob = dup_bare("XFP: 0000AAAA\nXFP: 0000BBBB\n");
+    dup_refused(
+        run_stdin(&blob),
+        "line 5: repeated `XFP:` header (first given at line 4)",
+    );
+}
+
+#[test]
+fn dup_headers_r8_name_conflict() {
+    let blob = format!("{}Name: other-wallet\n", dup_base());
+    dup_refused(
+        run_stdin(&blob),
+        "line 8: repeated `Name:` header (first given at line 1)",
+    );
+}
+
+#[test]
+fn dup_headers_r9_policy_identical_repeat() {
+    let blob = format!("{}Policy: 2 of 3\n", dup_base());
+    dup_refused(run_stdin(&blob), &format!("line 8: {P2}"));
+}
+
+#[test]
+fn dup_headers_r10_policy_repeat_other_spelling() {
+    let blob = format!("{}Policy: 2-of-3\n", dup_base());
+    dup_refused(run_stdin(&blob), &format!("line 8: {P2}"));
+}
+
+#[test]
+fn dup_headers_r11_policy_lowercase_key_repeat() {
+    let blob = format!("{}policy: 1 of 3\n", dup_base());
+    dup_refused(run_stdin(&blob), &format!("line 8: {P2}"));
+}
+
+#[test]
+fn dup_headers_r12_control_original_fixture() {
+    let out = dup_json(&dup_base()).success().get_output().clone();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("sortedmulti(2,"));
+}
+
+#[test]
+fn dup_headers_r13_control_per_cosigner_derivation() {
+    assert_eq!(
+        dup_paths(dup_json(&dup_percos())),
+        ["48'/0'/0'/2'", "48'/0'/1'/2'", "48'/0'/2'/2'"]
+    );
+}
+
+#[test]
+fn dup_headers_r14_control_xfp_single() {
+    let out = dup_json(&dup_bare("XFP: 0000AAAA\n"))
+        .success()
+        .get_output()
+        .clone();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("[0000aaaa/48'/0'/0'/2']"));
+}
+
+#[test]
+fn dup_headers_r15_derivation_twice_before_cosigners() {
+    let base = dup_base();
+    let mut lines: Vec<&str> = base.lines().collect();
+    lines.insert(3, "Derivation: m/48'/0'/9'/2'");
+    let blob = format!("{}\n", lines.join("\n"));
+    dup_refused(
+        run_stdin(&blob),
+        "line 4: `Derivation:` line follows the one at line 3 with no cosigner line between them",
+    );
+}
+
+#[test]
+fn dup_headers_r16_derivation_lowercase_after_shared() {
+    let base = dup_base();
+    let mut lines: Vec<&str> = base.lines().collect();
+    lines.insert(3, "derivation: m/48'/0'/9'/2'");
+    let blob = format!("{}\n", lines.join("\n"));
+    dup_refused(
+        run_stdin(&blob),
+        "line 4: `derivation:` must be spelled `Derivation:`",
+    );
+}
+
+#[test]
+fn dup_headers_r17_derivation_lowercase_per_cosigner() {
+    let blob = dup_percos().replacen(
+        "\nDerivation: m/48'/0'/1'/2'",
+        "\nderivation: m/48'/0'/1'/2'",
+        1,
+    );
+    dup_refused(
+        run_stdin(&blob),
+        "line 6: `derivation:` must be spelled `Derivation:`",
+    );
+}
+
+#[test]
+fn dup_headers_r18_render_export_path_change_carries_forward() {
+    let blob = format!(
+        "Name: render-export\nPolicy: 2 of 3\nFormat: P2WSH\nDerivation: m/48'/0'/0'/2'\n5436D724: {DUP_X1}\nDerivation: m/48'/0'/1'/2'\n28645006: {DUP_X2}\nB8688DF1: {DUP_X3}\n"
+    );
+    assert_eq!(
+        dup_paths(dup_json(&blob)),
+        ["48'/0'/0'/2'", "48'/0'/1'/2'", "48'/0'/1'/2'"]
+    );
+}
