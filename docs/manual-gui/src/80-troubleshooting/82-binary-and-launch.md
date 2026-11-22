@@ -43,7 +43,7 @@ newer than these.
 ## When the installer is ahead of the GUI {#installer-ahead}
 
 The toolkit installer currently installs four CLI releases newer than
-this GUI was built against: `mnemonic-toolkit-v0.107.0` (the GUI's label
+this GUI was built against: `mnemonic-toolkit-v0.107.1` (the GUI's label
 reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.21.0`
 (label `Pinned: md 0.20.3`), `ms-cli-v0.21.0` (label
 `Pinned: ms 0.20.1`) and `mk-cli-v0.17.0` (label `Pinned: mk 0.13.0`).
@@ -53,7 +53,7 @@ below), so choose `space`. On the `md encode`, `md descriptor --emit
 md1`, `ms encode` and `mk encode` forms, this GUI does not send
 `--group-size 5` (its shown default), and these CLI releases print the
 unbroken string unless `--group-size` is given: to print groups of
-five, run the CLI with `--group-size 5`. The 0.107.0 `mnemonic` refuses a secret
+five, run the CLI with `--group-size 5`. The 0.107.1 `mnemonic` refuses a secret
 typed on the command line at exit 2 for five more flags
 (`ms-shares combine --share`, `slip39 combine --share`, `seed-xor
 combine --share`, `import-wallet --ms1`, `verify-bundle --ms1`), but

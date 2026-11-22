@@ -8,6 +8,8 @@ numbers.
 
 ## [Unreleased]
 
+**The installer's newer toolkit tag moves to 0.107.1** (no `mnemonic` change; the release carries the md, ms and mk pins above). `[installer-ahead]` and §82 name it; nothing else in the GUI-facing text changes.
+
 **The installer's md, ms and mk tags move to 0.21.0, 0.21.0 and 0.17.0** (each md1, ms1 and mk1 string printed once, on stdout; `--group-size` now groups stdout and defaults to `0`; `ms hashlock` prints no preimage on the card under `--out` or `--json`; `md decompose` proves a mint route before printing it). `[installer-ahead]` and §82 name them; §82 says the four encode forms print the unbroken string because this GUI does not send its shown default `--group-size 5`, and lists three more `ms` outputs and three more `md` outputs. The GUI re-pin to these CLIs follows (mnemonic-gui 0.64.0), after which the table and section go.
 
 **The installer's newer toolkit tag moves to 0.107.0** (argv-secret refusals on `ms-shares`, `slip39` and `seed-xor combine --share`, `import-wallet --ms1` and `verify-bundle --ms1`). `[installer-ahead]` and §82 name it and say no GUI form is affected, since the GUI's private channels and its `--allow-argv-secret` fallback both pass; nothing else in the GUI-facing text changes.
