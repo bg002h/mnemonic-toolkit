@@ -111,7 +111,7 @@ jobs:
       # the toolkit rev so the gate stays THREE-block (the git-fork [source]
       # stanza is MANDATORY; the two-block form FAILS --offline — R0-r5-C1).
       # From Cargo.lock (the `pin` job), NOT the reusable workflow's default,
-      # which is the stale 95fdd1c5.
+      # which was once the stale 95fdd1c5 (now ff4732e5, the same as Cargo.lock).
       miniscript_rev: ${{ needs.pin.outputs.miniscript_rev }}
       # F-324 / F-675: md-codec's git source gets its own [source] stanza.
       git_source_url: ${{ needs.pin.outputs.git_source_url }}

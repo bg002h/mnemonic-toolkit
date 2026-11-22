@@ -106,7 +106,7 @@ fi
 #   MINISCRIPT_REV  set    ⇒ THREE-block keyed off that rev.
 # (Single-dash `${VAR-default}` defaults ONLY when UNSET, so an explicit empty
 # value from a codec caller is honored as the two-block selector.)
-MINISCRIPT_REV="${MINISCRIPT_REV-95fdd1c5773bd918c574d2225787973f63e16a66}"
+MINISCRIPT_REV="${MINISCRIPT_REV-ff4732e5f75aa555682343cb180fa72ee3e8e9d5}"
 # F-324: a SECOND, generic git-source stanza, for a caller whose Cargo.lock
 # carries a DIFFERENT git-sourced dependency (e.g. mnemonic-secret's
 # mnemonic-io-lib, git+https://github.com/bg002h/mnemonic-engrave?rev=…) that
