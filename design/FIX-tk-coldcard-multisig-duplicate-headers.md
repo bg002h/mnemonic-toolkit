@@ -36,6 +36,7 @@ either.
    them give cosigner 1 the second path and cosigners 2..N the first (R15:
    `paths=48'/0'/9'/2',48'/0'/0'/2',48'/0'/0'/2'`); Coldcard applies the second path to all three. Addresses are
    unchanged (the xpubs carry them); the key origins, and so the signing metadata, differ from what Coldcard reads.
+4. L240-L242, L348-L351: a cosigner line with no `Derivation:` line of its own takes the FIRST `Derivation:` path, while Coldcard (`from_simple_text` L698, L720) takes the most recent one. Coldcard's `render_export` writes `Derivation:` only when the path changes, so its export of a wallet whose paths are A, B, B gives the third cosigner A here and B on the device (R18), exit 0.
 
 ## 3. Spec delta (what the builder changes)
 
@@ -72,14 +73,16 @@ Confirmed (architect-bh-batch34). Per-cosigner `Derivation:` lines, each followe
 
 Confirmed (architect-bh-batch34). A lone `xfp:` key stays a dropped field (Coldcard ignores an `xfp` label).
 
+**Rule P (most recent path).** Every `Derivation:` line sets the current path. A cosigner line (`<XFP>: <xpub>` or bare xpub) with no pending per-line path takes the current path at that line, not the first path of the file: keep a `current_derivation`, set it on every accepted `Derivation:` line, and record `per_line_path = pending.take().or_else(|| current_derivation.clone())` in the `<XFP>:` arm and `per_line_path = current_derivation.clone()` in the L285-L295 bare-xpub arm. `shared_derivation` keeps its role only for cosigners before any `Derivation:` line.
+
 Nothing else changes: the sniff (L139-L152), the cosigner-count check (L324) and the XFP truth table (§11.4.1).
 
 **SPEC lockstep:** `design/SPEC_wallet_import_v0_28_0.md` §11.4 "Parse contract" (L417) gains, after its first
 sentence: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears at most once; a repeat, compared ignoring the
 key's ASCII case and whatever its value, is `ImportWalletParse` (exit 2) naming both line numbers. Two `Derivation:`
-lines with no cosigner line between them are refused the same way. A `Derivation` key spelled in another letter case is refused." Confirmed (architect-bh-batch34).
+lines with no cosigner line between them are refused the same way. A `Derivation` key spelled in another letter case is refused. A cosigner line takes the most recent `Derivation:` path." Confirmed (architect-bh-batch34).
 
-## 4. STOPs (product points the rulings do not decide)
+## 4. Product points (ruled A by architect-bh-batch34)
 
 B4 decides the grade only; B2 (repeated key records refused, exit 64) is ruled for `mk encode` key records, not
 for setup-file headers; B1 (normalise BOM and CRLF only) is ruled for near-canonical card input. None decides these.
@@ -126,12 +129,21 @@ quorum, wrap, fp0, paths and name columns; `err=` shows the last stderr line, wh
 | R13 | per-cosigner shape, three `Derivation:` + `<XFP>: <xpub>` pairs (control) | rc=0 paths `48'/0'/0'/2',48'/0'/1'/2',48'/0'/2'/2'` | unchanged |
 | R14 | R7 with one `XFP: 0000AAAA` (control) | rc=0 `fp0=0000aaaa` | unchanged |
 | R15 | fixture with `Derivation: m/48'/0'/9'/2'` inserted as L4 | rc=0 `paths=48'/0'/9'/2',48'/0'/0'/2',48'/0'/0'/2'` | rc=2 `line 4: \`Derivation:\` line follows the one at line 3 with no cosigner line between them` (STOP-3 B/C: differs) |
-| R16 | fixture with \`derivation: m/48'/0'/9'/2'\` inserted as L4 | rc=0 paths=48'/0'/0'/2',48'/0'/0'/2',48'/0'/0'/2' (Coldcard reads 9' for all) | rc=2 \`line 4: \`derivation:\` must be spelled \`Derivation:\`\` |
-| R17 | R13 with its L6 key spelled \`derivation:\` | rc=0 paths=48'/0'/0'/2',48'/0'/0'/2',48'/0'/2'/2' (Coldcard reads 1' for cosigner 2) | rc=2 \`line 6: \`derivation:\` must be spelled \`Derivation:\`\` |
+| R16 | fixture with `derivation: m/48'/0'/9'/2'` inserted as L4 | rc=0 paths=48'/0'/0'/2',48'/0'/0'/2',48'/0'/0'/2' (Coldcard reads 9' for all) | rc=2 `` line 4: `derivation:` must be spelled `Derivation:` `` |
+| R17 | R13 with its L6 key spelled `derivation:` | rc=0 paths=48'/0'/0'/2',48'/0'/0'/2',48'/0'/2'/2' (Coldcard reads 1' for cosigner 2) | rc=2 `` line 6: `derivation:` must be spelled `Derivation:` `` |
+| R18 | Coldcard render_export shape, paths A, B, B (`Derivation: m/48'/0'/0'/2'`, key 1, `Derivation: m/48'/0'/1'/2'`, keys 2 and 3) | rc=0 paths=48'/0'/0'/2',48'/0'/1'/2',48'/0'/0'/2' | rc=0 paths=48'/0'/0'/2',48'/0'/1'/2',48'/0'/1'/2' |
+
+The builder appends R16 and R17 to `design/fix-tk-coldcard-dup-headers-red.sh` (and changes its header to "rows R1-R17"):
+
+    TWODERLC=$(sed -n 1,3p "$FX"; printf 'derivation: m/48'"'"'/0'"'"'/9'"'"'/2'"'"'\n'; sed -n '4,$p' "$FX")
+    text R16-derivation-lowercase-after-shared  "${TWODERLC}
+    "
+    text R17-derivation-lowercase-per-cosigner  "$(printf '%s\n' "$PERCOS" | sed '6s/^Derivation:/derivation:/')
+    "
 
 Each expected refusal is the full stderr line `error: import-wallet: coldcard-multisig: parse error: <detail>` with
-the Rule H or Rule D detail. The author applied a scratch implementation of the recommended options (not
-committed) and saw exactly the "Expected" column for R1-R15.
+the Rule H, Rule C or Rule D detail. The author applied a scratch implementation of the recommended options (not
+committed) and saw exactly the "Expected" column for R1-R15. R16 and R17: measured by the architect (architect-bh-batch34 #24) with Rule C.
 
 ## 6. Tests
 
@@ -149,8 +161,7 @@ and that stderr contains the row's full detail string (line numbers included). N
 `dup_headers_r12_control_original_fixture` (exit 0, stdout contains `sortedmulti(2,`),
 `dup_headers_r13_control_per_cosigner_derivation` (exit 0, the three paths of R13),
 `dup_headers_r14_control_xfp_single` (exit 0, stdout contains `[0000aaaa/48'/0'/0'/2']`),
-`dup_headers_r15_derivation_twice_before_cosigners`, `dup_headers_r16_derivation_lowercase_after_shared`, `dup_headers_r17_derivation_lowercase_per_cosigner`. A STOP ruled other than the recommendation flips the rows it
-names in section 5 to exit-0 assertions of the "seen" column.
+`dup_headers_r15_derivation_twice_before_cosigners`, `dup_headers_r16_derivation_lowercase_after_shared`, `dup_headers_r17_derivation_lowercase_per_cosigner`, `dup_headers_r18_render_export_path_change_carries_forward`.
 
 ## 7. Manual and changelog lockstep
 
@@ -158,14 +169,10 @@ No flag, verb or `--help` text changes, so `docs/manual/src/40-cli-reference/` a
 (`docs/manual-gui/src/40-mnemonic/4c-import-wallet.md` L103-L106 lists no refusals) are unchanged.
 
 - `docs/manual/src/45-foreign-formats.md`: after L634 (end of the `m/45'` paragraph, before `### XFP-header
-  policy`), a new paragraph: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears once. A file that repeats one
-  of them (in any letter case, even with the same value), or that has two `Derivation:` lines with no cosigner line
-  between them, or spells `Derivation:` in another letter case, is refused (exit 2) with both line numbers; re-export the file from the device." Confirmed (architect-bh-batch34).
+  policy`), a new paragraph: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears once. A file that repeats one of them (in any letter case, even with the same value), or that has two `Derivation:` lines with no cosigner line between them, is refused (exit 2) with both line numbers; a `Derivation:` key spelled in another letter case is refused (exit 2) with its line number. Re-export the file from the device." Confirmed (architect-bh-batch34).
 - `CHANGELOG.md` `## [Unreleased]`, new subsection: "### A repeated Coldcard multisig header is refused" with
-  "- **`import-wallet` (`coldcard-multisig`, auto-detected, and `jade`)**: a setup file that repeats `Name:`,
-  `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, or spells `Derivation:` in another letter case, now exits 2
-  naming both lines. The last line used to win silently, so a second `Policy: 1 of 3` imported a 2-of-3 file as
-  1-of-3." Confirmed (architect-bh-batch34).
+  "- **`import-wallet` (`coldcard-multisig`, auto-detected, and `jade`)**: a setup file that repeats `Name:`, `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, now exits 2 naming both lines, and one that spells `Derivation:` in another letter case exits 2 naming that line. The last line used to win silently, so a second `Policy: 1 of 3` imported a 2-of-3 file as 1-of-3.
+  - a cosigner line after a later `Derivation:` line now takes that path, as the device does (it used to take the first)" Confirmed (architect-bh-batch34).
 
 ## 8. Gate (builder, one run to a file, then grep)
 
