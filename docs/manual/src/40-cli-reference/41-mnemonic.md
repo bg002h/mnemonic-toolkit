@@ -1943,7 +1943,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin |
+| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 1) |
 | `--application <APPLICATION>` | `bip39` / `hd-seed` / `xprv` / `hex` / `password-base64` / `password-base85` / `dice` |
 | `--length <LENGTH>` | application-specific size; pass `0` for `hd-seed` and `xprv` |
 | `--index <INDEX>` | hardened child index (`0..2^31`) |

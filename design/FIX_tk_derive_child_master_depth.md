@@ -17,7 +17,7 @@ Survey of the other commands that take an xprv (asked by grade-tk.md:52): only `
 In `cmd/derive_child.rs::run`, the `NodeType::Xprv` arm (lines 174-175), after the parse succeeds, an xprv/tprv whose `depth != 0` is refused:
 
 ~~~text
-error: derive-child: the xprv/tprv is at depth <d>, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from
+error: derive-child: the xprv/tprv is at depth <d>, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)
 ~~~
 
 PROPOSED (architect confirms): the text and exit code. The text is #56's text with the prefix `derive-child:` and the tail cut to the inputs `derive-child` accepts (`xprv=` or `phrase=`; it takes no ms1 or entropy, so #56's "seed phrase, ms1 or entropy" would name inputs this command refuses).
@@ -35,7 +35,7 @@ Decided edges:
 
 ## 3. Code delta (production)
 
-1. `crates/mnemonic-toolkit/src/cmd/derive_child.rs` (the only production file): in the `NodeType::Xprv` arm, bind the parsed `Xpriv`, return `ToolkitError::BadInput(format!("derive-child: the xprv/tprv is at depth {}, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from", x.depth))` when `x.depth != 0`, else yield it. The comment cites BIP-85 "BIP32 master root key" and this FIX.
+1. `crates/mnemonic-toolkit/src/cmd/derive_child.rs` (the only production file): in the `NodeType::Xprv` arm, bind the parsed `Xpriv`, return `ToolkitError::BadInput(format!("derive-child: the xprv/tprv is at depth {}, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)", x.depth))` when `x.depth != 0`, else yield it. The comment cites BIP-85 "BIP32 master root key" and this FIX.
 
 Source files this FIX changes (for build ordering; tk #15 `fix/tk-stdout-write-errors` touched `derive_child.rs` only at its stdout write, line 306, and is already on the base, GREEN f2d1caf5):
 - `crates/mnemonic-toolkit/src/cmd/derive_child.rs`
@@ -49,7 +49,7 @@ Run on base 04c56bfa with `target/debug/mnemonic` built `--locked` (cargo 1.85.0
 
 | Row (test name in `tests/cli_derive_child.rs`) | Command | Today (seen on base) | After the fix |
 |---|---|---|---|
-| `r1_non_master_xprv_stdin_refused` | `echo "$X" \| mnemonic derive-child --from xprv=- --application hex --length 16 --index 0` | stdout `ad95c2cd242617af788dc26e9ae95b82`, stderr the private-key warning, exit 0 | stdout empty; stderr exactly `error: derive-child: the xprv/tprv is at depth 1, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from`; exit 1 |
+| `r1_non_master_xprv_stdin_refused` | `echo "$X" \| mnemonic derive-child --from xprv=- --application hex --length 16 --index 0` | stdout `ad95c2cd242617af788dc26e9ae95b82`, stderr the private-key warning, exit 0 | stdout empty; stderr exactly `error: derive-child: the xprv/tprv is at depth 1, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)`; exit 1 |
 | `r2_non_master_xprv_env_sentinel_refused` | `XP="$X" mnemonic derive-child --from xprv=@env:XP --application bip39 --length 12 --index 0` | stdout `used moral panda trip raccoon soon render bulb remember math hello unable`, exit 0 | same stderr line, stdout empty, exit 1 |
 | `r3_non_master_tprv_refused` | `echo "$T" \| mnemonic derive-child --from xprv=- --application xprv --length 0 --index 0 --network signet` | stdout `tprv8ZgxMBicQKsPcuHBxrKgWm53dh7gREHMpgnaNC4HZSp9n11qtFAgxucAYvtiTvWnu7MiP29CbMjcJwwzuLMT5b3GavcAp3twiGEUggFpdBQ`, exit 0 | same stderr line, stdout empty, exit 1 |
 | `r4_non_master_xprv_with_passphrase_refused_without_warning` | `echo "$X" \| PP=foo mnemonic derive-child --from xprv=- --application hex --length 16 --index 0 --passphrase @env:PP` | stderr `warning: --passphrase ignored on --from xprv (no BIP-39 mnemonic to extend)`, stdout `ad95c2cd242617af788dc26e9ae95b82`, exit 0 | stderr is only the refusal line (no passphrase warning), stdout empty, exit 1 |
@@ -66,7 +66,7 @@ None. Searched every test that drives `derive-child` (`cli_derive_child.rs`, `bu
 
 `design/SPEC_derive_child_v0_7.md` §7, after line 122 (`**Invalid master xprv refusal:** ...`), insert one paragraph:
 
-`**Non-master xprv refusal (FIX_tk_derive_child_master_depth, bh-tk-I4):** BIP-85 derives from "a single BIP32 master root key", so an xprv/tprv whose depth is not 0 is refused after it parses, before any derivation or warning: ``error: derive-child: the xprv/tprv is at depth <d>, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from``; exit 1 (BadInput class), stdout empty.`
+`**Non-master xprv refusal (FIX_tk_derive_child_master_depth, bh-tk-I4):** BIP-85 derives from "a single BIP32 master root key", so an xprv/tprv whose depth is not 0 is refused after it parses, before any derivation, the `--passphrase ignored` warning and the stdout private-key warning (only the argv-secret advisories, which come first, can precede it): ``error: derive-child: the xprv/tprv is at depth <d>, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)``; exit 1 (BadInput class), stdout empty.`
 
 ## 7. Manual delta (toolkit manual, lockstep)
 
@@ -82,10 +82,12 @@ Not changed: `docs/manual-gui` (pinned to the GUI's release CLI, as for #56, FIX
 
 ## 8. Gate
 
-`bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/build-gate.sh /scratch/cache/wt-tk-derive-child-depth origin/master --rows 'test(/^r[1-4]_non_master_/)' --rows-expect 4`
+`bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/build-gate.sh <builder worktree> origin/master --rows 'test(/^r[1-4]_non_master_/)' --rows-expect 4`
 
 It runs the `[mnemonic-toolkit]` conf (fmt, clippy `-D warnings`, `cargo nextest run --locked --workspace`, doc tests) and the mutation gate on the diff. Not covered by it: the `manual` CI job (`make -C docs/manual audit`, with `verify-examples` and the doc-flag-lint mutation self-test) and `manual-gui`; run both, locally or as green CI on the head. Class B (derives secrets).
 
 ## 9. FOLLOWUPS
 
 Closes nothing already in `design/FOLLOWUPS.md` (no line for bh-tk-I4). The line the builder files is listed in the author's report, for a direct push after the PR merges (no FOLLOWUPS edit in the PR).
+
+The spec delta also rewrites SPEC :124 as: "Exit code: 2 for the application and length refusals above (`ToolkitError::DeriveChildLengthNotApplicable`, `DeriveChildLengthOutOfRange`, `DeriveChildUnsupportedApp`); the `--from` node and master-key refusals are BadInput, exit 1."
