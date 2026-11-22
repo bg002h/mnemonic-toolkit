@@ -80,7 +80,7 @@ Nothing else changes: the sniff (L139-L152), the cosigner-count check (L324) and
 **SPEC lockstep:** `design/SPEC_wallet_import_v0_28_0.md` §11.4 "Parse contract" (L417) gains, after its first
 sentence: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears at most once; a repeat, compared ignoring the
 key's ASCII case and whatever its value, is `ImportWalletParse` (exit 2) naming both line numbers. Two `Derivation:`
-lines with no cosigner line between them are refused the same way. A `Derivation` key spelled in another letter case is refused. A cosigner line takes the most recent `Derivation:` path." Confirmed (architect-bh-batch34).
+lines with no cosigner line between them are refused the same way. A `Derivation` key spelled in another letter case is refused. A cosigner line takes the most recent `Derivation:` path."
 
 ## 4. Product points (ruled A by architect-bh-batch34)
 
@@ -143,7 +143,7 @@ The builder appends R16 and R17 to `design/fix-tk-coldcard-dup-headers-red.sh` (
 
 Each expected refusal is the full stderr line `error: import-wallet: coldcard-multisig: parse error: <detail>` with
 the Rule H, Rule C or Rule D detail. The author applied a scratch implementation of the recommended options (not
-committed) and saw exactly the "Expected" column for R1-R15. R16 and R17: measured by the architect (architect-bh-batch34 #24) with Rule C.
+committed) and saw exactly the "Expected" column for R1-R15. R16 and R17: measured by the architect (architect-bh-batch34 #24) with Rule C. R18: measured by the r1 reviewer on a scratch copy (review-fix-bh-tk-coldcard-dup-headers-r1).
 
 ## 6. Tests
 
@@ -169,10 +169,10 @@ No flag, verb or `--help` text changes, so `docs/manual/src/40-cli-reference/` a
 (`docs/manual-gui/src/40-mnemonic/4c-import-wallet.md` L103-L106 lists no refusals) are unchanged.
 
 - `docs/manual/src/45-foreign-formats.md`: after L634 (end of the `m/45'` paragraph, before `### XFP-header
-  policy`), a new paragraph: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears once. A file that repeats one of them (in any letter case, even with the same value), or that has two `Derivation:` lines with no cosigner line between them, is refused (exit 2) with both line numbers; a `Derivation:` key spelled in another letter case is refused (exit 2) with its line number. Re-export the file from the device." Confirmed (architect-bh-batch34).
+  policy`), a new paragraph: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears once. A file that repeats one of them (in any letter case, even with the same value), or that has two `Derivation:` lines with no cosigner line between them, is refused (exit 2) with both line numbers; a `Derivation:` key spelled in another letter case is refused (exit 2) with its line number. Re-export the file from the device."
 - `CHANGELOG.md` `## [Unreleased]`, new subsection: "### A repeated Coldcard multisig header is refused" with
   "- **`import-wallet` (`coldcard-multisig`, auto-detected, and `jade`)**: a setup file that repeats `Name:`, `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, now exits 2 naming both lines, and one that spells `Derivation:` in another letter case exits 2 naming that line. The last line used to win silently, so a second `Policy: 1 of 3` imported a 2-of-3 file as 1-of-3.
-  - a cosigner line after a later `Derivation:` line now takes that path, as the device does (it used to take the first)" Confirmed (architect-bh-batch34).
+  - a cosigner line after a later `Derivation:` line now takes that path, as the device does (it used to take the first)"
 
 ## 8. Gate (builder, one run to a file, then grep)
 
@@ -193,6 +193,7 @@ PR head (RULES.md build gate). Not covered: library callers of `parse_text` outs
 - `design/SPEC_wallet_import_v0_28_0.md`
 - `docs/manual/src/45-foreign-formats.md`
 - `CHANGELOG.md`
+- `design/fix-tk-coldcard-dup-headers-red.sh`
 
 Neighbour #15 (`fix/tk-stdout-write-errors`) also edits `CHANGELOG.md` `[Unreleased]`; no other overlap.
 
