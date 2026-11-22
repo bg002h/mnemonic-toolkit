@@ -49,7 +49,7 @@ set -eu
 component_info() {
     case "$1" in
         mnemonic)
-            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.107.0|mnemonic|"
+            echo "mnemonic-toolkit|https://github.com/bg002h/mnemonic-toolkit|mnemonic-toolkit-v0.107.1|mnemonic|"
             ;;
         md)
             echo "md-cli|https://github.com/bg002h/descriptor-mnemonic|descriptor-mnemonic-md-cli-v0.21.0|md|cli-compiler"
