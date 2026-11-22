@@ -495,7 +495,7 @@ The address type is inferred from the origin-path purpose **at canonical
 single-sig account depth** (`m/44'`→`p2pkh`, `49'`→`p2sh-p2wpkh`, `84'`→`p2wpkh`,
 `86'`→`p2tr`) and is overridable with `--address-type`. A card whose origin is
 not at account depth requires the explicit flag (and prints a stderr advisory
-that addresses are derived relative to the card's xpub). Multisig-cosigner cards
+that addresses are derived relative to the card's xpub). A card that holds one fixed key (depth 0 with an all-zero chain code — how the toolkit writes a WIF key) is **refused** before anything else is checked (exit 64): it has no child keys that any wallet watches. The refusal prints the `mnemonic convert` command that renders the key's own address; a key in a multisig wallet takes its addresses from the md1 policy card with `md address`. Multisig-cosigner cards
 (`m/48'`/`m/87'`) are **refused** — single-key addresses would not match the
 wallet; derive its addresses with `md address <MD1>... --from-mk1-file FILE` (the md1 policy card, and every cosigner's mk1 card in FILE; for testnet cards add `--network testnet`, `--network signet` or `--network regtest`) instead.
 
@@ -548,7 +548,7 @@ JSON mode (here with `--count 2`):
 
 Derive a child xpub at a relative path from the card's xpub. An xpub can only
 derive **unhardened** children (it has no private key); hardened components are
-rejected. The emitted `child_xpub` is composable — pipe it back into `mk encode`.
+rejected. A `--path` with no steps (`''`, `m`, `m/`) is rejected (the card's own key is `mk decode`'s output), and a fixed-key card (see `mk address`) is refused. The emitted `child_xpub` is composable — pipe it back into `mk encode`.
 Read-only; no signing.
 
 ### Synopsis
@@ -564,7 +564,7 @@ mk1 strings from stdin.
 
 | Flag | Purpose |
 |---|---|
-| `--path <REL>` | relative derivation path, unhardened only (e.g. `m/0/5`) |
+| `--path <REL>` | relative derivation path, unhardened only, at least one step (e.g. `m/0/5`) |
 | `--index <N>` | single external-chain index — sugar for `--path m/0/<N>` |
 | `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit JSON output |
