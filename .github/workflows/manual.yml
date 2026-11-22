@@ -155,7 +155,7 @@ jobs:
         # against a multi-binary workspace.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.16.0 mk-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.17.0 mk-cli
 
       - name: Install md-cli
         if: steps.guard.outputs.relevant == 'true'
@@ -165,14 +165,14 @@ jobs:
         # flag matches scripts/install.sh:35's component_info pin.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.20.8 md-cli --features cli-compiler
+        run: cargo install --git https://github.com/bg002h/descriptor-mnemonic --tag descriptor-mnemonic-md-cli-v0.21.0 md-cli --features cli-compiler
 
       - name: Install ms-cli
         if: steps.guard.outputs.relevant == 'true'
         # Mirrors the mk-cli + md-cli install patterns above.
         env:
           CARGO_INSTALL_ROOT: ${{ runner.temp }}/sibling-clis
-        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.20.5 ms-cli
+        run: cargo install --git https://github.com/bg002h/mnemonic-secret --tag ms-cli-v0.21.0 ms-cli
 
       # `mr` is private, and its chapter is linted by mnemonic-refugium's CI (job `manual-mr`).
 

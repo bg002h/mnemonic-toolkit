@@ -8,6 +8,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Installer pins: md 0.21.0, ms 0.21.0 and mk 0.17.0
+
+- **`scripts/install.sh` installs md 0.21.0, ms 0.21.0 and mk 0.17.0** (tags `descriptor-mnemonic-md-cli-v0.21.0`,
+  `ms-cli-v0.21.0` and `mk-cli-v0.17.0`). `md encode`, `md descriptor --emit md1`, `ms encode` and `mk encode` print
+  each string once, on stdout: the grouped copy on stderr (and its `group size:` / `separator:` lines) is gone,
+  `--group-size N` groups stdout on request and defaults to `0`, and `--out FILE` receives the bytes stdout would
+  have carried. `ms hashlock` prints no form of the preimage on its card under `--out` or `--json`. The CLI manual's
+  md, ms and mk pages and the technical manual's `md1-encode-wpkh-basic` transcript follow. The pins are mirrored in
+  `manual.yml`, `quickstart.yml`, `technical-manual.yml` and `cross-tool-differential.yml` (md only); the Examples
+  golden shows them; `first_signed` is unchanged (md 0.20.4, ms 0.20.2, mk 0.14.0). The GUI manual stays on
+  mnemonic-gui v0.63.0's tier: its §82 section and `pinned-upstream.toml`'s `[installer-ahead]` table name the new
+  tags, and `manual-gui.yml` stays at the GUI's tags.
+
 ## mnemonic-toolkit [0.107.0] — 2026-11-20
 
 ### Argv secrets: a bare value is no longer echoed by the parser

@@ -44,12 +44,16 @@ newer than these.
 
 The toolkit installer currently installs four CLI releases newer than
 this GUI was built against: `mnemonic-toolkit-v0.107.0` (the GUI's label
-reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.20.8`
-(label `Pinned: md 0.20.3`), `ms-cli-v0.20.5` (label
-`Pinned: ms 0.20.1`) and `mk-cli-v0.16.0` (label `Pinned: mk 0.13.0`).
-The forms run unchanged except one: on the `mk encode` form, the
+reads `Pinned: mnemonic 0.105.1`), `descriptor-mnemonic-md-cli-v0.21.0`
+(label `Pinned: md 0.20.3`), `ms-cli-v0.21.0` (label
+`Pinned: ms 0.20.1`) and `mk-cli-v0.17.0` (label `Pinned: mk 0.13.0`).
+The forms run unchanged except two. On the `mk encode` form, the
 `--separator` dropdown's `hyphen` and `comma` are now refused (see
-below), so choose `space`. The 0.107.0 `mnemonic` refuses a secret
+below), so choose `space`. On the `md encode`, `md descriptor --emit
+md1`, `ms encode` and `mk encode` forms, this GUI does not send
+`--group-size 5` (its shown default), and these CLI releases print the
+unbroken string unless `--group-size` is given: to print groups of
+five, run the CLI with `--group-size 5`. The 0.107.0 `mnemonic` refuses a secret
 typed on the command line at exit 2 for five more flags
 (`ms-shares combine --share`, `slip39 combine --share`, `seed-xor
 combine --share`, `import-wallet --ms1`, `verify-bundle --ms1`), but
@@ -60,8 +64,8 @@ itself. `mnemonic --version`, `md --version`,
 expected.
 
 Outputs differ, mostly on invalid or unusual input or on the recovery
-line of a card, and `mk encode` now prints its grouped card on stderr;
-none changes a derived wallet. First `mnemonic`, three
+line of a card, and `md encode`, `ms encode` and `mk encode` now print
+each string once, on stdout; none changes a derived wallet. First `mnemonic`, three
 outputs:
 
 - **`bundle` with `--import-json`, and `export-wallet` with
@@ -84,8 +88,24 @@ outputs:
   envelope's descriptor, so `--threshold 1` on a 2-of-3 envelope prints
   `# Threshold: 2 of 3`, where it printed `1 of 3`.
 
-Then `ms`, five outputs:
+Then `ms`, eight outputs:
 
+- **`ms encode`.** The stderr `engraving card:` line (the ms1 in
+  groups of five) is gone; stdout still carries the unbroken ms1 once.
+  A `--group-size` other than `0` or `5` now groups stdout instead.
+  `--no-engraving-card` still drops the word count, language and
+  passphrase lines.
+- **`ms hashlock` with `--out` or `--json`.** The stderr card no longer
+  prints the preimage: its `preimage (ms1):` and `preimage (hex):`
+  lines (and, under `--json`, `record (phrase):`) say where it is, and
+  its first line says where the preimage is instead of `THIS CARD
+  CARRIES THE PREIMAGE`. Without `--out` or `--json` the card is
+  unchanged.
+- **`--in` and `--out` beside `--allow-argv-secret`** (the path this
+  GUI takes on macOS and Windows). A file name of 32 to 64 hex
+  characters, or one shaped like an ms1 string, is now read or written
+  as named, where it was taken for a secret and replaced by `-` (so
+  `--out` wrote a file named `-`).
 - **`ms inspect`.** A share at share index `s` (the secret itself,
   which `ms combine` refuses) now reads `FAIL: would NOT combine`,
   where it read `OK: K-of-N share (would combine: …)`. A mnem string
@@ -115,10 +135,12 @@ Then `ms`, five outputs:
 
 Then `mk`, seven outputs:
 
-- **`mk encode`.** stdout now carries only the unbroken strings, one
-  per line; the grouped engraving card, then `group size:` and
-  `separator:` lines, goes to stderr. `--group-size` and `--separator`
-  shape that card, not stdout. With `--json`, the card also names its
+- **`mk encode`.** stdout carries each unbroken string once, one per
+  line, where it carried them in groups of five (with a blank line
+  between `--keys` cards); nothing repeats them on stderr. A
+  `--group-size` other than `0` or `5` now groups stdout. With `--keys`
+  and two or more cards, stderr names each card's lines (`card <i> of
+  <n>: lines <a>-<b>`). With `--json`, the card also names its
   `origin_fingerprint` and `origin_path`.
 - **`mk encode` with `--separator`.** `hyphen` and `comma` (and the
   literals `-` and `,`) are now refused (exit 64), with a message
@@ -148,8 +170,24 @@ Then `mk`, seven outputs:
   with `md address <MD1>... --from-mk1-file FILE`, where it pointed at
   `mnemonic verify-bundle`.
 
-Last `md`, seven outputs:
+Last `md`, ten outputs:
 
+- **`md encode` and `md descriptor --emit md1`.** The grouped copy of
+  each md1 string on stderr, and its `group size:` and `separator:`
+  lines, are gone; stdout still carries each unbroken string once. A
+  `--group-size` other than `0` or `5` now groups stdout instead.
+  `chunk-set-id:` stays on stderr. With `--out`, the file holds exactly
+  what stdout would.
+- **`md decompose`.** `--emit commands` prints a mint route only after
+  proving that it mints the input's wallet; a route it cannot prove is
+  withheld with one line, and when no route does, the command refuses
+  (exit 1). `--emit template` and `--emit all` now refuse a descriptor
+  whose key use-site an md1 card cannot hold (a fixed step such as
+  `/0/*`, or none), where they printed a template that minted a
+  different wallet.
+- **`md descriptor --verify-against`.** A template that numbers its
+  slots out of first-occurrence order no longer reports its own fresh
+  card as `NOT spend-equal`.
 - **`md encode`.** `--fingerprint` takes hex digits only: `@0=+f+f+f+f`
   is now refused (`md: --fingerprint @0: invalid hex byte: +f`) where
   it was read as a fingerprint. A multipath alternative of 2^31 or more
@@ -191,7 +229,11 @@ Last `md`, seven outputs:
   `md decompose` line is printed when a key is in another spelling
   than `xpub`/`tpub` (the message says to export the descriptor again
   with xpub or tpub keys); and only the `--emit template` line is
-  printed when a key carries no `[fingerprint/path]` origin.
+  printed when a key carries no `[fingerprint/path]` origin. A key
+  whose origin is a fingerprint alone (`[fingerprint]xpub…`) is treated
+  like one with no origin, and when `md decompose` would refuse the
+  descriptor or print no template for it, no `md decompose` line is
+  printed and the message quotes its refusal.
 
 ## When the GUI is older than the CLI
 
