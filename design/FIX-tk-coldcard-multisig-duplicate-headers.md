@@ -7,8 +7,7 @@ Base: origin/master `04c56bfa`. Key: bh-tk-I1 (grade I, CONFIRMED; P4/B4 keep it
 `design/agent-reports/bug-hunt-2026-11-19.md` section I1 (L13-L17); coordinator
 `agent-reports/bughunt-1119/grade-tk.md` L25, L51; `triage-tk-t1.md` L12, L18; `xref-tk.md` L15.
 
-**Status: three open STOPs (section 4).** Sections 3, 5 and 6 are written to the recommended option of each STOP,
-marked where an option changes them. Every new holder-visible text is **PROPOSED (architect confirms)**.
+**Status: STOPs ruled (architect-bh-batch34 #24): STOP-1 A, STOP-2 A plus Rule C, STOP-3 A (grade I).** Every new holder-visible text is confirmed.
 
 ## 1. Scope
 
@@ -55,7 +54,7 @@ repeated line, `<F>` the first, and `<Header>` the canonical spelling `Name`, `P
 
     error: import-wallet: coldcard-multisig: parse error: line <L>: repeated `<Header>:` header (first given at line <F>); a setup file gives each header once
 
-PROPOSED (architect confirms). The detail string (without `error: `) is the `ImportWalletParse` payload, in the
+Confirmed (architect-bh-batch34). The detail string (without `error: `) is the `ImportWalletParse` payload, in the
 same shape as L297-L301.
 
 **Rule D (two `Derivation:` lines with no cosigner between; STOP-3).** A `Derivation:` line (exact case, as today)
@@ -65,14 +64,20 @@ bare xpub). Blank, comment and unknown-key lines do not count as cosigner lines.
 
     error: import-wallet: coldcard-multisig: parse error: line <L>: `Derivation:` line follows the one at line <F> with no cosigner line between them
 
-PROPOSED (architect confirms). Per-cosigner `Derivation:` lines, each followed by its key line, stay accepted (R13).
+Confirmed (architect-bh-batch34). Per-cosigner `Derivation:` lines, each followed by its key line, stay accepted (R13).
+
+**Rule C (case-variant Derivation key; STOP-2 ruling).** A key line whose key equals `Derivation` ignoring ASCII case but is not exactly `Derivation` is refused, checked after Rule H and before Rule D (Coldcard lowercases labels and reads it as a path line; this parser would drop it). Text, with `<key>` the key as written:
+
+    error: import-wallet: coldcard-multisig: parse error: line <L>: `<key>:` must be spelled `Derivation:`
+
+Confirmed (architect-bh-batch34). A lone `xfp:` key stays a dropped field (Coldcard ignores an `xfp` label).
 
 Nothing else changes: the sniff (L139-L152), the cosigner-count check (L324) and the XFP truth table (§11.4.1).
 
 **SPEC lockstep:** `design/SPEC_wallet_import_v0_28_0.md` §11.4 "Parse contract" (L417) gains, after its first
 sentence: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears at most once; a repeat, compared ignoring the
 key's ASCII case and whatever its value, is `ImportWalletParse` (exit 2) naming both line numbers. Two `Derivation:`
-lines with no cosigner line between them are refused the same way." (PROPOSED.)
+lines with no cosigner line between them are refused the same way. A `Derivation` key spelled in another letter case is refused." Confirmed (architect-bh-batch34).
 
 ## 4. STOPs (product points the rulings do not decide)
 
@@ -85,17 +90,17 @@ for setup-file headers; B1 (normalise BOM and CRLF only) is ruled for near-canon
   (`2-of-3` after `2 of 3` accepted), `Name:` excluded; then the text becomes "line <L>: `<Header>:` header
   `<value>` contradicts line <F> (`<first value>`)" and R8-R10 stay exit 0; (C) as B with `Name:` included.
   **Recommend A:** no Coldcard or toolkit export repeats a header, it is one rule with one text (the same choice B2
-  made for key records), and a second `Name:` is as much a sign of a spliced file as a second `Policy:`.
+  made for key records), and a second `Name:` is as much a sign of a spliced file as a second `Policy:`. **Ruled A (architect-bh-batch34).**
 - **STOP-2: case-variant keys (`policy: 1 of 3`, R11).** Options: (A) count a case-variant key as an occurrence for
   the repeat check only (Rule H as written); (B) also refuse a lone case-variant header key; (C) leave R11 out and
   file a FOLLOWUPS line. **Recommend A:** it closes the one case where Coldcard and the toolkit read different
   quorums from one file, and changes nothing for a file without a repeat (B would refuse lone `xfp:` lines that
-  Coldcard ignores).
+  Coldcard ignores). **Ruled A (architect-bh-batch34).** Extended by Rule C to a case-variant `Derivation` key.
 - **STOP-3: two `Derivation:` lines with no cosigner between (R15; new finding).** Options: (A) refuse (Rule D, in
   this FIX); (B) apply the later path to every following cosigner, as Coldcard does; (C) leave it and file a
   FOLLOWUPS line (proposed grade I: the origins of N-1 cosigners differ from the device's reading, addresses do
   not). **Recommend A:** no export writes that shape, refusal keeps one reading, and it is the same root (a repeated
-  header silently resolved).
+  header silently resolved). **Ruled A (architect-bh-batch34).** Grade I (P4).
 
 ## 5. RED rows (run at `04c56bfa`; public xpubs from committed fixtures, no seed)
 
@@ -121,6 +126,8 @@ quorum, wrap, fp0, paths and name columns; `err=` shows the last stderr line, wh
 | R13 | per-cosigner shape, three `Derivation:` + `<XFP>: <xpub>` pairs (control) | rc=0 paths `48'/0'/0'/2',48'/0'/1'/2',48'/0'/2'/2'` | unchanged |
 | R14 | R7 with one `XFP: 0000AAAA` (control) | rc=0 `fp0=0000aaaa` | unchanged |
 | R15 | fixture with `Derivation: m/48'/0'/9'/2'` inserted as L4 | rc=0 `paths=48'/0'/9'/2',48'/0'/0'/2',48'/0'/0'/2'` | rc=2 `line 4: \`Derivation:\` line follows the one at line 3 with no cosigner line between them` (STOP-3 B/C: differs) |
+| R16 | fixture with \`derivation: m/48'/0'/9'/2'\` inserted as L4 | rc=0 paths=48'/0'/0'/2',48'/0'/0'/2',48'/0'/0'/2' (Coldcard reads 9' for all) | rc=2 \`line 4: \`derivation:\` must be spelled \`Derivation:\`\` |
+| R17 | R13 with its L6 key spelled \`derivation:\` | rc=0 paths=48'/0'/0'/2',48'/0'/0'/2',48'/0'/2'/2' (Coldcard reads 1' for cosigner 2) | rc=2 \`line 6: \`derivation:\` must be spelled \`Derivation:\`\` |
 
 Each expected refusal is the full stderr line `error: import-wallet: coldcard-multisig: parse error: <detail>` with
 the Rule H or Rule D detail. The author applied a scratch implementation of the recommended options (not
@@ -142,7 +149,7 @@ and that stderr contains the row's full detail string (line numbers included). N
 `dup_headers_r12_control_original_fixture` (exit 0, stdout contains `sortedmulti(2,`),
 `dup_headers_r13_control_per_cosigner_derivation` (exit 0, the three paths of R13),
 `dup_headers_r14_control_xfp_single` (exit 0, stdout contains `[0000aaaa/48'/0'/0'/2']`),
-`dup_headers_r15_derivation_twice_before_cosigners`. A STOP ruled other than the recommendation flips the rows it
+`dup_headers_r15_derivation_twice_before_cosigners`, `dup_headers_r16_derivation_lowercase_after_shared`, `dup_headers_r17_derivation_lowercase_per_cosigner`. A STOP ruled other than the recommendation flips the rows it
 names in section 5 to exit-0 assertions of the "seen" column.
 
 ## 7. Manual and changelog lockstep
@@ -153,12 +160,12 @@ No flag, verb or `--help` text changes, so `docs/manual/src/40-cli-reference/` a
 - `docs/manual/src/45-foreign-formats.md`: after L634 (end of the `m/45'` paragraph, before `### XFP-header
   policy`), a new paragraph: "Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears once. A file that repeats one
   of them (in any letter case, even with the same value), or that has two `Derivation:` lines with no cosigner line
-  between them, is refused (exit 2) with both line numbers; re-export the file from the device." (PROPOSED.)
+  between them, or spells `Derivation:` in another letter case, is refused (exit 2) with both line numbers; re-export the file from the device." Confirmed (architect-bh-batch34).
 - `CHANGELOG.md` `## [Unreleased]`, new subsection: "### A repeated Coldcard multisig header is refused" with
   "- **`import-wallet` (`coldcard-multisig`, auto-detected, and `jade`)**: a setup file that repeats `Name:`,
-  `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, now exits 2
+  `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, or spells `Derivation:` in another letter case, now exits 2
   naming both lines. The last line used to win silently, so a second `Policy: 1 of 3` imported a 2-of-3 file as
-  1-of-3." (PROPOSED.)
+  1-of-3." Confirmed (architect-bh-batch34).
 
 ## 8. Gate (builder, one run to a file, then grep)
 
@@ -185,11 +192,4 @@ Neighbour #15 (`fix/tk-stdout-write-errors`) also edits `CHANGELOG.md` `[Unrelea
 ## 10. FOLLOWUPS
 
 Closes: none (bh-tk-I1 has no line in `design/FOLLOWUPS.md` at `04c56bfa`; grep for `bh-tk-I1`, `duplicate`,
-`repeated`, `Policy:`). Files: none if STOP-2 and STOP-3 rule A. If STOP-3 rules C, after the PR merges
-(direct-push):
-
-- `- [tk-coldcard-ms-derivation-twice] status=open grade=I kind=funds owner=none filed=2026-11-22 src=design/FIX-tk-coldcard-multisig-duplicate-headers.md#2 :: Two Derivation: lines with no cosigner line between give cosigner 1 the second path and the rest the first; Coldcard applies the second to all (key origins differ, addresses do not).`
-
-If STOP-2 rules C:
-
-- `- [tk-coldcard-ms-case-variant-header] status=open grade=I kind=funds owner=none filed=2026-11-22 src=design/FIX-tk-coldcard-multisig-duplicate-headers.md#2 :: A lowercase policy: line after Policy: is ignored by the toolkit but read by Coldcard firmware, so the two import different quorums from one file.`
+`repeated`, `Policy:`). Files: none (STOP-2 and STOP-3 ruled A, architect-bh-batch34).
