@@ -8,6 +8,8 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+## mnemonic-toolkit [0.107.1] — 2026-11-22
+
 ### Installer pins: md 0.21.0, ms 0.21.0 and mk 0.17.0
 
 - **`scripts/install.sh` installs md 0.21.0, ms 0.21.0 and mk 0.17.0** (tags `descriptor-mnemonic-md-cli-v0.21.0`,
