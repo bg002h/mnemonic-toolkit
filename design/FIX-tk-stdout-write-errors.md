@@ -5,8 +5,7 @@ Base: origin/master `dbac472f`. Keys: bh-tk-I2 (grade I, CONFIRMED). Ruling: arc
 section 1). Sources: `design/agent-reports/bug-hunt-2026-11-19.md` section I2; coordinator
 `agent-reports/bughunt-1119/grade-tk.md` L26, L50; `triage-tk-t1.md` L13.
 
-**Status: one open question (Q1, section 7).** It decides only what exit 4 becomes when stdout fails. Every other
-row is decided; rows R16 and R21 carry both outcomes.
+**Status: complete.** Q1 is RULED (B) by the architect (coordinator agent-reports/architect-bh-tk15-mkc17.md A1).
 
 ## 1. The contract (T6, decided)
 
@@ -77,12 +76,14 @@ After the verb returns and the sink is flushed:
 |---|---|
 | `Ok(0)` | `1` |
 | `Ok(5)` or `Err(RepairShortCircuit { exit_code: 5 })` (`REPAIR_APPLIED`: the corrected chunks on stdout are the result) | `1` |
-| exit 4, any source (`Ok(4)` or an `Err` whose `exit_code()` is 4) | **Q1** (section 7) |
+| exit 4 from `repair` or `inspect` (`Ok(4)` or an `Err` whose `exit_code()` is 4; the candidates or the partial decode on stdout are the result) | `1` |
+| exit 4 from every other verb (a verdict: mismatch, `partial`, no match, unverified signature) | kept |
 | any other code (`1`, `2`, `3`, `64`, every other `Err(e)`) | kept: the verb was already failing |
 
+`main` keys the exit-4 row on the subcommand it already matches; no verb signature changes.
+
 The order (the verb's own error line before the write-error line) is md's (`md-cli/src/main.rs:924-936`: the verb's
-`eprintln!` runs before `out::exit_code`). PROPOSED (architect confirms) only in so far as tk has not stated it
-before; it is not new wording.
+`eprintln!` runs before `out::exit_code`). RULED (architect A2).
 
 ### 3.3 `--help` / `--version` (`main.rs:211-217`)
 
@@ -110,18 +111,15 @@ Every verb's stdout bytes and stderr lines when stdout works; all exit codes whe
 ## 4. Manual lockstep (toolkit `docs/manual/src/40-cli-reference/41-mnemonic.md`)
 
 Append after the last line (today L5215), mirroring `42-md.md:797-799`, `43-ms.md:896-898`, `44-mk-cli.md:621`:
-a blank line, `---`, a blank line, `## When stdout fails`, a blank line, then this paragraph (PROPOSED (architect
-confirms); it is md's sentence with `mnemonic` and a tk example, plus the exit-4 clause Q1 decides):
+a blank line, `---`, a blank line, `## When stdout fails`, a blank line, then this paragraph (RULED, architect A2: md's sentence with `mnemonic` and a tk example, then the exit-4 sentence):
 
 > A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the
 > verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints
 > `mnemonic: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own
-> code.
+> code. Exit 4 from `repair` or `inspect` (the candidates or the partial decode on stdout are the result) also
+> becomes 1; every other exit 4 is a verdict and is kept.
 
-Q1 answer (A) adds nothing (exit 4 is "already failing"). Answer (B) or (C) appends one sentence, PROPOSED:
-(B) `` `repair`'s and `inspect`'s exit 4 (the candidates or the partial decode on stdout are the result) also become 1. ``
-(C) `` Exit 4 and exit 5 also become 1. `` (Exit 5 becomes 1 in every answer; md and mk state it the same way, under
-"a verb that was already failing", so no sentence is needed for 5.)
+(Exit 5 becomes 1 in every case; md and mk state it the same way, so no sentence is needed for 5.)
 
 No flag changes, so `docs/manual/tests/lint.sh` flag coverage is unaffected; the builder runs it anyway (gate, 8).
 CHANGELOG: the `changelog-check` job wants a section; the builder adds the entry per the repo's release process.
@@ -148,11 +146,12 @@ states what it does not cover). It prints `<row> rc=<exit> stderr=<last stderr l
 | R11 | `gui-schema` (`1</dev/null`) | rc=0, stderr empty | rc=1, stderr exactly `mnemonic: cannot write the output: Bad file descriptor (os error 9)` |
 | R12 | `convert --from phrase=- --to entropy` (P; `1</dev/null`) | rc=0 | rc=1, last line as R11 |
 | R13 | `verify-bundle --allow-argv-secret --template bip84 --network signet --ms1 … --mk1 … --md1 … --slot @0.phrase=-` (P; `>/dev/full`) | rc=0, stderr empty | rc=1, stderr exactly `W` |
-| R14 | R13 with stdin Z (mismatch, exit 4) (`>/dev/full`) | rc=4, stderr empty | Q1 (A),(B): rc=4, stderr exactly `W`. (C): rc=1, `W` |
+| R14 | R13 with stdin Z (mismatch, exit 4) (`>/dev/full`) | rc=4, stderr empty | rc=4, stderr exactly `W` |
 | R15 | `repair --mk1 <K1 with its last char f→q> <K2>` (`>/dev/full`) | rc=1, `error: I/O error: …(os error 28)` | rc=1, `W`; no `error: I/O error` line |
-| R16 | `repair --ms1 -` (stdin: the ms1 card, last char f→q; exit 4 when stdout works) (`>/dev/full`) | rc=1, `error: I/O error: …(os error 28)` | Q1 (A): rc=4, `W`. (B),(C): rc=1, `W`. No `error: I/O error` line in any answer |
+| R16 | `repair --ms1 -` (stdin: the ms1 card, last char f→q; exit 4 when stdout works) (`>/dev/full`) | rc=1, `error: I/O error: …(os error 28)` | rc=1, last stderr line `W`; no `error: I/O error` line |
 | R17 | R1 into a regular file under `sh -c 'trap "" XFSZ; ulimit -f 0; exec …'` (the consultant's case) | rc=0, bytes=0 | rc=1, bytes=0, `mnemonic: cannot write the output: File too large (os error 27)` |
 | R18 | `gui-schema >&-` | rc=0, stderr empty | rc=0, stderr empty (guard: std reopens fd 1 on /dev/null) |
+| R23 | `inspect --md1 md1yppqqxp3cg2x3r70ckk4kjaf` (a dead pathless md1, cli_inspect_partial.rs:42; exit 4 when stdout works) (`>/dev/full`) | rc=1, `error: I/O error: No space left on device (os error 28)` | rc=1, last stderr line `W`; no `error: I/O error` line |
 
 Measured output at `dbac472f`, verbatim except the long advisory line cut to its start (`warning: stdout carries
 private key material (can spend) — …` is R1-R4's and R12's last line):
@@ -169,6 +168,7 @@ private key material (can spend) — …` is R1-R4's and R12's last line):
     R16-repair-unverified4-full rc=1 stderr=error: I/O error: No space left on device (os error 28)
     R17-derive-child-fsize0 rc=0 bytes=0 stderr=
     R18-gui-schema-closed-fd rc=0 stderr=
+    R23-inspect-partial4-full rc=1 stderr=error: I/O error: No space left on device (os error 28)
 
 In-crate rows (no binary run; the builder sees each fail before the fix, by test, not by text):
 
@@ -176,7 +176,7 @@ In-crate rows (no binary run; the builder sees each fail before the fix, by test
 |---|---|---|---|
 | R19 | sink over a writer that accepts 4 bytes then returns `ENOSPC`: write 10 bytes, then 10 more | does not compile (no sink) | first write returns `Ok`, inner holds 4 bytes, recorded error is `os error 28`, second write reaches the inner writer 0 times |
 | R20 | sink over a writer whose writes succeed and whose `flush` returns `ENOSPC` | does not compile | writes `Ok`, `flush` `Ok`, recorded error `os error 28` |
-| R21 | exit mapping table: no error: every code kept; BrokenPipe only: codes 0,1,2,3,4,5,64 kept; ENOSPC: 0→1, 5→1, 1/2/3/64 kept, 4 per Q1 | does not compile | as stated |
+| R21 | exit mapping table: no error: every code kept; BrokenPipe only: codes 0,1,2,3,4,5,64 kept; ENOSPC: 0→1, 5→1, 1/2/3/64 kept, 4→1 when the verb is `repair` or `inspect`, 4 kept for `verify-bundle` (the function takes the verb) | does not compile | as stated |
 | R22 | source scan of `crates/mnemonic-toolkit/src`: no line matches `(writeln!\|write!)\(stdout` or `to_writer(_pretty)?\(&mut \*stdout` and contains `.ok()` | FAILS, lists the 34 sites | passes |
 
 ## 6. Tests
@@ -192,7 +192,8 @@ New, one test function per row, named exactly (TRACE):
   `r10_version_dev_full_exits_1`, `r11_gui_schema_read_only_stdout_exits_1`,
   `r12_convert_read_only_stdout_exits_1`, `r13_verify_bundle_ok_dev_full_exits_1`,
   `r14_verify_bundle_mismatch_dev_full`, `r15_repair_applied_dev_full_exits_1`,
-  `r16_repair_unverified_dev_full`, `r17_derive_child_fsize0_exits_1`, `r18_gui_schema_closed_fd_keeps_exit_0`.
+  `r16_repair_unverified_dev_full`, `r17_derive_child_fsize0_exits_1`, `r18_gui_schema_closed_fd_keeps_exit_0`,
+  `r23_inspect_partial_dev_full_exits_1`.
   R7 must not be flaky: the reader closes after the first byte and `--count 2000` writes far more than a pipe buffer
   (64 KiB on Linux); assert only rc and the absence of the two lines.
 - `crates/mnemonic-toolkit/src/out_sink.rs` `#[cfg(test)]`: `r19_sink_prefix_then_error_records_first_error_and_stops`,
@@ -205,22 +206,10 @@ Existing tests that change: none. Checked: no test under `crates/` or script und
 `Broken pipe`, `BrokenPipe`, `os error 28` or `cannot write the output`, and no test pins `error: I/O error:` on a
 stdout failure (`grep -rn` at `dbac472f`).
 
-## 7. Open question (STOP)
+## 7. Ruling (Q1)
 
-**Q1. When stdout fails, does tk's exit 4 become 1?** T6 keeps the code of "a verb already failing" and md turns
-"a code that says the output is the result" into 1. tk's exit 4 is both kinds: a failing verdict for
-`verify-bundle`/`restore`/`import-wallet` mismatch (`error.rs` `BundleMismatch`, `RestoreMismatch`,
-`ImportWalletSeedMismatch`, `Ok(4)` at `verify_bundle.rs:701,983`, `import_wallet.rs:447,1408`) and `xpub-search`
-no-match; and "the output is the result, verify it" for `repair` (candidates printed, manual 41-mnemonic.md L3464)
-and `inspect` partial decode (`inspect.rs:177`, a mirror of md's partial-decode 4, which md turns into 1). mk keeps
-its verify-mismatch 4. Today a `?`-propagating verb's 4 already becomes 1 on a full disk (R16), and an `.ok()` verb's 4
-stays 4 (R14).
-
-- (A) **Recommended.** Keep 4 everywhere. tk's manual defines 4 as VERIFY-ME/mismatch, a "do not trust" result that
-  no caller reads as success, so the false-success defect is closed without it; one rule, no per-verb table. Changes
-  R16 from today's 1 to 4.
-- (B) 4 becomes 1 for `repair` and `inspect` only (md's reading); `main` keys on the verb. Adds the 4.(B) sentence.
-- (C) 4 becomes 1 everywhere (md's code list 0/4/5 literally). Turns a mismatch verdict into 1.
+RULED (B), architect A1: exit 4 from `repair`/`inspect` becomes 1; every other
+exit 4 is kept. Rows R14, R16, R21, R23.
 
 ## 8. Gate (builder, one run to a file, then grep)
 

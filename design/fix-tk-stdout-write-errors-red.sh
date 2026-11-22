@@ -2,7 +2,7 @@
 # RED/GREEN probe for design/FIX-tk-stdout-write-errors.md.
 # Usage: design/fix-tk-stdout-write-errors-red.sh <path-to-mnemonic-binary>
 # Prints one line per row: "<row> rc=<exit> stderr=<last stderr line or empty>".
-# Covers: the rows R1-R18 of the FIX doc (stdout to /dev/full, a regular file under `ulimit -f 0`, a closed pipe,
+# Covers: the rows R1-R18 and R23 of the FIX doc (stdout to /dev/full, a regular file under `ulimit -f 0`, a closed pipe,
 # a read-only stdout, --help/--version). Does NOT cover: --out/--json-out file
 # writes, stderr write errors, Windows, or a writer that fails only at flush
 # (the in-crate unit test owns that row).
@@ -52,6 +52,7 @@ row R13-verify-bundle-ok-full "$P" full "${VB[@]}"
 row R14-verify-bundle-mismatch4-full "$Z" full "${VB[@]}"
 row R15-repair-applied5-full "" full repair --mk1 "$K1BAD" "$K2"
 row R16-repair-unverified4-full "${MS%f}q" full repair --ms1 -
+row R23-inspect-partial4-full "" full inspect --md1 md1yppqqxp3cg2x3r70ckk4kjaf
 # The consultant's case: a regular file, RLIMIT_FSIZE 0, SIGXFSZ ignored.
 printf '%s\n' "$P" | sh -c 'trap "" XFSZ; ulimit -f 0; exec "$0" "$@"' "$B" \
   derive-child --from phrase=- --application hex --length 16 --index 0 >"$T/out" 2>"$T/err"
