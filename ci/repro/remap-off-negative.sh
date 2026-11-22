@@ -79,7 +79,7 @@ fi
 # same way the positive build does; only the REMAP is dropped). MINISCRIPT_REV
 # UNSET ⇒ toolkit rev (THREE-block); EMPTY ⇒ TWO-block (codec). Single-dash default
 # fires ONLY when UNSET so a codec caller's explicit empty is honored.
-MINISCRIPT_REV="${MINISCRIPT_REV-95fdd1c5773bd918c574d2225787973f63e16a66}"
+MINISCRIPT_REV="${MINISCRIPT_REV-ff4732e5f75aa555682343cb180fa72ee3e8e9d5}"
 # F-324: optional SECOND git-source stanza (both empty ⇒ no-op). No sensible
 # non-empty default rev for an arbitrary caller dependency, so plain ${VAR:-}.
 GIT_SOURCE_URL="${GIT_SOURCE_URL:-}"
