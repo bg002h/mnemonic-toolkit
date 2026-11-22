@@ -127,11 +127,19 @@ def main() -> int:
     files = sorted([*man.glob("src/**/*.md"), *man.glob("tutorial/*.md")])
     checked = 0
     ahead_section = []
+    ahead_text = []
+    in_ahead = False
     for f in files:
         rel = f.relative_to(man).as_posix()
+        in_ahead = False
         for n, line in enumerate(f.read_text().splitlines(), 1):
             if "{#installer-ahead}" in line:
                 ahead_section.append(f"{rel}:{n}")
+                in_ahead = True
+            elif in_ahead and line.startswith("#"):
+                in_ahead = False
+            if in_ahead:
+                ahead_text.append(line)
             for m in MENTION.finditer(line):
                 cli = next(c for c in CLIS if m.group(c))
                 ver = next(v for v in (m.group("v1"), m.group("v2"), m.group("v3"), m.group("v4")) if v)
@@ -147,6 +155,12 @@ def main() -> int:
     if ahead and len(ahead_section) != 1:
         errs.append(f"[installer-ahead] is declared, so the manual needs exactly one {{#installer-ahead}} section "
                     f"telling the reader; found {len(ahead_section)} {ahead_section}")
+    if ahead and len(ahead_section) == 1:
+        body = "\n".join(ahead_text)
+        for key, decl in ahead.items():
+            if decl not in body:
+                errs.append(f"the {{#installer-ahead}} section does not name {decl} ([installer-ahead] {key}); "
+                            f"it must tell the reader about every CLI the installer runs ahead on")
     if not ahead and ahead_section:
         errs.append(f"{ahead_section[0]}: an {{#installer-ahead}} section, but pinned-upstream.toml declares no "
                     f"[installer-ahead]; remove the section")

@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.16.0 --bin mk`.
+`cargo install --locked --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.17.0 mk-cli`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -39,13 +39,13 @@ mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --pri
 | `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` |
 | `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored |
 | `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive |
-| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; overwrites an existing file (operator ruling 2026-08-26) |
+| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; the file holds exactly what stdout would (grouped under `--group-size`); overwrites an existing file (operator ruling 2026-08-26) |
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint`; a single-card encode needs one of the two (exit 64 otherwise) |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
 | `--chunk-set-id <HEX>` | pin the 20-bit `chunk_set_id` (`0x` prefix optional) instead of deriving it from the payload. Chunked output only. A value over 20 bits is refused, not truncated. Rarely needed: since mk-codec 0.5.0 the derived default is already deterministic, so re-encoding a card reproduces its strings byte for byte. |
-| `--group-size <N>` | grouping for the **stderr engraving card**: a separator every N characters (default 5; `0` = unbroken). Since mk-cli 0.14.0 stdout always carries the unbroken mk1 strings, and so does `--json`. Separator-stripping on intake means grouped and unbroken cards both re-ingest on `decode`/`verify`/etc. |
-| `--separator <space>` | the engraving card's separator for `--group-size`: `space` (keyword, the default) or the literal `" "`. Whitespace only: `hyphen` and `comma` (and the literals `-` and `,`) are refused (exit 64); a card already grouped with them still decodes |
+| `--group-size <N>` | group each mk1 string on stdout every N characters, for hand engraving (default `0` = unbroken). `--out` receives the same bytes; `--json` stays unbroken. Separator-stripping on intake means grouped and unbroken cards both re-ingest on `decode`/`verify`/etc. |
+| `--separator <space>` | the separator for `--group-size`: `space` (keyword, the default) or the literal `" "`. Whitespace only: `hyphen` and `comma` (and the literals `-` and `,`) are refused (exit 64); a card already grouped with them still decodes |
 | `--json` | emit a single JSON object on stdout |
 
 At least one of `--policy-id-stub` or `--from-md1` is required (the
@@ -67,10 +67,10 @@ derives the stub from a wallet-policy md1 string instead of taking the
 
 ### Output
 
-Text mode prints only the artifact on stdout: one unbroken mk1 string
-per line, one per chunk. The engraving card goes to stderr: the same
-strings grouped by `--group-size` and `--separator`, then
-`group size:` and `separator:` lines, then the watch-only note. JSON
+Text mode prints each mk1 string once, on stdout: one per line, one per
+chunk, unbroken by default and grouped under `--group-size`. stderr
+carries only the watch-only note; with `--keys` and two or more cards
+it is preceded by one `card <i> of <n>: lines <a>-<b>` line per card. JSON
 mode emits a `{ "schema_version", "mk1_strings", "chunk_count",
 "code_variant", "origin_fingerprint", "origin_path" }` object (the
 `mk1_strings` values are elided here; the chunk-set identifier is
