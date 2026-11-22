@@ -235,7 +235,7 @@ release.yml's `windows-x86_64` leg on the PR head, which runs only when the PR i
 builds `--lib` only and does not compile `out_sink.rs`.
 
 Plus every other job of `.github/workflows/rust.yml`, `manual.yml`, `changelog-check.yml` locally or green on the PR
-head (RULES.md build gate). Not covered by this gate: Windows behaviour of the sink, macOS (no `/dev/full`; the read-only and closed-pipe rows are Linux-only too) (no read-only check there, as md),
+head (RULES.md build gate). Not covered by this gate: Windows behaviour of the sink (no read-only check there, as md), macOS (no `/dev/full`; the read-only and closed-pipe rows are Linux-only too),
 stderr write failures, file outputs.
 
 ## 9. FOLLOWUPS
