@@ -21,6 +21,7 @@ mod indel;
 mod language;
 mod network;
 mod nostr;
+mod out_sink;
 mod parse;
 mod parse_descriptor;
 mod passphrase_input;
