@@ -74,7 +74,9 @@ mk-codec = "0.4.1"
 # refused on the encode side), routed the same way; the other md-codec changes in
 # the range (FIX-B codec fixes, the coordinator and descriptor-route library
 # routes, per-network key rendering, `split_unadmitted`) change no toolkit
-# output on a previously accepted input.
+# output on a previously accepted input, with one exception: an md1 string
+# that contains a non-ASCII character is now refused (exit 1, "not in codex32
+# alphabet"); 0.47.0 read U+0161 as the symbol 'a'.
 md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "c8bb97a5e2feccded5f05caf4c79c2458756c1c2" }
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.

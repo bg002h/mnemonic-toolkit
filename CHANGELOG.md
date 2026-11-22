@@ -16,6 +16,7 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   prints `md1 unknown TLV tag 0x.. is outside the reserved range 0x04..=0x1f` (`friendly.rs`, table test 51 -> 52 rows).
   No command emits an unknown TLV, so no existing input reaches it. The manual's `repair` section now names md-codec
   0.48.5 as the build that reads wire versions 4 and 8.
+- **An md1 string with a non-ASCII character is refused.** md-codec 0.47.0 reduced each character to its low byte, so a letter such as U+0161 was read as 'a' and a card carrying it decoded. 0.48.5 refuses it ("character 'š' not in codex32 alphabet", exit 1) in `inspect` (the path run; the other md1 decode paths share md-codec's chunk parser). `repair` already refused it.
 
 ## mnemonic-toolkit [0.107.0] — 2026-11-20
 
