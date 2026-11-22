@@ -1234,8 +1234,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             from_value,
             to: entries,
         };
-        serde_json::to_writer(&mut *stdout, &env).ok();
-        writeln!(stdout).ok();
+        serde_json::to_writer(&mut *stdout, &env)
+            .map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;
+        writeln!(stdout).map_err(ToolkitError::Io)?;
     } else {
         // mstring display-grouping (SPEC §6): group ONLY the codex32 card outputs
         // (ms1/mk1); xpub/wif/descriptor/etc. emit raw. --json stays unbroken.
@@ -1248,7 +1249,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 ),
                 _ => value.clone(),
             };
-            writeln!(stdout, "{}: {}", node.as_str(), rendered).ok();
+            writeln!(stdout, "{}: {}", node.as_str(), rendered).map_err(ToolkitError::Io)?;
         }
     }
 

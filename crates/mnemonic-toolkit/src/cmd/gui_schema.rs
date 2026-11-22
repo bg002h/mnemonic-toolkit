@@ -1322,16 +1322,17 @@ pub fn run<W: Write>(
         } else {
             "non-canonical"
         };
-        writeln!(stdout, "{verdict}").ok();
+        writeln!(stdout, "{verdict}").map_err(ToolkitError::Io)?;
         return Ok(());
     }
 
     let schema = build_schema(root);
     // Schema is a closed type tree with no untrusted input; serialization is
-    // infallible in practice. Match the `.ok()` pattern used by `bundle --json`
-    // / `verify-bundle --json` / `convert --json`.
-    serde_json::to_writer(&mut *stdout, &schema).ok();
-    writeln!(stdout).ok();
+    // infallible in practice; a failed stdout write is propagated (T6), as in
+    // `bundle --json` / `verify-bundle --json` / `convert --json`.
+    serde_json::to_writer(&mut *stdout, &schema)
+        .map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;
+    writeln!(stdout).map_err(ToolkitError::Io)?;
     Ok(())
 }
 

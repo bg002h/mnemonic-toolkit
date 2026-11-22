@@ -303,7 +303,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     };
 
-    writeln!(stdout, "{output}").ok();
+    writeln!(stdout, "{output}").map_err(ToolkitError::Io)?;
     // SPEC §4 — every in-scope app emits secret material; classify on stdout.
     crate::secret_advisory::emit_output_class_advisory(
         crate::secret_advisory::OutputClass::PrivateKeyMaterial,

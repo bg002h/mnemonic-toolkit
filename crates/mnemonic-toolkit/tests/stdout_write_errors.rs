@@ -9,7 +9,8 @@ use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 
 const BIN: &str = env!("CARGO_BIN_EXE_mnemonic");
-const P: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+const P: &str =
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const Z: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
 const MS: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 const K1: &str = "mk1qpg397pqqsq5gjlze9eutks2zvzrtp70pm6trteu3ssr0mjvzcsa5rf53k63zcmsnf3z6rfg8rw7dkzpn3glvvquvgpms6mzamgctgratycf";
@@ -31,7 +32,10 @@ impl Run {
     }
     fn no_io_error_line(&self) {
         assert!(
-            !self.stderr.lines().any(|l| l.starts_with("error: I/O error")),
+            !self
+                .stderr
+                .lines()
+                .any(|l| l.starts_with("error: I/O error")),
             "unexpected I/O error line: {}",
             self.stderr
         );
@@ -94,7 +98,15 @@ fn run_closed_pipe(stdin: &str, args: &[&str]) -> Run {
 }
 
 const DERIVE: &[&str] = &[
-    "derive-child", "--from", "phrase=-", "--application", "hex", "--length", "16", "--index", "0",
+    "derive-child",
+    "--from",
+    "phrase=-",
+    "--application",
+    "hex",
+    "--length",
+    "16",
+    "--index",
+    "0",
 ];
 
 #[test]
@@ -106,21 +118,41 @@ fn r1_derive_child_dev_full_exits_1() {
 
 #[test]
 fn r2_convert_text_dev_full_exits_1() {
-    let r = run(P, Out::Full, &["convert", "--from", "phrase=-", "--to", "entropy"]);
+    let r = run(
+        P,
+        Out::Full,
+        &["convert", "--from", "phrase=-", "--to", "entropy"],
+    );
     assert_eq!(r.rc, 1, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
 
 #[test]
 fn r3_convert_json_dev_full_exits_1() {
-    let r = run(P, Out::Full, &["convert", "--from", "phrase=-", "--to", "entropy", "--json"]);
+    let r = run(
+        P,
+        Out::Full,
+        &["convert", "--from", "phrase=-", "--to", "entropy", "--json"],
+    );
     assert_eq!(r.rc, 1, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
 
 #[test]
 fn r4_bundle_dev_full_exits_1() {
-    let r = run(P, Out::Full, &["bundle", "--template", "bip84", "--network", "signet", "--slot", "@0.phrase=-"]);
+    let r = run(
+        P,
+        Out::Full,
+        &[
+            "bundle",
+            "--template",
+            "bip84",
+            "--network",
+            "signet",
+            "--slot",
+            "@0.phrase=-",
+        ],
+    );
     assert_eq!(r.rc, 1, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
@@ -137,7 +169,17 @@ fn r6_addresses_dev_full_prints_the_contract_line() {
     let r = run(
         P,
         Out::Full,
-        &["addresses", "--from", "phrase=-", "--address-type", "p2wpkh", "--network", "signet", "--count", "3"],
+        &[
+            "addresses",
+            "--from",
+            "phrase=-",
+            "--address-type",
+            "p2wpkh",
+            "--network",
+            "signet",
+            "--count",
+            "3",
+        ],
     );
     assert_eq!(r.rc, 1, "{}", r.stderr);
     assert_eq!(r.last(), W);
@@ -148,7 +190,17 @@ fn r6_addresses_dev_full_prints_the_contract_line() {
 fn r7_addresses_closed_pipe_keeps_exit_0() {
     let r = run_closed_pipe(
         P,
-        &["addresses", "--from", "phrase=-", "--address-type", "p2wpkh", "--network", "signet", "--count", "2000"],
+        &[
+            "addresses",
+            "--from",
+            "phrase=-",
+            "--address-type",
+            "p2wpkh",
+            "--network",
+            "signet",
+            "--count",
+            "2000",
+        ],
     );
     assert_eq!(r.rc, 0, "{}", r.stderr);
     assert!(!r.stderr.contains("cannot write"), "{}", r.stderr);
@@ -187,15 +239,34 @@ fn r11_gui_schema_read_only_stdout_exits_1() {
 
 #[test]
 fn r12_convert_read_only_stdout_exits_1() {
-    let r = run(P, Out::ReadOnly, &["convert", "--from", "phrase=-", "--to", "entropy"]);
+    let r = run(
+        P,
+        Out::ReadOnly,
+        &["convert", "--from", "phrase=-", "--to", "entropy"],
+    );
     assert_eq!(r.rc, 1, "{}", r.stderr);
     assert_eq!(r.last(), RO);
 }
 
 fn vb() -> Vec<&'static str> {
     vec![
-        "verify-bundle", "--allow-argv-secret", "--template", "bip84", "--network", "signet", "--ms1", MS,
-        "--mk1", K1, K2, "--md1", D1, D2, D3, "--slot", "@0.phrase=-",
+        "verify-bundle",
+        "--allow-argv-secret",
+        "--template",
+        "bip84",
+        "--network",
+        "signet",
+        "--ms1",
+        MS,
+        "--mk1",
+        K1,
+        K2,
+        "--md1",
+        D1,
+        D2,
+        D3,
+        "--slot",
+        "@0.phrase=-",
     ]
 }
 
@@ -245,7 +316,12 @@ fn r17_derive_child_fsize0_exits_1() {
         .stderr(Stdio::piped())
         .spawn()
         .unwrap();
-    child.stdin.take().unwrap().write_all(format!("{P}\n").as_bytes()).ok();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{P}\n").as_bytes())
+        .ok();
     let o = child.wait_with_output().unwrap();
     let err = String::from_utf8_lossy(&o.stderr).into_owned();
     assert_eq!(o.status.code(), Some(1), "{err}");
@@ -267,12 +343,20 @@ fn r18_gui_schema_closed_fd_keeps_exit_0() {
         .output()
         .unwrap();
     assert_eq!(o.status.code(), Some(0));
-    assert!(o.stderr.is_empty(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(
+        o.stderr.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
 }
 
 #[test]
 fn r23_inspect_partial_dev_full_exits_1() {
-    let r = run("", Out::Full, &["inspect", "--md1", "md1yppqqxp3cg2x3r70ckk4kjaf"]);
+    let r = run(
+        "",
+        Out::Full,
+        &["inspect", "--md1", "md1yppqqxp3cg2x3r70ckk4kjaf"],
+    );
     assert_eq!(r.rc, 1, "{}", r.stderr);
     assert_eq!(r.last(), W);
     r.no_io_error_line();
@@ -303,5 +387,9 @@ fn r22_no_discarded_stdout_write_in_src() {
     let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut hits = Vec::new();
     scan(&src, &mut hits);
-    assert!(hits.is_empty(), "{} discarded stdout writes: {hits:#?}", hits.len());
+    assert!(
+        hits.is_empty(),
+        "{} discarded stdout writes: {hits:#?}",
+        hits.len()
+    );
 }
