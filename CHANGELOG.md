@@ -8,6 +8,69 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `slip39 split` refuses the test RNG variables
+
+- **`slip39 split`**: `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any
+  value) now exits 1 before reading any input. They used to seed the share randomness with only a warning, so
+  anyone who knew the value could recompute the shares. They now work only in a test build (cargo feature
+  `slip39-test-rng`, off by default).
+
+### Help and manual examples now run as printed
+
+- **`compare-cost --help`**: the `--miniscript` example is `or_b(pk(A),s:pk(B))`; the old `or_b(pk(A), pk(B))`
+  failed with a Miniscript type error (exit 2).
+- **`derive-child --help`**: `hd-seed` is BIP-85 application 2' and prints a compressed WIF at
+  `m/83696968'/2'/<index>'` (the help said application 32' and a 32-byte seed); `xprv` is application 32'; `dice`
+  runs, for 1..=2^31-1 rolls (the help said 1..=99 and REFUSED); `--dice-sides` is 2..=2^31-1 (the help said 2^32-1); `bip39` takes 12, 15, 18, 21 or 24 words; `rsa-gpg`
+  is application 828365'. What the command derives is unchanged.
+- **Manual**: the `mnemonic seedqr` examples and the BIP-85 chapter's examples pass the secret on stdin
+  (`--from phrase=-`, `--from seedqr=-`); as printed they put it on argv and were refused (exit 2). The BIP-85
+  chapter and the GUI manual now say `hd-seed` prints a WIF; the chapter lists five BIP-39 lengths and ten languages
+  and the dice range 1..=2^31-1.
+
+### `word-card --decode` refuses `-` mixed with other words
+
+- **`word-card --decode`**: `-` (read the words from stdin) given together with any other positional word, or
+  twice, now exits 1 before reading stdin. It used to read stdin and silently drop the other words.
+
+### An `@env:` value of `-` no longer reads stdin
+
+- **`convert`, `derive-child`, `bundle --slot`, `verify-bundle --slot`, `seed-xor`, `ms-shares`, `slip39`**: a
+  secret given as `@env:VAR` whose value is exactly `-` was read from stdin instead, so a valid input on stdin was
+  used in place of the named variable (exit 0). The value of `VAR` is now always the value, as for `--passphrase`
+  since F-687; a `-` value is now handled like any other inline value: refused by the parser, or on
+  `ms-shares combine` dropped as an empty share. The split subcommands no longer print the argv-secret warning for
+  an `@env:VAR` source.
+
+### A failed stdout write no longer exits 0
+
+- **Every verb, `--help` and `--version`**: a write error on stdout other than a closed pipe (a full disk,
+  `> /dev/full`, a read-only stdout) now prints `mnemonic: cannot write the output: <error>` on stderr and exits 1;
+  `derive-child`, `convert`, `bundle`, `gui-schema` and `verify-bundle` used to exit 0 with nothing written. A verb
+  that was already failing keeps its code; exit 4 from `repair` and `inspect` becomes 1, every other exit 4 is kept.
+  A reader that closes the pipe early (`| head`) only stops the output, and the exit code is the verb's own (it was
+  1 with `error: I/O error: Broken pipe` for some verbs). The manual's new "When stdout fails" section says so.
+
+### A repeated Coldcard multisig header is refused
+
+- **`import-wallet` (`coldcard-multisig`, auto-detected, and `jade`)**: a setup file that repeats `Name:`, `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, now exits 2 naming both lines, and one that spells `Derivation:` in another letter case exits 2 naming that line. The last line used to win silently, so a second `Policy: 1 of 3` imported a 2-of-3 file as 1-of-3.
+  - a cosigner line after a later `Derivation:` line now takes that path, as the device does (it used to take the first)
+
+## mnemonic-toolkit [0.107.1] — 2026-11-22
+
+### Installer pins: md 0.21.0, ms 0.21.0 and mk 0.17.0
+
+- **`scripts/install.sh` installs md 0.21.0, ms 0.21.0 and mk 0.17.0** (tags `descriptor-mnemonic-md-cli-v0.21.0`,
+  `ms-cli-v0.21.0` and `mk-cli-v0.17.0`). `md encode`, `md descriptor --emit md1`, `ms encode` and `mk encode` print
+  each string once, on stdout: the grouped copy on stderr (and its `group size:` / `separator:` lines) is gone,
+  `--group-size N` groups stdout on request and defaults to `0`, and `--out FILE` receives the bytes stdout would
+  have carried. `ms hashlock` prints no form of the preimage on its card under `--out` or `--json`. The CLI manual's
+  md, ms and mk pages and the technical manual's `md1-encode-wpkh-basic` transcript follow. The pins are mirrored in
+  `manual.yml`, `quickstart.yml`, `technical-manual.yml` and `cross-tool-differential.yml` (md only); the Examples
+  golden shows them; `first_signed` is unchanged (md 0.20.4, ms 0.20.2, mk 0.14.0). The GUI manual stays on
+  mnemonic-gui v0.63.0's tier: its §82 section and `pinned-upstream.toml`'s `[installer-ahead]` table name the new
+  tags, and `manual-gui.yml` stays at the GUI's tags.
+
 ### md-codec 0.47.0 -> 0.48.5 adopted
 
 - **The md-codec pin moves from `cf35d61a` (0.47.0) to `c8bb97a5` (tag `md-codec-v0.48.5`), `Cargo.lock`, `fuzz/Cargo.lock`

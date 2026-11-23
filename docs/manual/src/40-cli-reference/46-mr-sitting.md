@@ -1,8 +1,8 @@
 # `mr-sitting` (mr-sitting) reference
 
-<!-- cspell:ignore handback -->
+<!-- cspell:ignore handback BOOTSEL picotool -->
 
-The offline program of a Refugium sitting: `sit` makes or reads a plan's seeds and checks their plates, `verify` checks one plate against the hand-back, and `root` and `child` do the jobs of `mr root` and `mr child`, `practice` runs a practice sitting on signet from a built-in case, and `glossary` says what each term the sitting uses means. Linux only.
+The offline program of a Refugium sitting: `sit` makes or reads a plan's seeds and checks their plates, `verify` checks one plate against the hand-back, and `root` and `child` do the jobs of `mr root` and `mr child`, `practice` runs a practice sitting on signet from a built-in case, and `glossary` says what each term the sitting uses means. Three more commands write the SeedHammer from a computer in BOOTSEL: `kit-write` and `kit-wipe` for a kit payload from mr-gui, and `erase-sealed` for the sealed payload of a sitting. `sit` itself ends with a `Steel plates` step that writes a sealed payload of the sitting's seeds to the SeedHammer with `picotool`, reads each steel plate back, and erases the payload. Linux only.
 
 ---
 
@@ -106,7 +106,7 @@ mr-sitting sit --plan <I1> --hand-back <I2> [--closing-in <I8>] [--closing-out <
 
 **ST-PL-01b:**
 
-> make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel, from this screen, under the title "\<TITLE\>" (no plates file: \<why\>). Press Enter when the plate is done
+> make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel by typing them on the SeedHammer, under the title "\<TITLE\>". This sitting has no steel plates step: this computer has no RAM-only folder for the plates file. Press Enter when the plate is done
 
 **ST-PL-02:**
 
@@ -308,6 +308,183 @@ practice cases (run one with mr-sitting practice <case>):
 
 ST-PR-04 to ST-PR-07 and ST-PR-12 are exit 2; ST-PR-01 is the banner while the run matches the stored files and ST-PR-02 once it differs.
 
+### The steel plates step in practice
+
+`practice` runs both rows against the SeedHammer emulator, never a SeedHammer and never `picotool` (not even `picotool version`). mr-sitting serves the emulator page on `127.0.0.1` (port 8270, or a port the system chooses when that one is busy; the address is printed at ST-SH-30) from the three files `index.html`, `wasm_exec.js` and `emu.wasm` in `/usr/share/mr-sitting/emulator/`, and stops serving when the practice ends. You open the address in a browser on the same computer. The sealed payload is written to the emulator file `refugium-emulator-<plan-id>.bin` in the RAM-only folder (not in the practice folder); you load it in the emulator with `Load sealed region`, open Sealed Payload, type the plates password, cut the plates the emulator draws, and type each plate's ms1 string here (nothing is pre-filled on these prompts). The erase overwrites the emulator file with `0xFF` bytes and reads it back; the emulator file is wiped with the plates file when the practice ends. If the three files cannot be read or no port can be bound, ST-SH-37 says so once and Enter is refused at ST-SH-30 (ST-SH-38): type `none` to cut no steel plate in this practice.
+
+**ST-SH-30:**
+
+> payload \<x\> of \<y\>: practice writes it to a file for the SeedHammer emulator, never to a SeedHammer. \<open\>\<none\>
+
+**ST-SH-31:**
+
+> warning: the emulator file \<path\> was not written (\<detail\>)
+
+**ST-SH-32:**
+
+> payload \<x\> of \<y\> is written to the emulator file \<path\> and read back the same. In the SeedHammer emulator, load that file with Load sealed region, open Sealed Payload and type the \<n\> words of the plates password; it then works for about 80 seconds. Cut the plates it offers, in this order: \<list\>; the emulator draws each plate beside its screen. Type each plate here from that drawing once it is cut.
+
+**ST-SH-33:**
+
+> erase the practice payload: press the SeedHammer emulator's Erase sealed region button, then press Enter here; mr-sitting then erases the emulator file \<path\>\<escape\>
+
+**ST-SH-34:**
+
+> the emulator file \<path\> was not erased (\<detail\>)
+
+**ST-SH-35:**
+
+> the emulator file \<path\> is erased and reads back blank: no practice payload is left in it
+
+**ST-SH-36:**
+
+> the emulator file \<path\> was not erased and may still hold the practice payload; mr-sitting goes on without erasing it and wipes the file when this practice ends. In a real sitting this step tells you how to keep the SeedHammer and erase it later.
+
+**ST-SH-37:**
+
+> warning: mr-sitting cannot serve the SeedHammer emulator on this computer (\<detail\>). You can type none at the next prompt to cut no steel plate in this practice
+
+**ST-SH-38:**
+
+> mr-sitting cannot serve the SeedHammer emulator here. Type none to cut no steel plate in this practice
+
+**ST-PF-11:**
+
+> Shown: practice words, which are published: engrave or keep none of them; this practice's steel plates step cuts them only in the SeedHammer emulator. A real holder writes or engraves them now, seen by no one. Case: \<case tags\>
+
+**ST-PF-28:**
+
+> Practice: the steel plates step writes a file for the SeedHammer emulator and never a SeedHammer; nothing is filled in. A real holder writes the SeedHammer in BOOTSEL, cuts each plate on steel and types it here from the steel. Case: \<case tags\>
+
+## `mr-sitting kit-write`
+
+### Synopsis
+
+```sh
+mr-sitting kit-write --kit <FILE>
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `--kit <FILE>` | The kit payload plan file mr-gui saved |
+| `-h, --help` | Print help |
+
+`kit-write` writes the kit payload plan mr-gui saved to the SeedHammer's kit payload region (address `0x10D00000`) with `picotool load --verify`, the SeedHammer in BOOTSEL. It reads no secret and runs no hardening, lock, network test or logging-terminal check. It needs a RAM-only folder (`$XDG_RUNTIME_DIR` on tmpfs or ramfs) for the one file picotool reads, `refugium-device-<pid>.bin`, which it unlinks before it exits. The plan is read strictly (ASCII lines: `refugium-kit-payload 1`, `set`, `payload <x> of <y>`, `digest`, `records`, then each card's `card <k> <kind>` and `record` lines, then `end`); its digest line is recomputed from its records.
+
+### What it prints
+
+**ST-KIT-01:**
+
+> mr-sitting: the kit payload plan \<path\> cannot be read: \<os error\>
+
+**ST-KIT-02:**
+
+> mr-sitting: kit payload plan \<path\> line \<n\>: \<reason\>
+
+**ST-KIT-03:**
+
+> mr-sitting: kit payload plan \<path\>: its digest line says \<given\>, but its records give \<computed\>: the plan changed after mr-gui wrote it; save it again from mr-gui
+
+**ST-KIT-04:**
+
+> mr-sitting: the packed kit payload did not read back as the plan's records (\<why\>): nothing was written
+
+**ST-KIT-05:**
+
+> mr-sitting: no RAM-only folder was found (XDG_RUNTIME_DIR \<is not set, or is not on tmpfs or ramfs\>): this command needs one for the file picotool reads
+
+**ST-KIT-06:**
+
+> kit payload \<x\> of \<y\> (\<R\> records, Payload Digest \<digest\>) is written to the SeedHammer and read back the same. Unplug it, connect it to its power supply, and compare the Payload Digest it shows with this one, all 8 groups, before you engrave
+
+**ST-KIT-07:**
+
+> mr-sitting: the SeedHammer was not \<done\> (picotool exit \<code\>: \<last\>): check that it is the only board plugged into this computer and that it is in BOOTSEL, then run this command again
+
+**ST-KIT-09:**
+
+> mr-sitting: picotool, the program that writes the SeedHammer, cannot be used: \<why\>
+
+**ST-KIT-13:**
+
+> mr-sitting: the file \<path\> cannot be written: \<os error\>
+
+The reasons of ST-KIT-02, by number:
+
+| `<reason>` | Text |
+|---|---|
+| r1 | the plan is ASCII text, each line ended by one line feed, with no empty line |
+| r2 | line 1 must be refugium-kit-payload 1 |
+| r3 | expected set and 16 lower-case hex digits |
+| r4 | expected payload \<x\> of \<y\>, with 1 \<= x \<= y |
+| r5 | expected digest and 8 groups of 4 lower-case hex digits |
+| r6 | expected records and a number from 1 to 255 |
+| r7 | expected card \<k\> mr1, card \<k\> mk1 or card \<k\> md1 (`<k>` the number due) |
+| r8 | card \<k\> holds no record |
+| r9 | a record of an \<kind\> card starts \<kind\> and then holds only the characters qpzry9x8gf2tvdw0s3jn54khce6mua7l |
+| r10 | expected a record line, the next card or end |
+| r11 | nothing may follow end |
+| r12 | records says \<R\> but the plan holds \<r\> record lines |
+| r13 | the records joined by line feeds are \<b\> bytes; a kit payload holds at most 32734 |
+
+## `mr-sitting kit-wipe`
+
+### Synopsis
+
+```sh
+mr-sitting kit-wipe
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `-h, --help` | Print help |
+
+`kit-wipe` overwrites the SeedHammer's kit payload region with 65,536 random bytes (not secret, not kept) with `picotool load --verify`, the SeedHammer in BOOTSEL. Its prerequisites are `kit-write`'s.
+
+### What it prints
+
+**ST-KIT-08:**
+
+> the SeedHammer's kit payload region is overwritten with random bytes and read back the same: the kit payload is gone from it
+
+**ST-KIT-07:**
+
+> mr-sitting: the SeedHammer was not \<done\> (picotool exit \<code\>: \<last\>): check that it is the only board plugged into this computer and that it is in BOOTSEL, then run this command again
+
+## `mr-sitting erase-sealed`
+
+### Synopsis
+
+```sh
+mr-sitting erase-sealed
+```
+
+### Flags
+
+| Flag | Purpose |
+|---|---|
+| `-h, --help` | Print help |
+
+`erase-sealed` erases the SeedHammer's sealed payload region (`0x10E00000` to `0x10E10000`) with `picotool erase`, reads it back with `picotool save` and counts the bytes that are not `0xFF`. Run it, with the SeedHammer in BOOTSEL, for a sitting that stopped or left the payload on the device, until it reports the region blank. Its prerequisites are `kit-write`'s; the file picotool reads may hold ciphertext, so it is overwritten with zeros before it is unlinked.
+
+### What it prints
+
+**ST-KIT-10:**
+
+> the SeedHammer's sealed payload region is erased and reads back blank
+
+**ST-KIT-11:**
+
+> mr-sitting: the SeedHammer's sealed payload region did not read back blank (\<b\> of 65536 bytes are not erased): run this command again
+
+**ST-KIT-12:**
+
+> mr-sitting: the SeedHammer's sealed payload region could not be read back: \<detail\>
+
 ## `mr-sitting glossary`
 
 ### Synopsis
@@ -347,13 +524,14 @@ pills: Entropia pills: pills drawn one at a time, each landing on a word that gi
 passphrase: an extra secret typed with a seed's words. The same words with another passphrase make another wallet; empty means none. No plate holds it: its holder keeps it in memory or apart from every plate.
 ms1: an ms1 string is the same seed as its words, written another way (codex32, BIP-93): either one alone restores the seed.
 plate: a seed's words and its ms1 string, written on paper or engraved on steel under the plate's title. It restores that seed, so it is a secret.
-plates-file: the plates file is a copy of the plate being made, for an engraving machine, kept only in this computer's RAM. Each plate replaces the one before, and it is wiped when the sitting ends.
+plates-file: the plates file is the sealed payload mr-sitting writes to the SeedHammer for the steel plates, encrypted with the plates password and kept only in this computer's RAM. It is wiped when the sitting ends.
 phone-wallet: the phone wallet seed is made from its holder's seed by BIP-85, for a phone wallet app or mr-gui's hot wallet, with a letter no other seed of the wallet card has.
 bip85: BIP-85 is a published way to make child seeds from a seed: the same seed always gives the same child at the same number.
 hand-back: the hand-back is the file the sitting writes for mr-gui: each seed's public keys and fingerprints, and no secret. mr-gui makes the wallet card from it.
 wallet-check: the wallet check (closing check): once mr-gui has made the wallet card, the sitting reads it back and works each seat's key out again from the seeds it holds, proving that each seat this sitting's seeds fill on the wallet card holds that seed's key. It comes before any deposit.
 fingerprint: a short public number (8 hex digits) that names a seed with its passphrase: another passphrase gives another fingerprint.
 practice: practice mode (mr-sitting practice) runs a stored sitting on signet with every answer filled in from published values. Nothing made there is a real wallet.
+bootsel: BOOTSEL is the SeedHammer's mode for being written by a computer: hold its BOOTSEL button while you plug its USB cable into the computer, then let go. mr-sitting writes and erases the sealed payload only in this mode.
 ```
 
 ## The TUI
@@ -478,7 +656,7 @@ Every plan ends with a wallet check, not only plans that name a closing file. Th
 
 **ST-END-02:**
 
-> session over: the seeds and passphrases are wiped from this computer's memory, and the plates file is deleted. Next, in order: (1) \<next\>; (2) keep every plate (steel or paper) that passed its check, each in its own safe place\<unchecked\>; (3) only once the wallet check has passed, destroy every other copy of words or of an ms1 string (a note, a print, a photo; not a plate), and every plate engraved again after a failed check\<wait\>. mr-sitting glossary explains each term
+> session over: the seeds and passphrases are wiped from this computer's memory, and the plates file is deleted. Next, in order: (1) \<next\>; (2) keep every plate (steel or paper) that passed its check, each in its own safe place\<unchecked\>; (3) only once the wallet check has passed, destroy every other copy of words or of an ms1 string (a note, a print, a photo; not a plate), and every plate engraved again after a failed check\<wait\>\<pw\>. mr-sitting glossary explains each term
 
 **ST-END-03:**
 
@@ -486,7 +664,7 @@ Every plan ends with a wallet check, not only plans that name a closing file. Th
 
 ## The plates file and its password
 
-The sitting writes the plates file only encrypted, with a plates password it generates: a row `Plates password` before the first plate row, from 6 to 12 BIP-39 words. The file is wiped when the sitting ends.
+The sitting writes the plates file only encrypted, with a plates password it generates: a row `Plates password` after `Wallet check` (a practice too), from 6 to 12 BIP-39 words. The file is the sealed payload the `Steel plates` step writes to the SeedHammer. It is wiped when the sitting ends.
 
 **ST-W-01c:**
 
@@ -494,7 +672,7 @@ The sitting writes the plates file only encrypted, with a plates password it gen
 
 **ST-PW-01:**
 
-> plates password. The plates file holds each plate's ms1 string while you make it, encrypted with this password; whatever reads the plates file during this session needs it. The password is words from the BIP-39 English list, drawn at random: you do not choose them, and you will write them down. It is not a seed passphrase and goes on no plate. The file is wiped when the session ends, so the words are needed only until then. How many words, from 6 to 12? More words are stronger. Press Enter for 6, or type 6 to 12:
+> plates password. The SeedHammer cuts this sitting's seed plates on steel from a sealed payload, encrypted with this password: you type its words on the SeedHammer to open it. The password is words from the BIP-39 English list, drawn at random: you do not choose them, and you will write them down. It is not a seed passphrase and goes on no plate. mr-sitting erases the payload from the SeedHammer before the sitting ends; then destroy the paper. How many words, from 6 to 12? More words are stronger. Press Enter for 6, or type 6 to 12:
 
 **ST-PW-02:**
 
@@ -526,7 +704,7 @@ The sitting writes the plates file only encrypted, with a plates password it gen
 
 **ST-PW-09:**
 
-> plates password set: the plates file is encrypted with it
+> plates password set: the sealed payload for the SeedHammer is encrypted with it
 
 **ST-PW-10:**
 
@@ -536,18 +714,120 @@ The sitting writes the plates file only encrypted, with a plates password it gen
 
 > this computer's random source failed (\<os error\>): choose another way to draw the words
 
+## The steel plates step
+
+After the wallet check, `sit` and `practice` list two rows, `Plates password` and `Steel plates`, when this computer has a RAM-only folder and the plan has a plate to make. The plates password is drawn there (ST-PW-01 to ST-PW-11). The steel set is every plate of the sitting that is not a brought seed's own backup, in this order: the seed plates by letter, then the roots' plates, then the phone wallet seed's plate. The `Steel plates` row seals the steel set into payloads (at most 23 seed records and 253 bytes of titles each), and for each payload: mr-sitting writes it to the SeedHammer with `picotool load --verify` (the SeedHammer in BOOTSEL; picotool 2.0 or later found on `PATH`); you open it on the SeedHammer with the plates password and cut its plates; then you type each cut plate's ms1 string here to check it against the seed. When the last payload is checked, mr-sitting erases the region with `picotool erase` and reads it back blank: the sitting cannot end before that.
+
+The paper step no longer writes a plates file: the words screen of each plate (ST-PL-01) only says that the steel step follows. If picotool cannot be used, the Start screen warns (ST-SH-20), and each write or erase says so (ST-SH-05) and asks again.
+
+Going back to a row before `Steel plates` while the SeedHammer may hold the payload asks first (ST-SH-21, an overlay titled `Erase first`) and erases it; a plate whose seed you then change is owed again (`Steel plates` is marked `!`), and a plate already checked on steel from an unchanged seed is not cut twice. If the erase cannot be done, after one failed try you can type `leave the payload on the SeedHammer` at ST-SH-15 to go on; the SeedHammer then stays in your custody and `mr-sitting erase-sealed` erases it later (ST-SH-22). `Ctrl-Q` or the end of input while the SeedHammer may hold the payload stops the sitting with the same warning (ST-Q-02, ST-END-04).
+
+**ST-SH-01:**
+
+> steel plates: the SeedHammer can cut \<list\> on steel from \<payloads\>. For each payload, mr-sitting writes it to the SeedHammer; you open it there with the plates password (about 80 seconds) and cut its plates (about 21 minutes each); then you type each steel plate here to check it. Last, mr-sitting erases the payload from the SeedHammer: the sitting cannot end before that.
+
+**ST-SH-02:**
+
+> payload \<x\> of \<y\>: connect the SeedHammer to this computer in BOOTSEL: unplug every other board from this computer, then hold the SeedHammer's BOOTSEL button while you plug its USB cable into this computer, and let go. Press Enter when it is connected\<none\>
+
+**ST-SH-03:**
+
+> cut no more steel plates in this sitting? \<list\> then keep only their paper copy: you can type their words on the SeedHammer later. (y/n)
+
+**ST-SH-04:**
+
+> press Enter, or type none
+
+**ST-SH-05:**
+
+> picotool, the program that writes the SeedHammer, cannot be used: \<why\>. Install picotool 2.0 or later to write the SeedHammer from this computer
+
+**ST-SH-06:**
+
+> payload \<x\> of \<y\> is written to the SeedHammer and read back the same. Now unplug it from this computer, connect it to its power supply, open Sealed Payload and type the \<n\> words of the plates password; it then works for about 80 seconds. Cut the plates it offers, in this order: \<list\>. Type each plate here once it is cut.
+
+**ST-SH-07:**
+
+> the SeedHammer was not written (picotool exit \<code\>: \<last\>): check that it is the only board plugged into this computer and that it is in BOOTSEL
+
+**ST-SH-08:**
+
+> steel plate \<k\> of \<m\>, \<PLATE\>: once the SeedHammer has cut it, type its ms1 string from the steel (spaces and capitals do not matter), then an empty line. If it was not cut, type skip
+
+**ST-SH-09:**
+
+> those are words: the steel plate holds the ms1 string, not the words; type the ms1 string
+
+**ST-SH-10:**
+
+> \<PLATE\> on steel does not match: \<reason\>. Type it again from the steel; if it fails again, cut it again (on the SeedHammer: open the payload again and skip to it), then type it
+
+**ST-SH-11:**
+
+> \<PLATE\> on steel is checked: it matches
+
+**ST-SH-12:**
+
+> this is \<OTHER\>, not \<PLATE\>: type \<PLATE\>
+
+**ST-SH-13:**
+
+> leave \<PLATE\> without a steel copy from this sitting? It keeps only its paper copy; you can type its words on the SeedHammer later. (y/n)
+
+**ST-SH-14:**
+
+> payload \<x\> of \<y\> is done; payload \<x+1\> holds \<list\>.
+
+**ST-SH-15:**
+
+> erase the sealed payload from the SeedHammer now: connect it to this computer in BOOTSEL (unplug every other board, then hold the SeedHammer's BOOTSEL button while you plug its USB cable into this computer, and let go). Press Enter when it is connected\<escape\>
+
+**ST-SH-16:**
+
+> the SeedHammer's sealed payload region is erased and reads back blank: no payload of this sitting is left on it
+
+**ST-SH-17:**
+
+> the SeedHammer was not erased (\<why\>): check that it is the only board plugged into this computer and that it is in BOOTSEL
+
+**ST-SH-18:**
+
+> the SeedHammer's sealed payload region did not read back blank (\<b\> of 65536 bytes are not erased): erase it again
+
+**ST-SH-19:**
+
+> steel plates: \<done\>
+
+**ST-SH-20:**
+
+> warning: picotool, the program that writes the SeedHammer, cannot be used: \<why\>. The steel plates step after the wallet check needs it: install picotool 2.0 or later before then, or make the steel plates by typing their words on the SeedHammer
+
+**ST-SH-21:**
+
+> go back to \<row\>? First mr-sitting erases this sitting's sealed payload from \<device\>, which may still hold it: \<how\>. A plate already cut on steel from a seed you then change must be cut again. Erase it and go back?
+
+**ST-SH-22:**
+
+> the SeedHammer was not erased and may still hold this sitting's sealed payload; mr-sitting goes on without erasing it. Keep the SeedHammer in your custody: before it leaves your custody, connect it in BOOTSEL and run mr-sitting erase-sealed until it says the region reads back blank, then destroy the plates password paper. If the SeedHammer is already out of your custody, your seeds stand while the plates password paper is in your custody: destroy it when this sitting ends. If that paper may also be lost, treat this sitting's seeds as exposed and run the plan again (new draws make new seeds); a seed you brought and made a new plate for here is exposed too: do not bring it again, bring a different seed, and move any other funds that seed holds; deposit nothing more to this wallet, and once the new plan's wallet exists, move all funds in this wallet to it. Your paper plates and the steel plates checked here stay good while the plates password paper is in your custody.
+
+**ST-HARD-03:**
+
+> warning: the plates file could not be written (\<os error\>): the SeedHammer was not written
+
+ST-Q-02, ST-END-04 and ST-END-17 (the text printed in place of ST-END-04 when mr-sitting ends before it can wipe the seeds in its memory) end with the text below while the SeedHammer may hold the payload; otherwise they add nothing, and in `practice` they never add it. ST-Q-02 adds it after its last sentence, as shown. ST-END-04 and ST-END-17 add it after their wallet check clause, beginning `; the SeedHammer may still hold` (a semicolon and a lower-case `the` in place of the space and the capital `The`) and without the final full stop.
+
+> The SeedHammer may still hold this sitting's sealed payload: before it leaves your custody, connect it in BOOTSEL and run mr-sitting erase-sealed, then destroy the plates password paper. If the SeedHammer leaves your custody before that, your seeds stand while the plates password paper is in your custody; if that paper may also be lost, treat this sitting's seeds as exposed and run the plan again (new draws make new seeds); a seed you brought and made a new plate for here is exposed too: do not bring it again, bring a different seed, and move any other funds that seed holds; deposit nothing more to this wallet, and once the new plan's wallet exists, move all funds in this wallet to it.
+
+ST-END-02's `<pw>` is `; (4) destroy the paper with the plates password` when the plates password was drawn. When the SeedHammer is left holding the payload it is `; (4) the SeedHammer may still hold this sitting's sealed payload: before it leaves your custody, connect it in BOOTSEL and run mr-sitting erase-sealed (if it leaves your custody before that, your seeds stand while the plates password paper is in your custody; if that paper may also be lost, treat this sitting's seeds as exposed and run the plan again (new draws make new seeds); a seed you brought and made a new plate for here is exposed too: do not bring it again, bring a different seed, and move any other funds that seed holds; deposit nothing more to this wallet, and once the new plan's wallet exists, move all funds in this wallet to it), then destroy the paper with the plates password`. In `practice` it is the first form only.
+
 **ST-PL-01:**
 
-> make plate "\<TITLE\>" now: write these words and the ms1 string on paper, or engrave them on steel, under the title "\<TITLE\>". This plate is also in the plates file, \<path\>, encrypted with your plates password (in this computer's RAM; wiped when the session ends). Press Enter when the plate is done
-
-**ST-PL-21:**
-
-> Payload Digest for the engraving machine: \<DIGEST\>
+> make plate "\<TITLE\>" now: write these words and the ms1 string on paper under the title "\<TITLE\>", or engrave them on steel by typing them on the SeedHammer. After the wallet check, this sitting's steel plates step can have the SeedHammer cut this plate on steel from a sealed payload. Press Enter when the plate is done
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| 0 | `sit`: the session ended at ST-END-02. `verify`: exactly one block matched in full. `root`, `child`: as `mr root`, `mr child`. |
-| 1 | A refusal of holder material or a check, or the holder stopped: `sit` stopped (ST-END-03, ST-END-04), a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09); `verify` mismatch (ST-V-04, ST-V-05, ST-V-06), or stopped (ST-V-09). |
-| 2 | Usage and input files: clap errors; a refused I1, I2 or argument (ST-PLAN-…, ST-FILE-…, ST-HB-02, ST-START-02, ST-START-03, ST-START-04, ST-START-07, ST-START-11, ST-V-07, ST-V-08); `practice`: ST-PR-04 to ST-PR-07 and ST-PR-12; `glossary`: ST-G-02. Always before any secret is read. |
+| 0 | `sit`: the session ended at ST-END-02. `verify`: exactly one block matched in full. `root`, `child`: as `mr root`, `mr child`. `kit-write`, `kit-wipe`, `erase-sealed`: the SeedHammer was written or erased and read back as the command says (ST-KIT-06, ST-KIT-08, ST-KIT-10). |
+| 1 | A refusal of holder material or a check, or the holder stopped: `sit` stopped (ST-END-03, ST-END-04), a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09); `verify` mismatch (ST-V-04, ST-V-05, ST-V-06), or stopped (ST-V-09); `kit-write`, `kit-wipe`, `erase-sealed`: the device step failed (ST-KIT-07, ST-KIT-11, ST-KIT-12). |
+| 2 | Usage and input files: clap errors; a refused I1, I2 or argument (ST-PLAN-…, ST-FILE-…, ST-HB-02, ST-START-02, ST-START-03, ST-START-04, ST-START-07, ST-START-11, ST-V-07, ST-V-08); `practice`: ST-PR-04 to ST-PR-07 and ST-PR-12; `glossary`: ST-G-02; `kit-write`, `kit-wipe`, `erase-sealed`: the plan file (ST-KIT-01 to ST-KIT-04), the RAM-only folder (ST-KIT-05), picotool not usable (ST-KIT-09), the file (ST-KIT-13), always before any picotool run but `version`. Always before any secret is read. |

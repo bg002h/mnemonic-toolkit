@@ -81,6 +81,9 @@ needs two or more secrets at once — a multi-cosigner `bundle`, or
 `ms-shares combine` with K ≥ 2 shares — use the `@env:VAR` sentinel where
 the flag supports it, or `--allow-argv-secret`.
 
+`@env:VAR`, on every flag that accepts it, means the value of `VAR`: a variable whose value is
+`-` is that one-character value, never a request to read stdin.
+
 Watch-only material (`--from xpub=`, `--slot @N.xpub=`, `mk1` and `md1`
 cards) is **not** refused: a leak there costs privacy, not the money.
 
@@ -1943,7 +1946,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin |
+| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 1) |
 | `--application <APPLICATION>` | `bip39` / `hd-seed` / `xprv` / `hex` / `password-base64` / `password-base85` / `dice` |
 | `--length <LENGTH>` | application-specific size; pass `0` for `hd-seed` and `xprv` |
 | `--index <INDEX>` | hardened child index (`0..2^31`) |
@@ -1951,7 +1954,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 | `--language <LANGUAGE>` | BIP-39 wordlist + BIP-85 language code for `--application bip39` |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase, only for `--from phrase=…` |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
-| `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^32-1` |
+| `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^31-1` |
 | `--help` | print help |
 
 ### Worked example
@@ -2541,11 +2544,12 @@ permission advisory on stderr (advisories table below).
 ### Refusals
 
 All refusals exit 1 with the stem on stderr. Mirror of SPEC §2.5
-(25 classes; row 24 added at v0.13.0 P2.2 GREEN per Q3 fold; row 25
+(26 classes; row 24 added at v0.13.0 P2.2 GREEN per Q3 fold; row 25
 added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
 `--group N,T` with `T==1 AND N>1` — surfaced when chapter examples
 1+2 attempted `--group 2,1` and the lib refused per the python
-`split_ems` rule).
+`split_ems` rule; row 26 refuses the test-only RNG variables, which a shipped
+binary does not read).
 
 | Trigger | Refusal stem |
 |---|---|
@@ -2574,11 +2578,13 @@ added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
 | `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
 | `combine` shares: shares within a single group disagree on `member_threshold` | `slip39 combine: shares within a group disagree on member_threshold` |
 | Any `--group N,T` with `T==1 AND N>1` (toolkit policy; python `split_ems` rule — algorithm replicates the group share to all N members so T=1+N>1 is degenerate; jointly with row 5 means smallest legal split is `--group 2,2`) | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` |
+| `split` with `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any value, even empty; checked before every other refusal in this table and before any input is read) | `slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source` |
 
 ### Advisories
 
 Stderr advisories are non-fatal and do not change exit code (0 on
-success). Mirror of SPEC §2.6 (6 rows).
+success). Mirror of SPEC §2.6 rows 1-5; row 6 (the test RNG warning) exists only in a
+test build, and a shipped binary refuses those variables (see Refusals).
 
 | Trigger | Stderr advisory |
 |---|---|
@@ -2588,12 +2594,6 @@ success). Mirror of SPEC §2.6 (6 rows).
 | `combine` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
 | `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 | `--iteration-exponent E` where E ≥ 5 | `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second); Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values; E ≥ 10 may exceed 30s on weak hardware` |
-| Either `MNEMONIC_SLIP39_TEST_RNG` OR `MNEMONIC_SLIP39_TEST_IDENTIFIER` env-var set on a `split` invocation (always-on; not suppressible) | `warning: MNEMONIC_SLIP39_TEST_RNG set — output is deterministic and INSECURE; do not use for real shares` |
-
-> **Note:** the warning string names `MNEMONIC_SLIP39_TEST_RNG` even
-> when only the companion `MNEMONIC_SLIP39_TEST_IDENTIFIER` is set —
-> both env-vars trigger the same single-string advisory; see SPEC §6
-> for both env-var definitions.
 
 ### Trezor interop
 
@@ -2846,10 +2846,11 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
 - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
 
-Both subsubcommands emit an argv-leakage advisory on stderr when the
-secret is supplied inline (e.g., `--from seedqr=<value>`, the deprecated
-`--digits <value>`, or `--from phrase=<value>`).
-Use the stdin form (`-`) to avoid the advisory.
+Both subsubcommands refuse a secret supplied inline (`--from
+seedqr=<value>`, the deprecated `--digits <value>`, or `--from
+phrase=<value>`) at exit 2, before the command line is parsed; see
+[Secret material on argv is REFUSED](#argv-refusal). Pass the value on
+stdin with `-`.
 
 ### Scope (v0.30.0, widened in v0.31.5 + v0.32.0)
 
@@ -2864,10 +2865,12 @@ The CLI emits the compact payload as hex; pipe through `xxd -r -p` to get
 the raw bytes for a binary-mode QR:
 
 ```sh
-mnemonic seedqr encode --variant compact --from phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --variant compact --from phrase=-
 # → 00000000000000000000000000000000   (16 entropy bytes as 32 hex chars)
 
-mnemonic seedqr encode --variant compact --from phrase='…' \
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --variant compact --from phrase=- \
   | xxd -r -p \
   | qrencode -8 -o compact-seedqr.png   # -8 = byte mode
 ```
@@ -2875,7 +2878,8 @@ mnemonic seedqr encode --variant compact --from phrase='…' \
 Decode a scanned CompactSeedQR (hex of the scanned bytes):
 
 ```sh
-mnemonic seedqr decode --variant compact --from seedqr=00000000000000000000000000000000
+printf '%s' '00000000000000000000000000000000' \
+  | mnemonic seedqr decode --variant compact --from seedqr=-
 # → abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 
@@ -2922,7 +2926,8 @@ PLACEHOLDER — generated from transcripts/41-seedqr-encode.out at build
 Pipe to a QR generator:
 
 ```sh
-mnemonic seedqr encode --from phrase="abandon ... about" | qrencode -o out.png -
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --from phrase=- | tr -d '\n' | qrencode -o out.png
 ```
 
 ### Worked example — 24-word vector
@@ -5103,7 +5108,7 @@ mnemonic word-card --decode --decode-plate "<WORDS>" --decode-plate "<WORDS>"...
 | Flag | Purpose |
 |---|---|
 | `--from <MK1\|MD1>` | source `m*1` card to encode: an `mk1` xpub card or an `md1` descriptor card. Repeating flag (one per `mk1`/`md1`; multi-chunk cards may be passed joined or repeated — chunks auto-group by HRP). `-` reads one card per line from stdin. With `--raid 1\|2`, supply the `n` `mk1` data cards via repeated `--from`. PUBLIC material — not a secret |
-| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or `-`/stdin (whitespace-separated). For a RAID array, repeat `--decode-plate` once per surviving plate |
+| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or a lone `-` (stdin, whitespace-separated; `-` with any other `<WORD>` is refused, exit 1). For a RAID array, repeat `--decode-plate` once per surviving plate |
 | `--decode-plate <WORDS>` | one RAID plate's whitespace-separated word list for `--decode` reconstruction (repeating flag). Supply the surviving `≥ n` plates of an `n + r` array to reconstruct a lost data plate. Mutually exclusive with the positional `<WORD>...` single-card form |
 | `--parity-words <N>` | Reed–Solomon parity words `m` to append (the repair budget; corrects `⌊m/2⌋` substitutions / fills `m` erasures). Default `0` (detection only). Mutually exclusive with `--parity-pct` |
 | `--parity-pct <PCT>` | Reed–Solomon parity as a PERCENTAGE of the data-symbol count `K` (`m = ceil(K * pct / 100)`), an alternative to `--parity-words`. E.g. `--parity-pct 25` ≈ a 25% redundancy budget. Mutually exclusive with `--parity-words` |
@@ -5211,5 +5216,11 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
 | Condition | Exit |
 |---|---|
 | success (encode or decode) | `0` |
-| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, I/O error) | `1` |
+| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, `-` mixed with other `<WORD>` values, I/O error) | `1` |
 | decode / reconstruct refusal (parse failure beyond the repair budget, integrity-tag or header-CRC mismatch, unknown BIP-39 word, `ms1` / unknown HRP, RAID array-id or parity mismatch, RAID underdetermined — more than `r` plates missing) | `2` |
+
+---
+
+## When stdout fails
+
+A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mnemonic: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code. Exit 4 from `repair` or `inspect` (the candidates or the partial decode on stdout are the result) also becomes 1; every other exit 4 is a verdict and is kept.

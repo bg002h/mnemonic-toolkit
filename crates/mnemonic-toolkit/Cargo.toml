@@ -1,6 +1,6 @@
 [package]
 name = "mnemonic-toolkit"
-version = "0.107.0"
+version = "0.107.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -129,6 +129,11 @@ similar = "2"
 unicode-normalization = "0.1"
 zeroize = { version = "1.8", features = ["derive"] }
 
+[features]
+# Test-only: lets slip39 split read MNEMONIC_SLIP39_TEST_RNG /
+# _IDENTIFIER for deterministic shares. Off in every shipped build; there a set variable is refused.
+slip39-test-rng = []
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
@@ -141,3 +146,13 @@ proptest = "1"
 # nameable dev-dependency for `rand::rngs::StdRng` — no new Cargo.lock
 # version, test-only (no production binary impact).
 rand = "0.8"
+
+[[test]]
+name = "cli_slip39_advisories"
+path = "tests/cli_slip39_advisories.rs"
+required-features = ["slip39-test-rng"]
+
+[[test]]
+name = "cli_slip39_json"
+path = "tests/cli_slip39_json.rs"
+required-features = ["slip39-test-rng"]

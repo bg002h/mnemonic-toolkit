@@ -832,6 +832,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     let pp_argv: Option<&str> = args.passphrase.as_deref();
     // F-687b: the same, for `--bip38-passphrase` (`-` = stdin, `@env:` = env).
     let bip38_argv: Option<&str> = args.bip38_passphrase.as_deref();
+    // bh-tk-I5 (R-1): whether `--from` reads stdin is decided from the value as
+    // written, before `@env:` resolution — a variable whose value is `-` is that
+    // literal value, not stdin.
+    let from_dash_as_written: Vec<bool> = args.from.iter().map(|f| f.value == "-").collect();
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels before downstream
     // consumption.
@@ -844,10 +848,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     };
 
     // 1) Single-from-value constraint (§5).
-    let mut primaries: Vec<&FromInput> = args
+    let mut primaries: Vec<(&FromInput, bool)> = args
         .from
         .iter()
-        .filter(|f| !f.node.is_side_input_only())
+        .zip(from_dash_as_written.iter().copied())
+        .filter(|(f, _)| !f.node.is_side_input_only())
         .collect();
     if primaries.is_empty() {
         return Err(ToolkitError::BadInput(
@@ -860,12 +865,12 @@ pub fn run<R: Read, W: Write, E: Write>(
             primaries.len(),
             primaries
                 .iter()
-                .map(|f| f.node.as_str())
+                .map(|(f, _)| f.node.as_str())
                 .collect::<Vec<_>>()
                 .join(", "),
         )));
     }
-    let primary = primaries.pop().unwrap();
+    let (primary, primary_dash_as_written) = primaries.pop().unwrap();
 
     // 2.a) SPEC v0.8 §5.a + v0.9.0 §1 — single-stdin-per-invocation. The
     // three potential stdin consumers (`--passphrase-stdin`,
@@ -873,7 +878,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // exclusive; clap-level locks cover `--{,bip38-}passphrase-stdin`
     // against their inline counterparts, runtime locks cover the
     // stdin-vs-stdin cases below.
-    let primary_uses_stdin = primary.value == "-";
+    let primary_uses_stdin = primary_dash_as_written;
     // F-687: `--passphrase -` reads stdin exactly as `--passphrase-stdin`.
     let pp_reads_stdin = crate::passphrase_input::reads_stdin(pp_argv, args.passphrase_stdin);
     let pp_spelling = crate::passphrase_input::stdin_spelling(args.passphrase_stdin);
@@ -923,7 +928,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     };
 
     // 2.b) Stdin if `--from <node>=-`.
-    let primary_value: zeroize::Zeroizing<String> = if primary.value == "-" {
+    let primary_value: zeroize::Zeroizing<String> = if primary_uses_stdin {
         zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
         zeroize::Zeroizing::new(primary.value.clone())
@@ -1234,8 +1239,9 @@ pub fn run<R: Read, W: Write, E: Write>(
             from_value,
             to: entries,
         };
-        serde_json::to_writer(&mut *stdout, &env).ok();
-        writeln!(stdout).ok();
+        serde_json::to_writer(&mut *stdout, &env)
+            .map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;
+        writeln!(stdout).map_err(ToolkitError::Io)?;
     } else {
         // mstring display-grouping (SPEC §6): group ONLY the codex32 card outputs
         // (ms1/mk1); xpub/wif/descriptor/etc. emit raw. --json stays unbroken.
@@ -1248,7 +1254,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 ),
                 _ => value.clone(),
             };
-            writeln!(stdout, "{}: {}", node.as_str(), rendered).ok();
+            writeln!(stdout, "{}: {}", node.as_str(), rendered).map_err(ToolkitError::Io)?;
         }
     }
 

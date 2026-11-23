@@ -9,7 +9,7 @@ integrating mk1 into a non-toolkit pipeline.
 
 `mk-cli` ships in the `bg002h/mnemonic-key` repo as a separate
 binary alongside the `mk-codec` library; install with
-`cargo install --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.16.0 --bin mk`.
+`cargo install --locked --git https://github.com/bg002h/mnemonic-key --tag mk-cli-v0.17.0 mk-cli`.
 
 Every subcommand below accepts `--help` (`-h`) for inline help.
 
@@ -39,17 +39,22 @@ mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --pri
 | `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` |
 | `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored |
 | `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive |
-| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; overwrites an existing file (operator ruling 2026-08-26) |
+| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; the file holds exactly what stdout would (grouped under `--group-size`); overwrites an existing file (operator ruling 2026-08-26) |
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint`; a single-card encode needs one of the two (exit 64 otherwise) |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
 | `--chunk-set-id <HEX>` | pin the 20-bit `chunk_set_id` (`0x` prefix optional) instead of deriving it from the payload. Chunked output only. A value over 20 bits is refused, not truncated. Rarely needed: since mk-codec 0.5.0 the derived default is already deterministic, so re-encoding a card reproduces its strings byte for byte. |
-| `--group-size <N>` | grouping for the **stderr engraving card**: a separator every N characters (default 5; `0` = unbroken). Since mk-cli 0.14.0 stdout always carries the unbroken mk1 strings, and so does `--json`. Separator-stripping on intake means grouped and unbroken cards both re-ingest on `decode`/`verify`/etc. |
-| `--separator <space>` | the engraving card's separator for `--group-size`: `space` (keyword, the default) or the literal `" "`. Whitespace only: `hyphen` and `comma` (and the literals `-` and `,`) are refused (exit 64); a card already grouped with them still decodes |
+| `--group-size <N>` | group each mk1 string on stdout every N characters, for hand engraving (default `0` = unbroken). `--out` receives the same bytes; `--json` stays unbroken. Separator-stripping on intake means grouped and unbroken cards both re-ingest on `decode`/`verify`/etc. |
+| `--separator <space>` | the separator for `--group-size`: `space` (keyword, the default) or the literal `" "`. Whitespace only: `hyphen` and `comma` (and the literals `-` and `,`) are refused (exit 64); a card already grouped with them still decodes |
 | `--json` | emit a single JSON object on stdout |
 
 At least one of `--policy-id-stub` or `--from-md1` is required (the
 underlying `KeyCard.policy_id_stubs` slot must be non-empty).
+
+A depth-0 xpub (`--origin-path m`, or a key record with no path) must be a valid BIP 32 master: its parent
+fingerprint must be `00000000`, and a declared origin fingerprint must be the key's own. At depth 1 a declared
+origin fingerprint must be the xpub's parent fingerprint. `mk encode` refuses any of these with exit 64 and mints
+nothing.
 
 ### Worked example
 
@@ -67,10 +72,10 @@ derives the stub from a wallet-policy md1 string instead of taking the
 
 ### Output
 
-Text mode prints only the artifact on stdout: one unbroken mk1 string
-per line, one per chunk. The engraving card goes to stderr: the same
-strings grouped by `--group-size` and `--separator`, then
-`group size:` and `separator:` lines, then the watch-only note. JSON
+Text mode prints each mk1 string once, on stdout: one per line, one per
+chunk, unbroken by default and grouped under `--group-size`. stderr
+carries only the watch-only note; with `--keys` and two or more cards
+it is preceded by one `card <i> of <n>: lines <a>-<b>` line per card. JSON
 mode emits a `{ "schema_version", "mk1_strings", "chunk_count",
 "code_variant", "origin_fingerprint", "origin_path" }` object (the
 `mk1_strings` values are elided here; the chunk-set identifier is
@@ -163,6 +168,9 @@ JSON mode:
 ```
 
 `origin_fingerprint` is `null` for privacy-preserving cards.
+
+A card that breaks one of the key-origin rules in `mk encode` (minted before mk-codec 0.6.0) still reads: `mk decode`, `mk inspect`, `mk address`
+and `mk derive` print it as read and add a `warning: this card is invalid (...)` line on stderr.
 
 ---
 
@@ -440,9 +448,9 @@ mk verify \
   mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx
 ```
 
-Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success, exits
-4 with a `ContentMismatch` error envelope when an expected-* flag
-disagrees with the decoded value.
+Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success. Exits 1 when the card breaks one of the key-origin rules in `mk encode` (kind
+`MasterParentFingerprintNonzero`, `MasterFingerprintMismatch` or `OriginParentFingerprintMismatch`), before any expected-\* comparison. Exits 4 with a
+`ContentMismatch` error envelope when an expected-* flag disagrees with the decoded value.
 For a chunked card the `--json` envelope also carries `chunk_set_id`: `declared`, `derived`,
 `matches`, and `bundle_stamped` (true when the stamped id is the bundle id `mnemonic bundle` stamps).
 
@@ -487,7 +495,7 @@ The address type is inferred from the origin-path purpose **at canonical
 single-sig account depth** (`m/44'`→`p2pkh`, `49'`→`p2sh-p2wpkh`, `84'`→`p2wpkh`,
 `86'`→`p2tr`) and is overridable with `--address-type`. A card whose origin is
 not at account depth requires the explicit flag (and prints a stderr advisory
-that addresses are derived relative to the card's xpub). Multisig-cosigner cards
+that addresses are derived relative to the card's xpub). A card that holds one fixed key (depth 0 with an all-zero chain code — how the toolkit writes a WIF key) is **refused** before anything else is checked (exit 64): it has no child keys that any wallet watches. The refusal prints the `mnemonic convert` command that renders the key's own address; a key in a multisig wallet takes its addresses from the md1 policy card with `md address`. Multisig-cosigner cards
 (`m/48'`/`m/87'`) are **refused** — single-key addresses would not match the
 wallet; derive its addresses with `md address <MD1>... --from-mk1-file FILE` (the md1 policy card, and every cosigner's mk1 card in FILE; for testnet cards add `--network testnet`, `--network signet` or `--network regtest`) instead.
 
@@ -540,7 +548,7 @@ JSON mode (here with `--count 2`):
 
 Derive a child xpub at a relative path from the card's xpub. An xpub can only
 derive **unhardened** children (it has no private key); hardened components are
-rejected. The emitted `child_xpub` is composable — pipe it back into `mk encode`.
+rejected. A `--path` with no steps (`''`, `m`, `m/`) is rejected (the card's own key is `mk decode`'s output), and a fixed-key card (see `mk address`) is refused. The emitted `child_xpub` is composable — pipe it back into `mk encode`.
 Read-only; no signing.
 
 ### Synopsis
@@ -556,7 +564,7 @@ mk1 strings from stdin.
 
 | Flag | Purpose |
 |---|---|
-| `--path <REL>` | relative derivation path, unhardened only (e.g. `m/0/5`) |
+| `--path <REL>` | relative derivation path, unhardened only, at least one step (e.g. `m/0/5`) |
 | `--index <N>` | single external-chain index — sugar for `--path m/0/<N>` |
 | `--in <FILE>` | read mk1 strings from FILE, one per line, instead of (or as well as) the positional arguments. Display separators are stripped, so a card typed back from its grouped engraving form re-ingests |
 | `--json` | emit JSON output |

@@ -39,11 +39,13 @@ pub struct DeriveChildArgs {
     ///
     ///   bip39             BIP-85 application 39' — derives a child
     ///                     BIP-39 mnemonic of `--length` words (12 /
-    ///                     18 / 24)
-    ///   hd-seed           BIP-85 application 32' — derives a 32-byte
-    ///                     BIP-32 seed (`--length 0`)
-    ///   xprv              BIP-85 application 32' alt — derives a
-    ///                     child xprv directly (`--length 0`)
+    ///                     15 / 18 / 21 / 24)
+    ///   hd-seed           BIP-85 application 2' — derives a private
+    ///                     key, printed as a compressed WIF, at
+    ///                     m/83696968'/2'/<index>' (`--length 0`)
+    ///   xprv              BIP-85 application 32' — derives a child
+    ///                     xprv at m/83696968'/32'/<index>'
+    ///                     (`--length 0`)
     ///   hex               BIP-85 application 128169' — derives
     ///                     `--length` bytes of hex (16..=64)
     ///   password-base64   BIP-85 application 707764' — derives
@@ -51,13 +53,13 @@ pub struct DeriveChildArgs {
     ///   password-base85   BIP-85 application 707785' — derives
     ///                     `--length` chars of base85 password (10..=80)
     ///   dice              BIP-85 application 89101' — derives
-    ///                     `--length` dice rolls (1..=99 each
-    ///                     `--dice-sides`-sided); REFUSED at runtime
+    ///                     `--length` rolls (1..=2^31-1) of a
+    ///                     `--dice-sides`-sided die
     ///   rsa               BIP-85 application 828365' — RSA key
     ///                     derivation; REFUSED at runtime
     ///                     (RUSTSEC-2023-0071)
-    ///   rsa-gpg           BIP-85 application 828366' — RSA-GPG;
-    ///                     REFUSED at runtime
+    ///   rsa-gpg           BIP-85 application 828365' (RSA-GPG
+    ///                     key scheme); REFUSED at runtime
     #[arg(long = "application", required = true, verbatim_doc_comment)]
     pub application: String,
 
@@ -100,7 +102,7 @@ pub struct DeriveChildArgs {
     pub passphrase_stdin: bool,
 
     /// SPEC v0.8 §4 — number of sides for `--application dice`. Required
-    /// when `--application dice`; ignored otherwise. Range: 2..=2^32-1.
+    /// when `--application dice`; ignored otherwise. Range: 2..=2^31-1.
     #[arg(long = "dice-sides")]
     pub dice_sides: Option<u32>,
 }
@@ -120,6 +122,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     let pp_reads_stdin =
         crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin);
     let pp_spelling = crate::passphrase_input::stdin_spelling(args.passphrase_stdin);
+    // bh-tk-I5 (R-1): `--from <node>=-` is judged on the value as written; an
+    // `@env:` variable whose value is `-` is that literal value, not stdin.
+    let from_reads_stdin = args.from.value == "-";
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--passphrase` and
     // secret-bearing `--from <node>=` values before downstream consumption.
@@ -133,7 +138,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.9.0 §1 item 1 — single-stdin-per-invocation. `--from <node>=-`
     // and `--passphrase-stdin` both want stdin; refuse the combination.
-    if pp_reads_stdin && args.from.value == "-" {
+    if pp_reads_stdin && from_reads_stdin {
         return Err(ToolkitError::BadInput(format!(
             "{pp_spelling} cannot be used with --from <node>=- (single stdin per invocation)"
         )));
@@ -142,7 +147,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
     // SPEC v0.9.0 §1 item 2 — wrap the OWNED secret string in Zeroizing so
     // it scrubs on drop after seed derivation.
-    let from_value: zeroize::Zeroizing<String> = if args.from.value == "-" {
+    let from_value: zeroize::Zeroizing<String> = if from_reads_stdin {
         zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
         zeroize::Zeroizing::new(args.from.value.clone())
@@ -171,8 +176,20 @@ pub fn run<R: Read, W: Write, E: Write>(
         .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
 
     let master = match args.from.node {
-        NodeType::Xprv => Xpriv::from_str(&from_value)
-            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?,
+        NodeType::Xprv => {
+            let x = Xpriv::from_str(&from_value)
+                .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+            // BIP-85 derives from "a single BIP32 master root key"; a
+            // non-master xprv/tprv would give a child no wallet reproduces
+            // from the seed (FIX_tk_derive_child_master_depth, bh-tk-I4).
+            if x.depth != 0 {
+                return Err(ToolkitError::BadInput(format!(
+                    "derive-child: the xprv/tprv is at depth {}, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)",
+                    x.depth,
+                )));
+            }
+            x
+        }
         NodeType::Phrase => {
             // SAFETY: third-party-blocked — `bip39::Mnemonic` +
             // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
@@ -303,7 +320,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     };
 
-    writeln!(stdout, "{output}").ok();
+    writeln!(stdout, "{output}").map_err(ToolkitError::Io)?;
     // SPEC §4 — every in-scope app emits secret material; classify on stdout.
     crate::secret_advisory::emit_output_class_advisory(
         crate::secret_advisory::OutputClass::PrivateKeyMaterial,

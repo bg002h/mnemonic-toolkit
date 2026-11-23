@@ -13,7 +13,7 @@ use crate::error::ToolkitError;
 #[derive(Args, Debug)]
 pub struct CompareCostArgs {
     /// Bare miniscript fragment with abstract key labels (e.g.,
-    /// `or_b(pk(A), pk(B))`) OR concrete hex pubkeys. Cost is key-agnostic;
+    /// `or_b(pk(A),s:pk(B))`) OR concrete hex pubkeys. Cost is key-agnostic;
     /// abstract labels are auto-substituted with deterministic dummy keys.
     /// Mutually exclusive with `--descriptor`.
     #[arg(long, conflicts_with = "descriptor")]
