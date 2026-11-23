@@ -12,7 +12,7 @@ index 248f7613..c1befc5d 100644
      /// Mutually exclusive with `--descriptor`.
      #[arg(long, conflicts_with = "descriptor")]
 diff --git a/crates/mnemonic-toolkit/src/cmd/derive_child.rs b/crates/mnemonic-toolkit/src/cmd/derive_child.rs
-index 5cad8e73..23952ef4 100644
+index 5cad8e73..5ff3aeae 100644
 --- a/crates/mnemonic-toolkit/src/cmd/derive_child.rs
 +++ b/crates/mnemonic-toolkit/src/cmd/derive_child.rs
 @@ -39,11 +39,13 @@ pub struct DeriveChildArgs {
@@ -40,7 +40,7 @@ index 5cad8e73..23952ef4 100644
      ///   dice              BIP-85 application 89101' — derives
 -    ///                     `--length` dice rolls (1..=99 each
 -    ///                     `--dice-sides`-sided); REFUSED at runtime
-+    ///                     `--length` rolls (1..=2^32-1) of a
++    ///                     `--length` rolls (1..=2^31-1) of a
 +    ///                     `--dice-sides`-sided die
      ///   rsa               BIP-85 application 828365' — RSA key
      ///                     derivation; REFUSED at runtime
@@ -52,6 +52,15 @@ index 5cad8e73..23952ef4 100644
      #[arg(long = "application", required = true, verbatim_doc_comment)]
      pub application: String,
  
+@@ -100,7 +102,7 @@ pub struct DeriveChildArgs {
+     pub passphrase_stdin: bool,
+ 
+     /// SPEC v0.8 §4 — number of sides for `--application dice`. Required
+-    /// when `--application dice`; ignored otherwise. Range: 2..=2^32-1.
++    /// when `--application dice`; ignored otherwise. Range: 2..=2^31-1.
+     #[arg(long = "dice-sides")]
+     pub dice_sides: Option<u32>,
+ }
 diff --git a/docs/manual-gui/src/40-mnemonic/46-derive-child.md b/docs/manual-gui/src/40-mnemonic/46-derive-child.md
 index 8c3f28a2..f80d6137 100644
 --- a/docs/manual-gui/src/40-mnemonic/46-derive-child.md
@@ -80,7 +89,7 @@ index 8c3f28a2..f80d6137 100644
  ### `hex` {#mnemonic-derive-child-application-hex}
  
 diff --git a/docs/manual/src/30-workflows/38-bip85-children.md b/docs/manual/src/30-workflows/38-bip85-children.md
-index b7114c6d..4b4bf3d8 100644
+index b7114c6d..125ffaf1 100644
 --- a/docs/manual/src/30-workflows/38-bip85-children.md
 +++ b/docs/manual/src/30-workflows/38-bip85-children.md
 @@ -2,7 +2,7 @@
@@ -101,7 +110,7 @@ index b7114c6d..4b4bf3d8 100644
    hardware wallet without storing a separate backup.
  - **Passwords** — derive deterministic per-service passwords; lose
    the password manager but keep the master seed and you can
-@@ -42,10 +42,10 @@ mnemonic derive-child \
+@@ -42,10 +42,12 @@ mnemonic derive-child \
  
  The four required flags:
  
@@ -110,13 +119,15 @@ index b7114c6d..4b4bf3d8 100644
 -  `--passphrase` and `--language`), or `--from xprv=-` /
 -  `--from phrase=-` to read from stdin.
 +- **`--from`** — the master source, read from stdin: `--from xprv=-`
-+  (BIP-85 canonical) or `--from phrase=-` (combined with
-+  `--passphrase` and `--language`). An inline value is refused
-+  (exit 2); see [Secret material on argv is REFUSED](#argv-refusal).
++  (BIP-85 canonical) or `--from phrase=-` (with `--language`, and
++  `--passphrase @env:VAR` for a passphrase: stdin is already taken,
++  so `--passphrase -` and `--passphrase-stdin` cannot be used). An
++  inline value is refused (exit 2); see
++  [Secret material on argv is REFUSED](#argv-refusal).
  - **`--application`** — what kind of child secret to derive. Listed
    below.
  - **`--length`** — application-specific size. Range varies; pass
-@@ -58,19 +58,19 @@ The four required flags:
+@@ -58,19 +60,19 @@ The four required flags:
  
  | `--application` | Output | `--length` |
  |---|---|---|
@@ -129,7 +140,7 @@ index b7114c6d..4b4bf3d8 100644
  | `password-base64` | base64-shaped password | `20..=86` |
  | `password-base85` | base85-shaped password | `10..=80` |
 -| `dice` | deterministic dice rolls | `1..=10000` |
-+| `dice` | deterministic dice rolls | `1..=2^32-1` |
++| `dice` | deterministic dice rolls | `1..=2^31-1` |
  
  The seven in-scope BIP-85 applications map to BIP-85 codes 39',
  2', 32', 128169', 707764', 707785', and 89101' (DICE; BIP-85
@@ -141,7 +152,7 @@ index b7114c6d..4b4bf3d8 100644
  
  ## Worked examples
  
-@@ -80,8 +80,8 @@ the DANGER box there.)
+@@ -80,8 +82,8 @@ the DANGER box there.)
  ### Derive a child BIP-39 phrase
  
  ```sh
@@ -152,7 +163,7 @@ index b7114c6d..4b4bf3d8 100644
    --application bip39 \
    --length 12 \
    --index 0
-@@ -93,8 +93,8 @@ from the master. Increment `--index` to derive sibling phrases.
+@@ -93,8 +95,8 @@ from the master. Increment `--index` to derive sibling phrases.
  ### Derive a deterministic password
  
  ```sh
@@ -163,7 +174,7 @@ index b7114c6d..4b4bf3d8 100644
    --application password-base64 \
    --length 32 \
    --index 0
-@@ -106,8 +106,8 @@ N-th deterministic password.
+@@ -106,8 +108,8 @@ N-th deterministic password.
  ### Derive a child xprv
  
  ```sh
@@ -174,7 +185,7 @@ index b7114c6d..4b4bf3d8 100644
    --application xprv \
    --length 0 \
    --index 0
-@@ -119,8 +119,8 @@ provisioning an air-gapped hardware wallet from a parent backup.
+@@ -119,8 +121,8 @@ provisioning an air-gapped hardware wallet from a parent backup.
  ### Derive deterministic dice rolls
  
  ```sh
@@ -185,7 +196,15 @@ index b7114c6d..4b4bf3d8 100644
    --application dice \
    --length 100 \
    --index 0 \
-@@ -135,8 +135,8 @@ required for `dice` and accepts values in `2..=2^32-1`.
+@@ -128,15 +130,15 @@ mnemonic derive-child \
+ ```
+ 
+ Output: 100 deterministic d6 rolls. The `--dice-sides` flag is
+-required for `dice` and accepts values in `2..=2^32-1`.
++required for `dice` and accepts values in `2..=2^31-1`.
+ 
+ ## Cross-network derivation
+ 
  For testnet-targeted children:
  
  ```sh
@@ -197,9 +216,18 @@ index b7114c6d..4b4bf3d8 100644
    --length 0 \
    --index 0 \
 diff --git a/docs/manual/src/40-cli-reference/41-mnemonic.md b/docs/manual/src/40-cli-reference/41-mnemonic.md
-index 41c16d58..12c4ae83 100644
+index 41c16d58..4bbe8c5d 100644
 --- a/docs/manual/src/40-cli-reference/41-mnemonic.md
 +++ b/docs/manual/src/40-cli-reference/41-mnemonic.md
+@@ -1951,7 +1951,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
+ | `--language <LANGUAGE>` | BIP-39 wordlist + BIP-85 language code for `--application bip39` |
+ | `--passphrase <PASSPHRASE>` | BIP-39 passphrase, only for `--from phrase=…` |
+ | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
+-| `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^32-1` |
++| `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^31-1` |
+ | `--help` | print help |
+ 
+ ### Worked example
 @@ -2846,10 +2846,11 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
  - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
  - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
@@ -251,3 +279,16 @@ index 41c16d58..12c4ae83 100644
  ```
  
  ### Worked example — 24-word vector
+diff --git a/docs/manual/src/60-appendices/67-troubleshooting.md b/docs/manual/src/60-appendices/67-troubleshooting.md
+index f1097a23..0abc617d 100644
+--- a/docs/manual/src/60-appendices/67-troubleshooting.md
++++ b/docs/manual/src/60-appendices/67-troubleshooting.md
+@@ -51,7 +51,7 @@ m-format constellation bundle, ordered by frequency.
+ |---|---|---|
+ | `application not in scope` for `rsa` / `rsa-gpg` | These are deferred to v0.9 (RUSTSEC-2023-0071) | Use a different application or wait for v0.9. |
+ | `--length 0 invalid for application bip39` | `bip39` requires `--length 12`, `18`, or `24` | Use a valid word count. |
+-| `--dice-sides required for application dice` | DICE app needs the side count | Pass `--dice-sides N` (2..=2^32-1). |
++| `--dice-sides required for application dice` | DICE app needs the side count | Pass `--dice-sides N` (2..=2^31-1). |
+ 
+ ## When in doubt
+ 

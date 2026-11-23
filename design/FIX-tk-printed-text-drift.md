@@ -39,7 +39,7 @@ not fixed (section 8, F1, F2).
 | I10 | `cmd/derive_child.rs:40-42` | bip39 lengths `12 / 18 / 24` | `derive_child.rs:241` accepts 12, 15, 18, 21, 24 (BIP-85 L159-185 Words Table). |
 | I10 | `cmd/derive_child.rs:43-44` | `hd-seed` = "application 32' — derives a 32-byte BIP-32 seed" | `bip85.rs:95-104` derives at `m/83696968'/2'/<index>'` and prints a compressed WIF (BIP-85 L226-240 "HD-Seed WIF, Application number: 2'"). Vector P1 matches the BIP. |
 | I10 | `cmd/derive_child.rs:45-46` | `xprv` = "application 32' alt" | `bip85.rs:126-132` derives at `m/83696968'/32'/<index>'` (BIP-85 L250-259). "alt" suggests 32' belongs to hd-seed. |
-| I10 | `cmd/derive_child.rs:53-55` | dice "1..=99 each ... REFUSED at runtime" | `derive_child.rs:293-307` runs dice for any rolls >= 1 (u32, so <= 2^32-1); BIP-85 L398 `1 <= rolls <= 2^32 - 1`. 100 rolls exit 0 (P3). |
+| I10 | `cmd/derive_child.rs:53-55` | dice "1..=99 each ... REFUSED at runtime" | `derive_child.rs:293-307` runs dice for any rolls >= 1 up to 2^31-1 (the path element is hardened: `--length 2147483648` exits 1 with a BIP-32 child-number error, measured); BIP-85 L398 prints `1 <= rolls <= 2^32 - 1`. 100 rolls exit 0 (P3). |
 | I10 (found here) | `cmd/derive_child.rs:59-60` | `rsa-gpg` = "application 828366'" | BIP-85 L369-375: RSA-GPG keys live under `m/83696968'/828365'/...`; there is no 828366'. (Refused either way; text only.) |
 | I10 (found here) | `docs/manual/src/30-workflows/38-bip85-children.md:5,13,61,62,67,71-73` | "HD-seed bytes"; "12 / 18 / 24 words; 9 BIP-85 languages"; table `hd-seed` = "64-byte HD-seed bytes (raw)", bip39 `12`, `18`, `24`, dice `1..=10000`; RSA "out-of-scope for v0.8 ... will land in v0.9" | WIF (as above); 5 lengths; 10 languages (`derive_child.rs:352-365`, BIP-85 L120-155); dice >= 1; RSA refused at exit 2 today (v0.107.1). |
 | I10 (found here) | `docs/manual-gui/src/40-mnemonic/46-derive-child.md:100-108` | `hd-seed` "Emit a child HD-seed (an xprv at depth 0)"; `xprv` "effectively the same as `hd-seed`" | hd-seed prints a WIF; xprv is a different application (32'). |
@@ -65,12 +65,20 @@ them (the patch fixes the line breaks):
 - `bip39 BIP-85 application 39' — derives a child BIP-39 mnemonic of `--length` words (12 / 15 / 18 / 21 / 24)`
 - `hd-seed BIP-85 application 2' — derives a private key, printed as a compressed WIF, at m/83696968'/2'/<index>' (`--length 0`)`
 - `xprv BIP-85 application 32' — derives a child xprv at m/83696968'/32'/<index>' (`--length 0`)`
-- `dice BIP-85 application 89101' — derives `--length` rolls (1..=2^32-1) of a `--dice-sides`-sided die`
+- `dice BIP-85 application 89101' — derives `--length` rolls (1..=2^31-1) of a `--dice-sides`-sided die`
 - `rsa-gpg BIP-85 application 828365' (RSA-GPG key scheme); REFUSED at runtime`
 
-The dice range is written `1..=2^32-1` to match the existing `--dice-sides` text (`2..=2^32-1`, derive_child.rs:103);
+The dice range is written `1..=2^31-1`, the binary's bound: BIP-85 puts rolls and sides in hardened path elements, so
+values >= 2^31 fail at derivation (exit 1) although BIP-85 L398 prints 2^32-1; `--dice-sides` is corrected to
+`2..=2^31-1` for the same reason (review r1 I-1);
 the runtime message `valid: rolls >= 1` (derive_child.rs:299) is unchanged. `gen-man` pages follow automatically
 (clap renders the same doc comment; no committed man page carries it, grep at `b57187b3`).
+
+The same `--dice-sides` bound, `2..=2^32-1` -> `2..=2^31-1`, in four more places: `derive_child.rs:103` (the
+`--dice-sides` doc, `Range: 2..=2^31-1.`), `38-bip85-children.md:131`, `41-mnemonic.md:1954` (flag row) and
+`docs/manual/src/60-appendices/67-troubleshooting.md:54` (`Pass `--dice-sides N` (2..=2^31-1).`). The GUI manual
+`46-derive-child.md:43,128,280` and the mnemonic-gui `--dice-sides` widget max move together in a GUI-side change
+(FOLLOWUPS `gui-dice-sides-widget-max`).
 
 3.3 `41-mnemonic.md` `mnemonic seedqr` section:
 - L2849-2852 paragraph becomes: "Both subsubcommands refuse a secret supplied inline (`--from seedqr=<value>`, the
@@ -90,10 +98,12 @@ printed (the section's other examples already use it).
 - L5 `HD-seed bytes,` -> `HD-seed WIF keys,`
 - L13 `(12 / 18 / 24 words; 9 BIP-85 languages)` -> `(12 / 15 / 18 / 21 / 24 words; 10 BIP-85 languages)`
 - L45-48 `--from` bullet -> "the master source, read from stdin: `--from xprv=-` (BIP-85 canonical) or `--from
-  phrase=-` (combined with `--passphrase` and `--language`). An inline value is refused (exit 2); see [Secret material
-  on argv is REFUSED](#argv-refusal)." (anchor resolves: `make -C docs/manual anchor-check` OK, 9 danglers = baseline.)
+  phrase=-` (with `--language`, and `--passphrase @env:VAR` for a passphrase: stdin is already taken, so
+  `--passphrase -` and `--passphrase-stdin` cannot be used). An inline value is refused (exit 2); see [Secret material
+  on argv is REFUSED](#argv-refusal)." (review r1 S-1: `--passphrase <value>` on argv is refused at exit 2 after the
+  passphrase is in history, and `-` / `--passphrase-stdin` exit 1 with `=-`; `@env:VAR` exits 0, measured.) (anchor resolves: `make -C docs/manual anchor-check` OK, 9 danglers = baseline.)
 - table L61 `| \`bip39\` | new BIP-39 phrase (10 BIP-85-coded languages) | \`12\`, \`15\`, \`18\`, \`21\`, \`24\` |`;
-  L62 `| \`hd-seed\` | private key as a compressed WIF | \`0\` (sentinel) |`; L67 `| \`dice\` | deterministic dice rolls | \`1..=2^32-1\` |`.
+  L62 `| \`hd-seed\` | private key as a compressed WIF | \`0\` (sentinel) |`; L67 `| \`dice\` | deterministic dice rolls | \`1..=2^31-1\` |`.
 - L72-73 `out-of-scope for v0.8 pending RUSTSEC-2023-0071 patch and will land in v0.9.` -> `refused (exit 2): the
   \`rsa\` crate carries the unpatched advisory RUSTSEC-2023-0071.` (exit 2 measured: `--application rsa` rc=2.)
 - The five worked examples (L83-84, 96-97, 109-110, 122-123, 138-139): `mnemonic derive-child \` + `--from phrase="..."
@@ -118,12 +128,12 @@ version bump:
   failed with a Miniscript type error (exit 2).
 - **`derive-child --help`**: `hd-seed` is BIP-85 application 2' and prints a compressed WIF at
   `m/83696968'/2'/<index>'` (the help said application 32' and a 32-byte seed); `xprv` is application 32'; `dice`
-  runs, for 1..=2^32-1 rolls (the help said 1..=99 and REFUSED); `bip39` takes 12, 15, 18, 21 or 24 words; `rsa-gpg`
+  runs, for 1..=2^31-1 rolls (the help said 1..=99 and REFUSED); `--dice-sides` is 2..=2^31-1 (the help said 2^32-1); `bip39` takes 12, 15, 18, 21 or 24 words; `rsa-gpg`
   is application 828365'. What the command derives is unchanged.
-- **Manual**: the CompactSeedQR examples and the BIP-85 chapter's examples pass the secret on stdin
+- **Manual**: the `mnemonic seedqr` examples and the BIP-85 chapter's examples pass the secret on stdin
   (`--from phrase=-`, `--from seedqr=-`); as printed they put it on argv and were refused (exit 2). The BIP-85
   chapter and the GUI manual now say `hd-seed` prints a WIF; the chapter lists five BIP-39 lengths and ten languages
-  and the dice range 1..=2^32-1.
+  and the dice range 1..=2^31-1.
 ```
 
 No flag changes: the `docs/manual/tests/lint.sh` flag coverage and the `mnemonic-gui` schema mirror are unaffected
@@ -132,8 +142,8 @@ No flag changes: the `docs/manual/tests/lint.sh` flag coverage and the `mnemonic
 ## 5. RED rows (run at `b57187b3`, public test material only)
 
 Command: `cargo build --locked --bin mnemonic && design/fix-tk-printed-text-drift-red.sh target/debug/mnemonic`
-(from the repo root). Measured at the base: 14 RED, 3 GREEN (controls); with the patch applied and the binary
-rebuilt: 17 GREEN, 0 RED (run once each, 2026-11-22).
+(from the repo root). Measured at the base: 15 RED, 3 GREEN (controls); with the patch applied and the binary
+rebuilt: 18 GREEN, 0 RED (run once each, 2026-11-22).
 
 | Row | What it runs | At `b57187b3` (RED) | After (GREEN) |
 |---|---|---|---|
@@ -144,6 +154,7 @@ rebuilt: 17 GREEN, 0 RED (run once each, 2026-11-22).
 | D3 | same, `dice` entry | `dice BIP-85 application 89101' — derives \`--length\` dice rolls (1..=99 each \`--dice-sides\`-sided); REFUSED at runtime` | the 3.2 dice text |
 | D4 | same, `bip39` entry | `... words (12 / 18 / 24)` | `... words (12 / 15 / 18 / 21 / 24)` |
 | D5 | same, `rsa-gpg` entry | `rsa-gpg BIP-85 application 828366' — RSA-GPG; REFUSED at runtime` | the 3.2 rsa-gpg text |
+| D6 | `derive-child` dice bounds: `--length 2147483648` (2^31), `--dice-sides 2147483647 --length 3`, `--dice-sides 2147483648 --length 3`; `--help` carries `rolls (1..=2^31-1)` and `Range: 2..=2^31-1` | rc 1 / 0 / 1; help-bounds=1 (`D6 RED :: rolls 2^31 rc=1 sides 2^31-1 rc=0 sides 2^31 rc=1 help-bounds=1`) | rc 1 / 0 / 1; help-bounds=0 |
 | P1 (control) | BIP-85 master on stdin, `--application hd-seed --length 0 --index 0` | `Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp` (= BIP-85 L248) | same |
 | P2 (control) | same, `--application xprv` | `xprv9s21ZrQH143K2srSbCSg4m4kLvPMzcWydgmKEnMmoZUurYuBuYG46c6P71UGXMzmriLzCCBvKQWBUv3vPB3m1SATMhp3uEjXHJ42jFg7myX` (= BIP-85 L267) | same |
 | P3 (control) | dice d6 100 rolls; bip39 15 and 21 words | rolls=100, words=15,21, all rc=0 | same |
@@ -152,7 +163,7 @@ rebuilt: 17 GREEN, 0 RED (run once each, 2026-11-22).
 | S3 | the section's prose | contains "emit an argv-leakage advisory ... to avoid the advisory" | contains `(#argv-refusal)`, no "argv-leakage advisory" |
 | B1 | every logical command naming `mnemonic derive-child` in the sh blocks of `38-bip85-children.md`, except those containing `<` (the synopsis) | runnable=1 failing=1 (L83-87 rc=2, BIP-39 phrase on argv) | runnable=5 failing=0, all non-empty stdout |
 | B2 | lines of those sh blocks matching `--from (phrase\|xprv)=[^-]` | 84, 97, 110, 123, 139 | none |
-| B3 | the four exact 3.4 lines present; `HD-seed bytes`, `64-byte HD-seed`, `9 BIP-85`, `land in v0.9`, `1..=10000` absent | 4 missing, 5 present | all present / absent |
+| B3 | the five exact 3.4 lines present (the fifth is the `--from` bullet's `--passphrase @env:VAR` line); `HD-seed bytes`, `64-byte HD-seed`, `9 BIP-85`, `land in v0.9`, `1..=10000` absent | 5 missing, 5 present | all present / absent |
 | G1 | GUI manual `### \`hd-seed\` {#...-application-hd-seed}` and `### \`xprv\` {#...-application-xprv}` sections, normalized | "Emit a child HD-seed (an xprv at depth 0) ..." | the 3.5 texts |
 
 ## 6. Tests
@@ -161,7 +172,7 @@ New file `crates/mnemonic-toolkit/tests/cli_printed_text_drift.rs`, one test per
 `h1_compare_cost_help_example_runs`, `h2_help_eg_examples_inventory`,
 `d1_derive_child_help_hd_seed_is_application_2`, `d2_derive_child_help_xprv_is_application_32`,
 `d3_derive_child_help_dice_is_runnable_with_bip85_range`, `d4_derive_child_help_bip39_lists_five_lengths`,
-`d5_derive_child_help_rsa_gpg_is_application_828365`, `p1_hd_seed_bip85_vector_application_2`,
+`d5_derive_child_help_rsa_gpg_is_application_828365`, `d6_derive_child_dice_bounds_match_binary`, `p1_hd_seed_bip85_vector_application_2`,
 `p2_xprv_bip85_vector_application_32`, `p3_dice_100_rolls_and_bip39_15_21_run`,
 `s1_manual_seedqr_commands_run_as_printed`, `s2_manual_seedqr_no_inline_secret`,
 `s3_manual_seedqr_argv_paragraph_says_refused`, `b1_manual_bip85_commands_run_as_printed`,
@@ -196,9 +207,9 @@ Existing tests that change: none. Checked at `b57187b3`: no test or source outsi
 `readme_dice_kat_parity.rs` reads only `crates/mnemonic-toolkit/README.md`, which this FIX does not touch.
 
 Source files this FIX changes (for build ordering): `crates/mnemonic-toolkit/src/cmd/compare_cost.rs`,
-`crates/mnemonic-toolkit/src/cmd/derive_child.rs` (doc comment L40-60 only),
+`crates/mnemonic-toolkit/src/cmd/derive_child.rs` (doc comments L40-60 and L103 only),
 `crates/mnemonic-toolkit/tests/cli_printed_text_drift.rs` (new), `docs/manual/src/40-cli-reference/41-mnemonic.md`
-(L2849-2925), `docs/manual/src/30-workflows/38-bip85-children.md`, `docs/manual-gui/src/40-mnemonic/46-derive-child.md`,
+(L1954, L2849-2925), `docs/manual/src/60-appendices/67-troubleshooting.md` (L54), `docs/manual/src/30-workflows/38-bip85-children.md`, `docs/manual-gui/src/40-mnemonic/46-derive-child.md`,
 `CHANGELOG.md`; `design/fix-tk-printed-text-drift-red.sh` and `-texts.patch` (this branch). Overlaps:
 `fix/tk-env-dash-stdin-order` (#26) changes `cmd/derive_child.rs` code (L126-145) and `41-mnemonic.md` near L79-82
 and `CHANGELOG.md` [Unreleased]: no shared lines, but build after it or rebase (the patch carries no CHANGELOG hunk; its hunks
@@ -210,7 +221,7 @@ merged into `b57187b3`'s history.
     export PATH=$HOME/.cargo/bin:$PATH; cargo --version   # 1.85.0
     cargo +1.95.0 fmt --all -- --check && cargo clippy --locked --all-targets -- -D warnings \
       && cargo nextest run --locked --workspace --build-jobs 2 -j 2 > gate.log 2>&1; grep -E '^\s+(PASS|FAIL)|Summary' gate.log | tail -5
-    cargo build --locked --bin mnemonic && design/fix-tk-printed-text-drift-red.sh target/debug/mnemonic > red.log; grep -cE '^[A-Z][0-9]+ GREEN' red.log   # 17
+    cargo build --locked --bin mnemonic && design/fix-tk-printed-text-drift-red.sh target/debug/mnemonic > red.log; grep -cE '^[A-Z][0-9]+ GREEN' red.log   # 18
     make -C docs/manual lint MNEMONIC_BIN=$PWD/target/debug/mnemonic MD_BIN=md MS_BIN=ms MK_BIN=mk && make -C docs/manual anchor-check
 
 Plus every other job of `.github/workflows/rust.yml`, `manual.yml`, `manual-gui.yml` (needs

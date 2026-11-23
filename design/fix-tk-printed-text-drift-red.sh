@@ -116,9 +116,16 @@ chk() { # chk <row> <token> <want>
 }
 chk D1 hd-seed "hd-seed BIP-85 application 2' — derives a private key, printed as a compressed WIF, at m/83696968'/2'/<index>' (\`--length 0\`)"
 chk D2 xprv "xprv BIP-85 application 32' — derives a child xprv at m/83696968'/32'/<index>' (\`--length 0\`)"
-chk D3 dice "dice BIP-85 application 89101' — derives \`--length\` rolls (1..=2^32-1) of a \`--dice-sides\`-sided die"
+chk D3 dice "dice BIP-85 application 89101' — derives \`--length\` rolls (1..=2^31-1) of a \`--dice-sides\`-sided die"
 chk D4 bip39 "bip39 BIP-85 application 39' — derives a child BIP-39 mnemonic of \`--length\` words (12 / 15 / 18 / 21 / 24)"
 chk D5 rsa-gpg "rsa-gpg BIP-85 application 828365' (RSA-GPG key scheme); REFUSED at runtime"
+# D6: the printed dice bounds are the binary's (BIP-85 puts sides and rolls in hardened path elements, so >= 2^31 fails)
+printf '%s' "$X" | "$B" derive-child --from xprv=- --application dice --dice-sides 6 --length 2147483648 --index 0 >/dev/null 2>"$T/e"; r1=$?
+printf '%s' "$X" | "$B" derive-child --from xprv=- --application dice --dice-sides 2147483647 --length 3 --index 0 >/dev/null 2>/dev/null; r2=$?
+printf '%s' "$X" | "$B" derive-child --from xprv=- --application dice --dice-sides 2147483648 --length 3 --index 0 >/dev/null 2>/dev/null; r3=$?
+h=$("$B" derive-child --help | norm)
+case $h in *'rolls (1..=2^31-1)'*'Range: 2..=2^31-1'*) hb=0 ;; *) hb=1 ;; esac
+[ "$r1" != 0 ] && [ "$r2" = 0 ] && [ "$r3" != 0 ] && [ "$hb" = 0 ]; echo "D6 $(verdict $?) :: rolls 2^31 rc=$r1 sides 2^31-1 rc=$r2 sides 2^31 rc=$r3 help-bounds=$hb"
 
 echo "== I10 controls (behaviour is right at the base; must stay so)"
 o=$(printf '%s' "$X" | "$B" derive-child --from xprv=- --application hd-seed --length 0 --index 0 2>/dev/null)
@@ -148,7 +155,8 @@ b3=0
 for want in \
   '| `bip39` | new BIP-39 phrase (10 BIP-85-coded languages) | `12`, `15`, `18`, `21`, `24` |' \
   '| `hd-seed` | private key as a compressed WIF | `0` (sentinel) |' \
-  '| `dice` | deterministic dice rolls | `1..=2^32-1` |' \
+  '| `dice` | deterministic dice rolls | `1..=2^31-1` |' \
+  '  `--passphrase @env:VAR` for a passphrase: stdin is already taken,' \
   '  (12 / 15 / 18 / 21 / 24 words; 10 BIP-85 languages) for an air-gapped'; do
   grep -qxF -- "$want" "$M38" || { b3=1; echo "  missing: $want"; }
 done
