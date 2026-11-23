@@ -768,3 +768,129 @@ fn dice_missing_dice_sides_refused() {
         "stderr missing dice-sides refusal: {stderr:?}",
     );
 }
+
+// FIX_tk_derive_child_master_depth (bh-tk-I4): a non-master xprv/tprv is refused.
+// X = BIP-32 test vector 1 chain m/0' (depth 1); T = the same key with tprv version bytes.
+const NON_MASTER_XPRV: &str =
+    "xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7";
+const NON_MASTER_TPRV: &str =
+    "tprv8bxNLu25VazNnppTCP4fyhyCvBHcYtzE3wr3cwYeL4HA7yf6TLGEUdS4QC1vLT63TkjRssqJe4CvGNEC8DzW5AoPUw56D1Ayg6HY4oy8QZ9";
+const NON_MASTER_REFUSAL: &str = "error: derive-child: the xprv/tprv is at depth 1, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)";
+
+fn assert_refused(out: assert_cmd::assert::Assert) {
+    let out = out.code(1);
+    let o = out.get_output();
+    assert_eq!(String::from_utf8(o.stdout.clone()).unwrap(), "");
+    assert_eq!(
+        String::from_utf8(o.stderr.clone()).unwrap().trim(),
+        NON_MASTER_REFUSAL
+    );
+}
+
+#[test]
+fn r1_non_master_xprv_stdin_refused() {
+    assert_refused(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "derive-child",
+                "--from",
+                "xprv=-",
+                "--application",
+                "hex",
+                "--length",
+                "16",
+                "--index",
+                "0",
+            ])
+            .write_stdin(format!("{NON_MASTER_XPRV}\n"))
+            .assert(),
+    );
+}
+
+#[test]
+fn r2_non_master_xprv_env_sentinel_refused() {
+    assert_refused(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .env("XP", NON_MASTER_XPRV)
+            .args([
+                "derive-child",
+                "--from",
+                "xprv=@env:XP",
+                "--application",
+                "bip39",
+                "--length",
+                "12",
+                "--index",
+                "0",
+            ])
+            .assert(),
+    );
+}
+
+#[test]
+fn r3_non_master_tprv_refused() {
+    assert_refused(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "derive-child",
+                "--from",
+                "xprv=-",
+                "--application",
+                "xprv",
+                "--length",
+                "0",
+                "--index",
+                "0",
+                "--network",
+                "signet",
+            ])
+            .write_stdin(format!("{NON_MASTER_TPRV}\n"))
+            .assert(),
+    );
+}
+
+#[test]
+fn r4_non_master_xprv_with_passphrase_refused_without_warning() {
+    assert_refused(
+        Command::cargo_bin("mnemonic")
+            .unwrap()
+            .env("PP", "foo")
+            .args([
+                "derive-child",
+                "--from",
+                "xprv=-",
+                "--application",
+                "hex",
+                "--length",
+                "16",
+                "--index",
+                "0",
+                "--passphrase",
+                "@env:PP",
+            ])
+            .write_stdin(format!("{NON_MASTER_XPRV}\n"))
+            .assert(),
+    );
+}
+
+#[test]
+fn r5_non_master_xprv_depth2_refused() {
+    // BIP-32 test vector 1 chain m/0'/1 (depth 2).
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["derive-child", "--from", "xprv=-", "--application", "hex", "--length", "16", "--index", "0"])
+        .write_stdin("xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs\n")
+        .assert()
+        .code(1);
+    let e = String::from_utf8(o.get_output().stderr.clone()).unwrap();
+    assert!(
+        e.trim().starts_with(
+            "error: derive-child: the xprv/tprv is at depth 2, not a master key (depth 0);"
+        ),
+        "{e:?}"
+    );
+    assert!(o.get_output().stdout.is_empty());
+}

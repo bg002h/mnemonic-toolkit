@@ -121,7 +121,9 @@ error: --length not applicable for --application <hd-seed|xprv> (output is fixed
 
 **Invalid master xprv refusal:** standard `--from xprv=` parse error from `convert.rs` shared parser; exit 1 (BadInput class). Re-uses the existing `parse_from_input` taxonomy.
 
-Exit code: 2 for all `derive-child`-specific refusals (`ToolkitError::DeriveChildRefusal` family).
+**Non-master xprv refusal (FIX_tk_derive_child_master_depth, bh-tk-I4):** BIP-85 derives from "a single BIP32 master root key", so an xprv/tprv whose depth is not 0 is refused after it parses, before any derivation, the `--passphrase ignored` warning and the stdout private-key warning (only the argv-secret advisories, which come first, can precede it): ``error: derive-child: the xprv/tprv is at depth <d>, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)``; exit 1 (BadInput class), stdout empty.
+
+Exit code: 2 for the application and length refusals above (`ToolkitError::DeriveChildLengthNotApplicable`, `DeriveChildLengthOutOfRange`, `DeriveChildUnsupportedApp`); the `--from` node and master-key refusals are BadInput, exit 1.
 
 ## §8 Implementation hooks
 
