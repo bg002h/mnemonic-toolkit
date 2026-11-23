@@ -215,6 +215,10 @@ pub fn run<R: Read, W: Write, E: Write>(
         Slip39Command::Split(a) => {
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--from` +
             // `--passphrase` before downstream consumption.
+            // bh-tk-I5 (R-1, R-3): stdin and the argv advisory are judged on
+            // the value as written, before resolution.
+            let from_dash = a.from.value == "-";
+            let from_inline = !from_dash && !a.from.value.starts_with("@env:");
             let owned_a;
             let a = if needs_split_env_sentinel_resolution(a) {
                 owned_a = resolve_split_env_sentinels(a)?;
@@ -222,7 +226,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             } else {
                 a
             };
-            run_split(a, stdin, stdout, stderr)
+            run_split(a, from_dash, from_inline, stdin, stdout, stderr)
         }
         Slip39Command::Combine(a) => {
             // SPEC §2.6 row 1d: per-share inline advisory, judged on the value
@@ -234,6 +238,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share` +
             // `--passphrase` before downstream consumption.
+            // bh-tk-I5 (R-1, R-2): stdin shares are those written as `-`.
+            let share_dash: Vec<bool> = a.share.iter().map(|s| s == "-").collect();
             let owned_a;
             let a = if needs_combine_env_sentinel_resolution(a) {
                 owned_a = resolve_combine_env_sentinels(a)?;
@@ -241,7 +247,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             } else {
                 a
             };
-            run_combine(a, stdin, stdout, stderr)
+            run_combine(a, &share_dash, stdin, stdout, stderr)
         }
     }
 }
@@ -358,6 +364,8 @@ fn parse_master_to_entropy(
 #[allow(clippy::too_many_arguments)]
 fn run_split<R: Read, W: Write, E: Write>(
     args: &Slip39SplitArgs,
+    from_dash: bool,
+    from_inline: bool,
     stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
@@ -372,7 +380,7 @@ fn run_split<R: Read, W: Write, E: Write>(
 
     // SPEC §2.5 row 18 — single stdin consumer per invocation.
     // For split: --from - + --passphrase-stdin = max 2 candidates.
-    let split_stdin_count = (args.from.value == "-") as usize
+    let split_stdin_count = from_dash as usize
         + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             as usize;
     if split_stdin_count > 1 {
@@ -396,7 +404,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     }
 
     // SPEC §2.6 rows 1a/1b — argv-leakage advisories for inline --from.
-    if args.from.value != "-" {
+    if from_inline {
         match args.from.node {
             NodeType::Phrase => {
                 secret_in_argv_warning(stderr, "--from phrase=", "--from phrase=-");
@@ -425,7 +433,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     }
 
     // Resolve --from value (Zeroizing + mlock pin).
-    let from_value: zeroize::Zeroizing<String> = if args.from.value == "-" {
+    let from_value: zeroize::Zeroizing<String> = if from_dash {
         zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
         zeroize::Zeroizing::new(args.from.value.clone())
@@ -575,12 +583,13 @@ fn run_split<R: Read, W: Write, E: Write>(
 #[allow(clippy::too_many_arguments)]
 fn run_combine<R: Read, W: Write, E: Write>(
     args: &Slip39CombineArgs,
+    share_dash: &[bool],
     stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     // SPEC §2.5 row 18 — single stdin consumer per invocation.
-    let combine_stdin_count = args.share.iter().filter(|s| *s == "-").count()
+    let combine_stdin_count = share_dash.iter().filter(|d| **d).count()
         + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             as usize;
     if combine_stdin_count > 1 {
@@ -601,8 +610,8 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // Resolve --share values (stdin or inline) into Zeroizing<String>.
     let mut share_strings: Vec<zeroize::Zeroizing<String>> = Vec::with_capacity(args.share.len());
     let mut stdin_consumed = false;
-    for sh in &args.share {
-        let s = if sh == "-" {
+    for (sh, dash) in args.share.iter().zip(share_dash.iter().copied()) {
+        let s = if dash {
             if stdin_consumed {
                 return Err(ToolkitError::BadInput(
                     "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
