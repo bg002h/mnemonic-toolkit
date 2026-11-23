@@ -2544,11 +2544,12 @@ permission advisory on stderr (advisories table below).
 ### Refusals
 
 All refusals exit 1 with the stem on stderr. Mirror of SPEC §2.5
-(25 classes; row 24 added at v0.13.0 P2.2 GREEN per Q3 fold; row 25
+(26 classes; row 24 added at v0.13.0 P2.2 GREEN per Q3 fold; row 25
 added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
 `--group N,T` with `T==1 AND N>1` — surfaced when chapter examples
 1+2 attempted `--group 2,1` and the lib refused per the python
-`split_ems` rule).
+`split_ems` rule; row 26 refuses the test-only RNG variables, which a shipped
+binary does not read).
 
 | Trigger | Refusal stem |
 |---|---|
@@ -2577,11 +2578,13 @@ added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
 | `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
 | `combine` shares: shares within a single group disagree on `member_threshold` | `slip39 combine: shares within a group disagree on member_threshold` |
 | Any `--group N,T` with `T==1 AND N>1` (toolkit policy; python `split_ems` rule — algorithm replicates the group share to all N members so T=1+N>1 is degenerate; jointly with row 5 means smallest legal split is `--group 2,2`) | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` |
+| `split` with `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any value, even empty; checked before every other refusal and before any input is read) | `slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source` |
 
 ### Advisories
 
 Stderr advisories are non-fatal and do not change exit code (0 on
-success). Mirror of SPEC §2.6 (6 rows).
+success). Mirror of SPEC §2.6 rows 1-5; row 6 (the test RNG warning) exists only in a
+test build, and a shipped binary refuses those variables (see Refusals).
 
 | Trigger | Stderr advisory |
 |---|---|
@@ -2591,12 +2594,6 @@ success). Mirror of SPEC §2.6 (6 rows).
 | `combine` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
 | `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 | `--iteration-exponent E` where E ≥ 5 | `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second); Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values; E ≥ 10 may exceed 30s on weak hardware` |
-| Either `MNEMONIC_SLIP39_TEST_RNG` OR `MNEMONIC_SLIP39_TEST_IDENTIFIER` env-var set on a `split` invocation (always-on; not suppressible) | `warning: MNEMONIC_SLIP39_TEST_RNG set — output is deterministic and INSECURE; do not use for real shares` |
-
-> **Note:** the warning string names `MNEMONIC_SLIP39_TEST_RNG` even
-> when only the companion `MNEMONIC_SLIP39_TEST_IDENTIFIER` is set —
-> both env-vars trigger the same single-string advisory; see SPEC §6
-> for both env-var definitions.
 
 ### Trezor interop
 

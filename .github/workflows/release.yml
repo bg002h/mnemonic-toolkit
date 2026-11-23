@@ -152,7 +152,7 @@ jobs:
           fallback: none
       - name: cargo nextest run
         if: steps.docs.outputs.docs_only != 'true'
-        run: cargo nextest run --locked --workspace --no-fail-fast
+        run: cargo nextest run --locked --workspace --no-fail-fast --features slip39-test-rng
       # nextest does not run doc-tests; this step keeps them.
       - name: cargo test --doc
         if: steps.docs.outputs.docs_only != 'true'

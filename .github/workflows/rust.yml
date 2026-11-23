@@ -173,6 +173,14 @@ jobs:
           fi
           cargo build --tests --workspace
 
+      - name: cargo nextest run (shipped build: test-RNG refusal)
+        if: steps.docs.outputs.docs_only != 'true'
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo nextest run --locked -p mnemonic-toolkit --test cli_slip39_refusals -E 'test(=slip39_test_rng_env_refused_without_feature)'
+
       - name: cargo nextest run (default tests; G2.1 #[ignore]-gated)
         if: steps.docs.outputs.docs_only != 'true'
         run: |
@@ -185,7 +193,7 @@ jobs:
           # existed because wc-codec was a member never `-p`'d in CI).
           # nextest skips #[ignore] exactly as `cargo test` does, so the
           # env-gated g2_* legs below still run only in their own steps.
-          cargo nextest run --workspace --no-fail-fast
+          cargo nextest run --workspace --no-fail-fast --features slip39-test-rng
 
       # nextest does not run doc-tests; this step keeps them.
       - name: cargo test --doc
@@ -635,7 +643,7 @@ jobs:
           CC_x86_64_unknown_linux_musl: musl-gcc
         run: |
           ulimit -l 65536 || true
-          cargo nextest run --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast
+          cargo nextest run --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast --features slip39-test-rng
       # Run the package test suite on aarch64-Linux so the md1/address golden
       # vectors are OUTPUT-verified for the shipped aarch64 binary.
       # `--skip mlock` drops the lib `mlock::tests::*` POSIX-syscall /
@@ -649,4 +657,4 @@ jobs:
         if: (matrix.arm_native) && steps.docs.outputs.docs_only != 'true'
         env:
           CC_aarch64_unknown_linux_musl: musl-gcc
-        run: cargo nextest run --release --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast -- --skip mlock --skip g1_
+        run: cargo nextest run --release --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast --features slip39-test-rng -- --skip mlock --skip g1_

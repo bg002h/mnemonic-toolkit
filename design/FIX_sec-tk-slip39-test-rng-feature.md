@@ -183,7 +183,7 @@ Append ` --features slip39-test-rng` to each of the four nextest commands, nothi
 
   If the row is compiled out (the feature defaulted on), nextest exits 4 with `error: no tests to run`, so the step
   also fails if a shipped build turns the feature on. This is a default-feature step, not one of the four nextest
-  jobs the ruling names (an exception to "every CI nextest job adds the feature": the architect confirms); the PR
+  jobs the ruling names (an exception to "every CI nextest job adds the feature": accepted by the coordinator 2026-11-22); the PR
   description names it with the other `.github/` changes. `cargo build --tests --workspace` (:174) stays unchanged
   (default features); this step reuses it.
 
@@ -278,7 +278,7 @@ PROPOSED (architect confirms):
     make -C docs/manual lint MNEMONIC_BIN=... MD_BIN=... MS_BIN=... MK_BIN=...   (as CLAUDE.md; the CI manual job)
 
 The first two nextest runs are the only ones that run `slip39_test_rng_env_refused_without_feature` (the second is the
-CI shipped-side step of §7); the second is the only
+CI shipped-side step of §7); the third is the only
 one that runs the two `required-features` files. Not covered by this gate: the CI `.github/` edits themselves (read the
 diff) and the musl/aarch64 rows (green CI on the head).
 
