@@ -1,0 +1,253 @@
+diff --git a/crates/mnemonic-toolkit/src/cmd/compare_cost.rs b/crates/mnemonic-toolkit/src/cmd/compare_cost.rs
+index 248f7613..c1befc5d 100644
+--- a/crates/mnemonic-toolkit/src/cmd/compare_cost.rs
++++ b/crates/mnemonic-toolkit/src/cmd/compare_cost.rs
+@@ -13,7 +13,7 @@ use crate::error::ToolkitError;
+ #[derive(Args, Debug)]
+ pub struct CompareCostArgs {
+     /// Bare miniscript fragment with abstract key labels (e.g.,
+-    /// `or_b(pk(A), pk(B))`) OR concrete hex pubkeys. Cost is key-agnostic;
++    /// `or_b(pk(A),s:pk(B))`) OR concrete hex pubkeys. Cost is key-agnostic;
+     /// abstract labels are auto-substituted with deterministic dummy keys.
+     /// Mutually exclusive with `--descriptor`.
+     #[arg(long, conflicts_with = "descriptor")]
+diff --git a/crates/mnemonic-toolkit/src/cmd/derive_child.rs b/crates/mnemonic-toolkit/src/cmd/derive_child.rs
+index 5cad8e73..23952ef4 100644
+--- a/crates/mnemonic-toolkit/src/cmd/derive_child.rs
++++ b/crates/mnemonic-toolkit/src/cmd/derive_child.rs
+@@ -39,11 +39,13 @@ pub struct DeriveChildArgs {
+     ///
+     ///   bip39             BIP-85 application 39' — derives a child
+     ///                     BIP-39 mnemonic of `--length` words (12 /
+-    ///                     18 / 24)
+-    ///   hd-seed           BIP-85 application 32' — derives a 32-byte
+-    ///                     BIP-32 seed (`--length 0`)
+-    ///   xprv              BIP-85 application 32' alt — derives a
+-    ///                     child xprv directly (`--length 0`)
++    ///                     15 / 18 / 21 / 24)
++    ///   hd-seed           BIP-85 application 2' — derives a private
++    ///                     key, printed as a compressed WIF, at
++    ///                     m/83696968'/2'/<index>' (`--length 0`)
++    ///   xprv              BIP-85 application 32' — derives a child
++    ///                     xprv at m/83696968'/32'/<index>'
++    ///                     (`--length 0`)
+     ///   hex               BIP-85 application 128169' — derives
+     ///                     `--length` bytes of hex (16..=64)
+     ///   password-base64   BIP-85 application 707764' — derives
+@@ -51,13 +53,13 @@ pub struct DeriveChildArgs {
+     ///   password-base85   BIP-85 application 707785' — derives
+     ///                     `--length` chars of base85 password (10..=80)
+     ///   dice              BIP-85 application 89101' — derives
+-    ///                     `--length` dice rolls (1..=99 each
+-    ///                     `--dice-sides`-sided); REFUSED at runtime
++    ///                     `--length` rolls (1..=2^32-1) of a
++    ///                     `--dice-sides`-sided die
+     ///   rsa               BIP-85 application 828365' — RSA key
+     ///                     derivation; REFUSED at runtime
+     ///                     (RUSTSEC-2023-0071)
+-    ///   rsa-gpg           BIP-85 application 828366' — RSA-GPG;
+-    ///                     REFUSED at runtime
++    ///   rsa-gpg           BIP-85 application 828365' (RSA-GPG
++    ///                     key scheme); REFUSED at runtime
+     #[arg(long = "application", required = true, verbatim_doc_comment)]
+     pub application: String,
+ 
+diff --git a/docs/manual-gui/src/40-mnemonic/46-derive-child.md b/docs/manual-gui/src/40-mnemonic/46-derive-child.md
+index 8c3f28a2..f80d6137 100644
+--- a/docs/manual-gui/src/40-mnemonic/46-derive-child.md
++++ b/docs/manual-gui/src/40-mnemonic/46-derive-child.md
+@@ -97,15 +97,16 @@ per-purpose child phrases.
+ 
+ ### `hd-seed` {#mnemonic-derive-child-application-hd-seed}
+ 
+-Emit a child HD-seed (an xprv at depth 0). `--length` must be 0
+-(the seed length is fixed). `--network` selects mainnet vs
+-testnet xprv prefix.
++Emit a child private key as a compressed WIF (BIP-85 application
++2', path `m/83696968'/2'/<index>'`). `--length` must be 0.
++`--network` selects the mainnet (`K…` / `L…`) or test-network
++(`c…`) WIF prefix.
+ 
+ ### `xprv` {#mnemonic-derive-child-application-xprv}
+ 
+-Emit a child xprv at depth 0 (effectively the same as `hd-seed`
+-under a slightly different application slot). `--length` must
+-be 0. `--network` selects the prefix.
++Emit a child xprv at depth 0 (BIP-85 application 32', path
++`m/83696968'/32'/<index>'`). `--length` must be 0. `--network`
++selects the prefix.
+ 
+ ### `hex` {#mnemonic-derive-child-application-hex}
+ 
+diff --git a/docs/manual/src/30-workflows/38-bip85-children.md b/docs/manual/src/30-workflows/38-bip85-children.md
+index b7114c6d..4b4bf3d8 100644
+--- a/docs/manual/src/30-workflows/38-bip85-children.md
++++ b/docs/manual/src/30-workflows/38-bip85-children.md
+@@ -2,7 +2,7 @@
+ 
+ A single seed phrase can mathematically derive an unlimited supply
+ of *new* deterministic secrets — fresh BIP-39 phrases, raw entropy,
+-HD-seed bytes, child xprvs, password strings, even DICE entropy
++HD-seed WIF keys, child xprvs, password strings, even DICE entropy
+ streams. This is BIP-85: take one master seed and grind it through
+ HMAC-SHA-512\index{HMAC-SHA-512} with an application code and an
+ index to produce a deterministic, *independent* child secret.
+@@ -10,7 +10,7 @@ index to produce a deterministic, *independent* child secret.
+ The use cases:
+ 
+ - **Child wallets** — derive an entire new BIP-39 phrase
+-  (12 / 18 / 24 words; 9 BIP-85 languages) for an air-gapped
++  (12 / 15 / 18 / 21 / 24 words; 10 BIP-85 languages) for an air-gapped
+   hardware wallet without storing a separate backup.
+ - **Passwords** — derive deterministic per-service passwords; lose
+   the password manager but keep the master seed and you can
+@@ -42,10 +42,10 @@ mnemonic derive-child \
+ 
+ The four required flags:
+ 
+-- **`--from`** — the master source. `--from xprv=<xprv>` (BIP-85
+-  canonical), `--from phrase="<bip39 phrase>"` (combined with
+-  `--passphrase` and `--language`), or `--from xprv=-` /
+-  `--from phrase=-` to read from stdin.
++- **`--from`** — the master source, read from stdin: `--from xprv=-`
++  (BIP-85 canonical) or `--from phrase=-` (combined with
++  `--passphrase` and `--language`). An inline value is refused
++  (exit 2); see [Secret material on argv is REFUSED](#argv-refusal).
+ - **`--application`** — what kind of child secret to derive. Listed
+   below.
+ - **`--length`** — application-specific size. Range varies; pass
+@@ -58,19 +58,19 @@ The four required flags:
+ 
+ | `--application` | Output | `--length` |
+ |---|---|---|
+-| `bip39` | new BIP-39 phrase (9 BIP-85-coded languages) | `12`, `18`, `24` |
+-| `hd-seed` | 64-byte HD-seed bytes (raw) | `0` (sentinel) |
++| `bip39` | new BIP-39 phrase (10 BIP-85-coded languages) | `12`, `15`, `18`, `21`, `24` |
++| `hd-seed` | private key as a compressed WIF | `0` (sentinel) |
+ | `xprv` | child master xprv | `0` (sentinel) |
+ | `hex` | raw hex entropy | `16..=64` |
+ | `password-base64` | base64-shaped password | `20..=86` |
+ | `password-base85` | base85-shaped password | `10..=80` |
+-| `dice` | deterministic dice rolls | `1..=10000` |
++| `dice` | deterministic dice rolls | `1..=2^32-1` |
+ 
+ The seven in-scope BIP-85 applications map to BIP-85 codes 39',
+ 2', 32', 128169', 707764', 707785', and 89101' (DICE; BIP-85
+ v1.3.0). RSA and RSA-GPG (both under BIP-85 code 828365') are
+-out-of-scope for v0.8 pending RUSTSEC-2023-0071 patch and will
+-land in v0.9.
++refused (exit 2): the `rsa` crate carries the unpatched advisory
++RUSTSEC-2023-0071.
+ 
+ ## Worked examples
+ 
+@@ -80,8 +80,8 @@ the DANGER box there.)
+ ### Derive a child BIP-39 phrase
+ 
+ ```sh
+-mnemonic derive-child \
+-  --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic derive-child --from phrase=- \
+   --application bip39 \
+   --length 12 \
+   --index 0
+@@ -93,8 +93,8 @@ from the master. Increment `--index` to derive sibling phrases.
+ ### Derive a deterministic password
+ 
+ ```sh
+-mnemonic derive-child \
+-  --from phrase="<your master phrase>" \
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic derive-child --from phrase=- \
+   --application password-base64 \
+   --length 32 \
+   --index 0
+@@ -106,8 +106,8 @@ N-th deterministic password.
+ ### Derive a child xprv
+ 
+ ```sh
+-mnemonic derive-child \
+-  --from phrase="<your master phrase>" \
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic derive-child --from phrase=- \
+   --application xprv \
+   --length 0 \
+   --index 0
+@@ -119,8 +119,8 @@ provisioning an air-gapped hardware wallet from a parent backup.
+ ### Derive deterministic dice rolls
+ 
+ ```sh
+-mnemonic derive-child \
+-  --from phrase="<your master phrase>" \
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic derive-child --from phrase=- \
+   --application dice \
+   --length 100 \
+   --index 0 \
+@@ -135,8 +135,8 @@ required for `dice` and accepts values in `2..=2^32-1`.
+ For testnet-targeted children:
+ 
+ ```sh
+-mnemonic derive-child \
+-  --from phrase="<phrase>" \
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic derive-child --from phrase=- \
+   --application xprv \
+   --length 0 \
+   --index 0 \
+diff --git a/docs/manual/src/40-cli-reference/41-mnemonic.md b/docs/manual/src/40-cli-reference/41-mnemonic.md
+index 41c16d58..12c4ae83 100644
+--- a/docs/manual/src/40-cli-reference/41-mnemonic.md
++++ b/docs/manual/src/40-cli-reference/41-mnemonic.md
+@@ -2846,10 +2846,11 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
+ - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
+ - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
+ 
+-Both subsubcommands emit an argv-leakage advisory on stderr when the
+-secret is supplied inline (e.g., `--from seedqr=<value>`, the deprecated
+-`--digits <value>`, or `--from phrase=<value>`).
+-Use the stdin form (`-`) to avoid the advisory.
++Both subsubcommands refuse a secret supplied inline (`--from
++seedqr=<value>`, the deprecated `--digits <value>`, or `--from
++phrase=<value>`) at exit 2, before the command line is parsed; see
++[Secret material on argv is REFUSED](#argv-refusal). Pass the value on
++stdin with `-`.
+ 
+ ### Scope (v0.30.0, widened in v0.31.5 + v0.32.0)
+ 
+@@ -2864,10 +2865,12 @@ The CLI emits the compact payload as hex; pipe through `xxd -r -p` to get
+ the raw bytes for a binary-mode QR:
+ 
+ ```sh
+-mnemonic seedqr encode --variant compact --from phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic seedqr encode --variant compact --from phrase=-
+ # → 00000000000000000000000000000000   (16 entropy bytes as 32 hex chars)
+ 
+-mnemonic seedqr encode --variant compact --from phrase='…' \
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic seedqr encode --variant compact --from phrase=- \
+   | xxd -r -p \
+   | qrencode -8 -o compact-seedqr.png   # -8 = byte mode
+ ```
+@@ -2875,7 +2878,8 @@ mnemonic seedqr encode --variant compact --from phrase='…' \
+ Decode a scanned CompactSeedQR (hex of the scanned bytes):
+ 
+ ```sh
+-mnemonic seedqr decode --variant compact --from seedqr=00000000000000000000000000000000
++printf '%s' '00000000000000000000000000000000' \
++  | mnemonic seedqr decode --variant compact --from seedqr=-
+ # → abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
+ ```
+ 
+@@ -2922,7 +2926,8 @@ PLACEHOLDER — generated from transcripts/41-seedqr-encode.out at build
+ Pipe to a QR generator:
+ 
+ ```sh
+-mnemonic seedqr encode --from phrase="abandon ... about" | qrencode -o out.png -
++printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
++  | mnemonic seedqr encode --from phrase=- | qrencode -o out.png -
+ ```
+ 
+ ### Worked example — 24-word vector
