@@ -1,0 +1,20 @@
+# ms1[0] (entropy, BCH-checksummed)
+# (ms1 line removed: no row reads it)
+
+# ms1[1] (entropy, BCH-checksummed)
+# (ms1 line removed: no row reads it)
+
+# mk1[0] (cosigner 0 xpub + origin)
+mk1qpmfampqqspd57an0td8hvm6w0za5zshqs6c0ncc9wvaf5dxxvd5nulu0wmuqswqfxhp60gu782rszqekjqawuq8w9cmualmr3dawx4g2xx5
+mk1qpmfamppu9asynaxppp0uslaga3fzup656vhfg3j96p47d7x4n20yt2tz5h32qumgluzlec8x6tcx52mqg6c
+
+# mk1[1] (cosigner 1 xpub + origin)
+mk1qpmfa6pqqspd57an0td8hvm6hp5gmughqs6c0ncrum7pwruvf52der5dqacn6cr6q75j7myc33vauqn492273ntu57puxundl6n2wydhmvkv
+mk1qpmfa6pp2ekqyzxyy66kcdj5qqnzvlehu09qzyn2e9k6rck8qjpk5a48k7xujdvssc06flc7pyw66x3chdks
+
+# md1 (multisig wallet policy)
+md1f99jppspqfm678pqqxppcg2z7z883w6ptwrg3hc3tsfx35ce3kj0nl3am0szpcpy6u8fazy3hdw8qfec9dd
+md1f99jppsw0r4pcpqvmfqwhwqrhzud7u9asynaxppp0uslaga3fzup656vhfg3j96p47d7x5dgmkekl9vfjw7
+md1f99jppskdfu3dfv2j79grnwruvf52der5dqacn6cr6q75j7myc33vauqn492273ntu57pu3q7czt7aa3lhz
+md1f99jppsc6kdspq33pxk4krv4qqycn87dlregq3y6kfdks793cysd48dfah3hyntyql2fc255zn9taz
+

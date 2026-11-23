@@ -1,5 +1,15 @@
 # BRAINSTORM — cycle-5 "S-NET" network-provenance invariant (DESIGN ONLY)
 
+> **Erratum E1 (2026-11-23, `design/SPEC_network_rule.md` §9; Brian's
+> network rulings, P21 and decision 1).** L1's "WARN/DIAGNOSE" for
+> `build-descriptor`, and §4's "infer the display network from the keys
+> when `--network` is omitted ... emit a stderr WARN", are overruled:
+> `build-descriptor` refuses a key-against-run or key-against-key
+> contradiction (exit 8, TX-H1/TX-H2) and a coin-type contradiction unless
+> `--accept-coin-type-mismatch` (TX-S); no `--network` means mainnet. Built
+> by SPEC_network_rule unit 7; the pins in
+> `tests/cli_snet_build_descriptor_network_warn.rs` reverse there.
+
 **Status:** brainstorm spec, decision-complete, R0-ready. NO code, NO implementation.
 **Workstream:** S-NET (Tier 1, `design/PLAN_constellation_bughunt_fix_program.md` §2 + §4).
 **Closes:** H15, M13, M14, H9, L1, L2, L3, L10, L11 (9 findings). Toolkit-only, MINOR, no registry publish.

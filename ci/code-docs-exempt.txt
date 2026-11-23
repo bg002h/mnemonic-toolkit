@@ -6,6 +6,7 @@
 # Not run by CI.
 ^scripts/followup-reconcile\.sh$
 ^scripts/spec-citation-gate\.py$
+^scripts/spec-network-rule-gate\.sh$
 
 # Run only by the doc workflows (manual, quickstart, technical-manual,
 # manual-gui, examples), which ci/doc-gate-guard.sh guards, not
