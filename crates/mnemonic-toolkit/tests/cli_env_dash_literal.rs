@@ -517,3 +517,112 @@ fn c6_ms_shares_split_inline_keeps_argv_advisory() {
         o.stderr
     );
 }
+
+fn stdin_conflict_absent(o: &Out) {
+    assert!(!o.stderr.contains("cannot coexist"), "{}", o.stderr);
+    assert!(
+        !o.stderr.contains("only one input can come from stdin"),
+        "{}",
+        o.stderr
+    );
+}
+
+fn ok(o: &Out) {
+    assert_eq!(o.rc, 0, "stderr: {}", o.stderr);
+}
+#[test]
+fn n1_convert_bip38_env_dash_not_a_stdin_reader() {
+    let o = dash(
+        &[
+            "convert",
+            "--from",
+            "wif=@env:E",
+            "--to",
+            "bip38",
+            "--bip38-passphrase-stdin",
+        ],
+        "",
+    );
+    stdin_conflict_absent(&o);
+    assert!(
+        o.stderr
+            .lines()
+            .any(|l| l == "error: --from wif parse: invalid base58"),
+        "{}",
+        o.stderr
+    );
+}
+
+#[test]
+fn n3b_verify_bundle_literal_slot_and_env_dash_slot() {
+    let a = [
+        "verify-bundle",
+        "--allow-argv-secret",
+        "--template",
+        "wsh-sortedmulti",
+        "--threshold",
+        "1",
+        "--network",
+        "signet",
+        "--ms1",
+        MS,
+        "--mk1",
+        K1,
+        "--md1",
+        D1,
+        "--slot",
+        "@0.phrase=-",
+        "--slot",
+        "@1.phrase=@env:E",
+    ];
+    refused(&dash(&a, P), WC);
+}
+
+#[test]
+fn n10_bundle_env_slot_then_literal_dash_slot_reads_stdin_into_slot_1() {
+    let o = run(
+        &[
+            "bundle",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "1",
+            "--network",
+            "signet",
+            "--slot",
+            "@0.phrase=@env:E",
+            "--slot",
+            "@1.phrase=-",
+        ],
+        X,
+        &[("E", P)],
+    );
+    ok(&o);
+    assert!(o.stdout.contains("# ms1[1]"), "{}", o.stdout);
+}
+
+#[test]
+fn n11_convert_side_input_before_literal_dash_primary() {
+    let o = dash(
+        &[
+            "convert",
+            "--from",
+            "fingerprint=73c5da0a",
+            "--from",
+            "phrase=-",
+            "--to",
+            "entropy",
+        ],
+        P,
+    );
+    ok(&o);
+    assert!(
+        o.stdout
+            .lines()
+            .next()
+            .unwrap()
+            .starts_with("entropy: 0000"),
+        "{}",
+        o.stdout
+    );
+}
