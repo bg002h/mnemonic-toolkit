@@ -169,6 +169,24 @@ Append ` --features slip39-test-rng` to each of the four nextest commands, nothi
 - `.github/workflows/release.yml:155` `cargo nextest run --locked --workspace --no-fail-fast` becomes
   `cargo nextest run --locked --workspace --no-fail-fast --features slip39-test-rng`.
 
+- New step in the rust.yml test job (I1 of the r1 review), placed after the `cargo build --tests` step (:168-174,
+  default features, so it reuses that build) and before the :176 nextest step, same `if:` and `ulimit` lines, named
+  `cargo nextest run (shipped build: test-RNG refusal)`, running with no `--features`. Exact text:
+
+        - name: cargo nextest run (shipped build: test-RNG refusal)
+          if: steps.docs.outputs.docs_only != 'true'
+          run: |
+            if [ "${{ runner.os }}" = "Linux" ]; then
+              ulimit -l 65536 || true
+            fi
+            cargo nextest run --locked -p mnemonic-toolkit --test cli_slip39_refusals -E 'test(=slip39_test_rng_env_refused_without_feature)'
+
+  If the row is compiled out (the feature defaulted on), nextest exits 4 with `error: no tests to run`, so the step
+  also fails if a shipped build turns the feature on. This is a default-feature step, not one of the four nextest
+  jobs the ruling names (an exception to "every CI nextest job adds the feature": the architect confirms); the PR
+  description names it with the other `.github/` changes. `cargo build --tests --workspace` (:174) stays unchanged
+  (default features); this step reuses it.
+
 Unchanged: the `cargo test --doc`, mlock `cargo test` legs, `bitcoind-differential`, `cross-tool-differential`, clippy
 (`rust.yml:398`, default features) and every release-artifact build (no `--features` anywhere in `release.yml` build
 steps, so the shipped binary has the feature off). Unqualified `--features slip39-test-rng` with `--workspace` is
@@ -212,6 +230,10 @@ errors "none of the selected packages contains this feature").
   test RNG warning) exists only in a test build, and a shipped binary refuses those variables (see Refusals).`
 - Delete the advisory row at :2594 and the four-line note at :2596-2599 (with the blank line after it, so one blank
   line separates the table from `### Trezor interop`).
+- `docs/technical-manual/src/50-rust-api/54-mnemonic-toolkit-api.md` §V.4.2 (:13): replace the paragraph starting
+  `**None.**` with a one-row table: `slip39-test-rng` | no (`default = []` implicit) | lets `slip39 split` read
+  `MNEMONIC_SLIP39_TEST_RNG` / `_IDENTIFIER`; without it a set variable is refused | none (columns: feature, default,
+  effect, dependencies; header row added in the same table).
 - Unchanged: `docs/manual-gui` (no hit for `SLIP39_TEST`), the flag-coverage lint (no flag change).
 
 ## 10. CHANGELOG (`CHANGELOG.md`, under `## [Unreleased]`)
@@ -239,6 +261,7 @@ PROPOSED (architect confirms):
 | 3.1 edge 4: combine unchanged | C1 |
 | 3.1 edge 6: unset, default build unchanged | C2; the existing default-feature slip39 suites |
 | 3.2 feature-on unchanged | RED script on a feature-on binary (b2a2202b block); the two `required-features` files |
+| §7 CI runs the shipped side (feature defaulted on is caught) | the new rust.yml step (§7): exit 4 `no tests to run` if the row is compiled out; review of the `.github/` diff |
 | §7 CI runs the feature side | review of the `.github/` diff (the script does not cover it) |
 
 ## 12. Gate (build agent; full CI locally, `$HOME/.cargo/bin` first, cargo 1.85.0)
@@ -247,17 +270,25 @@ PROPOSED (architect confirms):
     cargo clippy --locked --all-targets -- -D warnings
     cargo clippy --locked --all-targets --features slip39-test-rng -- -D warnings
     cargo nextest run --locked --workspace --no-fail-fast
+    cargo nextest run --locked -p mnemonic-toolkit --test cli_slip39_refusals -E 'test(=slip39_test_rng_env_refused_without_feature)'
     cargo nextest run --locked --workspace --no-fail-fast --features slip39-test-rng
     cargo test --locked --workspace --doc
     cargo build --locked -p mnemonic-toolkit --bin mnemonic && design/fix-sec-tk-slip39-test-rng-feature-red.sh target/debug/mnemonic
     cargo build --locked -p mnemonic-toolkit --bin mnemonic --features slip39-test-rng && design/fix-sec-tk-slip39-test-rng-feature-red.sh target/debug/mnemonic
     make -C docs/manual lint MNEMONIC_BIN=... MD_BIN=... MS_BIN=... MK_BIN=...   (as CLAUDE.md; the CI manual job)
 
-The first nextest run is the only one that runs `slip39_test_rng_env_refused_without_feature`; the second is the only
+The first two nextest runs are the only ones that run `slip39_test_rng_env_refused_without_feature` (the second is the
+CI shipped-side step of §7); the second is the only
 one that runs the two `required-features` files. Not covered by this gate: the CI `.github/` edits themselves (read the
 diff) and the musl/aarch64 rows (green CI on the head).
 
 ## 13. FOLLOWUPS
+
+Downstream (r1 M3): mnemonic-engrave `design/IMPLEMENTATION_PLAN_seedhammer_slip39_recovery_D1.md:732-736` (Step 2, not
+yet executed) generates fixtures through the CLI wedge; with a stock binary that now refuses (fails closed). Step 2
+must use a `--features slip39-test-rng` build of `mnemonic` or a seeded `slip39_split` library call.
+
+The author's line `tk-slip39-test-rng-refusal-not-in-ci` is not filed: the §7 step closes it.
 
 Closes no FOLLOWUPS line (none names this defect). Files none in the repo. The secret row's status is updated by the
 coordinator after the build merges.
