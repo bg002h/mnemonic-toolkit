@@ -345,6 +345,9 @@ pub fn run<W: Write, E: Write>(
     // + downstream consumption. Owned-args shadowing keeps the diff
     // localized; clones the original `args` only if any sentinel
     // actually needed substitution.
+    // bh-tk-I5 (R-1): which slots read stdin is decided from the values as
+    // written, before `@env:` resolution.
+    let slot_stdin_idxs = crate::slot_input::stdin_slot_positions(&args.slot);
     let env_resolved_owned;
     let args: &VerifyBundleArgs = if needs_env_sentinel_resolution(args) {
         env_resolved_owned = resolve_env_sentinels(args)?;
@@ -437,8 +440,8 @@ pub fn run<W: Write, E: Write>(
     }
 
     let stdin_synth;
-    let args: &VerifyBundleArgs = if needs_stdin_substitution(args, pp_reads_stdin) {
-        stdin_synth = apply_stdin_substitutions(args, stdin, pp_reads_stdin)?;
+    let args: &VerifyBundleArgs = if needs_stdin_substitution(pp_reads_stdin, &slot_stdin_idxs) {
+        stdin_synth = apply_stdin_substitutions(args, stdin, pp_reads_stdin, &slot_stdin_idxs)?;
         &stdin_synth
     } else {
         args
@@ -2122,8 +2125,8 @@ fn emit_secret_in_argv_advisories<E: std::io::Write>(args: &VerifyBundleArgs, st
     );
 }
 
-fn needs_stdin_substitution(args: &VerifyBundleArgs, pp_reads_stdin: bool) -> bool {
-    pp_reads_stdin || args.slot.iter().any(|s| s.is_stdin_sentinel())
+fn needs_stdin_substitution(pp_reads_stdin: bool, slot_stdin_idxs: &[usize]) -> bool {
+    pp_reads_stdin || !slot_stdin_idxs.is_empty()
 }
 
 /// v0.26.0 §3 — cheap pre-check for `@env:` sentinels across `verify-bundle`'s
@@ -2180,9 +2183,12 @@ fn apply_stdin_substitutions(
     args: &VerifyBundleArgs,
     stdin: &mut dyn std::io::Read,
     pp_reads_stdin: bool,
+    slot_stdin_idxs: &[usize],
 ) -> Result<VerifyBundleArgs, ToolkitError> {
     let mut owned = args.clone();
-    let has_slot_stdin = owned.slot.iter().any(|s| s.is_stdin_sentinel());
+    // bh-tk-I5 (R-1): the stdin slots were identified from the values as
+    // written, before `@env:` resolution.
+    let has_slot_stdin = !slot_stdin_idxs.is_empty();
     if pp_reads_stdin && has_slot_stdin {
         return Err(ToolkitError::BadInput(format!(
             "{} cannot be used with --slot @N.<secret>=- (single stdin per invocation)",
@@ -2195,7 +2201,7 @@ fn apply_stdin_substitutions(
         // that it came from stdin (for `-` too) — see the template path.
         owned.passphrase_stdin = true;
     } else if has_slot_stdin {
-        crate::slot_input::apply_slot_stdin(&mut owned.slot, stdin)?;
+        crate::slot_input::apply_slot_stdin_at(&mut owned.slot, slot_stdin_idxs, stdin)?;
     }
     Ok(owned)
 }

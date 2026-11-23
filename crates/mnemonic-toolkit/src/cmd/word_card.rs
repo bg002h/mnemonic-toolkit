@@ -66,8 +66,8 @@ pub struct WordCardArgs {
     pub from: Vec<String>,
 
     /// Decode mode: recover the payload from an engraved Word Card. The words
-    /// come from the positional `<WORD>...` list, or `-`/stdin (whitespace-
-    /// separated). For a RAID array, repeat `--decode-plate` once per plate.
+    /// come from the positional `<WORD>...` list, or a lone `-` (stdin,
+    /// whitespace-separated). For a RAID array, repeat `--decode-plate` once per plate.
     #[arg(long)]
     pub decode: bool,
 
@@ -109,8 +109,9 @@ pub struct WordCardArgs {
     pub json: bool,
 
     /// Positional Word-Card words for `--decode` (a single solo card). Each value
-    /// is one BIP-39 word; or pass `-` to read whitespace-separated words from
-    /// stdin. Ignored in encode mode.
+    /// is one BIP-39 word; or pass `-` alone to read whitespace-separated
+    /// words from stdin (`-` with any other `<WORD>` is refused). Ignored in
+    /// encode mode.
     #[arg(value_name = "WORD", num_args = 0..)]
     pub words: Vec<String>,
 }
@@ -489,6 +490,12 @@ fn collect_from_sources<R: Read>(
 /// separated).
 fn collect_words<R: Read>(words: &[String], stdin: &mut R) -> Result<Vec<String>, ToolkitError> {
     if words.iter().any(|w| w == "-") {
+        if words.len() != 1 {
+            return Err(ToolkitError::BadInput(format!(
+                "word-card: `-` (read the words from stdin) must be the only positional <WORD>; got {} positional values",
+                words.len()
+            )));
+        }
         let mut buf = String::new();
         stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
         Ok(split_words(&buf))
@@ -765,5 +772,23 @@ mod tests {
     fn source_kind_strings() {
         assert_eq!(source_kind_str(SourceKind::Mk1Xpub), "mk1");
         assert_eq!(source_kind_str(SourceKind::Md1Descriptor), "md1");
+    }
+
+    #[test]
+    fn mixed_stdin_r10_refused_before_reading_stdin() {
+        struct Panics;
+        impl Read for Panics {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                panic!("stdin was read");
+            }
+        }
+        let want = "word-card: `-` (read the words from stdin) must be the only positional <WORD>; got 2 positional values";
+        for input in [["nonsense", "-"], ["-", "-"]] {
+            let words: Vec<String> = input.iter().map(|s| s.to_string()).collect();
+            match collect_words(&words, &mut Panics) {
+                Err(ToolkitError::BadInput(m)) => assert_eq!(m, want),
+                other => panic!("expected BadInput, got {other:?}"),
+            }
+        }
     }
 }

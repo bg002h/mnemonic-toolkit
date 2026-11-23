@@ -122,6 +122,9 @@ pub fn run<R: Read, W: Write, E: Write>(
     let pp_reads_stdin =
         crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin);
     let pp_spelling = crate::passphrase_input::stdin_spelling(args.passphrase_stdin);
+    // bh-tk-I5 (R-1): `--from <node>=-` is judged on the value as written; an
+    // `@env:` variable whose value is `-` is that literal value, not stdin.
+    let from_reads_stdin = args.from.value == "-";
 
     // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--passphrase` and
     // secret-bearing `--from <node>=` values before downstream consumption.
@@ -135,7 +138,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // SPEC v0.9.0 §1 item 1 — single-stdin-per-invocation. `--from <node>=-`
     // and `--passphrase-stdin` both want stdin; refuse the combination.
-    if pp_reads_stdin && args.from.value == "-" {
+    if pp_reads_stdin && from_reads_stdin {
         return Err(ToolkitError::BadInput(format!(
             "{pp_spelling} cannot be used with --from <node>=- (single stdin per invocation)"
         )));
@@ -144,7 +147,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
     // SPEC v0.9.0 §1 item 2 — wrap the OWNED secret string in Zeroizing so
     // it scrubs on drop after seed derivation.
-    let from_value: zeroize::Zeroizing<String> = if args.from.value == "-" {
+    let from_value: zeroize::Zeroizing<String> = if from_reads_stdin {
         zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
         zeroize::Zeroizing::new(args.from.value.clone())

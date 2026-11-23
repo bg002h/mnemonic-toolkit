@@ -524,3 +524,82 @@ fn parity_pct_budget_round_trips() {
     let v2: serde_json::Value = serde_json::from_slice(&out2).unwrap();
     assert_eq!(v2["recovered"]["xpub"], MK1_XPUB);
 }
+
+// ── bh-tk-I7: `-` must be the only positional word of `--decode`. ───────────
+
+fn mixed_refusal(n: usize) -> String {
+    format!(
+        "word-card: `-` (read the words from stdin) must be the only positional <WORD>; got {n} positional values"
+    )
+}
+
+fn assert_mixed_refused(args: &[&str], stdin: &str, n: usize) {
+    let out = mnemonic()
+        .arg("word-card")
+        .arg("--decode")
+        .args(args)
+        .write_stdin(stdin.to_string())
+        .assert()
+        .code(1)
+        .get_output()
+        .clone();
+    assert!(out.stdout.is_empty(), "stdout must be empty");
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains(&mixed_refusal(n)), "stderr: {err}");
+}
+
+#[test]
+fn mixed_stdin_r1_junk_then_dash_json_refused() {
+    let card = encode_solo_words(MK1, 4);
+    assert_mixed_refused(&["--json", "nonsense", "-"], &card, 2);
+}
+
+#[test]
+fn mixed_stdin_r2_junk_then_dash_refused() {
+    let card = encode_solo_words(MK1, 4);
+    assert_mixed_refused(&["nonsense", "-"], &card, 2);
+}
+
+#[test]
+fn mixed_stdin_r3_dash_then_junk_refused() {
+    let card = encode_solo_words(MK1, 4);
+    assert_mixed_refused(&["-", "nonsense"], &card, 2);
+}
+
+#[test]
+fn mixed_stdin_r4_dash_twice_refused() {
+    let card = encode_solo_words(MK1, 4);
+    assert_mixed_refused(&["-", "-"], &card, 2);
+}
+
+#[test]
+fn mixed_stdin_r5_full_card_args_plus_dash_refused() {
+    let card = encode_solo_words(MK1, 4);
+    let mut args: Vec<&str> = card.split_whitespace().collect();
+    args.push("-");
+    let n = args.len();
+    assert_mixed_refused(&args, &card, n);
+}
+
+#[test]
+fn mixed_stdin_r7_word_per_arg_control() {
+    let card = encode_solo_words(MK1, 4);
+    let args: Vec<&str> = card.split_whitespace().collect();
+    mnemonic()
+        .arg("word-card")
+        .arg("--decode")
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(MK1_XPUB));
+}
+
+#[test]
+fn mixed_stdin_r8_one_quoted_arg_control() {
+    let card = encode_solo_words(MK1, 4);
+    mnemonic()
+        .args(["word-card", "--decode", &card])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(MK1_XPUB));
+}
