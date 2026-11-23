@@ -633,6 +633,8 @@ the network comes from the xpubs' version bytes (`xpub` → mainnet,
 `sh(sortedmulti(K, [xfp/45']xpub…/<0;1>/*, …))`. A file that mixes
 `m/45'` with other derivation paths is refused (exit 2).
 
+Each of `Name:`, `Policy:`, `Format:` and `XFP:` appears once. A file that repeats one of them (in any letter case, even with the same value), or that has two `Derivation:` lines with no cosigner line between them, is refused (exit 2) with both line numbers; a `Derivation:` key spelled in another letter case is refused (exit 2) with its line number. Re-export the file from the device.
+
 ### XFP-header policy (depth-gated truth table)
 
 The `XFP:` / per-cosigner `<XFP>:` prefix is, by Coldcard convention,

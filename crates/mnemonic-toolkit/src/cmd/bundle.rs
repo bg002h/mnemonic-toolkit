@@ -1017,8 +1017,9 @@ fn emit_unified<W: Write, E: Write>(
             multisig: multisig_info,
             privacy_preserving: args.privacy_preserving,
         };
-        serde_json::to_writer(&mut *stdout, &json).ok();
-        writeln!(stdout).ok();
+        serde_json::to_writer(&mut *stdout, &json)
+            .map_err(|e| ToolkitError::Io(std::io::Error::from(e)))?;
+        writeln!(stdout).map_err(ToolkitError::Io)?;
     } else {
         // Schema-4 text mode: emit per-slot ms1 sections (skip empty sentinels).
         // v0.4.2 Phase M reconciliation: when ALL ms1 entries are empty, emit
@@ -1033,8 +1034,8 @@ fn emit_unified<W: Write, E: Write>(
             } else {
                 "# ms1 (omitted — xpub-only mode)"
             };
-            writeln!(stdout, "{marker}").ok();
-            writeln!(stdout).ok();
+            writeln!(stdout, "{marker}").map_err(ToolkitError::Io)?;
+            writeln!(stdout).map_err(ToolkitError::Io)?;
         }
         // mstring display-grouping (SPEC §6): print-once, flag-controlled
         // (default space/5). --json + verify-bundle forensics stay unbroken.
@@ -1045,28 +1046,31 @@ fn emit_unified<W: Write, E: Write>(
                 continue;
             }
             if n > 1 {
-                writeln!(stdout, "# ms1[{i}] (entropy, BCH-checksummed)").ok();
+                writeln!(stdout, "# ms1[{i}] (entropy, BCH-checksummed)")
+                    .map_err(ToolkitError::Io)?;
             } else {
-                writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").ok();
+                writeln!(stdout, "# ms1 (entropy, BCH-checksummed)").map_err(ToolkitError::Io)?;
             }
-            writeln!(stdout, "{}", render_grouped(ms, gs, sep)).ok();
-            writeln!(stdout).ok();
+            writeln!(stdout, "{}", render_grouped(ms, gs, sep)).map_err(ToolkitError::Io)?;
+            writeln!(stdout).map_err(ToolkitError::Io)?;
         }
         match &bundle.mk1 {
             MkField::Single(mk1) => {
-                writeln!(stdout, "# mk1 (xpub + origin)").ok();
+                writeln!(stdout, "# mk1 (xpub + origin)").map_err(ToolkitError::Io)?;
                 for s in mk1 {
-                    writeln!(stdout, "{}", render_grouped(s, gs, sep)).ok();
+                    writeln!(stdout, "{}", render_grouped(s, gs, sep)).map_err(ToolkitError::Io)?;
                 }
-                writeln!(stdout).ok();
+                writeln!(stdout).map_err(ToolkitError::Io)?;
             }
             MkField::Multi(per_cosigner) => {
                 for (i, chunks) in per_cosigner.iter().enumerate() {
-                    writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i).ok();
+                    writeln!(stdout, "# mk1[{}] (cosigner {} xpub + origin)", i, i)
+                        .map_err(ToolkitError::Io)?;
                     for s in chunks {
-                        writeln!(stdout, "{}", render_grouped(s, gs, sep)).ok();
+                        writeln!(stdout, "{}", render_grouped(s, gs, sep))
+                            .map_err(ToolkitError::Io)?;
                     }
-                    writeln!(stdout).ok();
+                    writeln!(stdout).map_err(ToolkitError::Io)?;
                 }
             }
         }
@@ -1077,11 +1081,11 @@ fn emit_unified<W: Write, E: Write>(
         } else {
             "# md1 (wallet policy)"
         };
-        writeln!(stdout, "{md1_header}").ok();
+        writeln!(stdout, "{md1_header}").map_err(ToolkitError::Io)?;
         for s in &bundle.md1 {
-            writeln!(stdout, "{}", render_grouped(s, gs, sep)).ok();
+            writeln!(stdout, "{}", render_grouped(s, gs, sep)).map_err(ToolkitError::Io)?;
         }
-        writeln!(stdout).ok();
+        writeln!(stdout).map_err(ToolkitError::Io)?;
         // v0.4.1 Phase I: emit unified engraving card to stderr unless suppressed.
         if !args.no_engraving_card {
             let card = build_unified_card(args, bundle, resolved);

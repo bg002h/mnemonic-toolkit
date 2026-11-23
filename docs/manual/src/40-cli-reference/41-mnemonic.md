@@ -1943,7 +1943,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin |
+| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 1) |
 | `--application <APPLICATION>` | `bip39` / `hd-seed` / `xprv` / `hex` / `password-base64` / `password-base85` / `dice` |
 | `--length <LENGTH>` | application-specific size; pass `0` for `hd-seed` and `xprv` |
 | `--index <INDEX>` | hardened child index (`0..2^31`) |
@@ -5213,3 +5213,9 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
 | success (encode or decode) | `0` |
 | bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, I/O error) | `1` |
 | decode / reconstruct refusal (parse failure beyond the repair budget, integrity-tag or header-CRC mismatch, unknown BIP-39 word, `ms1` / unknown HRP, RAID array-id or parity mismatch, RAID underdetermined — more than `r` plates missing) | `2` |
+
+---
+
+## When stdout fails
+
+A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mnemonic: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code. Exit 4 from `repair` or `inspect` (the candidates or the partial decode on stdout are the result) also becomes 1; every other exit 4 is a verdict and is kept.
