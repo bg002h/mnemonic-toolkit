@@ -4,7 +4,7 @@
 # Prints one line per row: "<row> rc=<exit> out=<first stdout line, 40 chars> err=<last stderr line>".
 # Every row sets E='-' and names it through `@env:E` on a secret-bearing value; stdin carries a valid
 # input. At the base the command reads stdin; after the fix it treats `-` as the literal value.
-# Covers: rows R1-R10, S1-S4, A1-A3, C1-C4 of the FIX doc. Does NOT cover: the in-crate unit rows (section 6),
+# Covers: rows R1-R10, S1-S9, A1-A3, C1-C6 of the FIX doc. Does NOT cover: the in-crate unit rows (section 6),
 # a terminal stdin (every row pipes stdin), Windows.
 # Public test phrase and signet cards only.
 set -u
@@ -62,6 +62,12 @@ row S1-derive-child-pp-stdin "" derive-child --from phrase=@env:E --passphrase-s
 row S2-convert-pp-stdin "" convert --from phrase=@env:E --passphrase-stdin --to entropy
 row S3-bundle-slot-pp-stdin "" bundle --template bip84 --network signet --slot @0.phrase=@env:E --passphrase-stdin
 row S4-seed-xor-combine-two-env "$X" seed-xor combine --shares 2 --share phrase=@env:E --share phrase=@env:E
+row S5-slip39-split-pp-stdin "" slip39 split --from phrase=@env:E --passphrase-stdin --group-threshold 1 --group 3,2
+row S6-slip39-combine-two-env "$L1" slip39 combine --share @env:E --share @env:E
+row S7-ms-shares-combine-two-env "$M1" ms-shares combine --share @env:E --share @env:E
+row S8-bundle-literal-and-env-slot "$P" bundle --template wsh-sortedmulti --threshold 1 --network signet --slot @0.phrase=- --slot @1.phrase=@env:E
+row S9-verify-bundle-slot-pp-stdin "" verify-bundle --allow-argv-secret --template bip84 --network signet \
+  --ms1 "$MS" --mk1 "$K1" "$K2" --md1 "$D1" "$D2" "$D3" --slot @0.phrase=@env:E --passphrase-stdin
 
 # A: the split argv advisory must judge the value as written (G holds the valid phrase).
 arow A1-seed-xor-split-env-source seed-xor split --from phrase=@env:G --shares 2 --deterministic-from-master
@@ -73,3 +79,5 @@ row C1-convert-literal-dash "$P" convert --from phrase=- --to entropy
 row C2-convert-env-phrase "" convert --from phrase=@env:G --to entropy
 row C3-bundle-literal-dash "$P" bundle --template bip84 --network signet --slot @0.phrase=-
 row C4-stdin-text-not-env-resolved '@env:G' convert --from phrase=- --to entropy
+row C5-bundle-stdin-text-not-env-resolved '@env:G' bundle --template bip84 --network signet --slot @0.phrase=-
+arow C6-ms-shares-split-inline-keeps-advisory ms-shares split --allow-argv-secret --from "phrase=$P" --threshold 2 --shares 3

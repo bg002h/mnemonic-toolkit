@@ -84,8 +84,8 @@ Consequences, decided by R-1 (existing behaviour of the literal value, measured 
 After the paragraph at L79-82 ("Only **one** input per invocation can come from stdin. ... or `--allow-argv-secret`.")
 insert one blank line and this paragraph:
 
-    `@env:VAR` always means the value of `VAR`, on every flag: a variable whose
-    value is `-` is that one-character value, never a request to read stdin.
+    `@env:VAR`, on every flag that accepts it, means the value of `VAR`: a variable whose value is
+    `-` is that one-character value, never a request to read stdin.
 
 No flag changes; `docs/manual/tests/lint.sh` flag coverage is unaffected (the builder runs it anyway, gate 8).
 
@@ -100,8 +100,9 @@ Insert after `## [Unreleased]` and its blank line (`CHANGELOG.md:9-10`), above t
 - **`convert`, `derive-child`, `bundle --slot`, `verify-bundle --slot`, `seed-xor`, `ms-shares`, `slip39`**: a
   secret given as `@env:VAR` whose value is exactly `-` was read from stdin instead, so a valid input on stdin was
   used in place of the named variable (exit 0). The value of `VAR` is now always the value, as for `--passphrase`
-  since F-687; a `-` value is refused by the parser like any other invalid input. The split subcommands no longer
-  print the argv-secret warning for an `@env:VAR` source.
+  since F-687; a `-` value is now handled like any other inline value: refused by the parser, or on
+  `ms-shares combine` dropped as an empty share. The split subcommands no longer print the argv-secret warning for
+  an `@env:VAR` source.
 ```
 
 ## 5. RED rows (run at `04c56bfa`, signet, public test phrase only)
@@ -133,6 +134,11 @@ exactly the GREEN column.
 | S2 | `convert --from phrase=@env:E --passphrase-stdin --to entropy` (empty) | rc=1, err `error: --passphrase-stdin cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv` | rc=1, out empty, err `WC` |
 | S3 | `bundle --template bip84 --network signet --slot @0.phrase=@env:E --passphrase-stdin` (empty) | rc=1, err `error: --passphrase-stdin cannot be used with --slot @N.<secret>=- (single stdin per invocation)` | rc=1, out empty, err `WC` |
 | S4 | `seed-xor combine --shares 2 --share phrase=@env:E --share phrase=@env:E` (X) | rc=1, err `error: seed-xor combine: at most one --share value may be \`-\` (single stdin per invocation)` | rc=1, out empty, err as R6 GREEN |
+| S5 | `slip39 split --from phrase=@env:E --passphrase-stdin --group-threshold 1 --group 3,2` (empty) | rc=1, err `error: slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` | rc=1, out empty, err `error: slip39 split: input phrase must be 12/15/18/21/24 words; got 1` |
+| S6 | `slip39 combine --share @env:E --share @env:E` (L1) | rc=1, err `error: slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` | rc=1, out empty, err `error: slip39 combine: share at position 0: word at index 0 not in SLIP-39 wordlist` |
+| S7 | `ms-shares combine --share @env:E --share @env:E` (M1) | rc=1, err `error: ms-shares combine: at most one stdin consumer per invocation (across --share)` | rc=1, out empty, err `error: ms-shares combine: at least one --share required` |
+| S8 | `bundle --template wsh-sortedmulti --threshold 1 --network signet --slot @0.phrase=- --slot @1.phrase=@env:E` (P) | rc=1, err `error: at most one --slot @N.<secret>=- per invocation (single stdin per invocation)` | rc=1, out empty, err `WC` |
+| S9 | `verify-bundle --allow-argv-secret --template bip84 --network signet --ms1 MS --mk1 K1 K2 --md1 D1 D2 D3 --slot @0.phrase=@env:E --passphrase-stdin` (empty) | rc=1, err `error: --passphrase-stdin cannot be used with --slot @N.<secret>=- (single stdin per invocation)` | rc=1, out empty, err `WC` |
 | A1 | `seed-xor split --from phrase=@env:G --shares 2 --deterministic-from-master` (none; `G=P`) | rc=0, `argv-advisory=1` (the line is `ADV`) | rc=0, `argv-advisory=0` |
 | A2 | `ms-shares split --from phrase=@env:G --threshold 2 --shares 3` (none) | rc=0, `argv-advisory=1` | rc=0, `argv-advisory=0` |
 | A3 | `slip39 split --from phrase=@env:G --group-threshold 1 --group 3,2` (none) | rc=0, `argv-advisory=1` | rc=0, `argv-advisory=0` |
@@ -140,6 +146,8 @@ exactly the GREEN column.
 | C2 | `convert --from phrase=@env:G --to entropy` (none) | rc=0, out `entropy: 0000...` | same |
 | C3 | `bundle --template bip84 --network signet --slot @0.phrase=-` (P) | rc=0, out `# ms1 (entropy, BCH-checksummed)` | same |
 | C4 | `convert --from phrase=- --to entropy` (stdin `@env:G`) | rc=1, err `WC` | same |
+| C5 | `bundle --template bip84 --network signet --slot @0.phrase=-` (stdin `@env:G`) | rc=1, err `WC` | same |
+| C6 | `ms-shares split --allow-argv-secret --from "phrase=$P" --threshold 2 --shares 3` (none) | rc=0, `argv-advisory=1` | same |
 
 The A rows print `argv-advisory=<count of stderr lines containing "secret material on argv">`. The capture build
 does not fix R-3, so A1-A3 GREEN is the rule, not a measurement; inline `--from phrase=<P>` keeps its advisory
@@ -171,10 +179,14 @@ New, one test function per row, named exactly (TRACE), in `crates/mnemonic-toolk
 `r8_ms_shares_combine_env_dash_is_literal`, `r9_slip39_split_env_dash_is_literal`,
 `r10_slip39_combine_env_dash_is_literal`, `s1_derive_child_env_dash_not_a_stdin_reader`,
 `s2_convert_env_dash_not_a_stdin_reader`, `s3_bundle_slot_env_dash_not_a_stdin_reader`,
-`s4_seed_xor_combine_two_env_dashes_not_stdin_readers`, `a1_seed_xor_split_env_source_no_argv_advisory`,
+`s4_seed_xor_combine_two_env_dashes_not_stdin_readers`, `s5_slip39_split_env_dash_not_a_stdin_reader`,
+`s6_slip39_combine_two_env_dashes_not_stdin_readers`, `s7_ms_shares_combine_two_env_dashes_not_stdin_readers`,
+`s8_bundle_literal_slot_and_env_dash_slot`, `s9_verify_bundle_slot_env_dash_not_a_stdin_reader`,
+`a1_seed_xor_split_env_source_no_argv_advisory`,
 `a2_ms_shares_split_env_source_no_argv_advisory`, `a3_slip39_split_env_source_no_argv_advisory`,
 `c1_convert_literal_dash_reads_stdin`, `c2_convert_env_phrase_works`, `c3_bundle_slot_literal_dash_reads_stdin`,
-`c4_stdin_text_is_not_env_resolved`.
+`c4_stdin_text_is_not_env_resolved`, `c5_bundle_stdin_text_is_not_env_resolved`,
+`c6_ms_shares_split_inline_keeps_argv_advisory`.
 Each R and S test asserts the exit code, an empty stdout, and the GREEN stderr line of section 5 as a whole line of
 stderr. R7 and R9 must not pin share text (random). A1-A3 assert rc=0 and that no stderr line contains
 `secret material on argv`.
