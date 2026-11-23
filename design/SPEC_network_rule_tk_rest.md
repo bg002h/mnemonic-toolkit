@@ -1,6 +1,6 @@
 # SPEC: one network-contradiction rule for every tool, units 2, 3, 8a, 8b
 
-Normative rule, texts and vectors: SPEC_network_rule.md (Spec A) at <A-COMMIT>; this spec adds units only and never changes §2/§3.
+Normative rule, texts and vectors: SPEC_network_rule.md (Spec A) at 36c1f155; this spec adds units only and never changes §2/§3.
 Spec map: A = SPEC_network_rule.md (§1-§10, §13, units 0, 1, 7); B = SPEC_network_rule_tk_rest.md (units 2, 3, 8a, 8b); C = SPEC_network_rule_mr.md (units 4, 5, 8c, 8g); D = SPEC_network_rule_codecs_gui.md (§6, units 6, 8d, 8e, 8f, 8h).
 Units here: 2, 3, 8a, 8b. Machine checks: `scripts/spec-network-rule-gate.sh` reads all four specs.
 
