@@ -134,6 +134,16 @@ impl Descriptor {
 /// `@j` for `j > i`. Canonicalization permutes the tree indices,
 /// divergent path decl, and per-`@N` TLV maps atomically; if `d` is
 /// already canonical it is unchanged.
+///
+/// Before returning, the payload is decoded with
+/// [`crate::decode::DecodeOpts::partial`] (the decode `md decode` runs) and
+/// the decoder's error is returned instead if it refuses
+/// (FIX_bh1119_md_encoder_admission): a card this function mints always
+/// decodes under `DecodeOpts::partial()`; strict `decode_payload` and
+/// `Descriptor::from_canonical_payload_bytes` still refuse an `@N` with no
+/// resolvable origin. The bytes of an accepted payload are unchanged. The
+/// check is the decoder's: it does not type-check the miniscript.
+/// [`encode_payload_unadmitted`] does not run this check.
 pub fn encode_payload(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
     encode_payload_inner(d, Admission::Enforce, None)
 }
@@ -273,7 +283,17 @@ fn encode_payload_inner(
     write_node(&mut w, &d.tree, kiw, version)?;
     d.tlv.write(&mut w, kiw)?;
     let total_bits = w.bit_len();
-    Ok((w.into_bytes(), total_bits))
+    let bytes = w.into_bytes();
+    // FIX_bh1119_md_encoder_admission: a payload this function mints must
+    // decode. Mint-time only; re-emit/hash paths never decode their output.
+    if admission == Admission::Enforce {
+        crate::decode::decode_payload_with_opts(
+            &bytes,
+            total_bits,
+            crate::decode::DecodeOpts::partial(),
+        )?;
+    }
+    Ok((bytes, total_bits))
 }
 
 /// Test-only hook forcing a NON-MINIMAL wire version past what

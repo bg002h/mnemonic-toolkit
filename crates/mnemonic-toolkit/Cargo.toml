@@ -66,18 +66,20 @@ mk-codec = "0.4.1"
 # failed with "failed to load source for dependency `md-codec`" and the release
 # shipped with no musl binaries at all.
 #
-# c8bb97a5 is descriptor-mnemonic tag md-codec-v0.48.5 (md-cli 0.20.4), the
+# e11b4ce1 is descriptor-mnemonic tag md-codec-v0.48.7 (md-cli 0.21.1), the
 # release that follows cf35d61a (md-codec 0.47.0, F-449 stage 2: wire version 8
 # and the wire-kind-1 Liana unspendable internal key, whose five Error variants
-# are routed in error.rs/friendly.rs). 0.47.0 -> 0.48.5 adds one more Error
+# are routed in error.rs/friendly.rs). 0.47.0 -> 0.48.7 adds one more Error
 # variant, `TlvUnknownTagOutOfRange` (an unknown TLV tag outside 0x04..=0x1f,
 # refused on the encode side), routed the same way; the other md-codec changes in
 # the range (FIX-B codec fixes, the coordinator and descriptor-route library
 # routes, per-network key rendering, `split_unadmitted`) change no toolkit
 # output on a previously accepted input, with one exception: an md1 string
 # that contains a non-ASCII character is now refused (exit 1, "not in codex32
-# alphabet"); 0.47.0 read U+0161 as the symbol 'a'.
-md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "c8bb97a5e2feccded5f05caf4c79c2458756c1c2" }
+# alphabet"); 0.47.0 read U+0161 as the symbol 'a'. 0.48.6 and 0.48.7 change
+# only mint-side behaviour (out-of-order slot numbering now mints a decodable
+# card; `encode_payload` decodes its own output and returns the decoder's error).
+md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "e11b4ce10ff35bb2a65999e37d1c6815c3b699a0" }
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.
 wc-codec = { path = "../wc-codec" }

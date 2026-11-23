@@ -71,15 +71,15 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   mnemonic-gui v0.63.0's tier: its §82 section and `pinned-upstream.toml`'s `[installer-ahead]` table name the new
   tags, and `manual-gui.yml` stays at the GUI's tags.
 
-### md-codec 0.47.0 -> 0.48.5 adopted
+### md-codec 0.47.0 -> 0.48.7 adopted
 
-- **The md-codec pin moves from `cf35d61a` (0.47.0) to `c8bb97a5` (tag `md-codec-v0.48.5`), `Cargo.lock`, `fuzz/Cargo.lock`
+- **The md-codec pin moves from `cf35d61a` (0.47.0) to `e11b4ce1` (tag `md-codec-v0.48.7`), `Cargo.lock`, `fuzz/Cargo.lock`
   and `vendor/md-codec` with it.** md-codec 0.48.x adds one `Error` variant, `TlvUnknownTagOutOfRange` (an unknown TLV
   tag outside the reserved range `0x04..=0x1f`). It routes at exit 2 (`error.rs`) with the sibling TLV decode rejects and
   prints `md1 unknown TLV tag 0x.. is outside the reserved range 0x04..=0x1f` (`friendly.rs`, table test 51 -> 52 rows).
   No command emits an unknown TLV, so no existing input reaches it. The manual's `repair` section now names md-codec
-  0.48.5 as the build that reads wire versions 4 and 8.
-- **An md1 string with a non-ASCII character is refused.** md-codec 0.47.0 reduced each character to its low byte, so a letter such as U+0161 was read as 'a' and a card carrying it decoded. 0.48.5 refuses it ("character 'š' not in codex32 alphabet", exit 1) in `inspect` (the path run; the other md1 decode paths share md-codec's chunk parser). `repair` already refused it.
+  0.48.7 as the build that reads wire versions 4 and 8.
+- **An md1 string with a non-ASCII character is refused.** md-codec 0.47.0 reduced each character to its low byte, so a letter such as U+0161 was read as 'a' and a card carrying it decoded. 0.48.5 and later refuse it ("character 'š' not in codex32 alphabet", exit 1) in `inspect` (the path run; the other md1 decode paths share md-codec's chunk parser). `repair` already refused it.
 
 ## mnemonic-toolkit [0.107.0] — 2026-11-20
 
