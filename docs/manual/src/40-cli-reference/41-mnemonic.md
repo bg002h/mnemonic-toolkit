@@ -2927,7 +2927,7 @@ Pipe to a QR generator:
 
 ```sh
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  | mnemonic seedqr encode --from phrase=- | qrencode -o out.png -
+  | mnemonic seedqr encode --from phrase=- | tr -d '\n' | qrencode -o out.png
 ```
 
 ### Worked example — 24-word vector

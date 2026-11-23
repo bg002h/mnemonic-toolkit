@@ -90,7 +90,7 @@ The same `--dice-sides` bound, `2..=2^32-1` -> `2..=2^31-1`, in four more places
   `| qrencode -8 ...` lines.
 - L2878: `printf '%s' '00000000000000000000000000000000' \` newline `  | mnemonic seedqr decode --variant compact --from seedqr=-`;
   the `# → abandon ... about` line stays.
-- L2925: `printf '%s' '<the full phrase>' \` newline `  | mnemonic seedqr encode --from phrase=- | qrencode -o out.png -`.
+- L2925: `printf '%s' '<the full phrase>' \` newline `  | mnemonic seedqr encode --from phrase=- | tr -d '\n' | qrencode -o out.png`.
 The placeholders `'…'` and `"abandon ... about"` are replaced by the full public test phrase so each example runs as
 printed (the section's other examples already use it).
 
