@@ -1,6 +1,7 @@
 # SPEC: one network-contradiction rule for every tool
 
-Status: spec, r0 (author: Claude Opus 5.5, claude-opus-5-5, 2026-11-23). Brief:
+Status: spec, r1 (author: Claude Opus 5.5, claude-opus-5-5, 2026-11-23; r1 folds
+review r1 slices s1 and s2, fold by Claude Opus 5.5, claude-opus-5-5). Brief:
 coordinator `briefs/spec-network-rule.md`. Every decision Brian ruled on
 2026-11-23 is binding here (coordinator `memory/network-mismatch-rule.md`);
 §9 lists each ruling with the text it changes. Source study: coordinator
@@ -38,7 +39,10 @@ refugium-wallet app) and the SeedHammer firmware.
 - **Kept artifact**: a card (md1, mk1, ms1, mt1, mr1), a plate, a descriptor
   or key string, an exported wallet file, a hand-back, plan or closing file:
   something the holder kept and now reads. A seed phrase being typed to make
-  something new is not a kept artifact.
+  something new is not a kept artifact. A seed in any form typed now (a
+  phrase, an ms1 string, entropy, a SeedQR) is not a kept artifact: it is
+  the seed case of N6 (no TX-N). A key with no network (a nostr npub or
+  nsec) is a kept artifact: N6 prints TX-N or TX-T for it.
 - **Prefix**: each tool's own refusal prefix, as its refusals print today:
   `mnemonic` `error:`, `md` `md:`, `mk` `error:`, `mr` `mr:`, `mr-sitting`
   `mr-sitting:`, `me` `me:`. Warnings start `warning:` in every tool.
@@ -65,11 +69,11 @@ N1 Sources.
 - Not a source: a card that states no network (md1, ms1, mt1, a
   path-convention mr1 card; their bytes name none), a nostr key, a seed.
 
-N2 Run network. A tool with `--network` runs on the flag's network if
+N2 Run network. A verb with `--network` runs on the flag's network if
 given, else on mainnet; both count as an assertion (D1). A test-class
 source with no `--network` therefore contradicts the run (HARD or SOFT as
 the source is) and is refused; no tool infers a test network from a key or
-a file. A tool with no `--network` (`me`, `mt`, the SeedHammer) has no
+a file. A verb with no `--network` (every `me` and `mt` verb, `mk encode`, `mk derive`, the SeedHammer) has no
 assertion: its HARD sources decide the run network; with no HARD source,
 coin types that all agree decide the class (coin 1 = test, shown as
 "TEST NETWORK" where the tool shows a network); coin types that disagree
@@ -104,8 +108,8 @@ network, such as nostr `--pubkey`) and prints something that depends on
 the network: with no `--network`, print TX-N (mt: TX-N-MT) once on stderr;
 with a test `--network`, print TX-T once on stderr. Exit unchanged. A run
 that only derives from a seed typed now (`bundle`, `restore --from
-phrase=`, `ms derive`, `convert --from phrase=`, mr `root`/`child`) prints
-neither (D5).
+phrase=|ms1=|entropy=|seedqr=`, `ms derive`, `convert --from
+phrase=|ms1=|entropy=|seedqr=`, mr `root`/`child`) prints neither (D5).
 
 N7 SOFT. Refuse by default: exit 8, nothing on stdout, nothing written.
 With `--accept-coin-type-mismatch` the run goes through: exit 0, output for
@@ -116,22 +120,25 @@ meet a SOFT contradiction (§4 "flag" column) and is accepted there with no
 effect when there is none (no line printed).
 
 N8 Several at once. Every contradiction is printed, one text line each, in
-this order: HARD before SOFT; among HARD, TX-H4C, TX-H4, TX-H2, TX-H1,
-TX-H3, TX-H5; within one text id, by input order (key @0 before @1). When
-any HARD contradiction is printed, every SOFT line drops its last sentence
-(the one naming `--accept-coin-type-mismatch`), so the flag is named only
-when every contradiction is SOFT. Sources of one class that agree with each
-other and disagree with the run are one contradiction, printed once
-("keys @0 and @1 are test-network keys (tpub)"). When an artifact's stated
+this order: HARD before SOFT; among HARD, TX-H4C, TX-H4, TX-H4P, TX-H2,
+TX-H1, TX-H3, TX-H5; within one text id, by input order (key @0 before
+@1). When any HARD contradiction is printed, every SOFT line drops its last
+sentence (the one naming `--accept-coin-type-mismatch`), so the flag is
+named only when every contradiction is SOFT. When TX-H2 prints, every TX-H1
+line of the same run drops its first remedy sentence (the one that says
+`rerun with --network ...`) and keeps `Nothing was written.` and its
+`export the key again` sentence; no `--network` can pass keys that disagree
+with each other (R1.14, R3.8, R7.3). Sources of one class that agree with
+each other and disagree with the run are one contradiction, printed once
+("keys @0 and @1 are test-network keys (tpub)"; the plural forms are in
+§3). When an artifact's stated
 network and its keys agree with each other and disagree with the run, only
-TX-H4 prints.
+TX-H4 prints. A coin type that agrees with the version of its own key (the key whose origin path carries it), when that key is named on a HARD line, is not a separate line: only the HARD lines print (V14, R1.14, R6.3). A coin type that disagrees with its own key's version prints TX-S after the HARD lines (V15, R3.6). When a file contradicts itself, only TX-H4C prints for it: its stated network and its keys are not also compared with the run (V30, V31).
 
 N9 Exit code 8 in every CLI for every network refusal, HARD or SOFT,
 including the existing refusals listed in §4 (they keep their meaning and
 move to 8). An overridden SOFT run exits 0. `ms` and `mt` never refuse on
-the network; 8 is reserved for them and unreachable. A missing network that
-is not a contradiction keeps its code (mr `TlvHandoutNetworkNotGiven`, exit
-1).
+the network; 8 is reserved for them and unreachable.
 
 N10 Machine line. When the environment variable `MNEMONIC_NETWORK_JSON` is
 `1`, a CLI that exits 8 prints one extra line, the last on stderr, a JSON
@@ -163,7 +170,9 @@ GUI-R (§6.2). `md`, `mk`, `ms`, `me`, `mt` and the SeedHammer never print
 it. It never changes the exit code.
 
 N13 Stray plates (D35, mr). Every `mr` verb that takes plates (`export`,
-`verify`, `address`, `member`, `current`) sorts each plate whose key
+`verify`, `address`, `member`; `current` takes no plates) sorts each key
+given with `--keys` or `--keys-file` (an mk1 plate or a
+`[fingerprint/path]xpub` record alike; "plate" below means either) whose key
 version is of the other class than the run: if the seat that plate's path
 names under the other class's convention (`270028'/<other coin>'/i'` names
 seat i) also has a plate or seed of the run's class, the stray plate is set
@@ -193,7 +202,8 @@ when no flag was given and `--network is <net>` when it was. Plural forms:
   `<P> network mismatch: <who> is a mainnet key (<pfx>), but --network is <net>. Nothing was written. For a mainnet wallet, rerun with --network mainnet. For a <net> wallet, export the key again with the signer set to a test network.`
 - **TX-H2** (key against key): `<P> network mismatch: <who1> is a mainnet key (<pfx1>), but <who2> is a test-network key (<pfx2>). Nothing was written. Every key of one wallet is for one network: export the odd key again.` (`<who1>` is the first mainnet key in input order, `<who2>` the first test key; the line names one of each.)
 - **TX-H3** (address): `<P> network mismatch: <who> <address> is a <kind> address, but <run>. Nothing was written. Rerun with <remedy>, or give an address of <net>.` `<address>` is the whole address as given; `<kind>` is `mainnet`, `regtest`, or (tb HRP) `signet or testnet`, or (base58 test version) `test-network`; `<remedy>` is `--network mainnet`, `--network regtest`, `--network signet or --network testnet`, or `--network signet, --network testnet or --network regtest` respectively.
-- **TX-H4** (an artifact's stated network against the run): `<P> network mismatch: <file> says network <stated>, but <run>. Nothing was written. Rerun with <remedy>, or use the file made for <net>.` `<file>` is the path as given (or `the hand-back`, `the plan`, `the closing file` where the tool names its inputs that way today); `<stated>` is the stated name, or for a two-valued statement `chain BTC (mainnet)`, `chain XTN (a test network)`, `chain XRT (a test network)`, `use-info 0 (mainnet)`, `use-info 1 (a test network)`; `<remedy>` is `--network <stated name>` for an exact name and `--network signet, --network testnet or --network regtest` for a test-class statement.
+- **TX-H4** (an artifact's stated network against the run): `<P> network mismatch: <file> says network <stated>, but <run>. Nothing was written. Rerun with <remedy>, or use the file made for <net>.` `<file>` is the path as given (or `the hand-back`, `the plan`, `the closing file` where the tool names its inputs that way today); `<stated>` is the stated name, or for a two-valued statement `chain BTC (mainnet)`, `chain XTN (a test network)`, `chain XRT (a test network)`, `use-info 0 (mainnet)`, `use-info 1 (a test network)`; `<remedy>` is `--network <stated name>` for an exact name, `--network mainnet` (mr: `--network main`) for a main-class statement, and `--network signet, --network testnet or --network regtest` for a test-class statement.
+- **TX-H4P** (mr-sitting, a file against the plan; mr-sitting `sit` and `verify` have no `--network`, the plan states the run network): `mr-sitting: network mismatch: <file> says network <stated>, but the plan says network <net>. Nothing was written. Use the <hand-back or closing file> written from this plan, or give the plan it was written from with --plan.` (`<file>` as in TX-H4; `<net>` the plan's network name; `<hand-back or closing file>` is `hand-back` or `closing file`, whichever `<file>` is.)
 - **TX-H4C** (an artifact that contradicts itself): `<P> network mismatch: <file> says <stated>, but its <section> key is a <class> key (<pfx>). Nothing was written. No --network repairs a file that contradicts itself: export the file again from the <device> with its network set for the wallet's network.` `<section>` is the file's own name for the key's entry (`bip84`, `bip48_2`, ...); `<device>` is `Coldcard` for a Coldcard export and `signer` otherwise.
 - **TX-H5** (WIF): `<P> network mismatch: the WIF key is a <class> key (version byte <n>), but <run>. Nothing was written.` followed by TX-H1's two remedy sentences for the same direction. (`<n>` is 128 or 239.)
 - **TX-S** (coin type). Against a key version:
@@ -202,15 +212,15 @@ when no flag was given and `--network is <net>` when it was. Plural forms:
   `<P> network mismatch (coin type): <who>'s path <path> is a <pclass> path (coin type <c>h), but <run>. Nothing was written. For a <pclass> wallet, rerun with <remedy>. To use this path on <net> as it is, add --accept-coin-type-mismatch: the output is then for <net> and this warning is printed every time.` (`<remedy>` is `--network mainnet` for a coin-0 path and `--network signet, --network testnet or --network regtest` for coin 1.)
   Path against path (tools with no `--network`):
   `<P> network mismatch (coin type): <who1>'s path <path1> is a mainnet path (coin type 0h), but <who2>'s path <path2> is a test-network path (coin type 1h). Nothing was written. Every key of one wallet is for one network: export the odd key again. To use these paths as they are, add --accept-coin-type-mismatch: the output is then for mainnet and this warning is printed every time.`
-  (`<path>` is written as the input wrote it; `<pclass>`/`<kclass>` are `mainnet` or `test-network`.)
+  (`<path>` is written as the input wrote it; `<pclass>`/`<kclass>` are `mainnet` or `test-network`.) Several sources in one contradiction (N8) are written as one: `<who>` becomes `keys @0 and @1` (`keys @0, @1 and @2`, ...), `<who>'s path <path> is a <pclass> path` becomes `keys @0 and @1's paths <path0> and <path1> are <pclass> paths`, `<who> is a <kclass> key` becomes `keys @0 and @1 are <kclass> keys`, and TX-S-OK takes the same plural; e.g. `error: network mismatch (coin type): keys @0 and @1's paths m/87h/1h/0h and m/87h/1h/0h are test-network paths (coin type 1h), but this run is on mainnet (no --network given). ...` The rest of the line is unchanged; it is one contradiction (N8), whose machine-line (N10) `a.what` is the plural `<who>` with `'s paths` (`keys @0 and @1's paths`).
 - **TX-S-OK** (override used): `warning: network mismatch (coin type) accepted with --accept-coin-type-mismatch: <who>'s path <path> is a <pclass> path; the output is for <net>. A signer or recovery tool that looks only at <net> paths will not find coins sent here.`
 - **TX-N** (no source, no flag): `warning: nothing here names a network and no --network was given: read as mainnet. For a signet, testnet or regtest wallet, rerun with --network signet, --network testnet or --network regtest.`
-- **TX-N-MT** (mt, no node, no source): `warning: no node answered and nothing here names a network: addresses are shown as mainnet. For a transaction on a test network, rerun with --bitcoin-cli naming a node of that network.`
+- **TX-N-MT** (mt, no node, no source): `warning: no node answered and nothing here names a network: addresses are shown as mainnet. For a transaction on a test network, rerun with --bitcoin-cli naming a script that runs bitcoin-cli for that network (for signet, a file holding `exec bitcoin-cli -signet "$@"`), or set that network in bitcoin.conf (`chain=signet`).`
 - **TX-T** (no source, test flag): `warning: this run is on <net>, a test network, because --network says so; this <thing> names no network. A wallet holding real bitcoin is read with --network <main>.` (`<thing>` is `card` for a card or plate, `key` for a key, `descriptor` for a descriptor; `<main>` is `main` in mr, `mainnet` elsewhere.) In mr on a card this reads exactly as walk 1 accepted: `warning: this run is on signet, a test network, because --network says so; this card names no network. A wallet holding real bitcoin is read with --network main.`
 - **TX-R** (rehearsal with real seeds): `warning: This rehearsal used your real seeds. Everything it engraved or printed from them is as secret as your real kit: destroy it, do not discard it.`
-- **TX-P** (mr stray plate set aside). Test plate on a main run: `warning: plate <k> (<path>) is a test-network key (<pfx>) from a rehearsal; it was not used. Seat @<i> is filled by <filler>.` Main plate on a test run: `warning: plate <k> (<path>) is a mainnet key (<pfx>); it was not used on <net>. Seat @<i> is filled by <filler>.` (`<filler>` is `plate <m>` or `seed <n>`.) It replaces today's two lines for that plate.
+- **TX-P** (mr stray plate set aside). Test plate on a main run: `warning: plate <k> (<path>) is a test-network key (<pfx>) from a rehearsal; it was not used. Seat @<i> is filled by <filler>.` Main plate on a test run: `warning: plate <k> (<path>) is a mainnet key (<pfx>); it was not used on <net>. Seat @<i> is filled by <filler>.` (`<filler>` is `plate <m>`, `record <m>` or `seed <n>`. When both a plate or record and a seed fill the seat, `<filler>` is the plate or record, the lowest-numbered when several.) In TX-P and TX-PX, `plate <k>` reads `record <k>` when the stray key is a `[fingerprint/path]xpub` record, as mr names that input today. It replaces today's two lines for that plate.
 - **TX-PX** (mr seat with only a stray plate): `mr: network mismatch: seat @<i> has no <net> key: plate <k> (<path>) is a <class> key (<pfx>)<origin>.` where `<origin>` is ` from a rehearsal` for a test key on a main run and empty otherwise.
-- **TX-PX-END** (closes the TX-PX lines): `mr: Nothing was written. Give each seat named above its <net> plate with --keys or its seed with --seeds; for a wallet on another network, rerun with that --network and that network's tip.`
+- **TX-PX-END** (closes the TX-PX lines): `mr: Nothing was written. Give each seat named above its <net> plate with --keys or its seed with --seeds; for a wallet on another network, rerun with that --network (and, on a verb that takes --height and --time, that network's tip).`
 - **TX-V** (verify-bundle cause line, after its mismatch rows, exit 4 unchanged): `note: every mismatch above is a coin-type or key-version row: the bundle may be for another network than --network <net>; rerun with the network the bundle was made for.`
 
 GUI and device texts (§6) are GUI-H, GUI-P, GUI-N, GUI-S0, GUI-R, MG-BANNER,
@@ -226,7 +236,7 @@ rows (§11) or the study's recon rows (named "recon").
 | arm | sources | class | today | after | text | exit | flag |
 |---|---|---|---|---|---|---|---|
 | export-wallet `--descriptor`, key version against run (every format) | key, run | HARD | rc 0, wrong-network output (R1.1-R1.3, R1.7, R1.8, R1.11) | refuse before any format renders | TX-H1 | 8 | no |
-| export-wallet `--descriptor`, key against key | keys | HARD | rc 0 (R1.14) | refuse | TX-H2 (+TX-H1) | 8 | no |
+| export-wallet `--descriptor`, key against key | keys | HARD | rc 0 (R1.14) | refuse | TX-H2, then TX-H1 without its rerun sentence (N8) | 8 | no |
 | export-wallet `--descriptor`, origin coin type | coin, key, run | SOFT | rc 0 (R1.4-R1.6) | refuse; flag lets through | TX-S / TX-S-OK | 8 / 0 | yes |
 | export-wallet `--template`/`--slot` | slot key, run | HARD | rc 2 (recon) | stays | TX-H1 | 8 | no |
 | export-wallet `--from-import-json` | envelope network, keys, run | HARD | rc 2 (recon) | stays | TX-H4 | 8 | no |
@@ -250,17 +260,17 @@ rows (§11) or the study's recon rows (named "recon").
 | xpub-search account-of-descriptor, coin type against key | coin, key | SOFT | rc 0 (recon) | refuse; flag | TX-S | 8 / 0 | yes |
 | silent-payment from xprv/tprv | key, run | HARD | rc 2 (recon) | stays; TX-R when N12 holds | TX-H1 | 8 | no |
 | build-descriptor, keys against run (flag or no flag) | keys, run | HARD | rc 0 with a warning or an inferred preview (R7.1, R7.2, R7.5) | refuse | TX-H1 | 8 | no |
-| build-descriptor, key against key | keys | HARD | rc 0 (R7.3) | refuse | TX-H2 | 8 | no |
+| build-descriptor, key against key | keys | HARD | rc 0 (R7.3) | refuse | TX-H2, then TX-H1 without its rerun sentence (N8) | 8 | no |
 | build-descriptor, coin type | coin, key | SOFT | rc 0 (R7.4) | refuse; flag | TX-S | 8 / 0 | yes |
 | import-wallet, every parser: key version against the blob's coin type | key, coin | SOFT | rc 2, no override (R3.7) | refuse; flag | TX-S | 8 / 0 | yes |
 | import-wallet, blob class against run (flag or no flag) | keys, stated, run | HARD | flag: rc 1 (recon); no flag on a test blob: rc 0 (R3.9) | refuse | TX-H1 / TX-H4 | 8 | no |
 | import-wallet coldcard generic JSON, `chain` against key | stated, key | HARD | rc 0 (R3.1-R3.3); with a flag rc 1 naming the wrong coin type (R3.5) | refuse; the flag never repairs it | TX-H4C | 8 | no |
 | import-wallet jade / coldcard-multisig | keys, coins, run | HARD / SOFT | rc 2 "coldcard-multisig" (R3.6, R3.8, R3.10) | as the rows above; the text names `jade` for a Jade file | TX-H1/H2/S | 8 | SOFT only |
-| verify-bundle, wrong `--network` | cards, run | - | rc 4 mismatch rows (recon) | rc 4 unchanged; TX-V after the rows when every mismatch row is a coin-type or key-version row | TX-V | 4 | no |
+| verify-bundle, wrong `--network` | cards, run | HARD / SOFT | rc 4 mismatch rows (recon) | refuse before the rows when an mk1 card's key version contradicts the run (TX-H1, `<who>` = `the mk1 card`, exit 8); an md1 coin type against the run is SOFT (TX-S run form, exit 8; with the flag the rows print as today, TX-S-OK); TX-V stays for the remaining case (rows fail and no source contradicts the run) | TX-H1 / TX-S / TX-V | 8 / 4 | SOFT only |
 | verify-bundle watch-only slot | key, run | HARD | rc 1 (recon) | stays | TX-H1 | 8 | no |
 | derive-child from a tprv, no flag | key, run | HARD | emits a mainnet xprv (recon) | refuse; TX-R when N12 holds on a test run | TX-H1 | 8 | no |
 | nostr `--pubkey` (no network) | none | - | rc 0, no line (R8a.9) | TX-N with no flag; TX-T with a test flag | TX-N / TX-T | 0 | no |
-| nostr `--secret`/`--phrase` | none | - | rc 0 | unchanged (N6); TX-R when N12 holds | TX-R | 0 | no |
+| nostr `--secret`/`--secret-file`/`--secret-stdin` | none | - | rc 0 | TX-N with no flag; TX-T with a test flag (a key with no network, D5); TX-R when N12 holds | TX-N / TX-T / TX-R | 0 | no |
 | decode-address, verify-message, compare-cost, repair, inspect | - | out | - | unchanged (N11) | none | - | no |
 
 ### 4.2 md, mk, ms
@@ -284,8 +294,9 @@ rows (§11) or the study's recon rows (named "recon").
 |---|---|---|---|---|---|---|---|
 | create `--keys`, `--hot-key`, `--sibling-keys`, `--bundle-card` keys, version against run | key, run | HARD | `--keys` rc 1; the others not run (recon) | refuse | TX-H1 | 8 | no |
 | create `--keys`, key at the other coin's seat path | record path, seat path | not overridable (a path-convention card cannot name another coin) | rc 1 (recon) | today's text kept | existing | 8 | no |
+| create `--hot-key`, `--sibling-keys`, `--bundle-card` md1, origin coin type against key or run | coin, key, run | SOFT | not checked: rc 0, no line (R8c.4) | refuse; flag; with the flag the kit's every printed `mr` and `mk encode` command carries it (as upgrade) | TX-S / TX-S-OK | 8 / 0 | yes |
 | upgrade, key version against run | key, run | HARD | rc 0, kit printed (R4.1-R4.3) | refuse (the check `create` has) | TX-H1 | 8 | no |
-| upgrade, md1 coin type against run | coin, run | SOFT | rc 0 + warning (R8c.1) | refuse; flag; with the flag the kit's every printed `mr` command carries it | TX-S / TX-S-OK | 8 / 0 | yes |
+| upgrade, md1 coin type against run | coin, run | SOFT | rc 0 + warning (R8c.1) | refuse; flag; with the flag the kit's every printed `mr` and `mk encode` command carries it | TX-S / TX-S-OK | 8 / 0 | yes |
 | upgrade `--funded-address` | HRP, run | HARD | rc 1 (recon) | stays | TX-H3 | 8 | no |
 | create/upgrade `--root-record` hand-back | stated, run | HARD | rc 1 (recon) | stays | TX-H4 | 8 | no |
 | create/upgrade `--seeds` on a test network | - | - | no line (R5.5) | TX-R last on stderr (N12) | TX-R | 0 | no |
@@ -293,13 +304,12 @@ rows (§11) or the study's recon rows (named "recon").
 | verify/decode/address/member/current/export on a path-convention card, no flag | none | - | rc 0, no line (R5.1-R5.3) | TX-N | TX-N | 0 | no |
 | same, a test `--network` | none | - | rc 0, no line (R5.4) | TX-T | TX-T | 0 | no |
 | read verbs on an explicit-path card, coin type against run (per key) | coin, run | SOFT | warning, rc 0 (recon) | refuse; flag | TX-S | 8 / 0 | yes |
-| pubkeys-TLV card, no flag | none | - | rc 1 `TlvHandoutNetworkNotGiven` | unchanged (not a contradiction) | existing | 1 | no |
+| pubkeys-TLV card, no flag | none | - | rc 1 `TlvHandoutNetworkNotGiven` | read as mainnet (D1), TX-N; `TlvHandoutNetworkNotGiven` retired (erratum E5) | TX-N | 0 | no |
 | verbs taking plates, a stray other-class plate, its seat also filled | key, run | - | rc 0, two warning lines (R8c.2) | TX-P replaces the two lines; output unchanged | TX-P | 0 | no |
 | same, the seat filled only by the stray plate | key, run | HARD | rc 1, header lines on stdout (R8c.3) | refuse, stdout empty | TX-PX, TX-PX-END | 8 | no |
-| `verify --keys` records, version against run | key, run | HARD | warning, then refused for the missing seat, rc 1 (recon) | refuse on the network first | TX-H1 | 8 | no |
 | mr-sitting verify: hand-back record kind against its own network line | key, stated | HARD | rc 2 (recon) | stays | TX-H4C | 8 | no |
-| mr-sitting verify: hand-back network against plan | stated, stated | HARD | rc 2 (recon) | stays | TX-H4 | 8 | no |
-| mr-sitting plan: seat path coin against the plan's network | path, stated | not overridable | rc 2 (recon) | today's text kept | existing | 8 | no |
+| mr-sitting sit/verify: hand-back or closing file network against plan | stated, stated | HARD | rc 2 (recon) | stays | TX-H4P | 8 | no |
+| mr-sitting sit/verify, reading the plan: seat path coin against the plan's network | path, stated | not overridable | rc 2 (recon) | today's text kept | existing | 8 | no |
 | mr-sitting sit, test plan, a brought seed | - | - | ST-END-02 last | TX-R after ST-END-02 (N12) | TX-R | 0 | no |
 | tip check (`--accept-tip`) | - | not a network check | refuses a main run at a signet height | unchanged; never counted as a network check | - | 1 | - |
 
@@ -366,7 +376,7 @@ R1.14 ends with two contradictions, TX-H2 then TX-H1, and top `"class":"hard"`.
   line's first soft contradiction:
 
       This key's path says <A> (coin type <c>h).
-      The key and this run say <B>.
+      <b-line>
           <a.what>
       If you go on:
       - Addresses and files are made for <B> from a key at a <A> path.
@@ -380,7 +390,11 @@ R1.14 ends with two contradictions, TX-H2 then TX-H1, and top `"class":"hard"`.
       [ Cancel ]   [ Override and run once ]
 
   `<A>` and `<B>` are `TEST NETWORK` or `MAINNET` from `a.network` and
-  `b.network`. With several soft contradictions the dialog lists every
+  `b.network`. `<b-line>` is `The key and this run say <B>.` when `b.what`
+  names a key (`key @i`, a flag such as `--key @0`); `This run says <B>
+  (the default when no network is chosen); the key carries no network of
+  its own.` when `b.what` is `this run`; and `Another key's path says <B>.`
+  when `b.what` names a path. With several soft contradictions the dialog lists every
   `a.what` under the first and the sentence is typed once.
 - Mechanics: "Override and run once" is disabled until the field equals the
   sentence after trimming leading and trailing spaces, compared
@@ -438,7 +452,7 @@ tool has none); `sources` (`;`-separated, `-` for none: `key=main|test`,
 separated, `-` for none); `exit` (`0` or `8`). Invariants the gate checks:
 hard and hard+soft exit 8 whatever the override; soft exits 8 without the
 override and 0 with it; none and no-source exit 0; a row with
-`has_network_flag` `no` never names a `--network` remedy. Rows: 60 (the
+`has_network_flag` `no` never names a `--network` remedy. Rows: 61 (the
 file).
 
 ## 8. Exit-code tables per tool (after)
@@ -455,7 +469,7 @@ is used as an exit code by none of them.
 | md | 0, 1, 2, 5 (repair) | + 8; md's version refusals (exit 1) exit 8 |
 | mk | 0, 1, 2, 3, 4, 5, 64 | + 8; `mk address`'s refusal (64, {{mnemonic-key@af12fea85:crates/mk-cli/src/main.rs:87}} "_ => ExitCode::from(64),") exits 8 |
 | ms | 0, 1, 2, 4, 64 | 8 reserved, unreachable (no contradiction possible) |
-| mr | 0, 1, 2, 5, 101 ({{mnemonic-refugium@34300ff27:crates/mr-codec/src/app/exit_codes.rs:5}} "pub const FAILURE: u8 = 1;") | + 8; every network refusal (exit 1 today) exits 8; `TlvHandoutNetworkNotGiven` stays 1 |
+| mr | 0, 1, 2, 5, 101 ({{mnemonic-refugium@34300ff27:crates/mr-codec/src/app/exit_codes.rs:5}} "pub const FAILURE: u8 = 1;") | + 8; every network refusal (exit 1 today) exits 8; `TlvHandoutNetworkNotGiven` is retired (erratum E5) |
 | mr-sitting | 0, 1, 2, 101 | + 8; its hand-back and plan network refusals (exit 2) exit 8 |
 | me | 0, 2, 3, 4 ({{mnemonic-engrave@0bd8dfbab:crates/me-cli/src/main.rs:484}} "const EXIT_REFUSED: i32 = 3;") | + 8; `MixedNetwork` (3) exits 8; `PromotionTestnetKey` stays 3 ({{mnemonic-engrave@0bd8dfbab:crates/me-cli/src/descriptor/refusal.rs:65}} "PromotionTestnetKey,"); the vocabulary test ({{mnemonic-engrave@0bd8dfbab:crates/me-cli/tests/cli.rs:1111}} "fn the_exit_code_vocabulary_is_one_vocabulary()") gains 8 |
 | mt | 0, 1, 2 | 8 reserved, unreachable |
@@ -470,7 +484,9 @@ Each ruling (Brian, 2026-11-23), with "spec text affected?".
 - D1 (no `--network` = mainnet, an assertion): N2. Spec text affected:
   toolkit cycle-5 S-NET's "infer the display network from the keys"
   ({{mnemonic-toolkit@4553d2da:design/BRAINSTORM_cycle5_snet_network_invariant.md:171}} "when `--network` is omitted, **infer**")
-  and its tests; erratum E1. The inferring arms in §4 change. Tools with no
+  and its tests; erratum E1; mr's `TlvHandoutNetworkNotGiven` refusal
+  (Brian 2026-11-23, ruling on review r1 s1 I-7: D1 has no exception);
+  erratum E5. The inferring arms in §4 change. Tools with no
   `--network` keep "their sources decide" (the study's Q-default, part of
   the decision Brian ruled).
 - Walk 1 / D7 (TX-T): TX-T verbatim; every test-network run of a card naming
@@ -523,6 +539,15 @@ Errata (applied by the unit named; the replacement text is binding):
   Brian's HARD ruling for version bytes.
 - E4 (study and memory): every "exit 6" for a network refusal reads "exit
   8". Why: Brian decisions 3 and 6.
+- E5 (mr, unit 5): the mr spec's refusal of a hand-out that fills a seat
+  from the Pubkeys TLV on a path-convention card with no `--network`
+  ({{mnemonic-refugium@34300ff27:design/SPEC_refugium_mr1.md:27203}} "a seat from the Pubkeys TLV is refused on a card with the")
+  and its code
+  ({{mnemonic-refugium@34300ff27:crates/mr-codec/src/network.rs:169}} "Err(Error::TlvHandoutNetworkNotGiven { seats })")
+  are retired: such a run is a mainnet run (D1), the card names no
+  network, so it prints TX-N and exits 0. Why: Brian 2026-11-23, ruling on
+  review r1 s1 I-7 (option b): "No network means main net, always" has no
+  exception.
 
 ## 10. Decisions this spec makes (logged; none changes what a ruling decided)
 
@@ -565,6 +590,11 @@ Errata (applied by the unit named; the replacement text is binding):
 - SH-S, SH-K, SH-L, SH-RT wording.
 - The `--accept-coin-type-mismatch` flag given with nothing to override:
   no effect, no line.
+- Fold r1: TX-H4P's wording (the two review slices' texts merged: s2's
+  first sentence, s1's remedy); N13 covers `[fingerprint/path]xpub` records
+  as plates (the `verify --keys` records row is gone); `convert --from
+  entropy=|seedqr=` join N6's seed list beside `ms1=` (§1: a seed in any
+  form typed now); fixture `fx/crs.sh` for R8c.4.
 
 ## 11. FIX units with RED rows
 
@@ -604,7 +634,7 @@ repo's unit carries its own `nr0_vectors_tsv_every_row` for its rows.
 | R1.9 | fx | - | `mnemonic export-wallet --descriptor "wpkh([73c5da0a/84h/1h/0h]$T/<0;1>/*)" --network signet --format bitcoin-core-addresses --count 1` | 0 | `tb1q6rz28mc` | - | `network mismatch` | 0 | unchanged (control) |
 | R1.10 | fx | - | `mnemonic export-wallet --descriptor "wpkh([73c5da0a/84h/0h/0h]$X/<0;1>/*)" --format bitcoin-core-addresses --count 1` | 0 | `bc1qcr8te4k` | - | `nothing here names` | 0 | unchanged (control; the key is a source, so no TX-N) |
 | R1.11 | fx | - | `mnemonic export-wallet --descriptor "wpkh([73c5da0a/84h/1h/0h]$T/<0;1>/*)" --network mainnet --format bitcoin-core --count 1` | 0 | `tpubDC8msF` | - | `network mismatch` | 8 | TX-H1 |
-| R1.14 | fx | - | `mnemonic export-wallet --descriptor "wsh(sortedmulti(1,[73c5da0a/48h/0h/0h/2h]$X/<0;1>/*,[00000001/48h/1h/0h/2h]$T/<0;1>/*))" --format bitcoin-core-addresses --count 1` | 0 | `bc1qhptpsd3` | - | `network mismatch` | 8 | TX-H2 then TX-H1 (key @1) |
+| R1.14 | fx | - | `mnemonic export-wallet --descriptor "wsh(sortedmulti(1,[73c5da0a/48h/0h/0h/2h]$X/<0;1>/*,[00000001/48h/1h/0h/2h]$T/<0;1>/*))" --format bitcoin-core-addresses --count 1` | 0 | `bc1qhptpsd3` | - | `network mismatch` | 8 | TX-H2 then TX-H1 (key @1) without its rerun sentence (N8) |
 
 TRACE rows: `nr1_export_wallet_main_key_on_testnet_refused` (R1.1),
 `nr1_export_wallet_test_key_on_mainnet_refused` (R1.2, R1.7, R1.11 as legs
@@ -620,7 +650,7 @@ R1.6), `nr1_export_wallet_main_key_on_regtest_refused` (R1.8),
 | R2.1 | fx | - | `mnemonic restore $(mdargs m_signet.txt) --count 1` | 0 | `bc1qvqnan` | - | `coin type` | 8 | TX-S (run form), naming the three test flags and the override |
 | R2.2 | fx | - | `mnemonic restore $(mdargs m_signet.txt) --network mainnet --count 1` | 0 | `bc1qvqnan` | - | `coin type` | 8 | TX-S; with the flag 0, `bc1qvqnan...`, TX-S-OK |
 | R2.3 | fx | - | `mnemonic restore $(mdargs m_mainnet.txt) --network testnet --count 1` | 0 | `tb1q7cty6` | - | `coin type` | 8 | TX-S |
-| R2.4 | fx | - | `mnemonic restore $(mdargs m_signet.txt) $(cos m_signet.txt 8 9 0) $(cos m_signet.txt 12 13 1) --count 1` | 0 | `bc1qvqnan` | - | `network mismatch` | 8 | TX-H1 naming both cosigners' mk1 cards (one line); the TX-S line without its flag sentence; the flag does not pass it |
+| R2.4 | fx | - | `mnemonic restore $(mdargs m_signet.txt) $(cos m_signet.txt 8 9 0) $(cos m_signet.txt 12 13 1) --count 1` | 0 | `bc1qvqnan` | - | `network mismatch` | 8 | TX-H1 naming both cosigners' mk1 cards (one line), nothing else; the flag does not pass it |
 | R2.5 | fx | - | `mnemonic restore $(mdargs m_signet.txt) --network signet --count 1` | 0 | `tb1qvqnan` | - | `network mismatch` | 0 | unchanged (control) |
 | R2.6 | fx | - | `mnemonic restore $(mdargs m_mainnet.txt) --count 1` | 0 | `bc1q7cty6` | - | `network mismatch` | 0 | unchanged (control; coin 0 agrees) |
 | R2.7 | fx | - | `mnemonic restore $(mdargs m_mainnet.txt) $(cos m_mainnet.txt 8 9 0) $(cos m_mainnet.txt 12 13 1) --network signet --count 1` | 0 | `tb1q7cty6` | - | `network mismatch` | 8 | TX-H1 (main keys, `--network is signet`) |
@@ -639,9 +669,9 @@ R2.3), `nr2_restore_md1_cosigner_version_refused_flag_ignored` (R2.4, R2.7),
 | R3.5 | fx | - | `mnemonic import-wallet --blob cc_BTC_T_1.json --network testnet --json` | 1 | - | `coin-type-0 network` | - | 8 | TX-H4C, same as R3.1 |
 | R3.6 | fx | - | `mnemonic import-wallet --blob jade_T_0.json --json` | 2 | - | `coldcard-multisig` | - | 8 | TX-H1 naming `jade` (HARD, no flag); then TX-S without its flag sentence |
 | R3.7 | fx | - | `mnemonic import-wallet --blob jade_X_1.json --json` | 2 | - | `coldcard-multisig` | - | 8 | TX-S; with the flag 0 |
-| R3.8 | fx | - | `mnemonic import-wallet --blob jade_mixed_0.json --json` | 2 | - | `coldcard-multisig` | - | 8 | TX-H2 (+TX-H1) |
+| R3.8 | fx | - | `mnemonic import-wallet --blob jade_mixed_0.json --json` | 2 | - | `coldcard-multisig` | - | 8 | TX-H2, TX-H1 without its rerun sentence (N8), then TX-S without its flag sentence (key @1's tpub against the coin-0 path, as V15) |
 | R3.9 | fx | - | `mnemonic import-wallet --blob jade_T_1.json --json` | 0 | `"network": "testnet"` | - | `network mismatch` | 8 | TX-H1 (`no --network given`) |
-| R3.10 | fx | - | `mnemonic import-wallet --blob ccms_T_0.txt --json` | 2 | - | `coldcard-multisig` | - | 8 | TX-H1 |
+| R3.10 | fx | - | `mnemonic import-wallet --blob ccms_T_0.txt --json` | 2 | - | `coldcard-multisig` | - | 8 | TX-H1, then TX-S without its flag sentence (the same keys as R3.6) |
 
 TRACE rows: `nr3_coldcard_chain_against_key_refused` (R3.1, R3.2, R3.3,
 R3.5), `nr3_coldcard_consistent_unchanged` (R3.4),
@@ -651,9 +681,9 @@ R3.5), `nr3_coldcard_consistent_unchanged` (R3.4),
 ### Unit 4: mr upgrade key version (mnemonic-refugium + erratum E3 + toolkit manual 45-mr)
 | row | dir | stdin | command | today rc | today stdout has | today stderr has | today stderr lacks | after rc | after |
 |---|---|---|---|---|---|---|---|---|---|
-| R4.1 | fx | - | `sh up.sh 0 0488b21e signet` | 0 | `network: signet` | `carry coin type 0` | `network mismatch` | 8 | TX-H1 (keys @0 and @1 mainnet keys, `--network is signet`); then TX-S without its flag sentence; no kit |
-| R4.2 | fx | - | `sh up.sh 1 0488b21e signet` | 0 | `xpub6` | - | `network mismatch` | 8 | TX-H1; no kit |
-| R4.3 | fx | - | `sh up.sh 0 043587cf main` | 0 | `tpub` | - | `network mismatch` | 8 | TX-H1 (`--network is main`) |
+| R4.1 | fx | - | `sh up.sh 0 0488b21e signet` | 0 | `network: signet` | `carry coin type 0` | `network mismatch` | 8 | TX-H1 (keys @0 and @1 mainnet keys, `--network is signet`); no kit |
+| R4.2 | fx | - | `sh up.sh 1 0488b21e signet` | 0 | `xpub6` | - | `network mismatch` | 8 | TX-H1, then TX-S without its flag sentence (xpub keys at coin-1 paths, as V15's mirror); no kit |
+| R4.3 | fx | - | `sh up.sh 0 043587cf main` | 0 | `tpub` | - | `network mismatch` | 8 | TX-H1 (`--network is main`), then TX-S without its flag sentence (tpub keys at coin-0 paths, as V15) |
 | R4.5 | fx | - | `sh up.sh 1 043587cf signet` | 0 | `network: signet` | - | `network mismatch` | 0 | unchanged except TX-R last (unit 5) |
 
 TRACE rows: `nr4_upgrade_key_version_refused` (R4.1, R4.2, R4.3),
@@ -674,6 +704,8 @@ TRACE rows: `nr5_no_flag_read_prints_tx_n` (R5.1, R5.2, R5.3),
 `nr5_create_with_seeds_on_signet_prints_tx_r_last` (R5.5; leg: `upgrade`
 with `--seeds` on signet, R4.5),
 `nr5_create_on_main_prints_no_tx_r` (R5.6),
+`nr5_tlv_card_no_flag_reads_mainnet_tx_n` (erratum E5; RED: exit 1
+`TlvHandoutNetworkNotGiven`),
 `nr5_sitting_brought_seed_test_plan_prints_tx_r` (mr-sitting practice
 harness; RED: no line), `nr5_sitting_drawn_seeds_only_no_tx_r`.
 
@@ -697,7 +729,7 @@ TRACE rows: `nr6_pack_coin_type_soft_refused_and_overridden` (R6.1, R6.2),
 |---|---|---|---|---|---|---|---|---|---|
 | R7.1 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$T1" --recovery-key "$T2" --older 144 --network mainnet` | 0 | `bc1qsgyzz` | `disagrees with descriptor keys` | - | 8 | TX-H1; stdout empty |
 | R7.2 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$X1" --recovery-key "$X2" --older 144 --network testnet` | 0 | `tb1qj7hsd` | `disagrees with descriptor keys` | - | 8 | TX-H1 |
-| R7.3 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$X1" --recovery-key "$T2" --older 144` | 0 | `bc1qpst0z` | - | `network` | 8 | TX-H2 then TX-H1 |
+| R7.3 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$X1" --recovery-key "$T2" --older 144` | 0 | `bc1qpst0z` | - | `network` | 8 | TX-H2 then TX-H1 without its rerun sentence (N8) |
 | R7.4 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$X1c1" --recovery-key "$X2" --older 144` | 0 | `bc1qj7hsd` | - | `coin type` | 8 | TX-S; with the flag 0 |
 | R7.5 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$T1" --recovery-key "$T2" --older 144` | 0 | `tb1qsgyzz` | - | `network mismatch` | 8 | TX-H1 (`no --network given`) |
 | R7.6 | fx | - | `mnemonic build-descriptor --archetype simple-timelocked-inheritance --key "$X1" --recovery-key "$X2" --older 144` | 0 | `bc1qj7hsd` | - | `network` | 0 | unchanged (control) |
@@ -729,7 +761,8 @@ TRACE rows: `nr8a_bundle_descriptor_refused` (R8a.1, R8a.2),
 `nr8a_xpub_search_refuses_before_search` (R8a.7, R8a.8),
 `nr8a_nostr_pubkey_prints_tx_n` (R8a.9),
 `nr8a_import_wallet_coin_type_flag`, `nr8a_derive_child_tprv_no_flag_refused`,
-`nr8a_verify_bundle_cause_line`, `nr8a_restore_expect_xpub_network_first`,
+`nr8a_verify_bundle_cause_line`, `nr8a_verify_bundle_network_refused_exit_8`,
+`nr8a_nostr_secret_prints_tx_n`, `nr8a_restore_expect_xpub_network_first`,
 `nr8a_tx_r_on_secret_output_test_run`.
 
 8b exit 8 and one wording on the arms that already refuse, and the
@@ -746,19 +779,21 @@ inferring arms (toolkit, md, mk + manual):
 TRACE rows: `nr8b_inferring_arms_refuse_without_flag` (R8b.1, R8b.4,
 R8b.5), `nr8b_existing_refusals_exit_8_one_wording` (R8b.2, R8b.3, R8b.6).
 
-8c mr SOFT and plates (mnemonic-refugium + errata E2 + manual 45-mr):
+8c mr SOFT and plates (mnemonic-refugium + errata E2 + manual 45-mr; needs 8d's mk released, since the kit prints `mk encode ... --accept-coin-type-mismatch`):
 | row | dir | stdin | command | today rc | today stdout has | today stderr has | today stderr lacks | after rc | after |
 |---|---|---|---|---|---|---|---|---|---|
-| R8c.1 | fx | - | `sh up.sh 0 043587cf signet` | 0 | `network: signet` | `carry coin type 0` | `network mismatch` | 8 | TX-S (run form); with `--accept-coin-type-mismatch` 0, TX-S-OK, and every `mr` command the kit prints carries the flag |
+| R8c.1 | fx | - | `sh up.sh 0 043587cf signet` | 0 | `network: signet` | `carry coin type 0` | `network mismatch` | 8 | TX-S (run form); with `--accept-coin-type-mismatch` 0, TX-S-OK, and every `mr` and `mk encode` command the kit prints carries the flag |
 | R8c.2 | fx | - | `mr export $(cat card_sig.txt) --keys "$(sh plate.sh 0 0488b21e 0)" "$(sh plate.sh 0 0488b21e 1)" "$(sh plate.sh 1 043587cf 0)" --height 900000 --time 1760000000` | 0 | `rule: @0=plate 1, @1=plate 2` | `this plate is for a test network` | `from a rehearsal` | 0 | TX-P (`plate 3 (m/270028'/1'/0') is a test-network key (tpub) from a rehearsal; it was not used. Seat @0 is filled by plate 1.`) in place of today's two lines; stdout unchanged |
 | R8c.3 | fx | - | `mr export $(cat card_sig.txt) --keys "$(sh plate.sh 0 0488b21e 0)" "$(sh plate.sh 1 043587cf 1)" --height 900000 --time 1760000000` | 1 | `seat @1: missing` | `nothing to export` | `network mismatch` | 8 | TX-PX (seat @1, plate 2 (m/270028'/1'/1'), from a rehearsal) then TX-PX-END; stdout empty |
+| R8c.4 | fx | - | `sh crs.sh main 1 0488b21e` | 0 | `card digest` | - | `coin type` | 8 | TX-S (the `--sibling-keys` record's coin-1 path m/84'/1'/0' against its xpub, as V09); stdout empty; with `--accept-coin-type-mismatch` 0, TX-S-OK, and every `mr` and `mk encode` command the kit prints carries the flag |
 
-TRACE rows: `nr8c_upgrade_coin_type_soft_and_kit_carries_flag` (R8c.1),
+TRACE rows: `nr8c_upgrade_coin_type_soft_and_kit_carries_flag` (R8c.1; leg: each printed `mk encode` line, run with the 8d mk, exits 0),
+`nr8c_create_sibling_hot_bundle_coin_type_soft` (R8c.4; legs: `--hot-key`, `--bundle-card` md1),
 `nr8c_explicit_path_card_read_coin_type_soft_per_key` (M-1 leg: one coin-0
 and one coin-1 path on one card),
 `nr8c_stray_plate_set_aside_tx_p` (R8c.2; leg: the mirror on signet),
 `nr8c_stray_plate_only_key_refused_tx_px` (R8c.3; legs: `verify`,
-`address`), `nr8c_mr_sitting_network_refusals_exit_8`.
+`address`, a stray `[fingerprint/path]xpub` record named `record <k>`), `nr8c_mr_sitting_network_refusals_exit_8`.
 
 8d md and mk coin type (descriptor-mnemonic, mnemonic-key + manual):
 | row | dir | stdin | command | today rc | today stdout has | today stderr has | today stderr lacks | after rc | after |
@@ -793,7 +828,8 @@ a GUI; TRACE rows: `nr8f_exit_8_red_banner`, `nr8f_soft_override_button_only_on_
 `nr8f_no_machine_line_no_button`, `nr8f_typed_sentence_enables_once`,
 `nr8f_paste_clears_field`, `nr8f_flag_inserted_before_double_dash`,
 `nr8f_flag_dropped_after_run`, `nr8f_amber_banner_after_override`,
-`nr8f_schema_flag_gui_managed`.
+`nr8f_schema_flag_gui_managed`, `nr8f_mg_dialog_b_line_per_form` (key
+form, run form, path form; fixture machine lines).
 
 8g refugium-wallet (needs the mr-codec pin past units 4, 5, 8c): GUI-H,
 GUI-P, GUI-N, GUI-S0, GUI-R and the typed error. TRACE rows:
@@ -831,7 +867,8 @@ TRACE rows: `nr8h_coin_type_screen_default_back`,
    (the `create` check), spec erratum E3; tests: new
    `upgrade` network rows; toolkit manual 45-mr `upgrade`.
 6. Unit 5: mnemonic-refugium `crates/mr-codec/src/card.rs` read path
-   (TX-N/TX-T), `app/create.rs` and `uprun.rs` (TX-R), mr-sitting
+   (TX-N/TX-T), `network.rs` (`check_tlv_handout` retired, erratum E5),
+   `app/create.rs` and `uprun.rs` (TX-R), mr-sitting
    `src/session.rs` (TX-R after ST-END-02); mr spec §7; tests: new rows,
    any golden of a read verb's stderr; manual 45-mr §`--network`,
    46-mr-sitting ST-END.
@@ -858,8 +895,8 @@ TRACE rows: `nr8h_coin_type_screen_default_back`,
    network refusal pins; manual 41, 42, 44 exit tables.
 11. Unit 8c: mnemonic-refugium `card.rs` (`Warning::CoinType` becomes the
    SOFT refusal, per key), `network.rs` (`paths_coin` per key),
-   `plates.rs` (N13), `app/create.rs` (upgrade SOFT, kit commands carry the
-   flag), mr-sitting exit codes; errata E2; tests:
+   `plates.rs` (N13, records included), `app/create.rs` (create and upgrade
+   SOFT, kit commands carry the flag), mr-sitting exit codes; errata E2; tests:
    `pr54_export_coin_type_warning_tagged_per_card` rewritten, plate
    set-aside pins; manual 45-mr, 46-mr-sitting exit tables.
 12. Unit 8d: descriptor-mnemonic `md-cli` address/descriptor/encode

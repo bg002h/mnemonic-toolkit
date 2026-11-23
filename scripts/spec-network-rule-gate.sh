@@ -30,7 +30,10 @@
 #     --network remedy (TX-H1, TX-H3, TX-H4, TX-H5, TX-N, TX-T).
 #  5. Exit code 8: re-greps every CLI's exit-code definitions and the toolkit
 #     manual's exit tables at the revs the spec's "Exit-code grep" line names,
-#     and fails if any of them already uses 8 as an exit code.
+#     and fails if any of them already uses 8 as an exit code. Patterns:
+#     ExitCode::from(8), process::exit(8), exit_code(8), EXIT_* / *EXIT* consts
+#     = 8 anywhere; in error.rs, exit_codes.rs and main.rs also a match arm
+#     `=> 8,` and any `[pub] const NAME: u8|i32 = 8;`; manual table rows `| 8 |`.
 #
 # What it does NOT cover (a reviewer's job):
 #  * the "after" legs of the RED rows (they describe code not yet written);
@@ -170,6 +173,7 @@ for pair in ${G8#Exit-code grep revs: }; do
   repo=${pair%%@*}; rev=${pair#*@}; d="$SHIB/$repo"
   [ -d "$d" ] || { fail "exit-8 grep: no checkout $d"; continue; }
   hits=$(git -C "$d" grep -n -E 'ExitCode::from\(8\)|process::exit\(8\)|exit_code\(8\)|EXIT_[A-Z_]+: *(u8|i32) *= *8;|const [A-Z_]*EXIT[A-Z_]*: *(u8|i32) *= *8;|^\| *`8` *\|' "$rev" -- ':!vendor' ':!**/vendor/**' ':!fuzz' 2>/dev/null)
+  hits="$hits$(git -C "$d" grep -n -E '=> *8,|^ *(pub )?const [A-Z_]+: *(u8|i32) *= *8;' "$rev" -- '**/error.rs' '**/exit_codes.rs' '**/main.rs' ':!vendor' ':!**/vendor/**' ':!fuzz' 2>/dev/null)"
   if [ "$repo" = mnemonic-toolkit ]; then
     # The manual's CLI pages hold every tool's exit table (mnemonic, md, ms, mk, mr, mr-sitting).
     hits="$hits$(git -C "$d" grep -n -E '^\| *`?8`? *\|' "$rev" -- 'docs/manual/src/40-cli-reference/*.md' 2>/dev/null)"
