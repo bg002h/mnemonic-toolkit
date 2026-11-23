@@ -1951,7 +1951,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 | `--language <LANGUAGE>` | BIP-39 wordlist + BIP-85 language code for `--application bip39` |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase, only for `--from phrase=…` |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
-| `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^32-1` |
+| `--dice-sides <DICE_SIDES>` | required for `--application dice`; range `2..=2^31-1` |
 | `--help` | print help |
 
 ### Worked example
@@ -2846,10 +2846,11 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
 - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
 - `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
 
-Both subsubcommands emit an argv-leakage advisory on stderr when the
-secret is supplied inline (e.g., `--from seedqr=<value>`, the deprecated
-`--digits <value>`, or `--from phrase=<value>`).
-Use the stdin form (`-`) to avoid the advisory.
+Both subsubcommands refuse a secret supplied inline (`--from
+seedqr=<value>`, the deprecated `--digits <value>`, or `--from
+phrase=<value>`) at exit 2, before the command line is parsed; see
+[Secret material on argv is REFUSED](#argv-refusal). Pass the value on
+stdin with `-`.
 
 ### Scope (v0.30.0, widened in v0.31.5 + v0.32.0)
 
@@ -2864,10 +2865,12 @@ The CLI emits the compact payload as hex; pipe through `xxd -r -p` to get
 the raw bytes for a binary-mode QR:
 
 ```sh
-mnemonic seedqr encode --variant compact --from phrase='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --variant compact --from phrase=-
 # → 00000000000000000000000000000000   (16 entropy bytes as 32 hex chars)
 
-mnemonic seedqr encode --variant compact --from phrase='…' \
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --variant compact --from phrase=- \
   | xxd -r -p \
   | qrencode -8 -o compact-seedqr.png   # -8 = byte mode
 ```
@@ -2875,7 +2878,8 @@ mnemonic seedqr encode --variant compact --from phrase='…' \
 Decode a scanned CompactSeedQR (hex of the scanned bytes):
 
 ```sh
-mnemonic seedqr decode --variant compact --from seedqr=00000000000000000000000000000000
+printf '%s' '00000000000000000000000000000000' \
+  | mnemonic seedqr decode --variant compact --from seedqr=-
 # → abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 
@@ -2922,7 +2926,8 @@ PLACEHOLDER — generated from transcripts/41-seedqr-encode.out at build
 Pipe to a QR generator:
 
 ```sh
-mnemonic seedqr encode --from phrase="abandon ... about" | qrencode -o out.png -
+printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
+  | mnemonic seedqr encode --from phrase=- | qrencode -o out.png -
 ```
 
 ### Worked example — 24-word vector

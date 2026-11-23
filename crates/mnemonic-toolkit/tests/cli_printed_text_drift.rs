@@ -31,7 +31,10 @@ fn run(args: &[&str], stdin: &str) -> (i32, String) {
         .unwrap();
     c.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
     let o = c.wait_with_output().unwrap();
-    (o.status.code().unwrap_or(-1), String::from_utf8_lossy(&o.stdout).into_owned())
+    (
+        o.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&o.stdout).into_owned(),
+    )
 }
 
 /// Every `e.g.,? `...`` span of a whitespace-normalised text.
@@ -62,7 +65,15 @@ fn help(args: &[&str]) -> String {
 
 fn app_entry(tok: &str) -> String {
     const NAMES: [&str; 9] = [
-        "bip39", "hd-seed", "xprv", "hex", "password-base64", "password-base85", "dice", "rsa", "rsa-gpg",
+        "bip39",
+        "hd-seed",
+        "xprv",
+        "hex",
+        "password-base64",
+        "password-base85",
+        "dice",
+        "rsa",
+        "rsa-gpg",
     ];
     let (_, h) = run(&["derive-child", "--help"], "");
     let (mut inapp, mut on) = (false, false);
@@ -171,22 +182,33 @@ fn extract(lines: &[(usize, String)]) -> Vec<(String, String)> {
 /// Run every command naming `needle` (and not matching `skip`); returns (runnable, failing, report).
 fn run_section(lines: &[(usize, String)], needle: &str, skip: &str) -> (usize, usize, String) {
     let bindir = Path::new(BIN).parent().unwrap().to_path_buf();
-    let path = format!("{}:{}", bindir.display(), std::env::var("PATH").unwrap_or_default());
+    let path = format!(
+        "{}:{}",
+        bindir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
     let (mut n, mut bad, mut rep) = (0, 0, String::new());
     for (cmd, exp) in extract(lines) {
         if !cmd.contains(needle) || cmd.contains(skip) {
             continue;
         }
-        let k = [cmd.find("| xxd"), cmd.find("| qrencode")].into_iter().flatten().min();
+        let k = [cmd.find("| xxd"), cmd.find("| qrencode")]
+            .into_iter()
+            .flatten()
+            .min();
         let mut cmd = k.map_or(cmd.clone(), |k| cmd[..k].to_string());
-        cmd = cmd.trim_end_matches(|c: char| c.is_whitespace() || c == '\\').to_string();
+        cmd = cmd
+            .trim_end_matches(|c: char| c.is_whitespace() || c == '\\')
+            .to_string();
         n += 1;
         let o = Command::new("bash")
             .args(["-o", "pipefail", "-c", &cmd])
             .env("PATH", &path)
             .output()
             .unwrap();
-        let out = String::from_utf8_lossy(&o.stdout).trim_end_matches('\n').to_string();
+        let out = String::from_utf8_lossy(&o.stdout)
+            .trim_end_matches('\n')
+            .to_string();
         let first = out.lines().next().unwrap_or("").to_string();
         let rc = o.status.code().unwrap_or(-1);
         if rc != 0 || out.is_empty() || (!exp.is_empty() && first != exp) {
@@ -221,7 +243,9 @@ fn inline_lines(lines: &[(usize, String)], kinds: &[&str], digits: bool) -> Vec<
             l.match_indices(p)
                 .any(|(i, _)| l[i + p.len()..].chars().next().is_some_and(|c| c != '-'))
         };
-        if kinds.iter().any(|k| nondash(&format!("--from {k}="))) || (digits && nondash("--digits ")) {
+        if kinds.iter().any(|k| nondash(&format!("--from {k}=")))
+            || (digits && nondash("--digits "))
+        {
             v.push(format!("{n}: {l}"));
         }
     }
@@ -229,7 +253,11 @@ fn inline_lines(lines: &[(usize, String)], kinds: &[&str], digits: bool) -> Vec<
 }
 
 fn seedqr_section() -> Vec<(usize, String)> {
-    section_lines(&read("docs/manual/src/40-cli-reference/41-mnemonic.md"), "## `mnemonic seedqr`", Some("## "))
+    section_lines(
+        &read("docs/manual/src/40-cli-reference/41-mnemonic.md"),
+        "## `mnemonic seedqr`",
+        Some("## "),
+    )
 }
 
 fn bip85_file() -> String {
@@ -256,7 +284,14 @@ fn h2_help_eg_examples_inventory() {
         }
         let sub: Vec<&str> = w.collect();
         for s in eg_spans(&help(&sub)) {
-            got.push(format!("{}: {s}", if sub.is_empty() { "<root>".into() } else { sub.join(" ") }));
+            got.push(format!(
+                "{}: {s}",
+                if sub.is_empty() {
+                    "<root>".into()
+                } else {
+                    sub.join(" ")
+                }
+            ));
         }
     }
     got.sort();
@@ -325,7 +360,19 @@ fn d5_derive_child_help_rsa_gpg_is_application_828365() {
 fn d6_derive_child_dice_bounds_match_binary() {
     let dice = |sides: &str, len: &str| {
         run(
-            &["derive-child", "--from", "xprv=-", "--application", "dice", "--dice-sides", sides, "--length", len, "--index", "0"],
+            &[
+                "derive-child",
+                "--from",
+                "xprv=-",
+                "--application",
+                "dice",
+                "--dice-sides",
+                sides,
+                "--length",
+                len,
+                "--index",
+                "0",
+            ],
             X,
         )
         .0
@@ -335,16 +382,36 @@ fn d6_derive_child_dice_bounds_match_binary() {
     assert_ne!(dice("2147483648", "3"), 0, "sides 2^31");
     let h = help(&["derive-child"]);
     let i = h.find("rolls (1..=2^31-1)").expect("help rolls bound");
-    assert!(h[i..].contains("Range: 2..=2^31-1"), "help dice-sides bound");
+    assert!(
+        h[i..].contains("Range: 2..=2^31-1"),
+        "help dice-sides bound"
+    );
 }
 
 fn derive(app: &str, len: &str) -> String {
-    run(&["derive-child", "--from", "xprv=-", "--application", app, "--length", len, "--index", "0"], X).1
+    run(
+        &[
+            "derive-child",
+            "--from",
+            "xprv=-",
+            "--application",
+            app,
+            "--length",
+            len,
+            "--index",
+            "0",
+        ],
+        X,
+    )
+    .1
 }
 
 #[test]
 fn p1_hd_seed_bip85_vector_application_2() {
-    assert_eq!(derive("hd-seed", "0").trim(), "Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp");
+    assert_eq!(
+        derive("hd-seed", "0").trim(),
+        "Kzyv4uF39d4Jrw2W7UryTHwZr1zQVNk4dAFyqE6BuMrMh1Za7uhp"
+    );
 }
 
 #[test]
@@ -358,11 +425,23 @@ fn p2_xprv_bip85_vector_application_32() {
 #[test]
 fn p3_dice_100_rolls_and_bip39_15_21_run() {
     let (rc, o) = run(
-        &["derive-child", "--from", "xprv=-", "--application", "dice", "--dice-sides", "6", "--length", "100", "--index", "0"],
+        &[
+            "derive-child",
+            "--from",
+            "xprv=-",
+            "--application",
+            "dice",
+            "--dice-sides",
+            "6",
+            "--length",
+            "100",
+            "--index",
+            "0",
+        ],
         X,
     );
     assert_eq!(rc, 0);
-    assert_eq!(o.split(|c| c == ',' || c == '\n').filter(|s| !s.is_empty()).count(), 100);
+    assert_eq!(o.split([',', '\n']).filter(|s| !s.is_empty()).count(), 100);
     assert_eq!(derive("bip39", "15").split_whitespace().count(), 15);
     assert_eq!(derive("bip39", "21").split_whitespace().count(), 21);
 }
@@ -381,8 +460,17 @@ fn s2_manual_seedqr_no_inline_secret() {
 
 #[test]
 fn s3_manual_seedqr_argv_paragraph_says_refused() {
-    let sec = norm(&seedqr_section().iter().map(|(_, l)| l.as_str()).collect::<Vec<_>>().join("\n"));
-    assert!(!sec.contains("to avoid the advisory") && !sec.contains("argv-leakage advisory"), "old advisory text");
+    let sec = norm(
+        &seedqr_section()
+            .iter()
+            .map(|(_, l)| l.as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    assert!(
+        !sec.contains("to avoid the advisory") && !sec.contains("argv-leakage advisory"),
+        "old advisory text"
+    );
     assert!(sec.contains("(#argv-refusal)"), "no link to #argv-refusal");
 }
 
@@ -417,7 +505,13 @@ fn b3_manual_bip85_application_facts() {
             problems.push(format!("missing: {want}"));
         }
     }
-    for gone in ["HD-seed bytes", "64-byte HD-seed", "9 BIP-85", "land in v0.9", "1..=10000"] {
+    for gone in [
+        "HD-seed bytes",
+        "64-byte HD-seed",
+        "9 BIP-85",
+        "land in v0.9",
+        "1..=10000",
+    ] {
         if f.contains(gone) {
             problems.push(format!("still present: {gone}"));
         }

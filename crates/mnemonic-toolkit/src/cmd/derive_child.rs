@@ -39,11 +39,13 @@ pub struct DeriveChildArgs {
     ///
     ///   bip39             BIP-85 application 39' — derives a child
     ///                     BIP-39 mnemonic of `--length` words (12 /
-    ///                     18 / 24)
-    ///   hd-seed           BIP-85 application 32' — derives a 32-byte
-    ///                     BIP-32 seed (`--length 0`)
-    ///   xprv              BIP-85 application 32' alt — derives a
-    ///                     child xprv directly (`--length 0`)
+    ///                     15 / 18 / 21 / 24)
+    ///   hd-seed           BIP-85 application 2' — derives a private
+    ///                     key, printed as a compressed WIF, at
+    ///                     m/83696968'/2'/<index>' (`--length 0`)
+    ///   xprv              BIP-85 application 32' — derives a child
+    ///                     xprv at m/83696968'/32'/<index>'
+    ///                     (`--length 0`)
     ///   hex               BIP-85 application 128169' — derives
     ///                     `--length` bytes of hex (16..=64)
     ///   password-base64   BIP-85 application 707764' — derives
@@ -51,13 +53,13 @@ pub struct DeriveChildArgs {
     ///   password-base85   BIP-85 application 707785' — derives
     ///                     `--length` chars of base85 password (10..=80)
     ///   dice              BIP-85 application 89101' — derives
-    ///                     `--length` dice rolls (1..=99 each
-    ///                     `--dice-sides`-sided); REFUSED at runtime
+    ///                     `--length` rolls (1..=2^31-1) of a
+    ///                     `--dice-sides`-sided die
     ///   rsa               BIP-85 application 828365' — RSA key
     ///                     derivation; REFUSED at runtime
     ///                     (RUSTSEC-2023-0071)
-    ///   rsa-gpg           BIP-85 application 828366' — RSA-GPG;
-    ///                     REFUSED at runtime
+    ///   rsa-gpg           BIP-85 application 828365' (RSA-GPG
+    ///                     key scheme); REFUSED at runtime
     #[arg(long = "application", required = true, verbatim_doc_comment)]
     pub application: String,
 
@@ -100,7 +102,7 @@ pub struct DeriveChildArgs {
     pub passphrase_stdin: bool,
 
     /// SPEC v0.8 §4 — number of sides for `--application dice`. Required
-    /// when `--application dice`; ignored otherwise. Range: 2..=2^32-1.
+    /// when `--application dice`; ignored otherwise. Range: 2..=2^31-1.
     #[arg(long = "dice-sides")]
     pub dice_sides: Option<u32>,
 }
