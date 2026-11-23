@@ -51,7 +51,7 @@ m-format constellation bundle, ordered by frequency.
 |---|---|---|
 | `application not in scope` for `rsa` / `rsa-gpg` | These are deferred to v0.9 (RUSTSEC-2023-0071) | Use a different application or wait for v0.9. |
 | `--length 0 invalid for application bip39` | `bip39` requires `--length 12`, `18`, or `24` | Use a valid word count. |
-| `--dice-sides required for application dice` | DICE app needs the side count | Pass `--dice-sides N` (2..=2^32-1). |
+| `--dice-sides required for application dice` | DICE app needs the side count | Pass `--dice-sides N` (2..=2^31-1). |
 
 ## When in doubt
 
