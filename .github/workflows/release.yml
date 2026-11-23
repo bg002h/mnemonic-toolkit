@@ -152,7 +152,7 @@ jobs:
           fallback: none
       - name: cargo nextest run
         if: steps.docs.outputs.docs_only != 'true'
-        run: cargo nextest run --locked --workspace --no-fail-fast
+        run: cargo nextest run --locked --workspace --no-fail-fast --features slip39-test-rng
       # nextest does not run doc-tests; this step keeps them.
       - name: cargo test --doc
         if: steps.docs.outputs.docs_only != 'true'
@@ -237,6 +237,12 @@ jobs:
           OUT="$(printf '%s' "$SEED" | "$BIN" xpub-search passphrase-of-xpub --phrase-stdin --target-xpub "$XPUB" --passphrase-candidates-file pp-cand.txt)"
           case "$OUT" in *"m/84'/0'/0'"*) ;; *) echo "::error::passphrase-of-xpub did not match here: $OUT"; exit 1 ;; esac
           echo "acceptance ok: passphrase-of-xpub derives the target xpub at m/84'/0'/0'"
+          # Shipped side of FIX sec-tk-slip39-test-rng-feature: this artifact must refuse the slip39 test RNG.
+          set +e
+          ERR="$(printf '%s' "$SEED" | MNEMONIC_SLIP39_TEST_RNG=1 "$BIN" slip39 split --group-threshold 1 --group 3,2 --from phrase=- 2>&1 >/dev/null)"; RC=$?
+          set -e
+          case "$RC:$ERR" in "1:error: slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG;"*) ;; *) echo "::error::this artifact did not refuse MNEMONIC_SLIP39_TEST_RNG (rc=$RC): $ERR"; exit 1 ;; esac
+          echo "refusal ok: this artifact refuses MNEMONIC_SLIP39_TEST_RNG"
 
       - name: Stage binary
         if: steps.docs.outputs.docs_only != 'true'

@@ -648,3 +648,81 @@ fn refusal_row_24_member_threshold_mismatch() {
         "expected row 24 stem (NEW per Q3 fold); got: {stderr}"
     );
 }
+
+// ============================================================
+// Row 26 — test-RNG env vars refused in a build without the
+// `slip39-test-rng` cargo feature (FIX sec-tk-slip39-test-rng-feature,
+// TK-Q4). Table-driven: each case is a separate run.
+// ============================================================
+
+#[cfg(not(feature = "slip39-test-rng"))]
+#[test]
+fn slip39_test_rng_env_refused_without_feature() {
+    use std::ffi::OsStr;
+
+    const STEM: &str = "error: slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source\n";
+    const RNG: &str = "MNEMONIC_SLIP39_TEST_RNG";
+    const IDENT: &str = "MNEMONIC_SLIP39_TEST_IDENTIFIER";
+    let seed = "1".repeat(64);
+
+    // (name, env var, value, --from arg, stdin, extra args)
+    let mut cases: Vec<(&str, &str, std::ffi::OsString, &str, &str)> = vec![
+        ("a", RNG, seed.clone().into(), "phrase=-", ABANDON_12),
+        ("b", IDENT, "12345".into(), "phrase=-", ABANDON_12),
+        ("c", RNG, "".into(), "phrase=-", ABANDON_12),
+        (
+            "e",
+            RNG,
+            seed.clone().into(),
+            "phrase=@env:MNX_ROW_UNSET",
+            "",
+        ),
+        ("f", RNG, seed.clone().into(), "xpub=x", ""),
+    ];
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        cases.push((
+            "d",
+            RNG,
+            OsStr::from_bytes(&[0xff]).to_os_string(),
+            "phrase=-",
+            ABANDON_12,
+        ));
+    }
+
+    for (name, var, value, from, stdin) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        let json_out = dir.path().join("split.json");
+        let mut cmd = Command::cargo_bin("mnemonic").unwrap();
+        cmd.env_remove(RNG)
+            .env_remove(IDENT)
+            .env_remove("MNX_ROW_UNSET")
+            .env(var, &value)
+            .args([
+                "slip39",
+                "split",
+                "--group-threshold",
+                "1",
+                "--group",
+                "3,2",
+            ])
+            .args(["--from", from]);
+        if name == "a" {
+            cmd.arg("--json-out").arg(&json_out);
+        }
+        let out = cmd.write_stdin(stdin).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        assert_eq!(
+            out.status.code(),
+            Some(1),
+            "case {name}: exit; stderr={stderr:?}"
+        );
+        assert_eq!(stdout, "", "case {name}: stdout");
+        assert_eq!(stderr, STEM, "case {name}: stderr");
+        if name == "a" {
+            assert!(!json_out.exists(), "case a: --json-out file must not exist");
+        }
+    }
+}

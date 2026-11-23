@@ -8,6 +8,13 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `slip39 split` refuses the test RNG variables
+
+- **`slip39 split`**: `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any
+  value) now exits 1 before reading any input. They used to seed the share randomness with only a warning, so
+  anyone who knew the value could recompute the shares. They now work only in a test build (cargo feature
+  `slip39-test-rng`, off by default).
+
 ### Help and manual examples now run as printed
 
 - **`compare-cost --help`**: the `--miniscript` example is `or_b(pk(A),s:pk(B))`; the old `or_b(pk(A), pk(B))`

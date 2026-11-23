@@ -10,7 +10,9 @@ The crate has **no library target**\index{binary-only crate} at v0.8.0. The `pub
 
 ## V.4.2 Feature flags
 
-**None.** The `[features]` table is **absent** from `crates/mnemonic-toolkit/Cargo.toml`; `grep -n '\[features\]'` on the manifest returns no match, and there are no `#[cfg(feature = ...)]` attributes anywhere under `src/`. All code is unconditionally compiled. The crate ships no optional `serde` impl, no optional vector-generator binary, and no optional `derive` tier. Test-only items use `#[cfg(test)]` only.
+| Feature | Default | Effect | Dependencies |
+|---|---|---|---|
+| `slip39-test-rng` | no (`default = []` implicit) | lets `slip39 split` read `MNEMONIC_SLIP39_TEST_RNG` / `_IDENTIFIER`; without it a set variable is refused | none |
 
 ## V.4.3 Crate structure (orchestration modules)
 

@@ -31,11 +31,11 @@
 //!     world-readable-path advisory (extracted from
 //!     `cmd/seed_xor.rs::emit_world_readable_advisory` per R0 Q5 fold)
 //!   - G9 iteration-exponent threshold advisory (E >= 5)
-//!   - env-var determinism wedge (Q2 fold): `MNEMONIC_SLIP39_TEST_RNG`
-//!     (32-byte hex seed for `ChaCha20Rng`) + `MNEMONIC_SLIP39_TEST_IDENTIFIER`
-//!     (decimal u16 in 0..=32767). Always-on insecurity advisory fires
-//!     when either env-var is set; production binary path (env-vars
-//!     unset) uses `OsRng` + library-generated random identifier.
+//!   - env-var determinism wedge (Q2 fold; TK-Q4): only with the off-by-default cargo feature
+//!     `slip39-test-rng`, `MNEMONIC_SLIP39_TEST_RNG` (32-byte hex seed for `ChaCha20Rng`) +
+//!     `MNEMONIC_SLIP39_TEST_IDENTIFIER` (decimal u16 in 0..=32767) drive split, with an always-on
+//!     insecurity advisory. Without the feature (every shipped build) a set variable is refused
+//!     before any input is read; split uses `OsRng` + a library-generated random identifier.
 
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
@@ -47,7 +47,9 @@ use mnemonic_toolkit::slip39::{
     parse_slip39_share, render_slip39_share, slip39_combine, slip39_split, GroupSpec, Share,
     Slip39Error,
 };
+#[cfg(feature = "slip39-test-rng")]
 use rand_chacha::ChaCha20Rng;
+#[cfg(feature = "slip39-test-rng")]
 use rand_core::SeedableRng;
 use std::io::{Read, Write};
 
@@ -213,6 +215,8 @@ pub fn run<R: Read, W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     match &args.command {
         Slip39Command::Split(a) => {
+            #[cfg(not(feature = "slip39-test-rng"))]
+            refuse_test_rng_env()?;
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--from` +
             // `--passphrase` before downstream consumption.
             // bh-tk-I5 (R-1, R-3): stdin and the argv advisory are judged on
@@ -285,6 +289,20 @@ fn resolve_combine_env_sentinels(
     Ok(owned)
 }
 
+/// SPEC §2.5 row 26 (FIX sec-tk-slip39-test-rng-feature, TK-Q4): a build
+/// without the `slip39-test-rng` feature refuses either test-RNG variable
+/// when set (any value, even empty or not UTF-8), before any input is read.
+#[cfg(not(feature = "slip39-test-rng"))]
+fn refuse_test_rng_env() -> Result<(), ToolkitError> {
+    if std::env::var_os(ENV_TEST_RNG).is_some() || std::env::var_os(ENV_TEST_IDENTIFIER).is_some() {
+        return Err(ToolkitError::BadInput(
+            "slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "slip39-test-rng")]
 fn emit_env_var_advisory<E: Write>(stderr: &mut E) {
     let _ = writeln!(
         stderr,
@@ -426,8 +444,11 @@ fn run_split<R: Read, W: Write, E: Write>(
 
     // Env-var determinism wedge (SPEC §2.6 row 6 — always-on insecurity
     // advisory; SPEC §6 documents the two env-vars).
+    #[cfg(feature = "slip39-test-rng")]
     let test_rng_hex = std::env::var(ENV_TEST_RNG).ok();
+    #[cfg(feature = "slip39-test-rng")]
     let test_identifier_raw = std::env::var(ENV_TEST_IDENTIFIER).ok();
+    #[cfg(feature = "slip39-test-rng")]
     if test_rng_hex.is_some() || test_identifier_raw.is_some() {
         emit_env_var_advisory(stderr);
     }
@@ -467,6 +488,9 @@ fn run_split<R: Read, W: Write, E: Write>(
         .collect();
 
     // Identifier override (env-var wedge).
+    #[cfg(not(feature = "slip39-test-rng"))]
+    let identifier: Option<u16> = None;
+    #[cfg(feature = "slip39-test-rng")]
     let identifier = if let Some(s) = test_identifier_raw {
         let id: u16 = s.parse().map_err(|_| {
             ToolkitError::BadInput(format!(
@@ -485,6 +509,7 @@ fn run_split<R: Read, W: Write, E: Write>(
 
     // Call slip39_split with either ChaCha20Rng (test wedge) or OsRng
     // (production). Map Slip39Error via map_slip39_error.
+    #[cfg(feature = "slip39-test-rng")]
     let share_groups: Vec<Vec<Share>> = if let Some(hex_str) = test_rng_hex {
         let seed_bytes = hex::decode(&hex_str).map_err(|_| {
             ToolkitError::BadInput(format!(
@@ -511,6 +536,21 @@ fn run_split<R: Read, W: Write, E: Write>(
             &mut rng,
         )
     } else {
+        let mut rng = rand_core::OsRng;
+        slip39_split(
+            master_entropy.as_slice(),
+            passphrase.as_bytes(),
+            args.group_threshold,
+            &groups,
+            args.iteration_exponent,
+            false,
+            identifier,
+            &mut rng,
+        )
+    }
+    .map_err(map_slip39_error)?;
+    #[cfg(not(feature = "slip39-test-rng"))]
+    let share_groups: Vec<Vec<Share>> = {
         let mut rng = rand_core::OsRng;
         slip39_split(
             master_entropy.as_slice(),
