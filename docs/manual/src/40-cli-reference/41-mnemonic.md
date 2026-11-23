@@ -81,6 +81,9 @@ needs two or more secrets at once — a multi-cosigner `bundle`, or
 `ms-shares combine` with K ≥ 2 shares — use the `@env:VAR` sentinel where
 the flag supports it, or `--allow-argv-secret`.
 
+`@env:VAR`, on every flag that accepts it, means the value of `VAR`: a variable whose value is
+`-` is that one-character value, never a request to read stdin.
+
 Watch-only material (`--from xpub=`, `--slot @N.xpub=`, `mk1` and `md1`
 cards) is **not** refused: a leak there costs privacy, not the money.
 
