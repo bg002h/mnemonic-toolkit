@@ -545,3 +545,26 @@ fn g1_gui_manual_hd_seed_and_xprv_facts() {
     assert_eq!(hd, "### `hd-seed` {#mnemonic-derive-child-application-hd-seed} Emit a child private key as a compressed WIF (BIP-85 application 2', path `m/83696968'/2'/<index>'`). `--length` must be 0. `--network` selects the mainnet (`K…` / `L…`) or test-network (`c…`) WIF prefix.");
     assert_eq!(xp, "### `xprv` {#mnemonic-derive-child-application-xprv} Emit a child xprv at depth 0 (BIP-85 application 32', path `m/83696968'/32'/<index>'`). `--length` must be 0. `--network` selects the prefix.");
 }
+
+#[test]
+fn d7_manual_dice_sides_bound_is_2_pow_31() {
+    for (rel, want) in [
+        ("docs/manual/src/30-workflows/38-bip85-children.md", "accepts values in `2..=2^31-1`"),
+        ("docs/manual/src/40-cli-reference/41-mnemonic.md", "required for `--application dice`; range `2..=2^31-1`"),
+        ("docs/manual/src/60-appendices/67-troubleshooting.md", "Pass `--dice-sides N` (2..=2^31-1)."),
+    ] {
+        let t = norm(&read(rel));
+        assert!(t.contains(want), "{rel}: missing {want}");
+        assert!(!t.contains("2..=2^32-1"), "{rel}: stale 2^32 bound");
+    }
+}
+
+#[test]
+fn s4_manual_seedqr_qr_pipe_strips_newline() {
+    let t = read("docs/manual/src/40-cli-reference/41-mnemonic.md");
+    assert!(
+        t.contains("  | mnemonic seedqr encode --from phrase=- | tr -d '\\n' | qrencode -o out.png\n"),
+        "fixed seedqr|qrencode line missing"
+    );
+    assert!(!t.contains("qrencode -o out.png -"), "bare ` -` after qrencode");
+}
