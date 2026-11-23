@@ -261,7 +261,9 @@ routing row says "refused", and the same flag pair is already refused twice (R3,
   --path` refusal after the warning; the §4 bullet says "WARNED (exit 0)" with that line; section 8 item 2 is
   not needed (the run still succeeds).
 
-Recommendation: (a), as routed. A warning matches the `--passphrase ignored on this edge` precedent, but that
+Recommendation: (a), as routed. The sibling verb already refuses the same misuse: on `68ea05e0`, `mnemonic
+addresses --from xpub=XPUB_84 --address-type p2wpkh --network signet --account 3 --count 1` exits 1 with `error:
+--account does not apply to --from xpub= (the xpub is already an account key)`. A warning matches the `--passphrase ignored on this edge` precedent, but that
 warning concerns an input whose absence cannot change the printed key; here the flag asks for a different key.
 
 **S2. Scope: edge rule or source rule.** The routing cell says "when the source is not a seed (xpub/xprv/wif),
