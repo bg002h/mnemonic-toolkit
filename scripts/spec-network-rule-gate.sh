@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# spec-network-rule-gate.sh -- machine checks for design/SPEC_network_rule.md.
+# spec-network-rule-gate.sh -- machine checks for design/SPEC_network_rule.md and its three
+# unit specs (SPEC_network_rule_tk_rest.md, _mr.md, _codecs_gui.md), read as one text.
 #
-# usage: scripts/spec-network-rule-gate.sh [SPEC] [--no-red]
-#   SPEC defaults to design/SPEC_network_rule.md (relative to the repo root).
+# usage: scripts/spec-network-rule-gate.sh [SPEC...] [--no-red]
+#   SPEC defaults to the four spec files under design/ (relative to the repo root);
+#   one or more SPEC paths replace that list (used to run the gate on planted copies).
+#   RED rows, cites and text ids are read from all files together, so a text id
+#   defined in one and used only in another counts as used.
 #   --no-red skips check 1 (the RED rows' "today" legs), e.g. on a machine
 #   without the installed binaries.
 # exit 0 = every check passed; 1 = a check failed (each failure is a FAIL line).
@@ -45,20 +49,24 @@
 #  * cites whose quote is a fixed string that also matches a different meaning.
 set -u
 cd "$(git -C "$(dirname "$0")" rev-parse --show-toplevel)" || exit 1
-SPEC=design/SPEC_network_rule.md
+SPECS=()
 RUN_RED=1
 for a in "$@"; do
   case "$a" in
     --no-red) RUN_RED=0 ;;
-    *) SPEC=$a ;;
+    *) SPECS+=("$a") ;;
   esac
 done
+[ "${#SPECS[@]}" -gt 0 ] || SPECS=(design/SPEC_network_rule.md design/SPEC_network_rule_tk_rest.md design/SPEC_network_rule_mr.md design/SPEC_network_rule_codecs_gui.md)
 VEC=${NETRULE_VECTORS:-design/network-rule/vectors.tsv}   # override only to show the gate RED on a planted table
 SHIB=${SHIB:-/scratch/code/shibboleth}
 FAILS=0
 fail() { echo "FAIL: $*"; FAILS=$((FAILS + 1)); }
-[ -f "$SPEC" ] || { echo "FAIL: no spec at $SPEC"; exit 1; }
+for f in "${SPECS[@]}"; do [ -f "$f" ] || { echo "FAIL: no spec at $f"; exit 1; }; done
 ROOT=$PWD
+SPEC=$(mktemp "${TMPDIR:-/tmp}/netrule-spec.XXXXXX")   # the specs read as one text
+cat -- "${SPECS[@]}" >"$SPEC"
+trap 'rm -f -- "$SPEC"' EXIT
 
 # ---------- 1. RED rows ----------
 strip() { local s="$1"; s="${s#"${s%%[![:space:]]*}"}"; s="${s%"${s##*[![:space:]]}"}"; s="${s#\`}"; s="${s%\`}"; printf '%s' "$s"; }
