@@ -5103,7 +5103,7 @@ mnemonic word-card --decode --decode-plate "<WORDS>" --decode-plate "<WORDS>"...
 | Flag | Purpose |
 |---|---|
 | `--from <MK1\|MD1>` | source `m*1` card to encode: an `mk1` xpub card or an `md1` descriptor card. Repeating flag (one per `mk1`/`md1`; multi-chunk cards may be passed joined or repeated — chunks auto-group by HRP). `-` reads one card per line from stdin. With `--raid 1\|2`, supply the `n` `mk1` data cards via repeated `--from`. PUBLIC material — not a secret |
-| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or `-`/stdin (whitespace-separated). For a RAID array, repeat `--decode-plate` once per surviving plate |
+| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or a lone `-` (stdin, whitespace-separated; `-` with any other `<WORD>` is refused, exit 1). For a RAID array, repeat `--decode-plate` once per surviving plate |
 | `--decode-plate <WORDS>` | one RAID plate's whitespace-separated word list for `--decode` reconstruction (repeating flag). Supply the surviving `≥ n` plates of an `n + r` array to reconstruct a lost data plate. Mutually exclusive with the positional `<WORD>...` single-card form |
 | `--parity-words <N>` | Reed–Solomon parity words `m` to append (the repair budget; corrects `⌊m/2⌋` substitutions / fills `m` erasures). Default `0` (detection only). Mutually exclusive with `--parity-pct` |
 | `--parity-pct <PCT>` | Reed–Solomon parity as a PERCENTAGE of the data-symbol count `K` (`m = ceil(K * pct / 100)`), an alternative to `--parity-words`. E.g. `--parity-pct 25` ≈ a 25% redundancy budget. Mutually exclusive with `--parity-words` |
@@ -5211,7 +5211,7 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
 | Condition | Exit |
 |---|---|
 | success (encode or decode) | `0` |
-| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, I/O error) | `1` |
+| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, `-` mixed with other `<WORD>` values, I/O error) | `1` |
 | decode / reconstruct refusal (parse failure beyond the repair budget, integrity-tag or header-CRC mismatch, unknown BIP-39 word, `ms1` / unknown HRP, RAID array-id or parity mismatch, RAID underdetermined — more than `r` plates missing) | `2` |
 
 ---

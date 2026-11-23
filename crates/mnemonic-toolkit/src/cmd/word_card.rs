@@ -66,8 +66,8 @@ pub struct WordCardArgs {
     pub from: Vec<String>,
 
     /// Decode mode: recover the payload from an engraved Word Card. The words
-    /// come from the positional `<WORD>...` list, or `-`/stdin (whitespace-
-    /// separated). For a RAID array, repeat `--decode-plate` once per plate.
+    /// come from the positional `<WORD>...` list, or a lone `-` (stdin,
+    /// whitespace-separated). For a RAID array, repeat `--decode-plate` once per plate.
     #[arg(long)]
     pub decode: bool,
 
@@ -109,8 +109,9 @@ pub struct WordCardArgs {
     pub json: bool,
 
     /// Positional Word-Card words for `--decode` (a single solo card). Each value
-    /// is one BIP-39 word; or pass `-` to read whitespace-separated words from
-    /// stdin. Ignored in encode mode.
+    /// is one BIP-39 word; or pass `-` alone to read whitespace-separated
+    /// words from stdin (`-` with any other `<WORD>` is refused). Ignored in
+    /// encode mode.
     #[arg(value_name = "WORD", num_args = 0..)]
     pub words: Vec<String>,
 }
@@ -489,6 +490,12 @@ fn collect_from_sources<R: Read>(
 /// separated).
 fn collect_words<R: Read>(words: &[String], stdin: &mut R) -> Result<Vec<String>, ToolkitError> {
     if words.iter().any(|w| w == "-") {
+        if words.len() != 1 {
+            return Err(ToolkitError::BadInput(format!(
+                "word-card: `-` (read the words from stdin) must be the only positional <WORD>; got {} positional values",
+                words.len()
+            )));
+        }
         let mut buf = String::new();
         stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
         Ok(split_words(&buf))
