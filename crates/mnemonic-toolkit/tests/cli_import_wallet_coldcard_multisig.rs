@@ -640,3 +640,34 @@ fn dup_headers_r18_render_export_path_change_carries_forward() {
         ["48'/0'/0'/2'", "48'/0'/1'/2'", "48'/0'/1'/2'"]
     );
 }
+
+#[test]
+fn dup_headers_x1_case_variants_other_headers() {
+    for (k, canon, first) in [("name", "Name", 1), ("format", "Format", 4)] {
+        let blob = format!("{}{k}: z\n", dup_base());
+        dup_refused(
+            run_stdin(&blob),
+            &format!("line 8: repeated `{canon}:` header (first given at line {first})"),
+        );
+    }
+}
+
+#[test]
+fn dup_headers_x2_xfp_lowercase_repeat() {
+    let blob = dup_bare("XFP: 0000AAAA\nxfp: 0000BBBB\n");
+    dup_refused(
+        run_stdin(&blob),
+        "line 5: repeated `XFP:` header (first given at line 4)",
+    );
+}
+
+#[test]
+fn dup_headers_x4_bare_xpub_takes_current_path() {
+    let blob = format!(
+        "Name: b\nPolicy: 2 of 3\nFormat: P2WSH\nXFP: 0000AAAA\nDerivation: m/48'/0'/0'/2'\n5436D724: {DUP_X1}\nDerivation: m/48'/0'/1'/2'\n28645006: {DUP_X2}\n{DUP_X3}\n"
+    );
+    assert_eq!(
+        dup_paths(dup_json(&blob)),
+        ["48'/0'/0'/2'", "48'/0'/1'/2'", "48'/0'/1'/2'"]
+    );
+}
