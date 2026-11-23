@@ -8,6 +8,11 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `word-card --decode` refuses `-` mixed with other words
+
+- **`word-card --decode`**: `-` (read the words from stdin) given together with any other positional word, or
+  twice, now exits 1 before reading stdin. It used to read stdin and silently drop the other words.
+
 ### An `@env:` value of `-` no longer reads stdin
 
 - **`convert`, `derive-child`, `bundle --slot`, `verify-bundle --slot`, `seed-xor`, `ms-shares`, `slip39`**: a
