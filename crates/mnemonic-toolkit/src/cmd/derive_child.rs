@@ -171,8 +171,20 @@ pub fn run<R: Read, W: Write, E: Write>(
         .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
 
     let master = match args.from.node {
-        NodeType::Xprv => Xpriv::from_str(&from_value)
-            .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?,
+        NodeType::Xprv => {
+            let x = Xpriv::from_str(&from_value)
+                .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
+            // BIP-85 derives from "a single BIP32 master root key"; a
+            // non-master xprv/tprv would give a child no wallet reproduces
+            // from the seed (FIX_tk_derive_child_master_depth, bh-tk-I4).
+            if x.depth != 0 {
+                return Err(ToolkitError::BadInput(format!(
+                    "derive-child: the xprv/tprv is at depth {}, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)",
+                    x.depth,
+                )));
+            }
+            x
+        }
         NodeType::Phrase => {
             // SAFETY: third-party-blocked — `bip39::Mnemonic` +
             // `bitcoin::bip32::Xpriv` have no Drop+Zeroize. FOLLOWUPS:
