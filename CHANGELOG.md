@@ -8,6 +8,15 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### An `@env:` value of `-` no longer reads stdin
+
+- **`convert`, `derive-child`, `bundle --slot`, `verify-bundle --slot`, `seed-xor`, `ms-shares`, `slip39`**: a
+  secret given as `@env:VAR` whose value is exactly `-` was read from stdin instead, so a valid input on stdin was
+  used in place of the named variable (exit 0). The value of `VAR` is now always the value, as for `--passphrase`
+  since F-687; a `-` value is now handled like any other inline value: refused by the parser, or on
+  `ms-shares combine` dropped as an empty share. The split subcommands no longer print the argv-secret warning for
+  an `@env:VAR` source.
+
 ### A failed stdout write no longer exits 0
 
 - **Every verb, `--help` and `--version`**: a write error on stdout other than a closed pipe (a full disk,

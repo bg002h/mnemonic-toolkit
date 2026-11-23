@@ -209,11 +209,29 @@ pub fn apply_slot_stdin<R: Read + ?Sized>(
     slots: &mut [SlotInput],
     stdin: &mut R,
 ) -> Result<(), ToolkitError> {
-    let stdin_idxs: Vec<usize> = slots
+    let stdin_idxs = stdin_slot_positions(slots);
+    apply_slot_stdin_at(slots, &stdin_idxs, stdin)
+}
+
+/// Positions (in `slots`) of the slots written as `@N.<secret>=-`. Callers that
+/// resolve `@env:` values capture this BEFORE resolution (bh-tk-I5, R-1): after
+/// resolution a `-` value is ambiguous (a variable whose value is `-` is that
+/// literal value, not stdin).
+pub fn stdin_slot_positions(slots: &[SlotInput]) -> Vec<usize> {
+    slots
         .iter()
         .enumerate()
         .filter_map(|(i, s)| s.is_stdin_sentinel().then_some(i))
-        .collect();
+        .collect()
+}
+
+/// `apply_slot_stdin` on positions decided by the caller (see
+/// `stdin_slot_positions`); same invariants and refusal.
+pub fn apply_slot_stdin_at<R: Read + ?Sized>(
+    slots: &mut [SlotInput],
+    stdin_idxs: &[usize],
+    stdin: &mut R,
+) -> Result<(), ToolkitError> {
     match stdin_idxs.len() {
         0 => Ok(()),
         1 => {

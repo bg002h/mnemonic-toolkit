@@ -107,6 +107,10 @@ pub fn run<R: Read, W: Write, E: Write>(
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--from`
             // before downstream consumption. `--from phrase=` is the only
             // accepted shape (row 8 enforced post-resolution).
+            // bh-tk-I5 (R-1, R-3): stdin and the argv advisory are judged on
+            // the value as written, before resolution.
+            let from_dash = a.from.value == "-";
+            let from_inline = !from_dash && !a.from.value.starts_with("@env:");
             let owned_a;
             let a = if a.from.value.starts_with("@env:") {
                 owned_a = resolve_split_env_sentinels(a)?;
@@ -114,7 +118,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             } else {
                 a
             };
-            run_split(a, stdin, stdout, stderr)
+            run_split(a, from_dash, from_inline, stdin, stdout, stderr)
         }
         SeedXorCommand::Combine(a) => {
             // Argv-leakage advisory per-occurrence for inline share values,
@@ -126,6 +130,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             }
             // v0.26.0 §3 — resolve `@env:<VAR>` sentinels on `--share`
             // values (all are `phrase=` secret-bearing per row 8).
+            // bh-tk-I5 (R-1, R-2): stdin shares are those written as `-`.
+            let share_dash: Vec<bool> = a.share.iter().map(|s| s.value == "-").collect();
             let owned_a;
             let a = if a.share.iter().any(|s| s.value.starts_with("@env:")) {
                 owned_a = resolve_combine_env_sentinels(a)?;
@@ -133,7 +139,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             } else {
                 a
             };
-            run_combine(a, stdin, stdout, stderr)
+            run_combine(a, &share_dash, stdin, stdout, stderr)
         }
     }
 }
@@ -163,6 +169,8 @@ fn resolve_combine_env_sentinels(
 
 fn run_split<R: Read, W: Write, E: Write>(
     args: &SeedXorSplitArgs,
+    from_dash: bool,
+    from_inline: bool,
     stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
@@ -173,11 +181,11 @@ fn run_split<R: Read, W: Write, E: Write>(
         ));
     }
 
-    if args.from.value != "-" {
+    if from_inline {
         secret_in_argv_warning(stderr, "--from phrase=", "--from phrase=-");
     }
 
-    let master_phrase: zeroize::Zeroizing<String> = if args.from.value == "-" {
+    let master_phrase: zeroize::Zeroizing<String> = if from_dash {
         zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
     } else {
         zeroize::Zeroizing::new(args.from.value.clone())
@@ -259,6 +267,7 @@ fn run_split<R: Read, W: Write, E: Write>(
 
 fn run_combine<R: Read, W: Write, E: Write>(
     args: &SeedXorCombineArgs,
+    share_dash: &[bool],
     stdin: &mut R,
     stdout: &mut W,
     stderr: &mut E,
@@ -273,7 +282,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     }
 
     // SPEC §2.5 row 9 — multi-stdin refusal.
-    let stdin_count = args.share.iter().filter(|s| s.value == "-").count();
+    let stdin_count = share_dash.iter().filter(|d| **d).count();
     if stdin_count > 1 {
         return Err(ToolkitError::BadInput(
             "seed-xor combine: at most one --share value may be `-` (single stdin per invocation)"
@@ -292,8 +301,8 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // Resolve all shares into Zeroizing<String>.
     let mut share_strings: Vec<zeroize::Zeroizing<String>> = Vec::with_capacity(args.share.len());
     let mut stdin_consumed = false;
-    for sh in &args.share {
-        let s = if sh.value == "-" {
+    for (sh, dash) in args.share.iter().zip(share_dash.iter().copied()) {
+        let s = if dash {
             if stdin_consumed {
                 // Defensive: already rejected by stdin_count check above, but be belt-and-suspenders.
                 return Err(ToolkitError::BadInput(
