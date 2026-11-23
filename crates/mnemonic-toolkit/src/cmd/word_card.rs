@@ -766,4 +766,22 @@ mod tests {
         assert_eq!(source_kind_str(SourceKind::Mk1Xpub), "mk1");
         assert_eq!(source_kind_str(SourceKind::Md1Descriptor), "md1");
     }
+
+    #[test]
+    fn mixed_stdin_r10_refused_before_reading_stdin() {
+        struct Panics;
+        impl Read for Panics {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                panic!("stdin was read");
+            }
+        }
+        let want = "word-card: `-` (read the words from stdin) must be the only positional <WORD>; got 2 positional values";
+        for input in [["nonsense", "-"], ["-", "-"]] {
+            let words: Vec<String> = input.iter().map(|s| s.to_string()).collect();
+            match collect_words(&words, &mut Panics) {
+                Err(ToolkitError::BadInput(m)) => assert_eq!(m, want),
+                other => panic!("expected BadInput, got {other:?}"),
+            }
+        }
+    }
 }
