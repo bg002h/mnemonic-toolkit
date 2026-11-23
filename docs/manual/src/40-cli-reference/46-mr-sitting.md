@@ -814,7 +814,7 @@ Going back to a row before `Steel plates` while the SeedHammer may hold the payl
 
 > warning: the plates file could not be written (\<os error\>): the SeedHammer was not written
 
-ST-Q-02 and ST-END-04 end with the text below (ST-Q-02 after its last sentence, ST-END-04 after its `<check>` clause with a semicolon in place of the opening space), while the SeedHammer may hold the payload; otherwise they add nothing. In `practice` they never do.
+ST-Q-02 and ST-END-04 end with the text below while the SeedHammer may hold the payload; otherwise they add nothing, and in `practice` they never add it. ST-Q-02 adds it after its last sentence, as shown. ST-END-04 adds it after its `<check>` clause, beginning `; the SeedHammer may still hold` (a semicolon and a lower-case `the` in place of ` The`) and without the final full stop.
 
 > The SeedHammer may still hold this sitting's sealed payload: before it leaves your custody, connect it in BOOTSEL and run mr-sitting erase-sealed, then destroy the plates password paper. If the SeedHammer leaves your custody before that, your seeds stand while the plates password paper is in your custody; if that paper may also be lost, treat this sitting's seeds as exposed and run the plan again (new draws make new seeds); a seed you brought and made a new plate for here is exposed too: do not bring it again, bring a different seed, and move any other funds that seed holds; deposit nothing more to this wallet, and once the new plan's wallet exists, move all funds in this wallet to it.
 
