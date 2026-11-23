@@ -8,6 +8,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Help and manual examples now run as printed
+
+- **`compare-cost --help`**: the `--miniscript` example is `or_b(pk(A),s:pk(B))`; the old `or_b(pk(A), pk(B))`
+  failed with a Miniscript type error (exit 2).
+- **`derive-child --help`**: `hd-seed` is BIP-85 application 2' and prints a compressed WIF at
+  `m/83696968'/2'/<index>'` (the help said application 32' and a 32-byte seed); `xprv` is application 32'; `dice`
+  runs, for 1..=2^31-1 rolls (the help said 1..=99 and REFUSED); `--dice-sides` is 2..=2^31-1 (the help said 2^32-1); `bip39` takes 12, 15, 18, 21 or 24 words; `rsa-gpg`
+  is application 828365'. What the command derives is unchanged.
+- **Manual**: the `mnemonic seedqr` examples and the BIP-85 chapter's examples pass the secret on stdin
+  (`--from phrase=-`, `--from seedqr=-`); as printed they put it on argv and were refused (exit 2). The BIP-85
+  chapter and the GUI manual now say `hd-seed` prints a WIF; the chapter lists five BIP-39 lengths and ten languages
+  and the dice range 1..=2^31-1.
+
 ### `word-card --decode` refuses `-` mixed with other words
 
 - **`word-card --decode`**: `-` (read the words from stdin) given together with any other positional word, or

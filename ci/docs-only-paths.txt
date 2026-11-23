@@ -20,3 +20,9 @@
 # Named in crates/mnemonic-toolkit/tests/design_artifacts_presence.rs
 # (ci/code-docs-check.sh).
 - ^CLAUDE\.md$
+# read by tests/cli_printed_text_drift.rs (the main CI test run)
+- ^docs/manual/src/40-cli-reference/41-mnemonic\.md$
+- ^docs/manual/src/30-workflows/38-bip85-children\.md$
+- ^docs/manual/tests/cli-subcommands\.list$
+- ^docs/manual-gui/src/40-mnemonic/46-derive-child\.md$
+- ^docs/manual/src/60-appendices/67-troubleshooting\.md$

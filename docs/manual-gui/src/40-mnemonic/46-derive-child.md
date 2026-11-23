@@ -97,15 +97,16 @@ per-purpose child phrases.
 
 ### `hd-seed` {#mnemonic-derive-child-application-hd-seed}
 
-Emit a child HD-seed (an xprv at depth 0). `--length` must be 0
-(the seed length is fixed). `--network` selects mainnet vs
-testnet xprv prefix.
+Emit a child private key as a compressed WIF (BIP-85 application
+2', path `m/83696968'/2'/<index>'`). `--length` must be 0.
+`--network` selects the mainnet (`K…` / `L…`) or test-network
+(`c…`) WIF prefix.
 
 ### `xprv` {#mnemonic-derive-child-application-xprv}
 
-Emit a child xprv at depth 0 (effectively the same as `hd-seed`
-under a slightly different application slot). `--length` must
-be 0. `--network` selects the prefix.
+Emit a child xprv at depth 0 (BIP-85 application 32', path
+`m/83696968'/32'/<index>'`). `--length` must be 0. `--network`
+selects the prefix.
 
 ### `hex` {#mnemonic-derive-child-application-hex}
 
