@@ -1,0 +1,65 @@
+refugium-handback 1
+network signet
+plan-id 70000001
+plan-sha256 e395b4b8339a7fd917fb6fae0fb705b2b177b06d6b1a1646e1d89d1017e5354a
+made-by mr-sitting 0.0.0 (00000000)
+networked no
+practice yes
+
+root 1
+letters B,D,E
+child B 274131 bd516112
+child D 274184 0ebdcb61
+child E 274139 5d452606
+verified yes
+
+key B
+person alice
+role creator
+fingerprint bd516112
+record @0=[bd516112/270028h/1h/0h]tpubDDqGSHNMJhXg2XkYHnyGZyntagA51AYR357dZUowbC2wkkWrJPqMQuSDyNd9PYjtQpF5HrAkEfgWeoRXccdmk3RzA3ZRf7xGsQyJYTX3dyg
+record @3=[bd516112/270028h/1h/3h]tpubDDqGSHNMJhXgAbGekxHBLWDJyhjRa24Vmz9f3VbfrdGxLnYqqAia6BUTUYsSY3RhuqKjNqPGnVAXXz1u9E6yFpP2YnKxEQ14Yc1Eo3KhCsV
+verified yes
+
+key D
+person carol
+role heir
+fingerprint 0ebdcb61
+record @2=[0ebdcb61/270028h/1h/2h]tpubDCoYHAfNtZyq4t5LdELwzs8YnEN1rgEZS32aErybEVP1uTVdF4w2zvNXVzXN91JkgpEKoZFpGRo8CtMFVgf6C1pXdWx7igHVn33oBPAngys
+verified yes
+
+key E
+person alice-emergency
+role creator
+fingerprint 5d452606
+record @5=[5d452606/270028h/1h/5h]tpubDDN6VRJAf7zTA4fGyyBUxLL9mzAvgX57Kd1tA9sPdpgp5XxjTqwWTTyE3xpuf7TbD4PjK2tLN9FGZmF5c23yo3x6UDFWueHfqN69KrtUTXp
+verified yes
+
+key C
+person bob
+role cosigner
+fingerprint aa56dc1d
+record @1=[aa56dc1d/270028h/1h/1h]tpubDDf3pdB53Lhe4PFJCUPotVjGEKZ4HWBsFg2rdyogrndQX5vGA2LhSkVtcg42PLLq8VKLS9ViQeLRvANiPu4U8VyJ6q5L8gDUo6Tu2qqKYsD
+verified yes
+
+key K
+person dave
+role heir
+fingerprint 993d856e
+record @4=[993d856e/270028h/1h/4h]tpubDCP9xTNM3eFSt8fSjm8BavGG4nT53iHLr4DfxYA5vbTc9dFx6we1T2mxo3aQX7MaoJq3KUEouKhvxr1oZAMMhB7gaBEmLGGNTG1hNNZvrzp
+verified yes
+
+key M
+person erin
+role heir
+fingerprint 02f5737b
+record @6=[02f5737b/270028h/1h/6h]tpubDCcZshcPvR4mxrv47W8xuvdX7f71qYCpjqgcQf4sKNonQ3kAs89ogNk6wZUNy9SHuYU9ToY3aDGLtFjvBAeW1FfbwCWwiGrAMgJTyx9jJiC
+verified yes
+
+hot B 12 0 G
+hot-parent-passphrase yes
+hot-key [5605fa18/86h/1h/0h]tpubDD8y9zezZpek4a6TmTnWFv5VigHcY1tReNUxiMdpRi9XYfQsNzgLhGNa4w3YUM2DAHByFhd2tondi2t1ZrRXX5PGDp7CKe7xghTkMuq8263
+hot-key [5605fa18/84h/1h/0h]tpubDCcKMnmu84VK6yEEwxpKiTpDmYAMo66npSFjYd1MvFRXVgpRZk7W9NkXYVUQjFLigPwGku21C3ydqm1ZT8BFyRfkwyq2MtsrpqniqTC9YMe
+hot-key [5605fa18/49h/1h/0h]tpubDC2bhSkFq1uDUGpEeDSuwkUgdwyyaBbs3HARRnccV2SKx11jw9mpMP3DeSQ2ZGsisne4hiBu7yTkAc6uFtRR6TrE68c6hanYF2vGsktN7C9
+hot-key [5605fa18/44h/1h/0h]tpubDDFnEraYB37LSyiTQqJUwCAoxp9fZRH5Gs8cGGo2NLzjHxcdaDpZ3WyAkbTBHRhvv1jrMcic6vkeJDYX1sq8du4h96vk4oFZFjarxLrtskk
+verified yes

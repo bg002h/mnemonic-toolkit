@@ -1,0 +1,55 @@
+refugium-plan 1
+network signet
+plan-id 70000001
+
+root 1
+letters B,D,E
+person alice
+role creator
+
+key B
+person alice
+role creator
+make grown root 1
+seat @0 m/270028h/1h/0h
+seat @3 m/270028h/1h/3h
+
+key D
+person carol
+role heir
+make grown root 1
+seat @2 m/270028h/1h/2h
+
+key E
+person alice-emergency
+role creator
+make grown root 1
+seat @5 m/270028h/1h/5h
+
+key C
+person bob
+role cosigner
+make draws
+seat @1 m/270028h/1h/1h
+
+key ?
+person dave
+role heir
+make existing
+seat @4 m/270028h/1h/4h
+
+key ?
+person erin
+role heir
+make existing
+seat @6 m/270028h/1h/6h
+
+hot B 12
+hot-holder alice
+hot-floor none
+hot-taken B,C,D,E
+hot-plate yes
+hot-path m/86h/1h/0h
+hot-path m/84h/1h/0h
+hot-path m/49h/1h/0h
+hot-path m/44h/1h/0h
