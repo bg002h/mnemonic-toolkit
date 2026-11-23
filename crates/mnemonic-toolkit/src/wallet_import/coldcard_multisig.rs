@@ -207,6 +207,16 @@ pub(super) fn parse_text(
     // we treat it as a per-cosigner derivation that pairs with the NEXT
     // bare-xpub line.
     let mut pending_per_cosigner_path: Option<String> = None;
+    // Line of the `Derivation:` line staged in `pending_per_cosigner_path` (Rule D).
+    let mut pending_derivation_line: usize = 0;
+    // Most recent `Derivation:` path (Rule P): a cosigner line with no pending
+    // per-line path takes this, as Coldcard's `from_simple_text` does.
+    let mut current_derivation: Option<String> = None;
+    // First line of each singleton header, compared ignoring ASCII case (Rule H).
+    let mut first_name_line: Option<usize> = None;
+    let mut first_policy_line: Option<usize> = None;
+    let mut first_format_line: Option<usize> = None;
+    let mut first_xfp_line: Option<usize> = None;
 
     for (line_idx, raw_line) in normalized.lines().enumerate() {
         let line_no = line_idx + 1; // 1-based for user-facing errors.
@@ -221,6 +231,35 @@ pub(super) fn parse_text(
                 Some(i) => raw_line[i + 1..].trim().to_string(),
                 None => continue, // unreachable — line_key returned Some
             };
+            // Rule H: Name/Policy/Format/XFP are singleton headers; any later
+            // occurrence (any ASCII case, any value) is refused before its
+            // value is parsed.
+            let singleton = [
+                ("Name", &mut first_name_line),
+                ("Policy", &mut first_policy_line),
+                ("Format", &mut first_format_line),
+                ("XFP", &mut first_xfp_line),
+            ]
+            .into_iter()
+            .find(|(canon, _)| key.eq_ignore_ascii_case(canon));
+            if let Some((canon, first)) = singleton {
+                if let Some(first_line) = *first {
+                    return Err(ToolkitError::ImportWalletParse(format!(
+                        "import-wallet: coldcard-multisig: parse error: line {line_no}: \
+                         repeated `{canon}:` header (first given at line {first_line}); \
+                         a setup file gives each header once"
+                    )));
+                }
+                *first = Some(line_no);
+            }
+            // Rule C: a case-variant `Derivation` key is refused (Coldcard
+            // lowercases labels and would read it as a path line).
+            if key != "Derivation" && key.eq_ignore_ascii_case("Derivation") {
+                return Err(ToolkitError::ImportWalletParse(format!(
+                    "import-wallet: coldcard-multisig: parse error: line {line_no}: \
+                     `{key}:` must be spelled `Derivation:`"
+                )));
+            }
             match key {
                 "Name" => {
                     name = Some(value);
@@ -235,6 +274,15 @@ pub(super) fn parse_text(
                     header_xfp = Some(parse_fingerprint_hex(&value, line_no, "XFP header")?);
                 }
                 "Derivation" => {
+                    // Rule D: the previous `Derivation:` has not been taken by
+                    // a cosigner line yet.
+                    if pending_per_cosigner_path.is_some() {
+                        return Err(ToolkitError::ImportWalletParse(format!(
+                            "import-wallet: coldcard-multisig: parse error: line {line_no}: \
+                             `Derivation:` line follows the one at line {pending_derivation_line} \
+                             with no cosigner line between them"
+                        )));
+                    }
                     // First `Derivation:` BEFORE any cosigner → shared.
                     // Subsequent `Derivation:` → per-cosigner staging.
                     if shared_derivation.is_none() && cosigners_raw.is_empty() {
@@ -244,6 +292,8 @@ pub(super) fn parse_text(
                     // bare-xpub line will consume it. This handles the case
                     // where the shared-derivation file format is used AND
                     // also pairs subsequent `Derivation:`s with cosigners.
+                    current_derivation = Some(value.clone());
+                    pending_derivation_line = line_no;
                     pending_per_cosigner_path = Some(value);
                 }
                 cosigner_xfp_key if is_xfp_hex(cosigner_xfp_key) => {
@@ -262,7 +312,9 @@ pub(super) fn parse_text(
                     cosigners_raw.push(RawCosigner {
                         xpub_str: value,
                         per_line_xfp: Some(fp),
-                        per_line_path: pending_per_cosigner_path.take(),
+                        per_line_path: pending_per_cosigner_path
+                            .take()
+                            .or_else(|| current_derivation.clone()),
                     });
                 }
                 unknown => {
@@ -291,7 +343,7 @@ pub(super) fn parse_text(
                 cosigners_raw.push(RawCosigner {
                     xpub_str,
                     per_line_xfp: None,
-                    per_line_path: None,
+                    per_line_path: current_derivation.clone(),
                 });
             } else {
                 return Err(ToolkitError::ImportWalletParse(format!(

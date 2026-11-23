@@ -17,6 +17,11 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   A reader that closes the pipe early (`| head`) only stops the output, and the exit code is the verb's own (it was
   1 with `error: I/O error: Broken pipe` for some verbs). The manual's new "When stdout fails" section says so.
 
+### A repeated Coldcard multisig header is refused
+
+- **`import-wallet` (`coldcard-multisig`, auto-detected, and `jade`)**: a setup file that repeats `Name:`, `Policy:`, `Format:` or `XFP:`, or has two `Derivation:` lines with no cosigner line between them, now exits 2 naming both lines, and one that spells `Derivation:` in another letter case exits 2 naming that line. The last line used to win silently, so a second `Policy: 1 of 3` imported a 2-of-3 file as 1-of-3.
+  - a cosigner line after a later `Derivation:` line now takes that path, as the device does (it used to take the first)
+
 ## mnemonic-toolkit [0.107.1] — 2026-11-22
 
 ### Installer pins: md 0.21.0, ms 0.21.0 and mk 0.17.0
