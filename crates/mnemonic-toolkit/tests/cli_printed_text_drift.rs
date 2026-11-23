@@ -549,9 +549,18 @@ fn g1_gui_manual_hd_seed_and_xprv_facts() {
 #[test]
 fn d7_manual_dice_sides_bound_is_2_pow_31() {
     for (rel, want) in [
-        ("docs/manual/src/30-workflows/38-bip85-children.md", "accepts values in `2..=2^31-1`"),
-        ("docs/manual/src/40-cli-reference/41-mnemonic.md", "required for `--application dice`; range `2..=2^31-1`"),
-        ("docs/manual/src/60-appendices/67-troubleshooting.md", "Pass `--dice-sides N` (2..=2^31-1)."),
+        (
+            "docs/manual/src/30-workflows/38-bip85-children.md",
+            "accepts values in `2..=2^31-1`",
+        ),
+        (
+            "docs/manual/src/40-cli-reference/41-mnemonic.md",
+            "required for `--application dice`; range `2..=2^31-1`",
+        ),
+        (
+            "docs/manual/src/60-appendices/67-troubleshooting.md",
+            "Pass `--dice-sides N` (2..=2^31-1).",
+        ),
     ] {
         let t = norm(&read(rel));
         assert!(t.contains(want), "{rel}: missing {want}");
@@ -563,8 +572,13 @@ fn d7_manual_dice_sides_bound_is_2_pow_31() {
 fn s4_manual_seedqr_qr_pipe_strips_newline() {
     let t = read("docs/manual/src/40-cli-reference/41-mnemonic.md");
     assert!(
-        t.contains("  | mnemonic seedqr encode --from phrase=- | tr -d '\\n' | qrencode -o out.png\n"),
+        t.contains(
+            "  | mnemonic seedqr encode --from phrase=- | tr -d '\\n' | qrencode -o out.png\n"
+        ),
         "fixed seedqr|qrencode line missing"
     );
-    assert!(!t.contains("qrencode -o out.png -"), "bare ` -` after qrencode");
+    assert!(
+        !t.contains("qrencode -o out.png -"),
+        "bare ` -` after qrencode"
+    );
 }
