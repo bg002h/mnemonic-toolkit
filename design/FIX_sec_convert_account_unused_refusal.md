@@ -93,9 +93,9 @@ becomes
 > no requested target reads it) and a non-zero `--account` (refused when given with `--path` or when no requested
 > target reads it) (§4).
 
-No other spec sentence changes (grep of `--account` over `design/SPEC_convert*.md` at `68ea05e0`: L77, L99, L102,
-L227-229, L253, L321, L325, L369; only L325 and the §4 list are affected; L77 and L321 already describe the
-reading edges).
+4.3. `design/SPEC_convert_path_independence_tests.md` L28, the C1a cell text `` `phrase→fp --template bip84` == `phrase→fp --template bip44 --account 5` == `entropy→fp --template bip86` == `5436d724` (master-fp is template/account-independent). `` becomes `` `phrase→fp --template bip84` == `phrase→fp --template bip44` == `entropy→fp --template bip86` == `5436d724` (master-fp is template-independent; a non-zero `--account` with only `--to fingerprint` is refused, SPEC_convert_v0_6 §4; account invariance of the master fp is pinned by `acct_guard_entropy_xpub_fingerprint_accepted`). `` Under S2(b) this file is unchanged.
+
+No other spec sentence changes (grep of `--account` over `design/SPEC_convert*.md` at `68ea05e0`: SPEC_convert_v0_6.md L77, L99, L102, L227-229, L253, L321, L325, L369, and SPEC_convert_path_independence_tests.md L28; only L325, the §4 list and the C1a cell are affected; L77 and L321 already describe the reading edges).
 
 ## 5. Manual, help and GUI-manual delta (lockstep, RULES "Builds and tests")
 
