@@ -120,6 +120,12 @@ pre-multipath `@0/0/<0;1>/*`, and (M-6) bare-unbracketed-origin `@0/48h/0h/0h/<0
 **Does NOT catch** bare `@0)` (terminator — D1 deferred), `@0/<0;1>/*`, `@0/*`, `@0/*h`, keyless multisig
 `wsh(sortedmulti(2,@0,@1))` — all R0-verified to still pass.
 
+**Duplicate multipath values (FIX sec-multipath-duplicate-refusal, 2026-11-23).** The multipath-body
+validator also refuses a tuple that repeats a value (BIP-389: "Duplicate NUMs within a tuple are not
+allowed"), comparing parsed values after the per-value checks: `<0;0>`, `<0;1;0>` and `<1;01>` are refused,
+and a hardened or non-integer value keeps its own refusal. Being part of the validator, it runs before the
+residue check and the no-wildcard check. Text: `design/FIX_sec_multipath_duplicate_refusal.md` §3.
+
 ## 6. Part 3 — reject-with-remediation across import surfaces
 
 Because Part 1 rejects every fixed-step import, each surface must fail *loudly and helpfully*. FIRST verify (at
