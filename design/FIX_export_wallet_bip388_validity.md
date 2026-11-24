@@ -20,8 +20,9 @@ Rulings this document builds on:
 
   > The public keys obtained by deserializing elements of the key information vector must be pairwise distinct
 
-**Three STOPs are open (section 11).** The document is written for the recommended answers. Section 11 lists the
-rows, texts and tests that flip under the other answers.
+**The three STOPs of section 11 are ruled** (architect-bip388-validity-s1s3-1124, 2026-11-24): S1 (a)
+with `null` only on `ToolkitError::BadInput` (section 3 item 4), S2 (a) (R0-r1 M5 superseded, section 4), S3 (a).
+The document is written for those answers; section 11 keeps the options as the record.
 
 **How this document was checked.** The code, texts and tests were applied in this worktree as a scratch change and
 reverted. They are saved as reference patches:
@@ -283,6 +284,11 @@ keys whose public keys are not pairwise distinct (`check_bip388_distinct_keys`, 
 repeated-key notes (md templates, not BIP-388 policies), the technical manual's `42-anti-collision-invariants.md`
 (bundle distinctness), and `42-md.md:412/454` (`tr(50929b74…,multi_a(2,@0,…))` md templates, per the architect).
 
+5.11. `docs/manual/src/30-workflows/37-wallet-export.md:173`: `  --format bip388` becomes
+`  --format bitcoin-core`. L176 `For the cosigner-as-internal-key variant, use `--taproot-internal-key @N`.` becomes
+`For the cosigner-as-internal-key variant, use `--taproot-internal-key @N`; only that variant emits `--format bip388`
+(BIP-388 allows only `@N` key placeholders, so `bip388` refuses `nums`, exit 1).`
+
 ## 6. RED rows
 
 New file `crates/mnemonic-toolkit/tests/cli_bip388_validity.rs` (the reference copy; each `tests/*.rs` is its own
@@ -295,7 +301,10 @@ RED rows, one guard); the rows are described in the tables below and the builder
 file's `bundle_md1` / `restore_args` helpers). Refusal rows assert exit code, **stdout empty** and stderr equal to
 the text plus `\n`.
 
-Constants (signet; public keys only):
+Constants (signet; public keys only): Every command below that puts a test phrase on argv runs as
+`mnemonic --allow-argv-secret <subcommand> …`, as the tests do (signet test phrases only); e.g.
+`mnemonic --allow-argv-secret convert --from "phrase=<C0>" --to xpub --network signet --path "m/48'/1'/0'/2'"`
+prints `xpub: <XA>`.
 
 | name | value |
 |---|---|
@@ -317,7 +326,7 @@ Constants (signet; public keys only):
 |---|---|---|---|---|
 | `p25_export_wallet_template_nums_bip388_refuses` | architect's `export_args("bip388","nums","-")` (tr-sortedmulti-a, 3 signet slots) | 1; ""; LIT | 0; `"tr(50929b74…,sortedmulti_a(2,@0/**,@1/**,@2/**))"` | no template-arm check |
 | `p25_export_wallet_template_nums_bip388_writes_no_file` | same, `--output <tmp>/policy.json` | 1; LIT; no file | 0, file written | refusal after the file is opened |
-| `p25_restore_nums_tr_multisig_bip388_refuses` | `bundle --template tr-sortedmulti-a` (C0,C1,C2), then `restore --md1 … --format bip388` | 1; ""; stderr == LIT | 0; the literal template; stderr `2-of-3 multisig restore …` | restore bypassing the shared emitter |
+| `p25_restore_nums_tr_multisig_bip388_refuses` | `mnemonic --allow-argv-secret bundle --template tr-sortedmulti-a` (C0,C1,C2), then `mnemonic --allow-argv-secret restore --md1 … --format bip388` | 1; ""; stderr == LIT | 0; the literal template; stderr `2-of-3 multisig restore …` | restore bypassing the shared emitter |
 | `bughunt_tk_21_bip388_export_from_descriptor_taproot_nums_multisig` (existing, `#[ignore]` removed) | mainnet fixture xpubs, `--descriptor tr(NUMS,sortedmulti_a(…))` | 1; ""; LIT | 1; `…requires every descriptor key to end in `/<0;1>/*` …; got key "50929b74…"` | descriptor arm left on the suffix text |
 | `bip388v_export_descriptor_nums_refused` | `EXP(bip388, tr(NUMS,sortedmulti_a(1,KA/<0;1>/*,KB/<0;1>/*)))` | 1; ""; LIT | 1; the suffix text naming the NUMS key | same, signet |
 | `bip388v_export_descriptor_nums_literal_before_multipath` | `EXP(bip388, tr(NUMS,sortedmulti_a(1,KA/0/*,KB/0/*)))` | 1; ""; LIT | 1; `error: --format bip388 requires the --descriptor to use multipath form `/<0;1>/*` (BIP-388 receive/change shape)` | LIT placed after the multipath check |
@@ -328,7 +337,7 @@ Constants (signet; public keys only):
 | `bip388v_export_descriptor_policy_json_repeated_key_refused` | `EXP(bip388, {"name":"dup","description_template":"wsh(or_d(pk(@0/**),and_v(v:pk(@1/**),older(100))))","keys_info":[KA,KA]})` | 1; ""; DUP(0,1,XA) | 0; `"name": "dup"`, `[KA, KA]` | a check before the policy JSON expansion only |
 | `bip388v_export_template_repeated_slot_refused` | `TPL(bip388,XA,73c5da0a,m/48'/1'/0'/2')`; leg: `--output <tmp>/policy.json` | 1; ""; DUP(0,1,XA); leg: 1, DUP, no file | 0; `"wsh(sortedmulti(1,@0/**,@1/**))"`, `[KA, KA]` (leg not reached) | no template-arm check; check after the file write |
 | `bip388v_export_template_same_xpub_other_path_refused` | `TPL(bip388,XA,b8688df1,m/48'/1'/1'/2')` | 1; ""; DUP(0,1,XA) | 0; `[KA, [b8688df1/48'/1'/1'/2']XA]` | the `(xpub, path)` rule |
-| `bip388v_restore_repeated_key_bip388_refused` | `bundle --descriptor wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@0/<0;1>/*),older(100)))) --slot @0.phrase=C0 --network signet --json --no-engraving-card`, then `restore --network signet --format bip388 --md1 …` | 1; ""; DUP(0,1,XA_BUNDLE) | 0; `[[73c5da0a/48'/1'/0'/2']XA_BUNDLE ×2]`; stderr `miniscript policy restore (1 cosigner)` … | restore's general arm bypassing the check |
+| `bip388v_restore_repeated_key_bip388_refused` | `mnemonic --allow-argv-secret bundle --descriptor wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@0/<0;1>/*),older(100)))) --slot @0.phrase=C0 --network signet --json --no-engraving-card`, then `mnemonic --allow-argv-secret restore --network signet --format bip388 --md1 …` | 1; ""; DUP(0,1,XA_BUNDLE) | 0; `[[73c5da0a/48'/1'/0'/2']XA_BUNDLE ×2]`; stderr `miniscript policy restore (1 cosigner)` … | restore's general arm bypassing the check |
 | `bip388v_build_descriptor_repeated_key_bip388_refused` (S2) | `BUILD(--format bip388)` | 1; ""; stderr == BANNER + `\n` + DUP-BUILD(0,1,XA) | 0; `[KA, KA]`; stderr BANNER only | export text on build-descriptor; no build-descriptor check |
 | `bip388v_build_descriptor_repeated_key_json_bip388_null` (S1) | `BUILD(--json)` | 0; `bip388` is null; `descriptor` starts `wsh(or_d(pk(`; stderr == BANNER | 0; `bip388` = the duplicate object | the whole `--json` run refusing; the object kept |
 | `bip388v_export_descriptor_extra_step_refused` | `EXP(bip388, wsh(or_d(pk(KA/5/<0;1>/*),and_v(v:pk(KB/<0;1>/*),older(100)))))` | 1; ""; EXT(KA/5/<0;1>/*) | 0; `keys_info[0]` ends `/5` | no extra-step check |
@@ -431,7 +440,7 @@ the origin-bearing `tr` internal key boundary (probed, no row); hardware-signer 
 | SEC-B388-W5 | the section 5 manual and CHANGELOG sentences | manuals | proposed |
 | SEC-B388-W6 | EXT | `export-wallet` / `restore` stderr, exit 1 | ruled (architect-bip388-validity-s1s3-1124) |
 
-## 11. STOPs (product points the rulings do not decide; recommendation given, document written for it)
+## 11. STOPs (ruled 2026-11-24 by architect-bip388-validity-s1s3-1124; options kept as the record)
 
 **S1. What `build-descriptor --json` writes for `bip388` when the policy has no BIP-388 form.** Today `emit`
 computes the policy for every output and would propagate the refusal into `--format descriptor`, the human view and
@@ -444,7 +453,8 @@ computes the policy for every output and would propagate the refusal into `--for
 - (c) Refuse the whole `--json` run (exit 1, DUP-BUILD). Breaks the GUI build of every allowed repeated-keys
   policy; row `…json_bip388_null` becomes a refusal row.
 
-Recommendation: (a).
+Recommendation: (a). **Ruled: (a)**, with `null` only when the converter returns
+`ToolkitError::BadInput`; any other error propagates (section 3 item 4).
 
 **S2. Does `build-descriptor --allow repeated-keys --format bip388` refuse?** This reverses SPEC
 `SPEC_descriptor_builder_allow.md` R0-r1 M5 ("pin the shape"; signer behaviour "out of toolkit scope"). Options:
@@ -457,6 +467,7 @@ Recommendation: (a).
   5.7 are dropped; DUP-BUILD is not needed.
 
 Recommendation: (a). S1 applies only under (a).
+**Ruled: (a)**; R0-r1 M5 pinned an invalid policy at exit 0 and is superseded (section 4).
 
 **S3. Which key equality is "pairwise distinct"?** BIP-388 L193 says "the public keys obtained by deserializing
 elements of the key information vector". Options:
@@ -466,7 +477,8 @@ elements of the key information vector". Options:
 - (b) The whole extended key: row `bip388v_export_descriptor_same_pubkey_other_chaincode_refused` becomes a guard
   (exit 0, two `keys_info` entries); every other row is unchanged.
 
-Recommendation: (a). The BIP says "public keys", not "extended public keys" (L187 uses "serialized extended public
+Recommendation: (a). **Ruled: (a)** (the 33-byte public key field of the
+deserialized xpub; BIP-32 L136, checked in raw bip-0032.mediawiki). The BIP says "public keys", not "extended public keys" (L187 uses "serialized extended public
 key" for the element itself); its footnote gives the reason as pubkey reuse in miniscript; and refusing fails closed, as
 the named alternatives still emit the wallet. Only a crafted key reaches the difference.
 
