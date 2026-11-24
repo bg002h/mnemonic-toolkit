@@ -28,7 +28,7 @@ suite was run once with the patch applied to find the tests that change (section
 fix mirrors ruling R4 (`--path` is refused when no requested target reads it): a non-zero `--account` is refused
 (exit 2) when no requested `--to` target reads it from the `--from` source.
 
-No new flag, type, command or public API. Spec delta: one new §4 bullet and one changed sentence. Small-fix track
+No new flag, type, command or public API. Spec delta: one new §4 bullet, one changed sentence and one changed C1a cell (SPEC_convert_path_independence_tests.md L28). Small-fix track
 is enough.
 
 ## 2. Holder-visible behaviour (after the fix)
