@@ -306,7 +306,7 @@ fn emit_decode_output<W: Write>(
         };
         let json = serde_json::to_string_pretty(&envelope)
             .map_err(|e| ToolkitError::BadInput(format!("seedqr: decode: json serialize: {e}")))?;
-        std::fs::write(path, json).map_err(|e| {
+        mnemonic_io_lib::write::write_private(path, json.as_bytes()).map_err(|e| {
             ToolkitError::BadInput(format!("seedqr: decode: json-out write to {path:?}: {e}"))
         })?;
     } else {
@@ -334,7 +334,7 @@ fn emit_encode_output<W: Write>(
         };
         let json = serde_json::to_string_pretty(&envelope)
             .map_err(|e| ToolkitError::BadInput(format!("seedqr: encode: json serialize: {e}")))?;
-        std::fs::write(path, json).map_err(|e| {
+        mnemonic_io_lib::write::write_private(path, json.as_bytes()).map_err(|e| {
             ToolkitError::BadInput(format!("seedqr: encode: json-out write to {path:?}: {e}"))
         })?;
     } else {
