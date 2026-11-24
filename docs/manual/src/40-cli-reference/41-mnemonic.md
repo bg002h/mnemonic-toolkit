@@ -4874,10 +4874,14 @@ Notes:
   `decaying-multisig`, where it is the **tier-1** timelock (the table above
   is the disambiguator).
 - A parameter that does not belong to the chosen archetype, a missing
-  required parameter, too few keys, or `--recovery-older` ≤ `--older` is
-  refused with a `param`-kind diagnostic naming the flag (exit 2). Everything
-  else — k > n, duplicate keys, bad hex, timelock bounds, an `xprv` — flows
-  to the SAME validation gate as `--spec` and is refused there; in preset
+  required parameter, too few keys, an `--older` or `--recovery-older`
+  outside `1..=65535`, or `--recovery-older` ≤ `--older` is refused with a
+  `param`-kind diagnostic naming the flag (exit 2). The two timelock flags
+  take blocks only: a value BIP-68 would read as 512-second units
+  (`0x400001..=0x40FFFF`) is refused with that reading spelled out; author a
+  time-based lock with `--spec`. Everything else — k > n, duplicate keys, bad
+  hex, an `xprv` — flows to the SAME validation gate as `--spec` and is
+  refused there; in preset
   mode those node-addressed diagnostics also name the responsible flag
   (`(from --key)` in the human output, `flag` in `--json`).
 - A deliberately unusual variant (inverted decay ordering, same-key
@@ -4912,8 +4916,8 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--recovery-key <RECOVERY_KEY>` | recovery-path cosigner key; repeat per cosigner (argv order preserved) |
 | `--recovery-threshold <RECOVERY_THRESHOLD>` | recovery quorum k |
 | `--final-key <FINAL_KEY>` | last-resort key (`decaying-multisig` tier 3) |
-| `--older <OLDER>` | relative timelock (blocks) gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
-| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock; must be **greater than** `--older` (tiers must unlock progressively later) |
+| `--older <OLDER>` | relative timelock in blocks, `1..=65535`, gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
+| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock in blocks, `1..=65535`; must be **greater than** `--older` (tiers must unlock progressively later) |
 | `--after <AFTER>` | `decaying-multisig` tier-3 absolute locktime (block height, or unix time past the BIP-65 threshold) |
 | `--hash <HASH>` | SHA-256 digest (64 hex chars) for `hashlock-gated` |
 | `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and ignored. The gate still runs: an invalid preset emits diagnostics, never a spec |

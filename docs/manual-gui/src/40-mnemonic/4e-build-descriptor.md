@@ -149,16 +149,17 @@ Text widget.
 
 ## `--older` {#mnemonic-build-descriptor-older}
 
-Relative timelock (blocks) gating the recovery path
-(`decaying-multisig`: the tier-1 timelock). Only the low 16 bits carry
-the value and bit 22 selects 512-second units, so the accepted domain
-is `1..=65535` (blocks) or `0x400000|(1..=65535)` (512-second units);
-any other bit set or a zero 16-bit value is rejected (consensus would
-silently mask it). The GUI renders this as a Number widget.
+Relative timelock in blocks gating the recovery path
+(`decaying-multisig`: the tier-1 timelock). Takes `1..=65535`; any other
+value is refused, and a value BIP-68 would read as 512-second units
+(`0x400001..=0x40FFFF`) is refused with that reading spelled out. For a
+time-based lock, author the policy as a tree. The GUI renders this as a
+Number widget.
 
 ## `--recovery-older` {#mnemonic-build-descriptor-recovery-older}
 
-`decaying-multisig` tier-2 relative timelock; must be **greater than**
+`decaying-multisig` tier-2 relative timelock in blocks, `1..=65535`;
+must be **greater than**
 `--older` (tiers must unlock progressively later). The GUI renders this
 as a Number widget.
 
@@ -319,7 +320,7 @@ of `--format`; the lowered spec JSON prints to stdout (feed it back via
 | a parameter not belonging to the chosen archetype, or a missing required one | `param`-kind diagnostic naming the flag (exit 2) |
 | `--recovery-older` ≤ `--older` | `param`-kind diagnostic (tiers must unlock progressively later) |
 | a fired sanity rule without a matching `--allow` | node-addressed diagnostic naming the rule + token (exit 2) |
-| `--older` with any disallowed BIP-68 bit set or a zero value | gate refusal (consensus would silently weaken the timelock) |
+| `--older` or `--recovery-older` outside `1..=65535` | `param`-kind diagnostic naming the flag; a 512-second-unit value has its reading spelled out (exit 2) |
 | a tree exceeding the build-time complexity cap | refused so the cost preview always renders |
 
 ## Advisories
