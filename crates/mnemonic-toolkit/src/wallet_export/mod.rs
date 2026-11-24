@@ -33,7 +33,7 @@ mod pipeline;
 mod sparrow;
 mod specter;
 
-pub(crate) use bip388::Bip388Emitter;
+pub(crate) use bip388::{Bip388Emitter, BIP388_BUILD_ALTERNATIVES};
 pub(crate) use bitcoin_core::import_array_single;
 pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use bitcoin_core_addresses::{BitcoinCoreAddressesEmitter, DEFAULT_ADDRESS_COUNT};

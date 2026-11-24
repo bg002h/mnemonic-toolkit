@@ -138,6 +138,8 @@ BIP-388 wallet-policy JSON. See
 [`export-wallet --format bip388`](#mnemonic-export-wallet-format-bip388).
 For a general taproot policy card this format refuses (no named-template
 form); such a card emits `descriptor` / `bitcoin-core` only.
+A NUMS taproot multisig card, and a card whose policy uses one public key more than
+once, refuse it too (exit 1): BIP-388 allows only `@N` key placeholders and requires pairwise distinct keys.
 
 ### `coldcard` {#mnemonic-restore-format-coldcard}
 
