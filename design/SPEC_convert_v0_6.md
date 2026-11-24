@@ -228,6 +228,10 @@ error: --from bip38 --to bip38 is an identity pivot. To re-encrypt with a differ
   ```
   error: --account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path.
   ```
+- A non-zero `--account` given and no requested `--to` target reads it from the `--from` source: REFUSED (exit 2). Only these edges read `--account`: `phrase`/`seedqr`/`entropy` → `xpub`, `xprv` (the template-derived account key; with `--path` the bullet above refuses first). An explicit `--account 0` is accepted (indistinguishable from the default). Checked after the `--path` refusals above. Stderr (byte-exact):
+  ```
+  error: --account is not used by any requested --to target from this --from source (only --to xpub or --to xprv from a phrase, seedqr or entropy reads it); drop --account.
+  ```
 - `--path` accepts only the literal form `m/...` (bare `m` is the master key); any other string is refused at the edge that reads it with `error: --path parse: <e>` (exit 1), `<e>` being the `bitcoin::bip32` parse error (e.g. `invalid child number format`). No coin-type check.
 - A seed source with an `xpub` or `xprv` target and neither `--template` nor `--path`: REFUSED (exit 1). Stderr (byte-exact):
   ```
@@ -322,7 +326,7 @@ Per-edge meaningfulness:
 | `--path` | edge derives at a custom BIP-32 path from the master key, literal `m/...` only; overrides `--template`/`--account` for `xpub`/`xprv`; `fingerprint` stays the master fingerprint |
 | `--fingerprint` | side-input for compound `--from` invocations (e.g., assembling KeyCard inputs) |
 
-Side-inputs that are not meaningful for the chosen edge are IGNORED (not refused), except `--path` (refused when no requested target reads it) and a non-zero `--account` given with `--path` (§4). Refusing on irrelevant flags adds friction without preventing user error; ignoring matches the existing toolkit pattern (e.g., `bundle` ignores `--passphrase` for watch-only invocations).
+Side-inputs that are not meaningful for the chosen edge are IGNORED (not refused), except `--path` (refused when no requested target reads it) and a non-zero `--account` (refused when given with `--path` or when no requested target reads it) (§4). Refusing on irrelevant flags adds friction without preventing user error; ignoring matches the existing toolkit pattern (e.g., `bundle` ignores `--passphrase` for watch-only invocations).
 
 **`--passphrase` warning policy (per architect r1 I-5):** when `--passphrase` is supplied but the chosen edge does NOT traverse PBKDF2 (e.g., `--from xpub --to fingerprint --passphrase ...`), the toolkit emits a one-line stderr warning:
 ```

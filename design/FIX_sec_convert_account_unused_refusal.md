@@ -284,3 +284,7 @@ prints the master fingerprint at exit 0, the same silent wrong answer the grade 
 still need ms1 decided (it is a seed card that reads no account).
 
 Not a STOP (decided by precedent): explicit `--account 0` is accepted, as R3 already states in SPEC §4.
+
+**Ruling S1 (coordinator, 2026-11-24; author and review r1 agree):** (a) refuse, exit 2.
+
+**Ruling S2 (coordinator, 2026-11-24; author and review r1 agree):** (a) the edge rule.
