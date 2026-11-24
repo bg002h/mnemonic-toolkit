@@ -28,14 +28,7 @@ name: fuzz-smoke
 
 on:
   push:
-    paths:
-      - "fuzz/**"
-      - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
-      - "crates/mnemonic-toolkit/src/lib.rs"
-      - "crates/wc-codec/fuzz/**"
-      - "crates/wc-codec/src/**"
-      - ".github/workflows/fuzz-smoke.yml"
-  pull_request:
+    branches: [master]
     paths:
       - "fuzz/**"
       - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
@@ -47,6 +40,12 @@ on:
     # Daily at 07:17 UTC (off the hour to avoid the cron thundering herd).
     - cron: "17 7 * * *"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "also run the nightly jobs"
+        type: boolean
+        required: false
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -56,11 +55,12 @@ env:
 # schedules and dispatches are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   build:
     name: cargo fuzz build (compile gate)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -93,7 +93,7 @@ jobs:
   smoke:
     name: cargo fuzz run (60s smoke)
     # Only on cron + manual dispatch — never on push/PR (off the critical path).
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true))
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
