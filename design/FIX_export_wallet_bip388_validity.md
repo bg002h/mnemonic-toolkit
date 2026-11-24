@@ -51,13 +51,16 @@ the toolkit breaks both at exit 0:
    `export-wallet --descriptor` (also a BIP-388 policy JSON given to `--descriptor`), `export-wallet --template`,
    `restore --md1` (a policy that repeats `@0`) and `build-descriptor --allow repeated-keys --format bip388` all
    emit a `keys_info` that lists one key twice.
+3. `export-wallet --descriptor` with a key that has a derivation step before `/<0;1>/*` (`xpub/5/<0;1>/*`; also a
+   BIP-388 policy JSON whose `keys_info` entry is `KA/5`) emits a `keys_info` entry ending in that step (`…/5`).
+   A BIP-388 key information entry is an extended public key with no path after it (L172, L180-187).
 
 After the fix each case refuses (exit 1, stdout empty, no file written) and names `--format descriptor` /
 `--format bitcoin-core`, which still emit the wallet. `build-descriptor --json` keeps exit 0 and writes
 `"bip388": null` (S1).
 
-No new flag, `ToolkitError` variant or public API. One printed text is new (DUP), one is the ruled text (LIT), one
-existing text gains two words (section 2.4). Small-fix track is enough.
+No new flag, `ToolkitError` variant or public API. Two printed texts are new (DUP, EXT; DUP-BUILD is DUP with the one format build-descriptor has), one is the ruled
+text (LIT), one existing text gains two words (section 2.4). Small-fix track is enough.
 
 ## 2. Holder-visible behaviour (after the fix)
 
@@ -76,11 +79,17 @@ existing text gains two words (section 2.4). Small-fix track is enough.
 
 `error: --format bip388 cannot express a wallet that uses one public key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet policy requires pairwise distinct keys; use --format descriptor for this wallet`
 
+**EXT** (new; export-wallet and restore; build-descriptor unreachable, names `--format descriptor` there through
+`alternatives`; `<key>` is the key as the canonical descriptor prints it, e.g. `[73c5da0a/48'/1'/0'/2']tpub…/5/<0;1>/*`;
+the final `use …` clause is the same `alternatives` list as LIT and DUP):
+
+``error: --format bip388 cannot express the key <key> (a derivation step between the extended public key and `/<0;1>/*`): a BIP-388 key information entry is an extended public key with no path after it; use --format descriptor or --format bitcoin-core for this wallet``
+
 - `<i>`, `<j>`: indices into the `keys_info` the policy would have had (template arm: the slot `@N`; descriptor
   arm: key occurrence order in the descriptor). The pair reported is the first with `i < j`, smallest `i`, then
   smallest `j` (K1,K2,K1,K2 reports `@0 and @2`).
 - `<xpub>`: entry `@<i>`'s extended key in base58, without its origin.
-- Exit code 1 (`ToolkitError::BadInput`) for all three, as for every other `--format bip388` refusal. No new
+- Exit code 1 (`ToolkitError::BadInput`) for all four, as for every other `--format bip388` refusal. No new
   error variant. The bundle-side `Bip388Distinctness` (exit 2) is unchanged and not used here.
 
 ### 2.2 The rules
@@ -94,9 +103,12 @@ existing text gains two words (section 2.4). Small-fix track is enough.
   on build-descriptor). The comparison is the 33-byte public key of each extended key (S3), so it does not look at
   origins or fingerprints: one xpub under two origins refuses, and so do two extended keys that share a public key
   but differ in chain code.
+- **Extra derivation step.** A key whose multipath paths have more than one step (`xpub/5/<0;1>/*`) refuses with
+  EXT.
 - **Order on the descriptor arm** (`descriptor_to_bip388_wallet_policy`): parse; LIT (a NUMS key gets LIT even
-  when the descriptor is not multipath); then today's multipath refusal; then today's per-key suffix refusal; then
-  DUP. So one key under disjoint multipaths (`<0;1>` and `<2;3>`) keeps today's suffix refusal.
+  when the descriptor is not multipath); today's multipath refusal; then per key in source order: today's suffix
+  refusal, then EXT; then DUP. So one xpub under `/5` and `/6` gets EXT, not DUP. So one key under disjoint
+  multipaths (`<0;1>` and `<2;3>`) keeps today's suffix refusal.
 - **Order on the template arm** (`format_bip388_wallet_policy`): everything upstream is unchanged; LIT, then DUP. A
   taproot template with two equal slots never reaches either: the strict descriptor parse refuses it first, exit
   2, `error: export-wallet descriptor parse: Miniscript contains repeated pubkeys or pubkeyhashes` (unchanged).
@@ -110,7 +122,7 @@ existing text gains two words (section 2.4). Small-fix track is enough.
 | surface | emitter | LIT | DUP |
 |---|---|---|---|
 | `export-wallet --template … --format bip388` | `format_bip388_wallet_policy` | yes (NUMS) | yes |
-| `export-wallet --descriptor <descriptor or BIP-388 policy JSON> --format bip388` | `descriptor_to_bip388_wallet_policy` | yes (origin-less `tr` internal key) | yes |
+| `export-wallet --descriptor <descriptor or BIP-388 policy JSON> --format bip388` | `descriptor_to_bip388_wallet_policy` | yes (origin-less `tr` internal key); EXT (a step before `/<0;1>/*`) | yes |
 | `restore --md1 … --format bip388`, template card | `format_bip388_wallet_policy` via `Bip388Emitter` | yes (NUMS tr-multisig card) | no row (bundle refuses equal cosigners, so no such card was built); the check is in the shared emitter |
 | `restore --md1 … --format bip388`, general wsh card | `descriptor_to_bip388_wallet_policy` via `Bip388Emitter` | unreachable (general taproot cards refuse first, restore.rs:3539-3548) | yes |
 | `build-descriptor --format bip388` | `descriptor_to_bip388_wallet_policy` | unreachable (builds `wsh` only) | yes, DUP-BUILD (needs `--allow repeated-keys`) |
@@ -144,8 +156,14 @@ surfaces); every other `--format`; `bundle`'s own distinctness rule (SPEC v0.5 �
    a `Descriptor::Tr` whose `internal_key()` is `Single` with `origin == None` returns
    `bip388_literal_key_refusal(<internal key>.to_string())`; the key loop collects each `MultiXPub` `xkey` and
    calls `check_bip388_distinct_keys` after the loop.
-4. `cmd/build_descriptor.rs` `emit`: the BIP-388 policy is computed lazily: `--json` writes
-   `bip388().unwrap_or(Value::Null)`; `--format bip388` propagates the error; `--format descriptor` and the human
+3b. `bip388.rs`: `pub(crate) fn bip388_extra_step_refusal(key: &str, alternatives: &str) -> ToolkitError` (`BadInput`,
+   EXT). In `descriptor_to_bip388_wallet_policy`'s key loop, after `strip_multipath_suffix(&full)?`, in the
+   `MultiXPub(mx)` arm before `xpubs.push`: `if mx.derivation_paths.paths().iter().any(|p| p.len() != 1) { return
+   Err(bip388_extra_step_refusal(&full, alternatives)); }`. Built as `/scratch/cache/arch-bip388v-1124-green-src.patch`
+   (reference source + this item + S1; sha256 `3ff29e13…5e81`).
+4. `cmd/build_descriptor.rs` `emit`: the BIP-388 policy is computed lazily: `--json` writes `null` when the converter
+   returns `ToolkitError::BadInput` (a policy BIP-388 cannot express) and propagates any other error (`match
+   bip388() { Ok(v) => v, Err(ToolkitError::BadInput(_)) => Value::Null, Err(e) => return Err(e) }`); `--format bip388` propagates the error; `--format descriptor` and the human
    view do not compute it. `wallet_export/mod.rs` re-exports `BIP388_BUILD_ALTERNATIVES`.
 5. `cmd/restore.rs:3547`: section 2.4.
 
@@ -192,7 +210,7 @@ No flag is added, removed or renamed and no `--help` text changes: no `gui-schem
 5.1. `docs/manual/src/40-cli-reference/41-mnemonic.md:1199` (`export-wallet` `--format` row): before the row's
 closing ` |`, after `… so use `bitcoin-core` or `sparrow` for taproot`, insert:
 
-> . **`bip388`** refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins); use `descriptor` or `bitcoin-core` for these wallets
+> . **`bip388`** refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins), and a `--descriptor` key with a derivation step before `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`; a BIP-388 key entry is an xpub with no path after it); use `descriptor` or `bitcoin-core` for these wallets
 
 5.2. Same file L1620-1622, the sentence
 
@@ -220,10 +238,11 @@ becomes
 
 - L322-326 (`### bip388`): after `… upstream BIP-388 standard format directly.` add `It refuses (exit 1) a policy
   BIP-388 calls invalid: a NUMS taproot internal key, or one public key used twice; see Refusals below.`
-- Refusals table: after the last row (L626, `--format specter` without `--wallet-name`), two rows:
+- Refusals table: after the last row (L626, `--format specter` without `--wallet-name`), three rows:
 
 > | `--format bip388` with `--taproot-internal-key nums`, or a `--descriptor` whose taproot internal key is a literal key with no origin (e.g. the NUMS key) | `--format bip388 cannot express the literal key <hex> (a taproot internal key with no origin, e.g. the BIP-341 NUMS key): a BIP-388 wallet policy allows only @N key placeholders; use --format descriptor or --format bitcoin-core for this wallet` |
 > | `--format bip388` and two keys with one public key (a repeated key, or one xpub under two origins) | `--format bip388 cannot express a wallet that uses one public key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet policy requires pairwise distinct keys; use --format descriptor or --format bitcoin-core for this wallet` |
+> | `--format bip388` and a `--descriptor` key with a step before `/<0;1>/*` (e.g. `…xpub/5/<0;1>/*`) | ``--format bip388 cannot express the key <key> (a derivation step between the extended public key and `/<0;1>/*`): a BIP-388 key information entry is an extended public key with no path after it; use --format descriptor or --format bitcoin-core for this wallet`` |
 
 5.6. `docs/manual-gui/src/40-mnemonic/4d-restore.md` L137-139: after `… such a card emits `descriptor` /
 `bitcoin-core` only.` add `A NUMS taproot multisig card, and a card whose policy uses one public key more than
@@ -244,7 +263,7 @@ nums`, `format_bip388_wallet_policy` refuses via `bip388_literal_key_refusal` (`
 only `@N` key placeholders), as `descriptor_to_bip388_wallet_policy` does for a `tr` whose internal key is an
 origin-less literal key; with`. After `… longest-first to avoid prefix collisions —
 `wallet_export/pipeline.rs::descriptor_to_bip388_wallet_policy`.` add ` Both paths refuse (`BadInput`, exit 1)
-keys whose public keys are not pairwise distinct (`check_bip388_distinct_keys`, BIP-388 "Additional rules").`
+keys whose public keys are not pairwise distinct (`check_bip388_distinct_keys`, BIP-388 "Additional rules"). `descriptor_to_bip388_wallet_policy` also refuses a key with a derivation step before `/<0;1>/*` (`bip388_extra_step_refusal`).`
 
 5.9. `CHANGELOG.md`, under `## [Unreleased]`, a new subsection, exact text:
 
@@ -254,7 +273,9 @@ keys whose public keys are not pairwise distinct (`check_bip388_distinct_keys`, 
 >   literal key and not an `@N` placeholder. Before, `--template tr-*-multi-a --taproot-internal-key nums` and a
 >   NUMS `restore --md1` card emitted `tr(50929b74…,…)` at exit 0, and `--descriptor` refused with a text about the
 >   `/<0;1>/*` suffix. It also refuses a wallet that uses one public key more than once (before: duplicate
->   `keys_info` entries at exit 0). Use `--format descriptor` or `--format bitcoin-core` for these wallets.
+>   `keys_info` entries at exit 0). It also refuses a
+>   `--descriptor` key with a derivation step before `/<0;1>/*` (before: a `keys_info` entry ending in that step, e.g.
+>   `…/5`, at exit 0). Use `--format descriptor` or `--format bitcoin-core` for these wallets.
 > - **`build-descriptor`**: with `--allow repeated-keys`, `--format bip388` refuses (exit 1) and `--json` emits
 >   `"bip388": null`; `--format descriptor` and the human view are unchanged.
 
@@ -267,7 +288,10 @@ repeated-key notes (md templates, not BIP-388 policies), the technical manual's 
 New file `crates/mnemonic-toolkit/tests/cli_bip388_validity.rs` (the reference copy; each `tests/*.rs` is its own
 binary, nothing to register). It holds the architect's four `p25_*` rows verbatim except that
 `p25_restore_nums_tr_multisig_bip388_refuses` asserts stderr **equal** to LIT (measured: restore prints nothing
-else before a refusal), plus the `bip388v_*` rows. One row goes in `tests/cli_restore_taproot.rs` (it uses that
+else before a refusal), plus the `bip388v_*` rows. The architect's EXT fold (architect-bip388-validity-s1s3-1124) appends four more tests to the same file, as Rust
+code in `/scratch/cache/arch-bip388v-1124-ext-rows.rs` (sha256 `a67a51c8…3f63`; an `ext_text(key)` helper, three
+RED rows, one guard); the rows are described in the tables below and the builder copies the code from that file.
+`EXT(k)` below means `ext_text(k)`: the EXT line of section 2.1 with `<key>` = `k` plus `\n`. One row goes in `tests/cli_restore_taproot.rs` (it uses that
 file's `bundle_md1` / `restore_args` helpers). Refusal rows assert exit code, **stdout empty** and stderr equal to
 the text plus `\n`.
 
@@ -307,6 +331,9 @@ Constants (signet; public keys only):
 | `bip388v_restore_repeated_key_bip388_refused` | `bundle --descriptor wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@0/<0;1>/*),older(100)))) --slot @0.phrase=C0 --network signet --json --no-engraving-card`, then `restore --network signet --format bip388 --md1 …` | 1; ""; DUP(0,1,XA_BUNDLE) | 0; `[[73c5da0a/48'/1'/0'/2']XA_BUNDLE ×2]`; stderr `miniscript policy restore (1 cosigner)` … | restore's general arm bypassing the check |
 | `bip388v_build_descriptor_repeated_key_bip388_refused` (S2) | `BUILD(--format bip388)` | 1; ""; stderr == BANNER + `\n` + DUP-BUILD(0,1,XA) | 0; `[KA, KA]`; stderr BANNER only | export text on build-descriptor; no build-descriptor check |
 | `bip388v_build_descriptor_repeated_key_json_bip388_null` (S1) | `BUILD(--json)` | 0; `bip388` is null; `descriptor` starts `wsh(or_d(pk(`; stderr == BANNER | 0; `bip388` = the duplicate object | the whole `--json` run refusing; the object kept |
+| `bip388v_export_descriptor_extra_step_refused` | `EXP(bip388, wsh(or_d(pk(KA/5/<0;1>/*),and_v(v:pk(KB/<0;1>/*),older(100)))))` | 1; ""; EXT(KA/5/<0;1>/*) | 0; `keys_info[0]` ends `/5` | no extra-step check |
+| `bip388v_export_descriptor_policy_json_extra_step_refused` | `EXP(bip388, {"name":"ext","description_template":"wsh(or_d(pk(@0/**),and_v(v:pk(@1/**),older(100))))","keys_info":[KA/5,KB]})` | 1; ""; EXT(KA/5/<0;1>/*) | 0; `/5` re-emitted | a check on raw descriptors only |
+| `bip388v_export_descriptor_extra_step_before_dup` | `EXP(bip388, wsh(or_d(pk(KA/5/<0;1>/*),and_v(v:pk(KA/6/<0;1>/*),older(100)))))` | 1; ""; EXT(KA/5/<0;1>/*) | 0; two entries | EXT placed after DUP |
 | `bip388v_restore_general_tr_text_names_non_nums` (in `cli_restore_taproot.rs`) | `bundle_md1("tr(NUMS,{pk(K0),pk(K1)})")`, `restore … --format bip388` | 1; ""; stderr == section 2.4's full line | 1; the line with `(A distinct-trunk tr-multisig md1 DOES …)` | the stale parenthetical |
 
 6.2. Guards (pass on `00947cb7` and must keep passing).
@@ -319,12 +346,14 @@ Constants (signet; public keys only):
 | `bip388v_guard_build_descriptor_other_outputs_emit` | `BUILD(--format descriptor)`; `BUILD()` | 0; stdout starts `wsh(or_d(pk(`; human view starts `descriptor:\n` | eager computation of the policy |
 | `bip388v_guard_disjoint_multipath_keeps_suffix_text` | `EXP(bip388, wsh(or_d(pk(KA/<0;1>/*),and_v(v:pk(KA/<2;3>/*),older(100)))))` | 1; ""; `error: --format bip388 requires every descriptor key to end in `/<0;1>/*` for the receive/change pair; got key "KA/<2;3>/*"` | DUP placed before the suffix rule |
 | `bip388v_guard_literal_leaf_key_keeps_suffix_text` | `EXP(bip388, wsh(or_d(pk(KA/<0;1>/*),and_v(v:pk(02<NUMS>),older(100)))))` | 1; ""; suffix text naming `02<NUMS>` | LIT for every literal key |
+| `bip388v_guard_extra_step_alternatives_emit` | `EXP(descriptor, d)` and `EXP(bitcoin-core, d)`, `d` = the descriptor of the first EXT row | 0 each; stdout contains `XA/5/` | refusing in a step all formats run |
 | `bip388v_guard_template_tr_repeated_slot_refused_upstream` | tr-sortedmulti-a, nums, threshold 1, two slots both `XA`/`73c5da0a`/`m/48'/1'/0'/2'`, bip388 | 2; ""; `error: export-wallet descriptor parse: Miniscript contains repeated pubkeys or pubkeyhashes` | a new check moved ahead of the strict parse |
 
 Measured: RED run on `00947cb7` with the test changes of section 8 (`/scratch/cache/bip388v-red-final.log`):
 `27 tests run: 8 passed, 19 failed` (the 17 rows of 6.1, `allow_repeated_keys_bip388_refused` and
 `tr_multi_a_bip388_wallet_policy_with_nums` fail; the 7 guards and the rewritten
-`export_wallet_tr_sortedmulti_bip48_emits_advisory` pass). Each failure is the "today" cell above (first failure
+`export_wallet_tr_sortedmulti_bip48_emits_advisory` pass). With the three EXT rows and the EXT guard added
+(`/scratch/cache/arch-bip388v-1124-red.log`, architect's copy): `31 tests run: 9 passed, 22 failed`. Each failure is the "today" cell above (first failure
 for the template row: `left: (0, "{\n  \"description_template\": \"wsh(sortedmulti(1,@0/**,@1/**))\"…`).
 
 ## 7. Coverage (BIP text and ruled text → rows)
@@ -340,6 +369,7 @@ for the template row: `left: (0, "{\n  \"description_template\": \"wsh(sortedmul
 | DUP after the suffix rule | `bip388v_guard_disjoint_multipath_keeps_suffix_text` |
 | build-descriptor: DUP-BUILD after the banner; `--json` null; other outputs unchanged | `bip388v_build_descriptor_*`, `bip388v_guard_build_descriptor_other_outputs_emit` |
 | the named alternatives still emit | `p25_controls_…`, `bip388v_guard_named_alternatives_emit_repeated_key` |
+| BIP-388 L172, L180-187: a KEY_INFO has no trailing path; EXT, before DUP | the three `…extra_step…` rows |
 | section 2.4 text | `bip388v_restore_general_tr_text_names_non_nums` |
 | manual / CHANGELOG sentences | the docs CI jobs (section 9) |
 
@@ -374,12 +404,12 @@ never `--release`.
    production code untouched. `cargo nextest run --locked -p mnemonic-toolkit --no-fail-fast -E
    'binary(cli_bip388_validity) | test(bughunt_tk_21_) | test(=allow_repeated_keys_bip388_refused) |
    test(=tr_multi_a_bip388_wallet_policy_with_nums) | test(=export_wallet_tr_sortedmulti_bip48_emits_advisory) |
-   test(=bip388v_restore_general_tr_text_names_non_nums)'`: exactly **27 run, 19 failed, 8 passed**. Paste the
+   test(=bip388v_restore_general_tr_text_names_non_nums)'`: exactly **31 run, 22 failed, 9 passed**. Paste the
    counts.
 2. GREEN commit: sections 3, 4, 5. `cargo fmt --all -- --check`; `cargo clippy --locked --workspace --all-targets
    -- -D warnings`; `cargo nextest run --locked --workspace --no-fail-fast` 0 failed (reference:
-   `4443 tests run: 4443 passed, 37 skipped`, `/scratch/cache/bip388v-green-full3.log`); `cargo test --locked
-   --doc --workspace`; the step-1 filter: exactly **27 run, 27 passed** (a short count is a FAIL).
+   `4447 tests run: 4447 passed, 37 skipped`, `/scratch/cache/arch-bip388v-1124-green2.log`); `cargo test --locked
+   --doc --workspace`; the step-1 filter: exactly **31 run, 31 passed** (a short count is a FAIL).
 3. Docs CI jobs on the head (locally where possible, else green CI on the PR): `manual.yml` (incl. the toolkit
    `manual` job and the doc-flag-lint mutation test), `manual-gui.yml`, `technical-manual.yml`, `quickstart.yml`,
    `examples.yml`; the rest of `rust.yml` and `fuzz-smoke.yml` as green CI.
@@ -399,6 +429,7 @@ the origin-bearing `tr` internal key boundary (probed, no row); hardware-signer 
 | SEC-B388-W3 | DUP-BUILD | `build-descriptor` stderr, exit 1 | proposed; DUP with the one format build-descriptor has |
 | SEC-B388-W4 | section 2.4's `(A non-NUMS distinct-trunk tr-multisig md1 DOES export bip388 via its template path.)` | `restore` stderr, exit 1 | proposed; two words inserted |
 | SEC-B388-W5 | the section 5 manual and CHANGELOG sentences | manuals | proposed |
+| SEC-B388-W6 | EXT | `export-wallet` / `restore` stderr, exit 1 | ruled (architect-bip388-validity-s1s3-1124) |
 
 ## 11. STOPs (product points the rulings do not decide; recommendation given, document written for it)
 
@@ -448,9 +479,8 @@ on the inputs it reaches today).
 1. Toolkit FOLLOWUPS `bip388-literal-nums-key-refusal-text` (L6215-6222; L6218 the ruled fix, L6219 "Open for the
    architect"): converted to the new format and closed by the GREEN commit of this unit (the template arm is
    ruled, both arms are built, the bughunt row is un-ignored).
-2. New: `bip388-keyinfo-extra-derivation-step`. `export-wallet --descriptor 'wsh(or_d(pk(KA/5/<0;1>/*),…))'
-   --format bip388` emits `keys_info` entry `…XA/5` at exit 0 (a `KEY_INFO` has no trailing path, BIP-388
-   L180-187). Measured at `00947cb7`.
+2. `bip388-keyinfo-extra-derivation-step`: folded into this unit (architect 2026-11-24); filed and closed by this
+   unit's GREEN commit (its FOLLOWUPS line is `status=closed@<GREEN sha>`).
 3. New: `bundle-distinctness-origin-blind`. `bundle`'s rule (SPEC v0.5 §4.11.b, "Two slots with identical xpubs
    but different non-empty paths are NOT colliding (BIP-388 letter; …)") accepts a key vector BIP-388 L193 calls
    invalid, and `bundle --descriptor` accepts a policy that repeats `@0` with one multipath (a non-disjoint
