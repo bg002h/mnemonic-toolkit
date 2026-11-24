@@ -29,24 +29,23 @@ on:
     # agents, not the human. There is no `paths:` filter: every job runs and
     # reports, and ci/docs-only.sh skips the build and test steps when every
     # changed file is documentation (ci/docs-only-paths.txt).
-    branches: [main, master, 'ci/**']
-  pull_request:
-    # ready_for_review: a PR leaving draft gets the Windows leg (the default
-    # types, plus that one).
-    types: [opened, synchronize, reopened, ready_for_review]
-    # NO paths — this workflow's `test`/`clippy` contexts are REQUIRED status
-    # checks (branch protection), and a path-filtered required check wedges a
-    # docs-only PR forever at "Expected — waiting for status" (mirror
-    # examples.yml's ruling). Running the full matrix on a docs-only PR is
-    # green (unchanged code). ci/docs-only.sh now skips the build and test
-    # steps of a documentation-only change on push and pull_request alike.
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "also run the nightly jobs"
+        type: boolean
+        required: false
+        default: false
+  schedule:
+    - cron: "0 7 * * *"
 
 # Cancel a pull request's superseded run when a newer commit is pushed to it.
 # Every other event gets a group of its own (the run id), so pushes, tags,
 # schedules and dispatches are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 permissions:
   contents: read
@@ -125,7 +124,132 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: test (${{ matrix.os }})
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
+
+      # FOLLOWUP cargo-lock-version-bump-lockstep: fail CI when Cargo.lock is
+      # stale relative to Cargo.toml (e.g. a version bump that forgot to
+      # regenerate/commit the lockfile). `--locked` errors if resolution would
+      # need to change the committed lock; `cargo metadata` resolves without
+      # compiling, so this is a fast fail-fast guard before the build.
+      - name: Verify Cargo.lock is up to date (--locked guard)
+        if: steps.docs.outputs.docs_only != 'true'
+        run: cargo metadata --locked --format-version 1 > /dev/null
+
+      - name: Show ulimit -l (diagnostic)
+        if: steps.docs.outputs.docs_only != 'true'
+        run: ulimit -l || true
+
+      # F-696: cargo nextest runs the test binaries CONCURRENTLY; `cargo test`
+      # runs them one at a time. Pinned by commit SHA; install-action checks the
+      # downloaded archive against the sha256 in its own manifest, and
+      # `fallback: none` refuses the unverified cargo-binstall path.
+      - name: Install cargo-nextest (pinned, checksum-verified)
+        if: steps.docs.outputs.docs_only != 'true'
+        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
+        with:
+          tool: cargo-nextest@0.9.146
+          fallback: none
+
+      - name: cargo build --tests
+        if: steps.docs.outputs.docs_only != 'true'
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo build --tests --workspace
+
+      - name: "cargo nextest run (shipped build: test-RNG refusal)"
+        if: steps.docs.outputs.docs_only != 'true'
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo nextest run --locked -p mnemonic-toolkit --test cli_slip39_refusals -E 'test(=slip39_test_rng_env_refused_without_feature)'
+
+      - name: cargo nextest run (default tests; G2.1 #[ignore]-gated)
+        if: steps.docs.outputs.docs_only != 'true'
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          # --workspace covers mnemonic-toolkit + wc-codec (the 2 members);
+          # the nested crates/wc-codec/fuzz/ is its OWN workspace, invisible
+          # here. Anti-recurrence: a future member is auto-covered (eval #2
+          # existed because wc-codec was a member never `-p`'d in CI).
+          # nextest skips #[ignore] exactly as `cargo test` does, so the
+          # env-gated g2_* legs below still run only in their own steps.
+          cargo nextest run --workspace --no-fail-fast --features slip39-test-rng
+
+      # nextest does not run doc-tests; this step keeps them.
+      - name: cargo test --doc
+        if: steps.docs.outputs.docs_only != 'true'
+        run: cargo test --workspace --doc
+
+      - name: G2.1 eperm fault injection (fresh subprocess; env set before cargo)
+        if: steps.docs.outputs.docs_only != 'true'
+        # Per SPEC §4 P2 + plan P2.T2: cfg(test) FAIL_MODE injection is only
+        # reachable from library unit tests (cfg(test) is per-crate-not-per-
+        # build, RFC 1604). G2.1 is #[ignore]-gated and filtered to the
+        # specific test name so the OnceLock<FailMode> initializes fresh
+        # from MNEMONIC_TEST_MLOCK_FAIL_MODE in this step's env.
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "eperm"
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit --lib mlock::tests::g2_1 -- --include-ignored
+
+      - name: G2.3-debug einval debug_assert (fresh subprocess)
+        if: steps.docs.outputs.docs_only != 'true'
+        # Per SPEC §6 G2.3: debug builds trip debug_assert when mlock returns
+        # EINVAL under fault injection. #[should_panic(expected = "EINVAL")]
+        # asserts the panic message contains the substring.
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "einval"
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit --lib mlock::tests::g2_3 -- --include-ignored
+
+      - name: G2.4 off control (fresh subprocess)
+        if: steps.docs.outputs.docs_only != 'true'
+        # Per SPEC §6 G2.4: control case — FAIL_MODE=off must not synthesize
+        # failures. Verifies the wrapper does not increment failure_count
+        # spuriously in a healthy ulimit environment.
+        # NOTE: bare 'off' in YAML 1.1 is a boolean false; quote to force
+        # string interpretation (GitHub Actions rejects the workflow without
+        # quotes — first observed at run 25834458333 on 2026-05-14).
+        env:
+          MNEMONIC_TEST_MLOCK_FAIL_MODE: "off"
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            ulimit -l 65536 || true
+          fi
+          cargo test -p mnemonic-toolkit --lib mlock::tests::g2_4 -- --include-ignored
+
+  test-macos:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest]
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -438,7 +562,91 @@ jobs:
         # Fallback if the secp256k1-sys cc cross-build ever needs a freebsd
         # sysroot: switch this row to `cross check --target …` (cross-rs
         # bundles a freebsd container). Validated locally with bare rustup.
-        include: ${{ fromJSON((github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))) || (github.event_name == 'pull_request' && !github.event.pull_request.draft && !startsWith(github.head_ref, 'release-') && !contains(github.head_ref, '-alpha') && !contains(github.head_ref, '-beta') && !contains(github.head_ref, '-rc'))) && '[{"target":"x86_64-pc-windows-msvc","runs-on":"windows-latest"},{"target":"aarch64-unknown-linux-gnu","runs-on":"ubuntu-latest"},{"target":"x86_64-unknown-freebsd","runs-on":"ubuntu-latest"}]' || '[{"target":"aarch64-unknown-linux-gnu","runs-on":"ubuntu-latest"},{"target":"x86_64-unknown-freebsd","runs-on":"ubuntu-latest"}]') }}
+        include:
+          - target: aarch64-unknown-linux-gnu
+            runs-on: ubuntu-latest
+          - target: x86_64-unknown-freebsd
+            runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Docs-only change? (skips the steps below when every changed file is documentation)
+        id: docs
+        shell: bash
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          CHECK_NAME: lib cross-platform check (${{ matrix.target }}, ${{ matrix.runs-on }})
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/docs-only.sh
+      - name: install-rust pinned toolchain
+        if: steps.docs.outputs.docs_only != 'true'
+        # Use the toolkit's pinned `rust-toolchain.toml` channel (1.85.0)
+        # so the cross-platform check matches the version used by the
+        # primary [ubuntu, macos] test matrix.
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: install aarch64-linux cross-compiler (linux target only)
+        # The toolkit's only C dependency is the vendored libsecp256k1
+        # (`secp256k1-sys`); there is no `ring` in the tree. Cross-compiling
+        # its C for the aarch64-linux target needs `aarch64-linux-gnu-gcc`.
+        # GitHub's ubuntu-latest runner has the package available via apt
+        # but doesn't install it by default. windows-latest doesn't need
+        # an explicit cross-compiler (MSVC is preinstalled); the freebsd row
+        # needs none either (cargo check stops before link).
+        if: (matrix.target == 'aarch64-unknown-linux-gnu') && steps.docs.outputs.docs_only != 'true'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: cargo check --lib (cross-platform)
+        if: steps.docs.outputs.docs_only != 'true'
+        # Compile-only (no test execution); the bin target is intentionally
+        # excluded — `mnemonic` CLI is unix-only by virtue of mlock.
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          # Point cc-rs at the cross-compiler installed above.
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: cargo check --lib --target "$TARGET" -p mnemonic-toolkit
+
+  lib-cross-platform-windows:
+    # v0.14.1 — added after the v0.14.0 release because the GUI's Windows
+    # build matrix (mnemonic-gui v0.4.0+ depends on this crate's lib for
+    # `pub mod secret_taxonomy`) caught a Windows-incompat: `pub mod mlock`
+    # uses POSIX `libc::mlock` / `libc::sysconf` / `_SC_PAGESIZE`, none of
+    # which exist in libc's Windows surface. The architect's risk-#5 (lib
+    # platform compat audit) was satisfied previously only by the binary's
+    # CI matrix [ubuntu, macos]; this job extends compile-only coverage to
+    # the lib for the platforms downstream consumers actually target.
+    name: lib cross-platform check
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Advisory Windows (Brian 2026-11-04): the Windows leg is built only on a
+        # push to the default branch or a tag, a manual run, and a ready (non-draft)
+        # pull request whose head branch does not start with `release-` and has no
+        # -alpha, -beta or -rc in it. A matrix leg cannot be skipped alone, so on a
+        # draft or prerelease pull request the leg is absent.
+        # FreeBSD compile-gate (Cycle C). `x86_64-unknown-freebsd` is Tier 2
+        # with Host Tools, so `rustup target add` ships a precompiled std on
+        # the ubuntu runner — no apt cross-compiler step needed (cargo check
+        # stops before link; the only C step is the vendored libsecp256k1 cc
+        # compile, which builds fine against the Tier-2 std). The toolkit
+        # `--lib` row IS correct here specifically because the toolkit alone
+        # declares `process_hardening` as `pub mod` in `src/lib.rs`, so the
+        # new BSD secret-hygiene arm (procctl/setrlimit) is compiled by --lib.
+        # (The 3 sibling CLIs are bin-only and use bare `cargo check --target`
+        # — see their workflows; --lib there would be silent false-green.)
+        # Fallback if the secp256k1-sys cc cross-build ever needs a freebsd
+        # sysroot: switch this row to `cross check --target …` (cross-rs
+        # bundles a freebsd container). Validated locally with bare rustup.
+        include:
+          - target: x86_64-pc-windows-msvc
+            runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
       - name: Docs-only change? (skips the steps below when every changed file is documentation)

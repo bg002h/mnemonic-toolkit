@@ -22,6 +22,10 @@ on:
   # release": proving the signing secret works before a tag relies on it.)
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
+
 jobs:
   man-tarball:
     if: startsWith(github.ref, 'refs/tags/mnemonic-toolkit-v')

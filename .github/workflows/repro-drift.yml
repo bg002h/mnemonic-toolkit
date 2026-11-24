@@ -48,6 +48,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
+
 jobs:
   # F-675: read BOTH git pins from Cargo.lock instead of hard-coding them here.
   # Two measured failures came from this caller disagreeing with the lock:

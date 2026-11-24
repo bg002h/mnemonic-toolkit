@@ -19,10 +19,9 @@ name: quickstart
 
 on:
   push:
-    branches: [main, master, 'ci/**']
+    branches: [master]
     tags:
       - 'quickstart-v*'
-  pull_request:
   workflow_dispatch:
 
 # Cancel a pull request's superseded run when a newer commit is pushed to it.
@@ -30,7 +29,7 @@ on:
 # schedules and dispatches are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   quickstart:

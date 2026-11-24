@@ -47,6 +47,7 @@ on:
     - cron: '0 6 * * 1'          # Mondays 06:00 UTC
   workflow_dispatch:              # on-demand, e.g. right before planning a cycle
   push:
+    branches: [master]
     paths:
       - '.github/workflows/miniscript-fork-tripwire.yml'   # born-green self-test
       - 'ci/miniscript-tripwire.py'
@@ -55,6 +56,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   tripwire:

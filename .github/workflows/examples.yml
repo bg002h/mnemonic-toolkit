@@ -33,10 +33,9 @@ name: examples
 #     capture (Q1-(b)).
 on:
   push:
-    branches: [master, main, 'ci/**']
+    branches: [master]
     tags:
       - 'examples-v*'
-  pull_request:                       # NO paths — a REQUIRED check must report on every PR
   workflow_dispatch:
 
 # Cancel a pull request's superseded run when a newer commit is pushed to it.
@@ -44,7 +43,7 @@ on:
 # schedules and dispatches are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   examples:
