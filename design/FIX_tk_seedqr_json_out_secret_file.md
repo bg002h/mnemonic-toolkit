@@ -108,7 +108,13 @@ The appended sentence is the ruling's text verbatim (`architect-secret-ci-decisi
 
 > ### `seedqr --json-out` writes its file owner-only
 >
-> - **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever the umask, and sets an existing file to 0600 (before: a new file took the umask mode, usually 0644, and an existing file kept its mode). The file holds the phrase. `--json-out /dev/null` and an existing file you can write but do not own are now refused (exit 1, `Operation not permitted`; before: exit 0), and a refused file you do not own is left empty.
+> - **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever
+>   the umask, and sets an existing file to 0600 (before: a new file took the umask mode, usually 0644, and an
+>   existing file kept its mode). The file holds the phrase. `--json-out /dev/null` is now refused for a holder who
+>   is not root (exit 1, `Operation not permitted`; before: exit 0; as root it sets /dev/null to mode 0600). An
+>   existing file you can write but do not own is now refused too (exit 1, `Operation not permitted`; before: exit
+>   0), and a refused file you do not own is left empty. `--json-out /dev/stdout` at a terminal you own sets the
+>   terminal's mode 620 -> 600.
 
 - Help text (`seedqr.rs:76`, `:97` doc comments): no change (ruling). No flag added or removed, so
   `docs/manual/tests/lint.sh` and the GUI schema mirror are unaffected.
@@ -151,7 +157,7 @@ FAIL seedqr_decode_json_out_fresh_file_0600          ... :83:5 ... mode is 644
 Summary 4 tests run: 0 passed, 4 failed
 ```
 
-Line 83 is the `mode & 0o077 == 0` assertion, so the exit, stdout, envelope and no-advisory assertions before it
+Line 83 (:97 after the `cargo fmt` of section 9 step 1) is the `mode & 0o077 == 0` assertion, so the exit, stdout, envelope and no-advisory assertions before it
 passed: each row fails for the stated reason only. With the code patch all four pass (section 8 run: `PASS` x4).
 
 Manual check of today's behaviour (umask 022, unpatched binary): fresh decode → `644`, fresh encode → `644`, a
