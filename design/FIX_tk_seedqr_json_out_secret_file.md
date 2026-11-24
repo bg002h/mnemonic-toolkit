@@ -61,11 +61,11 @@ flag, type, command, error text or public API; no spec owns the file mode. Small
 |---|---|---|
 | `/dev/null` (root-owned, 0666) | rc 0 | rc 1; stderr last line `error: seedqr: decode: json-out write to "/dev/null": Operation not permitted (os error 1)` (the `fchmod` at `write.rs:62` is refused) |
 | `/dev/stdout`, stdout a pipe | rc 0, envelope on the pipe | rc 0, envelope on the pipe (unchanged) |
-| `/dev/stdout`, stdout a terminal the holder owns | rc 0 | from the code: rc 0, and the terminal device's mode is set to 0600 (not measured: no terminal in this session) |
-| an existing file the holder can write but does not own | rc 0, written | from the code: the file is truncated by `open` (`write.rs:55`), then `fchmod` fails, rc 1 with `Operation not permitted (os error 1)`; the file is left empty |
+| `/dev/stdout`, stdout a terminal the holder owns | rc 0 | rc 0; the terminal device's mode goes 620 -> 600 (measured on a pty, architect-tk-seedqr-stops-1124 Q2) |
+| an existing file the holder can write but does not own | rc 0, written | rc 1, `Operation not permitted (os error 1)`; the file is left empty, owner and mode unchanged (measured in a user namespace, architect-tk-seedqr-stops-1124 Q2). Today the envelope lands in the other user's file. |
 | an existing read-only (0444) file | rc 1, `Permission denied (os error 13)` | the same (measured: rc 1, file untouched, 444) |
 
-The first and fourth rows are STOP 2 (section 11).
+Accepted for this FIX (architect-tk-seedqr-stops-1124 Q2); the /dev/null and terminal rows close with iolib-direct-chmod-non-regular.
 
 ## 3. Code delta, `crates/mnemonic-toolkit/src/cmd/seedqr.rs` (the reference patch)
 
@@ -168,14 +168,13 @@ Found by one `cargo nextest run --locked --workspace --build-jobs 6 -j 6 --no-fa
 RED file applied (log `/scratch/cache/seedqr-green.log`): `4451 tests run: 4450 passed, 1 failed, 37 skipped`. The
 one failure:
 
-1. `crates/mnemonic-toolkit/tests/p3_declined_crate_items.rs::the_binary_names_only_the_two_adopted_crate_items`
+1. `crates/mnemonic-toolkit/tests/p3_declined_crate_items.rs::the_binary_names_only_the_adopted_crate_items`
    (:25-69). It scans `src/` and allows `mnemonic_io_lib::` only before `remedy::`; its message:
    `P3's boundary table adopts `remedy` and NOTHING else from mnemonic-io-lib. These lines reach a declined item; if
    that is intended it is a boundary change and belongs in a plan, not in a tidy-up:` followed by
    `cmd/seedqr.rs:309: …write_private…` and `cmd/seedqr.rs:337: …`. The boundary table it enforces is
    `mnemonic-engrave/design/IMPLEMENTATION_PLAN_P3_md_mk_mnemonic.md:704@bc90d311` (`write_private` … `mnemonic`:
-   "DECLINE — no `--out` in P3's row"). **How this test (its allow rule, its name, which says "two", and its module
-   doc :1-18) changes is STOP 1.**
+   "DECLINE — no `--out` in P3's row"). It changes by architect-tk-seedqr-stops-1124 Q1: it allows the one item `write::write_private` by exact name and is renamed `the_binary_names_only_the_adopted_crate_items`; the patch is design/FIX_tk_seedqr_json_out_secret_file.p3-test.patch. The adoption is the one SPEC_io_lib_safe_write.md section 9 (tk row) already plans; P3's decline was "no `--out` in P3's row" (IMPLEMENTATION_PLAN_P3_md_mk_mnemonic.md:704@bc90d311).
 
 No other test changes. No golden or snapshot file changes.
 
@@ -194,7 +193,7 @@ No other test changes. No golden or snapshot file changes.
 4. `coordinator/scripts/mutation-gate.sh <worktree> 7ff7de83` after step 2; its missed list goes in the review brief.
 
 Not covered: macOS (`#![cfg(unix)]` runs there, but no macOS CI job is claimed here); the terminal and not-owned
-rows of section 2 (not testable without a tty or a second user).
+rows of section 2 (measured once by the architect, not tested).
 
 ## 10. Review class
 
@@ -207,15 +206,8 @@ judgement, never downward", so the class is **A**.
 
 ## 11. STOPs (points no ruling decides)
 
-- **STOP 1.** The ruled `write_private` call fails
-  `p3_declined_crate_items::the_binary_names_only_the_two_adopted_crate_items`, which pins P3's boundary table
-  (`remedy` only; `write_private` declined for `mnemonic` at `IMPLEMENTATION_PLAN_P3_md_mk_mnemonic.md:704`). How
-  does the test change (allow exactly `write::write_private`, or the whole `write::` module; keep or rename the
-  test, whose name says "two"; what its doc says), and does any boundary document record the adoption?
-- **STOP 2.** `--json-out /dev/null` goes from rc 0 to rc 1 (`Operation not permitted`), and an existing file the
-  holder can write but does not own is truncated and then refused (rc 1, left empty). Are these outcomes of
-  `write_private` accepted for this FIX (U6's atomic writer will change them again), or does seedqr need a rule for
-  non-regular or not-owned targets?
+Resolved: architect-tk-seedqr-stops-1124 Q1 (allow exactly write::write_private).
+Resolved: architect-tk-seedqr-stops-1124 Q2 (accept; library line filed).
 
 ## 12. Secret rows
 
