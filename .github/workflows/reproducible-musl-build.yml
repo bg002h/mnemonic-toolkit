@@ -167,6 +167,10 @@ on:
   # click drives the x86_64-musl `mnemonic` POC end-to-end.
   workflow_dispatch:
     inputs:
+      full:
+        description: "also run the nightly jobs (no nightly jobs in this workflow; accepted so the release gate can pass -f full=true everywhere)"
+        type: boolean
+        default: false
       target:
         description: "Rust target triple to resolve/build (musl)."
         type: string
