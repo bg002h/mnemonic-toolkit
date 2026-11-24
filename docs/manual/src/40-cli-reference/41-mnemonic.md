@@ -1196,7 +1196,7 @@ mnemonic export-wallet [OPTIONS]
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `seedqr`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys, including `seedqr`, are refused by `export-wallet`'s watch-only validator per SPEC §3) |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot. **`bip388`** refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins), and a `--descriptor` key with a derivation step before `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`; a BIP-388 key entry is an xpub with no path after it); use `descriptor` or `bitcoin-core` for these wallets |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `0` (default; rescan from genesis to discover an existing key's funds), `now`, or unix seconds |
@@ -1617,9 +1617,14 @@ file-import surface is singlesig-only and must not receive a script-tree
 policy dressed as singlesig. `bip388` likewise refuses a **general** taproot
 card (a tap-script-tree reconstructed via the general route-around has no
 named-template form): such a card emits `descriptor` / `bitcoin-core` only.
-A **distinct-trunk taproot multisig** card (NUMS *or* non-NUMS), by contrast,
+A non-NUMS **distinct-trunk taproot multisig** card, by contrast,
 takes the template path and *does* emit `bip388` faithfully — `tr(@idx/**,
-multi_a(k,…))`. No `--template` is needed (the threshold and script type come
+multi_a(k,…))`. A **NUMS** taproot multisig card refuses `bip388` (exit 1):
+its internal key is a literal key, and BIP-388 allows only `@N` key
+placeholders; it emits `descriptor` / `bitcoin-core`. A card whose policy
+uses one public key more than once (e.g. a `bundle --descriptor` that
+repeats `@0`) refuses `bip388` too (exit 1; BIP-388 requires pairwise
+distinct keys). No `--template` is needed (the threshold and script type come
 from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
 **before** any payload is emitted unless `--allow-mismatch`.
 
@@ -4917,7 +4922,7 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--spec <SPEC>` | the JSON node-tree spec — a file path, or `-` for stdin. If omitted, stdin is read when it is not a TTY |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Used only for the human-view first-receive-address rendering; the descriptor / bip388 / cost output is network-agnostic (the xpubs carry the network) |
 | `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
-| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
+| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object; `bip388` is `null` when BIP-388 cannot express the policy, e.g. an allowed `repeated-keys` policy). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
 | `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs. Since v0.51.0 it also carries an `archetypes` section: per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry |
 | `--archetype <ARCHETYPE>` | build from a curated preset instead of a `--spec` node-tree (conflicts with `--spec`): `decaying-multisig`, `hashlock-gated`, `kofn-recovery`, `simple-timelocked-inheritance`, `tiered-recovery`. Parameters via the flags below; the lowered tree flows through the SAME validation gate |
 | `--key <KEY>` | primary-path cosigner key (`[fp/path]xpub…`); repeat per cosigner. **Argv order is preserved into the quorum** (even `sortedmulti`'s descriptor string keeps authored order; sorting is script-time) |
@@ -4982,9 +4987,13 @@ invocation — a deliberate, reviewed act, never silent:
 - `--emit-spec` records NO allowance in the spec document — replaying an
   emitted spec without `--allow` correctly refuses. The banner still
   prints on the emitting run.
-- An allowed `repeated-keys` policy emits duplicate `keys_info` entries
-  in its BIP-388 output (no dedup); hardware-signer registration
-  behavior on duplicate keys is signer-defined.
+- An allowed `repeated-keys` policy has no BIP-388 form (BIP-388 requires
+  pairwise distinct `keys_info` keys): `--format bip388` refuses it (exit 1)
+  with `error: --format bip388 cannot express a wallet that uses one public
+  key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet
+  policy requires pairwise distinct keys; use --format descriptor for this
+  wallet`, and `--json` emits `"bip388": null`. `--format descriptor` and the
+  human view are unchanged.
 - miniscript's 6th opt-out, `raw_pkh`, is not exposed — it is
   unreachable from this builder's node grammar.
 

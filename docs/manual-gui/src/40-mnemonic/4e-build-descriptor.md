@@ -215,9 +215,9 @@ the path is intentional.
 ### `repeated-keys` {#mnemonic-build-descriptor-allow-repeated-keys}
 
 Waive the `repeated_keys` rule (the same key in two branches — e.g. a
-"degrading threshold"). The BIP-388 output emits duplicate `keys_info`
-entries (no dedup); hardware-signer behavior on duplicate keys is
-signer-defined.
+"degrading threshold"). Such a policy has no BIP-388 form (BIP-388 requires pairwise
+distinct keys): `--format bip388` refuses it (exit 1) and `--json` carries
+`"bip388": null`.
 
 ### `resource-limit` {#mnemonic-build-descriptor-allow-resource-limit}
 
@@ -285,7 +285,8 @@ See [`bundle --network regtest`](#mnemonic-bundle-network-regtest).
 
 Emit a structured JSON envelope `{descriptor, bip388, cost,
 diagnostics}` for the GUI (the `cost` field is the embedded
-`compare-cost --json` object). On a gate failure: `{diagnostics:
+`compare-cost --json` object). `bip388` is `null` when BIP-388 cannot
+express the policy (an allowed `repeated-keys` policy). On a gate failure: `{diagnostics:
 [{node_path, kind, message}]}` with exit 2; in preset mode each
 diagnostic may additionally carry `flag`. The GUI renders this as a
 Boolean toggle.

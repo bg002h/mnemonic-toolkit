@@ -321,10 +321,15 @@ fn emit<W: Write, E: Write>(
     // Canonical descriptor (with BIP-380 checksum) via the round-trip idiom.
     let canonical = vp.descriptor.to_string();
     // build-descriptor has no wallet-name context → the unchanged default name.
-    let bip388 = descriptor_to_bip388_wallet_policy(
-        &canonical,
-        crate::wallet_export::DEFAULT_BIP388_POLICY_NAME,
-    )?;
+    // Computed only where printed: `--json` (null when BIP-388 cannot express
+    // the policy) and `--format bip388` (refuses).
+    let bip388 = || {
+        descriptor_to_bip388_wallet_policy(
+            &canonical,
+            crate::wallet_export::DEFAULT_BIP388_POLICY_NAME,
+            crate::wallet_export::BIP388_BUILD_ALTERNATIVES,
+        )
+    };
 
     if args.json {
         // Cost posture on an allowed-insane emit (allow SPEC §3, R0-r1 C1):
@@ -335,9 +340,16 @@ fn emit<W: Write, E: Write>(
         } else {
             Value::Null
         };
+        // null only when BIP-388 cannot express the policy (the converter's
+        // BadInput refusals); any other error propagates.
+        let bip388_value = match bip388() {
+            Ok(v) => v,
+            Err(ToolkitError::BadInput(_)) => Value::Null,
+            Err(e) => return Err(e),
+        };
         let mut env = json!({
             "descriptor": canonical,
-            "bip388": bip388,
+            "bip388": bip388_value,
             "cost": cost,
             "diagnostics": [],
         });
@@ -366,7 +378,7 @@ fn emit<W: Write, E: Write>(
             writeln!(
                 stdout,
                 "{}",
-                serde_json::to_string_pretty(&bip388).map_err(|e| {
+                serde_json::to_string_pretty(&bip388()?).map_err(|e| {
                     ToolkitError::BuildDescriptorSpec(format!("bip388 serialize: {e}"))
                 })?
             )

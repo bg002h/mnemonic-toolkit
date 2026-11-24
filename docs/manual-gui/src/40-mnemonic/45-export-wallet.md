@@ -324,6 +324,7 @@ because the file holds addresses, not the descriptor.
 Bare BIP-388 wallet-policy JSON without the Bitcoin-Core-specific
 wrapper. Use for descriptor-aware tooling that consumes the
 upstream BIP-388 standard format directly.
+It refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key, or one public key used twice; see Refusals below.
 
 ### `coldcard` {#mnemonic-export-wallet-format-coldcard}
 
@@ -626,6 +627,9 @@ format.
 | Slot row with secret-bearing subkey (`phrase` / `entropy` / `wif` / `xprv`) | watch-only-validator refusal: secret material rejected |
 | `--format sparrow` with multisig template, no `--threshold` | Sparrow-specific missing-info refusal |
 | `--format specter` without `--wallet-name` | Specter-specific missing-info refusal |
+| `--format bip388` with `--taproot-internal-key nums`, or a `--descriptor` whose taproot internal key is a literal key with no origin (e.g. the NUMS key) | `--format bip388 cannot express the literal key <hex> (a taproot internal key with no origin, e.g. the BIP-341 NUMS key): a BIP-388 wallet policy allows only @N key placeholders; use --format descriptor or --format bitcoin-core for this wallet` |
+| `--format bip388` and two keys with one public key (a repeated key, or one xpub under two origins) | `--format bip388 cannot express a wallet that uses one public key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet policy requires pairwise distinct keys; use --format descriptor or --format bitcoin-core for this wallet` |
+| `--format bip388` and a `--descriptor` key with a step before `/<0;1>/*` (e.g. `…xpub/5/<0;1>/*`) | ``--format bip388 cannot express the key <key> (a derivation step between the extended public key and `/<0;1>/*`): a BIP-388 key information entry is an extended public key with no path after it; use --format descriptor or --format bitcoin-core for this wallet`` |
 
 ## Advisories
 
