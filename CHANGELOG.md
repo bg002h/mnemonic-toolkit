@@ -8,6 +8,13 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `build-descriptor` presets take `--older` / `--recovery-older` in blocks only
+
+- `--archetype` presets refuse an `--older` or `--recovery-older` outside `1..=65535` with a `param`
+  diagnostic (exit 2). A value BIP-68 reads as 512-second units (`0x400001..=0x40FFFF`, e.g. `4200000`,
+  about 33.75 days) used to build silently; the refusal now spells out that reading. Author a time-based lock
+  with `--spec`. The decaying-multisig cross-unit refusal is gone (both tiers are now blocks).
+
 ### `convert` refuses an unused `--account`
 
 - **`convert`**: a non-zero `--account` is now refused (exit 2) when no requested `--to` target reads it. Only
