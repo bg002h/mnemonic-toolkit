@@ -41,7 +41,7 @@ Reasons:
 2. The validator already owns the per-value rules for the same body (H13 hardened, non-integer), so the
    new rule sits with its siblings and keeps their precedence.
 3. An md-codec fix needs an md-codec release and a toolkit git-pin bump (`Cargo.toml` L73), and changes
-   md-codec's wire validity (encoder and decoder): cross-repo, full track. md-codec does hold BIP rules and
+   md-codec's encoder validity (the decoder must keep reading cards already engraved): cross-repo, full track. md-codec does hold BIP rules and
    `md encode` has the same defect (md 0.20.7: `md encode 'wpkh(@0/<0;0>/*)'` exits 0 and `md decode` returns
    `wpkh(@0/<0;0>/*)`), so a companion FOLLOWUP is proposed for md-codec (section 8). When md-codec refuses,
    the toolkit lexer still refuses first, with this text.
@@ -55,10 +55,10 @@ earlier value. The refusal is a `ToolkitError::DescriptorParse` (exit 2) with th
 the `@N` index, `<body>` is the body exactly as captured (the text between `<` and `>`) and `<v>` is the
 repeated value in decimal without leading zeros:
 
-    @<i> multipath `<<body>>` repeats the value <v>; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
+    @<i> multipath `<<body>>` repeats the value <v>; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
 
 Example (R1): ``@0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath
-tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)``.
+tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)``.
 
 Decided edge cases:
 - Comparison is by value: `<1;01>` repeats 1, and the message shows the body as typed (`<1;01>`) and `1` (R4).
@@ -115,12 +115,12 @@ No flag changes. Printed text changes, so the manual gains:
    > `<1;01>` repeats 1) — is invalid under BIP-389, which forbids duplicate values in a tuple; with `<0;0>`
    > the receive and change chains would be one chain. It is refused (exit 2, `DescriptorParse`; for
    > `import-wallet`, exit 2 `ImportWalletParse`) on the same surfaces, before the fixed-step and
-   > no-wildcard checks above. **Remedy:** give each alternative a different value, normally `/<0;1>/*`
-   > (receive 0, change 1).
+   > no-wildcard checks above. **Remedy:** copy the tuple from the wallet's own exported descriptor; most
+   > wallets use `/<0;1>/*` (receive 0, change 1). A guessed tuple describes a different wallet.
 
 2. In the `mnemonic bundle` refusal table, a row after the fixed-step row (L878):
 
-   | `@N`/key multipath repeats a value (`<0;0>`, `<0;1;0>`) | refused, exit 2 (`DescriptorParse`) — ``error: @N multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)``; see [Non-representable use-site steps](#non-representable-use-site-steps) |
+   | `@N`/key multipath repeats a value (`<0;0>`, `<0;1;0>`) | refused, exit 2 (`DescriptorParse`) — ``error: @N multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)``; see [Non-representable use-site steps](#non-representable-use-site-steps) |
 
 3. In the `mnemonic import-wallet` refusal table, a row after the fixed-step row (L1897):
 
@@ -193,16 +193,16 @@ target/debug/mnemonic`, verbatim; `out` is stdout bytes, `err` the first stderr 
 
 Expected after the fix (R10's stdout at `68ea05e0` is `canonical`):
 
-    R1 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R2 rc=2 out=0 err=error: @0 multipath `<1;1>` repeats the value 1; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R3 rc=2 out=0 err=error: @0 multipath `<0;1;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R4 rc=2 out=0 err=error: @0 multipath `<1;01>` repeats the value 1; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R5 rc=2 out=0 err=error: @1 multipath `<2;2>` repeats the value 2; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R6 rc=2 out=0 err=error: import-wallet: descriptor: parse error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R7 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R8 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R9 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
-    R10 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid (the usual receive/change form is `<0;1>`)
+    R1 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R2 rc=2 out=0 err=error: @0 multipath `<1;1>` repeats the value 1; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R3 rc=2 out=0 err=error: @0 multipath `<0;1;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R4 rc=2 out=0 err=error: @0 multipath `<1;01>` repeats the value 1; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R5 rc=2 out=0 err=error: @1 multipath `<2;2>` repeats the value 2; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R6 rc=2 out=0 err=error: import-wallet: descriptor: parse error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R7 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R8 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R9 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
+    R10 rc=2 out=0 err=error: @0 multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
     G1-G4 unchanged.
 
 R3, R4, R8 and R9 are covered in the test suite by the unit rows U2, U4, U6, U7; R10 is probe-only (the
@@ -219,11 +219,13 @@ property tests build `/<0;1>/*` only (`prop_backup_restore_roundtrip.rs` L462, L
 
 ## 7. Out of scope (proposed FOLLOWUPS, section 8)
 
-- md-codec encoder and decoder, and md-cli `md encode` (companion line).
+- md-codec encoder (the decoder keeps reading already-engraved cards), and md-cli `md encode` (companion line).
 - `export-wallet --descriptor` (`parse_descriptor_lenient`, miniscript parse): measured at `68ea05e0`,
   `export-wallet --network signet --format descriptor --descriptor "wpkh([73c5da0a/84h/1h/0h]T84/<0;0>/*)"`
   exits 0 and prints the one descriptor `wpkh([73c5da0a/84'/1'/0']T84/0/*)#2ag6nxcd`. `xpub-search
   account-of-descriptor` and `compare-cost --descriptor` were not probed.
+  Review r1 measured `--format bitcoin-core` on the same input: one `/0/*` entry with `"internal": false` and no
+  change descriptor, at exit 0. The FOLLOWUP is therefore graded I (not M) and routed as its own unit.
 - The other R02 sub-notes (grade row L58: `unwrap_or(master)`, wc-codec regroup trailing zeros, raid padding
   debug-only check, version field, u=0) need their own triage.
 
@@ -238,7 +240,7 @@ or link target); CI `changelog-check.yml`; and `design/fix-sec-multipath-duplica
 
 - **MPD-W1** (toolkit `lex_placeholders` Rule D; every surface in §3's table; source this FIX §3): >
   @<i> multipath `<<body>>` repeats the value <v>; BIP-389 forbids duplicate values in a multipath tuple, so
-  this descriptor is invalid (the usual receive/change form is `<0;1>`)
+  this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)
 - **MPD-W2** (toolkit manual 41-mnemonic.md "Non-representable use-site steps" paragraph; source this FIX §4
-  item 1): > A multipath that repeats a value … Remedy: give each alternative a different value, normally
-  `/<0;1>/*` (receive 0, change 1).
+  item 1): > A multipath that repeats a value … Remedy: copy the tuple from the wallet's own exported
+  descriptor; most wallets use `/<0;1>/*` (receive 0, change 1). A guessed tuple describes a different wallet.
