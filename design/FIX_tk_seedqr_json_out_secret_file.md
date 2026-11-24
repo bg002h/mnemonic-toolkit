@@ -13,8 +13,7 @@ advisory line; the four sibling `--json-out` writers reach 0600 later in file-ou
 (`architect-file-output-convention-1123.md:37`). Recon: `coordinator/agent-reports/secret-ci-recon-1124/mnemonic-toolkit.md`
 "FIX QUEUE" (:33-42).
 
-**One STOP is open (section 11): the boundary test `p3_declined_crate_items` fails under the ruled change, and no
-ruling says how it changes.** Everything else below follows the ruling.
+**Both STOPs are resolved (section 11, architect-tk-seedqr-stops-1124 Q1 and Q2).** Everything below follows the rulings.
 
 **How this document was checked.** The code change and the manual change were applied in this worktree as a
 scratch change and reverted. They are saved as reference patches:
@@ -174,7 +173,7 @@ Found by one `cargo nextest run --locked --workspace --build-jobs 6 -j 6 --no-fa
 RED file applied (log `/scratch/cache/seedqr-green.log`): `4451 tests run: 4450 passed, 1 failed, 37 skipped`. The
 one failure:
 
-1. `crates/mnemonic-toolkit/tests/p3_declined_crate_items.rs::the_binary_names_only_the_adopted_crate_items`
+1. `crates/mnemonic-toolkit/tests/p3_declined_crate_items.rs::the_binary_names_only_the_two_adopted_crate_items` (renamed `the_binary_names_only_the_adopted_crate_items` by the Q1 change)
    (:25-69). It scans `src/` and allows `mnemonic_io_lib::` only before `remedy::`; its message:
    `P3's boundary table adopts `remedy` and NOTHING else from mnemonic-io-lib. These lines reach a declined item; if
    that is intended it is a boundary change and belongs in a plan, not in a tidy-up:` followed by
@@ -192,7 +191,7 @@ No other test changes. No golden or snapshot file changes.
    -p mnemonic-toolkit --test cli_seedqr_json_out_mode --no-fail-fast`: **4 run, 4 failed**, each `mode is 644`.
 2. GREEN commit: sections 3 and 5, and the Q1 test change (`design/FIX_tk_seedqr_json_out_secret_file.p3-test.patch`). `cargo fmt --all -- --check`; `cargo clippy --locked
    --all-targets --workspace -- -D warnings`; `cargo nextest run --locked --workspace --no-fail-fast` 0 failed;
-   `cargo test --locked --doc --workspace`; the `cli_seedqr_json_out_mode` filter **4 run, 4 passed**.
+   `cargo test --locked --doc --workspace`; the `cli_seedqr_json_out_mode` filter **4 run, 4 passed**. Apply the patch with git apply design/FIX_tk_seedqr_json_out_secret_file.p3-test.patch; the GREEN commit keeps the .patch file unchanged as this document's record.
 3. Docs CI jobs on the head (locally where possible, else green CI): `manual.yml` (incl. `docs/manual/tests/lint.sh`),
    `manual-gui.yml`, `technical-manual.yml`, `quickstart.yml`, `examples.yml`; the rest of `rust.yml` and
    `fuzz-smoke.yml` as green CI.
@@ -218,8 +217,7 @@ Resolved: architect-tk-seedqr-stops-1124 Q2 (accept; library line filed).
 
 ## 12. Secret rows
 
-Close on the GREEN commit (the ruling, `architect-secret-ci-decisions-1124.md:36`): `bh1119-tk-c1-seedqr-json-out-mode`
-(row 270), `bh-tk-c1` (274), `bh-tk-c1b` (275), `tk-bh-c1` (278).
+The builder edits no coordinator file. After the PR merges, the coordinator sets the status cell of coordinator/status/secret-criticals.md rows bh1119-tk-c1-seedqr-json-out-mode, bh-tk-c1, bh-tk-c1b and tk-bh-c1 (lines 270, 274, 275, 278 at review time) to "closed <merge date>: <GREEN sha> @<merge sha> (FIX_tk_seedqr_json_out_secret_file)", and edits row 399 as below (its status stays open).
 
 Row 399 `tk-json-out-umask-secret` (M) stays open (closes with U6) and narrows. Its summary cell, old:
 
