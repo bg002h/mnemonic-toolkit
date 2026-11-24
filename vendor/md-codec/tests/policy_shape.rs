@@ -5,6 +5,7 @@ use common::{keyarg, multikeys, node2, node3, timelock, wrap};
 use md_codec::compose::{HashKind, HashLock, Lock as ComposeLock};
 use md_codec::policy_shape::{KeyPathKind, Lock, LockKind, policy_shape};
 use md_codec::tag::Tag;
+use md_codec::tree::{Body, Node};
 
 /// `wsh(or_d(multi(2,@0,@1,@2), and_v(v:pkh(@3), older(26280))))`
 fn kofn_recovery() -> md_codec::encode::Descriptor {
@@ -106,24 +107,17 @@ fn and_v_pk_with_timelock_reports_zero_threshold_not_one_of_one() {
     );
 }
 
-/// THE GUARD ITSELF: `wsh(and_v(v:older(10), or_d(multi(2,@0,@1,@2),
-/// c:pk_k(@3))))`. `split_branches` does not split an `or` sitting under
-/// `and_v`, so this is ONE branch holding `multi(2,@0,@1,@2)` PLUS a key
-/// outside it — `@3` spends this branch alone after 10 blocks. Reporting
-/// the multi's 2-of-3 for the whole branch would tell an operator two of
-/// three signatures are needed where one other key spends alone: the exact
-/// misreading round-1 review I-2 found, and the reason `branch_of` requires
-/// `nkeys == br.slots.len()` before trusting `sole_multi`'s answer. Ported
-/// from the Go test's `mixed` case (md/policy_shape_test.go:121-148).
-///
-/// MUTATION RESULT (recorded in the task report): with the guard's
-/// `nkeys as usize == br.slots.len()` temporarily replaced by a bare
-/// `true`, this test fails — `(b.k, b.n)` comes back `(2, 3)` instead of
-/// `(0, 0)`. So does
-/// `mixed_branch_without_a_lock_still_reports_zero_threshold` below, the
-/// same way. Both restored before this commit.
+/// `wsh(and_v(v:older(10), or_d(multi(2,@0,@1,@2), c:pk_k(@3))))`.
+/// `split_branches` does not split an `or` sitting under `and_v`, so the
+/// spending alternatives of this policy cannot be listed as branches. Bug
+/// hunt #5 (FIX-B): an `or` that `split_branches` leaves unsplit makes the
+/// shape incomplete, with no branches, rather than one merged branch. This
+/// replaces the earlier `mixed_branch_with_extra_key_beside_a_multi_reports_zero_threshold`,
+/// which pinned the merged branch; the `nkeys == br.slots.len()` guard in
+/// `branch_of` is now pinned by
+/// `mixed_branch_without_a_lock_still_reports_zero_threshold` below.
 #[test]
-fn mixed_branch_with_extra_key_beside_a_multi_reports_zero_threshold() {
+fn mixed_branch_with_or_under_and_v_marks_incomplete() {
     let tree = wrap(
         Tag::Wsh,
         node2(
@@ -137,28 +131,27 @@ fn mixed_branch_with_extra_key_beside_a_multi_reports_zero_threshold() {
         ),
     );
     let shape = policy_shape(&common::descriptor_of(tree, 4));
-    assert!(shape.complete, "the mixed branch should be understood");
-    assert_eq!(
-        shape.branches.len(),
-        1,
-        "split_branches does not split an or under and_v, which is what makes this branch mixed"
+    assert!(
+        !shape.complete,
+        "an or under and_v cannot be listed as branches"
     );
-    let b = &shape.branches[0];
-    assert_eq!(
-        b.slots,
-        vec![0, 1, 2, 3],
-        "INCONCLUSIVE fixture check: want all four keys"
-    );
-    assert_eq!(
-        (b.k, b.n),
-        (0, 0),
-        "a branch holding multi(2,@0,@1,@2) AND @3 alone has no single k-of-n"
+    assert!(
+        shape.branches.is_empty(),
+        "an incomplete shape lists no branches"
     );
 }
 
-/// The same shape with the timelock removed, so the guard is pinned as
-/// being about KEYS, not locks (Go test's `mixedNoLock`,
-/// md/policy_shape_test.go:151-166).
+/// THE GUARD ITSELF: `wsh(and_v(v:multi(2,@0,@1,@2), c:pk_k(@3)))` is ONE
+/// branch holding `multi(2,@0,@1,@2)` PLUS a key outside it. Reporting the
+/// multi's 2-of-3 for the whole branch would tell an operator two of three
+/// signatures are needed where a fourth is also required: the misreading
+/// round-1 review I-2 found, and the reason `branch_of` requires
+/// `nkeys == br.slots.len()` before trusting `sole_multi`'s answer (Go
+/// test's `mixedNoLock`, md/policy_shape_test.go:151-166).
+///
+/// MUTATION RESULT (recorded in the original task report): with the guard's
+/// `nkeys as usize == br.slots.len()` temporarily replaced by a bare `true`,
+/// this test fails — `(b.k, b.n)` comes back `(2, 3)` instead of `(0, 0)`.
 #[test]
 fn mixed_branch_without_a_lock_still_reports_zero_threshold() {
     let tree = wrap(
@@ -578,4 +571,85 @@ fn andor_splits_into_x_and_y_or_z() {
     assert_eq!(shape.branches.len(), 2);
     assert_eq!(shape.branches[0].slots, vec![0, 1]);
     assert_eq!(shape.branches[1].slots, vec![2]);
+}
+
+/// 1a final review M-1, owned "before plan 1b reads k/n" (plan 1b's
+/// `liana_reads_as_built` and `nunchuk_reads_as_built` read them). A
+/// duplicate-index multi has three indices and two distinct keys: no k-of-n
+/// describes it, and the bare spelling must answer as the wrapped one does.
+/// Mutation: delete `plain_multi`'s `nkeys == slots.len()` guard in
+/// `branch_of` -> the bare spelling reports 2-of-3 and this reds.
+#[test]
+fn a_duplicate_index_multi_reports_no_threshold_in_either_spelling() {
+    let bare = common::descriptor_of(wrap(Tag::Wsh, multikeys(Tag::Multi, 2, vec![0, 0, 1])), 2);
+    let locked = common::descriptor_of(
+        wrap(
+            Tag::Wsh,
+            node2(
+                Tag::AndV,
+                wrap(Tag::Verify, timelock(Tag::Older, 9)),
+                multikeys(Tag::Multi, 2, vec![0, 0, 1]),
+            ),
+        ),
+        2,
+    );
+    for d in [bare, locked] {
+        let b = &policy_shape(&d).branches[0];
+        assert_eq!(b.slots, vec![0, 1]);
+        assert_eq!((b.k, b.n), (0, 0), "no k-of-n for a duplicate-index multi");
+    }
+}
+
+/// `sln:older(N)` = `s:or_i(0,n:older(N))` and `and_n(X,Y)` =
+/// `andor(X,Y,0)`: one alternative is `0`, so neither is a disjunction and
+/// the branch stays complete (whole-diff s1 I-1).
+#[test]
+fn zero_alternative_or_i_and_andor_stay_complete() {
+    let sln = wrap(
+        Tag::Swap,
+        node2(
+            Tag::OrI,
+            Node {
+                tag: Tag::False,
+                body: Body::Empty,
+            },
+            wrap(Tag::NonZero, timelock(Tag::Older, 144)),
+        ),
+    );
+    let thresh = common::thresh_node(
+        2,
+        vec![
+            keyarg(Tag::PkK, 0),
+            wrap(Tag::Swap, keyarg(Tag::PkK, 1)),
+            sln,
+        ],
+    );
+    let shape = policy_shape(&common::descriptor_of(wrap(Tag::Wsh, thresh), 2));
+    assert!(
+        shape.complete,
+        "sln:older inside thresh is not a disjunction"
+    );
+    assert_eq!(shape.branches.len(), 1);
+    assert_eq!(shape.branches[0].slots, vec![0, 1]);
+    let and_n = node3(
+        Tag::AndOr,
+        wrap(Tag::Check, keyarg(Tag::PkK, 1)),
+        timelock(Tag::Older, 144),
+        Node {
+            tag: Tag::False,
+            body: Body::Empty,
+        },
+    );
+    let tree = wrap(
+        Tag::Wsh,
+        node2(
+            Tag::AndV,
+            wrap(Tag::Verify, wrap(Tag::Check, keyarg(Tag::PkK, 0))),
+            and_n,
+        ),
+    );
+    let shape = policy_shape(&common::descriptor_of(tree, 2));
+    assert!(shape.complete, "and_n inside and_v is not a disjunction");
+    assert_eq!(shape.branches.len(), 1);
+    assert_eq!(shape.branches[0].slots, vec![0, 1]);
 }

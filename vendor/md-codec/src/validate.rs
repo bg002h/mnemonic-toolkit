@@ -238,6 +238,11 @@ fn walk_older(node: &Node, consensus_bits: u32) -> Result<(), Error> {
                 walk_older(c, consensus_bits)?;
             }
         }
+        Body::Variable { children, .. } => {
+            for c in children {
+                walk_older(c, consensus_bits)?;
+            }
+        }
         Body::Tr { tree: Some(t), .. } => walk_older(t, consensus_bits)?,
         _ => {}
     }

@@ -82,6 +82,7 @@ impl TlvSection {
     ///   encoder boundary.
     /// - [`Error::OverrideOrderViolation`] if any entry vector is not strictly
     ///   ascending in `idx`.
+    /// - [`Error::TlvUnknownTagOutOfRange`] if an unknown entry's tag is outside 0x04..=0x1f; [`Error::TlvOrderingViolation`] if two unknown entries share a tag.
     /// - Encoding errors from contained values (`OriginPath::write`, etc.).
     pub fn write(&self, w: &mut BitWriter, key_index_width: u8) -> Result<(), Error> {
         // Exhaustive destructure — same drift-protection guarantee as is_empty.
@@ -92,6 +93,18 @@ impl TlvSection {
             origin_path_overrides,
             unknown,
         } = self;
+
+        for (i, (tag, _, _)) in unknown.iter().enumerate() {
+            if !(0x04..=0x1f).contains(tag) {
+                return Err(Error::TlvUnknownTagOutOfRange { tag: *tag });
+            }
+            if unknown[..i].iter().any(|(t, _, _)| t == tag) {
+                return Err(Error::TlvOrderingViolation {
+                    prev: *tag,
+                    current: *tag,
+                });
+            }
+        }
 
         // Collect entries, sort by tag.
         let mut entries: Vec<(u8, Vec<u8>, usize)> = Vec::new();

@@ -24,6 +24,10 @@
 //! rendering that cannot be re-parsed is the defect the wider cycle's
 //! invariant exists to prevent.
 //!
+//! A disjunction (`andor`, `or_b`, `or_c`, `or_d`, `or_i`) inside a branch
+//! that the top-level split leaves whole also makes `complete` false: listing
+//! it would need a cross product of branches.
+//!
 //! # Three extensions over the Go original
 //!
 //! 1. [`Branch::slots`] retains *which* placeholder indices a branch
@@ -451,10 +455,19 @@ fn branch_of(n: &Node, depth: u8) -> Option<Branch> {
 
     // A bare threshold-over-keys, possibly wrapped: report k-of-n and
     // whether it was the sorted spelling.
+    //
+    // `plain_multi` takes the SAME `nkeys == slots.len()` guard as
+    // `sole_multi` below (1a final review M-1): `slots` is deduplicated, so a
+    // duplicate-index multi such as `multi(2,@0,@0,@1)` has 3 indices and 2
+    // distinct keys, and "2-of-3" would claim a third signer that does not
+    // exist. Unguarded, one multi answered two ways depending on whether a
+    // wrapper or a lock sat around it.
     if let Some((k, nkeys, sorted)) = plain_multi(n) {
-        br.k = k;
-        br.n = nkeys;
-        br.sorted = sorted;
+        if nkeys as usize == br.slots.len() {
+            br.k = k;
+            br.n = nkeys;
+            br.sorted = sorted;
+        }
     } else if let Some((k, nkeys, sorted)) = sole_multi(n) {
         // A THRESHOLD BEHIND A LOCK OR A HASH IS STILL A THRESHOLD. Two
         // conditions: the branch must contain EXACTLY ONE multi node (two
@@ -628,13 +641,24 @@ fn collect(n: &Node, br: &mut Branch, keys: &mut BTreeSet<u8>) -> bool {
             };
             children.iter().all(|c| collect(c, br, keys))
         }
+        // `l:X` = or_i(0,X), `u:X` = or_i(X,0) and `and_n(X,Y)` =
+        // andor(X,Y,0): the `0` alternative is never satisfiable, so these
+        // are not disjunctions; walk them like any conjunction.
+        Tag::OrI | Tag::AndOr
+            if matches!(&n.body, Body::Children(c)
+                if (n.tag == Tag::OrI && c.iter().any(|x| x.tag == Tag::False))
+                    || (n.tag == Tag::AndOr && c.get(2).is_some_and(|x| x.tag == Tag::False))) =>
+        {
+            let Body::Children(children) = &n.body else {
+                return false;
+            };
+            children.iter().all(|c| collect(c, br, keys))
+        }
+        // A disjunction inside a branch would need a cross product of
+        // branches; the summary refuses it rather than show a wrong one.
+        Tag::AndOr | Tag::OrB | Tag::OrC | Tag::OrD | Tag::OrI => false,
         Tag::AndB
         | Tag::AndV
-        | Tag::AndOr
-        | Tag::OrB
-        | Tag::OrC
-        | Tag::OrD
-        | Tag::OrI
         | Tag::Check
         | Tag::Verify
         | Tag::Swap

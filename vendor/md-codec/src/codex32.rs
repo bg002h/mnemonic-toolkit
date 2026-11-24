@@ -70,6 +70,9 @@ fn symbol_to_char(s: u8) -> char {
 }
 
 fn char_to_symbol(c: char) -> Option<u8> {
+    if !c.is_ascii() {
+        return None;
+    }
     let lc = c.to_ascii_lowercase() as u8;
     CODEX32_ALPHABET
         .iter()
