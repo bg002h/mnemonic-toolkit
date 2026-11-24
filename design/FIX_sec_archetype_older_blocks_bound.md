@@ -95,8 +95,7 @@ Edge cases (decided):
   message. The D-decay-abs `--after` block is unchanged.
 - Doc comments: the module doc (lines 1-7), the `ParamKind` doc ("no producer check keys off it") and the
   `validate_params` doc say the producer now bounds `Blocks` params.
-- `timelock_advisory::older_unit_value` loses its only caller; it stays (public in the library) with its unit test.
-  See §12.
+- `timelock_advisory::older_unit_value` loses its only caller. The bin target compiles `timelock_advisory` as a private module (`src/main.rs:38`), so leaving it would raise `dead_code` and fail `clippy -D warnings`. Delete `older_unit_value` and its unit test `older_unit_value_classifies_clean_operands`, and drop the sentence naming it in the `older_consensus_masked`/module docs if any. No caller exists in this workspace, mnemonic-gui or refugium-wallet. (Public lib API removal is accepted on the small-fix track: the crate is 0.x and the fn was added for this check only.)
 
 ## 5. RED rows
 
@@ -189,17 +188,15 @@ New (`tests/cli_build_descriptor.rs`):
 
 Changed (`src/descriptor_builder/archetype.rs` unit tests):
 
-- New `validate_params_older_blocks_bound`: on `fixture_params` of each archetype, `--older` in
-  {1, 65535} passes; in {0, 65536, 0x400000, 0x410000, u32::MAX} gives exactly one Form B diagnostic on `--older`;
-  in {0x400001, 0x40FFFF} exactly one Form A diagnostic; on decaying-multisig `recovery_older` the same sets on
-  `--recovery-older`; both out of range gives two, `--older` first; a decaying-multisig pair with one value out of
+- New `validate_params_older_blocks_bound`: on `fixture_params` of each archetype, `--older` in {1, 65535} passes on the four archetypes other than decaying-multisig; on decaying-multisig the pass cases are the pairs (`older`, `recovery_older`) = (1, 2), (1, 65535) and (65534, 65535); in {0, 65536, 0x400000, 0x410000, u32::MAX} gives exactly one Form B diagnostic on `--older`;
+  in {0x400001, 0x40FFFF} exactly one Form A diagnostic; on decaying-multisig, with `older` = 1000 (fixture), `recovery_older` in the same refused sets gives exactly one diagnostic of the same form on `--recovery-older` and no "progressively later" diagnostic; both out of range gives two, `--older` first; a decaying-multisig pair with one value out of
   range gives no "progressively later" diagnostic.
 - `validate_params_does_not_duplicate_gate_rules` (:820) and `validate_params_decay_ordering` (:804): unchanged,
   must stay GREEN.
 
 Unchanged and must stay GREEN: every golden and preset argv (all use 144, 1000, 2000, 4032, 52560, 65535, 65534,
 4033, 145), `gate.rs` tests (the gate still accepts `0x0040_0001`, `0x0040_FFFF` at :1039), `cli_older_advisory.rs`,
-`cli_compare_cost.rs`, `timelock_advisory.rs` `older_unit_value_classifies_clean_operands`.
+`cli_compare_cost.rs`.
 
 ## 7. Manual delta (lockstep)
 
@@ -300,5 +297,5 @@ CHANGELOG prose (read the diff).
 ## 13. FOLLOWUPS
 
 Closes `archetype-older-blocks-flag-accepts-time-units` (FOLLOWUPS.md:488) once the build merges; the
-closing line is appended after merge (no FOLLOWUPS lines inside the PR). `older_unit_value` keeps no caller in the
-crate (kept: public library API, small-fix track); proposed line in the agent report.
+closing line is appended after merge (no FOLLOWUPS lines inside the PR). `older_unit_value` is deleted (see §4); no
+FOLLOWUPS line for it.
