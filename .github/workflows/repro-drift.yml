@@ -44,6 +44,11 @@ on:
   # Manual handle so a maintainer can re-prove on demand (e.g. after a runner
   # image bump or a cross-image change) without waiting for the weekly tick.
   workflow_dispatch:
+    inputs:
+      full:
+        description: "also run the nightly jobs (no nightly jobs in this workflow; accepted so the release gate can pass -f full=true everywhere)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
