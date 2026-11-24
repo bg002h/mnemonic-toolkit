@@ -105,6 +105,12 @@ new:
 
 The appended sentence is the ruling's text verbatim (`architect-secret-ci-decisions-1124.md:34`).
 
+5.3. `CHANGELOG.md` `## [Unreleased]` gains, as its first subsection (architect-tk-seedqr-stops-1124 Q2):
+
+> ### `seedqr --json-out` writes its file owner-only
+>
+> - **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever the umask, and sets an existing file to 0600 (before: a new file took the umask mode, usually 0644, and an existing file kept its mode). The file holds the phrase. `--json-out /dev/null` and an existing file you can write but do not own are now refused (exit 1, `Operation not permitted`; before: exit 0), and a refused file you do not own is left empty.
+
 - Help text (`seedqr.rs:76`, `:97` doc comments): no change (ruling). No flag added or removed, so
   `docs/manual/tests/lint.sh` and the GUI schema mirror are unaffected.
 - mnemonic-gui: `src/schema/mnemonic.rs:2334-2342@7e1b498` (seedqr `--json-out`, help "Side-effect: write versioned
@@ -184,7 +190,7 @@ No other test changes. No golden or snapshot file changes.
 
 1. RED commit: the section 6 test file (after `cargo fmt`), production code untouched. `cargo nextest run --locked
    -p mnemonic-toolkit --test cli_seedqr_json_out_mode --no-fail-fast`: **4 run, 4 failed**, each `mode is 644`.
-2. GREEN commit: sections 3 and 5, and the STOP 1 answer. `cargo fmt --all -- --check`; `cargo clippy --locked
+2. GREEN commit: sections 3 and 5, and the Q1 test change (`design/FIX_tk_seedqr_json_out_secret_file.p3-test.patch`). `cargo fmt --all -- --check`; `cargo clippy --locked
    --all-targets --workspace -- -D warnings`; `cargo nextest run --locked --workspace --no-fail-fast` 0 failed;
    `cargo test --locked --doc --workspace`; the `cli_seedqr_json_out_mode` filter **4 run, 4 passed**.
 3. Docs CI jobs on the head (locally where possible, else green CI): `manual.yml` (incl. `docs/manual/tests/lint.sh`),
@@ -202,7 +208,8 @@ manual patch and the RED file (output `/scratch/cache/seedqr-review-class.txt`):
 `docs/manual/src/40-cli-reference/41-mnemonic.md`), C (`cmd/seedqr.rs`), D (the test file); "REVIEW: s1 Opus
 executed advice review …; s2 Sonnet tests-can-fail against mutation-gate survivors." The ruling said class B
 (`architect-secret-ci-decisions-1124.md:34`); the script's A is higher and the script's rule is "Override upward by
-judgement, never downward", so the class is **A**.
+judgement, never downward", so the class is **A+B** (architect-tk-seedqr-stops-1124 Q3): one s1 Opus slice with the
+executed-advice and threat lenses, then s2 Sonnet tests-can-fail.
 
 ## 11. STOPs (points no ruling decides)
 
