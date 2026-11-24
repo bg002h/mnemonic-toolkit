@@ -8,6 +8,12 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `convert` refuses an unused `--account`
+
+- **`convert`**: a non-zero `--account` is now refused (exit 2) when no requested `--to` target reads it. Only
+  `--to xpub` and `--to xprv` from a phrase, SeedQR or entropy source read it. Before, `--from xpub=… --to xpub
+  --account 3` (and the same from xprv, wif, mk1 or ms1) printed the input key unchanged at exit 0.
+
 ### A multipath tuple that repeats a value is refused
 
 - **`bundle`, `verify-bundle`, `import-wallet`, `gui-schema --classify-descriptor`**: a descriptor whose

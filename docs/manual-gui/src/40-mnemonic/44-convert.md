@@ -472,6 +472,8 @@ preserving). Schema-`secret: true`. XOR with `--passphrase`.
 ## `--account` {#mnemonic-convert-account}
 
 BIP-32 account index (default 0). Range 0..2_147_483_647.
+Read only by `--to xpub` / `--to xprv` from a phrase, SeedQR or entropy source without `--path`; a non-zero
+value is refused (exit 2) together with `--path`, or where no requested target reads it.
 
 ## `--fingerprint` {#mnemonic-convert-fingerprint}
 

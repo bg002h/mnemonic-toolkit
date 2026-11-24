@@ -68,7 +68,7 @@ fn convert_lines(args: &[&str]) -> std::collections::BTreeMap<String, String> {
 }
 
 // ===========================================================================
-// C1a — master fingerprint is invariant across --template / --account.
+// C1a — master fingerprint is invariant across --template.
 // (The only fingerprint reachable from a BIP-39 source; F-fp.)
 // ===========================================================================
 #[test]
@@ -90,8 +90,6 @@ fn c1a_master_fp_template_account_invariant() {
         "fingerprint",
         "--template",
         "bip44",
-        "--account",
-        "5",
     ]);
     let r3 = convert_value(&[
         "convert",
@@ -103,7 +101,7 @@ fn c1a_master_fp_template_account_invariant() {
         "bip86",
     ]);
     assert_eq!(r1, MASTER_FP, "C1a: master fp");
-    assert_eq!(r1, r2, "C1a: master fp invariant across template/account");
+    assert_eq!(r1, r2, "C1a: master fp invariant across template");
     assert_eq!(
         r1, r3,
         "C1a: master fp invariant across source representation"
