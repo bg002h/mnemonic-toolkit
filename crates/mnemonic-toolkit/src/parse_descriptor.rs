@@ -153,7 +153,8 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                 // no stray residue. This single robust check rejects hardened
                 // (`<0';1'>`), malformed double-marker (`<0'';1>`, `<0'h;1>`,
                 // `<0h';1>`), and any other non-`[0-9;]` residue — fail-closed
-                // and loud — while accepting valid `<0;1>` / `<0;1;2>`. An xpub
+                // and loud — while accepting valid `<0;1>` / `<0;1;2>` and
+                // refusing a repeated value (`<0;0>`, BIP-389). An xpub
                 // card cannot do hardened public derivation (BIP-32), so a
                 // hardened-multipath card is permanently un-restorable: NEVER
                 // silently collapse to a bare `/*`.
@@ -174,6 +175,25 @@ pub fn lex_placeholders(descriptor: &str) -> Result<Vec<PlaceholderOccurrence>, 
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()
+                    .and_then(|vals| {
+                        // Rule D (FIX sec-multipath-duplicate-refusal): BIP-389
+                        // forbids duplicate values in a tuple. Runs after the
+                        // per-value checks; names the first value equal to an
+                        // earlier one.
+                        for (k, v) in vals.iter().enumerate() {
+                            if vals[..k].contains(v) {
+                                return Err(ToolkitError::DescriptorParse(format!(
+                                    "@{i} multipath `<{body}>` repeats the value {v}; \
+                                     BIP-389 forbids duplicate values in a multipath \
+                                     tuple, so this descriptor is invalid; copy the \
+                                     tuple from your wallet's own descriptor (most \
+                                     wallets use `<0;1>`: receive 0, change 1)",
+                                    body = m.as_str()
+                                )));
+                            }
+                        }
+                        Ok(vals)
+                    })
             })
             .transpose()?
             .unwrap_or_default();
@@ -3779,5 +3799,81 @@ mod tests {
             "expected tr(NUMS, and_v(v:pk(@0), after(N))) to parse; got {:?}",
             result.err()
         );
+    }
+}
+
+#[cfg(test)]
+mod multipath_duplicate_tests {
+    //! FIX sec-multipath-duplicate-refusal: Rule D rows U1-U10
+    //! (`design/FIX_sec_multipath_duplicate_refusal.md` section 5).
+    use super::lex_placeholders;
+
+    /// The Rule D payload `P(i, body, v)`.
+    fn p(i: usize, body: &str, v: u32) -> String {
+        format!(
+            "@{i} multipath `<{body}>` repeats the value {v}; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)"
+        )
+    }
+
+    fn lex(d: &str) -> String {
+        match lex_placeholders(d) {
+            Ok(v) => format!("Ok({} occurrence(s))", v.len()),
+            Err(e) => e.message(),
+        }
+    }
+
+    #[test]
+    fn lex_rejects_duplicate_multipath_value_pair() {
+        assert_eq!(lex("wpkh(@0/<0;0>/*)"), p(0, "0;0", 0));
+    }
+
+    #[test]
+    fn lex_rejects_duplicate_multipath_value_nonadjacent() {
+        assert_eq!(lex("wpkh(@0/<0;1;0>/*)"), p(0, "0;1;0", 0));
+    }
+
+    #[test]
+    fn lex_rejects_duplicate_multipath_value_first_repeat_named() {
+        assert_eq!(lex("wpkh(@0/<1;0;0;1>/*)"), p(0, "1;0;0;1", 0));
+    }
+
+    #[test]
+    fn lex_rejects_duplicate_multipath_value_leading_zero() {
+        assert_eq!(lex("wpkh(@0/<1;01>/*)"), p(0, "1;01", 1));
+    }
+
+    #[test]
+    fn lex_rejects_duplicate_multipath_value_second_placeholder() {
+        assert_eq!(lex("wsh(multi(2,@0/<0;1>/*,@1/<2;2>/*))"), p(1, "2;2", 2));
+    }
+
+    #[test]
+    fn lex_duplicate_refusal_precedes_no_wildcard_refusal() {
+        assert_eq!(lex("wpkh(@0/<0;0>)"), p(0, "0;0", 0));
+    }
+
+    #[test]
+    fn lex_duplicate_refusal_precedes_residue_refusal() {
+        assert_eq!(lex("wpkh(@0/<0;0>/0/*)"), p(0, "0;0", 0));
+    }
+
+    #[test]
+    fn lex_hardened_refusal_precedes_duplicate_refusal() {
+        assert!(lex("wpkh(@0/<0;0'>/*)").starts_with("@0 multipath alternative `0'` is hardened; "));
+    }
+
+    #[test]
+    fn lex_non_integer_refusal_precedes_duplicate_refusal() {
+        assert_eq!(
+            lex("wpkh(@0/<0;x;0>/*)"),
+            "@0 multipath alt `x` is not a bare unsigned integer"
+        );
+    }
+
+    #[test]
+    fn lex_distinct_multipath_values_still_accepted() {
+        for d in ["wpkh(@0/<0;1>/*)", "wpkh(@0/<0;1;2>/*)", "wpkh(@0/<1;0>/*)"] {
+            assert_eq!(lex(d), "Ok(1 occurrence(s))", "{d}");
+        }
     }
 }
