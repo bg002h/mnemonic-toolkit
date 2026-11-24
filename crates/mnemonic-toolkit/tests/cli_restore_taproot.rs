@@ -691,6 +691,27 @@ fn general_tr_format_bip388_refused() {
         .stderr(predicate::str::contains("BIP-388 wallet policy"));
 }
 
+/// Sweep unit export-wallet-bip388-validity: the general-tr bip388 refusal
+/// names only a NON-NUMS distinct-trunk card as the bip388-capable shape (a
+/// NUMS tr-multisig card now refuses bip388 too). Exact stderr.
+#[test]
+fn bip388v_restore_general_tr_text_names_non_nums() {
+    let desc = format!("tr(NUMS,{{pk({K0}),pk({K1})}})");
+    let (md1, _emitted) = bundle_md1(&desc);
+    let mut a = restore_args(&md1);
+    a.push("--format".into());
+    a.push("bip388".into());
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(&a)
+        .assert()
+        .code(1)
+        .stdout("")
+        .stderr(
+            "error: --format bip388 cannot express this taproot policy as a BIP-388 wallet policy \u{2014} a tap-script-tree reconstructed via the general route-around has no named-template form. Use --format descriptor or --format bitcoin-core for a watch-only import. (A non-NUMS distinct-trunk tr-multisig md1 DOES export bip388 via its template path.)\n",
+        );
+}
+
 /// (10) Descriptor-driven formats emit the faithful reconstruction.
 #[test]
 fn general_tr_format_descriptor_and_bitcoin_core_emit() {

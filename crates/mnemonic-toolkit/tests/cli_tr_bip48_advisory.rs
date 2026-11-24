@@ -203,7 +203,7 @@ fn export_wallet_tr_sortedmulti_bip48_emits_advisory() {
     let mut args: Vec<String> = [
         "export-wallet",
         "--format",
-        "bip388",
+        "descriptor",
         "--network",
         "mainnet",
         "--template",

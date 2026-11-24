@@ -1884,11 +1884,14 @@ fn emit_spec_records_no_allowance() {
     );
 }
 
-/// bip388 shape on an allowed repeated-keys emit (R0-r1 M5): duplicate
-/// keys_info entries, no dedup — pinned.
+/// bip388 on an allowed repeated-keys emit (sweep unit
+/// export-wallet-bip388-validity; replaces the R0-r1 M5 duplicate-keys_info
+/// pin): BIP-388 requires pairwise distinct keys_info, so `--format bip388`
+/// refuses after the --allow banner (first pair @0/@2, K1's key).
 #[test]
-fn allow_repeated_keys_bip388_duplicate_keys_info() {
-    let out = bin()
+fn allow_repeated_keys_bip388_refused() {
+    let k1_xpub = K1.split(']').nth(1).unwrap();
+    bin()
         .args([
             "build-descriptor",
             "--allow",
@@ -1898,14 +1901,13 @@ fn allow_repeated_keys_bip388_duplicate_keys_info() {
         ])
         .write_stdin(repeated_keys_spec())
         .assert()
-        .success();
-    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
-    let keys = v["keys_info"].as_array().unwrap();
-    assert_eq!(
-        keys.len(),
-        4,
-        "duplicate keys appear twice (no dedup): {keys:?}"
-    );
+        .code(1)
+        .stdout("")
+        .stderr(predicates::str::ends_with(format!(
+            "error: --format bip388 cannot express a wallet that uses one public key more than \
+             once (keys_info @0 and @2: {k1_xpub}): a BIP-388 wallet policy requires pairwise \
+             distinct keys; use --format descriptor for this wallet\n"
+        )));
 }
 
 /// Duplicate --allow tokens are idempotent (allow SPEC §1).
