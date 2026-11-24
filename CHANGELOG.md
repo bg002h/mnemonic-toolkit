@@ -8,6 +8,18 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `--format bip388` refuses a policy BIP-388 calls invalid
+
+- **`export-wallet`, `restore`**: `--format bip388` now refuses (exit 1) a NUMS taproot internal key, which is a
+  literal key and not an `@N` placeholder. Before, `--template tr-*-multi-a --taproot-internal-key nums` and a
+  NUMS `restore --md1` card emitted `tr(50929b74…,…)` at exit 0, and `--descriptor` refused with a text about the
+  `/<0;1>/*` suffix. It also refuses a wallet that uses one public key more than once (before: duplicate
+  `keys_info` entries at exit 0). It also refuses a
+  `--descriptor` key with a derivation step before `/<0;1>/*` (before: a `keys_info` entry ending in that step, e.g.
+  `…/5`, at exit 0). Use `--format descriptor` or `--format bitcoin-core` for these wallets.
+- **`build-descriptor`**: with `--allow repeated-keys`, `--format bip388` refuses (exit 1) and `--json` emits
+  `"bip388": null`; `--format descriptor` and the human view are unchanged.
+
 ### `build-descriptor` presets take `--older` / `--recovery-older` in blocks only
 
 - `--archetype` presets refuse an `--older` or `--recovery-older` outside `1..=65535` with a `param`
