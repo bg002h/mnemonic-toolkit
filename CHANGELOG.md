@@ -14,6 +14,14 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   `--to xpub` and `--to xprv` from a phrase, SeedQR or entropy source read it. Before, `--from xpub=… --to xpub
   --account 3` (and the same from xprv, wif, mk1 or ms1) printed the input key unchanged at exit 0.
 
+### A multipath tuple that repeats a value is refused
+
+- **`bundle`, `verify-bundle`, `import-wallet`, `gui-schema --classify-descriptor`**: a descriptor whose
+  multipath tuple repeats a value (`/<0;0>/*`, `/<0;1;0>/*`) now exits 2 with ``@0 multipath `<0;0>` repeats
+  the value 0; BIP-389 forbids duplicate values in a multipath tuple, …``. BIP-389 does not allow duplicate
+  values in a tuple; such a descriptor used to be engraved with exit 0, its receive and change chains the
+  same chain. `export-wallet --from-import-json` refuses such an envelope (exit 1).
+
 ### `slip39 split` refuses the test RNG variables
 
 - **`slip39 split`**: `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any
