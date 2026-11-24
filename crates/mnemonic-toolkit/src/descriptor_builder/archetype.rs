@@ -814,6 +814,106 @@ mod tests {
         }
     }
 
+    /// FIX archetype-older-blocks-bound: `--older` / `--recovery-older`
+    /// (`ParamKind::Blocks`) take `1..=65535`; the 512-second window gets Form A
+    /// (reading spelled out), everything else Form B.
+    #[test]
+    fn validate_params_older_blocks_bound() {
+        const ALL: [&str; 5] = [
+            "decaying-multisig",
+            "hashlock-gated",
+            "kofn-recovery",
+            "simple-timelocked-inheritance",
+            "tiered-recovery",
+        ];
+        let form_b = [0u32, 65536, 0x40_0000, 0x41_0000, u32::MAX];
+        let form_a = [0x40_0001u32, 0x40_FFFF];
+        let msg_b = |id: &str, flag: &str, n: u32| {
+            format!("{id} {flag} is a relative timelock in blocks and takes 1..=65535; got {n}")
+        };
+        let msg_a = |id: &str, flag: &str, n: u32| {
+            let v = n & 0xFFFF;
+            format!(
+                "{id} {flag} is a relative timelock in blocks and takes 1..=65535; got {n}, \
+                 which BIP-68 reads as a time-based lock of {v} x 512 seconds ({} seconds), \
+                 not {n} blocks; for a time-based lock, author the policy with --spec",
+                v * 512
+            )
+        };
+        for id in ALL {
+            let def = registry_get(id);
+            let dm = id == "decaying-multisig";
+            // Pass cases.
+            let passes: &[(u32, Option<u32>)] = if dm {
+                &[(1, Some(2)), (1, Some(65535)), (65534, Some(65535))]
+            } else {
+                &[(1, None), (65535, None)]
+            };
+            for &(older, rec) in passes {
+                let mut params = fixture_params(id);
+                params.older = Some(older);
+                if let Some(r) = rec {
+                    params.recovery_older = Some(r);
+                }
+                validate_params(def, &params)
+                    .unwrap_or_else(|d| panic!("{id} older={older} rec={rec:?}: {d:?}"));
+            }
+            // Out-of-range `--older`.
+            for (set, is_a) in [(&form_b[..], false), (&form_a[..], true)] {
+                for &n in set {
+                    let mut params = fixture_params(id);
+                    params.older = Some(n);
+                    let diags = validate_params(def, &params).unwrap_err();
+                    assert_eq!(diags.len(), 1, "{id} older={n}: {diags:?}");
+                    assert_eq!(diags[0].kind, DiagnosticKind::Param);
+                    assert_eq!(diags[0].flag.as_deref(), Some("--older"));
+                    let want = if is_a {
+                        msg_a(id, "--older", n)
+                    } else {
+                        msg_b(id, "--older", n)
+                    };
+                    assert_eq!(diags[0].message, want);
+                    assert!(!diags[0].message.contains("progressively later"));
+                }
+            }
+        }
+        // decaying-multisig `--recovery-older`, `older` = 1000 (fixture).
+        let def = registry_get("decaying-multisig");
+        for (set, is_a) in [(&form_b[..], false), (&form_a[..], true)] {
+            for &n in set {
+                let mut params = fixture_params("decaying-multisig");
+                params.recovery_older = Some(n);
+                let diags = validate_params(def, &params).unwrap_err();
+                assert_eq!(diags.len(), 1, "recovery_older={n}: {diags:?}");
+                assert_eq!(diags[0].flag.as_deref(), Some("--recovery-older"));
+                let want = if is_a {
+                    msg_a("decaying-multisig", "--recovery-older", n)
+                } else {
+                    msg_b("decaying-multisig", "--recovery-older", n)
+                };
+                assert_eq!(diags[0].message, want);
+                assert!(!diags[0].message.contains("progressively later"));
+            }
+        }
+        // Both out of range: two diagnostics, `--older` first, no ordering one.
+        let mut params = fixture_params("decaying-multisig");
+        params.older = Some(0x40_0001);
+        params.recovery_older = Some(0x40_0002);
+        let diags = validate_params(def, &params).unwrap_err();
+        assert_eq!(diags.len(), 2);
+        assert_eq!(diags[0].flag.as_deref(), Some("--older"));
+        assert_eq!(diags[1].flag.as_deref(), Some("--recovery-older"));
+        // One out of range, the other in: no ordering diagnostic either way.
+        for (o, r) in [(145u32, 0x40_0001u32), (70000, 2000)] {
+            let mut params = fixture_params("decaying-multisig");
+            params.older = Some(o);
+            params.recovery_older = Some(r);
+            let diags = validate_params(def, &params).unwrap_err();
+            assert_eq!(diags.len(), 1, "{o}/{r}: {diags:?}");
+            assert!(!diags[0].message.contains("progressively later"));
+        }
+    }
+
     /// The gate rules are NOT duplicated at the producer (SPEC §3.2): k>n and
     /// duplicate keys pass `validate_params` (the gate refuses them later).
     #[test]
