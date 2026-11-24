@@ -328,6 +328,13 @@ remedy above does **not** apply: adding `/*` describes a different wallet
 (`/<0;1>/*` ranges over `/0/i` and `/1/i`; `/<0;1>` is the two keys `/0`
 and `/1`). md1 has no card for it; keep the full descriptor.
 
+A **multipath that repeats a value** — `<0;0>`, `<1;1>`, `<0;1;0>` (values compare as numbers, so
+`<1;01>` repeats 1) — is invalid under BIP-389, which forbids duplicate values in a tuple; with `<0;0>`
+the receive and change chains would be one chain. It is refused (exit 2, `DescriptorParse`; for
+`import-wallet`, exit 2 `ImportWalletParse`) on the same surfaces, before the fixed-step and
+no-wildcard checks above. **Remedy:** copy the tuple from the wallet's own exported descriptor; most
+wallets use `/<0;1>/*` (receive 0, change 1). A guessed tuple describes a different wallet.
+
 **Sparrow is unaffected.** Sparrow's own `@N/**` template placeholder is
 expanded to the multipath form internally before this check runs, so a
 normal Sparrow import is unaffected by this rule.
@@ -876,6 +883,7 @@ default per the inference rule above.
 | `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
 | Canonical descriptor + `--slot @N.phrase= + --slot @N.path=` | `error: slot @{N} has both secret-bearing input and watch-only input; pick one per slot.` (the `{phrase, path}` pair is legal only in non-canonical mode) |
 | `@N`/key use-site path ends in a fixed step (`/0/*`, `/0h/*`) | refused, exit 2 (`DescriptorParse`) — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused |
+| `@N`/key multipath repeats a value (`<0;0>`, `<0;1;0>`) | refused, exit 2 (`DescriptorParse`) — ``error: @N multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)``; see [Non-representable use-site steps](#non-representable-use-site-steps) |
 
 ---
 
@@ -1131,7 +1139,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 2) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
 | `--template <TEMPLATE>` | as for `bundle` |
 | `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--template`/`--account` path (and makes `--template` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
-| `--account <ACCOUNT>` | account index (default 0); refused (exit 2) when non-zero together with `--path` |
+| `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 2) when non-zero together with `--path`, or when non-zero and no requested target reads it |
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
@@ -1895,6 +1903,7 @@ on stdout + the round-trip status on stderr.
 | `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
 | Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
 | Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused. Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
+| Descriptor's key placeholder multipath repeats a value (`<0;0>`, `<0;1;0>`) | exit 2 `ImportWalletParse` — the `bundle` text after the format's parse-error prefix (``import-wallet: descriptor: parse error: @0 multipath `<0;0>` repeats the value 0; …``); see [Non-representable use-site steps](#non-representable-use-site-steps) |
 | Bitcoin Core receive/change-shaped pair whose keys/origins differ | exit 2 `ImportWalletParse` — not merged (distinct keys are different wallets); see [foreign wallet formats](#foreign-wallet-formats) |
 | Bitcoin Core same-key receive/change pair whose script bodies differ (e.g. `wsh(pk(…/0/*))` + `wsh(pkh(…/1/*))`) | exit 2 `ImportWalletParse` — not merged; the first entry gets the fixed-step refusal above |
 | Coldcard generic JSON: `account` present but not a non-negative JSON integer (`"5"`, `-1`, `1.5`, `null`) | exit 2 `ImportWalletParse` — ``import-wallet: coldcard: parse error: `account` must be a non-negative integer, got <value>`` |
