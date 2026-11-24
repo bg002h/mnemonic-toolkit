@@ -1,6 +1,6 @@
 # FIX: repro doc keys its `[source]` stanzas on Cargo.lock's revs (r11 F-371)
 
-Author: Claude Opus 5.5 (claude-opus-5-5), 2026-11-23. Base: origin/master
+Author: Claude Opus 5.5 (claude-opus-5-5), 2026-11-23; folded to the md-codec ruling by Claude Sonnet 5.5 (claude-sonnet-5-5). Base: origin/master
 `68ea05e0`. Unit `repro-doc-miniscript-rev` (security-sweep routing, grade I).
 Track: small-fix. Docs plus one test; no flag, type, command or API.
 
@@ -17,37 +17,33 @@ New fact found while writing this FIX: `Cargo.lock:688` also pins a second git
 source, md-codec at `https://github.com/bg002h/descriptor-mnemonic` rev
 `cf35d61af0f058029df841f4882945e53f86cd4b` (F-642). The doc prints no stanza
 for it. Re-keying the miniscript rev alone does NOT make the printed command
-resolve (row R2b below, run). See section 1.
+resolve (row R2b below, run). Decided in section 1: this unit adds the
+md-codec stanzas too.
 
-## 1. OPEN POINT (STOP): does this unit also add the md-codec stanzas?
+## 1. DECIDED: this unit also adds the md-codec stanzas (coordinator 147m, STOP-1 = YES)
 
-The routed scope is "re-key the three stanzas (8 sites)". With only that, the
+The routed scope was "re-key the three stanzas (8 sites)". With only that, the
 section 9.3 command still fails offline, now on md-codec:
 
     error: failed to load source for dependency `md-codec`
     ...
       can't checkout from 'https://github.com/bg002h/descriptor-mnemonic': you are in the offline mode (--offline)
 
-- **Option A (recommended).** Re-key miniscript AND add the three md-codec
-  stanzas to both commands, and update the "three-block" prose (section 3.2).
-  The test (section 4) checks every git source Cargo.lock pins. This is the
-  only option after which the printed command works as printed, which is what
-  F-371's I grade is about. Cost: three prose sentences more than routed.
-- **Option B.** Re-key miniscript only (section 3.1); the test checks only the
-  rust-miniscript source; file the md-codec gap as a new FOLLOWUPS line (its
-  own I unit). R2 stays RED after this FIX.
-
-The prose wording in 3.2 is a proposal and is part of this decision.
+Ruling: re-key miniscript AND add the three md-codec stanzas to both commands,
+and update the "three-block" prose (section 3.2). The test (section 4) checks
+every git source Cargo.lock pins. After this FIX the printed command works as
+printed, which is what F-371's I grade is about. There is no option B and no
+new FOLLOWUPS line for the md-codec gap.
 
 ## 2. Holder-visible output, refusals, exit codes, manual lockstep
 
 None at runtime. No `mnemonic`/`md` CLI text or flag changes, so no toolkit
-manual lockstep and no CLI WORDING_REVIEW row. The doc prose in 3.2 (option A)
-is the only new text; it is proposed as WORDING_REVIEW rows in section 7.
+manual lockstep and no CLI WORDING_REVIEW row. The doc prose in 3.2
+is the only new text; it is entered as WORDING_REVIEW rows (section 7).
 
 ## 3. Spec (doc) delta: exact old/new
 
-### 3.1 Both options
+### 3.1 Miniscript re-key
 
 S1. Lines 113, 114, 115, 400, 401, 402 and 151: every occurrence of
 `95fdd1c5773bd918c574d2225787973f63e16a66` becomes
@@ -61,7 +57,7 @@ S3. Line 152: `` `Cargo.toml:28-29` `` becomes `` `Cargo.toml:38-39` ``.
 
 After S1-S3, `grep -c 95fdd1c docs/verify-reproducibility.md` prints `0`.
 
-### 3.2 Option A only
+### 3.2 md-codec stanzas and prose
 
 A1. Section 4, after line 115 (the miniscript `.replace-with` line), insert
 three lines, same 6-space indent and `'"'"'` quoting as line 115:
@@ -98,8 +94,7 @@ A5. Line 410: `The same three-block `[source]` activation` becomes
   (b) every `rev=` followed by 7+ hex digits in the doc starts a Cargo.lock rev
   (catches the prose sites 143 and 151); (c) for every Cargo.lock git source,
   each of its three stanzas (`.git=`, `.rev=`, `.replace-with="vendored-sources"`)
-  appears exactly 2 times (sections 4 and 9.3). Option B: (a) and (c) are
-  limited to `https://github.com/rust-bitcoin/rust-miniscript`.
+  appears exactly 2 times (sections 4 and 9.3).
 - `ci/docs-only-paths.txt`: add, with the other `-` rules,
   `# read by tests/repro_doc_pins.rs` then `- ^docs/verify-reproducibility\.md$`
   (without it `ci/code-docs-check.sh` flags the new test, and a doc-only edit
@@ -116,7 +111,7 @@ standalone `rustc --test` of the draft test (same body) against the base tree:
     test result: FAILED. 0 passed; 1 failed
 
 Builder command: `cargo nextest run --locked -p mnemonic-toolkit --test repro_doc_pins`.
-Expected after the fix: 1 passed. Trial with S1-S3 only (option-A test): fails
+Expected after the fix: 1 passed. Trial with S1-S3 only: fails
 with `prints 0 copies of `source."git+https://github.com/bg002h/descriptor-mnemonic?rev=cf35d61a...".git="https://github.com/bg002h/descriptor-mnemonic"``;
 with S1-S3 + A1-A5: `test result: ok. 1 passed`.
 
@@ -132,8 +127,7 @@ R2 (the command that proves the new rev resolves):
 
 R2b, trial with S1-S3 only: fails on `md-codec` (`can't checkout from
 'https://github.com/bg002h/descriptor-mnemonic'`), `exit=101`.
-Expected after option A: last line `exit=0` (trial run: `exit=0`).
-After option B: R2b's failure, stays RED (owned by the new FOLLOWUPS line).
+Expected after S1-S3 + A1-A5: last line `exit=0` (trial run: `exit=0`).
 
 ## 6. Gate (builder)
 
@@ -144,7 +138,7 @@ Not covered by any of these: the section 4 docker command is not executed
 (needs docker and the pinned image; its stanzas are checked as text only), and
 nothing compiles or byte-compares the rebuild.
 
-## 7. WORDING_REVIEW row proposals (option A only)
+## 7. WORDING_REVIEW rows for A3-A5
 
 - `docs/verify-reproducibility.md` A3/A5: "three-block" -> "four-block".
 - A4: "All four `cargo vendor`-emitted blocks are required" and "The md-codec
