@@ -1,0 +1,32 @@
+[
+  {
+    "bundle": {
+      "account": 0,
+      "descriptor": "wpkh([73c5da0a/84h/1h/0h]xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V/<0;1>/*)#zgqz77gq",
+      "master_fingerprint": "73c5da0a",
+      "md1": [
+        "md1ft5xypqpqpm6j8pqqxqqks883w6pg25zz22ws2kgdemj2cd8zwsmf59uxcm6ct0e",
+        "md1ft5xypqv4pvyv5uq7qaull2q22c6f0gv7ywe2fplqzwpax9ldvcr9dwwmkjd8kr2",
+        "md1ft5xypqsnw4xmrk8qe0yr02mhqrqxshncevms69k357he6px5mqa08u0ujawazdk"
+      ],
+      "mk1": [
+        "mk1qp8qxmpqqsqnsrdj9feutks2zvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp20zsu24auc2uxy",
+        "mk1qp8qxmpp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0hg546z6qycn6c3vdvqa"
+      ],
+      "mode": "watch-only",
+      "ms1": [
+        ""
+      ],
+      "multisig": null,
+      "network": "mainnet",
+      "origin_path": "m/84'/1'/0'",
+      "origin_paths": null,
+      "privacy_preserving": false,
+      "schema_version": "4",
+      "template": null
+    },
+    "roundtrip": {},
+    "schema_version": "1",
+    "source_format": "descriptor"
+  }
+]
