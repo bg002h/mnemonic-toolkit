@@ -477,3 +477,67 @@ fn b2_sh_wsh_multisig_keeps_bip48_1h_and_no_warning() {
     assert!(!o.stderr.contains("legacy P2SH"), "{}", o.stderr);
     assert!(!o.stderr.contains("m/45'"), "{}", o.stderr);
 }
+
+// ---------------------------------------------------------------------------
+// B4 — a bare `@N` (no derivation after it) is refused at mint. BIP-388 keys
+// are "always followed by" `/**` or `/<M;N>/*`; a bare key minted as `@N/*`
+// would describe different keys than the ones typed.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn b4_bare_placeholder_is_refused_at_mint() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    for (desc, slots) in [
+        ("wpkh(@0)", vec![s0.as_str()]),
+        (
+            "wsh(sortedmulti(2,@0/<0;1>/*,@1))",
+            vec![s0.as_str(), s1.as_str()],
+        ),
+        (
+            "wsh(and_v(v:pk(@0),pk(@1/<0;1>/*)))",
+            vec![s0.as_str(), s1.as_str()],
+        ),
+    ] {
+        let mut args = vec!["bundle", "--network", "mainnet", "--descriptor", desc];
+        for s in &slots {
+            args.extend(["--slot", s]);
+        }
+        let o = run(&args);
+        assert_eq!(o.code, 2, "{desc}: {}", o.stderr);
+        assert!(o.stdout.is_empty(), "{desc}: no card: {}", o.stdout);
+        assert!(
+            o.stderr.contains("has no derivation after it") && o.stderr.contains("/<0;1>/*"),
+            "{desc}: {}",
+            o.stderr
+        );
+    }
+}
+
+/// An explicit `/*` or `/<0;1>/*` still mints, and a `/*` card still restores
+/// (decoding is unchanged).
+#[test]
+fn b4_explicit_derivations_still_mint_and_restore() {
+    let s0 = format!("@0.phrase={A}");
+    for desc in ["wpkh(@0/*)", "wpkh(@0/<0;1>/*)", "wpkh(@0/**)"] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--json",
+        ]);
+        assert_eq!(o.code, 0, "{desc}: {}", o.stderr);
+        let md1 = md1_of(&o.stdout);
+        let mut args = vec!["restore".to_string()];
+        for m in &md1 {
+            args.extend(["--md1".to_string(), m.clone()]);
+        }
+        let refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let r = run(&refs);
+        assert_eq!(r.code, 0, "{desc}: restore: {}", r.stderr);
+    }
+}

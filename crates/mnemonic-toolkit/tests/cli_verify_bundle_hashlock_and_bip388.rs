@@ -32,7 +32,7 @@ const B: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQ
 #[test]
 fn hashlock_wsh_and_v_sha256_round_trips_via_bundle_json() {
     let h = "1111111111111111111111111111111111111111111111111111111111111111";
-    let descriptor = format!("wsh(and_v(v:sha256({h}),pk(@0)))");
+    let descriptor = format!("wsh(and_v(v:sha256({h}),pk(@0/*)))");
 
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()

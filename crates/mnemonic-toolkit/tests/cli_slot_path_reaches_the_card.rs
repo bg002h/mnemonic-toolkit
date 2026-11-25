@@ -37,7 +37,7 @@ fn emit_md1(p0: &str, p1: &str) -> Vec<String> {
             // CANONICAL on purpose: wsh(sortedmulti) HAS a canonical origin, and
             // the canonical arm is the one that dropped the paths.
             "--descriptor",
-            "wsh(sortedmulti(2,@0,@1))",
+            "wsh(sortedmulti(2,@0/*,@1/*))",
             "--slot",
             &format!("@0.xpub={X0}"),
             "--slot",
@@ -144,7 +144,7 @@ fn a_canonical_descriptor_with_partial_inline_origins_fills_the_canonical_origin
             "mainnet",
             // CANONICAL, and only @0 carries an inline origin.
             "--descriptor",
-            "wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']@0,@1))",
+            "wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']@0/*,@1/*))",
             "--slot",
             "@0.phrase=abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
             "--slot",

@@ -122,7 +122,7 @@ fn audit_i10_same_xpub_two_paths_2of2_round_trips() {
             "--network".into(),
             "mainnet".into(),
             "--descriptor".into(),
-            "wsh(sortedmulti(2,@0,@1))".into(),
+            "wsh(sortedmulti(2,@0/*,@1/*))".into(),
             "--slot".into(),
             format!("@0.xpub={X}"),
             "--slot".into(),
@@ -271,7 +271,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_flat_mk1_repetition() {
 /// v0.19.0 default-path inference combined with F1 csi-uniqueness fix.
 #[test]
 fn non_canonical_wsh_andor_round_trips_via_bundle_json() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),pk(@1)))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))";
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -399,7 +399,7 @@ fn single_sig_csi_unchanged_byte_identical_to_pre_fix_fixture() {
 /// csi-collision in descriptor mode for n>2 cosigners).
 #[test]
 fn non_canonical_3_of_3_wsh_andor_round_trips_via_bundle_json() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -467,7 +467,7 @@ fn non_canonical_3_of_3_wsh_andor_round_trips_via_bundle_json() {
 /// --bundle-json round-trip per `[[feedback-verify-bundle-round-trip-per-phase-r0-scope]]`.
 #[test]
 fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
-    let descriptor = "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    let descriptor = "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
     let bundle_out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")

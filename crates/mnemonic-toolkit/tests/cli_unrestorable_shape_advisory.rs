@@ -112,7 +112,7 @@ fn restore_md1(cards: &[String]) -> assert_cmd::assert::Assert {
 /// refuses ("sole child" … "faithful backup").
 #[test]
 fn shape1_sortedmulti_in_combinator_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("wsh(or_d(pk(@1),sortedmulti(2,@0,@1)))").success();
+    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))").success();
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -240,7 +240,7 @@ fn shape3c_hardened_taproot_override_fires_and_restore_refuses() {
 /// NEGATIVE.
 #[test]
 fn shape3d_non_nums_taproot_override_fires_and_restore_refuses() {
-    let out = bundle_three_cosigner("tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))").success();
+    let out = bundle_three_cosigner("tr(@0/*,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))").success();
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -324,9 +324,9 @@ fn import_wallet_hardened_wildcard_fires_advisory() {
 #[test]
 fn sole_child_sortedmulti_no_advisory_and_restores() {
     for desc in [
-        "wsh(sortedmulti(2,@0,@1))",
-        "sh(wsh(sortedmulti(2,@0,@1)))",
-        "sh(sortedmulti(2,@0,@1))",
+        "wsh(sortedmulti(2,@0/*,@1/*))",
+        "sh(wsh(sortedmulti(2,@0/*,@1/*)))",
+        "sh(sortedmulti(2,@0/*,@1/*))",
     ] {
         let out = bundle_two_cosigner(desc).success();
         let o = out.get_output();
@@ -346,7 +346,7 @@ fn sole_child_sortedmulti_no_advisory_and_restores() {
 /// the wrong tag).
 #[test]
 fn multi_in_combinator_no_advisory() {
-    let out = bundle_two_cosigner("wsh(or_d(pk(@1),multi(2,@0,@1)))").success();
+    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),multi(2,@0/*,@1/*)))").success();
     let stderr = String::from_utf8_lossy(&out.get_output().stderr);
     assert!(
         !stderr.contains(ADVISORY_PREFIX),
@@ -372,7 +372,7 @@ fn shared_suffix_unhardened_no_advisory() {
 /// advisory text (mirror `cli_older_advisory.rs` invariant 4).
 #[test]
 fn json_stdout_clean_advisory_on_stderr() {
-    let out = bundle_two_cosigner("wsh(or_d(pk(@1),sortedmulti(2,@0,@1)))").success();
+    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))").success();
     let o = out.get_output();
     let stdout = String::from_utf8_lossy(&o.stdout);
     let stderr = String::from_utf8_lossy(&o.stderr);

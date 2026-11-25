@@ -614,7 +614,22 @@ Anything else — bare `wsh(@N)`, miniscript bodies like
 `wsh(andor(...))`, taproot trees with leaves (`tr(@N, <TapTree>)`),
 legacy `sh(sortedmulti(...))` — is **non-canonical**.
 
-**Canonical shape, bare `@N` (bug hunt 2026-11-25).** When a canonical
+**Every `@N` needs a derivation (2026-11-25).** A placeholder with
+nothing after it, such as `wpkh(@0)`, is refused (exit 2): md1 would
+record it as `@0/*`, which names different keys from a bare key, and
+BIP-388 has each placeholder "always followed by" `/**` or `/<M;N>/*`.
+Write `@0/<0;1>/*` (receive addresses on 0, change on 1, as most wallets
+do; `/**` is the same) or, for a wallet that really uses one chain,
+`@0/*`:
+
+```text
+error: @0 has no derivation after it: a bare `@0` would be recorded as `@0/*`, which names different keys from the ones typed. Write `@0/<0;1>/*` (receive addresses on 0, change on 1, as most wallets do), or `@0/*` if this wallet really uses a single chain.
+```
+
+Only minting is refused: an existing card decodes, verifies and restores
+as before.
+
+**Canonical shape, origin-elided `@N` (bug hunt 2026-11-25).** When a canonical
 descriptor gives an `@N` no origin (no inline `[fingerprint/path]@N`, no
 `--slot @N.path=`), the toolkit uses that shape's canonical origin, with
 `<coin>` from `--network`: `m/44'/<coin>'/0'` for `pkh`,
@@ -719,7 +734,7 @@ The miniscript body is single-line; using a shell variable keeps the
 recipe readable while preserving that constraint:
 
 ```sh
-DESC='wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))'
+DESC='wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))'
 ```
 
 ##### Default text-form output
@@ -928,7 +943,7 @@ tracks the next-step refactor opportunity).
 
 ```sh
 mnemonic bundle --network mainnet \
-  --descriptor 'tr(NUMS, and_v(v:pk(@0), after(12000000)))' \
+  --descriptor 'tr(NUMS, and_v(v:pk(@0/*), after(12000000)))' \
   --language english \
   --slot '@0.phrase=…'
 ```

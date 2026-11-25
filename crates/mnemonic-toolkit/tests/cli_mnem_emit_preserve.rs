@@ -542,7 +542,7 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh(@0)",
+            "wpkh(@0/*)",
             "--slot",
             &format!("@0.phrase={ja_phrase}"),
             "--language",
@@ -604,7 +604,7 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh(@0)",
+            "wpkh(@0/*)",
             "--slot",
             &format!("@0.phrase={ja_phrase}"),
             "--language",
@@ -661,7 +661,7 @@ fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh(@0)",
+            "wpkh(@0/*)",
             "--slot",
             &format!("@0.phrase={ja_phrase}"),
             "--language",

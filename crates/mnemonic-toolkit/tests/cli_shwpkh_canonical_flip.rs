@@ -109,7 +109,7 @@ fn decode_mk1(chunks: &[String]) -> (String, String, u8) {
 #[test]
 fn flip1_shwpkh_no_origin_emits_canonical_origin_card_with_notice() {
     let slot = format!("@0.phrase={SEED}");
-    let (v, stderr) = bundle("sh(wpkh(@0))", &[slot.as_str()]);
+    let (v, stderr) = bundle("sh(wpkh(@0/*))", &[slot.as_str()]);
     assert_eq!(v["mode"], "full");
 
     let (origin, xpub, depth) = decode_mk1(&mk1_chunks(&v));
@@ -138,8 +138,8 @@ fn flip1_shwpkh_no_origin_emits_canonical_origin_card_with_notice() {
 #[test]
 fn flip1_wpkh_and_shwpkh_each_use_their_canonical_origin() {
     let slot = format!("@0.phrase={SEED}");
-    let (vw, stderr_w) = bundle("wpkh(@0)", &[slot.as_str()]);
-    let (vs, stderr_s) = bundle("sh(wpkh(@0))", &[slot.as_str()]);
+    let (vw, stderr_w) = bundle("wpkh(@0/*)", &[slot.as_str()]);
+    let (vs, stderr_s) = bundle("sh(wpkh(@0/*))", &[slot.as_str()]);
 
     let (ow, xw, dw) = decode_mk1(&mk1_chunks(&vw));
     let (os, xs, ds) = decode_mk1(&mk1_chunks(&vs));
@@ -161,7 +161,7 @@ fn non_canonical_descriptor_still_gets_default_path_notice() {
     let s0 = format!("@0.phrase={SEED}");
     let s1 = format!("@1.phrase={SEED_B}");
     let (v, stderr) = bundle(
-        "wsh(andor(pkh(@0),after(12000000),pk(@1)))",
+        "wsh(andor(pkh(@0/*),after(12000000),pk(@1/*)))",
         &[s0.as_str(), s1.as_str()],
     );
     assert_eq!(
@@ -188,7 +188,7 @@ fn flip2_shwpkh_nonzero_account_refuses_mode_violation() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--account",
             "1",
             "--network",
@@ -218,7 +218,7 @@ fn flip2_shwpkh_account_zero_still_succeeds() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--account",
             "0",
             "--network",
@@ -248,7 +248,7 @@ fn flip3_shwpkh_secret_bearing_path_override_refuses() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--network",
             "mainnet",
             "--slot",
@@ -277,7 +277,7 @@ fn flip3_shwpkh_watch_only_xpub_path_override_still_succeeds() {
     const XPUB: &str = "xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9";
     let s0 = format!("@0.xpub={XPUB}");
     let (v, _stderr) = bundle(
-        "sh(wpkh(@0))",
+        "sh(wpkh(@0/*))",
         &[
             s0.as_str(),
             "@0.fingerprint=deadbeef",
@@ -328,7 +328,7 @@ fn flip4_preflip_elided_shwpkh_bundle_fails_verify_as_byte_mismatch() {
         "--network".into(),
         "mainnet".into(),
         "--descriptor".into(),
-        "sh(wpkh(@0))".into(),
+        "sh(wpkh(@0/*))".into(),
         "--slot".into(),
         format!("@0.phrase={SEED}"),
         "--json".into(),
@@ -504,7 +504,7 @@ fn mirror_unchanged_shwpkh_template_emit_still_refused() {
         .args([
             "bundle",
             "--descriptor",
-            "sh(wpkh(@0))",
+            "sh(wpkh(@0/*))",
             "--network",
             "mainnet",
             "--md1-form",

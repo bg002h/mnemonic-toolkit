@@ -212,7 +212,7 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
 
 #[test]
 fn bughunt_tk_06_descriptor_anno_fp_checked_for_entropy_and_ms1_slots() {
-    let desc = "wsh(sortedmulti(2,[deadbeef/48'/0'/0'/2']@0,@1))";
+    let desc = "wsh(sortedmulti(2,[deadbeef/48'/0'/0'/2']@0/*,@1/*))";
     let slot_b = format!("@1.xpub={XPUB_B}");
     let mut failures: Vec<String> = Vec::new();
     for (label, slot0) in [
@@ -354,7 +354,7 @@ fn bughunt_tk_11_singlesig_hardened_usesite_template_form_refused() {
 fn bughunt_tk_11b_singlesig_nonstandard_usesite_template_form_refused() {
     const PHRASE_A: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
     for desc in [
-        "wpkh(@0)",
+        "wpkh(@0/*)",
         "wpkh(@0/*)",
         "wpkh([73c5da0a/84'/0'/0']@0/<2;3>/*)",
     ] {

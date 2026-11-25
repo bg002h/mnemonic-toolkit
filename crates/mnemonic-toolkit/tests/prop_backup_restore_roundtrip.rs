@@ -652,7 +652,7 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
         "wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))", // hardened wildcard (override only)
         "tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))", // taproot sortedmulti_a override (render gap)
         "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))",      // hardened taproot override
-        "tr(@0,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))",         // non-NUMS real-trunk override (D7)
+        "tr(@0/*,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))",       // non-NUMS real-trunk override (D7)
     ] {
         let max_n = (0u8..3)
             .filter(|n| desc.contains(&format!("@{n}")))
@@ -767,7 +767,7 @@ fn sortedmulti_in_combinator_bundles_but_restore_refuses_loudly() {
         .args([
             "bundle",
             "--descriptor",
-            "wsh(or_d(pk(@1),sortedmulti(2,@0,@1)))",
+            "wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))",
             "--network",
             "mainnet",
             "--slot",

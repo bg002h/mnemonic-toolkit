@@ -1601,6 +1601,20 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         crate::parse_descriptor::expand_literal_double_star(&descriptor_str).into_owned();
 
     let occs = lex_placeholders(&descriptor_str)?;
+    // Review r1 B4 (Brian's BIP-defaults ruling 4): a bare `@N` with no
+    // derivation after it is refused at mint. BIP-388: each key placeholder
+    // is "always followed by" `/**` or `/<M;N>/*`; md1 would record it as
+    // `@N/*`, a different set of keys from the one typed. Only minting is
+    // refused: decoding, verifying and restoring a card are unchanged.
+    if let Some(occ) = occs.iter().find(|o| !o.wildcard) {
+        let i = occ.i;
+        return Err(ToolkitError::DescriptorParse(format!(
+            "@{i} has no derivation after it: a bare `@{i}` would be recorded as `@{i}/*`, \
+             which names different keys from the ones typed. Write `@{i}/<0;1>/*` (receive \
+             addresses on 0, change on 1, as most wallets do), or `@{i}/*` if this wallet \
+             really uses a single chain."
+        )));
+    }
     let mut resolved_placeholders = resolve_placeholders(&occs)?;
     let n = resolved_placeholders.n as usize;
 

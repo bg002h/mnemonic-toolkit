@@ -225,40 +225,49 @@ fn bundle_concrete_wpkh_multipath_round_trips() {
 }
 
 // ============================================================================
-// §6.5 — ACCEPT (regression): hand-typed LITERAL @N template is UNAFFECTED —
-// it routes via the AtN direct-lex path and never reaches `key_regex` /
-// `concrete_keys_to_placeholders` (structurally unreachable, not merely
-// untested). Companion to the unit-level pin
-// `lex_residue_floor_accepts_bare_at_n_d1_deferred` (parse_descriptor.rs),
-// kept green + unmodified.
+// §6.5 — a hand-typed LITERAL @N template routes via the AtN direct-lex path
+// and never reaches `key_regex` / `concrete_keys_to_placeholders`. Since
+// review r1 B4 (Brian's BIP-defaults ruling, 2026-11-25) a bare `@N` there is
+// refused at mint by its own rule (asking for `/<0;1>/*`), not by this file's
+// concrete-key check; `@N/*` still mints.
 // ============================================================================
 
 #[test]
 fn bundle_atn_bare_template_unaffected_by_new_check() {
-    let out = bin()
-        .args([
-            "bundle",
-            "--descriptor",
-            "wpkh(@0)",
-            "--network",
-            "mainnet",
-            "--slot",
-            &format!("@0.xpub={XPUB_A}"),
-            "--slot",
-            &format!("@0.fingerprint={FP_A}"),
-            // XPUB_A is a BIP-48 key (depth 4, child 2'); since bug hunt
-            // 2026-11-25 toolkit#1 a canonical origin that contradicts the
-            // header is refused, so the fixture states the key's real origin.
-            "--slot",
-            "@0.path=m/48'/0'/0'/2'",
-            "--json",
-        ])
-        .output()
-        .unwrap();
+    let run_with = |desc: &str| {
+        bin()
+            .args([
+                "bundle",
+                "--descriptor",
+                desc,
+                "--network",
+                "mainnet",
+                "--slot",
+                &format!("@0.xpub={XPUB_A}"),
+                "--slot",
+                &format!("@0.fingerprint={FP_A}"),
+                // XPUB_A is a BIP-48 key (depth 4, child 2'); since bug hunt
+                // 2026-11-25 toolkit#1 a canonical origin that contradicts the
+                // header is refused, so the fixture states the key's real origin.
+                "--slot",
+                "@0.path=m/48'/0'/0'/2'",
+                "--json",
+            ])
+            .output()
+            .unwrap()
+    };
+    let out = run_with("wpkh(@0/*)");
     assert!(
         out.status.success(),
-        "a hand-typed bare @N template must be UNAFFECTED by the new concrete-key check: {}",
+        "a hand-typed @N/* template must be UNAFFECTED by the concrete-key check: {}",
         String::from_utf8_lossy(&out.stderr)
+    );
+    let bare = run_with("wpkh(@0)");
+    let err = String::from_utf8_lossy(&bare.stderr);
+    assert_eq!(bare.status.code(), Some(2), "{err}");
+    assert!(
+        err.contains("@0 has no derivation after it"),
+        "B4 rule: {err}"
     );
 }
 

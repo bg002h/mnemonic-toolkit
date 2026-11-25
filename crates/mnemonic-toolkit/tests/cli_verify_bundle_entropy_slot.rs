@@ -13,11 +13,11 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 /// Single-`@0` non-canonical descriptor (from `cli_ms1_slot.rs:294`).
-const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
 /// Proven non-canonical 3-cosigner fixture that bundles secret slots with
 /// `.success()` (from `cli_non_canonical_descriptor.rs:22`).
 const ANDOR3_DESC: &str =
-    "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
 
 const TREZOR_12_ZERO: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";

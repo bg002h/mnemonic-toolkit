@@ -240,7 +240,7 @@ fn b4_descriptor_to_md1_to_descriptor_canonical_singlesig() {
 #[test]
 fn b5_descriptor_to_md1_to_descriptor_non_canonical_andor() {
     let descriptor =
-        "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+        "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
     let mut slots: Vec<String> = Vec::new();
     for (i, p) in MS_PHRASES.iter().enumerate() {
         let (xpub, fp) = derive_account_xpub(p, "m/48'/0'/0'/2'");

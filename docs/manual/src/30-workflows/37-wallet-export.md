@@ -147,7 +147,7 @@ template:
 
 ```sh
 mnemonic export-wallet \
-  --descriptor 'tr(NUMS,sortedmulti_a(2,@0,@1,@2))' \
+  --descriptor 'tr(NUMS,sortedmulti_a(2,@0/*,@1/*,@2/*))' \
   --slot @0.xpub=<xpub-0> \
   --slot @1.xpub=<xpub-1> \
   --slot @2.xpub=<xpub-2> \
@@ -263,7 +263,7 @@ x1=xpub6DVvJu3xFotP7byMCoCa9B5EmDcCo9Yznz7kuEogMemnYTMumxxCnXhk1pfJZHPuoX79Hbjae
 
 mnemonic bundle \
   --network mainnet \
-  --descriptor 'wsh(sortedmulti(2,@0,@1))' \
+  --descriptor 'wsh(sortedmulti(2,@0/*,@1/*))' \
   --slot "@0.xpub=$x0" \
   --slot "@1.xpub=$x1"
 ```

@@ -61,7 +61,7 @@ fn phrase_in(entropy: &[u8], lang: bip39::Language) -> String {
 
 /// Canonical 2-of-2 sorted-multisig descriptor (canonical_origin maps it, so
 /// it is NOT treated as non-canonical / explicit-origin).
-const CANONICAL_DESC: &str = "wsh(sortedmulti(2,@0,@1))";
+const CANONICAL_DESC: &str = "wsh(sortedmulti(2,@0/*,@1/*))";
 
 /// A well-formed mainnet xpub for the `@1` cosigner (from
 /// `cli_export_wallet_coldcard.rs`). Keeps the command from being rejected for
@@ -303,7 +303,7 @@ fn ms1_mnem_language_conflict_exit2() {
 
 /// A non-canonical single-`@0` descriptor (tr() with TapTree is non-canonical
 /// per md-codec's table → default-path inference → descriptor binding loop).
-const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
 
 /// entr ms1 cosigner derives in descriptor mode (the bundle succeeds and emits
 /// an ms1 card for `@0`).
