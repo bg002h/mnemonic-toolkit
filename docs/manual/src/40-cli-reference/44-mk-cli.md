@@ -39,7 +39,7 @@ mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --pri
 | `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; a leading byte-order mark is removed and CRLF line ends are read as LF; any other carriage return or line-break character, or a byte-order mark after the first character, is refused (exit 64) naming the line; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` |
 | `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored; a leading byte-order mark is removed and CRLF line ends are read as LF; a CR-only file, any other carriage return or line-break character, or a byte-order mark after the first character, is refused (exit 64) naming the line |
 | `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive |
-| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; the file holds exactly what stdout would (grouped under `--group-size`); overwrites an existing file (operator ruling 2026-08-26) |
+| `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; the file holds exactly what stdout would without `--json` (grouped under `--group-size`); with `--json` the file still gets the mk1 string(s) and the JSON goes to stdout; overwrites an existing file (operator ruling 2026-08-26). The new contents go to a temporary `FILE.<pid>.<n>.tmp` beside FILE that then replaces it, so a failed write leaves an existing FILE unchanged, FILE's directory must be writable, and a run killed mid-write can leave that owner-only temporary behind. A symlink is followed and its target replaced. FILE may not be one of the inputs (`--in`, `--keys`, `--from-md1-set`, or standard input): that is refused (exit `64`) before anything is read or written |
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint`; a single-card encode needs one of the two (exit 64 otherwise) |
 | `--force-chunked` | force chunked output (reserved; codec auto-dispatches) |
 | `--force-long-code` | force long-code BCH variant (reserved; codec auto-dispatches) |
@@ -619,14 +619,14 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 | Code | Meaning |
 |---|---|
 | 0 | Success. |
-| 1 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. Also an I/O error reading stdin, or writing `mk vectors --out` / `mk gen-man --out` (an unreadable `--in FILE` and an unwritable `mk encode --out FILE` are `64`). |
+| 1 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. Also an I/O error reading stdin, or writing `mk encode --out` / `mk vectors --out` / `mk gen-man --out` (an unreadable `--in FILE` is `64`). |
 | 2 | `mk repair` only: unrepairable, or a reassembly mismatch (see [`mk repair`](#mk-repair)'s exit codes). |
 | 3 | FutureFormat — string is well-formed but its declared version is newer than this tool. Maps to `Error::UnsupportedVersion`. |
 | 4 | Verify content mismatch (only `mk verify` with expected-* flags emits this). |
 | 5 | `mk repair` only: at least one string corrected (see [`mk repair`](#mk-repair)'s exit codes). |
 | 64 | CLI usage error per clap convention (unrecognized flag, missing required argument, etc.). |
 
-A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code.
+A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code. A write error on `mk encode --out FILE` (a full disk, a directory that does not exist or cannot be written) prints `mk: cannot write the output: FILE: <error>`, followed by `. FILE is unchanged.` or `. Nothing was written.` when mk can see that is so, and exits 1. `mk encode` refuses (exit 64, before reading anything) an `--out` FILE or a redirected stdout that is the same file as one of its inputs, naming both.
 
 ## `mk gui-schema`
 
