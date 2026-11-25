@@ -649,24 +649,50 @@ descriptor string itself. The toolkit handles this two ways:
 
 1. **Default path inference** — when an `@N` has no inline
    `[fingerprint/path]@N` annotation AND no `--slot @N.path=` CLI input,
-   the toolkit assigns the BIP-48 cosigner path
-   `m/48'/<coin>'/<account>'/<script_type>'`, where `<script_type>`
-   follows the descriptor's outermost wrapper: `2'` for a `wsh(...)`
-   descriptor (BIP-48 Native Segwit; the Liana / Specter de-facto
-   convention), `1'` for any `sh(...)` descriptor, and `3'` for a
-   `tr(...)` descriptor (not in BIP-48; the Sparrow / Coldcard / Jade
-   convention that template mode also uses).
+   the toolkit picks a path from the descriptor's outermost wrapper:
+   - `wsh(...)` → BIP-48 `m/48'/<coin>'/<account>'/2'` (BIP-48: "Native
+     Segwit (p2wsh)"; the Liana / Specter convention);
+   - `sh(wsh(...))` → BIP-48 `m/48'/<coin>'/<account>'/1'` (BIP-48:
+     "Nested Segwit (p2sh-p2wsh)");
+   - any other `sh(...)` (legacy bare P2SH) and any `tr(...)` → BIP-87
+     `m/87'/<coin>'/<account>'`. BIP-48 defines only `1'` and `2'`, so it
+     has no path for bare P2SH or taproot; BIP-87 is script-agnostic: "the
+     same derivation path may be used for all multisig script types".
+
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
    `<account>` consumes `--account N` (defaults to `0'`). A stderr info
    notice lists the `@N` indices that received the default and the path
-   chosen.
+   chosen:
 
-   BIP-48 assigns `1'` to Nested Segwit (P2SH-P2WSH) only and defines no
-   script type for legacy bare P2SH. So a legacy `sh(multi(...))` or
-   `sh(sortedmulti(...))` descriptor also defaults to `1'`, which uses the
-   SAME keys as the P2SH-P2WSH wallet of the same seeds. To keep the two
-   apart, give legacy P2SH cosigners an explicit origin (inline
-   `[fingerprint/path]@N` or `--slot @N.path=`).
+   ```text
+   info: no origin supplied for @0,@1; defaulting to m/87'/0'/0' (BIP-87). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+   ```
+
+   For a legacy bare `sh(...)` descriptor the notice is a **warning**
+   instead, because other wallets place legacy P2SH multisig keys
+   elsewhere (BIP-45's `m/45'`, or `m/45'/0`, `m/45'/0'/0'`). It names the
+   path used, asks you to compare the wallet's first address before
+   funding it and to use a different `--account` for a second wallet from
+   the same seed, and prints the command that mints the same bundle at
+   `m/45'` instead (your command plus `--slot @N.path=m/45'` for each
+   defaulted seed slot, shell-quoted):
+
+   ```text
+   warning: no origin supplied for @0,@1 in a legacy P2SH descriptor (sh(...)); derived at m/87'/0'/0' (BIP-87). BIP-48 assigns no path to this script type, and other wallets place legacy P2SH multisig keys elsewhere (for example m/45', m/45'/0, m/45'/0'/0'). If this card is meant to match an existing wallet, compare its first address before funding, or set the origin with [fp/path]@N or --slot @N.path=m/... . For a second wallet from the same seed, use a different --account.
+   warning: to mint this bundle at m/45' instead, run:
+     mnemonic bundle --network mainnet --descriptor 'sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))' --slot '@0.phrase=-' … --slot '@0.path=m/45'\''
+   ```
+
+   A secret typed on the command line (a `phrase`, `seedqr`, `entropy`,
+   `ms1`, `wif` or `xprv` slot value, or `--passphrase`) is not repeated in
+   that command: it shows `<...>` in its place, and a further warning line
+   asks you to put yours back or pass it as `=-` on stdin. An `xpub` slot
+   is not overridden: its key does not move with its path.
+
+   Before 2026-11-25 a bare `sh(...)` defaulted to BIP-48 `1'`, the
+   P2SH-P2WSH path, and a `tr(...)` to `m/48'/<coin>'/<account>'/3'`,
+   which no BIP defines. A card minted then carries that origin and still
+   decodes and verifies as before; only the default for a new card moved.
 2. **Explicit per-`@N` override** — either inline BIP-380 syntax
    `[deadbeef/48'/0'/0'/2']@N` embedded in the descriptor, or
    `--slot @N.path=m/48'/0'/0'/2'` on the CLI. Either takes precedence
@@ -3456,9 +3482,10 @@ is suppressed and a single line is printed to stdout:
   inferred from BIP-44/49/84/86 or BIP-48 conventions.
 - `non-canonical\n` (exit 0) — the descriptor parses but does not map to a
   canonical shape. The `mnemonic bundle` default-path inference per
-  SPEC §4.12.b applies (BIP-48 cosigner path `m/48'/<coin>'/<account>'/<script_type>'`:
-  `2'` for `wsh(...)`, `1'` for `sh(...)`, `3'` for `tr(...)`; see "Non-canonical descriptor mode" under
-  `mnemonic bundle`).
+  SPEC §4.12.b applies (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`,
+  `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87
+  `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; see
+  "Non-canonical descriptor mode" under `mnemonic bundle`).
 - exit 2 with empty stdout — descriptor failed to parse
   (`DescriptorParse` error variant).
 
@@ -4349,7 +4376,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 
 #### v0.19.0 silent-default-path inference
 
-Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger silent BIP-48 default path (`m/48'/<coin>'/<account>'/2'`; `3'` for a `tr(...)` descriptor) + a stderr `info:` notice mirroring `mnemonic bundle` v0.19.0 behavior. Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
+Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
 
 #### NUMS sentinel
 

@@ -1661,10 +1661,8 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // emit path calls), so the two sides cannot drift. `Verify` mode SKIPS the
     // emit-only §6.6 row-19 path-mismatch refusal (verify is read-only — a
     // genuine inline/slot conflict surfaces downstream as a md1 byte-mismatch,
-    // never as a refusal, preserving verify's accept-set). The returned
-    // `defaulted_indices` is discarded: verify-bundle emits no notice, and the
-    // sole consumed output (`path_decl.paths`) is byte-identical to the prior
-    // hand-copied block (only the discarded bookkeeping differs).
+    // never as a refusal, preserving verify's accept-set). The slots it
+    // filled are reported below as an advisory.
     let bound_paths = crate::cmd::bundle::bind_descriptor_mode_paths(
         crate::cmd::bundle::DescriptorBindMode::Verify,
         &args.slot,
@@ -1704,11 +1702,16 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             .map(|i| format!("@{i}"))
             .collect::<Vec<_>>()
             .join(", ");
+        // Name the path actually assumed (Brian's BIP-defaults ruling,
+        // 2026-11-25: BIP-48 1'/2' for sh(wsh)/wsh, BIP-87 otherwise).
+        let family = crate::template::DefaultOriginFamily::for_md_tree(&canonicity_probe.tree);
+        let path = family.path_string(args.network, args.account);
+        let label = family.label();
         let _ = writeln!(
             stderr,
-            "info: no origin supplied for {idx_list}; assuming the BIP-48 \
-             cosigner path to rebuild the expected card. If that is not where \
-             those keys live, set it with [fp/path]@N or --slot @N.path=m/..."
+            "info: no origin supplied for {idx_list}; assuming {path} ({label}) \
+             to rebuild the expected card. If that is not where those keys \
+             live, set it with [fp/path]@N or --slot @N.path=m/..."
         );
     }
 

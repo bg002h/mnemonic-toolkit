@@ -165,10 +165,10 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // H12 (cycle-1): a taproot (`tr(...)`) root tag defaults the BIP-48
-    // script-type leaf to 3' (P2TR), not 2' (P2WSH).
+    // 2026-11-25 BIP-defaults ruling: a taproot (`tr(...)`) root defaults to
+    // BIP-87 (script-agnostic), not a BIP-48 leaf (BIP-48 defines 1' and 2' only).
     assert!(
-        stderr.contains("info: no origin supplied for @0; defaulting to m/48'/0'/0'/3'"),
+        stderr.contains("info: no origin supplied for @0; defaulting to m/87'/0'/0' (BIP-87)"),
         "stderr did not contain default-path info notice for tr(NUMS); got:\n{stderr}"
     );
 }

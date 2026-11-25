@@ -210,3 +210,262 @@ fn r1_i3_multisig_exports_keep_an_explicit_master_path() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// B1-B3 — Brian's BIP-defaults ruling: sh(wsh) → BIP-48 1'; any other
+// non-canonical sh(...) and taproot multisig → BIP-87; bundle, verify-bundle
+// and xpub-search agree.
+// ---------------------------------------------------------------------------
+
+fn md1_of(json: &str) -> Vec<String> {
+    let v: serde_json::Value = serde_json::from_str(json).expect("bundle --json");
+    v["md1"]
+        .as_array()
+        .expect("md1 array")
+        .iter()
+        .map(|s| s.as_str().unwrap().to_string())
+        .collect()
+}
+
+fn origins_on_card(md1: &[String]) -> Vec<String> {
+    let refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let d = md_codec::chunk::reassemble(&refs).expect("md1 decodes");
+    let expanded = md_codec::canonicalize::expand_per_at_n(&d).expect("expand");
+    expanded
+        .iter()
+        .map(|e| {
+            e.origin_path
+                .components
+                .iter()
+                .map(|c| format!("{}{}", c.value, if c.hardened { "'" } else { "" }))
+                .collect::<Vec<_>>()
+                .join("/")
+        })
+        .collect()
+}
+
+fn run_stdin(args: &[&str], stdin: &str) -> Out {
+    let o = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(args)
+        .write_stdin(stdin.as_bytes().to_vec())
+        .output()
+        .unwrap();
+    Out {
+        code: o.status.code().unwrap_or(-1),
+        stdout: String::from_utf8(o.stdout).unwrap(),
+        stderr: String::from_utf8(o.stderr).unwrap(),
+    }
+}
+
+#[test]
+fn b3_taproot_multisig_descriptor_defaults_to_bip87() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "testnet",
+        "--descriptor",
+        "tr(@0/<0;1>/*,multi_a(1,@1/<0;1>/*))",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["87'/1'/0'", "87'/1'/0'"]
+    );
+    assert!(
+        o.stderr
+            .contains("info: no origin supplied for @0,@1; defaulting to m/87'/1'/0' (BIP-87)"),
+        "{}",
+        o.stderr
+    );
+    assert!(!o.stderr.contains("/3'"), "no BIP-48 3': {}", o.stderr);
+}
+
+#[test]
+fn b1_b2_b3_xpub_search_default_follows_the_ruling() {
+    for (shape, path) in [
+        ("sh(wsh(sortedmulti(1,{a},{b})))", "m/48'/0'/0'/1'"),
+        ("sh(sortedmulti(1,{a},{b}))", "m/87'/0'/0'"),
+        ("tr({a},sortedmulti_a(1,{b}))", "m/87'/0'/0'"),
+        ("wsh(sortedmulti(1,{a},{b}))", "m/48'/0'/0'/2'"),
+    ] {
+        let a = format!("{}/<0;1>/*", xpub_at(A, "m/87'/0'/0'"));
+        let b = format!("{}/<0;1>/*", xpub_at(B, "m/87'/0'/0'"));
+        let desc = shape.replace("{a}", &a).replace("{b}", &b);
+        let o = run_stdin(
+            &[
+                "xpub-search",
+                "account-of-descriptor",
+                "--phrase-stdin",
+                "--descriptor",
+                &desc,
+                "--min-account",
+                "0",
+                "--number-of-accounts",
+                "1",
+            ],
+            A,
+        );
+        assert!(
+            o.stderr
+                .contains(&format!("defaulting origin path for @0,@1 to {path}")),
+            "{shape}: {}",
+            o.stderr
+        );
+    }
+}
+
+/// The bare-P2SH WARNING, and the m/45' command it prints: run as printed,
+/// it mints the same bundle with origin m/45' on @0's card entry, and
+/// verify-bundle accepts that bundle.
+#[test]
+fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
+    let xb = xpub_at(B, "m/87'/0'/0'");
+    let s1 = format!("@1.xpub={xb}");
+    let desc = "sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))";
+    let args = [
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        desc,
+        "--slot",
+        "@0.phrase=-",
+        "--slot",
+        &s1,
+        "--slot",
+        "@1.fingerprint=b8688df1",
+        "--json",
+    ];
+    let o = run_stdin(&args, A);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["87'/0'/0'", "87'/0'/0'"]
+    );
+    for want in [
+        "warning: no origin supplied for @0,@1 in a legacy P2SH descriptor",
+        "m/87'/0'/0' (BIP-87)",
+        "m/45', m/45'/0, m/45'/0'/0'",
+        "compare its first address before funding",
+        "use a different --account",
+        "warning: to mint this bundle at m/45' instead, run:",
+    ] {
+        assert!(o.stderr.contains(want), "missing {want:?}: {}", o.stderr);
+    }
+    assert!(
+        !o.stderr.contains("info: no origin"),
+        "a WARNING, not info: {}",
+        o.stderr
+    );
+    let lines: Vec<&str> = o.stderr.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("to mint this bundle at m/45' instead"))
+        .unwrap();
+    let cmd = lines[at + 1].trim();
+    assert!(cmd.ends_with("--slot '@0.path=m/45'\\'''"), "{cmd}");
+    assert!(
+        !o.stderr.contains("not repeated above"),
+        "no inline secret: {}",
+        o.stderr
+    );
+
+    // Run the printed command exactly as printed.
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(cmd)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .and_then(|mut c| {
+            use std::io::Write;
+            c.stdin.take().unwrap().write_all(A.as_bytes())?;
+            c.wait_with_output()
+        })
+        .unwrap();
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        out.status.success(),
+        "printed command failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(origins_on_card(&md1_of(&stdout)), vec!["45'", "87'/0'/0'"]);
+
+    // verify-bundle accepts it, given the same slots.
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bundle.json");
+    std::fs::write(&path, &stdout).unwrap();
+    let v = run_stdin(
+        &[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            "@0.phrase=-",
+            "--slot",
+            "@0.path=m/45'",
+            "--slot",
+            &s1,
+            "--slot",
+            "@1.fingerprint=b8688df1",
+            "--bundle-json",
+            path.to_str().unwrap(),
+        ],
+        A,
+    );
+    assert_eq!(v.code, 0, "verify-bundle: {}\n{}", v.stdout, v.stderr);
+
+    // The key on the card is A's m/45' key.
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(
+        v["multisig"]["cosigners"][0]["xpub"].as_str(),
+        Some(xpub_at(A, "m/45'").as_str()),
+        "@0 is derived at m/45'"
+    );
+}
+
+/// A non-canonical sh(wsh(...)) is BIP-48 1' (P2SH-P2WSH), not legacy P2SH:
+/// the plain info notice, no P2SH warning and no m/45' command.
+#[test]
+fn b2_sh_wsh_multisig_keeps_bip48_1h_and_no_warning() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "sh(wsh(and_v(v:pk(@0/<0;1>/*),pk(@1/<0;1>/*))))",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["48'/0'/0'/1'", "48'/0'/0'/1'"]
+    );
+    assert!(
+        o.stderr.contains(
+            "info: no origin supplied for @0,@1; defaulting to m/48'/0'/0'/1' (BIP-48 cosigner path)"
+        ),
+        "{}",
+        o.stderr
+    );
+    assert!(!o.stderr.contains("legacy P2SH"), "{}", o.stderr);
+    assert!(!o.stderr.contains("m/45'"), "{}", o.stderr);
+}

@@ -1184,8 +1184,11 @@ fn bitcoind_subset_search_completion_differential() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// H12 (cycle-1) — descriptor-mode taproot multisig defaults the BIP-48 origin
-// to script-type 3' (P2TR), not 2' (P2WSH).
+// H12 (cycle-1) — descriptor-mode taproot multisig default origin. Superseded
+// 2026-11-25 by the BIP-defaults ruling: the default is now BIP-87
+// `m/87'/0'/0'` (BIP-48 defines only 1' and 2'; BIP-87 is script-agnostic), so
+// the rows below pin BIP-87 and assert divergence from the old `48'/../3'`.
+// The H12 history follows.
 //
 // The bug is funds-critical AND only visible through a SEED-derived cosigner:
 // when a `tr(NUMS, multi_a/sortedmulti_a)` descriptor's cosigner origin is
@@ -1197,8 +1200,8 @@ fn bitcoind_subset_search_completion_differential() {
 // This row bundles an ORIGIN-ELIDED taproot multisig from two controlled seeds
 // (account 0), reads back the per-cosigner xpubs the toolkit derived, and
 // builds the concrete descriptor it implies. The oracle asserts that descriptor
-// derives the SAME addresses as the INDEPENDENT `48'/0'/0'/3'` derivation, and
-// DIFFERS from the `48'/0'/0'/2'` (pre-H12 wrong) subtree — via BOTH
+// derives the SAME addresses as the INDEPENDENT `87'/0'/0'` derivation, and
+// DIFFERS from the `48'/0'/0'/3'` (previous default) path — via BOTH
 // rust-miniscript (DEFAULT-CI anti-vacuity) AND Core `deriveaddresses`
 // (env-gated heavy leg). Mainnet (the harness's offline `-chain=main` contract;
 // the toolkit renders mainnet `xpub…`).
@@ -1267,7 +1270,7 @@ fn h12_independent_concrete(inner: &str, st_path: &str) -> String {
 
 /// DEFAULT-CI anti-vacuity leg (NOT `#[ignore]`): the toolkit's bundled taproot
 /// cosigner xpubs (origin defaulted) must derive the SAME addresses as the
-/// INDEPENDENT `3'` subtree, and DIFFER from the `2'` subtree. This is the
+/// INDEPENDENT BIP-87 path, and DIFFER from the old `48'/../3'` one. This is the
 /// rust-miniscript half of the H12 oracle; it gates the fix without a node.
 #[test]
 fn h12_taproot_default_origin_anti_vacuity_leg() {
@@ -1280,40 +1283,40 @@ fn h12_taproot_default_origin_anti_vacuity_leg() {
     ] {
         let (bundled_desc, origins) = h12_bundle_concrete(template);
 
-        // (a) The emitted origin is the 3' (P2TR) subtree.
+        // (a) The emitted origin is BIP-87.
         for op in &origins {
             assert_eq!(
-                op, "m/48'/0'/0'/3'",
-                "[{inner}] taproot cosigner origin must default to 3'; got {op}"
+                op, "m/87'/0'/0'",
+                "[{inner}] taproot cosigner origin must default to BIP-87; got {op}"
             );
         }
 
         let bundled_addrs = derive_receive(&bundled_desc, N + 1);
-        let addrs_3 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/3'"), N + 1);
-        let addrs_2 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/2'"), N + 1);
+        let addrs_3 = derive_receive(&h12_independent_concrete(inner, "87'/0'/0'"), N + 1);
+        let addrs_2 = derive_receive(&h12_independent_concrete(inner, "48'/0'/0'/3'"), N + 1);
 
-        // (b) MATCH the 3' subtree.
+        // (b) MATCH the BIP-87 path.
         assert_eq!(
             bundled_addrs, addrs_3,
-            "[{inner}] bundled taproot addresses must equal the INDEPENDENT 3' derivation"
+            "[{inner}] bundled taproot addresses must equal the INDEPENDENT BIP-87 derivation"
         );
-        // (c) DIFFER from the 2' subtree (the pre-H12 wrong subtree).
+        // (c) DIFFER from the old 48'/../3' path.
         assert_ne!(
             bundled_addrs, addrs_2,
-            "[{inner}] bundled taproot addresses must DIFFER from the 2' (wrong) subtree — \
-             a 2'/3' subtree confusion would make this vacuous"
+            "[{inner}] bundled taproot addresses must DIFFER from the old 48'/../3' derivation — \
+             a 48'/87' path confusion would make this vacuous"
         );
-        // Sanity: 2' and 3' subtrees are genuinely distinct (anti-vacuity of (c)).
+        // Sanity: the two paths are genuinely distinct (anti-vacuity of (c)).
         assert_ne!(
             addrs_3, addrs_2,
-            "[{inner}] the 2' and 3' subtree derivations must differ (oracle sanity)"
+            "[{inner}] the 48'/../3' and BIP-87 derivations must differ (oracle sanity)"
         );
     }
 }
 
 /// Env-gated heavy leg: Core `deriveaddresses` corroborates the H12 oracle — the
-/// toolkit's bundled taproot descriptor matches Core on the 3' subtree and
-/// DIFFERS from Core on the 2' subtree. Same CONNECT-ONLY contract.
+/// toolkit's bundled taproot descriptor matches Core on the BIP-87 path and
+/// DIFFERS from Core on the old 48'/../3' path. Same CONNECT-ONLY contract.
 #[test]
 #[ignore = "requires a pre-running offline -chain=main bitcoind (wiring env vars)"]
 fn bitcoind_h12_taproot_default_origin_differential() {
@@ -1335,23 +1338,23 @@ fn bitcoind_h12_taproot_default_origin_differential() {
     ] {
         let (bundled_desc, origins) = h12_bundle_concrete(template);
         for op in &origins {
-            assert_eq!(op, "m/48'/0'/0'/3'", "[{inner}] origin must be 3'");
+            assert_eq!(op, "m/87'/0'/0'", "[{inner}] origin must be BIP-87");
         }
 
         let bundled_addrs = derive_receive(&bundled_desc, N + 1);
-        let desc3 = h12_independent_concrete(inner, "48'/0'/0'/3'");
-        let desc2 = h12_independent_concrete(inner, "48'/0'/0'/2'");
+        let desc3 = h12_independent_concrete(inner, "87'/0'/0'");
+        let desc2 = h12_independent_concrete(inner, "48'/0'/0'/3'");
 
-        // Anti-vacuity BEFORE Core: bundled == independent 3'.
+        // Anti-vacuity BEFORE Core: bundled == independent BIP-87.
         assert_eq!(
             bundled_addrs,
             derive_receive(&desc3, N + 1),
-            "[{inner}] anti-vacuity: bundled addrs must equal independent 3' BEFORE Core"
+            "[{inner}] anti-vacuity: bundled addrs must equal independent BIP-87 BEFORE Core"
         );
 
         // Core on the BUNDLED descriptor's chain-0 == toolkit's reported addrs.
         let core_bundled = core_addresses(&w, &single_chain_desc(&bundled_desc, 0));
-        // Core on the independent 3' and 2' subtrees.
+        // Core on the independent BIP-87 and old 48'/../3' paths.
         let core_3 = core_addresses(&w, &single_chain_desc(&desc3, 0));
         let core_2 = core_addresses(&w, &single_chain_desc(&desc2, 0));
 
@@ -1364,18 +1367,18 @@ fn bitcoind_h12_taproot_default_origin_differential() {
             );
             assert_eq!(
                 core_bundled[i], core_3[i],
-                "[{inner}] idx{i}: bundled must match Core on the 3' subtree"
+                "[{inner}] idx{i}: bundled must match Core on the BIP-87 path"
             );
             assert_ne!(
                 core_bundled[i], core_2[i],
-                "[{inner}] idx{i}: bundled (3') must DIFFER from Core on the 2' subtree"
+                "[{inner}] idx{i}: bundled (BIP-87) must DIFFER from Core on the old 48'/../3' path"
             );
             total_checks += 1;
         }
     }
     eprintln!(
-        "toolkit bitcoind H12 differential PASS: {total_checks} taproot 3'-vs-2' \
-         address checks, byte-identical to Core on 3' and diverging from 2'"
+        "toolkit bitcoind H12 differential PASS: {total_checks} taproot BIP-87-vs-48'/3' \
+         address checks, byte-identical to Core on BIP-87 and diverging from 48'/3'"
     );
 }
 

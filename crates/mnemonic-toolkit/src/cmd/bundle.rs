@@ -1660,21 +1660,10 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     }
 
     // v0.19.0 SPEC §4.12.b — default-path inference for non-canonical
-    // descriptors. For each `@N` whose path_decl entry is empty AND that
-    // has no `--slot @N.path=` override, assign `m/48'/<coin>'/<account>'/2'`
-    // (BIP-48 cosigner path). The mutation produces `Divergent(vec)` with
-    // `vec.len() == n`. `--slot @N.path=` overrides happen later in the
-    // per-slot loop (lines 1018-1029 already handle Xpub slots; Phase 4
-    // extends to Phrase slots via the canonical-mode guard above).
-    // H12 — taproot-aware default-origin script-type. The canonicity probe
-    // holds the descriptor's md-codec tree, whose root `Tag` selects the BIP-48
-    // leaf (Tr → 3' P2TR, sh → 1', else wsh 2'). Pre-H12 this was hardcoded 2',
-    // putting taproot cosigner keys in the wrong (un-cosignable) subtree.
-    // `default_script_type` is needed at the call site by
-    // `emit_default_path_notice` below; the shared fn recomputes it internally
-    // from `root_tag` (a cheap pure tag→u32 map) — SPEC §3.2 Open-Q resolution.
-    let default_script_type =
-        crate::template::bip48_script_type_for_root_tag(&canonicity_probe.tree.tag);
+    // descriptors: each `@N` with no origin and no `--slot @N.path=` gets the
+    // family default (`template::DefaultOriginFamily`, Brian's 2026-11-25
+    // ruling). The notice below names the path actually used.
+    let default_family = crate::template::DefaultOriginFamily::for_md_tree(&canonicity_probe.tree);
     // Wave-4 L1: gate + H12 inference + new_paths build + per-slot override loop
     // (incl. the emit-mode-gated §6.6 row-19 path-mismatch refusal) + F4 collapse
     // now live in the SHARED `bind_descriptor_mode_paths`. `Emit` mode enforces
@@ -2063,12 +2052,35 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // v0.19.0 SPEC §4.12.d — stderr info notice on default-path application.
     // Printed BEFORE the bundle to surface the assumption legibly. Suppressed
     // when no `@N` received the default (defaulted_indices is empty).
+    // Seed-bound slots among the defaulted ones: the printed m/45' command
+    // overrides only those (an xpub slot's key does not move with its path).
+    let seed_defaulted: Vec<u8> = bound_paths
+        .defaulted
+        .iter()
+        .copied()
+        .filter(|i| {
+            slots.iter().any(|s| {
+                s.index == *i
+                    && matches!(
+                        s.subkey,
+                        crate::slot_input::SlotSubkey::Phrase
+                            | crate::slot_input::SlotSubkey::Seedqr
+                            | crate::slot_input::SlotSubkey::Entropy
+                            | crate::slot_input::SlotSubkey::Ms1
+                    )
+            })
+        })
+        .collect();
     emit_default_path_notice(
         stderr,
         &bound_paths.defaulted,
+        &seed_defaulted,
         args.network,
         args.account,
-        default_script_type,
+        default_family,
+        // Bare P2SH only: sh(wsh(...)) keeps BIP-48 1' and the plain notice.
+        canonicity_probe.tree.tag == md_codec::tag::Tag::Sh
+            && matches!(default_family, crate::template::DefaultOriginFamily::Bip87),
     )?;
     // Bug hunt 2026-11-25 toolkit#1: say which canonical-shape slots were given
     // the shape's canonical origin (and so were derived / recorded there).
@@ -2613,11 +2625,13 @@ pub(crate) fn bind_descriptor_mode_paths(
     // shape has a canonical origin and must not be second-guessed), and
     // everything below it runs for both.
 
-    // H12 — taproot-aware default-origin script-type (Tr → 3', sh → 1',
-    // else wsh 2'). Derived from the SAME canonicity-probe root `Tag` both
-    // callers pass, so emit and verify agree on the BIP-48 leaf.
-    let default_script_type = crate::template::bip48_script_type_for_root_tag(&root_tree.tag);
-    let default_path = compute_default_origin_path(network, account, default_script_type);
+    // Default origin family (Brian's BIP-defaults ruling, 2026-11-25; see
+    // `template::DefaultOriginFamily`): sh(wsh) → BIP-48 1', wsh → BIP-48 2',
+    // any other sh(...) and every tr(...) → BIP-87 m/87'/c'/a'. Derived from
+    // the SAME canonicity-probe tree both callers pass, so emit and verify
+    // agree. (H12 used BIP-48 3' for taproot, which no BIP defines.)
+    let default_path =
+        crate::template::DefaultOriginFamily::for_md_tree(root_tree).origin_path(network, account);
 
     let mut new_paths: Vec<OriginPath> = match &path_decl.paths {
         PathDeclPaths::Shared(op) => {
@@ -2805,44 +2819,6 @@ pub(crate) fn canonical_origin_for_network(
     Some(op)
 }
 
-/// v0.19.0 SPEC §4.12.b — compute the default origin path
-/// `m/48'/<coin>'/<account>'/<script_type>'` for non-canonical descriptors with
-/// bare `@N` placeholders. `<coin>` derives from `--network` (mainnet → `0'`,
-/// testnet/signet/regtest → `1'` per BIP-44); `<account>` consumes `--account N`.
-/// `script_type` is the BIP-48 leaf (1=sh-wsh, 2=wsh, 3=taproot/P2TR), computed
-/// by the caller from the descriptor's root md-codec `Tag` via
-/// `template::bip48_script_type_for_root_tag` (H12 — taproot multisig must
-/// default to `3'`, not `2'`). Public so verify-bundle's descriptor mode can
-/// mirror the same default-inference per SPEC §4.11.c (symmetric verify-bundle
-/// enforcement).
-pub fn compute_default_origin_path(
-    network: crate::network::CliNetwork,
-    account: u32,
-    script_type: u32,
-) -> md_codec::origin_path::OriginPath {
-    use md_codec::origin_path::{OriginPath, PathComponent};
-    OriginPath {
-        components: vec![
-            PathComponent {
-                hardened: true,
-                value: 48,
-            },
-            PathComponent {
-                hardened: true,
-                value: network.coin_type(),
-            },
-            PathComponent {
-                hardened: true,
-                value: account,
-            },
-            PathComponent {
-                hardened: true,
-                value: script_type,
-            },
-        ],
-    }
-}
-
 /// Convert a `bitcoin::bip32::DerivationPath` to `md_codec::origin_path::OriginPath`.
 /// Used to fold `--slot @N.path=` user input into `path_decl.paths` for
 /// non-canonical-descriptor default-inference override. Public for the
@@ -2867,14 +2843,21 @@ pub fn derivation_path_to_origin(dp: &DerivationPath) -> md_codec::origin_path::
     }
 }
 
-/// v0.19.0 SPEC §4.12.d — emit the stderr info notice naming the `@N`
-/// indices that received the default path. Format byte-exact per SPEC.
+/// v0.19.0 SPEC §4.12.d — emit the stderr notice naming the `@N` indices that
+/// received the default path, and the path. For a legacy bare-P2SH `sh(...)`
+/// (no BIP-48 script type; BIP-87 default per Brian's 2026-11-25 ruling) it is
+/// a WARNING: other wallets put those keys elsewhere, so it lists the common
+/// alternatives, asks for an address comparison and a distinct `--account`
+/// for a second wallet, and prints the ready-to-run command that mints the
+/// same bundle at `m/45'` instead.
 fn emit_default_path_notice<E: Write>(
     stderr: &mut E,
     defaulted_indices: &[u8],
+    seed_defaulted: &[u8],
     network: crate::network::CliNetwork,
     account: u32,
-    script_type: u32,
+    family: crate::template::DefaultOriginFamily,
+    bare_sh: bool,
 ) -> Result<(), ToolkitError> {
     if defaulted_indices.is_empty() {
         return Ok(());
@@ -2884,21 +2867,134 @@ fn emit_default_path_notice<E: Write>(
         .map(|i| format!("@{i}"))
         .collect::<Vec<_>>()
         .join(",");
-    let coin = network.coin_type();
-    // H12 — render the ACTUAL inferred script-type leaf (3' for taproot), not a
-    // hardcoded 2'.
+    let path = family.path_string(network, account);
+    let label = family.label();
+    let w = |e: std::io::Error| ToolkitError::BadInput(format!("stderr write: {e}"));
+    if !bare_sh {
+        // Says "defaulting", not "non-canonical descriptor": what the operator
+        // needs is which slots got an origin chosen for them, and how to
+        // choose it themselves.
+        writeln!(
+            stderr,
+            "info: no origin supplied for {idx_list}; defaulting to {path} ({label}). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+        )
+        .map_err(w)?;
+        return Ok(());
+    }
     writeln!(
         stderr,
-        // Says "defaulting", not "non-canonical descriptor". The old wording
-        // asserted a property of the INPUT that this notice never checked, and
-        // after path-binding was ungated for canonical shapes it could be flatly
-        // false. What the operator needs to know is that an origin was CHOSEN
-        // for them and how to choose it themselves -- which slots, and the two
-        // ways to override. The shape of the descriptor is not their problem.
-        "info: no origin supplied for {idx_list}; defaulting to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+        "warning: no origin supplied for {idx_list} in a legacy P2SH descriptor (sh(...)); derived at \
+         {path} ({label}). BIP-48 assigns no path to this script type, and other wallets place \
+         legacy P2SH multisig keys elsewhere (for example m/45', m/45'/0, m/45'/0'/0'). If this \
+         card is meant to match an existing wallet, compare its first address before funding, or \
+         set the origin with [fp/path]@N or --slot @N.path=m/... . For a second wallet from the \
+         same seed, use a different --account."
     )
-    .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
+    .map_err(w)?;
+    if !seed_defaulted.is_empty() {
+        let extra: Vec<String> = seed_defaulted
+            .iter()
+            .flat_map(|i| ["--slot".to_string(), format!("@{i}.path=m/45'")])
+            .collect();
+        let (cmd, redacted) = rerun_command_with(&extra);
+        writeln!(
+            stderr,
+            "warning: to mint this bundle at m/45' instead, run:"
+        )
+        .map_err(w)?;
+        writeln!(stderr, "  {cmd}").map_err(w)?;
+        if redacted {
+            writeln!(
+                stderr,
+                "warning: secret values typed on the command line are not repeated above; put \
+                 yours back in place of each <...>, or pass one as =- on stdin."
+            )
+            .map_err(w)?;
+        }
+    }
     Ok(())
+}
+
+/// This process's own command line with `extra` appended, quoted for a POSIX
+/// shell. Secret values typed inline (`--slot @N.<phrase|seedqr|entropy|ms1|
+/// wif|xprv>=<value>` and `--passphrase <value>`) are replaced by a `<...>`
+/// placeholder and never echoed; the `bool` says whether any was.
+fn rerun_command_with(extra: &[String]) -> (String, bool) {
+    let argv: Vec<String> = std::env::args_os()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    redact_and_quote(&argv, extra)
+}
+
+/// Slot subkeys whose values are public and may be repeated in a printed
+/// command. Fail-closed: every other subkey's inline value (a phrase, seedqr,
+/// entropy, ms1, wif or xprv, or any subkey added later) is redacted.
+const PUBLIC_SLOT_SUBKEYS: &[&str] = &["xpub", "master_xpub", "fingerprint", "path"];
+
+fn redact_slot_value(v: &str, redacted: &mut bool) -> String {
+    // `@N.<subkey>=<value>`
+    if let Some((key, value)) = v.split_once('=') {
+        let public = key
+            .split_once('.')
+            .is_some_and(|(_, sub)| PUBLIC_SLOT_SUBKEYS.contains(&sub));
+        if public || value == "-" {
+            return v.to_string();
+        }
+        *redacted = true;
+        return format!("{key}=<your {key}>");
+    }
+    v.to_string()
+}
+
+fn redact_and_quote(argv: &[String], extra: &[String]) -> (String, bool) {
+    let mut redacted = false;
+    let mut out: Vec<String> = Vec::with_capacity(argv.len() + extra.len());
+    let mut i = 0;
+    while i < argv.len() {
+        let a = &argv[i];
+        if a == "--slot" && i + 1 < argv.len() {
+            out.push(a.clone());
+            out.push(redact_slot_value(&argv[i + 1], &mut redacted));
+            i += 2;
+            continue;
+        }
+        if let Some(v) = a.strip_prefix("--slot=") {
+            out.push(format!("--slot={}", redact_slot_value(v, &mut redacted)));
+            i += 1;
+            continue;
+        }
+        if a == "--passphrase" && i + 1 < argv.len() {
+            out.push(a.clone());
+            out.push("<your passphrase>".into());
+            redacted = true;
+            i += 2;
+            continue;
+        }
+        if a.starts_with("--passphrase=") {
+            out.push("--passphrase=<your passphrase>".into());
+            redacted = true;
+            i += 1;
+            continue;
+        }
+        out.push(a.clone());
+        i += 1;
+    }
+    out.extend(extra.iter().cloned());
+    let quoted: Vec<String> = out.iter().map(|a| shell_quote(a)).collect();
+    (quoted.join(" "), redacted)
+}
+
+/// Quote one argument for a POSIX shell: bare when it is plainly safe,
+/// otherwise single-quoted with each embedded `'` written as `'\''`.
+fn shell_quote(a: &str) -> String {
+    let safe = !a.is_empty()
+        && a.chars()
+            .all(|c| c.is_ascii_alphanumeric() || "@%+=:,./-_".contains(c));
+    if safe {
+        a.to_string()
+    } else {
+        format!("'{}'", a.replace('\'', "'\\''"))
+    }
 }
 
 /// Bug hunt 2026-11-25 toolkit#1 — stderr `info:` line naming the canonical
@@ -3664,42 +3760,76 @@ mod self_check_mk1_xpub_binding_tests {
         );
     }
 
-    // H12 (cycle-1) — taproot-aware default-origin helper. The BIP-48
-    // script-type component must be 3' for taproot multisig (P2TR de-facto
-    // interop convention: Sparrow/Coldcard/Jade), 2' for wsh, 1' for sh(wsh).
-    // Pre-H12 the helper hardcoded 2' regardless of script type, putting every
-    // taproot cosigner key in the wrong subtree (un-cosignable wallets).
+    // Brian's BIP-defaults ruling (2026-11-25): the default origin family
+    // for a non-canonical descriptor.
     #[test]
-    fn compute_default_origin_path_taproot_emits_3prime() {
-        let op = compute_default_origin_path(CliNetwork::Mainnet, 0, 3);
-        let last = op.components.last().expect("non-empty origin path");
-        assert!(last.hardened, "script-type component must be hardened");
-        assert_eq!(
-            last.value, 3,
-            "taproot default origin must use BIP-48 script-type 3' (P2TR); got {}'",
-            last.value
-        );
-        // Full shape: m/48'/0'/0'/3' on mainnet, account 0.
-        let shape: Vec<(bool, u32)> = op
-            .components
-            .iter()
-            .map(|c| (c.hardened, c.value))
-            .collect();
-        assert_eq!(
-            shape,
-            vec![(true, 48), (true, 0), (true, 0), (true, 3)],
-            "mainnet account-0 taproot default origin must be m/48'/0'/0'/3'"
-        );
+    fn default_origin_family_follows_the_bip_defaults_ruling() {
+        use crate::template::DefaultOriginFamily as F;
+        let tree = |d: &str| parse_descriptor(d, &[], &[]).unwrap().tree;
+        let cases = [
+            ("sh(wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*)))", "m/48'/0'/0'/1'"),
+            (
+                "wsh(and_v(v:pk(@0/<0;1>/*),pk(@1/<0;1>/*)))",
+                "m/48'/0'/0'/2'",
+            ),
+            ("sh(multi(2,@0/<0;1>/*,@1/<0;1>/*))", "m/87'/0'/0'"),
+            ("sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))", "m/87'/0'/0'"),
+            ("tr(@0/<0;1>/*,multi_a(1,@1/<0;1>/*))", "m/87'/0'/0'"),
+        ];
+        for (d, want) in cases {
+            assert_eq!(
+                F::for_md_tree(&tree(d)).path_string(CliNetwork::Mainnet, 0),
+                want,
+                "{d}"
+            );
+        }
+        assert_eq!(F::Bip87.path_string(CliNetwork::Testnet, 3), "m/87'/1'/3'");
     }
 
     #[test]
-    fn compute_default_origin_path_wsh_and_shwsh_unchanged() {
-        // wsh (script-type 2') — the prior hardcoded value, must be preserved.
-        let wsh = compute_default_origin_path(CliNetwork::Mainnet, 0, 2);
-        assert_eq!(wsh.components.last().unwrap().value, 2);
-        // sh(wsh) (script-type 1').
-        let shwsh = compute_default_origin_path(CliNetwork::Mainnet, 0, 1);
-        assert_eq!(shwsh.components.last().unwrap().value, 1);
+    fn rerun_command_never_echoes_an_inline_secret() {
+        let argv: Vec<String> = [
+            "mnemonic",
+            "--allow-argv-secret",
+            "bundle",
+            "--descriptor",
+            "sh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
+            "--slot",
+            "@0.phrase=abandon abandon about",
+            "--slot=@1.ms1=ms10secret",
+            "--slot",
+            "@2.phrase=-",
+            "--slot",
+            "@3.xpub=xpubPUBLIC",
+            "--slot",
+            "@3.fingerprint=b8688df1",
+            "--slot",
+            "@4.newsecret=topsecret",
+            "--passphrase",
+            "hunter2",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let (cmd, redacted) = redact_and_quote(&argv, &["--slot".into(), "@0.path=m/45'".into()]);
+        assert!(redacted);
+        for secret in ["abandon", "ms10secret", "hunter2", "topsecret"] {
+            assert!(!cmd.contains(secret), "fail-closed: {cmd}");
+        }
+        assert!(cmd.contains("@2.phrase=-"), "stdin form kept: {cmd}");
+        assert!(
+            cmd.contains("@3.xpub=xpubPUBLIC"),
+            "public value kept: {cmd}"
+        );
+        assert!(
+            cmd.contains("@3.fingerprint=b8688df1"),
+            "public value kept: {cmd}"
+        );
+        assert!(cmd.ends_with("--slot '@0.path=m/45'\\'''"), "{cmd}");
+        assert!(
+            cmd.contains("'sh(multi(2,@0/<0;1>/*,@1/<0;1>/*))'"),
+            "{cmd}"
+        );
     }
 }
 

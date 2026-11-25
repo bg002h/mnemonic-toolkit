@@ -10,7 +10,7 @@
 //! - toolkit#5: an xpub slot got the template default origin even when its
 //!   own header contradicts it.
 //! - toolkit#6: `--account >= 2^31` panicked.
-//! - toolkit#7: the legacy `sh(sortedmulti)` default (pinned; manual fixed).
+//! - toolkit#7: the legacy `sh(sortedmulti)` default (superseded: BIP-87 + warning).
 //! - X4: a WIF slot minted a depth-0, zero-chain-code "xpub" under a ranged
 //!   use-site.
 
@@ -599,11 +599,13 @@ fn tk6_largest_hardened_account_still_parses() {
 }
 
 // ---------------------------------------------------------------------------
-// toolkit#7 — legacy sh(sortedmulti) default is BIP-48 1' (pinned, not changed).
+// toolkit#7 — legacy sh(sortedmulti) default. Superseded by the 2026-11-25
+// BIP-defaults ruling: BIP-48 assigns no path to bare P2SH, so the default is
+// BIP-87 with a warning naming m/45' (see bughunt_1125_r1 b2_*).
 // ---------------------------------------------------------------------------
 
 #[test]
-fn tk7_legacy_sh_sortedmulti_default_is_pinned_at_1h() {
+fn tk7_legacy_sh_sortedmulti_defaults_to_bip87_with_a_warning() {
     let o = run(&[
         "bundle",
         "--network",
@@ -618,8 +620,13 @@ fn tk7_legacy_sh_sortedmulti_default_is_pinned_at_1h() {
     ]);
     assert_eq!(o.code, 0, "{}", o.stderr);
     assert!(
-        o.stderr.contains("defaulting to m/48'/0'/0'/1'"),
-        "a derivation default: changing it changes addresses (manual documents 1'); {}",
+        o.stderr.contains("derived at m/87'/0'/0' (BIP-87)") && o.stderr.contains("m/45'"),
+        "bare sh(...) defaults to BIP-87 and names m/45'; {}",
+        o.stderr
+    );
+    assert!(
+        !o.stderr.contains("m/48'/0'/0'/1'"),
+        "BIP-48 1' is P2SH-P2WSH, not bare P2SH; {}",
         o.stderr
     );
 }

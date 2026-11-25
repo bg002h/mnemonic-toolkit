@@ -99,9 +99,10 @@ is auto-detected by a tie-break order:
   rust-miniscript).
 
 Literal-xpub descriptors with missing `[fp/path]` annotations on
-`@N` cosigners trigger silent BIP-48 default-path inference
-(`m/48'/<coin>'/<account>'/2'`; `3'` for a `tr(...)` descriptor) plus a
-stderr `info:` notice. A
+`@N` cosigners trigger default-path inference
+(`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'`
+for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)`
+and for `tr(...)`) plus a stderr `info:` notice naming the path. A
 cosigner xpub matching the BIP-341 unspendable NUMS H point is
 skipped and reported in the JSON envelope's
 `unspendable_internal_keys` array. The GUI renders this as a Text
