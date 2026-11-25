@@ -93,3 +93,120 @@ fn r1_n4_canonical_notice_names_the_missing_path() {
         o.stderr
     );
 }
+
+// ---------------------------------------------------------------------------
+// r1 I3 — the Sparrow, Electrum and Coldcard emitters write the slot's own
+// origin path, never the template default (owner's ruling, toolkit#2).
+// ---------------------------------------------------------------------------
+
+fn xpub_at(phrase: &str, path: &str) -> String {
+    let o = run(&[
+        "convert",
+        "--network",
+        "mainnet",
+        "--from",
+        &format!("phrase={phrase}"),
+        "--to",
+        "xpub",
+        "--path",
+        path,
+    ]);
+    assert_eq!(o.code, 0, "convert: {}", o.stderr);
+    o.stdout
+        .split_whitespace()
+        .find(|w| w.starts_with("xpub") && w.len() > 100)
+        .expect("xpub")
+        .to_string()
+}
+
+#[test]
+fn r1_i3_singlesig_exports_keep_the_typed_account_path() {
+    let x = xpub_at(A, "m/84'/0'/7'");
+    let xs = format!("@0.xpub={x}");
+    for format in ["sparrow", "electrum", "coldcard"] {
+        let o = run(&[
+            "export-wallet",
+            "--format",
+            format,
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            &xs,
+            "--slot",
+            "@0.fingerprint=73c5da0a",
+            "--slot",
+            "@0.path=m/84'/0'/7'",
+            "--output",
+            "-",
+        ]);
+        assert_eq!(o.code, 0, "{format}: {}", o.stderr);
+        assert!(
+            o.stdout.contains("m/84'/0'/7'"),
+            "{format}: the typed origin must be exported: {}",
+            o.stdout
+        );
+        assert!(
+            !o.stdout.contains("m/84'/0'/0'"),
+            "{format}: the template default must not replace it: {}",
+            o.stdout
+        );
+    }
+}
+
+#[test]
+fn r1_i3_multisig_exports_keep_an_explicit_master_path() {
+    let master = xpub_at(A, "m");
+    let other = xpub_at(B, "m/87'/0'/0'");
+    let s0 = format!("@0.xpub={master}");
+    let s1 = format!("@1.xpub={other}");
+    for format in ["sparrow", "electrum"] {
+        let o = run(&[
+            "export-wallet",
+            "--format",
+            format,
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "2",
+            "--network",
+            "mainnet",
+            "--slot",
+            &s0,
+            "--slot",
+            "@0.fingerprint=73c5da0a",
+            "--slot",
+            "@0.path=m",
+            "--slot",
+            &s1,
+            "--slot",
+            "@1.fingerprint=b8688df1",
+            "--output",
+            "-",
+        ]);
+        assert_eq!(o.code, 0, "{format}: {}", o.stderr);
+        let v: serde_json::Value = serde_json::from_str(&o.stdout).expect("json");
+        let derivs: Vec<String> = match format {
+            "sparrow" => v["keystores"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|k| {
+                    k["keyDerivation"]["derivation"]
+                        .as_str()
+                        .unwrap()
+                        .to_string()
+                })
+                .collect(),
+            _ => ["x1/", "x2/"]
+                .iter()
+                .map(|k| v[*k]["derivation"].as_str().unwrap().to_string())
+                .collect(),
+        };
+        assert!(
+            derivs.contains(&"m".to_string()) && derivs.contains(&"m/87'/0'/0'".to_string()),
+            "{format}: {derivs:?}"
+        );
+    }
+}

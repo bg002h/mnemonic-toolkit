@@ -197,8 +197,9 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
         _ => unreachable!(),
     };
 
-    // bipNN.deriv: m/<purpose>'/<coin>'/<account>'.
-    let deriv = template.origin_path_str(inputs.network, inputs.account);
+    // bipNN.deriv: the slot's own origin path (normally
+    // m/<purpose>'/<coin>'/<account>'), never the template default (review r1 I3).
+    let deriv = slot.origin_path_m();
 
     let sub = ColdcardSubDerivation {
         name: sub_object_name,

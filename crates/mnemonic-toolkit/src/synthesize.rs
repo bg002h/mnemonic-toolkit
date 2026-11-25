@@ -831,6 +831,18 @@ impl ResolvedSlot {
         }
     }
 
+    /// The slot's origin path in `m/...` form, `m` for the master node. This is
+    /// the path the caller derived at (or typed); wallet-file emitters use it
+    /// and never a template default (bug hunt 2026-11-25 review r1 I3, owner's
+    /// ruling on toolkit#2).
+    pub fn origin_path_m(&self) -> String {
+        if self.path == DerivationPath::default() {
+            "m".to_string()
+        } else {
+            format!("m/{}", self.path)
+        }
+    }
+
     /// BIP-380 bracketed origin annotation `[fp/comps]` (lowercase fingerprint,
     /// no `m/` inside), or `[fp]` for the pathless/degenerate slot. Rebuilt from
     /// the typed `fingerprint` + `path`; reproduces every former bracketed
