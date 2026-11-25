@@ -89,6 +89,7 @@ pub mod final_word;
 // windows-msvc cross-check and the release build both cover it.
 pub mod mlock;
 pub mod secret_taxonomy;
+pub mod zero_free;
 // v0.34.7: process-level argv-hardening (PR_SET_DUMPABLE). Unconditional —
 // the body is `#[cfg(target_os = "linux")]`-gated (no-op elsewhere), so this
 // compiles on the GUI's Windows lib consumption.
