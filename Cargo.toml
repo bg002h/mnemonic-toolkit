@@ -40,6 +40,8 @@ miniscript = { git = "https://github.com/rust-bitcoin/rust-miniscript", rev = "f
 
 [profile.test]
 opt-level = 2
+debug = "line-tables-only"
 
 [profile.dev]
 opt-level = 2
+debug = "line-tables-only"

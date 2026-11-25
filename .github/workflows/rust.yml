@@ -164,14 +164,12 @@ jobs:
           tool: cargo-nextest@0.9.146
           fallback: none
 
-      - name: cargo build --tests
-        if: steps.docs.outputs.docs_only != 'true'
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            ulimit -l 65536 || true
-          fi
-          cargo build --tests --workspace
-
+      # The old `cargo build --tests --workspace` step (no feature) built every
+      # test target of the package, and the feature-on nextest step below then
+      # built them all again. Only src/cmd/slip39.rs and cli_slip39_refusals.rs
+      # look at `slip39-test-rng`, so the next step (shipped build: bin + that
+      # one test, no feature) keeps the no-feature proof and the feature-on
+      # nextest step builds every test target once.
       - name: "cargo nextest run (shipped build: test-RNG refusal)"
         if: steps.docs.outputs.docs_only != 'true'
         run: |
@@ -289,14 +287,12 @@ jobs:
           tool: cargo-nextest@0.9.146
           fallback: none
 
-      - name: cargo build --tests
-        if: steps.docs.outputs.docs_only != 'true'
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            ulimit -l 65536 || true
-          fi
-          cargo build --tests --workspace
-
+      # The old `cargo build --tests --workspace` step (no feature) built every
+      # test target of the package, and the feature-on nextest step below then
+      # built them all again. Only src/cmd/slip39.rs and cli_slip39_refusals.rs
+      # look at `slip39-test-rng`, so the next step (shipped build: bin + that
+      # one test, no feature) keeps the no-feature proof and the feature-on
+      # nextest step builds every test target once.
       - name: "cargo nextest run (shipped build: test-RNG refusal)"
         if: steps.docs.outputs.docs_only != 'true'
         run: |
