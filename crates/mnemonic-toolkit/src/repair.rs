@@ -1250,15 +1250,36 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
             let set_verify = if repairs.is_empty() {
                 SetVerify::Blessed
             } else if repairs.iter().any(|d| ms1_is_share(&d.corrected_chunk)) {
-                SetVerify::Unverified {
-                    reason: "correction UNVERIFIED — a corrected K-of-N share cannot be \
-                        self-verified; recombine it with the other shares (mnemonic ms-shares \
-                        combine --share - --share @env:VAR …, one share on stdin and each \
-                        further share in an exported variable) and confirm the recovered \
-                        seed's address/xpub against a known-good copy before use; BIP-93 \
-                        recommends confirming a corrected codex32 string"
-                        .to_string(),
-                }
+                let sec = repairs
+                    .iter()
+                    .any(|d| ms1_is_secret_share(&d.corrected_chunk));
+                let dist = repairs.iter().any(|d| {
+                    ms1_is_share(&d.corrected_chunk) && !ms1_is_secret_share(&d.corrected_chunk)
+                });
+                let reason = if sec && !dist {
+                    "correction UNVERIFIED — a corrected codex32 secret (share index 's' of a \
+                     K-of-N set) cannot be self-verified; it is the secret itself, not a \
+                     distributed share, and `mnemonic ms-shares combine` does not take it; \
+                     BIP-93 recommends confirming a corrected codex32 string"
+                        .to_string()
+                } else {
+                    let leave_out = if sec {
+                        "; leave out the corrected string at share index 's': it is the secret \
+                         itself, not a distributed share, and `mnemonic ms-shares combine` does \
+                         not take it"
+                    } else {
+                        ""
+                    };
+                    format!(
+                        "correction UNVERIFIED — a corrected K-of-N share cannot be \
+                         self-verified; recombine it with the other shares (mnemonic ms-shares \
+                         combine --share - --share @env:VAR …, one share on stdin and each \
+                         further share in an exported variable) and confirm the recovered \
+                         seed's address/xpub against a known-good copy before use{leave_out}; \
+                         BIP-93 recommends confirming a corrected codex32 string"
+                    )
+                };
+                SetVerify::Unverified { reason }
             } else {
                 SetVerify::Unverified {
                     reason: "correction UNVERIFIED — a corrected seed card cannot be \
@@ -1421,6 +1442,19 @@ fn ms1_is_share(s: &str) -> bool {
     let lower = s.to_lowercase();
     match lower.rfind('1') {
         Some(sep) => lower[sep + 1..].chars().next().is_some_and(|c| c != '0'),
+        None => false,
+    }
+}
+
+/// A K-of-N share whose share index (BIP-93: threshold at +1, identifier
+/// +2..+5, index +6 after the separator) is `s`: the secret itself.
+fn ms1_is_secret_share(s: &str) -> bool {
+    if !ms1_is_share(s) {
+        return false;
+    }
+    let lower = s.to_lowercase();
+    match lower.rfind('1') {
+        Some(sep) => lower[sep + 1..].chars().nth(5) == Some('s'),
         None => false,
     }
 }

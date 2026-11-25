@@ -8,6 +8,16 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### An index-`s` ms1 string is no longer sent to `ms-shares combine`
+
+- **`convert --from ms1=`, `inspect --ms1`, `bundle`/`verify-bundle --slot @N.ms1=`, `restore --from ms1=`,
+  `silent-payment --secret`, `xpub-search`, `repair --ms1`**: an ms1 string at share index `s` (the secret itself,
+  not a distributed share) is no longer told to go to `mnemonic ms-shares combine`, which refuses that string. The
+  message now says so and names no command. `repair --ms1` exits 4 with the new reason (a call that corrects both an
+  index-`s` and another share keeps the recombine advice and says to leave the index-`s` string out); `convert`,
+  `inspect` and the other consume paths still refuse with exit 2. Before: ``use `mnemonic ms-shares combine` to
+  recombine <T> shares``. Other share indices keep that advice. (bh-tk-ms-s-index)
+
 ### `seedqr --json-out` writes its file owner-only
 
 - **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever
