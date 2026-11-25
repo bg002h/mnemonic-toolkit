@@ -612,7 +612,7 @@ Every plan ends with a wallet check, not only plans that name a closing file. Th
 
 **ST-CL-02:**
 
-> wallet check skipped: make no deposit until it is done. With the wallet card (its mr1 strings), mr-gui lists the checks to run before any deposit: run them on an offline computer that has mr, typing each seed's words from its plate\<regrow\>; a seed with a passphrase is checked as that list says for it (mr verify's wallet card check takes no passphrase: its holder loads the seed with its passphrase on their Coldcard, checks the fingerprint on the Coldcard's main screen, then, from mr-gui, registers this Refugium wallet on the Coldcard with its Skip Checks setting off), never by typing the seed without its passphrase
+> wallet check skipped: make no deposit until it is done. With the wallet card (its mr1 strings), mr-gui lists the checks to run before any deposit: run them on an offline computer that has mr, typing each seed's words from its plate\<regrow\>; a seed with a passphrase is typed with it (mr verify takes it with `--passphrase-stdin N`, N the seed's position, on the line after the empty line that ends the seeds), never without it
 
 **ST-CL-03:**
 
