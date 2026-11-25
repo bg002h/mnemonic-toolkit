@@ -8,6 +8,21 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Huge `--length` and account-window values are refused or streamed, not aborted
+
+- **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in
+  `1..=2^31-1` runs in constant memory and prints the same rolls as before. Before, the whole sequence was built in
+  memory first, and a large `--length` aborted on a failed memory allocation (exit 134), so a long dice child could not
+  be re-derived on a computer with less memory. `--length 0` and `--length` 2147483648 or more are refused
+  (exit 2, `--length <N> out of range for --application dice (valid: 1..=2^31-1 rolls)`); 2147483648 and more failed
+  with a BIP-32 error (exit 1) before. (bh-tk-mn7)
+- **`xpub-search path-of-xpub`, `passphrase-of-xpub`, `account-of-descriptor`**: an account window reaching 2^31
+  (`--min-account` or `--max-account` ≥ 2147483648, or `--min-account + --number-of-accounts` > 2147483648) is refused
+  (exit 1). Before, it panicked (exit 101). (bh-tk-mn11)
+- **`xpub-search`**: candidate paths are generated as the search runs, so a large valid window (up to
+  `--max-account 2147483647`) searches instead of aborting on a memory allocation (exit 134). Printed counts and
+  results are unchanged. (bh-tk-mn18)
+
 ### `seedqr --json-out` writes its file owner-only
 
 - **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever

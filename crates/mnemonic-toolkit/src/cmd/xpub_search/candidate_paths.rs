@@ -17,6 +17,7 @@
 //! first then multisig; accounts ascending; add-paths in user-supplied order.
 //! No `HashMap`/`HashSet` for iteration (plan §9.6 / R0 R4 lock).
 
+use crate::error::ToolkitError;
 use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
 use crate::template::CliTemplate;
@@ -34,7 +35,177 @@ pub struct CandidatePath {
     pub account: Option<u32>,
 }
 
-/// Build the full deterministic candidate set per plan §3.2 step 4.
+/// Refuse an account window that reaches 2^31 (BIP-32 hardened account indexes
+/// are 31 bits). The window is `[min, end)` with
+/// `end = max(min + number, max + 1)`; refused (never clamped) when
+/// `min_account >= 2^31`, `max_account >= 2^31`, or
+/// `min_account + number_of_accounts > 2^31` (sum in `u64`).
+pub fn check_account_window(
+    min_account: u32,
+    number_of_accounts: u32,
+    max_account: Option<u32>,
+) -> Result<(), ToolkitError> {
+    const LIMIT: u64 = 1 << 31;
+    let too_big = u64::from(min_account) >= LIMIT
+        || max_account.is_some_and(|m| u64::from(m) >= LIMIT)
+        || u64::from(min_account) + u64::from(number_of_accounts) > LIMIT;
+    if too_big {
+        return Err(ToolkitError::BadInput(
+            "--min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
+/// The deterministic candidate set per plan §3.2 step 4, generated lazily by
+/// [`CandidatePaths::iter`] (memory is constant in the window size).
+#[derive(Debug, Clone)]
+pub struct CandidatePaths {
+    lo: u32,
+    hi: u32,
+    add_paths: Vec<String>,
+    network: CliNetwork,
+}
+
+/// One `--add-path` template: where the account token sits, if any.
+enum AddPathShape {
+    /// `head` + account + `quoted?` + `tail` (account substituted).
+    Token {
+        head: String,
+        tail: String,
+        quote: bool,
+    },
+    /// Searched once, as given.
+    Literal,
+}
+
+fn add_path_shape(tmpl: &str) -> AddPathShape {
+    if let Some(prefix) = tmpl.find("account'") {
+        let after = prefix + "account'".len();
+        AddPathShape::Token {
+            head: tmpl[..prefix].to_string(),
+            tail: tmpl[after..].to_string(),
+            quote: true,
+        }
+    } else if let Some(prefix) = tmpl.find("account") {
+        let after = prefix + "account".len();
+        AddPathShape::Token {
+            head: tmpl[..prefix].to_string(),
+            tail: tmpl[after..].to_string(),
+            quote: false,
+        }
+    } else {
+        AddPathShape::Literal
+    }
+}
+
+fn substitute(head: &str, tail: &str, quote: bool, account: u32) -> String {
+    if quote {
+        format!("{head}{account}'{tail}")
+    } else {
+        format!("{head}{account}{tail}")
+    }
+}
+
+const SINGLE_SIG: [(CliTemplate, &str); 4] = [
+    (CliTemplate::Bip44, "bip44"),
+    (CliTemplate::Bip49, "bip49"),
+    (CliTemplate::Bip84, "bip84"),
+    (CliTemplate::Bip86, "bip86"),
+];
+const MULTISIG: [(u32, &str); 3] = [
+    (1, "bip48-sh-wsh"),
+    (2, "bip48-wsh"),
+    (3, "bip48-tr-multi-a"),
+];
+
+impl CandidatePaths {
+    /// Yields exactly the sequence the former `Vec` held: 4 single-sig
+    /// templates × accounts, then 3 BIP-48 script types × accounts, then each
+    /// `--add-path` in order (malformed substitutions skipped).
+    pub fn iter(&self) -> impl Iterator<Item = CandidatePath> + '_ {
+        let (lo, hi, network) = (self.lo, self.hi, self.network);
+        let single = SINGLE_SIG.iter().flat_map(move |(template, name)| {
+            (lo..hi).map(move |account| CandidatePath {
+                template_name: (*name).to_string(),
+                path: template.derivation_path(network, account),
+                account: Some(account),
+            })
+        });
+        let multi = MULTISIG.iter().flat_map(move |(script_type, name)| {
+            (lo..hi).map(move |account| {
+                let path_str =
+                    MultisigPathFamily::Bip48.default_origin_path(network, account, *script_type);
+                let path = DerivationPath::from_str(&path_str).expect(
+                    "BIP-48 paths from default_origin_path are well-formed by construction",
+                );
+                CandidatePath {
+                    template_name: (*name).to_string(),
+                    path,
+                    account: Some(account),
+                }
+            })
+        });
+        let added = self.add_paths.iter().flat_map(move |tmpl| {
+            let shape = add_path_shape(tmpl);
+            let tmpl_name = tmpl.clone();
+            let it: Box<dyn Iterator<Item = CandidatePath> + '_> = match shape {
+                AddPathShape::Token { head, tail, quote } => {
+                    Box::new((lo..hi).filter_map(move |account| {
+                        // skip malformed; user will see no-match
+                        DerivationPath::from_str(&substitute(&head, &tail, quote, account))
+                            .ok()
+                            .map(|path| CandidatePath {
+                                template_name: tmpl_name.clone(),
+                                path,
+                                account: Some(account),
+                            })
+                    }))
+                }
+                AddPathShape::Literal => Box::new(
+                    DerivationPath::from_str(tmpl)
+                        .ok()
+                        .map(|path| CandidatePath {
+                            template_name: tmpl_name,
+                            path,
+                            account: None,
+                        })
+                        .into_iter(),
+                ),
+            };
+            it
+        });
+        single.chain(multi).chain(added)
+    }
+
+    /// Number of candidates, equal to `self.iter().count()` without building
+    /// them. A token `--add-path` counts the accounts in `lo..hi` whose
+    /// substituted string parses (validity can depend on the account).
+    pub fn len(&self) -> usize {
+        let n = (self.hi.saturating_sub(self.lo)) as usize;
+        let mut total = 7 * n;
+        for tmpl in &self.add_paths {
+            total += match add_path_shape(tmpl) {
+                AddPathShape::Literal => usize::from(DerivationPath::from_str(tmpl).is_ok()),
+                AddPathShape::Token { head, tail, quote } => (self.lo..self.hi)
+                    .filter(|&a| {
+                        DerivationPath::from_str(&substitute(&head, &tail, quote, a)).is_ok()
+                    })
+                    .count(),
+            };
+        }
+        total
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// Build the deterministic candidate set per plan §3.2 step 4 (lazily; see
+/// [`CandidatePaths`]). Infallible; precondition: the caller ran
+/// [`check_account_window`].
 ///
 /// - `min_account`: lower bound (inclusive).
 /// - `number_of_accounts`: window size (default 20).
@@ -48,7 +219,7 @@ pub fn build_candidate_paths(
     max_account: Option<u32>,
     add_paths: &[String],
     network: CliNetwork,
-) -> Vec<CandidatePath> {
+) -> CandidatePaths {
     let lo = min_account;
     let hi = {
         let from_n = min_account.saturating_add(number_of_accounts);
@@ -57,103 +228,12 @@ pub fn build_candidate_paths(
             None => from_n,
         }
     };
-    let n = hi.saturating_sub(lo);
-
-    let mut out: Vec<CandidatePath> = Vec::with_capacity((n as usize) * 7 + add_paths.len());
-
-    // 1) Single-sig templates: bip44, bip49, bip84, bip86 — fixed order.
-    let single_sig: &[(CliTemplate, &str)] = &[
-        (CliTemplate::Bip44, "bip44"),
-        (CliTemplate::Bip49, "bip49"),
-        (CliTemplate::Bip84, "bip84"),
-        (CliTemplate::Bip86, "bip86"),
-    ];
-    for (template, name) in single_sig {
-        for account in lo..hi {
-            out.push(CandidatePath {
-                template_name: (*name).to_string(),
-                path: template.derivation_path(network, account),
-                account: Some(account),
-            });
-        }
+    CandidatePaths {
+        lo,
+        hi,
+        add_paths: add_paths.to_vec(),
+        network,
     }
-
-    // 2) BIP-48 multisig at script_type 1' / 2' / 3'.
-    let multisig: &[(u32, &str)] = &[
-        (1, "bip48-sh-wsh"),
-        (2, "bip48-wsh"),
-        (3, "bip48-tr-multi-a"),
-    ];
-    for (script_type, name) in multisig {
-        for account in lo..hi {
-            let path_str =
-                MultisigPathFamily::Bip48.default_origin_path(network, account, *script_type);
-            let path = DerivationPath::from_str(&path_str)
-                .expect("BIP-48 paths from default_origin_path are well-formed by construction");
-            out.push(CandidatePath {
-                template_name: (*name).to_string(),
-                path,
-                account: Some(account),
-            });
-        }
-    }
-
-    // 3) --add-path user-supplied templates, in user-supplied order.
-    for tmpl in add_paths {
-        let (has_token, replacer): (bool, Box<dyn Fn(u32) -> Option<String>>) =
-            if tmpl.contains("account'") {
-                let prefix = tmpl
-                    .find("account'")
-                    .expect("contains() succeeded; find() must succeed");
-                let after = prefix + "account'".len();
-                let head = tmpl[..prefix].to_string();
-                let tail = tmpl[after..].to_string();
-                (
-                    true,
-                    Box::new(move |a: u32| Some(format!("{head}{a}'{tail}"))),
-                )
-            } else if tmpl.contains("account") {
-                let prefix = tmpl
-                    .find("account")
-                    .expect("contains() succeeded; find() must succeed");
-                let after = prefix + "account".len();
-                let head = tmpl[..prefix].to_string();
-                let tail = tmpl[after..].to_string();
-                (
-                    true,
-                    Box::new(move |a: u32| Some(format!("{head}{a}{tail}"))),
-                )
-            } else {
-                let lit = tmpl.clone();
-                (false, Box::new(move |_a: u32| Some(lit.clone())))
-            };
-
-        if has_token {
-            for account in lo..hi {
-                let path_str = replacer(account).unwrap();
-                match DerivationPath::from_str(&path_str) {
-                    Ok(path) => out.push(CandidatePath {
-                        template_name: tmpl.clone(),
-                        path,
-                        account: Some(account),
-                    }),
-                    Err(_) => continue, // skip malformed; user will see no-match
-                }
-            }
-        } else {
-            // Search once at the literal path (no account token).
-            match DerivationPath::from_str(tmpl) {
-                Ok(path) => out.push(CandidatePath {
-                    template_name: tmpl.clone(),
-                    path,
-                    account: None,
-                }),
-                Err(_) => continue,
-            }
-        }
-    }
-
-    out
 }
 
 #[cfg(test)]
@@ -255,9 +335,19 @@ mod tests {
         ];
         for (min, n, max, add) in cases {
             let c = build_candidate_paths(min, n, max, &add, CliNetwork::Mainnet);
-            assert_eq!(c.len(), c.iter().count(), "case ({min},{n},{max:?},{add:?})");
+            assert_eq!(
+                c.len(),
+                c.iter().count(),
+                "case ({min},{n},{max:?},{add:?})"
+            );
         }
-        let last = build_candidate_paths(2147483646, 2, None, &s(&["m/1account'"]), CliNetwork::Mainnet);
+        let last = build_candidate_paths(
+            2147483646,
+            2,
+            None,
+            &s(&["m/1account'"]),
+            CliNetwork::Mainnet,
+        );
         assert_eq!(last.len(), 14);
     }
 
@@ -283,7 +373,10 @@ mod tests {
             (0, 0, Some(2147483647)),
             (0, u32::MAX >> 1, None),
         ] {
-            assert!(check_account_window(min, n, max).is_ok(), "({min},{n},{max:?})");
+            assert!(
+                check_account_window(min, n, max).is_ok(),
+                "({min},{n},{max:?})"
+            );
         }
         let w1 = "--min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits";
         for (min, n, max) in [
@@ -294,7 +387,10 @@ mod tests {
             (0, u32::MAX, None),
         ] {
             let e = check_account_window(min, n, max).unwrap_err();
-            assert!(matches!(e, ToolkitError::BadInput(_)), "({min},{n},{max:?})");
+            assert!(
+                matches!(e, ToolkitError::BadInput(_)),
+                "({min},{n},{max:?})"
+            );
             assert_eq!(e.to_string(), format!("error: {w1}"), "({min},{n},{max:?})");
         }
     }

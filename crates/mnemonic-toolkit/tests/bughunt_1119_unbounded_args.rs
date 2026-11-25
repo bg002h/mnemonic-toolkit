@@ -167,7 +167,9 @@ fn bh_tk_mn7_dice_max_length_streams_at_once() {
     let got = rx.recv_timeout(DEADLINE);
     child.kill().ok();
     child.wait().ok();
-    let got = got.expect("first 63 bytes within 60 s").expect("read 63 bytes");
+    let got = got
+        .expect("first 63 bytes within 60 s")
+        .expect("read 63 bytes");
     assert_eq!(
         std::str::from_utf8(&got).unwrap(),
         "0,5,0,4,0,2,0,0,2,5,5,1,1,4,0,4,0,0,4,5,0,1,3,3,1,4,3,0,4,4,3,5"
@@ -202,7 +204,14 @@ fn bh_tk_mn11_path_of_xpub_window_crossing_2p31_is_refused() {
         None,
         xs(
             "path-of-xpub",
-            &["--target-xpub", X, "--min-account", "2147483647", "--number-of-accounts", "2"],
+            &[
+                "--target-xpub",
+                X,
+                "--min-account",
+                "2147483647",
+                "--number-of-accounts",
+                "2",
+            ],
         ),
     );
     assert_w1(&r);
@@ -226,7 +235,14 @@ fn bh_tk_mn11_passphrase_of_xpub_min_account_2p31_is_refused() {
         None,
         xs(
             "passphrase-of-xpub",
-            &["--passphrase", "", "--target-xpub", X, "--min-account", "2147483648"],
+            &[
+                "--passphrase",
+                "",
+                "--target-xpub",
+                X,
+                "--min-account",
+                "2147483648",
+            ],
         ),
     );
     assert_w1(&r);
@@ -238,7 +254,14 @@ fn bh_tk_mn11_window_ending_at_2p31_is_accepted() {
         None,
         xs(
             "path-of-xpub",
-            &["--target-xpub", X, "--min-account", "2147483646", "--number-of-accounts", "2"],
+            &[
+                "--target-xpub",
+                X,
+                "--min-account",
+                "2147483646",
+                "--number-of-accounts",
+                "2",
+            ],
         ),
     );
     assert!(!r.timed_out);
@@ -271,7 +294,10 @@ fn bh_tk_mn18_add_path_count_unchanged() {
     );
     assert_eq!(r.code, Some(0), "stderr: {}", r.err());
     let o = r.out();
-    assert!(o.contains("match: m/84'/1'/0'  (template=bip84, account=0)\n"), "{o}");
+    assert!(
+        o.contains("match: m/84'/1'/0'  (template=bip84, account=0)\n"),
+        "{o}"
+    );
     assert!(o.contains("searched: 27 candidate paths\n"), "{o}");
 }
 
@@ -328,7 +354,10 @@ const FULL: &str = "15032385536";
 fn bh_tk_mn18_path_of_xpub_full_hardened_window_streams() {
     let r = run_xs(
         Some(4000000),
-        xs("path-of-xpub", &["--target-xpub", X44, "--max-account", "2147483647"]),
+        xs(
+            "path-of-xpub",
+            &["--target-xpub", X44, "--max-account", "2147483647"],
+        ),
     );
     assert!(!r.timed_out, "deadline; stderr: {}", r.err());
     assert_eq!(r.signal, None, "signal; stderr: {}", r.err());
@@ -341,7 +370,13 @@ fn bh_tk_mn18_path_of_xpub_full_hardened_window_streams() {
         Some(4000000),
         xs(
             "path-of-xpub",
-            &["--target-xpub", X44, "--max-account", "2147483647", "--json"],
+            &[
+                "--target-xpub",
+                X44,
+                "--max-account",
+                "2147483647",
+                "--json",
+            ],
         ),
     );
     assert!(!j.timed_out && j.signal.is_none(), "stderr: {}", j.err());
@@ -375,14 +410,22 @@ fn bh_tk_mn18_passphrase_of_xpub_full_hardened_window_streams() {
         Some(4000000),
         xs(
             "passphrase-of-xpub",
-            &["--passphrase", "", "--target-xpub", X44, "--max-account", "2147483647"],
+            &[
+                "--passphrase",
+                "",
+                "--target-xpub",
+                X44,
+                "--max-account",
+                "2147483647",
+            ],
         ),
     );
     assert!(!r.timed_out, "deadline; stderr: {}", r.err());
     assert_eq!(r.signal, None, "signal; stderr: {}", r.err());
     assert_eq!(r.code, Some(0), "stderr: {}", r.err());
     assert!(
-        r.out().ends_with(&format!("searched: {FULL} candidate paths\n")),
+        r.out()
+            .ends_with(&format!("searched: {FULL} candidate paths\n")),
         "stdout: {}",
         r.out()
     );

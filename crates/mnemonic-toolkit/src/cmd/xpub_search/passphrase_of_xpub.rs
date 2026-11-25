@@ -123,7 +123,8 @@ pub struct PassphraseOfXpubArgs {
     pub number_of_accounts: u32,
 
     /// Optional upper bound. Effective end is
-    /// `max(min_account + number_of_accounts, max_account + 1)`.
+    /// `max(min_account + number_of_accounts, max_account + 1)`. Every account
+    /// in the window must be below 2147483648 (2^31).
     #[arg(long)]
     pub max_account: Option<u32>,
 
@@ -268,6 +269,11 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
     stderr: &mut E,
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
+    super::candidate_paths::check_account_window(
+        args.min_account,
+        args.number_of_accounts,
+        args.max_account,
+    )?;
     // 0) Emit the unconditional stderr advisory FIRST (plan §6.4 "always
     //    emit … before search starts"). Errors in writeln are non-fatal —
     //    if stderr is unreachable the user already has bigger problems.

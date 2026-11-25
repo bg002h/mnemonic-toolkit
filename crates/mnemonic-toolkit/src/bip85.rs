@@ -211,6 +211,10 @@ pub(crate) fn format_password_base85(
 // DICE (app 89101')
 // ============================================================================
 
+/// Largest `--length` (rolls) the CLI accepts for DICE: the hardened child
+/// number ending derivation at `2^31 - 1` (the rolls count is a path element).
+pub(crate) const DICE_MAX_ROLLS: u32 = 2_147_483_647;
+
 /// SPEC v0.8 §4 — BIP-85 DICE rolls. Path m/83696968'/89101'/<sides>'/<rolls>'/<index>'.
 /// Per BIP-85 v1.3.0 §"DICE" the algorithm is:
 ///   1. Derive 64 bytes of BIP-85 entropy at the spec path.
@@ -221,13 +225,19 @@ pub(crate) fn format_password_base85(
 ///      in `[0, sides-1]`.
 ///   4. Output rolls separated by `,` (per BIP-85 spec example).
 ///
-/// Constraints: `2 <= sides <= 2^32 - 1`, `1 <= rolls <= 2^32 - 1`.
-pub(crate) fn format_dice_rolls(
+/// Each accepted roll is written to `out` at once (`,` before every roll but
+/// the first), so memory is constant in `rolls`. Nothing is written before the
+/// checks and `derive_entropy` succeed; a write error is `ToolkitError::Io`.
+///
+/// Constraints: `2 <= sides <= 2^32 - 1`, `1 <= rolls <= DICE_MAX_ROLLS` (the
+/// CLI's bound; the caller checks it).
+pub(crate) fn write_dice_rolls<W: std::io::Write + ?Sized>(
     master: &Xpriv,
     sides: u32,
     rolls: u32,
     index: u32,
-) -> Result<SecretString, ToolkitError> {
+    out: &mut W,
+) -> Result<(), ToolkitError> {
     if sides < 2 {
         return Err(ToolkitError::BadInput(format!(
             "BIP-85 dice: sides must be >= 2, got {sides}",
@@ -251,14 +261,15 @@ pub(crate) fn format_dice_rolls(
     let bits_per_roll = u32::BITS - (sides - 1).leading_zeros();
     let bytes_per_roll = bits_per_roll.div_ceil(8) as usize;
 
-    let mut out: Zeroizing<Vec<String>> = Zeroizing::new(Vec::with_capacity(rolls as usize));
-    let mut buf = vec![0u8; bytes_per_roll];
-    while out.len() < rolls as usize {
-        reader.read(&mut buf);
+    let mut buf = [0u8; 4];
+    let mut accepted: u32 = 0;
+    while accepted < rolls {
+        let chunk = &mut buf[..bytes_per_roll];
+        reader.read(chunk);
         // Big-endian assembly of bytes into a u32 trial value (sides up to
         // 2^32 - 1 fits in u32).
         let mut trial: u32 = 0;
-        for &b in &buf {
+        for &b in chunk.iter() {
             trial = (trial << 8) | (b as u32);
         }
         // Trim excess low bits — BIP-85 spec says "retain the most significant
@@ -268,12 +279,15 @@ pub(crate) fn format_dice_rolls(
         let shift = total_bits - bits_per_roll;
         trial >>= shift;
         if trial < sides {
-            out.push(trial.to_string());
+            if accepted > 0 {
+                out.write_all(b",").map_err(ToolkitError::Io)?;
+            }
+            write!(out, "{trial}").map_err(ToolkitError::Io)?;
+            accepted += 1;
         }
         // else: rejection sample — read the next chunk.
     }
-
-    Ok(SecretString::new(out.join(",")))
+    Ok(())
 }
 
 // ============================================================================

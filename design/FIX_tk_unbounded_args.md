@@ -154,9 +154,10 @@ Run on the base (e30985a5, `target/debug/mnemonic`, `cargo build --locked`) by t
 the public BIP-39 vector `abandon ×11 about` (on stdin); `X` = its signet `m/84'/1'/0'` tpub
 `tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M`; `T`
 = its signet master tprv from `mnemonic convert --from phrase=- --to xprv --path m --network signet`. Every abort or
-panic row runs as `timeout 60 sh -c 'ulimit -v 4000000; exec "$@"' sh mnemonic …` (4 GB address space, 60 s), so a
+panic row runs as `timeout 60 sh -c 'ulimit -v 4000000; exec "$@"' sh mnemonic …` (4 GB address space, 60 s; the dice
+rows R1 and R12 use `ulimit -v 200000`, 200 MB, as the table gives), so a
 pre-fix run fails fast on any host and never touches swap. Integration rows build the same bound in-test (spawn
-`sh -c 'ulimit -v 4000000 && exec "$0" "$@"'`, the pattern of `bughunt_s4.rs:59-80`, with a deadline).
+`sh -c 'ulimit -v <KB> && exec "$0" "$@"'`, the pattern of `bughunt_s4.rs:59-80`, with a deadline).
 
 New file `crates/mnemonic-toolkit/tests/bughunt_1119_unbounded_args.rs` unless noted. Row names are the test names.
 
