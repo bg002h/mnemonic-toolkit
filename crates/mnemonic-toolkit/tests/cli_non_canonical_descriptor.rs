@@ -167,8 +167,11 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     // 2026-11-25 BIP-defaults ruling: a taproot (`tr(...)`) root defaults to
     // BIP-87 (script-agnostic), not a BIP-48 leaf (BIP-48 defines 1' and 2' only).
+    // Review r2 M5: a single-key shape at the BIP-87 default is a warning.
     assert!(
-        stderr.contains("info: no origin supplied for @0; defaulting to m/87'/0'/0' (BIP-87)"),
+        stderr.contains("warning: no origin supplied for @0; defaulting to m/87'/0'/0' (BIP-87)")
+            && stderr.contains("BIP-87 is written for multisig")
+            && stderr.contains("use a different --account for each wallet"),
         "stderr did not contain default-path info notice for tr(NUMS); got:\n{stderr}"
     );
 }

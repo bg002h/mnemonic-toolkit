@@ -2105,6 +2105,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         // Bare P2SH only: sh(wsh(...)) keeps BIP-48 1' and the plain notice.
         canonicity_probe.tree.tag == md_codec::tag::Tag::Sh
             && matches!(default_family, crate::template::DefaultOriginFamily::Bip87),
+        n == 1,
     )?;
     // Bug hunt 2026-11-25 toolkit#1: say which canonical-shape slots were given
     // the shape's canonical origin (and so were derived / recorded there).
@@ -2882,6 +2883,7 @@ fn emit_default_path_notice<E: Write>(
     account: u32,
     family: crate::template::DefaultOriginFamily,
     bare_sh: bool,
+    single_key: bool,
 ) -> Result<(), ToolkitError> {
     if defaulted_indices.is_empty() {
         return Ok(());
@@ -2894,15 +2896,40 @@ fn emit_default_path_notice<E: Write>(
     let path = family.path_string(network, account);
     let label = family.label();
     let w = |e: std::io::Error| ToolkitError::BadInput(format!("stderr write: {e}"));
+    let bip87 = matches!(family, crate::template::DefaultOriginFamily::Bip87);
     if !bare_sh {
         // Says "defaulting", not "non-canonical descriptor": what the operator
         // needs is which slots got an origin chosen for them, and how to
         // choose it themselves.
-        writeln!(
-            stderr,
-            "info: no origin supplied for {idx_list}; defaulting to {path} ({label}). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
-        )
-        .map_err(w)?;
+        //
+        // Review r2 M5: m/87'/c'/a' is also the default of the multisig
+        // templates and of every other bare-sh / tr descriptor, so one seed at
+        // one account would reuse one key across script types, which BIP-87
+        // asks wallets to avoid ("the wallet must increment the `account'`
+        // level. This prevents key reuse - across ECDSA and Schnorr
+        // signatures, across different script types"). A single-key shape is
+        // a warning: BIP-87 is written for multisig.
+        let level = if bip87 && single_key {
+            "warning"
+        } else {
+            "info"
+        };
+        let mut line = format!(
+            "{level}: no origin supplied for {idx_list}; defaulting to {path} ({label}). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+        );
+        if bip87 {
+            if single_key {
+                line.push_str(
+                    " BIP-87 is written for multisig; this card records the path, so restore \
+                     does not depend on it.",
+                );
+            }
+            line.push_str(
+                " The same BIP-87 key serves every script type at one account: use a \
+                 different --account for each wallet from this seed.",
+            );
+        }
+        writeln!(stderr, "{line}").map_err(w)?;
         return Ok(());
     }
     writeln!(
@@ -2927,6 +2954,14 @@ fn emit_default_path_notice<E: Write>(
         )
         .map_err(w)?;
         writeln!(stderr, "  {cmd}").map_err(w)?;
+        // Review r2 M3: m/45' has no coin or account level, and verify-bundle
+        // rebuilds the card from the same slot set.
+        writeln!(
+            stderr,
+            "warning: m/45' has no coin or account level (every --account and network gives the \
+             same keys); pass the same --slot @N.path=m/45' to verify-bundle."
+        )
+        .map_err(w)?;
         if redacted {
             writeln!(
                 stderr,

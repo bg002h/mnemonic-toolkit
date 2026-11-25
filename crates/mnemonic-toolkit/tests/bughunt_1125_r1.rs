@@ -295,6 +295,15 @@ fn b3_taproot_multisig_descriptor_defaults_to_bip87() {
         o.stderr
     );
     assert!(!o.stderr.contains("/3'"), "no BIP-48 3': {}", o.stderr);
+    // Review r2 M5: the key-reuse advice rides on every BIP-87 default.
+    assert!(
+        o.stderr.contains(
+            "The same BIP-87 key serves every script type at one account: use a different \
+             --account for each wallet from this seed."
+        ),
+        "{}",
+        o.stderr
+    );
 }
 
 #[test]
@@ -387,6 +396,8 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
         "compare its first address before funding",
         "use a different --account",
         "warning: to mint this bundle at m/45' instead, run:",
+        "warning: m/45' has no coin or account level (every --account and network gives the \
+         same keys); pass the same --slot @N.path=m/45' to verify-bundle.",
     ] {
         assert!(o.stderr.contains(want), "missing {want:?}: {}", o.stderr);
     }

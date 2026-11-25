@@ -671,8 +671,12 @@ descriptor string itself. The toolkit handles this two ways:
      "Nested Segwit (p2sh-p2wsh)");
    - any other `sh(...)` (legacy bare P2SH) and any `tr(...)` → BIP-87
      `m/87'/<coin>'/<account>'`. BIP-48 defines only `1'` and `2'`, so it
-     has no path for bare P2SH or taproot; BIP-87 is script-agnostic: "the
-     same derivation path may be used for all multisig script types".
+     has no path for bare P2SH or taproot; BIP-87 is script-agnostic:
+     "Any script that is supported by descriptors (and the specific wallet
+     implementation) is compatible with this BIP." BIP-87 is written for
+     multisig wallets; a single-key shape (for example
+     `tr(NUMS, and_v(v:pk(@0/*), after(N)))`) gets the same default with a
+     `warning:` instead of `info:`, since the card records the path.
 
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
    `<account>` consumes `--account N` (defaults to `0'`). An `@N.xpub=`
@@ -686,7 +690,7 @@ descriptor string itself. The toolkit handles this two ways:
    chosen:
 
    ```text
-   info: no origin supplied for @0,@1; defaulting to m/87'/0'/0' (BIP-87). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+   info: no origin supplied for @0,@1; defaulting to m/87'/0'/0' (BIP-87). Set it explicitly with [fp/path]@N or --slot @N.path=m/... The same BIP-87 key serves every script type at one account: use a different --account for each wallet from this seed.
    ```
 
    For a legacy bare `sh(...)` descriptor the notice is a **warning**
@@ -701,12 +705,18 @@ descriptor string itself. The toolkit handles this two ways:
    ```text
    warning: no origin supplied for @0,@1 in a legacy P2SH descriptor (sh(...)); derived at m/87'/0'/0' (BIP-87). BIP-48 assigns no path to this script type, and other wallets place legacy P2SH multisig keys elsewhere (for example m/45', m/45'/0, m/45'/0'/0'). If this card is meant to match an existing wallet, compare its first address before funding, or set the origin with [fp/path]@N or --slot @N.path=m/... . For a second wallet from the same seed, use a different --account.
    warning: to mint this bundle at m/45' instead, run:
-     mnemonic bundle --network mainnet --descriptor 'sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))' --slot '@0.phrase=-' … --slot '@0.path=m/45'\''
+     mnemonic bundle --network mainnet --descriptor 'sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))' --slot @0.phrase=- --slot @1.xpub=xpub6CbhrPzY2z7NcCGCGjLAJLq8iRyjUfwmdXQs66MxTVUReKqb9DpLnVJ5D1qpatZjUuPGTyxf5TYU1vA34YFE9FHB4TvfYmokYLVsyEFZFt9 --slot @1.fingerprint=b8688df1 --json --slot '@0.path=m/45'\'''
+   warning: m/45' has no coin or account level (every --account and network gives the same keys); pass the same --slot @N.path=m/45' to verify-bundle.
    ```
 
-   A secret typed on the command line (a `phrase`, `seedqr`, `entropy`,
-   `ms1`, `wif` or `xprv` slot value, or `--passphrase`) is not repeated in
-   that command: it shows `<...>` in its place, and a further warning line
+   `m/45'` has no coin or account level, so `--account` and the network
+   do not separate keys there: every account and network gives the same
+   keys. `verify-bundle` rebuilds the card from the slots it is given, so
+   pass it the same `--slot @N.path=m/45'`.
+
+   A secret typed on the command line (any slot value other than `xpub`,
+   `master_xpub`, `fingerprint` and `path`, which are public, or
+   `--passphrase`) is not repeated in that command: it shows `<...>` in its place, and a further warning line
    asks you to put yours back or pass it as `=-` on stdin. An `xpub` slot
    is not overridden: its key does not move with its path.
 

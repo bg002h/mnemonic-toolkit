@@ -3,9 +3,10 @@
 //! BIP-87 `m/87'/<coin>'/<account>'`, not a BIP-48 `…/3'` leaf.
 //!
 //! BIP-48 defines script types `1'` (P2SH-P2WSH) and `2'` (P2WSH) only, so a
-//! `3'` leaf for P2TR is a convention BIP-48 does not define. BIP-87: "Because
-//! this scheme is script-agnostic, the same derivation path may be used for
-//! all multisig script types" (m / purpose' / coin_type' / account').
+//! `3'` leaf for P2TR is a convention BIP-48 does not define. BIP-87 is
+//! script-agnostic ("m / purpose' / coin_type' / account' / change /
+//! address_index"; "Any script that is supported by descriptors (and the
+//! specific wallet implementation) is compatible with this BIP.").
 //!
 //! These tests prove: (a) the emitted per-cosigner `origin_path` is
 //! `m/87'/<coin>'/<account>'`; (b) the mk-decoded cosigner xpub equals the
