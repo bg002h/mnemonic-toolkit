@@ -48,6 +48,7 @@ Not in this FIX (decided elsewhere, listed so a reviewer can check the split):
   `mnemonic-io-lib = "0.1.0"`: 0.1.2 is NOT yet on crates.io. Until it is, the builder does every step that needs no
   build and stops (1124 overrides). The GREEN prototype of section 7 used a local `[patch.crates-io]` path to the
   io-lib tree of mnemonic-engrave `e09d538d` (crate version 0.1.2); that patch is not part of the fix.
+- **Pin version.** This doc writes 0.1.2 (1124 overrides). If the coordinator names another version at build, the builder writes that version in the four places that name 0.1.2: crates/mnemonic-toolkit/Cargo.toml:99, the --precise argument of 4.1 step 2, the vendor/mnemonic-io-lib re-vendor of 4.1 step 3, and the CHANGELOG text of 4.3(b). The builder then diffs that version's src/write.rs against mnemonic-engrave e09d538d and STOPs and reports if anything outside write_direct and is_stdio_alias (e09d538d write.rs:100-142) changed, including the signature fn write_private(path: &Path, bytes: &[u8]) -> io::Result<()>.
 
 ## 3. Holder-visible behaviour after the fix (`seedqr decode|encode --json-out P`)
 
