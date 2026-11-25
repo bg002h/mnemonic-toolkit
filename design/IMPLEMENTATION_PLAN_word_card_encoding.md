@@ -275,6 +275,7 @@ implementation truth, and all phase KATs use it. The spec ladder stands as illus
   words. **Truncation flag** iff `words-present < max(ledger entries, highest stop-sign
   count)` — both **exact 11-bit counts reaching the 2047 cap** (I1), so a near-cap top
   truncation is never missed (spec §6.3 / §8 step 1).
+- **Stop-sign vs ledger disagreement (bh-tk-I6, 2026-11-23).** The stop-sign checksum covers only the preceding words, so its own count is unauthenticated. When a valid ledger record `L` exists and either the tail stop-sign's count differs from `L`, or the tail carries no stop-sign marker and exactly `L` words are present, decode also tries the ledger geometry (parity ends 2 words before the end; `m = L − interleave_start − interleave_len − 2`; truncated iff `words-present < L`). Only a unique tag-verified payload is returned: both geometries verifying different payloads ⇒ `IntegrityMismatch`; both failing ⇒ the stop-sign geometry's error. A single mis-stamped stop-sign word therefore costs no RS budget.
 
 ### 4.5 Integrity tag (Layer C, §4.1 placement)
 `t`-bit `SHA-256(canonical_payload)[0..t]`, regrouped with the payload (§4.1) ⇒ RS-protected,

@@ -37,7 +37,10 @@
 //! This preserves append-only (an upgrade fills the next blank ledger slot +
 //! appends parity + writes a new stop-sign, never touching `K′`) AND keeps the
 //! header RS-correctable. Only the mutable ledger / stop-sign lose RS protection
-//! — mitigated by their own checksums plus the stop-sign cross-check.
+//! — mitigated by their own checksums plus the stop-sign cross-check, and, when the
+//! stop-sign's own (unauthenticated) count disagrees with the ledger, a
+//! ledger-anchored alternate decode (bh-tk-I6; only a unique tag-verified payload
+//! is returned).
 
 use crate::field;
 use crate::regroup;
@@ -831,6 +834,10 @@ pub fn decode(words: &[&str]) -> Result<Decoded, WcError> {
         }
     }
 
+    // The ledger-only recorded length `L` (valid slots only), captured before the
+    // stop-sign block below can raise `recorded_max` (bh-tk-I6, rule 2).
+    let ledger_max: Option<u16> = if any_record { Some(recorded_max) } else { None };
+
     // Defensive bounds: the stream must at least reach the interleave region.
     if syms.len() < interleave_start {
         return Err(WcError::Truncated);
@@ -874,9 +881,10 @@ pub fn decode(words: &[&str]) -> Result<Decoded, WcError> {
 
     let truncated = any_record && words_present < recorded_max;
 
-    // Derive the creation total: prefer the stop-sign count (position-anchored
-    // marker carries an exact 11-bit count even under upstream corruption), else
-    // the ledger. If neither is available we fall back to the intact assumption.
+    // Derive the creation total for the PRIMARY attempt: prefer the stop-sign count
+    // (position-anchored marker; its count is NOT authenticated, so when it
+    // disagrees with the ledger the ledger-anchored alternate below is tried
+    // too), else the ledger. If neither is available we fall back to the intact assumption.
     let creation_total = stop_count.map(|c| c as usize).or(if any_record {
         Some(recorded_max as usize)
     } else {
@@ -905,26 +913,83 @@ pub fn decode(words: &[&str]) -> Result<Decoded, WcError> {
     };
 
     // Guard the slice bounds.
-    if parity_start < interleave_start || parity_start > syms.len() || parity_end < parity_start {
+    let primary = if parity_start < interleave_start
+        || parity_start > syms.len()
+        || parity_end < parity_start
+    {
         // The interleave region itself is truncated below recoverable. Attempt the
         // short path (a one-short interleave) or refuse.
-        return decode_short_interleave(&header, &syms, interleave_start, truncated);
+        decode_short_interleave(&header, &syms, interleave_start, truncated)
+    } else {
+        let parity_region = &syms[parity_start..parity_end];
+        let interleave_region = &syms[interleave_start..parity_start];
+
+        // --- Pass 2: sync over the interleave region. -------------------
+        let outcome = sync::sync_classify(interleave_region, geom.k);
+        finish_decode(
+            &header,
+            &syms,
+            interleave_start,
+            interleave_region,
+            parity_region,
+            outcome,
+            truncated,
+        )
+    };
+
+    // Ledger-anchored alternate geometry (bh-tk-I6): the stop-sign's own count is
+    // unauthenticated, so when it disagrees with the ledger (rule 2a), or the tail
+    // marker is lost with exactly `L` words present (rule 2b), also try the
+    // geometry that takes the creation total from the ledger.
+    let n = syms.len();
+    let alternate = ledger_max.and_then(|l| {
+        let l = l as usize;
+        let alt_end = match stop_count {
+            Some(c) if c as usize != l => n - 2,
+            None if n == l && n >= interleave_start + 2 => n - 2,
+            _ => return None,
+        };
+        let m_l = l.checked_sub(interleave_start + interleave_len + 2)?;
+        let alt_start = alt_end.checked_sub(m_l)?;
+        if alt_start < interleave_start {
+            return None;
+        }
+        let parity_region = &syms[alt_start..alt_end];
+        let interleave_region = &syms[interleave_start..alt_start];
+        let outcome = sync::sync_classify(interleave_region, geom.k);
+        Some(finish_decode(
+            &header,
+            &syms,
+            interleave_start,
+            interleave_region,
+            parity_region,
+            outcome,
+            n < l,
+        ))
+    });
+    select_geometry(primary, alternate)
+}
+
+/// Rule 4 of the bh-tk-I6 FIX: only a unique tag-verified payload is returned.
+/// Both geometries verifying different payloads is `IntegrityMismatch`; both
+/// failing keeps the primary geometry's error.
+fn select_geometry(
+    primary: Result<Decoded, WcError>,
+    alternate: Option<Result<Decoded, WcError>>,
+) -> Result<Decoded, WcError> {
+    match (primary, alternate) {
+        (p, None) => p,
+        (Ok(p), Some(Ok(a))) => {
+            if p.kind == a.kind && p.payload == a.payload && p.payload_bits == a.payload_bits {
+                Ok(a)
+            } else {
+                Err(WcError::IntegrityMismatch)
+            }
+        }
+        (Err(_), Some(Ok(a))) => Ok(a),
+        (Ok(p), Some(Err(_))) => Ok(p),
+        (Err(e), Some(Err(_))) => Err(e),
     }
-
-    let parity_region = &syms[parity_start..parity_end];
-    let interleave_region = &syms[interleave_start..parity_start];
-
-    // --- Pass 2: sync over the interleave region. -----------------------
-    let outcome = sync::sync_classify(interleave_region, geom.k);
-    finish_decode(
-        &header,
-        &syms,
-        interleave_start,
-        interleave_region,
-        parity_region,
-        outcome,
-        truncated,
-    )
 }
 
 /// Handle a stream whose interleave region is itself short (a tail deletion that
