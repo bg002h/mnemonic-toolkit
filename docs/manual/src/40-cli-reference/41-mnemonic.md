@@ -4214,7 +4214,7 @@ for the non-blocking `older()` advisory the descriptor-bearing modes
 
 ### `mnemonic xpub-search path-of-xpub`
 
-Given a seed (BIP-39 phrase OR ms1 card) and a target xpub (or mk1 card carrying an xpub), search the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set.
+Given a seed (BIP-39 phrase OR ms1 card) and a target xpub (or mk1 card carrying an xpub), search the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}` + BIP-87 multisig `m/87'/<coin>'/<account>'` + BIP-45 `m/45'` once) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set.
 
 #### Synopsis
 
@@ -4270,7 +4270,7 @@ Stdout (text form):
 ```text
 match: m/84'/0'/0'  (template=bip84, account=0)
 target-xpub: xpub6... (normalized from zpub; variant=zpub)
-searched: 7 templates × 20 accounts = 140 paths
+searched: 161 candidate paths
 ```
 
 #### JSON output
@@ -4343,11 +4343,11 @@ demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 The default candidate set is the cross-product of:
 
-- **Templates:** BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at `script_type ∈ {1', 2', 3'}` (sh-wsh / wsh / tr-multi-a multisig) — seven templates, fixed order
+- **Templates:** BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at `script_type ∈ {1', 2', 3'}` (sh-wsh / wsh / tr-multi-a multisig) + BIP-87 `m/87'/<coin>'/<account>'` (multisig; the toolkit's multisig template default, and the default `bundle` uses for bare `sh(...)` and `tr(...)` descriptors) — eight templates, fixed order, each over the account range — then BIP-45 `m/45'` once (BIP-45 has no coin or account level: "Only the hardened purpose extended public key is shared")
 - **Accounts:** half-open range `[min_account, max(min_account + number_of_accounts, max_account + 1))`
 - **Add-paths:** each `--add-path <TEMPLATE>` iterated over the same account range (or once if the template contains no `account` token)
 
-Iteration is deterministic: templates in fixed lexical order, accounts ascending, add-paths in user-supplied order. First match wins. The matching template name is one of `bip44` / `bip49` / `bip84` / `bip86` / `bip48-sh-wsh` / `bip48-wsh` / `bip48-tr-multi-a` for standard templates, or the literal user-supplied template string (e.g. `m/87'/0'/account'`) for `--add-path` entries. The `account` field is `null` when the matched template carries no `account` token (e.g., a fully-literal `--add-path m/9999'/0'/0'`).
+Iteration is deterministic: templates in fixed lexical order, accounts ascending, add-paths in user-supplied order. First match wins. The matching template name is one of `bip44` / `bip49` / `bip84` / `bip86` / `bip48-sh-wsh` / `bip48-wsh` / `bip48-tr-multi-a` / `bip87` / `bip45` for standard templates, or the literal user-supplied template string (e.g. `m/88'/0'/account'`) for `--add-path` entries. The `account` field is `null` for `bip45` and when the matched template carries no `account` token (e.g., a fully-literal `--add-path m/9999'/0'/0'`).
 
 ### `mnemonic xpub-search account-of-descriptor`
 
@@ -4406,7 +4406,7 @@ match: cosigner @0  m/48'/0'/0'/2'  (template=bip48-wsh, account=0)
 descriptor: wsh(sortedmulti(2, [fp1/48h/0h/0h/2h]xpub1.../0/*, ...))
 cosigners total: 3
 matched cosigner indices: [0]
-searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
+searched: 161 candidates × 3 cosigners
 ```
 
 #### Output (`--json`)
@@ -4568,7 +4568,7 @@ P3 takes no secret material; auto-fire BCH repair (exit 5) does not apply.
 
 ### `mnemonic xpub-search passphrase-of-xpub`
 
-Given a seed (BIP-39 phrase OR ms1 card) **plus a specific passphrase** + a target xpub (or mk1 card carrying an xpub), verify that this passphrase produces the xpub under the seed at one of the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) × account range. Same candidate-set + first-match-wins primitive as `path-of-xpub`; the semantic difference is that this mode answers **"does THIS passphrase produce the xpub?"** rather than **"what path produced this xpub?"**.
+Given a seed (BIP-39 phrase OR ms1 card) **plus a specific passphrase** + a target xpub (or mk1 card carrying an xpub), verify that this passphrase produces the xpub under the seed at one of the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}` + BIP-87 multisig `m/87'/<coin>'/<account>'` + BIP-45 `m/45'` once) × account range. Same candidate-set + first-match-wins primitive as `path-of-xpub`; the semantic difference is that this mode answers **"does THIS passphrase produce the xpub?"** rather than **"what path produced this xpub?"**.
 
 The passphrase source is **mandatory**: exactly one of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file` must be supplied. Omitting all three is a clap arg-parse error (exit 64).
 

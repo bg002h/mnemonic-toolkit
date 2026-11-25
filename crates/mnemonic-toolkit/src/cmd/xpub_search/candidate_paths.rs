@@ -120,9 +120,21 @@ const MULTISIG: [(u32, &str); 3] = [
     (3, "bip48-tr-multi-a"),
 ];
 
+/// Template name of the BIP-87 multisig family `m/87'/<coin>'/<account>'`.
+/// BIP-87: "m / purpose' / coin_type' / account' / change / address_index";
+/// it is the toolkit's multisig template default and, since the 2026-11-25
+/// BIP-defaults ruling, the descriptor-mode default for bare `sh(...)` and
+/// `tr(...)` (review r2 I-A: the search must cover what `bundle` mints).
+const BIP87_NAME: &str = "bip87";
+/// Template name of BIP-45's purpose key `m/45'`. BIP-45: "m / 45' / *",
+/// "Hardened derivation is used at this level", and "Only the hardened
+/// purpose extended public key is shared". No coin or account level, so it
+/// is searched once.
+const BIP45_NAME: &str = "bip45";
+
 impl CandidatePaths {
-    /// Yields exactly the sequence the former `Vec` held: 4 single-sig
-    /// templates × accounts, then 3 BIP-48 script types × accounts, then each
+    /// Yields 4 single-sig templates × accounts, then 3 BIP-48 script types ×
+    /// accounts, then BIP-87 × accounts, then BIP-45 `m/45'` once, then each
     /// `--add-path` in order (malformed substitutions skipped).
     pub fn iter(&self) -> impl Iterator<Item = CandidatePath> + '_ {
         let (lo, hi, network) = (self.lo, self.hi, self.network);
@@ -146,6 +158,19 @@ impl CandidatePaths {
                     account: Some(account),
                 }
             })
+        });
+        let bip87 = (lo..hi).map(move |account| CandidatePath {
+            template_name: BIP87_NAME.to_string(),
+            path: DerivationPath::from_str(
+                &MultisigPathFamily::Bip87.default_origin_path(network, account, 0),
+            )
+            .expect("BIP-87 paths from default_origin_path are well-formed by construction"),
+            account: Some(account),
+        });
+        let bip45 = std::iter::once(CandidatePath {
+            template_name: BIP45_NAME.to_string(),
+            path: DerivationPath::from_str("m/45'").expect("static path"),
+            account: None,
         });
         let added = self.add_paths.iter().flat_map(move |tmpl| {
             let shape = add_path_shape(tmpl);
@@ -176,7 +201,7 @@ impl CandidatePaths {
             };
             it
         });
-        single.chain(multi).chain(added)
+        single.chain(multi).chain(bip87).chain(bip45).chain(added)
     }
 
     /// Number of candidates, equal to `self.iter().count()` without building
@@ -184,7 +209,8 @@ impl CandidatePaths {
     /// substituted string parses (validity can depend on the account).
     pub fn len(&self) -> usize {
         let n = (self.hi.saturating_sub(self.lo)) as usize;
-        let mut total = 7 * n;
+        // 4 single-sig + 3 BIP-48 + BIP-87 per account, plus BIP-45 once.
+        let mut total = 8 * n + 1;
         for tmpl in &self.add_paths {
             total += match add_path_shape(tmpl) {
                 AddPathShape::Literal => usize::from(DerivationPath::from_str(tmpl).is_ok()),
@@ -239,8 +265,8 @@ mod tests {
     #[test]
     fn standard_templates_at_account_0_default_range() {
         let candidates = build_candidate_paths(0, 20, None, &[], CliNetwork::Mainnet);
-        // 7 templates × 20 accounts = 140
-        assert_eq!(candidates.len(), 140);
+        // 8 families × 20 accounts + m/45' once = 161
+        assert_eq!(candidates.len(), 161);
         let first = candidates.iter().next().unwrap();
         assert_eq!(first.template_name, "bip44");
         assert_eq!(first.path.to_string(), "44'/0'/0'");
@@ -249,8 +275,8 @@ mod tests {
     #[test]
     fn min_account_5_n_3_yields_range_5_to_8() {
         let candidates = build_candidate_paths(5, 3, None, &[], CliNetwork::Mainnet);
-        // 7 templates × 3 accounts = 21
-        assert_eq!(candidates.len(), 21);
+        // 8 families × 3 accounts + m/45' once = 25
+        assert_eq!(candidates.len(), 25);
         let bip84: Vec<CandidatePath> = candidates
             .iter()
             .filter(|c| c.template_name == "bip84")
@@ -263,8 +289,8 @@ mod tests {
     #[test]
     fn max_account_50_widens_range() {
         let candidates = build_candidate_paths(0, 5, Some(50), &[], CliNetwork::Mainnet);
-        // max(0+5, 50+1) = 51; 7 × 51 = 357
-        assert_eq!(candidates.len(), 7 * 51);
+        // max(0+5, 50+1) = 51; 8 × 51 + 1 = 409
+        assert_eq!(candidates.len(), 8 * 51 + 1);
     }
 
     #[test]
@@ -319,6 +345,26 @@ mod tests {
     }
 
     #[test]
+    fn bip87_accounts_and_bip45_are_searched() {
+        // Review r2 I-A: the descriptor-mode defaults (BIP-87) and the bare-P2SH
+        // alternative (BIP-45 m/45') must be in the searched set.
+        let c = build_candidate_paths(0, 2, None, &[], CliNetwork::Testnet);
+        let got: Vec<(String, String, Option<u32>)> = c
+            .iter()
+            .filter(|p| p.template_name == "bip87" || p.template_name == "bip45")
+            .map(|p| (p.template_name.clone(), p.path.to_string(), p.account))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ("bip87".into(), "87'/1'/0'".into(), Some(0)),
+                ("bip87".into(), "87'/1'/1'".into(), Some(1)),
+                ("bip45".into(), "45'".into(), None),
+            ]
+        );
+    }
+
+    #[test]
     fn candidate_paths_len_matches_iter_count() {
         let garbage = ["m/1account'", "m/9'/account", "m/86'/0'/0'", "garbage"];
         let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<String>>();
@@ -344,13 +390,13 @@ mod tests {
             &s(&["m/1account'"]),
             CliNetwork::Mainnet,
         );
-        assert_eq!(last.len(), 14);
+        assert_eq!(last.len(), 17);
     }
 
     #[test]
     fn candidate_paths_full_hardened_window_is_lazy() {
         let c = build_candidate_paths(0, 20, Some(2147483647), &[], CliNetwork::Mainnet);
-        assert_eq!(c.len(), 15032385536usize);
+        assert_eq!(c.len(), 8 * 2147483648usize + 1);
         let first: Vec<CandidatePath> = c.iter().take(3).collect();
         assert_eq!(first.len(), 3);
         for (i, cp) in first.iter().enumerate() {

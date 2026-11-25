@@ -252,7 +252,7 @@ fn passphrase_of_xpub_json_envelope_shape() {
 // ---------------------------------------------------------------------------
 #[test]
 fn passphrase_of_xpub_add_path_extends_search() {
-    let target = xpub_at("m/87'/0'/2'", "satoshi").to_string();
+    let target = xpub_at("m/88'/0'/2'", "satoshi").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -265,7 +265,7 @@ fn passphrase_of_xpub_add_path_extends_search() {
             "--target-xpub",
             &target,
             "--add-path",
-            "m/87'/0'/account'",
+            "m/88'/0'/account'",
             "--json",
         ])
         .write_stdin(PHRASE)
@@ -275,9 +275,9 @@ fn passphrase_of_xpub_add_path_extends_search() {
         .stdout
         .clone();
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
-    assert_eq!(v["path"], "m/87'/0'/2'");
+    assert_eq!(v["path"], "m/88'/0'/2'");
     assert_eq!(v["account"], 2);
-    assert_eq!(v["template"], "m/87'/0'/account'");
+    assert_eq!(v["template"], "m/88'/0'/account'");
 }
 
 // ---------------------------------------------------------------------------

@@ -299,14 +299,27 @@ fn b3_taproot_multisig_descriptor_defaults_to_bip87() {
 
 #[test]
 fn b1_b2_b3_xpub_search_default_follows_the_ruling() {
-    for (shape, path) in [
-        ("sh(wsh(sortedmulti(1,{a},{b})))", "m/48'/0'/0'/1'"),
-        ("sh(sortedmulti(1,{a},{b}))", "m/87'/0'/0'"),
-        ("tr({a},sortedmulti_a(1,{b}))", "m/87'/0'/0'"),
-        ("wsh(sortedmulti(1,{a},{b}))", "m/48'/0'/0'/2'"),
+    // (shape, default named in the notice, path A's key really sits at).
+    // Review r2 I-A: the search must FIND the key at the path the new
+    // defaults mint (BIP-87, and m/45' for the bare-P2SH alternative), not
+    // only name it.
+    for (shape, default, key_path) in [
+        (
+            "sh(wsh(sortedmulti(1,{a},{b})))",
+            "m/48'/0'/0'/1'",
+            "m/48'/0'/0'/1'",
+        ),
+        ("sh(sortedmulti(1,{a},{b}))", "m/87'/0'/0'", "m/87'/0'/0'"),
+        ("sh(sortedmulti(1,{a},{b}))", "m/87'/0'/0'", "m/45'"),
+        ("tr({b},multi_a(1,{a}))", "m/87'/0'/0'", "m/87'/0'/0'"),
+        (
+            "wsh(sortedmulti(1,{a},{b}))",
+            "m/48'/0'/0'/2'",
+            "m/48'/0'/0'/2'",
+        ),
     ] {
-        let a = format!("{}/<0;1>/*", xpub_at(A, "m/87'/0'/0'"));
-        let b = format!("{}/<0;1>/*", xpub_at(B, "m/87'/0'/0'"));
+        let a = format!("{}/<0;1>/*", xpub_at(A, key_path));
+        let b = format!("{}/<0;1>/*", xpub_at(B, key_path));
         let desc = shape.replace("{a}", &a).replace("{b}", &b);
         let o = run_stdin(
             &[
@@ -324,9 +337,17 @@ fn b1_b2_b3_xpub_search_default_follows_the_ruling() {
         );
         assert!(
             o.stderr
-                .contains(&format!("defaulting origin path for @0,@1 to {path}")),
+                .contains(&format!("defaulting origin path for @0,@1 to {default}")),
             "{shape}: {}",
             o.stderr
+        );
+        let at = if shape.starts_with("tr(") { "@1" } else { "@0" };
+        assert_eq!(o.code, 0, "{shape} at {key_path}: {}{}", o.stdout, o.stderr);
+        assert!(
+            o.stdout
+                .contains(&format!("match: cosigner {at}  {key_path}")),
+            "{shape} at {key_path}: {}",
+            o.stdout
         );
     }
 }
