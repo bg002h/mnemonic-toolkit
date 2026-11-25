@@ -48,15 +48,12 @@ on:
   push:
     tags:
       - 'mnemonic-toolkit-v*'
-    branches:
-      - master
-      - 'ci/**'
-  pull_request:
-    # ready_for_review: a PR leaving draft gets the Windows leg (the default
-    # types, plus that one).
-    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
     inputs:
+      full:
+        description: "also run the nightly jobs (no nightly jobs in this workflow; accepted so the release gate can pass -f full=true everywhere)"
+        type: boolean
+        default: false
       tag:
         description: 'Existing tag to build and BACKFILL binaries onto. Empty = just exercise the matrix.'
         required: false

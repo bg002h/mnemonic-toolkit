@@ -8,7 +8,7 @@
 //! version-byte differences in input xpubs (the target is already
 //! canonicalized at this point but the byte-form is the unambiguous identity).
 
-use super::candidate_paths::CandidatePath;
+use super::candidate_paths::CandidatePaths;
 use crate::synthesize::xpub_to_65;
 use bitcoin::bip32::{DerivationPath, Xpriv, Xpub};
 use bitcoin::secp256k1::Secp256k1;
@@ -25,11 +25,11 @@ pub struct MatchedPath {
 /// the first byte-equal match to `target_xpub_65` (in the 65-byte form).
 pub fn match_xpub_against_paths(
     master_xprv: &Xpriv,
-    candidates: &[CandidatePath],
+    candidates: &CandidatePaths,
     target_xpub_65: &[u8; 65],
 ) -> Option<MatchedPath> {
     let secp = Secp256k1::new();
-    for c in candidates {
+    for c in candidates.iter() {
         match master_xprv.derive_priv(&secp, &c.path) {
             Ok(child_xpriv) => {
                 let child_xpub = Xpub::from_priv(&secp, &child_xpriv);

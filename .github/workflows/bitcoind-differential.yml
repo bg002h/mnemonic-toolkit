@@ -42,20 +42,7 @@ name: bitcoind-differential
 
 on:
   push:
-    paths:
-      - "crates/mnemonic-toolkit/src/derive_address.rs"
-      - "crates/mnemonic-toolkit/src/address_render.rs"
-      - "crates/mnemonic-toolkit/src/parse_descriptor.rs"
-      - "crates/mnemonic-toolkit/src/cmd/restore.rs"
-      - "crates/mnemonic-toolkit/src/cmd/bundle.rs"
-      - "crates/mnemonic-toolkit/tests/bitcoind_differential.rs"
-      - "crates/mnemonic-toolkit/tests/bitcoind_addr_import.rs"
-      - "crates/mnemonic-toolkit/src/wallet_export/bitcoin_core_addresses.rs"
-      - "crates/mnemonic-toolkit/src/wallet_export/mod.rs"
-      - "crates/mnemonic-toolkit/src/cmd/export_wallet.rs"
-      - "crates/mnemonic-toolkit/src/descriptor_builder/allow.rs"
-      - ".github/workflows/bitcoind-differential.yml"
-  pull_request:
+    branches: [master]
     paths:
       - "crates/mnemonic-toolkit/src/derive_address.rs"
       - "crates/mnemonic-toolkit/src/address_render.rs"
@@ -73,6 +60,12 @@ on:
     # Daily at 05:17 UTC (off the hour to avoid the cron thundering herd).
     - cron: "17 5 * * *"
   workflow_dispatch:
+    inputs:
+      full:
+        description: "also run the nightly jobs"
+        type: boolean
+        required: false
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -86,13 +79,14 @@ env:
 # schedules and dispatches are never cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   differential:
     # Renamed 2026-08-22 (PLAN Phase 1b): this job now runs TWO gates against
     # the one node, and a reader of a green run must be able to tell which.
     name: bitcoind v27.0 gates (end-to-end differential + addr-import)
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full == true)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

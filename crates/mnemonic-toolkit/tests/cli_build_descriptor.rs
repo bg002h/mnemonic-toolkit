@@ -4,6 +4,7 @@
 //! `export-wallet --descriptor` intake (SPEC §7).
 
 use assert_cmd::Command;
+use predicates::prelude::*;
 use serde_json::Value;
 
 fn bin() -> Command {
@@ -576,12 +577,10 @@ fn preset_decay_ordering_violation_exit_2() {
         .stderr(predicates::str::contains("--older"));
 }
 
-/// cycle-6 D-decay-rel (funds-loss): a 512-second-unit `--recovery-older` whose
-/// raw value exceeds a block-height `--older` passes the old raw `<=` compare but
-/// actually unlocks the recovery tier FIRST. `--older 145` (≈24h, blocks) +
-/// `--recovery-older 4194305` (0x40_0001 = 1×512s ≈ 8.5min) is the recon repro;
-/// the two operands are in different BIP-68 units and cannot be ordered offline →
-/// REFUSE fail-closed. Accepted (exit 0) before the fix.
+/// cycle-6 D-decay-rel (funds-loss) repro: `--older 145` (blocks) +
+/// `--recovery-older 4194305` (0x40_0001 = 1×512s). Since FIX
+/// archetype-older-blocks-bound the preset bound refuses the 512-second
+/// `--recovery-older` (Form A, one diagnostic); the cross-unit refusal is gone.
 #[test]
 fn preset_decay_cross_unit_refused_exit_2() {
     bin()
@@ -612,9 +611,11 @@ fn preset_decay_cross_unit_refused_exit_2() {
         ])
         .assert()
         .code(2)
-        .stderr(predicates::str::contains("--older"))
-        .stderr(predicates::str::contains("--recovery-older"))
-        .stderr(predicates::str::contains("different BIP-68 timelock units"));
+        .stderr(predicates::str::contains(
+            "[param] params: decaying-multisig --recovery-older is a relative timelock in blocks and takes 1..=65535; got 4194305, which BIP-68 reads as a time-based lock of 1 x 512 seconds (512 seconds), not 4194305 blocks; for a time-based lock, author the policy with --spec (from --recovery-older)",
+        ))
+        .stderr(predicates::str::contains("different BIP-68 timelock units").not())
+        .stderr(predicates::str::contains("refused — 1 diagnostic(s):"));
 }
 
 /// cycle-6 D-decay-rel positive control: same-unit, strictly-ordered (`--older
@@ -652,12 +653,12 @@ fn preset_decay_same_unit_ordered_builds() {
         .success();
 }
 
-/// cycle-6 D-decay-rel positive control: both tiers 512-second units, strictly
-/// ordered (`--older 4194305` = 0x40_0001 < `--recovery-older 4194306` = 0x40_0002)
-/// → same unit, value 1 < 2 → builds. A consistent cross-unit-free decay ladder
-/// is accepted (R1: refuse only MIXED units, not the 512s axis itself).
+/// Both tiers in the 512-second window (`--older 4194305`, `--recovery-older
+/// 4194306`) used to build (cycle-6 R5); the preset bound now refuses both
+/// (R5 of FIX archetype-older-blocks-bound), `--older` first. `--spec` is the
+/// route for such a ladder.
 #[test]
-fn preset_decay_same_unit_both_512s_builds() {
+fn preset_decay_both_512s_refused_exit_2() {
     bin()
         .args([
             "build-descriptor",
@@ -685,7 +686,12 @@ fn preset_decay_same_unit_both_512s_builds() {
             "4000000",
         ])
         .assert()
-        .success();
+        .code(2)
+        .stderr(predicates::str::contains("refused — 2 diagnostic(s):"))
+        .stderr(predicates::str::contains(R5_OLDER).and(predicates::str::contains(R5_REC)))
+        .stderr(predicates::function::function(|e: &str| {
+            e.find(R5_OLDER).unwrap() < e.find(R5_REC).unwrap()
+        }));
 }
 
 /// cycle-6 D-decay-abs (funds-loss): an absolute `--after 500000` is a long-past
@@ -1153,8 +1159,8 @@ fn masked_older_timelock_refused_exit_2() {
 /// Funds-safety on the PRESET path (the deep-recon "2-year vault" headline):
 /// `--archetype kofn-recovery --older 105120` — 2 years in blocks overflows the
 /// 16-bit BIP-68 value field, so consensus would silently mask it to ~275 days —
-/// is refused (exit 2) with a schema_field diagnostic carrying `--older`
-/// provenance (attribution attaches via the node-path provenance table).
+/// is refused (exit 2) by the preset bound before the gate runs: one `param`
+/// diagnostic (Form B) naming `--older` (FIX archetype-older-blocks-bound).
 #[test]
 fn preset_masked_older_refused_with_older_provenance() {
     let out = bin()
@@ -1179,13 +1185,219 @@ fn preset_masked_older_refused_with_older_provenance() {
         .assert()
         .code(2);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
-    let d = &v["diagnostics"][0];
-    assert_eq!(d["kind"], "schema_field");
+    let ds = v["diagnostics"].as_array().unwrap();
+    assert_eq!(ds.len(), 1);
+    let d = &ds[0];
+    assert_eq!(d["kind"], "param");
+    assert_eq!(d["node_path"], "params");
     assert_eq!(d["flag"], "--older");
-    assert!(
-        d["message"].as_str().unwrap().contains("older"),
-        "diagnostic must name the older() field: {d}"
+    assert_eq!(
+        d["message"],
+        "kofn-recovery --older is a relative timelock in blocks and takes 1..=65535; got 105120"
     );
+}
+
+const R5_OLDER: &str = "[param] params: decaying-multisig --older is a relative timelock in blocks and takes 1..=65535; got 4194305, which BIP-68 reads as a time-based lock of 1 x 512 seconds (512 seconds), not 4194305 blocks; for a time-based lock, author the policy with --spec (from --older)";
+const R5_REC: &str = "[param] params: decaying-multisig --recovery-older is a relative timelock in blocks and takes 1..=65535; got 4194306, which BIP-68 reads as a time-based lock of 2 x 512 seconds (1024 seconds), not 4194306 blocks; for a time-based lock, author the policy with --spec (from --recovery-older)";
+const R1_MSG: &str = "[param] params: hashlock-gated --older is a relative timelock in blocks and takes 1..=65535; got 4200000, which BIP-68 reads as a time-based lock of 5696 x 512 seconds (2916352 seconds), not 4200000 blocks; for a time-based lock, author the policy with --spec (from --older)";
+
+fn hg_args() -> Vec<&'static str> {
+    vec![
+        "build-descriptor",
+        "--archetype",
+        "hashlock-gated",
+        "--key",
+        K1,
+        "--hash",
+        HASH_HEX,
+        "--recovery-key",
+        K2,
+    ]
+}
+fn sti_args() -> Vec<&'static str> {
+    vec![
+        "build-descriptor",
+        "--archetype",
+        "simple-timelocked-inheritance",
+        "--key",
+        K1,
+        "--recovery-key",
+        K2,
+    ]
+}
+fn kofn_args() -> Vec<&'static str> {
+    vec![
+        "build-descriptor",
+        "--archetype",
+        "kofn-recovery",
+        "--key",
+        K1,
+        "--key",
+        K2,
+        "--key",
+        K3,
+        "--threshold",
+        "2",
+        "--recovery-key",
+        K4,
+    ]
+}
+fn tr_args() -> Vec<&'static str> {
+    vec![
+        "build-descriptor",
+        "--archetype",
+        "tiered-recovery",
+        "--key",
+        K1,
+        "--key",
+        K2,
+        "--threshold",
+        "2",
+        "--recovery-key",
+        K3,
+        "--recovery-key",
+        K4,
+        "--recovery-threshold",
+        "2",
+    ]
+}
+fn dm_args() -> Vec<&'static str> {
+    vec![
+        "build-descriptor",
+        "--archetype",
+        "decaying-multisig",
+        "--key",
+        K1,
+        "--key",
+        K2,
+        "--threshold",
+        "2",
+        "--recovery-key",
+        K3,
+        "--recovery-key",
+        K4,
+        "--recovery-threshold",
+        "2",
+        "--final-key",
+        K5,
+        "--after",
+        "4000000",
+    ]
+}
+
+/// R1-R4: every archetype refuses a 512-second-window `--older` (Form A), exit 2,
+/// nothing on stdout.
+#[test]
+fn preset_older_512s_window_refused_exit_2() {
+    let rows: Vec<(Vec<&str>, &str, &str)> = vec![
+        (hg_args(), "4200000", R1_MSG),
+        (
+            sti_args(),
+            "4194305",
+            "[param] params: simple-timelocked-inheritance --older is a relative timelock in blocks and takes 1..=65535; got 4194305, which BIP-68 reads as a time-based lock of 1 x 512 seconds (512 seconds), not 4194305 blocks; for a time-based lock, author the policy with --spec (from --older)",
+        ),
+        (
+            kofn_args(),
+            "4259839",
+            "[param] params: kofn-recovery --older is a relative timelock in blocks and takes 1..=65535; got 4259839, which BIP-68 reads as a time-based lock of 65535 x 512 seconds (33553920 seconds), not 4259839 blocks; for a time-based lock, author the policy with --spec (from --older)",
+        ),
+        (
+            tr_args(),
+            "4200000",
+            "[param] params: tiered-recovery --older is a relative timelock in blocks and takes 1..=65535; got 4200000, which BIP-68 reads as a time-based lock of 5696 x 512 seconds (2916352 seconds), not 4200000 blocks; for a time-based lock, author the policy with --spec (from --older)",
+        ),
+    ];
+    for (mut args, older, want) in rows {
+        args.extend(["--older", older]);
+        bin()
+            .args(&args)
+            .assert()
+            .code(2)
+            .stdout(predicates::str::is_empty())
+            .stderr(predicates::str::contains(want))
+            .stderr(predicates::str::contains("older(").not());
+    }
+}
+
+/// R7: `--json` carries `param` / `params` / `--older` and the Form A text.
+#[test]
+fn preset_older_512s_window_json_param_diag() {
+    let mut args = hg_args();
+    args.extend(["--older", "4200000", "--json"]);
+    let out = bin().args(&args).assert().code(2);
+    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
+    let ds = v["diagnostics"].as_array().unwrap();
+    assert_eq!(ds.len(), 1);
+    assert_eq!(ds[0]["kind"], "param");
+    assert_eq!(ds[0]["node_path"], "params");
+    assert_eq!(ds[0]["flag"], "--older");
+    let want = R1_MSG
+        .strip_prefix("[param] params: ")
+        .unwrap()
+        .strip_suffix(" (from --older)")
+        .unwrap();
+    assert_eq!(ds[0]["message"], want);
+}
+
+/// R8-R10, R13: out of range and outside the window → Form B, from the preset
+/// (no gate `schema_field` text).
+#[test]
+fn preset_older_out_of_range_form_b_exit_2() {
+    let rows: Vec<(Vec<&str>, [&str; 2], &str)> = vec![
+        (
+            kofn_args(),
+            ["--older", "0"],
+            "[param] params: kofn-recovery --older is a relative timelock in blocks and takes 1..=65535; got 0 (from --older)",
+        ),
+        (
+            kofn_args(),
+            ["--older", "65536"],
+            "[param] params: kofn-recovery --older is a relative timelock in blocks and takes 1..=65535; got 65536 (from --older)",
+        ),
+        (
+            kofn_args(),
+            ["--older", "4194304"],
+            "[param] params: kofn-recovery --older is a relative timelock in blocks and takes 1..=65535; got 4194304 (from --older)",
+        ),
+    ];
+    for (mut args, extra, want) in rows {
+        args.extend(extra);
+        bin()
+            .args(&args)
+            .assert()
+            .code(2)
+            .stderr(predicates::str::contains(want))
+            .stderr(predicates::str::contains("schema_field").not());
+    }
+    let mut args = dm_args();
+    args.extend(["--older", "1000", "--recovery-older", "70000"]);
+    bin()
+        .args(&args)
+        .assert()
+        .code(2)
+        .stderr(predicates::str::contains(
+            "[param] params: decaying-multisig --recovery-older is a relative timelock in blocks and takes 1..=65535; got 70000 (from --recovery-older)",
+        ))
+        .stderr(predicates::str::contains("schema_field").not());
+}
+
+/// C1, C2: the bounds 65535 and 1 build.
+#[test]
+fn preset_older_bounds_build() {
+    let mut args = sti_args();
+    args.extend(["--older", "65535"]);
+    bin()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("older(65535)"));
+    let mut args = hg_args();
+    args.extend(["--older", "1"]);
+    bin()
+        .args(&args)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("older(1)"));
 }
 
 /// The contractual `flag`-ABSENT cases (presets SPEC §3.3/§7 + P1-r1 M3):
@@ -1672,11 +1884,14 @@ fn emit_spec_records_no_allowance() {
     );
 }
 
-/// bip388 shape on an allowed repeated-keys emit (R0-r1 M5): duplicate
-/// keys_info entries, no dedup — pinned.
+/// bip388 on an allowed repeated-keys emit (sweep unit
+/// export-wallet-bip388-validity; replaces the R0-r1 M5 duplicate-keys_info
+/// pin): BIP-388 requires pairwise distinct keys_info, so `--format bip388`
+/// refuses after the --allow banner (first pair @0/@2, K1's key).
 #[test]
-fn allow_repeated_keys_bip388_duplicate_keys_info() {
-    let out = bin()
+fn allow_repeated_keys_bip388_refused() {
+    let k1_xpub = K1.split(']').nth(1).unwrap();
+    bin()
         .args([
             "build-descriptor",
             "--allow",
@@ -1686,14 +1901,13 @@ fn allow_repeated_keys_bip388_duplicate_keys_info() {
         ])
         .write_stdin(repeated_keys_spec())
         .assert()
-        .success();
-    let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
-    let keys = v["keys_info"].as_array().unwrap();
-    assert_eq!(
-        keys.len(),
-        4,
-        "duplicate keys appear twice (no dedup): {keys:?}"
-    );
+        .code(1)
+        .stdout("")
+        .stderr(predicates::str::ends_with(format!(
+            "error: --format bip388 cannot express a wallet that uses one public key more than \
+             once (keys_info @0 and @2: {k1_xpub}): a BIP-388 wallet policy requires pairwise \
+             distinct keys; use --format descriptor for this wallet\n"
+        )));
 }
 
 /// Duplicate --allow tokens are idempotent (allow SPEC §1).

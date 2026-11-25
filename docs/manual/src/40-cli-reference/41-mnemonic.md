@@ -328,6 +328,13 @@ remedy above does **not** apply: adding `/*` describes a different wallet
 (`/<0;1>/*` ranges over `/0/i` and `/1/i`; `/<0;1>` is the two keys `/0`
 and `/1`). md1 has no card for it; keep the full descriptor.
 
+A **multipath that repeats a value** — `<0;0>`, `<1;1>`, `<0;1;0>` (values compare as numbers, so
+`<1;01>` repeats 1) — is invalid under BIP-389, which forbids duplicate values in a tuple; with `<0;0>`
+the receive and change chains would be one chain. It is refused (exit 2, `DescriptorParse`; for
+`import-wallet`, exit 2 `ImportWalletParse`) on the same surfaces, before the fixed-step and
+no-wildcard checks above. **Remedy:** copy the tuple from the wallet's own exported descriptor; most
+wallets use `/<0;1>/*` (receive 0, change 1). A guessed tuple describes a different wallet.
+
 **Sparrow is unaffected.** Sparrow's own `@N/**` template placeholder is
 expanded to the multipath form internally before this check runs, so a
 normal Sparrow import is unaffected by this rule.
@@ -381,7 +388,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
-| `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. |
+| `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. The share at index `s` is the secret itself, not a distributed share, and `ms-shares combine` does not take it, so it is rejected (exit 2) without that pointer. |
 | `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
@@ -876,6 +883,7 @@ default per the inference rule above.
 | `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
 | Canonical descriptor + `--slot @N.phrase= + --slot @N.path=` | `error: slot @{N} has both secret-bearing input and watch-only input; pick one per slot.` (the `{phrase, path}` pair is legal only in non-canonical mode) |
 | `@N`/key use-site path ends in a fixed step (`/0/*`, `/0h/*`) | refused, exit 2 (`DescriptorParse`) — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused |
+| `@N`/key multipath repeats a value (`<0;0>`, `<0;1;0>`) | refused, exit 2 (`DescriptorParse`) — ``error: @N multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)``; see [Non-representable use-site steps](#non-representable-use-site-steps) |
 
 ---
 
@@ -919,7 +927,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20; mirrors `restore`) |
 | `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, default), `change` (chain 1), or `both` (mirrors `restore`) |
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0** (as on [`restore`](#mnemonic-restore)): accepted so existing scripts do not fail, but there is no search-time ceiling any more; the completion reports a measured estimate and progress instead |
-| `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`), mirroring `mnemonic bundle --slot @N.ms1=`. |
+| `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`, except the share at index `s`, the secret itself, which `ms-shares combine` does not take), mirroring `mnemonic bundle --slot @N.ms1=`. |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
 | `--ms1 <STRING>` | repeating; one ms1 card. `--ms1 -` reads one card from stdin (at most one; empty or separator-only stdin is refused); `--ms1 @env:VAR` also works. An inline card on argv is refused unless `--allow-argv-secret` is given |
 | `--mk1 <STRING>` | repeating; one mk1 card |
@@ -1131,7 +1139,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 2) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
 | `--template <TEMPLATE>` | as for `bundle` |
 | `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--template`/`--account` path (and makes `--template` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
-| `--account <ACCOUNT>` | account index (default 0); refused (exit 2) when non-zero together with `--path` |
+| `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 2) when non-zero together with `--path`, or when non-zero and no requested target reads it |
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
@@ -1188,7 +1196,7 @@ mnemonic export-wallet [OPTIONS]
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `seedqr`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys, including `seedqr`, are refused by `export-wallet`'s watch-only validator per SPEC §3) |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot. **`bip388`** refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins), and a `--descriptor` key with a derivation step before `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`; a BIP-388 key entry is an xpub with no path after it); use `descriptor` or `bitcoin-core` for these wallets |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `0` (default; rescan from genesis to discover an existing key's funds), `now`, or unix seconds |
@@ -1609,9 +1617,14 @@ file-import surface is singlesig-only and must not receive a script-tree
 policy dressed as singlesig. `bip388` likewise refuses a **general** taproot
 card (a tap-script-tree reconstructed via the general route-around has no
 named-template form): such a card emits `descriptor` / `bitcoin-core` only.
-A **distinct-trunk taproot multisig** card (NUMS *or* non-NUMS), by contrast,
+A non-NUMS **distinct-trunk taproot multisig** card, by contrast,
 takes the template path and *does* emit `bip388` faithfully — `tr(@idx/**,
-multi_a(k,…))`. No `--template` is needed (the threshold and script type come
+multi_a(k,…))`. A **NUMS** taproot multisig card refuses `bip388` (exit 1):
+its internal key is a literal key, and BIP-388 allows only `@N` key
+placeholders; it emits `descriptor` / `bitcoin-core`. A card whose policy
+uses one public key more than once (e.g. a `bundle --descriptor` that
+repeats `@0`) refuses `bip388` too (exit 1; BIP-388 requires pairwise
+distinct keys). No `--template` is needed (the threshold and script type come
 from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
 **before** any payload is emitted unless `--allow-mismatch`.
 
@@ -1895,6 +1908,7 @@ on stdout + the round-trip status on stderr.
 | `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
 | Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
 | Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused. Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
+| Descriptor's key placeholder multipath repeats a value (`<0;0>`, `<0;1;0>`) | exit 2 `ImportWalletParse` — the `bundle` text after the format's parse-error prefix (``import-wallet: descriptor: parse error: @0 multipath `<0;0>` repeats the value 0; …``); see [Non-representable use-site steps](#non-representable-use-site-steps) |
 | Bitcoin Core receive/change-shaped pair whose keys/origins differ | exit 2 `ImportWalletParse` — not merged (distinct keys are different wallets); see [foreign wallet formats](#foreign-wallet-formats) |
 | Bitcoin Core same-key receive/change pair whose script bodies differ (e.g. `wsh(pk(…/0/*))` + `wsh(pkh(…/1/*))`) | exit 2 `ImportWalletParse` — not merged; the first entry gets the fixed-step refusal above |
 | Coldcard generic JSON: `account` present but not a non-negative JSON integer (`"5"`, `-1`, `1.5`, `null`) | exit 2 `ImportWalletParse` — ``import-wallet: coldcard: parse error: `account` must be a non-negative integer, got <value>`` |
@@ -2836,7 +2850,7 @@ mnemonic seedqr encode --from phrase=<VALUE|-> [--variant <standard|compact>] [-
 - `--from seedqr=<VALUE|->`: **(canonical, v0.31.6+)** the SeedQR payload. Under `--variant standard` (default) this is a numeric digit string (48, 60, 72, 84, or 96 ASCII digits — 12 / 15 / 18 / 21 / 24-word phrases). Under `--variant compact` this is lowercase hex of the raw BIP-39 entropy bytes (32 hex chars = 16 bytes = 12-word; 64 hex chars = 32 bytes = 24-word). `seedqr=-` reads from stdin. Only the `seedqr` node type is accepted.
 - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). See [§Scope](#scope-v0300-widened-in-v0315-v0320) below.
 - `--digits <VALUE|->`: **(DEPRECATED, v0.31.6)** the original digit-string flag (Standard variant only). Still accepted, but emits a stderr deprecation notice directing to `--from seedqr=`; will be removed in a future release. Mutually exclusive with `--from` (clap-level conflict; exit 64). Exactly one of `--from seedqr=` or `--digits` is required.
-- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. On Unix the file is written owner-only (mode 0600), an existing file's mode included. If the write fails, an existing file keeps its contents (its mode may already be 0600) and no new file is made. A standard-stream name such as `/dev/stdout` is written into that stream and never truncated, so a failed write there can leave part of the envelope in the stream.
 
 The equivalent Standard conversion is also reachable via `mnemonic convert --from seedqr=<digits> --to phrase` (the `seedqr` node type was unified into the shared `--from` grammar in v0.31.6).
 
@@ -2844,7 +2858,7 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
 
 - `--from phrase=<VALUE|->`: BIP-39 phrase (12, 15, 18, 21, or 24 English words for Standard; 12 or 24 only for Compact). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
 - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
-- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact). On Unix the file is written owner-only (mode 0600), an existing file's mode included. If the write fails, an existing file keeps its contents (its mode may already be 0600) and no new file is made. A standard-stream name such as `/dev/stdout` is written into that stream and never truncated, so a failed write there can leave part of the envelope in the stream.
 
 Both subsubcommands refuse a secret supplied inline (`--from
 seedqr=<value>`, the deprecated `--digits <value>`, or `--from
@@ -3604,6 +3618,9 @@ share cannot be self-verified; recombine it with the other shares
 stdin and each further share in an exported variable) and confirm the
 recovered seed's address/xpub against a known-good copy before use;
 BIP-93 recommends confirming a corrected codex32 string`. A clean share exits `0`, echoed.
+A corrected string at share index `s` (the secret itself, which `ms-shares combine` does not take) gets the same exit `4` with
+its own reason instead of the recombine advice. A call that corrects both kinds keeps the recombine advice and says
+to leave the index-`s` string out.
 
 ### md1 non-chunked demotion (v0.86.0 funds fix) {#mnemonic-repair-md1-non-chunked-demotion}
 
@@ -3665,7 +3682,7 @@ did not actually apply.
 ### md1 at an unreadable wire version (F-642) {#mnemonic-repair-md1-unreadable-version}
 
 BCH correction does not read the payload, so it works on a card whose
-wire version this build cannot decode (md-codec 0.47.0 reads versions 4
+wire version this build cannot decode (md-codec 0.48.7 reads versions 4
 and 8). On a **single-string** `--md1` card at such a version,
 `mnemonic repair` keeps the correction: the report and corrected string
 go to stdout, the JSON `verdict` is `"unreadable_version"`, and the exit
@@ -4118,7 +4135,7 @@ mnemonic xpub-search path-of-xpub \
 | `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
-| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)` |
+| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
 | `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
@@ -4477,7 +4494,7 @@ mnemonic xpub-search passphrase-of-xpub \
 | `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
-| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)` |
+| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
 | `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
@@ -4874,10 +4891,14 @@ Notes:
   `decaying-multisig`, where it is the **tier-1** timelock (the table above
   is the disambiguator).
 - A parameter that does not belong to the chosen archetype, a missing
-  required parameter, too few keys, or `--recovery-older` ≤ `--older` is
-  refused with a `param`-kind diagnostic naming the flag (exit 2). Everything
-  else — k > n, duplicate keys, bad hex, timelock bounds, an `xprv` — flows
-  to the SAME validation gate as `--spec` and is refused there; in preset
+  required parameter, too few keys, an `--older` or `--recovery-older`
+  outside `1..=65535`, or `--recovery-older` ≤ `--older` is refused with a
+  `param`-kind diagnostic naming the flag (exit 2). The two timelock flags
+  take blocks only: a value BIP-68 would read as 512-second units
+  (`0x400001..=0x40FFFF`) is refused with that reading spelled out; author a
+  time-based lock with `--spec`. Everything else — k > n, duplicate keys, bad
+  hex, an `xprv` — flows to the SAME validation gate as `--spec` and is
+  refused there; in preset
   mode those node-addressed diagnostics also name the responsible flag
   (`(from --key)` in the human output, `flag` in `--json`).
 - A deliberately unusual variant (inverted decay ordering, same-key
@@ -4904,7 +4925,7 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--spec <SPEC>` | the JSON node-tree spec — a file path, or `-` for stdin. If omitted, stdin is read when it is not a TTY |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Used only for the human-view first-receive-address rendering; the descriptor / bip388 / cost output is network-agnostic (the xpubs carry the network) |
 | `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
-| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
+| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object; `bip388` is `null` when BIP-388 cannot express the policy, e.g. an allowed `repeated-keys` policy). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
 | `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs. Since v0.51.0 it also carries an `archetypes` section: per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry |
 | `--archetype <ARCHETYPE>` | build from a curated preset instead of a `--spec` node-tree (conflicts with `--spec`): `decaying-multisig`, `hashlock-gated`, `kofn-recovery`, `simple-timelocked-inheritance`, `tiered-recovery`. Parameters via the flags below; the lowered tree flows through the SAME validation gate |
 | `--key <KEY>` | primary-path cosigner key (`[fp/path]xpub…`); repeat per cosigner. **Argv order is preserved into the quorum** (even `sortedmulti`'s descriptor string keeps authored order; sorting is script-time) |
@@ -4912,8 +4933,8 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--recovery-key <RECOVERY_KEY>` | recovery-path cosigner key; repeat per cosigner (argv order preserved) |
 | `--recovery-threshold <RECOVERY_THRESHOLD>` | recovery quorum k |
 | `--final-key <FINAL_KEY>` | last-resort key (`decaying-multisig` tier 3) |
-| `--older <OLDER>` | relative timelock (blocks) gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
-| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock; must be **greater than** `--older` (tiers must unlock progressively later) |
+| `--older <OLDER>` | relative timelock in blocks, `1..=65535`, gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
+| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock in blocks, `1..=65535`; must be **greater than** `--older` (tiers must unlock progressively later) |
 | `--after <AFTER>` | `decaying-multisig` tier-3 absolute locktime (block height, or unix time past the BIP-65 threshold) |
 | `--hash <HASH>` | SHA-256 digest (64 hex chars) for `hashlock-gated` |
 | `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and ignored. The gate still runs: an invalid preset emits diagnostics, never a spec |
@@ -4969,9 +4990,13 @@ invocation — a deliberate, reviewed act, never silent:
 - `--emit-spec` records NO allowance in the spec document — replaying an
   emitted spec without `--allow` correctly refuses. The banner still
   prints on the emitting run.
-- An allowed `repeated-keys` policy emits duplicate `keys_info` entries
-  in its BIP-388 output (no dedup); hardware-signer registration
-  behavior on duplicate keys is signer-defined.
+- An allowed `repeated-keys` policy has no BIP-388 form (BIP-388 requires
+  pairwise distinct `keys_info` keys): `--format bip388` refuses it (exit 1)
+  with `error: --format bip388 cannot express a wallet that uses one public
+  key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet
+  policy requires pairwise distinct keys; use --format descriptor for this
+  wallet`, and `--json` emits `"bip388": null`. `--format descriptor` and the
+  human view are unchanged.
 - miniscript's 6th opt-out, `raw_pkh`, is not exposed — it is
   unreachable from this builder's node grammar.
 

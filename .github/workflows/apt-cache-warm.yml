@@ -33,13 +33,18 @@ on:
       - '.github/workflows/manual.yml'
       - '.github/workflows/manual-gui.yml'
   workflow_dispatch:
+    inputs:
+      full:
+        description: "also run the nightly jobs (no nightly jobs in this workflow; accepted so the release gate can pass -f full=true everywhere)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: apt-cache-warm
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   warm-a:

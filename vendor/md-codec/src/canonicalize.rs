@@ -164,6 +164,29 @@ pub fn canonicalize_placeholder_indices(d: &mut Descriptor) -> Result<(), Error>
     // ignoring them in walk_collect_first.
     check_placeholder_bounds(&d.tree, d.n)?;
 
+    // Every TLV entry idx must be < n (checked in the order the TLVs are
+    // written): an out-of-range idx is a typed error, never an index panic.
+    let tlv_idxs = d
+        .tlv
+        .use_site_path_overrides
+        .iter()
+        .flatten()
+        .map(|(i, _)| *i)
+        .chain(d.tlv.fingerprints.iter().flatten().map(|(i, _)| *i))
+        .chain(d.tlv.pubkeys.iter().flatten().map(|(i, _)| *i))
+        .chain(
+            d.tlv
+                .origin_path_overrides
+                .iter()
+                .flatten()
+                .map(|(i, _)| *i),
+        );
+    for idx in tlv_idxs {
+        if idx >= d.n {
+            return Err(Error::PlaceholderIndexOutOfRange { idx, n: d.n });
+        }
+    }
+
     let mut seen = vec![false; n];
     let mut first_occurrences: Vec<u8> = Vec::with_capacity(n);
     walk_collect_first(&d.tree, &mut seen, &mut first_occurrences);
@@ -191,24 +214,55 @@ pub fn canonicalize_placeholder_indices(d: &mut Descriptor) -> Result<(), Error>
         return Ok(());
     }
 
-    // Atomically apply the permutation to every index-bearing field.
-    remap_indices(&mut d.tree, &perm);
+    // R1 step 0 (bughunt-1119 C2): refuse a duplicated use-site override index
+    // before any mutation (the encoder's own error for this input on the
+    // identity path), so the lookup below is unique.
+    if let Some(v) = d.tlv.use_site_path_overrides.as_ref() {
+        for (pos, (i, _)) in v.iter().enumerate() {
+            if v[..pos].iter().any(|(j, _)| j == i) {
+                return Err(Error::OverrideOrderViolation {
+                    prev: *i,
+                    current: *i,
+                });
+            }
+        }
+    }
 
-    // Bind `d.n` before the mutable borrow of `d.path_decl.paths` below so
-    // the error payload (which wants the `u8`) does not re-borrow `d` while
-    // `paths` is live.
-    let n_keys = d.n;
-    if let PathDeclPaths::Divergent(paths) = &mut d.path_decl.paths {
-        // L6: a hand-built Descriptor can carry a short Divergent vector;
-        // guard before indexing old_paths[inverse[new_idx]] to surface a
-        // typed error instead of an out-of-bounds panic (mirror
-        // expand_per_at_n's length check).
+    // R3 (bughunt-1119 I12): L6 guard. A hand-built Descriptor can carry a
+    // short Divergent vector; surface a typed error before ANY mutation so
+    // an `Err` leaves `d` exactly as it was (and before indexing
+    // old_paths[inverse[new_idx]] below, which would otherwise panic).
+    if let PathDeclPaths::Divergent(paths) = &d.path_decl.paths {
         if paths.len() != n {
             return Err(Error::DivergentPathCountMismatch {
-                n: n_keys,
+                n: d.n,
                 got: paths.len(),
             });
         }
+    }
+
+    // R1 steps 1-2: resolve each OLD slot's use-site (its override if present,
+    // else the baseline), then map to the new slots, before any mutation.
+    let mut new_sites: Vec<Option<crate::use_site_path::UseSitePath>> = vec![None; n];
+    for (old_idx, &new_idx) in perm.iter().enumerate() {
+        let site = d
+            .tlv
+            .use_site_path_overrides
+            .as_ref()
+            .and_then(|v| v.iter().find(|(i, _)| usize::from(*i) == old_idx))
+            .map(|(_, u)| u.clone())
+            .unwrap_or_else(|| d.use_site_path.clone());
+        new_sites[new_idx as usize] = Some(site);
+    }
+    let new_sites: Vec<crate::use_site_path::UseSitePath> = new_sites
+        .into_iter()
+        .map(|s| s.expect("perm is a permutation"))
+        .collect();
+
+    // Atomically apply the permutation to every index-bearing field.
+    remap_indices(&mut d.tree, &perm);
+
+    if let PathDeclPaths::Divergent(paths) = &mut d.path_decl.paths {
         // paths[old_idx] becomes paths[perm[old_idx]] — i.e. new_paths[new_idx] = old_paths[old_idx]
         // where perm[old_idx] = new_idx. We need new_paths[new_idx] = old_paths[inverse_perm[new_idx]].
         let mut inverse = vec![0u8; n];
@@ -223,9 +277,21 @@ pub fn canonicalize_placeholder_indices(d: &mut Descriptor) -> Result<(), Error>
         *paths = new_paths;
     }
 
-    if let Some(v) = d.tlv.use_site_path_overrides.as_mut() {
-        remap_tlv_vec(v, &perm);
-    }
+    // R1 steps 3-4: the new @0's use-site is the baseline; an override is kept
+    // only where a later slot differs from it. `Some(vec![])` stays as is.
+    let was_empty_some = matches!(&d.tlv.use_site_path_overrides, Some(v) if v.is_empty());
+    d.use_site_path = new_sites[0].clone();
+    let overrides: Vec<(u8, crate::use_site_path::UseSitePath)> = (1..n)
+        .filter(|&k| new_sites[k] != new_sites[0])
+        .map(|k| (k as u8, new_sites[k].clone()))
+        .collect();
+    d.tlv.use_site_path_overrides = if !overrides.is_empty() {
+        Some(overrides)
+    } else if was_empty_some {
+        Some(vec![])
+    } else {
+        None
+    };
     if let Some(v) = d.tlv.fingerprints.as_mut() {
         remap_tlv_vec(v, &perm);
     }
@@ -739,11 +805,13 @@ mod tests {
             },
             tlv: TlvSection::new_empty(),
         };
+        let pre = d.clone();
         let err = canonicalize_placeholder_indices(&mut d).unwrap_err();
         assert!(
             matches!(err, Error::DivergentPathCountMismatch { n: 2, got: 1 }),
             "expected DivergentPathCountMismatch{{n:2,got:1}}, got {err:?}"
         );
+        assert_eq!(d, pre);
     }
 
     /// L6 scope-bound regression: a CANONICAL-ordering descriptor with a
@@ -807,8 +875,14 @@ mod tests {
             },
         };
         canonicalize_placeholder_indices(&mut d).unwrap();
-        // After: original @1 → new @0; override should now key on @0.
-        assert_eq!(d.tlv.use_site_path_overrides.unwrap(), vec![(0, custom)],);
+        // bughunt-1119 C2: the old assertion (`vec![(0, custom)]`) pinned the defect
+        // (an override keyed on the baseline @0, which the decoder refuses).
+        // After: original @1 -> new @0 becomes the baseline; old @0 (no_multipath) is the override at new @1.
+        assert_eq!(d.use_site_path, custom);
+        assert_eq!(
+            d.tlv.use_site_path_overrides,
+            Some(vec![(1, no_multipath())])
+        );
     }
 
     /// Both `fingerprints` and `pubkeys` carry @N idx; both must be

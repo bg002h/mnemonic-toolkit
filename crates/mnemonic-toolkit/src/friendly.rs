@@ -127,7 +127,18 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
         // v0.2 K-of-N share variants (SPEC_ms_v0_2_kofn §4 R0-m3). A consume
         // path (inspect/convert/decode) handed ONE share of a K-of-N set must
         // point the user at `mnemonic ms-shares combine`, NOT fall through to
-        // the "unhandled" wildcard.
+        // the "unhandled" wildcard. Except at index `s`, the secret itself,
+        // which `ms-shares combine` refuses (`SecretShareSuppliedToCombine`);
+        // there the text says so and names no command (bh-tk-ms-s-index).
+        ms_codec::Error::IsShareNotSingleString { threshold, index }
+            if index.eq_ignore_ascii_case(&'s') =>
+        {
+            format!(
+                "ms1 this is the secret share of a K-of-N set (threshold '{threshold}', index \
+                 's'); it is the secret itself, not a distributed share, and \
+                 `mnemonic ms-shares combine` does not take it",
+            )
+        }
         ms_codec::Error::IsShareNotSingleString { threshold, index } => format!(
             "ms1 this is ONE of a K-of-N share set (threshold '{}', index '{}'); \
              use `mnemonic ms-shares combine` to recombine {} shares",
@@ -318,6 +329,10 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         E::TlvOrderingViolation { prev, current } => {
             format!("md1 TLV ordering: 0x{:02x} after 0x{:02x}", current, prev)
         }
+        E::TlvUnknownTagOutOfRange { tag } => format!(
+            "md1 unknown TLV tag 0x{:02x} is outside the reserved range 0x04..=0x1f",
+            tag,
+        ),
         E::PlaceholderIndexOutOfRange { idx, n } => {
             format!("md1 placeholder index {} out of range (n={})", idx, n)
         }
@@ -536,6 +551,27 @@ mod tests {
     }
 
     #[test]
+    fn bh_tk_ms_s_index_friendly_text() {
+        let want = |t: char| {
+            format!(
+                "ms1 this is the secret share of a K-of-N set (threshold '{t}', index 's'); \
+                 it is the secret itself, not a distributed share, and \
+                 `mnemonic ms-shares combine` does not take it"
+            )
+        };
+        let m = friendly_ms_codec(&ms_codec::Error::IsShareNotSingleString {
+            threshold: '2',
+            index: 's',
+        });
+        assert_eq!(m, want('2'));
+        let m = friendly_ms_codec(&ms_codec::Error::IsShareNotSingleString {
+            threshold: '9',
+            index: 'S',
+        });
+        assert_eq!(m, want('9'));
+    }
+
+    #[test]
     fn ms_codec_secret_share_to_combine_is_explicit() {
         let m = friendly_ms_codec(&ms_codec::Error::SecretShareSuppliedToCombine);
         assert!(m.contains("secret share"), "got: {m}");
@@ -701,7 +737,7 @@ mod tests {
         use md_codec::error::ContextKind;
         use md_codec::Error as E;
         use md_codec::Tag;
-        let rows: [(E, &str, &str); 51] = [
+        let rows: [(E, &str, &str); 52] = [
             (
                 E::BitStreamTruncated {
                     requested: 8,
@@ -769,6 +805,11 @@ mod tests {
                 },
                 "TLV ordering",
                 "TlvOrderingViolation",
+            ),
+            (
+                E::TlvUnknownTagOutOfRange { tag: 0x03 },
+                "unknown TLV tag",
+                "TlvUnknownTagOutOfRange",
             ),
             (
                 E::PlaceholderIndexOutOfRange { idx: 5, n: 3 },

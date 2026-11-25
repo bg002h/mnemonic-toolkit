@@ -228,7 +228,7 @@ pub const SINGLE_STRING_PAYLOAD_BIT_LIMIT: usize = 64 * 5;
 /// header and a slice of the canonical payload.
 ///
 /// Algorithm:
-/// 1. Encode the full payload (`encode_payload`).
+/// 1. Encode the full payload (`encode_payload`, which admits).
 /// 2. Compute [`crate::identity::Md1EncodingId`]; derive `ChunkSetId`.
 /// 3. Choose chunk count N such that each chunk fits in codex32 long form
 ///    after adding the 37-bit chunk header.
@@ -238,12 +238,58 @@ pub const SINGLE_STRING_PAYLOAD_BIT_LIMIT: usize = 64 * 5;
 ///
 /// Note: `bytes_per_chunk` could be 0 if `payload_bytes` were empty, but the
 /// encoder validates `n ≥ 1` so the payload is always non-empty.
+///
+/// This is the MINTING path: it applies md's mint-time admission policy
+/// (through `encode_payload`). A tool that creates a new card must use this
+/// (or [`crate::encode_md1_string`]). To re-emit a card that already exists,
+/// which mint policy may now refuse, see [`split_unadmitted`].
 pub fn split(d: &Descriptor) -> Result<Vec<String>, Error> {
+    split_with(d, true)
+}
+
+/// Split a [`Descriptor`] into md1 chunk strings applying NO mint-time
+/// admission policy -- for RE-EMITTING a card that already exists, never for
+/// minting a new one.
+///
+/// Same strings as [`split`] for every descriptor that function accepts
+/// (the same payload bytes, header version, chunk-set id and chunk sizing);
+/// the only difference is that the mint-time rules (F-217 origin/key
+/// consistency, F-218 duplicate key slots, SPEC §6's kind-1 shape rules and
+/// the minimum-version rule) are not consulted, as in
+/// [`crate::encode_payload_unadmitted`]. The chunk-set id already came from
+/// the non-admitting [`crate::compute_md1_encoding_id`], so it is unchanged.
+///
+/// Why it exists (Refugium SPEC §9 Q17): an `mr1` card that already exists
+/// must always be readable and printable, including the md1 card it carries,
+/// even when md's mint policy would refuse that md1 today. Re-emitting a card
+/// that already exists is not minting. Nothing in the signature can check
+/// that the card already exists, so the mint gate is the caller's job: a
+/// tool that creates a new card must use [`split`] or
+/// [`crate::encode_md1_string`]; only its re-emit paths use this.
+///
+/// Structural errors still surface, because they come from the writers
+/// themselves, and so does the > 64-chunk refusal
+/// ([`Error::ChunkCountExceedsMax`]). When a descriptor fails both an
+/// admission rule and the chunk cap, [`split`] reports the admission error
+/// (it is checked first) and `split_unadmitted` reports the cap.
+pub fn split_unadmitted(d: &Descriptor) -> Result<Vec<String>, Error> {
+    split_with(d, false)
+}
+
+/// Shared body of [`split`] (`admitted = true`, via `encode_payload`) and
+/// [`split_unadmitted`] (`admitted = false`, via `encode_payload_unadmitted`).
+/// Admission only adds refusals before any byte is written, so both emit the
+/// same strings whenever the admitted path succeeds.
+fn split_with(d: &Descriptor, admitted: bool) -> Result<Vec<String>, Error> {
     use crate::bitstream::BitWriter;
-    use crate::encode::encode_payload;
+    use crate::encode::{encode_payload, encode_payload_unadmitted};
     use crate::identity::compute_md1_encoding_id;
 
-    let (payload_bytes, _payload_bits) = encode_payload(d)?;
+    let (payload_bytes, _payload_bits) = if admitted {
+        encode_payload(d)?
+    } else {
+        encode_payload_unadmitted(d)?
+    };
 
     // Compute ChunkSetId from full-encoding hash.
     let md1_id = compute_md1_encoding_id(d)?;
@@ -478,6 +524,11 @@ fn parse_chunk_symbols(chunk: &str, chunk_index: usize) -> Result<Vec<u8>, Error
     for c in rest.chars() {
         if c.is_whitespace() || c == '-' {
             continue;
+        }
+        if !c.is_ascii() {
+            return Err(Error::Codex32DecodeError(format!(
+                "chunk {chunk_index}: character {c:?} not in codex32 alphabet"
+            )));
         }
         let lc = c as u8;
         let sym = CODEX32_ALPHABET

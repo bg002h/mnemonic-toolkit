@@ -11,6 +11,9 @@ documentation = "https://docs.rs/mnemonic-toolkit"
 readme = "README.md"
 keywords = ["bitcoin", "bip39", "bip93", "engraving", "self-custody"]
 categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
+# One integration-test binary (tests/all.rs) instead of one per file; the few
+# `[[test]]` blocks at the end stay separate because CI runs them by name.
+autotests = false
 
 [[bin]]
 name = "mnemonic"
@@ -66,11 +69,20 @@ mk-codec = "0.4.1"
 # failed with "failed to load source for dependency `md-codec`" and the release
 # shipped with no musl binaries at all.
 #
-# cf35d61a is descriptor-mnemonic-md-cli-v0.19.0 (md-codec 0.47.0, F-449 stage 2):
-# wire version 8 and the wire-kind-1 (Liana unspendable) internal key, five new
-# Error variants routed in error.rs/friendly.rs, `UNSPENDABLE(liana)` in
-# descriptor_to_template (F-642).
-md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "cf35d61af0f058029df841f4882945e53f86cd4b" }
+# e11b4ce1 is descriptor-mnemonic tag md-codec-v0.48.7 (md-cli 0.21.1), the
+# release that follows cf35d61a (md-codec 0.47.0, F-449 stage 2: wire version 8
+# and the wire-kind-1 Liana unspendable internal key, whose five Error variants
+# are routed in error.rs/friendly.rs). 0.47.0 -> 0.48.7 adds one more Error
+# variant, `TlvUnknownTagOutOfRange` (an unknown TLV tag outside 0x04..=0x1f,
+# refused on the encode side), routed the same way; the other md-codec changes in
+# the range (FIX-B codec fixes, the coordinator and descriptor-route library
+# routes, per-network key rendering, `split_unadmitted`) change no toolkit
+# output on a previously accepted input, with one exception: an md1 string
+# that contains a non-ASCII character is now refused (exit 1, "not in codex32
+# alphabet"); 0.47.0 read U+0161 as the symbol 'a'. 0.48.6 and 0.48.7 change
+# only mint-side behaviour (out-of-order slot numbering now mints a decodable
+# card; `encode_payload` decodes its own output and returns the decoder's error).
+md-codec = { git = "https://github.com/bg002h/descriptor-mnemonic", rev = "e11b4ce10ff35bb2a65999e37d1c6815c3b699a0" }
 # Word-Card value engine (P6) — the in-workspace RS/RAID/sync/word codec. The
 # toolkit consumes it via the canonical-payload adapter + the `word-card` CLI.
 wc-codec = { path = "../wc-codec" }
@@ -87,7 +99,7 @@ wc-codec = { path = "../wc-codec" }
 # every build, so this crate needs no grounding at all and the gate's unanchored
 # set stays exactly one (miniscript). NOTE the module path — `remedy` has no
 # root re-export in `lib.rs`, so `mnemonic_io_lib::history_purge_block` is E0425.
-mnemonic-io-lib = "0.1.0"
+mnemonic-io-lib = "0.1.3"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"
@@ -141,11 +153,25 @@ proptest = "1"
 rand = "0.8"
 
 [[test]]
-name = "cli_slip39_advisories"
-path = "tests/cli_slip39_advisories.rs"
-required-features = ["slip39-test-rng"]
+name = "cli_slip39_refusals"
+path = "tests/cli_slip39_refusals.rs"
 
 [[test]]
-name = "cli_slip39_json"
-path = "tests/cli_slip39_json.rs"
-required-features = ["slip39-test-rng"]
+name = "cli_cross_tool_differential"
+path = "tests/cli_cross_tool_differential.rs"
+
+[[test]]
+name = "bitcoind_differential"
+path = "tests/bitcoind_differential.rs"
+
+[[test]]
+name = "bitcoind_addr_import"
+path = "tests/bitcoind_addr_import.rs"
+
+[[test]]
+name = "mlock_g6_invariant"
+path = "tests/mlock_g6_invariant.rs"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

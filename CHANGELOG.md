@@ -8,6 +8,95 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Huge `--length` and account-window values are refused or streamed, not aborted
+
+- **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in
+  `1..=2^31-1` runs in constant memory and prints the same rolls as before. Before, the whole sequence was built in
+  memory first, and a large `--length` aborted on a failed memory allocation (exit 134), so a long dice child could not
+  be re-derived on a computer with less memory. `--length 0` and `--length` 2147483648 or more are refused
+  (exit 2, `--length <N> out of range for --application dice (valid: 1..=2^31-1 rolls)`); 2147483648 and more failed
+  with a BIP-32 error (exit 1) before. (bh-tk-mn7)
+- **`xpub-search path-of-xpub`, `passphrase-of-xpub`, `account-of-descriptor`**: an account window reaching 2^31
+  (`--min-account` or `--max-account` ≥ 2147483648, or `--min-account + --number-of-accounts` > 2147483648) is refused
+  (exit 1). Before, it panicked (exit 101). (bh-tk-mn11)
+- **`xpub-search`**: candidate paths are generated as the search runs, so a large valid window (up to
+  `--max-account 2147483647`) searches instead of aborting on a memory allocation (exit 134). Printed counts and
+  results are unchanged. (bh-tk-mn18)
+
+### An index-`s` ms1 string is no longer sent to `ms-shares combine`
+
+- **`convert --from ms1=`, `inspect --ms1`, `bundle`/`verify-bundle --slot @N.ms1=`, `restore --from ms1=`,
+  `silent-payment --secret`, `xpub-search`, `repair --ms1`**: an ms1 string at share index `s` (the secret itself,
+  not a distributed share) is no longer told to go to `mnemonic ms-shares combine`, which refuses that string. The
+  message now says so and names no command. `repair --ms1` exits 4 with the new reason (a call that corrects both an
+  index-`s` and another share keeps the recombine advice and says to leave the index-`s` string out); `convert`,
+  `inspect` and the other consume paths still refuse with exit 2. Before: ``use `mnemonic ms-shares combine` to
+  recombine <T> shares``. Other share indices keep that advice. (bh-tk-ms-s-index)
+
+### `seedqr --json-out` writes its file owner-only
+
+- **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever
+  the umask, and sets an existing file to 0600 (before: a new file took the umask mode, usually 0644, and an
+  existing file kept its mode). The file holds the phrase. `--json-out /dev/null` is now refused for a holder who
+  is not root (exit 1, `Operation not permitted`; before: exit 0; as root it sets /dev/null to mode 0600). An
+  existing file you can write but do not own is now refused too (exit 1, `Operation not permitted`; before: exit
+  0), and the file is left as it was. `--json-out /dev/stdout` at a terminal you own sets the
+  terminal's mode 620 -> 600.
+
+### `seedqr --json-out` keeps the old file when a write fails
+
+- **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes a temporary file next to PATH
+  (`PATH.<pid>.<n>.tmp`, mode 0600) and renames it over PATH (mnemonic-io-lib 0.1.3). A write that fails (a full
+  disk, a file-size limit) leaves an existing PATH byte-for-byte as it was and makes no file where there was none
+  (before: PATH was emptied, and a failed first write left an empty file). PATH in a folder you cannot write is
+  now refused (exit 1, `Permission denied`; before: written in place). A PATH with a second hard-link name is
+  replaced at PATH only; the other name keeps the old contents. A run killed mid-write can leave the temporary
+  file behind. `--json-out /dev/stdout` (also `/dev/fd/N`, `/proc/self/fd/N`) now writes into the stream and
+  never empties it: with `>> FILE` the earlier lines are kept (before: FILE was emptied first). `--json-out
+  /dev/stdin` with stdin read from a file is refused (exit 1, `Bad file descriptor`; before: that file was
+  overwritten).
+
+### `word-card --decode` recovers a card whose stop-sign word is mis-stamped
+
+- **`word-card --decode`**: a single wrong word among the last two words of a card (the end marker) no longer
+  makes an intact card unreadable. Before, a wrong last word, or a wrong second-to-last word, refused (exit 2,
+  `uncorrectable` or `sync`) in most cases, or decoded with `truncated: true`. Now the card decodes using the
+  length recorded near its start, with no spent repair budget. A wrong payload is still never returned.
+  (bh-tk-I6; wc-codec `decode` also tries the ledger-anchored geometry and returns only a unique tag-verified payload.)
+
+### `--format bip388` refuses a policy BIP-388 calls invalid
+
+- **`export-wallet`, `restore`**: `--format bip388` now refuses (exit 1) a NUMS taproot internal key, which is a
+  literal key and not an `@N` placeholder. Before, `--template tr-*-multi-a --taproot-internal-key nums` and a
+  NUMS `restore --md1` card emitted `tr(50929b74…,…)` at exit 0, and `--descriptor` refused with a text about the
+  `/<0;1>/*` suffix. It also refuses a wallet that uses one public key more than once (before: duplicate
+  `keys_info` entries at exit 0). It also refuses a
+  `--descriptor` key with a derivation step before `/<0;1>/*` (before: a `keys_info` entry ending in that step, e.g.
+  `…/5`, at exit 0). Use `--format descriptor` or `--format bitcoin-core` for these wallets.
+- **`build-descriptor`**: with `--allow repeated-keys`, `--format bip388` refuses (exit 1) and `--json` emits
+  `"bip388": null`; `--format descriptor` and the human view are unchanged.
+
+### `build-descriptor` presets take `--older` / `--recovery-older` in blocks only
+
+- `--archetype` presets refuse an `--older` or `--recovery-older` outside `1..=65535` with a `param`
+  diagnostic (exit 2). A value BIP-68 reads as 512-second units (`0x400001..=0x40FFFF`, e.g. `4200000`,
+  about 33.75 days) used to build silently; the refusal now spells out that reading. Author a time-based lock
+  with `--spec`. The decaying-multisig cross-unit refusal is gone (both tiers are now blocks).
+
+### `convert` refuses an unused `--account`
+
+- **`convert`**: a non-zero `--account` is now refused (exit 2) when no requested `--to` target reads it. Only
+  `--to xpub` and `--to xprv` from a phrase, SeedQR or entropy source read it. Before, `--from xpub=… --to xpub
+  --account 3` (and the same from xprv, wif, mk1 or ms1) printed the input key unchanged at exit 0.
+
+### A multipath tuple that repeats a value is refused
+
+- **`bundle`, `verify-bundle`, `import-wallet`, `gui-schema --classify-descriptor`**: a descriptor whose
+  multipath tuple repeats a value (`/<0;0>/*`, `/<0;1;0>/*`) now exits 2 with ``@0 multipath `<0;0>` repeats
+  the value 0; BIP-389 forbids duplicate values in a multipath tuple, …``. BIP-389 does not allow duplicate
+  values in a tuple; such a descriptor used to be engraved with exit 0, its receive and change chains the
+  same chain. `export-wallet --from-import-json` refuses such an envelope (exit 1).
+
 ### `slip39 split` refuses the test RNG variables
 
 - **`slip39 split`**: `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any
@@ -70,6 +159,16 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   golden shows them; `first_signed` is unchanged (md 0.20.4, ms 0.20.2, mk 0.14.0). The GUI manual stays on
   mnemonic-gui v0.63.0's tier: its §82 section and `pinned-upstream.toml`'s `[installer-ahead]` table name the new
   tags, and `manual-gui.yml` stays at the GUI's tags.
+
+### md-codec 0.47.0 -> 0.48.7 adopted
+
+- **The md-codec pin moves from `cf35d61a` (0.47.0) to `e11b4ce1` (tag `md-codec-v0.48.7`), `Cargo.lock`, `fuzz/Cargo.lock`
+  and `vendor/md-codec` with it.** md-codec 0.48.x adds one `Error` variant, `TlvUnknownTagOutOfRange` (an unknown TLV
+  tag outside the reserved range `0x04..=0x1f`). It routes at exit 2 (`error.rs`) with the sibling TLV decode rejects and
+  prints `md1 unknown TLV tag 0x.. is outside the reserved range 0x04..=0x1f` (`friendly.rs`, table test 51 -> 52 rows).
+  No command emits an unknown TLV, so no existing input reaches it. The manual's `repair` section now names md-codec
+  0.48.7 as the build that reads wire versions 4 and 8.
+- **An md1 string with a non-ASCII character is refused.** md-codec 0.47.0 reduced each character to its low byte, so a letter such as U+0161 was read as 'a' and a card carrying it decoded. 0.48.5 and later refuse it ("character 'š' not in codex32 alphabet", exit 1) in `inspect` (the path run; the other md1 decode paths share md-codec's chunk parser). `repair` already refused it.
 
 ## mnemonic-toolkit [0.107.0] — 2026-11-20
 

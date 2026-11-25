@@ -170,10 +170,11 @@ mnemonic export-wallet \
   --slot @0.xpub=<xpub-0> \
   --slot @1.xpub=<xpub-1> \
   --slot @2.xpub=<xpub-2> \
-  --format bip388
+  --format bitcoin-core
 ```
 
-For the cosigner-as-internal-key variant, use `--taproot-internal-key @N`.
+For the cosigner-as-internal-key variant, use `--taproot-internal-key @N`; only that variant emits `--format bip388`
+(BIP-388 allows only `@N` key placeholders, so `bip388` refuses `nums`, exit 1).
 See [Taproot multisig](#taproot-multisig) for the design choice.
 
 ## All four single-sig types from one seed

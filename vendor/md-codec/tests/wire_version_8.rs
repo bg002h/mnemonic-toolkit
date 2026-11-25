@@ -72,15 +72,30 @@ fn wire_version_is_derived_from_the_tree_not_assumed() {
     // test would report `ok` having proven nothing about the corpus at all.
     let vectors = all_root_tr_vectors();
     assert!(!vectors.is_empty(), "no root tr vectors in the corpus");
+    // F-449 stage 3 prerequisite: the corpus now carries wire-kind-1
+    // vectors (`keyed_tr_liana_*`, `liana_taproot`), so the expected
+    // version is DERIVED from the root internal key, never assumed to be 4.
+    // Both populations must be non-empty, or one half proves nothing.
+    let (mut v4, mut v8) = (0usize, 0usize);
     for name in &vectors {
-        assert_eq!(
-            decode_vendored(&load_vendored_phrase(name))
-                .unwrap()
-                .wire_version(),
-            4,
-            "{name}"
+        let d = decode_vendored(&load_vendored_phrase(name)).unwrap();
+        let kind1 = matches!(
+            d.tree.body,
+            Body::Tr {
+                internal_key: InternalKey::LianaUnspendable,
+                ..
+            }
         );
+        let want = if kind1 { 8 } else { 4 };
+        assert_eq!(d.wire_version(), want, "{name}");
+        if kind1 {
+            v8 += 1;
+        } else {
+            v4 += 1;
+        }
     }
+    assert!(v4 > 0, "no version-4 root tr vector in the corpus");
+    assert!(v8 > 0, "no version-8 (kind-1) root tr vector in the corpus");
 }
 
 #[test]
@@ -185,4 +200,58 @@ fn the_kind_bit_polarity_is_pinned_on_the_wire_not_just_round_tripped() {
         vec![0x07, 0x00],
         "golden bytes for kind 1 at v8"
     );
+
+    // F-449 stage 3 R0 m1: pin the READ side too. A reader that always
+    // yields LianaUnspendable at v8, or that reads a kind bit for a Slot
+    // key, round-trips every minimal vector and so passes every other test
+    // in the suite; only reading GOLDEN bytes back separates it. The Slot
+    // golden is `Tag::Tr` | is_nums 0 | key_index `01` (kiw 2) | has_tree 0
+    // = 0b000001_0_01_0, 10 bits = [0x04, 0x80]: no kind bit at any
+    // version, so a reader that consumes one mis-reads the slot index.
+    use md_codec::tree::read_node;
+    for (bytes, kiw, version, want, what) in [
+        (
+            vec![0x06, 0x00],
+            0u8,
+            Header::WF_UNSPENDABLE_VERSION,
+            InternalKey::NumsPoint,
+            "nums at v8",
+        ),
+        (
+            vec![0x07, 0x00],
+            0,
+            Header::WF_UNSPENDABLE_VERSION,
+            InternalKey::LianaUnspendable,
+            "liana at v8",
+        ),
+        (
+            vec![0x06],
+            0,
+            Header::WF_REDESIGN_VERSION,
+            InternalKey::NumsPoint,
+            "nums at v4 (no kind bit)",
+        ),
+        (
+            vec![0x04, 0x80],
+            2,
+            Header::WF_UNSPENDABLE_VERSION,
+            InternalKey::Slot(1),
+            "slot 1 at v8 (no kind bit)",
+        ),
+    ] {
+        let mut r = BitReader::new(&bytes);
+        let n = read_node(&mut r, kiw, version).unwrap_or_else(|e| panic!("{what}: {e}"));
+        let expected = Node {
+            tag: Tag::Tr,
+            body: Body::Tr {
+                internal_key: want,
+                tree: None,
+            },
+        };
+        assert_eq!(n, expected, "{what}: golden {bytes:02x?} read back wrong");
+        // And the write side of the Slot golden, which the rows above lack.
+        let mut w = BitWriter::new();
+        write_node(&mut w, &expected, kiw, version).unwrap();
+        assert_eq!(w.into_bytes(), bytes, "{what}: write side");
+    }
 }

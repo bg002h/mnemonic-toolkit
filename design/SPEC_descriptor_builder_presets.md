@@ -67,7 +67,7 @@ pub struct ArchetypeParams {
 /// One param's declaration — drives generic applicability/arity validation
 /// AND the `--spec-schema` archetypes section (§5). `flag` is the literal
 /// clap long name (with leading `--`). `kind` is schema/manual METADATA ONLY —
-/// no producer check keys off it (hex/timelock validation is the gate's, §3.2);
+/// the §3.1 item 4 bound keys off `Blocks` (hex/other timelock validation is the gate's, §3.2);
 /// `AbsoluteLocktime` is deliberately locktime-neutral (the decaying-multisig
 /// canon uses a block HEIGHT `after(500000)`, not a unix time — R0-r2 M1).
 pub struct ParamSpec {
@@ -107,10 +107,11 @@ Registry entries in the `CliArchetype` declaration order = alphabetical by id: `
 ### 3.1 Producer-level (param-addressed) — ONLY what the gate cannot know
 1. **Applicability:** a supplied param not declared for the chosen archetype → refused, naming both (`--hash is not a parameter of kofn-recovery`).
 2. **Presence/arity:** missing required param; fewer than `min_count` values (e.g. kofn-recovery needs ≥ 2 `--key`; tiered-recovery needs ≥ 2 `--key` AND ≥ 2 `--recovery-key`; simple-timelocked-inheritance needs exactly 1 `--key` and 1 `--recovery-key` — `repeatable: false` params given twice are refused).
-3. **Decay ordering (decaying-multisig only):** require `--recovery-older` > `--older`. Both values are individually gate-valid and the inverted tree is sane, yet inversion silently defeats the archetype's purpose (tier 2 would unlock before tier 1). A user who genuinely wants inverted timelocks has `--spec`.
+3. **Decay ordering (decaying-multisig only):** require `--recovery-older` > `--older`. Both values are individually gate-valid and the inverted tree is sane, yet inversion silently defeats the archetype's purpose (tier 2 would unlock before tier 1). A user who genuinely wants inverted timelocks has `--spec`. It runs only when both values pass item 4.
+4. **Timelock unit (all archetypes):** `--older` and `--recovery-older` (`ParamKind::Blocks`) take blocks, `1..=65535`. Any other value is refused at the producer, naming the flag; a value in the BIP-68 512-second window `0x400001..=0x40FFFF` has that reading spelled out. The gate accepts that window for `--spec`; the bound is the presets' meaning of the flag, not a gate rule, so it does not break §3.2.
 
 ### 3.2 Gate-level (node-addressed) — everything else flows through unchanged
-k ≤ n (`gate.rs:212` `check_threshold`), duplicate keys → `RepeatedKeys` (sanity step), hex digest length/charset (`gate.rs:223` `check_hashlock`), timelock bounds (`older`/`after` field rules in `validate_fields`), xprv screen (`gate.rs:198`), type errors, malleability, resource limits, envelope cap. **The producer MUST NOT pre-check any of these** — e.g. no k≤n check in `validate_params`; `--threshold 5` with 2 keys lowers and the gate's `SchemaField` diagnostic fires.
+k ≤ n (`gate.rs:212` `check_threshold`), duplicate keys → `RepeatedKeys` (sanity step), hex digest length/charset (`gate.rs:223` `check_hashlock`), timelock bounds (`after` field rules, and the `older` field rule, which item 4 pre-empts in preset mode), xprv screen (`gate.rs:198`), type errors, malleability, resource limits, envelope cap. **The producer MUST NOT pre-check any of these** — e.g. no k≤n check in `validate_params`; `--threshold 5` with 2 keys lowers and the gate's `SchemaField` diagnostic fires.
 
 ### 3.3 Bridging the addressing gap (param provenance on gate diagnostics)
 In preset mode, a gate diagnostic carries a `node_path` into a tree the user never authored (e.g. `root.or_d[0].multi.keys[1]`). Two additive changes:
@@ -169,6 +170,8 @@ Notes the manual must carry verbatim: (a) **key order is significant** — argv 
 **Negative cells (each asserting exit 2 + the discriminating diagnostic):**
 - Per-archetype: missing required param; inapplicable param (`--hash` with `kofn-recovery`); under-`min_count` keys; non-repeatable param repeated — **pin this cell to a Vec-typed flag** (e.g. `--key`×2 on `simple-timelocked-inheritance`, which reaches `validate_params`' `repeatable: false` check); scalar `Option<_>` flags repeated are rejected by clap itself as a usage error — note that path separately, no producer cell possible (R0-r1 M2).
 - Decay ordering: `--recovery-older` ≤ `--older` → producer `Param` diagnostic naming both flags.
+- Timelock unit: `--older 4200000` → producer `Param` diagnostic naming `--older` and
+  the 512-second reading; `--older 0` / `65536` → producer `Param` diagnostic, no gate diagnostic.
 - Gate flow-through (proves no producer duplication AND provenance): `--threshold 5` with 2 keys → gate `SchemaField` + `flag: "--threshold"`; duplicate `--key` values (same quorum) → `RepeatedKeys` + `flag: "--key"` (both land on the SAME quorum node path — this pair is exactly what the kind-aware provenance disambiguates, §3.3); bad `--hash` hex → `SchemaField` + `flag: "--hash"`; cross-branch duplicate (`--key X … --recovery-key X`) → `RepeatedKeys` at `root` with `flag` ABSENT (the `None` case is contractual, not a bug).
 - Key-order discrimination: swap two `--key` values on a `multi` archetype → descriptor ≠ golden (proves order preservation is load-bearing and tested).
 - Golden non-vacuity: mutate one param (a threshold or timelock) per archetype → descriptor ≠ golden (mirrors `negative_discrimination_mutated_threshold_breaks_golden` `:220`).
@@ -203,7 +206,7 @@ Sizing: ~500–700 src + ~400–500 test LOC (architect estimate; recon's 300–
 
 ## 11. Risks the implementation must hold the line on
 
-1. **No second validation path** — producer checks are exactly §3.1's three categories; any gate-rule duplication (esp. the tempting k≤n) is a review-blocking defect.
+1. **No second validation path** — producer checks are exactly §3.1's four categories; any gate-rule duplication (esp. the tempting k≤n) is a review-blocking defect.
 2. **Canon integrity** — layer-1 tests compare against `SpecDoc::parse(fixture)`, never captured producer output; fixtures immutable this cycle.
 3. **Key-order preservation** — argv → `MultiSpec.keys` untouched; discriminating test mandatory.
 4. **Spec-mode byte-stability** — the `flag: Option<String>` serde addition must leave existing spec-mode `--json` output byte-identical (self-test (c)).

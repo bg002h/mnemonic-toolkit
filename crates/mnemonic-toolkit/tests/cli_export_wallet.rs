@@ -859,11 +859,11 @@ fn taproot_internal_key_on_non_taproot_template_refused() {
     );
 }
 
-/// SPEC v0.8 §6 + §7 — taproot multisig + BIP-388 wallet_policy. NUMS internal
-/// embeds the literal hex; multi_a leaves use `@N/**` placeholders.
+/// Sweep P25 — taproot multisig + BIP-388 with a NUMS internal key refuses:
+/// BIP-388 allows only `@N` key placeholders, never a literal key.
 #[test]
 fn tr_multi_a_bip388_wallet_policy_with_nums() {
-    let out = Command::cargo_bin("mnemonic")
+    Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
         .args([
@@ -894,15 +894,11 @@ fn tr_multi_a_bip388_wallet_policy_with_nums() {
             "@1.path=m/48'/0'/0'/2'",
         ])
         .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    let json: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
-    assert_eq!(
-        json["description_template"].as_str().unwrap(),
-        format!("tr({NUMS_HEX},multi_a(2,@0/**,@1/**))"),
-    );
-    let keys_info = json["keys_info"].as_array().unwrap();
-    assert_eq!(keys_info.len(), 2);
+        .code(1)
+        .stdout("")
+        .stderr(predicates::str::contains(format!(
+            "error: --format bip388 cannot express the literal key {NUMS_HEX} (a taproot internal key with no origin"
+        )));
 }
 
 // ============================================================================

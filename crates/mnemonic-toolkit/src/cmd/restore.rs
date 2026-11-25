@@ -3544,7 +3544,7 @@ fn build_multisig_import_payload(
                 )
             {
                 return Err(ToolkitError::BadInput(
-                    "--format bip388 cannot express this taproot policy as a BIP-388 wallet policy — a tap-script-tree reconstructed via the general route-around has no named-template form. Use --format descriptor or --format bitcoin-core for a watch-only import. (A distinct-trunk tr-multisig md1 DOES export bip388 via its template path.)".into(),
+                    "--format bip388 cannot express this taproot policy as a BIP-388 wallet policy — a tap-script-tree reconstructed via the general route-around has no named-template form. Use --format descriptor or --format bitcoin-core for a watch-only import. (A non-NUMS distinct-trunk tr-multisig md1 DOES export bip388 via its template path.)".into(),
                 ));
             }
             (script_type, "imported-descriptor".to_string())

@@ -70,7 +70,8 @@ pub mod observation;
 pub mod records;
 /// Purge and remedy text.
 pub mod remedy;
-/// Creating the file a bearer artifact is written into, owner-only.
+/// Creating the file a bearer artifact is written into, owner-only. The module
+/// also answers "is this output one of my inputs" (`same_file`).
 pub mod write;
 
 // NOT re-exported at the root, and that is a choice rather than an omission.

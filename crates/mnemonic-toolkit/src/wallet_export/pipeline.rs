@@ -172,7 +172,10 @@ fn build_tr_multi_a_descriptor(
 /// derivation suffix), and emits the BIP-388 wallet_policy JSON with `@N/**`
 /// placeholders. Requires the descriptor to use the multipath form
 /// `<0;1>/*` for each key (BIP-388's intended receive/change shape); other
-/// derivation suffixes are refused.
+/// derivation suffixes are refused. A `tr` whose internal key is an
+/// origin-less literal key refuses first (the ruled literal-key text), and
+/// keys whose public keys are not pairwise distinct refuse last (BIP-388
+/// "Additional rules"); `alternatives` is the format list those texts name.
 /// The BIP-388 wallet-policy `name` used when no name is carried — the value
 /// `export-wallet --descriptor` emitted unconditionally before
 /// `bip388-policy-name-lossy-roundtrip` (v0.53.8). Also the `build-descriptor`
@@ -182,6 +185,7 @@ pub(crate) const DEFAULT_BIP388_POLICY_NAME: &str = "imported-descriptor";
 pub(crate) fn descriptor_to_bip388_wallet_policy(
     canonical_descriptor: &str,
     name: &str,
+    alternatives: &str,
 ) -> Result<Value, ToolkitError> {
     // Lenient: a re-parse of an already-admitted string (PLAN
     // `PLAN_wallet_file_export.md` Phase 1, F-2). `bip388` is a TRANSFORMING
@@ -191,6 +195,15 @@ pub(crate) fn descriptor_to_bip388_wallet_policy(
     // (round-1 finding I4(b)).
     let parsed = crate::parse_descriptor::parse_descriptor_lenient(canonical_descriptor)
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
+    if let MsDescriptor::Tr(tr) = &parsed {
+        if let DescriptorPublicKey::Single(single) = tr.internal_key() {
+            if single.origin.is_none() {
+                return Err(super::bip388::bip388_literal_key_refusal(
+                    &tr.internal_key().to_string(),
+                ));
+            }
+        }
+    }
     if !parsed.is_multipath() {
         return Err(ToolkitError::BadInput(
             "--format bip388 requires the --descriptor to use multipath form `/<0;1>/*` (BIP-388 receive/change shape)".into(),
@@ -203,12 +216,26 @@ pub(crate) fn descriptor_to_bip388_wallet_policy(
     // for substitution. Both are deterministic via miniscript's serialization.
     let mut keys_info: Vec<String> = Vec::new();
     let mut full_key_strs: Vec<String> = Vec::new();
+    let mut xpubs: Vec<bitcoin::bip32::Xpub> = Vec::new();
     for pk in parsed.iter_pk() {
         let full = pk.to_string();
         let stripped = strip_multipath_suffix(&full)?;
+        if let DescriptorPublicKey::MultiXPub(mx) = &pk {
+            // A step between the xkey and `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`)
+            // would leave `xpub/5` in keys_info: no BIP-388 form (bip-0388
+            // L172, L180-187).
+            if mx.derivation_paths.paths().iter().any(|p| p.len() != 1) {
+                return Err(super::bip388::bip388_extra_step_refusal(
+                    &full,
+                    alternatives,
+                ));
+            }
+            xpubs.push(mx.xkey);
+        }
         keys_info.push(stripped);
         full_key_strs.push(full);
     }
+    super::bip388::check_bip388_distinct_keys(&xpubs, alternatives)?;
 
     // String-substitute each full key-expression with `@N/**`. We replace
     // longest-first to avoid prefix collisions when two keys share a common

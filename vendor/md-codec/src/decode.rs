@@ -198,17 +198,39 @@ pub fn decode_md1_string_with_opts(s: &str, opts: DecodeOpts) -> Result<Descript
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encode::encode_payload;
     use crate::origin_path::{OriginPath, PathComponent, PathDeclPaths};
     use crate::tlv::TlvSection;
     use crate::tree::{Body, Node};
 
+    /// Writes `d` as given, with the public writers and no canonicalisation or
+    /// validation (FIX_bh1119_md_encoder_admission: `encode_payload` now refuses
+    /// the wires these tests need, so they build them raw).
+    fn raw_wire(d: &Descriptor) -> (Vec<u8>, usize) {
+        let mut w = crate::bitstream::BitWriter::new();
+        let version = d.wire_version();
+        crate::header::Header {
+            version,
+            divergent_paths: matches!(
+                d.path_decl.paths,
+                crate::origin_path::PathDeclPaths::Divergent(_)
+            ),
+        }
+        .write(&mut w);
+        d.path_decl.write(&mut w).unwrap();
+        d.use_site_path.write(&mut w).unwrap();
+        let kiw = d.key_index_width();
+        crate::tree::write_node(&mut w, &d.tree, kiw, version).unwrap();
+        d.tlv.write(&mut w, kiw).unwrap();
+        let bits = w.bit_len();
+        (w.into_bytes(), bits)
+    }
+
     /// SPEC §11 TopLevel check: a wire payload whose root tag is outside the
     /// BIP-388 allow-list `{Sh, Wsh, Wpkh, Pkh, Tr}` must be rejected with
     /// `Error::OperatorContextViolation { context: ContextKind::TopLevel }`.
-    /// The encoder has no root-tag gate (only placeholder/multipath/taptree
-    /// validators run), so `encode_payload` of an AndV-rooted descriptor
-    /// succeeds and round-trips through `decode_payload` exposes the gap.
+    /// The encoder refuses this wire (it decodes its own output,
+    /// FIX_bh1119_md_encoder_admission), so the test writes it with
+    /// `raw_wire`, which applies no check.
     #[test]
     fn decode_rejects_non_canonical_root_tag() {
         // The TopLevel check fires in `decode_payload` before any downstream
@@ -243,7 +265,7 @@ mod tests {
             },
             tlv: TlvSection::new_empty(),
         };
-        let (bytes, total_bits) = encode_payload(&d).expect("encode AndV-rooted ok");
+        let (bytes, total_bits) = raw_wire(&d);
         let err = decode_payload(&bytes, total_bits).expect_err("decode must reject");
         assert!(
             matches!(
