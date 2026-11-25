@@ -2875,6 +2875,7 @@ pub fn derivation_path_to_origin(dp: &DerivationPath) -> md_codec::origin_path::
 /// alternatives, asks for an address comparison and a distinct `--account`
 /// for a second wallet, and prints the ready-to-run command that mints the
 /// same bundle at `m/45'` instead.
+#[allow(clippy::too_many_arguments)]
 fn emit_default_path_notice<E: Write>(
     stderr: &mut E,
     defaulted_indices: &[u8],
