@@ -18,6 +18,14 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   0), and a refused file you do not own is left empty. `--json-out /dev/stdout` at a terminal you own sets the
   terminal's mode 620 -> 600.
 
+### `word-card --decode` recovers a card whose stop-sign word is mis-stamped
+
+- **`word-card --decode`**: a single wrong word among the last two words of a card (the end marker) no longer
+  makes an intact card unreadable. Before, a wrong last word, or a wrong second-to-last word, refused (exit 2,
+  `uncorrectable` or `sync`) in most cases, or decoded with `truncated: true`. Now the card decodes using the
+  length recorded near its start, with no spent repair budget. A wrong payload is still never returned.
+  (bh-tk-I6; wc-codec `decode` also tries the ledger-anchored geometry and returns only a unique tag-verified payload.)
+
 ### `--format bip388` refuses a policy BIP-388 calls invalid
 
 - **`export-wallet`, `restore`**: `--format bip388` now refuses (exit 1) a NUMS taproot internal key, which is a
