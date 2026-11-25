@@ -8,6 +8,16 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `seedqr --json-out` writes its file owner-only
+
+- **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes PATH owner-only (mode 0600) on Unix whatever
+  the umask, and sets an existing file to 0600 (before: a new file took the umask mode, usually 0644, and an
+  existing file kept its mode). The file holds the phrase. `--json-out /dev/null` is now refused for a holder who
+  is not root (exit 1, `Operation not permitted`; before: exit 0; as root it sets /dev/null to mode 0600). An
+  existing file you can write but do not own is now refused too (exit 1, `Operation not permitted`; before: exit
+  0), and a refused file you do not own is left empty. `--json-out /dev/stdout` at a terminal you own sets the
+  terminal's mode 620 -> 600.
+
 ### `word-card --decode` recovers a card whose stop-sign word is mis-stamped
 
 - **`word-card --decode`**: a single wrong word among the last two words of a card (the end marker) no longer
