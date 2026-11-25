@@ -675,7 +675,13 @@ descriptor string itself. The toolkit handles this two ways:
      same derivation path may be used for all multisig script types".
 
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
-   `<account>` consumes `--account N` (defaults to `0'`). A stderr info
+   `<account>` consumes `--account N` (defaults to `0'`). An `@N.xpub=`
+   slot takes the default only when the xpub's own header agrees (its
+   depth equals the path length and its child number the last
+   component), as on canonical shapes; otherwise `bundle` and
+   `verify-bundle` refuse (exit 2) and ask for `--slot @N.path=`. A
+   taproot cosigner xpub exported at `m/48'/<coin>'/<account>'/3'`
+   therefore needs `--slot @N.path=m/48'/0'/0'/3'`. A stderr info
    notice lists the `@N` indices that received the default and the path
    chosen:
 

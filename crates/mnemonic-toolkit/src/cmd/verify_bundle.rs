@@ -1847,7 +1847,17 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
                 Some(p) => bitcoin::bip32::DerivationPath::from_str(&p.value).map_err(|e| {
                     ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
                 })?,
-                None => anno_path.clone(),
+                None => {
+                    // Review r2 I-B (mirrors bundle): an assumed origin (the
+                    // shape's canonical one or the non-canonical default) is
+                    // used for a foreign xpub only when its header agrees.
+                    if bound_paths.canonical_filled.contains(&idx)
+                        || bound_paths.defaulted.contains(&idx)
+                    {
+                        crate::cmd::bundle::check_defaulted_xpub_origin(idx, &xpub, &anno_path)?;
+                    }
+                    anno_path.clone()
+                }
             };
             (xpub, fp, path, None, None)
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Entropy) {

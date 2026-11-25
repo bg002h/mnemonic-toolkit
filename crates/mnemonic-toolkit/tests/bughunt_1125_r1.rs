@@ -562,3 +562,115 @@ fn b4_explicit_derivations_still_mint_and_restore() {
         assert_eq!(r.code, 0, "{desc}: restore: {}", r.stderr);
     }
 }
+
+// ---------------------------------------------------------------------------
+// r2 I-B — a foreign `@N.xpub=` on a non-canonical shape takes the default
+// origin only when its own header (depth, child number) agrees, as on
+// canonical shapes (toolkit#5); otherwise mint and verify-bundle refuse and
+// ask for `@N.path=`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn r2_ib_foreign_xpub_whose_header_contradicts_the_default_is_refused() {
+    let s0 = format!("@0.phrase={A}");
+    for (desc, foreign_path) in [
+        // A Sparrow / previous-default taproot cosigner key.
+        (
+            "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+            "m/48'/0'/0'/3'",
+        ),
+        // A cosigner key at the old bare-sh default.
+        ("sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))", "m/48'/0'/0'/1'"),
+    ] {
+        let s1 = format!("@1.xpub={}", xpub_at(B, foreign_path));
+        let mint = |extra: &[&str]| {
+            let mut args = vec![
+                "bundle",
+                "--network",
+                "mainnet",
+                "--descriptor",
+                desc,
+                "--slot",
+                &s0,
+                "--slot",
+                &s1,
+                "--slot",
+                "@1.fingerprint=b8688df1",
+                "--json",
+            ];
+            args.extend(extra);
+            run(&args)
+        };
+        let o = mint(&[]);
+        assert_eq!(o.code, 2, "{desc}: {}", o.stderr);
+        assert!(o.stdout.is_empty(), "{desc}: no card: {}", o.stdout);
+        assert!(
+            o.stderr.contains("slot @1: no `@1.path=` was given")
+                && o.stderr.contains("does not match the xpub's own header"),
+            "{desc}: {}",
+            o.stderr
+        );
+
+        // With the real origin it mints; verify-bundle without the path
+        // refuses the same way, and with it accepts.
+        let p1 = format!("@1.path={foreign_path}");
+        let ok = mint(&["--slot", &p1]);
+        assert_eq!(ok.code, 0, "{desc}: {}", ok.stderr);
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("b.json");
+        std::fs::write(&file, &ok.stdout).unwrap();
+        let verify = |extra: &[&str]| {
+            let mut args = vec![
+                "verify-bundle",
+                "--network",
+                "mainnet",
+                "--descriptor",
+                desc,
+                "--slot",
+                &s0,
+                "--slot",
+                &s1,
+                "--slot",
+                "@1.fingerprint=b8688df1",
+                "--bundle-json",
+                file.to_str().unwrap(),
+            ];
+            args.extend(extra);
+            run(&args)
+        };
+        let v = verify(&[]);
+        assert_eq!(v.code, 2, "{desc}: verify: {}\n{}", v.stdout, v.stderr);
+        assert!(
+            v.stderr.contains("does not match the xpub's own header"),
+            "{desc}: {}",
+            v.stderr
+        );
+        let v = verify(&["--slot", &p1]);
+        assert_eq!(v.code, 0, "{desc}: verify: {}\n{}", v.stdout, v.stderr);
+    }
+}
+
+#[test]
+fn r2_ib_foreign_xpub_at_the_bip87_default_still_mints() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.xpub={}", xpub_at(B, "m/87'/0'/0'"));
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--slot",
+        "@1.fingerprint=b8688df1",
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["87'/0'/0'", "87'/0'/0'"]
+    );
+}

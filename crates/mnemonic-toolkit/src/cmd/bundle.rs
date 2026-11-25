@@ -547,7 +547,7 @@ fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), Toolk
 /// xpub's own BIP-32 header contradicts (depth differs from the path length, or
 /// the child number differs from the path's last component). Only called when
 /// no `@N.path=` was given; a typed path is not checked here.
-fn check_defaulted_xpub_origin(
+pub(crate) fn check_defaulted_xpub_origin(
     idx: u8,
     xpub: &bitcoin::bip32::Xpub,
     default_path: &DerivationPath,
@@ -1862,7 +1862,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                     // operator did not give is only a guess; use it for an xpub
                     // only when the xpub's own header agrees (as toolkit#5 does
                     // for template mode), else ask for `@N.path=`.
-                    if bound_paths.canonical_filled.contains(&idx) {
+                    // Review r2 I-B: the same holds for a non-canonical shape's
+                    // default (BIP-48 or BIP-87): a foreign key at another path
+                    // (e.g. a 48'/../3' taproot cosigner) must not be recorded at
+                    // the default.
+                    if bound_paths.canonical_filled.contains(&idx)
+                        || bound_paths.defaulted.contains(&idx)
+                    {
                         check_defaulted_xpub_origin(idx, &xpub, &anno_path)?;
                     }
                     anno_path.clone()
