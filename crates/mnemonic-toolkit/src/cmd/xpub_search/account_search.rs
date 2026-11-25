@@ -5,7 +5,7 @@
 //! match; multi-match (same seed matches >1 cosigner) reports all per
 //! plan §4.3 step 6.
 
-use super::candidate_paths::CandidatePath;
+use super::candidate_paths::CandidatePaths;
 use super::descriptor_intake::CosignerExtract;
 use super::path_search::match_xpub_against_paths;
 use bitcoin::bip32::{DerivationPath, Xpriv};
@@ -27,7 +27,7 @@ pub struct CosignerMatch {
 pub fn match_descriptor_against_seed(
     master_xprv: &Xpriv,
     descriptor_extract: &[CosignerExtract],
-    candidates: &[CandidatePath],
+    candidates: &CandidatePaths,
 ) -> Vec<CosignerMatch> {
     let mut out: Vec<CosignerMatch> = Vec::new();
     for cosigner in descriptor_extract {

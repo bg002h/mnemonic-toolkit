@@ -297,11 +297,11 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
         "dice" => {
             let rolls = args.length;
-            if rolls < 1 {
+            if !(1..=bip85::DICE_MAX_ROLLS).contains(&rolls) {
                 return Err(ToolkitError::DeriveChildLengthOutOfRange {
                     app: "dice",
                     length: rolls,
-                    valid_text: "rolls >= 1",
+                    valid_text: "1..=2^31-1 rolls",
                 });
             }
             let sides = args.dice_sides.ok_or_else(|| {
@@ -309,7 +309,15 @@ pub fn run<R: Read, W: Write, E: Write>(
                     "--application dice requires --dice-sides <N> (number of sides; >=2)".into(),
                 )
             })?;
-            bip85::format_dice_rolls(&master, sides, rolls, args.index)?
+            // The rolls are written as they are drawn (constant memory in
+            // `--length`); no aggregate secret is built.
+            bip85::write_dice_rolls(&master, sides, rolls, args.index, stdout)?;
+            writeln!(stdout).map_err(ToolkitError::Io)?;
+            crate::secret_advisory::emit_output_class_advisory(
+                crate::secret_advisory::OutputClass::PrivateKeyMaterial,
+                stderr,
+            );
+            return Ok(());
         }
         other => {
             return Err(ToolkitError::BadInput(format!(

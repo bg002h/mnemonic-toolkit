@@ -211,6 +211,10 @@ pub(crate) fn format_password_base85(
 // DICE (app 89101')
 // ============================================================================
 
+/// Largest `--length` (rolls) the CLI accepts for DICE: the hardened child
+/// number ending derivation at `2^31 - 1` (the rolls count is a path element).
+pub(crate) const DICE_MAX_ROLLS: u32 = 2_147_483_647;
+
 /// SPEC v0.8 §4 — BIP-85 DICE rolls. Path m/83696968'/89101'/<sides>'/<rolls>'/<index>'.
 /// Per BIP-85 v1.3.0 §"DICE" the algorithm is:
 ///   1. Derive 64 bytes of BIP-85 entropy at the spec path.
@@ -221,13 +225,19 @@ pub(crate) fn format_password_base85(
 ///      in `[0, sides-1]`.
 ///   4. Output rolls separated by `,` (per BIP-85 spec example).
 ///
-/// Constraints: `2 <= sides <= 2^32 - 1`, `1 <= rolls <= 2^32 - 1`.
-pub(crate) fn format_dice_rolls(
+/// Each accepted roll is written to `out` at once (`,` before every roll but
+/// the first), so memory is constant in `rolls`. Nothing is written before the
+/// checks and `derive_entropy` succeed; a write error is `ToolkitError::Io`.
+///
+/// Constraints: `2 <= sides <= 2^32 - 1`, `1 <= rolls <= DICE_MAX_ROLLS` (the
+/// CLI's bound; the caller checks it).
+pub(crate) fn write_dice_rolls<W: std::io::Write + ?Sized>(
     master: &Xpriv,
     sides: u32,
     rolls: u32,
     index: u32,
-) -> Result<SecretString, ToolkitError> {
+    out: &mut W,
+) -> Result<(), ToolkitError> {
     if sides < 2 {
         return Err(ToolkitError::BadInput(format!(
             "BIP-85 dice: sides must be >= 2, got {sides}",
@@ -251,14 +261,15 @@ pub(crate) fn format_dice_rolls(
     let bits_per_roll = u32::BITS - (sides - 1).leading_zeros();
     let bytes_per_roll = bits_per_roll.div_ceil(8) as usize;
 
-    let mut out: Zeroizing<Vec<String>> = Zeroizing::new(Vec::with_capacity(rolls as usize));
-    let mut buf = vec![0u8; bytes_per_roll];
-    while out.len() < rolls as usize {
-        reader.read(&mut buf);
+    let mut buf = [0u8; 4];
+    let mut accepted: u32 = 0;
+    while accepted < rolls {
+        let chunk = &mut buf[..bytes_per_roll];
+        reader.read(chunk);
         // Big-endian assembly of bytes into a u32 trial value (sides up to
         // 2^32 - 1 fits in u32).
         let mut trial: u32 = 0;
-        for &b in &buf {
+        for &b in chunk.iter() {
             trial = (trial << 8) | (b as u32);
         }
         // Trim excess low bits — BIP-85 spec says "retain the most significant
@@ -268,12 +279,15 @@ pub(crate) fn format_dice_rolls(
         let shift = total_bits - bits_per_roll;
         trial >>= shift;
         if trial < sides {
-            out.push(trial.to_string());
+            if accepted > 0 {
+                out.write_all(b",").map_err(ToolkitError::Io)?;
+            }
+            write!(out, "{trial}").map_err(ToolkitError::Io)?;
+            accepted += 1;
         }
         // else: rejection sample — read the next chunk.
     }
-
-    Ok(SecretString::new(out.join(",")))
+    Ok(())
 }
 
 // ============================================================================
@@ -397,17 +411,18 @@ mod tests {
     /// Path m/83696968'/89101'/6'/10'/0' → rolls 1,0,0,2,0,1,5,5,2,4.
     #[test]
     fn dice_d6_10_rolls_matches_spec() {
-        let rolls = format_dice_rolls(&master(), 6, 10, 0).unwrap();
-        assert_eq!(&*rolls, "1,0,0,2,0,1,5,5,2,4");
+        let mut out: Vec<u8> = Vec::new();
+        write_dice_rolls(&master(), 6, 10, 0, &mut out).unwrap();
+        assert_eq!(std::str::from_utf8(&out).unwrap(), "1,0,0,2,0,1,5,5,2,4");
     }
 
     // ========================================================================
     // cycle-15t T1 — Slug-1 type-level fence: every `format_*` returns a
     // `SecretString` (length-only redacting Debug), NOT a bare `String`.
-    // RED until the 7 returns flip; mirrors the bip85 lint type rows.
+    // RED until the 6 returns flip; mirrors the bip85 lint type rows.
     // ========================================================================
 
-    /// T1 — the 7 `format_*` fn pointers coerce to `-> Result<SecretString, _>`.
+    /// T1 — the 6 `format_*` fn pointers coerce to `-> Result<SecretString, _>`.
     /// A bare-`String` return makes this fail to compile (RED), proving the
     /// type-level fence rather than a runtime check.
     #[test]
@@ -424,8 +439,6 @@ mod tests {
             format_password_base64;
         let _f6: fn(&Xpriv, u32, u32) -> Result<SecretString, ToolkitError> =
             format_password_base85;
-        let _f7: fn(&Xpriv, u32, u32, u32) -> Result<SecretString, ToolkitError> =
-            format_dice_rolls;
     }
 
     /// T2 — Debug-redaction: `{:?}` on a `format_*` output never leaks the
@@ -487,7 +500,9 @@ mod tests {
     /// Boundary: sides=2 (coin flip). bits_per_roll = 1; rolls are 0 or 1.
     #[test]
     fn dice_d2_rolls_in_range() {
-        let rolls = format_dice_rolls(&master(), 2, 50, 0).unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        write_dice_rolls(&master(), 2, 50, 0, &mut out).unwrap();
+        let rolls = String::from_utf8(out).unwrap();
         for r in rolls.split(',') {
             let v: u32 = r.parse().unwrap();
             assert!(v < 2, "d2 roll out of [0,1]: {v}");
@@ -497,7 +512,9 @@ mod tests {
     /// Boundary: sides=256 (no rejection sampling required). 1 byte per roll.
     #[test]
     fn dice_d256_rolls_in_range() {
-        let rolls = format_dice_rolls(&master(), 256, 20, 0).unwrap();
+        let mut out: Vec<u8> = Vec::new();
+        write_dice_rolls(&master(), 256, 20, 0, &mut out).unwrap();
+        let rolls = String::from_utf8(out).unwrap();
         for r in rolls.split(',') {
             let v: u32 = r.parse().unwrap();
             assert!(v < 256, "d256 roll out of [0,255]: {v}");
@@ -507,7 +524,8 @@ mod tests {
     /// Refusal: sides < 2.
     #[test]
     fn dice_sides_too_small_refused() {
-        let r = format_dice_rolls(&master(), 1, 5, 0);
+        let mut out: Vec<u8> = Vec::new();
+        let r = write_dice_rolls(&master(), 1, 5, 0, &mut out);
         assert!(
             matches!(r, Err(ToolkitError::BadInput(ref m)) if m.contains("sides must be >= 2"))
         );
@@ -537,8 +555,9 @@ mod tests {
     /// Cycle-15t internal-scratch evidence — the three pre-return derived-secret
     /// scratch locals in the encode/dice fns are `Zeroizing`-wrapped: the
     /// `format_password_base64`/`base85` full `encoded` String (only `[..length]`
-    /// is wrapped into the `SecretString` return; the full encode lingers) and the
-    /// `format_dice_rolls` per-roll `out: Vec<String>` aggregate (the dice secret).
+    /// is wrapped into the `SecretString` return; the full encode lingers); the
+    /// dice rolls hold no per-roll aggregate (`write_dice_rolls` writes each roll
+    /// as it is drawn).
     /// The anchors are assembled at runtime via `format!` so this test's own
     /// source does NOT self-match the `src.contains(...)` checks (Lane T's T8
     /// precedent in `seedqr.rs`).
@@ -556,11 +575,12 @@ mod tests {
             src.contains(&format!("let encoded = {zn}(base85_btc(")),
             "encode scratch: base85 `encoded` must be Zeroizing::new(base85_btc(...))"
         );
-        // dice per-roll aggregate.
-        let zv = format!("{}<Vec<String>>", "Zeroizing");
-        assert!(
-            src.contains(&format!("out: {zv}")),
-            "dice scratch: `out` aggregate must be Zeroizing<Vec<String>>"
-        );
+        // dice: no per-roll aggregate; the rolls are written as they are drawn.
+        for anchor in [format!("{}.push(trial", "out"), format!("{}.join(", "out")] {
+            assert!(
+                !src.contains(&anchor),
+                "dice: rolls must be written as drawn; found `{anchor}`"
+            );
+        }
     }
 }
