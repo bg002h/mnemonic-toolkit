@@ -484,99 +484,16 @@ fn drain_pending_input(noun: &str) {
     }
 }
 
-/// F-687d (operator ruling 2026-09-25: "Agree with masked echo as you
-/// suggested"): the note for input discarded after a terminal prompt. Each
-/// discarded line is shown MASKED, one per line under the header:
-///
-/// - only whitespace → `(blank)`;
-/// - at most 8 characters → the line itself;
-/// - longer → its first 8 characters, `…`, and `(W word(s), N chars)`.
-///
-/// Characters, not bytes, are counted. In what is shown, a control
-/// character, a whole escape sequence (CSI `ESC [ … final`, OSC `ESC ] …
-/// BEL/ST`, or `ESC x`) and the invisible reordering/formatting marks
-/// (U+200B–U+200F, U+202A–U+202E, U+2066–U+2069, U+FEFF) each become `?`,
-/// so a paste cannot drive the terminal. Byte-identical in mnemonic-toolkit
-/// and mnemonic-secret; pinned by `drain_preview.json` in both repos.
+/// F-687d, as changed by pp-s2-4 (architect-secret-mn-decisions-1124 T6): the
+/// one-line note for input discarded after a terminal prompt. It states how
+/// many lines were discarded and shows none of their text: not a masked head,
+/// not a word or character count. Pinned by `drain_preview.json` (the same
+/// golden `mnemonic-secret` carries).
 pub(crate) fn drain_note(noun: &str, got: &[u8]) -> String {
     let text = String::from_utf8_lossy(got);
     let body = text.strip_suffix('\n').unwrap_or(&text);
-    let lines: Vec<&str> = body.split('\n').collect();
-    let mut out = format!(
-        "note: discarded {} line(s) typed after the {noun} (not run, not used):\n",
-        lines.len()
-    );
-    for line in lines {
-        out.push_str("  ");
-        out.push_str(&masked_preview(line));
-        out.push('\n');
-    }
-    out
-}
-
-/// The masked preview of ONE discarded line (see [`drain_note`]).
-fn masked_preview(line: &str) -> String {
-    if line.trim().is_empty() {
-        return "(blank)".to_string();
-    }
-    let n = line.chars().count();
-    if n <= 8 {
-        return neutralise(line);
-    }
-    let head: String = line.chars().take(8).collect();
-    let words = line.split_whitespace().count();
-    format!(
-        "{}\u{2026} ({words} word{}, {n} chars)",
-        neutralise(&head),
-        if words == 1 { "" } else { "s" }
-    )
-}
-
-/// Replace control characters, escape sequences and invisible
-/// formatting marks with `?` (one `?` per sequence).
-fn neutralise(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut it = s.chars().peekable();
-    while let Some(c) = it.next() {
-        if c == '\u{1b}' {
-            match it.peek() {
-                // CSI: parameters/intermediates, then a final byte @..~.
-                Some('[') => {
-                    it.next();
-                    for d in it.by_ref() {
-                        if ('\u{40}'..='\u{7e}').contains(&d) {
-                            break;
-                        }
-                    }
-                }
-                // OSC: up to BEL or ST (ESC \).
-                Some(']') => {
-                    it.next();
-                    while let Some(d) = it.next() {
-                        if d == '\u{7}' {
-                            break;
-                        }
-                        if d == '\u{1b}' && it.peek() == Some(&'\\') {
-                            it.next();
-                            break;
-                        }
-                    }
-                }
-                Some(_) => {
-                    it.next();
-                }
-                None => {}
-            }
-            out.push('?');
-        } else if c.is_control()
-            || matches!(c, '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' | '\u{feff}')
-        {
-            out.push('?');
-        } else {
-            out.push(c);
-        }
-    }
-    out
+    let n = body.split('\n').count();
+    format!("note: discarded {n} line(s) typed after the {noun} (not run, not used; not shown)\n")
 }
 
 /// Read ONE line (up to and including the first `\n`, or EOF) byte by byte,

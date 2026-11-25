@@ -209,14 +209,11 @@ fn class_of_token(token: &str) -> &'static str {
 }
 
 /// One refused occurrence. The value is **never** carried in it — only its
-/// class, its length, and where it sat.
+/// class and where it sat (never its length, pp-s2-2).
 pub struct Finding {
     /// The flag as the operator wrote it, e.g. `--from phrase=`.
     pub flag: String,
     pub class: &'static str,
-    /// Characters, not bytes: this is for a human comparing against what they
-    /// typed.
-    pub len: usize,
     /// The private channel that exists for this flag on this invocation.
     pub channel: String,
     /// Index in argv. argv[0] is the binary itself.
@@ -250,11 +247,8 @@ fn subcommand_word(argv: &[String]) -> Option<&str> {
 /// exist"* is the rule this file is most exposed to, and a refusal whose remedy
 /// cannot be followed is worse than the advisory it replaced: it stops the
 /// operator without telling them what to do instead. The remaining `None`s
-/// were **measured on the binary**:
-///
-/// - **`--slot` on `export-wallet`**: the verb refuses secret slots itself
-///   (*"export-wallet is watch-only by definition"*), so there is nothing to
-///   route and no channel to name.
+/// were **measured on the binary**. (`--slot` on `export-wallet` is no longer
+/// one of them: it names the watch-only form, T7.)
 fn channel_for(flag: &str, sub: Option<&str>, subkey_form: Option<&str>) -> Option<String> {
     match (flag, sub) {
         // Measured: `--ms1 -` reads stdin on `inspect` and `repair`;
@@ -291,7 +285,12 @@ fn channel_for(flag: &str, sub: Option<&str>, subkey_form: Option<&str>) -> Opti
             "--slot {}@env:VAR",
             subkey_form.unwrap_or("@N.phrase=")
         )),
-        ("--slot", Some("export-wallet")) => None,
+        // architect-secret-mn-decisions-1124 T7: a bare, typo'd or secret
+        // `--slot` value reaches clap's echo, so it is refused with this text.
+        ("--slot", Some("export-wallet")) => Some(
+            "--slot @N.xpub=<xpub>   (export-wallet is watch-only; a secret goes to mnemonic bundle)"
+                .into(),
+        ),
         ("--slot", _) => Some(format!("--slot {}-", subkey_form.unwrap_or("@N.phrase="))),
         ("--from", _) => Some(format!("--from {}-", subkey_form.unwrap_or("phrase="))),
         ("--digits", _) => Some("--digits -".into()),
@@ -405,7 +404,6 @@ fn shapeless(
     Some(Finding {
         flag: flag.to_string(),
         class: class_of_token(""),
-        len: value.chars().count(),
         channel: channel_for(
             flag,
             sub,
@@ -436,7 +434,6 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
             Some(Finding {
                 flag: format!("--from {token}="),
                 class: class_of_token(token),
-                len: material.chars().count(),
                 channel: channel_for("--from", sub, Some(&format!("{token}=")))?,
                 position,
             })
@@ -465,7 +462,6 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
             Some(Finding {
                 flag: format!("--slot @{index}.{subkey}="),
                 class: class_of_token(subkey),
-                len: material.chars().count(),
                 channel: channel_for("--slot", sub, Some(&format!("@{index}.{subkey}=")))?,
                 position,
             })
@@ -487,7 +483,6 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
                 return Some(Finding {
                     flag: format!("--share {token}="),
                     class: class_of_token(token),
-                    len: material.chars().count(),
                     channel: channel_for("--share", sub, Some(&format!("{token}=")))?,
                     position,
                 });
@@ -498,7 +493,6 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
             Some(Finding {
                 flag: entry.flag.to_string(),
                 class: "a share of a seed (recovers the secret with K others)",
-                len: value.chars().count(),
                 channel: channel_for(entry.flag, sub, None)?,
                 position,
             })
@@ -510,7 +504,6 @@ fn classify(entry: &Entry, value: &str, argv: &[String], position: usize) -> Opt
             Some(Finding {
                 flag: entry.flag.to_string(),
                 class,
-                len: value.chars().count(),
                 channel: channel_for(entry.flag, sub, None)?,
                 position,
             })
@@ -540,9 +533,9 @@ pub fn refusal_message(findings: &[Finding]) -> String {
     let mut s = String::new();
     for f in findings {
         s.push_str(&format!(
-            "argument {} on ARGV ({}) is {} -- {} characters. Nothing about it is \
+            "argument {} on ARGV ({}) is {}. Nothing about it is \
              printed here.\n      ",
-            f.position, f.flag, f.class, f.len,
+            f.position, f.flag, f.class,
         ));
     }
     s.push_str(
@@ -603,7 +596,6 @@ mod tests {
             ]);
             assert_eq!(f.len(), 1, "{token}: expected exactly one finding");
             assert_eq!(f[0].flag, format!("--from {token}="));
-            assert_eq!(f[0].len, "material".len());
             assert_eq!(f[0].channel, format!("--from {token}=-"));
         }
     }
@@ -725,7 +717,6 @@ mod tests {
         assert_eq!(f[0].flag, "--from phrase=");
         let f = findings(&["convert", "--passphrase=hunter2", "--from", "xpub=x"]);
         assert_eq!(f[0].flag, "--passphrase");
-        assert_eq!(f[0].len, 7);
     }
 
     #[test]
@@ -781,7 +772,7 @@ mod tests {
         let msg = refusal_message(&f);
         assert!(!msg.contains(secret), "the refusal echoed the value: {msg}");
         assert!(!msg.contains("staple"));
-        assert!(msg.contains("28 characters"));
+        assert!(!msg.contains("characters"), "the refusal gave a count: {msg}");
         assert!(msg.contains("--passphrase-stdin"));
         assert!(msg.contains("--passphrase -"));
         assert!(msg.contains("--passphrase @env:VAR"));
@@ -825,15 +816,33 @@ mod tests {
         assert_eq!(f[0].channel, "--ms1-stdin");
     }
 
-    /// §6h in its hardest form: where a (subcommand, flag) pair has NO private
-    /// channel, the guard does not refuse. `export-wallet` refuses secret slots
-    /// itself, so the guard stays out of its way.
+    /// tk175-export-wallet-slot-echo (architect-secret-mn-decisions-1124 T7):
+    /// `--slot` on `export-wallet` is refused for a shapeless value and for a
+    /// secret subkey, with the watch-only channel text.
     #[test]
-    fn a_pair_with_no_private_channel_is_not_refused() {
+    fn tk175_export_wallet_slot_echo_is_refused_with_channel_text() {
+        let want = "--slot @N.xpub=<xpub>   (export-wallet is watch-only; a secret goes to mnemonic bundle)";
+        for v in ["a b c", "@0.phrase=material", "@0.xprv=material"] {
+            let f = findings(&["export-wallet", "--slot", v]);
+            assert_eq!(f.len(), 1, "{v}");
+            assert_eq!(f[0].channel, want, "{v}");
+        }
+        // A public subkey is not material and passes.
         assert!(matches!(
-            inspect(&argv(&["export-wallet", "--slot", "@0.phrase=material"])),
+            inspect(&argv(&["export-wallet", "--slot", "@0.xpub=xpub6abc"])),
             Verdict::Clean
         ));
+    }
+
+    /// pp-s2-2 (T4, passphrase convention rule 9): the refusal gives the
+    /// position, never the length.
+    #[test]
+    fn pp_s2_2_refusal_gives_position_not_count() {
+        let f = findings(&["convert", "--passphrase", "correct horse", "--from", "xpub=x"]);
+        let msg = refusal_message(&f);
+        assert!(msg.contains("argument "), "{msg}");
+        assert!(!msg.contains("characters"), "{msg}");
+        assert!(!msg.contains("13"), "{msg}");
     }
 
     /// F-688 / F-353: `--ms1` on `verify-bundle` and `import-wallet` is refused
@@ -873,7 +882,6 @@ mod tests {
             let f = findings(a);
             assert_eq!(f.len(), 1, "{a:?}");
             assert_eq!(f[0].flag, flag);
-            assert_eq!(f[0].len, 5);
             assert_eq!(f[0].channel, channel);
         }
         for v in ["-", "@env:X", ""] {
@@ -916,10 +924,8 @@ mod tests {
         assert_eq!(f[0].channel, "--slot @0.phrase=-");
         let f = findings(&["import-wallet", "--slot", "@0.phrase=material"]);
         assert_eq!(f[0].channel, "--slot @0.phrase=@env:VAR");
-        assert!(matches!(
-            inspect(&argv(&["export-wallet", "--slot", "@0.phrase=material"])),
-            Verdict::Clean
-        ));
+        let f = findings(&["export-wallet", "--slot", "@0.phrase=material"]);
+        assert!(f[0].channel.contains("export-wallet is watch-only"));
     }
 
     /// The subcommand read must survive a leading global flag, and both of

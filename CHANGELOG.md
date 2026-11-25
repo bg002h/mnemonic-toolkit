@@ -8,6 +8,19 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### Argv refusal and typed-ahead note show less of what you typed
+
+- **Argv refusal**: the message gives the argument's position and class, no longer its length (`-- N characters`
+  is gone). (pp-s2-2)
+- **`xpub-search passphrase-of-xpub --passphrase-candidates-file --json`**: the `match` body no longer carries
+  `matched_passphrase`; `matched_candidate_line` locates the hit. (pp-s2-3)
+- **Typed-ahead note** (after a terminal prompt): the note is one line, `note: discarded N line(s) typed after the
+  <noun> (not run, not used; not shown)`; it no longer shows the first 8 characters of each discarded line or its
+  word and character counts. (pp-s2-4)
+- **`export-wallet --slot`**: a value that is not `@N.<public subkey>=...` (a bare word, a typo, or a secret subkey) is
+  refused before parsing, with `--slot @N.xpub=<xpub>   (export-wallet is watch-only; a secret goes to mnemonic
+  bundle)`, so clap no longer echoes it. (tk175-export-wallet-slot-echo)
+
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 
 - **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in

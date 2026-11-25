@@ -416,10 +416,10 @@ fn the_refusal_carries_an_executable_purge_recipe() {
     assert!(stderr.contains("\\bmnemonic\\b"), "{stderr}");
 }
 
-/// The refusal reports the CLASS and the LENGTH, which is what makes it useful
+/// The refusal reports the CLASS (never the length), which is what makes it useful
 /// without being a second leak.
 #[test]
-fn the_refusal_reports_class_and_length_not_the_value() {
+fn the_refusal_reports_class_not_the_value_or_length() {
     let secret = "0123456789abcdef";
     let stderr = assert_refused(
         &[
@@ -437,8 +437,8 @@ fn the_refusal_reports_class_and_length_not_the_value() {
         "class missing:\n{stderr}"
     );
     assert!(
-        stderr.contains(&format!("{} characters", secret.len())),
-        "length missing:\n{stderr}"
+        !stderr.contains("characters"),
+        "length given:\n{stderr}"
     );
 }
 

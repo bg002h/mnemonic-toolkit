@@ -144,16 +144,12 @@ the command exits (by the signal, status 130 in a shell); so do SIGTERM,
 SIGHUP and SIGQUIT. Anything already typed or pasted after that one line —
 the rest of a multi-line paste, or type-ahead — is read (for 0.1 s after
 input stops) and discarded, so the shell never runs it or records it in its
-history. Stderr shows a MASKED preview of each discarded line: a line of up
-to 8 characters as is, a longer one as its first 8 characters, `…` and its
-word and character counts, a whitespace-only line as `(blank)`. Control
-characters and escape sequences in the preview are shown as `?`, so a paste
-cannot drive the terminal:
+history. Stderr shows one line naming how many lines were discarded and
+none of their text (no preview, no word or character counts), so a pasted
+secret never reaches the screen or the scrollback:
 
 ```text
-note: discarded 2 line(s) typed after the passphrase (not run, not used):
-  abandon … (12 words, 93 chars)
-  ls -la
+note: discarded 2 line(s) typed after the passphrase (not run, not used; not shown)
 ```
 
 With stdin a pipe or file nothing is printed and nothing beyond what the
@@ -4592,8 +4588,8 @@ No-match shape:
 `target_xpub_variant` serializes as `null` when the target was supplied in canonical xpub/tpub form (no SLIP-0132 alt-prefix swap occurred). The field is always emitted (not skipped) to keep the JSON envelope structurally stable across runs.
 
 **Candidate-list scan fields.** With `--passphrase-candidates-file`, the `match`
-body additionally carries `matched_candidate_line` (1-indexed file line) and
-`matched_passphrase` (the winning candidate — present only for the scan), and the
+body additionally carries `matched_candidate_line` (1-indexed file line; the matching passphrase itself is
+never printed, it is already in your file), and the
 `no_match` body carries `candidates_tried` (#non-blank lines tried). These fields
 use `skip_serializing_if` — they are ABSENT (not `null`) on the single-`--passphrase`
 path, so that envelope is byte-unchanged:
@@ -4602,7 +4598,7 @@ path, so that envelope is byte-unchanged:
 { "schema_version": "1", "mode": "passphrase-of-xpub", "result": "match",
   "path": "m/84'/0'/0'", "template": "bip84", "account": 0,
   "target_xpub_canonical": "xpub6...", "target_xpub_variant": "zpub",
-  "searched_count": 140, "matched_candidate_line": 2, "matched_passphrase": "satoshi" }
+  "searched_count": 140, "matched_candidate_line": 2 }
 ```
 
 #### Exit codes
