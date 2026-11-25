@@ -21,6 +21,7 @@
 mod bch_residue_separation;
 mod bip32_vectors;
 mod bughunt_1119_unbounded_args;
+mod bughunt_1125;
 mod bughunt_s1;
 mod bughunt_s2;
 mod bughunt_s3;

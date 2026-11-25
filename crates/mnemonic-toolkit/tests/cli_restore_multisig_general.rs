@@ -687,9 +687,13 @@ fn assert_divergent_address_independent_golden(reconstructed_desc: &str) {
 /// Offline-anchored golden: chain0/idx0 of
 /// `wsh(multi(2, <C0-xpub>/<0;1>/*, <C1-xpub>/<2;3>/*))`. @1's divergence makes
 /// this DISTINCT from the all-baseline `wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))`
-/// address — the anti-clobber discriminator. Captured 2026-06-19 by test (11g).
+/// address — the anti-clobber discriminator. Captured 2026-06-19 by test (11g);
+/// RE-CAPTURED 2026-11-25 (bug hunt toolkit#1): `wsh(multi)` is a canonical
+/// shape, so `bundle --descriptor` with bare `@N` seed slots now derives each
+/// key at the canonical origin m/48'/0'/0'/2' (written on the card) instead of
+/// at the master node. The old value was the master-key wallet's address.
 const DIVERGENT_WSH_MULTI_CHAIN0_IDX0_GOLDEN: &str =
-    "bc1qkay38njhhx0c5zx43vrfglxlj0wa7dhm7d54q9fu7gredyj8hpusnqjy9k";
+    "bc1qrce3xdgthdumu3u6h2kucc0mnxlwat3sk5yvznj7avmks6ghv5mq0rff63";
 
 /// (11g) GENERATOR + anti-vacuity: prove the divergent golden DIFFERS from the
 /// all-baseline address (so the golden actually anchors divergence, not codec

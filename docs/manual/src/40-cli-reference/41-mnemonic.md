@@ -614,6 +614,34 @@ Anything else — bare `wsh(@N)`, miniscript bodies like
 `wsh(andor(...))`, taproot trees with leaves (`tr(@N, <TapTree>)`),
 legacy `sh(sortedmulti(...))` — is **non-canonical**.
 
+**Canonical shape, bare `@N` (bug hunt 2026-11-25).** When a canonical
+descriptor gives an `@N` no origin (no inline `[fingerprint/path]@N`, no
+`--slot @N.path=`), the toolkit uses that shape's canonical origin, with
+`<coin>` from `--network`: `m/44'/<coin>'/0'` for `pkh`,
+`m/49'/<coin>'/0'` for `sh(wpkh)`, `m/84'/<coin>'/0'` for `wpkh`,
+`m/86'/<coin>'/0'` for key-path `tr`, `m/48'/<coin>'/0'/2'` for
+`wsh(multi|sortedmulti)` and `m/48'/<coin>'/0'/1'` for
+`sh(wsh(multi|sortedmulti))`. A seed slot (`phrase` / `seedqr` /
+`entropy` / `ms1`) is derived there, the origin is WRITTEN on the card,
+and stderr says so:
+
+```text
+info: no origin supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0' (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+```
+
+An `@N.xpub=` slot takes the canonical origin only when the xpub's own
+header agrees (its depth equals the path length and its child number the
+last component); otherwise the bundle is refused (exit 2) and asks for
+`--slot @N.path=`. `--slot @N.path=m` (the master node) is refused on a
+canonical shape: an empty origin on the card means the canonical origin,
+so the master node cannot be recorded there. Before this, such a slot was
+derived at the MASTER key and the card carried an empty origin.
+
+For the multisig shapes the canonical origin is BIP-48
+(`m/48'/<coin>'/0'/2'`), while `--template wsh-sortedmulti` defaults to
+the BIP-87 family (`m/87'/<coin>'/<account>'`); give an explicit origin if
+you need the descriptor-mode wallet to match a template-mode one.
+
 Non-canonical descriptors typically lack per-`@N` origin paths in the
 descriptor string itself. The toolkit handles this two ways:
 
@@ -1523,6 +1551,27 @@ The seed is never echoed in any output mode (redacted by construction);
 no `xprv` / `tprv` token appears in restore's stdout or `--json`.
 
 ### Multisig-cosigner restore (`--md1`) {#multisig-cosigner-restore}
+
+**A key with no origin on the card (bug hunt 2026-11-25).** Cards minted by
+older toolkit or `md` releases can carry a key with an EMPTY origin path.
+`restore` never invents one:
+
+- Without `--from`, that key is printed as `[fingerprint]xpub` with no path,
+  and stderr warns: `WARNING: md1 cosigner @N carries NO origin path on the
+  card. ... Signers will not recognise this key until its origin path is
+  supplied.` (Older releases printed the template default here, such as
+  `[fp/87'/0'/0']`, an origin at which the key does not live.)
+- With `--from <seed>`, the seed's common paths are searched for an EXACT
+  key match (chain code and public key): the master key `m`; the shape's
+  canonical origin; BIP-44/49/84/86 and BIP-87 `m/<purpose>'/<coin>'/<a>'`
+  and BIP-48 `m/48'/<coin>'/<a>'/1'` and `/2'` for accounts `a` = 0..9; and
+  the Refugium seat paths `m/270028'/<coin>'/<n>'` for `n` = 0..255 (rounds
+  0..7, `n` = 32·round + seat). `<coin>` follows `--network`. On exactly one
+  match the restore proceeds with that origin and warns loudly that the path
+  was FOUND, not read from the card (and, for `m`, that the wallet sits on
+  the master key, which is non-standard). On no match it refuses (exit 1):
+  the card carries no origin and no common path of this seed produces its
+  key.
 
 A wallet-policy `md1` card (the multisig descriptor card the toolkit emits
 for any multisig bundle) carries **every cosigner's public key**, so the

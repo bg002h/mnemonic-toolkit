@@ -1679,13 +1679,13 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // (incl. the emit-mode-gated §6.6 row-19 path-mismatch refusal) + F4 collapse
     // now live in the SHARED `bind_descriptor_mode_paths`. `Emit` mode enforces
     // row-19. Returns the `defaulted_indices` for the notice below.
-    let defaulted_indices = bind_descriptor_mode_paths(
+    let bound_paths = bind_descriptor_mode_paths(
         DescriptorBindMode::Emit,
         slots,
         &mut resolved_placeholders.path_decl,
         n,
         is_non_canonical,
-        &canonicity_probe.tree.tag,
+        &canonicity_probe.tree,
         args.network,
         args.account,
     )?;
@@ -1824,7 +1824,16 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 Some(p) => DerivationPath::from_str(&p.value).map_err(|e| {
                     ToolkitError::BadInput(format!("--slot @{idx}.path parse: {e}"))
                 })?,
-                None => anno_path.clone(),
+                None => {
+                    // Bug hunt 2026-11-25 toolkit#1: a canonical-shape origin the
+                    // operator did not give is only a guess; use it for an xpub
+                    // only when the xpub's own header agrees (as toolkit#5 does
+                    // for template mode), else ask for `@N.path=`.
+                    if bound_paths.canonical_filled.contains(&idx) {
+                        check_defaulted_xpub_origin(idx, &xpub, &anno_path)?;
+                    }
+                    anno_path.clone()
+                }
             };
             (xpub, fp, path, None, None)
         } else if subkeys.contains(&crate::slot_input::SlotSubkey::Entropy) {
@@ -2030,11 +2039,14 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // when no `@N` received the default (defaulted_indices is empty).
     emit_default_path_notice(
         stderr,
-        &defaulted_indices,
+        &bound_paths.defaulted,
         args.network,
         args.account,
         default_script_type,
     )?;
+    // Bug hunt 2026-11-25 toolkit#1: say which canonical-shape slots were given
+    // the shape's canonical origin (and so were derived / recorded there).
+    emit_canonical_origin_notice(stderr, &bound_paths.canonical_filled, &descriptor)?;
 
     // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 1) — surface
     // BIP-68 consensus-masked older() operands on the finalized MdDescriptor
@@ -2513,7 +2525,7 @@ pub(crate) enum DescriptorBindMode {
 /// Inputs are already-resolved so each caller keeps its OWN error mapping for
 /// the lex/resolve/probe steps (bundle → `DescriptorParse`; verify-bundle →
 /// `DescriptorReparseFailed`) — those steps deliberately stay at the call site,
-/// which is why this takes `n` + `is_non_canonical` + `root_tag` rather than
+/// which is why this takes `n` + `is_non_canonical` + `root_tree` rather than
 /// the descriptor string.
 ///
 /// EMIT-ONLY concerns that do NOT belong here (caller-side): the §4.12.g
@@ -2521,7 +2533,7 @@ pub(crate) enum DescriptorBindMode {
 /// stderr notice.
 ///
 /// The arg count (8) is deliberate: passing already-resolved `n` /
-/// `is_non_canonical` / `root_tag` keeps the lex/resolve/probe steps (and their
+/// `is_non_canonical` / `root_tree` keeps the lex/resolve/probe steps (and their
 /// per-caller error mapping) at the call site, which is the whole point of the
 /// dedup boundary (SPEC §3.1). Bundling them into a struct would only relocate,
 /// not reduce, the coupling.
@@ -2532,10 +2544,10 @@ pub(crate) fn bind_descriptor_mode_paths(
     path_decl: &mut md_codec::origin_path::PathDecl,
     n: usize,
     is_non_canonical: bool,
-    root_tag: &md_codec::tag::Tag,
+    root_tree: &md_codec::tree::Node,
     network: crate::network::CliNetwork,
     account: u32,
-) -> Result<Vec<u8>, ToolkitError> {
+) -> Result<BoundDescriptorPaths, ToolkitError> {
     use md_codec::origin_path::{OriginPath, PathDeclPaths};
 
     // cycle-11b L24 — exact-coverage bounds gate. `validate_slot_set` checks
@@ -2578,7 +2590,7 @@ pub(crate) fn bind_descriptor_mode_paths(
     // H12 — taproot-aware default-origin script-type (Tr → 3', sh → 1',
     // else wsh 2'). Derived from the SAME canonicity-probe root `Tag` both
     // callers pass, so emit and verify agree on the BIP-48 leaf.
-    let default_script_type = crate::template::bip48_script_type_for_root_tag(root_tag);
+    let default_script_type = crate::template::bip48_script_type_for_root_tag(&root_tree.tag);
     let default_path = compute_default_origin_path(network, account, default_script_type);
 
     let mut new_paths: Vec<OriginPath> = match &path_decl.paths {
@@ -2686,6 +2698,46 @@ pub(crate) fn bind_descriptor_mode_paths(
         defaulted_indices.retain(|i| i != idx);
     }
 
+    // Bug hunt 2026-11-25 toolkit#1 (Brian's ruling on the empty origin of a
+    // KEYED card): a canonical shape whose `@N` still has no origin here (no
+    // inline `[fp/path]@N`, no `--slot @N.path=`) used to be minted with an
+    // EMPTY origin, and a seed slot was then derived at the MASTER node. An
+    // empty origin on the wire means "the canonical origin, elided", so that
+    // card described a wallet nobody expects (m/0/i addresses) and put the
+    // master xpub on public cards. Fill the canonical origin of the shape
+    // instead (md-codec `canonical_origin`, coin from --network), write it on
+    // the card explicitly, and report the slots so the caller can say so.
+    //
+    // A slot whose operator TYPED an empty path (`--slot @N.path=m`) is not
+    // filled: in Emit mode it is refused (the master node cannot be written
+    // on a canonical card, the wire would read it as the canonical origin);
+    // Verify mode stays read-only and leaves it as typed.
+    let mut canonical_filled: Vec<u8> = Vec::new();
+    if !is_non_canonical {
+        if let Some(canon) = canonical_origin_for_network(root_tree, network) {
+            for (i, op) in new_paths.iter_mut().enumerate() {
+                if !op.components.is_empty() {
+                    continue;
+                }
+                if by_index_path.contains_key(&(i as u8)) {
+                    if mode == DescriptorBindMode::Emit {
+                        return Err(ToolkitError::SlotInputViolation {
+                            kind: "conflict",
+                            message: format!(
+                                "slot @{i}: `--slot @{i}.path=m` (the master node) cannot be recorded on a \
+                                 card for this descriptor shape: an empty origin on the card means the \
+                                 shape's canonical origin. Give the key's real origin path."
+                            ),
+                        });
+                    }
+                    continue;
+                }
+                *op = canon.clone();
+                canonical_filled.push(i as u8);
+            }
+        }
+    }
+
     // F4 — collapse identical inferred per-`@N` paths to `Shared` for
     // cross-start byte-convergence with the explicit-origin / wallet-import
     // path. `new_paths` is non-empty (n >= 1 enforced upstream); a 1-element
@@ -2697,7 +2749,34 @@ pub(crate) fn bind_descriptor_mode_paths(
         PathDeclPaths::Divergent(new_paths)
     };
 
-    Ok(defaulted_indices)
+    Ok(BoundDescriptorPaths {
+        defaulted: defaulted_indices,
+        canonical_filled,
+    })
+}
+
+/// What [`bind_descriptor_mode_paths`] chose on the operator's behalf.
+#[derive(Debug, Default)]
+pub(crate) struct BoundDescriptorPaths {
+    /// Non-canonical `@N` given the BIP-48 default origin.
+    pub defaulted: Vec<u8>,
+    /// Canonical-shape `@N` given the shape's canonical origin (bug hunt
+    /// 2026-11-25 toolkit#1).
+    pub canonical_filled: Vec<u8>,
+}
+
+/// md-codec's `canonical_origin` for `tree` with the coin-type component set
+/// from `network` (md-codec's table is written for mainnet, coin `0'`). `None`
+/// for a non-canonical shape.
+pub(crate) fn canonical_origin_for_network(
+    tree: &md_codec::tree::Node,
+    network: crate::network::CliNetwork,
+) -> Option<md_codec::origin_path::OriginPath> {
+    let mut op = md_codec::canonical_origin::canonical_origin(tree)?;
+    if let Some(coin) = op.components.get_mut(1) {
+        coin.value = network.coin_type();
+    }
+    Some(op)
 }
 
 /// v0.19.0 SPEC §4.12.b — compute the default origin path
@@ -2791,6 +2870,36 @@ fn emit_default_path_notice<E: Write>(
         // for them and how to choose it themselves -- which slots, and the two
         // ways to override. The shape of the descriptor is not their problem.
         "info: no origin supplied for {idx_list}; defaulting to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+    )
+    .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
+    Ok(())
+}
+
+/// Bug hunt 2026-11-25 toolkit#1 — stderr `info:` line naming the canonical
+/// origin written for canonical-shape `@N` that had none. `descriptor` is the
+/// final descriptor, so the printed path is the one on the card.
+fn emit_canonical_origin_notice<E: Write>(
+    stderr: &mut E,
+    filled: &[u8],
+    descriptor: &md_codec::Descriptor,
+) -> Result<(), ToolkitError> {
+    use md_codec::origin_path::PathDeclPaths;
+    if filled.is_empty() {
+        return Ok(());
+    }
+    let idx_list = filled
+        .iter()
+        .map(|i| format!("@{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let op = match &descriptor.path_decl.paths {
+        PathDeclPaths::Shared(op) => op.clone(),
+        PathDeclPaths::Divergent(v) => v[filled[0] as usize].clone(),
+    };
+    let path = origin_to_derivation_path(&op)?;
+    writeln!(
+        stderr,
+        "info: no origin supplied for {idx_list}; using this descriptor shape's canonical origin m/{path} (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
     )
     .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     Ok(())

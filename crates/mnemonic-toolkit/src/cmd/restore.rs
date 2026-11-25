@@ -3882,6 +3882,106 @@ struct CosignerInfo {
     note: &'static str,
 }
 
+/// Bug hunt 2026-11-25 toolkit#1/#2 — the common paths a seed is searched at
+/// for a keyed md1 key whose card origin is EMPTY (Brian's ruling): the master
+/// key `m`; the shape's canonical origin; BIP-44/49/84/86 and BIP-87
+/// `m/<purpose>'/<coin>'/<account>'` and BIP-48 `m/48'/<coin>'/<account>'/1'`
+/// and `/2'` for accounts 0..=9; and the Refugium convention
+/// `m/270028'/<coin>'/<n>'` for n = 32·round + seat, n in 0..=255 (rounds
+/// 0..=7). 270028 is `mr_codec::layout::PURPOSE_NUMBER` (mnemonic-refugium
+/// `crates/mr-codec/src/layout.rs`; `seat_path` in
+/// `crates/mr-cli/src/lost_or_stolen/succ.rs`), hard-coded here so the toolkit
+/// takes no dependency on mr-codec. Coin from `--network`. Deduplicated, in
+/// this order.
+pub(crate) fn empty_origin_search_paths(
+    tree: &md_codec::tree::Node,
+    network: CliNetwork,
+) -> Vec<DerivationPath> {
+    /// mnemonic-refugium `mr_codec::layout::PURPOSE_NUMBER`.
+    const REFUGIUM_PURPOSE: u32 = 270_028;
+    let coin = network.coin_type();
+    let h = |i: u32| ChildNumber::from_hardened_idx(i).expect("below 2^31");
+    let mut out: Vec<DerivationPath> = vec![DerivationPath::master()];
+    if let Some(op) = crate::cmd::bundle::canonical_origin_for_network(tree, network) {
+        if let Ok(p) = origin_path_to_derivation_path(&op) {
+            out.push(p);
+        }
+    }
+    for account in 0..=9u32 {
+        for purpose in [44u32, 49, 84, 86, 87] {
+            out.push(vec![h(purpose), h(coin), h(account)].into());
+        }
+        for script in [1u32, 2] {
+            out.push(vec![h(48), h(coin), h(account), h(script)].into());
+        }
+    }
+    for n in 0..=255u32 {
+        out.push(vec![h(REFUGIUM_PURPOSE), h(coin), h(n)].into());
+    }
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|p| seen.insert(p.clone()));
+    out
+}
+
+fn empty_origin_found_warning(idx: u8, found: &DerivationPath) -> String {
+    let path = if found.is_empty() {
+        "m".to_string()
+    } else {
+        format!("m/{found}")
+    };
+    let mut w = format!(
+        "WARNING: md1 cosigner @{idx} carries NO origin path on the card. Its key was FOUND by \
+         searching this seed's common paths, at {path}. That path is NOT on the card: record \
+         it, because a signer needs it to recognise the key."
+    );
+    if found.is_empty() {
+        w.push_str(
+            " The key is this seed's MASTER key (m): the wallet sits on the master key, which is \
+             non-standard (no hardware wallet derives a wallet there), and the master xpub is on \
+             the public cards.",
+        );
+    }
+    w
+}
+
+fn empty_origin_unresolved_warning(idx: u8) -> String {
+    format!(
+        "WARNING: md1 cosigner @{idx} carries NO origin path on the card. Its key is shown as \
+         [fingerprint]xpub with no path; no path is guessed. Signers will not recognise this key \
+         until its origin path is supplied. Rerun with --from <that cosigner's seed> to search its \
+         common paths."
+    )
+}
+
+/// Write `found` as `@ci`'s origin into the descriptor's path declaration.
+fn set_origin_on_descriptor(d: &mut md_codec::Descriptor, ci: usize, found: &DerivationPath) {
+    use md_codec::origin_path::{OriginPath, PathComponent, PathDeclPaths};
+    let op = OriginPath {
+        components: found
+            .into_iter()
+            .map(|c| match *c {
+                ChildNumber::Hardened { index } => PathComponent {
+                    hardened: true,
+                    value: index,
+                },
+                ChildNumber::Normal { index } => PathComponent {
+                    hardened: false,
+                    value: index,
+                },
+            })
+            .collect(),
+    };
+    let n = d.n as usize;
+    let mut v = match &d.path_decl.paths {
+        PathDeclPaths::Shared(s) => vec![s.clone(); n],
+        PathDeclPaths::Divergent(v) => v.clone(),
+    };
+    if ci < v.len() {
+        v[ci] = op;
+    }
+    d.path_decl.paths = PathDeclPaths::Divergent(v);
+}
+
 /// `mnemonic restore --md1 …` — reconstruct the concrete watch-only multisig
 /// descriptor from a wallet-policy md1; cross-check `--from`/`--cosigner`.
 fn run_multisig<R: Read, W: Write, E: Write>(
@@ -3914,7 +4014,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 
     // --- 1. Reassemble the md1 card(s) ---
     let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
-    let d =
+    let mut d =
         md_codec::chunk::reassemble(&md1_refs).map_err(|e| bad(format!("--md1 decode: {e}")))?;
 
     // F-642: the one Liana (wire-kind-1) rule, applied before anything else.
@@ -4063,17 +4163,24 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // Plain arm: existing `build_descriptor_string` (byte-for-byte unchanged —
     // `tap_internal_key` is `Some(ik)` for taproot, `None` for non-taproot,
     // exactly as before). General arm: the faithful reconstruction.
-    let descriptor = match template_opt {
-        Some(template) => build_descriptor_string(
-            template,
-            &slots,
-            k_opt.expect("plain/taproot template arm always carries a threshold"),
-            network,
-            args.account_primary(),
-            tap_internal_key,
-        )?,
-        None => faithful_multisig_descriptor(&d, network)?,
-    };
+    // Bug hunt 2026-11-25 toolkit#1/#2: built through a closure so the
+    // descriptor can be rebuilt once an empty-origin key's path is FOUND by the
+    // seed search below (the addresses do not depend on the origin).
+    let build_desc =
+        |slots: &[ResolvedSlot], d: &md_codec::Descriptor| -> Result<String, ToolkitError> {
+            match template_opt {
+                Some(template) => build_descriptor_string(
+                    template,
+                    slots,
+                    k_opt.expect("plain/taproot template arm always carries a threshold"),
+                    network,
+                    args.account_primary(),
+                    tap_internal_key,
+                ),
+                None => faithful_multisig_descriptor(d, network),
+            }
+        };
+    let mut descriptor = build_desc(&slots, &d)?;
 
     // --- 5. First receive address(es), chain 0. ---
     // Taproot AND the general arm derive from the reconstructed descriptor STRING
@@ -4184,7 +4291,15 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 
         // Derive the own key at each cosigner's origin; the 65-byte match is the
         // own position (stronger than a master-fp match, R0-r1 M3).
+        //
+        // Bug hunt 2026-11-25 toolkit#1/#2: a cosigner whose card origin is
+        // EMPTY is skipped here (deriving at an empty path would silently
+        // accept a master-key match as if the card said `m`); the
+        // empty-origin search below handles it.
         for c in &cosigners {
+            if c.origin.is_empty() {
+                continue;
+            }
             let acct = crate::derive_slot::derive_bip32_from_entropy_at_path(
                 &entropy,
                 &passphrase,
@@ -4213,6 +4328,85 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 own_pos = Some(c.idx);
                 verified_positions.insert(c.idx);
                 break;
+            }
+        }
+        // Bug hunt 2026-11-25 toolkit#1/#2 (Brian's ruling): the card carries
+        // no origin for some key. Search this seed's common paths for an EXACT
+        // key match (chain code + public key). Exactly one match: proceed with
+        // that origin and warn loudly that it was found, not read. No match:
+        // refuse rather than guess.
+        let empty_origin: Vec<usize> = cosigners
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.origin.is_empty())
+            .map(|(i, _)| i)
+            .collect();
+        if own_pos.is_none() && mismatch.is_none() && !empty_origin.is_empty() {
+            let paths = empty_origin_search_paths(&d.tree, network);
+            let derived = crate::derive_slot::derive_accounts_xpub_only(
+                &entropy,
+                &passphrase,
+                derive_language,
+                network,
+                &paths,
+            )?;
+            let mut matches: Vec<(usize, DerivationPath, Fingerprint)> = Vec::new();
+            for &ci in &empty_origin {
+                for (p, (xpub, master_fp)) in paths.iter().zip(derived.iter()) {
+                    if crate::synthesize::xpub_to_65(xpub) == cosigners[ci].key65 {
+                        matches.push((ci, p.clone(), *master_fp));
+                    }
+                }
+            }
+            match matches.as_slice() {
+                [(ci, found, master_fp)] => {
+                    let ci = *ci;
+                    let c_idx = cosigners[ci].idx;
+                    if *master_fp != cosigners[ci].fingerprint {
+                        mismatch = Some((
+                            "cosigner-fingerprint",
+                            format!("seed master fp {}", master_fp.to_string().to_lowercase()),
+                            format!(
+                                "md1 cosigner @{} engraved fingerprint {}",
+                                c_idx,
+                                cosigners[ci].fingerprint.to_string().to_lowercase()
+                            ),
+                            Some(c_idx),
+                        ));
+                    } else {
+                        writeln!(stderr, "{}", empty_origin_found_warning(c_idx, found))
+                            .map_err(ToolkitError::Io)?;
+                        cosigners[ci].origin = found.clone();
+                        slots[ci].path = found.clone();
+                        slots[ci].xpub = xpub_from_65_bytes(&cosigners[ci].key65, network, found)?;
+                        set_origin_on_descriptor(&mut d, ci, found);
+                        descriptor = build_desc(&slots, &d)?;
+                        own_pos = Some(c_idx);
+                        verified_positions.insert(c_idx);
+                    }
+                }
+                [] => {
+                    let idx_list = empty_origin
+                        .iter()
+                        .map(|&i| format!("@{}", cosigners[i].idx))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(bad(format!(
+                        "--md1 cosigner {idx_list} carries NO origin path on the card, and no \
+                         common path of this seed produces its key (searched: the master key m, \
+                         this shape's canonical origin, BIP-44/49/84/86 and BIP-87 \
+                         m/<purpose>'/<coin>'/<0..9>', BIP-48 m/48'/<coin>'/<0..9>'/1' and /2', \
+                         and Refugium m/270028'/<coin>'/<0..255>'), and the seed matches no other \
+                         cosigner. Refusing rather than guess a path: check the seed, passphrase \
+                         and --network."
+                    )));
+                }
+                _ => {
+                    return Err(bad(
+                        "--md1: more than one path of this seed produces an empty-origin key on \
+                         the card; refusing rather than guess which one is meant.",
+                    ));
+                }
             }
         }
         if own_pos.is_none() && mismatch.is_none() {
@@ -4318,6 +4512,13 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         } else {
             "from md1 (not independently verified)"
         };
+    }
+
+    // Bug hunt 2026-11-25 toolkit#1/#2: a key still without an origin (no
+    // seed given for it, or a foreign cosigner) is printed as `[fp]xpub` with
+    // NO path — never a guessed one — and the operator is told loudly.
+    for c in cosigners.iter().filter(|c| c.origin.is_empty()) {
+        writeln!(stderr, "{}", empty_origin_unresolved_warning(c.idx)).map_err(ToolkitError::Io)?;
     }
 
     // Overall status: "verified" ONLY when EVERY cosigner position was validated;

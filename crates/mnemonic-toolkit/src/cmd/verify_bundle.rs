@@ -1665,13 +1665,13 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // `defaulted_indices` is discarded: verify-bundle emits no notice, and the
     // sole consumed output (`path_decl.paths`) is byte-identical to the prior
     // hand-copied block (only the discarded bookkeeping differs).
-    let defaulted = crate::cmd::bundle::bind_descriptor_mode_paths(
+    let bound_paths = crate::cmd::bundle::bind_descriptor_mode_paths(
         crate::cmd::bundle::DescriptorBindMode::Verify,
         &args.slot,
         &mut descriptor_resolved.path_decl,
         n,
         is_non_canonical,
-        &canonicity_probe.tree.tag,
+        &canonicity_probe.tree,
         args.network,
         args.account,
     )?;
@@ -1683,6 +1683,21 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
     // `verify-bundle` never learns an origin was assumed on their behalf.
     // Advisory on stderr, like the emit side; no check row and no exit code
     // moves.
+    let defaulted = &bound_paths.defaulted;
+    if !bound_paths.canonical_filled.is_empty() {
+        let idx_list = bound_paths
+            .canonical_filled
+            .iter()
+            .map(|i| format!("@{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let _ = writeln!(
+            stderr,
+            "info: no origin supplied for {idx_list}; assuming this descriptor shape's \
+             canonical origin to rebuild the expected card. If that is not where those \
+             keys live, set it with [fp/path]@N or --slot @N.path=m/..."
+        );
+    }
     if !defaulted.is_empty() {
         let idx_list = defaulted
             .iter()

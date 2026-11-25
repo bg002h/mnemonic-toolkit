@@ -42,42 +42,27 @@ pub(crate) fn build_descriptor_string(
     Ok(parsed.to_string())
 }
 
-pub(super) fn key_origin_str(slot: &ResolvedSlot, fallback_path: &str) -> String {
-    // For a slot with an origin path, the bracketed annotation is rebuilt from
-    // the typed fingerprint+path (`bracketed_origin()`). For the pathless
-    // (degenerate / WIF) slot, `bracketed_origin()` would be just `[fp]`, which
-    // drops the BIP-32 origin — so we keep the path-bearing `fallback_path`
-    // branch (the template-derived default). miniscript wants no `m/` prefix
-    // inside `[fp/...]`. See SPEC_path_raw_bracketed_bare_unification.md §5 C4.
-    if slot.origin_path_bare().is_empty() {
-        let fp = slot.fingerprint.to_string().to_lowercase();
-        let raw = fallback_path
-            .trim_start_matches("m/")
-            .trim_start_matches('m')
-            .trim_start_matches('/');
-        format!("[{fp}/{raw}]")
-    } else {
-        slot.bracketed_origin()
-    }
-}
-
-pub(super) fn template_origin_path_no_m(
-    template: CliTemplate,
-    network: CliNetwork,
-    account: u32,
-) -> String {
-    let s = template.origin_path_str(network, account);
-    s.trim_start_matches("m/")
-        .trim_start_matches('m')
-        .to_string()
+pub(super) fn key_origin_str(slot: &ResolvedSlot) -> String {
+    // Bug hunt 2026-11-25 toolkit#2: the bracketed origin is rebuilt ONLY from
+    // what the slot itself carries (typed fingerprint + path). A pathless slot
+    // renders as a bare `[fp]`. This used to substitute the TEMPLATE DEFAULT
+    // path for a pathless slot, so `restore --md1` printed
+    // `[fp/87'/0'/0']<key>` for a key whose card origin was empty and which
+    // does not live there: a signer following that origin derives a different
+    // key. A default path belongs only where the caller itself derived the key
+    // at it, and such a slot already carries that path.
+    // miniscript wants no `m/` prefix inside `[fp/...]`.
+    slot.bracketed_origin()
 }
 
 fn build_descriptor_string_inner(
     template: CliTemplate,
     slots: &[ResolvedSlot],
     k: u8,
-    network: CliNetwork,
-    account: u32,
+    // Unused since bug hunt 2026-11-25 toolkit#2: they only fed the template
+    // default that `key_origin_str` used to substitute for a pathless slot.
+    _network: CliNetwork,
+    _account: u32,
     taproot_internal_key: Option<TaprootInternalKey>,
 ) -> Result<String, ToolkitError> {
     if slots.is_empty() {
@@ -85,14 +70,12 @@ fn build_descriptor_string_inner(
             "export-wallet: at least one --slot @N.xpub=... required".into(),
         ));
     }
-    let fallback = template_origin_path_no_m(template, network, account);
-
     // Single-sig templates: bip44 → pkh, bip49 → sh(wpkh(...)), bip84 → wpkh,
     // bip86 → tr(...).
     let key_segs: Vec<String> = slots
         .iter()
         .map(|s| {
-            let origin = key_origin_str(s, &fallback);
+            let origin = key_origin_str(s);
             format!("{origin}{}/<0;1>/*", s.xpub)
         })
         .collect();
@@ -295,32 +278,18 @@ mod tests {
         }
     }
 
-    // T5(e) (SPEC_path_raw_bracketed_bare_unification.md §8, R0 C-2) —
-    // `key_origin_str` must keep the path-bearing fallback for a pathless
-    // (default-path) slot rather than dropping to a bare `[fp]` that would
-    // corrupt the exported descriptor key.
+    // Bug hunt 2026-11-25 toolkit#2 (supersedes T5(e)): a pathless slot
+    // renders as a bare `[fp]` — never with a substituted template default.
     #[test]
-    fn key_origin_str_pathless_slot_uses_path_bearing_fallback() {
+    fn key_origin_str_pathless_slot_never_guesses_a_path() {
         let pathless = slot_with_path(DerivationPath::default());
-        assert_eq!(
-            key_origin_str(&pathless, "84'/0'/0'"),
-            "[deadbeef/84'/0'/0']",
-            "pathless slot must use the path-bearing fallback, not bare [fp]"
-        );
-        // also accepts an `m/`-prefixed fallback
-        assert_eq!(
-            key_origin_str(&pathless, "m/84'/0'/0'"),
-            "[deadbeef/84'/0'/0']"
-        );
+        assert_eq!(key_origin_str(&pathless), "[deadbeef]");
     }
 
-    // A path-bearing slot renders from its typed path (ignores the fallback).
+    // A path-bearing slot renders from its typed path.
     #[test]
     fn key_origin_str_path_bearing_slot_uses_bracketed_origin() {
         let slot = slot_with_path(DerivationPath::from_str("48'/0'/0'/2'").unwrap());
-        assert_eq!(
-            key_origin_str(&slot, "84'/0'/0'"),
-            "[deadbeef/48'/0'/0'/2']"
-        );
+        assert_eq!(key_origin_str(&slot), "[deadbeef/48'/0'/0'/2']");
     }
 }

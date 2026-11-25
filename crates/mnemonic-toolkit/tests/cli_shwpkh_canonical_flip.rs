@@ -95,61 +95,45 @@ fn decode_mk1(chunks: &[String]) -> (String, String, u8) {
 }
 
 // ============================================================================
-// FLIP #1 (funds-load-bearing) — no-origin sh(wpkh) now emits an
-// EMPTY-ORIGIN / MASTER-KEY card with NO default-path notice (wpkh-parity),
-// NOT the pre-flip 48'/0'/0'/1' + notice. (plan-R0 C1 — assert empty/master.)
+// FLIP #1 (funds-load-bearing) — AMENDED 2026-11-25 (bug hunt toolkit#1, see
+// design/SPEC_toolkit_repin_sh_wpkh.md "AMENDMENT 2026-11-25"). A no-origin
+// canonical sh(wpkh) used to emit an EMPTY-ORIGIN / MASTER-KEY card. It now
+// derives at md-codec's canonical origin for the shape (m/49'/0'/0'), WRITES
+// that origin on the card, and prints the canonical-origin info notice. Still
+// NOT the pre-flip 48'/0'/0'/1'.
 // ============================================================================
 
 #[test]
-fn flip1_shwpkh_no_origin_emits_master_key_card_no_notice() {
+fn flip1_shwpkh_no_origin_emits_canonical_origin_card_with_notice() {
     let slot = format!("@0.phrase={SEED}");
     let (v, stderr) = bundle("sh(wpkh(@0))", &[slot.as_str()]);
-
-    // Top-level JSON origin is the empty/default sentinel (null), NOT 48'/0'.
-    assert!(
-        v["origin_path"].is_null(),
-        "post-flip sh(wpkh) no-origin: top-level origin_path must be null (empty/master); got {:?}",
-        v["origin_path"]
-    );
     assert_eq!(v["mode"], "full");
 
-    // The emitted mk1 encodes the MASTER key: empty origin path, depth 0.
     let (origin, xpub, depth) = decode_mk1(&mk1_chunks(&v));
-    assert!(
-        origin.is_empty(),
-        "post-flip sh(wpkh) no-origin: mk1 origin_path must be empty/master (m/), NOT 48'/0'/0'/1' \
-         and NOT 49'; got {origin:?}"
-    );
     assert_eq!(
-        depth, 0,
-        "master key is depth-0; got depth {depth} (a defaulted origin would be depth-4)"
+        origin, "49'/0'/0'",
+        "sh(wpkh) no-origin: mk1 origin is the canonical m/49'/0'/0', written on the card"
     );
-    assert!(
-        xpub.starts_with("xpub661My"),
-        "depth-0 mainnet master xpub must carry the xpub661My… prefix; got {xpub}"
-    );
-    assert_eq!(
+    assert_eq!(depth, 3, "canonical account key is depth-3; got {depth}");
+    assert_ne!(
         xpub, SEED_MASTER_XPUB,
-        "sh(wpkh) no-origin must encode the SEED master xpub (empty-origin derivation)"
+        "the master key must never be bound implicitly"
     );
-
-    // The default-path notice is ABSENT (canonical → no default-inference).
     assert!(
-        !stderr.contains(DEFAULT_PATH_NOTICE),
-        "post-flip sh(wpkh) is canonical: the default-path notice must be ABSENT; got stderr:\n{stderr}"
+        stderr.contains("info: no origin supplied for @0")
+            && stderr.contains("canonical origin m/49'/0'/0'"),
+        "the canonical-origin notice must name the path; got stderr:\n{stderr}"
     );
     assert!(
         !stderr.contains("48'/0'/0'/1'"),
-        "post-flip must NOT mention the pre-flip 48'/0'/0'/1' default; got stderr:\n{stderr}"
+        "must NOT mention the pre-flip 48'/0'/0'/1' default; got stderr:\n{stderr}"
     );
 }
 
-/// RED-proof-equivalent (B0 already flipped, so this proves flip #1 genuinely
-/// exercises the flip): a CANONICAL `wpkh(@0)` no-origin emits the SAME
-/// empty-origin / master-key card, and post-flip `sh(wpkh(@0))` now MATCHES it
-/// in the decoded key. Pre-flip these diverged (wpkh=master, sh(wpkh)=48'/0'/0'/1').
+/// `wpkh(@0)` and `sh(wpkh(@0))` no-origin: each derives at ITS OWN canonical
+/// origin (84' / 49'), neither at the master key.
 #[test]
-fn flip1_shwpkh_now_matches_canonical_wpkh_master_parity() {
+fn flip1_wpkh_and_shwpkh_each_use_their_canonical_origin() {
     let slot = format!("@0.phrase={SEED}");
     let (vw, stderr_w) = bundle("wpkh(@0)", &[slot.as_str()]);
     let (vs, stderr_s) = bundle("sh(wpkh(@0))", &[slot.as_str()]);
@@ -157,28 +141,13 @@ fn flip1_shwpkh_now_matches_canonical_wpkh_master_parity() {
     let (ow, xw, dw) = decode_mk1(&mk1_chunks(&vw));
     let (os, xs, ds) = decode_mk1(&mk1_chunks(&vs));
 
-    // wpkh(@0) is (and always was) canonical → master/empty.
-    assert!(
-        ow.is_empty() && dw == 0,
-        "wpkh(@0) no-origin must be master/empty"
-    );
-    // sh(wpkh(@0)) now has PARITY with wpkh(@0): identical empty origin, depth,
-    // and xpub.
-    assert_eq!(
-        os, ow,
-        "sh(wpkh) origin must now match canonical wpkh (both empty)"
-    );
-    assert_eq!(
-        ds, dw,
-        "sh(wpkh) depth must now match canonical wpkh (both depth-0)"
-    );
-    assert_eq!(
-        xs, xw,
-        "sh(wpkh) master xpub must now match canonical wpkh's"
-    );
-    // Neither canonical shape emits the default-path notice.
-    assert!(!stderr_w.contains(DEFAULT_PATH_NOTICE));
-    assert!(!stderr_s.contains(DEFAULT_PATH_NOTICE));
+    assert_eq!(ow, "84'/0'/0'");
+    assert_eq!(os, "49'/0'/0'");
+    assert_eq!((dw, ds), (3, 3));
+    assert_ne!(xw, xs, "different canonical paths give different keys");
+    assert_ne!(xw, SEED_MASTER_XPUB);
+    assert!(stderr_w.contains(DEFAULT_PATH_NOTICE));
+    assert!(stderr_s.contains(DEFAULT_PATH_NOTICE));
 }
 
 /// The flip-#1 "notice absent" assertion is non-vacuous: a genuinely
@@ -407,8 +376,8 @@ fn flip4_preflip_elided_shwpkh_bundle_fails_verify_as_byte_mismatch() {
     );
     assert_eq!(
         path_check["expected"].as_str(),
-        Some(""),
-        "post-flip re-derived origin path is EMPTY (master); got {:?}",
+        Some("49'/0'/0'"),
+        "re-derived origin path is the canonical 49'/0'/0' (toolkit#1); got {:?}",
         path_check["expected"]
     );
     assert_eq!(

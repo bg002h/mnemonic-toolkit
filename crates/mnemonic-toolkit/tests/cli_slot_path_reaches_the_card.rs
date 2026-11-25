@@ -124,10 +124,17 @@ fn the_two_slots_do_not_share_one_origin() {
 ///   broken:  @1 [3f635a63/48'/0'/0'/2']  id a28485fe...  bc1qt2yw8z4...
 ///
 /// This asserts the shape a REVIEWER had to construct, because no existing
-/// test covered a canonical descriptor with SOME slots annotated: an
-/// un-annotated slot must be left exactly as the operator left it.
+/// test covered a canonical descriptor with SOME slots annotated.
+///
+/// RULING 2026-11-25 (bug hunt toolkit#1, Brian): the "shipped" line above
+/// derived @1 at the MASTER node and left its origin EMPTY on the card. There
+/// are no existing card holders, and a keyed card must never again carry an
+/// empty origin, so the un-annotated slot is now derived at the shape's
+/// canonical origin, that origin is written on the card, and an `info:` line
+/// names it. The "same command line, different wallet" change is the intended
+/// consequence; it is no longer silent.
 #[test]
-fn a_canonical_descriptor_with_partial_inline_origins_invents_nothing() {
+fn a_canonical_descriptor_with_partial_inline_origins_fills_the_canonical_origin() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -155,11 +162,20 @@ fn a_canonical_descriptor_with_partial_inline_origins_invents_nothing() {
     let got = origins_on_card(&md1);
     assert_eq!(got.len(), 2, "two slots");
     assert_eq!(got[0], "48'/0'/0'/2'", "@0's inline origin must survive");
+    // AMENDED by bug hunt 2026-11-25 toolkit#1: @1 carried NO origin and NO
+    // --slot path. It used to be left EMPTY on the card while its key was
+    // derived at the MASTER node. It is now derived at the shape's canonical
+    // origin (md-codec `canonical_origin`, BIP-48 /2' for wsh) and that origin
+    // is WRITTEN on the card (with an info: line), so the card records where
+    // the key really lives.
+    assert_eq!(
+        got[1], "48'/0'/0'/2'",
+        "@1's key is derived at, and the card records, the canonical origin"
+    );
+    let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        got[1].is_empty(),
-        "@1 carried NO origin and supplied NO --slot path, so none may be \
-         invented for it -- inventing one changes the derived key and the \
-         wallet. got {:?}",
-        got[1]
+        stderr.contains("info: no origin supplied for @1")
+            && stderr.contains("canonical origin m/48'/0'/0'/2'"),
+        "stderr: {stderr}"
     );
 }

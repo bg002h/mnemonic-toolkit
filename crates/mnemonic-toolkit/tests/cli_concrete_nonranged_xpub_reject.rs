@@ -246,6 +246,11 @@ fn bundle_atn_bare_template_unaffected_by_new_check() {
             &format!("@0.xpub={XPUB_A}"),
             "--slot",
             &format!("@0.fingerprint={FP_A}"),
+            // XPUB_A is a BIP-48 key (depth 4, child 2'); since bug hunt
+            // 2026-11-25 toolkit#1 a canonical origin that contradicts the
+            // header is refused, so the fixture states the key's real origin.
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
             "--json",
         ])
         .output()
