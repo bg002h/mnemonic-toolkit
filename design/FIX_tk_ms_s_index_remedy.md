@@ -6,7 +6,7 @@ printed command; it fails as printed). Not a funds path (the refusal exit code a
 Base: `origin/master` = `4bfa645f` (Merge pull request #211). Source: coordinator
 `agent-reports/review-fix-bh-ms46-r11.md` I-2 (L53-70, run on tk `e30985a5`), the toolkit copy of ms #46's bh-ms-R11
 defect. The wording follows the ms side decided in mnemonic-secret `fix/ms-printed-commands`
-(`design/FIX_bughunt1119_ms_printed_commands.md` R5, L72-81 and the R5 text table L101-106): "this is the secret share
+(head `1bed05af`, ms #41; `design/FIX_bughunt1119_ms_printed_commands.md` R5, L72-81 and the R5 text table L101-106): "this is the secret share
 of a K-of-N set (threshold '<T>', index 's'); it is the secret itself, not a distributed share, and `ms combine` does
 not take it", here in the toolkit's own command name.
 
@@ -77,6 +77,27 @@ stderr only, nothing on stdout; `ms-shares combine`'s own refusal text; every ot
 The new text is the ms R5 text with `ms combine` -> `mnemonic ms-shares combine` and tk's `ms1 ` prefix (every arm
 of `friendly_ms_codec` starts `ms1 `). The `<T>` digit is printed as the codec gives it (a `char`), as today.
 
+**R2 (`repair`).** In `crates/mnemonic-toolkit/src/repair.rs` `repair_card`, `CardKind::Ms1` arm (L1250-1270), the
+`SetVerify::Unverified` reason for corrected K-of-N chunks depends on the share index of the corrected chunks.
+
+New helper `ms1_is_secret_share(s: &str) -> bool`: `ms1_is_share(s)` and the character at the separator plus 6 (the
+share index, BIP-93: threshold at +1, identifier +2..+5, index +6), lowercased, is `s`. The separator is
+`rfind('1')`, as in `ms1_is_share`; bech32 data never contains `1`.
+
+Let *sec* = any corrected chunk is a secret share, and *dist* = any corrected chunk is a K-of-N share that is not a
+secret share. The cases:
+ (a) *dist* and not *sec*: the text is unchanged.
+ (b) *sec* and not *dist*: ``correction UNVERIFIED — a corrected codex32 secret (share index 's' of a K-of-N set)
+     cannot be self-verified; it is the secret itself, not a distributed share, and `mnemonic ms-shares combine` does
+     not take it; BIP-93 recommends confirming a corrected codex32 string``
+ (c) *sec* and *dist* (one call corrects both): text (a), with ``; leave out the corrected string at share index
+     's': it is the secret itself, not a distributed share, and `mnemonic ms-shares combine` does not take it``
+     inserted before ``; BIP-93 recommends``.
+
+The texts of (b) and (c) are PROPOSED (architect confirms; WORDING_REVIEW). The following stay unchanged: exit 4,
+stdout, the `--json` `verdict` (`candidate`), the seed-card text for threshold-`0` corrections, and the
+`try_repair_and_short_circuit` pointer line.
+
 ## 3. Code delta (production; prose)
 
 - `crates/mnemonic-toolkit/src/friendly.rs` L131: a new arm before the existing one,
@@ -103,6 +124,15 @@ Guard row (passes on both base and fix): `bh_tk_ms_s_index_control_distributed` 
 `convert --from ms1=- --to phrase` -> exit 2, stderr equals ``error: ms1 this is ONE of a K-of-N share set (threshold
 '2', index 'a'); use `mnemonic ms-shares combine` to recombine 2 shares`` + `\n`.
 
+Tests for R2 go in `tests/cli_ms_shares_consume.rs`, each seen RED on `4bfa645f`:
+- `bh_tk_ms_s_index_repair`: stdin `S2b\n`, `repair --ms1 -`. Expect exit 4; stdout equals `# Repair report\n#
+  ms1 chunk 0: 1 correction at position 46: 'q' -> 'a'\n` + S2 + `\n`; stderr equals `repair: ` + text (b) + `\n` +
+  the private-key advisory line + `\n`.
+- `bh_tk_ms_s_index_repair_mixed`: argv `repair --allow-argv-secret S2b A2b`. Expect exit 4; stderr starts with
+  `repair: ` + text (c) + `\n`.
+- Guard: `bughunt_s5.rs` `bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share` (SHARE_1 index `q`) is
+  unchanged. It must still pass.
+
 `S2` and `A2` are written as constants in the test file (they are synthetic test strings, not funded keys; no entropy
 from a real seed). The CLI rows pipe stdin, so they need no `--allow-argv-secret`.
 
@@ -124,6 +154,10 @@ and `encode_shares` index claim by running the suite (they would fail if they ev
 - L930 (`verify-bundle --slot`), ``a K-of-N share is rejected with a pointer to `ms-shares combine` `` becomes ``a
   K-of-N share is rejected with a pointer to `ms-shares combine`, except the share at index `s`, the secret itself,
   which `ms-shares combine` does not take`` PROPOSED.
+- `41-mnemonic.md` L3613-3620 (**K-of-N shares.**), after ``A clean share exits `0`, echoed.``, add: ``A corrected
+  string at share index `s` (the secret itself, which `ms-shares combine` does not take) gets the same exit `4` with
+  its own reason instead of the recombine advice. A call that corrects both kinds keeps the recombine advice and says
+  to leave the index-`s` string out.`` PROPOSED.
 
 No other manual line names this text (grep of `docs/manual/src` and `docs/manual-gui/src` for `ONE of a K-of-N`,
 `pointer to`, `ms-shares combine`). The GUI manual and the GUI schema are unchanged (no flag changes).
@@ -133,19 +167,13 @@ No other manual line names this text (grep of `docs/manual/src` and `docs/manual
     ### An index-`s` ms1 string is no longer sent to `ms-shares combine`
 
     - **`convert --from ms1=`, `inspect --ms1`, `bundle`/`verify-bundle --slot @N.ms1=`, `restore --from ms1=`,
-      `silent-payment --secret`, `xpub-search`**: an ms1 string at share index `s` (the secret itself, not a
+      `silent-payment --secret`, `xpub-search`, `repair --ms1`**: an ms1 string at share index `s` (the secret itself, not a
       distributed share) is still refused (exit 2), but the message now says so and no longer tells you to run
       `mnemonic ms-shares combine`, which refuses that string. Before: ``use `mnemonic ms-shares combine` to
       recombine <T> shares``. Other share indices keep that advice. (bh-tk-ms-s-index)
 
 ## 7. Out of scope (filed in the author's report, not here)
 
-- `mnemonic repair` on a corrected index-`s` string prints the same wrong pointer from a different text
-  (`repair.rs:1252-1260`, `ms1_is_share` is true for every threshold != `0`): measured on `4bfa645f`, stdin
-  `ms12testsqqqqqqqqqqqqqqqqqqqqqqqqqqqqkwe5qlrp6ykwq`, `repair --ms1 -` -> rc 4, stderr ``repair: correction UNVERIFIED
-  — a corrected K-of-N share cannot be self-verified; recombine it with the other shares (mnemonic ms-shares combine
-  --share - --share @env:VAR …, ...)``. Not the same formatter; its text, and the multi-chunk mixed case (`repair`
-  takes several ms1 positionals), are undecided. A new row.
 - The reviewer's Minor M-5 (`argv_guard.rs`, `--from ms1` told to use `--from phrase=-`) is a different file; it keeps
   its own FOLLOWUPS line (`tk-convert-argv-guard-ms1-remedy`).
 
