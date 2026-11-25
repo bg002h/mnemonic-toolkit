@@ -540,6 +540,27 @@ mod tests {
     }
 
     #[test]
+    fn bh_tk_ms_s_index_friendly_text() {
+        let want = |t: char| {
+            format!(
+                "ms1 this is the secret share of a K-of-N set (threshold '{t}', index 's'); \
+                 it is the secret itself, not a distributed share, and \
+                 `mnemonic ms-shares combine` does not take it"
+            )
+        };
+        let m = friendly_ms_codec(&ms_codec::Error::IsShareNotSingleString {
+            threshold: '2',
+            index: 's',
+        });
+        assert_eq!(m, want('2'));
+        let m = friendly_ms_codec(&ms_codec::Error::IsShareNotSingleString {
+            threshold: '9',
+            index: 'S',
+        });
+        assert_eq!(m, want('9'));
+    }
+
+    #[test]
     fn ms_codec_secret_share_to_combine_is_explicit() {
         let m = friendly_ms_codec(&ms_codec::Error::SecretShareSuppliedToCombine);
         assert!(m.contains("secret share"), "got: {m}");
