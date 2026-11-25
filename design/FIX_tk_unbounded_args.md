@@ -4,7 +4,8 @@ Author: Claude Opus 5.5 (claude-opus-5-5), 2026-11-24. Track: small (one Opus re
 regrade, graded I, refutes upheld): bh-tk-mn7, bh-tk-mn11, bh-tk-mn18
 (coordinator `agent-reports/bughunt-1119-mn-regrade/tk-grade.md:25-60`, `tk-refute-bh-tk-mn7.md`,
 `tk-refute-bh-tk-mn18.md`). Base: origin/master e30985a5. Closes the ruled FOLLOWUPS entries
-`derive-child-dice-length-cap` and `xpub-search-account-window-2p31-panic` (their ruled texts are used verbatim) and
+`derive-child-dice-length-cap` and `xpub-search-account-window-2p31-panic` (`xpub-search-account-window-2p31-panic`'s ruled text
+is used verbatim; `derive-child-dice-length-cap`'s cap is superseded by the 2026-11-24 architect ruling, 2.1) and
 `xpub-search-max-account-unbounded-allocation`.
 
 ## 1. Defects
@@ -25,22 +26,23 @@ regrade, graded I, refutes upheld): bh-tk-mn7, bh-tk-mn11, bh-tk-mn18
 
 ## 2. Decisions
 
-### 2.1 `--length` for `--application dice`: `1..=1000000`
+### 2.1 `--length` for `--application dice`: `1..=2^31-1`, rolls written as drawn
 
-The accepted range is `1..=1000000` rolls (the ruling in FOLLOWUPS `derive-child-dice-length-cap`). Why that value:
+Architect ruling 2026-11-24 (`coordinator/agent-reports/architect-tk-dice-cap-1124.md`), replacing the cap
+`1..=1000000` of FOLLOWUPS `derive-child-dice-length-cap`. The accepted range is `1..=2147483647`, the range the help
+(`derive_child.rs:56`) and manual ch.38 (`38-bip85-children.md:69`) already state.
 
-- BIP-85 (bitcoin/bips `bip-0085.mediawiki`, DICE, fetched 2026-11-24, lines 395-398) puts `{rolls}'` in the
-  hardened derivation path `m/83696968'/89101'/{sides}'/{rolls}'/{index}'` and states `1 <= rolls <= 2^32 - 1`. So the
-  BIP sets no useful size limit; the cap is the tool's.
-- A dice secret needs few rolls: 256 bits is 100 d6 rolls; the BIP's own vector is 10 rolls. 10^6 is four orders of
-  magnitude above any secret use.
-- 10^6 rolls are cheap: measured on the base binary under `ulimit -v 4000000`, `--length 1000000` exits 0 and prints
-  2 000 000 bytes at `--dice-sides 6` and 10 483 055 bytes at `--dice-sides 2147483647` (the largest accepted die).
-  The roll vector is at most about 1e6 x 40 bytes = 40 MB.
-- Reproducibility note (for the architect; not a STOP): a length in `1000001..=2147483647` was accepted before when
-  memory allowed (R1 below shows 1 000 001 rolls at exit 0), and `{rolls}` is part of the derivation path, so such a
-  sequence cannot be re-derived with a release carrying this fix. No plausible secret uses more than 10^6 rolls; the
-  ruling stands.
+- BIP-85 (bitcoin/bips `bip-0085.mediawiki`, DICE, fetched 2026-11-24, lines 395 and 398) puts `{rolls}'` in the
+  hardened path `m/83696968'/89101'/{sides}'/{rolls}'/{index}'` and allows `1 <= rolls <= 2^32 - 1`; the hardened
+  element ends derivation at 2^31-1. The rolls count is part of the child: a cap below 2^31-1 would make a child that
+  every release since v0.8.0 derived (they check only `rolls >= 1`) underivable here, and a shorter `--length` derives
+  an unrelated sequence, not a prefix.
+- The defect is memory, not the count: `bip85.rs:254` reserves `rolls` × 24 bytes before the first roll. The rolls are
+  now written to stdout as they are drawn, so memory is constant in `--length`; output size and time are the holder's
+  choice, as for the candidate set (2.3). Every accepted length prints the same bytes as before.
+- Refused, exit 2 (D1): `--length 0`, and `--length 2147483648` or more (before: a BIP-32 error, exit 1).
+- A closed stdout (`| head`) does not end the run early: under T6 (`out_sink.rs:1-7`) later writes are dropped and the
+  verb runs to its end, as every verb does.
 
 ### 2.2 Account window: refuse at 2^31 (mn11)
 
@@ -66,15 +68,15 @@ bounded only by time, which the holder chose), not an abort. No cap, no new advi
 
 ### 3.1 Refusal texts (stderr, one line, nothing on stdout)
 
-D1, `derive-child --application dice`, `--length` outside `1..=1000000` (includes `0`), exit 2 (unchanged code,
-variant `DeriveChildLengthOutOfRange`). Ruled text (FOLLOWUPS `derive-child-dice-length-cap`):
+D1, `derive-child --application dice`, `--length` outside `1..=2147483647` (`0`, or `2147483648` and above), exit 2
+(unchanged code, variant `DeriveChildLengthOutOfRange`):
 
 ~~~text
-error: --length <N> out of range for --application dice (valid: 1..=1000000 rolls)
+error: --length <N> out of range for --application dice (valid: 1..=2^31-1 rolls)
 ~~~
 
-`<N>` is the value as given in decimal. This replaces `(valid: rolls >= 1)` for `--length 0`. The refusal fires before
-`--dice-sides` is read (the present order: a missing `--dice-sides` with a bad `--length` still prints D1).
+`<N>` is the value as given in decimal. This replaces `(valid: rolls >= 1)` for `--length 0` and the BIP-32 child-number
+error (exit 1) for `2147483648` and above. The refusal fires before `--dice-sides` is read (the present order).
 
 W1, `xpub-search path-of-xpub | passphrase-of-xpub | account-of-descriptor`, window rule of 2.2, exit 1 (variant
 `BadInput`). Ruled text (FOLLOWUPS `xpub-search-account-window-2p31-panic`):
@@ -89,13 +91,6 @@ warning. So stderr is exactly the W1 line. It applies also to `passphrase-of-xpu
 check precedes the candidates-file dispatch at `passphrase_of_xpub.rs:297`).
 
 ### 3.2 Help texts (PROPOSED, architect confirms)
-
-H1, `derive_child.rs:56`, the dice entry of `--application`'s list: `` `--length` rolls (1..=2^31-1) of a `` becomes
-`` `--length` rolls (1..=1000000) of a ``. Rendered `app_entry("dice")`:
-
-~~~text
-dice BIP-85 application 89101' — derives `--length` rolls (1..=1000000) of a `--dice-sides`-sided die
-~~~
 
 H2, the `--max-account` doc comment, identical in `path_of_xpub.rs:94-95`, `account_of_descriptor.rs:106-107`,
 `passphrase_of_xpub.rs:125-126`. Old: ``Optional upper bound. Effective end is `max(min_account + number_of_accounts,
@@ -113,14 +108,20 @@ unchanged.
 Every accepted input prints byte-identical output: candidate order, `searched: N candidate paths`,
 `searched: N candidates × C cosigners`, `searched: N candidate paths per passphrase`, `paths searched=N` in the
 no-match error, every `--json` `searched_count`. BIP-85 dice KATs unchanged. Exit codes 0 / 4 unchanged.
+`derive-child --application dice` stdout and stderr are byte-identical for every accepted length (R1).
 
 ## 4. Code delta (production)
 
-1. `cmd/derive_child.rs:299-307`: the dice check becomes `!(1..=1_000_000).contains(&rolls)` with
-   `valid_text: "1..=1000000 rolls"`. Name the bound `pub(crate) const DICE_MAX_ROLLS: u32 = 1_000_000;` in `bip85.rs`
-   and use it in both places below.
-2. `bip85.rs:254`: `Vec::with_capacity((rolls.min(1024)) as usize)` (defence in depth; the doc comment at :224 adds
-   "the CLI caps rolls at `DICE_MAX_ROLLS`"). `format_dice_rolls` itself adds no refusal.
+1. `cmd/derive_child.rs:299-307`: the dice check becomes `!(1..=bip85::DICE_MAX_ROLLS).contains(&rolls)` with
+   `valid_text: "1..=2^31-1 rolls"`; `pub(crate) const DICE_MAX_ROLLS: u32 = 2_147_483_647;` in `bip85.rs`.
+2. `bip85.rs:214-280`: `format_dice_rolls` is removed and replaced by `pub(crate) fn write_dice_rolls<W: std::io::Write +
+   ?Sized>(master: &Xpriv, sides: u32, rolls: u32, index: u32, out: &mut W) -> Result<(), ToolkitError>`: the same two
+   checks, `derive_entropy`, the same SHAKE256 loop; each accepted roll is written at once (`,` before every roll but the
+   first, then the decimal value with `write!`), a write error is `ToolkitError::Io`; no `Vec`, no `String`, no joined
+   output; the per-roll read buffer is a stack `[u8; 4]` sliced to `bytes_per_roll`. Nothing is written before the checks
+   and `derive_entropy` succeed. Its doc comment states the bound `rolls <= DICE_MAX_ROLLS` (the CLI's) and drops
+   "`1 <= rolls <= 2^32 - 1`". The dice arm of `derive_child.rs:298-313` calls it with `stdout`, then `writeln!(stdout)`,
+   then the same `emit_output_class_advisory(OutputClass::PrivateKeyMaterial, stderr)`, and returns `Ok(())`.
 3. `cmd/xpub_search/candidate_paths.rs`:
    - new `pub fn check_account_window(min_account: u32, number_of_accounts: u32, max_account: Option<u32>) ->
      Result<(), ToolkitError>`: returns `BadInput` with the W1 text (without the `error: ` prefix, which Display adds)
@@ -161,10 +162,10 @@ New file `crates/mnemonic-toolkit/tests/bughunt_1119_unbounded_args.rs` unless n
 
 | Row | Command (stdin) | Base output (observed) | Expected after fix |
 |---|---|---|---|
-| R1 `bh_tk_mn7_dice_length_over_cap_is_refused` | `derive-child --from xprv=- --application dice --dice-sides 6 --length 1000001 --index 0` (`T`) | exit 0; stdout 2 000 002 bytes (1 000 001 rolls) | exit 2; stdout empty; stderr exactly `error: --length 1000001 out of range for --application dice (valid: 1..=1000000 rolls)` |
-| R2 `bh_tk_mn7_dice_length_zero_names_the_cap` | same, `--length 0` | exit 2; `error: --length 0 out of range for --application dice (valid: rolls >= 1)` | exit 2; `error: --length 0 out of range for --application dice (valid: 1..=1000000 rolls)` |
-| R3 `bughunt_tk_15_dice_huge_length_is_refused_cleanly` (existing, `bughunt_s4.rs:59`, un-ignore) | same, `--length 2000000000`, ulimit | `memory allocation of 48000000000 bytes failed`; exit 134 (SIGABRT) | exit 2; stderr exactly D1 with `2000000000` (assertion added) |
-| G1 `bh_tk_mn7_dice_length_at_cap_succeeds` (guard, green on base) | same, `--length 1000000` | exit 0; 1 000 000 comma-separated rolls | unchanged |
+| R1 `bh_tk_mn7_dice_long_child_streams_byte_identical` | `derive-child --from xprv=- --application dice --dice-sides 6 --length 10000000 --index 0`, `ulimit -v 200000`, deadline 60 s | rc 134; stderr `memory allocation of 240000000 bytes failed`; stdout empty | exit 0; stdout 20000000 bytes, sha256 `2d14b9d9f52ab6379a461cd7d41c6bc01a36d69c4aa1c8727d1b9d39d3a62c59` (= base's stdout for the same command with no ulimit, measured); stderr exactly the one advisory line `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')`. 0.43 s |
+| R2 `bh_tk_mn7_dice_length_outside_range_is_refused` | same, no ulimit, `--length 0`; then `--length 4294967295` | 0: rc 2, `error: --length 0 out of range for --application dice (valid: rolls >= 1)`; 4294967295: rc 1, `error: BIP-32 error: child number 4294967295 is invalid (not within [0, 2^31 - 1])` | each: exit 2; stdout empty; stderr exactly `error: --length <N> out of range for --application dice (valid: 1..=2^31-1 rolls)` with N = 0, 4294967295 |
+| R3 `bughunt_tk_15_dice_huge_length_is_refused_cleanly` (existing, `bughunt_s4.rs:59`, un-ignore) | keeps its argv form and ulimit 4000000; `--length 2000000000` becomes `--length 2147483648` | rc 1; stderr `warning: secret material on argv (--from xprv=) — pipe via --from xprv=- to avoid /proc/$PID/cmdline exposure` then `error: BIP-32 error: child number 2147483648 is invalid (not within [0, 2^31 - 1])` | exit 2; stdout empty; stderr exactly the same warning line then `error: --length 2147483648 out of range for --application dice (valid: 1..=2^31-1 rolls)` |
+| R12 `bh_tk_mn7_dice_max_length_streams_at_once` | `--length 2147483647`, `ulimit -v 200000`; a thread reads stdout, the test waits `recv_timeout(60 s)` for the first 63 bytes, then kills and waits the child | rc 134; `memory allocation of 51539607528 bytes failed`; stdout empty | the first 63 stdout bytes are exactly `0,5,0,4,0,2,0,0,2,5,5,1,1,4,0,4,0,0,4,5,0,1,3,3,1,4,3,0,4,4,3,5` (= the oracle's first 32 rolls of `m/83696968'/89101'/6'/2147483647'/0'`). 0.004 s |
 | R4 `bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic` (existing, `bughunt_s4.rs:306`, un-ignore) | `xpub-search path-of-xpub --phrase-stdin --network signet --target-xpub X --min-account 2147483648` | panic `template.rs:78:14 … InvalidChildNumber(2147483648)`; exit 101 | exit 1; stderr exactly W1 (assertion added) |
 | R5 `bh_tk_mn11_path_of_xpub_window_crossing_2p31_is_refused` | same, `--min-account 2147483647 --number-of-accounts 2` | same panic; exit 101 | exit 1; W1 |
 | R6 `bh_tk_mn11_path_of_xpub_max_account_2p31_is_refused` | same, `--max-account 2147483648`, ulimit | `memory allocation of 841813590408 bytes failed`; exit 134 | exit 1; W1 |
@@ -172,12 +173,22 @@ New file `crates/mnemonic-toolkit/tests/bughunt_1119_unbounded_args.rs` unless n
 | R8 `bh_tk_mn11_passphrase_of_xpub_min_account_2p31_is_refused` | `xpub-search passphrase-of-xpub --phrase-stdin --network signet --passphrase "" --target-xpub X --min-account 2147483648` | advisory note, argv warning, then panic `template.rs:78:14`; exit 101 | exit 1; stderr exactly the W1 line (no note, no warning) |
 | G2 `bh_tk_mn11_window_ending_at_2p31_is_accepted` (guard) | path-of-xpub, `--min-account 2147483646 --number-of-accounts 2` | exit 4; `error: no match in searched set: mode=path-of-xpub, paths searched=14; widen the range …` | unchanged |
 | G3 `bh_tk_mn18_add_path_count_unchanged` (guard) | path-of-xpub, `--number-of-accounts 3 --add-path "m/1account'" --add-path "m/9'/account"` | exit 0; `match: m/84'/1'/0'  (template=bip84, account=0)`; `searched: 27 candidate paths` | unchanged |
-| R9 `bh_tk_mn18_path_of_xpub_full_hardened_window_streams` | path-of-xpub, `--max-account 2147483647`, ulimit | `memory allocation of 841813590016 bytes failed`; exit 134 | still running after 10 s (the test kills it); stderr has no `memory allocation` |
-| R10 `bh_tk_mn18_account_of_descriptor_full_hardened_window_streams` | account-of-descriptor (R7's descriptor), `--max-account 2147483647`, ulimit | `memory allocation of 841813590016 bytes failed`; exit 134 | as R9 |
-| R11 `bh_tk_mn18_passphrase_of_xpub_full_hardened_window_streams` | passphrase-of-xpub, `--passphrase "" --max-account 2147483647`, ulimit | note, warning, `memory allocation of 841813590016 bytes failed`; exit 134 | as R9 (the note and warning stay) |
+| O1 `bh_tk_mn18_order_bip48_before_add_path` (guard, green on base) | `xpub-search path-of-xpub --phrase-stdin --network signet --target-xpub tpubDEYM1BmQ5rp2PWKvCgvQxNeUrEv8gu5819xRdmu6S23fYpS8x2icwAeoVaBTLyN3fGWJQcWoaiKMduTXWKtG9bXNpVrZPRF7XVxrANtAEcR --number-of-accounts 2 --add-path "m/48'/1'/account'/2'"` (target = `m/48'/1'/1'/2'`; phrase `abandon ×11 about` on stdin) | exit 0; stdout exactly `match: m/48'/1'/1'/2'  (template=bip48-wsh, account=1)` / `target-xpub: tpubDEYM1BmQ5rp2PWKvCgvQxNeUrEv8gu5819xRdmu6S23fYpS8x2icwAeoVaBTLyN3fGWJQcWoaiKMduTXWKtG9bXNpVrZPRF7XVxrANtAEcR` / `searched: 16 candidate paths` | unchanged |
+| O3 `bh_tk_mn18_order_add_paths_in_argv_order` (guard, green on base) | same, `--target-xpub tpubDCChhoz5QdrkoaTfhN9wz9UwMkRvBNezCAcbLJ3yqswVCnGtCvuBtmub29oFk2CEty4eu15WDGa7aJ3QcHKp9JtggPakJ8JaFz4HHtCnA65 --number-of-accounts 2 --add-path "m/87'/1'/1'" --add-path "m/87'/1'/account'"` (target = `m/87'/1'/1'`) | exit 0; stdout exactly `match: m/87'/1'/1'  (template=m/87'/1'/1', account=n/a)` / `target-xpub: tpubDCChhoz5QdrkoaTfhN9wz9UwMkRvBNezCAcbLJ3yqswVCnGtCvuBtmub29oFk2CEty4eu15WDGa7aJ3QcHKp9JtggPakJ8JaFz4HHtCnA65` / `searched: 17 candidate paths` (the reverse argv order gives `template=m/87'/1'/account', account=1`) | unchanged |
+| O5 `bh_tk_mn18_order_templates_outer_accounts_inner` (guard, green on base) | same target as O3, `--number-of-accounts 2 --add-path "m/87'/1'/account'" --add-path "m/87'/1'/account1'"` | exit 0; stdout exactly `match: m/87'/1'/1'  (template=m/87'/1'/account', account=1)` / `target-xpub: tpubDCChhoz5QdrkoaTfhN9wz9UwMkRvBNezCAcbLJ3yqswVCnGtCvuBtmub29oFk2CEty4eu15WDGa7aJ3QcHKp9JtggPakJ8JaFz4HHtCnA65` / `searched: 18 candidate paths` (an account-major iterator prints `template=m/87'/1'/account1', account=0`) | unchanged |
+| R9 `bh_tk_mn18_path_of_xpub_full_hardened_window_streams` | path-of-xpub, `--target-xpub X44`, `--max-account 2147483647`, ulimit, 60 s deadline | rc 134; `memory allocation of 841813590016 bytes failed` | rc 0 within the deadline; stdout as in the paragraph below (`searched: 15032385536 candidate paths`); also with `--json`: `searched_count` = 15032385536 |
+| R10 `bh_tk_mn18_account_of_descriptor_full_hardened_window_streams` | account-of-descriptor, descriptor `wsh(sortedmulti(1,X44/<0;1>/*,X44/<0;1>/*))`, `--max-account 2147483647`, ulimit, 60 s deadline | rc 134; `memory allocation of 841813590016 bytes failed` | rc 0 within the deadline; stdout as in the paragraph below (`searched: 15032385536 candidates × 2 cosigners`) |
+| R11 `bh_tk_mn18_passphrase_of_xpub_full_hardened_window_streams` | passphrase-of-xpub, `--passphrase ""`, `--target-xpub X44`, `--max-account 2147483647`, ulimit, 60 s deadline | rc 134 after the note and warning; `memory allocation of 841813590016 bytes failed` | rc 0 within the deadline; stdout as in the paragraph below (`searched: 15032385536 candidate paths`) |
 
-R9-R11: the test spawns under the ulimit, polls `try_wait` every 100 ms, asserts the child has not exited at 10 s, kills
-it, and asserts stderr lacks `memory allocation`. On the base the child exits 134 within a second.
+R9/R10/R11: as above but `--target-xpub X44` (R10: the descriptor `wsh(sortedmulti(1,X44/<0;1>/*,X44/<0;1>/*))`),
+`--max-account 2147483647`, ulimit, a 60 s deadline. `X44` = `tpubDC5FSnBiZDMmhiuCmWAYsLwgLYrrT9rAqvTySfuCCrgsWz8wxMXUS9Tb9iVMvcRbvFcAHGkMD5Kx8koh4GquNGNTfohfk7pgjhaPCdXpoba` (signet `m/44'/1'/0'` of `abandon ×11 about`, from
+`mnemonic convert --from phrase=- --to xpub --path "m/44'/1'/0'" --network signet`). Base: rc 134, `memory allocation of 841813590016 bytes failed`.
+After: rc 0 within the deadline; stdout exactly the 0..20 output (no `--max-account`; observed on base: `match: m/44'/1'/0'  (template=bip44, account=0)`,
+`target-xpub: X44`, `searched: 140 candidate paths`; for account-of-descriptor `match: cosigner @0  m/44'/1'/0'  (template=bip44, account=0)`,
+`match: cosigner @1  m/44'/1'/0'  (template=bip44, account=0)`, `cosigners total: 2; matched: 2`,
+`searched: 140 candidates × 2 cosigners`) with `140` replaced by `15032385536`
+(R9, R11: `searched: 15032385536 candidate paths`; R10: `searched: 15032385536 candidates × 2 cosigners`); R9 also
+run with `--json`: `searched_count` = 15032385536.
 
 Unit rows (in `cmd/xpub_search/candidate_paths.rs` `mod tests`; RED on base = they do not compile, as
 `CandidatePaths` / `check_account_window` do not exist):
@@ -193,15 +204,33 @@ Unit rows (in `cmd/xpub_search/candidate_paths.rs` `mod tests`; RED on base = th
 
 ## 6. Tests that change
 
-- `tests/bughunt_s4.rs`: `bughunt_tk_15_dice_huge_length_is_refused_cleanly`,
-  `bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic`, `bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic`:
-  drop `#[ignore]`, add the exit-code and exact-stderr assertions of R3, R4, R7. Their comments drop "OPEN product
-  question".
-- `tests/cli_printed_text_drift.rs`: `d3_derive_child_help_dice_is_runnable_with_bip85_range` (:336) expects H1;
-  `d6_derive_child_dice_bounds_match_binary` (:359): `dice("6", "2147483648")` becomes `dice("6", "1000001")` (rolls
-  over the cap, nonzero) plus `assert_eq!(dice("6", "1000000"), 0, "rolls at cap")`, and
-  `h.find("rolls (1..=2^31-1)")` becomes `h.find("rolls (1..=1000000)")`; `b3_manual_bip85_application_facts` (:500)
-  expects ``| `dice` | deterministic dice rolls | `1..=1000000` |``.
+- `tests/bughunt_s4.rs`: `bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic`,
+  `bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic`: drop `#[ignore]`, add the exit-code and exact-stderr
+  assertions of R4, R7. Their comments drop "OPEN product question".
+- `tests/bughunt_s4.rs` `bughunt_tk_15_…`: un-ignore, `--length 2147483648`, the R3 assertions; comment drops "OPEN product question".
+  R3 keeps its argv form (`--allow-argv-secret derive-child --from xprv=<MASTER_XPRV>`); after the fix its stderr is exactly two
+  lines: `warning: secret material on argv (--from xprv=) — pipe via --from xprv=- to avoid /proc/$PID/cmdline exposure` then
+  `error: --length 2147483648 out of range for --application dice (valid: 1..=2^31-1 rolls)`; assert exit code 2 and that whole stderr.
+  This also closes FOLLOWUPS `dice-length-red-row-ulimit-false-pass`.
+- `src/bip85.rs` tests: `t1_format_fns_return_secret_string` drops `_f7` (doc "7 `format_*`" → "6"); `dice_d6_10_rolls_matches_spec`,
+  `dice_d2_rolls_in_range`, `dice_d256_rolls_in_range`, `dice_sides_too_small_refused` call `write_dice_rolls` into a
+  `Vec<u8>` (expected values unchanged); `internal_encode_dice_scratch_is_zeroizing`: its dice assertion and the dice half
+  of its doc comment are replaced by
+
+  ~~~rust
+          // dice: no per-roll aggregate; the rolls are written as they are drawn.
+          for anchor in [format!("{}.push(trial", "out"), format!("{}.join(", "out")] {
+              assert!(
+                  !src.contains(&anchor),
+                  "dice: rolls must be written as drawn; found `{anchor}`"
+              );
+          }
+  ~~~
+
+  Run: on fixB PASS (`/scratch/cache/arch-tkdice-1124-zt-green.log`); on base code FAIL `dice: rolls must be written as
+  drawn; found `out.push(trial`` (`…-zt-red.log`).
+- `tests/cli_derive_child.rs:722` `dice_d6_10_rolls_reference_vector`: unchanged (passes on fixB).
+- `tests/cli_printed_text_drift.rs`: d3, d6 and b3 stay as they are (they pass on fixB; d6's `dice("6", "2147483648")` is nonzero as exit 2).
 - `cmd/xpub_search/candidate_paths.rs` unit tests (:163-243, 7 tests): index `candidates[i]` / `.iter().filter` over
   `candidates.iter()` (collect to a `Vec` in the test where indexing is needed); expected values unchanged.
 - No other test changes (`git grep build_candidate_paths` / `match_xpub_against_paths` /
@@ -210,17 +239,12 @@ Unit rows (in `cmd/xpub_search/candidate_paths.rs` `mod tests`; RED on base = th
 
 ## 7. Manual delta (toolkit manual, lockstep; PROPOSED, architect confirms)
 
-- `docs/manual/src/40-cli-reference/41-mnemonic.md:1965` `--length` row. Old cell
-  ``application-specific size; pass `0` for `hd-seed` and `xprv` `` → new cell
-  ``application-specific size; pass `0` for `hd-seed` and `xprv`; `dice`: `1..=1000000` rolls (exit 2 otherwise)``.
 - `41-mnemonic.md:4135` (path-of-xpub) and `:4494` (passphrase-of-xpub) `--max-account` rows. Old cell
   ``optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)` `` → new cell
   ``optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise)``.
   account-of-descriptor's row (:4276) says "same as `path-of-xpub`" and is unchanged.
-- `docs/manual/src/30-workflows/38-bip85-children.md:69`:
-  ``| `dice` | deterministic dice rolls | `1..=2^31-1` |`` → ``| `dice` | deterministic dice rolls | `1..=1000000` |``.
 - Not changed: `docs/manual-gui` (pinned to the GUI's release CLI, precedent FIX_bughunt_tk_g2 5.6; its
-  `46-derive-child.md:128` dice paragraph and the `--max-account` sections of `4d`/`4e`/`4f` get the texts at the
+  `--max-account` sections of `4d`/`4e`/`4f` get the texts at the
   next GUI pin; filed as a FOLLOWUPS line in the author report). No flag added or removed, so the GUI schema mirror and
   `gui-schema` output are unchanged (it carries no help text).
 
@@ -229,9 +253,12 @@ Unit rows (in `cmd/xpub_search/candidate_paths.rs` `mod tests`; RED on base = th
 ~~~text
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 
-- **`derive-child --application dice`**: `--length` is capped at 1000000 rolls. A larger value is refused (exit 2,
-  `--length <N> out of range for --application dice (valid: 1..=1000000 rolls)`). Before, a value near 2^31 aborted
-  on a failed memory allocation (exit 134), and lengths up to 2^31-1 were documented. (bh-tk-mn7)
+- **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in
+  `1..=2^31-1` runs in constant memory and prints the same rolls as before. Before, the whole sequence was built in
+  memory first, and a large `--length` aborted on a failed memory allocation (exit 134), so a long dice child could not
+  be re-derived on a computer with less memory. `--length 0` and `--length` 2147483648 or more are refused
+  (exit 2, `--length <N> out of range for --application dice (valid: 1..=2^31-1 rolls)`); 2147483648 and more failed
+  with a BIP-32 error (exit 1) before. (bh-tk-mn7)
 - **`xpub-search path-of-xpub`, `passphrase-of-xpub`, `account-of-descriptor`**: an account window reaching 2^31
   (`--min-account` or `--max-account` ≥ 2147483648, or `--min-account + --number-of-accounts` > 2147483648) is refused
   (exit 1). Before, it panicked (exit 101). (bh-tk-mn11)
@@ -242,16 +269,16 @@ Unit rows (in `cmd/xpub_search/candidate_paths.rs` `mod tests`; RED on base = th
 
 ## 9. Gate
 
-`bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/build-gate.sh <builder worktree> origin/master --rows 'test(/bh_tk_mn(7|11|18)_|bughunt_tk_(15|32)_|candidate_paths_len_matches_iter_count|candidate_paths_full_hardened_window_is_lazy|check_account_window_boundaries/)' --rows-expect 17`
+`bash /scratch/code/shibboleth/refugium-coordinator/coordinator/scripts/build-gate.sh <builder worktree> origin/master --rows 'test(/bh_tk_mn(7|11|18)_|bughunt_tk_(15|32)_|candidate_paths_len_matches_iter_count|candidate_paths_full_hardened_window_is_lazy|check_account_window_boundaries/)' --rows-expect 20`
 
-17 = R1-R11 (11, of which R3, R4, R7 are the three un-ignored `bughunt_s4.rs` rows) + G1-G3 (3) + U1-U3 (3). The
+20 = R1-R12 (12, of which R3, R4, R7 are the three un-ignored `bughunt_s4.rs` rows) + G2-G3 and O1/O3/O5 (5) + U1-U3 (3). The
 regex is unanchored because nextest matches unit tests by their module path. On the base no other test matches it
 (checked: only the three `bughunt_s4.rs` rows, ignored). The drift tests d3/d6/b3 run in the full nextest step.
 
 It runs the `[mnemonic-toolkit]` conf (fmt, clippy `-D warnings`, `cargo nextest run --locked --workspace`, doc
 tests) and the mutation gate on the diff. Not covered by it: the `manual` CI job (`make -C docs/manual audit`, with
 `verify-examples` and the doc-flag-lint mutation self-test) and `manual-gui`; run both, locally or as green CI on the
-head. R9-R11 each hold a 10 s wait; they run in parallel under nextest.
+head.
 
 ## 10. FOLLOWUPS
 
