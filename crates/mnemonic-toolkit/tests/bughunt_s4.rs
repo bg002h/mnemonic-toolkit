@@ -54,6 +54,7 @@ fn xpub_at(phrase: &str, path: &str) -> Xpub {
 // Correct: a clean refusal (exit 2, exact stderr), no signal.
 // ---------------------------------------------------------------------------
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bughunt_tk_15_dice_huge_length_is_refused_cleanly() {
     let mut child = std::process::Command::new("sh")
         .args([
