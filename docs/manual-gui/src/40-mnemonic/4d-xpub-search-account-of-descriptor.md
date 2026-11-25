@@ -100,7 +100,8 @@ is auto-detected by a tie-break order:
 
 Literal-xpub descriptors with missing `[fp/path]` annotations on
 `@N` cosigners trigger silent BIP-48 default-path inference
-(`m/48'/<coin>'/<account>'/2'`) plus a stderr `info:` notice. A
+(`m/48'/<coin>'/<account>'/2'`; `3'` for a `tr(...)` descriptor) plus a
+stderr `info:` notice. A
 cosigner xpub matching the BIP-341 unspendable NUMS H point is
 skipped and reported in the JSON envelope's
 `unspendable_internal_keys` array. The GUI renders this as a Text

@@ -620,10 +620,23 @@ descriptor string itself. The toolkit handles this two ways:
 1. **Default path inference** — when an `@N` has no inline
    `[fingerprint/path]@N` annotation AND no `--slot @N.path=` CLI input,
    the toolkit assigns the BIP-48 cosigner path
-   `m/48'/<coin>'/<account>'/2'` (Liana / Specter de-facto convention).
+   `m/48'/<coin>'/<account>'/<script_type>'`, where `<script_type>`
+   follows the descriptor's outermost wrapper: `2'` for a `wsh(...)`
+   descriptor (BIP-48 Native Segwit; the Liana / Specter de-facto
+   convention), `1'` for any `sh(...)` descriptor, and `3'` for a
+   `tr(...)` descriptor (not in BIP-48; the Sparrow / Coldcard / Jade
+   convention that template mode also uses).
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
    `<account>` consumes `--account N` (defaults to `0'`). A stderr info
-   notice lists the `@N` indices that received the default.
+   notice lists the `@N` indices that received the default and the path
+   chosen.
+
+   BIP-48 assigns `1'` to Nested Segwit (P2SH-P2WSH) only and defines no
+   script type for legacy bare P2SH. So a legacy `sh(multi(...))` or
+   `sh(sortedmulti(...))` descriptor also defaults to `1'`, which uses the
+   SAME keys as the P2SH-P2WSH wallet of the same seeds. To keep the two
+   apart, give legacy P2SH cosigners an explicit origin (inline
+   `[fingerprint/path]@N` or `--slot @N.path=`).
 2. **Explicit per-`@N` override** — either inline BIP-380 syntax
    `[deadbeef/48'/0'/0'/2']@N` embedded in the descriptor, or
    `--slot @N.path=m/48'/0'/0'/2'` on the CLI. Either takes precedence
@@ -3392,7 +3405,9 @@ is suppressed and a single line is printed to stdout:
   inferred from BIP-44/49/84/86 or BIP-48 conventions.
 - `non-canonical\n` (exit 0) — the descriptor parses but does not map to a
   canonical shape. The `mnemonic bundle` default-path inference per
-  SPEC §4.12.b applies (BIP-48 cosigner path `m/48'/<coin>'/<account>'/2'`).
+  SPEC §4.12.b applies (BIP-48 cosigner path `m/48'/<coin>'/<account>'/<script_type>'`:
+  `2'` for `wsh(...)`, `1'` for `sh(...)`, `3'` for `tr(...)`; see "Non-canonical descriptor mode" under
+  `mnemonic bundle`).
 - exit 2 with empty stdout — descriptor failed to parse
   (`DescriptorParse` error variant).
 
@@ -4283,7 +4298,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 
 #### v0.19.0 silent-default-path inference
 
-Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger silent BIP-48 default path (`m/48'/<coin>'/<account>'/2'`) + a stderr `info:` notice mirroring `mnemonic bundle` v0.19.0 behavior. Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
+Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger silent BIP-48 default path (`m/48'/<coin>'/<account>'/2'`; `3'` for a `tr(...)` descriptor) + a stderr `info:` notice mirroring `mnemonic bundle` v0.19.0 behavior. Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
 
 #### NUMS sentinel
 
