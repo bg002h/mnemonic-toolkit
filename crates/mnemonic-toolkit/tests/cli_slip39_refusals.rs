@@ -726,3 +726,44 @@ fn slip39_test_rng_env_refused_without_feature() {
         }
     }
 }
+
+// ============================================================
+// Row 26 / R5 — the test-RNG refusal comes BEFORE stdin is read
+// (secret row tk-slip39-red-r5-stdin-unread-not-in-ci). Ported from
+// design/fix-sec-tk-slip39-test-rng-feature-red.sh R5, which no CI job ran:
+// the refusal must not consume the phrase piped to `--from phrase=-`.
+// `sh` pipes the phrase into the binary, then `wc -c` counts the bytes the
+// binary left unread; all of them must remain.
+// ============================================================
+
+#[cfg(all(unix, not(feature = "slip39-test-rng")))]
+#[test]
+fn slip39_test_rng_refusal_leaves_stdin_unread() {
+    let bin = assert_cmd::cargo::cargo_bin("mnemonic");
+    let script = r#"printf '%s' "$PHRASE" | { "$BIN" slip39 split --group-threshold 1 --group 3,2 --from phrase=- >/dev/null 2>"$ERRF"; echo "rc=$?"; wc -c | tr -d ' '; }"#;
+    let dir = tempfile::tempdir().unwrap();
+    let errf = dir.path().join("err.txt");
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(script)
+        .env("BIN", &bin)
+        .env("PHRASE", ABANDON_12)
+        .env("ERRF", &errf)
+        .env("MNEMONIC_SLIP39_TEST_RNG", "1".repeat(64))
+        .env_remove("MNEMONIC_SLIP39_TEST_IDENTIFIER")
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+    let stderr_file = std::fs::read_to_string(&errf).unwrap();
+    assert!(
+        stderr_file.starts_with("error: slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG;"),
+        "refusal stem; stderr={stderr_file:?}"
+    );
+    let mut lines = stdout.lines();
+    assert_eq!(lines.next(), Some("rc=1"), "exit; stdout={stdout:?}");
+    assert_eq!(
+        lines.next(),
+        Some(ABANDON_12.len().to_string().as_str()),
+        "the refusal consumed stdin; stdout={stdout:?}"
+    );
+}

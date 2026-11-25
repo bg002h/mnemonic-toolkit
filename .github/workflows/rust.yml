@@ -525,6 +525,12 @@ jobs:
         if: steps.docs.outputs.docs_only != 'true'
         run: cargo clippy --all-targets -- -D warnings
 
+      # Secret row tk-slip39-ci-clippy-feature-on: the feature-on slip39 test-RNG
+      # code is cfg-gated out of the default lint above; lint it with the feature on.
+      - name: cargo clippy --all-targets --features slip39-test-rng -- -D warnings
+        if: steps.docs.outputs.docs_only != 'true'
+        run: cargo clippy -p mnemonic-toolkit --all-targets --features slip39-test-rng -- -D warnings
+
   lib-cross-platform:
     # v0.14.1 — added after the v0.14.0 release because the GUI's Windows
     # build matrix (mnemonic-gui v0.4.0+ depends on this crate's lib for
