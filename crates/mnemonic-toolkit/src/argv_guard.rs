@@ -772,7 +772,10 @@ mod tests {
         let msg = refusal_message(&f);
         assert!(!msg.contains(secret), "the refusal echoed the value: {msg}");
         assert!(!msg.contains("staple"));
-        assert!(!msg.contains("characters"), "the refusal gave a count: {msg}");
+        assert!(
+            !msg.contains("characters"),
+            "the refusal gave a count: {msg}"
+        );
         assert!(msg.contains("--passphrase-stdin"));
         assert!(msg.contains("--passphrase -"));
         assert!(msg.contains("--passphrase @env:VAR"));
@@ -838,7 +841,13 @@ mod tests {
     /// position, never the length.
     #[test]
     fn pp_s2_2_refusal_gives_position_not_count() {
-        let f = findings(&["convert", "--passphrase", "correct horse", "--from", "xpub=x"]);
+        let f = findings(&[
+            "convert",
+            "--passphrase",
+            "correct horse",
+            "--from",
+            "xpub=x",
+        ]);
         let msg = refusal_message(&f);
         assert!(msg.contains("argument "), "{msg}");
         assert!(!msg.contains("characters"), "{msg}");

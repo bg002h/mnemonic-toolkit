@@ -436,10 +436,7 @@ fn the_refusal_reports_class_not_the_value_or_length() {
         stderr.contains("a BIP-32 extended PRIVATE key"),
         "class missing:\n{stderr}"
     );
-    assert!(
-        !stderr.contains("characters"),
-        "length given:\n{stderr}"
-    );
+    assert!(!stderr.contains("characters"), "length given:\n{stderr}");
 }
 
 // ---------------------------------------------------------------------------

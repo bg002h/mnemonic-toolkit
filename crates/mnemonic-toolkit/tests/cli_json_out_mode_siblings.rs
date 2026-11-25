@@ -85,7 +85,13 @@ fn tk_json_out_umask_secret_final_word_0600() {
     check(
         |p| {
             run(
-                &["final-word", "--from", "phrase=-", "--json-out", p.to_str().unwrap()],
+                &[
+                    "final-word",
+                    "--from",
+                    "phrase=-",
+                    "--json-out",
+                    p.to_str().unwrap(),
+                ],
                 Some(ABANDON_11),
                 true,
             )
@@ -122,8 +128,16 @@ fn split_shares_slip39() -> Vec<String> {
     let from = format!("phrase={ABANDON_12}");
     let o = run(
         &[
-            "slip39", "split", "--from", &from, "--group-threshold", "1", "--group", "3,2",
-            "--json-out", p.to_str().unwrap(),
+            "slip39",
+            "split",
+            "--from",
+            &from,
+            "--group-threshold",
+            "1",
+            "--group",
+            "3,2",
+            "--json-out",
+            p.to_str().unwrap(),
         ],
         None,
         false,
@@ -145,8 +159,14 @@ fn tk_json_out_umask_secret_slip39_combine_0600() {
         |p| {
             run(
                 &[
-                    "slip39", "combine", "--share", &shares[0], "--share", &shares[1],
-                    "--json-out", p.to_str().unwrap(),
+                    "slip39",
+                    "combine",
+                    "--share",
+                    &shares[0],
+                    "--share",
+                    &shares[1],
+                    "--json-out",
+                    p.to_str().unwrap(),
                 ],
                 None,
                 true,
@@ -163,8 +183,15 @@ fn tk_json_out_umask_secret_seed_xor_combine_0600() {
     let from = format!("phrase={ABANDON_12}");
     let o = run(
         &[
-            "seed-xor", "split", "--from", &from, "--shares", "2", "--deterministic-from-master",
-            "--json-out", sp.to_str().unwrap(),
+            "seed-xor",
+            "split",
+            "--from",
+            &from,
+            "--shares",
+            "2",
+            "--deterministic-from-master",
+            "--json-out",
+            sp.to_str().unwrap(),
         ],
         None,
         false,
@@ -181,8 +208,16 @@ fn tk_json_out_umask_secret_seed_xor_combine_0600() {
         |p| {
             run(
                 &[
-                    "seed-xor", "combine", "--share", &s[0], "--share", &s[1], "--shares", "2",
-                    "--json-out", p.to_str().unwrap(),
+                    "seed-xor",
+                    "combine",
+                    "--share",
+                    &s[0],
+                    "--share",
+                    &s[1],
+                    "--shares",
+                    "2",
+                    "--json-out",
+                    p.to_str().unwrap(),
                 ],
                 None,
                 true,
@@ -204,7 +239,13 @@ fn tk_bh_i3_failed_json_out_keeps_the_old_file() {
         .arg("-c")
         .arg("umask 022; ulimit -f 0; trap '' XFSZ; exec \"$0\" \"$@\"")
         .arg(bin)
-        .args(["--allow-argv-secret", "final-word", "--from", "phrase=-", "--json-out"])
+        .args([
+            "--allow-argv-secret",
+            "final-word",
+            "--from",
+            "phrase=-",
+            "--json-out",
+        ])
         .arg(&p)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -213,7 +254,12 @@ fn tk_bh_i3_failed_json_out_keeps_the_old_file() {
         .unwrap();
     {
         use std::io::Write;
-        child.stdin.take().unwrap().write_all(ABANDON_11.as_bytes()).unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(ABANDON_11.as_bytes())
+            .unwrap();
     }
     let o = child.wait_with_output().unwrap();
     assert_ne!(o.status.code(), Some(0), "the write must fail");
