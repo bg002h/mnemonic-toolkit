@@ -273,6 +273,8 @@ pub const MANIFEST: &[Vector] = &[
     // NUMS-taproot (`is_nums = 1` wire path) — script-path-only tr, explicit origin.
     Vector { name: "nums_taproot",       template: "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,multi_a(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
         keys: &[], fingerprints: &[], force_chunked: false, path: Some("48'/0'/0'/2'") },
+    Vector { name: "liana_taproot",      template: "tr(UNSPENDABLE(liana),multi_a(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+        keys: &[], fingerprints: &[], force_chunked: false, path: Some("48'/0'/0'/2'") },
     // 2-of-8 sortedmulti + fingerprint on every cosigner: a 376-bit payload
     // that FITS a single string (< the 400-bit regular-code cap), so
     // `force_chunked` routes it through `split`, whose 320-bit per-chunk budget
@@ -470,6 +472,16 @@ pub const MANIFEST: &[Vector] = &[
         template: "wsh(or_i(pkh(@0/48'/0'/0'/2'/<0;1>/*),and_v(v:pkh(@1/48'/0'/1'/2'/<0;1>/*),older(26280))))",
         keys: &[(0, XPUB_JOURNEY_0), (1, XPUB_JOURNEY_1)],
         fingerprints: &[(0, [0x73, 0xc5, 0xda, 0x0a]), (1, [0x73, 0xc5, 0xda, 0x0a])],
+        force_chunked: true, path: None },
+    Vector { name: "keyed_tr_liana_kofn_recovery",
+        template: "tr(UNSPENDABLE(liana),{multi_a(2,@0/48'/0'/0'/3'/<0;1>/*,@1/48'/0'/1'/3'/<0;1>/*,@2/48'/0'/2'/3'/<0;1>/*),and_v(v:pk(@3/48'/0'/3'/3'/<0;1>/*),older(26280))})",
+        keys: &[(0, XPUB_JOURNEY_0), (1, XPUB_JOURNEY_1), (2, XPUB_JOURNEY_2), (3, XPUB_JOURNEY_3)],
+        fingerprints: &[(0, [0x73, 0xc5, 0xda, 0x0a]), (1, [0x73, 0xc5, 0xda, 0x0a]), (2, [0x73, 0xc5, 0xda, 0x0a]), (3, [0x73, 0xc5, 0xda, 0x0a])],
+        force_chunked: true, path: None },
+    Vector { name: "keyed_tr_liana_nested_two_recoveries",
+        template: "tr(UNSPENDABLE(liana),{multi_a(2,@0/48'/0'/0'/3'/<0;1>/*,@1/48'/0'/1'/3'/<0;1>/*),{and_v(v:pk(@2/48'/0'/2'/3'/<0;1>/*),older(26280)),and_v(v:pk(@3/48'/0'/3'/3'/<0;1>/*),older(52560))}})",
+        keys: &[(0, XPUB_JOURNEY_0), (1, XPUB_JOURNEY_1), (2, XPUB_JOURNEY_2), (3, XPUB_JOURNEY_3)],
+        fingerprints: &[(0, [0x73, 0xc5, 0xda, 0x0a]), (1, [0x73, 0xc5, 0xda, 0x0a]), (2, [0x73, 0xc5, 0xda, 0x0a]), (3, [0x73, 0xc5, 0xda, 0x0a])],
         force_chunked: true, path: None },
     Vector { name: "keyed_compose_preset_kofn_recovery",
         template: "tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,{multi_a(2,@0/48'/0'/0'/3'/<0;1>/*,@1/48'/0'/1'/3'/<0;1>/*,@2/48'/0'/2'/3'/<0;1>/*),and_v(v:pk(@3/48'/0'/3'/3'/<0;1>/*),older(26280))})",

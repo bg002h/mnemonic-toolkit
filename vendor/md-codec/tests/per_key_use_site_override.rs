@@ -507,12 +507,35 @@ fn multipath_builder_sortedmulti_divergent_independent_golden() {
     );
 }
 
+/// Writes `d` as given, with the public writers and no canonicalisation or
+/// validation (FIX_bh1119_md_encoder_admission: `encode_payload` now refuses
+/// the wires these tests need, so they build them raw).
+fn raw_wire(d: &Descriptor) -> (Vec<u8>, usize) {
+    let mut w = md_codec::bitstream::BitWriter::new();
+    let version = d.wire_version();
+    md_codec::header::Header {
+        version,
+        divergent_paths: matches!(
+            d.path_decl.paths,
+            md_codec::origin_path::PathDeclPaths::Divergent(_)
+        ),
+    }
+    .write(&mut w);
+    d.path_decl.write(&mut w).unwrap();
+    d.use_site_path.write(&mut w).unwrap();
+    let kiw = d.key_index_width();
+    md_codec::tree::write_node(&mut w, &d.tree, kiw, version).unwrap();
+    d.tlv.write(&mut w, kiw).unwrap();
+    let bits = w.bit_len();
+    (w.into_bytes(), bits)
+}
+
 // ─── P1.4 — D5(a)/(b): decode hardening ───────────────────────────────────
 
 /// D5(a): a card whose `use_site_path_overrides` carries an `@0` entry (the
 /// baseline cannot be overridden) is rejected at decode with
-/// `BaselineUseSiteOverride { idx: 0 }`. Hand-crafted via encode→decode
-/// (our encoders never emit an `@0` override, so this is adversarial wire).
+/// `BaselineUseSiteOverride { idx: 0 }`. Hand-crafted with `raw_wire` (the
+/// encoder refuses an `@0` override, so this is adversarial wire).
 #[test]
 fn decode_rejects_baseline_at0_override() {
     let mut d = divergent_wsh_multi(UseSitePath::standard_multipath(), None);
@@ -520,7 +543,7 @@ fn decode_rejects_baseline_at0_override() {
     // caught as redundant — we want the @0 reject specifically).
     d.tlv.use_site_path_overrides = Some(vec![(0u8, mp(2, 3))]);
 
-    let (bytes, total_bits) = md_codec::encode_payload(&d).expect("encode adversarial @0 override");
+    let (bytes, total_bits) = raw_wire(&d);
     let err = md_codec::decode_payload(&bytes, total_bits)
         .expect_err("decode must reject an @0 use-site override");
     assert!(
@@ -538,8 +561,7 @@ fn decode_rejects_redundant_override_equal_to_baseline() {
     let mut d = divergent_wsh_multi(UseSitePath::standard_multipath(), None);
     d.tlv.use_site_path_overrides = Some(vec![(1u8, UseSitePath::standard_multipath())]);
 
-    let (bytes, total_bits) =
-        md_codec::encode_payload(&d).expect("encode adversarial redundant override");
+    let (bytes, total_bits) = raw_wire(&d);
     let err = md_codec::decode_payload(&bytes, total_bits)
         .expect_err("decode must reject a redundant use-site override");
     assert!(

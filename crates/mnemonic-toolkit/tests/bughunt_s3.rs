@@ -415,7 +415,6 @@ fn nums_tr_template_args<'a>(format: &'a str, slots: &'a [String]) -> Vec<&'a st
 /// the `--descriptor` path is right to refuse a literal NUMS internal key; the
 /// defect is its text, which blames a "descriptor key" use-site.
 #[test]
-#[ignore = "deferred-minor: bip388-literal-nums-key-refusal-text"]
 fn bughunt_tk_21_bip388_export_from_descriptor_taproot_nums_multisig() {
     let slots: Vec<String> = [(0, XPUB_A, FP_A), (1, XPUB_B, FP_B), (2, XPUB_C, FP_C)]
         .iter()

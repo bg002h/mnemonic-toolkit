@@ -8,6 +8,39 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `--format bip388` refuses a policy BIP-388 calls invalid
+
+- **`export-wallet`, `restore`**: `--format bip388` now refuses (exit 1) a NUMS taproot internal key, which is a
+  literal key and not an `@N` placeholder. Before, `--template tr-*-multi-a --taproot-internal-key nums` and a
+  NUMS `restore --md1` card emitted `tr(50929b74…,…)` at exit 0, and `--descriptor` refused with a text about the
+  `/<0;1>/*` suffix. It also refuses a wallet that uses one public key more than once (before: duplicate
+  `keys_info` entries at exit 0). It also refuses a
+  `--descriptor` key with a derivation step before `/<0;1>/*` (before: a `keys_info` entry ending in that step, e.g.
+  `…/5`, at exit 0). Use `--format descriptor` or `--format bitcoin-core` for these wallets.
+- **`build-descriptor`**: with `--allow repeated-keys`, `--format bip388` refuses (exit 1) and `--json` emits
+  `"bip388": null`; `--format descriptor` and the human view are unchanged.
+
+### `build-descriptor` presets take `--older` / `--recovery-older` in blocks only
+
+- `--archetype` presets refuse an `--older` or `--recovery-older` outside `1..=65535` with a `param`
+  diagnostic (exit 2). A value BIP-68 reads as 512-second units (`0x400001..=0x40FFFF`, e.g. `4200000`,
+  about 33.75 days) used to build silently; the refusal now spells out that reading. Author a time-based lock
+  with `--spec`. The decaying-multisig cross-unit refusal is gone (both tiers are now blocks).
+
+### `convert` refuses an unused `--account`
+
+- **`convert`**: a non-zero `--account` is now refused (exit 2) when no requested `--to` target reads it. Only
+  `--to xpub` and `--to xprv` from a phrase, SeedQR or entropy source read it. Before, `--from xpub=… --to xpub
+  --account 3` (and the same from xprv, wif, mk1 or ms1) printed the input key unchanged at exit 0.
+
+### A multipath tuple that repeats a value is refused
+
+- **`bundle`, `verify-bundle`, `import-wallet`, `gui-schema --classify-descriptor`**: a descriptor whose
+  multipath tuple repeats a value (`/<0;0>/*`, `/<0;1;0>/*`) now exits 2 with ``@0 multipath `<0;0>` repeats
+  the value 0; BIP-389 forbids duplicate values in a multipath tuple, …``. BIP-389 does not allow duplicate
+  values in a tuple; such a descriptor used to be engraved with exit 0, its receive and change chains the
+  same chain. `export-wallet --from-import-json` refuses such an envelope (exit 1).
+
 ### `slip39 split` refuses the test RNG variables
 
 - **`slip39 split`**: `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any
@@ -70,6 +103,16 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   golden shows them; `first_signed` is unchanged (md 0.20.4, ms 0.20.2, mk 0.14.0). The GUI manual stays on
   mnemonic-gui v0.63.0's tier: its §82 section and `pinned-upstream.toml`'s `[installer-ahead]` table name the new
   tags, and `manual-gui.yml` stays at the GUI's tags.
+
+### md-codec 0.47.0 -> 0.48.7 adopted
+
+- **The md-codec pin moves from `cf35d61a` (0.47.0) to `e11b4ce1` (tag `md-codec-v0.48.7`), `Cargo.lock`, `fuzz/Cargo.lock`
+  and `vendor/md-codec` with it.** md-codec 0.48.x adds one `Error` variant, `TlvUnknownTagOutOfRange` (an unknown TLV
+  tag outside the reserved range `0x04..=0x1f`). It routes at exit 2 (`error.rs`) with the sibling TLV decode rejects and
+  prints `md1 unknown TLV tag 0x.. is outside the reserved range 0x04..=0x1f` (`friendly.rs`, table test 51 -> 52 rows).
+  No command emits an unknown TLV, so no existing input reaches it. The manual's `repair` section now names md-codec
+  0.48.7 as the build that reads wire versions 4 and 8.
+- **An md1 string with a non-ASCII character is refused.** md-codec 0.47.0 reduced each character to its low byte, so a letter such as U+0161 was read as 'a' and a card carrying it decoded. 0.48.5 and later refuse it ("character 'š' not in codex32 alphabet", exit 1) in `inspect` (the path run; the other md1 decode paths share md-codec's chunk parser). `repair` already refused it.
 
 ## mnemonic-toolkit [0.107.0] — 2026-11-20
 

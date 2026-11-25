@@ -69,6 +69,8 @@ Add to `gate.rs` `#[cfg(test)]` (alongside `rejects_zero_timelock` at `:803`):
 
 Also fold in (same commit, recon dispositions already drafted in FOLLOWUPS working tree): `addresses-env-sentinel-overapplied` → WONTFIX (benign quirk), `two-miniscripts-patch-load-bearing-stale-error` → WONTFIX-in-toolkit (md-codec hygiene, already tracked). Stage paths explicitly. Mandatory R0 gate to 0C/0I; persist reviews to `design/agent-reports/`.
 
+Erratum 2026-11-23 (FIX_sec_archetype_older_blocks_bound): the preset bound now refuses out-of-range `--older` before the gate, so the Tests (2) preset cell sees a `param` diagnostic; the deferred M1 item is done.
+
 ## Non-goals
 - `after()` height/time 500M-boundary semantics or cross-branch mixing (already gated at step-3).
 - Rejecting time-based `older()` entirely in spec-mode (bit-22 values are valid BIP-68; we accept the non-zero-value ones). The preset-flag blocks-only tightening is deferred to the M1 FOLLOWUP.

@@ -46,7 +46,13 @@ on:
   schedule:
     - cron: '0 6 * * 1'          # Mondays 06:00 UTC
   workflow_dispatch:              # on-demand, e.g. right before planning a cycle
+    inputs:
+      full:
+        description: "also run the nightly jobs (no nightly jobs in this workflow; accepted so the release gate can pass -f full=true everywhere)"
+        type: boolean
+        default: false
   push:
+    branches: [master]
     paths:
       - '.github/workflows/miniscript-fork-tripwire.yml'   # born-green self-test
       - 'ci/miniscript-tripwire.py'
@@ -55,6 +61,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'push' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   tripwire:

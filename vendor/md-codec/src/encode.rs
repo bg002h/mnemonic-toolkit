@@ -134,6 +134,16 @@ impl Descriptor {
 /// `@j` for `j > i`. Canonicalization permutes the tree indices,
 /// divergent path decl, and per-`@N` TLV maps atomically; if `d` is
 /// already canonical it is unchanged.
+///
+/// Before returning, the payload is decoded with
+/// [`crate::decode::DecodeOpts::partial`] (the decode `md decode` runs) and
+/// the decoder's error is returned instead if it refuses
+/// (FIX_bh1119_md_encoder_admission): a card this function mints always
+/// decodes under `DecodeOpts::partial()`; strict `decode_payload` and
+/// `Descriptor::from_canonical_payload_bytes` still refuse an `@N` with no
+/// resolvable origin. The bytes of an accepted payload are unchanged. The
+/// check is the decoder's: it does not type-check the miniscript.
+/// [`encode_payload_unadmitted`] does not run this check.
 pub fn encode_payload(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
     encode_payload_inner(d, Admission::Enforce, None)
 }
@@ -178,8 +188,8 @@ pub(crate) fn encode_payload_for_identity(d: &Descriptor) -> Result<(Vec<u8>, us
     encode_payload_inner(d, Admission::SkipPolicy, None)
 }
 
-/// Serialise a card applying NO admission policy -- for COMPARISON and
-/// HASHING of cards that already exist, **never for minting**.
+/// Serialise a card applying NO admission policy -- for COMPARISON, HASHING
+/// and RE-EMITTING of cards that already exist, **never for minting**.
 ///
 /// Same bytes as [`encode_payload`] for every descriptor that function
 /// accepts; the only difference is that the mint-time rules (F-217 origin/key
@@ -195,6 +205,15 @@ pub(crate) fn encode_payload_for_identity(d: &Descriptor) -> Result<(Vec<u8>, us
 /// caller that is about to write a card must use [`encode_payload`] (or
 /// [`encode_md1_string`]); a caller that only asks "are these the same
 /// bytes?" uses this.
+///
+/// Re-emitting a card that already exists is not minting either (Refugium
+/// SPEC §9 Q17): printing the md1 card carried inside an existing `mr1` card
+/// must work even when mint policy would refuse that md1 today. The
+/// single-string form is `codex32::wrap_payload` over this function's
+/// output; the chunked form is [`crate::chunk::split_unadmitted`]. Nothing in
+/// the signature can check that the card already exists, so the mint gate
+/// stays the caller's job: a tool that creates a new card must use
+/// [`encode_payload`], [`encode_md1_string`] or [`crate::chunk::split`].
 pub fn encode_payload_unadmitted(d: &Descriptor) -> Result<(Vec<u8>, usize), Error> {
     encode_payload_inner(d, Admission::SkipPolicy, None)
 }
@@ -264,7 +283,17 @@ fn encode_payload_inner(
     write_node(&mut w, &d.tree, kiw, version)?;
     d.tlv.write(&mut w, kiw)?;
     let total_bits = w.bit_len();
-    Ok((w.into_bytes(), total_bits))
+    let bytes = w.into_bytes();
+    // FIX_bh1119_md_encoder_admission: a payload this function mints must
+    // decode. Mint-time only; re-emit/hash paths never decode their output.
+    if admission == Admission::Enforce {
+        crate::decode::decode_payload_with_opts(
+            &bytes,
+            total_bits,
+            crate::decode::DecodeOpts::partial(),
+        )?;
+    }
+    Ok((bytes, total_bits))
 }
 
 /// Test-only hook forcing a NON-MINIMAL wire version past what

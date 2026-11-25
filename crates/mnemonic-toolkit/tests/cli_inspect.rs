@@ -517,3 +517,26 @@ fn inspect_positional_mk1_md1_only_does_not_fire_argv_advisory() {
         "mk1/md1 positionals are public material — no argv advisory; stderr: {stderr:?}"
     );
 }
+
+/// md-codec 0.48.5 (FIX-B): a non-ASCII character no longer aliases a codex32
+/// symbol. U+0161 truncates to 0x61 ('a'), so 0.47.0 read this card as valid.
+#[test]
+fn inspect_refuses_non_ascii_char_that_aliased_a_codex32_symbol() {
+    let aliased = VALID_MD1_CHUNK0.replacen("za5", "z\u{0161}5", 1);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "inspect",
+            "--no-auto-repair",
+            "--md1",
+            &aliased,
+            "--md1",
+            VALID_MD1_CHUNK1,
+            "--md1",
+            VALID_MD1_CHUNK2,
+        ])
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicate::str::contains("not in codex32 alphabet"));
+}

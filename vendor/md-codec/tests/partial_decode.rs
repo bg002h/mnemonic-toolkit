@@ -288,6 +288,29 @@ fn partial_decode_round_trip_byte_identical() {
     assert_eq!(total_bits, total_bits2);
 }
 
+/// Writes `d` as given, with the public writers and no canonicalisation or
+/// validation (FIX_bh1119_md_encoder_admission: `encode_payload` now refuses
+/// the wires these tests need, so they build them raw).
+fn raw_wire(d: &Descriptor) -> (Vec<u8>, usize) {
+    let mut w = md_codec::bitstream::BitWriter::new();
+    let version = d.wire_version();
+    md_codec::header::Header {
+        version,
+        divergent_paths: matches!(
+            d.path_decl.paths,
+            md_codec::origin_path::PathDeclPaths::Divergent(_)
+        ),
+    }
+    .write(&mut w);
+    d.path_decl.write(&mut w).unwrap();
+    d.use_site_path.write(&mut w).unwrap();
+    let kiw = d.key_index_width();
+    md_codec::tree::write_node(&mut w, &d.tree, kiw, version).unwrap();
+    d.tlv.write(&mut w, kiw).unwrap();
+    let bits = w.bit_len();
+    (w.into_bytes(), bits)
+}
+
 // ─── P0.3 (I-1): EmptyOriginOverride — unconditional + fatal-in-partial ───
 
 #[test]
@@ -320,7 +343,7 @@ fn empty_origin_override_rejected_for_non_canonical_shape_via_path_decl_fallback
     };
     d.tlv.origin_path_overrides = Some(vec![(0u8, empty_path())]);
 
-    let (bytes, total_bits) = encode_payload(&d).unwrap();
+    let (bytes, total_bits) = raw_wire(&d);
     let err = decode_payload(&bytes, total_bits).unwrap_err();
     assert!(
         matches!(err, Error::EmptyOriginOverride { idx: 0 }),
@@ -357,7 +380,7 @@ fn empty_origin_override_rejected_for_canonical_wpkh_shape() {
     };
     d.tlv.origin_path_overrides = Some(vec![(0u8, empty_path())]);
 
-    let (bytes, total_bits) = encode_payload(&d).unwrap();
+    let (bytes, total_bits) = raw_wire(&d);
     let err = decode_payload(&bytes, total_bits).unwrap_err();
     assert!(matches!(err, Error::EmptyOriginOverride { idx: 0 }));
 }
@@ -369,7 +392,7 @@ fn empty_origin_override_still_rejects_under_partial_mode() {
     // from MissingExplicitOrigin.
     let mut d = dead_sh_sortedmulti();
     d.tlv.origin_path_overrides = Some(vec![(0u8, empty_path())]);
-    let (bytes, total_bits) = encode_payload(&d).unwrap();
+    let (bytes, total_bits) = raw_wire(&d);
     let opts = DecodeOpts::partial();
     let err = decode_payload_with_opts(&bytes, total_bits, opts).unwrap_err();
     assert!(

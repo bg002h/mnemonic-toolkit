@@ -371,7 +371,7 @@ mr-sitting kit-write --kit <FILE>
 | `--kit <FILE>` | The kit payload plan file mr-gui saved |
 | `-h, --help` | Print help |
 
-`kit-write` writes the kit payload plan mr-gui saved to the SeedHammer's kit payload region (address `0x10D00000`) with `picotool load --verify`, the SeedHammer in BOOTSEL. It reads no secret and runs no hardening, lock, network test or logging-terminal check. It needs a RAM-only folder (`$XDG_RUNTIME_DIR` on tmpfs or ramfs) for the one file picotool reads, `refugium-device-<pid>.bin`, which it unlinks before it exits. The plan is read strictly (ASCII lines: `refugium-kit-payload 1`, `set`, `payload <x> of <y>`, `digest`, `records`, then each card's `card <k> <kind>` and `record` lines, then `end`); its digest line is recomputed from its records.
+`kit-write` writes the kit payload plan mr-gui saved to the SeedHammer's kit payload region (address `0x10D00000`) with `picotool load --verify`, the SeedHammer in BOOTSEL. It reads no secret and runs no hardening, lock, network test or logging-terminal check. It needs a RAM-only folder (`$XDG_RUNTIME_DIR` on tmpfs or ramfs; an empty value counts as not set; the `refugium-sitting` folder `sit` makes in it is not checked) for the one file picotool reads, `refugium-device-<pid>.bin`, which it overwrites with zeros and unlinks before it exits, also when a signal stops it. A signal (Ctrl-C, SIGTERM, SIGHUP) that comes before the device file is made stops the command there once its checks pass (ST-KIT-14, exit 1; a Ctrl-C while `picotool version` runs ends that run, and ST-KIT-09 says so); Ctrl-C in its terminal during a device step also ends picotool, and that step is reported as failed (ST-KIT-07); a signal sent to mr-sitting alone lets the step end, and the command reports its result. The plan is read strictly (ASCII lines: `refugium-kit-payload 1`, `set`, `payload <x> of <y>`, `digest`, `records`, then each card's `card <k> <kind>` and `record` lines, then `end`); its digest line is recomputed from its records.
 
 ### What it prints
 
@@ -402,6 +402,10 @@ mr-sitting kit-write --kit <FILE>
 **ST-KIT-07:**
 
 > mr-sitting: the SeedHammer was not \<done\> (picotool exit \<code\>: \<last\>): check that it is the only board plugged into this computer and that it is in BOOTSEL, then run this command again
+
+**ST-KIT-14:**
+
+> mr-sitting: stopped by a signal before picotool ran: the SeedHammer was not \<done\>
 
 **ST-KIT-09:**
 
@@ -455,6 +459,10 @@ mr-sitting kit-wipe
 
 > mr-sitting: the SeedHammer was not \<done\> (picotool exit \<code\>: \<last\>): check that it is the only board plugged into this computer and that it is in BOOTSEL, then run this command again
 
+**ST-KIT-14:**
+
+> mr-sitting: stopped by a signal before picotool ran: the SeedHammer was not \<done\>
+
 ## `mr-sitting erase-sealed`
 
 ### Synopsis
@@ -484,6 +492,10 @@ mr-sitting erase-sealed
 **ST-KIT-12:**
 
 > mr-sitting: the SeedHammer's sealed payload region could not be read back: \<detail\>
+
+**ST-KIT-14:**
+
+> mr-sitting: stopped by a signal before picotool ran: the SeedHammer was not \<done\>
 
 ## `mr-sitting glossary`
 
@@ -829,5 +841,5 @@ ST-END-02's `<pw>` is `; (4) destroy the paper with the plates password` when th
 | Code | Meaning |
 |---|---|
 | 0 | `sit`: the session ended at ST-END-02. `verify`: exactly one block matched in full. `root`, `child`: as `mr root`, `mr child`. `kit-write`, `kit-wipe`, `erase-sealed`: the SeedHammer was written or erased and read back as the command says (ST-KIT-06, ST-KIT-08, ST-KIT-10). |
-| 1 | A refusal of holder material or a check, or the holder stopped: `sit` stopped (ST-END-03, ST-END-04), a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09); `verify` mismatch (ST-V-04, ST-V-05, ST-V-06), or stopped (ST-V-09); `kit-write`, `kit-wipe`, `erase-sealed`: the device step failed (ST-KIT-07, ST-KIT-11, ST-KIT-12). |
+| 1 | A refusal of holder material or a check, or the holder stopped: `sit` stopped (ST-END-03, ST-END-04), a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09); `verify` mismatch (ST-V-04, ST-V-05, ST-V-06), or stopped (ST-V-09); `kit-write`, `kit-wipe`, `erase-sealed`: the device step failed (ST-KIT-07, ST-KIT-11, ST-KIT-12), or a signal came before it (ST-KIT-14). |
 | 2 | Usage and input files: clap errors; a refused I1, I2 or argument (ST-PLAN-…, ST-FILE-…, ST-HB-02, ST-START-02, ST-START-03, ST-START-04, ST-START-07, ST-START-11, ST-V-07, ST-V-08); `practice`: ST-PR-04 to ST-PR-07 and ST-PR-12; `glossary`: ST-G-02; `kit-write`, `kit-wipe`, `erase-sealed`: the plan file (ST-KIT-01 to ST-KIT-04), the RAM-only folder (ST-KIT-05), picotool not usable (ST-KIT-09), the file (ST-KIT-13), always before any picotool run but `version`. Always before any secret is read. |

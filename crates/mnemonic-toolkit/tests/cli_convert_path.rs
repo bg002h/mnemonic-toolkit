@@ -522,16 +522,6 @@ fn r5_help_path_block_literal_only() {
     );
 }
 
-#[test]
-fn r3_help_account_refused_with_path() {
-    let h = help();
-    assert!(
-        h.lines().any(|l| l.trim()
-            == "BIP-32 account index (default 0). Used to compute the template-derived path when `--path` is omitted. Refused (non-zero) together with --path"),
-        "help:\n{h}"
-    );
-}
-
 // QT1-QT3 precedence guard rows (architect bughunt-fixdocs).
 #[test]
 fn r4_before_r3_xprv_to_xpub_path_and_account() {

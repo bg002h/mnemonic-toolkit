@@ -28,6 +28,16 @@ on:
   push:
     tags:
       - 'mnemonic-toolkit-v*'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "also run the nightly jobs (no nightly jobs in this workflow; accepted so the release gate can pass -f full=true everywhere)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/master' }}
 
 jobs:
   self-pin-matches-tag:

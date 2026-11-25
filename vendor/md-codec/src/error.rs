@@ -113,6 +113,13 @@ pub enum Error {
         n: usize,
     },
 
+    /// An unknown TLV entry whose tag is outside the reserved range 0x04..=0x1f.
+    #[error("unknown TLV tag 0x{tag:02x} is outside the reserved range 0x04..=0x1f")]
+    TlvUnknownTagOutOfRange {
+        /// The offending tag.
+        tag: u8,
+    },
+
     /// TLV ordering violation: a TLV tag was followed by a smaller-or-equal tag.
     #[error(
         "TLV ordering violation: tag 0x{prev:02x} followed by 0x{current:02x}; require ascending"

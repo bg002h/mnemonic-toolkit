@@ -348,3 +348,35 @@ fn golden_key_taproot_with_key_path_branch() {
         "tr(@0/<0;1>/*,{pk(@1/<0;1>/*),pk(@2/<0;1>/*)})\u{1f}[[][][]][]\u{1f}Xpub"
     );
 }
+
+/// `leaf_keys_ascending` is STRICT: Nunchuk deduplicates, Liana does not, so
+/// a repeated leaf key breaks agreement. Mutation: `pk <= p` -> `pk < p` in
+/// `skeleton.rs` -> the duplicate case reads `Some(true)` and this reds.
+#[test]
+fn leaf_keys_ascending_is_strict_and_order_sensitive() {
+    use common::{keyarg, taptree2, test_xpubs, tr_liana_unspendable_two_leaves_with_pubkeys};
+    use md_codec::tag::Tag;
+    use md_codec::tree::{Body, InternalKey, Node};
+
+    let a = test_xpubs()[0];
+    let b = test_xpubs()[1];
+    let mut ab = tr_liana_unspendable_two_leaves_with_pubkeys();
+    ab.tlv.pubkeys = Some(vec![(0, a), (1, b)]);
+    let mut ba = ab.clone();
+    ba.tlv.pubkeys = Some(vec![(0, b), (1, a)]);
+    let got = [ab, ba].map(|d| skeleton(&d).unwrap().leaf_keys_ascending);
+    assert!(
+        got == [Some(true), Some(false)] || got == [Some(false), Some(true)],
+        "exactly one order ascends: {got:?}"
+    );
+
+    let mut dup = tr_liana_unspendable_two_leaves_with_pubkeys();
+    dup.tree = Node {
+        tag: Tag::Tr,
+        body: Body::Tr {
+            internal_key: InternalKey::LianaUnspendable,
+            tree: Some(Box::new(taptree2(keyarg(Tag::PkK, 0), keyarg(Tag::PkK, 0)))),
+        },
+    };
+    assert_eq!(skeleton(&dup).unwrap().leaf_keys_ascending, Some(false));
+}

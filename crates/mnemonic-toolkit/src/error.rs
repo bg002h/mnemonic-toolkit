@@ -533,6 +533,9 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::ChildCountOutOfRange { .. }
         | md_codec::Error::KGreaterThanN { .. }
         | md_codec::Error::TlvOrderingViolation { .. }
+        // md-codec 0.48.x: an unknown TLV tag outside the reserved range
+        // 0x04..=0x1f is non-canonical wire, a decode reject like its siblings.
+        | md_codec::Error::TlvUnknownTagOutOfRange { .. }
         | md_codec::Error::PlaceholderIndexOutOfRange { .. }
         | md_codec::Error::OverrideOrderViolation { .. }
         // md-codec 0.37.0 D5(a) decode canonical-form rejects: an `@0`

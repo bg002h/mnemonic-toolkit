@@ -282,7 +282,7 @@ pub struct ConvertArgs {
 
     /// BIP-32 account index (default 0). Used to compute the
     /// template-derived path when `--path` is omitted. Refused (non-zero)
-    /// together with --path.
+    /// together with --path, or where no requested target uses it.
     #[arg(long, default_value = "0")]
     pub account: u32,
 
@@ -525,6 +525,20 @@ fn refusal_path_unused() -> ToolkitError {
 fn refusal_account_with_path() -> ToolkitError {
     ToolkitError::ConvertRefusal(
         "--account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path."
+            .into(),
+    )
+}
+
+/// Which (source, target) edges read `--account`: a seed source's
+/// template-derived xpub/xprv (with `--path` absent; R3 refuses the pair).
+fn reads_account(from: NodeType, to: NodeType) -> bool {
+    use NodeType::*;
+    matches!(from, Seedqr | Phrase | Entropy) && matches!(to, Xpub | Xprv)
+}
+
+fn refusal_account_unused() -> ToolkitError {
+    ToolkitError::ConvertRefusal(
+        "--account is not used by any requested --to target from this --from source (only --to xpub or --to xprv from a phrase, seedqr or entropy reads it); drop --account."
             .into(),
     )
 }
@@ -1000,6 +1014,11 @@ pub fn run<R: Read, W: Write, E: Write>(
     // 5.0b) Ruling R3: a non-zero `--account` is refused together with `--path`.
     if args.path.is_some() && args.account != 0 {
         return Err(refusal_account_with_path());
+    }
+
+    // 5.0c) A non-zero `--account` must be read by at least one requested target.
+    if args.account != 0 && !targets.iter().any(|&t| reads_account(primary.node, t)) {
+        return Err(refusal_account_unused());
     }
 
     // 5.a) SPEC §11.a — `--xpub-prefix` (non-default) requires explicit `--network`.

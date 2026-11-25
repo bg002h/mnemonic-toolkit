@@ -328,6 +328,13 @@ remedy above does **not** apply: adding `/*` describes a different wallet
 (`/<0;1>/*` ranges over `/0/i` and `/1/i`; `/<0;1>` is the two keys `/0`
 and `/1`). md1 has no card for it; keep the full descriptor.
 
+A **multipath that repeats a value** — `<0;0>`, `<1;1>`, `<0;1;0>` (values compare as numbers, so
+`<1;01>` repeats 1) — is invalid under BIP-389, which forbids duplicate values in a tuple; with `<0;0>`
+the receive and change chains would be one chain. It is refused (exit 2, `DescriptorParse`; for
+`import-wallet`, exit 2 `ImportWalletParse`) on the same surfaces, before the fixed-step and
+no-wildcard checks above. **Remedy:** copy the tuple from the wallet's own exported descriptor; most
+wallets use `/<0;1>/*` (receive 0, change 1). A guessed tuple describes a different wallet.
+
 **Sparrow is unaffected.** Sparrow's own `@N/**` template placeholder is
 expanded to the multipath form internally before this check runs, so a
 normal Sparrow import is unaffected by this rule.
@@ -876,6 +883,7 @@ default per the inference rule above.
 | `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
 | Canonical descriptor + `--slot @N.phrase= + --slot @N.path=` | `error: slot @{N} has both secret-bearing input and watch-only input; pick one per slot.` (the `{phrase, path}` pair is legal only in non-canonical mode) |
 | `@N`/key use-site path ends in a fixed step (`/0/*`, `/0h/*`) | refused, exit 2 (`DescriptorParse`) — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused |
+| `@N`/key multipath repeats a value (`<0;0>`, `<0;1;0>`) | refused, exit 2 (`DescriptorParse`) — ``error: @N multipath `<0;0>` repeats the value 0; BIP-389 forbids duplicate values in a multipath tuple, so this descriptor is invalid; copy the tuple from your wallet's own descriptor (most wallets use `<0;1>`: receive 0, change 1)``; see [Non-representable use-site steps](#non-representable-use-site-steps) |
 
 ---
 
@@ -1131,7 +1139,7 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 2) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
 | `--template <TEMPLATE>` | as for `bundle` |
 | `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--template`/`--account` path (and makes `--template` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
-| `--account <ACCOUNT>` | account index (default 0); refused (exit 2) when non-zero together with `--path` |
+| `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 2) when non-zero together with `--path`, or when non-zero and no requested target reads it |
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
@@ -1188,7 +1196,7 @@ mnemonic export-wallet [OPTIONS]
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `seedqr`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys, including `seedqr`, are refused by `export-wallet`'s watch-only validator per SPEC §3) |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot. **`bip388`** refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins), and a `--descriptor` key with a derivation step before `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`; a BIP-388 key entry is an xpub with no path after it); use `descriptor` or `bitcoin-core` for these wallets |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `0` (default; rescan from genesis to discover an existing key's funds), `now`, or unix seconds |
@@ -1609,9 +1617,14 @@ file-import surface is singlesig-only and must not receive a script-tree
 policy dressed as singlesig. `bip388` likewise refuses a **general** taproot
 card (a tap-script-tree reconstructed via the general route-around has no
 named-template form): such a card emits `descriptor` / `bitcoin-core` only.
-A **distinct-trunk taproot multisig** card (NUMS *or* non-NUMS), by contrast,
+A non-NUMS **distinct-trunk taproot multisig** card, by contrast,
 takes the template path and *does* emit `bip388` faithfully — `tr(@idx/**,
-multi_a(k,…))`. No `--template` is needed (the threshold and script type come
+multi_a(k,…))`. A **NUMS** taproot multisig card refuses `bip388` (exit 1):
+its internal key is a literal key, and BIP-388 allows only `@N` key
+placeholders; it emits `descriptor` / `bitcoin-core`. A card whose policy
+uses one public key more than once (e.g. a `bundle --descriptor` that
+repeats `@0`) refuses `bip388` too (exit 1; BIP-388 requires pairwise
+distinct keys). No `--template` is needed (the threshold and script type come
 from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
 **before** any payload is emitted unless `--allow-mismatch`.
 
@@ -1895,6 +1908,7 @@ on stdout + the round-trip status on stderr.
 | `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
 | Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
 | Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused. Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
+| Descriptor's key placeholder multipath repeats a value (`<0;0>`, `<0;1;0>`) | exit 2 `ImportWalletParse` — the `bundle` text after the format's parse-error prefix (``import-wallet: descriptor: parse error: @0 multipath `<0;0>` repeats the value 0; …``); see [Non-representable use-site steps](#non-representable-use-site-steps) |
 | Bitcoin Core receive/change-shaped pair whose keys/origins differ | exit 2 `ImportWalletParse` — not merged (distinct keys are different wallets); see [foreign wallet formats](#foreign-wallet-formats) |
 | Bitcoin Core same-key receive/change pair whose script bodies differ (e.g. `wsh(pk(…/0/*))` + `wsh(pkh(…/1/*))`) | exit 2 `ImportWalletParse` — not merged; the first entry gets the fixed-step refusal above |
 | Coldcard generic JSON: `account` present but not a non-negative JSON integer (`"5"`, `-1`, `1.5`, `null`) | exit 2 `ImportWalletParse` — ``import-wallet: coldcard: parse error: `account` must be a non-negative integer, got <value>`` |
@@ -3665,7 +3679,7 @@ did not actually apply.
 ### md1 at an unreadable wire version (F-642) {#mnemonic-repair-md1-unreadable-version}
 
 BCH correction does not read the payload, so it works on a card whose
-wire version this build cannot decode (md-codec 0.47.0 reads versions 4
+wire version this build cannot decode (md-codec 0.48.7 reads versions 4
 and 8). On a **single-string** `--md1` card at such a version,
 `mnemonic repair` keeps the correction: the report and corrected string
 go to stdout, the JSON `verdict` is `"unreadable_version"`, and the exit
@@ -4874,10 +4888,14 @@ Notes:
   `decaying-multisig`, where it is the **tier-1** timelock (the table above
   is the disambiguator).
 - A parameter that does not belong to the chosen archetype, a missing
-  required parameter, too few keys, or `--recovery-older` ≤ `--older` is
-  refused with a `param`-kind diagnostic naming the flag (exit 2). Everything
-  else — k > n, duplicate keys, bad hex, timelock bounds, an `xprv` — flows
-  to the SAME validation gate as `--spec` and is refused there; in preset
+  required parameter, too few keys, an `--older` or `--recovery-older`
+  outside `1..=65535`, or `--recovery-older` ≤ `--older` is refused with a
+  `param`-kind diagnostic naming the flag (exit 2). The two timelock flags
+  take blocks only: a value BIP-68 would read as 512-second units
+  (`0x400001..=0x40FFFF`) is refused with that reading spelled out; author a
+  time-based lock with `--spec`. Everything else — k > n, duplicate keys, bad
+  hex, an `xprv` — flows to the SAME validation gate as `--spec` and is
+  refused there; in preset
   mode those node-addressed diagnostics also name the responsible flag
   (`(from --key)` in the human output, `flag` in `--json`).
 - A deliberately unusual variant (inverted decay ordering, same-key
@@ -4904,7 +4922,7 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--spec <SPEC>` | the JSON node-tree spec — a file path, or `-` for stdin. If omitted, stdin is read when it is not a TTY |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest`. Used only for the human-view first-receive-address rendering; the descriptor / bip388 / cost output is network-agnostic (the xpubs carry the network) |
 | `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
-| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
+| `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object; `bip388` is `null` when BIP-388 cannot express the policy, e.g. an allowed `repeated-keys` policy). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
 | `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs. Since v0.51.0 it also carries an `archetypes` section: per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry |
 | `--archetype <ARCHETYPE>` | build from a curated preset instead of a `--spec` node-tree (conflicts with `--spec`): `decaying-multisig`, `hashlock-gated`, `kofn-recovery`, `simple-timelocked-inheritance`, `tiered-recovery`. Parameters via the flags below; the lowered tree flows through the SAME validation gate |
 | `--key <KEY>` | primary-path cosigner key (`[fp/path]xpub…`); repeat per cosigner. **Argv order is preserved into the quorum** (even `sortedmulti`'s descriptor string keeps authored order; sorting is script-time) |
@@ -4912,8 +4930,8 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--recovery-key <RECOVERY_KEY>` | recovery-path cosigner key; repeat per cosigner (argv order preserved) |
 | `--recovery-threshold <RECOVERY_THRESHOLD>` | recovery quorum k |
 | `--final-key <FINAL_KEY>` | last-resort key (`decaying-multisig` tier 3) |
-| `--older <OLDER>` | relative timelock (blocks) gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
-| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock; must be **greater than** `--older` (tiers must unlock progressively later) |
+| `--older <OLDER>` | relative timelock in blocks, `1..=65535`, gating the recovery path (`decaying-multisig`: the tier-1 timelock) |
+| `--recovery-older <RECOVERY_OLDER>` | `decaying-multisig` tier-2 relative timelock in blocks, `1..=65535`; must be **greater than** `--older` (tiers must unlock progressively later) |
 | `--after <AFTER>` | `decaying-multisig` tier-3 absolute locktime (block height, or unix time past the BIP-65 threshold) |
 | `--hash <HASH>` | SHA-256 digest (64 hex chars) for `hashlock-gated` |
 | `--emit-spec` | print the lowered + gate-validated node-tree spec JSON instead of building — review it, edit it, feed it back via `--spec`. Conflicts with `--format` / `--json`; `--network` is accepted and ignored. The gate still runs: an invalid preset emits diagnostics, never a spec |
@@ -4969,9 +4987,13 @@ invocation — a deliberate, reviewed act, never silent:
 - `--emit-spec` records NO allowance in the spec document — replaying an
   emitted spec without `--allow` correctly refuses. The banner still
   prints on the emitting run.
-- An allowed `repeated-keys` policy emits duplicate `keys_info` entries
-  in its BIP-388 output (no dedup); hardware-signer registration
-  behavior on duplicate keys is signer-defined.
+- An allowed `repeated-keys` policy has no BIP-388 form (BIP-388 requires
+  pairwise distinct `keys_info` keys): `--format bip388` refuses it (exit 1)
+  with `error: --format bip388 cannot express a wallet that uses one public
+  key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet
+  policy requires pairwise distinct keys; use --format descriptor for this
+  wallet`, and `--json` emits `"bip388": null`. `--format descriptor` and the
+  human view are unchanged.
 - miniscript's 6th opt-out, `raw_pkh`, is not exposed — it is
   unreachable from this builder's node grammar.
 

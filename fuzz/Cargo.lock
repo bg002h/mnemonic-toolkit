@@ -532,8 +532,8 @@ dependencies = [
 
 [[package]]
 name = "md-codec"
-version = "0.47.0"
-source = "git+https://github.com/bg002h/descriptor-mnemonic?rev=cf35d61af0f058029df841f4882945e53f86cd4b#cf35d61af0f058029df841f4882945e53f86cd4b"
+version = "0.48.7"
+source = "git+https://github.com/bg002h/descriptor-mnemonic?rev=e11b4ce10ff35bb2a65999e37d1c6815c3b699a0#e11b4ce10ff35bb2a65999e37d1c6815c3b699a0"
 dependencies = [
  "bip39",
  "bitcoin",
@@ -587,7 +587,7 @@ checksum = "d54d9fc783d32defa2274b346b66549a29756db8514200b12c3c98a2c4579f64"
 
 [[package]]
 name = "mnemonic-toolkit"
-version = "0.107.0"
+version = "0.107.1"
 dependencies = [
  "aes",
  "base64 0.22.1",
