@@ -81,11 +81,12 @@ pub struct WordCardArgs {
     /// Reed–Solomon parity words `m` to append (the repair budget). Default 0
     /// (detection only). Repair works on whole checkpoint blocks of about √K
     /// data words (all K when K < 16): a mis-stamped data word erases its whole
-    /// block, a mis-stamped checkpoint word its block plus itself, and a
-    /// mis-stamped parity word costs 2; the card repairs while the total stays
-    /// within `m`. The header words cannot be repaired. To survive one
-    /// mis-stamped word anywhere outside the header, `m` must exceed the block
-    /// size. Mutually exclusive with `--parity-pct`.
+    /// block; a mis-stamped checkpoint word costs its block plus one, or plus
+    /// two when only its CRC field changed; a mis-stamped parity word costs 2.
+    /// The card repairs while the total stays within `m`. The header words
+    /// cannot be repaired. To survive one mis-stamped word anywhere outside
+    /// the header, `m` must be at least the block size plus 2. Mutually
+    /// exclusive with `--parity-pct`.
     #[arg(long, value_name = "N", conflicts_with = "parity_pct")]
     pub parity_words: Option<usize>,
 

@@ -5199,7 +5199,7 @@ mnemonic word-card --decode --decode-plate "<WORDS>" --decode-plate "<WORDS>"...
 | `--from <MK1\|MD1>` | source `m*1` card to encode: an `mk1` xpub card or an `md1` descriptor card. Repeating flag (one per `mk1`/`md1`; multi-chunk cards may be passed joined or repeated — chunks auto-group by HRP). `-` reads one card per line from stdin. With `--raid 1\|2`, supply the `n` `mk1` data cards via repeated `--from`. PUBLIC material — not a secret |
 | `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or a lone `-` (stdin, whitespace-separated; `-` with any other `<WORD>` is refused, exit 1). For a RAID array, repeat `--decode-plate` once per surviving plate |
 | `--decode-plate <WORDS>` | one RAID plate's whitespace-separated word list for `--decode` reconstruction (repeating flag). Supply the surviving `≥ n` plates of an `n + r` array to reconstruct a lost data plate. Mutually exclusive with the positional `<WORD>...` single-card form |
-| `--parity-words <N>` | Reed–Solomon parity words `m` to append (the repair budget). Default `0` (detection only). Repair works on whole checkpoint blocks of about √K data words (all `K` when `K < 16`): a mis-stamped data word erases its whole block, a mis-stamped checkpoint word its block plus itself, and a mis-stamped parity word costs 2; the card repairs while the total stays within `m`. The header words cannot be repaired. To survive one mis-stamped word anywhere outside the header, `m` must exceed the block size (see *Repair budget* below). Mutually exclusive with `--parity-pct` |
+| `--parity-words <N>` | Reed–Solomon parity words `m` to append (the repair budget). Default `0` (detection only). Repair works on whole checkpoint blocks of about √K data words (all `K` when `K < 16`): a mis-stamped data word erases its whole block; a mis-stamped checkpoint word costs its block plus one, or plus two when only its CRC field changed; a mis-stamped parity word costs 2. The card repairs while the total stays within `m`. The header words cannot be repaired. To survive one mis-stamped word anywhere outside the header, `m` must be at least the block size plus 2 (see *Repair budget* below). Mutually exclusive with `--parity-pct` |
 | `--parity-pct <PCT>` | Reed–Solomon parity as a PERCENTAGE of the data-symbol count `K` (`m = ceil(K * pct / 100)`), an alternative to `--parity-words`. E.g. `--parity-pct 25` ≈ a 25% redundancy budget. Mutually exclusive with `--parity-words` |
 | `--raid <0\|1\|2>` | RAID recovery tier: `0` = no RAID (a single solo card; default), `1` = one XOR recovery plate (RAID-5, survives any 1 lost plate), `2` = two recovery plates (RAID-6, survives any 2). RAID requires `≥ 2` `mk1` data cards via repeated `--from`. Default `0` |
 | `--integrity-bits <BITS>` | integrity-tag bit width `t` (the non-linear SHA-256 truncation that catches an RS miscorrection at `≤ 2⁻ᵗ`). Default `44` (4 words); minimum `33` |
@@ -5220,8 +5220,9 @@ mnemonic word-card --from "mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj
 
 Add an 8-word Reed–Solomon repair budget (this card's checkpoint blocks hold 8
 data words, so it repairs one mis-stamped data word, or up to 4 mis-stamped
-parity words, but not a mis-stamped checkpoint or header word; see *Repair
-budget* below), then decode it back to the original xpub:
+parity words, but not a mis-stamped checkpoint or header word; `--parity-words
+10` would survive any one non-header word; see *Repair budget* below), then
+decode it back to the original xpub:
 
 ```sh
 WORDS=$(mnemonic word-card --from "$MK1" --parity-words 8 | sed -n '2p')
@@ -5283,14 +5284,18 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
   (`K` = data words; one block of all `K` when `K < 16`), each followed by a
   checkpoint word carrying a 5-bit CRC of the block. The CRC says a block is
   wrong but not which word, so the decoder erases the whole block: one
-  mis-stamped data word costs the block size, a mis-stamped checkpoint word
-  costs the block size plus one, and a mis-stamped parity word costs 2. Repair
-  succeeds while the total is at most `m`. The first 5 words (the header; 9 on a
-  RAID plate) are CRC-checked and cannot be repaired. So `m` = block size + 1
-  survives one mis-stamped word anywhere outside the header, and each further
-  damaged block needs another block's worth. A 2-chunk `mk1` card has blocks of
-  8 words: `--parity-words 9` survives any one mis-stamped non-header word,
-  `--parity-words 18` any two in different blocks. A decode beyond the budget
+  mis-stamped data word costs the block size, and a mis-stamped parity word
+  costs 2. A mis-stamped checkpoint word costs the block size plus one; but if
+  the slip changes only its 5-bit CRC field (the word still reads as the same
+  block's checkpoint), it costs the block size plus two, since the block is
+  erased and the word itself is an RS error. Repair succeeds while the total is
+  at most `m`. The first 5 words (the header; 9 on a RAID plate) are
+  CRC-checked and cannot be repaired; the ledger and stop words after them do
+  not use the budget. So `m` = block size + 2 survives one mis-stamped word
+  anywhere outside the header, and each further damaged block needs another
+  block size + 2. A 2-chunk `mk1` card has blocks of 8 words:
+  `--parity-words 10` survives any one mis-stamped non-header word,
+  `--parity-words 20` any two in different blocks. A decode beyond the budget
   refuses; it does not return a wrong payload.
 - **Integrity tag.** `--integrity-bits` sizes the non-linear SHA-256 truncation
   appended to the payload; it bounds the probability that an RS *miscorrection*

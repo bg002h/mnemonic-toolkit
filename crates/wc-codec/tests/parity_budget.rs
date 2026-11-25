@@ -3,7 +3,9 @@
 //! The CLI and manual used to say `m` parity words "correct `⌊m/2⌋`
 //! substitutions". The decoder works on whole checkpoint blocks: a block whose
 //! CRC-5 fails is erased whole (the 5-bit CRC cannot say WHICH word is wrong),
-//! a damaged checkpoint word erases its block plus itself, and the header words
+//! a damaged checkpoint word erases its block plus itself (block + 2 when only
+//! its CRC-5 field changes, since it then still parses as a checkpoint and is
+//! also an undetected RS error), and the header words
 //! are CRC-checked before RS and are not repairable at all. These tests pin the
 //! budget as it is now documented, and that the old `⌊m/2⌋` claim is false.
 //! The decoder and the wire format are unchanged; every refusal below is a
@@ -109,10 +111,15 @@ fn data_word_substitution_costs_its_whole_block() {
     }
 }
 
-/// A mis-stamped CHECKPOINT word costs its block plus itself: `m` = block
-/// size is not enough, `m` = block size + 1 is.
+/// A mis-stamped CHECKPOINT word costs its block plus itself, and block + 2
+/// when the substitution keeps the checkpoint marker and block index and
+/// changes only the CRC-5 field: the word still parses as a checkpoint, so its
+/// block is erased (the CRC no longer matches) AND the word itself is an
+/// undetected RS error costing 2. Every one of the 2047 substitutions of the
+/// first checkpoint word is tried (review r1 I1: a single `+1029` delta always
+/// broke the marker or index and hid the block + 2 case).
 #[test]
-fn checkpoint_substitution_costs_block_plus_one() {
+fn checkpoint_substitution_costs_block_plus_one_or_plus_two() {
     let layout = checkpoint_layout(k());
     let sz = layout.block_sizes[0];
     let cp0 = interleave_start() + sz;
@@ -124,22 +131,102 @@ fn checkpoint_substitution_costs_block_plus_one() {
         "m = block size cannot repair a checkpoint"
     );
 
-    let mut c = card(sz + 1);
-    substitute(&mut c, cp0);
-    assert_eq!(dec(&c).expect("m = block size + 1").payload, payload());
+    let base_card = card(sz + 1);
+    let orig = word_to_symbol(&base_card[cp0]).unwrap();
+    let mut refused_at_plus_one = 0usize;
+    for delta in 1..2048u16 {
+        let sub = (orig + delta) % 2048;
+        let keeps_marker_and_index = (sub >> 5) == (orig >> 5);
+        let mut c = base_card.clone();
+        c[cp0] = symbol_to_word(sub).unwrap().to_string();
+        match dec(&c) {
+            Ok(d) => {
+                assert_eq!(d.payload, payload(), "delta {delta}: never a wrong payload");
+                assert!(
+                    !keeps_marker_and_index,
+                    "delta {delta}: block + 1 repaired a CRC-only change"
+                );
+            }
+            Err(_) => {
+                assert!(
+                    keeps_marker_and_index,
+                    "delta {delta}: block + 1 refused a marker/index change"
+                );
+                refused_at_plus_one += 1;
+            }
+        }
+        // block + 2 always repairs.
+        let mut c2 = card(sz + 2);
+        c2[cp0] = symbol_to_word(sub).unwrap().to_string();
+        assert_eq!(
+            dec(&c2)
+                .unwrap_or_else(|e| panic!("m = block + 2, delta {delta}: {e:?}"))
+                .payload,
+            payload()
+        );
+    }
+    assert_eq!(
+        refused_at_plus_one, 31,
+        "the 31 other CRC-5 values of this checkpoint"
+    );
 }
 
-/// The documented rule of thumb: with `m` ≥ block size + 1, ONE mis-stamped
-/// word anywhere outside the header repairs.
+/// The documented rule of thumb: with `m` >= block size + 2, ONE mis-stamped
+/// word anywhere outside the header repairs. Every non-header position is
+/// tried with two deltas, one that breaks a checkpoint's marker and one (`+1`)
+/// that, on a checkpoint word, changes only its CRC-5 field.
 #[test]
-fn block_size_plus_one_survives_any_single_non_header_word() {
-    let m = checkpoint_layout(k()).stride + 1;
-    let n = card(m).len();
+fn block_size_plus_two_survives_any_single_non_header_word() {
+    let m = checkpoint_layout(k()).stride + 2;
+    let base_card = card(m);
+    let n = base_card.len();
     for idx in HEADER_WORDS..n {
+        for delta in [1u16, 1029] {
+            let mut c = base_card.clone();
+            let s = word_to_symbol(&c[idx]).unwrap();
+            c[idx] = symbol_to_word((s + delta) % 2048).unwrap().to_string();
+            let d = dec(&c).unwrap_or_else(|e| panic!("m={m} word {idx} delta {delta}: {e:?}"));
+            assert_eq!(d.payload, payload(), "word {idx}");
+        }
+    }
+}
+
+/// And block size + 1 is NOT enough for every single word: a checkpoint word
+/// whose CRC-5 field alone changes refuses (never a wrong payload).
+#[test]
+fn block_size_plus_one_does_not_survive_a_crc_only_checkpoint_change() {
+    let layout = checkpoint_layout(k());
+    let m = layout.stride + 1;
+    let cp0 = interleave_start() + layout.block_sizes[0];
+    let mut c = card(m);
+    let s = word_to_symbol(&c[cp0]).unwrap();
+    // Flip one CRC bit (bits 0-4): marker and block index stay.
+    c[cp0] = symbol_to_word(s ^ 1).unwrap().to_string();
+    assert!(dec(&c).is_err());
+}
+
+/// Two mis-stamped words in different blocks: the worst case is two CRC-only
+/// checkpoint changes, 2 x (block + 2). One word less refuses.
+#[test]
+fn two_crc_only_checkpoint_changes_cost_two_blocks_plus_four() {
+    let layout = checkpoint_layout(k());
+    let (b0, b1) = (layout.block_sizes[0], layout.block_sizes[1]);
+    let cp0 = interleave_start() + b0;
+    let cp1 = cp0 + 1 + b1;
+    let need = (b0 + 2) + (b1 + 2);
+    for (m, ok) in [(need - 1, false), (need, true)] {
         let mut c = card(m);
-        substitute(&mut c, idx);
-        let d = dec(&c).unwrap_or_else(|e| panic!("m={m} word {idx}: {e:?}"));
-        assert_eq!(d.payload, payload(), "word {idx}");
+        for cp in [cp0, cp1] {
+            let s = word_to_symbol(&c[cp]).unwrap();
+            c[cp] = symbol_to_word(s ^ 1).unwrap().to_string();
+        }
+        match dec(&c) {
+            Ok(d) => {
+                assert!(ok, "m={m} repaired; expected a refusal");
+                assert_eq!(d.payload, payload());
+            }
+            Err(e) => assert!(!ok, "m={m}: {e:?}"),
+        }
     }
 }
 
