@@ -36,8 +36,9 @@ pub enum IndelDirection {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndelCandidate {
-    /// Full m*1 string (canonical, post-solve).
-    pub recovered: String,
+    /// Full m*1 string (canonical, post-solve). Secret material: scrubbed on
+    /// drop (secret row tk-indel-candidate-plain-string).
+    pub recovered: zeroize::Zeroizing<String>,
     /// j — number of indels applied.
     pub indel_count: usize,
     pub region: IndelRegion,
@@ -103,7 +104,7 @@ pub fn recover_indel(
                     // `recovered`, not on region/direction.
                     let direction = if j_data > 0 { data_dir } else { pfx_dir };
                     hits.push(IndelCandidate {
-                        recovered: rec,
+                        recovered: zeroize::Zeroizing::new(rec),
                         indel_count: j_prefix + j_data,
                         region,
                         direction,
@@ -324,6 +325,21 @@ mod tests {
         );
     }
 
+    /// Secret row tk-indel-candidate-plain-string: the recovered ms1 string is
+    /// secret material; the field type must scrub on drop (compile-time witness).
+    #[test]
+    fn indel_candidate_recovered_is_zeroizing() {
+        let c = IndelCandidate {
+            recovered: zeroize::Zeroizing::new(String::from("ms1xyz")),
+            indel_count: 1,
+            region: IndelRegion::Prefix,
+            direction: IndelDirection::Inserted,
+            subst_count: 0,
+        };
+        let z: &zeroize::Zeroizing<String> = &c.recovered;
+        assert_eq!(z.as_str(), "ms1xyz");
+    }
+
     /// R0 I2 load-bearing dedup test: P1 and P2 can recover the SAME string
     /// with different region/direction. dedup_by_recovered must collapse them
     /// (keyed on `recovered` only), NOT the derived PartialEq (which would
@@ -332,14 +348,14 @@ mod tests {
     fn dedup_collapses_same_recovered_with_differing_metadata() {
         let mut hits = vec![
             IndelCandidate {
-                recovered: "ms1xyz".into(),
+                recovered: "ms1xyz".to_string().into(),
                 indel_count: 1,
                 region: IndelRegion::Prefix,
                 direction: IndelDirection::Inserted,
                 subst_count: 0,
             },
             IndelCandidate {
-                recovered: "ms1xyz".into(),
+                recovered: "ms1xyz".to_string().into(),
                 indel_count: 1,
                 region: IndelRegion::DataPart,
                 direction: IndelDirection::Deleted,

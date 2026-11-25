@@ -2415,17 +2415,19 @@ fn read_blob<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<Zeroizing<Vec<u8>
 /// Returns the lowercased + whitespace-stripped hex string. Mirrors
 /// `read_blob`'s `path.as_os_str() == "-"` precedent.
 fn read_bsms_token<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<String, ToolkitError> {
+    // The raw file/stdin text is the token: scrub this copy on drop
+    // (secret row tk-bsms-token-not-zeroized).
     let raw = if path.as_os_str() == "-" {
-        let mut buf = String::new();
+        let mut buf = Zeroizing::new(String::new());
         stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
         buf
     } else {
-        fs::read_to_string(path).map_err(|e| {
+        Zeroizing::new(fs::read_to_string(path).map_err(|e| {
             ToolkitError::BadInput(format!(
                 "--bsms-encryption-token: cannot read token file {}: {e}",
                 path.display()
             ))
-        })?
+        })?)
     };
     Ok(raw.trim().to_lowercase())
 }
@@ -2435,6 +2437,7 @@ fn read_bsms_token<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<String, Too
 /// Round-2 descriptor-decrypt block can share it without re-reading stdin.
 /// `hex` is the lowercase ASCII-hex form (the PBKDF2 salt is `raw`; the
 /// HMAC input prefix is `hex`).
+#[derive(zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 struct BsmsToken {
     hex: String,
     raw: Vec<u8>,
@@ -2452,15 +2455,21 @@ fn read_and_validate_bsms_token<R: Read>(
         ToolkitError::BadInput(format!(
             "--bsms-encryption-token: token file contents not valid hex: {e}"
         ))
-    })?;
-    if raw.len() != 8 && raw.len() != 16 {
+    });
+    // Build the scrubbing struct before the width check so the error path
+    // also scrubs `hex` and `raw` on drop.
+    let token = BsmsToken {
+        raw: raw?,
+        hex,
+    };
+    if token.raw.len() != 8 && token.raw.len() != 16 {
         return Err(ToolkitError::BadInput(format!(
             "--bsms-encryption-token: token must be 8 bytes STANDARD (16 hex chars) or 16 bytes EXTENDED (32 hex chars); got {} bytes ({} hex chars)",
-            raw.len(),
-            hex.len(),
+            token.raw.len(),
+            token.hex.len(),
         )));
     }
-    Ok(BsmsToken { hex, raw })
+    Ok(token)
 }
 
 /// True iff `text` is a BIP-129 encrypted record wire (hex `MAC || ciphertext`)
@@ -2749,6 +2758,14 @@ fn round1_verification_to_json(v: &Round1Verification) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Secret row tk-bsms-token-not-zeroized: the BIP-129 token (hex + raw
+    /// bytes) must scrub on drop (compile-time witness).
+    #[test]
+    fn bsms_token_is_zeroize_on_drop() {
+        fn needs_zod<T: zeroize::ZeroizeOnDrop>() {}
+        needs_zod::<BsmsToken>();
+    }
 
     /// T4c (cycle-14, L22 → wave2 T3) — the `phrase_overlays` collection maps a
     /// `SlotInput` (whose `.value` is a `SecretString`) into the

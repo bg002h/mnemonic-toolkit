@@ -449,7 +449,7 @@ fn direction_str(d: IndelDirection) -> &'static str {
 
 fn candidate_json(c: &IndelCandidate) -> IndelCandidateJson<'_> {
     IndelCandidateJson {
-        recovered: &c.recovered,
+        recovered: c.recovered.as_str(),
         indel_count: c.indel_count,
         region: region_str(c.region),
         direction: direction_str(c.direction),
@@ -464,7 +464,7 @@ fn emit_indel_text<W: Write>(
     stdout: &mut W,
 ) -> Result<(), ToolkitError> {
     for c in cands {
-        writeln!(stdout, "{}", c.recovered).map_err(ToolkitError::Io)?;
+        writeln!(stdout, "{}", c.recovered.as_str()).map_err(ToolkitError::Io)?;
     }
     Ok(())
 }
@@ -500,14 +500,14 @@ mod tests {
     #[test]
     fn emit_indel_two_candidate_text_and_json() {
         let a = IndelCandidate {
-            recovered: "ms1aaa".to_string(),
+            recovered: "ms1aaa".to_string().into(),
             indel_count: 1,
             region: IndelRegion::Prefix,
             direction: IndelDirection::Inserted,
             subst_count: 0,
         };
         let b = IndelCandidate {
-            recovered: "ms1bbb".to_string(),
+            recovered: "ms1bbb".to_string().into(),
             indel_count: 1,
             region: IndelRegion::DataPart,
             direction: IndelDirection::Deleted,
