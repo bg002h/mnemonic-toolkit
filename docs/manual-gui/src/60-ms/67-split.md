@@ -32,7 +32,7 @@ inputs — [`--phrase`](#ms-split-phrase) XOR
 - [`--hex`](#ms-split-hex) — raw hex entropy to split (XOR with `--phrase`, secret-bearing)
 - [`--threshold`](#ms-split-threshold) — threshold K, minimum shares to recombine (required; `2..=9`)
 - [`--shares`](#ms-split-shares) — total shares N to produce (required; `K..=31`)
-- [`--language`](#ms-split-language) — BIP-39 wordlist for `--phrase` (default `english`; ignored under `--hex`)
+- [`--language`](#ms-split-language) — BIP-39 wordlist for `--phrase` (default `english`; a non-English value with `--hex` is refused, exit 64: hex entropy carries no language, so give the phrase instead)
 - [`--json`](#ms-split-json) — emit a single JSON object on stdout instead of multi-line text
 - [`--in`](#ms-split-in) — read the BIP-39 phrase from a file (never hex)
 - [`--out`](#ms-split-out) — write the artifact to a file (owner-only `0600`, overwrites)
