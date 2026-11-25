@@ -99,7 +99,7 @@ wc-codec = { path = "../wc-codec" }
 # every build, so this crate needs no grounding at all and the gate's unanchored
 # set stays exactly one (miniscript). NOTE the module path — `remedy` has no
 # root re-export in `lib.rs`, so `mnemonic_io_lib::history_purge_block` is E0425.
-mnemonic-io-lib = "0.1.0"
+mnemonic-io-lib = "0.1.3"
 aes = "0.8"
 base64 = "0.22"
 cbc = "0.1"
