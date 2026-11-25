@@ -20,7 +20,6 @@ use mnemonic_toolkit::mlock::PinnedPageRange;
 /// = derived;`) is once again E0509-free. [`DerivedAccount::into_parts`]
 /// remains useful for consuming-move ergonomics and is the canonical
 /// path; it returns a bare `Vec<u8>` per the caller-wrap contract.
-#[derive(Debug)]
 pub struct DerivedAccount {
     pub entropy: zeroize::Zeroizing<Vec<u8>>,
     pub master_fingerprint: Fingerprint,
@@ -40,6 +39,25 @@ pub struct DerivedAccount {
     /// inner Vec then deallocs) → then `_entropy_pin` munlock. Strictest
     /// threat-model ordering (zeroize-while-still-pinned).
     pub _entropy_pin: PinnedPageRange,
+}
+
+/// Secret row tk-derived-account-debug-prints-entropy: `Zeroizing<Vec<u8>>`
+/// derives `Debug` and prints its bytes, so the derived impl would put the
+/// entropy into any `{:?}`. This impl redacts the entropy (and the pin);
+/// `account_xpriv` is a `ScrubbedXpriv` whose own `Debug` already redacts.
+impl std::fmt::Debug for DerivedAccount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DerivedAccount")
+            .field(
+                "entropy",
+                &format_args!("<redacted {} bytes>", self.entropy.len()),
+            )
+            .field("master_fingerprint", &self.master_fingerprint)
+            .field("account_xpub", &self.account_xpub)
+            .field("account_xpriv", &self.account_xpriv)
+            .field("account_path", &self.account_path)
+            .finish_non_exhaustive()
+    }
 }
 
 impl DerivedAccount {
@@ -141,6 +159,34 @@ mod tests {
         // Type of the migrated field. If it is `Copy`, the `<_>` is ambiguous.
         let _ = <crate::derive_slot::ScrubbedXpriv as AmbiguousIfImpl<_>>::some_item;
     };
+
+    /// Secret row tk-derived-account-debug-prints-entropy: `{:?}` of a
+    /// DerivedAccount must not print the entropy bytes.
+    #[test]
+    fn derived_account_debug_does_not_print_entropy() {
+        let acc = derive_full(
+            LEGAL_12_NONZERO,
+            "",
+            CliLanguage::English,
+            CliNetwork::Mainnet,
+            CliTemplate::Bip84,
+            0,
+        )
+        .unwrap();
+        let dbg = format!("{acc:?}");
+        let ent = acc.entropy.to_vec();
+        assert!(ent.iter().any(|b| *b != 0));
+        let as_list = format!("{:?}", ent);
+        assert!(
+            !dbg.contains(&as_list) && !dbg.contains(&hex::encode(&ent)),
+            "DerivedAccount Debug leaked entropy: {dbg}"
+        );
+        assert!(dbg.contains("DerivedAccount"), "{dbg}");
+    }
+
+    /// A 12-word public BIP-39 vector ("legal winner ...") with non-zero entropy.
+    const LEGAL_12_NONZERO: &str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
     /// Trezor canonical 24-word vector: "abandon × 23 art" → 32-zero-bytes entropy.
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";

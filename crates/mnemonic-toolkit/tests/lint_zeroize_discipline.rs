@@ -312,10 +312,29 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         evidence: &["crate::mlock::pin_pages_for"],
     },
     // ---- cmd/slip39.rs (v0.13.0 P2.2) ----
+    // ---- indel.rs (secret row tk-indel-candidate-plain-string) ----
     ZeroizeRow {
-        label: "slip39 run() parsed --from + --share + --passphrase wrap in Zeroizing<String>",
+        label: "IndelCandidate.recovered (recovered ms1 string) is Zeroizing<String>",
+        source_file: "src/indel.rs",
+        evidence: &["pub recovered: zeroize::Zeroizing<String>"],
+    },
+    // Secret row tk-lint-zeroize-slip39-evidence-loose: one row per site, each
+    // with its own anchor (the former single row passed on ANY one
+    // `zeroize::Zeroizing::new` of the 8 in the file).
+    ZeroizeRow {
+        label: "slip39 run() parsed --from wraps in Zeroizing<String>",
         source_file: "src/cmd/slip39.rs",
-        evidence: &["zeroize::Zeroizing::new"],
+        evidence: &["let from_value: zeroize::Zeroizing<String> ="],
+    },
+    ZeroizeRow {
+        label: "slip39 combine --share values wrap in Zeroizing<String>",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &["let mut share_strings: Vec<zeroize::Zeroizing<String>>"],
+    },
+    ZeroizeRow {
+        label: "slip39 --passphrase resolves into Zeroizing<String>",
+        source_file: "src/cmd/slip39.rs",
+        evidence: &[") -> Result<zeroize::Zeroizing<String>, ToolkitError> {\n    crate::passphrase_input::resolve_or_empty("],
     },
     // ---- cmd/xpub_search/passphrase_search.rs (v0.46.0 candidate scan) ----
     ZeroizeRow {

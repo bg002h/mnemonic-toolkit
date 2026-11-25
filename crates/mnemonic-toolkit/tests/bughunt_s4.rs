@@ -169,7 +169,6 @@ fn bughunt_tk_24_xpub_search_sh_wsh_default_origin_is_1prime() {
 // handed to the mini-key parser.
 // ---------------------------------------------------------------------------
 #[test]
-#[ignore = "deferred-minor: convert-minikey-env-sentinel"]
 fn bughunt_tk_25_convert_minikey_env_sentinel_resolves() {
     // Casascius 30-char vector from `cli_convert_minikey.rs`.
     let out = bin()

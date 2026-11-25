@@ -2764,7 +2764,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.direction, crate::indel::IndelDirection::Deleted);
                 assert_eq!(c.region, crate::indel::IndelRegion::DataPart);
                 assert_eq!(c.indel_count, 1);
@@ -2782,7 +2782,7 @@ mod tests {
         s.insert(3 + 5, 'p'); // two inserted chars
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 2, 0, &oracle) {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), VALID_MS1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -2805,7 +2805,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.direction, crate::indel::IndelDirection::Inserted);
                 assert_eq!(c.region, crate::indel::IndelRegion::DataPart);
                 assert_eq!(c.indel_count, 1);
@@ -2826,7 +2826,7 @@ mod tests {
         s.remove(3 + 8); // a 'q'
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), VALID_MS1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -2865,7 +2865,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 1, 1, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.subst_count, 1);
             }
             other => panic!("expected Unique, got {other:?}"),
@@ -2897,7 +2897,7 @@ mod tests {
         s.remove(3 + 1); // 'e' at data index 1
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 2, 0, &oracle) {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, VALID_MS1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), VALID_MS1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -2914,7 +2914,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.region, crate::indel::IndelRegion::Prefix);
                 assert_eq!(c.direction, crate::indel::IndelDirection::Inserted);
                 assert_eq!(c.indel_count, 1);
@@ -2931,7 +2931,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 1, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.region, crate::indel::IndelRegion::Prefix);
                 assert_eq!(c.direction, crate::indel::IndelDirection::Deleted);
             }
@@ -2957,7 +2957,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 2, 0, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.region, crate::indel::IndelRegion::CrossRegion);
                 assert_eq!(c.indel_count, 2);
             }
@@ -2998,7 +2998,7 @@ mod tests {
         let oracle = Ms1IndelOracle;
         match crate::indel::recover_indel(&s, "ms", 2, 1, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, VALID_MS1);
+                assert_eq!(c.recovered.as_str(), VALID_MS1);
                 assert_eq!(c.region, crate::indel::IndelRegion::CrossRegion);
                 assert_eq!(c.subst_count, 1);
                 assert_eq!(c.indel_count, 2);
@@ -3046,7 +3046,7 @@ mod tests {
             failing_index: 1,
         };
         match crate::indel::recover_indel(&s, "mk", 1, 0, &oracle) {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MK1_CARD_C1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), MK1_CARD_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -3063,7 +3063,7 @@ mod tests {
             failing_index: 1,
         };
         match crate::indel::recover_indel(&s, "mk", 1, 0, &oracle) {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MK1_CARD_C1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), MK1_CARD_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -3087,7 +3087,7 @@ mod tests {
         };
         match crate::indel::recover_indel(&s, "mk", 1, 1, &oracle) {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, MK1_CARD_C1);
+                assert_eq!(c.recovered.as_str(), MK1_CARD_C1);
                 assert_eq!(c.subst_count, 1);
             }
             other => panic!("expected Unique, got {other:?}"),
@@ -3108,7 +3108,7 @@ mod tests {
         let chunks = vec![MK1_CARD_C0.to_string(), bad_c1];
         match recover_indel_card(CardKind::Mk1, &chunks, 1, 0).expect("ok") {
             crate::indel::IndelOutcome::Unique(c) => {
-                assert_eq!(c.recovered, MK1_CARD_C1); // recovered chunk == original chunk 1
+                assert_eq!(c.recovered.as_str(), MK1_CARD_C1); // recovered chunk == original chunk 1
             }
             other => panic!("expected Unique, got {other:?}"),
         }
@@ -3230,7 +3230,7 @@ mod tests {
         bad.insert(3 + 12, 'q'); // insert one data char into chunk 1
         let chunks = vec![MD1_C0.to_string(), bad, MD1_C2.to_string()];
         match recover_indel_card(CardKind::Md1, &chunks, 1, 0).expect("ok") {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MD1_C1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), MD1_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }
@@ -3241,7 +3241,7 @@ mod tests {
         bad.remove(3 + 12); // drop one data char
         let chunks = vec![MD1_C0.to_string(), bad, MD1_C2.to_string()];
         match recover_indel_card(CardKind::Md1, &chunks, 1, 0).expect("ok") {
-            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered, MD1_C1),
+            crate::indel::IndelOutcome::Unique(c) => assert_eq!(c.recovered.as_str(), MD1_C1),
             other => panic!("expected Unique, got {other:?}"),
         }
     }

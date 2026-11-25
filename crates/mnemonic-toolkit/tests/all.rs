@@ -259,6 +259,7 @@ mod prop_template_completion_roundtrip;
 mod readme_dice_kat_parity;
 mod readme_version_current;
 mod s2_red;
+mod secmn_zeroize_hygiene;
 mod stdout_write_errors;
 
 /// Every `tests/*.rs` file is either declared above, or is one of the separate

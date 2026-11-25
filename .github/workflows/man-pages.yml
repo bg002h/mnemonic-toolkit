@@ -388,6 +388,29 @@ jobs:
           } > "PROVENANCE.${ARCH}.txt"
           cat "PROVENANCE.${ARCH}.txt"
 
+      # Shipped-artifact refusal smoke (secret row tk-slip39-manpages-artifact-refusal-unchecked).
+      # The signed musl tarball is the published binary: run IT (not a rebuild) and
+      # require that it refuses the slip39 test RNG. Mirrors release.yml's
+      # acceptance step. The aarch64 cross leg cannot run on this host.
+      - name: slip39 test-RNG refusal smoke (the packaged x86_64 binary)
+        if: ${{ matrix.musl_native }}
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          ARCH: ${{ matrix.arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${REF_NAME##*-v}"
+          D="$(mktemp -d)"
+          tar -xzf "mnemonic-${VER}-${ARCH}-linux-musl.tar.gz" -C "$D"
+          BIN="$D/mnemonic"
+          SEED='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
+          set +e
+          ERR="$(printf '%s' "$SEED" | MNEMONIC_SLIP39_TEST_RNG=1 "$BIN" slip39 split --group-threshold 1 --group 3,2 --from phrase=- 2>&1 >/dev/null)"; RC=$?
+          set -e
+          case "$RC:$ERR" in "1:error: slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG;"*) ;; *) echo "::error::the packaged artifact did not refuse MNEMONIC_SLIP39_TEST_RNG (rc=$RC): $ERR"; exit 1 ;; esac
+          echo "refusal ok: the packaged artifact refuses MNEMONIC_SLIP39_TEST_RNG"
+
       # ── minisign SHA256SUMS.<arch> ─────────────────────────────────────────
       # A HOST step: it runs after build+package has written the final digest,
       # and before anything is uploaded. The secret never enters the

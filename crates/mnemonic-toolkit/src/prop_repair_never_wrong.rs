@@ -282,7 +282,7 @@ proptest! {
             delete_data_char(&card, pos)
         };
         match recover_indel(&corrupted, "ms", 1, 0, &Ms1IndelOracle) {
-            IndelOutcome::Unique(c) => prop_assert_eq!(c.recovered, card),
+            IndelOutcome::Unique(c) => prop_assert_eq!(c.recovered.as_str(), card.as_str()),
             IndelOutcome::Ambiguous(_) | IndelOutcome::Unrecoverable => {}
         }
     }
