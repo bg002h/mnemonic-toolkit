@@ -776,7 +776,7 @@ jobs:
     #       - `--skip g1_` drops the `tests/mlock_unit.rs` integration binary's
     #         G1.x page-pinning gates (`g1_1`..`g1_4`) — their fn names lack the
     #         "mlock" substring, so `--skip mlock` alone would NOT catch them.
-    #     The `lint_safety_first_party_mlock` binary is a pure SOURCE-TEXT scan
+    #     The `lint_safety_first_party_mlock` module (inside the `all` test binary) is a pure SOURCE-TEXT scan
     #     of `src/mlock.rs` (no syscall, no page math) and intentionally still
     #     runs; every bundle/convert/md1 golden integration test runs too.
     #
@@ -850,10 +850,11 @@ jobs:
           cargo nextest run --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast --features slip39-test-rng
       # Run the package test suite on aarch64-Linux so the md1/address golden
       # vectors are OUTPUT-verified for the shipped aarch64 binary.
-      # `--skip mlock` drops the lib `mlock::tests::*` POSIX-syscall /
-      # page-size gates; `--skip g1_` drops the `tests/mlock_unit.rs` G1.x
-      # page-pinning integration gates (their fn names lack "mlock", so the
-      # first filter misses them). They were skipped under QEMU and stay
+      # The nextest filterset `-E` (it matches module-prefixed test names)
+      # drops every `mlock` test (the lib `mlock::tests::*` POSIX-syscall /
+      # page-size gates) except the `lint_safety_first_party_mlock::` source
+      # scan, and `g1_` drops the `mlock_unit` G1.x page-pinning gates
+      # (their fn names lack "mlock"). They were skipped under QEMU and stay
       # skipped here, so the executed set is unchanged by the F-696 runner
       # move. Every golden/integration test still runs. No
       # `--include-ignored`, so the `g2_*` fault-injection tests stay skipped.
@@ -861,4 +862,4 @@ jobs:
         if: (matrix.arm_native) && steps.docs.outputs.docs_only != 'true'
         env:
           CC_aarch64_unknown_linux_musl: musl-gcc
-        run: cargo nextest run --release --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast --features slip39-test-rng -- --skip mlock --skip g1_
+        run: cargo nextest run --release --target ${{ matrix.target }} -p mnemonic-toolkit --no-fail-fast --features slip39-test-rng -E 'not (test(/mlock/) and not test(/^lint_safety_first_party_mlock::/)) and not test(/g1_/)'
