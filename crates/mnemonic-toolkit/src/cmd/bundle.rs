@@ -799,6 +799,14 @@ pub(crate) fn resolve_slots(
                 .expect("contains() asserts presence");
             let priv_key = bitcoin::PrivateKey::from_wif(wif_str)
                 .map_err(|e| ToolkitError::BadInput(format!("--slot @{idx}.wif parse: {e}")))?;
+            // Bug hunt 2026-11-25 toolkit#8: a WIF carries its own network byte;
+            // refuse one that disagrees with --network (the xpub arm already
+            // checks), instead of re-stamping a mainnet key as a testnet wallet.
+            crate::network::assert_network_agrees(
+                priv_key.network,
+                network.network_kind(),
+                "--slot @N.wif",
+            )?;
             let pubkey = priv_key.public_key(&secp);
             // Build a depth-0 xpub from the WIF's pubkey + zero chain code.
             // The KeyCard accepts this via the standard mk-codec encoder; the
@@ -3470,5 +3478,52 @@ mod self_check_mk1_xpub_binding_tests {
         // sh(wsh) (script-type 1').
         let shwsh = compute_default_origin_path(CliNetwork::Mainnet, 0, 1);
         assert_eq!(shwsh.components.last().unwrap().value, 1);
+    }
+}
+
+#[cfg(test)]
+mod bughunt_1125_wif_network_tests {
+    //! Bug hunt 2026-11-25 toolkit#8: a WIF's own network byte must agree with
+    //! `--network` (the xpub arm already checked). `bundle` now refuses every
+    //! WIF slot (X4) before `resolve_slots`, so this guards the remaining
+    //! caller, `verify-bundle`.
+    use super::*;
+    use crate::slot_input::SlotInput;
+
+    const MAINNET_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
+
+    fn wif_slot(wif: &str) -> Vec<SlotInput> {
+        vec![SlotInput {
+            index: 0,
+            subkey: SlotSubkey::Wif,
+            value: crate::secret_string::SecretString::new(wif.to_string()),
+        }]
+    }
+
+    fn resolve(network: CliNetwork) -> Result<(), ToolkitError> {
+        resolve_slots(
+            &wif_slot(MAINNET_WIF),
+            CliTemplate::Bip84,
+            network,
+            0,
+            None,
+            None,
+            MultisigPathFamily::default(),
+        )
+        .map(|_| ())
+    }
+
+    #[test]
+    fn mainnet_wif_under_testnet_is_refused() {
+        let e = resolve(CliNetwork::Testnet).expect_err("network mismatch must refuse");
+        assert!(
+            matches!(e, ToolkitError::NetworkMismatch { .. }),
+            "got {e:?}"
+        );
+    }
+
+    #[test]
+    fn mainnet_wif_under_mainnet_still_resolves() {
+        resolve(CliNetwork::Mainnet).expect("matching network resolves as before");
     }
 }
