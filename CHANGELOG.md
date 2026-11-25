@@ -51,7 +51,10 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   (before: PATH was emptied, and a failed first write left an empty file). PATH in a folder you cannot write is
   now refused (exit 1, `Permission denied`; before: written in place). A PATH with a second hard-link name is
   replaced at PATH only; the other name keeps the old contents. A run killed mid-write can leave the temporary
-  file behind.
+  file behind. `--json-out /dev/stdout` (also `/dev/fd/N`, `/proc/self/fd/N`) now writes into the stream and
+  never empties it: with `>> FILE` the earlier lines are kept (before: FILE was emptied first). `--json-out
+  /dev/stdin` with stdin read from a file is refused (exit 1, `Bad file descriptor`; before: that file was
+  overwritten).
 
 ### `word-card --decode` recovers a card whose stop-sign word is mis-stamped
 
