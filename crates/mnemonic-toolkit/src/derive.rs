@@ -48,7 +48,10 @@ pub struct DerivedAccount {
 impl std::fmt::Debug for DerivedAccount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DerivedAccount")
-            .field("entropy", &format_args!("<redacted {} bytes>", self.entropy.len()))
+            .field(
+                "entropy",
+                &format_args!("<redacted {} bytes>", self.entropy.len()),
+            )
             .field("master_fingerprint", &self.master_fingerprint)
             .field("account_xpub", &self.account_xpub)
             .field("account_xpriv", &self.account_xpriv)
@@ -162,7 +165,7 @@ mod tests {
     #[test]
     fn derived_account_debug_does_not_print_entropy() {
         let acc = derive_full(
-            TREZOR_24_NONZERO,
+            LEGAL_12_NONZERO,
             "",
             CliLanguage::English,
             CliNetwork::Mainnet,
@@ -181,8 +184,9 @@ mod tests {
         assert!(dbg.contains("DerivedAccount"), "{dbg}");
     }
 
-    /// A 12-word public BIP-39 vector with non-zero entropy (7f x16).
-    const TREZOR_24_NONZERO: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    /// A 12-word public BIP-39 vector ("legal winner ...") with non-zero entropy.
+    const LEGAL_12_NONZERO: &str =
+        "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
     /// Trezor canonical 24-word vector: "abandon × 23 art" → 32-zero-bytes entropy.
     const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";

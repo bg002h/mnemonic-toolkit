@@ -2458,10 +2458,7 @@ fn read_and_validate_bsms_token<R: Read>(
     });
     // Build the scrubbing struct before the width check so the error path
     // also scrubs `hex` and `raw` on drop.
-    let token = BsmsToken {
-        raw: raw?,
-        hex,
-    };
+    let token = BsmsToken { raw: raw?, hex };
     if token.raw.len() != 8 && token.raw.len() != 16 {
         return Err(ToolkitError::BadInput(format!(
             "--bsms-encryption-token: token must be 8 bytes STANDARD (16 hex chars) or 16 bytes EXTENDED (32 hex chars); got {} bytes ({} hex chars)",
