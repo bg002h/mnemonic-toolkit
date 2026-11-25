@@ -7,7 +7,8 @@
 //! **The `--out` overwrite rule is NOT gated here, and saying so is
 //! load-bearing.** `0o600` binds on CREATE, so an existing world-readable
 //! target keeps its old mode; the fix is
-//! [`write_private`](super::write::write_private) tightening the OPEN file.
+//! [`write_private`](super::write::write_private) creating the new file
+//! `0o600` and renaming it over the old one.
 //! Gating that rule on `destination` would gate nothing at all, because
 //! `destination` never touches a path.
 //!

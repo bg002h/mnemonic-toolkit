@@ -191,6 +191,7 @@ mod cli_seed_xor_stdin;
 mod cli_seedqr;
 mod cli_seedqr_from_unification;
 mod cli_seedqr_json_out_mode;
+mod cli_seedqr_json_out_replace;
 mod cli_self_check;
 mod cli_shwpkh_canonical_flip;
 mod cli_silent_payment;

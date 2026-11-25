@@ -40,8 +40,21 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   existing file kept its mode). The file holds the phrase. `--json-out /dev/null` is now refused for a holder who
   is not root (exit 1, `Operation not permitted`; before: exit 0; as root it sets /dev/null to mode 0600). An
   existing file you can write but do not own is now refused too (exit 1, `Operation not permitted`; before: exit
-  0), and a refused file you do not own is left empty. `--json-out /dev/stdout` at a terminal you own sets the
+  0), and the file is left as it was. `--json-out /dev/stdout` at a terminal you own sets the
   terminal's mode 620 -> 600.
+
+### `seedqr --json-out` keeps the old file when a write fails
+
+- **`seedqr decode`, `seedqr encode`**: `--json-out PATH` now writes a temporary file next to PATH
+  (`PATH.<pid>.<n>.tmp`, mode 0600) and renames it over PATH (mnemonic-io-lib 0.1.3). A write that fails (a full
+  disk, a file-size limit) leaves an existing PATH byte-for-byte as it was and makes no file where there was none
+  (before: PATH was emptied, and a failed first write left an empty file). PATH in a folder you cannot write is
+  now refused (exit 1, `Permission denied`; before: written in place). A PATH with a second hard-link name is
+  replaced at PATH only; the other name keeps the old contents. A run killed mid-write can leave the temporary
+  file behind. `--json-out /dev/stdout` (also `/dev/fd/N`, `/proc/self/fd/N`) now writes into the stream and
+  never empties it: with `>> FILE` the earlier lines are kept (before: FILE was emptied first). `--json-out
+  /dev/stdin` with stdin read from a file is refused (exit 1, `Bad file descriptor`; before: that file was
+  overwritten).
 
 ### `word-card --decode` recovers a card whose stop-sign word is mis-stamped
 
