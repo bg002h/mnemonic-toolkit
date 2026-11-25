@@ -2850,7 +2850,7 @@ mnemonic seedqr encode --from phrase=<VALUE|-> [--variant <standard|compact>] [-
 - `--from seedqr=<VALUE|->`: **(canonical, v0.31.6+)** the SeedQR payload. Under `--variant standard` (default) this is a numeric digit string (48, 60, 72, 84, or 96 ASCII digits — 12 / 15 / 18 / 21 / 24-word phrases). Under `--variant compact` this is lowercase hex of the raw BIP-39 entropy bytes (32 hex chars = 16 bytes = 12-word; 64 hex chars = 32 bytes = 24-word). `seedqr=-` reads from stdin. Only the `seedqr` node type is accepted.
 - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). See [§Scope](#scope-v0300-widened-in-v0315-v0320) below.
 - `--digits <VALUE|->`: **(DEPRECATED, v0.31.6)** the original digit-string flag (Standard variant only). Still accepted, but emits a stderr deprecation notice directing to `--from seedqr=`; will be removed in a future release. Mutually exclusive with `--from` (clap-level conflict; exit 64). Exactly one of `--from seedqr=` or `--digits` is required.
-- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout.
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. On Unix the file is written owner-only (mode 0600), an existing file's mode included.
 
 The equivalent Standard conversion is also reachable via `mnemonic convert --from seedqr=<digits> --to phrase` (the `seedqr` node type was unified into the shared `--from` grammar in v0.31.6).
 
@@ -2858,7 +2858,7 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
 
 - `--from phrase=<VALUE|->`: BIP-39 phrase (12, 15, 18, 21, or 24 English words for Standard; 12 or 24 only for Compact). `phrase=-` reads from stdin. The toolkit refuses non-phrase node types (`xpub=`, `ms1=`, etc.).
 - `--variant <standard|compact>`: **(v0.32.0+)** SeedQR variant (default `standard`). Standard emits the decimal digit string; Compact emits lowercase hex of the entropy bytes.
-- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact).
+- `--json-out <PATH>`: emit a JSON envelope at PATH instead of plain text on stdout. The envelope's `variant` field reflects the selected variant; the `digits` field holds the payload (decimal for standard, hex for compact). On Unix the file is written owner-only (mode 0600), an existing file's mode included.
 
 Both subsubcommands refuse a secret supplied inline (`--from
 seedqr=<value>`, the deprecated `--digits <value>`, or `--from

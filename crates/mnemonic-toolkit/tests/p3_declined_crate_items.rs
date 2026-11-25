@@ -7,6 +7,14 @@
 //! nothing goes red. These tests are the backstop that makes the nine declines
 //! observable.
 //!
+//! **One decline is lifted: `write::write_private`.** P3 declined it for
+//! `mnemonic` only because P3's row had no `--out` (mnemonic-engrave
+//! `design/IMPLEMENTATION_PLAN_P3_md_mk_mnemonic.md` section 2.1). The seedqr
+//! `--json-out` fix adopts it so the phrase file is written 0600
+//! (`design/FIX_tk_seedqr_json_out_secret_file.md`; mnemonic-engrave
+//! `design/SPEC_io_lib_safe_write.md` section 9, tk row). The other eight
+//! declines stand, and so does any other item of the `write` module.
+//!
 //! **The reasons are the spec's, not this file's.** §6e **retracted** the
 //! generalisation of `me`'s terminal gate — *"the terminal gate stays scoped to
 //! `me`'s binary container"*, justified by binary-in-a-scrollback and by
@@ -20,10 +28,11 @@
 use assert_cmd::Command;
 
 /// **THE STRUCTURAL HALF.** The binary reaches into the shared crate through
-/// exactly one module. A `cargo nextest` run cannot see an adoption that is
-/// merely *compiled*, so this is asserted against the source itself.
+/// the `remedy` module and the one item `write::write_private`, nothing else.
+/// A `cargo nextest` run cannot see an adoption that is merely *compiled*, so
+/// this is asserted against the source itself.
 #[test]
-fn the_binary_names_only_the_two_adopted_crate_items() {
+fn the_binary_names_only_the_adopted_crate_items() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut offenders = Vec::new();
     let mut adopters = 0usize;
@@ -46,6 +55,11 @@ fn the_binary_names_only_the_two_adopted_crate_items() {
                 let rest = &line[pos + "mnemonic_io_lib::".len()..];
                 if rest.starts_with("remedy::") {
                     adopters += 1;
+                } else if rest.strip_prefix("write::write_private").is_some_and(|t| {
+                    !t.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                }) {
+                    // The one lifted decline, by exact item name: a longer
+                    // name such as `write_private_new` is still an offender.
                 } else {
                     let rel = path.strip_prefix(&root).unwrap_or(&path);
                     offenders.push(format!("{}:{}: {}", rel.display(), i + 1, line.trim()));
@@ -55,8 +69,9 @@ fn the_binary_names_only_the_two_adopted_crate_items() {
     }
     assert!(
         offenders.is_empty(),
-        "P3's boundary table adopts `remedy` and NOTHING else from \
-         mnemonic-io-lib. These lines reach a declined item; if that is \
+        "mnemonic adopts `remedy` (P3's boundary table) and \
+         `write::write_private` (the seedqr --json-out fix) and NOTHING else \
+         from mnemonic-io-lib. These lines reach a declined item; if that is \
          intended it is a boundary change and belongs in a plan, not in a \
          tidy-up:\n{}",
         offenders.join("\n")
