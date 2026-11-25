@@ -17,6 +17,12 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   that advisory is gone for these four verbs. `slip39 split` and `seed-xor split` still write plainly and keep the
   advisory until `write_private_new` exists. (tk-json-out-umask-secret, tk-bh-i3)
 
+### The resolved passphrase is wiped when its args struct drops
+
+- **`bundle`, `verify-bundle`, `derive-child`, `convert`**: the passphrase read from stdin or `@env:` is held in a
+  clone of the command's args as a plain `String`; the args struct now wipes it on drop. No printed text changes.
+  (pp-s2-1)
+
 ### Argv refusal and typed-ahead note show less of what you typed
 
 - **Argv refusal**: the message gives the argument's position and class, no longer its length (`-- N characters`

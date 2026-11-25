@@ -107,6 +107,14 @@ pub struct DeriveChildArgs {
     pub dice_sides: Option<u32>,
 }
 
+/// pp-s2-1: the stdin- or `@env:`-resolved passphrase sits in a clone of this
+/// struct as a plain `String`; scrub it when the struct drops.
+impl Drop for DeriveChildArgs {
+    fn drop(&mut self) {
+        crate::passphrase_input::scrub_passphrase(&mut self.passphrase);
+    }
+}
+
 pub fn run<R: Read, W: Write, E: Write>(
     args: &DeriveChildArgs,
     stdin: &mut R,

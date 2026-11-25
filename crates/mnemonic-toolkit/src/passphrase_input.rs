@@ -496,6 +496,16 @@ pub(crate) fn drain_note(noun: &str, got: &[u8]) -> String {
     format!("note: discarded {n} line(s) typed after the {noun} (not run, not used; not shown)\n")
 }
 
+/// pp-s2-1: wipe a passphrase held in a plain `Option<String>` (a clap field
+/// or the resolved copy in a cloned args struct). Called from the `Drop` impls
+/// of the four args structs that carry one.
+pub(crate) fn scrub_passphrase(slot: &mut Option<String>) {
+    use zeroize::Zeroize;
+    if let Some(p) = slot.as_mut() {
+        p.zeroize();
+    }
+}
+
 /// Read ONE line (up to and including the first `\n`, or EOF) byte by byte,
 /// so nothing past the line is consumed.
 fn read_line<R: Read + ?Sized>(stdin: &mut R, buf: &mut Vec<u8>) -> std::io::Result<()> {
@@ -703,6 +713,19 @@ mod tests {
     }
 
     use super::*;
+
+    /// pp-s2-1: the scrub empties the string and wipes the buffer it used.
+    #[test]
+    fn pp_s2_1_scrub_passphrase_wipes_the_buffer() {
+        let mut slot = Some(String::from("hunter2-hunter2"));
+        let ptr = slot.as_ref().unwrap().as_ptr();
+        scrub_passphrase(&mut slot);
+        assert_eq!(slot.as_deref(), Some(""));
+        // The buffer is still owned by `slot` (capacity kept), so reading it is sound.
+        let bytes = unsafe { std::slice::from_raw_parts(ptr, 15) };
+        assert!(bytes.iter().all(|&b| b == 0), "buffer not wiped: {bytes:?}");
+        scrub_passphrase(&mut None);
+    }
 
     fn r(value: Option<&str>, stdin_flag: bool, input: &[u8]) -> Result<Option<String>, String> {
         let mut cur = std::io::Cursor::new(input.to_vec());
