@@ -685,6 +685,12 @@ jobs:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: cargo check --lib --target "$TARGET" -p mnemonic-toolkit
+      - name: cargo check --bin mnemonic (windows-msvc, as release.yml builds it)
+        if: matrix.target == 'x86_64-pc-windows-msvc' && steps.docs.outputs.docs_only != 'true'
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: cargo check --locked --bin mnemonic --target "$TARGET" -p mnemonic-toolkit
 
   g6-invariant:
     # Cycle B SPEC §6 G6 — cross-repo mlock.rs inline-copy invariant.

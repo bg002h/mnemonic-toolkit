@@ -126,6 +126,7 @@ fn stdin_t() -> String {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bh_tk_mn7_dice_long_child_streams_byte_identical() {
     let r = run(Some(200000), &dice_args("10000000"), &stdin_t());
     assert!(!r.timed_out, "deadline; stderr: {}", r.err());
@@ -155,6 +156,7 @@ fn bh_tk_mn7_dice_length_outside_range_is_refused() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bh_tk_mn7_dice_max_length_streams_at_once() {
     let mut child = spawn(Some(200000), &dice_args("2147483647"), &stdin_t());
     let mut so = child.stdout.take().unwrap();
@@ -218,6 +220,7 @@ fn bh_tk_mn11_path_of_xpub_window_crossing_2p31_is_refused() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bh_tk_mn11_path_of_xpub_max_account_2p31_is_refused() {
     let r = run_xs(
         Some(4000000),
@@ -351,6 +354,7 @@ fn bh_tk_mn18_order_templates_outer_accounts_inner() {
 const FULL: &str = "15032385536";
 
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bh_tk_mn18_path_of_xpub_full_hardened_window_streams() {
     let r = run_xs(
         Some(4000000),
@@ -386,6 +390,7 @@ fn bh_tk_mn18_path_of_xpub_full_hardened_window_streams() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bh_tk_mn18_account_of_descriptor_full_hardened_window_streams() {
     let desc = format!("wsh(sortedmulti(1,{X44}/<0;1>/*,{X44}/<0;1>/*))");
     let r = run_xs(
@@ -405,6 +410,7 @@ fn bh_tk_mn18_account_of_descriptor_full_hardened_window_streams() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
 fn bh_tk_mn18_passphrase_of_xpub_full_hardened_window_streams() {
     let r = run_xs(
         Some(4000000),
