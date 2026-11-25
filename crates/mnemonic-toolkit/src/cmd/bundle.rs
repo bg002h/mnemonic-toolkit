@@ -543,6 +543,33 @@ fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), Toolk
     Ok(())
 }
 
+/// Bug hunt 2026-11-25 toolkit#5: refuse a DEFAULTED origin path that the
+/// xpub's own BIP-32 header contradicts (depth differs from the path length, or
+/// the child number differs from the path's last component). Only called when
+/// no `@N.path=` was given; a typed path is not checked here.
+fn check_defaulted_xpub_origin(
+    idx: u8,
+    xpub: &bitcoin::bip32::Xpub,
+    default_path: &DerivationPath,
+) -> Result<(), ToolkitError> {
+    let comps: Vec<bitcoin::bip32::ChildNumber> = default_path.into_iter().copied().collect();
+    let depth_ok = xpub.depth as usize == comps.len();
+    let child_ok = comps.last() == Some(&xpub.child_number);
+    if depth_ok && child_ok {
+        return Ok(());
+    }
+    Err(ToolkitError::SlotInputViolation {
+        kind: "conflict",
+        message: format!(
+            "slot @{idx}: no `@{idx}.path=` was given, and the default origin m/{default_path} \
+             does not match the xpub's own header (depth {}, child number {}); the key does not \
+             live at the default path. Supply the key's real origin with `--slot @{idx}.path=m/...` \
+             (for example m/48'/0'/0'/2' for a BIP-48 P2WSH cosigner xpub).",
+            xpub.depth, xpub.child_number
+        ),
+    })
+}
+
 /// Resolve slot inputs into ResolvedSlot vec.
 /// Supported subkey shapes:
 /// - {phrase} → BIP-39 derive entropy + seed + master_xpriv → xpub at template
@@ -593,6 +620,36 @@ pub(crate) fn resolve_slots(
     for (idx, slot_inputs) in by_index {
         let subkeys: std::collections::BTreeSet<SlotSubkey> =
             slot_inputs.iter().map(|s| s.subkey).collect();
+        // Bug hunt 2026-11-25 toolkit#4: the slot grammar admits `@N.path=` /
+        // `@N.fingerprint=` beside a seed (`phrase` / `seedqr` / `ms1`) for
+        // non-canonical DESCRIPTOR mode only. Template mode derives the seed at
+        // the `--template` / `--account` / `--multisig-path-family` path and has
+        // nowhere to put a typed path or fingerprint, so it used to drop them
+        // silently (a request for account 5 produced account-0 cards). Refuse
+        // instead: a path the operator supplies must reach the artifact or be
+        // refused, never be silently dropped.
+        let seed_bearing = [
+            SlotSubkey::Phrase,
+            SlotSubkey::Seedqr,
+            SlotSubkey::Ms1,
+            SlotSubkey::Entropy,
+        ]
+        .iter()
+        .any(|k| subkeys.contains(k));
+        if seed_bearing
+            && (subkeys.contains(&SlotSubkey::Path) || subkeys.contains(&SlotSubkey::Fingerprint))
+        {
+            return Err(ToolkitError::SlotInputViolation {
+                kind: "conflict",
+                message: format!(
+                    "slot @{idx}: --template mode ignores `@{idx}.path=` / `@{idx}.fingerprint=` \
+                     beside a seed (the key is derived at the template's path and the seed's own \
+                     master fingerprint); remove them, and choose the account with --account \
+                     (and --multisig-path-family for multisig). A per-key path on a seed slot is \
+                     only accepted with a non-canonical --descriptor."
+                ),
+            });
+        }
         if subkeys.contains(&SlotSubkey::Phrase) || subkeys.contains(&SlotSubkey::Seedqr) {
             // v0.31.3 — Seedqr digest = secret-bearing materialization of
             // a BIP-39 phrase. Decode at slot-emit time then dispatch
@@ -673,10 +730,21 @@ pub(crate) fn resolve_slots(
                     // at the same path. F3 fix: for multisig templates this is the
                     // --multisig-path-family path, not the BIP-87-only template
                     // fallback.
-                    match &multisig_acct_path {
+                    let default_path = match &multisig_acct_path {
                         Some(p) => p.clone(),
                         None => template.derivation_path(network, account),
-                    }
+                    };
+                    // Bug hunt 2026-11-25 toolkit#5: the default is a GUESS, so
+                    // refuse it when the xpub's own header says the key does
+                    // not live there (depth or child number disagree) — e.g. a
+                    // BIP-48 `m/48'/0'/0'/2'` hardware-wallet xpub under the
+                    // BIP-87 `m/87'/0'/0'` multisig default. Recording the guess
+                    // would put an origin on the cards and exports at which no
+                    // signer finds this key. A path the operator TYPES keeps the
+                    // v0.37.10 tolerance (no depth check), so the refusal only
+                    // asks for that path to be stated.
+                    check_defaulted_xpub_origin(idx, &xpub, &default_path)?;
+                    default_path
                 }
             };
             // v0.8.2 SPEC §5.1 — parse the optional `@N.master_xpub=` subkey

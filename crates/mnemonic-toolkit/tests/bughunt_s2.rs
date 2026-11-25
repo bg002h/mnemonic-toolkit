@@ -180,6 +180,11 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
         &slot_xpub,
         "--slot",
         &slot_fp,
+        // XPUB_A is a BIP-48 key (depth 4, child 2'); since bug hunt 2026-11-25
+        // toolkit#1/#5 a defaulted origin that contradicts the header is refused,
+        // so the fixture states the key's real origin.
+        "--slot",
+        "@0.path=m/48'/0'/0'/2'",
         "--output",
         "-",
     ]);
@@ -318,6 +323,11 @@ fn bughunt_tk_11_singlesig_hardened_usesite_template_form_refused() {
         &slot_xpub,
         "--slot",
         &slot_fp,
+        // XPUB_A is a BIP-48 key (depth 4, child 2'); since bug hunt 2026-11-25
+        // toolkit#1/#5 a defaulted origin that contradicts the header is refused,
+        // so the fixture states the key's real origin.
+        "--slot",
+        "@0.path=m/48'/0'/0'/2'",
         "--json",
     ]);
     assert!(

@@ -321,6 +321,8 @@ fn bsms_4line_taproot_multisig_refused_carries_full_v0_28_diagnostic() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
+            // Bug hunt 2026-11-25 toolkit#5: a defaulted origin that contradicts
+            // the xpub's header is refused, so the fixture states each key's real origin.
             "export-wallet",
             "--format",
             "bsms",
@@ -337,9 +339,13 @@ fn bsms_4line_taproot_multisig_refused_carries_full_v0_28_diagnostic() {
             "--slot",
             &format!("@0.xpub={COSIGNER_A_XPUB}"),
             "--slot",
+            "@0.path=m/48'/0'/0'/2'",
+            "--slot",
             &format!("@0.fingerprint={COSIGNER_A_FP}"),
             "--slot",
             &format!("@1.xpub={COSIGNER_B_XPUB}"),
+            "--slot",
+            "@1.path=m/48'/0'/0'/2'",
             "--slot",
             &format!("@1.fingerprint={COSIGNER_B_FP}"),
         ])
@@ -391,6 +397,8 @@ fn bsms_taproot_singlesig_refused_carries_p2tr_discriminator() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
+            // Bug hunt 2026-11-25 toolkit#5: a defaulted origin that contradicts
+            // the xpub's header is refused, so the fixture states each key's real origin.
             "export-wallet",
             "--format",
             "bsms",
@@ -400,6 +408,8 @@ fn bsms_taproot_singlesig_refused_carries_p2tr_discriminator() {
             "mainnet",
             "--slot",
             &format!("@0.xpub={COSIGNER_A_XPUB}"),
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
             "--slot",
             &format!("@0.fingerprint={COSIGNER_A_FP}"),
         ])
