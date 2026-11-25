@@ -1688,7 +1688,11 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 return Err(ToolkitError::SlotInputViolation {
                     kind: "conflict",
                     message: format!(
-                        "slot @{i}: the descriptor gives `[{fp}]@{i}` (a fingerprint with no path),                          which says the key is the master key of {fp}. The master node cannot be                          recorded on a card for this descriptor shape: an empty origin on the card                          means the shape's canonical origin. Give the key's real origin,                          `[{fp}/<path>]@{i}`, or drop the brackets to use the canonical origin."
+                        "slot @{i}: the descriptor gives `[{fp}]@{i}` (a fingerprint with no path), \
+                         which says the key is the master key of {fp}. The master node cannot be \
+                         recorded on a card for this descriptor shape: an empty origin on the card \
+                         means the shape's canonical origin. Give the key's real origin, \
+                         `[{fp}/<path>]@{i}`, or drop the brackets to use the canonical origin."
                     ),
                 });
             }

@@ -65,6 +65,14 @@ fn r1_i2_inline_fingerprint_only_origin_on_canonical_shape_is_refused() {
             o.stderr
         );
         assert!(
+            o.stderr.contains(
+                "(a fingerprint with no path), which says the key is the master key of 73c5da0a. \
+                 The master node cannot be recorded"
+            ),
+            "{desc}: one sentence, no stray spaces: {}",
+            o.stderr
+        );
+        assert!(
             !o.stderr.contains("no origin supplied"),
             "N4: the origin WAS supplied: {}",
             o.stderr
