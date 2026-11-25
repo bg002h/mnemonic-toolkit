@@ -1592,8 +1592,10 @@ older toolkit or `md` releases can carry a key with an EMPTY origin path.
 - With `--from <seed>`, the seed's common paths are searched for an EXACT
   key match (chain code and public key): the master key `m`; the shape's
   canonical origin; BIP-44/49/84/86 and BIP-87 `m/<purpose>'/<coin>'/<a>'`
-  and BIP-48 `m/48'/<coin>'/<a>'/1'` and `/2'` for accounts `a` = 0..9; and
-  the Refugium seat paths `m/270028'/<coin>'/<n>'` for `n` = 0..255 (rounds
+  and BIP-48 `m/48'/<coin>'/<a>'/1'` and `/2'` for accounts `a` = 0..9;
+  BIP-45 `m/45'` (the purpose key a BIP-45 cosigner shares: "Only the
+  hardened purpose extended public key is shared"); and the Refugium seat
+  paths `m/270028'/<coin>'/<n>'` for `n` = 0..255 (rounds
   0..7, `n` = 32·round + seat). `<coin>` follows `--network`. On exactly one
   match the restore proceeds with that origin and warns loudly that the path
   was FOUND, not read from the card (and, for `m`, that the wallet sits on

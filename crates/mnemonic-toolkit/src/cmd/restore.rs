@@ -3915,6 +3915,10 @@ pub(crate) fn empty_origin_search_paths(
             out.push(vec![h(48), h(coin), h(account), h(script)].into());
         }
     }
+    // BIP-45: "m / 45' / *" ... "Hardened derivation is used at this level."
+    // "Only the hardened purpose extended public key is shared", so a BIP-45
+    // cosigner's key is the m/45' one (no coin or account level).
+    out.push(vec![h(45)].into());
     for n in 0..=255u32 {
         out.push(vec![h(REFUGIUM_PURPOSE), h(coin), h(n)].into());
     }
@@ -4396,7 +4400,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                          common path of this seed produces its key (searched: the master key m, \
                          this shape's canonical origin, BIP-44/49/84/86 and BIP-87 \
                          m/<purpose>'/<coin>'/<0..9>', BIP-48 m/48'/<coin>'/<0..9>'/1' and /2', \
-                         and Refugium m/270028'/<coin>'/<0..255>'), and the seed matches no other \
+                         BIP-45 m/45', and Refugium m/270028'/<coin>'/<0..255>'), and the seed \
+                         matches no other \
                          cosigner. Refusing rather than guess a path: check the seed, passphrase \
                          and --network."
                     )));

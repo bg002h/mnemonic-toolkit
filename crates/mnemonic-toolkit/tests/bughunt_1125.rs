@@ -441,6 +441,38 @@ fn tk2_refugium_path_is_found_on_testnet() {
     );
 }
 
+/// Review r1 B5: BIP-45's shared key is the purpose key m/45' ("Only the
+/// hardened purpose extended public key is shared"), so a card whose @N
+/// came from a BIP-45 wallet and lost its origin is found there. (The card
+/// is a canonical wsh shape because a non-canonical one cannot carry an empty
+/// origin; the search does not depend on the shape.)
+#[test]
+fn b5_bip45_purpose_key_is_found_by_the_empty_origin_search() {
+    let x = xpub_at(A, "m/45'", "mainnet");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(2,@0/**,@1/**))",
+        "--slot",
+        &format!("@0.xpub={x}"),
+        "--slot",
+        &format!("@0.fingerprint={FP_A}"),
+        "--slot",
+        "@0.path=m/45'",
+        "--slot",
+        &format!("@1.phrase={B}"),
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let md1 = with_empty_origins(&md1_of(&o.stdout));
+    let r = restore(&md1, &["--from", &format!("phrase={A}")]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(r.stderr.contains("at m/45'."), "{}", r.stderr);
+    assert!(r.stdout.contains(&format!("[{FP_A}/45']")), "{}", r.stdout);
+}
+
 // ---------------------------------------------------------------------------
 // toolkit#4 — template mode refuses a path / fingerprint beside a seed.
 // ---------------------------------------------------------------------------
