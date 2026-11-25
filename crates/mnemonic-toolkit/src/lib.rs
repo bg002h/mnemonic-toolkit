@@ -3,8 +3,8 @@
 //! The toolkit's primary artifact is the `mnemonic` binary (see
 //! `crates/mnemonic-toolkit/src/main.rs`). This library exposes a focused
 //! set of modules so integration tests and the binary itself can use
-//! `mnemonic_toolkit::<module>::*`. All other binary modules stay private
-//! to `main.rs`.
+//! `mnemonic_toolkit::<module>::*`. All other binary modules are declared
+//! here, private (the binary's `main` is `run`, in `src/cli.rs`).
 //!
 //! See `design/SPEC_secret_memory_hygiene_v0_9_B.md` §4 P2 for the locked
 //! crate-shape decision (Option C: hybrid lib + bin).
@@ -150,50 +150,168 @@ pub mod slip39;
 // `cfg(fuzzing)` ONLY. It remains binary-private in every normal/shipped build,
 // so the "binary-private by design" invariant is preserved (the mount never
 // compiles in a normal build).
-#[cfg(fuzzing)]
+// `extern crate self as mnemonic_toolkit;` (load-bearing): the binary's code now
+// lives in this crate, and several of its modules (`derive.rs`, `synthesize.rs`,
+// `derive_slot.rs`, `cli.rs`) reach `mlock` and `process_hardening` by the
+// external-crate self-name path (`mnemonic_toolkit::mlock::...`), as they did
+// when they were compiled as the binary crate.
 extern crate self as mnemonic_toolkit;
 
-#[cfg(fuzzing)]
+/// The CLI entry point (`src/main.rs` calls it). Hidden from the docs: it is the
+/// binary's `main`, not a library API.
+#[cfg(unix)]
+mod cli;
+#[doc(hidden)]
+#[cfg(unix)]
+pub use cli::run;
+
+// UNIX ONLY: the binary was never built for Windows (`out_sink`, `passphrase_input` use
+// `libc::fcntl`/termios), and the GUI consumes this lib on Windows, so the moved code is
+// `cfg(unix)` and the lib's Windows surface is exactly what it was.
+// ---------------------------------------------------------------------------
+// The modules that used to be declared in `main.rs` (binary-private).
+// ---------------------------------------------------------------------------
+//
+// They are declared here, private, so the integration tests link this library
+// instead of recompiling the whole binary, and the shipped surface is the same
+// as before: nothing below is `pub` in a normal build. `display_grouping` and
+// `secret_string` are `pub mod` above (they were mounted in both crates).
+//
+// `cfg(fuzzing)` is set ONLY by cargo-fuzz (it passes `--cfg fuzzing` via
+// RUSTFLAGS). The 22 modules the fuzz target `fuzz/fuzz_targets/descriptor_parse.rs`
+// reaches (the `parse_descriptor` closure) are `pub` under it and private in
+// every normal build. The `[lints.rust] unexpected_cfgs` line in `Cargo.toml`
+// stops clippy `-D warnings` from flagging the otherwise-unknown `cfg(fuzzing)`.
+// `error.rs` is `pub` under `cfg(fuzzing)` ONLY, so `ToolkitError` stays
+// binary-private in every normal/shipped build.
+#[cfg(unix)]
+mod address_render;
+#[cfg(unix)]
+mod argv_guard;
+#[cfg(unix)]
+mod bip85;
+#[cfg(unix)]
+mod bundle_unified;
+#[cfg(unix)]
+mod cmd;
+#[cfg(all(unix, fuzzing))]
 pub mod cost;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod cost;
+#[cfg(unix)]
+mod decode_address;
+#[cfg(all(unix, fuzzing))]
 pub mod derive;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod derive;
+#[cfg(all(unix, fuzzing))]
 pub mod derive_address;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod derive_address;
+#[cfg(all(unix, fuzzing))]
 pub mod derive_slot;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod derive_slot;
+#[cfg(unix)]
+mod descriptor_builder;
+#[cfg(unix)]
+mod electrum;
+#[cfg(unix)]
+mod env_sentinel;
+#[cfg(all(unix, fuzzing))]
 pub mod error;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod error;
+#[cfg(all(unix, fuzzing))]
 pub mod format;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod format;
+#[cfg(all(unix, fuzzing))]
 pub mod friendly;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod friendly;
+#[cfg(all(unix, fuzzing))]
 pub mod indel;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod indel;
+#[cfg(all(unix, fuzzing))]
 pub mod language;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod language;
+#[cfg(all(unix, fuzzing))]
 pub mod network;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod network;
+#[cfg(unix)]
+mod nostr;
+#[cfg(unix)]
+mod out_sink;
+#[cfg(all(unix, fuzzing))]
 pub mod parse;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod parse;
+#[cfg(all(unix, fuzzing))]
 pub mod parse_descriptor;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod parse_descriptor;
+#[cfg(unix)]
+mod passphrase_input;
+#[cfg(all(unix, fuzzing))]
 pub mod repair;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod repair;
+#[cfg(all(unix, fuzzing))]
 pub mod secret_advisory;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod secret_advisory;
+#[cfg(unix)]
+mod silent_payment;
+#[cfg(all(unix, fuzzing))]
 pub mod slip0132;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod slip0132;
+#[cfg(all(unix, fuzzing))]
 pub mod slot_input;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod slot_input;
+#[cfg(unix)]
+mod slot_ms1;
+#[cfg(all(unix, fuzzing))]
 pub mod synthesize;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod synthesize;
+#[cfg(all(unix, fuzzing))]
 pub mod taproot_override_classify;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod taproot_override_classify;
+#[cfg(all(unix, fuzzing))]
 pub mod template;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod template;
+#[cfg(all(unix, fuzzing))]
 pub mod timelock_advisory;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod timelock_advisory;
+#[cfg(all(unix, fuzzing))]
 pub mod unrestorable_advisory;
-#[cfg(fuzzing)]
+#[cfg(all(unix, not(fuzzing)))]
+mod unrestorable_advisory;
+#[cfg(unix)]
+mod verify_message;
+#[cfg(all(unix, fuzzing))]
 pub mod wallet_export;
+#[cfg(all(unix, not(fuzzing)))]
+mod wallet_export;
+#[cfg(unix)]
+mod wallet_import;
+#[cfg(unix)]
+mod word_card_adapter;
+#[cfg(unix)]
+mod wordlists;
+
+// T2-a (#6) — never-wrong-payload property harness for the repair engine.
+// In-crate `#[cfg(test)]` module (repair/indel are private): direct
+// private access to `repair_card` / `recover_indel` incl. the mock-oracle
+// ambiguity path. TEST-only, NO-BUMP (compiles only under `cargo test`).
+#[cfg(all(unix, test))]
+mod prop_repair_never_wrong;

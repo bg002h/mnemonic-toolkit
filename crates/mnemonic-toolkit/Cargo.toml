@@ -11,6 +11,9 @@ documentation = "https://docs.rs/mnemonic-toolkit"
 readme = "README.md"
 keywords = ["bitcoin", "bip39", "bip93", "engraving", "self-custody"]
 categories = ["cryptography::cryptocurrencies", "command-line-utilities"]
+# One integration-test binary (tests/all.rs) instead of one per file; the few
+# `[[test]]` blocks at the end stay separate because CI runs them by name.
+autotests = false
 
 [[bin]]
 name = "mnemonic"
@@ -150,11 +153,25 @@ proptest = "1"
 rand = "0.8"
 
 [[test]]
-name = "cli_slip39_advisories"
-path = "tests/cli_slip39_advisories.rs"
-required-features = ["slip39-test-rng"]
+name = "cli_slip39_refusals"
+path = "tests/cli_slip39_refusals.rs"
 
 [[test]]
-name = "cli_slip39_json"
-path = "tests/cli_slip39_json.rs"
-required-features = ["slip39-test-rng"]
+name = "cli_cross_tool_differential"
+path = "tests/cli_cross_tool_differential.rs"
+
+[[test]]
+name = "bitcoind_differential"
+path = "tests/bitcoind_differential.rs"
+
+[[test]]
+name = "bitcoind_addr_import"
+path = "tests/bitcoind_addr_import.rs"
+
+[[test]]
+name = "mlock_g6_invariant"
+path = "tests/mlock_g6_invariant.rs"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

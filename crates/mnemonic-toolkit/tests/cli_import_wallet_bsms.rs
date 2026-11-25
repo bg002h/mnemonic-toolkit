@@ -577,7 +577,7 @@ fn bsms_7_line_blob_rejected_with_pointer_text() {
 fn bsms_sniff_rejects_lowercase_header() {
     let blob = b"bsms 1.0\nwpkh(xpub...)\n";
     assert!(
-        !crate::shared::bsms_sniff_via_dispatch(blob),
+        !shared::bsms_sniff_via_dispatch(blob),
         "lowercase header must NOT match BSMS sniff"
     );
 }
@@ -586,7 +586,7 @@ fn bsms_sniff_rejects_lowercase_header() {
 fn bsms_sniff_rejects_leading_whitespace() {
     let blob = b" BSMS 1.0\nwpkh(xpub...)\n";
     assert!(
-        !crate::shared::bsms_sniff_via_dispatch(blob),
+        !shared::bsms_sniff_via_dispatch(blob),
         "leading-whitespace header must NOT match BSMS sniff"
     );
 }
