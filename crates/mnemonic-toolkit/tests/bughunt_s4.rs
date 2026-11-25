@@ -51,11 +51,9 @@ fn xpub_at(phrase: &str, path: &str) -> Xpub {
 // clean refusal. Run under `ulimit -v` so the failed allocation is deterministic
 // on any box (on a large-memory box the unbounded request can otherwise succeed
 // and the command spins for billions of rolls; both are the missing cap).
-// Correct (report): a clean BadInput error -> normal exit with non-zero code,
-// no signal. OPEN product question: the maximum `--length` for dice.
+// Correct: a clean refusal (exit 2, exact stderr), no signal.
 // ---------------------------------------------------------------------------
 #[test]
-#[ignore = "deferred-minor: derive-child-dice-length-cap"]
 fn bughunt_tk_15_dice_huge_length_is_refused_cleanly() {
     let mut child = std::process::Command::new("sh")
         .args([
@@ -71,7 +69,7 @@ fn bughunt_tk_15_dice_huge_length_is_refused_cleanly() {
             "--dice-sides",
             "6",
             "--length",
-            "2000000000",
+            "2147483648",
             "--index",
             "0",
         ])
@@ -108,9 +106,26 @@ fn bughunt_tk_15_dice_huge_length_is_refused_cleanly() {
         "process died from signal {:?} (6 = SIGABRT) instead of exiting cleanly; stderr: {err}",
         status.signal()
     );
-    assert!(
-        status.code().is_some_and(|c| c != 0),
-        "expected a clean non-zero refusal; got {status:?}; stderr: {err}"
+    assert_eq!(
+        status.code(),
+        Some(2),
+        "expected exit 2; got {status:?}; stderr: {err}"
+    );
+    let mut out = String::new();
+    {
+        use std::io::Read;
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_string(&mut out)
+            .unwrap();
+    }
+    assert_eq!(out, "", "stdout must be empty");
+    assert_eq!(
+        err,
+        "warning: secret material on argv (--from xprv=) — pipe via --from xprv=- to avoid /proc/$PID/cmdline exposure\n\
+         error: --length 2147483648 out of range for --application dice (valid: 1..=2^31-1 rolls)\n"
     );
 }
 
@@ -302,7 +317,6 @@ fn assert_no_panic(out: &std::process::Output, what: &str) {
 }
 
 #[test]
-#[ignore = "deferred-minor: xpub-search-account-window-2p31-panic"]
 fn bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic() {
     let target = xpub_at(PHRASE, "m/86'/0'/0'");
     let out = bin()
@@ -319,10 +333,14 @@ fn bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic() {
         .output()
         .unwrap();
     assert_no_panic(&out, "path-of-xpub --min-account 2147483648");
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "error: --min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits\n"
+    );
 }
 
 #[test]
-#[ignore = "deferred-minor: xpub-search-account-window-2p31-panic"]
 fn bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic() {
     let a = xpub_at(PHRASE, "m/86'/0'/0'");
     let desc = format!("wsh(sortedmulti(1,{a}/<0;1>/*,{a}/<0;1>/*))");
@@ -344,6 +362,11 @@ fn bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic() {
     assert_no_panic(
         &out,
         "account-of-descriptor --min-account 2147483648 --number-of-accounts 0",
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stderr),
+        "error: --min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits\n"
     );
 }
 

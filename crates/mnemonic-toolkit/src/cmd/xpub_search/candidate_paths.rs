@@ -165,8 +165,9 @@ mod tests {
         let candidates = build_candidate_paths(0, 20, None, &[], CliNetwork::Mainnet);
         // 7 templates × 20 accounts = 140
         assert_eq!(candidates.len(), 140);
-        assert_eq!(candidates[0].template_name, "bip44");
-        assert_eq!(candidates[0].path.to_string(), "44'/0'/0'");
+        let first = candidates.iter().next().unwrap();
+        assert_eq!(first.template_name, "bip44");
+        assert_eq!(first.path.to_string(), "44'/0'/0'");
     }
 
     #[test]
@@ -174,7 +175,7 @@ mod tests {
         let candidates = build_candidate_paths(5, 3, None, &[], CliNetwork::Mainnet);
         // 7 templates × 3 accounts = 21
         assert_eq!(candidates.len(), 21);
-        let bip84: Vec<&CandidatePath> = candidates
+        let bip84: Vec<CandidatePath> = candidates
             .iter()
             .filter(|c| c.template_name == "bip84")
             .collect();
@@ -193,7 +194,7 @@ mod tests {
     #[test]
     fn bip48_multisig_at_three_script_types() {
         let candidates = build_candidate_paths(0, 1, None, &[], CliNetwork::Mainnet);
-        let mset: Vec<&CandidatePath> = candidates
+        let mset: Vec<CandidatePath> = candidates
             .iter()
             .filter(|c| c.template_name.starts_with("bip48-"))
             .collect();
@@ -207,7 +208,7 @@ mod tests {
     fn add_path_with_account_quote_substitutes() {
         let add_paths = vec!["m/87'/0'/account'".to_string()];
         let candidates = build_candidate_paths(0, 3, None, &add_paths, CliNetwork::Mainnet);
-        let added: Vec<&CandidatePath> = candidates
+        let added: Vec<CandidatePath> = candidates
             .iter()
             .filter(|c| c.template_name == "m/87'/0'/account'")
             .collect();
@@ -220,7 +221,7 @@ mod tests {
     fn add_path_no_account_token_searched_once() {
         let add_paths = vec!["m/9999'/0'/0'".to_string()];
         let candidates = build_candidate_paths(0, 5, None, &add_paths, CliNetwork::Mainnet);
-        let added: Vec<&CandidatePath> = candidates
+        let added: Vec<CandidatePath> = candidates
             .iter()
             .filter(|c| c.template_name == "m/9999'/0'/0'")
             .collect();
@@ -233,11 +234,68 @@ mod tests {
     fn determinism_two_consecutive_calls_byte_equal() {
         let a = build_candidate_paths(0, 5, None, &[], CliNetwork::Mainnet);
         let b = build_candidate_paths(0, 5, None, &[], CliNetwork::Mainnet);
-        let a_names: Vec<&str> = a.iter().map(|c| c.template_name.as_str()).collect();
-        let b_names: Vec<&str> = b.iter().map(|c| c.template_name.as_str()).collect();
+        let a_names: Vec<String> = a.iter().map(|c| c.template_name).collect();
+        let b_names: Vec<String> = b.iter().map(|c| c.template_name).collect();
         assert_eq!(a_names, b_names);
         let a_paths: Vec<String> = a.iter().map(|c| c.path.to_string()).collect();
         let b_paths: Vec<String> = b.iter().map(|c| c.path.to_string()).collect();
         assert_eq!(a_paths, b_paths);
+    }
+
+    #[test]
+    fn candidate_paths_len_matches_iter_count() {
+        let garbage = ["m/1account'", "m/9'/account", "m/86'/0'/0'", "garbage"];
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+        let cases: Vec<(u32, u32, Option<u32>, Vec<String>)> = vec![
+            (0, 20, None, vec![]),
+            (5, 3, None, vec![]),
+            (0, 5, Some(50), vec![]),
+            (0, 3, None, s(&garbage)),
+            (2147483646, 2, None, s(&["m/1account'"])),
+        ];
+        for (min, n, max, add) in cases {
+            let c = build_candidate_paths(min, n, max, &add, CliNetwork::Mainnet);
+            assert_eq!(c.len(), c.iter().count(), "case ({min},{n},{max:?},{add:?})");
+        }
+        let last = build_candidate_paths(2147483646, 2, None, &s(&["m/1account'"]), CliNetwork::Mainnet);
+        assert_eq!(last.len(), 14);
+    }
+
+    #[test]
+    fn candidate_paths_full_hardened_window_is_lazy() {
+        let c = build_candidate_paths(0, 20, Some(2147483647), &[], CliNetwork::Mainnet);
+        assert_eq!(c.len(), 15032385536usize);
+        let first: Vec<CandidatePath> = c.iter().take(3).collect();
+        assert_eq!(first.len(), 3);
+        for (i, cp) in first.iter().enumerate() {
+            assert_eq!(cp.template_name, "bip44");
+            assert_eq!(cp.account, Some(i as u32));
+            assert_eq!(cp.path.to_string(), format!("44'/0'/{i}'"));
+        }
+    }
+
+    #[test]
+    fn check_account_window_boundaries() {
+        for (min, n, max) in [
+            (0u32, 20u32, None),
+            (2147483646, 2, None),
+            (2147483647, 1, None),
+            (0, 0, Some(2147483647)),
+            (0, u32::MAX >> 1, None),
+        ] {
+            assert!(check_account_window(min, n, max).is_ok(), "({min},{n},{max:?})");
+        }
+        let w1 = "--min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits";
+        for (min, n, max) in [
+            (2147483648u32, 0u32, None),
+            (2147483647, 2, None),
+            (0, 20, Some(2147483648)),
+            (1, 2147483648, None),
+            (0, u32::MAX, None),
+        ] {
+            let e = check_account_window(min, n, max).unwrap_err();
+            assert!(matches!(e, ToolkitError::BadInput(_)), "({min},{n},{max:?})");
+            assert_eq!(e.to_string(), format!("error: {w1}"), "({min},{n},{max:?})");
+        }
     }
 }
