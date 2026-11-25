@@ -924,3 +924,100 @@ fn invalid_params_rejected() {
         Err(WcError::InvalidParams)
     );
 }
+
+// ===========================================================================
+// KAT 11 — stop-sign mis-stamp recovery (bh-tk-I6)
+// ===========================================================================
+
+fn kat11_card(m: usize, u: u8, seed: u64) -> Vec<String> {
+    let payload = det_bytes(73, seed);
+    let opts = EncodeOpts {
+        parity_words: m,
+        integrity_bits: 44,
+        u_slots: u,
+    };
+    enc(SourceKind::Mk1Xpub, &payload, 584, &opts)
+}
+
+fn kat11_assert_recovers(card: &[String], seed: u64, m: usize, idx: usize, w: &str) {
+    match dec(card) {
+        Ok(d) => {
+            assert_eq!(d.payload, det_bytes(73, seed), "m={m} idx={idx} word={w}");
+            assert_eq!(d.payload_bits, 584, "m={m} idx={idx} word={w}");
+            assert_eq!(d.kind, SourceKind::Mk1Xpub, "m={m} idx={idx} word={w}");
+            assert!(!d.truncated, "truncated m={m} idx={idx} word={w}");
+        }
+        Err(e) => panic!("refused {e:?}: m={m} idx={idx} word={w}"),
+    }
+}
+
+fn kat11_every_substitute(base: &[String], seed: u64, m: usize, idx: usize) {
+    let orig = sym(&base[idx]);
+    for s in 0u16..2048 {
+        if s == orig {
+            continue;
+        }
+        let mut card = base.to_vec();
+        card[idx] = word(s);
+        kat11_assert_recovers(&card, seed, m, idx, &card[idx].clone());
+    }
+}
+
+#[test]
+fn stop_sign_last_word_every_substitute_recovers() {
+    for &(m, u, seed) in &[(4usize, 3u8, 1u64), (8, 3, 2), (0, 1, 4), (16, 1, 5)] {
+        let base = kat11_card(m, u, seed);
+        let n = base.len();
+        kat11_every_substitute(&base, seed, m, n - 1);
+    }
+}
+
+#[test]
+fn stop_sign_second_to_last_word_every_substitute_recovers() {
+    for &(m, u, seed) in &[(4usize, 3u8, 1u64), (8, 3, 2), (0, 1, 4), (16, 1, 5)] {
+        let base = kat11_card(m, u, seed);
+        let n = base.len();
+        kat11_every_substitute(&base, seed, m, n - 2);
+    }
+}
+
+#[test]
+fn stop_sign_misstamp_keeps_full_parity_budget() {
+    for &(m, u, seed) in &[(4usize, 3u8, 6u64), (8, 3, 3), (16, 1, 7), (2, 7, 8)] {
+        let mut base = kat11_card(m, u, seed);
+        let n = base.len();
+        for j in 0..m / 2 {
+            let i = n - 3 - j;
+            let s = sym(&base[i]);
+            base[i] = word((s + 1 + j as u16) % 2048);
+        }
+        kat11_assert_recovers(&base, seed, m, usize::MAX, "control");
+        kat11_every_substitute(&base, seed, m, n - 2);
+        kat11_every_substitute(&base, seed, m, n - 1);
+    }
+}
+
+#[test]
+fn lost_tail_still_flagged_after_stop_sign_fix() {
+    let base = kat11_card(16, 3, 9);
+    for k in 1..=10usize {
+        let mut card = base.clone();
+        card.truncate(base.len() - k);
+        match dec(&card) {
+            Ok(d) => {
+                assert!(d.truncated, "k={k}");
+                assert_eq!(d.payload, det_bytes(73, 9), "k={k}");
+            }
+            Err(e) => assert!(
+                matches!(
+                    e,
+                    WcError::Truncated
+                        | WcError::Uncorrectable
+                        | WcError::IntegrityMismatch
+                        | WcError::Sync(_)
+                ),
+                "k={k} {e:?}"
+            ),
+        }
+    }
+}

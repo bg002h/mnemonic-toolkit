@@ -1199,3 +1199,75 @@ fn make_decoded(
         raid: header.raid.as_ref().map(raid_meta),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn d(payload: u8, truncated: bool, erasures: usize) -> Decoded {
+        Decoded {
+            kind: SourceKind::Mk1Xpub,
+            payload: vec![payload],
+            payload_bits: 8,
+            truncated,
+            repair: RepairSummary {
+                erasures_filled: erasures,
+            },
+            raid: None,
+        }
+    }
+
+    #[test]
+    fn select_geometry_no_alternate_returns_primary() {
+        assert_eq!(
+            select_geometry(Err(WcError::Uncorrectable), None),
+            Err(WcError::Uncorrectable)
+        );
+    }
+
+    #[test]
+    fn select_geometry_same_payload_returns_alternate() {
+        assert_eq!(
+            select_geometry(Ok(d(1, true, 0)), Some(Ok(d(1, false, 2)))),
+            Ok(d(1, false, 2))
+        );
+    }
+
+    #[test]
+    fn select_geometry_different_payloads_refused() {
+        assert_eq!(
+            select_geometry(Ok(d(1, false, 0)), Some(Ok(d(2, false, 0)))),
+            Err(WcError::IntegrityMismatch)
+        );
+    }
+
+    #[test]
+    fn select_geometry_alternate_only_verifies() {
+        assert_eq!(
+            select_geometry(
+                Err(WcError::Sync(sync::SyncError::MultiIndelBlock)),
+                Some(Ok(d(1, false, 0)))
+            ),
+            Ok(d(1, false, 0))
+        );
+    }
+
+    #[test]
+    fn select_geometry_primary_only_verifies() {
+        assert_eq!(
+            select_geometry(Ok(d(1, false, 0)), Some(Err(WcError::Uncorrectable))),
+            Ok(d(1, false, 0))
+        );
+    }
+
+    #[test]
+    fn select_geometry_both_fail_keeps_primary_error() {
+        assert_eq!(
+            select_geometry(
+                Err(WcError::Sync(sync::SyncError::MultiIndelBlock)),
+                Some(Err(WcError::Uncorrectable))
+            ),
+            Err(WcError::Sync(sync::SyncError::MultiIndelBlock))
+        );
+    }
+}

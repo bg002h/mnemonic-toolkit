@@ -603,3 +603,53 @@ fn mixed_stdin_r8_one_quoted_arg_control() {
         .success()
         .stdout(predicates::str::contains(MK1_XPUB));
 }
+
+#[test]
+fn word_card_decode_stop_sign_misstamp_recovers_xpub() {
+    let words = encode_solo_words(MK1, 4);
+    let base: Vec<String> = words.split_whitespace().map(String::from).collect();
+    assert_eq!(base.len(), 92);
+    assert_eq!(
+        [&base[86], &base[87], &base[90], &base[91]],
+        ["funny", "life", "vague", "shed"]
+    );
+    let with = |subs: &[(usize, &str)]| {
+        let mut c = base.clone();
+        for &(i, w) in subs {
+            c[i - 1] = w.to_string();
+        }
+        c.join(" ")
+    };
+    let cases = [
+        ("R1", with(&[(92, "stem")])),
+        ("R2", with(&[(92, "torch")])),
+        ("R3", with(&[(91, "zoo")])),
+        (
+            "R4",
+            with(&[(92, "stem"), (87, "abandon"), (88, "ability")]),
+        ),
+        (
+            "R5",
+            with(&[(91, "abandon"), (87, "abandon"), (88, "ability")]),
+        ),
+    ];
+    for (row, card) in cases {
+        let out = mnemonic()
+            .args(["word-card", "--decode", "-"])
+            .write_stdin(card)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(
+            out.status.code(),
+            Some(0),
+            "{row}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(stdout.contains("truncated: false"), "{row}: {stdout}");
+        assert!(
+            stdout.contains(&format!("xpub: {MK1_XPUB}")),
+            "{row}: {stdout}"
+        );
+    }
+}
