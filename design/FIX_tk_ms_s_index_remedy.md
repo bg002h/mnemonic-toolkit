@@ -6,7 +6,7 @@ printed command; it fails as printed). Not a funds path (the refusal exit code a
 Base: `origin/master` = `4bfa645f` (Merge pull request #211). Source: coordinator
 `agent-reports/review-fix-bh-ms46-r11.md` I-2 (L53-70, run on tk `e30985a5`), the toolkit copy of ms #46's bh-ms-R11
 defect. The wording follows the ms side decided in mnemonic-secret `fix/ms-printed-commands`
-(head `1bed05af`, ms #41; `design/FIX_bughunt1119_ms_printed_commands.md` R5, L72-81 and the R5 text table L101-106): "this is the secret share
+(head `1bed05af`, merged as ms #41, `907a327a`; `design/FIX_bughunt1119_ms_printed_commands.md` R5, L72-81 and the R5 text table L101-106): "this is the secret share
 of a K-of-N set (threshold '<T>', index 's'); it is the secret itself, not a distributed share, and `ms combine` does
 not take it", here in the toolkit's own command name.
 
@@ -16,7 +16,9 @@ not take it", here in the toolkit's own command name.
    test, section 4)
 2. `crates/mnemonic-toolkit/tests/cli_ms_shares_consume.rs` (new CLI rows, section 4)
 3. `docs/manual/src/40-cli-reference/41-mnemonic.md` L391 and L930 (section 5)
-4. `CHANGELOG.md` `[Unreleased]` (section 6)
+4. `crates/mnemonic-toolkit/src/repair.rs` (`repair_card`, `CardKind::Ms1` arm L1252-1260, and the new helper
+   `ms1_is_secret_share`; R2)
+5. `CHANGELOG.md` `[Unreleased]` (section 6)
 
 No flag, type, error variant, exit code, `--json` shape or public API changes. ms-codec is not bumped (tk pins 0.7.0;
 this arm is tk's own text, not ms-codec's `Display`).
@@ -106,6 +108,8 @@ stdout, the `--json` `verdict` (`candidate`), the seed-card text for threshold-`
 - The comment above the arms (L127-130, "must point the user at `mnemonic ms-shares combine`") gains: except at index
   `s`, the secret itself, which `ms-shares combine` refuses (`SecretShareSuppliedToCombine`); there the text says so
   and names no command (bh-tk-ms-s-index).
+- `crates/mnemonic-toolkit/src/repair.rs`: the `CardKind::Ms1` arm (L1252-1260) builds the `SetVerify::Unverified`
+  reason per R2 (a)/(b)/(c), with the new helper `ms1_is_secret_share` beside `ms1_is_share`.
 - No other production file. (Measured: a scratch build of exactly this arm on `4bfa645f`, reverted, printed the R1
   text for every RED row of section 1, uppercase included, rc 2 each, and the unchanged control line for `A2`.)
 
@@ -128,8 +132,8 @@ Tests for R2 go in `tests/cli_ms_shares_consume.rs`, each seen RED on `4bfa645f`
 - `bh_tk_ms_s_index_repair`: stdin `S2b\n`, `repair --ms1 -`. Expect exit 4; stdout equals `# Repair report\n#
   ms1 chunk 0: 1 correction at position 46: 'q' -> 'a'\n` + S2 + `\n`; stderr equals `repair: ` + text (b) + `\n` +
   the private-key advisory line + `\n`.
-- `bh_tk_ms_s_index_repair_mixed`: argv `repair --allow-argv-secret S2b A2b`. Expect exit 4; stderr starts with
-  `repair: ` + text (c) + `\n`.
+- `bh_tk_ms_s_index_repair_mixed`: argv `repair --allow-argv-secret S2b A2b`. Expect exit 4; stderr contains
+  `repair: ` + text (c) + `\n` (two argv-secret warning lines come first, so not `starts_with`).
 - Guard: `bughunt_s5.rs` `bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share` (SHARE_1 index `q`) is
   unchanged. It must still pass.
 
@@ -159,8 +163,8 @@ and `encode_shares` index claim by running the suite (they would fail if they ev
   its own reason instead of the recombine advice. A call that corrects both kinds keeps the recombine advice and says
   to leave the index-`s` string out.`` PROPOSED.
 
-No other manual line names this text (grep of `docs/manual/src` and `docs/manual-gui/src` for `ONE of a K-of-N`,
-`pointer to`, `ms-shares combine`). The GUI manual and the GUI schema are unchanged (no flag changes).
+`41-mnemonic.md` L3613-3620 is the second site, changed per section 5. (A grep of `docs/manual/src` and `docs/manual-gui/src` for `ONE of a K-of-N`,
+`pointer to`, `ms-shares combine`.) The GUI manual and the GUI schema are unchanged (no flag changes).
 
 ## 6. CHANGELOG (`[Unreleased]`, new subsection)
 

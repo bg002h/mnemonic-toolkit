@@ -127,7 +127,18 @@ pub fn friendly_ms_codec(e: &ms_codec::Error) -> String {
         // v0.2 K-of-N share variants (SPEC_ms_v0_2_kofn §4 R0-m3). A consume
         // path (inspect/convert/decode) handed ONE share of a K-of-N set must
         // point the user at `mnemonic ms-shares combine`, NOT fall through to
-        // the "unhandled" wildcard.
+        // the "unhandled" wildcard. Except at index `s`, the secret itself,
+        // which `ms-shares combine` refuses (`SecretShareSuppliedToCombine`);
+        // there the text says so and names no command (bh-tk-ms-s-index).
+        ms_codec::Error::IsShareNotSingleString { threshold, index }
+            if index.eq_ignore_ascii_case(&'s') =>
+        {
+            format!(
+                "ms1 this is the secret share of a K-of-N set (threshold '{threshold}', index \
+                 's'); it is the secret itself, not a distributed share, and \
+                 `mnemonic ms-shares combine` does not take it",
+            )
+        }
         ms_codec::Error::IsShareNotSingleString { threshold, index } => format!(
             "ms1 this is ONE of a K-of-N share set (threshold '{}', index '{}'); \
              use `mnemonic ms-shares combine` to recombine {} shares",
