@@ -172,6 +172,14 @@ symlink to a 0644 file → target stays `644`, all rc 0, stderr only the argv wa
 | manual 5.2 (both clauses) | `seedqr_encode_json_out_fresh_file_0600`, `seedqr_encode_json_out_existing_0644_tightened` |
 | ruling "no advisory" | the stderr assertion in all four rows |
 | envelope unchanged | the envelope assertion in all four rows; existing `cli_seedqr.rs` JSON rows |
+| section 2 "truncated first, so a shorter envelope leaves no tail" | `json_out_longer_file_truncated_decode`, `json_out_longer_file_truncated_encode` |
+| section 2 "a symlink to such a file: the link is followed; the target becomes 0600" | `json_out_symlink_target_0600_decode`, `json_out_symlink_target_0600_encode` |
+| section 2 table `/dev/null` row (exit 1, `Operation not permitted`; skipped with a printed reason as root) | `json_out_dev_null_refused_decode`, `json_out_dev_null_refused_encode` |
+| section 2 "error texts unchanged" (missing parent: exit 1, no file created) | `json_out_missing_parent_refused_decode`, `json_out_missing_parent_refused_encode` |
+| section 2 "error texts unchanged" (read-only parent: exit 1, no file created; skipped as root) | `json_out_readonly_parent_refused_decode`, `json_out_readonly_parent_refused_encode` |
+| section 2 "created mode 0600 whatever the umask" (umask 000) | `json_out_umask_000_gives_0600_decode`, `json_out_umask_000_gives_0600_encode` |
+| section 2 "created mode 0600 whatever the umask" (umask 077) | `json_out_umask_077_gives_0600_decode`, `json_out_umask_077_gives_0600_encode` |
+| section 2 table read-only (0444) file row (exit 1, `Permission denied (os error 13)`, file untouched; skipped as root) | `json_out_readonly_0444_file_untouched_decode`, `json_out_readonly_0444_file_untouched_encode` |
 
 ## 8. Tests that change
 
