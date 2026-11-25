@@ -12,7 +12,7 @@
 use crate::cmd::convert::{parse_from_input, read_stdin_to_string, FromInput, NodeType};
 use crate::error::ToolkitError;
 use crate::language::CliLanguage;
-use crate::secret_advisory::{secret_in_argv_warning, warn_if_world_readable};
+use crate::secret_advisory::secret_in_argv_warning;
 use clap::Args;
 use mnemonic_toolkit::final_word::{final_word_candidates, FinalWordError, FinalWordLanguage};
 use std::io::{Read, Write};
@@ -39,8 +39,8 @@ pub struct FinalWordArgs {
 
     /// Write a versioned JSON envelope to this path (side-effect; does
     /// NOT replace stdout). The plain candidate list is still emitted to
-    /// stdout. On Unix the resulting file inherits the process umask;
-    /// a world-readable result raises a SPEC §2.6 stderr advisory.
+    /// stdout. On Unix the file is written owner-only (mode 0600),
+    /// an existing file's mode included.
     #[arg(long = "json-out", value_name = "PATH")]
     pub json_out: Option<std::path::PathBuf>,
 }
@@ -90,7 +90,6 @@ pub fn run<R: Read, W: Write, E: Write>(
             args.language.human_name(),
             &candidates,
             partial_word_count(&partial),
-            stderr,
         )?;
     }
 
@@ -157,12 +156,11 @@ struct FinalWordJson<'a> {
     candidates: &'a [&'static str],
 }
 
-fn write_json_envelope<E: Write>(
+fn write_json_envelope(
     path: &std::path::Path,
     language_name: &'static str,
     candidates: &[&'static str],
     partial_word_count: usize,
-    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     let envelope = FinalWordJson {
         schema_version: "1",
@@ -174,11 +172,10 @@ fn write_json_envelope<E: Write>(
     };
     let body = serde_json::to_string(&envelope)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
+    // U6 (architect-file-output-convention-1123 R2/R4): atomic, owner-only; no
+    // world-readable advisory remains to emit.
+    mnemonic_io_lib::write::write_private(path, body.as_bytes())
         .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
-
-    // SPEC §2.6 row 3 — world-readable permission-mode advisory.
-    warn_if_world_readable(path, stderr);
 
     Ok(())
 }

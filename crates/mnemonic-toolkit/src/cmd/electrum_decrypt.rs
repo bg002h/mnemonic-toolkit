@@ -16,7 +16,6 @@
 
 use crate::cmd::convert::read_stdin_to_string;
 use crate::error::ToolkitError;
-use crate::secret_advisory::warn_if_world_readable;
 use clap::{ArgGroup, Args};
 use mnemonic_toolkit::electrum_crypto::{decrypt_field, ElectrumDecryptError};
 use std::io::{Read, Write};
@@ -164,10 +163,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         let json = serde_json::to_string_pretty(&envelope).map_err(|e| {
             ToolkitError::BadInput(format!("electrum-decrypt: json serialize: {e}"))
         })?;
-        std::fs::write(path, json).map_err(|e| {
+        mnemonic_io_lib::write::write_private(path, json.as_bytes()).map_err(|e| {
             ToolkitError::BadInput(format!("electrum-decrypt: json-out write to {path:?}: {e}"))
         })?;
-        warn_if_world_readable(path, stderr);
     } else {
         writeln!(stdout, "{}", plaintext.as_str())
             .map_err(|e| ToolkitError::BadInput(format!("electrum-decrypt: stdout write: {e}")))?;

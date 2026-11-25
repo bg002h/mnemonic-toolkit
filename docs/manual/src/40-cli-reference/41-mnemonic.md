@@ -1997,7 +1997,7 @@ mnemonic electrum-decrypt --ciphertext <VALUE|-> (--decrypt-password <VAL> | --d
 | `--decrypt-password <VALUE>` | decryption password; `-` reads stdin, `@env:VAR` the environment (the `--passphrase` rule); any other value emits an argv-leakage advisory. Exactly one password form is required |
 | `--decrypt-password-file <PATH>` | read the password from a file (single trailing newline stripped) |
 | `--decrypt-password-stdin` | read the password from stdin (raw, NULL-byte preserving); single stdin per invocation (mutually exclusive with `--ciphertext -`) |
-| `--json-out <PATH>` | emit a JSON envelope (`{schema_version, operation, plaintext}`; no password echo) instead of plain text on stdout; emits a world-readable-permissions advisory if the file is group/other-readable |
+| `--json-out <PATH>` | emit a JSON envelope (`{schema_version, operation, plaintext}`; no password echo) instead of plain text on stdout. On Unix the file is written owner-only (mode 0600), an existing file's mode included. |
 | `--help` | print help |
 
 The three password forms are mutually exclusive and exactly one is
@@ -2050,7 +2050,7 @@ mnemonic final-word --from <phrase=<value-or-->> [--language <LANGUAGE>] [--json
 |---|---|
 | `--from <phrase=<value-or-->>` | partial phrase as `phrase=<N-1 words>` (inline) or `phrase=-` to read from stdin; inline form emits a `/proc/$PID/cmdline` argv-leakage advisory on stderr |
 | `--language <LANGUAGE>` | BIP-39 wordlist; one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish` (default `english`) |
-| `--json-out <PATH>` | side-effect: write a versioned JSON envelope to `<PATH>` in addition to the plain candidate list on stdout; on Unix a world-readable result raises a permission-mode advisory |
+| `--json-out <PATH>` | side-effect: write a versioned JSON envelope to `<PATH>` in addition to the plain candidate list on stdout. On Unix the file is written owner-only (mode 0600), an existing file's mode included. |
 | `--help` | print help |
 
 ### Worked example
@@ -2101,7 +2101,6 @@ stdout-replacement).
 |---|---|
 | Inline `--from phrase=<value>` | `warning: secret material on argv (--from phrase=) — pipe via --from phrase=- to avoid /proc/$PID/cmdline exposure` |
 | Stdout is a TTY AND candidate set non-empty | `warning: candidate list is secret material — pairing the partial phrase with any candidate yields a valid seed phrase; do not paste this output into untrusted tools` |
-| `--json-out PATH` with world-readable file (Unix umask 022 default) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 
 ---
 
@@ -2147,7 +2146,7 @@ mnemonic seed-xor combine --share <phrase=<value-or-->> ... --shares <N> [OPTION
 | `--share <phrase=<value-or-->>` | share phrase; repeating; at most ONE may be `phrase=-` (single stdin per invocation); use `phrase=@env:VAR` for each further share. An inline `phrase=<value>` on argv is refused unless `--allow-argv-secret` is given |
 | `--shares <N>` | asserted share count; MUST equal the number of `--share` flags (hard refusal on mismatch — catches cardinality omissions, NOT substitution) |
 | `--language <LANGUAGE>` | BIP-39 wordlist of inputs + output (default `english`) |
-| `--json-out <PATH>` | side-effect: write versioned JSON envelope |
+| `--json-out <PATH>` | side-effect: write versioned JSON envelope. On Unix the file is written owner-only (mode 0600), an existing file's mode included. |
 | `--help` | print help |
 
 ### Worked example
@@ -2228,7 +2227,7 @@ Field order is part of the schema (SHA-pinned in
 | `split` AND stdout is a TTY | `warning: Seed XOR shares on stdout — each of the N=<n> lines is independently a complete BIP-39 phrase; ALL N shares are required to reconstruct the master; distribute them to N separate locations; do not paste this output into a single untrusted tool. Substitution of a wrong-but-valid-BIP-39 share is undetectable by Seed XOR — verify the recovered wallet's derived address before trusting it.` |
 | `combine` AND stdout is a TTY | `warning: combined phrase is secret material — Seed XOR has no authentication tag; verify the recovered wallet's expected derived address before trusting; if a share was substituted with a wrong-but-valid one, the result will validate but derive the wrong wallet` |
 | `split --deterministic-from-master` with 15/21-word input | `warning: --deterministic-from-master with 15-word input is toolkit-only — Coldcard's xor_seed.py natively supports 12/18/24 only; resulting shares will NOT round-trip a Coldcard device. For Coldcard interop, use 12/18/24-word input.` |
-| `--json-out <PATH>` with world-readable file (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
+| `split --json-out <PATH>` with world-readable file (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 
 ---
 
@@ -2302,7 +2301,7 @@ mnemonic slip39 combine --share <slip39-mnemonic-or-> ... [OPTIONS]
 | `--passphrase-stdin` | read `--passphrase` from stdin (incompatible with any `--share -`) |
 | `--to <entropy\|phrase>` | output shape (default `entropy`); `phrase` emits a BIP-39 mnemonic per `--language` |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `--to phrase`; ignored for `--to entropy` |
-| `--json-out <PATH>` | side-effect: write versioned JSON envelope to `<PATH>` (in addition to plain-stdout secret) |
+| `--json-out <PATH>` | side-effect: write versioned JSON envelope to `<PATH>` (in addition to plain-stdout secret). On Unix the file is written owner-only (mode 0600), an existing file's mode included. |
 | `--help` | print help |
 
 ### Worked examples
@@ -2548,8 +2547,9 @@ value, the other is `null`, selected by `output_shape`. The
 (English / Czech / Korean / etc.) but is not itself reflected in the
 envelope.
 
-`--json-out` to a Unix world-readable path triggers the `mode 644`
-permission advisory on stderr (advisories table below).
+`split --json-out` to a Unix world-readable path triggers the `mode 644`
+permission advisory on stderr (advisories table below); `combine --json-out`
+writes its file owner-only (mode 0600), an existing file's mode included.
 
 ### Refusals
 
@@ -2602,7 +2602,7 @@ test build, and a shipped binary refuses those variables (see Refusals).
 | Literal `--passphrase <v>` (not `-`, not `@env:VAR`) | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `split` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: each share is secret material — distribute across separate locations; SLIP-39 shares have no authentication tag` |
 | `combine` (always, unconditional) | `warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '\| age -e ...')` followed by `note: verify the recovered wallet's expected derived address before trusting` |
-| `--json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
+| `split --json-out` to a world-readable path (Unix) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 | `--iteration-exponent E` where E ≥ 5 | `warning: --iteration-exponent E=<E> yields <iters> × PBKDF2-HMAC-SHA-256 iterations; split + combine performance may be observably slow (sub-second to multi-second); Trezor's reference uses E=1 (20000 iters) as default; the SLIP-0039 spec gives no recommended values; E ≥ 10 may exceed 30s on weak hardware` |
 
 ### Trezor interop

@@ -8,6 +8,15 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `--json-out` of four more verbs is written owner-only and atomically
+
+- **`final-word`, `electrum-decrypt`, `slip39 combine`, `seed-xor combine`**: `--json-out` writes through
+  `mnemonic_io_lib::write::write_private`: a hidden temp file in the same folder (mode 0600, synced), then one rename.
+  The file is owner-only (mode 0600), an existing file's mode included, and a failed write leaves the old file
+  unchanged. Before, it was a truncating write at the umask (0644 under umask 022) with a world-readable advisory;
+  that advisory is gone for these four verbs. `slip39 split` and `seed-xor split` still write plainly and keep the
+  advisory until `write_private_new` exists. (tk-json-out-umask-secret, tk-bh-i3)
+
 ### Argv refusal and typed-ahead note show less of what you typed
 
 - **Argv refusal**: the message gives the argument's position and class, no longer its length (`-- N characters`

@@ -741,7 +741,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     if let Some(path) = &args.json_out {
         let identifier = shares[0].identifier;
         let iter_exp = shares[0].iteration_exponent;
-        write_combine_json(path, identifier, iter_exp, args.to, output.as_str(), stderr)?;
+        write_combine_json(path, identifier, iter_exp, args.to, output.as_str())?;
     }
 
     Ok(0)
@@ -919,13 +919,12 @@ fn write_split_json<E: Write>(
     Ok(())
 }
 
-fn write_combine_json<E: Write>(
+fn write_combine_json(
     path: &std::path::Path,
     identifier: u16,
     iteration_exponent: u8,
     to: Slip39ToShape,
     output: &str,
-    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     let (output_shape, phrase, entropy_hex) = match to {
         Slip39ToShape::Phrase => ("phrase", Some(output), None),
@@ -942,9 +941,8 @@ fn write_combine_json<E: Write>(
     };
     let body = serde_json::to_string(&envelope)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
+    mnemonic_io_lib::write::write_private(path, body.as_bytes())
         .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
-    warn_if_world_readable(path, stderr);
     Ok(())
 }
 

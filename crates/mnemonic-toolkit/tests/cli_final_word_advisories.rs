@@ -83,11 +83,10 @@ fn piped_stdout_does_not_emit_stdout_on_tty_advisory() {
 
 #[cfg(unix)]
 #[test]
-fn json_out_world_readable_emits_advisory() {
+fn json_out_world_readable_path_is_tightened_not_advised() {
     use std::os::unix::fs::PermissionsExt;
-    // Pre-create the file at 0o644 and KEEP it alive through the CLI
-    // invocation. `std::fs::write` opens the existing path with O_TRUNC
-    // (not O_CREAT-from-scratch), so the pre-set mode is preserved.
+    // U6: a pre-existing 0o644 target is replaced owner-only (0o600) and no
+    // world-readable advisory is printed (tk-json-out-umask-secret).
     let f = NamedTempFile::new().unwrap();
     let path = f.path().to_owned();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
@@ -105,9 +104,11 @@ fn json_out_world_readable_emits_advisory() {
     assert!(out.status.success());
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        stderr.contains("world-readable") || stderr.contains("umask"),
-        "world-readable --json-out path must emit permission-mode advisory; got: {stderr}",
+        !stderr.contains("world-readable") && !stderr.contains("umask"),
+        "no permission advisory expected; got: {stderr}",
     );
+    let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "mode is {mode:o}");
     drop(f);
 }
 
