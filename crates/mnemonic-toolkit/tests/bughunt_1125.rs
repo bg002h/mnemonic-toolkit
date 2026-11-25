@@ -148,7 +148,7 @@ fn tk1_wpkh_seed_slot_derives_at_canonical_origin_not_master() {
     assert_eq!(o.code, 0, "{}", o.stderr);
     assert!(
         o.stderr
-            .contains("info: no origin supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0'"),
+            .contains("info: no origin path supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0'"),
         "info line naming the path; stderr: {}",
         o.stderr
     );

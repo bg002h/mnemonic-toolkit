@@ -43,6 +43,9 @@ const SEED_MASTER_XPUB: &str = "xpub661MyMwAqRbcFkPHucMnrGNzDwb6teAX1RbKQmqtEF8k
 // was ungated for canonical shapes it could be false. It now names the SLOTS
 // and the remedy, which is what the operator can act on.
 const DEFAULT_PATH_NOTICE: &str = "info: no origin supplied for";
+/// Substring of the canonical-shape notice (bug hunt 2026-11-25 toolkit#1;
+/// "path" since review r1 N4).
+const CANONICAL_ORIGIN_NOTICE: &str = "info: no origin path supplied for";
 
 /// `bundle --descriptor <d> --slot <s>… --json` → (parsed JSON, raw stderr).
 /// Always `--no-engraving-card`, mainnet.
@@ -120,7 +123,7 @@ fn flip1_shwpkh_no_origin_emits_canonical_origin_card_with_notice() {
         "the master key must never be bound implicitly"
     );
     assert!(
-        stderr.contains("info: no origin supplied for @0")
+        stderr.contains("info: no origin path supplied for @0")
             && stderr.contains("canonical origin m/49'/0'/0'"),
         "the canonical-origin notice must name the path; got stderr:\n{stderr}"
     );
@@ -146,14 +149,13 @@ fn flip1_wpkh_and_shwpkh_each_use_their_canonical_origin() {
     assert_eq!((dw, ds), (3, 3));
     assert_ne!(xw, xs, "different canonical paths give different keys");
     assert_ne!(xw, SEED_MASTER_XPUB);
-    assert!(stderr_w.contains(DEFAULT_PATH_NOTICE));
-    assert!(stderr_s.contains(DEFAULT_PATH_NOTICE));
+    assert!(stderr_w.contains(CANONICAL_ORIGIN_NOTICE));
+    assert!(stderr_s.contains(CANONICAL_ORIGIN_NOTICE));
 }
 
-/// The flip-#1 "notice absent" assertion is non-vacuous: a genuinely
-/// NON-canonical descriptor STILL receives the default-path notice + a
-/// non-empty (48'/0'/0'/2') origin. Confirms the notice machinery is live and
-/// that sh(wpkh) is on the canonical side of it.
+/// A genuinely NON-canonical descriptor receives the default-path notice and a
+/// non-empty (48'/0'/0'/2') origin; canonical shapes get the separate
+/// canonical-origin notice (flip #1, as amended 2026-11-25).
 #[test]
 fn non_canonical_descriptor_still_gets_default_path_notice() {
     let s0 = format!("@0.phrase={SEED}");

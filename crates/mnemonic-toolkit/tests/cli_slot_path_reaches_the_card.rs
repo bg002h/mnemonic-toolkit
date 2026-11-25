@@ -174,7 +174,7 @@ fn a_canonical_descriptor_with_partial_inline_origins_fills_the_canonical_origin
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("info: no origin supplied for @1")
+        stderr.contains("info: no origin path supplied for @1")
             && stderr.contains("canonical origin m/48'/0'/0'/2'"),
         "stderr: {stderr}"
     );

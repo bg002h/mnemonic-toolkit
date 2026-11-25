@@ -626,7 +626,7 @@ descriptor gives an `@N` no origin (no inline `[fingerprint/path]@N`, no
 and stderr says so:
 
 ```text
-info: no origin supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0' (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+info: no origin path supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0' (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
 ```
 
 An `@N.xpub=` slot takes the canonical origin only when the xpub's own
@@ -634,7 +634,9 @@ header agrees (its depth equals the path length and its child number the
 last component); otherwise the bundle is refused (exit 2) and asks for
 `--slot @N.path=`. `--slot @N.path=m` (the master node) is refused on a
 canonical shape: an empty origin on the card means the canonical origin,
-so the master node cannot be recorded there. Before this, such a slot was
+so the master node cannot be recorded there. For the same reason an inline fingerprint with no
+path, `[fp]@N` (which says the key is the master key of `fp`), is refused
+(exit 2) on a canonical shape: give `[fp/<path>]@N`, or drop the brackets. Before this, such a slot was
 derived at the MASTER key and the card carried an empty origin.
 
 For the multisig shapes the canonical origin is BIP-48

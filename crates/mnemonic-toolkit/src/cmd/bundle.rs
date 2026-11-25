@@ -1679,6 +1679,32 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // (incl. the emit-mode-gated §6.6 row-19 path-mismatch refusal) + F4 collapse
     // now live in the SHARED `bind_descriptor_mode_paths`. `Emit` mode enforces
     // row-19. Returns the `defaulted_indices` for the notice below.
+    // Review r1 I2 (bug hunt 2026-11-25): an inline fingerprint-only origin
+    // `[fp]@N` says, per BIP-380, that the key IS the master key of `fp`. A
+    // canonical card cannot record that (an empty origin on the wire means the
+    // shape's canonical origin), and filling the canonical origin would rewrite
+    // what the operator typed. Refuse, exactly as `--slot @N.path=m` is refused.
+    if !is_non_canonical {
+        use md_codec::origin_path::PathDeclPaths as P;
+        for (i, fp) in resolved_placeholders.fingerprint_annos.iter().enumerate() {
+            let Some(fp) = fp else { continue };
+            let path_empty = match &resolved_placeholders.path_decl.paths {
+                P::Shared(op) => op.components.is_empty(),
+                P::Divergent(v) => v[i].components.is_empty(),
+            };
+            let slot_path = slots
+                .iter()
+                .any(|s| s.index as usize == i && s.subkey == crate::slot_input::SlotSubkey::Path);
+            if path_empty && !slot_path {
+                return Err(ToolkitError::SlotInputViolation {
+                    kind: "conflict",
+                    message: format!(
+                        "slot @{i}: the descriptor gives `[{fp}]@{i}` (a fingerprint with no path),                          which says the key is the master key of {fp}. The master node cannot be                          recorded on a card for this descriptor shape: an empty origin on the card                          means the shape's canonical origin. Give the key's real origin,                          `[{fp}/<path>]@{i}`, or drop the brackets to use the canonical origin."
+                    ),
+                });
+            }
+        }
+    }
     let bound_paths = bind_descriptor_mode_paths(
         DescriptorBindMode::Emit,
         slots,
@@ -2899,7 +2925,7 @@ fn emit_canonical_origin_notice<E: Write>(
     let path = origin_to_derivation_path(&op)?;
     writeln!(
         stderr,
-        "info: no origin supplied for {idx_list}; using this descriptor shape's canonical origin m/{path} (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+        "info: no origin path supplied for {idx_list}; using this descriptor shape's canonical origin m/{path} (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
     )
     .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
     Ok(())

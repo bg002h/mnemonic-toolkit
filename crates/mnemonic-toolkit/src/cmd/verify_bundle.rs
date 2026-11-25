@@ -1693,7 +1693,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
             .join(", ");
         let _ = writeln!(
             stderr,
-            "info: no origin supplied for {idx_list}; assuming this descriptor shape's \
+            "info: no origin path supplied for {idx_list}; assuming this descriptor shape's \
              canonical origin to rebuild the expected card. If that is not where those \
              keys live, set it with [fp/path]@N or --slot @N.path=m/..."
         );
