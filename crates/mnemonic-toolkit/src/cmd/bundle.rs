@@ -438,6 +438,25 @@ fn bundle_run_unified<W: Write, E: Write>(
         .template
         .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
 
+    // Bug hunt 2026-11-25 X4: a `@N.wif=` slot is one fixed key, not an HD key.
+    // Minting it wrote the WIF's public key as a depth-0 "xpub" with an all-zero
+    // chain code under the template's ranged `/<0;1>/*` use-site, so every
+    // address on the cards (and from `restore` / `md address`) is a CHILD of
+    // that fake chain code — not the WIF key's own address, and invisible to any
+    // wallet that imports the WIF. Every template is ranged, so refuse at mint.
+    // (`verify-bundle` still reads an existing WIF bundle unchanged; descriptor
+    // mode already refused `wif`.)
+    if let Some(w) = slots.iter().find(|s| s.subkey == SlotSubkey::Wif) {
+        let idx = w.index;
+        return Err(ToolkitError::BadInput(format!(
+            "--slot @{idx}.wif is refused: a WIF is a single private key with no chain code, but \
+             every --template derives ranged child addresses (/<0;1>/*), so the cards would \
+             describe addresses that are children of an all-zero chain code, not the WIF key's \
+             own address, and that no wallet importing this WIF would ever watch. Back up the \
+             seed (phrase / entropy / ms1) instead, or sweep the WIF's funds into a seed wallet."
+        )));
+    }
+
     // FOLLOWUP `multisig-tr-bip48-script-type-3-policy` (bless + warn): taproot
     // multisig under --multisig-path-family bip48 derives at the non-standard
     // m/48'/.../3'. Honor it, but advise on stderr at creation time.
