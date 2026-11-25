@@ -1988,7 +1988,7 @@ fn needs_env_sentinel_resolution(args: &ConvertArgs) -> bool {
     let from = args
         .from
         .iter()
-        .any(|f| f.node.is_secret_bearing() && f.value.starts_with("@env:"));
+        .any(|f| f.node.is_argv_secret_bearing() && f.value.starts_with("@env:"));
     pp || bip38_pp || from
 }
 
@@ -2015,7 +2015,10 @@ fn resolve_env_sentinels(args: &ConvertArgs) -> Result<ConvertArgs, ToolkitError
         }
     }
     for f in owned.from.iter_mut() {
-        if f.node.is_secret_bearing() {
+        // `is_argv_secret_bearing` (not `is_secret_bearing`): it adds MiniKey, so
+        // `--from minikey=@env:VAR` resolves like every other secret node
+        // (secret row tk-bughunt-g2-25-minikey-env-sentinel).
+        if f.node.is_argv_secret_bearing() {
             let flag = format!("--from {}=", f.node.as_str());
             f.value = resolve_env_var_sentinel(&f.value, &flag)?;
         }
