@@ -121,7 +121,12 @@ pub struct RestoreArgs {
     /// seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a
     /// 4-own-slot policy); the search places each own-derived key. Default `0`.
     /// Comma-separated; whitespace tolerated.
-    #[arg(long, value_delimiter = ',', default_value = "0")]
+    #[arg(
+        long,
+        value_delimiter = ',',
+        default_value = "0",
+        value_parser = crate::parse::parse_account_arg
+    )]
     pub account: Vec<u32>,
 
     /// #28 phase 1 — explicit origin derivation path for single-sig

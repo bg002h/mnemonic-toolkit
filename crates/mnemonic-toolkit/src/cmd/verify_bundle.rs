@@ -62,7 +62,7 @@ pub struct VerifyBundleArgs {
 
     /// BIP-32 account index (default 0). Non-zero values produce md1 with
     /// PathDeclPaths::Divergent per SPEC §4.2.
-    #[arg(long, default_value = "0")]
+    #[arg(long, default_value = "0", value_parser = crate::parse::parse_account_arg)]
     pub account: u32,
 
     /// #28 phase 1 — explicit origin derivation path for verifying + recomposing

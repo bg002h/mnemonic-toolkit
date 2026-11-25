@@ -35,6 +35,21 @@ fn normalize_phrase(s: &str) -> String {
     s.split_whitespace().collect::<Vec<&str>>().join(" ")
 }
 
+/// clap value parser for every `--account <N>` flag (bug hunt 2026-11-25
+/// toolkit#6). A BIP-32 hardened account index is 31 bits, so `N` must be
+/// below 2^31; a larger value used to reach `DerivationPath::from_str` in
+/// `template.rs` and panic. Same bound as `xpub-search`'s account window.
+pub fn parse_account_arg(s: &str) -> Result<u32, String> {
+    let v: u32 = s.parse().map_err(|e| format!("{e}"))?;
+    if v >= 0x8000_0000 {
+        return Err(format!(
+            "{v} is out of range: the account index must stay below 2147483648 (2^31): \
+             BIP-32 hardened account indexes are 31 bits"
+        ));
+    }
+    Ok(v)
+}
+
 /// Parse `--master-fingerprint`: 8 hex chars, case-insensitive, no `0x` prefix.
 /// SPEC §2.1.5 byte-exact rejection message.
 pub fn parse_master_fingerprint(s: &str) -> Result<Fingerprint, ToolkitError> {

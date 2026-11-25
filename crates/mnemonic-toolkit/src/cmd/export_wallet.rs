@@ -299,7 +299,7 @@ pub struct ExportWalletArgs {
     pub language: Option<CliLanguage>,
 
     /// BIP-32 account index (default 0).
-    #[arg(long, default_value = "0")]
+    #[arg(long, default_value = "0", value_parser = crate::parse::parse_account_arg)]
     pub account: u32,
 
     /// Slot input — shape `@N.<subkey>=<value>`. Repeating.
