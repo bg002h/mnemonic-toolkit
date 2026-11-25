@@ -649,7 +649,9 @@ header agrees (its depth equals the path length and its child number the
 last component); otherwise the bundle is refused (exit 2) and asks for
 `--slot @N.path=`. `--slot @N.path=m` (the master node) is refused on a
 canonical shape: an empty origin on the card means the canonical origin,
-so the master node cannot be recorded there. For the same reason an inline fingerprint with no
+so the master node cannot be recorded there. The same refusal applies
+with `--template` (for example `--template bip84 --slot @0.xpub=... --slot
+@0.path=m`). For the same reason an inline fingerprint with no
 path, `[fp]@N` (which says the key is the master key of `fp`), is refused
 (exit 2) on a canonical shape: give `[fp/<path>]@N`, or drop the brackets. Before this, such a slot was
 derived at the MASTER key and the card carried an empty origin.

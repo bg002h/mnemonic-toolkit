@@ -291,6 +291,53 @@ fn tk1_explicit_master_path_on_canonical_shape_is_refused() {
     assert!(o.stdout.is_empty());
 }
 
+/// Fable review I1: template mode refused `@N.path=m` nowhere, so a keyed
+/// card was minted with an EMPTY origin (the descriptor-mode twin above is
+/// refused). Refused at mint for single-sig and multisig templates.
+#[test]
+fn tk1_explicit_master_path_in_template_mode_is_refused() {
+    let master = xpub_at(A, "m", "mainnet");
+    let b87 = xpub_at(B, "m/87'/0'/0'", "mainnet");
+    let s0x = format!("@0.xpub={master}");
+    let s0f = format!("@0.fingerprint={FP_A}");
+    let s1x = format!("@1.xpub={b87}");
+    let mut cases: Vec<Vec<&str>> = vec![vec!["--template", "bip84"]];
+    cases.push(vec![
+        "--template",
+        "wsh-sortedmulti",
+        "--threshold",
+        "1",
+        "--slot",
+        &s1x,
+        "--slot",
+        "@1.fingerprint=b8688df1",
+    ]);
+    for extra in cases {
+        let mut args = vec![
+            "bundle",
+            "--network",
+            "mainnet",
+            "--slot",
+            &s0x,
+            "--slot",
+            &s0f,
+            "--slot",
+            "@0.path=m",
+            "--json",
+        ];
+        args.extend(extra.iter().copied());
+        let o = run(&args);
+        assert_eq!(o.code, 2, "{extra:?}: {}", o.stderr);
+        assert!(o.stdout.is_empty(), "{extra:?}: no card: {}", o.stdout);
+        assert!(
+            o.stderr
+                .contains("slot @0: `--slot @0.path=m` (the master node) cannot be recorded"),
+            "{extra:?}: {}",
+            o.stderr
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // toolkit#2 — restore of a keyed card whose origin is EMPTY.
 // ---------------------------------------------------------------------------

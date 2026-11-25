@@ -457,6 +457,29 @@ fn bundle_run_unified<W: Write, E: Write>(
         )));
     }
 
+    // Fable review I1 (bug hunt 2026-11-25): a typed `@N.path=m` (the master
+    // node) would mint a keyed card with an EMPTY origin, which the wire reads
+    // as "canonical origin, elided" for the template shapes, and which a
+    // non-canonical card cannot carry at all. Refused at mint only, with the
+    // descriptor-mode text; `resolve_slots` is shared with verify-bundle and
+    // export-wallet, which keep reading existing input unchanged.
+    for s in slots.iter().filter(|s| s.subkey == SlotSubkey::Path) {
+        let empty = DerivationPath::from_str(&s.value)
+            .map(|p| p.is_empty())
+            .unwrap_or(false);
+        if empty {
+            let i = s.index;
+            return Err(ToolkitError::SlotInputViolation {
+                kind: "conflict",
+                message: format!(
+                    "slot @{i}: `--slot @{i}.path=m` (the master node) cannot be recorded on a \
+                     card for this template: an empty origin on the card means the shape's \
+                     canonical origin. Give the key's real origin path."
+                ),
+            });
+        }
+    }
+
     // FOLLOWUP `multisig-tr-bip48-script-type-3-policy` (bless + warn): taproot
     // multisig under --multisig-path-family bip48 derives at the non-standard
     // m/48'/.../3'. Honor it, but advise on stderr at creation time.
