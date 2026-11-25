@@ -105,7 +105,7 @@ fn run(ulimit_kb: Option<u32>, args: &[&str], stdin: &str) -> Run {
     }
 }
 
-fn dice_args<'a>(length: &'a str) -> Vec<&'a str> {
+fn dice_args(length: &str) -> Vec<&str> {
     vec![
         "derive-child",
         "--from",

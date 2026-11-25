@@ -197,10 +197,6 @@ impl CandidatePaths {
         }
         total
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
 }
 
 /// Build the deterministic candidate set per plan §3.2 step 4 (lazily; see
