@@ -250,6 +250,14 @@ pub struct VerifyBundleArgs {
     pub extra_strings: Vec<String>,
 }
 
+/// pp-s2-1: the stdin- or `@env:`-resolved passphrase sits in a clone of this
+/// struct as a plain `String`; scrub it when the struct drops.
+impl Drop for VerifyBundleArgs {
+    fn drop(&mut self) {
+        crate::passphrase_input::scrub_passphrase(&mut self.passphrase);
+    }
+}
+
 impl VerifyBundleArgs {
     fn template_unchecked(&self) -> CliTemplate {
         self.template
@@ -2267,13 +2275,12 @@ fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArg
         .collect();
     // Construct synthetic args: clone everything from caller, override the
     // card-input fields. bundle_json field is cleared to avoid recursion.
-    Ok(VerifyBundleArgs {
-        ms1,
-        mk1,
-        md1,
-        bundle_json: None,
-        ..args.clone()
-    })
+    let mut out = args.clone();
+    out.ms1 = ms1;
+    out.mk1 = mk1;
+    out.md1 = md1;
+    out.bundle_json = None;
+    Ok(out)
 }
 
 /// v0.24.0 §2.C.1 — route `extra_strings` positional values to the
@@ -2300,13 +2307,12 @@ fn apply_positional_hrp_autodetect(
             crate::repair::CardKind::Md1 => md1.push(s.clone()),
         }
     }
-    Ok(VerifyBundleArgs {
-        ms1,
-        mk1,
-        md1,
-        extra_strings: Vec::new(),
-        ..args.clone()
-    })
+    let mut out = args.clone();
+    out.ms1 = ms1;
+    out.mk1 = mk1;
+    out.md1 = md1;
+    out.extra_strings = Vec::new();
+    Ok(out)
 }
 
 // ============================================================================

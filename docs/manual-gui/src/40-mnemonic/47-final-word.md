@@ -167,13 +167,8 @@ Field order is part of the schema (SHA-pinned in
 `tests/cli_final_word_json.rs`). `candidates` is lexicographically
 sorted; `candidate_count == candidates.len()`.
 
-On Unix the resulting file inherits the process umask. A
-world-readable result (default umask 022 → mode 644) raises a
-stderr advisory: `warning: --json-out <PATH> inherits umask (file
-may be world-readable, mode 644); consider --json-out /dev/stdout
-or chmod 0600 the path before invoking`. The GUI does not
-intercept this advisory; it surfaces in the output panel's
-stderr region after the run completes.
+On Unix the file is written owner-only (mode 0600), an existing file's
+mode included; no permission advisory is printed.
 
 The GUI renders this flag as a Path text field (no `?` help-icon
 per [§33 Option C placement](#help-icons-and-deep-links-into-this-manual)
@@ -226,7 +221,6 @@ surfaces the CLI's refusal in the output panel's stderr region.
 |---|---|
 | Inline `--from phrase=<value>` | `warning: secret material on argv (--from phrase=) — pipe via --from phrase=- to avoid /proc/$PID/cmdline exposure` |
 | Stdout is a TTY AND candidate set non-empty | `warning: candidate list is secret material — pairing the partial phrase with any candidate yields a valid seed phrase; do not paste this output into untrusted tools` |
-| `--json-out PATH` with world-readable file (Unix umask 022 default) | `warning: --json-out <PATH> inherits umask (file may be world-readable, mode 644); consider --json-out /dev/stdout or chmod 0600 the path before invoking` |
 
 The TTY-vs-pipe advisory fires whenever the CLI detects a TTY on
 stdout. The GUI's subprocess launcher pipes stdout via

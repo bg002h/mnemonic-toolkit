@@ -1704,7 +1704,7 @@ fn pasted_and_typed_ahead_lines_are_drained_and_shown() {
     let env = [("F687_SEED", SEED)];
     let p = "Enter passphrase: ";
     let label = "note: discarded";
-    for (what, writes, lines, text) in [
+    for (what, writes, lines, _masked_before) in [
         // F-687d: each discarded line is MASKED (<= 8 chars shown as is,
         // two-space indent); see drain_preview.json.
         ("paste", vec![&b"TREZOR\nline2\nline3\n"[..]], 2usize, "  line2\n  line3"),
@@ -1733,7 +1733,7 @@ fn pasted_and_typed_ahead_lines_are_drained_and_shown() {
         );
         assert!(
             r.stderr.contains(&format!(
-                "{label} {lines} line(s) typed after the passphrase (not run, not used):\n{text}\n"
+                "{label} {lines} line(s) typed after the passphrase (not run, not used; not shown)\n"
             )),
             "{what}: {:?}",
             r.stderr
@@ -1743,7 +1743,10 @@ fn pasted_and_typed_ahead_lines_are_drained_and_shown() {
             "{what}: left for the shell: {:?}",
             r.left_for_shell
         );
-        // Masked: never the seed's tail, never a raw escape byte.
+        // pp-s2-4 (T6): nothing typed is shown, not even a masked head.
+        assert!(!r.stderr.contains("abandon"), "{what}: text shown: {}", r.stderr);
+        assert!(!r.stderr.contains("chars)"), "{what}: counts shown: {}", r.stderr);
+        // Never the seed's tail, never a raw escape byte.
         assert!(!r.stderr.contains("about"), "{what}: the full line leaked: {}", r.stderr);
         assert!(!r.stderr.contains('\u{1b}'), "{what}: a raw ESC reached stderr");
         assert!(r.echo_after, "{what}: echo left off");
@@ -1851,7 +1854,7 @@ fn verify_bundle_ms1_prompt_drains_a_paste() {
     );
     assert!(
         r.stderr
-            .contains("1 line(s) typed after the ms1 (not run, not used):\n  echo pwn\n"),
+            .contains("1 line(s) typed after the ms1 (not run, not used; not shown)\n"),
         "{}",
         r.stderr
     );

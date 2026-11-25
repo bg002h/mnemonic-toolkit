@@ -48,12 +48,13 @@ fn cmd_seed_xor_calls_shared_warn_if_world_readable() {
 }
 
 #[test]
-fn cmd_final_word_calls_shared_warn_if_world_readable() {
+fn cmd_final_word_writes_private_and_no_longer_warns() {
+    // U6: final-word `--json-out` goes through write_private (0600), so there is
+    // no permission advisory left to call.
     let src = read_or_panic("src/cmd/final_word.rs");
     assert!(
-        src.contains("warn_if_world_readable("),
-        "src/cmd/final_word.rs must call secret_advisory::warn_if_world_readable \
-         (R0 Q5 fold); got source without that helper reference"
+        src.contains("write_private(") && !src.contains("warn_if_world_readable("),
+        "src/cmd/final_word.rs must write via write_private and not call warn_if_world_readable"
     );
 }
 

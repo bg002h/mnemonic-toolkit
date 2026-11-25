@@ -8,6 +8,34 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### `--json-out` of four more verbs is written owner-only and atomically
+
+- **`final-word`, `electrum-decrypt`, `slip39 combine`, `seed-xor combine`**: `--json-out` writes through
+  `mnemonic_io_lib::write::write_private`: a hidden temp file in the same folder (mode 0600, synced), then one rename.
+  The file is owner-only (mode 0600), an existing file's mode included, and a failed write leaves the old file
+  unchanged. Before, it was a truncating write at the umask (0644 under umask 022) with a world-readable advisory;
+  that advisory is gone for these four verbs. `slip39 split` and `seed-xor split` still write plainly and keep the
+  advisory until `write_private_new` exists. (tk-json-out-umask-secret, tk-bh-i3)
+
+### The resolved passphrase is wiped when its args struct drops
+
+- **`bundle`, `verify-bundle`, `derive-child`, `convert`**: the passphrase read from stdin or `@env:` is held in a
+  clone of the command's args as a plain `String`; the args struct now wipes it on drop. No printed text changes.
+  (pp-s2-1)
+
+### Argv refusal and typed-ahead note show less of what you typed
+
+- **Argv refusal**: the message gives the argument's position and class, no longer its length (`-- N characters`
+  is gone). (pp-s2-2)
+- **`xpub-search passphrase-of-xpub --passphrase-candidates-file --json`**: the `match` body no longer carries
+  `matched_passphrase`; `matched_candidate_line` locates the hit. (pp-s2-3)
+- **Typed-ahead note** (after a terminal prompt): the note is one line, `note: discarded N line(s) typed after the
+  <noun> (not run, not used; not shown)`; it no longer shows the first 8 characters of each discarded line or its
+  word and character counts. (pp-s2-4)
+- **`export-wallet --slot`**: a value that is not `@N.<public subkey>=...` (a bare word, a typo, or a secret subkey) is
+  refused before parsing, with `--slot @N.xpub=<xpub>   (export-wallet is watch-only; a secret goes to mnemonic
+  bundle)`, so clap no longer echoes it. (tk175-export-wallet-slot-echo)
+
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 
 - **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in

@@ -87,7 +87,6 @@ pub(super) fn run_candidate_scan<W: Write, E: Write>(
                 stdout,
                 &m,
                 line_no,
-                &candidate,
                 target_xpub_canonical,
                 target_variant,
                 searched_count,
@@ -119,13 +118,13 @@ fn emit_match<W: Write>(
     stdout: &mut W,
     m: &super::path_search::MatchedPath,
     line_no: usize,
-    candidate: &Zeroizing<String>,
     target_xpub_canonical: String,
     target_variant: Option<&'static str>,
     searched_count: usize,
 ) -> Result<u8, ToolkitError> {
     if args.json {
-        // `--json` opt-in: the matching passphrase IS emitted (machine use).
+        // `--json`: the hit is located by `matched_candidate_line`; the passphrase
+        // itself is never emitted (pp-s2-3, passphrase convention rule 9).
         let envelope = XpubSearchEnvelope {
             schema_version: "1",
             body: XpubSearchJson::PassphraseOfXpub(PassphraseOfXpubResult::Match {
@@ -136,7 +135,6 @@ fn emit_match<W: Write>(
                 target_xpub_variant: target_variant,
                 searched_count,
                 matched_candidate_line: Some(line_no),
-                matched_passphrase: Some(candidate.as_str().to_string()),
             }),
         };
         let body = serde_json::to_string(&envelope)

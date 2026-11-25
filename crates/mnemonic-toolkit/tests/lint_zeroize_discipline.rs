@@ -483,6 +483,34 @@ const ZEROIZE_ROWS: &[ZeroizeRow] = &[
         source_file: "src/repair.rs",
         evidence: &["pub corrected_chunks: Vec<SecretString>"],
     },
+    // pp-s2-1: the stdin/env-resolved passphrase lives in a cloned args struct;
+    // the struct scrubs it on drop.
+    ZeroizeRow {
+        label: "BundleArgs scrubs its passphrase on drop (pp-s2-1)",
+        source_file: "src/cmd/bundle.rs",
+        evidence: &["impl Drop for BundleArgs"],
+    },
+    // pp-s2-1: the stdin/env-resolved passphrase lives in a cloned args struct;
+    // the struct scrubs it on drop.
+    ZeroizeRow {
+        label: "VerifyBundleArgs scrubs its passphrase on drop (pp-s2-1)",
+        source_file: "src/cmd/verify_bundle.rs",
+        evidence: &["impl Drop for VerifyBundleArgs"],
+    },
+    // pp-s2-1: the stdin/env-resolved passphrase lives in a cloned args struct;
+    // the struct scrubs it on drop.
+    ZeroizeRow {
+        label: "DeriveChildArgs scrubs its passphrase on drop (pp-s2-1)",
+        source_file: "src/cmd/derive_child.rs",
+        evidence: &["impl Drop for DeriveChildArgs"],
+    },
+    // pp-s2-1: the stdin/env-resolved passphrase lives in a cloned args struct;
+    // the struct scrubs it on drop.
+    ZeroizeRow {
+        label: "ConvertArgs scrubs its passphrase on drop (pp-s2-1)",
+        source_file: "src/cmd/convert.rs",
+        evidence: &["impl Drop for ConvertArgs"],
+    },
 ];
 
 fn crate_root() -> &'static Path {

@@ -247,8 +247,9 @@ fn decrypt_realistic_seed_fixture() {
 }
 
 #[test]
-fn json_out_world_readable_advisory() {
-    // R0 I2 — --json-out to a 0o644 path emits the world-readable advisory.
+fn json_out_world_readable_path_is_tightened_not_advised() {
+    // U6: a pre-existing 0o644 target is replaced owner-only (0o600), with no
+    // permission advisory (tk-json-out-umask-secret).
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -270,8 +271,10 @@ fn json_out_world_readable_advisory() {
             .success();
         let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
         assert!(
-            stderr.to_lowercase().contains("readable") || stderr.contains("permission"),
-            "expected world-readable advisory; got: {stderr}"
+            !stderr.to_lowercase().contains("readable") && !stderr.contains("umask"),
+            "no permission advisory expected; got: {stderr}"
         );
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "mode is {mode:o}");
     }
 }

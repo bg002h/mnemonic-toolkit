@@ -149,6 +149,7 @@ mod cli_inspect_partial;
 mod cli_intake_grouped;
 mod cli_invalidchecksum_redaction;
 mod cli_json_envelopes;
+mod cli_json_out_mode_siblings;
 mod cli_liana_template_refusal;
 mod cli_md1_length_cap;
 mod cli_mk1_repair_reverify;

@@ -200,10 +200,6 @@ pub enum PassphraseOfXpubResult {
         /// matching candidate. Absent in single-`--passphrase` mode.
         #[serde(skip_serializing_if = "Option::is_none")]
         matched_candidate_line: Option<usize>,
-        /// `--passphrase-candidates-file` scan: the matching passphrase
-        /// (machine-consumption; absent in single-`--passphrase` mode).
-        #[serde(skip_serializing_if = "Option::is_none")]
-        matched_passphrase: Option<String>,
     },
     /// No match: envelope-scope fields preserved; search fields absent.
     NoMatch {
@@ -237,7 +233,6 @@ pub(super) fn build_passphrase_match(
         target_xpub_variant,
         searched_count,
         matched_candidate_line: None,
-        matched_passphrase: None,
     }
 }
 

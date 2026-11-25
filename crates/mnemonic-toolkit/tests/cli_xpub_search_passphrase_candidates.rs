@@ -89,7 +89,9 @@ fn candidates_hit_json_carries_line_and_passphrase() {
     // tagged enum: result == "match"
     assert_eq!(v["result"], "match");
     assert_eq!(v["matched_candidate_line"], 2);
-    assert_eq!(v["matched_passphrase"], SECRET);
+    // pp-s2-3 (T5): the scan JSON locates the hit by line, never echoes it.
+    assert!(v.get("matched_passphrase").is_none(), "{v}");
+    assert!(!String::from_utf8_lossy(&out.get_output().stdout).contains(SECRET));
 }
 
 // ── Cell 3 — miss: exit 4 (Exhausted), candidates_tried == non-blank lines ───

@@ -383,14 +383,12 @@ the all-`abandon` phrase and the passphrase `TREZOR` (fingerprint
 - **At a terminal**, `--passphrase -` (or `--passphrase-stdin`) prints
   `Enter passphrase:` on stderr and reads one line without echoing it.
   Anything typed or pasted after that line is **discarded** rather than
-  left for your shell to run, and a masked preview of each discarded
-  line is printed:
+  left for your shell to run, and one line says how many lines were
+  discarded (none of their text is shown):
 
   ```text
   Enter passphrase:
-  note: discarded 2 line(s) typed after the passphrase (not run, not used):
-    curl exa… (2 words, 16 chars)
-    echo hel… (3 words, 16 chars)
+  note: discarded 2 line(s) typed after the passphrase (not run, not used; not shown)
   ```
 
 The GUI never relies on your typing `-` at such a prompt: it has no

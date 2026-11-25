@@ -370,7 +370,6 @@ fn run_combine<R: Read, W: Write, E: Write>(
             word_count,
             args.share.len(),
             phrase.as_str(),
-            stderr,
         )?;
     }
 
@@ -464,13 +463,12 @@ fn write_split_json<E: Write>(
     Ok(())
 }
 
-fn write_combine_json<E: Write>(
+fn write_combine_json(
     path: &std::path::Path,
     language: &'static str,
     word_count: usize,
     share_count: usize,
     phrase: &str,
-    stderr: &mut E,
 ) -> Result<(), ToolkitError> {
     let envelope = CombineJson {
         schema_version: "1",
@@ -482,9 +480,7 @@ fn write_combine_json<E: Write>(
     };
     let body = serde_json::to_string(&envelope)
         .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
+    mnemonic_io_lib::write::write_private(path, body.as_bytes())
         .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
-
-    warn_if_world_readable(path, stderr);
     Ok(())
 }

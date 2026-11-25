@@ -365,6 +365,14 @@ pub struct ConvertArgs {
     pub json: bool,
 }
 
+/// pp-s2-1: the stdin- or `@env:`-resolved passphrase sits in a clone of this
+/// struct as a plain `String`; scrub it when the struct drops.
+impl Drop for ConvertArgs {
+    fn drop(&mut self) {
+        crate::passphrase_input::scrub_passphrase(&mut self.passphrase);
+    }
+}
+
 /// SPEC v0.7 §10.a — script-type selector for the `(Xpub, Address)` edge.
 /// Single-sig variants only; multisig templates do not infer to a single-sig
 /// script-type. P2PKH (BIP-44) added v0.26.0 to round out the four standard

@@ -183,6 +183,14 @@ pub struct BundleArgs {
     pub import_json_index: Option<usize>,
 }
 
+/// pp-s2-1: the stdin- or `@env:`-resolved passphrase sits in a clone of this
+/// struct as a plain `String`; scrub it when the struct drops.
+impl Drop for BundleArgs {
+    fn drop(&mut self) {
+        crate::passphrase_input::scrub_passphrase(&mut self.passphrase);
+    }
+}
+
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
 pub mod mode_text {
     pub const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.";
