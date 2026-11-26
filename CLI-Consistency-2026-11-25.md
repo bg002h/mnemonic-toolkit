@@ -17,9 +17,11 @@ the vocabulary: flag names, values, defaults, verbs and help.
 These three choices shape several items. Each has a recommendation, and the rest
 of the report is written assuming it.
 
-1. **Usage-error exit code (CLI-14).** Five binaries exit 2 on a bad flag (`md`,
-   `mt`, `me`, `mr`, `mr-sitting`) and three exit 64 (`mk`, `ms`, `mnemonic`).
-   *Recommended: 2*, clap's default and the majority, so three binaries change.
+1. **Usage-error exit code (CLI-14). Moved on 2026-11-26** to the
+   constellation exit-code spec, mnemonic-engrave
+   `design/SPEC_constellation_exit_codes.md`, which replaces CLI-14. Following
+   Brian's direction that codes be summable bit flags, 2 becomes a bit there,
+   so the spec recommends 64 for a usage error (its decision 2).
 2. **Consent-flag prefix (CLI-08). Decided by Brian on 2026-11-26: `--allow-`.**
    The other candidate was `--accept-` (used across mr). Attestations use
    `--confirm-`; `mr` is still alpha, so renaming its flags is cheapest now.
