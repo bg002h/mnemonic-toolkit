@@ -269,7 +269,11 @@ mnemonic bundle \
 ```
 
 This emits the steel-engravable `md1` template card plus one `mk1` card
-per cosigner (no `ms1` — descriptor mode is watch-only). See
+per cosigner (no `ms1` — descriptor mode is watch-only). No `@N` names
+an origin, so the cards record this shape's canonical origin
+`m/48'/0'/0'/2'` (when each xpub's header agrees with it); `bundle`
+warns, prints the command that states it, and exits 4. Add
+`--slot @N.path=` with each cosigner's real path to state it. See
 [From a user-supplied descriptor](#from-a-user-supplied-descriptor) for
 the full bundle layout.
 

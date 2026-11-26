@@ -384,7 +384,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--no-engraving-card` | suppress the stderr engraving-card layout |
 | `--group-size <N>` | mstring display grouping: insert a separator every N characters in the emitted `ms1`/`mk1`/`md1` card strings; `0` = unbroken (**default 0** — pass `5` for the engraving-friendly five-character groups). Display only — `--json` and `verify-bundle` forensic strings always stay unbroken. The same flag (with `--separator`) is also accepted on `convert` (when emitting an `ms1`/`mk1` card) and on `ms-shares split` / `ms-shares combine --to ms1`. |
 | `--separator <space>` | the grouping separator for `--group-size` (default `space`); accepts the keyword `space` or the literal `" "`. **Whitespace only**: `hyphen` and `comma` were retired, because `mt`'s decoder strips whitespace and nothing else, so a hyphen-grouped card round-trips here and is refused there. Intake still strips `-` and `,`, so cards grouped by an older build still decode. |
-| `--multisig-path-family <FAMILY>` | bip48 or bip87 (default bip87) |
+| `--multisig-path-family <FAMILY>` | bip48 or bip87 (default bip87). With a multisig `--template`, leaving it out records the BIP-87 path the toolkit chose: `bundle` warns, prints the command with `--multisig-path-family bip87` added, and exits 4 (see [Exit status](#mnemonic-bundle-exit-status)) |
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
@@ -392,6 +392,30 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
+
+### Exit status {#mnemonic-bundle-exit-status}
+
+| Exit | Meaning |
+|---|---|
+| `0` | the cards were written, and every origin they record is one the command gave (a typed `--slot @N.path=` or `[fp/path]@N`, a `--multisig-path-family`, or the scheme a single-sig `--template` names) |
+| `4` | the cards and JSON were written exactly as with exit 0, but they record an origin the command did not give: a descriptor-mode default (BIP-48, or BIP-87 including bare `sh(...)`), a canonical shape's canonical origin, or the BIP-87 family of a multisig `--template` without `--multisig-path-family`. One warning names the path, and the next line prints the command that states it explicitly (Brian's ruling of 2026-11-26) |
+| `1`, `2`, `64` | refused, and nothing was written: bad input (`1`), a slot or descriptor refusal (`2`), or a usage error (`64`) |
+
+Exit 4 is a verdict, not a failure to write: check the path against the
+wallet (its first address) and then either keep the cards or re-run the
+printed command, which writes the same cards and exits 0. Scripts that
+treat any non-zero exit as failure should accept 4 from `bundle` or
+state every origin. A defaulted `--account` is not a chosen origin: the
+scheme you named fixes the path, and account 0 is the account the
+scheme starts with.
+
+The printed command is the one you typed, with `mnemonic` as the program
+name, each argument shell-quoted, and the stated path added. It never
+repeats a secret typed on the command line: such a value (any slot
+value other than `xpub`, `master_xpub`, `fingerprint` and `path`, a
+`--from` value, or `--passphrase`) shows `<...>` in its place, and a
+further line asks you to put yours back or pass it as `=-` on stdin.
+`-` (stdin) and `@env:VAR` are kept as typed.
 
 ### Worked example
 
@@ -637,12 +661,23 @@ descriptor gives an `@N` no origin (no inline `[fingerprint/path]@N`, no
 `m/86'/<coin>'/0'` for key-path `tr`, `m/48'/<coin>'/0'/2'` for
 `wsh(multi|sortedmulti)` and `m/48'/<coin>'/0'/1'` for
 `sh(wsh(multi|sortedmulti))`. A seed slot (`phrase` / `seedqr` /
-`entropy` / `ms1`) is derived there, the origin is WRITTEN on the card,
-and stderr says so:
+`entropy` / `ms1`) is derived there and the origin is WRITTEN on the
+card. Because the cards record a path the command did not give, stderr
+warns, prints the command that states it, and `bundle` exits 4 (see
+[Exit status](#mnemonic-bundle-exit-status)):
 
 ```text
-info: no origin path supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0' (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+warning: no origin was given for @0; the toolkit chose m/84'/0'/0' (this descriptor shape's canonical origin) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards.
+warning: to state this path explicitly, run:
+  mnemonic bundle --network mainnet --descriptor 'wpkh([73c5da0a/84'\''/0'\''/0'\'']@0/<0;1>/*)' --slot @0.phrase=- --json
 ```
+
+A seed slot on a canonical shape cannot take `--slot @N.path=` (see
+below), and an `@N.entropy=` slot never can, so for those the command
+writes the origin inline in the descriptor, `[fp/path]@N`; other slots
+get `--slot @N.path=`. With `--descriptor-file` the command line cannot
+carry it, and the second line says instead: `warning: to state this
+path explicitly, write [fp/path]@N in the descriptor file.`
 
 An `@N.xpub=` slot takes the canonical origin only when the xpub's own
 header agrees (its depth equals the path length and its child number the
@@ -700,40 +735,48 @@ descriptor string itself. The toolkit handles this two ways:
    component), as on canonical shapes; otherwise `bundle` and
    `verify-bundle` refuse (exit 2) and ask for `--slot @N.path=`. A
    taproot cosigner xpub exported at `m/48'/<coin>'/<account>'/3'`
-   therefore needs `--slot @N.path=m/48'/0'/0'/3'`. A stderr info
-   notice lists the `@N` indices that received the default and the path
-   chosen:
+   therefore needs `--slot @N.path=m/48'/0'/0'/3'`. A stderr warning
+   lists the `@N` indices that received the default and the path
+   chosen, the next line prints the command that states it explicitly,
+   and `bundle` exits 4 (see [Exit status](#mnemonic-bundle-exit-status)).
+   For BIP-87 it adds that the same key serves every script type at one
+   account:
 
    ```text
-   info: no origin supplied for @0,@1; defaulting to m/87'/0'/0' (BIP-87). Set it explicitly with [fp/path]@N or --slot @N.path=m/... The same BIP-87 key serves every script type at one account: use a different --account for each wallet from this seed.
+   warning: no origin was given for @0,@1; the toolkit chose m/87'/0'/0' (BIP-87) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards. The same BIP-87 key serves every script type at one account: use a different --account for each wallet from this seed.
+   warning: to state this path explicitly, run:
+     mnemonic bundle --network mainnet --descriptor 'tr(50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))' --slot @0.phrase=@env:S0 --slot @1.phrase=@env:S1 --json --slot '@0.path=m/87'\''/0'\''/0'\''' --slot '@1.path=m/87'\''/0'\''/0'\'''
    ```
 
-   For a legacy bare `sh(...)` descriptor the notice is a **warning**
-   instead, because other wallets place legacy P2SH multisig keys
-   elsewhere (BIP-45's `m/45'`, or `m/45'/0`, `m/45'/0'/0'`). It names the
-   path used, asks you to compare the wallet's first address before
-   funding it and to use a different `--account` for a second wallet from
-   the same seed, and prints the command that mints the same bundle at
-   `m/45'` instead (your command plus `--slot @N.path=m/45'` for each
-   defaulted seed slot, shell-quoted):
+   For a legacy bare `sh(...)` descriptor the warning says more,
+   because other wallets place legacy P2SH multisig keys elsewhere
+   (BIP-45's `m/45'`, or `m/45'/0`, `m/45'/0'/0'`). It is still one
+   warning: it names the path used, asks you to compare the wallet's
+   first address, and asks for a different `--account` for a second
+   wallet from the same seed. Then come the command that states the
+   BIP-87 path explicitly and, when a seed slot took the default, the
+   command that mints the same bundle at `m/45'` instead (seed slots at
+   `m/45'`; an `xpub` slot keeps its path, stated explicitly, because its
+   key does not move with its path). `bundle` exits 4:
 
    ```text
-   warning: no origin supplied for @0,@1 in a legacy P2SH descriptor (sh(...)); derived at m/87'/0'/0' (BIP-87). BIP-48 assigns no path to this script type, and other wallets place legacy P2SH multisig keys elsewhere (for example m/45', m/45'/0, m/45'/0'/0'). If this card is meant to match an existing wallet, compare its first address before funding, or set the origin with [fp/path]@N or --slot @N.path=m/... . For a second wallet from the same seed, use a different --account.
+   warning: no origin was given for @0,@1 in a legacy P2SH descriptor (sh(...)); the toolkit chose m/87'/0'/0' (BIP-87) and the cards record it. BIP-48 assigns no path to this script type, and other wallets place legacy P2SH multisig keys elsewhere (for example m/45', m/45'/0, m/45'/0'/0'). Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards. For a second wallet from the same seed, use a different --account.
+   warning: to state this path explicitly, run:
+     mnemonic bundle --network mainnet --descriptor 'sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))' --slot @0.phrase=- --slot @1.xpub=XPUB --slot @1.fingerprint=b8688df1 --json --slot '@0.path=m/87'\''/0'\''/0'\''' --slot '@1.path=m/87'\''/0'\''/0'\'''
    warning: to mint this bundle at m/45' instead, run:
-     mnemonic bundle --network mainnet --descriptor 'sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))' --slot @0.phrase=- --slot @1.xpub=xpub6CbhrPzY2z7NcCGCGjLAJLq8iRyjUfwmdXQs66MxTVUReKqb9DpLnVJ5D1qpatZjUuPGTyxf5TYU1vA34YFE9FHB4TvfYmokYLVsyEFZFt9 --slot @1.fingerprint=b8688df1 --json --slot '@0.path=m/45'\'''
-   warning: m/45' has no coin or account level (every --account and network gives the same keys); pass the same --slot @N.path=m/45' to verify-bundle.
+     mnemonic bundle --network mainnet --descriptor 'sh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))' --slot @0.phrase=- --slot @1.xpub=XPUB --slot @1.fingerprint=b8688df1 --json --slot '@0.path=m/45'\''' --slot '@1.path=m/87'\''/0'\''/0'\'''
+   warning: m/45' has no coin or account level (every --account and network gives the same keys); pass the same m/45' origins to verify-bundle.
    ```
 
-   `m/45'` has no coin or account level, so `--account` and the network
-   do not separate keys there: every account and network gives the same
-   keys. `verify-bundle` rebuilds the card from the slots it is given, so
-   pass it the same `--slot @N.path=m/45'`.
+   (`XPUB` stands for the `xpub6CbhrPzY…` value typed; the command
+   repeats it in full.) `m/45'` has no coin or account level, so
+   `--account` and the network do not separate keys there: every account
+   and network gives the same keys. `verify-bundle` rebuilds the card
+   from the slots it is given, so pass it the same `--slot @N.path=`
+   values.
 
-   A secret typed on the command line (any slot value other than `xpub`,
-   `master_xpub`, `fingerprint` and `path`, which are public, or
-   `--passphrase`) is not repeated in that command: it shows `<...>` in its place, and a further warning line
-   asks you to put yours back or pass it as `=-` on stdin. An `xpub` slot
-   is not overridden: its key does not move with its path.
+   Neither command repeats a secret typed on the command line (see
+   [Exit status](#mnemonic-bundle-exit-status)).
 
    Before 2026-11-25 a bare `sh(...)` defaulted to BIP-48 `1'`, the
    P2SH-P2WSH path, and a `tr(...)` to `m/48'/<coin>'/<account>'/3'`,
@@ -801,10 +844,14 @@ separators are non-load-bearing — pass `--group-size 5` for the
 during verification; intake strips the separators, so every form decodes
 back to the same payload.
 
-Stderr (info notice + bundle-summary engraving card):
+Stderr (the chosen-origin warning, the command that states the path
+explicitly, and the bundle-summary engraving card). `bundle` exits 4
+here, because the cards record a path the command did not give (see
+[Exit status](#mnemonic-bundle-exit-status)); the cards on stdout are
+the same either way:
 
-```{.text include="41-bundle-inheritance-cards.err" lines="1-10"}
-PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-10 at build
+```{.text include="41-bundle-inheritance-cards.err" lines="1-12"}
+PLACEHOLDER — generated from transcripts/41-bundle-inheritance-cards.err lines 1-12 at build
 ```
 
 The engraving-card block on stderr is a wallet-level summary the user
@@ -930,14 +977,17 @@ mnemonic verify-bundle --network mainnet --account 0 \
 The preceding `bundle` and `verify-bundle` commands emit stderr
 disclosures alongside the JSON / stdout. From `bundle`:
 
-```{.text include="41-inheritance.out" lines="1-2"}
-PLACEHOLDER — generated from transcripts/41-inheritance.out lines 1-2 at build
+```{.text include="41-inheritance.out" lines="1-4"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 1-4 at build
 ```
 
-The `info:` line is the v0.19.0 silent-default-with-stderr-notice
-feature firing on this recipe's non-canonical `wsh(andor(...))`
-descriptor — the BIP-48 origin path is inferred silently and the
-bundle proceeds. `verify-bundle` prints its own `info:` line (the first
+The first warning is the default-origin warning firing on this
+recipe's non-canonical `wsh(andor(...))` descriptor: no `@N` names an
+origin, so the toolkit chose the BIP-48 path, wrote it on the cards,
+and exits 4 (Brian's ruling of 2026-11-26). The command after it is
+this one with `--slot @N.path=m/48'/0'/0'/2'` added for each key; run
+it, or write `[fp/path]@N` in the descriptor, and `bundle` exits 0 with
+the same cards. `verify-bundle` prints its own `info:` line (the first
 line of its output below), naming the path it assumes to rebuild the
 expected cards.
 Neither command emits a secret-on-argv line, because the three phrases
@@ -946,8 +996,8 @@ would be REFUSED before the command line was parsed.
 
 Expected output (one block per cosigner; final `result: ok`):
 
-```{.text include="41-inheritance.out" lines="3-26"}
-PLACEHOLDER — generated from transcripts/41-inheritance.out lines 3-26 at build
+```{.text include="41-inheritance.out" lines="5-28"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 5-28 at build
 ```
 
 Per SPEC §5.8 emission rule (v0.21.0+), descriptor mode populates
@@ -1498,7 +1548,7 @@ channels that keep the seed off the argv.
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--account <ACCOUNT>` | BIP-32 account index(es) (default 0). Single-sig restore + single-sig template completion: one account (the first value). **(#28 phase 2) MULTISIG template completion**: the comma-separated LIST of accounts the OWN seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a 4-own-slot policy); the search places each own-derived key. See [Multisig template completion](#multisig-template-completion); must be below 2147483648 (2^31), else refused (usage error, exit 64) |
-| `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default. Only meaningful for keyless single-sig template restore; ignored otherwise. See [Template-only md1](#template-only-md1) |
+| `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default; given once, without `@N=`. See [Template-only md1](#template-only-md1). **Keyed `--md1` (2026-11-26):** repeating, `@N=m/...` (a bare `m/...` for a single-key card) states the origin of a key whose card carries **none**; restore checks it against any `--cosigner @N=<xpub>` header, renders it as asserted by you, and exits 4. A key whose card carries an origin is refused (exit 2). See [A key with no origin on the card](#multisig-cosigner-restore) |
 | `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion (single-sig phase 1 **and** multisig phase 2 id-search). Restore recomputes the id from the completed, fully-keyed wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). For multisig the prefix must be **strong** (sized to the realized search space) or the search refuses an ambiguous match. **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
 | `--own-account-max <OWN_ACCOUNT_MAX>` | (v0.70.0; #28 phase 2) RANGE fallback for the OWN seed's account(s) when the exact accounts are unknown: derive the own seed at **every** account in `0..K` and let the multisig-template **own-account subset-search** select the subset actually used. Own-only — the supplied `--cosigner` cards must be EXACT (over-supply cosigners with `--search-cosigner-subset`). Mutually exclusive with `--account` (clap `conflicts_with` — `--own-account-max K` ALONE passes; the `--account` default is ignored). `K ≤ 256`. The realized search space sizes the strong-prefix requirement, so a LONGER `--expect-wallet-id` prefix (or `--search-address`) is needed than for the exact-account path. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
 | `--search-cosigner-subset` | (v0.70.0; #28 phase 2) **OPT-IN bounded cosigner-subset search.** By default (OFF) a multisig template completion requires the supplied `--cosigner` cards to be EXACT (own-only — over-supplying cosigners refuses). With this flag the operator MAY over-supply `--cosigner` cards (unsure which/how many cosigners belong); the search resolves the correct cosigner subset too. The space grows to `S_opt = Σ_j C(K_own,j)·C(M_sup,N−j)·N!`, so a LONGER `--expect-wallet-id` prefix is needed (a too-short prefix refuses; `--search-address` is the recommended collision-free mode for large opt-in pools). Bounded by the §6 hard ceiling (`S_opt ≤ 1e15`) + the adaptive time-cap. Mutually exclusive with `--cosigner @N=` (explicit placement). Composes with `--own-account-max` / `--account`. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
@@ -1631,15 +1681,12 @@ no `xprv` / `tprv` token appears in restore's stdout or `--json`.
 
 ### Multisig-cosigner restore (`--md1`) {#multisig-cosigner-restore}
 
-**A key with no origin on the card (bug hunt 2026-11-25).** Cards minted by
-older toolkit or `md` releases can carry a key with an EMPTY origin path.
-`restore` never invents one:
+**A key with no origin on the card (bug hunt 2026-11-25; Brian's ruling
+of 2026-11-26).** Cards minted by older toolkit or `md` releases can carry a
+key with an EMPTY origin path. `restore` never invents one, and never prints
+such a key as a bare `[fingerprint]xpub`, which claims to be the master key
+of that fingerprint:
 
-- Without `--from`, that key is printed as `[fingerprint]xpub` with no path,
-  and stderr warns: `WARNING: md1 cosigner @N carries NO origin path on the
-  card. ... Signers will not recognise this key until its origin path is
-  supplied.` (Older releases printed the template default here, such as
-  `[fp/87'/0'/0']`, an origin at which the key does not live.)
 - With `--from <seed>`, the seed's common paths are searched for an EXACT
   key match (chain code and public key): the master key `m`; the shape's
   canonical origin; BIP-44/49/84/86 and BIP-87 `m/<purpose>'/<coin>'/<a>'`
@@ -1653,6 +1700,36 @@ older toolkit or `md` releases can carry a key with an EMPTY origin path.
   the master key, which is non-standard). On no match it refuses (exit 1):
   the card carries no origin and no common path of this seed produces its
   key.
+- Any other empty-origin key (no `--from`, or a cosigner's key the seed
+  does not produce) is refused (exit 2, `kind: "missing-origin"`) unless you
+  state its path. The refusal names the keys and prints your command with
+  `--origin '@N=m/<path>'` added for each; it suggests no example path,
+  because the right one is wherever the key really lives:
+
+  ```text
+  error: --md1 cosigner @0, @1 carries NO origin path on the card, and without its seed nothing can be derived. Refusing rather than show the key with no path (a bare [fp]xpub claims to be the master key of fp). If you know where the key lives, state it with --origin @N=m/<path>: restore then checks it against any --cosigner @N=<xpub> you give, shows it as asserted by you, and exits 4. Or give the key's seed with --from to search its common paths. To state each path you know, replace each <path> and run:
+    mnemonic restore --md1 md1f2z66psp... --md1 md1f2z66psw... --md1 md1f2z66psh... --md1 md1f2z66psm... --origin '@0=m/<path>' --origin '@1=m/<path>'
+  ```
+
+  State a path with `--origin @N=m/...` (repeat it per key), or, for a
+  single-key card, `--origin m/...` or the scheme the card was made with
+  (`--template bip44|bip49|bip84|bip86` with `--account`; the scheme must
+  describe the card's script, so `--template bip44` on a `wpkh` card is
+  refused). If you also give `--cosigner @N=<xpub|mk1>` for that key, the
+  path's length and last component must match the xpub's depth and child
+  number, and for the master node `m` the key must be the master key of its
+  fingerprint; otherwise restore refuses (exit 2, `kind: "path-mismatch"`).
+  On success the key is rendered at that path, one warning per key says so,
+  and restore exits 4:
+
+  ```text
+  WARNING: md1 cosigner @1's origin m/48'/0'/0'/2' (--origin @1) is asserted by you, not on the card. Its depth and child number agree with the xpub you gave (--cosigner @1). An xpub header cannot confirm the purpose or coin of a path: check this path against your records, and the wallet's first address, before trusting this wallet.
+  ```
+
+  Without `--cosigner @N` the warning says that not even the depth and
+  child number were checked. Older releases printed the key with no path
+  (and before that the template default, such as `[fp/87'/0'/0']`, an
+  origin at which the key does not live).
 
 A wallet-policy `md1` card (the multisig descriptor card the toolkit emits
 for any multisig bundle) carries **every cosigner's public key**, so the
@@ -5417,4 +5494,4 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
 
 ## When stdout fails
 
-A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mnemonic: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code. Exit 4 from `repair` or `inspect` (the candidates or the partial decode on stdout are the result) also becomes 1; every other exit 4 is a verdict and is kept.
+A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mnemonic: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code. Exit 4 from `repair` or `inspect` (the candidates or the partial decode on stdout are the result), and from `bundle` (an origin the command did not give) or `restore` (an origin you asserted), whose cards or wallet on stdout are the result, also becomes 1; every other exit 4 is a verdict and is kept.

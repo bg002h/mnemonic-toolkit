@@ -46,7 +46,7 @@ for every secret-bearing invocation.
 - [`--language`](#mnemonic-restore-language) — BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`)
 - [`--account`](#mnemonic-restore-account) — BIP-32 account index(es) (default 0)
 - [`--count`](#mnemonic-restore-count) — number of first-receive addresses to show per wallet type (default 1)
-- [`--origin`](#mnemonic-restore-origin) — explicit BIP-32 origin path for a keyless single-sig template `md1`
+- [`--origin`](#mnemonic-restore-origin) — explicit BIP-32 origin path for a keyless single-sig template `md1`, or `@N=m/...` for a keyed `md1` key whose card carries none
 - [`--expect-wallet-id`](#mnemonic-restore-expect-wallet-id) — expected `WalletPolicyId` hex prefix for template-completion
 - [`--expect-fingerprint`](#mnemonic-restore-expect-fingerprint) — reference master fingerprint (mismatch → exit 4)
 - [`--expect-xpub`](#mnemonic-restore-expect-xpub) — reference account xpub (requires `--template`)
@@ -411,6 +411,18 @@ overrides the template's canonical `m/<purpose>'/<coin>'/<account>'`
 default. Only meaningful for keyless single-sig template restore;
 ignored otherwise. When supplied, `--expect-wallet-id` is NOT checked
 (a different preimage). The GUI renders this as a Text widget.
+
+**Keyed `--md1` (Brian's ruling of 2026-11-26).** A key whose card
+carries NO origin is refused (exit 2) unless a seed (`--from`) finds it
+or you state its path: `--origin @N=m/...` (repeat it per key; a bare
+`m/...` for a single-key card), or, for a single-key card, the
+single-sig `--template` the card was made with. Restore checks the path
+against the depth and child number of any `--cosigner @N` xpub given
+(exit 2 on a mismatch), renders the key at that path, warns that the
+path is "asserted by you, not on the card", and exits 4. A key whose
+card carries an origin cannot be given one (exit 2). The CLI takes
+`--origin` more than once in this form; the GUI's Text widget passes one
+value (FOLLOWUP `gui-restore-origin-repeating`).
 
 ## `--expect-wallet-id` {#mnemonic-restore-expect-wallet-id}
 
