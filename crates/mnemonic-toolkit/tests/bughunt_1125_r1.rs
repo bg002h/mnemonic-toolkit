@@ -1205,3 +1205,162 @@ fn bip48_scope_multisig_template_is_unaffected() {
         vec!["48'/0'/0'/2'", "48'/0'/0'/2'"]
     );
 }
+
+// ---------------------------------------------------------------------------
+// rulings2-r1 I-1 — the canonical BIP-48 fill of wsh / sh(wsh) of multi /
+// sortedmulti is a multisig hierarchy too: a one-key `multi(1,@0)` with no
+// origin is refused at mint like every other one-key tree.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bip48_scope_single_key_canonical_multi_without_origin_is_refused() {
+    let s0 = format!("@0.phrase={A}");
+    for desc in [
+        "wsh(multi(1,@0/**))",
+        "wsh(sortedmulti(1,@0/<0;1>/*))",
+        "sh(wsh(sortedmulti(1,@0/<0;1>/*)))",
+        "sh(wsh(multi(1,@0/<0;1>/*)))",
+    ] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--json",
+        ]);
+        assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", desc);
+        assert!(
+            o.stderr
+                .contains("On this descriptor shape a seed slot (@0) takes only the inline form."),
+            "{desc}: a phrase slot cannot take @0.path= here: {}",
+            o.stderr
+        );
+        assert!(
+            !o.stderr.contains("the toolkit chose"),
+            "{desc}: no chosen-origin warning before a refusal: {}",
+            o.stderr
+        );
+    }
+    // A foreign xpub slot is refused the same way.
+    let s0x = format!("@0.xpub={}", xpub_at(A, "m/48'/0'/0'/2'"));
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(1,@0/<0;1>/*))",
+        "--slot",
+        &s0x,
+        "--slot",
+        "@0.fingerprint=73c5da0a",
+        "--json",
+    ]);
+    assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", "xpub slot");
+    // The `[fp]@0` refusal on a one-key canonical multi does not advise
+    // dropping the brackets (that would be refused too).
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(1,[73c5da0a]@0/<0;1>/*))",
+        "--slot",
+        &s0,
+    ]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(
+        !o.stderr.contains("drop the brackets"),
+        "no refused advice: {}",
+        o.stderr
+    );
+}
+
+/// The ruling is mint-time admission only: a one-key canonical multi with an
+/// explicit origin mints, and a card minted at the BIP-48 path (as the fill
+/// used to do) still verifies with no path, as before the ruling.
+#[test]
+fn bip48_scope_single_key_canonical_multi_explicit_and_pre_ruling_verify() {
+    let s0 = format!("@0.phrase={A}");
+    for (desc, minted, want) in [
+        (
+            "wsh(sortedmulti(1,@0/<0;1>/*))",
+            "wsh(sortedmulti(1,[73c5da0a/84'/0'/0']@0/<0;1>/*))",
+            "84'/0'/0'",
+        ),
+        (
+            "wsh(sortedmulti(1,@0/<0;1>/*))",
+            "wsh(sortedmulti(1,[73c5da0a/48'/0'/0'/2']@0/<0;1>/*))",
+            "48'/0'/0'/2'",
+        ),
+        (
+            "sh(wsh(sortedmulti(1,@0/<0;1>/*)))",
+            "sh(wsh(sortedmulti(1,[73c5da0a/48'/0'/0'/1']@0/<0;1>/*)))",
+            "48'/0'/0'/1'",
+        ),
+    ] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            minted,
+            "--slot",
+            &s0,
+            "--json",
+        ]);
+        assert_eq!(o.code, 0, "{minted}: {}", o.stderr);
+        if !want.starts_with("48'") {
+            assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec![want], "{minted}");
+            continue;
+        }
+        // The card a pre-ruling `bundle --descriptor <desc>` (no origin)
+        // minted is this one; verify-bundle still rebuilds it with no path.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("bundle.json");
+        std::fs::write(&file, &o.stdout).unwrap();
+        let v = run(&[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--bundle-json",
+            file.to_str().unwrap(),
+        ]);
+        assert_eq!(
+            v.code, 0,
+            "{desc}: verify-bundle: {}\n{}",
+            v.stdout, v.stderr
+        );
+    }
+}
+
+/// Two-key canonical multisig keeps the canonical BIP-48 fill (exit 4 notice).
+#[test]
+fn bip48_scope_two_key_canonical_multi_keeps_the_fill() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(1,@0/<0;1>/*,@1/<0;1>/*))",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_eq!(o.code, 4, "{}", o.stderr);
+    assert!(
+        o.stderr.contains("the toolkit chose m/48'/0'/0'/2'"),
+        "{}",
+        o.stderr
+    );
+}

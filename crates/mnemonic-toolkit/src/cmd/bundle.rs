@@ -1750,6 +1750,15 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 .iter()
                 .any(|s| s.index as usize == i && s.subkey == crate::slot_input::SlotSubkey::Path);
             if path_empty && !slot_path {
+                // A one-key BIP-48 shape has no canonical fill to fall back
+                // on (rulings2-r1 I-1), so do not advise dropping the brackets.
+                let drop_hint = if canonical_fill_is_bip48(&canonicity_probe.tree)
+                    && !crate::template::tree_has_multiple_keys(&canonicity_probe.tree)
+                {
+                    ""
+                } else {
+                    ", or drop the brackets to use the canonical origin"
+                };
                 return Err(ToolkitError::SlotInputViolation {
                     kind: "conflict",
                     message: format!(
@@ -1757,7 +1766,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                          which says the key is the master key of {fp}. The master node cannot be \
                          recorded on a card for this descriptor shape: an empty origin on the card \
                          means the shape's canonical origin. Give the key's real origin, \
-                         `[{fp}/<path>]@{i}`, or drop the brackets to use the canonical origin."
+                         `[{fp}/<path>]@{i}`{drop_hint}."
                     ),
                 });
             }
@@ -1783,7 +1792,22 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         slots,
         default_family,
         &canonicity_probe.tree,
+        false,
     )?;
+    // Review rulings2-r1 I-1: the canonical BIP-48 fill of wsh / sh(wsh) of
+    // multi / sortedmulti is the same multisig hierarchy, so a one-key
+    // `wsh(multi(1,@0))` with no origin is refused like every other one-key
+    // tree. Mint-time admission only: decode, verify-bundle and restore of an
+    // existing card keep md-codec's canonical meaning.
+    if canonical_fill_is_bip48(&canonicity_probe.tree) {
+        check_default_origin_scope(
+            &bound_paths.canonical_filled,
+            slots,
+            default_family,
+            &canonicity_probe.tree,
+            true,
+        )?;
+    }
 
     // Resolve each @i slot using the per-@i annotation path from the descriptor.
     let secp = Secp256k1::new();
@@ -2919,13 +2943,16 @@ pub(crate) fn bind_descriptor_mode_paths(
 /// multisig hierarchy too. No example path is suggested: the right one depends
 /// on where the key really lives (see FOLLOWUPS
 /// `tk-bh1125-r3-m1-refusal-example-path`). Canonical shapes never take a
-/// family default (their BIP-48 canonical fill is only for wsh / sh(wsh) of
-/// multi / sortedmulti).
+/// family default; the bundle caller applies this same check to the
+/// canonical BIP-48 fill of wsh / sh(wsh) of multi / sortedmulti
+/// ([`canonical_fill_is_bip48`]), which a one-of-one `multi` would otherwise
+/// take. The single-sig canonical fills (BIP-44/49/84/86) are not affected.
 fn check_default_origin_scope(
     defaulted: &[u8],
     slots: &[crate::slot_input::SlotInput],
     family: crate::template::DefaultOriginFamily,
     root_tree: &md_codec::tree::Node,
+    canonical_shape: bool,
 ) -> Result<(), ToolkitError> {
     if defaulted.is_empty() || crate::template::tree_has_multiple_keys(root_tree) {
         return Ok(());
@@ -2962,9 +2989,40 @@ fn check_default_origin_scope(
             entropy_only.join(",")
         ));
     }
+    // A canonical shape refuses `@N.path=` beside a phrase / SeedQR / ms1
+    // slot (SPEC v0.19.0 §6.6 row 4), so those take only the inline form too.
+    if canonical_shape {
+        use crate::slot_input::SlotSubkey as K;
+        let seed_only: Vec<String> = defaulted
+            .iter()
+            .filter(|i| {
+                slots
+                    .iter()
+                    .any(|s| s.index == **i && matches!(s.subkey, K::Phrase | K::Seedqr | K::Ms1))
+            })
+            .map(|i| format!("@{i}"))
+            .collect();
+        if !seed_only.is_empty() {
+            message.push_str(&format!(
+                " On this descriptor shape a seed slot ({}) takes only the inline form.",
+                seed_only.join(",")
+            ));
+        }
+    }
     Err(ToolkitError::SlotInputViolation {
         kind: "missing-origin",
         message,
+    })
+}
+
+/// Whether `tree`'s canonical origin (md-codec `canonical_origin`) is the
+/// BIP-48 multisig hierarchy (`m/48'/...`, wsh / sh(wsh) of multi /
+/// sortedmulti), as opposed to a single-sig BIP-44/49/84/86 origin.
+pub(crate) fn canonical_fill_is_bip48(tree: &md_codec::tree::Node) -> bool {
+    md_codec::canonical_origin::canonical_origin(tree).is_some_and(|op| {
+        op.components
+            .first()
+            .is_some_and(|c| c.hardened && c.value == 48)
     })
 }
 

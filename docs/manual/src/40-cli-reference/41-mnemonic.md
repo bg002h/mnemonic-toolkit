@@ -743,6 +743,18 @@ descriptor string itself. The toolkit handles this two ways:
      mints nothing and still rebuilds such a card at the family default
      when no origin is given, so a single-key card minted at that default
      before 2026-11-26 still verifies with its original command line.
+   - The same rule covers the canonical BIP-48 shapes: a 1-of-1
+     `wsh(multi(1,@0/**))`, `wsh(sortedmulti(1,@0/<0;1>/*))` or
+     `sh(wsh(sortedmulti(1,@0/<0;1>/*)))` (any `wsh` / `sh(wsh)` of
+     `multi` / `sortedmulti` with fewer than two distinct keys) whose `@N`
+     has no origin does **not** take the canonical `m/48'/...` origin;
+     `bundle` refuses it with the same `missing-origin` error (exit 2).
+     A canonical shape refuses `@N.path=` beside a phrase, SeedQR or
+     `ms1` slot, so for those slots the error adds that only the inline
+     `[fp/path]@N` form works. The single-sig canonical shapes (`pkh`,
+     `wpkh`, `sh(wpkh)`, key-path `tr`) keep their BIP-44/49/84/86 fill.
+     Decoding, `verify-bundle` and `restore` of an existing 1-of-1 card
+     are unchanged.
 
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
    `<account>` consumes `--account N` (defaults to `0'`). An `@N.xpub=`
@@ -1061,7 +1073,7 @@ refuses (see the inference rule above).
 
 | Trigger | Stderr |
 |---|---|
-| Non-canonical descriptor with only one key (`wsh(...)`, `sh(wsh(...))`, `tr(...)` script tree or bare `sh(...)`) and an `@N` lacking an origin | `error: no origin was given for @{N}, and this descriptor holds only one key. BIP-48 (m/48'/...) is for wallets with two or more keys, so no default origin is assumed. Give each key's real origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor.` (exit 2; `BIP-87 (m/87'/...)` for a `tr(...)` or bare `sh(...)`; an `@N.entropy=` slot adds that it takes only the inline form) |
+| Descriptor with only one key (non-canonical `wsh(...)`, `sh(wsh(...))`, `tr(...)` script tree or bare `sh(...)`, or a canonical 1-of-1 `wsh` / `sh(wsh)` of `multi` / `sortedmulti`) and an `@N` lacking an origin | `error: no origin was given for @{N}, and this descriptor holds only one key. BIP-48 (m/48'/...) is for wallets with two or more keys, so no default origin is assumed. Give each key's real origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor.` (exit 2; `BIP-87 (m/87'/...)` for a `tr(...)` or bare `sh(...)`; an `@N.entropy=` slot adds that it takes only the inline form; on a canonical 1-of-1 shape a phrase, SeedQR or `ms1` slot adds `On this descriptor shape a seed slot (@N) takes only the inline form.`) |
 | Bare `tr(<miniscript>)` (no internal key) | `error: tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.` |
 | Canonical descriptor + `--account != 0` | `error: --account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
 | `--slot @N.fingerprint=X` AND inline `[Y/...]@N` disagree | `error: slot @{N} fingerprint mismatch: --slot says X, descriptor inline [Y/...] disagrees; supply consistent values.` |
