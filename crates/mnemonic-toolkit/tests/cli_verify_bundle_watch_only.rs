@@ -132,7 +132,7 @@ fn gen_bundle_json(args: &[&str]) -> (Vec<String>, Vec<String>) {
         .arg("--allow-argv-secret")
         .args(args)
         .assert()
-        .success();
+        .code(predicates::prelude::predicate::in_iter([0, 4])); // 4: a default origin (2026-11-26 ruling)
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let mk1 = bundle["mk1"]
@@ -157,7 +157,7 @@ fn gen_bundle_json_multisig(args: &[&str]) -> (Vec<String>, Vec<String>) {
         .arg("--allow-argv-secret")
         .args(args)
         .assert()
-        .success();
+        .code(predicates::prelude::predicate::in_iter([0, 4])); // 4: a default origin (2026-11-26 ruling)
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let mut mk1: Vec<String> = Vec::new();
@@ -619,7 +619,7 @@ fn watch_only_multi_cosigner_one_ms1_missing_emits_notice_for_that_cosigner_only
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
     let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let ms1_arr = bundle["ms1"].as_array().expect("ms1 array");
@@ -710,7 +710,7 @@ fn watch_only_empty_ms1_sentinel_marks_cosigner_skip_with_notice() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
     let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let ms1_arr = bundle["ms1"].as_array().expect("ms1 array");

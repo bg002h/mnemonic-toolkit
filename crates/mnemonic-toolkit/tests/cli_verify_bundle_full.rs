@@ -69,7 +69,9 @@ fn gen_bundle_full_multisig(args: &[&str]) -> (Vec<String>, Vec<String>, Vec<Str
         .arg("--allow-argv-secret")
         .args(args)
         .assert()
-        .success();
+        // 4: the multisig template took the default --multisig-path-family
+        // (Brian's ruling of 2026-11-26); the cards are written in full.
+        .code(predicates::prelude::predicate::in_iter([0, 4]));
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let ms1: Vec<String> = bundle["ms1"]

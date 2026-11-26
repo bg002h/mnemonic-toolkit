@@ -69,6 +69,7 @@ mnemonic bundle \
   --network mainnet \
   --scheme wsh-sortedmulti \
   --threshold 2 \
+  --multisig-path-family bip87 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
   --slot @2.phrase="letter advice cage absurd amount doctor acoustic avoid letter advice cage above" \
@@ -85,10 +86,13 @@ The interesting flags vs. single-sig:
 - **`--slot @N.phrase=…`** repeated three times — one slot per
   cosigner, indexed `@0` through `@2`. The slot index becomes the
   cosigner index in the BIP-388 wallet policy.
-- **`--multisig-path-family bip87`** is the default and stays. The
-  toolkit derives at `m/87'/0'/0'` for each cosigner. To use the
-  Coldcard / SeedSigner-friendly `m/48'/0'/0'/2'` BIP-48 family,
-  pass `--multisig-path-family bip48`.
+- **`--multisig-path-family bip87`** states the path family: the
+  toolkit derives at `m/87'/0'/0'` for each cosigner. BIP-87 is also
+  the default, but without the flag the cards record a path the
+  command did not name, so `bundle` warns, prints this command with
+  the flag added, and exits 4 (the cards are the same either way). To
+  use the Coldcard / SeedSigner-friendly `m/48'/0'/0'/2'` BIP-48
+  family, pass `--multisig-path-family bip48`.
 
 The output is the full seven-card bundle. Each cosigner's ms1
 appears under a `# === Cosigner N ===` separator on the engraving-card
@@ -188,6 +192,7 @@ their own air-gapped device:
      --network mainnet \
      --scheme wsh-sortedmulti \
      --threshold 2 \
+     --multisig-path-family bip87 \
      --slot @0.xpub=<xpub-0> \
      --slot @1.xpub=<xpub-1> \
      --slot @2.xpub=<xpub-2>

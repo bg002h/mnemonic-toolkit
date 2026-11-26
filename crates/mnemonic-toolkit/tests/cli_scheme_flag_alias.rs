@@ -327,3 +327,64 @@ fn refusals_are_identical_under_the_alias() {
         assert!(!o.stderr.contains(old), "{args:?}: {}", o.stderr);
     }
 }
+
+/// The 2026-11-26 origin rulings: restore checks a single-sig scheme against
+/// the decoded md1 (it may state the path of a single-key card that carries
+/// none), so a keyed multisig card refuses it there. And bundle, exiting 4 on
+/// an origin it chose, prints a "state this path" command that repeats the
+/// user's own command line: the alias is printed as `--scheme` in it.
+#[test]
+fn origin_ruling_refusals_name_scheme_under_either_spelling() {
+    const B: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let mut bundle_args = vec![
+        "bundle",
+        "--network",
+        "mainnet",
+        "{flag}",
+        "wsh-sortedmulti",
+        "--threshold",
+        "2",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ];
+    // No --multisig-path-family: bundle chose BIP-87 and exits 4.
+    let o = assert_alias_identical(&bundle_args, "--template");
+    assert_eq!(o.code, 4, "{}", o.stderr);
+    assert!(
+        o.stderr.contains("--scheme wsh-sortedmulti"),
+        "{}",
+        o.stderr
+    );
+    assert!(!o.stderr.contains("--template"), "{}", o.stderr);
+
+    bundle_args.splice(5..5, ["--multisig-path-family", "bip48"]);
+    let new = bundle_args
+        .iter()
+        .map(|a| if *a == "{flag}" { "--scheme" } else { a })
+        .collect::<Vec<_>>();
+    let bundle = run(&new);
+    assert_eq!(bundle.code, 0, "{}", bundle.stderr);
+    let v: serde_json::Value = serde_json::from_str(&bundle.stdout).unwrap();
+    let mut args: Vec<String> = vec!["restore".into()];
+    for s in v["md1"].as_array().unwrap() {
+        args.push("--md1".into());
+        args.push(s.as_str().unwrap().into());
+    }
+    args.extend(["{flag}".into(), "bip84".into()]);
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let o = assert_alias_identical(&args, "--template");
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(o.stdout.is_empty(), "{}", o.stdout);
+    assert!(
+        o.stderr
+            .contains("--scheme (single-sig) does not apply in multisig --md1 mode"),
+        "{}",
+        o.stderr
+    );
+    assert!(!o.stderr.contains("--template"), "{}", o.stderr);
+}

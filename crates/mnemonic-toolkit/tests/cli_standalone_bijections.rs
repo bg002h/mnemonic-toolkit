@@ -248,6 +248,9 @@ fn b5_descriptor_to_md1_to_descriptor_non_canonical_andor() {
         slots.push(format!("@{i}.xpub={xpub}"));
         slots.push("--slot".into());
         slots.push(format!("@{i}.fingerprint={fp}"));
+        // Stated, so the toolkit chooses no origin (no exit 4).
+        slots.push("--slot".into());
+        slots.push(format!("@{i}.path=m/48'/0'/0'/2'"));
     }
     let mut args: Vec<String> = [
         "bundle",

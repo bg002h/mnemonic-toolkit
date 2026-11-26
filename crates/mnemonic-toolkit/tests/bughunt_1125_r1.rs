@@ -93,10 +93,10 @@ fn r1_n4_canonical_notice_names_the_missing_path() {
         "--slot",
         &seed_a,
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert!(
         o.stderr
-            .contains("info: no origin path supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0'"),
+            .contains("warning: no origin was given for @0; the toolkit chose m/84'/0'/0' (this descriptor shape's canonical origin)"),
         "{}",
         o.stderr
     );
@@ -283,14 +283,15 @@ fn b3_taproot_multisig_descriptor_defaults_to_bip87() {
         &s1,
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/1'/0'", "87'/1'/0'"]
     );
     assert!(
-        o.stderr
-            .contains("info: no origin supplied for @0,@1; defaulting to m/87'/1'/0' (BIP-87)"),
+        o.stderr.contains(
+            "warning: no origin was given for @0,@1; the toolkit chose m/87'/1'/0' (BIP-87)"
+        ),
         "{}",
         o.stderr
     );
@@ -384,20 +385,21 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
         "--json",
     ];
     let o = run_stdin(&args, A);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/0'/0'", "87'/0'/0'"]
     );
     for want in [
-        "warning: no origin supplied for @0,@1 in a legacy P2SH descriptor",
+        "warning: no origin was given for @0,@1 in a legacy P2SH descriptor",
         "m/87'/0'/0' (BIP-87)",
         "m/45', m/45'/0, m/45'/0'/0'",
-        "compare its first address before funding",
+        "compare the first address",
         "use a different --account",
+        "warning: to state this path explicitly, run:",
         "warning: to mint this bundle at m/45' instead, run:",
         "warning: m/45' has no coin or account level (every --account and network gives the \
-         same keys); pass the same --slot @N.path=m/45' to verify-bundle.",
+         same keys); pass the same m/45' origins to verify-bundle.",
     ] {
         assert!(o.stderr.contains(want), "missing {want:?}: {}", o.stderr);
     }
@@ -412,7 +414,21 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
         .position(|l| l.contains("to mint this bundle at m/45' instead"))
         .unwrap();
     let cmd = lines[at + 1].trim();
-    assert!(cmd.ends_with("--slot '@0.path=m/45'\\'''"), "{cmd}");
+    // @0 (the seed) moves to m/45'; the xpub @1 keeps the path it was minted
+    // at, stated explicitly, so the printed command chooses nothing (exit 0).
+    assert!(
+        cmd.ends_with("--slot '@0.path=m/45'\\''' --slot '@1.path=m/87'\\''/0'\\''/0'\\'''"),
+        "{cmd}"
+    );
+    let cmd = cmd
+        .strip_prefix("mnemonic ")
+        .map(|rest| {
+            format!(
+                "'{}' {rest}",
+                assert_cmd::cargo::cargo_bin("mnemonic").display()
+            )
+        })
+        .expect("printed as `mnemonic ...`");
     assert!(
         !o.stderr.contains("not repeated above"),
         "no inline secret: {}",
@@ -477,7 +493,7 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
 }
 
 /// A non-canonical sh(wsh(...)) is BIP-48 1' (P2SH-P2WSH), not legacy P2SH:
-/// the plain info notice, no P2SH warning and no m/45' command.
+/// the plain default warning, no P2SH warning and no m/45' command.
 #[test]
 fn b2_sh_wsh_multisig_keeps_bip48_1h_and_no_warning() {
     let s0 = format!("@0.phrase={A}");
@@ -494,14 +510,14 @@ fn b2_sh_wsh_multisig_keeps_bip48_1h_and_no_warning() {
         &s1,
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["48'/0'/0'/1'", "48'/0'/0'/1'"]
     );
     assert!(
         o.stderr.contains(
-            "info: no origin supplied for @0,@1; defaulting to m/48'/0'/0'/1' (BIP-48 cosigner path)"
+            "warning: no origin was given for @0,@1; the toolkit chose m/48'/0'/0'/1' (BIP-48 cosigner path)"
         ),
         "{}",
         o.stderr
@@ -562,7 +578,7 @@ fn b4_explicit_derivations_still_mint_and_restore() {
             &s0,
             "--json",
         ]);
-        assert_eq!(o.code, 0, "{desc}: {}", o.stderr);
+        assert_eq!(o.code, 4, "{desc}: canonical origin chosen: {}", o.stderr);
         let md1 = md1_of(&o.stdout);
         let mut args = vec!["restore".to_string()];
         for m in &md1 {
@@ -626,7 +642,8 @@ fn r2_ib_foreign_xpub_whose_header_contradicts_the_default_is_refused() {
         // refuses the same way, and with it accepts.
         let p1 = format!("@1.path={foreign_path}");
         let ok = mint(&["--slot", &p1]);
-        assert_eq!(ok.code, 0, "{desc}: {}", ok.stderr);
+        // @0 (the seed) still takes the default: exit 4.
+        assert_eq!(ok.code, 4, "{desc}: {}", ok.stderr);
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("b.json");
         std::fs::write(&file, &ok.stdout).unwrap();
@@ -679,9 +696,261 @@ fn r2_ib_foreign_xpub_at_the_bip87_default_still_mints() {
         "@1.fingerprint=b8688df1",
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/0'/0'", "87'/0'/0'"]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// tk-bh1125-tr-tree-bip87-scope (Brian's ruling, 2026-11-26): BIP-87 is for
+// multisig ("it is best to restrict this script-agnostic hierarchy to
+// multisignature wallets only"), so a non-canonical tr(...) or bare sh(...)
+// that holds no multi / sortedmulti / multi_a / sortedmulti_a fragment is
+// refused when any @N has no origin. Multisig shapes keep their defaults.
+// ---------------------------------------------------------------------------
+
+fn assert_bip87_scope_refusal(o: &Out, missing: &str, ctx: &str) {
+    assert_eq!(o.code, 2, "{ctx}: exit 2 (usage class): {}", o.stderr);
+    assert!(o.stdout.is_empty(), "{ctx}: no card minted: {}", o.stdout);
+    for want in [
+        format!("no origin was given for {missing}"),
+        "BIP-87 (m/87'/...) is for multisig wallets only".to_string(),
+        "--slot @N.path=m/...".to_string(),
+        "[fp/path]@N".to_string(),
+    ] {
+        assert!(
+            o.stderr.contains(&want),
+            "{ctx}: missing {want:?}: {}",
+            o.stderr
+        );
+    }
+    // r3 M1: never suggest a concrete example path that may be wrong.
+    assert!(
+        !o.stderr.contains("for example"),
+        "{ctx}: no example path: {}",
+        o.stderr
+    );
+}
+
+#[test]
+fn bip87_scope_single_key_tr_script_tree_without_origin_is_refused() {
+    let s0 = format!("@0.phrase={A}");
+    let desc = "tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))";
+    let o = run(&[
+        "bundle",
+        "--network",
+        "testnet",
+        "--descriptor",
+        desc,
+        "--slot",
+        &s0,
+        "--json",
+    ]);
+    assert_bip87_scope_refusal(&o, "@0", "seed slot");
+
+    // A foreign xpub slot is refused the same way (its origin would be recorded
+    // from the default).
+    let s0x = format!("@0.xpub={}", xpub_at(A, "m/87'/0'/0'"));
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        desc,
+        "--slot",
+        &s0x,
+        "--slot",
+        "@0.fingerprint=73c5da0a",
+        "--json",
+    ]);
+    assert_bip87_scope_refusal(&o, "@0", "xpub slot");
+}
+
+#[test]
+fn bip87_scope_non_multisig_trees_without_origin_are_refused() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    // Bare sh(...) with one key, and a two-key taproot tree with no multi
+    // fragment: both refused, naming every @N that lacks an origin.
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "sh(and_v(v:pk(@0/<0;1>/*),after(100)))",
+        "--slot",
+        &s0,
+        "--json",
+    ]);
+    assert_bip87_scope_refusal(&o, "@0", "bare sh");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "tr(NUMS,{pk(@0/<0;1>/*),pk(@1/<0;1>/*)})",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_bip87_scope_refusal(&o, "@0,@1", "two-key tree");
+    // Only the @N that lacks an origin is named.
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "tr(NUMS,{pk([73c5da0a/86'/0'/0']@0/<0;1>/*),pk(@1/<0;1>/*)})",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_bip87_scope_refusal(&o, "@1", "partial origins");
+    assert!(!o.stderr.contains("@0,"), "{}", o.stderr);
+}
+
+#[test]
+fn bip87_scope_non_multisig_tree_with_explicit_origin_mints() {
+    let s0 = format!("@0.phrase={A}");
+    let desc = "tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))";
+    // --slot @N.path=
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        desc,
+        "--slot",
+        &s0,
+        "--slot",
+        "@0.path=m/86'/0'/5'",
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec!["86'/0'/5'"]);
+    assert!(!o.stderr.contains("no origin"), "{}", o.stderr);
+    assert!(
+        !o.stderr.contains("BIP-87 is written for multisig"),
+        "{}",
+        o.stderr
+    );
+    // inline [fp/path]@N
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "sh(and_v(v:pk([73c5da0a/44'/0'/0']@0/<0;1>/*),after(100)))",
+        "--slot",
+        &s0,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec!["44'/0'/0'"]);
+}
+
+#[test]
+fn bip87_scope_multisig_trees_keep_the_bip87_default() {
+    // A taproot tree with a multi_a leaf beside a single-key recovery leaf is a
+    // multisig wallet: every @N keeps the BIP-87 default and the warning (exit 4).
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let s2 = "@2.phrase=zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    let o = run(&[
+        "bundle",
+        "--network",
+        "testnet",
+        "--descriptor",
+        "tr(NUMS,{multi_a(2,@0/<0;1>/*,@1/<0;1>/*),and_v(v:pk(@2/<0;1>/*),older(1000))})",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--slot",
+        s2,
+        "--json",
+    ]);
+    assert_eq!(o.code, 4, "{}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["87'/1'/0'", "87'/1'/0'", "87'/1'/0'"]
+    );
+    assert!(
+        o.stderr.contains(
+            "warning: no origin was given for @0,@1,@2; the toolkit chose m/87'/1'/0' (BIP-87)"
+        ),
+        "{}",
+        o.stderr
+    );
+    assert!(
+        !o.stderr.contains("BIP-87 is written for multisig"),
+        "{}",
+        o.stderr
+    );
+}
+
+/// verify-bundle mints nothing, so it keeps rebuilding at the default: a
+/// single-key card minted at m/87' before the ruling still verifies with its
+/// original command line.
+#[test]
+fn bip87_scope_verify_bundle_still_rebuilds_a_pre_ruling_single_key_card() {
+    let s0 = format!("@0.phrase={A}");
+    let desc = "tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))";
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        desc,
+        "--slot",
+        &s0,
+        "--slot",
+        "@0.path=m/87'/0'/0'",
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bundle.json");
+    std::fs::write(&path, &o.stdout).unwrap();
+    let v = run(&[
+        "verify-bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        desc,
+        "--slot",
+        &s0,
+        "--bundle-json",
+        path.to_str().unwrap(),
+    ]);
+    assert_eq!(v.code, 0, "verify-bundle: {}\n{}", v.stdout, v.stderr);
+}
+
+/// An `@N.entropy=` slot cannot carry `@N.path=` (slot grammar), so the
+/// refusal names only the inline form for it.
+#[test]
+fn bip87_scope_refusal_for_an_entropy_slot_names_only_the_inline_form() {
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(12000000)))",
+        "--slot",
+        "@0.entropy=07070707070707070707070707070707",
+        "--json",
+    ]);
+    assert_bip87_scope_refusal(&o, "@0", "entropy slot");
+    assert!(
+        o.stderr
+            .contains("An @N.entropy= slot (@0) takes only the inline form."),
+        "{}",
+        o.stderr
     );
 }

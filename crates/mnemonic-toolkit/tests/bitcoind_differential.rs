@@ -1230,8 +1230,10 @@ fn h12_bundle_concrete(at_template: &str) -> (String, Vec<String>) {
         ])
         .output()
         .expect("spawn mnemonic bundle");
+    // Exit 4: the origin is ELIDED on purpose, so the toolkit chose it (Brian's
+    // ruling of 2026-11-26); the cards are written in full.
     assert!(
-        out.status.success(),
+        out.status.code() == Some(4),
         "h12 bundle failed: {}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -1410,6 +1412,8 @@ fn h1_bundle_cards(template: &str, threshold: &str) -> (Vec<String>, Vec<String>
             template,
             "--threshold",
             threshold,
+            "--multisig-path-family",
+            "bip87",
             "--slot",
             &format!("@0.phrase={SEED_A}"),
             "--slot",
@@ -1505,6 +1509,8 @@ fn h1_divergent_multipath_md1() -> Vec<String> {
             "wsh-sortedmulti",
             "--threshold",
             "2",
+            "--multisig-path-family",
+            "bip87",
             "--slot",
             &format!("@0.phrase={SEED_A}"),
             "--slot",

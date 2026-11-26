@@ -194,7 +194,7 @@ pub fn run() -> ExitCode {
     let stderr = &mut io::stderr();
 
     let result: Result<u8, ToolkitError> = match &cli.command {
-        Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
+        Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr),
         Command::VerifyBundle(args) => {
             cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
@@ -250,6 +250,11 @@ pub fn run() -> ExitCode {
         Command::WordCard(args) => cmd::word_card::run(args, stdin, stdout, stderr),
     };
 
+    // Brian's ruling of 2026-11-26: `bundle` (an origin the user did not supply)
+    // and `restore` (an origin the user asserted) exit 4 WITH their output; if
+    // that output never reached stdout, the run failed (1), as for repair/inspect.
+    let ok4_is_result =
+        matches!(result, Ok(4)) && matches!(cli.command, Command::Bundle(_) | Command::Restore(_));
     // The verb's own error line first (RepairShortCircuit prints nothing here), then the
     // write-error line from `finish_exit`.
     let code = match result {
@@ -266,7 +271,8 @@ pub fn run() -> ExitCode {
         }
     };
     let _ = sink.flush();
-    let exit4_is_result = matches!(cli.command, Command::Repair(_) | Command::Inspect(_));
+    let exit4_is_result =
+        ok4_is_result || matches!(cli.command, Command::Repair(_) | Command::Inspect(_));
     finish_exit(&sink, code, exit4_is_result)
 }
 

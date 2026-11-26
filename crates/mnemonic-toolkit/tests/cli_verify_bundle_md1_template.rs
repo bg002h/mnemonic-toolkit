@@ -268,7 +268,7 @@ fn verify_bundle_nonchunked_dead_card_falls_through_strict() {
     );
     assert!(
         stderr.contains("--scheme"),
-        "dead card must fall through to the --template-required refusal (strict classify, \
+        "dead card must fall through to the --scheme-required refusal (strict classify, \
          not a vacuous pre-gate reject): {stderr}"
     );
 }

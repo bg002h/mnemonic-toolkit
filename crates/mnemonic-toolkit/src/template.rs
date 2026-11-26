@@ -357,6 +357,29 @@ impl DefaultOriginFamily {
     }
 }
 
+/// Whether `tree` holds a multisig fragment (`multi`, `sortedmulti`,
+/// `multi_a`, `sortedmulti_a`) anywhere, including inside a taproot script
+/// tree. Brian's ruling of 2026-11-26 (`tk-bh1125-tr-tree-bip87-scope`): the
+/// BIP-87 default origin applies only to such shapes, since BIP-87 says "it is
+/// best to restrict this script-agnostic hierarchy to multisignature wallets
+/// only". A shape without one (a single-key script tree, a `thresh` of `pk`s,
+/// a bare `sh(...)` timelock) is not given a default.
+pub fn tree_has_multisig_fragment(tree: &Node) -> bool {
+    if matches!(
+        tree.tag,
+        Tag::Multi | Tag::SortedMulti | Tag::MultiA | Tag::SortedMultiA
+    ) {
+        return true;
+    }
+    match &tree.body {
+        Body::Children(c) | Body::Variable { children: c, .. } => {
+            c.iter().any(tree_has_multisig_fragment)
+        }
+        Body::Tr { tree: Some(t), .. } => tree_has_multisig_fragment(t),
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
 

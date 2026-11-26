@@ -671,7 +671,7 @@ fn negative_property_unreconstructable_shapes_refuse_loudly() {
         }
         bundle_args.push("--json".into());
         bundle_args.push("--no-engraving-card".into());
-        let out = bin().args(&bundle_args).assert().success();
+        let out = bin().args(&bundle_args).assert().code(4);
         let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
         let md1: Vec<String> = v["md1"]
             .as_array()
@@ -723,7 +723,7 @@ fn divergent_use_site_override_roundtrips_faithfully() {
                 "--no-engraving-card",
             ])
             .assert()
-            .success();
+            .code(4);
         let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
         let md1: Vec<String> = v["md1"]
             .as_array()
@@ -778,7 +778,7 @@ fn sortedmulti_in_combinator_bundles_but_restore_refuses_loudly() {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     let md1: Vec<String> = v["md1"]
         .as_array()

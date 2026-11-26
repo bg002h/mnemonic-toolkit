@@ -195,7 +195,7 @@ fn french_multisig_2of2_both_mnem_no_advisory() {
             &format!("@1.phrase={FRENCH_12_B}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains(ADVISORY_NEEDLE),

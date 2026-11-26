@@ -112,7 +112,7 @@ fn restore_md1(cards: &[String]) -> assert_cmd::assert::Assert {
 /// refuses ("sole child" … "faithful backup").
 #[test]
 fn shape1_sortedmulti_in_combinator_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))").success();
+    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -133,7 +133,7 @@ fn shape1_sortedmulti_in_combinator_fires_and_restore_refuses() {
 /// refuses (shared `has_hardened_use_site` predicate).
 #[test]
 fn shape2_hardened_wildcard_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("wsh(multi(2,@0/*h,@1/*h))").success();
+    let out = bundle_two_cosigner("wsh(multi(2,@0/*h,@1/*h))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -154,7 +154,7 @@ fn shape2_hardened_wildcard_fires_and_restore_refuses() {
 /// baseline scan). bundle exit 0 + advisory; restore refuses.
 #[test]
 fn shape2b_override_hardened_wildcard_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))").success();
+    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*h))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -177,7 +177,7 @@ fn shape2b_override_hardened_wildcard_fires_and_restore_refuses() {
 /// (advisory fires IFF restore refuses → silent here). PARITY.
 #[test]
 fn shape3_restorable_taproot_override_silent_and_restores() {
-    let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -197,7 +197,7 @@ fn shape3_restorable_taproot_override_silent_and_restores() {
 /// fires + restore refuses (leaf-tag gate; md-codec render gap). PARITY NEGATIVE.
 #[test]
 fn shape3b_taproot_sortedmulti_a_override_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let out = bundle_two_cosigner("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<2;3>/*))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -219,7 +219,7 @@ fn shape3b_taproot_sortedmulti_a_override_fires_and_restore_refuses() {
 /// hardened∩taproot intersection; the advisory Vec permits 0..=3). PARITY NEGATIVE.
 #[test]
 fn shape3c_hardened_taproot_override_fires_and_restore_refuses() {
-    let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))").success();
+    let out = bundle_two_cosigner("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<2;3>/*h))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -240,7 +240,7 @@ fn shape3c_hardened_taproot_override_fires_and_restore_refuses() {
 /// NEGATIVE.
 #[test]
 fn shape3d_non_nums_taproot_override_fires_and_restore_refuses() {
-    let out = bundle_three_cosigner("tr(@0/*,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))").success();
+    let out = bundle_three_cosigner("tr(@0/*,multi_a(2,@1/<0;1>/*,@2/<2;3>/*))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -263,7 +263,7 @@ fn shape3d_non_nums_taproot_override_fires_and_restore_refuses() {
 /// guard.
 #[test]
 fn nontaproot_nonhardened_override_no_advisory_and_restores() {
-    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))").success();
+    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<2;3>/*))").code(4);
     let o = out.get_output();
     let stderr = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -328,7 +328,7 @@ fn sole_child_sortedmulti_no_advisory_and_restores() {
         "sh(wsh(sortedmulti(2,@0/*,@1/*)))",
         "sh(sortedmulti(2,@0/*,@1/*))",
     ] {
-        let out = bundle_two_cosigner(desc).success();
+        let out = bundle_two_cosigner(desc).code(4);
         let o = out.get_output();
         let stderr = String::from_utf8_lossy(&o.stderr);
         assert!(
@@ -346,7 +346,7 @@ fn sole_child_sortedmulti_no_advisory_and_restores() {
 /// the wrong tag).
 #[test]
 fn multi_in_combinator_no_advisory() {
-    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),multi(2,@0/*,@1/*)))").success();
+    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),multi(2,@0/*,@1/*)))").code(4);
     let stderr = String::from_utf8_lossy(&out.get_output().stderr);
     assert!(
         !stderr.contains(ADVISORY_PREFIX),
@@ -358,7 +358,7 @@ fn multi_in_combinator_no_advisory() {
 /// wildcard) → NO advisory (shapes 2 and 3 both absent).
 #[test]
 fn shared_suffix_unhardened_no_advisory() {
-    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))").success();
+    let out = bundle_two_cosigner("wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))").code(4);
     let stderr = String::from_utf8_lossy(&out.get_output().stderr);
     assert!(
         !stderr.contains(ADVISORY_PREFIX),
@@ -372,7 +372,7 @@ fn shared_suffix_unhardened_no_advisory() {
 /// advisory text (mirror `cli_older_advisory.rs` invariant 4).
 #[test]
 fn json_stdout_clean_advisory_on_stderr() {
-    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))").success();
+    let out = bundle_two_cosigner("wsh(or_d(pk(@1/*),sortedmulti(2,@0/*,@1/*)))").code(4);
     let o = out.get_output();
     let stdout = String::from_utf8_lossy(&o.stdout);
     let stderr = String::from_utf8_lossy(&o.stderr);

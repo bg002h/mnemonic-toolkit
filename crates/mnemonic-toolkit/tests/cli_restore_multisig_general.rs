@@ -47,7 +47,7 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        .code(4);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
     v["md1"]
         .as_array()
