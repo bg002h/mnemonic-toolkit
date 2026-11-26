@@ -237,7 +237,7 @@ renders this as a Number widget.
 An additional derivation-path template, repeatable. The literal token
 `account'` (or `account`) is substituted with each iterated account
 index; templates without an `account` token are searched once at the
-literal path. The search runs once per cosigner. The GUI renders this
+literal path. Hardened steps take `'` or `h`; a template that is not a derivation path (for example one with a typographic quote `’`, `H` or a trailing `/`) is refused with exit 2 and a message naming it, instead of being skipped. The search runs once per cosigner. The GUI renders this
 as a repeating Text input (one row per occurrence; the argv assembler
 emits one `--add-path` token per row).
 

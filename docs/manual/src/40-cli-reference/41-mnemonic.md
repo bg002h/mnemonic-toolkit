@@ -4481,7 +4481,7 @@ mnemonic xpub-search path-of-xpub \
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
 | `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
-| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags |
+| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags. Hardened steps take `'` or `h`; a template that is not a derivation path (a typographic quote `’`, `H`, a trailing `/`) is refused with exit 2 naming it. Before this, such a template was silently skipped and the run reported no match. |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
@@ -4621,7 +4621,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 | `--descriptor <VALUE>` | wallet descriptor; shape auto-detected per tie-break order |
 | `--descriptor-from <NODE>=<VALUE>` | explicit shape override (`literal=` / `md1=` / `bip388=`; `-` for stdin) |
 | `--language` / `--network` | BIP-39 wordlist + network selector (same defaults as `path-of-xpub`) |
-| `--min-account` / `--number-of-accounts` / `--max-account` / `--add-path` | candidate-set range (same as `path-of-xpub`; search runs once per cosigner) |
+| `--min-account` / `--number-of-accounts` / `--max-account` / `--add-path` | candidate-set range (same as `path-of-xpub`, including the refusal of a malformed `--add-path`; search runs once per cosigner) |
 | `--json` | emit JSON envelope on stdout |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure |
 | `-h, --help` | print help |
@@ -4840,7 +4840,7 @@ mnemonic xpub-search passphrase-of-xpub \
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
 | `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
-| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path |
+| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Hardened steps take `'` or `h`; a template that is not a derivation path (a typographic quote `’`, `H`, a trailing `/`) is refused with exit 2 naming it. Before this, such a template was silently skipped and the run reported no match. |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
@@ -5019,7 +5019,7 @@ mnemonic xpub-search address-of-seed \
 | `--descriptor-from md1=<CHUNK\|->` | a keyless md1 template (repeat per chunk, or `md1=-` for stdin); its recorded origin paths pin the search |
 | `--cosigner [@N=]<KEY>` | a key that is not a seed: an xpub, `[fp/path]xpub` or mk1. `@N=` states its slot; without it the slot is searched. An mk1's chunks may be given one per `--cosigner` (grouped by the chunk-set id in their headers) or together in one value; placed chunks repeat `@N=` per chunk. Needs `--descriptor`. Private keys are refused and never echoed |
 | `--min-account <N>` / `--number-of-accounts <N>` / `--max-account <N>` | the account window. Default `[0, 20)`: BIP-44, 49, 84, 86, BIP-48 script types 1', 2', 3' and BIP-87 per account, plus `m/45'` once (161 paths) |
-| `--add-path <T>` | another path template (`account'` substituted per account); repeatable. One that repeats a standard path is dropped |
+| `--add-path <T>` | another path template (`account'` substituted per account); repeatable. Hardened steps take `'` or `h`; a template that is not a derivation path (a typographic quote `’`, `H`, a trailing `/`) is refused (exit 2, naming it), never skipped. One that repeats a searched path (also spelt another way, `m/0'` beside `m/0h`) is dropped, as is a repeated `--target-address` |
 | `--gap-limit <N>` | the index window `[0, N)` on each searched chain — not BIP-44's "N consecutive unused addresses" rule. Default `20`, at most 2^31; see the cache ceiling below |
 | `--external-only` | search use-site alternative 0 only (the receive chain under `<0;1>`) |
 | `--independent-paths` | multisig: each seed at its own path (C^k path tuples) instead of every seed at the same path |
@@ -5028,13 +5028,18 @@ mnemonic xpub-search address-of-seed \
 | `--json` | one JSON document on stdout (`mode: "address-of-seed"`) |
 | `--no-auto-repair` | global flag; skip auto-fire BCH repair on a decode failure |
 
-The search is the whole space: a hit does not stop it. Before it starts,
-stderr states the candidate count, the child-key cache and the estimated time
-(progress follows when the estimate passes 30 s). Two ceilings refuse a run before it
-starts (exit 2), naming the flags that narrow it: more than 10^15 candidate
-scripts, and a child-key cache of more than 2^26 keys (paths × chains ×
-`--gap-limit` per key: one seed at the default 161 paths reaches it at a
-`--gap-limit` of about 208,000).
+The search is the whole space: a hit does not stop it. Before any key is
+derived, stderr states (`estimate:`) the candidate and script counts, the
+account-key derivations and the child-key cache with their estimated time,
+and the estimated memory; once the keys exist, a `scan estimate:` line gives
+the scan's estimated time (progress follows when it passes 30 s). Three
+ceilings refuse a run before it starts (exit 2), naming the flags that narrow
+it: more than 10^15 candidate scripts; a child-key cache of more than 2^26
+keys (paths × chains × `--gap-limit` per key: one seed at the default 161
+paths reaches it at a `--gap-limit` of about 208,000); and an estimated
+memory (the path lists plus the child-key cache) above 6144 MB, which a very
+wide account window reaches first (for example `--number-of-accounts
+3000000`).
 
 #### Worked example
 
@@ -5093,10 +5098,10 @@ spec's §6.
 
 | Code | Meaning |
 |---|---|
-| 0 | exactly one wallet, every target in it, no twin, mintable by the printed command as printed |
+| 0 | one wallet (one per seed when several seeds are searched without a descriptor), every target in it, no twin, mintable by the printed command as printed |
 | 4 | **two meanings until the constellation exit-code scheme lands:** a wallet was found but must be verified (`XpubSearchUnverified`, `result: "unverified"`, `reasons` among `twin`, `split`, `unmatched`, `path_unrecordable`, `origin_unknown`, `cap`), or nothing matched (`XpubSearchNoMatch`, `result: "no_match"`). Text and JSON `result` tell them apart |
 | 1 | malformed phrase or address |
-| 2 | a refusal that needs input (`XpubSearchRefusal`): a slot without a key, more keys than slots, the same seed twice, `--cosigner` without `--descriptor`, a seed that equals no key of a keyed descriptor, targets none of which a searched script can produce, private-key material, `/*h`, a fixed single step, a bare `@N`, a second stdin reader, a count above the ceiling; also a target on another network and secret material on argv |
+| 2 | a refusal that needs input (`XpubSearchRefusal`): a slot without a key, more keys than slots, the same seed twice, `--cosigner` without `--descriptor`, a seed that equals no key of a keyed descriptor, targets none of which a searched script can produce, private-key material, `/*h`, a fixed single step, a bare `@N`, a second stdin reader, a count or memory estimate above its ceiling, a malformed `--add-path`, two keys for one `--cosigner @N=` slot, a keyed shape a card cannot record (named by the key you typed); also a target on another network and secret material on argv |
 | 64 | clap usage error |
 
 ## `mnemonic compare-cost`
