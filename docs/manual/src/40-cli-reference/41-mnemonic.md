@@ -401,6 +401,14 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `4` | the cards and JSON were written exactly as with exit 0, but they record an origin the command did not give: a descriptor-mode default (BIP-48, or BIP-87 including bare `sh(...)`), a canonical shape's canonical origin, or the BIP-87 family of a multisig `--template` without `--multisig-path-family`. One warning names the path, and the next line prints the command that states it explicitly (Brian's ruling of 2026-11-26) |
 | `1`, `2`, `64` | refused, and nothing was written: bad input (`1`), a slot or descriptor refusal (`2`), or a usage error (`64`) |
 
+One exception to both rows: `--self-check` runs after the cards are
+written, so a self-check failure leaves them on stdout (or in the
+`--output` file) and exits non-zero: `4`, with `bundle mismatch on
+self-check[...]: ...` on stderr (`kind: "BundleMismatch"`), for a card
+that does not round-trip. Treat such
+cards as bad: discard them and investigate; that error line, not the
+exit code alone, tells this apart from a chosen origin.
+
 Exit 4 is a verdict, not a failure to write: check the path against the
 wallet (its first address) and then either keep the cards or re-run the
 printed command, which writes the same cards and exits 0. Scripts that
@@ -1715,21 +1723,48 @@ of that fingerprint:
   single-key card, `--origin m/...` or the scheme the card was made with
   (`--template bip44|bip49|bip84|bip86` with `--account`; the scheme must
   describe the card's script, so `--template bip44` on a `wpkh` card is
-  refused). If you also give `--cosigner @N=<xpub|mk1>` for that key, the
+  refused). For the master node `m` the key must be the master key of its
+  fingerprint. If you also give `--cosigner @N=<xpub>` for that key, the
   path's length and last component must match the xpub's depth and child
-  number, and for the master node `m` the key must be the master key of its
-  fingerprint; otherwise restore refuses (exit 2, `kind: "path-mismatch"`).
-  On success the key is rendered at that path, one warning per key says so,
-  and restore exits 4:
+  number, and for a one-step path the xpub's parent fingerprint must be the
+  md1's fingerprint; otherwise restore refuses (exit 2,
+  `kind: "path-mismatch"`). On success the key is rendered at that path,
+  one warning per key says so, and restore exits 4:
 
   ```text
-  WARNING: md1 cosigner @1's origin m/48'/0'/0'/2' (--origin @1) is asserted by you, not on the card. Its depth and child number agree with the xpub you gave (--cosigner @1). An xpub header cannot confirm the purpose or coin of a path: check this path against your records, and the wallet's first address, before trusting this wallet.
+  WARNING: md1 cosigner @1's origin m/48'/0'/0'/2' (--origin @1) is asserted by you, not on the card. The xpub you gave for it (--cosigner @1) has the depth and child number this path implies; that checks only the path's length and last step, not the steps before it. An xpub header cannot confirm the purpose or coin of a path: check this path against your records, and the wallet's first address, before trusting this wallet.
   ```
 
   Without `--cosigner @N` the warning says that not even the depth and
   child number were checked. Older releases printed the key with no path
   (and before that the template default, such as `[fp/87'/0'/0']`, an
   origin at which the key does not live).
+- **An mk1 card for the key.** An mk1 card records its key's origin path
+  (and, unless it was made `--privacy-preserving`, the fingerprint). Give it
+  with `--cosigner @N=<mk1>` (one `--cosigner @N=` per chunk): once its key
+  (chain code and public key) is the md1's key, restore takes the mk1's
+  path as the key's origin, says so on stderr
+  (`NOTE: md1 cosigner @N's origin m/... is read from the mk1 card you gave
+  for it`), and labels it `origin from its mk1 card`. The path is on a card
+  you hold, so it is not an assertion: with every origin on a card, restore
+  exits 0. A `--origin @N=` that differs from the mk1's path, or an mk1
+  fingerprint that differs from the md1's, is refused (exit 2,
+  `kind: "path-mismatch"`, naming both); an equal one is accepted. An mk1
+  that records no path cannot supply or check one: state the path with
+  `--origin @N=` as above (exit 4).
+
+  On stdout an asserted origin is marked beside the key:
+  `cosigner @1: b8688df1 [48'/0'/0'/2']  origin asserted by you, not on the
+  card; key not independently verified` (or `key cross-checked; origin
+  asserted by you, not on the card` when a `--cosigner @N` matched the key).
+  With `--json` each `cosigner_keys` entry carries `origin_source`
+  (`"card"`, `"mk1"`, `"asserted"` or `"seed-search"`), and
+  `verification.status` is `"unverified"` whenever any origin is asserted,
+  however many keys were cross-checked. No `--format` wallet file has a
+  field that marks an asserted path, so restore says on stderr that the
+  exported file carries one (`WARNING: the exported wallet file carries an
+  origin path asserted by you, not on the card (@1 m/48'/0'/0'/2'), and
+  nothing in the file marks it; ...`).
 
 A wallet-policy `md1` card (the multisig descriptor card the toolkit emits
 for any multisig bundle) carries **every cosigner's public key**, so the
@@ -1759,7 +1794,11 @@ to prove which cosigner is yours (the position is inferred by matching the
 derived key against the md1 slots), and/or `--cosigner @N=<mk1|xpub>` to
 assert another cosigner's key. Only the positions you actually supply are
 marked verified; the rest stay `from md1 (not independently verified)`, and
-the verdict is `PARTIAL` until **every** position is cross-checked:
+the verdict is `PARTIAL` until **every** position is cross-checked (and
+`UNVERIFIED` in `--json` while any origin is asserted by you, see above).
+A cross-check compares the key (chain code and public key), never the
+origin path, except as described above for a key whose md1 carries no
+origin:
 
 ```sh
 mnemonic restore --md1 md1f5przzs... \

@@ -418,8 +418,13 @@ or you state its path: `--origin @N=m/...` (repeat it per key; a bare
 `m/...` for a single-key card), or, for a single-key card, the
 single-sig `--template` the card was made with. Restore checks the path
 against the depth and child number of any `--cosigner @N` xpub given
-(exit 2 on a mismatch), renders the key at that path, warns that the
-path is "asserted by you, not on the card", and exits 4. A key whose
+(exit 2 on a mismatch), renders the key at that path, marks it
+"asserted by you, not on the card" on stderr and beside the key in the
+output (`--json`: `origin_source: "asserted"`, status `unverified`), and
+exits 4. An mk1 card given with `--cosigner @N` supplies its recorded
+path instead (labelled `origin from its mk1 card`, exit 0 when every
+origin is on a card); a `--origin @N` that differs from it is refused
+(exit 2). A key whose
 card carries an origin cannot be given one (exit 2). The CLI takes
 `--origin` more than once in this form; the GUI's Text widget passes one
 value (FOLLOWUP `gui-restore-origin-repeating`).
