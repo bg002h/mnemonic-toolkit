@@ -399,7 +399,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 |---|---|
 | `0` | the cards were written, and every origin they record is one the command gave (a typed `--slot @N.path=` or `[fp/path]@N`, a `--multisig-path-family`, or the scheme a single-sig `--template` names) |
 | `4` | the cards and JSON were written exactly as with exit 0, but they record an origin the command did not give: a descriptor-mode default (BIP-48, or BIP-87 including bare `sh(...)`), a canonical shape's canonical origin, or the BIP-87 family of a multisig `--template` without `--multisig-path-family`. One warning names the path, and the next line prints the command that states it explicitly (Brian's ruling of 2026-11-26) |
-| `1`, `2`, `8`, `64` | refused, and nothing was written: a stated value that contradicts what it is checked against (`1`, such as a slot path against its xpub), wrong or insufficient input (`2`, such as a slot or descriptor refusal), a policy refusal a flag would waive (`8`), or a usage error (`64`) |
+| `1`, `2`, `8`, `64` | refused, and nothing was written: a stated value that contradicts what it is checked against (`1`, such as a slot path against its xpub), wrong or insufficient input (`2`, such as a slot or descriptor refusal), a policy refusal a flag would waive or a network mismatch (`8`: a `--slot @N.xpub=` of the other network than `--network` says, single-sig or multisig, `network mismatch: --slot @N.xpub: key encodes mainnet but testnet was asserted ...`; `verify-bundle` refuses the same slot the same way), or a usage error (`64`) |
 
 One exception to both rows: `--self-check` runs after the cards are
 written, so a self-check failure leaves them on stdout (or in the
@@ -1577,7 +1577,7 @@ channels that keep the seed off the argv.
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) and that slot's engraved master fingerprint (a different engraved fingerprint refuses, exit 1, unless `--allow-mismatch`). See [Multisig template completion](#multisig-template-completion) |
+| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused as an invalid input, exit 2 (`--from xpub is not a seed source for restore`; restore needs a master secret). `verify-bundle --from` on a keyless multisig template refuses them the same way. REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) and that slot's engraved master fingerprint (a different engraved fingerprint refuses, exit 1, unless `--allow-mismatch`). See [Multisig template completion](#multisig-template-completion) |
 | `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. **(#28 phase 2) also accepts a keyless multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`), completed via `--from` + `--account` + `--cosigner` (see [Multisig template completion](#multisig-template-completion)). Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies in a tap tree of any depth, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general policies + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key) or a `sortedmulti_a` leaf inside a multi-leaf tree is refused (exit 2). Watch-only (non-secret) |
 | `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 1) unless `--allow-mismatch`. **(#28 phase 2) for multisig-template completion** the bare form (`--cosigner <mk1>`, no `@N=`) supplies an UNASSIGNED cosigner the search places; the `@N=` form assigns it explicitly. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `-` reads stdin, `@env:VAR` the environment. Empty (default) = no passphrase |
@@ -3195,7 +3195,7 @@ The equivalent Standard conversion is also reachable via `mnemonic convert --fro
 
 Both subsubcommands refuse a secret supplied inline (`--from
 seedqr=<value>`, the deprecated `--digits <value>`, or `--from
-phrase=<value>`) at exit 2, before the command line is parsed; see
+phrase=<value>`) at exit 8, before the command line is parsed; see
 [Secret material on argv is REFUSED](#argv-refusal). Pass the value on
 stdin with `-`.
 
@@ -3818,14 +3818,24 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 
 | Code | Meaning |
 |---|---|
-| `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged); also a clean but INCOMPLETE mk1 or md1 chunk set (a lone chunk of a larger card), echoed; for md1 a stderr line says the set is incomplete |
+| `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged); also a clean but INCOMPLETE mk1 or md1 chunk set (a lone chunk of a larger card), echoed; for md1 a stderr line says the set is incomplete; also a clean distributed `ms1` share of a K-of-N set (see [ms1 shares](#mnemonic-repair-ms1-shares) below) |
 | `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks; also **a corrected mk1 or md1 chunk set that is INCOMPLETE** (a lone chunk of a larger card, or fewer chunks than the card's count): each chunk is corrected on its own and printed, and the rest of the set verifies the correction when it is reassembled, so it is not a no-oracle correction. An md1 set with a repeated index, an index past its count or more chunks than its count is not an incomplete set: it exits `2` |
-| `18` | (mk1) a corrected string whose chunk header does not parse as an mk1 chunk: 16 + 2. It is printed, with a `repair: error:` line on stderr saying it is not a valid card |
 | `20` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **every non-chunked `--md1` single-string correction (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below)** — verify each before trusting; all candidates are printed |
-| `22` | a corrected single string that is not a card: 16 + 4 + 2, a correction was applied, nothing checks it a second time, and the corrected string does not decode. This is an `ms1` whose payload does not decode, a non-chunked `md1` or single-string `mk1` that does not decode, or (F-642) a single-string `--md1` at a wire version this build cannot read (see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version) below). The corrected string is still printed, with a `repair: error:` line on stderr (F-642 prints its own two lines instead). `ms repair`, `md repair` and `mk repair` exit `22` on the same strings |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery; an md1 at an unreadable wire version that is multi-string, clean, or uncorrectable); **or clean strings that are not a card** (nothing to correct, and the card does not decode; an mk1 string whose chunk header does not parse is still printed, with a `repair: error:` line, as `mk repair` prints it) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
+| `22` | a corrected single string that is not a card: 16 + 4 + 2, a correction was applied, nothing checks it a second time, and the corrected string does not decode. This is an `ms1` whose payload does not decode or that is the secret share (index `s`) of a K-of-N set, a non-chunked `md1` or single-string `mk1` that does not decode, a corrected `mk1` chunk whose chunk header does not parse, or (F-642) a single-string `--md1` at a wire version this build cannot read (see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version) below). The corrected string is still printed, with a `repair: error:` line on stderr (F-642 prints its own two lines instead). `ms repair`, `md repair` and `mk repair` exit `22` on the same strings |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery; an md1 at an unreadable wire version that is multi-string, clean, or uncorrectable); **or clean strings that are not a card** (nothing to correct, and the card does not decode: a clean mk1 string whose chunk header does not parse, a clean `ms1` secret share at index `s`) **or (mk1) chunks that are not one card's set** (an index given twice, an index outside the set, more chunks than the set declares, or chunks that disagree on its size; the reason is on stderr) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
 | `32` | a file, stdin or stdout failed (stdout failure adds 32 to the code above) |
 | `64` | a bad command line; nothing ran |
+
+**Every group is decided before anything is printed.** A call that
+mixes kinds (`--ms1`, `--mk1` and `--md1` together) or several groups
+of one kind prints nothing at all when any group fails with `2`: no
+group's corrected strings appear on stdout, so a failing call never
+hands a script a partial recovery. Only groups that are printed add
+their bits (16, 20, 22) to the code.
+
+`mk repair` exits `18` for a corrected card that fails mk-codec's
+validation. The toolkit does not run that check yet (its mk-codec
+predates it), so `mnemonic repair --mk1` exits `16` for that card.
 
 **Case.** A chunk typed all in lower case or all in capitals (the
 BIP-93 handwritten and QR form) is accepted, with or without
@@ -3898,6 +3908,26 @@ fix:
 BIP-93 itself recommends confirming a corrected codex32 string before
 relying on it; this advisory operationalizes that recommendation for
 the one case the re-verify cannot resolve on its own.
+
+### ms1 shares of a K-of-N set {#mnemonic-repair-ms1-shares}
+
+`mnemonic repair --ms1` takes a distributed share of a K-of-N set (a
+threshold digit 2 to 9 and a share index other than `s`, as `mnemonic
+ms-shares split` writes it) as `ms repair` does:
+
+- A clean share is echoed, exit `0`; a corrected one is printed, exit
+  `20` (every `ms1` correction is unverified, below).
+- stderr names it: `repair: this is share '<i>' of a <k>-of-N set, not
+  a single card; recover the secret with `mnemonic ms-shares combine`
+  and <k> shares`.
+- `--json` adds `"share": {"threshold": <k>, "index": "<i>"}`; the
+  field is absent for a card.
+
+The share at index `s` of a K-of-N set is the secret itself, not a
+distributed share, and `mnemonic ms-shares combine` does not take it.
+Clean, it exits `2` with nothing printed and the reason on stderr;
+corrected, it is printed at `22` with a `repair: error:` line, and
+`--json` gives `"not_a_card": {"kind": "IsShareNotSingleString", ...}`.
 
 ### ms1 substitution-correction demotion (Cycle F funds fix) {#mnemonic-repair-ms1-substitution-demotion}
 
@@ -4096,6 +4126,21 @@ reassembled (a clean incomplete md1 set has the same verdict and exits
 `0`). `ms-cli`'s
 standalone `ms repair --json` byte-matches this field's position.
 
+Three more fields follow `verdict`, each absent unless it applies, as
+`ms`, `md` and `mk repair --json` carry them:
+
+- `"not_a_card": {"kind": "<error kind>", "message": "<reason>"}` at
+  exit `22`: the corrected string is not a card (`kind` names the
+  codec's error, for example `IsShareNotSingleString` or
+  `WireVersionMismatch`);
+- `"incomplete": true` for an incomplete mk1 or md1 chunk set (exit `0`
+  or `16`);
+- `"share": {"threshold": <k>, "index": "<i>"}` for a distributed
+  `ms1` share (exit `0` or `20`).
+
+A call that fails with `2` prints nothing on stdout, under `--json` as
+in text mode.
+
 ```{.text include="41-repair-ms1-json.out"}
 PLACEHOLDER — generated from transcripts/41-repair-ms1-json.out at build
 ```
@@ -4103,8 +4148,9 @@ PLACEHOLDER — generated from transcripts/41-repair-ms1-json.out at build
 ### Per-chunk atomic semantics
 
 For multi-chunk inputs (`--mk1 <c0> --mk1 <c1> --mk1 <c2>` or the `md1`
-analog), if ANY chunk fails to repair (e.g. > 4 errors), the WHOLE
-call fails with the offending `chunk_index` named. Partial repair of
+analog), and for a call that mixes kinds, if ANY chunk fails to repair
+(e.g. > 4 errors), the WHOLE call fails with the offending
+`chunk_index` named and nothing on stdout. Partial repair of
 sibling chunks is NOT returned — this avoids surfacing a half-fixed
 card that could mislead the user into committing it. Re-run with
 better data for the failing chunk.
@@ -5624,6 +5670,27 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
 | decode / reconstruct refusal (parse failure beyond the repair budget, integrity-tag or header-CRC mismatch, unknown BIP-39 word, `ms1` / unknown HRP, RAID array-id or parity mismatch, RAID underdetermined — more than `r` plates missing) | `2` |
 
 ---
+
+## Input that is not UTF-8 text
+
+Every place `mnemonic` reads text (stdin under `-`, `--descriptor-file`,
+`--import-json`, `--from-import-json`, `--bundle-json`, `--spec`,
+`--passphrase-candidates-file`, password and token files) treats bytes
+that are not UTF-8 as an invalid input: exit `2`, with `<source>: the
+input is not UTF-8 text` on stderr. Any other read failure (a missing
+or unreadable file) is `32`.
+
+## Settings are judged before input is read
+
+A setting (a count, a range, a length, an index, share K and N, a
+group, an output form) is checked from the command line before any
+input is read, so a bad one is `64` whatever the input is, even input
+that would itself be refused. This covers `ms-shares split
+--threshold`/`--shares` (for example `--threshold 1 --shares 3` and
+`--threshold 3 --shares 2`), `derive-child --length`, `--index`, the
+application and `--dice-sides`, `slip39 split --group`,
+`--group-threshold` and `--iteration-exponent`, `addresses --range`,
+and `addresses --from xpub=` with `--account` or `--passphrase`.
 
 ## When stdout fails
 

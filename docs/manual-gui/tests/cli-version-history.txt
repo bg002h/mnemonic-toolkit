@@ -8,7 +8,7 @@
 # that is NOT listed here fails the lint -- so a pin bump surfaces every
 # sentence that stated the old pin. Before adding a line, check that it is
 # history and not a stale statement of the pin.
-src/40-mnemonic/4i-repair.md	| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted), clean strings that are not a card, **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
+src/40-mnemonic/4i-repair.md	| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted), clean strings that are not a card (a clean `mk1` chunk whose header does not parse, a clean `ms1` secret share), `mk1` chunks that are not one card's set (an index given twice or outside the set, more chunks than the set declares, chunks that disagree on its size), **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
 src/40-mnemonic/4n-word-card.md	with toolkit v0.74.0 (the `wc-codec` engine). The GUI exposes it as a flat
 src/50-md/53-encode.md	Boolean. **No-op since md-cli v0.12.0** — the long-code mode was
 src/50-md/53-encode.md	has no effect (status: wont-fix at md-cli v0.15.2 per

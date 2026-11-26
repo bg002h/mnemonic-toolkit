@@ -62,10 +62,10 @@ directory.
 
 | Code | Meaning |
 |---|---|
-| `0` | input already valid; no correction applied; echoed unchanged |
-| `20` | `16 + 4`: **`VERIFY-ME` Candidate** — at least one substitution corrected; stdout = repair report + corrected string; stderr carries a `repair: correction UNVERIFIED …` advisory. `ms repair` has no `--max-indel` flag, so a plain `16` is unreachable from this binary. |
-| `22` | `16 + 4 + 2`: the corrected string is not a valid card; it is printed, and `--out` is not written. Under `--json` the envelope adds `"not_a_card": {"kind": …, "message": …}` after `verdict` (still `"candidate"`) |
-| `2` | unrepairable (> 4 substitution errors, or a structural `ms1` error before correction could run), a clean string that is not a card, or empty input |
+| `0` | input already valid; no correction applied; echoed unchanged. Also a clean distributed share of a K-of-N set, which stderr names (`repair: this is share '<i>' of a <k>-of-N set, not a single card; recover the secret with `ms combine` and <k> shares`) |
+| `20` | `16 + 4`: **`VERIFY-ME` Candidate** — at least one substitution corrected; stdout = repair report + corrected string; stderr carries a `repair: correction UNVERIFIED …` advisory. A corrected distributed share is also `20`; it is printed, written to `--out`, and `--json` adds `"share": {"threshold", "index"}` (the GUI keys on that field). `ms repair` has no `--max-indel` flag, so a plain `16` is unreachable from this binary. |
+| `22` | `16 + 4 + 2`: the corrected string is neither a valid card nor a distributed share (for example the secret share at index `s`); it is printed, and `--out` is not written. Under `--json` the envelope adds `"not_a_card": {"kind": …, "message": …}` after `verdict` (still `"candidate"`) |
+| `2` | unrepairable (> 4 substitution errors, or a structural `ms1` error before correction could run), a clean string that is neither a card nor a share, or empty input (`error: the input is empty (stdin)`) |
 | `8` | refused: the `ms1` on argv, or `--out` naming stdout |
 | `32` | a file or stream could not be read or written |
 | `64` | the command line is wrong; nothing ran |

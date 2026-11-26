@@ -261,10 +261,10 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Code | Meaning |
 |---|---|
 | `0` | all strings already valid (no repair applied; input echoed to stdout unchanged) |
-| `16` | at least one string corrected (`REPAIR_APPLIED`), and the corrected group decodes; stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory telling you to reassemble the full card — see [Set-level re-verify](#set-level-re-verify) below |
-| `18` | `16 + 2`: a corrected string whose chunk header does not parse as an mk1 chunk. It is printed, with an error line saying it is not a valid card |
-| `22` | `16 + 4 + 2`: a corrected single (not chunked) string that does not decode; it is still printed, with an error telling you not to trust it. (A corrected single string that decodes, `20`, cannot occur in mk: a single string cannot hold a 65-byte xpub.) |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below). Nothing is printed, except a string whose chunk header does not parse, which is printed with an error line saying it is not a valid card |
+| `16` | at least one string corrected (`REPAIR_APPLIED`), and the corrected group decodes; stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card: fewer chunks than the set holds, each index given once and inside the set), stderr additionally carries a `warning:` line saying the correction is verifiable when the rest of the set is reassembled, and telling you to run `mk decode` with every chunk — see [Set-level re-verify](#set-level-re-verify) below. A clean incomplete group is echoed at `0` |
+| `18` | `16 + 2`: a corrected group that decodes to a card that then fails validation (`KeyCard::validate`). It is printed, with an error line; a clean card that fails validation is printed at `2`. (`mnemonic repair --mk1` does not run this check yet; see [Appendix J](#appendix-j-exit-codes).) |
+| `22` | `16 + 4 + 2`: a corrected string that is not a card — a corrected single (not chunked) string that does not decode, or a corrected string whose chunk header does not parse as an mk1 chunk. It is still printed, with an error line telling you not to trust it. (A corrected single string that decodes, `20`, cannot occur in mk: a single string cannot hold a 65-byte xpub.) |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch); a clean string `mk decode` rejects, or a clean string whose chunk header does not parse; a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below); **or** a malformed group: an index given twice, an index outside the set, more chunks than the set declares, or chunks that disagree on the set's size. Nothing is printed, and the reason is on stderr |
 | `32` | a file or stream could not be read or written |
 | `64` | the command line is wrong; nothing ran |
 
@@ -275,7 +275,7 @@ negative test vectors N6 to N21, each clean and with one substitution
 build). Bit 16 means a correction
 was applied: it is **verified now** (a complete, cleanly-reassembling
 `chunk_set_id` group) or **verifiable by reassembly later** (an
-incomplete group, whose `UNVERIFIED` advisory tells you to reassemble the
+incomplete group, whose `warning:` line tells you to reassemble the
 full card). A corrected single (not chunked) string that does not decode
 is printed at `22`; a chunked set of one follows the complete-set rule
 (`2`, nothing printed). See
@@ -317,9 +317,14 @@ reporting a confident fix:
   documented per-plate recovery workflow in the worked example below) —
   reassembly cannot be checked, because the other chunks aren't
   present. `mk repair` still corrects and reports the chunk (exit `16`:
-  the rest of the set verifies it when reassembled), but adds a loud `UNVERIFIED` advisory on stderr instructing
-  the operator to reassemble the full card before trusting the
-  correction.
+  the rest of the set verifies it when reassembled), and adds a `warning:`
+  line on stderr: the correction is verifiable when the rest of the set is
+  reassembled, so run `mk decode` with every chunk of the card to confirm
+  it. `--json` marks such a group `"incomplete": true`.
+- **The chunks are not one card's set** (an index given twice, an index
+  outside the set, more chunks than the set declares, or chunks that
+  disagree on its size): exit `2`, nothing printed, the reason on
+  stderr. Such a group is not an incomplete set.
 
 BIP-93 itself recommends confirming a corrected codex32 string before
 relying on it; this advisory operationalizes that recommendation for
@@ -336,7 +341,7 @@ valid one.
 # This is ONE chunk of a 2-chunk mk1 card — the documented single-plate
 # recovery workflow (only this plate is legible; the sibling chunk is
 # not being supplied) — so the group is INCOMPLETE and the correction
-# below is an UNVERIFIED candidate per Set-level re-verify above.
+# below is verifiable only by reassembly, per Set-level re-verify above.
 mk repair mk1qpu9e2pqqsqaatd7aqeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qyle5zxl62t28hpv
 ```
 
@@ -360,8 +365,11 @@ Exit code: `16`.
 `mk repair --json` emits the shared `RepairJson` fields (`kind` is
 `"mk1"`); toolkit's `mnemonic repair --mk1 --json` is a superset of this
 since Cycle F (it adds a `verdict` field after `kind` that this NO-BUMP
-envelope omits — shared-field-parser compatible). The `UNVERIFIED`
-advisory (same wording as the text mode above) is still emitted on
+envelope omits — shared-field-parser compatible). Two fields follow `kind`
+and are absent unless they apply: `"not_a_card": {"kind": "<error
+kind>", "message": "<reason>"}` at exit `22`, and `"incomplete": true`
+for an incomplete group (exit `0` or `16`). The incomplete-set `warning:`
+line (same wording as the text mode above) is still emitted on
 stderr — `--json` only changes stdout:
 
 ```{.json include="44-mk-repair-json.out"}
@@ -618,8 +626,6 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 
 ## Exit codes
 
-| Code | Meaning |
-|---|---|
 `mk` uses the constellation codes of [Appendix J](#appendix-j-exit-codes);
 codes 1 to 63 are sums of the bits below.
 
@@ -627,15 +633,20 @@ codes 1 to 63 are sums of the bits below.
 |---|---|
 | 0 | Success. |
 | 1 | A check said no: `mk verify` content mismatch with an expected-* flag, a key that is not a cosigner of the policy, an origin that contradicts its policy, a `--keys` batch membership failure. |
-| 2 | An input is invalid: an mk1 format violation (every `Error::*` kind, including `UnsupportedVersion` for a newer format) in any verb, an md1 that does not decode, a bad stub, fingerprint, origin path or SLIP-132 xpub, a bad key record, an empty named input (an empty `--in` file or empty stdin), input that is not UTF-8, a fixed-key card given to `derive` or `address`, a multisig card given to `address`, or a repair that fails reassembly. |
+| 2 | An input is invalid: an mk1 format violation (every `Error::*` kind, including `UnsupportedVersion` for a newer format) in any verb, an md1 that does not decode, a bad stub, fingerprint, origin path or SLIP-132 xpub, a bad key record, an empty named input (an empty `--in` file or empty stdin), input that is not UTF-8, a fixed-key card given to `derive` or `address`, a multisig card given to `address`, a card that fails validation (`decode`, `inspect`, `address` and `derive` still print it, with a warning), or a repair that fails reassembly or whose chunks are not one card's set. A bad `--xpub` is not echoed: the error names the flag and the version bytes, and says when they belong to a private key. |
 | 8 | Refused: an output file that is also an input, or a card of the other network given to `address`. |
 | 16 | A BCH correction was applied and the corrected value used: `mk repair`, and also `decode`, `verify`, `inspect`, `address` and `derive` on a damaged card (re-engrave it). |
-| 22 | `16 + 4 + 2`: `mk repair` corrected a single (not chunked) string that does not decode; it is printed. |
+| 18 | `16 + 2`: a corrected card that is still invalid for the verb, for example one that fails validation (`mk repair` prints it with an error line). |
+| 22 | `16 + 4 + 2`: `mk repair` corrected a string that is not a card — a single (not chunked) string that does not decode, or a chunk whose header does not parse; it is printed. |
 | 32 | A file, stdin or stdout failed: an unreadable `--in FILE` or `--keys FILE`, an unwritable `--out`. |
 | 64 | The command line is wrong (unrecognized flag, missing required argument, a bad setting, no input named at all: no positional, no `--in`, no `-`); nothing ran. |
 | 101 | An internal error. |
 
-A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and adds 32 to the verb's code (0 becomes 32, 16 becomes 48, 2 becomes 34); 64 and 101 are kept.
+**Per-verb exit status.** Every `mk` verb's `-h` and `--help` ends with one `Exit status: ...` line
+that names the codes that verb can give (for example `mk repair --help`); the root
+`--help` ends with the shared legend of [Appendix J](#appendix-j-exit-codes).
+
+A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and adds 32 to the verb's code (0 becomes 32, 16 becomes 48, a `verify` mismatch that prints its report, 1, becomes 33); a verb that fails before writing anything keeps its code (an invalid input stays 2); 64 and 101 are kept.
 
 ## `mk gui-schema`
 

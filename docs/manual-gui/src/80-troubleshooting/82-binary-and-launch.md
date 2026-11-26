@@ -98,7 +98,9 @@ start, for example with no display or a graphics stack that will not
 initialise, after printing `mnemonic-gui: cannot start: …` (it exited
 1 before). 101 is an internal error, and 130 means it was stopped by a
 signal and the clean shutdown timed out. Its `--help` ends with a
-legend listing these five codes.
+legend listing these five codes. If printing `--help` or `--version`
+fails for any reason but a closed pipe (`mnemonic-gui --help >
+/dev/full`), it exits 32; `| head -0` still exits 0.
 
 Outputs differ, mostly on invalid or unusual input or on the recovery
 line of a card, and `md encode`, `ms encode` and `mk encode` now print

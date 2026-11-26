@@ -39,7 +39,10 @@ instead of the text-form report. The envelope shares the `RepairJson`
 fields with `mnemonic repair --json`, whose toolkit envelope is a
 strict superset since v0.81.0 (adds `verdict`; see above); a
 shared-field parser reads both. The per-repair detail may carry a
-`code` field naming the BCH variant (`regular`/`long`). Default off.
+`code` field naming the BCH variant (`regular`/`long`). Two fields
+follow `kind` and are absent unless they apply: `"not_a_card": {"kind",
+"message"}` at exit `22`, and `"incomplete": true` for an incomplete
+chunk set (exit `0` or `16`). Default off.
 
 ## Positional `mk1-strings`
 
@@ -58,10 +61,10 @@ avoid surfacing a half-fixed card.
 | Code | Meaning |
 |---|---|
 | `0` | all strings already valid (input echoed unchanged) |
-| `16` | at least one string corrected (`REPAIR_APPLIED`) and the corrected group decodes; stdout = report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory: the rest of the set verifies the correction when it is reassembled |
-| `18` | `16 + 2`: a corrected string whose chunk header does not parse as an mk1 chunk; it is printed, with an error saying it is not a valid card |
-| `22` | `16 + 4 + 2`: a corrected single (not chunked) string that does not decode; it is still printed, with an error telling you not to trust it. A corrected single string that decodes (`20`) cannot occur in mk |
-| `2` | unrepairable (too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (the per-chunk correction aliased to a different, wrong card); nothing is printed, except a string whose chunk header does not parse, which is printed with an error |
+| `16` | at least one string corrected (`REPAIR_APPLIED`) and the corrected group decodes; stdout = report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries a `warning:` line: the correction is verifiable when the rest of the set is reassembled. A clean incomplete group is echoed at `0` |
+| `18` | `16 + 2`: a corrected group that decodes to a card that then fails validation; it is printed, with an error line (a clean one is printed at `2`). `mnemonic repair --mk1` does not run this check yet |
+| `22` | `16 + 4 + 2`: a corrected string that is not a card — a corrected single (not chunked) string that does not decode, or a corrected string whose chunk header does not parse as an mk1 chunk; it is still printed, with an error telling you not to trust it. A corrected single string that decodes (`20`) cannot occur in mk |
+| `2` | unrepairable (too many errors, HRP mismatch); a clean string `mk decode` rejects or whose chunk header does not parse; a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (the per-chunk correction aliased to a different, wrong card); **or** chunks that are not one card's set (an index given twice or outside the set, more chunks than the set declares, or chunks that disagree on its size). Nothing is printed, and the reason is on stderr |
 | `32` | a file or stream could not be read or written |
 | `64` | the command line is wrong; nothing ran |
 

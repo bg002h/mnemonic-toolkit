@@ -68,7 +68,12 @@ mislead you into committing it.
 ## `--json` {#mnemonic-repair-json}
 
 Boolean flag. When set, emits a single JSON envelope on stdout
-(`schema_version: "1"`) instead of the text-form repair report.
+(`schema_version: "1"`) instead of the text-form repair report. After
+`verdict` come three fields, each absent unless it applies:
+`not_a_card` (`{"kind", "message"}`, exit `22`), `incomplete: true`
+(an incomplete `mk1` or `md1` chunk set) and `share` (`{"threshold",
+"index"}`, a distributed `ms1` share of a K-of-N set). A failing call
+prints nothing on stdout.
 
 ## `--max-indel` {#mnemonic-repair-max-indel}
 
@@ -92,14 +97,17 @@ The GUI surfaces the toolkit exit code in the output panel:
 
 | Code | Meaning |
 |---|---|
-| `0` | all chunks already valid (input echoed unchanged); also a clean but incomplete `mk1` or `md1` chunk set (a lone chunk of a larger card) |
+| `0` | all chunks already valid (input echoed unchanged); also a clean but incomplete `mk1` or `md1` chunk set (a lone chunk of a larger card), and a clean distributed `ms1` share (stderr names it as share `<i>` of a `<k>`-of-N set, to be recovered with `mnemonic ms-shares combine`) |
 | `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — `mk1` (a full `chunk_set_id` group reassembles) / chunked `md1` (content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly; also a corrected `mk1` or `md1` chunk set that is INCOMPLETE, such as a lone chunk of a larger card (the rest of the set verifies it when it is reassembled); stdout = repair report + corrected chunks |
-| `18` | 16 + 2: (`mk1`) a corrected string whose chunk header does not parse as an `mk1` chunk; it is printed, with an error saying it is not a valid card |
-| `20` | 16 + 4: ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction** and every non-chunked `--md1` single-string correction — verify each candidate before trusting it |
-| `22` | 16 + 4 + 2: a corrected single string that is not a card — an `ms1` whose payload does not decode, a non-chunked `md1` or single-string `mk1` that does not decode, or a single-string `--md1` at a wire version this build cannot read; the corrected string is printed, with an error telling you not to trust it |
-| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted), clean strings that are not a card, **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
+| `20` | 16 + 4: ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction** (a distributed share included) and every non-chunked `--md1` single-string correction — verify each candidate before trusting it |
+| `22` | 16 + 4 + 2: a corrected single string that is not a card — an `ms1` whose payload does not decode or that is the secret share (index `s`) of a K-of-N set, a non-chunked `md1` or single-string `mk1` that does not decode, a corrected `mk1` chunk whose header does not parse, or a single-string `--md1` at a wire version this build cannot read; the corrected string is printed, with an error telling you not to trust it |
+| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted), clean strings that are not a card (a clean `mk1` chunk whose header does not parse, a clean `ms1` secret share), `mk1` chunks that are not one card's set (an index given twice or outside the set, more chunks than the set declares, chunks that disagree on its size), **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
 | `32` | a file, stdin or stdout failed |
 | `64` | a bad command line; nothing ran |
+
+Every group is decided before anything is printed: a call that mixes
+`--ms1`, `--mk1` and `--md1`, or holds several groups, prints nothing
+when any group fails with `2`.
 
 These are the constellation codes (see the user manual's exit-code
 appendix). Bit 16 in any code means a correction was applied: the

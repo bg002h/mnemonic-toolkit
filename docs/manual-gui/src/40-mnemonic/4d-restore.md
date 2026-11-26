@@ -650,7 +650,7 @@ you know the reference itself is wrong.
 
 | Trigger | Refusal |
 |---|---|
-| `--from` with a non-seed node (`xpub` / `xprv` / `wif`) | exit 64 — restore needs a master secret |
+| `--from` with a non-seed node (`xpub` / `xprv` / `wif`) | exit 2 (an invalid input: `--from xpub is not a seed source for restore`) — restore needs a master secret |
 | `--format` without `--template` (single-sig) | exit 64 — `--format` needs one `--template` (one-in/one-out) |
 | `--template <multisig value>` (single-sig restore) | refused — reconstruct multisig via `--md1` |
 | `--expect-fingerprint` / `--expect-xpub` mismatch | exit 1 (`RestoreMismatch`) unless `--allow-mismatch` |

@@ -85,6 +85,11 @@ data for the failing chunk.
 | `32` | a file or stream could not be read or written. |
 | `64` | the command line is wrong; nothing ran. |
 
+Under `--json` the envelope adds, after `kind` and only when they apply,
+`"not_a_card": {"kind", "message"}` (exit `22`) and `"incomplete": true`
+(an incomplete set or a lone chunk, exit `0` or `16`). A failing call
+prints nothing on stdout.
+
 **The same rule on every CLI.** Bit 16 means a correction was applied
 and the corrected value used. Bit 4 is added when nothing can verify it:
 a single non-chunked `md1`, and every `ms1` (see [`ms

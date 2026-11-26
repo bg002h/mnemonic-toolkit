@@ -52,9 +52,11 @@ checked by default. The `exit:` line shows the subprocess's exit
 code, decoded by the codes that CLI speaks. The GUI asks each binary
 once (and again when the binary file changes) whether its root `--help`
 ends with the constellation exit-code legend, the paragraph that begins
-`Exit status: 0 = done`:
+`Exit status: 0 = done`. It probes the same file it then runs. It
+splits the help into paragraphs on blank lines and compares with the
+whitespace normalised:
 
-- **The legend is there (new codes).** The code is decoded with the
+- **The exact legend is the last paragraph (new codes).** The code is decoded with the
   constellation's codes (see the user manual's exit-code appendix):
   `exit: 0 — done, every check passed`; a sum from 1 to 63 names each
   bit, for example `exit: 20 = 4 + 16 — verify the result before
@@ -62,14 +64,22 @@ ends with the constellation exit-code legend, the paragraph that begins
   `64 — bad command line, nothing ran`; `101 — internal error (a bug;
   report it)`; `130 — stopped by the operator`; and any other code `—
   ended abnormally (a bug: please report)`. Red marks 1, 2, 8, 32, 64
-  and 101; amber marks 4 and 130; green marks 16 alone.
-- **No legend (old codes, a CLI released before the change).** The
-  code is read with the old per-command meanings: `md descriptor
-  --verify-against` 5 is a red NOT spend-equal, `mk verify` and `ms
-  verify` 4 is a red MISMATCH, any other 4 is an amber VERIFY-ME, any
-  other 5 is a green Repair Applied, and anything else is `exit: N`.
-- **The binary could not be asked** (its `--help` failed or hung): the
-  code is shown undecoded, as `exit: N (not decoded: …)`.
+  and 101; amber marks 4, 130 and 16 alone. 16 alone reads "a
+  correction was applied — verified, or verifiable only once the whole
+  set is read; re-engrave the damaged plate": a lone corrected chunk of
+  a larger set is verified only when the set is reassembled.
+- **No paragraph begins `Exit status:` (old codes, a CLI released
+  before the change).** The code is read with the old per-command
+  meanings: `md descriptor --verify-against` 5 is a red NOT
+  spend-equal, `mk verify` and `ms verify` 4 is a red MISMATCH, any
+  other 4 (`mnemonic`'s included) is an amber VERIFY-ME, a 5 is a green
+  Repair Applied only on `repair` (any CLI) and on `mnemonic inspect`,
+  `convert` and `verify-bundle` (its auto-repair), and anything else is
+  `exit: N`.
+- **Anything else** (an `Exit status:` paragraph that is not the exact
+  legend, or not the last paragraph), **or the binary could not be
+  asked** (its `--help` failed or hung): the code is shown undecoded,
+  as `exit: N (not decoded: …)`.
 
 In every case a process terminated by a signal shows `killed by signal
 N`. When stderr is
@@ -90,13 +100,11 @@ message in the `stderr:` region:
 ```text
 exit: 64 — bad command line, nothing ran
 stderr:
-  error: the following required arguments were not provided:
-    [MK1_STRINGS]...
-  Usage: mk inspect [OPTIONS] [MK1_STRINGS]...
+  error: expected at least one mk1 string (positional, via --in FILE, or via stdin with '-')
 ```
 
-This is the CLI's clap-derive usage diagnostic, surfaced through
-the GUI without modification. The same diagnostic appears if you
+This is the CLI's own usage diagnostic (no input channel was named, so
+nothing was read), surfaced through the GUI without modification. The same diagnostic appears if you
 run `mk inspect` from a shell with no arguments.
 
 ## A second walkthrough — the run-confirm modal

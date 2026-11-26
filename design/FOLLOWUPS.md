@@ -6626,7 +6626,7 @@ screen printed. Print the values.
   (usage), with the per-verb sets of the report's Q1 table. Repair table L780-787: add 3 and 64. gen-man
   L885-890: add 64.
 - Owner: the next toolkit docs cycle.
-- Status: `deferred-minor`.
+- Status: `closed, by the constellation exit-code work (2026-11-26, final-review N6): the chapter now has an exit-code section, per-verb sets and a repair table in the new codes (Appendix J)`.
 - Tier: `docs`.
 
 ### `md-manual-exit-codes` — 42-md.md's repair and gen-man tables say I/O exits 1; it exits 2 (architect 2026-11-13)
@@ -6637,7 +6637,7 @@ screen printed. Print the values.
   are not spend-equal (coordinator `agent-reports/review-crash-sweep-ms-md-mk.md` M-B, md-cli run: rc 5); md has no
   64. Per-verb sets as in the report's Q2 table.
 - Owner: the next toolkit docs cycle.
-- Status: `deferred-minor`.
+- Status: `closed, by the constellation exit-code work (2026-11-26, final-review N6): the chapter now has an exit-code section, per-verb sets and a repair table in the new codes (Appendix J)`.
 - Tier: `docs`.
 
 ### `ms-manual-when-stdout-fails` — at the ms re-pin carrying the output sink, `43-ms.md` states what ms does when stdout fails (repo: **mnemonic-toolkit**; owning phase: **the toolkit pin bump to the ms-cli release carrying mnemonic-secret `ms-output-sink`**)
@@ -6935,3 +6935,4 @@ screen printed. Print the values.
 - [tk-bh1125-refold-nits] status=open grade=N kind=test owner=none filed=2026-11-25 src=design/agent-reports/bughunt-2026-11-25-mnemonic-toolkit-review-refold.md#nit repo=mnemonic-toolkit :: (n1) `@0.path=m/` is refused with text naming `--slot @0.path=m` (the canonical spelling, not the typed value); harmless. (n2) tk1_explicit_master_path_in_template_mode_is_refused covers bip84 and wsh-sortedmulti with `m` only; add the `m/` spelling and a non-first (@1) slot, both refused per the refold probes.
 - [tk-md-address-allow-invalid-miniscript-manual] status=open grade=M kind=docs owner=none filed=2026-11-26 src=Brian decision 2026-11-26 00:25Z repo=mnemonic-toolkit :: 42-md.md documents md-cli's new `--allow-invalid-miniscript` on `md address` and `md descriptor` (flag row, refusal sentence, descriptor lead-in) ahead of its release. The row carries `(unreleased: md-cli after 0.21.0: --allow-invalid-miniscript)` because manual.yml pins md-cli v0.21.0. When the CI md pin moves to a release that ships the flag, drop the marker (lint fails until then). Close this entry and the companion when that happens. Companion: descriptor-mnemonic design/FOLLOWUPS.md md-address-allow-invalid-miniscript-manual.
 - [tk-md76-recover-md1-transcripts] status=open grade=M kind=docs owner=none filed=2026-11-26 src=gate RESULTS.md section 7 (toolkit#227 final gate, sibling variant; logs tk-manual-verify-prsib, tk-base-verify-prsib) refs=descriptor-mnemonic#76 repo=mnemonic-toolkit :: descriptor-mnemonic#76 (commit 59c158e0) adds a privacy note to `md decode`'s stderr, so the manual transcripts `24-recover-md1` and `qs-26-recover-md1` drift against md built at #76 (same 2 drifts with the base toolkit). They pass at the current pin (md-cli v0.21.0). When the toolkit's md pin (scripts/install.sh, manual.yml) moves past descriptor-mnemonic#76, regenerate both transcripts against the new md binary and re-check any prose quoting their stderr.
+- [network-rule-spec-exit-8-after-exit-codes] status=open grade=M kind=docs owner=none filed=2026-11-26 src=mnemonic-engrave/design/agent-reports/exit-codes-2026-11-26/final-review-toolkit-gui.md#m10 repo=mnemonic-toolkit :: SPEC_constellation_exit_codes §6 changes to the network rule are not made: design/SPEC_network_rule.md:143 (N9: 8 "reserved ... and unreachable" for ms and mt), :146 (N10 keys the machine line on "a CLI that exits 8") and :400-401 (the mnemonic-gui MG-BANNER and MG-OVERRIDE rows keyed on exit 8) predate 8 meaning every REFUSED, not only a network refusal; check 5 of scripts/spec-network-rule-gate.sh needs the same change. Key the GUI rows and the machine line on the line itself (MNEMONIC_NETWORK_JSON), not on 8 alone. The unbuilt `bundle --network testnet --descriptor <mainnet key>` (rc 0) is already listed in the spec's §4 table (row "bundle --descriptor", HARD, unit 8a); the final-review fold already moved `bundle`/`verify-bundle --slot @N.xpub=` (a §4.1 "stays" arm of unit 8b) to NetworkMismatch 8.

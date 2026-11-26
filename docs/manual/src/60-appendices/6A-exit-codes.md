@@ -26,8 +26,10 @@ Codes 1 to 63 are **sums** of the six bits 1, 2, 4, 8, 16 and 32, and
 each sum is unique. For example `20` is 16 + 4: a correction was
 applied and it cannot be verified yet. `18` is 16 + 2: a correction
 was applied, but the corrected string is still not a valid card.
-`34` is 32 + 2: the input was invalid and stdout could not be written
-either. 64 and 101 never combine. Any other code from 65 to 125 is a
+`33` is 32 + 1: `mnemonic verify-bundle` found a mismatch and could
+not write its report either. (A verb that fails before it writes
+anything keeps its own code: an invalid input with stdout closed is
+still `2`.) 64 and 101 never combine. Any other code from 65 to 125 is a
 bug.
 
 Every binary's root `--help` ends with the same legend:
@@ -58,8 +60,10 @@ The order is the specification's; it numbers the same questions 0 to 7.
 4. Is it a network mismatch? Then `8`.
 5. Is the input well-formed but does it fail to match something it
    should match (a reference you gave, a phrase, a template, a
-   policy-id stub, the chain, an `--expect` claim)? Then `1`, even when
-   an override flag exists.
+   policy-id stub, a plan it should belong to, the chain, an `--expect`
+   claim)? Then `1`, even when an override flag exists. A limit, cap,
+   deadline or delta is not something to match: exceeding one is `8`
+   when a flag would waive it, otherwise `2`.
 6. Did the tool decline under a safety or policy rule that a flag,
    network, channel or destination would waive? Then `8`.
 7. Is the input itself wrong or insufficient for the verb? Then `2`.
@@ -117,11 +121,11 @@ per-verb detail.
 
 | Binary | Codes it uses | Notes |
 |---|---|---|
-| `mnemonic` | 0, 1, 2, 4, 8, 16, 18, 20, 22, 32, 64, 101 and sums | [`mnemonic` reference](#mnemonic-reference). `repair`: 16 verified or incomplete-set, 18 a corrected string that is no mk1 chunk, 20 unverified, 22 a corrected single string that is not a card. `verify-bundle`: 1 mismatch, 2 undecodable card, 4 partial. |
+| `mnemonic` | 0, 1, 2, 4, 8, 16, 18, 20, 22, 32, 64, 101 and sums | [`mnemonic` reference](#mnemonic-reference). `repair`: 16 verified or incomplete-set, 20 unverified (also a corrected `ms1` share), 22 a corrected string that is not a card (a single string that does not decode, an mk1 chunk whose header does not parse, an `ms1` secret share at index `s`); a malformed mk1 set is 2 with nothing printed. `verify-bundle`: 1 mismatch, 2 undecodable card, 4 partial; a corrected card adds 16 (17, 18). A `--slot` key of the other network is 8; input that is not UTF-8 is 2. |
 | `md` | 0, 1, 2, 4, 8, 16, 20, 22, 32, 64, 101 and sums | [`md` reference](#md-md-cli-reference). `repair` decode-checks each corrected string (adds 2). `descriptor --verify-against` NOT spend-equal is 1. |
-| `ms` | 0, 1, 2, 8, 20, 22, 32, 64, 101 and sums | [`ms` reference](#ms-ms-cli-reference). `repair` applied is 20; `inspect` that would not decode is 2. |
-| `mk` | 0, 1, 2, 8, 16, 18, 22, 32, 64, 101 and sums | [`mk` reference](#mk-mk-cli-reference). A correction in `decode`, `verify`, `inspect`, `address` or `derive` sets 16. `repair`: 18 a corrected string that is no mk1 chunk, 22 a corrected single string that does not decode. |
+| `ms` | 0, 1, 2, 8, 20, 22, 32, 64, 101 and sums | [`ms` reference](#ms-ms-cli-reference). `repair` applied is 20 (also a corrected K-of-N share); 22 a corrected string that is neither a card nor a share; `inspect` that would not decode is 2. |
+| `mk` | 0, 1, 2, 8, 16, 18, 22, 32, 64, 101 and sums | [`mk` reference](#mk-mk-cli-reference). A correction in `decode`, `verify`, `inspect`, `address` or `derive` sets 16. `repair`: 18 a corrected card that fails validation, 22 a corrected string that is not a card (a single string that does not decode, or a chunk whose header does not parse); a malformed set is 2 with nothing printed. |
 | `mt` | 0, 1, 2, 8, 16, 32, 64, 101 and sums | No chapter in this manual. A correction in `decode`, `verify` or `inspect` sets 16; a named `--bitcoin-cli` that fails is 32; no node at all stays 0. |
-| `me` | 0, 1, 2, 8, 32, 64, 101 and sums | No chapter in this manual. Destination refusals are 8; `sysw pack --expect` not met is 1; a named `ME_PREVIEW_BIN` that is missing is 32. |
-| `mr` | 0, 1, 2, 8, 16, 20, 32, 64, 101 and sums | [`mr` reference](#mr-mr-cli-reference). |
-| `mr-sitting` | 0, 1, 2, 8, 32, 64, 130, 128+N | [`mr-sitting` reference](#mr-sitting-mr-sitting-reference). A deliberate stop at a prompt is 130. |
+| `me` | 0, 1, 2, 8, 32, 64, 101 and sums | No chapter in this manual. Destination refusals are 8; `sysw pack --expect` not met is 1, and so is a sealed file that fails to open (the AEAD check); every verb's `--help` ends with an `Exit status:` line; a named `ME_PREVIEW_BIN` that is missing is 32. |
+| `mr` | 0, 1, 2, 8, 16, 18, 20, 22, 32, 64, 101 and sums | [`mr` reference](#mr-mr-cli-reference). |
+| `mr-sitting` | 0, 1, 2, 8, 32, 64, 101, 130, 128+N | [`mr-sitting` reference](#mr-sitting-mr-sitting-reference). A deliberate stop at a prompt is 130. |

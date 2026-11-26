@@ -91,13 +91,16 @@ plain `entr` share-set; `--language` is ignored for `entropy=` input.
 Number widget. The threshold K — the minimum number of shares that
 recombine. Required. Allowed range 2..=9 (the codex32 threshold field
 is a single ASCII digit; `0` is the unshared single-string sentinel and
-`1` is invalid). K outside 2..=9 is a usage error (exit 64).
+`1` is invalid). K outside 2..=9 is a usage error (exit 64), checked
+before the secret is read, so it is 64 whatever the input is.
 
 ## `--shares` {#mnemonic-ms-shares-split-shares}
 
 Number widget. The total number of shares N to emit. Required. Allowed
 range K ≤ N ≤ 31 (there are exactly 31 valid non-`s` codex32 share
-indices). N outside K..=31 is a usage error (exit 64).
+indices). N outside K..=31 is a usage error (exit 64), checked before
+the secret is read: `--threshold 3 --shares 2` is 64 whatever the input
+is.
 
 ## `--language` {#mnemonic-ms-shares-split-language}
 
