@@ -1800,7 +1800,7 @@ fn execute<W: Write, E: Write>(
     writeln!(
         stderr,
         "estimate: {total_cands} candidate(s), {total_scripts} script(s) over {} alternative(s) \
-         and index window [0, {}); {} slot order(s); child-key cache {} keys ({} KB); about {:.1} s \
+         and index window [0, {}); {} slot order(s); child-key cache {} keys ({} KB); estimated {:.1} s \
          on {threads} thread(s)",
         job.templates
             .iter()

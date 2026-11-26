@@ -201,6 +201,7 @@ fn single(target: &str, path: &str, script_type: &str) -> Value {
     let w = found(&v);
     assert_eq!(w["script_type"], script_type);
     assert_eq!(first_target_path(w, 0), path);
+    assert_eq!(check_printed(&v, &envs(), None), 1);
     v
 }
 
@@ -303,6 +304,7 @@ fn t1_testnet_and_regtest() {
     let o = run_a(&["--target-address", T1, "--network", "testnet", "--json"]);
     assert_eq!(o.code, 0, "{}", o.stderr);
     assert_eq!(first_target_path(found(&o.json()), 0), "m/84'/1'/0'/0/0");
+    assert_eq!(check_printed(&o.json(), &envs(), None), 1);
     let o = run_a(&["--target-address", T1]);
     assert_eq!(
         o.code, 2,
@@ -339,6 +341,7 @@ fn p1_passphrase_changes_the_fingerprint() {
         .unwrap()
         .contains("--passphrase @env:PP_TREZOR"));
     assert_eq!(v["searched"]["passphrase_supplied"], true);
+    assert_eq!(check_printed(&v, &envs(), None), 1);
     let o = run_a(&["--target-address", P1]);
     assert_eq!(o.code, 4);
     assert!(
@@ -458,8 +461,11 @@ fn m4_independent_paths() {
         "3",
         "--json",
     ]);
+    assert_eq!(o.code, 4, "one target, sorted: the twin fits: {}", o.stderr);
     let v = o.json();
-    assert_ne!(v["result"], "no_match", "{}", o.stderr);
+    assert_eq!(v["result"], "unverified", "{}", o.stderr);
+    assert!(reasons(&v).contains(&"twin".to_string()));
+    assert!(check_printed(&v, &envs(), None) >= 2);
     let w = found(&v);
     let paths: Vec<String> = w["slots"]
         .as_array()
@@ -489,6 +495,7 @@ fn m5_two_targets_sorted_exit_0() {
     let v = o.json();
     assert_eq!(v["result"], "match");
     assert_eq!(found(&v)["targets"].as_array().unwrap().len(), 2);
+    assert_eq!(check_printed(&v, &envs(), None), 1);
 }
 
 #[test]
@@ -648,6 +655,10 @@ fn l1_two_sorted_leaves_search_24_orders() {
         !reasons(&v).contains(&"split".to_string()),
         "symmetric orders are merged into one wallet: {v}"
     );
+    // The tap-tree sibling swap ({A,C},{Z,D} = {Z,D},{A,C}) is merged, with
+    // the note (SPEC §5 "Same wallet, two ways").
+    assert!(w["merged_forms"].as_u64().unwrap() >= 1, "{w}");
+    assert!(check_printed(&v, &envs(), None) >= 1);
 }
 
 #[test]
@@ -675,6 +686,7 @@ fn l2_internal_key_is_a_slot() {
     assert_ne!(v["result"], "no_match", "{}", o.stderr);
     assert_eq!(v["searched"]["slot_orders"], 6);
     assert_eq!(slot_seed(found(&v), 0), Some(1), "Z is the internal key");
+    assert!(check_printed(&v, &envs(), None) >= 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +715,7 @@ fn k1_keyed_descriptor_places_by_derivation() {
         o.stderr.contains("states 00000000") || o.stdout.contains("states 00000000"),
         "the mismatch is noted"
     );
+    assert!(check_printed(&v, &envs(), None) >= 2);
 }
 
 #[test]
@@ -740,6 +753,7 @@ fn keyed_non_standard_origin_is_placed() {
     let w = found(&o.json()).clone();
     assert_eq!(w["slots"][0]["origin_path"], "m/48'/0'/25'/2'");
     assert_eq!(w["slots"][0]["template"], "keyed");
+    assert_eq!(check_printed(&o.json(), &envs(), None), 1);
 }
 
 #[test]
@@ -799,10 +813,8 @@ fn b2_bare_cosigner_header_mismatch_prints_placeholder() {
 
 #[test]
 fn cosigner_as_mk1() {
-    // mk1 for Z at m/48'/0'/0'/2' via the toolkit's own bundle/convert is out
-    // of scope here; a `[fp/path]xpub` cosigner and an unplaced one cover the
-    // placement logic, and mk1 decode reuses `mk_codec::decode`.
-    let z = origin_key(Z, "m/48'/0'/0'/2'");
+    // Z's key as an mk1 card, all chunks in one unplaced value.
+    let z = z_mk1().join(" ");
     let o = run_a(&[
         "--descriptor",
         UNSORTED,
@@ -813,9 +825,15 @@ fn cosigner_as_mk1() {
         "--json",
     ]);
     assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
-    let w = found(&o.json()).clone();
-    assert_eq!(slot_seed(&w, 0), Some(0));
+    let v = o.json();
+    let w = found(&v);
+    assert_eq!(slot_seed(w, 0), Some(0));
     assert_eq!(w["slots"][1]["source"], "cosigner");
+    assert_eq!(w["slots"][1]["origin_path"], "m/48'/0'/0'/2'");
+    let cmd = w["bundle_command"].as_str().unwrap();
+    assert!(cmd.contains("@1.fingerprint=3f635a63"), "{cmd}");
+    assert!(cmd.contains("@1.path=m/48h/0h/0h/2h"), "{cmd}");
+    assert_eq!(check_printed(&v, &envs(), None), 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -843,8 +861,10 @@ fn h1_path_step_above_md1_range() {
         H1_OK,
         "--add-path",
         "m/84'/0'/536870911'",
+        "--json",
     ]);
     assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    assert_eq!(check_printed(&o.json(), &envs(), None), 1);
 }
 
 #[test]
@@ -935,6 +955,16 @@ fn refusals_exit_2() {
         "200000000",
     ]);
     assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(
+        o.stderr
+            .contains("above the ceiling of 10^15 (or past the u64 range)"),
+        "the candidate-count ceiling fired, not the cache ceiling: {}",
+        o.stderr
+    );
+    // The child-key cache ceiling (2^26 keys) is its own refusal.
+    let o = run_a(&["--target-address", S1, "--gap-limit", "300000"]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(o.stderr.contains("child-key cache"), "{}", o.stderr);
 }
 
 #[test]
@@ -1175,9 +1205,9 @@ fn redaction_inline_passphrase_beside_stdin_seed() {
     assert!(!stdout.contains("TREZOR"));
 }
 
-/// The printed command, run: it exits 0 and mints a wallet whose first
-/// receive address is the found wallet's (checked through `restore --md1`).
-fn run_printed(cmd: &str, envs: &[(&str, &str)], stdin: Option<&str>) -> String {
+/// Run one printed `bundle` command through `sh`, secrets supplied by
+/// `envs` and `stdin`; it must exit 0. Returns `bundle`'s JSON.
+fn run_printed(cmd: &str, envs: &[(&str, &str)], stdin: Option<&str>) -> Value {
     let bin = assert_cmd::cargo::cargo_bin("mnemonic");
     let line = cmd.replacen("mnemonic", &format!("'{}'", bin.display()), 1);
     let mut c = std::process::Command::new("sh");
@@ -1203,27 +1233,82 @@ fn run_printed(cmd: &str, envs: &[(&str, &str)], stdin: Option<&str>) -> String 
         "printed command failed: {line}\n{}",
         String::from_utf8_lossy(&o.stderr)
     );
-    String::from_utf8_lossy(&o.stdout).into_owned()
+    serde_json::from_slice(&o.stdout)
+        .unwrap_or_else(|e| panic!("bundle JSON ({e}): {}", String::from_utf8_lossy(&o.stdout)))
+}
+
+/// The xpub of each slot of a minted bundle, read from its mk1 cards.
+fn minted_xpubs(b: &Value) -> Vec<Xpub> {
+    let decode = |chunks: &Value| -> Xpub {
+        let v: Vec<&str> = chunks
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c.as_str().unwrap())
+            .collect();
+        mk_codec::decode(&v).unwrap().xpub
+    };
+    let mk1 = b["mk1"].as_array().expect("bundle JSON has mk1");
+    if mk1.first().is_some_and(|c| c.is_string()) {
+        vec![decode(&b["mk1"])]
+    } else {
+        mk1.iter().map(decode).collect()
+    }
+}
+
+/// SPEC §9 "The printed command, run" (review r1 I4): for every wallet that
+/// prints a `bundle` command (found and twin alike), run it and check, with
+/// rust-miniscript in the test, that the minted wallet (the descriptor
+/// `bundle` records with the xpubs of its mk1 cards) produces each of the
+/// wallet's matched targets at its reported (alternative, index).
+fn check_printed(v: &Value, envs: &[(&str, &str)], stdin: Option<&str>) -> usize {
+    let at = regex::Regex::new(r"(\[[^\]]*\])?@(\d+)").unwrap();
+    let nums = regex::Regex::new(r"\bNUMS\b").unwrap();
+    let mut ran = 0;
+    for w in v["wallets"].as_array().unwrap() {
+        let Some(cmd) = w["bundle_command"].as_str() else {
+            continue;
+        };
+        let b = run_printed(cmd, envs, stdin);
+        let xpubs = minted_xpubs(&b);
+        let desc = b["descriptor"].as_str().unwrap();
+        let concrete = at.replace_all(desc, |c: &regex::Captures| {
+            xpubs[c[2].parse::<usize>().unwrap()].to_string()
+        });
+        let concrete = nums.replace_all(&concrete, NUMS).into_owned();
+        let net = match b["network"].as_str().unwrap() {
+            "mainnet" => bitcoin::Network::Bitcoin,
+            "testnet" => bitcoin::Network::Testnet,
+            "signet" => bitcoin::Network::Signet,
+            _ => bitcoin::Network::Regtest,
+        };
+        let d = Descriptor::<DescriptorPublicKey>::from_str(&concrete).unwrap();
+        let singles = d.into_single_descriptors().unwrap();
+        for t in w["targets"].as_array().unwrap() {
+            let alt = t["alternative"].as_u64().unwrap() as usize;
+            let idx = t["index"].as_u64().unwrap() as u32;
+            let got = singles[alt]
+                .derive_at_index(idx)
+                .unwrap()
+                .address(net)
+                .unwrap()
+                .to_string();
+            assert_eq!(
+                got, t["address"],
+                "the wallet `{cmd}` mints ({concrete}) gives {got} at alternative {alt} index {idx}"
+            );
+        }
+        ran += 1;
+    }
+    ran
 }
 
 #[test]
 fn printed_command_runs_single_sig_and_multisig() {
     let o = run_a(&["--target-address", S1, "--json"]);
-    let cmd = found(&o.json())["bundle_command"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let out = run_printed(&cmd, &envs(), None);
-    assert!(out.contains("md1"), "{out}");
-
+    assert_eq!(check_printed(&o.json(), &envs(), None), 1);
     let o = run_az(&["--descriptor", UNSORTED, "--target-address", M3, "--json"]);
-    let cmd = found(&o.json())["bundle_command"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let out = run_printed(&cmd, &envs(), None);
-    assert!(out.contains("md1"), "{out}");
-
+    assert_eq!(check_printed(&o.json(), &envs(), None), 1);
     let o = run_az(&[
         "--descriptor",
         "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
@@ -1231,11 +1316,32 @@ fn printed_command_runs_single_sig_and_multisig() {
         R2,
         "--json",
     ]);
-    let cmd = found(&o.json())["bundle_command"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    run_printed(&cmd, &envs(), None);
+    assert_eq!(check_printed(&o.json(), &envs(), None), 1);
+}
+
+#[test]
+fn printed_command_runs_for_twins() {
+    // M1 (found + twin), M2, M6 (the covering twin first), R1, N1, U1.
+    for (tmpl, targets) in [
+        (SORTED, vec![M1]),
+        (UNSORTED, vec![M1]),
+        (UNSORTED, vec![M1, M1_IDX1]),
+        ("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))", vec![R1]),
+        ("sh(wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*)))", vec![N1]),
+        ("wsh(sortedmulti(2,@0/<0;1>/*,@1/<2;3>/*))", vec![U1]),
+    ] {
+        let mut a = vec!["--descriptor", tmpl, "--json"];
+        for t in &targets {
+            a.extend(["--target-address", t]);
+        }
+        let o = run_az(&a);
+        let v = o.json();
+        let n = check_printed(&v, &envs(), None);
+        assert!(n >= 1, "{tmpl}: {v}");
+        if v["reasons"].as_array().unwrap().iter().any(|r| r == "twin") {
+            assert!(n >= 2, "the twin's command is run too: {tmpl}");
+        }
+    }
 }
 
 #[test]
@@ -1251,11 +1357,7 @@ fn printed_command_runs_for_bare_cosigner_b1() {
         M1,
         "--json",
     ]);
-    let cmd = found(&o.json())["bundle_command"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    run_printed(&cmd, &envs(), None);
+    assert!(check_printed(&o.json(), &envs(), None) >= 1);
 }
 
 #[test]
@@ -1375,6 +1477,7 @@ fn c1_refugium_two_seats_found_in_either_seed_order() {
             assert_eq!(z["template"], "refugium-seat");
             assert_eq!(z["refugium_seat"], 0);
             assert_eq!(a["refugium_seat"], 1);
+            assert!(check_printed(&v, &envs(), None) >= 1);
         }
     }
 }
@@ -1502,6 +1605,7 @@ fn i2_template_mixing_at_n_with_a_literal_xpub_searches() {
     assert_eq!(slot_by_fp(w, "73c5da0a")["origin_path"], "m/48'/0'/0'/2'");
     assert_eq!(slot_by_fp(w, "3f635a63")["source"], "cosigner");
     assert!(reasons(&v).contains(&"twin".to_string()), "{v}");
+    assert!(check_printed(&v, &envs(), None) >= 2);
 }
 
 /// I3 (review r1): a keyed descriptor with a valid BIP-380 checksum is
@@ -1566,6 +1670,7 @@ fn i6_mk1_cosigner_placed_and_unplaced_chunks() {
     assert_eq!(w["slots"][1]["source"], "cosigner");
     assert_eq!(w["slots"][1]["origin_path"], "m/48'/0'/0'/2'");
     assert_eq!(w["slots"][1]["stated_fingerprint"], "3f635a63");
+    assert_eq!(check_printed(&v, &envs(), None), 1);
     // Placed: `@1=` repeated per chunk.
     let mut args: Vec<String> = vec!["--descriptor".into(), UNSORTED.into()];
     for c in &chunks {
@@ -1647,4 +1752,354 @@ fn positional_ms1_gets_the_argv_advisory() {
         .unwrap();
     assert_eq!(o.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&o.stderr).contains("secret material on argv (positional ms1)"));
+}
+
+// ---------------------------------------------------------------------------
+// SPEC §9 rows without a test before review r1 (I5)
+// ---------------------------------------------------------------------------
+
+const A_MS1: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
+
+#[test]
+fn intake_ms1_stdin_env_and_from() {
+    let o = run_with(
+        &["--ms1-stdin", "--target-address", S1, "--json"],
+        &[],
+        Some(A_MS1),
+    );
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let v = o.json();
+    assert!(found(&v)["bundle_command"]
+        .as_str()
+        .unwrap()
+        .contains("@0.ms1=-"));
+    let o = run_with(
+        &[
+            "--from",
+            "ms1=@env:M",
+            "--from",
+            "phrase=@env:SEED_Z",
+            "--target-address",
+            S1,
+            "--json",
+        ],
+        &[("M", A_MS1), ("SEED_Z", Z)],
+        None,
+    );
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let v = o.json();
+    assert!(found(&v)["bundle_command"]
+        .as_str()
+        .unwrap()
+        .contains("@0.ms1=@env:M"));
+    assert_eq!(check_printed(&v, &[("M", A_MS1)], None), 1);
+}
+
+#[test]
+fn non_english_phrase() {
+    let m = Mnemonic::from_entropy_in(bip39::Language::Spanish, &[0u8; 16]).unwrap();
+    let phrase = m.to_string();
+    let seed = m.to_seed("");
+    let secp = Secp256k1::new();
+    let master = Xpriv::new_master(NetworkKind::Main, &seed).unwrap();
+    let fp = master.fingerprint(&secp);
+    let acct = Xpub::from_priv(
+        &secp,
+        &master
+            .derive_priv(&secp, &DerivationPath::from_str("m/84'/0'/0'").unwrap())
+            .unwrap(),
+    );
+    let target = mint(&format!("wpkh([{fp}/84h/0h/0h]{acct}/<0;1>/*)"), 0, 2);
+    let o = run_with(
+        &[
+            "--phrase",
+            "@env:ES",
+            "--language",
+            "spanish",
+            "--target-address",
+            &target,
+            "--json",
+        ],
+        &[("ES", &phrase)],
+        None,
+    );
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let v = o.json();
+    let w = found(&v);
+    assert_eq!(first_target_path(w, 0), "m/84'/0'/0'/0/2");
+    let cmd = w["bundle_command"].as_str().unwrap();
+    assert!(cmd.contains("--language spanish"), "{cmd}");
+    assert_eq!(check_printed(&v, &[("ES", &phrase)], None), 1);
+}
+
+#[test]
+fn keyed_descriptor_at_a_refugium_seat_origin() {
+    let (_, ax) = xpub_at(A, "m/270028'/0'/1'");
+    let (_, zx) = xpub_at(Z, "m/270028'/0'/0'");
+    let desc = format!(
+        "wsh(multi(2,[3f635a63/270028h/0h/0h]{zx}/<0;1>/*,[73c5da0a/270028h/0h/1h]{ax}/<0;1>/*))"
+    );
+    let target = mint(&desc, 0, 4);
+    let o = run_a(&["--descriptor", &desc, "--target-address", &target, "--json"]);
+    let v = o.json();
+    assert_eq!(v["searched"]["mode"], "keyed");
+    assert_ne!(v["result"], "no_match", "{}", o.stderr);
+    let w = found(&v);
+    assert_eq!(slot_by_fp(w, "73c5da0a")["origin_path"], "m/270028'/0'/1'");
+    assert_eq!(slot_by_fp(w, "73c5da0a")["slot"], 1);
+    assert!(check_printed(&v, &envs(), None) >= 1);
+}
+
+#[test]
+fn p2tr_no_match_carries_the_internal_key_hint() {
+    let o = run_with(
+        &["--phrase", "@env:SEED_Z", "--target-address", S3],
+        &envs(),
+        None,
+    );
+    assert_eq!(o.code, 4);
+    assert!(
+        o.stdout.contains("internal key is not the toolkit's NUMS"),
+        "{}",
+        o.stdout
+    );
+}
+
+#[test]
+fn double_star_is_receive_change() {
+    let o = run_az(&[
+        "--descriptor",
+        "wsh(sortedmulti(2,@0/**,@1/**))",
+        "--target-address",
+        M1,
+        "--target-address",
+        M1_IDX1,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    let v = o.json();
+    assert_eq!(v["searched"]["alternatives"], serde_json::json!([0, 1]));
+    assert_eq!(first_target_path(found(&v), 0), "m/48'/0'/0'/2'/0/0");
+    assert_eq!(check_printed(&v, &envs(), None), 1);
+}
+
+#[test]
+fn second_stdin_reader_via_descriptor_from_md1() {
+    let o = run_with(
+        &[
+            "--phrase-stdin",
+            "--descriptor-from",
+            "md1=-",
+            "--target-address",
+            M1,
+        ],
+        &[],
+        Some(A),
+    );
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(o.stderr.contains("stdin"), "{}", o.stderr);
+}
+
+#[test]
+fn one_unplaced_mk1_cosigner_across_three_slots() {
+    let p = "m/48'/0'/0'/2'";
+    let (a, z) = (key_with_use_site(A, p), key_with_use_site(Z, p));
+    let (cfp, cx) = xpub_at(C3, p);
+    let c = format!("[{cfp}/48h/0h/0h/2h]{cx}/<0;1>/*");
+    let target = mint(&format!("wsh(multi(2,{a},{c},{z}))"), 0, 1);
+    let card = mk_codec::KeyCard::new(
+        vec![[0u8; 4]],
+        Some(cfp),
+        DerivationPath::from_str(p).unwrap(),
+        cx,
+    );
+    let chunks = mk_codec::encode(&card).unwrap();
+    let mut args: Vec<String> = vec![
+        "--descriptor".into(),
+        "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))".into(),
+        "--number-of-accounts".into(),
+        "1".into(),
+        "--target-address".into(),
+        target,
+        "--json".into(),
+    ];
+    for ch in &chunks {
+        args.push("--cosigner".into());
+        args.push(ch.clone());
+    }
+    let a: Vec<&str> = args.iter().map(String::as_str).collect();
+    let o = run_az(&a);
+    let v = o.json();
+    assert_ne!(v["result"], "no_match", "{}", o.stderr);
+    assert_eq!(v["searched"]["slot_orders"], 6);
+    let w = found(&v);
+    assert_eq!(slot_seed(w, 0), Some(0));
+    assert_eq!(w["slots"][1]["source"], "cosigner");
+    assert_eq!(slot_seed(w, 2), Some(1));
+    assert!(check_printed(&v, &envs(), None) >= 1);
+}
+
+/// JSON `result` and `reasons` for `match`, each reachable `unverified`
+/// reason and `no_match` (SPEC §6). `cap` needs more than 10,000 matches
+/// of one run and has no test (FOLLOWUP address-of-seed-cap-row).
+#[test]
+fn json_result_and_reasons_per_outcome() {
+    let r = |o: Out| {
+        let v = o.json();
+        (v["result"].as_str().unwrap().to_string(), reasons(&v))
+    };
+    let s = |x: &[&str]| x.iter().map(|y| y.to_string()).collect::<Vec<_>>();
+    assert_eq!(
+        r(run_a(&["--target-address", S1, "--json"])),
+        ("match".into(), s(&[]))
+    );
+    assert_eq!(
+        r(run_az(&[
+            "--descriptor",
+            SORTED,
+            "--target-address",
+            M1,
+            "--json"
+        ])),
+        ("unverified".into(), s(&["twin"]))
+    );
+    assert_eq!(
+        r(run_a(&[
+            "--target-address",
+            S1,
+            "--target-address",
+            S8,
+            "--json"
+        ])),
+        ("unverified".into(), s(&["split"]))
+    );
+    let other = mint(
+        &format!("wpkh({})", key_with_use_site(Z, "m/84'/0'/0'")),
+        0,
+        0,
+    );
+    assert_eq!(
+        r(run_a(&[
+            "--target-address",
+            S1,
+            "--target-address",
+            &other,
+            "--json"
+        ])),
+        ("unverified".into(), s(&["unmatched"]))
+    );
+    assert_eq!(
+        r(run_a(&[
+            "--target-address",
+            H1,
+            "--add-path",
+            "m/84'/0'/536870912'",
+            "--json"
+        ])),
+        ("unverified".into(), s(&["path_unrecordable"]))
+    );
+    let (_, zx) = xpub_at(Z, "m/48'/0'/0'/2'");
+    assert_eq!(
+        r(run_a(&[
+            "--descriptor",
+            UNSORTED,
+            "--cosigner",
+            &zx.to_string(),
+            "--target-address",
+            M3,
+            "--json"
+        ])),
+        ("unverified".into(), s(&["origin_unknown"]))
+    );
+    assert_eq!(
+        r(run_a(&["--target-address", S10, "--json"])),
+        ("no_match".into(), s(&[]))
+    );
+}
+
+/// SPEC §7: no seed word and no passphrase on stdout, stderr or the JSON,
+/// with every secret given inline (the worst case).
+#[test]
+fn no_secret_on_any_stream() {
+    let words: std::collections::BTreeSet<&str> = A
+        .split(' ')
+        .chain(C3.split(' '))
+        .chain(["TREZOR"])
+        .collect();
+    for json in [false, true] {
+        let mut args = vec![
+            "--allow-argv-secret".to_string(),
+            "xpub-search".into(),
+            "address-of-seed".into(),
+            "--from".into(),
+            format!("phrase={A}"),
+            "--from".into(),
+            format!("phrase={C3}"),
+            "--passphrase".into(),
+            "TREZOR".into(),
+            "--target-address".into(),
+            P1.into(),
+        ];
+        if json {
+            args.push("--json".into());
+        }
+        let o = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(&args)
+            .output()
+            .unwrap();
+        let out = String::from_utf8_lossy(&o.stdout);
+        let err = String::from_utf8_lossy(&o.stderr);
+        let word = |w: &str, text: &str| {
+            regex::Regex::new(&format!(r"(?i)\b{}\b", regex::escape(w)))
+                .unwrap()
+                .is_match(text)
+        };
+        for w in &words {
+            assert!(!word(w, &out), "{w} on stdout (json {json}):\n{out}");
+            assert!(!word(w, &err), "{w} on stderr (json {json}):\n{err}");
+        }
+    }
+}
+
+/// SPEC §7: the argv guard refuses inline `--from`, `--ms1` and
+/// `--passphrase` on this verb (exit 2) and echoes none of them.
+#[test]
+fn argv_guard_table_for_this_verb() {
+    for args in [
+        vec![
+            "--from".to_string(),
+            format!("phrase={A}"),
+            "--target-address".into(),
+            S1.into(),
+        ],
+        vec![
+            "--ms1".to_string(),
+            A_MS1.into(),
+            "--target-address".into(),
+            S1.into(),
+        ],
+        vec![
+            "--phrase".to_string(),
+            "@env:SEED_A".into(),
+            "--passphrase".into(),
+            "Sw0rdf1sh-pass".into(),
+            "--target-address".into(),
+            S1.into(),
+        ],
+    ] {
+        let o = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["xpub-search", "address-of-seed"])
+            .args(&args)
+            .envs(envs())
+            .output()
+            .unwrap();
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert!(
+            !err.contains("abandon") && !err.contains("Sw0rdf1sh") && !err.contains(A_MS1),
+            "{err}"
+        );
+    }
 }

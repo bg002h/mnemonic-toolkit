@@ -1100,97 +1100,349 @@ mod tests {
             .collect()
     }
 
-    /// The parallel collect-all scan equals the single-threaded reference
-    /// over the same space, including the collected match list (§4.1).
-    #[test]
-    fn parallel_scan_equals_reference() {
-        let paths = ["m/48'/0'/0'/2'", "m/48'/0'/1'/2'", "m/87'/0'/0'"];
-        let a = xpubs(
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-            &paths,
-        );
-        let z = xpubs("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong", &paths);
-        for text in [
-            "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
-            "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
-            "tr(NUMS,multi_a(1,@0/<0;1>/*,@1/<0;1>/*))",
-        ] {
-            let tpl = Template::parse(text).unwrap();
-            let steps = vec![Some(0), Some(1)];
-            let cache = ChildCache::build(&[a.clone(), z.clone()], &steps, 6, 4);
-            let mk = |seg: PathTuples| Space {
-                n: 2,
-                pinned_key: vec![None, None],
-                free_slots: vec![0, 1],
-                free_keys: vec![0, 1],
-                orders: 2,
-                segments: vec![seg],
-                sources: vec![
-                    SourcePaths {
-                        std_len: 3,
-                        seat_base: None,
-                        pin: vec![None, None]
-                    };
-                    2
-                ],
-            };
-            for space in [
-                mk(PathTuples::Shared { c: 3 }),
-                mk(PathTuples::Independent {
-                    seeds: vec![0, 1],
-                    c: 3,
-                }),
-            ] {
-                // Targets: a few scripts from inside the space, one outside.
-                let mut targets = HashMap::new();
-                for (i, (r, alt, idx)) in [(0u64, 0usize, 0u32), (5, 1, 3), (7, 0, 5)]
-                    .iter()
-                    .enumerate()
-                {
-                    if *r >= space.candidates().unwrap() {
-                        continue;
-                    }
-                    let asg = space.decode(*r).unwrap();
-                    let keys: Vec<PublicKey> = asg
-                        .iter()
-                        .enumerate()
-                        .map(|(slot, (s, p))| {
-                            cache.get(*s, *p, tpl.slot_alts[slot][*alt].unwrap() as usize, *idx)
-                        })
-                        .collect();
-                    targets.insert(tpl.eval(&keys).unwrap(), i);
-                }
-                let reference = scan_reference(&space, &tpl, &cache, &targets, 2, 1000);
-                let parallel = scan(
-                    &space,
-                    &tpl,
-                    &cache,
-                    &targets,
-                    2,
-                    4,
-                    1000,
-                    None,
-                    &mut |_, _| {},
-                );
-                assert!(
-                    reference.total_hits as usize >= targets.len() && targets.len() >= 2,
-                    "{text}"
-                );
-                assert_eq!(parallel, reference, "{text}");
-                // The cap is counted, not silently dropped.
-                let capped = scan(
-                    &space,
-                    &tpl,
-                    &cache,
-                    &targets,
-                    2,
-                    4,
-                    1,
-                    None,
-                    &mut |_, _| {},
-                );
-                assert!(capped.capped && capped.total_hits == reference.total_hits);
+    const PA: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const PZ: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
+    const PC: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+
+    /// Standard paths (3), then 256 Refugium seats, then two pin paths.
+    fn source_paths() -> Vec<String> {
+        let mut v: Vec<String> = ["m/48'/0'/0'/2'", "m/48'/0'/1'/2'", "m/87'/0'/0'"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        v.extend((0..256).map(|n| format!("m/270028'/0'/{n}'")));
+        v.extend(["m/87'/0'/2'".to_string(), "m/84'/0'/7'".to_string()]);
+        v
+    }
+    const STD: usize = 3;
+    const SEAT_BASE: usize = 3;
+    const PIN_X: usize = 259;
+    const PIN_Y: usize = 260;
+
+    /// How the naive enumeration assigns paths to the searched seeds.
+    #[derive(Clone, Copy)]
+    enum Naive {
+        Shared,
+        Independent,
+        Refugium,
+    }
+
+    /// The merge key of an assignment: the template's leaves labelled by
+    /// (source, path, use-site), canonicalised under the known symmetries.
+    fn canon(tpl: &Template, assign: &[(usize, usize)]) -> String {
+        Expr::parse(&tpl.text)
+            .unwrap()
+            .map_leaves(&|leaf| match leaf_slot(leaf) {
+                Some(i) => format!("k{}p{}{}", assign[i].0, assign[i].1, leaf_use_site(leaf)),
+                None => leaf.to_string(),
+            })
+            .canonical()
+            .render()
+    }
+
+    fn perms(f: usize) -> Vec<Vec<usize>> {
+        if f == 0 {
+            return vec![vec![]];
+        }
+        let mut out = Vec::new();
+        for p in perms(f - 1) {
+            for at in 0..=p.len() {
+                let mut q = p.clone();
+                q.insert(at, f - 1);
+                out.push(q);
             }
+        }
+        out
+    }
+
+    type Found = std::collections::BTreeSet<(String, u32, u32, usize)>;
+
+    /// Independent brute force (review r1 I4): every slot order of the free
+    /// keys, every path tuple the mode allows, no collapse, no shortcuts.
+    /// Returns every (merge key, alt, idx, target) hit, or with `targets`
+    /// empty every (merge key, alt, idx) script as target `usize::MAX` with
+    /// the script in `scripts`.
+    #[allow(clippy::too_many_arguments)]
+    fn naive(
+        tpl: &Template,
+        cache: &ChildCache,
+        sources: &[SourcePaths],
+        pinned_key: &[Option<usize>],
+        seeds: &[usize],
+        modes: &[Naive],
+        targets: &HashMap<ScriptBuf, usize>,
+        scripts: &mut Vec<(String, u32, u32, ScriptBuf)>,
+    ) -> Found {
+        let n = tpl.n;
+        let free_slots: Vec<usize> = (0..n).filter(|s| pinned_key[*s].is_none()).collect();
+        let pinned: Vec<usize> = pinned_key.iter().flatten().copied().collect();
+        let free_keys: Vec<usize> = (0..sources.len()).filter(|k| !pinned.contains(k)).collect();
+        let mut out = Found::new();
+        for perm in perms(free_slots.len()) {
+            let mut slot_src: Vec<usize> = pinned_key.iter().map(|p| p.unwrap_or(0)).collect();
+            for (j, slot) in free_slots.iter().enumerate() {
+                slot_src[*slot] = free_keys[perm[j]];
+            }
+            for mode in modes {
+                // Per-seed path choices: one list of digits per tuple.
+                let digits: Vec<Vec<usize>> = match mode {
+                    Naive::Shared => (0..STD).map(|t| vec![t; seeds.len()]).collect(),
+                    Naive::Independent | Naive::Refugium => {
+                        let r = if matches!(mode, Naive::Independent) {
+                            STD
+                        } else {
+                            8
+                        };
+                        let mut v = vec![vec![]];
+                        for _ in seeds {
+                            v = v
+                                .into_iter()
+                                .flat_map(|p: Vec<usize>| {
+                                    (0..r).map(move |d| {
+                                        let mut q = p.clone();
+                                        q.push(d);
+                                        q
+                                    })
+                                })
+                                .collect();
+                        }
+                        v
+                    }
+                };
+                'tuple: for d in digits {
+                    let mut assign = Vec::with_capacity(n);
+                    for (slot, &src) in slot_src.iter().enumerate() {
+                        let path = if let Some(p) = sources[src].pin[slot] {
+                            p
+                        } else if let Some(pos) = seeds.iter().position(|s| *s == src) {
+                            match mode {
+                                Naive::Refugium => {
+                                    let seat = 32 * d[pos] + slot;
+                                    if seat > 255 {
+                                        continue 'tuple;
+                                    }
+                                    SEAT_BASE + seat
+                                }
+                                _ => d[pos],
+                            }
+                        } else {
+                            0
+                        };
+                        assign.push((src, path));
+                    }
+                    let key = canon(tpl, &assign);
+                    for (a, alt) in tpl.slot_alts[0].iter().enumerate() {
+                        let _ = alt;
+                        for idx in 0..cache.gap {
+                            let keys: Vec<PublicKey> = assign
+                                .iter()
+                                .enumerate()
+                                .map(|(slot, (src, path))| {
+                                    let st = tpl.slot_alts[slot][a];
+                                    let si = cache.steps.iter().position(|x| *x == st).unwrap();
+                                    cache.get(*src, *path, si, idx)
+                                })
+                                .collect();
+                            let spk = tpl.eval(&keys).unwrap();
+                            if targets.is_empty() {
+                                scripts.push((key.clone(), a as u32, idx, spk));
+                            } else if let Some(t) = targets.get(&spk) {
+                                out.insert((key.clone(), a as u32, idx, *t));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The parallel collect-all scan, over the space the command builds
+    /// (`slot_orders` deciding the collapse), finds exactly what an
+    /// independent brute force finds, up to the §5 symmetry merge; and it
+    /// equals the single-threaded reference hit for hit (§4.1). The cases
+    /// cover shared and independent paths, a Refugium seat segment beside a
+    /// sorted template (review r1 C1), per-slot path pins on free slots
+    /// (I1), a pinned key and an unplaced cosigner.
+    #[test]
+    fn scan_equals_independent_brute_force() {
+        let paths = source_paths();
+        let p: Vec<&str> = paths.iter().map(String::as_str).collect();
+        let a = xpubs(PA, &p);
+        let z = xpubs(PZ, &p);
+        let c = xpubs(PC, &["m/48'/0'/0'/2'"]);
+        let steps = vec![Some(0), Some(1)];
+        let cache = ChildCache::build(&[a, z, c], &steps, 3, 4);
+        let seed_sp = |pin: Vec<Option<usize>>, seats: bool| SourcePaths {
+            std_len: STD,
+            seat_base: seats.then_some(SEAT_BASE),
+            pin,
+        };
+        let cos_sp = |n: usize| SourcePaths {
+            std_len: 1,
+            seat_base: None,
+            pin: vec![None; n],
+        };
+        struct Case {
+            text: &'static str,
+            sources: Vec<SourcePaths>,
+            pinned_key: Vec<Option<usize>>,
+            segments: Vec<PathTuples>,
+            modes: Vec<Naive>,
+        }
+        let cases = vec![
+            Case {
+                text: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+                sources: vec![seed_sp(vec![None; 2], false); 2],
+                pinned_key: vec![None, None],
+                segments: vec![PathTuples::Shared { c: STD as u64 }],
+                modes: vec![Naive::Shared],
+            },
+            Case {
+                text: "wsh(multi(2,@0/<0;1>/*,@1/<0;1>/*))",
+                sources: vec![seed_sp(vec![None; 2], false); 2],
+                pinned_key: vec![None, None],
+                segments: vec![PathTuples::Independent {
+                    seeds: vec![0, 1],
+                    c: STD as u64,
+                }],
+                modes: vec![Naive::Independent],
+            },
+            // C1: a seat segment beside a sorted template.
+            Case {
+                text: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+                sources: vec![seed_sp(vec![None; 2], true); 2],
+                pinned_key: vec![None, None],
+                segments: vec![
+                    PathTuples::Shared { c: STD as u64 },
+                    PathTuples::Refugium { seeds: vec![0, 1] },
+                ],
+                modes: vec![Naive::Shared, Naive::Refugium],
+            },
+            Case {
+                text: "tr(NUMS,sortedmulti_a(1,@0/<0;1>/*,@1/<0;1>/*))",
+                sources: vec![seed_sp(vec![None; 2], true); 2],
+                pinned_key: vec![None, None],
+                segments: vec![
+                    PathTuples::Shared { c: STD as u64 },
+                    PathTuples::Refugium { seeds: vec![0, 1] },
+                ],
+                modes: vec![Naive::Shared, Naive::Refugium],
+            },
+            // I1: path pins that differ by free slot (a keyless md1).
+            Case {
+                text: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+                sources: vec![seed_sp(vec![Some(PIN_X), Some(PIN_Y)], false); 2],
+                pinned_key: vec![None, None],
+                segments: vec![PathTuples::Shared { c: 1 }],
+                modes: vec![Naive::Shared],
+            },
+            // Equal pins keep the collapse and still agree.
+            Case {
+                text: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+                sources: vec![seed_sp(vec![Some(PIN_X), Some(PIN_X)], false); 2],
+                pinned_key: vec![None, None],
+                segments: vec![PathTuples::Shared { c: 1 }],
+                modes: vec![Naive::Shared],
+            },
+            // A pinned seed, a free seed and an unplaced cosigner.
+            Case {
+                text: "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*))",
+                sources: vec![
+                    seed_sp(vec![None; 3], false),
+                    seed_sp(vec![None; 3], false),
+                    cos_sp(3),
+                ],
+                pinned_key: vec![None, Some(1), None],
+                segments: vec![PathTuples::Shared { c: STD as u64 }],
+                modes: vec![Naive::Shared],
+            },
+        ];
+        for case in cases {
+            let tpl = Template::parse(case.text).unwrap();
+            let n = tpl.n;
+            let free_slots: Vec<usize> = (0..n).filter(|s| case.pinned_key[*s].is_none()).collect();
+            let pinned: Vec<usize> = case.pinned_key.iter().flatten().copied().collect();
+            let free_keys: Vec<usize> = (0..case.sources.len())
+                .filter(|k| !pinned.contains(k))
+                .collect();
+            let orders =
+                slot_orders(&tpl, &free_slots, &free_keys, &case.segments, &case.sources).unwrap();
+            let space = Space {
+                n,
+                pinned_key: case.pinned_key.clone(),
+                free_slots,
+                free_keys,
+                orders,
+                segments: case.segments.clone(),
+                sources: case.sources.clone(),
+            };
+            let seeds: Vec<usize> = (0..case.sources.len())
+                .filter(|s| case.sources[*s].std_len > 1)
+                .collect();
+            // Targets: every 7th script of the brute force, so both slot
+            // orders and every mode are represented.
+            let mut scripts = Vec::new();
+            naive(
+                &tpl,
+                &cache,
+                &case.sources,
+                &case.pinned_key,
+                &seeds,
+                &case.modes,
+                &HashMap::new(),
+                &mut scripts,
+            );
+            let mut targets = HashMap::new();
+            for (i, (_, _, _, spk)) in scripts.iter().step_by(7).enumerate() {
+                targets.entry(spk.clone()).or_insert(i);
+            }
+            let expect = naive(
+                &tpl,
+                &cache,
+                &case.sources,
+                &case.pinned_key,
+                &seeds,
+                &case.modes,
+                &targets,
+                &mut Vec::new(),
+            );
+            let parallel = scan(
+                &space,
+                &tpl,
+                &cache,
+                &targets,
+                2,
+                4,
+                1 << 20,
+                None,
+                &mut |_, _| {},
+            );
+            assert!(!parallel.capped);
+            let got: Found = parallel
+                .hits
+                .iter()
+                .map(|h| {
+                    let asg = space.decode(h.rank).unwrap();
+                    (canon(&tpl, &asg), h.alt, h.index, h.target)
+                })
+                .collect();
+            assert_eq!(got, expect, "{} (orders {orders})", case.text);
+            let reference = scan_reference(&space, &tpl, &cache, &targets, 2, 1 << 20);
+            assert_eq!(parallel, reference, "{}", case.text);
+            // The cap is counted, not silently dropped.
+            let capped = scan(
+                &space,
+                &tpl,
+                &cache,
+                &targets,
+                2,
+                4,
+                1,
+                None,
+                &mut |_, _| {},
+            );
+            assert!(capped.capped && capped.total_hits == reference.total_hits);
         }
     }
 
