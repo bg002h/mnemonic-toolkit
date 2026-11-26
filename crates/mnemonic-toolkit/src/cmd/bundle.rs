@@ -1711,24 +1711,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let is_non_canonical =
         md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
 
-    // Review rulings2 final (fable) M-1: a slot whose subkey set descriptor
-    // mode cannot materialize (xprv, wif, a lone fingerprint or path) is
-    // refused here, before any origin advice it could not follow.
-    {
-        let mut by_index_kinds: std::collections::BTreeMap<
-            u8,
-            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
-        > = std::collections::BTreeMap::new();
-        for s in slots {
-            by_index_kinds.entry(s.index).or_default().insert(s.subkey);
-        }
-        for (idx, subkeys) in &by_index_kinds {
-            if !descriptor_mode_materializes(subkeys) {
-                return Err(descriptor_mode_unsupported_subkeys(*idx, subkeys));
-            }
-        }
-    }
-
     // v0.19.0 SPEC §4.12.g — DESCRIPTOR_WITH_NONZERO_ACCOUNT canonicity-gated.
     if !is_non_canonical && args.account != 0 {
         return Err(ToolkitError::ModeViolation {
@@ -1761,6 +1743,25 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                         "slot @{idx} has both secret-bearing input and watch-only input; pick one per slot."
                     ),
                 });
+            }
+        }
+    }
+
+    // Review rulings2 final (fable) M-1: a slot whose subkey set descriptor
+    // mode cannot materialize (xprv, wif, a lone fingerprint or path) is
+    // refused here, before any origin advice it could not follow (after the
+    // §6.6 row-4 conflict refusal above, which names the slot's real problem).
+    {
+        let mut by_index_kinds: std::collections::BTreeMap<
+            u8,
+            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+        > = std::collections::BTreeMap::new();
+        for s in slots {
+            by_index_kinds.entry(s.index).or_default().insert(s.subkey);
+        }
+        for (idx, subkeys) in &by_index_kinds {
+            if !descriptor_mode_materializes(subkeys) {
+                return Err(descriptor_mode_unsupported_subkeys(*idx, subkeys));
             }
         }
     }

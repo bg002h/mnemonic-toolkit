@@ -573,8 +573,10 @@ fn ruling_restore_with_own_seed_still_refuses_the_foreign_empty_origin_key() {
     let from = format!("phrase={A}");
     let r = restore(&md1, &["--from", &from]);
     assert_eq!(r.code, 2, "{}", r.stderr);
-    // The seed's own key was found by the (unchanged) search; only @1 is refused.
-    assert!(r.stderr.contains("Its key was FOUND"), "{}", r.stderr);
+    // The seed's own key was found by the (unchanged) search; only @1 is
+    // refused. The found-path warning waits until nothing is refused (review
+    // rulings2 final N-3), so it appears in the run below, not here.
+    assert!(!r.stderr.contains("Its key was FOUND"), "{}", r.stderr);
     assert!(
         r.stderr.contains("@1 carries NO origin path"),
         "{}",
@@ -588,6 +590,7 @@ fn ruling_restore_with_own_seed_still_refuses_the_foreign_empty_origin_key() {
 
     let r = restore(&md1, &["--from", &from, "--origin", "@1=m/48'/0'/0'/2'"]);
     assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(r.stderr.contains("Its key was FOUND"), "{}", r.stderr);
     assert!(
         r.stdout.contains(&format!("[{FP_B}/48'/0'/0'/2']")),
         "{}",
