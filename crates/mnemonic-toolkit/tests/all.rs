@@ -229,6 +229,7 @@ mod cli_verify_message;
 mod cli_wallet_cross_format_convergence;
 mod cli_word_card;
 mod cli_xpub_search_account_of_descriptor;
+mod cli_xpub_search_address_of_seed;
 mod cli_xpub_search_address_of_xpub;
 mod cli_xpub_search_drift_v0_27_0;
 mod cli_xpub_search_env_var_sentinel;
