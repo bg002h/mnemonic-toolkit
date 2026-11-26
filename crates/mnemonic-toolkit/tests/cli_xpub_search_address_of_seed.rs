@@ -1379,9 +1379,12 @@ fn c1_refugium_two_seats_found_in_either_seed_order() {
     }
 }
 
-/// Mint a keyless template md1 with `bundle --md1-form template` (the test's
-/// own mint, as L1 and L2 mint their targets).
-fn mint_template_md1(descriptor: &str) -> Vec<String> {
+/// Mint a keyless md1 whose origin paths differ per slot. `bundle
+/// --md1-form template` records one shared origin, so the test mints the
+/// keyed (policy) md1 with `bundle`, then drops its keys and fingerprints
+/// with md-codec at the toolkit's pin and re-splits it: the card a
+/// coordinator that records per-slot origins without keys would carry.
+fn mint_keyless_divergent_md1(descriptor: &str) -> Vec<String> {
     let o = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
@@ -1394,8 +1397,6 @@ fn mint_template_md1(descriptor: &str) -> Vec<String> {
             "@0.phrase=@env:SEED_A",
             "--slot",
             "@1.phrase=@env:SEED_Z",
-            "--md1-form",
-            "template",
             "--json",
         ])
         .envs(envs())
@@ -1408,12 +1409,21 @@ fn mint_template_md1(descriptor: &str) -> Vec<String> {
         String::from_utf8_lossy(&o.stderr)
     );
     let v: Value = serde_json::from_slice(&o.stdout).unwrap();
-    v["md1"]
+    let chunks: Vec<String> = v["md1"]
         .as_array()
         .unwrap()
         .iter()
         .map(|c| c.as_str().unwrap().to_string())
-        .collect()
+        .collect();
+    let refs: Vec<&str> = chunks.iter().map(String::as_str).collect();
+    let mut d = md_codec::chunk::reassemble(&refs).unwrap();
+    assert!(matches!(
+        d.path_decl.paths,
+        md_codec::origin_path::PathDeclPaths::Divergent(_)
+    ));
+    d.tlv.fingerprints = None;
+    d.tlv.pubkeys = None;
+    md_codec::chunk::split(&d).unwrap()
 }
 
 /// I1 (review r1): a keyless md1 recording a different origin per slot pins
@@ -1422,7 +1432,7 @@ fn mint_template_md1(descriptor: &str) -> Vec<String> {
 /// @1) is found with the seeds in either order.
 #[test]
 fn i1_keyless_md1_divergent_paths_either_seed_order() {
-    let md1 = mint_template_md1(
+    let md1 = mint_keyless_divergent_md1(
         "wsh(sortedmulti(2,[73c5da0a/48h/0h/0h/2h]@0/<0;1>/*,[3f635a63/87h/0h/2h]@1/<0;1>/*))",
     );
     for order in [

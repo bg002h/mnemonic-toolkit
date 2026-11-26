@@ -507,6 +507,61 @@ pub fn orders_for(f: usize) -> Option<u64> {
     factorial(f).and_then(|v| u64::try_from(v).ok())
 }
 
+/// Slot orders searched per path tuple: 1 under the sorted collapse, `f!`
+/// otherwise, or `None` past `u64`.
+///
+/// The collapse is sound only when a slot contributes nothing but its
+/// use-site path (SPEC §4 pruning 4): the template passes
+/// [`sorted_collapse_applies`], AND every free key has the same candidate
+/// path set in every free slot. Two things make a slot select a path, and
+/// either one disables the collapse (review r1 C1, I1):
+/// - a Refugium seat segment (the seat is `32 r + slot`, so the path fixes
+///   the slot);
+/// - a path pin that differs between free slots (a keyless md1's per-slot
+///   origins, which bind the path to the slot, not to a seed).
+pub fn slot_orders(
+    tpl: &Template,
+    free_slots: &[usize],
+    free_keys: &[usize],
+    segments: &[PathTuples],
+    sources: &[SourcePaths],
+) -> Option<u64> {
+    let same_paths_in_every_free_slot = free_keys.iter().all(|k| {
+        let pin = &sources[*k].pin;
+        free_slots
+            .iter()
+            .all(|s| free_slots.first().is_none_or(|s0| pin[*s] == pin[*s0]))
+    });
+    let seat_segment = segments
+        .iter()
+        .any(|s| matches!(s, PathTuples::Refugium { .. }));
+    if sorted_collapse_applies(tpl) && !seat_segment && same_paths_in_every_free_slot {
+        Some(1)
+    } else {
+        orders_for(free_slots.len())
+    }
+}
+
+/// True when the template evaluates at the space's first candidate (a
+/// pre-scan guard: a template whose keys the evaluator cannot translate
+/// would otherwise match nothing and print a false no-match).
+pub fn probe_eval(space: &Space, tpl: &Template, cache: &ChildCache, alts: usize) -> bool {
+    if space.candidates().unwrap_or(0) == 0 {
+        return true;
+    }
+    let targets = HashMap::new();
+    let ctx = ScanCtx::new(space, tpl, cache, &targets, alts);
+    let Some(assign) = space.decode(0) else {
+        return false;
+    };
+    let keys: Vec<PublicKey> = assign
+        .iter()
+        .enumerate()
+        .map(|(slot, (src, path))| cache.get(*src, *path, ctx.step_idx[slot][0], 0))
+        .collect();
+    tpl.eval(&keys).is_some()
+}
+
 // ---------------------------------------------------------------------------
 // Scan (§4.1 item 1)
 // ---------------------------------------------------------------------------

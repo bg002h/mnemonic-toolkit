@@ -16,8 +16,8 @@
 use super::candidate_paths::{build_candidate_paths, check_account_window};
 use super::seed_intake::{resolve_seed, SeedIntakeArgs};
 use super::seed_search::{
-    derive_child, leaf_slot, leaf_use_site, multi_family, orders_for, scan,
-    sorted_collapse_applies, ChildCache, Expr, PathTuples, SourcePaths, Space, SpkKind, Template,
+    derive_child, leaf_slot, leaf_use_site, multi_family, probe_eval, scan, slot_orders,
+    ChildCache, Expr, PathTuples, SourcePaths, Space, SpkKind, Template,
 };
 use super::{XpubSearchEnvelope, XpubSearchJson};
 use crate::cmd::convert::{parse_from_input, NodeType};
@@ -466,7 +466,16 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
         refuse_private("--descriptor", d)?;
     }
     for c in &args.cosigner {
-        refuse_private("--cosigner", c)?;
+        // An mk1 card is public by construction, and its bech32 text can
+        // contain an `xprv`-shaped run (review r1 N8); mk-codec decodes
+        // public keys only.
+        let value = c
+            .split_once('=')
+            .filter(|_| c.starts_with('@'))
+            .map_or(c.as_str(), |x| x.1);
+        if !value.trim().to_lowercase().starts_with("mk1") {
+            refuse_private("--cosigner", c)?;
+        }
     }
 
     // Descriptor intake (before reading any secret).
@@ -553,6 +562,11 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
     };
 
     let job = if let Some(text) = descriptor_text {
+        let text = if text.trim_start().starts_with('{') {
+            text
+        } else {
+            strip_checksum(&text)?
+        };
         if text.trim_start().starts_with('{') {
             let expanded = crate::wallet_import::pipeline::expand_bip388_policy(&text)?;
             refuse_private("--descriptor", &expanded)?;
@@ -781,10 +795,18 @@ fn parse_cosigner_key(v: &str) -> Result<CosignerIn, ToolkitError> {
     Ok(CosignerIn { xpub, fp, path })
 }
 
-/// `(slot, key)` per cosigner; placed mk1 chunks for one slot are joined.
+/// `(slot, key)` per cosigner. Placed mk1 chunks for one slot are joined;
+/// unplaced mk1 chunks, one or more per `--cosigner` value, are grouped by
+/// the chunk-set id in their string-layer headers and each group is
+/// reassembled (SPEC §2; review r1 I6). A group that does not reassemble is
+/// refused (exit 2).
 fn intake_cosigners(values: &[String]) -> Result<Vec<(Option<usize>, CosignerIn)>, ToolkitError> {
+    use mk_codec::string_layer::{decode_string, StringLayerHeader};
     let mut placed: BTreeMap<usize, Vec<String>> = BTreeMap::new();
     let mut out = Vec::new();
+    // Unplaced mk1 groups, in first-seen order: (chunk-set id or a
+    // single-string marker, chunks).
+    let mut groups: Vec<(Option<u32>, Vec<String>)> = Vec::new();
     for v in values {
         if let Some(rest) = v.strip_prefix('@') {
             let (n, val) = rest
@@ -794,9 +816,30 @@ fn intake_cosigners(values: &[String]) -> Result<Vec<(Option<usize>, CosignerIn)
                 .parse()
                 .map_err(|_| refuse(format!("--cosigner @{n}=: not a slot number")))?;
             placed.entry(n).or_default().push(val.to_string());
+        } else if v.trim().to_lowercase().starts_with("mk1") {
+            for tok in v.split_whitespace() {
+                let header = decode_string(tok)
+                    .map_err(ToolkitError::from)
+                    .and_then(|d| {
+                        StringLayerHeader::from_5bit_symbols(d.data())
+                            .map(|(h, _)| h)
+                            .map_err(ToolkitError::from)
+                    })?;
+                let id = match header {
+                    StringLayerHeader::Chunked { chunk_set_id, .. } => Some(chunk_set_id),
+                    _ => None,
+                };
+                match groups.iter_mut().find(|(g, _)| id.is_some() && *g == id) {
+                    Some((_, chunks)) => chunks.push(tok.to_string()),
+                    None => groups.push((id, vec![tok.to_string()])),
+                }
+            }
         } else {
             out.push((None, parse_cosigner_key(v)?));
         }
+    }
+    for (_, chunks) in groups {
+        out.push((None, parse_cosigner_key(&chunks.join(" "))?));
     }
     for (n, vals) in placed {
         out.push((Some(n), parse_cosigner_key(&vals.join(" "))?));
@@ -1161,7 +1204,17 @@ fn template_job(
     md1: Option<&Md1Template>,
     masters: &[Xpriv],
 ) -> Result<Job, ToolkitError> {
-    let tpl = Template::parse(text).map_err(refuse)?;
+    // A literal key beside `@N` placeholders becomes a placed cosigner slot
+    // after the last placeholder (review r1 I2): the evaluator translates
+    // slots only, so a literal key left in place would match nothing.
+    let placeholders = Regex::new(r"@(\d+)")
+        .expect("static")
+        .captures_iter(text)
+        .filter_map(|c| c[1].parse::<usize>().ok())
+        .max()
+        .map_or(0, |m| m + 1);
+    let (lifted_text, lifted) = templatise_keys(text, placeholders)?;
+    let tpl = Template::parse(&lifted_text).map_err(refuse)?;
     let n = tpl.n;
     let (std, add, end) = standard_paths(ctx)?;
     let mut std = std;
@@ -1171,7 +1224,10 @@ fn template_job(
     }
     let c = std.len();
     let k = ctx.seeds.len();
-    let cos = intake_cosigners(&ctx.args.cosigner)?;
+    let mut cos = intake_cosigners(&ctx.args.cosigner)?;
+    for (j, k) in lifted.into_iter().enumerate() {
+        cos.push((Some(placeholders + j), k));
+    }
 
     // Sources: seeds then cosigners.
     let mut sources: Vec<Source> = (0..k)
@@ -1252,10 +1308,19 @@ fn template_job(
             pinned_seed_or_cos(slot, *fp)?;
         }
     }
-    // Path pins: append the pinned path to every seed's list.
+    // Path pins: append the pinned path to every seed's list, once per
+    // distinct path (equal pins share an index, so the collapse test of
+    // `slot_orders` compares paths, not positions).
     for (slot, p) in slot_path.iter().enumerate() {
         if let Some(p) = p {
             for s in sources.iter_mut().filter(|s| s.seed.is_some()) {
+                let pinned_before = (0..slot)
+                    .filter_map(|o| s.sp.pin[o])
+                    .find(|i| s.paths[*i].path == *p);
+                if let Some(idx) = pinned_before {
+                    s.sp.pin[slot] = Some(idx);
+                    continue;
+                }
                 let idx = s.paths.len();
                 s.paths.push(PathInfo {
                     path: p.clone(),
@@ -1303,14 +1368,16 @@ fn template_job(
             free_keys.len()
         )));
     }
-    let collapse = sorted_collapse_applies(&tpl);
-    let orders = if collapse {
-        1
-    } else {
-        orders_for(free_slots.len()).ok_or_else(|| refuse("too many free slots"))?
-    };
-    // Path tuples.
-    let seed_ids: Vec<usize> = (0..k).collect();
+    // Path tuples. A seed whose slot is pinned and path-pinned takes no
+    // path digit (review r1 M7: its digit would repeat every assignment).
+    let seed_ids: Vec<usize> = (0..k)
+        .filter(|i| {
+            !pinned_key
+                .iter()
+                .enumerate()
+                .any(|(slot, p)| *p == Some(*i) && slot_path[slot].is_some())
+        })
+        .collect();
     let any_unpinned_path_seed_slot = (0..n).any(|slot| {
         slot_path[slot].is_none()
             && match pinned_key[slot] {
@@ -1320,7 +1387,7 @@ fn template_job(
     });
     let mut segments = Vec::new();
     if any_unpinned_path_seed_slot {
-        if ctx.args.independent_paths && k > 1 {
+        if ctx.args.independent_paths && seed_ids.len() > 1 {
             segments.push(PathTuples::Independent {
                 seeds: seed_ids.clone(),
                 c: c as u64,
@@ -1334,6 +1401,9 @@ fn template_job(
     } else {
         segments.push(PathTuples::Shared { c: 1 });
     }
+    let src_paths: Vec<SourcePaths> = sources.iter().map(|s| s.sp.clone()).collect();
+    let orders = slot_orders(&tpl, &free_slots, &free_keys, &segments, &src_paths)
+        .ok_or_else(|| refuse("too many free slots"))?;
     let kinds: BTreeSet<SpkKind> = ctx.targets.iter().map(|t| t.2).collect();
     if !kinds.contains(&tpl.kind) {
         return Err(refuse(format!(
@@ -1373,25 +1443,26 @@ fn template_job(
     })
 }
 
-fn keyed_job<E: Write>(
-    ctx: &Ctx,
-    text: &str,
-    masters: &[Xpriv],
-    stderr: &mut E,
-) -> Result<Job, ToolkitError> {
+/// A literal extended public key with an optional `[fp/path]` origin.
+fn key_regex() -> &'static Regex {
     static KEY: OnceLock<Regex> = OnceLock::new();
-    let re = KEY.get_or_init(|| {
+    KEY.get_or_init(|| {
         Regex::new(
             r"(?:\[([0-9a-fA-F]{8})((?:/\d+['h]?)*)\])?([a-zA-Z]pub[1-9A-HJ-NP-Za-km-z]{100,112})",
         )
         .expect("static regex")
-    });
-    let expanded = crate::parse_descriptor::expand_literal_double_star(text).into_owned();
+    })
+}
+
+/// Replace every literal key of `text` by `@{first + i}` (one slot per
+/// distinct key, in order of first appearance); return the rewritten text
+/// and the keys with their stated origins.
+fn templatise_keys(text: &str, first: usize) -> Result<(String, Vec<CosignerIn>), ToolkitError> {
     let mut keys: Vec<CosignerIn> = Vec::new();
     let mut key_strs: Vec<String> = Vec::new();
     let mut bad: Option<ToolkitError> = None;
-    let templ = re
-        .replace_all(&expanded, |c: &regex::Captures| {
+    let templ = key_regex()
+        .replace_all(text, |c: &regex::Captures| {
             let k = c[3].to_string();
             let i = match key_strs.iter().position(|x| *x == k) {
                 Some(i) => i,
@@ -1426,12 +1497,35 @@ fn keyed_job<E: Write>(
                     }
                 }
             };
-            format!("@{i}")
+            format!("@{}", first + i)
         })
         .into_owned();
     if let Some(e) = bad {
         return Err(e);
     }
+    Ok((templ, keys))
+}
+
+/// Verify a BIP-380 checksum on the text as given and strip it (review r1
+/// I3: the keys are rewritten to `@N` after this, which would change it).
+fn strip_checksum(text: &str) -> Result<String, ToolkitError> {
+    let t = text.trim();
+    if !t.contains('#') {
+        return Ok(t.to_string());
+    }
+    miniscript::descriptor::checksum::verify_checksum(t)
+        .map(str::to_string)
+        .map_err(|e| refuse(format!("--descriptor checksum: {e}")))
+}
+
+fn keyed_job<E: Write>(
+    ctx: &Ctx,
+    text: &str,
+    masters: &[Xpriv],
+    stderr: &mut E,
+) -> Result<Job, ToolkitError> {
+    let expanded = crate::parse_descriptor::expand_literal_double_star(text).into_owned();
+    let (templ, keys) = templatise_keys(&expanded, 0)?;
     if keys.is_empty() {
         return Err(refuse(
             "--descriptor has neither @N placeholders nor public keys",
@@ -1678,6 +1772,14 @@ fn execute<W: Write, E: Write>(
         sp.sources = src_paths.clone();
         let tpl = &job.templates[u.tpl_idx];
         let a = alts_used(ctx, tpl);
+        // Fail loud (review r1 I2): a template the evaluator cannot
+        // translate would match nothing and print a false no-match.
+        if !probe_eval(&sp, tpl, &cache, a) {
+            return Err(refuse(format!(
+                "internal: {} cannot be evaluated with the keys given; nothing was searched",
+                tpl.text
+            )));
+        }
         let c = sp.candidates().unwrap_or(0);
         total_cands = total_cands.saturating_add(c);
         total_scripts = total_scripts.saturating_add(c * a as u64 * u64::from(ctx.args.gap_limit));
@@ -2236,6 +2338,10 @@ impl Analysis<'_> {
             Vec::new()
         };
 
+        // SPEC §6: `reasons` is empty for `no_match` (review r1 M1).
+        if found.is_empty() {
+            reasons.clear();
+        }
         let reasons_v: Vec<&'static str> = reasons.iter().map(|i| REASONS[*i]).collect();
         let result = if found.is_empty() {
             "no_match"
@@ -2404,9 +2510,14 @@ impl Analysis<'_> {
         let job = self.job;
         let mut unavailable: Option<&'static str> = None;
         let mut placeholder = false;
-        // Paths recordable by md1?
+        // Paths recordable by md1? A seed at the master `m` is not either:
+        // `bundle` cannot record the master as a key origin (SPEC §1 "not
+        // covered"; review r1 M2), so it is reported like a step past 2^29.
         for (src, path) in &w.assign {
             let p = &job.sources[*src].paths[*path].path;
+            if job.sources[*src].seed.is_some() && p.is_empty() {
+                unavailable = Some("path_unrecordable");
+            }
             if p.into_iter().any(|c| match c {
                 ChildNumber::Hardened { index } | ChildNumber::Normal { index } => {
                     *index > MD1_STEP_MAX
@@ -2425,6 +2536,7 @@ impl Analysis<'_> {
                         let s = &job.sources[src];
                         let us = leaf_use_site(leaf);
                         match s.fingerprint.filter(|_| s.seed.is_some()) {
+                            Some(fp) if s.paths[path].path.is_empty() => format!("[{fp}]@{i}{us}"),
                             Some(fp) => {
                                 format!("[{fp}/{}]@{i}{us}", path_h(&s.paths[path].path))
                             }
@@ -2698,10 +2810,18 @@ impl Analysis<'_> {
                     }
                 }
                 (None, Some("path_unrecordable")) => {
+                    let at_master = w.assign.iter().any(|(src, path)| {
+                        job.sources[*src].seed.is_some()
+                            && job.sources[*src].paths[*path].path.is_empty()
+                    });
                     writeln!(
                         out,
-                        "  md1 cannot record a path step above 536870911; no card can be made for \
-                         this wallet"
+                        "  {}; no card can be made for this wallet",
+                        if at_master {
+                            "the master key m cannot be recorded as a key origin"
+                        } else {
+                            "md1 cannot record a path step above 536870911"
+                        }
                     )
                     .map_err(io)?;
                 }
