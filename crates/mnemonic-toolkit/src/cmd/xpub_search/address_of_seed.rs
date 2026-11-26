@@ -2288,6 +2288,8 @@ impl Analysis<'_> {
             matches_total,
             matches_kept,
         };
+        // The shared no-match error labels its count "paths searched".
+        let searched_paths = searched.paths;
 
         if ctx.args.json {
             let env = XpubSearchEnvelope {
@@ -2323,7 +2325,7 @@ impl Analysis<'_> {
             "match" => Ok(0),
             "no_match" => Err(ToolkitError::XpubSearchNoMatch {
                 mode: "address-of-seed",
-                searched: usize::try_from(total_scripts).unwrap_or(usize::MAX),
+                searched: searched_paths,
             }),
             _ => Err(ToolkitError::XpubSearchUnverified { reasons: reasons_v }),
         }
