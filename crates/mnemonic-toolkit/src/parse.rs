@@ -184,13 +184,13 @@ struct CosignersFileEntry {
 }
 
 /// Parse a JSON `--cosigners-file <path>` into a list of `CosignerSpec`s
-/// (SPEC §2.1.2.1). Errors with `ToolkitError::CosignersFile { message }`
-/// (exit 1) for I/O, JSON parse, or schema-violation failures.
+/// (SPEC §2.1.2.1). A file that cannot be read is an IO failure (exit 32;
+/// non-UTF-8 text is an invalid input, exit 2); JSON parse and schema
+/// failures are `ToolkitError::CosignersFile { message }` (exit 2).
 #[allow(dead_code)]
 pub fn parse_cosigners_file(path: &Path) -> Result<Vec<CosignerSpec>, ToolkitError> {
-    let text = std::fs::read_to_string(path).map_err(|e| ToolkitError::CosignersFile {
-        message: format!("read {}: {}", path.display(), e),
-    })?;
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| crate::error::read_error(format!("--cosigners-file {}", path.display()), e))?;
     let entries: Vec<CosignersFileEntry> =
         serde_json::from_str(&text).map_err(|e| ToolkitError::CosignersFile {
             message: format!("JSON parse: {}", e),
@@ -410,6 +410,19 @@ mod tests {
         assert!(specs[0].path.is_none());
         assert!(specs[1].path.is_some());
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn cosigners_file_unreadable_is_io_32() {
+        let path = std::env::temp_dir().join("toolkit_cosigners_file_test_does_not_exist.json");
+        std::fs::remove_file(&path).ok();
+        let e = parse_cosigners_file(&path).unwrap_err();
+        assert!(
+            matches!(e, ToolkitError::IoFailure(_)),
+            "expected IoFailure, got {e:?}"
+        );
+        assert_eq!(e.exit_code(), 32);
+        assert!(e.message().contains("--cosigners-file"), "{}", e.message());
     }
 
     #[test]
