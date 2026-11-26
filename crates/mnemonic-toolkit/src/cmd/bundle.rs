@@ -4213,6 +4213,28 @@ mod self_check_mk1_xpub_binding_tests {
     }
 
     #[test]
+    fn rerun_command_prints_the_scheme_spelling_for_the_hidden_alias() {
+        let argv: Vec<String> = [
+            "mnemonic",
+            "bundle",
+            "--template",
+            "bip84",
+            "--template=bip86",
+            "--template-other",
+            "--network",
+            "testnet",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let (cmd, _) = redact_and_quote(&argv, &[], None);
+        assert_eq!(
+            cmd,
+            "mnemonic bundle --scheme bip84 --scheme=bip86 --template-other --network testnet"
+        );
+    }
+
+    #[test]
     fn rerun_command_never_echoes_an_inline_secret() {
         let argv: Vec<String> = [
             "mnemonic",
