@@ -671,14 +671,27 @@ descriptor string itself. The toolkit handles this two ways:
      Segwit (p2wsh)"; the Liana / Specter convention);
    - `sh(wsh(...))` → BIP-48 `m/48'/<coin>'/<account>'/1'` (BIP-48:
      "Nested Segwit (p2sh-p2wsh)");
-   - any other `sh(...)` (legacy bare P2SH) and any `tr(...)` → BIP-87
-     `m/87'/<coin>'/<account>'`. BIP-48 defines only `1'` and `2'`, so it
-     has no path for bare P2SH or taproot; BIP-87 is script-agnostic:
-     "Any script that is supported by descriptors (and the specific wallet
-     implementation) is compatible with this BIP." BIP-87 is written for
-     multisig wallets; a single-key shape (for example
-     `tr(NUMS, and_v(v:pk(@0/*), after(N)))`) gets the same default with a
-     `warning:` instead of `info:`, since the card records the path.
+   - any other `sh(...)` (legacy bare P2SH) and any `tr(...)` that holds
+     a multisig fragment (`multi`, `sortedmulti`, `multi_a` or
+     `sortedmulti_a`, anywhere in the descriptor, including a taproot
+     script tree) → BIP-87 `m/87'/<coin>'/<account>'`. BIP-48 defines
+     only `1'` and `2'`, so it has no path for bare P2SH or taproot;
+     BIP-87 is script-agnostic: "Any script that is supported by
+     descriptors (and the specific wallet implementation) is compatible
+     with this BIP."
+   - a non-canonical `tr(...)` or bare `sh(...)` with **no** multisig
+     fragment (for example a single-key script tree
+     `tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(N)))`, or a tree of `pk`
+     leaves) gets **no** default: BIP-87 says "it is best to restrict
+     this script-agnostic hierarchy to multisignature wallets only".
+     `bundle` refuses it (`SlotInputViolation` `kind:"missing-origin"`,
+     exit 2) when any `@N` has no origin, names those `@N`, and asks for
+     each key's real origin with `--slot @N.path=m/...` or inline
+     `[fp/path]@N`. An `@N.entropy=` slot cannot carry `@N.path=`, so for
+     it only the inline form works. `verify-bundle` mints nothing and
+     still rebuilds such a card at the BIP-87 default when no origin is
+     given, so a card minted that way before 2026-11-26 still verifies
+     with its original command line.
 
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
    `<account>` consumes `--account N` (defaults to `0'`). An `@N.xpub=`
@@ -964,7 +977,8 @@ tracks the next-step refactor opportunity).
 mnemonic bundle --network mainnet \
   --descriptor 'tr(NUMS, and_v(v:pk(@0/*), after(12000000)))' \
   --language english \
-  --slot '@0.phrase=…'
+  --slot '@0.phrase=…' \
+  --slot '@0.path=m/…'
 ```
 
 `NUMS` is a literal token the toolkit substitutes with the BIP-341
@@ -972,13 +986,16 @@ unspendable internal-key hex
 `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0`
 before rust-miniscript parses. The resulting wallet is P2TR (bech32m
 addresses) with key-path spending intentionally disabled — only the
-tap-script path is spendable. The leaf-key `@0` derives at the BIP-48
-default per the inference rule above.
+tap-script path is spendable. This single-key tree holds no multisig
+fragment, so it gets no default origin: give the path at which `@0`'s key
+lives with `--slot @0.path=` (or inline `[fp/path]@0`); without it `bundle`
+refuses (see the inference rule above).
 
 #### Refusal cases
 
 | Trigger | Stderr |
 |---|---|
+| Non-multisig `tr(...)` / bare `sh(...)` with an `@N` lacking an origin | `error: no origin was given for @{N}, and this descriptor is not a multisig (it has no multi, sortedmulti, multi_a or sortedmulti_a). BIP-87 (m/87'/...) is for multisig wallets only, so no default origin is assumed. Give each key's real origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor.` (exit 2; an `@N.entropy=` slot adds that it takes only the inline form) |
 | Bare `tr(<miniscript>)` (no internal key) | `error: tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.` |
 | Canonical descriptor + `--account != 0` | `error: --account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
 | `--slot @N.fingerprint=X` AND inline `[Y/...]@N` disagree | `error: slot @{N} fingerprint mismatch: --slot says X, descriptor inline [Y/...] disagrees; supply consistent values.` |
@@ -3520,7 +3537,9 @@ is suppressed and a single line is printed to stdout:
   canonical shape. The `mnemonic bundle` default-path inference per
   SPEC §4.12.b applies (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`,
   `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87
-  `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; see
+  `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)` that
+  holds a multisig fragment; a non-multisig `tr(...)` or bare `sh(...)`
+  gets no default and `bundle` refuses it without an origin; see
   "Non-canonical descriptor mode" under `mnemonic bundle`).
 - exit 2 with empty stdout — descriptor failed to parse
   (`DescriptorParse` error variant).
@@ -4412,7 +4431,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 
 #### v0.19.0 silent-default-path inference
 
-Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
+Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; `xpub-search` records no origin, so it keeps the BIP-87 default even for the non-multisig shapes `bundle` refuses) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
 
 #### NUMS sentinel
 

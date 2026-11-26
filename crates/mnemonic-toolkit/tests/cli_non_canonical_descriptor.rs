@@ -145,8 +145,10 @@ fn canonical_wsh_sortedmulti_with_nonzero_account_refuses() {
         ));
 }
 
-/// SPEC §4.12.e — `tr(NUMS, <ms>)` sentinel substitution + default-path
-/// inference (tr() with TapTree is non-canonical per md-codec's table).
+/// SPEC §4.12.e — `tr(NUMS, <ms>)` sentinel substitution (tr() with TapTree
+/// is non-canonical per md-codec's table). A single-key script tree gets no
+/// default origin (tk-bh1125-tr-tree-bip87-scope, Brian's ruling 2026-11-26),
+/// so the origin is given with `--slot @0.path=`.
 #[test]
 fn tr_nums_sentinel_substitution_emits_bundle() {
     let descriptor = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
@@ -161,18 +163,15 @@ fn tr_nums_sentinel_substitution_emits_bundle() {
             "mainnet",
             "--slot",
             &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/87'/0'/0'",
         ])
         .assert()
         .success();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // 2026-11-25 BIP-defaults ruling: a taproot (`tr(...)`) root defaults to
-    // BIP-87 (script-agnostic), not a BIP-48 leaf (BIP-48 defines 1' and 2' only).
-    // Review r2 M5: a single-key shape at the BIP-87 default is a warning.
     assert!(
-        stderr.contains("warning: no origin supplied for @0; defaulting to m/87'/0'/0' (BIP-87)")
-            && stderr.contains("BIP-87 is written for multisig")
-            && stderr.contains("use a different --account for each wallet"),
-        "stderr did not contain default-path info notice for tr(NUMS); got:\n{stderr}"
+        !stderr.contains("no origin supplied"),
+        "the origin was given; no default notice expected; got:\n{stderr}"
     );
 }
 
@@ -265,10 +264,11 @@ fn non_canonical_default_path_self_check_round_trips() {
         .success();
 }
 
-/// Same round-trip test for `tr(NUMS, <ms>)` + bare-`@N` (default-path
-/// inference + NUMS substitution + tap-leaf walker round-trip).
+/// Same round-trip test for `tr(NUMS, <ms>)` (NUMS substitution + tap-leaf
+/// walker round-trip). The single-key tree takes an explicit origin
+/// (tk-bh1125-tr-tree-bip87-scope).
 #[test]
-fn tr_nums_default_path_self_check_round_trips() {
+fn tr_nums_explicit_path_self_check_round_trips() {
     let descriptor = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
     Command::cargo_bin("mnemonic")
         .unwrap()
@@ -281,6 +281,8 @@ fn tr_nums_default_path_self_check_round_trips() {
             "mainnet",
             "--slot",
             &format!("@0.phrase={TREZOR_12_ZERO}"),
+            "--slot",
+            "@0.path=m/87'/0'/0'",
             "--self-check",
         ])
         .assert()
@@ -676,15 +678,20 @@ fn parity_sh_wsh_round_trips() {
     }
 }
 
-/// PARITY (tr(NUMS), leaf 3', n=1) — H12 selects the taproot BIP-48 leaf `3'`.
-/// all-elided + slot-override. The n=1 bundle mk1 is FLAT (the harness handles
-/// it), so this also exercises the flat-mk1 arm of `parity_round_trips`.
+/// PARITY (tr(NUMS), n=1), slot-override only: a single-key script tree gets
+/// no default origin (tk-bh1125-tr-tree-bip87-scope, Brian's ruling
+/// 2026-11-26), so there is no all-elided cell. The n=1 bundle mk1 is FLAT
+/// (the harness handles it), so this also exercises the flat-mk1 arm of
+/// `parity_round_trips`.
 #[test]
 fn parity_tr_nums_round_trips() {
     for (desc, slots) in [
         (
             "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))",
-            vec![format!("@0.phrase={TREZOR_12_ZERO}")],
+            vec![
+                format!("@0.phrase={TREZOR_12_ZERO}"),
+                "@0.path=m/87'/0'/0'".into(),
+            ],
         ),
         (
             "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))",

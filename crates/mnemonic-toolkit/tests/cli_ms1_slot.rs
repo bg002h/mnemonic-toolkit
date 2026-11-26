@@ -304,6 +304,9 @@ fn ms1_mnem_language_conflict_exit2() {
 /// A non-canonical single-`@0` descriptor (tr() with TapTree is non-canonical
 /// per md-codec's table → default-path inference → descriptor binding loop).
 const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0/*),after(12000000)))";
+/// Its explicit origin: a single-key shape gets no default origin
+/// (tk-bh1125-tr-tree-bip87-scope, Brian's ruling 2026-11-26).
+const NONCANONICAL_PATH: &str = "@0.path=m/87'/0'/0'";
 
 /// entr ms1 cosigner derives in descriptor mode (the bundle succeeds and emits
 /// an ms1 card for `@0`).
@@ -323,6 +326,8 @@ fn ms1_entr_descriptor_mode_derives_cosigner() {
             "mainnet",
             "--slot",
             &format!("@0.ms1={ms1}"),
+            "--slot",
+            NONCANONICAL_PATH,
             "--json",
             "--no-engraving-card",
         ])
@@ -357,6 +362,8 @@ fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
             "mainnet",
             "--slot",
             &format!("@0.ms1={ms1}"),
+            "--slot",
+            NONCANONICAL_PATH,
             "--json",
             "--no-engraving-card",
         ])
@@ -589,6 +596,8 @@ fn verify_bundle_descriptor_mode_ms1_cosigner_verified() {
             "mainnet",
             "--slot",
             &format!("@0.ms1={ms1_in}"),
+            "--slot",
+            NONCANONICAL_PATH,
             "--json",
             "--no-engraving-card",
         ])

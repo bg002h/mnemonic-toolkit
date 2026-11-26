@@ -1746,6 +1746,17 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         args.account,
     )?;
 
+    // tk-bh1125-tr-tree-bip87-scope (Brian's ruling, 2026-11-26): BIP-87 is
+    // for multisig, so a non-multisig shape that would take the BIP-87
+    // default (a tr(...) script tree or a bare sh(...) with no multi fragment)
+    // is refused instead of minted with an origin nobody chose.
+    check_bip87_default_scope(
+        &bound_paths.defaulted,
+        slots,
+        default_family,
+        &canonicity_probe.tree,
+    )?;
+
     // Resolve each @i slot using the per-@i annotation path from the descriptor.
     let secp = Secp256k1::new();
     let mut by_index: BTreeMap<u8, Vec<&crate::slot_input::SlotInput>> = BTreeMap::new();
@@ -2128,7 +2139,6 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         // Bare P2SH only: sh(wsh(...)) keeps BIP-48 1' and the plain notice.
         canonicity_probe.tree.tag == md_codec::tag::Tag::Sh
             && matches!(default_family, crate::template::DefaultOriginFamily::Bip87),
-        n == 1,
     )?;
     // Bug hunt 2026-11-25 toolkit#1: say which canonical-shape slots were given
     // the shape's canonical origin (and so were derived / recorded there).
@@ -2843,10 +2853,63 @@ pub(crate) fn bind_descriptor_mode_paths(
     })
 }
 
+/// Brian's ruling of 2026-11-26 (`tk-bh1125-tr-tree-bip87-scope`): refuse to
+/// mint when an `@N` would take the BIP-87 default origin on a shape with no
+/// multisig fragment. BIP-87: "it is best to restrict this script-agnostic
+/// hierarchy to multisignature wallets only". No example path is suggested:
+/// the right one depends on where the key really lives (see FOLLOWUPS
+/// `tk-bh1125-r3-m1-refusal-example-path`).
+fn check_bip87_default_scope(
+    defaulted: &[u8],
+    slots: &[crate::slot_input::SlotInput],
+    family: crate::template::DefaultOriginFamily,
+    root_tree: &md_codec::tree::Node,
+) -> Result<(), ToolkitError> {
+    if defaulted.is_empty()
+        || !matches!(family, crate::template::DefaultOriginFamily::Bip87)
+        || crate::template::tree_has_multisig_fragment(root_tree)
+    {
+        return Ok(());
+    }
+    let idx_list = defaulted
+        .iter()
+        .map(|i| format!("@{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut message = format!(
+        "no origin was given for {idx_list}, and this descriptor is not a multisig (it has \
+         no multi, sortedmulti, multi_a or sortedmulti_a). BIP-87 (m/87'/...) is for \
+         multisig wallets only, so no default origin is assumed. Give each key's real \
+         origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor."
+    );
+    // The slot grammar refuses `@N.path=` beside `@N.entropy=`, so name only
+    // the inline form for those slots (never advise a refused input).
+    let entropy_only: Vec<String> = defaulted
+        .iter()
+        .filter(|i| {
+            slots
+                .iter()
+                .any(|s| s.index == **i && s.subkey == crate::slot_input::SlotSubkey::Entropy)
+        })
+        .map(|i| format!("@{i}"))
+        .collect();
+    if !entropy_only.is_empty() {
+        message.push_str(&format!(
+            " An @N.entropy= slot ({}) takes only the inline form.",
+            entropy_only.join(",")
+        ));
+    }
+    Err(ToolkitError::SlotInputViolation {
+        kind: "missing-origin",
+        message,
+    })
+}
+
 /// What [`bind_descriptor_mode_paths`] chose on the operator's behalf.
 #[derive(Debug, Default)]
 pub(crate) struct BoundDescriptorPaths {
-    /// Non-canonical `@N` given the BIP-48 default origin.
+    /// Non-canonical `@N` given the family default origin (BIP-48 or BIP-87,
+    /// `template::DefaultOriginFamily`).
     pub defaulted: Vec<u8>,
     /// Canonical-shape `@N` given the shape's canonical origin (bug hunt
     /// 2026-11-25 toolkit#1).
@@ -2892,13 +2955,13 @@ pub fn derivation_path_to_origin(dp: &DerivationPath) -> md_codec::origin_path::
 }
 
 /// v0.19.0 SPEC §4.12.d — emit the stderr notice naming the `@N` indices that
-/// received the default path, and the path. For a legacy bare-P2SH `sh(...)`
-/// (no BIP-48 script type; BIP-87 default per Brian's 2026-11-25 ruling) it is
+/// received the default path, and the path. For a legacy bare-P2SH multisig
+/// `sh(...)` (no BIP-48 script type; BIP-87 default per Brian's 2026-11-25
+/// ruling; a non-multisig `sh(...)` is refused before this) it is
 /// a WARNING: other wallets put those keys elsewhere, so it lists the common
 /// alternatives, asks for an address comparison and a distinct `--account`
 /// for a second wallet, and prints the ready-to-run command that mints the
 /// same bundle at `m/45'` instead.
-#[allow(clippy::too_many_arguments)]
 fn emit_default_path_notice<E: Write>(
     stderr: &mut E,
     defaulted_indices: &[u8],
@@ -2907,7 +2970,6 @@ fn emit_default_path_notice<E: Write>(
     account: u32,
     family: crate::template::DefaultOriginFamily,
     bare_sh: bool,
-    single_key: bool,
 ) -> Result<(), ToolkitError> {
     if defaulted_indices.is_empty() {
         return Ok(());
@@ -2931,23 +2993,13 @@ fn emit_default_path_notice<E: Write>(
         // one account would reuse one key across script types, which BIP-87
         // asks wallets to avoid ("the wallet must increment the `account'`
         // level. This prevents key reuse - across ECDSA and Schnorr
-        // signatures, across different script types"). A single-key shape is
-        // a warning: BIP-87 is written for multisig.
-        let level = if bip87 && single_key {
-            "warning"
-        } else {
-            "info"
-        };
+        // signatures, across different script types"). Only multisig shapes
+        // reach here with a BIP-87 default: a non-multisig one is refused by
+        // `check_bip87_default_scope` (Brian's ruling, 2026-11-26).
         let mut line = format!(
-            "{level}: no origin supplied for {idx_list}; defaulting to {path} ({label}). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+            "info: no origin supplied for {idx_list}; defaulting to {path} ({label}). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
         );
         if bip87 {
-            if single_key {
-                line.push_str(
-                    " BIP-87 is written for multisig; this card records the path, so restore \
-                     does not depend on it.",
-                );
-            }
             line.push_str(
                 " The same BIP-87 key serves every script type at one account: use a \
                  different --account for each wallet from this seed.",

@@ -102,7 +102,9 @@ Literal-xpub descriptors with missing `[fp/path]` annotations on
 `@N` cosigners trigger default-path inference
 (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'`
 for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)`
-and for `tr(...)`) plus a stderr `info:` notice naming the path. A
+and for `tr(...)`, including the non-multisig shapes that `bundle` refuses
+without an origin, since a search records none) plus a stderr `info:`
+notice naming the path. A
 cosigner xpub matching the BIP-341 unspendable NUMS H point is
 skipped and reported in the JSON envelope's
 `unspendable_internal_keys` array. The GUI renders this as a Text
