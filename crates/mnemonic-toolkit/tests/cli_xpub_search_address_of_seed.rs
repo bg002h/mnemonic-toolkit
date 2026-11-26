@@ -2215,3 +2215,250 @@ fn covering_twin_names_the_found_wallet_by_position() {
     // later, never wallet 1 (itself).
     assert!(!o.stdout.contains("twin (of wallet 1)"), "{}", o.stdout);
 }
+
+// ---------------------------------------------------------------------------
+// Final review (fable): I1, I2, M1-M6
+// ---------------------------------------------------------------------------
+
+/// `wpkh` of seed A at `path`, receive `idx`.
+fn wpkh_at(path: &str, idx: u32) -> String {
+    mint(&format!("wpkh({}/<0;1>/*)", origin_key(A, path)), 0, idx)
+}
+
+/// Final review I1: a malformed `--add-path` is refused at intake (exit 2,
+/// naming the value), never dropped and listed as searched.
+#[test]
+fn fable_i1_malformed_add_path_refused() {
+    let target = wpkh_at("m/0'", 0);
+    for bad in [
+        "m/0\u{2019}",
+        "m/0''",
+        "m/0H",
+        "M/0'",
+        "m / 0'",
+        "m/0'/",
+        "garbage",
+        "m/2147483648'",
+        "m/account\u{2019}/0'",
+        "",
+    ] {
+        let o = run_a(&["--target-address", &target, "--add-path", bad]);
+        assert_eq!(o.code, 2, "{bad:?}: {}\n{}", o.stdout, o.stderr);
+        assert!(
+            o.stderr.contains(&format!("--add-path `{bad}`")),
+            "{bad:?}: {}",
+            o.stderr
+        );
+        assert!(!o.stdout.contains("searched:"), "{bad:?}: {}", o.stdout);
+    }
+    // The accepted hardened markers: `'` and `h`, with or without `m/`.
+    for good in ["m/0'", "m/0h", "0'"] {
+        let o = run_a(&["--target-address", &target, "--add-path", good, "--json"]);
+        assert_eq!(o.code, 0, "{good}: {}\n{}", o.stdout, o.stderr);
+        assert_eq!(o.json()["searched"]["paths"], 162, "{good}");
+    }
+}
+
+/// Final review I1: the shared path builder refuses for the sibling verbs
+/// too (path-of-xpub, account-of-descriptor, passphrase-of-xpub).
+#[test]
+fn fable_i1_sibling_verbs_refuse_a_malformed_add_path() {
+    let (_, x) = xpub_at(A, "m/84'/0'/0'");
+    let x = x.to_string();
+    let cases: Vec<Vec<&str>> = vec![
+        vec![
+            "path-of-xpub",
+            "--phrase",
+            "@env:SEED_A",
+            "--target-xpub",
+            &x,
+        ],
+        vec![
+            "account-of-descriptor",
+            "--phrase",
+            "@env:SEED_A",
+            "--descriptor",
+            "wpkh(@0/<0;1>/*)",
+        ],
+        vec![
+            "passphrase-of-xpub",
+            "--phrase",
+            "@env:SEED_A",
+            "--target-xpub",
+            &x,
+            "--passphrase",
+            "@env:PP_TREZOR",
+        ],
+    ];
+    for c in cases {
+        let o = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("xpub-search")
+            .args(&c)
+            .args(["--add-path", "m/84H/0H/0H"])
+            .envs(envs())
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert_eq!(o.status.code(), Some(2), "{}: {err}", c[0]);
+        assert!(
+            err.contains(&format!("{}: --add-path `m/84H/0H/0H`", c[0])),
+            "{}: {err}",
+            c[0]
+        );
+    }
+}
+
+/// Final review I2: the twin is evaluated at the hit's own index, with no
+/// index cap: a sortedmulti hit at receive 100003 whose multi twin fits
+/// exits 4.
+#[test]
+fn fable_i2_twin_checked_past_index_100000() {
+    let p = "m/48'/0'/0'/2'";
+    let desc = format!(
+        "wsh(sortedmulti(2,{}/<0;1>/*,{}/<0;1>/*))",
+        origin_key(A, p),
+        origin_key(Z, p)
+    );
+    let target = mint(&desc, 0, 100_003);
+    let o = run_a(&[
+        "--descriptor",
+        &desc,
+        "--target-address",
+        &target,
+        "--gap-limit",
+        "100010",
+        "--external-only",
+        "--json",
+    ]);
+    assert_eq!(o.code, 4, "{}\n{}", o.stdout, o.stderr);
+    let v = o.json();
+    assert!(reasons(&v).contains(&"twin".to_string()), "{v}");
+}
+
+/// Final review M1: a repeated `--target-address` (also in upper case) is
+/// one target, not a false `unmatched`.
+#[test]
+fn fable_m1_repeated_target_is_deduplicated() {
+    let upper = S1.to_uppercase();
+    for second in [S1, upper.as_str()] {
+        let o = run_a(&["--target-address", S1, "--target-address", second, "--json"]);
+        assert_eq!(o.code, 0, "{second}: {}\n{}", o.stdout, o.stderr);
+        let v = o.json();
+        assert_eq!(v["result"], "match");
+        assert_eq!(v["unmatched_targets"].as_array().unwrap().len(), 0);
+    }
+}
+
+/// Final review M2: the same `--add-path` twice (or spelt two ways) is one
+/// path, not a false `split`.
+#[test]
+fn fable_m2_repeated_add_path_is_deduplicated() {
+    let target = wpkh_at("m/0'", 0);
+    for (a, b) in [("m/0'", "m/0'"), ("m/0'", "m/0h")] {
+        let o = run_a(&[
+            "--target-address",
+            &target,
+            "--add-path",
+            a,
+            "--add-path",
+            b,
+            "--json",
+        ]);
+        assert_eq!(o.code, 0, "{a} {b}: {}\n{}", o.stdout, o.stderr);
+        let v = o.json();
+        assert_eq!(v["wallets"].as_array().unwrap().len(), 1, "{v}");
+        assert_eq!(v["searched"]["paths"], 162, "{v}");
+    }
+}
+
+/// Final review M3: with `--refugium-seats`, the shared (standard-path)
+/// segment keeps the sorted collapse: a sorted wallet at a standard path is
+/// hit once per target, not once per slot order.
+#[test]
+fn fable_m3_seats_keep_the_sorted_collapse_on_shared_paths() {
+    let o = run_az(&[
+        "--descriptor",
+        SORTED,
+        "--target-address",
+        M1,
+        "--refugium-seats",
+        "--json",
+    ]);
+    assert_eq!(o.code, 4, "{}", o.stderr);
+    let v = o.json();
+    assert_eq!(v["searched"]["matches_total"], 1, "{v}");
+    assert!(!reasons(&v).contains(&"cap".to_string()));
+    assert_eq!(found(&v)["merged_forms"], 0, "{v}");
+}
+
+/// Final review M4: a request whose estimated memory passes the ceiling is
+/// refused (exit 2) before any path list is built or key derived.
+#[test]
+fn fable_m4_memory_ceiling_refuses_before_work() {
+    let o = run_a(&[
+        "--target-address",
+        S1,
+        "--number-of-accounts",
+        "3000000",
+        "--gap-limit",
+        "1",
+        "--external-only",
+    ]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(o.stderr.contains("memory"), "{}", o.stderr);
+    assert!(!o.stderr.contains("estimate:"), "{}", o.stderr);
+}
+
+/// Final review M4: the estimate (counts, cache, memory) is printed before
+/// any key is derived: it is the first line, and states the memory.
+#[test]
+fn fable_m4_estimate_states_memory() {
+    let o = run_a(&["--target-address", S1]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let first = o.stderr.lines().next().unwrap_or("");
+    assert!(first.starts_with("estimate:"), "{}", o.stderr);
+    assert!(first.contains("memory about"), "{}", o.stderr);
+}
+
+/// Final review M5: a keyed shape `bundle` cannot record is refused naming
+/// the key the user typed, never an `@0` they did not type, with one
+/// `error:`.
+#[test]
+fn fable_m5_keyed_refusal_names_the_typed_key() {
+    let (fp, x) = xpub_at(A, "m/84'/0'/0'");
+    let xs = x.to_string();
+    let core = format!("wpkh([{fp}/84h/0h/0h]{xs}/0/*)");
+    let liana = format!(
+        "wsh(or_d(pk({k}/<0;1>/*),and_v(v:pk({k}/<2;3>/*),older(52560))))",
+        k = format!("[{fp}/84h/0h/0h]{xs}")
+    );
+    for d in [core, liana] {
+        let o = run_a(&["--descriptor", &d, "--target-address", S1]);
+        assert_eq!(o.code, 2, "{d}: {}", o.stderr);
+        assert!(!o.stderr.contains("@0"), "{d}: {}", o.stderr);
+        assert!(o.stderr.contains(&xs[..12]), "{d}: {}", o.stderr);
+        assert_eq!(o.stderr.matches("error:").count(), 1, "{}", o.stderr);
+    }
+}
+
+/// Final review M6: two xpubs placed on one slot are a clear conflict
+/// (exit 2), not a base58 decode error.
+#[test]
+fn fable_m6_two_keys_for_one_placed_slot() {
+    let z1 = origin_key(Z, "m/48'/0'/0'/2'");
+    let z2 = origin_key(Z, "m/48'/0'/1'/2'");
+    let (c1, c2) = (format!("@1={z1}"), format!("@1={z2}"));
+    let o = run_a(&[
+        "--descriptor",
+        SORTED,
+        "--cosigner",
+        &c1,
+        "--cosigner",
+        &c2,
+        "--target-address",
+        M1,
+    ]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(o.stderr.contains("@1 is given two keys"), "{}", o.stderr);
+}
