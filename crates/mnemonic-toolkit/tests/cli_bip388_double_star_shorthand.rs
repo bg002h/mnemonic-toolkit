@@ -57,7 +57,7 @@ fn bundle_json_descriptor_with_slots(desc: &str, slots: &[&str]) -> Value {
         args.push(s);
     }
     args.push("--json");
-    let out = bin().args(&args).assert().success();
+    let out = bin().args(&args).assert().code(4);
     let mut v: Value =
         serde_json::from_slice(&out.get_output().stdout).expect("bundle --json output");
     v["descriptor"] = Value::Null;
@@ -143,7 +143,7 @@ fn verify_bundle_atn_form_double_star_accepts() {
         bundle_args.push(s);
     }
     bundle_args.push("--json");
-    let bundle_out = bin().args(&bundle_args).assert().success();
+    let bundle_out = bin().args(&bundle_args).assert().code(4);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
 
     let tmpdir = tempfile::tempdir().unwrap();

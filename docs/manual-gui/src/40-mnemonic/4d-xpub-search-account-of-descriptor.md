@@ -99,8 +99,12 @@ is auto-detected by a tie-break order:
   rust-miniscript).
 
 Literal-xpub descriptors with missing `[fp/path]` annotations on
-`@N` cosigners trigger silent BIP-48 default-path inference
-(`m/48'/<coin>'/<account>'/2'`) plus a stderr `info:` notice. A
+`@N` cosigners trigger default-path inference
+(`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'`
+for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)`
+and for `tr(...)`, including the non-multisig shapes that `bundle` refuses
+without an origin, since a search records none) plus a stderr `info:`
+notice naming the path. A
 cosigner xpub matching the BIP-341 unspendable NUMS H point is
 skipped and reported in the JSON envelope's
 `unspendable_internal_keys` array. The GUI renders this as a Text
@@ -266,7 +270,7 @@ match: cosigner @0  m/48'/0'/0'/2'  (template=bip48-wsh, account=0)
 descriptor: wsh(sortedmulti(2, [fp1/48h/0h/0h/2h]xpub1.../0/*, ...))
 cosigners total: 3
 matched cosigner indices: [0]
-searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
+searched: 161 candidates × 3 cosigners
 ```
 
 A no-cosigner-match result exits 1 (`ToolkitError::XpubSearchNoMatch`);

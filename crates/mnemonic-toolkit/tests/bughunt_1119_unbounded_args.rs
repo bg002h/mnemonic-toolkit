@@ -271,7 +271,7 @@ fn bh_tk_mn11_window_ending_at_2p31_is_accepted() {
     assert_eq!(r.code, Some(1), "stderr: {}", r.err());
     assert!(
         r.err()
-            .starts_with("error: no match in searched set: mode=path-of-xpub, paths searched=14; widen the range"),
+            .starts_with("error: no match in searched set: mode=path-of-xpub, paths searched=17; widen the range"),
         "stderr: {}",
         r.err()
     );
@@ -301,11 +301,13 @@ fn bh_tk_mn18_add_path_count_unchanged() {
         o.contains("match: m/84'/1'/0'  (template=bip84, account=0)\n"),
         "{o}"
     );
-    assert!(o.contains("searched: 27 candidate paths\n"), "{o}");
+    assert!(o.contains("searched: 31 candidate paths\n"), "{o}");
 }
 
 const TARGET_48: &str = "tpubDEYM1BmQ5rp2PWKvCgvQxNeUrEv8gu5819xRdmu6S23fYpS8x2icwAeoVaBTLyN3fGWJQcWoaiKMduTXWKtG9bXNpVrZPRF7XVxrANtAEcR";
-const TARGET_87: &str = "tpubDCChhoz5QdrkoaTfhN9wz9UwMkRvBNezCAcbLJ3yqswVCnGtCvuBtmub29oFk2CEty4eu15WDGa7aJ3QcHKp9JtggPakJ8JaFz4HHtCnA65";
+/// Signet `m/88'/1'/1'` tpub of PHRASE: a path outside every built-in family
+/// (BIP-87 joined them in review r2 I-A), so only an `--add-path` finds it.
+const TARGET_88: &str = "tpubDCrgSta8TNzMgaT9kwRwz5vUSeHEgcqD7GLJDDd1erSCdMb6RUg7dSVP29ggAK6bXFcYnJS5S2P4uGvzzsHfixfehosuJrZ3LtjLNkNWWEa";
 
 fn order_row(target: &str, adds: &[&str], line: &str, searched: u32) {
     let mut tail = vec!["--target-xpub", target, "--number-of-accounts", "2"];
@@ -327,31 +329,32 @@ fn bh_tk_mn18_order_bip48_before_add_path() {
         TARGET_48,
         &["m/48'/1'/account'/2'"],
         "m/48'/1'/1'/2'  (template=bip48-wsh, account=1)",
-        16,
+        19,
     );
 }
 
 #[test]
 fn bh_tk_mn18_order_add_paths_in_argv_order() {
     order_row(
-        TARGET_87,
-        &["m/87'/1'/1'", "m/87'/1'/account'"],
-        "m/87'/1'/1'  (template=m/87'/1'/1', account=n/a)",
-        17,
+        TARGET_88,
+        &["m/88'/1'/1'", "m/88'/1'/account'"],
+        "m/88'/1'/1'  (template=m/88'/1'/1', account=n/a)",
+        20,
     );
 }
 
 #[test]
 fn bh_tk_mn18_order_templates_outer_accounts_inner() {
     order_row(
-        TARGET_87,
-        &["m/87'/1'/account'", "m/87'/1'/account1'"],
-        "m/87'/1'/1'  (template=m/87'/1'/account', account=1)",
-        18,
+        TARGET_88,
+        &["m/88'/1'/account'", "m/88'/1'/account1'"],
+        "m/88'/1'/1'  (template=m/88'/1'/account', account=1)",
+        21,
     );
 }
 
-const FULL: &str = "15032385536";
+/// 8 families × 2^31 accounts + BIP-45 m/45' once.
+const FULL: &str = "17179869185";
 
 #[test]
 #[cfg(not(target_os = "macos"))] // `ulimit -v` is unsupported on macOS
@@ -386,7 +389,7 @@ fn bh_tk_mn18_path_of_xpub_full_hardened_window_streams() {
     assert!(!j.timed_out && j.signal.is_none(), "stderr: {}", j.err());
     assert_eq!(j.code, Some(0), "stderr: {}", j.err());
     let v: serde_json::Value = serde_json::from_str(&j.out()).expect("json");
-    assert_eq!(v["searched_count"].as_u64(), Some(15032385536), "{v}");
+    assert_eq!(v["searched_count"].as_u64(), Some(17179869185), "{v}");
 }
 
 #[test]

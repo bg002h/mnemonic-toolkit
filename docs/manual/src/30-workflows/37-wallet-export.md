@@ -147,7 +147,7 @@ template:
 
 ```sh
 mnemonic export-wallet \
-  --descriptor 'tr(NUMS,sortedmulti_a(2,@0,@1,@2))' \
+  --descriptor 'tr(NUMS,sortedmulti_a(2,@0/*,@1/*,@2/*))' \
   --slot @0.xpub=<xpub-0> \
   --slot @1.xpub=<xpub-1> \
   --slot @2.xpub=<xpub-2> \
@@ -263,13 +263,17 @@ x1=xpub6DVvJu3xFotP7byMCoCa9B5EmDcCo9Yznz7kuEogMemnYTMumxxCnXhk1pfJZHPuoX79Hbjae
 
 mnemonic bundle \
   --network mainnet \
-  --descriptor 'wsh(sortedmulti(2,@0,@1))' \
+  --descriptor 'wsh(sortedmulti(2,@0/*,@1/*))' \
   --slot "@0.xpub=$x0" \
   --slot "@1.xpub=$x1"
 ```
 
 This emits the steel-engravable `md1` template card plus one `mk1` card
-per cosigner (no `ms1` — descriptor mode is watch-only). See
+per cosigner (no `ms1` — descriptor mode is watch-only). No `@N` names
+an origin, so the cards record this shape's canonical origin
+`m/48'/0'/0'/2'` (when each xpub's header agrees with it); `bundle`
+warns, prints the command that states it, and exits 4. Add
+`--slot @N.path=` with each cosigner's real path to state it. See
 [From a user-supplied descriptor](#from-a-user-supplied-descriptor) for
 the full bundle layout.
 

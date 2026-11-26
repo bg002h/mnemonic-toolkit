@@ -1,11 +1,13 @@
-info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+warning: no origin was given for @0,@1,@2; the toolkit chose m/48'/0'/0'/2' (BIP-48 cosigner path) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards.
+warning: to state this path explicitly, run:
+  mnemonic bundle --network mainnet --account 0 --descriptor 'wsh(andor(pkh(@0/<0;1>/*),after(12000000),or_i(and_v(v:pkh(@1/<0;1>/*),older(4032)),and_v(v:pkh(@2/<0;1>/*),older(32768)))))' --language english --slot @0.phrase=@env:SEED_0 --slot @1.phrase=@env:SEED_1 --slot @2.phrase=@env:SEED_2 --slot '@0.path=m/48'\''/0'\''/0'\''/2'\''' --slot '@1.path=m/48'\''/0'\''/0'\''/2'\''' --slot '@2.path=m/48'\''/0'\''/0'\''/2'\'''
 # === Wallet bundle: descriptor, mainnet ===
 # Cosigners:
-#   @0: ms1:6e6be,mk1:6e6be (73c5da0a @ m/48'/0'/0'/2')
-#   @1: ms1:6e6bf,mk1:6e6bf (b8688df1 @ m/48'/0'/0'/2')
-#   @2: ms1:6e6bc,mk1:6e6bc (28645006 @ m/48'/0'/0'/2')
+#   @0: ms1:abd03,mk1:abd03 (73c5da0a @ m/48'/0'/0'/2')
+#   @1: ms1:abd02,mk1:abd02 (b8688df1 @ m/48'/0'/0'/2')
+#   @2: ms1:abd01,mk1:abd01 (28645006 @ m/48'/0'/0'/2')
 # Template: descriptor
-# md1: 6e6b
+# md1: abd0
 # Recovery: general policy, not k-of-n (the md1 policy decides which key sets can spend); keep all 3 signing keys, any hash preimages it names, and md1 (template card).
 # Language: english
 warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')

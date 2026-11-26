@@ -301,14 +301,22 @@ fn parse_literal_xpub(
     let expanded = crate::parse_descriptor::expand_literal_double_star(descriptor_str);
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(expanded.as_ref())
         .map_err(|e| ToolkitError::DescriptorParse(format!("--descriptor parse: {e}")))?;
-    // H12 — taproot-aware default-origin script-type. `parsed` is a
-    // rust-miniscript `Descriptor` (NOT an md-codec `Tag`), so detect taproot
-    // directly (precedent: `wallet_import/bsms.rs`): Tr → 3' (P2TR), else 2'.
-    // Pre-H12 the literal `2` put taproot cosigner keys in the wrong subtree.
-    let default_script_type = if matches!(parsed, MsDescriptor::Tr(_)) {
-        3
-    } else {
-        2
+    // Default origin family (Brian's BIP-defaults ruling, 2026-11-25; the same
+    // rule `bundle` and `verify-bundle` apply, `template::DefaultOriginFamily`):
+    // sh(wsh) → BIP-48 1' ("`1'`: Nested Segwit (p2sh-p2wsh)"), any other
+    // sh(...) and every tr(...) → BIP-87 m/87'/c'/a' ("Any script that is
+    // supported by descriptors ... is compatible with this BIP"), else BIP-48 2'.
+    // `parsed` is a rust-miniscript `Descriptor`, so match it directly.
+    let default_family = {
+        use crate::template::DefaultOriginFamily as F;
+        match &parsed {
+            MsDescriptor::Sh(sh) => match sh.as_inner() {
+                miniscript::descriptor::ShInner::Wsh(_) => F::Bip48 { script_type: 1 },
+                _ => F::Bip87,
+            },
+            MsDescriptor::Tr(_) => F::Bip87,
+            _ => F::Bip48 { script_type: 2 },
+        }
     };
     // Non-blocking consensus-masked older() advisory (Adapter B; post-from_str,
     // bit-31 unreachable). SPEC_older_timelock_advisory §4 / PLAN Task 10 3a.
@@ -336,7 +344,7 @@ fn parse_literal_xpub(
                     // m/48'/coin'/account'/<script_type>' as the cosigner path
                     // (H12 — 3' for taproot). Mirrors `cmd/bundle.rs` notice +
                     // plan §4.3 step 4.
-                    let default = bip48_default_path(network, account, default_script_type);
+                    let default = default_family.derivation_path(network, account);
                     effective_path = Some(default);
                     defaulted_indices.push(idx as u8);
                 }
@@ -357,8 +365,7 @@ fn parse_literal_xpub(
                 };
                 let mut effective_path = path_anno.clone();
                 if effective_path.is_none() {
-                    // H12 — taproot-aware default (3' for taproot, else 2').
-                    let default = bip48_default_path(network, account, default_script_type);
+                    let default = default_family.derivation_path(network, account);
                     effective_path = Some(default);
                     defaulted_indices.push(idx as u8);
                 }
@@ -407,11 +414,11 @@ fn parse_literal_xpub(
             .map(|i| format!("@{i}"))
             .collect::<Vec<_>>()
             .join(",");
-        let coin = network.coin_type();
-        // H12 — render the ACTUAL inferred script-type leaf (3' for taproot).
+        let path = default_family.path_string(network, account);
+        let label = default_family.label();
         writeln!(
             stderr,
-            "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/{default_script_type}' (BIP-48 cosigner path). Override per-placeholder with [fp/path] in the descriptor."
+            "info: non-canonical descriptor; defaulting origin path for {idx_list} to {path} ({label}). Override per-placeholder with [fp/path] in the descriptor."
         )
         .map_err(|e| ToolkitError::IoFailure(format!("stderr write: {e}")))?;
     }
@@ -420,18 +427,6 @@ fn parse_literal_xpub(
         shape: DescriptorShape::LiteralXpub,
         defaulted_indices,
     })
-}
-
-/// Build a BIP-48 path `m/48'/coin'/account'/script_type'` for default-path
-/// inference (mirrors `parse::MultisigPathFamily::default_origin_path`).
-fn bip48_default_path(
-    network: crate::network::CliNetwork,
-    account: u32,
-    script_type: u32,
-) -> DerivationPath {
-    use crate::parse::MultisigPathFamily;
-    let s = MultisigPathFamily::Bip48.default_origin_path(network, account, script_type);
-    DerivationPath::from_str(&s).expect("BIP-48 default path well-formed")
 }
 
 /// Lowercase-hex encode. Tiny helper; avoids the bitcoin::hex direct import.
@@ -504,10 +499,10 @@ mod tests {
     }
 
     #[test]
-    fn literal_xpub_taproot_defaults_origin_to_3prime() {
+    fn literal_xpub_taproot_defaults_origin_to_bip87() {
         let mut sink = Vec::new();
-        // Origin-elided taproot multisig → default-inference fires; must land
-        // in the 3' (P2TR) subtree.
+        // Origin-elided taproot multisig → default-inference fires; BIP-87
+        // (script-agnostic), not a BIP-48 3' leaf BIP-48 does not define.
         let desc = format!(
             "tr({NUMS_H_POINT_X_ONLY_HEX},multi_a(2,{H12_XPUB_A}/<0;1>/*,{H12_XPUB_B}/<0;1>/*))"
         );
@@ -525,9 +520,9 @@ mod tests {
                 .as_ref()
                 .expect("defaulted cosigner must carry an inferred path");
             assert_eq!(
-                last_component_hardened(p),
-                Some((3, true)),
-                "taproot cosigner default origin must end in 3' (P2TR); got {p}"
+                p.to_string(),
+                "87'/0'/0'",
+                "taproot cosigner default origin must be BIP-87; got {p}"
             );
         }
     }

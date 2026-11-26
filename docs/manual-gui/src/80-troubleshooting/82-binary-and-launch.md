@@ -30,9 +30,18 @@ for this manual:
 
 The toolkit installer installs newer releases of all four (next
 section). Run each binary with
-`--version` to compare; the GUI does not check them for you. The GUI's
-secret channels were measured against exactly these binaries, so an
-older release can misread or refuse the channel spellings the GUI
+`--version` to compare. The GUI checks only before a **Run that
+carries a secret**: it asks the binary for `--version` and refuses the
+Run unless the binary is the expected CLI at the pinned version or
+newer. The refusal says why (for example *"the `ms` this GUI runs is
+version 0.19.0, older than the pinned ms 0.20.1"*), names the channel
+this OS's Run uses (private channels on Linux; the command line with
+`--allow-argv-secret` on macOS and Windows), warns that the copied
+command (Copy buttons) is not safe with that binary either, and asks
+you to install the pinned version or newer so that it is the one found
+first on the search path. A Run with no secret is not checked. The
+GUI's secret channels were measured against exactly these binaries, so
+an older release can misread or refuse the channel spellings the GUI
 writes (for example `ms derive --passphrase @env:…` before `ms`
 0.20); below `mnemonic` 0.104.0 even the macOS/Windows interim path
 fails (older releases reject its `--allow-argv-secret`). See

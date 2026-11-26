@@ -372,7 +372,8 @@ pub enum ToolkitError {
     /// Exit 2. Wired into `bundle_run` in Phase C.
     #[allow(dead_code)]
     SlotInputViolation {
-        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey" | "language-conflict".
+        /// "conflict" | "gap" | "invalid-set" | "duplicate-subkey" | "language-conflict"
+        /// | "path-mismatch" | "missing-origin".
         kind: &'static str,
         message: String,
     },
@@ -700,6 +701,11 @@ impl ToolkitError {
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
             ToolkitError::RestoreMismatch { .. } => NO,
             ToolkitError::SilentPayment(_) => INVALID,
+            // `path-mismatch`: a stated origin checked against what records the
+            // key's path (an inline origin, an xpub header, an mk1 card, the
+            // seed search) and found different (test 4, NO). Every other kind
+            // is an input wrong or insufficient for the verb (test 6).
+            ToolkitError::SlotInputViolation { kind, .. } if *kind == "path-mismatch" => NO,
             ToolkitError::SlotInputViolation { .. } => INVALID,
             ToolkitError::TemplateFormUnsupportedShape { .. } => INVALID,
             ToolkitError::UnknownHrp { .. } => INVALID,
@@ -1405,6 +1411,20 @@ mod tests {
                 INVALID,
             ),
             (
+                ToolkitError::SlotInputViolation {
+                    kind: "missing-origin",
+                    message: "x".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::SlotInputViolation {
+                    kind: "path-mismatch",
+                    message: "x".into(),
+                },
+                NO,
+            ),
+            (
                 ToolkitError::TemplateFormUnsupportedShape {
                     message: "x".into(),
                 },
@@ -1531,6 +1551,25 @@ mod tests {
             missing.is_empty(),
             "variants with no class row: {missing:?}"
         );
+    }
+
+    /// Brian's origin rulings of 2026-11-26 under the exit-code spec: an
+    /// origin `bundle` chose itself and an origin the user asserted to
+    /// `restore` both exit 4 (UNVERIFIED) with their output; a refused
+    /// cross-check is 1 (NO). The rows above class `path-mismatch` (NO) and
+    /// `missing-origin` (INVALID); `tests/bughunt_1125_origin_rulings.rs`
+    /// runs each through the binary.
+    #[test]
+    fn origin_rulings_have_their_class() {
+        use crate::exit_code::{NO, UNVERIFIED};
+        assert_eq!(crate::cmd::bundle::EXIT_CHOSEN_ORIGIN, UNVERIFIED);
+        let m = ToolkitError::RestoreMismatch {
+            reference: "x",
+            derived: "x".into(),
+            expected: "x".into(),
+            slot: None,
+        };
+        assert_eq!(m.exit_code(), NO);
     }
 
     /// Every ms-codec and mk-codec variant this crate's pin has is classified

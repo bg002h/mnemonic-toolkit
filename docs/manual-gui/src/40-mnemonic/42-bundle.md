@@ -469,7 +469,10 @@ for new multisig setups and matches modern hardware-wallet
 conventions.
 
 Refused under descriptor mode (the descriptor specifies the
-path family directly).
+path family directly). With a multisig template and this field
+cleared, the CLI still uses BIP-87 but warns and exits 4, because the
+cards record a path the command did not name (see Advisories
+below).
 
 ## `--md1-form` {#mnemonic-bundle-md1-form}
 
@@ -660,7 +663,7 @@ SPEC §6.6 / §6.9 byte-pinned and integration-test-gated.
 | `--descriptor*` with a canonical `@i` shape AND `--account != 0` | exit 2: `--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
 | `--threshold` AND single-sig template | `--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.` |
 | `--multisig-path-family` AND single-sig template | `--multisig-path-family is meaningful only with a multisig --template.` |
-| `--passphrase` AND `--passphrase-stdin` | clap `conflicts_with`, exit 64: `the argument '--passphrase <PASSPHRASE>' cannot be used with '--passphrase-stdin'` (the GUI's run adds `--allow-argv-secret`; without it the CLI's argv-secret refusal fires first, exit 2) |
+| `--passphrase` AND `--passphrase-stdin` | clap `conflicts_with`, exit 64: `the argument '--passphrase <PASSPHRASE>' cannot be used with '--passphrase-stdin'` (the GUI's run adds `--allow-argv-secret`; without it the CLI's argv-secret refusal fires first, exit 8) |
 
 The conditional-visibility engine pre-disables several of these
 combinations in the GUI form (`--descriptor` disables
@@ -680,6 +683,8 @@ region after the run completes.
 | Inline `--slot @N.<secret>=<value>` (any of `phrase`, `entropy`, `wif`, `xprv`) | `warning: secret material on argv (--slot @N.<subkey>=) — pipe via --slot @N.<subkey>=- to avoid /proc/$PID/cmdline exposure` |
 | Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `--self-check` failure (re-derivation drift) | exits non-zero with `self-check failed: round-trip drift on <card-class>` |
+| Descriptor mode: an `@N` with no inline `[fp/path]@N` and no `@N.path` slot, so the toolkit chose the origin (a canonical shape's canonical origin, or the BIP-48 / BIP-87 default) | `warning: no origin was given for @N; the toolkit chose m/<path> (<why>) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards.`, then `warning: to state this path explicitly, run:` and the command with the path stated (secrets typed inline shown as `<...>`). The cards and JSON are written as usual and the run **exits 4** (Brian's ruling of 2026-11-26) |
+| Multisig `--template` with `--multisig-path-family` cleared | `warning: --multisig-path-family was not given, so the toolkit chose BIP-87 (m/87'/<coin>'/<account>') for @N... and the cards record it. ...`, then the command with `--multisig-path-family bip87`; **exits 4**. The GUI seeds the field with `bip48` on a multisig template, so a run that keeps it records BIP-48 (`m/48'/<coin>'/<account>'/2'` and the like), not the CLI's BIP-87 default, and exits 0 |
 
 Note that the GUI's command-line preview always uses the inline
 form (the GUI does not pipe argv via stdin by default); the

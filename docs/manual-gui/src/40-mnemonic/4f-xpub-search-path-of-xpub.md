@@ -4,7 +4,7 @@ Reverse-search a BIP-32 derivation graph: given a seed (BIP-39 phrase
 or `ms1` card) and a target xpub (or `mk1` card carrying an xpub),
 find the BIP-32 path under the seed that produces it. The default
 candidate set is the standard derivation templates (BIP-44 / 49 / 84 /
-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) ×
+86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}` + BIP-87 multisig `m/87'/<coin>'/<account>'` + BIP-45 `m/45'` once) ×
 account range; `--add-path` extends it. First match wins. The GUI
 exposes this as one form under the **mnemonic** tab's subcommand
 selector.
@@ -226,7 +226,7 @@ Stdout (text form, match):
 ```text
 match: m/84'/0'/0'  (template=bip84, account=0)
 target-xpub: xpub6... (normalized from zpub; variant=zpub)
-searched: 7 templates × 20 accounts = 140 paths
+searched: 161 candidate paths
 ```
 
 A no-match result exits 1; bad input (BIP-39/xpub parse failure)

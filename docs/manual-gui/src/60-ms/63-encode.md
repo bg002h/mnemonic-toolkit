@@ -94,9 +94,9 @@ bytes, corresponding to 12 / 15 / 18 / 21 / 24-word BIP-39
 phrases). The GUI renders this as a `SecretLineEdit` widget.
 
 When `--hex` is the chosen mode, the conditional-visibility
-engine `Hides` [`--language`](#ms-encode-language) because the
-binary ignores `--language` on the hex path (the wordlist only
-matters for phrase parsing, and hex skips that step).
+engine `Hides` [`--language`](#ms-encode-language): a hex card
+carries no wordlist language, and the binary refuses a non-English
+`--language` beside `--hex` (exit 64), so the GUI does not send one.
 
 ## `--language` {#ms-encode-language}
 

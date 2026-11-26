@@ -261,7 +261,7 @@ pub fn run() -> ExitCode {
     let stderr = &mut io::stderr();
 
     let result: Result<u8, ToolkitError> = match &cli.command {
-        Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr).map(|_| 0),
+        Command::Bundle(args) => cmd::bundle::run(args, stdin, stdout, stderr),
         Command::VerifyBundle(args) => {
             cmd::verify_bundle::run(args, stdin, stdout, stderr, cli.no_auto_repair)
         }
@@ -317,6 +317,10 @@ pub fn run() -> ExitCode {
         Command::WordCard(args) => cmd::word_card::run(args, stdin, stdout, stderr),
     };
 
+    // Brian's ruling of 2026-11-26: `bundle` (an origin the user did not supply)
+    // and `restore` (an origin the user asserted) exit 4 (UNVERIFIED) WITH their
+    // output. If that output never reached stdout, R8 adds 32 in `finish_exit`
+    // (36), as for every other verb.
     // The verb's own error line first (RepairShortCircuit prints nothing here), then the
     // write-error line from `finish_exit`.
     let code = match result {

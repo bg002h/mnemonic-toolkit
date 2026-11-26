@@ -1,20 +1,18 @@
-//! H12 (cycle-1) — descriptor-mode taproot multisig defaults the BIP-48
-//! script-type origin component to `3'` (P2TR), not `2'` (P2WSH).
+//! H12 (cycle-1), superseded by the 2026-11-25 BIP-defaults ruling:
+//! descriptor-mode taproot multisig defaults every origin-elided cosigner to
+//! BIP-87 `m/87'/<coin>'/<account>'`, not a BIP-48 `…/3'` leaf.
 //!
-//! `compute_default_origin_path` (`cmd/bundle.rs`) hardcoded `2'` regardless of
-//! script type, so for `tr(NUMS, multi_a/sortedmulti_a)` every origin-elided
-//! cosigner key landed in the `2'` (P2WSH) subtree instead of `3'` (P2TR).
-//! Result: every address diverged from what BIP-48 coordinators
-//! (Sparrow/Coldcard/Jade) re-derive at `3'` → un-cosignable wallets. `3'`=P2TR
-//! is a documented de-facto interop convention, confirmed by the differential
-//! oracle (`bitcoind_differential.rs`).
+//! BIP-48 defines script types `1'` (P2SH-P2WSH) and `2'` (P2WSH) only, so a
+//! `3'` leaf for P2TR is a convention BIP-48 does not define. BIP-87 is
+//! script-agnostic ("m / purpose' / coin_type' / account' / change /
+//! address_index"; "Any script that is supported by descriptors (and the
+//! specific wallet implementation) is compatible with this BIP.").
 //!
 //! These tests prove: (a) the emitted per-cosigner `origin_path` is
-//! `m/48'/<coin>'/<account>'/3'`; (b) the mk-decoded cosigner xpub equals the
-//! INDEPENDENT `3'` derivation (obtained via an explicit `--slot @N.path=3'`
-//! override), NOT the `2'` derivation; (c) the stderr default-path notice
-//! renders the actual `3'` component; (d) non-taproot wsh/sh(wsh) are
-//! unaffected (no spurious `3'`).
+//! `m/87'/<coin>'/<account>'`; (b) the mk-decoded cosigner xpub equals the
+//! INDEPENDENT BIP-87 derivation (an explicit `--slot @N.path=` override), NOT
+//! the old `48'/…/3'` derivation; (c) the stderr notice renders the path it
+//! used; (d) non-taproot wsh/sh(wsh) are unaffected.
 
 use assert_cmd::Command;
 use serde_json::Value;
@@ -50,7 +48,8 @@ fn bundle_taproot(descriptor: &str, extra: &[&str]) -> (Value, String) {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        // Brian's ruling of 2026-11-26: an origin the toolkit chose exits 4.
+        .code(if extra.is_empty() { 4 } else { 0 });
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout)
@@ -81,28 +80,42 @@ fn cosigner_xpubs(v: &Value) -> Vec<String> {
         .collect()
 }
 
-/// Core H12 assertion: taproot multi_a defaults every origin-elided cosigner
-/// to `m/48'/1'/0'/3'` (regtest coin-type 1), and the mk-decoded cosigner xpub
-/// equals the INDEPENDENT `3'` derivation (NOT the `2'` derivation).
+/// Core assertion: taproot multi_a defaults every origin-elided cosigner to
+/// `m/87'/1'/0'` (regtest coin-type 1), and the mk-decoded cosigner xpub
+/// equals the INDEPENDENT BIP-87 derivation (NOT the old `48'/…/3'` one).
 #[test]
-fn taproot_multi_a_defaults_origin_to_3prime() {
+fn taproot_multi_a_defaults_origin_to_bip87() {
     let (v, stderr) = bundle_taproot("tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))", &[]);
 
     let origins = cosigner_origins(&v);
     assert_eq!(
         origins,
-        vec!["m/48'/1'/0'/3'", "m/48'/1'/0'/3'"],
-        "taproot multi_a cosigner origins must default to the 3' (P2TR) subtree"
+        vec!["m/87'/1'/0'", "m/87'/1'/0'"],
+        "taproot multi_a cosigner origins must default to BIP-87"
     );
     assert_eq!(
         v["origin_path"].as_str(),
-        Some("m/48'/1'/0'/3'"),
-        "top-level origin_path must also be 3'"
+        Some("m/87'/1'/0'"),
+        "top-level origin_path must also be BIP-87"
     );
 
-    // Independent oracle: the SAME bundle with an explicit @N.path=3' override
-    // produces the canonical `3'` xpubs. The DEFAULT (no override) xpubs must
-    // equal these — proving the keys live in the 3' subtree, not just a label.
+    // Independent oracle: the SAME bundle with an explicit BIP-87 override.
+    let (v87, _) = bundle_taproot(
+        "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
+        &[
+            "--slot",
+            "@0.path=m/87'/1'/0'",
+            "--slot",
+            "@1.path=m/87'/1'/0'",
+        ],
+    );
+    assert_eq!(
+        cosigner_xpubs(&v),
+        cosigner_xpubs(&v87),
+        "default taproot cosigner xpubs must equal the explicit BIP-87 derivation"
+    );
+
+    // …and DIFFER from the old `48'/…/3'` derivation.
     let (v3, _) = bundle_taproot(
         "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
         &[
@@ -112,47 +125,30 @@ fn taproot_multi_a_defaults_origin_to_3prime() {
             "@1.path=m/48'/1'/0'/3'",
         ],
     );
-    assert_eq!(
-        cosigner_xpubs(&v),
-        cosigner_xpubs(&v3),
-        "default taproot cosigner xpubs must equal the explicit-3' derivation"
-    );
-
-    // …and DIFFER from the `2'` derivation (the pre-H12 wrong subtree).
-    let (v2, _) = bundle_taproot(
-        "tr(NUMS,multi_a(2,@0/<0;1>/*,@1/<0;1>/*))",
-        &[
-            "--slot",
-            "@0.path=m/48'/1'/0'/2'",
-            "--slot",
-            "@1.path=m/48'/1'/0'/2'",
-        ],
-    );
     assert_ne!(
         cosigner_xpubs(&v),
-        cosigner_xpubs(&v2),
-        "default taproot cosigner xpubs must NOT equal the 2' (wrong) subtree derivation"
+        cosigner_xpubs(&v3),
+        "default taproot cosigner xpubs must NOT equal the old 48'/../3' derivation"
     );
 
-    // The stderr default-path notice renders the actual 3' component.
     assert!(
-        stderr.contains("m/48'/1'/0'/3'"),
-        "default-path notice must render the 3' component; got stderr:\n{stderr}"
+        stderr.contains("chose m/87'/1'/0' (BIP-87)"),
+        "default-path notice must render the BIP-87 path; got stderr:\n{stderr}"
     );
     assert!(
-        !stderr.contains("m/48'/1'/0'/2' (BIP-48 cosigner path)"),
-        "default-path notice must NOT render the stale 2' for a taproot descriptor; got:\n{stderr}"
+        !stderr.contains("m/48'"),
+        "default-path notice must NOT render a BIP-48 path for a taproot descriptor; got:\n{stderr}"
     );
 }
 
-/// `tr(NUMS, sortedmulti_a(...))` likewise defaults to `3'`.
+/// `tr(NUMS, sortedmulti_a(...))` likewise defaults to BIP-87.
 #[test]
-fn taproot_sortedmulti_a_defaults_origin_to_3prime() {
+fn taproot_sortedmulti_a_defaults_origin_to_bip87() {
     let (v, _) = bundle_taproot("tr(NUMS,sortedmulti_a(2,@0/<0;1>/*,@1/<0;1>/*))", &[]);
     assert_eq!(
         cosigner_origins(&v),
-        vec!["m/48'/1'/0'/3'", "m/48'/1'/0'/3'"],
-        "taproot sortedmulti_a cosigner origins must default to the 3' subtree"
+        vec!["m/87'/1'/0'", "m/87'/1'/0'"],
+        "taproot sortedmulti_a cosigner origins must default to BIP-87"
     );
 }
 
@@ -164,8 +160,8 @@ fn wsh_sortedmulti_not_given_3prime() {
     let (v, _) = bundle_taproot("wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))", &[]);
     for op in cosigner_origins(&v) {
         assert!(
-            !op.ends_with("/3'"),
-            "wsh cosigner origin must NOT be the taproot 3' subtree; got {op}"
+            !op.ends_with("/3'") && !op.starts_with("m/87'"),
+            "wsh cosigner origin must NOT be a taproot default; got {op}"
         );
     }
 }
@@ -176,8 +172,8 @@ fn sh_wsh_sortedmulti_not_given_3prime() {
     let (v, _) = bundle_taproot("sh(wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*)))", &[]);
     for op in cosigner_origins(&v) {
         assert!(
-            !op.ends_with("/3'"),
-            "sh(wsh) cosigner origin must NOT be the taproot 3' subtree; got {op}"
+            !op.ends_with("/3'") && !op.starts_with("m/87'"),
+            "sh(wsh) cosigner origin must NOT be a taproot default; got {op}"
         );
     }
 }

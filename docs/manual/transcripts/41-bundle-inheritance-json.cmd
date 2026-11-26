@@ -1,4 +1,4 @@
-DESC='wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))'
+DESC='wsh(andor(pkh(@0/<0;1>/*),after(12000000),or_i(and_v(v:pkh(@1/<0;1>/*),older(4032)),and_v(v:pkh(@2/<0;1>/*),older(32768)))))'
 export SEED_0='abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'
 export SEED_1='legal winner thank year wave sausage worth useful legal winner thank yellow'
 export SEED_2='letter advice cage absurd amount doctor acoustic avoid letter advice cage above'

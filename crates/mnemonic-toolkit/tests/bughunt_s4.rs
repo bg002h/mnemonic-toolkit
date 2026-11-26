@@ -132,11 +132,10 @@ fn bughunt_tk_15_dice_huge_length_is_refused_cleanly() {
 
 // ---------------------------------------------------------------------------
 // #24 xpub-search: the origin-elided default path for sh(wsh(sortedmulti)) must
-// be BIP-48 script type 1', as `bundle` does (bip48_script_type_for_root_tag:
-// Tr -> 3', Sh -> 1', else 2'). The intake only special-cases Tr.
+// be BIP-48 script type 1', as `bundle` does. Fixed by Brian's BIP-defaults
+// ruling of 2026-11-25 (template::DefaultOriginFamily).
 // ---------------------------------------------------------------------------
 #[test]
-#[ignore = "deferred-minor: xpub-search-sh-wsh-default-origin-notice"]
 fn bughunt_tk_24_xpub_search_sh_wsh_default_origin_is_1prime() {
     let a = xpub_at(PHRASE, "m/48'/0'/0'/1'");
     let b = xpub_at(OTHER_PHRASE, "m/48'/0'/0'/1'");

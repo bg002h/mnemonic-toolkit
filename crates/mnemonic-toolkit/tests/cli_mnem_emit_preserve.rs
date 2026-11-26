@@ -542,7 +542,7 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh(@0)",
+            "wpkh(@0/*)",
             "--slot",
             &format!("@0.phrase={ja_phrase}"),
             "--language",
@@ -553,7 +553,7 @@ fn descriptor_placeholder_japanese_phrase_emits_mnem_ms1() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
 
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
@@ -604,7 +604,7 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh(@0)",
+            "wpkh(@0/*)",
             "--slot",
             &format!("@0.phrase={ja_phrase}"),
             "--language",
@@ -615,7 +615,7 @@ fn descriptor_placeholder_japanese_phrase_ms1_round_trips() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
 
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
@@ -661,7 +661,7 @@ fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
         .args([
             "bundle",
             "--descriptor",
-            "wpkh(@0)",
+            "wpkh(@0/*)",
             "--slot",
             &format!("@0.phrase={ja_phrase}"),
             "--language",
@@ -672,7 +672,7 @@ fn descriptor_placeholder_japanese_phrase_advisory_suppressed() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
 
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
 

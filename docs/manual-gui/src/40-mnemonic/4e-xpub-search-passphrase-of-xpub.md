@@ -4,7 +4,7 @@ Reverse-search a BIP-32 derivation graph: given a seed (BIP-39 phrase
 or `ms1` card) **plus a specific passphrase** (or a candidate list)
 and a target xpub, verify that the passphrase produces that xpub under
 the seed at one of the standard derivation templates (BIP-44 / 49 / 84
-/ 86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}`) ×
+/ 86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}` + BIP-87 multisig `m/87'/<coin>'/<account>'` + BIP-45 `m/45'` once) ×
 account range. The semantic difference from `path-of-xpub` is that
 this mode answers **"does THIS passphrase produce the xpub?"** rather
 than **"what path produced this xpub?"**. The GUI exposes this as one

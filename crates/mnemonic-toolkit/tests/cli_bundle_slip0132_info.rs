@@ -89,7 +89,7 @@ fn bundle_descriptor_watch_only_zpub_emits_info_line_then_card_no_warning() {
             &format!("@0.fingerprint={TREZOR_FP_HEX}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let info_idx = stderr
         .find(&info_line("zpub"))
@@ -128,7 +128,7 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
             &format!("@0.fingerprint={TREZOR_FP_HEX}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains("info: normalized"),
@@ -149,8 +149,44 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
 // (informational) intermediates with Normal{0} while preserving the xpub's own
 // terminal child (0'), so the emitted mk1 card round-trips. This pins the
 // synthetic origin_path contract (`m/0/0/0'`) as a deliberate, documented value.
+//
+// Since bug hunt 2026-11-25 toolkit#1, `bundle` no longer MINTS such a card for
+// a canonical shape: the xpub's header agrees with wpkh's canonical origin, so
+// that origin (m/84'/0'/0') is written instead. The synthetic-path card below
+// was captured from the toolkit before that change (same command line); an
+// EXISTING card of that kind must keep decoding to `m/0/0/0'`.
+const PRE_TK1_NO_ORIGIN_MK1: &[&str] = &[
+    "mk1qpnd2wpqqsqek48ppe2rd4eylcpsqqyqszqgqzqy3zepuyn75rnfygq30386qvqp2sm6kx2hx273m5ks7rc87nw24agn26jq0kdv4muhxrtq",
+    "mk1qpnd2wpppvjmck3usgpee0m2ps4qcw3gwypsrquk7ynq9mrlv4rukdudjs0jcf36gujj9d0kzcuvw4dygx0wqa099j",
+];
+
+fn inspect_mk1(mk1: &[String]) -> String {
+    let mut args: Vec<String> = vec!["inspect".into()];
+    for c in mk1 {
+        args.push("--mk1".into());
+        args.push(c.clone());
+    }
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(&args)
+        .assert()
+        .success();
+    String::from_utf8(out.get_output().stdout.clone()).unwrap()
+}
+
 #[test]
-fn bundle_watch_only_no_origin_xpub_inspect_shows_synthetic_path() {
+fn existing_no_origin_xpub_card_inspect_shows_synthetic_path() {
+    let mk1: Vec<String> = PRE_TK1_NO_ORIGIN_MK1
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let stdout = inspect_mk1(&mk1);
+    assert!(stdout.contains("origin_path: m/0/0/0'"), "{stdout}");
+}
+
+#[test]
+fn bundle_watch_only_no_origin_xpub_now_records_canonical_origin() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -168,7 +204,7 @@ fn bundle_watch_only_no_origin_xpub_inspect_shows_synthetic_path() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let mk1: Vec<String> = json["mk1"]
@@ -177,18 +213,8 @@ fn bundle_watch_only_no_origin_xpub_inspect_shows_synthetic_path() {
         .iter()
         .map(|v| v.as_str().unwrap().to_string())
         .collect();
-    let mut args: Vec<String> = vec!["inspect".into()];
-    for c in &mk1 {
-        args.push("--mk1".into());
-        args.push(c.clone());
-    }
-    Command::cargo_bin("mnemonic")
-        .unwrap()
-        .arg("--allow-argv-secret")
-        .args(&args)
-        .assert()
-        .success()
-        .stdout(predicates::str::contains("origin_path: m/0/0/0'"));
+    let shown = inspect_mk1(&mk1);
+    assert!(shown.contains("origin_path: m/84'/0'/0'"), "{shown}");
 }
 
 // ============================================================================
@@ -229,7 +255,7 @@ fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
             &format!("@1.path={path}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let info_idx = stderr
         .find(&info_line("Ypub"))
@@ -369,7 +395,7 @@ fn bundle_json_watch_only_zpub_emits_info_line_no_warning() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains(&info_line("zpub")),
@@ -407,7 +433,7 @@ fn bundle_no_engraving_card_zpub_emits_info_line_only() {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains(&info_line("zpub")),

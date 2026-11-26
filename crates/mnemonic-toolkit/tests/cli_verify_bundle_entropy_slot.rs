@@ -12,12 +12,16 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
-/// Single-`@0` non-canonical descriptor (from `cli_ms1_slot.rs:294`).
-const NONCANONICAL_DESC: &str = "tr(NUMS,and_v(v:pk(@0),after(12000000)))";
+/// Single-`@0` non-canonical descriptor that takes the BIP-87 default origin.
+/// A 1-of-1 `multi_a`: since tk-bh1125-tr-tree-bip87-scope (Brian's ruling
+/// 2026-11-26) a non-multisig tree such as `tr(NUMS,and_v(v:pk(@0/*),...))`
+/// gets no default origin, and an `@0.entropy=` slot cannot carry
+/// `@0.path=` (slot grammar), so the default is kept by the shape instead.
+const NONCANONICAL_DESC: &str = "tr(NUMS,multi_a(1,@0/*))";
 /// Proven non-canonical 3-cosigner fixture that bundles secret slots with
 /// `.success()` (from `cli_non_canonical_descriptor.rs:22`).
 const ANDOR3_DESC: &str =
-    "wsh(andor(pkh(@0),after(12000000),or_i(and_v(v:pkh(@1),older(4032)),and_v(v:pkh(@2),older(32768)))))";
+    "wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))";
 
 const TREZOR_12_ZERO: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
@@ -85,7 +89,7 @@ fn bundle_cards(
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        .code(4);
     let v: serde_json::Value =
         serde_json::from_slice(&out.get_output().stdout).expect("descriptor bundle JSON");
     extract_cards(&v)

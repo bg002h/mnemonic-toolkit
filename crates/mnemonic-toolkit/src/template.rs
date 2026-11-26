@@ -281,22 +281,103 @@ impl CliTemplate {
     }
 }
 
-/// BIP-48 default-origin script-type component for a descriptor whose root
-/// md-codec [`Tag`] is known but whose `--template` is not (the descriptor-mode
-/// default-origin inference path — H12). Maps the root tag to a representative
-/// multisig [`CliTemplate`] and reuses [`CliTemplate::bip48_script_type`] as the
-/// single 1/2/3 mapping authority:
-///   `Tag::Tr` → `3'` (P2TR; a de-facto interop convention adopted by
-///   Sparrow/Coldcard/Jade and what template-mode already emits),
-///   `Tag::Sh` (sh(wsh)) → `1'`, everything else (wsh / indeterminate) → `2'`.
-/// The `2'` default preserves the pre-H12 behavior for the wsh case.
-pub fn bip48_script_type_for_root_tag(tag: &Tag) -> u32 {
-    let representative = match tag {
-        Tag::Tr => CliTemplate::TrSortedMultiA,
-        Tag::Sh => CliTemplate::ShWshSortedMulti,
-        _ => CliTemplate::WshSortedMulti,
-    };
-    representative.bip48_script_type().unwrap_or(2)
+/// Default origin for an `@N` that a NON-canonical descriptor leaves without
+/// one (`bundle --descriptor`, `verify-bundle --descriptor`, `xpub-search`).
+/// Brian's ruling of 2026-11-25 (BIP defaults): BIP-48 only where BIP-48
+/// names the script type, BIP-87 for everything else.
+///
+/// - BIP-48 (§Script): "Currently the only script types covered by this BIP
+///   are Native Segwit (p2wsh) and Nested Segwit (p2sh-p2wsh)", with
+///   "`1'`: Nested Segwit (p2sh-p2wsh)" and "`2'`: Native Segwit (p2wsh)".
+///   So `sh(wsh(...))` takes `m/48'/c'/a'/1'` and `wsh(...)` `m/48'/c'/a'/2'`.
+/// - BIP-87 (Backwards Compatibility): "Any script that is supported by
+///   descriptors (and the specific wallet implementation) is compatible with
+///   this BIP." Path `m/87'/c'/a'`, with "Coin type `0` for mainnet and `1`
+///   for testnets (testnet, regtest, and signet)". It covers what BIP-48 does
+///   not: legacy bare P2SH (`sh(multi)`, `sh(sortedmulti)`, other `sh(...)`
+///   that is not `sh(wsh)`) and taproot multisig. BIP-48 defines no `3'`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultOriginFamily {
+    /// `m/48'/<coin>'/<account>'/<script_type>'`.
+    Bip48 { script_type: u32 },
+    /// `m/87'/<coin>'/<account>'`.
+    Bip87,
+}
+
+impl DefaultOriginFamily {
+    /// The family for an md-codec descriptor tree (root tag and, for `sh`, its
+    /// single child).
+    pub fn for_md_tree(tree: &Node) -> Self {
+        match (&tree.tag, &tree.body) {
+            (Tag::Sh, Body::Children(c)) if c.len() == 1 && c[0].tag == Tag::Wsh => {
+                Self::Bip48 { script_type: 1 }
+            }
+            (Tag::Sh, _) | (Tag::Tr, _) => Self::Bip87,
+            _ => Self::Bip48 { script_type: 2 },
+        }
+    }
+
+    /// The default origin as an md-codec [`OriginPath`].
+    pub fn origin_path(&self, network: CliNetwork, account: u32) -> OriginPath {
+        let h = |value: u32| PathComponent {
+            hardened: true,
+            value,
+        };
+        let components = match self {
+            Self::Bip48 { script_type } => {
+                vec![h(48), h(network.coin_type()), h(account), h(*script_type)]
+            }
+            Self::Bip87 => vec![h(87), h(network.coin_type()), h(account)],
+        };
+        OriginPath { components }
+    }
+
+    /// The default origin as `m/...`.
+    pub fn path_string(&self, network: CliNetwork, account: u32) -> String {
+        match self {
+            Self::Bip48 { script_type } => {
+                MultisigPathFamily::Bip48.default_origin_path(network, account, *script_type)
+            }
+            Self::Bip87 => MultisigPathFamily::Bip87.default_origin_path(network, account, 0),
+        }
+    }
+
+    /// The default origin as a [`DerivationPath`].
+    pub fn derivation_path(&self, network: CliNetwork, account: u32) -> DerivationPath {
+        DerivationPath::from_str(&self.path_string(network, account))
+            .expect("default origin paths are well-formed")
+    }
+
+    /// Short name for notices.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Bip48 { .. } => "BIP-48 cosigner path",
+            Self::Bip87 => "BIP-87",
+        }
+    }
+}
+
+/// Whether `tree` holds a multisig fragment (`multi`, `sortedmulti`,
+/// `multi_a`, `sortedmulti_a`) anywhere, including inside a taproot script
+/// tree. Brian's ruling of 2026-11-26 (`tk-bh1125-tr-tree-bip87-scope`): the
+/// BIP-87 default origin applies only to such shapes, since BIP-87 says "it is
+/// best to restrict this script-agnostic hierarchy to multisignature wallets
+/// only". A shape without one (a single-key script tree, a `thresh` of `pk`s,
+/// a bare `sh(...)` timelock) is not given a default.
+pub fn tree_has_multisig_fragment(tree: &Node) -> bool {
+    if matches!(
+        tree.tag,
+        Tag::Multi | Tag::SortedMulti | Tag::MultiA | Tag::SortedMultiA
+    ) {
+        return true;
+    }
+    match &tree.body {
+        Body::Children(c) | Body::Variable { children: c, .. } => {
+            c.iter().any(tree_has_multisig_fragment)
+        }
+        Body::Tr { tree: Some(t), .. } => tree_has_multisig_fragment(t),
+        _ => false,
+    }
 }
 
 #[cfg(test)]

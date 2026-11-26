@@ -587,6 +587,8 @@ fn n10_bundle_env_slot_then_literal_dash_slot_reads_stdin_into_slot_1() {
             "wsh-sortedmulti",
             "--threshold",
             "1",
+            "--multisig-path-family",
+            "bip87",
             "--network",
             "signet",
             "--slot",

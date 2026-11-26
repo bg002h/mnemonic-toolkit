@@ -491,10 +491,10 @@ fn account_of_descriptor_max_account_widens_per_cosigner_range() {
 // ---------------------------------------------------------------------------
 #[test]
 fn account_of_descriptor_add_path_extends_candidates() {
-    // Descriptor with xpub at m/87'/0'/0' (BIP-87, not in default set).
-    let xpub = xpub_at(PHRASE, "m/87'/0'/0'", "");
+    // Descriptor with xpub at m/88'/0'/0' (a purpose outside the default set).
+    let xpub = xpub_at(PHRASE, "m/88'/0'/0'", "");
     let fp = master_fp(PHRASE, "");
-    let descriptor = format!("wpkh([{}/87'/0'/0']{}/<0;1>/*)", fp, xpub);
+    let descriptor = format!("wpkh([{}/88'/0'/0']{}/<0;1>/*)", fp, xpub);
 
     // Without --add-path: no match.
     Command::cargo_bin("mnemonic")
@@ -522,7 +522,7 @@ fn account_of_descriptor_add_path_extends_candidates() {
             "--descriptor",
             &descriptor,
             "--add-path",
-            "m/87'/0'/account'",
+            "m/88'/0'/account'",
             "--json",
         ])
         .write_stdin(PHRASE)
@@ -533,7 +533,7 @@ fn account_of_descriptor_add_path_extends_candidates() {
         .clone();
     let v: Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
     let matched = v["matched_cosigners"].as_array().unwrap();
-    assert_eq!(matched[0]["template"], "m/87'/0'/account'");
+    assert_eq!(matched[0]["template"], "m/88'/0'/account'");
 }
 
 // ---------------------------------------------------------------------------

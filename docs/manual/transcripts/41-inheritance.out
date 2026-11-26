@@ -1,6 +1,8 @@
-info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/...
+warning: no origin was given for @0,@1,@2; the toolkit chose m/48'/0'/0'/2' (BIP-48 cosigner path) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards.
+warning: to state this path explicitly, run:
+  mnemonic bundle --network mainnet --account 0 --descriptor 'wsh(andor(pkh(@0/<0;1>/*),after(12000000),or_i(and_v(v:pkh(@1/<0;1>/*),older(4032)),and_v(v:pkh(@2/<0;1>/*),older(32768)))))' --language english --slot @0.phrase=@env:SEED_0 --slot @1.phrase=@env:SEED_1 --slot @2.phrase=@env:SEED_2 --json --slot '@0.path=m/48'\''/0'\''/0'\''/2'\''' --slot '@1.path=m/48'\''/0'\''/0'\''/2'\''' --slot '@2.path=m/48'\''/0'\''/0'\''/2'\'''
 warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')
-info: no origin supplied for @0, @1, @2; assuming the BIP-48 cosigner path to rebuild the expected card. If that is not where those keys live, set it with [fp/path]@N or --slot @N.path=m/...
+info: no origin supplied for @0, @1, @2; assuming m/48'/0'/0'/2' (BIP-48 cosigner path) to rebuild the expected card. If that is not where those keys live, set it with [fp/path]@N or --slot @N.path=m/...
 ms1_decode[0]: ok cosigner[0] ms1 decoded
 ms1_entropy_match[0]: ok cosigner[0] ms1 byte-identical
 mk1_decode[0]: ok cosigner[0] mk1 decoded

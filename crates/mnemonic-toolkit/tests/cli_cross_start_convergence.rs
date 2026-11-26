@@ -539,7 +539,15 @@ fn a8_non_canonical_descriptor_vs_bsms_walletfile_converge() {
     .map(|s| s.to_string())
     .collect();
     dargs.extend(slots);
-    let desc_start = bundle_json_owned(&dargs);
+    // The descriptor start takes the BIP-48 default origin, which the toolkit
+    // chose: exit 4 (Brian's ruling of 2026-11-26), with the cards in full.
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .arg("--allow-argv-secret")
+        .args(&dargs)
+        .assert()
+        .code(4);
+    let desc_start: Value = serde_json::from_slice(&out.get_output().stdout).expect("JSON");
 
     let concrete = format!(
         "wsh(andor(pkh({}),after(12000000),or_i(and_v(v:pkh({}),older(4032)),and_v(v:pkh({}),older(32768)))))",

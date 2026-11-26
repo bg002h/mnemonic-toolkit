@@ -280,11 +280,11 @@ fn path_of_xpub_max_account_overrides_number_of_accounts() {
 }
 
 // ---------------------------------------------------------------------------
-// Cell 7 — --add-path m/87'/0'/account' substitution → BIP-87 path matched.
+// Cell 7 — --add-path m/88'/0'/account' substitution → a path outside the default set matched.
 // ---------------------------------------------------------------------------
 #[test]
-fn path_of_xpub_add_path_bip87() {
-    let target = xpub_at("m/87'/0'/2'", "").to_string();
+fn path_of_xpub_add_path_outside_the_default_set() {
+    let target = xpub_at("m/88'/0'/2'", "").to_string();
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -295,7 +295,7 @@ fn path_of_xpub_add_path_bip87() {
             "--target-xpub",
             &target,
             "--add-path",
-            "m/87'/0'/account'",
+            "m/88'/0'/account'",
             "--json",
         ])
         .write_stdin(PHRASE)
@@ -305,10 +305,43 @@ fn path_of_xpub_add_path_bip87() {
         .stdout
         .clone();
     let v: serde_json::Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
-    assert_eq!(v["path"], "m/87'/0'/2'");
+    assert_eq!(v["path"], "m/88'/0'/2'");
     assert_eq!(v["account"], 2);
     // Template name for add-path entries is the literal template string.
-    assert_eq!(v["template"], "m/87'/0'/account'");
+    assert_eq!(v["template"], "m/88'/0'/account'");
+}
+
+/// Review r2 I-A: BIP-87 accounts and BIP-45 m/45' are in the default set
+/// (they are what `bundle` now mints by default), so no --add-path is needed.
+#[test]
+fn path_of_xpub_default_set_covers_bip87_and_bip45() {
+    for (path, template, account) in [
+        ("m/87'/0'/2'", "bip87", serde_json::json!(2)),
+        ("m/45'", "bip45", serde_json::Value::Null),
+    ] {
+        let target = xpub_at(path, "").to_string();
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .arg("--allow-argv-secret")
+            .args([
+                "xpub-search",
+                "path-of-xpub",
+                "--phrase-stdin",
+                "--target-xpub",
+                &target,
+                "--json",
+            ])
+            .write_stdin(PHRASE)
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+        let v: serde_json::Value = serde_json::from_str(&String::from_utf8(out).unwrap()).unwrap();
+        assert_eq!(v["path"], path);
+        assert_eq!(v["template"], template);
+        assert_eq!(v["account"], account);
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,6 @@
 //! SPEC §6 + v0.8 §7 — BIP-388 `wallet_policy` JSON emitter.
 
-use super::pipeline::{
-    descriptor_to_bip388_wallet_policy, key_origin_str, template_origin_path_no_m,
-};
+use super::pipeline::{descriptor_to_bip388_wallet_policy, key_origin_str};
 use super::{EmitInputs, MissingField, TaprootInternalKey, WalletFormatEmitter, NUMS_XONLY_HEX};
 use crate::error::ToolkitError;
 use crate::network::CliNetwork;
@@ -121,14 +119,15 @@ pub(crate) fn format_bip388_wallet_policy(
     template: CliTemplate,
     slots: &[ResolvedSlot],
     k: u8,
-    network: CliNetwork,
-    account: u32,
+    // Unused since bug hunt 2026-11-25 toolkit#2: they only fed the template
+    // default that `key_origin_str` used to substitute for a pathless slot.
+    _network: CliNetwork,
+    _account: u32,
     taproot_internal_key: Option<TaprootInternalKey>,
 ) -> Result<Value, ToolkitError> {
-    let fallback = template_origin_path_no_m(template, network, account);
     let keys_info: Vec<String> = slots
         .iter()
-        .map(|s| format!("{}{}", key_origin_str(s, &fallback), s.xpub))
+        .map(|s| format!("{}{}", key_origin_str(s), s.xpub))
         .collect();
 
     let n = slots.len();

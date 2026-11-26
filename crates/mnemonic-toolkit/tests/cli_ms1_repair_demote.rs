@@ -128,7 +128,7 @@ fn gen_bundle_multisig(phrase0: &str, phrase1: &str) -> (Vec<String>, Vec<String
             "--no-engraving-card",
         ])
         .assert()
-        .success()
+        .code(4)
         .get_output()
         .stdout
         .clone();

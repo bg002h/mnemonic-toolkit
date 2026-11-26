@@ -135,7 +135,7 @@ pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, To
             wallet_model: "SPARROW",
             key_derivation: SparrowKeyDerivation {
                 master_fingerprint: s.fingerprint.to_string().to_lowercase(),
-                derivation: normalize_derivation(&s.origin_path_bare(), template, inputs),
+                derivation: normalize_derivation(s),
             },
             extended_public_key: s.xpub.to_string(),
         })
@@ -236,27 +236,10 @@ fn multi_arg(kind: &str, inputs: &EmitInputs, n: usize) -> Result<String, Toolki
     Ok(format!("{kind}({k},{})", placeholders.join(",")))
 }
 
-/// Derivation field: normalize the per-slot bare origin path (multisig; from
-/// `ResolvedSlot::origin_path_bare()`) or the template's singlesig origin path.
-/// Sparrow expects `m/...` form without trailing slash and without descriptor
-/// wildcards.
-fn normalize_derivation(
-    bare_path: &str,
-    template: crate::template::CliTemplate,
-    inputs: &EmitInputs,
-) -> String {
-    if template.is_multisig() {
-        if bare_path.starts_with('m') {
-            // Covers both `m/...` and bare `m`.
-            bare_path.to_string()
-        } else if bare_path.is_empty() {
-            // Fall back to the multisig family default (BIP-48 wsh or BIP-87).
-            template.origin_path_str(inputs.network, inputs.account)
-        } else {
-            format!("m/{bare_path}")
-        }
-    } else {
-        // Singlesig: always use the template-derived origin path.
-        template.origin_path_str(inputs.network, inputs.account)
-    }
+/// Derivation field: the slot's own origin path in `m/...` form (`m` for the
+/// master node). Never the template default: a default would claim the key
+/// sits where it may not, and a signer asked for that path derives another key
+/// (bug hunt 2026-11-25 review r1 I3).
+fn normalize_derivation(slot: &crate::synthesize::ResolvedSlot) -> String {
+    slot.origin_path_m()
 }

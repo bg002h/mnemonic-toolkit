@@ -117,9 +117,9 @@ fn emit_electrum_standard_json(inputs: &EmitInputs) -> Result<String, ToolkitErr
         )));
     }
     let slot = &inputs.resolved_slots[0];
-    let template = inputs.template.expect("checked by caller");
     let xpub_str = render_slip132_xpub(inputs.script_type, &slot.xpub, inputs.network)?;
-    let derivation = template.origin_path_str(inputs.network, inputs.account);
+    // The slot's own origin, never the template default (review r1 I3).
+    let derivation = slot.origin_path_m();
 
     let wallet = ElectrumStandard {
         seed_version: ELECTRUM_SEED_VERSION_PIN,
@@ -171,17 +171,8 @@ fn emit_electrum_multisig_json(inputs: &EmitInputs) -> Result<String, ToolkitErr
     for (i, slot) in inputs.resolved_slots.iter().enumerate() {
         let key = format!("x{}/", i + 1);
         let xpub_str = render_slip132_xpub(inputs.script_type, &slot.xpub, inputs.network)?;
-        let derivation = {
-            let bare = slot.origin_path_bare();
-            if !bare.is_empty() {
-                bare
-            } else {
-                inputs
-                    .template
-                    .expect("checked")
-                    .origin_path_str(inputs.network, inputs.account)
-            }
-        };
+        // The slot's own origin, never the template default (review r1 I3).
+        let derivation = slot.origin_path_m();
         let mut keystore = Map::new();
         keystore.insert("type".into(), Value::String("bip32".into()));
         keystore.insert("xpub".into(), Value::String(xpub_str));

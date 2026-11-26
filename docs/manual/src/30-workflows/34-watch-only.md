@@ -60,6 +60,7 @@ mnemonic bundle \
   --network mainnet \
   --template wsh-sortedmulti \
   --threshold 2 \
+  --multisig-path-family bip87 \
   --slot @0.xpub=<xpub-cosigner-0> \
   --slot @1.xpub=<xpub-cosigner-1> \
   --slot @2.xpub=<xpub-cosigner-2>

@@ -42,14 +42,12 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
 // exercised the v0.2 self-multisig pattern (--cosigner-count 3 with --phrase),
 // which was hard-rejected by BIP-388 in v0.4.0 and has no migration path.
 
-// G-B (FOLLOWUP self-check-ms1-iteration, R0 C1b): a `--slot @N.wif=` slot is
-// `is_secret_bearing()` yet emits an EMPTY ms1 (ms-codec ENTR needs BIP-39
-// entropy, not raw WIF bytes → entropy: None). The corrected self-check oracle
-// keys off `resolved_slots[i].entropy.is_some()` (None for wif) — NOT the
-// supplied subkey — so a wif-slot bundle must still self-check Ok. (The old
-// `args.slot`-based oracle would have false-rejected this.)
+// G-B (FOLLOWUP self-check-ms1-iteration, R0 C1b) used a `--slot @N.wif=`
+// slot to prove the self-check oracle keys off `entropy.is_some()`. Since bug
+// hunt 2026-11-25 X4, `bundle --template` refuses a WIF slot at mint (exit 1)
+// before the self-check runs; the refusal is pinned instead.
 #[test]
-fn bundle_wif_slot_self_check_passes() {
+fn bundle_wif_slot_refused_before_self_check() {
     const SAMPLE_WIF: &str = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
     Command::cargo_bin("mnemonic")
         .unwrap()
@@ -66,5 +64,6 @@ fn bundle_wif_slot_self_check_passes() {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .failure()
+        .code(2);
 }
