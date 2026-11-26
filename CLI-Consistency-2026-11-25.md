@@ -20,10 +20,9 @@ of the report is written assuming it.
 1. **Usage-error exit code (CLI-14).** Five binaries exit 2 on a bad flag (`md`,
    `mt`, `me`, `mr`, `mr-sitting`) and three exit 64 (`mk`, `ms`, `mnemonic`).
    *Recommended: 2*, clap's default and the majority, so three binaries change.
-2. **Consent-flag prefix (CLI-08).** `--allow-` (used across md, mt, me, the
-   toolkit) or `--accept-` (used across mr). *Recommended: `--allow-`*, with
-   `--confirm-` for attestations; `mr` is still alpha, so renaming its flags is
-   cheapest now.
+2. **Consent-flag prefix (CLI-08). Decided by Brian on 2026-11-26: `--allow-`.**
+   The other candidate was `--accept-` (used across mr). Attestations use
+   `--confirm-`; `mr` is still alpha, so renaming its flags is cheapest now.
 3. **The toolkit's `--template` (CLI-06).** It names a preset (`bip84`,
    `wsh-sortedmulti`), while `md` and `mr` use `--template` for BIP-388 template
    text. *Recommended: rename to `--preset`*, keeping `--template` as an alias
