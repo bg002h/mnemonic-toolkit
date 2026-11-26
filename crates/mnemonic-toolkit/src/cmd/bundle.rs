@@ -1774,11 +1774,11 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         args.account,
     )?;
 
-    // tk-bh1125-tr-tree-bip87-scope (Brian's ruling, 2026-11-26): BIP-87 is
-    // for multisig, so a non-multisig shape that would take the BIP-87
-    // default (a tr(...) script tree or a bare sh(...) with no multi fragment)
-    // is refused instead of minted with an origin nobody chose.
-    check_bip87_default_scope(
+    // tk-bh1125-tr-tree-bip87-scope and tk-bh1125-rr1-m3-bip48-thresh-scope
+    // (Brian's rulings, 2026-11-26): the BIP-87 and BIP-48 defaults are for
+    // multisig, so a shape with fewer than two keys that would take either
+    // default is refused instead of minted with an origin nobody chose.
+    check_default_origin_scope(
         &bound_paths.defaulted,
         slots,
         default_family,
@@ -2910,34 +2910,40 @@ pub(crate) fn bind_descriptor_mode_paths(
     })
 }
 
-/// Brian's ruling of 2026-11-26 (`tk-bh1125-tr-tree-bip87-scope`): refuse to
-/// mint when an `@N` would take the BIP-87 default origin on a shape with no
-/// multisig fragment. BIP-87: "it is best to restrict this script-agnostic
-/// hierarchy to multisignature wallets only". No example path is suggested:
-/// the right one depends on where the key really lives (see FOLLOWUPS
-/// `tk-bh1125-r3-m1-refusal-example-path`).
-fn check_bip87_default_scope(
+/// Brian's rulings of 2026-11-26 (`tk-bh1125-tr-tree-bip87-scope`,
+/// `tk-bh1125-rr1-m3-bip48-thresh-scope`): refuse to mint when an `@N` would
+/// take a family default origin (BIP-87, or BIP-48 for wsh / sh(wsh)) on a
+/// shape that references fewer than two distinct keys
+/// (`template::tree_has_multiple_keys`). BIP-87: "it is best to restrict this
+/// script-agnostic hierarchy to multisignature wallets only"; BIP-48 is a
+/// multisig hierarchy too. No example path is suggested: the right one depends
+/// on where the key really lives (see FOLLOWUPS
+/// `tk-bh1125-r3-m1-refusal-example-path`). Canonical shapes never take a
+/// family default (their BIP-48 canonical fill is only for wsh / sh(wsh) of
+/// multi / sortedmulti).
+fn check_default_origin_scope(
     defaulted: &[u8],
     slots: &[crate::slot_input::SlotInput],
     family: crate::template::DefaultOriginFamily,
     root_tree: &md_codec::tree::Node,
 ) -> Result<(), ToolkitError> {
-    if defaulted.is_empty()
-        || !matches!(family, crate::template::DefaultOriginFamily::Bip87)
-        || crate::template::tree_has_multisig_fragment(root_tree)
-    {
+    if defaulted.is_empty() || crate::template::tree_has_multiple_keys(root_tree) {
         return Ok(());
     }
+    let family_text = match family {
+        crate::template::DefaultOriginFamily::Bip87 => "BIP-87 (m/87'/...)",
+        crate::template::DefaultOriginFamily::Bip48 { .. } => "BIP-48 (m/48'/...)",
+    };
     let idx_list = defaulted
         .iter()
         .map(|i| format!("@{i}"))
         .collect::<Vec<_>>()
         .join(",");
     let mut message = format!(
-        "no origin was given for {idx_list}, and this descriptor is not a multisig (it has \
-         no multi, sortedmulti, multi_a or sortedmulti_a). BIP-87 (m/87'/...) is for \
-         multisig wallets only, so no default origin is assumed. Give each key's real \
-         origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor."
+        "no origin was given for {idx_list}, and this descriptor holds only one key. \
+         {family_text} is for wallets with two or more keys, so no default origin is \
+         assumed. Give each key's real origin with --slot @N.path=m/... or inline \
+         [fp/path]@N in the descriptor."
     );
     // The slot grammar refuses `@N.path=` beside `@N.entropy=`, so name only
     // the inline form for those slots (never advise a refused input).

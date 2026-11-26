@@ -47,10 +47,14 @@ fn hashlock_wsh_and_v_sha256_round_trips_via_bundle_json() {
             "0",
             "--slot",
             &format!("@0.phrase={TREZOR_12_ZERO}"),
+            // A single-key wsh takes no BIP-48 default (tk-bh1125-rr1-m3-
+            // bip48-thresh-scope, Brian 2026-11-26): state the origin.
+            "--slot",
+            "@0.path=m/48'/0'/0'/2'",
             "--json",
         ])
         .assert()
-        .code(4);
+        .code(0);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
 
     let tmpdir = tempfile::tempdir().unwrap();

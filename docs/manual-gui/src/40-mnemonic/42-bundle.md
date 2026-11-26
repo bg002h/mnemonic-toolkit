@@ -383,9 +383,14 @@ With a descriptor (`--descriptor` or `--descriptor-file`), a non-zero
   `--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.`
   (`mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT` in
   `crates/mnemonic-toolkit/src/cmd/bundle.rs`).
-- A non-canonical shape (`wsh(pk(@0/<0;1>/*))`) accepts it as the
-  account in the default origin it infers (`--account 1` →
-  `m/48'/0'/1'/2'`).
+- A non-canonical shape with two or more keys
+  (`wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@1/<0;1>/*),older(144))))`)
+  accepts it as the account in the default origin it infers
+  (`--account 1` → `m/48'/0'/1'/2'`). The pinned 0.104.0 did the same
+  for a single-key `wsh(pk(@0/<0;1>/*))`; since Brian's ruling of
+  2026-11-26 (`tk-bh1125-rr1-m3-bip48-thresh-scope`) a single-key
+  descriptor takes no default origin, and the CLI refuses it (exit `2`)
+  unless each key's origin is given.
 - A key written with its own origin (`[73c5da0a/84'/0'/0']xpub…`) keeps
   that origin; `--account` does not change it.
 
@@ -660,6 +665,7 @@ SPEC §6.6 / §6.9 byte-pinned and integration-test-gated.
 | `--descriptor` AND `--descriptor-file` | clap `conflicts_with`, exit 64: `the argument '--descriptor <DESCRIPTOR>' cannot be used with '--descriptor-file <DESCRIPTOR_FILE>'` |
 | `--descriptor*` AND `--threshold` | `--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.` |
 | `--descriptor*` AND `--multisig-path-family` | `--multisig-path-family is meaningful only with --template; descriptor mode encodes paths directly via @i/path syntax.` |
+| `--descriptor*` with a non-canonical descriptor that holds only one key (for example `wsh(and_v(v:pk(@0/<0;1>/*),older(144)))`, `sh(wsh(pk(@0/<0;1>/*)))`, `tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(N)))`) AND an `@N` with no origin | exit 2: `no origin was given for @N, and this descriptor holds only one key. BIP-48 (m/48'/...) is for wallets with two or more keys, so no default origin is assumed. Give each key's real origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor.` (`BIP-87 (m/87'/...)` for a `tr(...)` or bare `sh(...)`). Two or more distinct keys make a multisig whatever the fragments (`thresh`, `or_d`, taproot leaves), and those take the default |
 | `--descriptor*` with a canonical `@i` shape AND `--account != 0` | exit 2: `--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
 | `--threshold` AND single-sig template | `--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.` |
 | `--multisig-path-family` AND single-sig template | `--multisig-path-family is meaningful only with a multisig --template.` |
@@ -683,7 +689,7 @@ region after the run completes.
 | Inline `--slot @N.<secret>=<value>` (any of `phrase`, `entropy`, `wif`, `xprv`) | `warning: secret material on argv (--slot @N.<subkey>=) — pipe via --slot @N.<subkey>=- to avoid /proc/$PID/cmdline exposure` |
 | Inline `--passphrase <value>` | `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 | `--self-check` failure (re-derivation drift) | exits non-zero with `self-check failed: round-trip drift on <card-class>` |
-| Descriptor mode: an `@N` with no inline `[fp/path]@N` and no `@N.path` slot, so the toolkit chose the origin (a canonical shape's canonical origin, or the BIP-48 / BIP-87 default) | `warning: no origin was given for @N; the toolkit chose m/<path> (<why>) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards.`, then `warning: to state this path explicitly, run:` and the command with the path stated (secrets typed inline shown as `<...>`). The cards and JSON are written as usual and the run **exits 4** (Brian's ruling of 2026-11-26) |
+| Descriptor mode: an `@N` with no inline `[fp/path]@N` and no `@N.path` slot, so the toolkit chose the origin (a canonical shape's canonical origin, or the BIP-48 / BIP-87 default, which only a descriptor with two or more keys takes) | `warning: no origin was given for @N; the toolkit chose m/<path> (<why>) and the cards record it. Verify that your wallet keeps these keys there (compare the first address with it) before trusting the cards.`, then `warning: to state this path explicitly, run:` and the command with the path stated (secrets typed inline shown as `<...>`). The cards and JSON are written as usual and the run **exits 4** (Brian's ruling of 2026-11-26) |
 | Multisig `--template` with `--multisig-path-family` cleared | `warning: --multisig-path-family was not given, so the toolkit chose BIP-87 (m/87'/<coin>'/<account>') for @N... and the cards record it. ...`, then the command with `--multisig-path-family bip87`; **exits 4**. The GUI seeds the field with `bip48` on a multisig template, so a run that keeps it records BIP-48 (`m/48'/<coin>'/<account>'/2'` and the like), not the CLI's BIP-87 default, and exits 0 |
 
 Note that the GUI's command-line preview always uses the inline
