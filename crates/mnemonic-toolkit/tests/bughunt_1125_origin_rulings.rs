@@ -1462,3 +1462,68 @@ fn rulings2_fable_m1_xprv_slot_in_descriptor_mode_is_refused_as_unsupported_firs
         assert!(!r.stderr.contains("--slot @N.path="), "{d}: {}", r.stderr);
     }
 }
+
+/// N-1: a malformed `--origin` path prints one `error:` prefix and the value
+/// as typed (with its `@N=`).
+#[test]
+fn rulings2_fable_n1_malformed_origin_has_one_prefix_and_keeps_at_n() {
+    let md1 = empty_origin_multisig();
+    let r = restore(
+        &md1,
+        &["--origin", "@0=m/84x", "--origin", "@1=m/48'/0'/0'/2'"],
+    );
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(!r.stderr.contains("error: error:"), "{}", r.stderr);
+    assert!(r.stderr.contains("`@0=m/84x`"), "{}", r.stderr);
+}
+
+/// N-2: one leading `m` (or `m/`) is the master node; a second is a typo and
+/// refused as malformed, never read as `m` or as the path after it.
+#[test]
+fn rulings2_fable_n2_a_doubled_m_is_refused_as_malformed() {
+    let master = master_key_wpkh();
+    let single = empty_origin_wpkh();
+    for (md1, v) in [
+        (&master, "mm"),
+        (&master, "m/m"),
+        (&single, "m/m/84'/0'/0'"),
+        (&single, "mm/84'/0'/0'"),
+        (&single, "@0=m/m/84'/0'/0'"),
+    ] {
+        let r = restore(md1, &["--origin", v, "--json"]);
+        assert_eq!(r.code, 2, "{v}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{v}: {}", r.stdout);
+        assert!(
+            r.stderr.contains("m may appear only once, at the start"),
+            "{v}: {}",
+            r.stderr
+        );
+    }
+    // The one-prefix spellings still work.
+    let r = restore(&master, &["--origin", "m"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    for v in ["m/84'/0'/0'", "84'/0'/0'"] {
+        let r = restore(&single, &["--origin", v]);
+        assert_eq!(r.code, 4, "{v}: {}", r.stderr);
+    }
+}
+
+/// N-3: with a seed, the found-path warning for one key is not printed when
+/// another key is then refused.
+#[test]
+fn rulings2_fable_n3_no_found_path_warning_before_a_refusal_about_another_key() {
+    let md1 = master_key_card(empty_origin_multisig());
+    let from = format!("phrase={A}");
+    let r = restore(&md1, &["--from", &from]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stderr.contains("@1 carries NO origin"), "{}", r.stderr);
+    assert!(!r.stderr.contains("WARNING"), "{}", r.stderr);
+    // Once @1 is stated, the warning about @0 is printed.
+    let r = restore(&md1, &["--from", &from, "--origin", "@1=m/48'/0'/0'/2'"]);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("WARNING: md1 cosigner @0"),
+        "{}",
+        r.stderr
+    );
+}

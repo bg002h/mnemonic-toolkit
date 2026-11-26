@@ -971,14 +971,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     };
 
     // --- (c) derive the account key at --origin OR the template default -----
-    let explicit_origin = match single_origin(args)? {
-        Some(s) => Some(
-            DerivationPath::from_str(s.trim_start_matches("m/").trim_start_matches('m'))
-                .or_else(|_| DerivationPath::from_str(s))
-                .map_err(|e| bad(format!("--origin {s}: {e}")))?,
-        ),
-        None => None,
-    };
+    let explicit_origin = parse_explicit_own_origin(single_origin(args)?)?;
     let acct = match &explicit_origin {
         Some(path) => crate::derive_slot::derive_bip32_from_entropy_at_path(
             &entropy,
@@ -1739,12 +1732,24 @@ fn single_origin(args: &RestoreArgs) -> Result<Option<&str>, ToolkitError> {
 fn parse_explicit_own_origin(s: Option<&str>) -> Result<Option<DerivationPath>, ToolkitError> {
     match s {
         Some(s) => Ok(Some(
-            DerivationPath::from_str(s.trim_start_matches("m/").trim_start_matches('m'))
-                .or_else(|_| DerivationPath::from_str(s))
-                .map_err(|e| bad(format!("--origin {s}: {e}")))?,
+            parse_origin_text(s).map_err(|e| bad(format!("--origin {s}: {e}")))?,
         )),
         None => Ok(None),
     }
+}
+
+/// An `--origin` path: `m`, `m/<path>` or a bare `<path>`. Exactly one `m`
+/// prefix is taken (review rulings2 final N-2): `mm` or `m/m/84'/...` is a
+/// typo, refused rather than read as `m` or as the path after it.
+fn parse_origin_text(s: &str) -> Result<DerivationPath, String> {
+    if s == "m" || s == "m/" {
+        return Ok(DerivationPath::master());
+    }
+    let rest = s.strip_prefix("m/").unwrap_or(s);
+    if rest.split('/').any(|c| c.starts_with('m')) {
+        return Err("m may appear only once, at the start (m or m/<path>)".to_string());
+    }
+    DerivationPath::from_str(rest).map_err(|e| e.to_string())
 }
 
 /// #28 phase 2 — the SHARED, arg-struct-NEUTRAL multisig-template completion
@@ -4124,9 +4129,9 @@ fn asserted_origins(
                  m/<path>"
             )));
         }
-        let path = parse_explicit_own_origin(Some(path_text))
-            .map_err(|e| malformed(e.to_string()))?
-            .expect("Some in, Some out");
+        // Review rulings2 final N-1: one `error:` prefix, and the value as typed.
+        let path = parse_origin_text(path_text)
+            .map_err(|e| malformed(format!("{origin_flag} `{v}`: {e}")))?;
         let c = cosigners.iter().find(|c| c.idx == idx).ok_or_else(|| {
             malformed(format!(
                 "{origin_flag} @{idx}: no such key (this md1 has {} keys)",
@@ -4622,6 +4627,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     // Empty-origin keys whose path the seed search FOUND (it may be `m`, the
     // master node, which is an empty path too).
     let mut found_by_seed: std::collections::BTreeSet<u8> = std::collections::BTreeSet::new();
+    let mut found_warnings: Vec<String> = Vec::new();
     if let Some(from_raw) = args.from.as_deref() {
         let from = parse_from_input(from_raw).map_err(bad)?;
         let from_uses_stdin = from.value == "-";
@@ -4778,8 +4784,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                                 });
                             }
                         }
-                        writeln!(stderr, "{}", empty_origin_found_warning(c_idx, found))
-                            .map_err(ToolkitError::Io)?;
+                        // Review rulings2 final N-3: printed once nothing is
+                        // refused (with the other origin warnings below).
+                        found_warnings.push(empty_origin_found_warning(c_idx, found));
                         cosigners[ci].origin = found.clone();
                         found_by_seed.insert(c_idx);
                         slots[ci].path = found.clone();
@@ -5096,6 +5103,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             &xpub,
             cosigners[ci].fingerprint,
         )?;
+    }
+    for w in &found_warnings {
+        writeln!(stderr, "{w}").map_err(ToolkitError::Io)?;
     }
     for (ci, path) in &from_mk1 {
         let idx = cosigners[*ci].idx;
