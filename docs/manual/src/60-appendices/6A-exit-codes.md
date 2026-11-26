@@ -11,12 +11,12 @@ produce and points here for their meaning.
 | Code | Name | Set when | What to do |
 |---|---|---|---|
 | `0` | OK | Everything requested was done and every check passed. | Nothing. |
-| `1` | NO | The input is well-formed, and a comparison against something else came out no: a reference, a phrase, a template, the chain, an expectation. Examples: a verify mismatch, NOT spend-equal, not a member, `--expect` not met. | Read the verdict. |
+| `1` | NO | The input is well-formed, and a comparison against something else came out no: a reference, a phrase, a template, the chain, an expectation. Examples: a verify mismatch, NOT spend-equal, not a member, `--expect` not met, an input the node proves spent. | Read the verdict. |
 | `2` | INVALID | An input is wrong for this verb whatever the flags: a bad checksum, an uncorrectable string, a wrong HRP or kind, a newer format, empty input, a malformed value the tool reads, an input that breaks the verb's correctness rules. | Fix or replace the input. |
 | `4` | UNVERIFIED | The tool checked part of the result and could not confirm it: a correction with no oracle, a partial decode, a signature accepted leniently. | Verify the result before trusting it. |
 | `8` | REFUSED | The tool declined under a safety or policy rule that a flag, network, channel or different destination would waive, or a network mismatch. Examples: a secret on the command line, an unsafe output destination, an output that exists, a limit a flag can raise. | Change how it is run, or pass the override knowingly. |
 | `16` | REPAIRED | The tool applied a checksum correction to an input and used the corrected value. | The plate is damaged: re-engrave it. |
-| `32` | IO | Something the tool needed from the system failed or is missing: an input file, an output that cannot be written, stdout, a helper program you asked for, a device, an environment variable, a feature this build lacks. | Fix the environment. |
+| `32` | IO | Something the tool needed from the system failed or is missing: an input file, an output that cannot be written, stdout, a helper program you asked for, a device, a lock, a RAM folder, an environment variable, a feature this build lacks. | Fix the environment. |
 | `64` | USAGE | The command line alone is wrong: an unknown flag or verb, a missing argument, a conflict, a bad setting. Nothing ran. Never combined with another code. | Fix the command line. |
 | `101` | INTERNAL | A bug, or any failure no other class covers. Never combined. | Report it. |
 | `130` | stopped | The operator stopped it, at a prompt or with Ctrl-C. | |
@@ -43,7 +43,8 @@ correction was applied; 32 a file, device or helper failed.
 
 ## How a failure is classed
 
-The binaries ask these questions in order, and the first "yes" decides:
+The binaries ask these questions in order, and the first "yes" decides.
+The order is the specification's; it numbers the same questions 0 to 7.
 
 1. Did the operator stop it? Then `130`.
 2. Is the command line alone wrong, judged without reading any input,
@@ -116,10 +117,10 @@ per-verb detail.
 
 | Binary | Codes it uses | Notes |
 |---|---|---|
-| `mnemonic` | 0, 1, 2, 4, 8, 16, 20, 22, 32, 64, 101 and sums | [`mnemonic` reference](#mnemonic-reference). `repair`: 16 verified or incomplete-set, 20 unverified, 22 corrected but unreadable. `verify-bundle`: 1 mismatch, 2 undecodable card, 4 partial. |
-| `md` | 0, 1, 2, 4, 8, 16, 20, 32, 64 and sums | [`md` reference](#md-md-cli-reference). `repair` decode-checks each corrected string (adds 2). `descriptor --verify-against` NOT spend-equal is 1. |
+| `mnemonic` | 0, 1, 2, 4, 8, 16, 18, 20, 22, 32, 64, 101 and sums | [`mnemonic` reference](#mnemonic-reference). `repair`: 16 verified or incomplete-set, 18 a corrected string that is no mk1 chunk, 20 unverified, 22 a corrected single string that is not a card. `verify-bundle`: 1 mismatch, 2 undecodable card, 4 partial. |
+| `md` | 0, 1, 2, 4, 8, 16, 20, 22, 32, 64, 101 and sums | [`md` reference](#md-md-cli-reference). `repair` decode-checks each corrected string (adds 2). `descriptor --verify-against` NOT spend-equal is 1. |
 | `ms` | 0, 1, 2, 8, 20, 22, 32, 64, 101 and sums | [`ms` reference](#ms-ms-cli-reference). `repair` applied is 20; `inspect` that would not decode is 2. |
-| `mk` | 0, 1, 2, 8, 16, 32, 64 and sums | [`mk` reference](#mk-mk-cli-reference). A correction in `decode`, `verify`, `inspect`, `address` or `derive` sets 16. |
+| `mk` | 0, 1, 2, 8, 16, 18, 22, 32, 64, 101 and sums | [`mk` reference](#mk-mk-cli-reference). A correction in `decode`, `verify`, `inspect`, `address` or `derive` sets 16. `repair`: 18 a corrected string that is no mk1 chunk, 22 a corrected single string that does not decode. |
 | `mt` | 0, 1, 2, 8, 16, 32, 64, 101 and sums | No chapter in this manual. A correction in `decode`, `verify` or `inspect` sets 16; a named `--bitcoin-cli` that fails is 32; no node at all stays 0. |
 | `me` | 0, 1, 2, 8, 32, 64, 101 and sums | No chapter in this manual. Destination refusals are 8; `sysw pack --expect` not met is 1; a named `ME_PREVIEW_BIN` that is missing is 32. |
 | `mr` | 0, 1, 2, 8, 16, 20, 32, 64, 101 and sums | [`mr` reference](#mr-mr-cli-reference). |

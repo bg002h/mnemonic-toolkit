@@ -654,6 +654,7 @@ you know the reference itself is wrong.
 | `--format` without `--template` (single-sig) | exit 64 — `--format` needs one `--template` (one-in/one-out) |
 | `--template <multisig value>` (single-sig restore) | refused — reconstruct multisig via `--md1` |
 | `--expect-fingerprint` / `--expect-xpub` mismatch | exit 1 (`RestoreMismatch`) unless `--allow-mismatch` |
+| `--expect-fingerprint` not 8 hex digits, or `--expect-xpub` not an extended public key | exit 2, even with `--allow-mismatch` |
 | `--cosigner @N=` mismatch against the md1 slot | exit 1 unless `--allow-mismatch` |
 | `--md1` `@-in-both` taproot shape | exit 2 (faithful card preserved) |
 | `--language` conflicting with a `mnem`-kind ms1's wire language | refused |

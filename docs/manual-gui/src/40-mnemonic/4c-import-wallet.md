@@ -279,7 +279,9 @@ auto-detects it and decrypts it to the wallet JSON (ECIES) BEFORE
 sniff/parse, then imports watch-only as usual. Only consumed when a
 `BIE1` blob is detected; ignored (with a stderr notice) otherwise. A
 wrong password → `decryption failed (wrong password or corrupted wallet
-file)`. Mutually exclusive with the other two `--decrypt-password*`
+file)`: exit 1 when the file's HMAC does not verify (the password is
+proven wrong, or the file altered), exit 2 when the HMAC verified but
+the decryption after it failed (the file is damaged). Mutually exclusive with the other two `--decrypt-password*`
 forms.
 
 Schema-`secret: true`. The GUI renders this as a `SecretLineEdit`; any

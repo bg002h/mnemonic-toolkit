@@ -36,8 +36,8 @@ mk encode --xpub <XPUB> --origin-path <PATH> (--origin-fingerprint <HEX> | --pri
 | `--origin-path <PATH>` | derivation path (e.g., `m/84'/0'/0'`) |
 | `--policy-id-stub <HEX>` | 8 hex chars (4 bytes) for one stub; repeatable |
 | `--from-md1 <MD1-STRING>` | derive a stub from an md1 wallet-policy string; repeatable |
-| `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; a leading byte-order mark is removed and CRLF line ends are read as LF; any other carriage return or line-break character, or a byte-order mark after the first character, is refused (exit 64) naming the line; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` |
-| `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored; a leading byte-order mark is removed and CRLF line ends are read as LF; a CR-only file, any other carriage return or line-break character, or a byte-order mark after the first character, is refused (exit 64) naming the line |
+| `--from-md1-set <FILE>` | repeatable; read md1 strings from FILE (what `md encode --out` writes) and bind their stubs exactly as repeated `--from-md1` does; lines that are not md1 strings (the `chunk-set-id:` header, blanks, `#` comments) are skipped; a leading byte-order mark is removed and CRLF line ends are read as LF; any other carriage return or line-break character, or a byte-order mark after the first character, is refused (exit 2) naming the line; stubs bind in flag order `--policy-id-stub`, `--from-md1`, `--from-md1-set` |
+| `--keys <FILE>` | mint ONE card per key record in FILE (`-` for stdin) instead of the single card described by `--xpub`/`--origin-path`; each record is BIP-380 origin notation `[fingerprint/path]xpub` on its own line; blanks and `#` comments ignored; a leading byte-order mark is removed and CRLF line ends are read as LF; a CR-only file, any other carriage return or line-break character, or a byte-order mark after the first character, is refused (exit 2) naming the line |
 | `--in <FILE>` | read the key records from FILE (`-` for stdin) — the same reader `--keys` uses; the two are mutually exclusive |
 | `--out <FILE>` | write the mk1 artifact to FILE, created `0600`, instead of stdout; the file holds exactly what stdout would (grouped under `--group-size`); overwrites an existing file (operator ruling 2026-08-26) |
 | `--privacy-preserving` | emit without master fingerprint; mutually exclusive with `--origin-fingerprint`; a single-card encode needs one of the two (exit 64 otherwise) |
@@ -262,13 +262,17 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 |---|---|
 | `0` | all strings already valid (no repair applied; input echoed to stdout unchanged) |
 | `16` | at least one string corrected (`REPAIR_APPLIED`), and the corrected group decodes; stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory telling you to reassemble the full card — see [Set-level re-verify](#set-level-re-verify) below |
+| `18` | `16 + 2`: a corrected string whose chunk header does not parse as an mk1 chunk. It is printed, with an error line saying it is not a valid card |
 | `22` | `16 + 4 + 2`: a corrected single (not chunked) string that does not decode; it is still printed, with an error telling you not to trust it. (A corrected single string that decodes, `20`, cannot occur in mk: a single string cannot hold a 65-byte xpub.) |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below). Nothing is printed |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below). Nothing is printed, except a string whose chunk header does not parse, which is printed with an error line saying it is not a valid card |
 | `32` | a file or stream could not be read or written |
 | `64` | the command line is wrong; nothing ran |
 
 **The same codes as the toolkit.** `mk repair` and `mnemonic repair
---mk1` give the same code on the same strings. Bit 16 means a correction
+--mk1` give the same code, and print the same strings, on mk-codec's
+negative test vectors N6 to N21, each clean and with one substitution
+(the toolkit's tests compare the two when `MK_BIN` names an `mk`
+build). Bit 16 means a correction
 was applied: it is **verified now** (a complete, cleanly-reassembling
 `chunk_set_id` group) or **verifiable by reassembly later** (an
 incomplete group, whose `UNVERIFIED` advisory tells you to reassemble the

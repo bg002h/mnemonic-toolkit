@@ -48,7 +48,8 @@ Secret-bearing.
 
 The asserted share count. Number widget; range 2..255. Required.
 The handler-side runtime check requires the actual `--share`
-occurrence count to equal `--shares`; mismatch is refused.
+occurrence count to equal `--shares`; a mismatch, or a value below 2,
+is refused as a bad command line (exit 64) before any share is read.
 
 This redundancy is intentional: it lets the user explicitly
 declare how many shares they're providing, catching off-by-one

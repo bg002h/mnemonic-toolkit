@@ -523,8 +523,9 @@ suppressed.
 
 Boolean flag. When set, the CLI re-parses the freshly-emitted
 bundle (`ms1`/`mk1`/`md1`) end-to-end and asserts that the
-re-derivation produces byte-identical card strings. Exits non-zero
-on any drift. This is a runtime safety check; recommended for
+re-derivation produces byte-identical card strings. Exits 101 (an
+internal error: please report it) on any drift, with the cards
+already written. This is a runtime safety check; recommended for
 production engraving workflows.
 
 ## `--threshold` {#mnemonic-bundle-threshold}

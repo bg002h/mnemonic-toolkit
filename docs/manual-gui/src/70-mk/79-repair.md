@@ -59,13 +59,16 @@ avoid surfacing a half-fixed card.
 |---|---|
 | `0` | all strings already valid (input echoed unchanged) |
 | `16` | at least one string corrected (`REPAIR_APPLIED`) and the corrected group decodes; stdout = report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory: the rest of the set verifies the correction when it is reassembled |
+| `18` | `16 + 2`: a corrected string whose chunk header does not parse as an mk1 chunk; it is printed, with an error saying it is not a valid card |
 | `22` | `16 + 4 + 2`: a corrected single (not chunked) string that does not decode; it is still printed, with an error telling you not to trust it. A corrected single string that decodes (`20`) cannot occur in mk |
-| `2` | unrepairable (too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (the per-chunk correction aliased to a different, wrong card); nothing is printed |
+| `2` | unrepairable (too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (the per-chunk correction aliased to a different, wrong card); nothing is printed, except a string whose chunk header does not parse, which is printed with an error |
 | `32` | a file or stream could not be read or written |
 | `64` | the command line is wrong; nothing ran |
 
 **The same codes as the toolkit.** `mk repair` and [`mnemonic repair
---mk1`](#mnemonic-repair-mk1) give the same code on the same strings.
+--mk1`](#mnemonic-repair-mk1) give the same code, and print the same
+strings, on mk-codec's negative test vectors N6 to N21, each clean and
+with one substitution.
 Bit 16 means a correction was applied: it is **verified now** (a
 complete, cleanly-reassembling `chunk_set_id` group) or **verifiable by
 reassembly later** (an incomplete group). Bit 4 is added only where

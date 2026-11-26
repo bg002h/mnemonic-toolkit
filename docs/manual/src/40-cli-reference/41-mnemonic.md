@@ -403,9 +403,11 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 
 One exception to both rows: `--self-check` runs after the cards are
 written, so a self-check failure leaves them on stdout (or in the
-`--output` file) and exits non-zero: `1`, with `bundle mismatch on
+`--output` file) and exits non-zero: `101`, with `bundle mismatch on
 self-check[...]: ...` on stderr (`kind: "BundleMismatch"`), for a card
-that does not round-trip. Treat such
+that does not round-trip. A card the toolkit itself wrote that does not
+read back is a bug in the toolkit, not in your input, so the code is the
+internal-error code; please report it. Treat such
 cards as bad: discard them and investigate; that error line, not the
 exit code alone, tells this apart from a chosen origin.
 
@@ -1135,7 +1137,12 @@ descriptor (keys supplied via `--slot`) alike.
 > **Changed again at the constellation exit-code cutover.** A card
 > mismatch is now exit 1, a failed BIP-388 key-distinctness check and an
 > undecodable supplied card are exit 2, and exit 4 means only `result:
-> partial` (see [Appendix J](#appendix-j-exit-codes)).
+> partial` (see [Appendix J](#appendix-j-exit-codes)). A supplied md1
+> that decodes but is a template only (the `md1_wallet_policy` check
+> fails, so there are no keys to compare) is exit 2 too: the card is the
+> wrong kind of input, not a card that disagrees with the seed. Each
+> check carries its class explicitly; a failing check outside both
+> classes would be a toolkit bug (exit 101).
 
 ### Worked example
 
@@ -1164,7 +1171,7 @@ undecodable supplied card is exit 2 in every row.
 correction was applied and the corrected value used; it is **verified
 now** (an mk1/**chunked** md1 cross-chunk reassembly hash or content-id
 check; a unique full-checksum `--max-indel` recovery) **or verifiable
-by reassembly later** (an incomplete mk1 `chunk_set_id` group, once the
+by reassembly later** (an incomplete mk1 `chunk_set_id` group or md1 chunk set, once the
 rest of its set is supplied). Bit 4 is added (exit 20) when a
 bounded-distance BCH SUBSTITUTION correction spent the checksum's
 error-detection budget and has **no self-oracle** — this is ms1's case
@@ -1338,6 +1345,22 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--group-size <N>` | insert a separator every N characters in an emitted ms1 or mk1 card (default `0` = unbroken). Display only; `--json` and non-card outputs (xpub, WIF, …) stay unbroken |
 | `--separator <SEPARATOR>` | the grouping separator: `space` (keyword, the default) or the literal `" "`. Whitespace only — `hyphen` and `comma` are refused |
 | `--help` | print help |
+
+### Exit codes {#mnemonic-convert-exit-codes}
+
+- **Settings before input.** A target the given settings cannot produce
+  (a derivation target with neither `--template` nor `--path`, `--to wif`
+  or `--to address` from a seed without `--path`, `--to address` with no
+  script type, `--to path`, a composite `--to bip38` without
+  `--bip38-passphrase`) is judged from the command line alone, before
+  stdin or any `--from` value is read. It exits the same code whatever
+  the input holds, valid or not.
+- **A wrong BIP-38 passphrase is `1`.** Decrypting a `bip38=` key with
+  the wrong `--passphrase` fails BIP-38's address-hash check on a key
+  whose base58check checksum already passed, so the passphrase is proven
+  wrong rather than the key damaged: `error: BIP-38 decryption failed:
+  passphrase does not match the encrypted key …`, exit `1`. A key whose
+  checksum fails is input that does not decode: exit `2`.
 
 ### Worked example
 
@@ -1573,8 +1596,8 @@ channels that keep the seed off the argv.
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0.** Accepted (and still parsed as a humantime duration such as `2h` or `90min`) so existing scripts do not fail on an unknown flag, but it changes nothing: there is no search-time ceiling any more — the completion declares its measured estimate and reports progress, and Ctrl-C stops it |
 | `--recalibrate-threads` | ignore the search-thread count recorded under `[search]` in `~/.mnemonic/mt.conf`, measure this machine again and overwrite the record. The count is measured once, on the first multisig-template search, and reused, because the best count is a property of the machine rather than of its core count; use this after a hardware change or when the recorded value looks wrong. Only a multisig-template completion (id-search or `--search-address`) runs the search, so on any other restore the flag has no effect |
 | `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
-| `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 1 (unless `--allow-mismatch`) |
-| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`, or a keyless single-sig template `--md1`, whose type it takes); mismatch → exit 1 (unless `--allow-mismatch`) |
+| `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 hex digits); mismatch → exit 1 (unless `--allow-mismatch`); a value that is not 8 hex digits is refused (exit 2), with or without `--allow-mismatch` |
+| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`, or a keyless single-sig template `--md1`, whose type it takes); mismatch → exit 1 (unless `--allow-mismatch`); a value that is not an extended public key is refused (exit 2), with or without `--allow-mismatch` |
 | `--allow-mismatch` | emit descriptors even when a reference does not match (loud `✗ MISMATCH (overridden)` banner, exit 0) |
 | `--count <COUNT>` | number of first-receive addresses to show per wallet type (default 1) |
 | `--format <FORMAT>` | emit an importable wallet-software payload via an `export-wallet` emitter (`descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, `specter`, `jade`, `electrum`, `green`, `bsms`, …). REQUIRES a single `--template` (one-descriptor-in/one-out); `--format` with no `--template` → exit 64. Refused (exit 2) when completing a keyless single-sig template `--md1`. When set, the importable payload goes to stdout and the verification block goes to stderr so the payload pipes cleanly. With `--json` the payload is embedded as the `import_payload` field instead |
@@ -1597,6 +1620,9 @@ Restore is built around the master fingerprint as the
 - **`--allow-mismatch`** override → emit the descriptors the supplied
   seed+passphrase produced under a loud `✗ MISMATCH (overridden)` stderr
   banner, exit 0.
+- **A reference that is not a fingerprint or an xpub** (`--expect-fingerprint
+  zz`) → exit 2, before any comparison and whether or not
+  `--allow-mismatch` is given: a malformed reference cannot be overridden.
 - **No reference at all** → emit, with a loud `UNVERIFIED` stderr banner
   pointing at the fingerprint to verify against your own records.
 
@@ -2091,7 +2117,8 @@ auto-rewriting).
 | NOTICE (exit 0) | `notice: import-wallet: no BIE1 storage-encrypted wallet detected; --decrypt-password* ignored` (v0.33.2; emitted when a `--decrypt-password*` flag is supplied for a non-encrypted wallet) |
 | Error (exit 1) | `error: import-wallet: bsms: BIP-129 MAC verification failed (token width <N> hex chars; wrong token or tampered ciphertext)` |
 | Error (exit 2) | `error: import-wallet: electrum: this wallet is encrypted with a hardware-device key (BIE2 / XPUB_PASSWORD); it cannot be decrypted from a password…` (v0.33.2) |
-| Error (exit 2) | `error: import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)` (v0.33.2) |
+| Error (exit 1) | `error: import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)` (v0.33.2), when the BIE1 HMAC does not verify: the password is proven wrong (or the file altered), as with a BSMS MAC |
+| Error (exit 2) | the same message, when the HMAC verified but the AES decryption that follows failed: the file is damaged, not the password wrong |
 | Error (exit 2) | `error: import-wallet: electrum: BIE1 storage-encrypted wallet detected; supply the wallet password via --decrypt-password, --decrypt-password-file, or --decrypt-password-stdin` (v0.33.2) |
 | Error (exit 2) | `error: import-wallet: could not detect format; supply --format <bsms\|bitcoin-core>` |
 | Error (exit 2) | `error: import-wallet: --format <X> supplied but blob looks like <Y>` |
@@ -2305,7 +2332,10 @@ required (clap arg-group; missing/multiple → exit 64). A wrong password
 (or corrupted ciphertext) surfaces as `electrum-decrypt: decryption failed
 (wrong password or corrupted ciphertext)` (exit 2) — Format A field
 encryption carries no MAC, so the two underlying failure modes (PKCS7
-unpad refusal / non-UTF-8 result) are reported uniformly. The recovered
+unpad refusal / non-UTF-8 result) are reported uniformly, and with no
+authentication tag a wrong password cannot be told apart from damaged
+ciphertext: the code is `2`, not the `1` that a failed MAC or HMAC gives
+(`import-wallet`'s BSMS and BIE1 paths, a BIP-38 address hash). The recovered
 plaintext on stdout is private key material and emits the
 output-class advisory.
 
@@ -2513,12 +2543,19 @@ Field order is part of the schema (SHA-pinned in
 |---|---|
 | `split --from` phrase word-count not in {12,15,18,21,24} | `seed-xor split: phrase must be 12/15/18/21/24 words; got K` |
 | `split --shares` < 2 | `seed-xor split: --shares must be >= 2; got N` |
+| `combine --shares` < 2 | `seed-xor combine: --shares must be >= 2; got N` |
 | `combine --share` count mismatch vs `--shares` | `seed-xor combine: --shares N requires exactly N --share arguments; got K --share values for --shares N` |
 | `combine` mixed-length shares | `seed-xor combine: all shares must be the same word count; got mix of {K1, K2, ...}` |
 | `combine` share at position I has BIP-39 checksum failure | `seed-xor combine: share at position I has invalid BIP-39 checksum (...)` |
 | `combine` unknown word in share at position I | `seed-xor combine: share at position I: unknown BIP-39 word at index J ...` |
 | `--from` or `--share` variant other than `phrase=` | `seed-xor only accepts phrase=<value> or phrase=-` |
 | Two or more `--share phrase=-` (multi-stdin) | `seed-xor combine: at most one --share value may be \`-\` (single stdin per invocation)` |
+
+`--shares` below 2 (either verb) and a `combine --shares` that does not
+match the number of `--share` flags are usage errors (exit `64`), judged
+from the command line before any phrase or share is read, so the code
+does not depend on the input. A phrase or share that does not decode is
+exit `2`.
 
 ### Advisories
 
@@ -3781,11 +3818,12 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 
 | Code | Meaning |
 |---|---|
-| `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
-| `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks; also **(mk1 only, Cycle E) a corrected chunk set that is INCOMPLETE**: the rest of the set verifies it when it is reassembled, so it is not a no-oracle correction |
+| `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged); also a clean but INCOMPLETE mk1 or md1 chunk set (a lone chunk of a larger card), echoed; for md1 a stderr line says the set is incomplete |
+| `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks; also **a corrected mk1 or md1 chunk set that is INCOMPLETE** (a lone chunk of a larger card, or fewer chunks than the card's count): each chunk is corrected on its own and printed, and the rest of the set verifies the correction when it is reassembled, so it is not a no-oracle correction. An md1 set with a repeated index, an index past its count or more chunks than its count is not an incomplete set: it exits `2` |
+| `18` | (mk1) a corrected string whose chunk header does not parse as an mk1 chunk: 16 + 2. It is printed, with a `repair: error:` line on stderr saying it is not a valid card |
 | `20` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **every non-chunked `--md1` single-string correction (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below)** — verify each before trusting; all candidates are printed |
-| `22` | (F-642) a corrected single-string `--md1` at a wire version this build cannot read (see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version) below): 16 + 4 + 2, a correction was applied, it cannot be verified, and the corrected string is not a card this build can decode. The corrected string is still printed |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery; an md1 at an unreadable wire version that is multi-string, clean, or uncorrectable) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
+| `22` | a corrected single string that is not a card: 16 + 4 + 2, a correction was applied, nothing checks it a second time, and the corrected string does not decode. This is an `ms1` whose payload does not decode, a non-chunked `md1` or single-string `mk1` that does not decode, or (F-642) a single-string `--md1` at a wire version this build cannot read (see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version) below). The corrected string is still printed, with a `repair: error:` line on stderr (F-642 prints its own two lines instead). `ms repair`, `md repair` and `mk repair` exit `22` on the same strings |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery; an md1 at an unreadable wire version that is multi-string, clean, or uncorrectable); **or clean strings that are not a card** (nothing to correct, and the card does not decode; an mk1 string whose chunk header does not parse is still printed, with a `repair: error:` line, as `mk repair` prints it) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
 | `32` | a file, stdin or stdout failed (stdout failure adds 32 to the code above) |
 | `64` | a bad command line; nothing ran |
 
@@ -3846,16 +3884,16 @@ fix:
   auto-fire) as a confident fix.
 - **An INCOMPLETE group is supplied** (a single plate of a multi-chunk
   card, or otherwise fewer chunks than `total_chunks`) — reassembly
-  cannot be checked, because the other chunks aren't present.
-  `mnemonic repair` reports it as an exit-`20` VERIFY-ME candidate (the
-  same precedence tier as an ambiguous `--max-indel` recovery) with an
-  `UNVERIFIED` advisory: reassemble the full card (e.g. `mnemonic
-  inspect --mk1` for every chunk, or `mk decode`) before trusting the
-  correction. A batch call mixing an incomplete group with a fully-
-  reassembling group still reports the incomplete group's candidate —
-  but a batch containing a REJECTED (aliased) group fails the WHOLE
-  call (reject dominates candidate and bless; the rejected group's
-  chunks are never presented as recovered).
+  cannot be checked yet, because the other chunks aren't present.
+  `mnemonic repair` prints the corrected chunks and exits `16`, with a
+  stderr advisory: the rest of the set verifies the correction when the
+  full card is reassembled (e.g. `mnemonic inspect --mk1` for every
+  chunk, or `mk decode`), so reassemble it before trusting the
+  correction. A clean incomplete group exits `0`. A batch call mixing an
+  incomplete group with a fully-reassembling group reports the
+  incomplete group's advisory — but a batch containing a REJECTED
+  (aliased) group fails the WHOLE call (reject dominates candidate and
+  bless; the rejected group's chunks are never presented as recovered).
 
 BIP-93 itself recommends confirming a corrected codex32 string before
 relying on it; this advisory operationalizes that recommendation for
@@ -3975,9 +4013,11 @@ exit-`16` "recovered" — mirroring the ms1 treatment exactly:
 
 **Sibling CLI:** the standalone `md repair` (md-cli, see `42-md.md`)
 applies the same demotion since the constellation exit-code cutover:
-a corrected non-chunked md1 exits `20` there too, and the two agree on
-every md1 shape (FOLLOWUP `md-cli-non-chunked-single-string-repair-demote`
-is closed).
+a corrected non-chunked md1 exits `20` there too (FOLLOWUP
+`md-cli-non-chunked-single-string-repair-demote` is closed). The two
+give the same code, and print or withhold the same strings, for an
+incomplete set, a lone chunk and a corrected string that is not a card;
+the toolkit's tests compare them when `MD_BIN` names an `md` build.
 
 BIP-93 itself recommends against automatically proceeding with a
 corrected codex32 string without user confirmation; this demotion
@@ -4050,9 +4090,10 @@ demotion](#mnemonic-repair-md1-non-chunked-demotion) above). It is
 version this build cannot read, which exits `22` (see
 [md1 at an unreadable wire
 version](#mnemonic-repair-md1-unreadable-version) above), and
-`"incomplete_set"` for a correction in an incomplete mk1 chunk set,
-which exits `16` because the rest of the set verifies it when it is
-reassembled. `ms-cli`'s
+`"incomplete_set"` for a correction in an incomplete mk1 or md1 chunk
+set, which exits `16` because the rest of the set verifies it when it is
+reassembled (a clean incomplete md1 set has the same verdict and exits
+`0`). `ms-cli`'s
 standalone `ms repair --json` byte-matches this field's position.
 
 ```{.text include="41-repair-ms1-json.out"}
@@ -4983,7 +5024,7 @@ mnemonic compare-cost {--miniscript <STR> | --descriptor <STR> | stdin (when non
 | Flag | Purpose |
 |---|---|
 | `--miniscript <STR>` | bare miniscript fragment with abstract labels (`pk(A)`, `pk(B)`, …) or concrete hex pubkeys; cost is key-agnostic so abstract labels auto-substitute to deterministic dummy keys. Mutually exclusive with `--descriptor`. |
-| `--descriptor <STR>` | full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf `tr(IK, {M})` (v0.28.0). The wrapper is stripped to recover the inner miniscript `M` before the comparison. Multi-leaf `tr(IK, {M1, M2, ...})` and keypath-only `tr(IK)` are refused with exit `3`. Mutually exclusive with `--miniscript`. |
+| `--descriptor <STR>` | full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf `tr(IK, {M})` (v0.28.0). The wrapper is stripped to recover the inner miniscript `M` before the comparison. Multi-leaf `tr(IK, {M1, M2, ...})` and keypath-only `tr(IK)` are refused with exit `2`. Mutually exclusive with `--miniscript`. |
 | `--feerate <SATS_PER_VB>` | decimal sats per virtual byte for the sats columns; default `1.0`, max `10000.0`. Out-of-range values exit `64`. |
 | `--max-conditions <N>` | hard cap on raw enumeration size `n_abs × n_rel × 2^(\|signers\|+\|preimages\|)`; exceeding the cap exits `8` (refused; raise the cap to proceed) before any enumeration. Default `4096` (permits up to 10 signers+preimages). When `>256`, a soft warn-trail entry appears in `notes[]` once 256 rows are produced. Min `1`. |
 | `--json` | emit a JSON envelope on stdout instead of the plaintext aligned-column table. |

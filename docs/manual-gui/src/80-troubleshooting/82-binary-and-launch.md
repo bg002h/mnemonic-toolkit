@@ -81,7 +81,8 @@ codes: 0 done; 64 a bad command line (nothing ran);
 before trusting it), 8 (refused), 16 (a correction was applied) and 32
 (a file, device or helper failed). A `repair` that corrected a card now
 exits 16 or 20, not 5 or 4; a mismatch is 1, not 4; a secret typed on
-the command line is 8, not 2. The output panel tells the two apart by
+the command line is 8 in every CLI, where it was 2 in `mnemonic`, 1 in
+`ms`, 64 in `mk` and 3 in `me`. The output panel tells the two apart by
 the legend at the end of each binary's root `--help`: it decodes the
 new codes for a binary whose help ends with the legend, reads an older
 binary's code with that release's own meanings, and shows the code
@@ -89,6 +90,15 @@ undecoded only when the binary could not be asked (see [Run and read
 the output panel](#run-and-read-the-output-panel)). The codes quoted for older releases on this page are
 those releases' own. The user manual's exit-code appendix has the full
 table.
+
+**mnemonic-gui's own exit codes.** The GUI process follows the same
+codes. It exits 0 when you close it (and for `--help` or `--version`),
+64 for a bad command line (it exited 2 before), and 32 when it cannot
+start, for example with no display or a graphics stack that will not
+initialise, after printing `mnemonic-gui: cannot start: …` (it exited
+1 before). 101 is an internal error, and 130 means it was stopped by a
+signal and the clean shutdown timed out. Its `--help` ends with a
+legend listing these five codes.
 
 Outputs differ, mostly on invalid or unusual input or on the recovery
 line of a card, and `md encode`, `ms encode` and `mk encode` now print

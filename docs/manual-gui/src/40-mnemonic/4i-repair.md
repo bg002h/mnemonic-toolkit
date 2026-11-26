@@ -92,11 +92,12 @@ The GUI surfaces the toolkit exit code in the output panel:
 
 | Code | Meaning |
 |---|---|
-| `0` | all chunks already valid (input echoed unchanged) |
-| `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — `mk1` (a full `chunk_set_id` group reassembles) / chunked `md1` (content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly; also a corrected `mk1` chunk set that is INCOMPLETE (the rest of the set verifies it when it is reassembled); stdout = repair report + corrected chunks |
+| `0` | all chunks already valid (input echoed unchanged); also a clean but incomplete `mk1` or `md1` chunk set (a lone chunk of a larger card) |
+| `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — `mk1` (a full `chunk_set_id` group reassembles) / chunked `md1` (content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly; also a corrected `mk1` or `md1` chunk set that is INCOMPLETE, such as a lone chunk of a larger card (the rest of the set verifies it when it is reassembled); stdout = repair report + corrected chunks |
+| `18` | 16 + 2: (`mk1`) a corrected string whose chunk header does not parse as an `mk1` chunk; it is printed, with an error saying it is not a valid card |
 | `20` | 16 + 4: ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction** and every non-chunked `--md1` single-string correction — verify each candidate before trusting it |
-| `22` | 16 + 4 + 2: a corrected single-string `--md1` at a wire version this build cannot read; the corrected string is printed |
-| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted) **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
+| `22` | 16 + 4 + 2: a corrected single string that is not a card — an `ms1` whose payload does not decode, a non-chunked `md1` or single-string `mk1` that does not decode, or a single-string `--md1` at a wire version this build cannot read; the corrected string is printed, with an error telling you not to trust it |
+| `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted), clean strings that are not a card, **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
 | `32` | a file, stdin or stdout failed |
 | `64` | a bad command line; nothing ran |
 
