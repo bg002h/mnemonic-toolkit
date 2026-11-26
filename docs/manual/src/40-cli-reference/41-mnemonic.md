@@ -1724,7 +1724,14 @@ of that fingerprint:
   (`--template bip44|bip49|bip84|bip86` with `--account`; the scheme must
   describe the card's script, so `--template bip44` on a `wpkh` card is
   refused). For the master node `m` the key must be the master key of its
-  fingerprint. If you also give `--cosigner @N=<xpub>` for that key, the
+  fingerprint. Conversely, a key the card itself proves to be the master
+  key (its own fingerprint, the hash160 of its public key, is the card's
+  fingerprint) can only be at `m`: any other path stated for it,
+  `--template` included, is refused (exit 2, `kind: "path-mismatch"`,
+  "the key is the master key of <fp>"), and the missing-origin refusal for
+  such a key prints `--origin @N=m` instead of `m/<path>` and suggests no
+  scheme. `--origin @N=m` for it is accepted as before (asserted, exit 4).
+  If you also give `--cosigner @N=<xpub>` for that key, the
   path's length and last component must match the xpub's depth and child
   number, and for a one-step path the xpub's parent fingerprint must be the
   md1's fingerprint; otherwise restore refuses (exit 2,
@@ -1743,7 +1750,11 @@ of that fingerprint:
   (and, unless it was made `--privacy-preserving`, the fingerprint). Give it
   with `--cosigner @N=<mk1>` (one `--cosigner @N=` per chunk): once its key
   (chain code and public key) is the md1's key, restore takes the mk1's
-  path as the key's origin, says so on stderr
+  path as the key's origin (only then: an mk1 whose key is another key,
+  kept under `--allow-mismatch`, supplies no path and checks none, so the
+  key is refused as having no origin unless you state one, and the warning
+  for a stated one says the key you gave is not the md1's key), says so on
+  stderr
   (`NOTE: md1 cosigner @N's origin m/... is read from the mk1 card you gave
   for it`), and labels it `origin from its mk1 card`. The path is on a card
   you hold, so it is not an assertion: with every origin on a card, restore
@@ -1765,6 +1776,23 @@ of that fingerprint:
   exported file carries one (`WARNING: the exported wallet file carries an
   origin path asserted by you, not on the card (@1 m/48'/0'/0'/2'), and
   nothing in the file marks it; ...`).
+
+  **Telling restore's two exits 4 apart.** Exit 4 means either that a
+  cross-check refused (a `--from` seed, `--cosigner` key or `--expect-*`
+  reference that does not match; nothing written) or that the wallet was
+  written with an origin asserted by you (verify before trusting). They
+  differ on stderr and in `--json`:
+
+  | | refused mismatch | asserted origin |
+  |---|---|---|
+  | stderr | `✗ MISMATCH`, then `error: restore: <reference> mismatch …` | `WARNING: … is asserted by you, not on the card`, then `UNVERIFIED: an origin path is asserted by you, not on the card (@N m/…); exit 4 here means verify before trusting, not a mismatch. …` |
+  | stdout / `--output` | nothing written | the wallet (text, `--format` payload or `--json`) |
+  | `--json` | no JSON object (the error is on stderr only) | `verification.status` is `"unverified"`, and `cosigner_keys[].origin_source` is `"asserted"` for the stated keys |
+
+  A script should therefore read exit 4 together with stderr's first
+  `✗ MISMATCH` / `UNVERIFIED:` line, or with whether a JSON object came
+  back. Under `--allow-mismatch` a mismatch is written instead, with
+  `✗ MISMATCH (overridden)` and status `"overridden"`.
 
 A wallet-policy `md1` card (the multisig descriptor card the toolkit emits
 for any multisig bundle) carries **every cosigner's public key**, so the
@@ -1795,7 +1823,8 @@ derived key against the md1 slots), and/or `--cosigner @N=<mk1|xpub>` to
 assert another cosigner's key. Only the positions you actually supply are
 marked verified; the rest stay `from md1 (not independently verified)`, and
 the verdict is `PARTIAL` until **every** position is cross-checked (and
-`UNVERIFIED` in `--json` while any origin is asserted by you, see above).
+`UNVERIFIED`, on stderr and in `--json`, while any origin is asserted by
+you, see above).
 A cross-check compares the key (chain code and public key), never the
 origin path, except as described above for a key whose md1 carries no
 origin:
