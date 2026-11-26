@@ -1723,7 +1723,7 @@ of that fingerprint:
   because the right one is wherever the key really lives:
 
   ```text
-  error: --md1 cosigner @0, @1 carries NO origin path on the card, and without its seed nothing can be derived. Refusing rather than show the key with no path (a bare [fp]xpub claims to be the master key of fp). If you know where the key lives, state it with --origin @N=m/<path>: restore then checks it against any --cosigner @N=<xpub> you give, shows it as asserted by you, and exits 4. Or give the key's seed with --from to search its common paths. To state each path you know, replace each <path> and run:
+  error: --md1 cosigner @0, @1 carries NO origin path on the card, and without its seed nothing can be derived. Refusing rather than show the key with no path (a bare [fp]xpub claims to be the master key of fp, and this key is not). If you know where the key lives, state it with --origin @N=m/<path>: restore then checks it against any --cosigner @N=<xpub> you give, shows it as asserted by you, and exits 4. Or give the key's seed with --from to search its common paths. To state each path you know, replace each <path> and run:
     mnemonic restore --md1 md1f2z66psp... --md1 md1f2z66psw... --md1 md1f2z66psh... --md1 md1f2z66psm... --origin '@0=m/<path>' --origin '@1=m/<path>'
   ```
 
@@ -1732,14 +1732,34 @@ of that fingerprint:
   (`--template bip44|bip49|bip84|bip86` with `--account`; the scheme must
   describe the card's script, so `--template bip44` on a `wpkh` card is
   refused). For the master node `m` the key must be the master key of its
-  fingerprint. Conversely, a key the card itself proves to be the master
-  key (its own fingerprint, the hash160 of its public key, is the card's
-  fingerprint) can only be at `m`: any other path stated for it,
-  `--template` included, is refused (exit 2, `kind: "path-mismatch"`,
-  "the key is the master key of <fp>"), and the missing-origin refusal for
-  such a key prints `--origin @N=m` instead of `m/<path>` and suggests no
-  scheme. `--origin @N=m` for it is accepted as before (asserted, exit 4).
-  If you also give `--cosigner @N=<xpub>` for that key, the
+  fingerprint. A malformed or empty value (`--origin @1=`, as an unset
+  shell variable gives), an `@N` the card does not have, or the same `@N`
+  twice is refused (exit 2, like every `--origin` refusal); an empty value
+  is never read as `m`.
+
+  **A key the card proves to be the master key** (Brian's ruling of
+  2026-11-26 17:33Z): when an empty-origin key's own fingerprint (the
+  first 4 bytes of the hash160 of its public key) is the fingerprint the
+  card records for it, the key is the master key of that fingerprint (a
+  chance match is about 1 in 2^32), so restore resolves its origin to `m`
+  without a seed and without `--origin`. It prints the wallet on the
+  master key (`[fp]xpub661My…`), shows the origin as `m`
+  (`cosigner @0: 73c5da0a [m]  origin m: the key is the master key of its
+  fingerprint; …`), labels it `origin_source: "master"` in `--json` (its
+  `origin` is `""`, the master node), warns on stderr that the wallet sits
+  on the master key, and counts the origin as read from the card: restore
+  exits 0 unless something else is unverified (an asserted origin for
+  another key). An explicit `--origin @N=m` (or `--origin m` for a
+  single-key card) for such a key is consistent with it and gives the same
+  result. Any other path stated for it, `--template` included, or an mk1
+  card for it recording a path, is refused (exit 2,
+  `kind: "path-mismatch"`, "the key is the master key of <fp>"). A
+  `--cosigner @N=<xpub>` for it must have depth 0. With a `--from` seed the
+  search is unchanged: it tries `m` first, labels the key `"seed-search"`
+  (the seed proved it), and prints the same `m` and the same master-key
+  warning.
+
+  If you also give `--cosigner @N=<xpub>` for a key with a stated path, the
   path's length and last component must match the xpub's depth and child
   number, and for a one-step path the xpub's parent fingerprint must be the
   md1's fingerprint; otherwise restore refuses (exit 2,
@@ -1777,7 +1797,7 @@ of that fingerprint:
   card; key not independently verified` (or `key cross-checked; origin
   asserted by you, not on the card` when a `--cosigner @N` matched the key).
   With `--json` each `cosigner_keys` entry carries `origin_source`
-  (`"card"`, `"mk1"`, `"asserted"` or `"seed-search"`), and
+  (`"card"`, `"mk1"`, `"asserted"`, `"seed-search"` or `"master"`), and
   `verification.status` is `"unverified"` whenever any origin is asserted,
   however many keys were cross-checked. No `--format` wallet file has a
   field that marks an asserted path, so restore says on stderr that the

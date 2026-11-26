@@ -418,9 +418,7 @@ or you state its path: `--origin @N=m/...` (repeat it per key; a bare
 `m/...` for a single-key card), or, for a single-key card, the
 single-sig `--template` the card was made with. Restore checks the path
 against the depth and child number of any `--cosigner @N` xpub given
-(exit 2 on a mismatch), refuses any path but `m` for a key the card
-proves to be the master key (its own fingerprint is the card's), renders
-the key at that path, marks it
+(exit 2 on a mismatch), renders the key at that path, marks it
 "asserted by you, not on the card" on stderr and beside the key in the
 output (`--json`: `origin_source: "asserted"`, status `unverified`), and
 exits 4; stderr's `UNVERIFIED:` line tells this exit 4 from a refused
@@ -429,7 +427,17 @@ cross-check (`✗ MISMATCH`, nothing written). An mk1 card given with
 instead (labelled `origin from its mk1 card`, exit 0 when every
 origin is on a card); a `--origin @N` that differs from it is refused
 (exit 2). A key whose
-card carries an origin cannot be given one (exit 2). The CLI takes
+card carries an origin cannot be given one (exit 2). An empty or
+malformed value is refused (exit 2), never read as `m`.
+
+A key the card proves to be the master key (its own fingerprint, the
+first 4 bytes of the hash160 of its public key, is the fingerprint the
+card records for it; Brian's ruling of 2026-11-26 17:33Z) needs no
+`--origin`: restore resolves it to `m`, shows the origin as `m`, warns
+that the wallet sits on the master key, labels it `--json`
+`origin_source: "master"`, and exits 0 unless another key's origin is
+asserted. `--origin @N=m` for it gives the same result; any other path
+for it, `--template` included, is refused (exit 2). The CLI takes
 `--origin` more than once in this form; the GUI's Text widget passes one
 value (FOLLOWUP `gui-restore-origin-repeating`).
 
