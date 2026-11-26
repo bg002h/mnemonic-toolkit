@@ -42,7 +42,7 @@ fn watch_only_multisig_distinct_cosigners_emits_distinct_cards() {
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),

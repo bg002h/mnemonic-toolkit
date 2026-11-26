@@ -2,5 +2,5 @@ printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon aba
   | $MNEMONIC_BIN convert \
       --from phrase=- \
       --to xpub \
-      --template bip84 \
+      --scheme bip84 \
       --network mainnet

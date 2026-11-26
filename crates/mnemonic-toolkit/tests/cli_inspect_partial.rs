@@ -55,7 +55,7 @@ const CANONICAL_SINGLE: &str = "md1yqpqqxqq8xtwhw4xwn4qh";
 const CANONICAL_TEMPLATE: &str = "wpkh(@0/<0;1>/*)";
 
 /// A KEYED, MULTI-CHUNK (4-chunk) `tr(sortedmulti_a(2,…))` card WITH origin
-/// `m/87'/0'/0'` (from `mnemonic bundle --template tr-sortedmulti-a`). Eliding
+/// `m/87'/0'/0'` (from `mnemonic bundle --scheme tr-sortedmulti-a`). Eliding
 /// its origin yields a KEYED multi-chunk DEAD card — the substrate for the
 /// content-id-oracle RED-proof (the doctoring needs 2+ chunks to mix set-ids).
 const KEYED_ORIGIN_MD1: &[&str] = &[

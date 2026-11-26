@@ -86,7 +86,7 @@ pub(crate) fn derive_mk1_chunk_set_id(stub: &[u8; 4]) -> u32 {
 /// I10). XOR is injective in `slot` ⇒ pairwise-distinct csi for distinct slots.
 ///
 /// The slot index runs 0..=31 (md1 caps a policy at 32 keys; the descriptor
-/// path mints every slot, only `--template` multisig caps at 16 cosigners), so it
+/// path mints every slot, only `--scheme` multisig caps at 16 cosigners), so it
 /// touches bits 4..0: the 5th hex char and the lowest bit of the 4th. The
 /// **leading 15 bits** (bits 19..5, the bundle-binding prefix shared with md1)
 /// are preserved across all cosigners. For slots 0..=15 the leading 16 bits

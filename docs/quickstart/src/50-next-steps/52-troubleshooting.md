@@ -70,7 +70,7 @@ chapter covers the import-shape matrix.
 addresses don't match the wallet you intended to back up. The
 toolkit derived a different xpub than your existing wallet uses.
 
-**Cause:** mismatched `--template`, `--account`, or `--network`. The
+**Cause:** mismatched `--scheme`, `--account`, or `--network`. The
 xpub depends on all three; changing any one produces a different
 xpub. Common pitfalls:
 
@@ -82,7 +82,7 @@ xpub. Common pitfalls:
   xpub prefixes.
 
 **Fix:** before stamping, run `mnemonic convert --from phrase=… --to xpub`
-with the same `--template`, `--account`, and `--network` as your
+with the same `--scheme`, `--account`, and `--network` as your
 bundle invocation, and compare to your wallet's xpub. If they
 match, the bundle is correct; if not, adjust the flags to match the
 wallet you're backing up.

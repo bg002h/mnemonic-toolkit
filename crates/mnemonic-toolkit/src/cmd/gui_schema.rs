@@ -83,7 +83,7 @@ struct Subcommand {
     conditional_rules: Vec<ConditionalRule>,
     /// SPEC §6.10.8 (NEW v3) per-subcommand meta-fields block. Currently
     /// contains the `template_groups` block for subcommands that consume
-    /// `--template`; future v3 cycles add more fields here additively
+    /// `--scheme`; future v3 cycles add more fields here additively
     /// (additive at the field level — no schema-version bump required for
     /// new meta keys; only Predicate/Effect changes bump the version).
     /// Empty BTreeMap serializes as omitted (no `meta` key in JSON) so
@@ -272,7 +272,7 @@ struct Positional {
 /// SPEC §6.10.7-derived single-sig template list. Derived from
 /// `CliTemplate::is_multisig()` (source-of-truth at `template.rs:46-56`) so the
 /// projection stays in sync with template-enum additions automatically. Used
-/// by `dropdown_value_in("--template", SINGLE_SIG)` predicates in
+/// by `dropdown_value_in("--scheme", SINGLE_SIG)` predicates in
 /// bundle/verify-bundle/export-wallet rules.
 fn single_sig_template_values() -> Vec<String> {
     CliTemplate::value_variants()
@@ -295,18 +295,18 @@ fn multisig_template_values() -> Vec<String> {
 
 /// SPEC §6.10.8 — per-subcommand `meta` block. Returns the meta map for
 /// subcommands that have one (currently: any subcommand that consumes
-/// `--template`); empty map for the rest (which serializes as omitted).
+/// `--scheme`); empty map for the rest (which serializes as omitted).
 ///
 /// Source-of-truth for the template-consumer list: this match is hand-coded
 /// to mirror the subcommands whose clap-derive `#[arg]` set includes
-/// `--template`. Adding a new template-consuming subcommand requires
+/// `--scheme`. Adding a new template-consuming subcommand requires
 /// extending this match in lockstep — the drift gate
 /// (`mnemonic-gui/tests/gui_schema_conditional_drift.rs`) catches divergence.
 fn build_subcommand_meta(name: &str) -> BTreeMap<String, serde_json::Value> {
     let mut meta = BTreeMap::new();
     // v0.17.1 P0: derive-child REMOVED from this match arm. Although v0.17.0
     // emitted a meta.template_groups block for derive-child, that subcommand
-    // has zero `--template` references in `crates/mnemonic-toolkit/src/cmd/
+    // has zero `--scheme` references in `crates/mnemonic-toolkit/src/cmd/
     // derive_child.rs` — the block was spurious. Negative-cell guard at
     // `tests/cli_gui_schema_v3_extensions.rs::derive_child_omits_meta_template_groups`.
     if matches!(name, "bundle" | "verify-bundle" | "export-wallet") {
@@ -350,7 +350,7 @@ fn build_subcommand_conditional_rules(name: &str) -> Vec<ConditionalRule> {
 /// restore's `--from required_unless_present="md1"` (cmd/restore.rs clap-derive)
 /// so mnemonic-gui's hand-authored `conditional::restore` rule (--from Required
 /// ⟺ --md1 absent) becomes drift-gated. Single-flag form of bundle's
-/// `--template` Required-unless precedent.
+/// `--scheme` Required-unless precedent.
 fn restore_conditional_rules() -> Vec<ConditionalRule> {
     vec![ConditionalRule {
         rationale: "--from is required unless --md1 is supplied: single-sig \
@@ -412,11 +412,11 @@ fn compare_cost_conditional_rules() -> Vec<ConditionalRule> {
 fn bundle_conditional_rules() -> Vec<ConditionalRule> {
     let single_sig = single_sig_template_values();
     vec![
-        // --template Required-unless-descriptor (existing GUI encoding).
+        // --scheme Required-unless-descriptor (existing GUI encoding).
         // SPEC §6.6 "Required first-class flag" framing; cmd/bundle.rs:25
         // clap-derive `required_unless_present_any`.
         ConditionalRule {
-            rationale: "--template is required unless --descriptor or \
+            rationale: "--scheme is required unless --descriptor or \
                         --descriptor-file is supplied (bundle's primary-mode \
                         selection invariant)."
                 .to_string(),
@@ -434,7 +434,7 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
                 }),
             },
             effect: Effect {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 visibility: VisibilityProjection::Required,
             },
         },
@@ -496,10 +496,10 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
                 visibility: VisibilityProjection::Disabled,
             },
         },
-        // --template disabled when --descriptor present (NEW v0.16.0;
+        // --scheme disabled when --descriptor present (NEW v0.16.0;
         // cmd/bundle.rs::mode_text::DESCRIPTOR_AND_TEMPLATE).
         ConditionalRule {
-            rationale: "--template is incompatible with --descriptor; descriptor \
+            rationale: "--scheme is incompatible with --descriptor; descriptor \
                         passthrough mode supplies its own wallet structure."
                 .to_string(),
             spec_ref: "SPEC §6.6 row 2; bundle.rs::mode_text::DESCRIPTOR_AND_TEMPLATE".to_string(),
@@ -507,7 +507,7 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
                 flag: "--descriptor".to_string(),
             },
             effect: Effect {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 visibility: VisibilityProjection::Disabled,
             },
         },
@@ -529,13 +529,13 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
         // --threshold disabled when template is single-sig (NEW v0.16.0;
         // priority-2 of two --threshold rules — less-specific predicate).
         ConditionalRule {
-            rationale: "--threshold is meaningful only with a multisig --template; \
+            rationale: "--threshold is meaningful only with a multisig --scheme; \
                         single-sig templates ignore threshold."
                 .to_string(),
             spec_ref: "SPEC §6.6 row T1; bundle.rs::mode_text::THRESHOLD_WITHOUT_MULTISIG"
                 .to_string(),
             when: Predicate::DropdownValueIn {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 values: single_sig.clone(),
             },
             effect: Effect {
@@ -562,12 +562,12 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
         // priority-2 of two rules).
         ConditionalRule {
             rationale: "--multisig-path-family is meaningful only with a multisig \
-                        --template; single-sig templates ignore it."
+                        --scheme; single-sig templates ignore it."
                 .to_string(),
             spec_ref: "SPEC §6.6 row T2; bundle.rs::mode_text::PATH_FAMILY_WITHOUT_MULTISIG"
                 .to_string(),
             when: Predicate::DropdownValueIn {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 values: single_sig,
             },
             effect: Effect {
@@ -604,8 +604,8 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
         },
         // v0.18.1 — rows 10 + 11 disable_options emission REMOVED.
         // v0.18.0 introduced two rules: slot_count_gte: 2 → disable
-        // single-sig --template options (row 10); slot_count_eq: 1 →
-        // disable multisig --template options (row 11). Row 11 was a
+        // single-sig --scheme options (row 10); slot_count_eq: 1 →
+        // disable multisig --scheme options (row 11). Row 11 was a
         // design flaw: slot_count==1 is the natural transient state
         // when building UP to multisig (user adds slots one at a time),
         // and disabling multisig at that transient state prevents the
@@ -615,7 +615,7 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
         // v0.18.1 + GUI v0.7.2 replace both with a GUI-internal warning
         // banner (Option A pattern, like row 8 contiguity check):
         // dropdown renders all options normally; an inline warning fires
-        // when the chosen --template + slot_count combination is
+        // when the chosen --scheme + slot_count combination is
         // invalid, with text suggesting which side to adjust. CLI rows
         // 10 + 11 remain the authoritative gate per §6.6.
         //
@@ -629,9 +629,9 @@ fn bundle_conditional_rules() -> Vec<ConditionalRule> {
 fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
     let single_sig = single_sig_template_values();
     vec![
-        // --template Required-unless-descriptor (existing GUI encoding).
+        // --scheme Required-unless-descriptor (existing GUI encoding).
         ConditionalRule {
-            rationale: "--template is required unless --descriptor or \
+            rationale: "--scheme is required unless --descriptor or \
                         --descriptor-file is supplied."
                 .to_string(),
             spec_ref: "SPEC §6.7; cmd/verify_bundle.rs clap-derive".to_string(),
@@ -648,7 +648,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
                 }),
             },
             effect: Effect {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 visibility: VisibilityProjection::Required,
             },
         },
@@ -747,10 +747,10 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --threshold disabled when template is single-sig (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--threshold is meaningful only with a multisig --template.".to_string(),
+            rationale: "--threshold is meaningful only with a multisig --scheme.".to_string(),
             spec_ref: "SPEC §6.6 row T1 (mirror for verify-bundle)".to_string(),
             when: Predicate::DropdownValueIn {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 values: single_sig,
             },
             effect: Effect {
@@ -758,9 +758,9 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
                 visibility: VisibilityProjection::Disabled,
             },
         },
-        // --template disabled when --descriptor present (NEW v0.16.0).
+        // --scheme disabled when --descriptor present (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--template is incompatible with --descriptor.".to_string(),
+            rationale: "--scheme is incompatible with --descriptor.".to_string(),
             spec_ref: "SPEC §6.6 row 2 (mirror); cmd/verify_bundle.rs \
                        conflicts_with"
                 .to_string(),
@@ -768,7 +768,7 @@ fn verify_bundle_conditional_rules() -> Vec<ConditionalRule> {
                 flag: "--descriptor".to_string(),
             },
             effect: Effect {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 visibility: VisibilityProjection::Disabled,
             },
         },
@@ -779,14 +779,14 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
     let single_sig = single_sig_template_values();
     let tr_internal_key = taproot_internal_key_template_values();
     vec![
-        // --template ↔ --descriptor mutex (existing GUI encoding).
+        // --scheme ↔ --descriptor mutex (existing GUI encoding).
         ConditionalRule {
-            rationale: "--template and --descriptor are mutually exclusive in \
+            rationale: "--scheme and --descriptor are mutually exclusive in \
                         export-wallet (mirrors bundle)."
                 .to_string(),
             spec_ref: "cmd/export_wallet.rs clap-derive conflicts_with".to_string(),
             when: Predicate::FlagPresent {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
             },
             effect: Effect {
                 flag: "--descriptor".to_string(),
@@ -794,7 +794,7 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
             },
         },
         ConditionalRule {
-            rationale: "--template and --descriptor are mutually exclusive \
+            rationale: "--scheme and --descriptor are mutually exclusive \
                         (symmetric direction)."
                 .to_string(),
             spec_ref: "cmd/export_wallet.rs clap-derive conflicts_with".to_string(),
@@ -802,7 +802,7 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
                 flag: "--descriptor".to_string(),
             },
             effect: Effect {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 visibility: VisibilityProjection::Disabled,
             },
         },
@@ -814,7 +814,7 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
                 .to_string(),
             spec_ref: "cmd/export_wallet.rs clap-derive required_if_eq_any".to_string(),
             when: Predicate::DropdownValueIn {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 values: tr_internal_key.clone(),
             },
             effect: Effect {
@@ -831,7 +831,7 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
             spec_ref: "cmd/export_wallet.rs clap-derive".to_string(),
             when: Predicate::Not {
                 predicate: Box::new(Predicate::DropdownValueIn {
-                    flag: "--template".to_string(),
+                    flag: "--scheme".to_string(),
                     values: tr_internal_key,
                 }),
             },
@@ -842,10 +842,10 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
         },
         // --threshold disabled when template is single-sig (NEW v0.16.0).
         ConditionalRule {
-            rationale: "--threshold is meaningful only with a multisig --template.".to_string(),
+            rationale: "--threshold is meaningful only with a multisig --scheme.".to_string(),
             spec_ref: "SPEC §6.6 row T1 (mirror for export-wallet)".to_string(),
             when: Predicate::DropdownValueIn {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 values: single_sig.clone(),
             },
             effect: Effect {
@@ -856,11 +856,11 @@ fn export_wallet_conditional_rules() -> Vec<ConditionalRule> {
         // --multisig-path-family disabled when template is single-sig (NEW v0.16.0).
         ConditionalRule {
             rationale: "--multisig-path-family is meaningful only with a multisig \
-                        --template."
+                        --scheme."
                 .to_string(),
             spec_ref: "SPEC §6.6 row T2 (mirror for export-wallet)".to_string(),
             when: Predicate::DropdownValueIn {
-                flag: "--template".to_string(),
+                flag: "--scheme".to_string(),
                 values: single_sig,
             },
             effect: Effect {

@@ -47,7 +47,7 @@ fn bundle_help_shows_slot_and_template_flags() {
         .success()
         .stdout(predicate::str::contains("--slot"))
         .stdout(predicate::str::contains("--network"))
-        .stdout(predicate::str::contains("--template"))
+        .stdout(predicate::str::contains("--scheme"))
         .stdout(predicate::str::contains("--no-engraving-card"));
 }
 
@@ -62,5 +62,5 @@ fn verify_bundle_help_shows_required_flags() {
         .stdout(predicate::str::contains("--md1"))
         .stdout(predicate::str::contains("--ms1"))
         .stdout(predicate::str::contains("--network"))
-        .stdout(predicate::str::contains("--template"));
+        .stdout(predicate::str::contains("--scheme"));
 }

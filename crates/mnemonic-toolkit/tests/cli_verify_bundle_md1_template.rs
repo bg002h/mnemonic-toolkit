@@ -24,7 +24,7 @@ fn template_cards(
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",
@@ -125,7 +125,7 @@ fn keyed_cards(
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",
@@ -180,7 +180,7 @@ fn verify_bundle_keyed_multichunk_unchanged() {
         md1.len() > 1,
         "keyed bip84 md1 must be multi-chunk: {md1:?}"
     );
-    // A KEYED wallet-policy md1 REQUIRES --template: it skips the keyless-template
+    // A KEYED wallet-policy md1 REQUIRES --scheme: it skips the keyless-template
     // short-circuit → verify_bundle.rs:435-443 ModeViolation without it (planr0 I-A).
     // The general/keyed path prints lowercase "result: ok" (:558-567), NOT the
     // template-path-only "OK (…recomposed)" string (:824). Mirror the proven keyed
@@ -189,7 +189,7 @@ fn verify_bundle_keyed_multichunk_unchanged() {
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--account".into(),
         "0".into(),
@@ -239,7 +239,7 @@ fn verify_bundle_nonchunked_dead_card_falls_through_strict() {
     // template mk1 so the invocation PASSES clap and actually REACHES the classify
     // gate (without it, clap rejects at exit 64 and the strict-classify path is
     // never exercised — a vacuous lock). The dead md1 strict-decode-fails so it
-    // falls THROUGH classify → "--template is required" (exit 2), never OK, before
+    // falls THROUGH classify → "--scheme is required" (exit 2), never OK, before
     // AND after Facet 1. The mk1 content is irrelevant: the fall-through refusal
     // fires before mk1 is examined.
     let (_ms1, mk1, _md1) = template_cards("bip84", PHRASE_A, "0");
@@ -254,7 +254,7 @@ fn verify_bundle_nonchunked_dead_card_falls_through_strict() {
         args.push("--mk1".to_string());
         args.push(m.clone());
     }
-    // Pin exit 2 AND the "--template is required" fall-through message (postimpl
+    // Pin exit 2 AND the "--scheme is required" fall-through message (postimpl
     // M-1): a bare `.failure()` would stay green even if a future clap-surface
     // change re-introduced a pre-gate exit-64 reject WITHOUT exercising strict
     // classify (the vacuous-lock class). Exit 2 + this message prove the dead card
@@ -267,7 +267,7 @@ fn verify_bundle_nonchunked_dead_card_falls_through_strict() {
         "non-chunked dead card must never verify OK: {stdout}"
     );
     assert!(
-        stderr.contains("--template"),
+        stderr.contains("--scheme"),
         "dead card must fall through to the --template-required refusal (strict classify, \
          not a vacuous pre-gate reject): {stderr}"
     );

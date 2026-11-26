@@ -21,7 +21,7 @@ struct Archetype {
     spec: &'static str,
     descriptor: &'static str,
     bip388: &'static str,
-    /// `--archetype` preset argv reproducing this fixture byte-exactly
+    /// `--scheme` preset argv reproducing this fixture byte-exactly
     /// (presets SPEC §7 layer 2 — Release B).
     preset_args: &'static [&'static str],
 }
@@ -43,7 +43,7 @@ const ARCHETYPES: &[Archetype] = &[
         ),
         bip388: include_str!("fixtures/descriptor_builder/simple-timelocked-inheritance.bip388"),
         preset_args: &[
-            "--archetype",
+            "--scheme",
             "simple-timelocked-inheritance",
             "--key",
             K1,
@@ -59,7 +59,7 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/decaying-multisig.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/decaying-multisig.bip388"),
         preset_args: &[
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -89,7 +89,7 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/kofn-recovery.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/kofn-recovery.bip388"),
         preset_args: &[
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -111,7 +111,7 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/tiered-recovery.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/tiered-recovery.bip388"),
         preset_args: &[
-            "--archetype",
+            "--scheme",
             "tiered-recovery",
             "--key",
             K1,
@@ -137,7 +137,7 @@ const ARCHETYPES: &[Archetype] = &[
         descriptor: include_str!("fixtures/descriptor_builder/hashlock-gated.descriptor"),
         bip388: include_str!("fixtures/descriptor_builder/hashlock-gated.bip388"),
         preset_args: &[
-            "--archetype",
+            "--scheme",
             "hashlock-gated",
             "--key",
             K1,
@@ -455,13 +455,13 @@ fn preset_ignores_piped_stdin() {
     );
 }
 
-/// `--archetype` conflicts with `--spec` at the clap level (presets SPEC §1).
+/// `--scheme` conflicts with `--spec` at the clap level (presets SPEC §1).
 #[test]
 fn preset_conflicts_with_spec() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--spec",
             "x.json",
@@ -471,14 +471,14 @@ fn preset_conflicts_with_spec() {
         .stderr(predicates::str::contains("cannot be used with"));
 }
 
-/// Param flags require `--archetype` at the clap level (presets SPEC §1).
+/// Param flags require `--scheme` at the clap level (presets SPEC §1).
 #[test]
 fn param_flag_without_archetype_is_clap_error() {
     bin()
         .args(["build-descriptor", "--key", K1])
         .assert()
         .failure()
-        .stderr(predicates::str::contains("--archetype"));
+        .stderr(predicates::str::contains("--scheme"));
 }
 
 /// Producer negatives (presets SPEC §3.1/§7): exit 2 + a `param`-kind
@@ -488,7 +488,7 @@ fn preset_missing_required_param_exit_2() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -520,7 +520,7 @@ fn preset_inapplicable_param_exit_2() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -548,7 +548,7 @@ fn preset_decay_ordering_violation_exit_2() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -586,7 +586,7 @@ fn preset_decay_cross_unit_refused_exit_2() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -626,7 +626,7 @@ fn preset_decay_same_unit_ordered_builds() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -662,7 +662,7 @@ fn preset_decay_both_512s_refused_exit_2() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -703,7 +703,7 @@ fn preset_decay_past_after_height_refused_exit_2() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -741,7 +741,7 @@ fn preset_decay_future_after_height_builds() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -777,7 +777,7 @@ fn preset_decay_same_unit_mis_ordered_stays_exit_2() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -815,7 +815,7 @@ fn preset_k_gt_n_flows_to_gate_schema_field() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -843,7 +843,7 @@ fn preset_duplicate_key_flows_to_gate_repeated_keys() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -873,7 +873,7 @@ fn preset_duplicate_key_flows_to_gate_repeated_keys() {
 fn preset_key_order_is_preserved_and_load_bearing() {
     let a = &ARCHETYPES[2]; // kofn-recovery (multi)
     let swapped: &[&str] = &[
-        "--archetype",
+        "--scheme",
         "kofn-recovery",
         "--key",
         K2,
@@ -1001,7 +1001,7 @@ fn emit_spec_runs_the_gate_before_printing() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1032,7 +1032,7 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1059,7 +1059,7 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1085,7 +1085,7 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "hashlock-gated",
             "--key",
             K1,
@@ -1111,7 +1111,7 @@ fn gate_diagnostics_carry_flag_provenance_in_preset_mode() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             XPRV,
@@ -1157,7 +1157,7 @@ fn masked_older_timelock_refused_exit_2() {
 }
 
 /// Funds-safety on the PRESET path (the deep-recon "2-year vault" headline):
-/// `--archetype kofn-recovery --older 105120` — 2 years in blocks overflows the
+/// `--scheme kofn-recovery --older 105120` — 2 years in blocks overflows the
 /// 16-bit BIP-68 value field, so consensus would silently mask it to ~275 days —
 /// is refused (exit 2) by the preset bound before the gate runs: one `param`
 /// diagnostic (Form B) naming `--older` (FIX archetype-older-blocks-bound).
@@ -1166,7 +1166,7 @@ fn preset_masked_older_refused_with_older_provenance() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1204,7 +1204,7 @@ const R1_MSG: &str = "[param] params: hashlock-gated --older is a relative timel
 fn hg_args() -> Vec<&'static str> {
     vec![
         "build-descriptor",
-        "--archetype",
+        "--scheme",
         "hashlock-gated",
         "--key",
         K1,
@@ -1217,7 +1217,7 @@ fn hg_args() -> Vec<&'static str> {
 fn sti_args() -> Vec<&'static str> {
     vec![
         "build-descriptor",
-        "--archetype",
+        "--scheme",
         "simple-timelocked-inheritance",
         "--key",
         K1,
@@ -1228,7 +1228,7 @@ fn sti_args() -> Vec<&'static str> {
 fn kofn_args() -> Vec<&'static str> {
     vec![
         "build-descriptor",
-        "--archetype",
+        "--scheme",
         "kofn-recovery",
         "--key",
         K1,
@@ -1245,7 +1245,7 @@ fn kofn_args() -> Vec<&'static str> {
 fn tr_args() -> Vec<&'static str> {
     vec![
         "build-descriptor",
-        "--archetype",
+        "--scheme",
         "tiered-recovery",
         "--key",
         K1,
@@ -1264,7 +1264,7 @@ fn tr_args() -> Vec<&'static str> {
 fn dm_args() -> Vec<&'static str> {
     vec![
         "build-descriptor",
-        "--archetype",
+        "--scheme",
         "decaying-multisig",
         "--key",
         K1,
@@ -1409,7 +1409,7 @@ fn cross_branch_duplicates_carry_no_flag() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "simple-timelocked-inheritance",
             "--key",
             K1,
@@ -1432,7 +1432,7 @@ fn cross_branch_duplicates_carry_no_flag() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             K1,
@@ -1472,7 +1472,7 @@ fn producer_diagnostics_carry_flag_and_human_suffix() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1496,7 +1496,7 @@ fn producer_diagnostics_carry_flag_and_human_suffix() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1810,7 +1810,7 @@ fn allow_composes_with_preset_mode() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1839,7 +1839,7 @@ fn emit_spec_records_no_allowance() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "kofn-recovery",
             "--key",
             K1,
@@ -1964,7 +1964,7 @@ fn m8_preset_single_sig_extra_suffix_refused_exit2() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "simple-timelocked-inheritance",
             "--key",
             &suffixed,
@@ -2005,7 +2005,7 @@ fn m8_preset_single_sig_extra_suffix_refused_exit2() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "simple-timelocked-inheritance",
             "--key",
             &suffixed,
@@ -2056,7 +2056,7 @@ fn m8_preset_flag_provenance_per_archetype() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "simple-timelocked-inheritance",
             "--key",
             &suffixed,
@@ -2085,7 +2085,7 @@ fn m8_preset_flag_provenance_per_archetype() {
     let out = bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "decaying-multisig",
             "--key",
             &suffixed2,
@@ -2195,7 +2195,7 @@ fn m8_positive_control_normal_key_still_builds_both_paths() {
     bin()
         .args([
             "build-descriptor",
-            "--archetype",
+            "--scheme",
             "simple-timelocked-inheritance",
             "--key",
             M8_ORIGIN_XPUB,

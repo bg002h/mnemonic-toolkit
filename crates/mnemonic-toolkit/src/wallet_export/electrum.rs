@@ -51,7 +51,7 @@ impl WalletFormatEmitter for ElectrumEmitter {
         use crate::template::CliTemplate;
         let template = inputs.template.ok_or_else(|| {
             ToolkitError::BadInput(
-                "--format electrum requires --template; descriptor passthrough is not supported by Electrum's wallet-db schema".into(),
+                "--format electrum requires --scheme; descriptor passthrough is not supported by Electrum's wallet-db schema".into(),
             )
         })?;
 
@@ -62,7 +62,7 @@ impl WalletFormatEmitter for ElectrumEmitter {
             CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA
         ) {
             return Err(ToolkitError::BadInput(format!(
-                "--format electrum does not yet support --template {} — Electrum's wallet-db does not currently ingest taproot multisig (tracked by FOLLOWUPS electrum-tr-multi-a-pending-libsecp-taproot). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
+                "--format electrum does not yet support --scheme {} — Electrum's wallet-db does not currently ingest taproot multisig (tracked by FOLLOWUPS electrum-tr-multi-a-pending-libsecp-taproot). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
                 template.human_name(),
             )));
         }
@@ -71,7 +71,7 @@ impl WalletFormatEmitter for ElectrumEmitter {
         // as p2pkh; there is no taproot singlesig wallet type to write.
         if matches!(inputs.script_type, WalletScriptType::P2tr) {
             return Err(ToolkitError::BadInput(
-                "--format electrum does not support --template bip86 (P2TR): a plain xpub \
+                "--format electrum does not support --scheme bip86 (P2TR): a plain xpub \
                  \"standard\" wallet is read by Electrum as p2pkh. Use --format bitcoin-core \
                  (descriptor) or --format sparrow for taproot watch-only setup."
                     .into(),

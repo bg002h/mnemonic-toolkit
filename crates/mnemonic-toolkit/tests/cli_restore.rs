@@ -2,7 +2,7 @@
 //!
 //! Watch-only restore document: master fingerprint + CONFIRM line, then per-type
 //! concrete descriptor + first receive address(es) for bip44/49/84/86 (or a
-//! single `--template`). Optional `--expect-fingerprint`/`--expect-xpub`
+//! single `--scheme`). Optional `--expect-fingerprint`/`--expect-xpub`
 //! reference → mismatch is exit 4 `RestoreMismatch` (no descriptors) unless
 //! `--allow-mismatch`; no reference → UNVERIFIED banner.
 //!
@@ -25,7 +25,7 @@ const DESC_BIP84: &str = "wpkh([73c5da0a/84'/0'/0']xpub6CatWdiZiodmUeTDp8LT5or8n
 // bip84 first receive address (m/84'/0'/0'/0/0) — the canonical BIP-84 vector.
 const FIRST_RECV_BIP84: &str = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
 
-// ms1 entr card for the no-pp seed (generated via `convert --to ms1 --template
+// ms1 entr card for the no-pp seed (generated via `convert --to ms1 --scheme
 // bip84` at write time; restore decodes it back to the same entropy/fingerprint).
 const MS1_NO_PP: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 // SeedQR digit-string for the no-pp seed (generated via `seedqr encode`).
@@ -56,7 +56,7 @@ fn fingerprint_via_convert(phrase: &str, passphrase: Option<&str>) -> String {
         &format!("phrase={phrase}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip84",
     ]);
     if let Some(pp) = passphrase {
@@ -83,7 +83,7 @@ fn restore_phrase_bip84_smoke_and_exact() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -128,7 +128,7 @@ fn restore_template_single_only_bip84() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -152,7 +152,7 @@ fn restore_from_ms1_same_fingerprint() {
             "restore",
             "--from",
             &format!("ms1={MS1_NO_PP}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -171,7 +171,7 @@ fn restore_from_entropy_same_fingerprint() {
             "restore",
             "--from",
             "entropy=00000000000000000000000000000000",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -189,7 +189,7 @@ fn restore_from_seedqr_same_fingerprint() {
             "restore",
             "--from",
             &format!("seedqr={SEEDQR_NO_PP}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -214,7 +214,7 @@ fn restore_passphrase_via_env_and_stdin_derives_trezor_pp_fingerprint() {
             "--from",
             "phrase=@env:RESTORE_SEED",
             "--passphrase-stdin",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .env("RESTORE_SEED", TREZOR_12)
@@ -239,7 +239,7 @@ fn restore_stdin_mutex_rejected() {
             "--from",
             "phrase=-",
             "--passphrase-stdin",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .write_stdin(TREZOR_12)
@@ -266,7 +266,7 @@ fn restore_ms1_mnem_uses_wire_language_not_english() {
             "restore",
             "--from",
             &format!("ms1={MS1_MNEM_JP}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -292,7 +292,7 @@ fn restore_ms1_mnem_language_conflict_exit_2() {
             "restore",
             "--from",
             &format!("ms1={MS1_MNEM_JP}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--language",
             "english",
@@ -350,7 +350,7 @@ fn restore_expect_fingerprint_match_exit_0() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--expect-fingerprint",
             FP_NO_PP,
@@ -372,7 +372,7 @@ fn restore_expect_fingerprint_mismatch_exit_4_no_descriptors() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--expect-fingerprint",
             "deadbeef",
@@ -394,7 +394,7 @@ fn restore_mismatch_allow_override_exit_0_banner() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--expect-fingerprint",
             "deadbeef",
@@ -422,7 +422,7 @@ fn restore_no_reference_unverified_banner() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -439,7 +439,7 @@ fn restore_expect_xpub_match_exit_0() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--expect-xpub",
             ACCT_XPUB_BIP84,
@@ -475,7 +475,7 @@ fn restore_multisig_template_rejected_exit_1() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
         ])
         .output()
@@ -490,7 +490,7 @@ fn restore_watch_only_advisory_present() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .output()
@@ -501,7 +501,7 @@ fn restore_watch_only_advisory_present() {
 }
 
 // ---------------------------------------------------------------------------
-// 2.1 --format importable payload (requires single --template)
+// 2.1 --format importable payload (requires single --scheme)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -514,7 +514,7 @@ fn restore_format_descriptor_payload_to_stdout() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "descriptor",
@@ -551,7 +551,7 @@ fn restore_format_bitcoin_core_payload() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "bitcoin-core",
@@ -584,7 +584,7 @@ fn restore_format_bitcoin_core_default_timestamp_is_zero() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "bitcoin-core",
@@ -615,7 +615,7 @@ fn restore_format_bip388_payload() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "bip388",
@@ -641,7 +641,7 @@ fn restore_format_bip388_payload() {
 
 #[test]
 fn restore_format_without_template_exit_2() {
-    // `--format` requires a single `--template`; with the all-4 default → exit 2
+    // `--format` requires a single `--scheme`; with the all-4 default → exit 2
     // (ModeViolation, NOT BadInput exit 1).
     let out = bin()
         .args([
@@ -664,23 +664,23 @@ fn restore_format_without_template_exit_2() {
 
 #[test]
 fn restore_format_coldcard_multisig_single_sig_refused_exit_1() {
-    // `--format coldcard-multisig` on a single-sig `--template` is refused. After
+    // `--format coldcard-multisig` on a single-sig `--scheme` is refused. After
     // the 4-way emit-dispatch dedup (FOLLOWUP `restore-emit-dispatch-3way-dedup`),
     // single-sig restore routes through the shared `emit_payload` helper, so the
     // refusal is the UNIFIED 6-variant coldcard-multisig message
-    // ("requires a multisig --template (wsh-sortedmulti, …)"), not the old
+    // ("requires a multisig --scheme (wsh-sortedmulti, …)"), not the old
     // restore-specific "requires a multisig wallet; restore is single-sig" string.
     //
     // NOTE: exit is 1 (BadInput) BOTH before and after the dedup — the message
     // substring, NOT the exit code, is the discriminator. So this cell is RED
-    // against the pre-dedup binary purely on the `requires a multisig --template`
+    // against the pre-dedup binary purely on the `requires a multisig --scheme`
     // assertion.
     let out = bin()
         .args([
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "coldcard-multisig",
@@ -694,7 +694,7 @@ fn restore_format_coldcard_multisig_single_sig_refused_exit_1() {
     );
     let stderr = String::from_utf8(out.stderr).unwrap();
     assert!(
-        stderr.contains("requires a multisig --template"),
+        stderr.contains("requires a multisig --scheme"),
         "unified coldcard-multisig refusal on stderr:\n{stderr}"
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -710,7 +710,7 @@ fn restore_format_mismatch_no_allow_exit_4_no_payload() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "descriptor",
@@ -736,7 +736,7 @@ fn restore_format_path_emits_no_private_key_material() {
                 "restore",
                 "--from",
                 &format!("phrase={TREZOR_12}"),
-                "--template",
+                "--scheme",
                 "bip84",
                 "--passphrase",
                 "TREZOR",
@@ -771,7 +771,7 @@ fn restore_json_shape_single_template() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
         ])
@@ -786,7 +786,7 @@ fn restore_json_shape_single_template() {
     assert_eq!(v["network"].as_str().unwrap(), "mainnet");
     assert_eq!(v["verification"]["status"].as_str().unwrap(), "unverified");
     let wallets = v["wallets"].as_array().expect("wallets array");
-    assert_eq!(wallets.len(), 1, "single --template = 1 wallet");
+    assert_eq!(wallets.len(), 1, "single --scheme = 1 wallet");
     assert_eq!(wallets[0]["wallet_type"].as_str().unwrap(), "bip84");
     assert_eq!(wallets[0]["descriptor"].as_str().unwrap(), DESC_BIP84);
     let addrs = wallets[0]["first_addresses"].as_array().unwrap();
@@ -832,7 +832,7 @@ fn restore_json_with_format_embeds_import_payload() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
             "--format",
@@ -857,7 +857,7 @@ fn restore_json_verification_verified_status() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
             "--expect-fingerprint",
@@ -880,7 +880,7 @@ fn restore_json_mismatch_exits_4_not_json_success_body() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
             "--expect-fingerprint",
@@ -919,7 +919,7 @@ fn restore_json_no_seed_material_redacted_non_vacuous() {
             &format!("ms1={MS1_NO_PP}"),
             "--passphrase",
             PASSPHRASE,
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
         ])
@@ -954,7 +954,7 @@ fn restore_output_file_writes_content_stdout_clean() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--output",
             path.to_str().unwrap(),
@@ -983,7 +983,7 @@ fn restore_output_file_with_json_writes_json() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
             "--output",
@@ -1069,7 +1069,7 @@ fn restore_format_specter_missing_wallet_name_exit_2() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "specter",
@@ -1101,7 +1101,7 @@ fn restore_format_specter_matches_export_wallet_exit_code() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "specter",
@@ -1111,7 +1111,7 @@ fn restore_format_specter_matches_export_wallet_exit_code() {
     let export_out = bin()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "specter",
@@ -1144,7 +1144,7 @@ fn restore_format_jade_singlesig_refused_exit_1() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "jade",
@@ -1169,7 +1169,7 @@ fn restore_format_descriptor_unaffected_by_collect_missing() {
             "restore",
             "--from",
             &format!("phrase={TREZOR_12}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--format",
             "descriptor",

@@ -25,7 +25,7 @@ const TREZOR_24_MASTER_FP: &str = "5436d724";
 const TREZOR_24_BIP84_MAINNET_ZPUB: &str = "zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S";
 
 /// BIP-49 testnet account-0 xpub at `m/49'/1'/0'` for TREZOR_24 (tpub form;
-/// derived via `mnemonic convert --to xpub --template bip49 --network testnet`).
+/// derived via `mnemonic convert --to xpub --scheme bip49 --network testnet`).
 const TREZOR_24_BIP49_TESTNET_TPUB: &str = "tpubDDYhB7EGtNkJdeaPTacttc9jZ6aq7NWHiYy21ACcFx8g2zs9HNpQDondF7HQfemghZSEimBPHPRfs93UehvbFHZyHgWDBrY4KSCC183DAFw";
 
 /// BIP-44 mainnet account-0 xpub at `m/44'/0'/0'` for TREZOR_24.
@@ -59,7 +59,7 @@ const COSIGNER_B_FP: &str = "28645006";
 const COSIGNER_C_XPUB: &str = "xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx";
 const COSIGNER_C_FP: &str = TREZOR_24_MASTER_FP;
 
-/// SPEC §5.1 Phase 1.2 RED → GREEN: `--format coldcard --template bip84
+/// SPEC §5.1 Phase 1.2 RED → GREEN: `--format coldcard --scheme bip84
 /// --network mainnet --slot @0.xpub=zpub... --slot @0.fingerprint=5436d724`
 /// emits the canonical Coldcard generic JSON skeleton for the BIP-84 mainnet
 /// account, byte-identical to the pinned fixture (master_xpub omitted —
@@ -74,7 +74,7 @@ fn cell_1_coldcard_generic_bip84_mainnet_byte_exact() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -107,7 +107,7 @@ fn cell_2_coldcard_generic_bip49_testnet_byte_exact() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip49",
             "--network",
             "testnet",
@@ -139,7 +139,7 @@ fn cell_3_coldcard_generic_bip44_mainnet_byte_exact() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip44",
             "--network",
             "mainnet",
@@ -160,7 +160,7 @@ fn cell_3_coldcard_generic_bip44_mainnet_byte_exact() {
     );
 }
 
-/// SPEC §5.1 R1-I2 — `--template bip86 --format coldcard` REFUSES with the
+/// SPEC §5.1 R1-I2 — `--scheme bip86 --format coldcard` REFUSES with the
 /// pinned pointer text (BIP-86 is not in the upstream Coldcard generic-export
 /// schema; tracked by FOLLOWUPS `coldcard-bip86-generic-export-pending-firmware`).
 #[test]
@@ -172,7 +172,7 @@ fn cell_4_coldcard_bip86_refuses_byte_exact() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip86",
             "--network",
             "mainnet",
@@ -209,7 +209,7 @@ fn cell_5_coldcard_multisig_2of3_wsh_sortedmulti_byte_exact() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -262,7 +262,7 @@ fn cell_8_coldcard_master_xpub_plumbing_byte_exact() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -311,7 +311,7 @@ fn cell_9_coldcard_master_xpub_absent_omits_top_level_xpub() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -346,7 +346,7 @@ fn cell_6_coldcard_tr_multi_a_refuses() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--threshold",
             "2",
@@ -404,7 +404,7 @@ fn cell_7_coldcard_wallet_name_non_ascii_truncation_no_panic() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -462,7 +462,7 @@ fn cell_1_coldcard_bip84_vector_consistency_with_derive_pipeline() {
             &format!("phrase={TREZOR_24}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -488,9 +488,9 @@ fn cell_1_coldcard_bip84_vector_consistency_with_derive_pipeline() {
 
 #[test]
 fn export_wallet_coldcard_multisig_format_wsh_sortedmulti_2_of_3_emits_text() {
-    // Happy path: `--format coldcard-multisig --template wsh-sortedmulti
+    // Happy path: `--format coldcard-multisig --scheme wsh-sortedmulti
     // --threshold 2` produces the same Coldcard-multisig text output as
-    // `--format coldcard --template wsh-sortedmulti --threshold 2` (the
+    // `--format coldcard --scheme wsh-sortedmulti --threshold 2` (the
     // multisig-template arm of ColdcardEmitter::emit delegates identically).
     let out = assert_cmd::Command::cargo_bin("mnemonic")
         .unwrap()
@@ -498,7 +498,7 @@ fn export_wallet_coldcard_multisig_format_wsh_sortedmulti_2_of_3_emits_text() {
         .args([
             "export-wallet",
             "--format", "coldcard-multisig",
-            "--template", "wsh-sortedmulti",
+            "--scheme", "wsh-sortedmulti",
             "--threshold", "2",
             "--network", "mainnet",
             "--account", "0",
@@ -535,7 +535,7 @@ fn export_wallet_coldcard_multisig_format_refuses_singlesig_template_bip84() {
         .args([
             "export-wallet",
             "--format", "coldcard-multisig",
-            "--template", "bip84",
+            "--scheme", "bip84",
             "--network", "mainnet",
             "--account", "0",
             "--slot", "@0.xpub=xpub6Bner3L3tdQW367NmmMsWKtMfP7hbu4JxdtbSGdWWjSzLkSUEnT7G9h5GFWUXtifeRhHiUXJuek1qeaTJqnXkveWpiHp8rmt53E8HTMshg9",
@@ -546,7 +546,7 @@ fn export_wallet_coldcard_multisig_format_refuses_singlesig_template_bip84() {
     assert_ne!(out.status.code(), Some(0), "must refuse");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("--format coldcard-multisig requires a multisig --template"),
+        stderr.contains("--format coldcard-multisig requires a multisig --scheme"),
         "expected multisig-required refusal, got: {stderr}"
     );
     assert!(
@@ -595,7 +595,7 @@ fn run_divergent_export(format: &str) -> std::process::Output {
             "export-wallet",
             "--format",
             format,
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -708,7 +708,7 @@ fn export_coldcard_multisig_shared_path_unchanged() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",

@@ -156,7 +156,7 @@ fn bughunt_tk_04_electrum_passphrase_strips_space_between_hangul() {
 }
 
 // ===========================================================================
-// #5 -- `export-wallet --format electrum --template bip86` writes a plain
+// #5 -- `export-wallet --format electrum --scheme bip86` writes a plain
 // "standard" xpub keystore, which Electrum reads as p2pkh
 // (electrum/wallet.py:4241 `self.txin_type = 'p2pkh' if xtype == 'standard'
 // else xtype`). Correct: refuse, as for taproot multisig.
@@ -170,7 +170,7 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
         "export-wallet",
         "--format",
         "electrum",
-        "--template",
+        "--scheme",
         "bip86",
         "--network",
         "mainnet",
@@ -190,7 +190,7 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
     ]);
     assert!(
         !o.status.success(),
-        "export-wallet --format electrum --template bip86 exited 0 and wrote a plain-xpub \
+        "export-wallet --format electrum --scheme bip86 exited 0 and wrote a plain-xpub \
          \"standard\" wallet that Electrum reads as p2pkh (wrong addresses). stdout:\n{}",
         out_s(&o)
     );
@@ -198,7 +198,7 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
     assert!(out_s(&o).is_empty(), "nothing on stdout:\n{}", out_s(&o));
     assert!(
         err_s(&o).contains(
-            "error: --format electrum does not support --template bip86 (P2TR): a plain xpub \"standard\" wallet is read by Electrum as p2pkh. Use --format bitcoin-core (descriptor) or --format sparrow for taproot watch-only setup."
+            "error: --format electrum does not support --scheme bip86 (P2TR): a plain xpub \"standard\" wallet is read by Electrum as p2pkh. Use --format bitcoin-core (descriptor) or --format sparrow for taproot watch-only setup."
         ),
         "stderr:\n{}",
         err_s(&o)
@@ -663,7 +663,7 @@ fn bundle_args(form: &str) -> Vec<String> {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",

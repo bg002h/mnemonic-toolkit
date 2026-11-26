@@ -313,7 +313,7 @@ fn bsms_envelope_verify_bundle_round_trip_via_bundle_json() {
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--multisig-path-family".into(),
         "bip87".into(),

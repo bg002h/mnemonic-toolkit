@@ -13,7 +13,7 @@ fn convert_help_lists_required_flags() {
         .stdout(predicate::str::contains("--from"))
         .stdout(predicate::str::contains("--to"))
         .stdout(predicate::str::contains("--network"))
-        .stdout(predicate::str::contains("--template"))
+        .stdout(predicate::str::contains("--scheme"))
         .stdout(predicate::str::contains("--json"));
 }
 

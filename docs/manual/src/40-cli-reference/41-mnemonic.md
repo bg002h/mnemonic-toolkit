@@ -372,8 +372,8 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | Flag | Purpose |
 |---|---|
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest |
-| `--template <TEMPLATE>` | bip44 / bip49 / bip84 / bip86 / wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti / tr-multi-a / tr-sortedmulti-a |
-| `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); **(v0.49.0) or a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`, origin-annotated `keys_info` required), expanded to the concrete descriptor — the inverse of `export-wallet --format bip388`; both apostrophe and `h`-form hardened paths are accepted; mutually exclusive with `--template` and `--descriptor-file` |
+| `--scheme <SCHEME>` | named wallet scheme: bip44 / bip49 / bip84 / bip86 / wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti / tr-multi-a / tr-sortedmulti-a. Single-sig BIP-44/49/84/86 derivation schemes, or the BIP-388 common multisig schemes. Before 2026-11-26 this flag was `--template`; that spelling is still accepted as a hidden alias in `bundle`, `verify-bundle`, `convert`, `export-wallet` and `restore` |
+| `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); **(v0.49.0) or a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`, origin-annotated `keys_info` required), expanded to the concrete descriptor — the inverse of `export-wallet --format bip388`; both apostrophe and `h`-form hardened paths are accepted; mutually exclusive with `--scheme` and `--descriptor-file` |
 | `--descriptor-file <DESCRIPTOR_FILE>` | descriptor read from a single-line UTF-8 file; mutually exclusive with `--descriptor` |
 | `--language <LANGUAGE>` | BIP-39 wordlist for the input phrase |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase |
@@ -388,8 +388,8 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--privacy-preserving` | suppress the master fingerprint from mk1 + engraving card |
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
-| `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. The share at index `s` is the secret itself, not a distributed share, and `ms-shares combine` does not take it, so it is rejected (exit 2) without that pointer. With `--template`, `@N.path=` / `@N.fingerprint=` beside a seed slot (`phrase` / `seedqr` / `entropy` / `ms1`) is refused (`SlotInputViolation` `kind:"conflict"`, exit 2): the key is derived at the template's path, so choose the account with `--account` (a per-key path beside a seed is accepted only with a non-canonical `--descriptor`). An `@N.xpub=` slot with no `@N.path=` takes the template's default origin only when the xpub's own header agrees (depth equal to the path length, child number equal to its last component); otherwise it is refused (exit 2) and asks for `--slot @N.path=` (for example a BIP-48 `m/48'/0'/0'/2'` xpub under the BIP-87 multisig default). `wif` is refused at mint (exit 1): a WIF is one key with no chain code, while every template derives ranged child addresses (`/<0;1>/*`), so the cards would describe addresses no wallet importing the WIF watches. |
-| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
+| `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. The share at index `s` is the secret itself, not a distributed share, and `ms-shares combine` does not take it, so it is rejected (exit 2) without that pointer. With `--scheme`, `@N.path=` / `@N.fingerprint=` beside a seed slot (`phrase` / `seedqr` / `entropy` / `ms1`) is refused (`SlotInputViolation` `kind:"conflict"`, exit 2): the key is derived at the template's path, so choose the account with `--account` (a per-key path beside a seed is accepted only with a non-canonical `--descriptor`). An `@N.xpub=` slot with no `@N.path=` takes the template's default origin only when the xpub's own header agrees (depth equal to the path length, child number equal to its last component); otherwise it is refused (exit 2) and asks for `--slot @N.path=` (for example a BIP-48 `m/48'/0'/0'/2'` xpub under the BIP-87 multisig default). `wif` is refused at mint (exit 1): a WIF is one key with no chain code, while every template derives ranged child addresses (`/<0;1>/*`), so the cards would describe addresses no wallet importing the WIF watches. |
+| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--scheme` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--scheme`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
 
@@ -650,14 +650,14 @@ last component); otherwise the bundle is refused (exit 2) and asks for
 `--slot @N.path=`. `--slot @N.path=m` (the master node) is refused on a
 canonical shape: an empty origin on the card means the canonical origin,
 so the master node cannot be recorded there. The same refusal applies
-with `--template` (for example `--template bip84 --slot @0.xpub=... --slot
+with `--scheme` (for example `--scheme bip84 --slot @0.xpub=... --slot
 @0.path=m`). For the same reason an inline fingerprint with no
 path, `[fp]@N` (which says the key is the master key of `fp`), is refused
 (exit 2) on a canonical shape: give `[fp/<path>]@N`, or drop the brackets. Before this, such a slot was
 derived at the MASTER key and the card carried an empty origin.
 
 For the multisig shapes the canonical origin is BIP-48
-(`m/48'/<coin>'/0'/2'`), while `--template wsh-sortedmulti` defaults to
+(`m/48'/<coin>'/0'/2'`), while `--scheme wsh-sortedmulti` defaults to
 the BIP-87 family (`m/87'/<coin>'/<account>'`); give an explicit origin if
 you need the descriptor-mode wallet to match a template-mode one.
 
@@ -803,7 +803,7 @@ prints no `# Threshold:` line, and its Recovery line tells the holder
 to keep all 3 signing keys, any hash preimages the policy names, and
 md1. A plain k-of-n descriptor prints `# Threshold: K of N` and
 `# Recovery: any K of N signing keys + md1 (template card).` instead;
-so does every multisig `--template`. A descriptor is plain k-of-n when
+so does every multisig `--scheme`. A descriptor is plain k-of-n when
 the only child of `wsh`, `sh` or `sh(wsh)` is `multi`, `sortedmulti`,
 `multi_a`, `sortedmulti_a`, or a `thresh` whose children are all
 `pk`/`pkh` keys with only `s:`/`a:` wrappers, or when that operator is
@@ -896,7 +896,7 @@ Things to notice in the envelope:
   when importing the descriptor.
 - **`multisig.threshold`** is `null` here, because this descriptor is a
   general policy, not k-of-n. It is the integer K for a plain k-of-n
-  descriptor and for every multisig `--template`.
+  descriptor and for every multisig `--scheme`.
 
 #### Verifying the inheritance bundle (v0.20.0+)
 
@@ -980,7 +980,7 @@ default per the inference rule above.
 | Trigger | Stderr |
 |---|---|
 | Bare `tr(<miniscript>)` (no internal key) | `error: tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.` |
-| Canonical descriptor + `--account != 0` | `error: --account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.` |
+| Canonical descriptor + `--account != 0` | `error: --account != 0 is meaningful only with --scheme; descriptor mode encodes account index in the @i origin path.` |
 | `--slot @N.fingerprint=X` AND inline `[Y/...]@N` disagree | `error: slot @{N} fingerprint mismatch: --slot says X, descriptor inline [Y/...] disagrees; supply consistent values.` |
 | Phrase-derived fingerprint disagrees with inline `[Y/...]@N` | `error: slot @{N} phrase-derived fingerprint X does not match descriptor inline [Y/...]; verify the phrase or correct the descriptor.` |
 | `--slot @N.path=X` AND inline `[Y/Z]@N` paths differ | `error: slot @{N} path mismatch: --slot says X, descriptor inline [.../Z] disagrees; supply consistent values or remove one source.` |
@@ -1009,7 +1009,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | Flag | Purpose |
 |---|---|
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest |
-| `--template <TEMPLATE>` | as for `bundle` |
+| `--scheme <SCHEME>` | as for `bundle` |
 | `--descriptor <DESCRIPTOR>` | user-supplied descriptor; accepts either a BIP-388 `@N` template (keys supplied via `--slot`) **or a bare concrete descriptor** with inline `[fp/path]xpub` keys (watch-only output); **(v0.57.0) or a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor before verifying — parity with `bundle`/`export-wallet --descriptor`; both apostrophe and `h`-form hardened paths are accepted |
 | `--descriptor-file <DESCRIPTOR_FILE>` | descriptor read from file (also accepts a BIP-388 wallet-policy JSON, same as `--descriptor`) |
 | `--threshold <THRESHOLD>` | multisig threshold |
@@ -1030,7 +1030,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20; mirrors `restore`) |
 | `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, default), `change` (chain 1), or `both` (mirrors `restore`) |
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0** (as on [`restore`](#mnemonic-restore)): accepted so existing scripts do not fail, but there is no search-time ceiling any more; the completion reports a measured estimate and progress instead |
-| `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`, except the share at index `s`, the secret itself, which `ms-shares combine` does not take), mirroring `mnemonic bundle --slot @N.ms1=`. The same slot checks as `bundle --template` apply (since bug hunt 2026-11-25): `@N.path=` / `@N.fingerprint=` beside a seed slot is refused, and an `@N.xpub=` slot with no `@N.path=` whose header contradicts the default origin is refused (both exit 2). |
+| `--slot <SLOT>` | repeating slot input `@N.<subkey>=<value>`; subkeys mirror `mnemonic bundle --slot` (`phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) decodes a 48- or 96-digit SeedQR string inline. `ms1` (v0.41.0+) decodes a raw BIP-93 codex32 secret inline (language-preserving; `--language` conflicting with the slot's wire language is refused with exit 2; a K-of-N share is rejected with a pointer to `ms-shares combine`, except the share at index `s`, the secret itself, which `ms-shares combine` does not take), mirroring `mnemonic bundle --slot @N.ms1=`. The same slot checks as `bundle --scheme` apply (since bug hunt 2026-11-25): `@N.path=` / `@N.fingerprint=` beside a seed slot is refused, and an `@N.xpub=` slot with no `@N.path=` whose header contradicts the default origin is refused (both exit 2). |
 | `--bundle-json <PATH>` | read the bundle from a JSON file emitted by `bundle --json` |
 | `--ms1 <STRING>` | repeating; one ms1 card. `--ms1 -` reads one card from stdin (at most one; empty or separator-only stdin is refused); `--ms1 @env:VAR` also works. An inline card on argv is refused unless `--allow-argv-secret` is given |
 | `--mk1 <STRING>` | repeating; one mk1 card |
@@ -1107,7 +1107,7 @@ signalling that the origin on this backup is unspecified and must be confirmed
 out-of-band before restoring funds. The `--json` envelope gains an additive
 `partial` field on the partial verdict (`schema_version` unchanged; a
 non-partial verdict's JSON is byte-identical). The strict template route
-(`--template`) and `restore` are unaffected — they stay fail-closed. GUI
+(`--scheme`) and `restore` are unaffected — they stay fail-closed. GUI
 consumers of the `--json` verdict must handle the new `partial` value (tracked
 follow-up; the clap flag surface is unchanged, so the schema mirror is not
 affected).
@@ -1240,8 +1240,8 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 | `--from <FROM>` | source node (`phrase=…`, `seedqr=…`, `entropy=…`, `xpub=…`, `xprv=…`, `wif=…`, `ms1=…`, `mk1=…`, `bip38=…`, `minikey=…`, `electrum-phrase=…`); `=-` reads from stdin. `seedqr=<digits>` (v0.31.6+) decodes a 48/60/72/84/96-digit SeedQR string to a BIP-39 phrase then projects to any phrase-reachable target |
 | `--to <TO>` | target node; repeating for multi-output. `seedqr` is NOT a valid target (input-only); use `mnemonic seedqr encode` to emit a SeedQR digit-string |
 | `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 2) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
-| `--template <TEMPLATE>` | as for `bundle` |
-| `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--template`/`--account` path (and makes `--template` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
+| `--scheme <SCHEME>` | as for `bundle` |
+| `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--scheme`/`--account` path (and makes `--scheme` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
 | `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 2) when non-zero together with `--path`, or when non-zero and no requested target reads it; must be below 2147483648 (2^31), else refused (usage error, exit 64) |
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
@@ -1291,8 +1291,8 @@ mnemonic export-wallet [OPTIONS]
 
 | Flag | Purpose |
 |---|---|
-| `--template <TEMPLATE>` | as for `bundle` |
-| `--descriptor <DESCRIPTOR>` | accepts a concrete descriptor (with or without key origins); **(v0.49.0) also a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor — the inverse of `--format bip388`; a keyless `@N` template is rejected with a pointer to `--template … --slot …` or `--from-import-json` |
+| `--scheme <SCHEME>` | as for `bundle` |
+| `--descriptor <DESCRIPTOR>` | accepts a concrete descriptor (with or without key origins); **(v0.49.0) also a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor — the inverse of `--format bip388`; a keyless `@N` template is rejected with a pointer to `--scheme … --slot …` or `--from-import-json` |
 | `--threshold <THRESHOLD>` | multisig threshold |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 |
 | `--network <NETWORK>` | default mainnet. Every resolved `--slot` xpub (and `@N.master_xpub=`) must agree with `--network`'s version-byte family, and a concrete `--descriptor`'s extended keys must agree with it for `--format bsms` 4-line's first-address line — a disagreement (including against the clap default, with no explicit flag) is refused fail-closed (exit 2) rather than re-emitting a wrong-network xpub / minting a wrong-network address |
@@ -1308,7 +1308,7 @@ mnemonic export-wallet [OPTIONS]
 | `--wallet-name <WALLET_NAME>` | wallet name/label for formats that publish one (Coldcard generic JSON, Sparrow, Specter, Electrum); default `<template-human-name>-<account>` |
 | `--taproot-internal-key <TAPROOT_INTERNAL_KEY>` | `nums` or `@N` for `tr-multi-a` / `tr-sortedmulti-a` |
 | `--bsms-form <FORM>` | (v0.27.0) BSMS Round-2 emit shape — `4-line` (default; BIP-129-canonical) or `2-line` (lenient excerpt symmetric with the v0.26.0 import-side parser); ignored by every non-BSMS format per the per-format ignored-input contract |
-| `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--template` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative). **(v0.37.0)** for template-requiring file-import formats (`sparrow`/`coldcard`/`jade`/`electrum`) the `--template` is **auto-derived from the envelope descriptor** (so these now round-trip via `--from-import-json`); you still cannot pass `--template` explicitly here (it remains mutually exclusive) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
+| `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--scheme` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--scheme` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative). **(v0.37.0)** for template-requiring file-import formats (`sparrow`/`coldcard`/`jade`/`electrum`) the `--scheme` is **auto-derived from the envelope descriptor** (so these now round-trip via `--from-import-json`); you still cannot pass `--scheme` explicitly here (it remains mutually exclusive) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--from-import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array; required when the envelope has > 1 entry |
 | `--allow <RULE>` | reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable): `malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch` — the same vocabulary as `build-descriptor`. On THIS surface only `sigless-branch` is ENFORCED; the other four never run and say so. Never silent — see "Reviewed sanity opt-out" below |
 | `--help` | print help |
@@ -1316,7 +1316,7 @@ mnemonic export-wallet [OPTIONS]
 ### Reviewed sanity opt-out (`--allow`)
 
 `export-wallet` runs ONE admission check on every descriptor it emits, on every
-intake arm (`--descriptor`, `--template`/`--slot`, `--from-import-json`) and
+intake arm (`--descriptor`, `--scheme`/`--slot`, `--from-import-json`) and
 every wrapper (`wsh`, `sh`, `bare`, `tr`): **does some spend path require no
 signature at all?** If one does, the export refuses (exit 2) and names the flag:
 
@@ -1340,7 +1340,7 @@ error: export-wallet: this wallet has a spend path that requires no signature
 - **Detection is per wrapper.** For `wsh`/`sh`/`bare` the top-level miniscript
   is checked; for `tr` **every tapleaf** is, because one keyless leaf makes the
   whole output anyone-can-spend regardless of the key path.
-- **`--template`/`--slot` is gated too, and cannot trip the rule.** A
+- **`--scheme`/`--slot` is gated too, and cannot trip the rule.** A
   builder-produced descriptor never carries a sigless branch, so the check runs
   and does not fire — a consequence of the uniform gate, not an exemption from
   it.
@@ -1458,7 +1458,7 @@ key) and a `sortedmulti_a` leaf inside a multi-leaf tree.
 
 ```sh
 # single-sig
-mnemonic restore --from <node>=<value> [--template <TEMPLATE>] [OPTIONS]
+mnemonic restore --from <node>=<value> [--scheme <SCHEME>] [OPTIONS]
 # multisig-cosigner (reconstruct from the shared md1; cross-check is optional)
 mnemonic restore --md1 <card> [--md1 <card> …] \
     [--from <node>=<value>] [--cosigner @N=<mk1|xpub> …] [OPTIONS]
@@ -1491,12 +1491,12 @@ channels that keep the seed off the argv.
 | `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, the **default**), `change` (chain 1), or `both` (doubles the per-index search cost) |
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0.** Accepted (and still parsed as a humantime duration such as `2h` or `90min`) so existing scripts do not fail on an unknown flag, but it changes nothing: there is no search-time ceiling any more — the completion declares its measured estimate and reports progress, and Ctrl-C stops it |
 | `--recalibrate-threads` | ignore the search-thread count recorded under `[search]` in `~/.mnemonic/mt.conf`, measure this machine again and overwrite the record. The count is measured once, on the first multisig-template search, and reused, because the best count is a property of the machine rather than of its core count; use this after a hardware change or when the recorded value looks wrong. Only a multisig-template completion (id-search or `--search-address`) runs the search, so on any other restore the flag has no effect |
-| `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
+| `--scheme <SCHEME>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
 | `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 4 (unless `--allow-mismatch`) |
-| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`, or a keyless single-sig template `--md1`, whose type it takes); mismatch → exit 4 (unless `--allow-mismatch`) |
+| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--scheme`, or a keyless single-sig template `--md1`, whose type it takes); mismatch → exit 4 (unless `--allow-mismatch`) |
 | `--allow-mismatch` | emit descriptors even when a reference does not match (loud `✗ MISMATCH (overridden)` banner, exit 0) |
 | `--count <COUNT>` | number of first-receive addresses to show per wallet type (default 1) |
-| `--format <FORMAT>` | emit an importable wallet-software payload via an `export-wallet` emitter (`descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, `specter`, `jade`, `electrum`, `green`, `bsms`, …). REQUIRES a single `--template` (one-descriptor-in/one-out); `--format` with no `--template` → exit 2. Refused (exit 2) when completing a keyless single-sig template `--md1`. When set, the importable payload goes to stdout and the verification block goes to stderr so the payload pipes cleanly. With `--json` the payload is embedded as the `import_payload` field instead |
+| `--format <FORMAT>` | emit an importable wallet-software payload via an `export-wallet` emitter (`descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, `specter`, `jade`, `electrum`, `green`, `bsms`, …). REQUIRES a single `--scheme` (one-descriptor-in/one-out); `--format` with no `--scheme` → exit 2. Refused (exit 2) when completing a keyless single-sig template `--md1`. When set, the importable payload goes to stdout and the verification block goes to stderr so the payload pipes cleanly. With `--json` the payload is embedded as the `import_payload` field instead |
 | `--json` | emit a single structured JSON object on stdout instead of the text document; seed material is NEVER echoed (redacted by construction). `import_payload` is present only when `--format` is also set |
 | `--output <OUTPUT>` | write the stdout content to `<FILE>` (`-`, the default, → stdout); the verification block / banners / advisory still go to stderr |
 | `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
@@ -1529,7 +1529,7 @@ known reference:
 seed="abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon about"
 printf '%s' "$seed" |
-  mnemonic restore --from phrase=- --template bip84 \
+  mnemonic restore --from phrase=- --scheme bip84 \
     --expect-fingerprint 73c5da0a
 ```
 
@@ -1544,7 +1544,7 @@ public keys only, cannot spend`). Piping the seed via `--from phrase=-`
 keeps it off the argv; passing `--from phrase="$seed"` inline instead
 raises a `/proc/$PID/cmdline` argv-leakage advisory on stderr.
 
-**All four wallet types** (omit `--template`):
+**All four wallet types** (omit `--scheme`):
 
 ```sh
 printf '%s' "$seed" | mnemonic restore --from phrase=-
@@ -1557,7 +1557,7 @@ master fingerprint, four descriptors + first-recv addresses).
 
 ```sh
 printf '%s' "$seed" |
-  mnemonic restore --from phrase=- --template bip84 \
+  mnemonic restore --from phrase=- --scheme bip84 \
     --expect-fingerprint deadbeef ; echo "exit=$?"
 ```
 
@@ -1573,7 +1573,7 @@ TREZOR-passphrase wallet has a *different* fingerprint, `b4e3f5ed`):
 ```sh
 export RSEED="$seed"
 printf 'TREZOR' |
-  mnemonic restore --from phrase=@env:RSEED --template bip84 \
+  mnemonic restore --from phrase=@env:RSEED --scheme bip84 \
     --passphrase-stdin --expect-fingerprint b4e3f5ed
 ```
 
@@ -1586,7 +1586,7 @@ verification block goes to stderr:
 
 ```sh
 printf '%s' "$seed" |
-  mnemonic restore --from phrase=- --template bip84 \
+  mnemonic restore --from phrase=- --scheme bip84 \
     --format descriptor --expect-fingerprint 73c5da0a
 ```
 
@@ -1599,7 +1599,7 @@ object.
 
 ```sh
 printf '%s' "$seed" |
-  mnemonic restore --from phrase=- --template bip84 \
+  mnemonic restore --from phrase=- --scheme bip84 \
     --expect-fingerprint 73c5da0a --json
 ```
 
@@ -1723,7 +1723,7 @@ remains a faithful backup.
 **Importable wallet payloads (`--format`).** As with single-sig restore,
 `--format <X>` emits an importable wallet-software payload instead of the
 plain descriptor doc — the same payload class as `mnemonic export-wallet
---template <multisig> --format <X>`, built from the reconstructed cosigner
+--scheme <multisig> --format <X>`, built from the reconstructed cosigner
 keys + threshold. The payload pipes from stdout while the verification doc
 (descriptor + cosigner table) moves to stderr:
 
@@ -1750,7 +1750,7 @@ its internal key is a literal key, and BIP-388 allows only `@N` key
 placeholders; it emits `descriptor` / `bitcoin-core`. A card whose policy
 uses one public key more than once (e.g. a `bundle --descriptor` that
 repeats `@0`) refuses `bip388` too (exit 1; BIP-388 requires pairwise
-distinct keys). No `--template` is needed (the threshold and script type come
+distinct keys). No `--scheme` is needed (the threshold and script type come
 from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
 **before** any payload is emitted unless `--allow-mismatch`.
 
@@ -1768,7 +1768,7 @@ TEMPLATE `md1`** (no concrete keys, `bundle --md1-form=template`) is
 **completed** rather than refused — see [Multisig template
 completion](#multisig-template-completion). A non-NUMS **general** tr
 emits `descriptor` / `bitcoin-core` only (`bip388` / `green` refused), while a
-non-NUMS distinct-trunk **multisig** also emits `bip388`. `--template` and
+non-NUMS distinct-trunk **multisig** also emits `bip388`. `--scheme` and
 `--expect-xpub` are single-sig only.
 
 **Liana unspendable internal key (v0.104.0).** An `md1` whose taproot
@@ -4233,7 +4233,7 @@ for the non-blocking `older()` advisory the descriptor-bearing modes
 
 ### `mnemonic xpub-search path-of-xpub`
 
-Given a seed (BIP-39 phrase OR ms1 card) and a target xpub (or mk1 card carrying an xpub), search the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}` + BIP-87 multisig `m/87'/<coin>'/<account>'` + BIP-45 `m/45'` once) × account range, returning the matching path on first hit. `--add-path <TEMPLATE>` extends the candidate set.
+Given a seed (BIP-39 phrase OR ms1 card) and a target xpub (or mk1 card carrying an xpub), search the standard derivation templates (BIP-44 / BIP-49 / BIP-84 / BIP-86 single-sig + BIP-48 multisig at `script_type ∈ {1', 2', 3'}` + BIP-87 multisig `m/87'/<coin>'/<account>'` + BIP-45 `m/45'` once) × account range, returning the matching path on first hit. `--add-path <PATH>` (a derivation path pattern) extends the candidate set.
 
 #### Synopsis
 
@@ -4244,7 +4244,7 @@ mnemonic xpub-search path-of-xpub \
     --target-xpub <XPUB-OR-MK1> \
     [--language <LANG>] [--network <NET>] \
     [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
-    [--add-path <TEMPLATE>]... \
+    [--add-path <PATH>]... \
     [--json]
 ```
 
@@ -4265,7 +4265,7 @@ mnemonic xpub-search path-of-xpub \
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
 | `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
-| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags |
+| `--add-path <PATH>` | additional derivation path pattern (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Patterns without an `account` token are searched once at the literal path. Multi-occurrence within one pattern requires multiple `--add-path` flags |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
@@ -4364,7 +4364,7 @@ The default candidate set is the cross-product of:
 
 - **Templates:** BIP-44 / BIP-49 / BIP-84 / BIP-86 (single-sig) + BIP-48 at `script_type ∈ {1', 2', 3'}` (sh-wsh / wsh / tr-multi-a multisig) + BIP-87 `m/87'/<coin>'/<account>'` (multisig; the toolkit's multisig template default, and the default `bundle` uses for bare `sh(...)` and `tr(...)` descriptors) — eight templates, fixed order, each over the account range — then BIP-45 `m/45'` once (BIP-45 has no coin or account level: "Only the hardened purpose extended public key is shared")
 - **Accounts:** half-open range `[min_account, max(min_account + number_of_accounts, max_account + 1))`
-- **Add-paths:** each `--add-path <TEMPLATE>` iterated over the same account range (or once if the template contains no `account` token)
+- **Add-paths:** each `--add-path <PATH>` iterated over the same account range (or once if the pattern contains no `account` token)
 
 Iteration is deterministic: templates in fixed lexical order, accounts ascending, add-paths in user-supplied order. First match wins. The matching template name is one of `bip44` / `bip49` / `bip84` / `bip86` / `bip48-sh-wsh` / `bip48-wsh` / `bip48-tr-multi-a` / `bip87` / `bip45` for standard templates, or the literal user-supplied template string (e.g. `m/88'/0'/account'`) for `--add-path` entries. The `account` field is `null` for `bip45` and when the matched template carries no `account` token (e.g., a fully-literal `--add-path m/9999'/0'/0'`).
 
@@ -4381,7 +4381,7 @@ mnemonic xpub-search account-of-descriptor \
     {--descriptor <VALUE> | --descriptor-from <NODE>=<VALUE>} \
     [--language <LANG>] [--network <NET>] \
     [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
-    [--add-path <TEMPLATE>]... \
+    [--add-path <PATH>]... \
     [--json]
 ```
 
@@ -4602,7 +4602,7 @@ mnemonic xpub-search passphrase-of-xpub \
     --target-xpub <XPUB-OR-MK1> \
     [--language <LANG>] [--network <NET>] \
     [--min-account 0] [--number-of-accounts 20] [--max-account <N>] \
-    [--add-path <TEMPLATE>]... \
+    [--add-path <PATH>]... \
     [--json]
 ```
 
@@ -4624,7 +4624,7 @@ mnemonic xpub-search passphrase-of-xpub \
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
 | `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
-| `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path |
+| `--add-path <PATH>` | additional derivation path pattern (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Patterns without an `account` token are searched once at the literal path |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
@@ -4975,8 +4975,8 @@ mis-typed or unsafe tree is rejected with a node-addressed diagnostic.
 
 ```sh
 mnemonic build-descriptor --spec <FILE|-> [--allow <RULE>]… [--network <NET>] [--format <FMT>] [--json]
-mnemonic build-descriptor --archetype <NAME> <PARAMS…> [--allow <RULE>]… [--format <FMT>] [--json]
-mnemonic build-descriptor --archetype <NAME> <PARAMS…> --emit-spec   # print the lowered spec JSON
+mnemonic build-descriptor --scheme <NAME> <PARAMS…> [--allow <RULE>]… [--format <FMT>] [--json]
+mnemonic build-descriptor --scheme <NAME> <PARAMS…> --emit-spec   # print the lowered spec JSON
 mnemonic build-descriptor --spec-schema      # dump the node-tree grammar and exit
 ```
 
@@ -4998,7 +4998,7 @@ A versioned JSON document `{"schema_version": 1, "wrapper": "wsh", "root": <node
 | `{"thresh": {"k": K, "subs": [..]}}` | `thresh` | k-of-n over sub-policies |
 | `{"wrap": {"w": "<wrappers>", "sub": <node>}}` | `<w>:<frag>` | explicit miniscript wrapper(s) (`v`,`s`,`a`,…) on a child |
 
-### Archetype presets (`--archetype`, v0.51.0)
+### Named wallet schemes (`--scheme`, v0.51.0)
 
 Five curated vault shapes over the same engine — no JSON authoring. Each
 preset lowers your flag parameters into the canonical policy tree below and
@@ -5036,14 +5036,14 @@ Notes:
 
 ```sh
 # 2-of-3 multisig, single recovery key after ~1 year — no JSON authoring:
-mnemonic build-descriptor --archetype kofn-recovery \
+mnemonic build-descriptor --scheme kofn-recovery \
   --key "[11111111/48h/0h/0h/2h]xpubA…" --key "[22222222/48h/0h/0h/2h]xpubB…" \
   --key "[33333333/48h/0h/0h/2h]xpubC…" --threshold 2 \
   --recovery-key "[44444444/48h/0h/0h/2h]xpubD…" --older 52560 \
   --format descriptor
 
 # Review the generated tree first, then build from it:
-mnemonic build-descriptor --archetype kofn-recovery … --emit-spec > policy.json
+mnemonic build-descriptor --scheme kofn-recovery … --emit-spec > policy.json
 mnemonic build-descriptor --spec policy.json --format descriptor
 ```
 
@@ -5056,7 +5056,7 @@ mnemonic build-descriptor --spec policy.json --format descriptor
 | `--format <FORMAT>` | emit a single bare artifact instead of the rich human view: `descriptor` = the concrete `wsh(M)#checksum`; `bip388` = the BIP-388 wallet-policy JSON. Omit `--format` for the human view (descriptor + first receive address + cost table). Overridden by `--json` |
 | `--json` | emit a structured JSON envelope `{descriptor, bip388, cost, diagnostics}` for the GUI (the `cost` field is the embedded `compare-cost --json` object; `bip388` is `null` when BIP-388 cannot express the policy, e.g. an allowed `repeated-keys` policy). On a gate failure: `{diagnostics: [{node_path, kind, message}]}` with exit 2. In preset mode each diagnostic may additionally carry `flag` — the CLI flag it traces back to (absent when no single flag is responsible, e.g. a duplicate key across two branches) |
 | `--spec-schema` | dump the versioned node-tree grammar JSON (the schema the GUI + presets consume) and exit; ignores all other inputs. Since v0.51.0 it also carries an `archetypes` section: per-preset parameter field-specs (`flag`, `kind`, `required`, `repeatable`, `min`), generated from the registry |
-| `--archetype <ARCHETYPE>` | build from a curated preset instead of a `--spec` node-tree (conflicts with `--spec`): `decaying-multisig`, `hashlock-gated`, `kofn-recovery`, `simple-timelocked-inheritance`, `tiered-recovery`. Parameters via the flags below; the lowered tree flows through the SAME validation gate |
+| `--scheme <SCHEME>` | build from a named wallet scheme instead of a `--spec` node-tree (conflicts with `--spec`): `decaying-multisig`, `hashlock-gated`, `kofn-recovery`, `simple-timelocked-inheritance`, `tiered-recovery`. Parameters via the flags below; the lowered tree flows through the SAME validation gate. Before 2026-11-26 this flag was `--archetype`; that spelling is still accepted as a hidden alias |
 | `--key <KEY>` | primary-path cosigner key (`[fp/path]xpub…`); repeat per cosigner. **Argv order is preserved into the quorum** (even `sortedmulti`'s descriptor string keeps authored order; sorting is script-time) |
 | `--threshold <THRESHOLD>` | primary quorum k |
 | `--recovery-key <RECOVERY_KEY>` | recovery-path cosigner key; repeat per cosigner (argv order preserved) |

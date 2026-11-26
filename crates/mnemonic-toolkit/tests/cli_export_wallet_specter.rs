@@ -23,7 +23,7 @@ const FIXTURE_MULTI_2OF3: &str = "tests/export_wallet/specter_multi_2of3.json";
 const FIXTURE_REFUSAL_MISSING_WALLET_NAME: &str =
     "tests/export_wallet/specter_missing_wallet_name_refusal.stderr";
 
-/// SPEC §8 cell 1 — `--format specter --template bip84 --network mainnet
+/// SPEC §8 cell 1 — `--format specter --scheme bip84 --network mainnet
 /// --wallet-name Daily` emits the canonical Specter import shape.
 #[test]
 fn cell_1_specter_single_wpkh_byte_exact() {
@@ -33,7 +33,7 @@ fn cell_1_specter_single_wpkh_byte_exact() {
             "export-wallet",
             "--format",
             "specter",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -66,7 +66,7 @@ fn cell_2_specter_multi_2of3_byte_exact() {
             "export-wallet",
             "--format",
             "specter",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -122,7 +122,7 @@ fn cell_3_specter_missing_wallet_name_refusal_byte_exact() {
             "export-wallet",
             "--format",
             "specter",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -157,7 +157,7 @@ fn cell_4_specter_descriptor_round_trips_with_canonical_pipeline() {
             "export-wallet",
             "--format",
             "specter",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

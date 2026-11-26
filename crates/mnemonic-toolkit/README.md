@@ -37,56 +37,56 @@ The **[end-user manual](https://github.com/bg002h/mnemonic-toolkit/tree/master/d
 
 ```bash
 # Full mode (single-sig): phrase → 3-card bundle.
-mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84
+mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --scheme bip84
 
 # Watch-only (single-sig): xpub + master fingerprint → 2-card bundle (mk1 + md1).
-mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --template bip84
+mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --scheme bip84
 
 # Multisig 2-of-3 (watch-only with distinct cosigners — the production shape).
-mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
+mnemonic bundle --network mainnet --scheme wsh-sortedmulti --threshold 2 \
     --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
     --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
     --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
 
 # Round-trip verification: confirm the engraved bundle decodes against the original phrase.
 MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
-    --network mainnet --template bip84 \
+    --network mainnet --scheme bip84 \
     --ms1 @env:MS1 --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
 ```
 
 `--json` is available on `bundle` / `verify-bundle` for tooling.
 </details>
 
-## Templates and networks
+## Wallet schemes and networks
 
 ```bash
 # Full mode (single-sig): phrase → 3-card bundle.
-mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84
+mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --scheme bip84
 
 # Watch-only mode (single-sig): xpub + master fingerprint → 2-card bundle (mk1 + md1; ms1 is empty-string sentinel).
-mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --template bip84
+mnemonic bundle --xpub xpub6... --master-fingerprint 5436d724 --network mainnet --scheme bip84
 
 # Multisig 2-of-3 (watch-only with distinct cosigners — the production shape).
-mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
+mnemonic bundle --network mainnet --scheme wsh-sortedmulti --threshold 2 \
     --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
     --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
     --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
 
 # Multisig 2-of-3 (full mode, multi-source — N distinct seeds via --slot, v0.4+).
-mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
+mnemonic bundle --network mainnet --scheme wsh-sortedmulti --threshold 2 \
     --slot "@0.phrase=abandon abandon ... art" \
     --slot "@1.phrase=legal winner thank ... vote" \
     --slot "@2.phrase=letter advice cage ... above"
 
 # Hybrid 2-of-3 (own seed @0 + watch-only cosigners @1, @2 via --slot).
-mnemonic bundle --network mainnet --template wsh-sortedmulti --threshold 2 \
+mnemonic bundle --network mainnet --scheme wsh-sortedmulti --threshold 2 \
     --slot "@0.phrase=abandon abandon ... art" \
     --slot "@1.xpub=xpub6B..." --slot "@1.fingerprint=cafef00d" --slot "@1.path=87'/0'/0'" \
     --slot "@2.xpub=xpub6C..." --slot "@2.fingerprint=cafe1234" --slot "@2.path=87'/0'/0'"
 
 # Privacy-preserving: omit master fingerprints from mk1 cards.
 mnemonic bundle --privacy-preserving \
-    --network mainnet --template wsh-sortedmulti --threshold 2 \
+    --network mainnet --scheme wsh-sortedmulti --threshold 2 \
     --cosigner xpub6A...:fingerprint1:m/87h/0h/0h \
     --cosigner xpub6B...:fingerprint2:m/87h/0h/0h \
     --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
@@ -98,11 +98,11 @@ mnemonic bundle --descriptor "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*,@2/<0;1>/*
     --cosigner xpub6C...:fingerprint3:m/87h/0h/0h
 
 # --self-check: synthesize-then-verify before engraving.
-mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --template bip84 --self-check
+mnemonic bundle --phrase "abandon abandon ... art" --network mainnet --scheme bip84 --self-check
 
 # Round-trip verification: confirm the engraved bundle decodes against the original phrase.
 MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
-    --network mainnet --template bip84 \
+    --network mainnet --scheme bip84 \
     --ms1 @env:MS1 --mk1 mk1q... --md1 md1zs... --md1 md1zs... --md1 md1zs...
 ```
 
@@ -114,7 +114,7 @@ MS1=ms1... mnemonic verify-bundle --phrase "abandon abandon ... art" \
 # BIP-39 phrase ↔ entropy ↔ xpub.
 mnemonic convert --from "phrase=abandon abandon ... art" --to entropy
 mnemonic convert --from "entropy=00000000000000000000000000000000" --to phrase
-mnemonic convert --from "phrase=abandon abandon ... art" --to xpub --template bip84 --network mainnet
+mnemonic convert --from "phrase=abandon abandon ... art" --to xpub --scheme bip84 --network mainnet
 
 # BIP-38 encrypted WIF (v0.7).
 mnemonic convert --from "wif=L4..." --to bip38 --passphrase "TestingOneTwoThree"
@@ -145,11 +145,11 @@ mnemonic convert --from "minikey=SzavMBLoXU6kDrqtUVmffv" --to wif
 
 ```bash
 # Bitcoin Core importdescriptors JSON (default).
-mnemonic export-wallet --template bip84 --network mainnet \
+mnemonic export-wallet --scheme bip84 --network mainnet \
     --slot "@0.xpub=xpub6..." --slot "@0.fingerprint=73c5da0a" --slot "@0.path=m/84'/0'/0'"
 
 # BIP-388 wallet_policy JSON (template-mode).
-mnemonic export-wallet --template wsh-sortedmulti --threshold 2 --format bip388 --network mainnet \
+mnemonic export-wallet --scheme wsh-sortedmulti --threshold 2 --format bip388 --network mainnet \
     --slot "@0.xpub=xpub6A..." --slot "@0.fingerprint=fp1" --slot "@0.path=m/48'/0'/0'/2'" \
     --slot "@1.xpub=xpub6B..." --slot "@1.fingerprint=fp2" --slot "@1.path=m/48'/0'/0'/2'"
 
@@ -158,7 +158,7 @@ mnemonic export-wallet --format bip388 --network mainnet \
     --descriptor "wsh(sortedmulti(2,[fp1/48'/0'/0'/2']xpub6A.../<0;1>/*,[fp2/48'/0'/0'/2']xpub6B.../<0;1>/*))"
 
 # v0.8: taproot multisig — choose internal key (NUMS or cosigner @N).
-mnemonic export-wallet --template tr-multi-a --threshold 2 --network mainnet \
+mnemonic export-wallet --scheme tr-multi-a --threshold 2 --network mainnet \
     --taproot-internal-key nums \
     --slot "@0.xpub=xpub6A..." --slot "@0.fingerprint=fp1" --slot "@0.path=m/48'/0'/0'/2'" \
     --slot "@1.xpub=xpub6B..." --slot "@1.fingerprint=fp2" --slot "@1.path=m/48'/0'/0'/2'"
@@ -185,10 +185,10 @@ mnemonic derive-child --from "xprv=xprv9s21..." \
 # → 1,0,0,2,0,1,5,5,2,4
 ```
 
-## Templates and networks
+## Wallet schemes and networks
 
-- **Single-sig templates:** `bip44` (pkh), `bip49` (sh-wpkh), `bip84` (wpkh), `bip86` (tr).
-- **Multisig templates:** `wsh-multi`, `wsh-sortedmulti`, `sh-wsh-multi`, `sh-wsh-sortedmulti`, `tr-multi-a`, `tr-sortedmulti-a`. Threshold `1 ≤ K ≤ N ≤ 16`. Taproot multisig under `mnemonic export-wallet` requires `--taproot-internal-key <nums|@N>` (v0.8).
+- **Single-sig schemes (`--scheme`):** `bip44` (pkh), `bip49` (sh-wpkh), `bip84` (wpkh), `bip86` (tr).
+- **Multisig schemes (`--scheme`):** `wsh-multi`, `wsh-sortedmulti`, `sh-wsh-multi`, `sh-wsh-sortedmulti`, `tr-multi-a`, `tr-sortedmulti-a`. Threshold `1 ≤ K ≤ N ≤ 16`. Taproot multisig under `mnemonic export-wallet` requires `--taproot-internal-key <nums|@N>` (v0.8).
 - **User-supplied descriptors:** any BIP-388 descriptor string via `--descriptor` / `--descriptor-file`. Multi-leaf taproot (`tr(K, {leaf1, leaf2, ...})`) supported in v0.4+. v0.8 lifts the `--descriptor + --format bip388` refusal in `export-wallet` (multipath `<0;1>/*` form required).
 - **Networks:** `mainnet`, `testnet`, `signet`, `regtest`.
 - **Account:** `--account <u32>` (default `0`).

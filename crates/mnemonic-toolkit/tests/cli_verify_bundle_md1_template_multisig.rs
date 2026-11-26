@@ -131,7 +131,7 @@ fn canonical_bundle_args(
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         script.into(),
         "--threshold".into(),
         threshold.into(),

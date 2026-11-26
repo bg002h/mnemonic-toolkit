@@ -2904,7 +2904,7 @@ mod tests {
     #[test]
     fn descriptor_tr_sortedmulti_a_matches_template_tr_sortedmulti_a_md1() {
         // Wire-bit-identical regression: descriptor-mode tr(@0, sortedmulti_a(...))
-        // must produce md1 byte-identical to template-mode --template tr-sortedmulti-a
+        // must produce md1 byte-identical to template-mode --scheme tr-sortedmulti-a
         // for matching keys/cosigners. This confirms the new Terminal::SortedMultiA
         // walker arm produces the same Tag::SortedMultiA tree the template encoder
         // has been producing since v0.3.0 (template-mode bypasses rust-miniscript).

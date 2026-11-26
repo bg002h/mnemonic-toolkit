@@ -27,7 +27,7 @@ const FIXTURE_REFUSAL_MISSING_THRESHOLD: &str =
     "tests/export_wallet/sparrow_missing_threshold_refusal.stderr";
 const FIXTURE_TR_MULTI_A_NUMS_2OF3: &str = "tests/export_wallet/sparrow_tr_multi_a_nums_2of3.json";
 
-/// SPEC §7 cell 1 — `--format sparrow --template bip84 --network mainnet`
+/// SPEC §7 cell 1 — `--format sparrow --scheme bip84 --network mainnet`
 /// emits the canonical Sparrow wallet JSON for the BIP-84 mainnet account.
 #[test]
 fn cell_1_sparrow_single_wpkh_byte_exact() {
@@ -37,7 +37,7 @@ fn cell_1_sparrow_single_wpkh_byte_exact() {
             "export-wallet",
             "--format",
             "sparrow",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -58,7 +58,7 @@ fn cell_1_sparrow_single_wpkh_byte_exact() {
     );
 }
 
-/// SPEC §7 cell 2 — `--format sparrow --template bip86` emits the p2tr
+/// SPEC §7 cell 2 — `--format sparrow --scheme bip86` emits the p2tr
 /// singlesig shape with `scriptType: P2TR` and `script: tr(@0/**)`.
 #[test]
 fn cell_2_sparrow_single_tr_byte_exact() {
@@ -68,7 +68,7 @@ fn cell_2_sparrow_single_tr_byte_exact() {
             "export-wallet",
             "--format",
             "sparrow",
-            "--template",
+            "--scheme",
             "bip86",
             "--network",
             "mainnet",
@@ -100,7 +100,7 @@ fn cell_3_sparrow_multi_2of3_wsh_sortedmulti_byte_exact() {
             "export-wallet",
             "--format",
             "sparrow",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -156,7 +156,7 @@ fn cell_4_sparrow_missing_threshold_refusal_byte_exact() {
             "export-wallet",
             "--format",
             "sparrow",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             // Note: NO --threshold supplied.
             "--multisig-path-family",
@@ -212,7 +212,7 @@ fn cell_5_sparrow_tr_multi_a_nums_2of3_byte_exact() {
             "export-wallet",
             "--format",
             "sparrow",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--threshold",
             "2",

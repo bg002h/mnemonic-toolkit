@@ -60,7 +60,7 @@ fn bundle_slot_phrase_stdin_succeeds() {
             "@0.phrase=-",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])
@@ -84,7 +84,7 @@ fn bundle_slot_entropy_stdin_succeeds() {
             "@0.entropy=-",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])
@@ -97,7 +97,7 @@ fn bundle_slot_entropy_stdin_succeeds() {
 // Cell 3 — `bundle --slot @0.wif=-`
 // ============================================================================
 
-/// Bug hunt 2026-11-25 X4: `bundle --template` now REFUSES a WIF slot at mint
+/// Bug hunt 2026-11-25 X4: `bundle --scheme` now REFUSES a WIF slot at mint
 /// (a WIF has no chain code; every template derives ranged child addresses).
 /// The stdin form `@0.wif=-` reaches that refusal, not a parse error.
 #[test]
@@ -111,7 +111,7 @@ fn bundle_slot_wif_stdin_refused_at_mint() {
             "@0.wif=-",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])
@@ -127,7 +127,7 @@ fn bundle_slot_wif_stdin_refused_at_mint() {
 // (decode_path rejected the empty/no-path origin as PathTooDeep(0)). mk-codec 0.4.0's
 // no-path/depth-0 support makes it round-trip. Since X4 (2026-11-25) `bundle` no
 // longer MINTS a WIF card, so this fixture was captured from the toolkit before
-// that change (`bundle --slot @0.wif=- --template bip84 --network mainnet` with
+// that change (`bundle --slot @0.wif=- --scheme bip84 --network mainnet` with
 // MAINNET_WIF on stdin): an EXISTING WIF card must keep decoding.
 const PRE_X4_WIF_MK1: &[&str] = &[
     "mk1qpskrypqqsqctpj8kgqqqqqqlcqqfz9jrcqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqxa5945vdr3qrvzs5",
@@ -180,7 +180,7 @@ fn verify_bundle_slot_phrase_stdin_succeeds() {
         "@0.phrase=-".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--ms1".into(),
         ms1,
@@ -225,7 +225,7 @@ fn bundle_passphrase_stdin_empty_round_trips_pinned_fixture() {
             &format!("@0.phrase={TREZOR_24}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--passphrase-stdin",
             "--no-engraving-card",
@@ -273,7 +273,7 @@ fn verify_bundle_passphrase_stdin_empty_round_trips_pinned_fixture() {
         format!("@0.phrase={TREZOR_24}"),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--passphrase-stdin".into(),
         "--ms1".into(),

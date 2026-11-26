@@ -29,7 +29,7 @@ fn bundle_via_phrase(phrase: &str) -> Vec<u8> {
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -45,7 +45,7 @@ fn bundle_via_seedqr(digits: &str) -> Vec<u8> {
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -95,7 +95,7 @@ fn bundle_seedqr_slot_invalid_digit_count_refused() {
     let assertion = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -121,7 +121,7 @@ fn bundle_seedqr_slot_checksum_failure_refused() {
     let assertion = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -147,7 +147,7 @@ fn bundle_seedqr_slot_stdin_sentinel_happy_path() {
     let via_seedqr_stdin = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -173,7 +173,7 @@ fn bundle_seedqr_slot_double_stdin_refused() {
     let assertion = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "wsh-multi",
             "--threshold",
             "2",

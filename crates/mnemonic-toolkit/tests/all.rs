@@ -184,6 +184,7 @@ mod cli_restore_multisig;
 mod cli_restore_multisig_format;
 mod cli_restore_multisig_general;
 mod cli_restore_taproot;
+mod cli_scheme_flag_alias;
 mod cli_secret_in_argv_warning;
 mod cli_seed_xor_advisories;
 mod cli_seed_xor_happy_paths;

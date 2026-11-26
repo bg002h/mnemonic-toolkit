@@ -243,7 +243,7 @@ impl EmissionKind {
 /// Invoked at each of `export-wallet`'s two `EmitInputs` construction sites
 /// (`run` and `run_from_import_json`), on that arm's canonical descriptor,
 /// honouring the [`AllowSet`]. Uniform: the rule runs on every wrapper and every
-/// arm. On the `--template`/`--slot` arm it therefore RUNS and cannot fire — a
+/// arm. On the `--scheme`/`--slot` arm it therefore RUNS and cannot fire — a
 /// consequence of the uniform gate, not an exemption from it.
 ///
 /// `kind` selects only the refusal's closing sentence (PLAN Phase 1b). It does

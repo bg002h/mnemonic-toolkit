@@ -11,7 +11,7 @@
 //!
 //! Fixtures: known-valid m-format strings reused from `src/repair.rs::tests`.
 //!   - VALID_MS1 was generated from the TREZOR_12_ZERO entropy via
-//!     `mnemonic bundle --template bip84 --slot @0.phrase=… --json`.
+//!     `mnemonic bundle --scheme bip84 --slot @0.phrase=… --json`.
 //!   - VALID_MK1_LONG / VALID_MK1_REG were generated 2026-05-17 from the
 //!     canonical `abandon × 11 about` phrase.
 

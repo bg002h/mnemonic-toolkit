@@ -8,7 +8,7 @@
 //!   when `--descriptor` is present (closes the v1-deferred §6.10.7 row).
 //!
 //! - §6.10.8 (NEW) — per-subcommand `meta.template_groups` block emitted for
-//!   subcommands that consume `--template`. Block partitions `CliTemplate`
+//!   subcommands that consume `--scheme`. Block partitions `CliTemplate`
 //!   variants into `single_sig` / `multisig` per
 //!   `CliTemplate::is_multisig()` source-of-truth (`src/template.rs`).
 //!   GUI consumer retires its hand-coded `SINGLE_SIG_TEMPLATES: &[&str]`
@@ -167,7 +167,7 @@ fn bundle_emits_meta_template_groups() {
 
 #[test]
 fn verify_bundle_emits_meta_template_groups() {
-    // verify-bundle consumes --template; meta block must be present.
+    // verify-bundle consumes --scheme; meta block must be present.
     let v = run_gui_schema();
     let groups = meta_template_groups(&v, "verify-bundle");
     assert!(
@@ -178,7 +178,7 @@ fn verify_bundle_emits_meta_template_groups() {
 
 #[test]
 fn export_wallet_emits_meta_template_groups() {
-    // export-wallet consumes --template; meta block must be present.
+    // export-wallet consumes --scheme; meta block must be present.
     let v = run_gui_schema();
     let groups = meta_template_groups(&v, "export-wallet");
     assert!(
@@ -189,13 +189,13 @@ fn export_wallet_emits_meta_template_groups() {
 
 #[test]
 fn derive_child_omits_meta_template_groups() {
-    // v0.17.1 P0: derive-child does NOT consume `--template` (the subcommand
-    // has zero `--template` references in `crates/mnemonic-toolkit/src/cmd/
+    // v0.17.1 P0: derive-child does NOT consume `--scheme` (the subcommand
+    // has zero `--scheme` references in `crates/mnemonic-toolkit/src/cmd/
     // derive_child.rs`). The previous test cell at this position
     // (`derive_child_emits_meta_template_groups`) enshrined the wrong
     // invariant — `build_subcommand_meta`'s spurious match-arm inclusion of
     // `derive-child` emitted a meta.template_groups block on a subcommand
-    // with no `--template` widget. The v0.17.1 fix removes the match arm;
+    // with no `--scheme` widget. The v0.17.1 fix removes the match arm;
     // this negative cell guards against re-introduction.
     // Tracks FOLLOWUP `gui-schema-derive-child-meta-template-groups-spurious`.
     let v = run_gui_schema();
@@ -204,24 +204,24 @@ fn derive_child_omits_meta_template_groups() {
     assert!(
         template_groups.is_null() || derive_child["meta"].is_null(),
         "derive-child subcommand MUST NOT emit meta.template_groups (no \
-         --template flag in derive_child.rs). Got: {template_groups:?}"
+         --scheme flag in derive_child.rs). Got: {template_groups:?}"
     );
 }
 
 #[test]
 fn subcommands_without_template_flag_omit_meta_template_groups() {
     // §6.10.8 requires meta.template_groups for subcommands that consume
-    // `--template`. Subcommands that do NOT consume `--template` MUST omit
+    // `--scheme`. Subcommands that do NOT consume `--scheme` MUST omit
     // the block entirely (no empty `single_sig: []` / `multisig: []` stub).
     let v = run_gui_schema();
-    // `convert` does not consume `--template` (it operates on xpub
+    // `convert` does not consume `--scheme` (it operates on xpub
     // network-prefix transforms).
     let convert = find_sub(&v, "convert");
     let convert_template_groups = &convert["meta"]["template_groups"];
     assert!(
         convert_template_groups.is_null() || convert["meta"].is_null(),
         "convert subcommand MUST NOT emit meta.template_groups (convert does \
-         not consume --template). Got: {convert_template_groups:?}"
+         not consume --scheme). Got: {convert_template_groups:?}"
     );
 }
 

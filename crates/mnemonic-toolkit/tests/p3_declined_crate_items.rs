@@ -102,7 +102,7 @@ fn mnemonic_writes_to_a_terminal_without_refusing() {
             "@0.phrase=-",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .write_stdin(PHRASE)

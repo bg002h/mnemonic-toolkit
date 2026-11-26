@@ -128,7 +128,7 @@ fn emit_template_md1(script: &str, threshold: &str, cosigners: &[(&str, u32)]) -
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         script.into(),
         "--threshold".into(),
         threshold.into(),
@@ -159,7 +159,7 @@ fn emit_template_wallet_id(script: &str, threshold: &str, cosigners: &[(&str, u3
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         script.into(),
         "--threshold".into(),
         threshold.into(),
@@ -200,7 +200,7 @@ fn emit_cosigner_mk1(
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         script.into(),
         "--threshold".into(),
         threshold.into(),
@@ -1595,7 +1595,7 @@ fn bundle_bip87_arg_vec(form: &str, threshold: &str, cosigners: &[(&str, u32)]) 
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         threshold.into(),
@@ -2047,7 +2047,7 @@ fn singlesig_template_completion_unchanged() {
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -2105,7 +2105,7 @@ fn singlesig_template_completion_unchanged() {
 // 3 keys → 3! = 6 permutations (a fast shape).
 //
 // The template + per-cosigner mk1s are emitted via `bundle --md1-form=
-// template|policy --descriptor <full general descriptor>` (NOT `--template`,
+// template|policy --descriptor <full general descriptor>` (NOT `--scheme`,
 // which is canonical-only). The independent golden is built directly from the
 // SAME descriptor string via rust-miniscript (NOT an md-codec reconstruction).
 // ===========================================================================

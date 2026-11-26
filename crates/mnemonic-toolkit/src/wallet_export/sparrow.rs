@@ -103,7 +103,7 @@ struct SparrowKeyDerivation {
 pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, ToolkitError> {
     let template = inputs.template.ok_or_else(|| {
         ToolkitError::BadInput(
-            "--format sparrow requires --template; descriptor passthrough is not supported by Sparrow's file-import surface".into(),
+            "--format sparrow requires --scheme; descriptor passthrough is not supported by Sparrow's file-import surface".into(),
         )
     })?;
 

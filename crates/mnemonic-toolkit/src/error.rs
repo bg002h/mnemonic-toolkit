@@ -997,7 +997,7 @@ impl ToolkitError {
             ToolkitError::XpubSearchNoMatch { mode, searched } => format!(
                 "no match in searched set: mode={mode}, paths searched={searched}; \
                  widen the range with --max-account / --number-of-accounts, or supply \
-                 additional templates via --add-path"
+                 additional derivation path patterns via --add-path"
             ),
             ToolkitError::XpubSearchPassphraseCandidatesExhausted { candidates_tried } => {
                 if *candidates_tried == 0 {

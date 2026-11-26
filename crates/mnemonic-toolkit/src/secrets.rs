@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn known_non_secret_flags_classify_as_non_secret() {
         // --mk1 = xpub (non-secret); --md1 = descriptor (non-secret).
-        // --account / --template / --network / --from / --to / --no-auto-repair
+        // --account / --scheme / --network / --from / --to / --no-auto-repair
         // are non-secret-bearing (or value-dependent, handled elsewhere).
         // --decrypt-password-file holds a filesystem PATH, not the secret
         // itself — the inline --decrypt-password / --decrypt-password-stdin
@@ -113,7 +113,7 @@ mod tests {
             "--mk1",
             "--md1",
             "--account",
-            "--template",
+            "--scheme",
             "--network",
             "--from",
             "--to",

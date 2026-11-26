@@ -28,7 +28,7 @@ pub(crate) fn build_descriptor_string(
     // DELIBERATELY STRICT, and the only strict descriptor parse left on the
     // `export-wallet` path (PLAN `PLAN_wallet_file_export.md` Phase 1). It is
     // NOT an admission point for `sigless-branch`: this canonicalizes the
-    // BUILDER's own output for the `--template`/`--slot` arm, and a
+    // BUILDER's own output for the `--scheme`/`--slot` arm, and a
     // builder-produced descriptor cannot carry a sigless branch — every
     // template is a `pk`/`multi`/`multi_a`/`sortedmulti` quorum. The uniform
     // admission gate still runs on the result, and simply never fires there.

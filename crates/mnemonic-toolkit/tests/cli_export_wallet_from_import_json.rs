@@ -89,7 +89,7 @@ fn export_wallet_from_import_json_to_bip388_emits_valid_wallet_policy() {
 // Cell 3 — jade/sparrow/coldcard/specter/electrum/green refuse
 // descriptor-mode input. The wallet-import envelope is always
 // descriptor-mode (Phase 4 emits with template=None), so these formats
-// surface the existing per-emitter "--template required" refusal.
+// surface the existing per-emitter "--scheme required" refusal.
 // Pinning this behavior at v0.27.0 prevents accidental regressions on
 // the per-emitter contract.
 // ============================================================================
@@ -115,7 +115,7 @@ fn export_wallet_from_import_json_to_template_only_format_refuses_with_helpful_m
         let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
         // v0.37.0: `envelope_v0_27_0.json` is sh(multi(...)) → P2shMulti, which
         // has no export-wallet template, so the auto-derive refuses with the
-        // new legacy-P2SH message (NOT the old "requires --template").
+        // new legacy-P2SH message (NOT the old "requires --scheme").
         assert!(
             stderr.contains("legacy bare P2SH") || stderr.contains("has no export-wallet template"),
             "format {fmt} must refuse the sh(multi) envelope with the P2shMulti template-derivation message; got: {stderr}"
@@ -124,7 +124,7 @@ fn export_wallet_from_import_json_to_template_only_format_refuses_with_helpful_m
 }
 
 // ============================================================================
-// Cell 5 — mutex: --template + --from-import-json errors.
+// Cell 5 — mutex: --scheme + --from-import-json errors.
 // ============================================================================
 
 #[test]
@@ -134,7 +134,7 @@ fn export_wallet_from_import_json_with_template_errors_mutex() {
         .unwrap()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--from-import-json",
             p.to_str().unwrap(),
@@ -458,7 +458,7 @@ fn export_wallet_from_import_json_malformed_json_errors() {
 //
 // Each "refusal" cell asserts the template-only destination surfaces
 // the existing emitter-contract refusal message
-// (`requires --template` / `descriptor passthrough is not supported` /
+// (`requires --scheme` / `descriptor passthrough is not supported` /
 // `does not support multisig`).
 //
 // Source format ⇒ fixture map (P11B). Each source fixture is a
@@ -692,7 +692,7 @@ const ALL_SOURCES: &[&str] = &[
 const SINGLESIG_SOURCES: &[&str] = &["bitcoin-core", "coldcard", "electrum"];
 
 /// Descriptor-capable destinations — accept any descriptor-mode
-/// envelope without `--template`. Verified at `wallet_export/*.rs`:
+/// envelope without `--scheme`. Verified at `wallet_export/*.rs`:
 /// bitcoin-core (always), bip388 (always), bsms (refuses ONLY when
 /// script_type is P2tr / P2trMulti per v0.28.0 P8A).
 const DESCRIPTOR_CAPABLE_DESTS: &[&str] = &["bitcoin-core", "bip388", "bsms"];
@@ -974,15 +974,15 @@ const SOURCES_LACKING_WALLET_NAME: &[&str] = &["bsms"];
 /// Allowed refusal stderr substrings. Each template-only emitter has
 /// its own message but they all contain one of these literals.
 const REFUSAL_STDERR_PATTERNS: &[&str] = &[
-    "requires --template",
+    "requires --scheme",
     // v0.28.4: coldcard-multisig precheck emits this distinct phrase.
-    "requires a multisig --template",
+    "requires a multisig --scheme",
     "descriptor passthrough is not supported",
     "does not support multisig",
     // Specter wallet-name path (descriptor mode with no wallet_name).
     "--wallet-name",
     // v0.37.0: jade singlesig refusal (template IS set on the from-import-json
-    // path, so it bypasses the old "requires --template" message).
+    // path, so it bypasses the old "requires --scheme" message).
     "emits multisig wallet config only",
 ];
 
@@ -1002,10 +1002,10 @@ fn assert_refusal(res: &ExportResult, src: &str, dest: &str) {
     );
 }
 
-/// v0.37.0 — `--from-import-json` now auto-derives the `--template` from the
+/// v0.37.0 — `--from-import-json` now auto-derives the `--scheme` from the
 /// envelope descriptor for template-requiring formats, so the 40-cell matrix
 /// is no longer all-refusals. Each cell must match the equivalent direct
-/// `--template <derived>` invocation (SPEC §0 invariant). The 6 cells that
+/// `--scheme <derived>` invocation (SPEC §0 invariant). The 6 cells that
 /// still refuse are the 3 singlesig sources → {coldcard-multisig, jade}
 /// (multisig-only file-import surfaces); the other 34 succeed.
 #[test]

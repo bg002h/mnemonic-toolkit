@@ -241,7 +241,7 @@ fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -285,7 +285,7 @@ fn bundle_full_phrase_only_no_info_line_card_then_warning() {
             &format!("@0.phrase={TREZOR_24}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -334,7 +334,7 @@ fn bundle_multisig_two_normalized_slots_emit_info_lines_in_slot_order() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",

@@ -17,7 +17,7 @@
 //!   E1 — `convert` xpub→address        (convert.rs)
 //!   E2 — `xpub-search address-of-xpub` (xpub_search/address_of_xpub.rs)
 //!   E3 — `silent-payment` xprv/tprv master (silent_payment.rs)
-//!   E4 — `export-wallet --template/--slot` (export_wallet.rs)
+//!   E4 — `export-wallet --scheme/--slot` (export_wallet.rs)
 //!   E5 — `export-wallet --descriptor --format bsms` 4-line mint (wallet_export/bsms.rs)
 
 use assert_cmd::Command;
@@ -48,7 +48,7 @@ fn assert_mismatch(out: &std::process::Output, who: &str) {
 // ---------------------------------------------------------------------------
 // Test vectors — all derived from the standard "abandon"×11 + "about" BIP-39
 // test mnemonic (empty passphrase), BIP-84 single-sig, account 0. Verified at
-// impl time via `mnemonic convert --from phrase=... --to xpub/xprv --template
+// impl time via `mnemonic convert --from phrase=... --to xpub/xprv --scheme
 // bip84 --network <mainnet|testnet>` against the running binary.
 // ---------------------------------------------------------------------------
 
@@ -74,7 +74,7 @@ const TESTNET_RECEIVE_0: &str = "tb1q6rz28mcfaxtmd6v789l9rrlrusdprr9pqcpvkl";
 /// template bip84, network testnet) — 2 whitespace-joined chunks per the mk1
 /// wire form `resolve_target_xpub` expects. Deterministic re-derivation via
 /// `mnemonic bundle --slot @0.xpub=<TESTNET_TPUB> --slot @0.fingerprint=00000000
-/// --template bip84 --network testnet --json` (verified byte-identical across
+/// --scheme bip84 --network testnet --json` (verified byte-identical across
 /// repeated runs — no randomness in the watch-only single-mk1 encode path).
 const TESTNET_MK1: &str = "mk1qpgrpdpqqsq5psk6z5qqqqqqzvzrtp70pm6trteu3ssr0mjvzcsa5rf53k63zcmsnf3z6rfg8rw7dkzpn3glvvquvgpmsqu0z442zjf250ld \
 mk1qpgrpdpp3c8mu0myvvm7myaups8nhpplea7jtz09ajyyw48xgqsz02yskj2hqkegezdnk6eyarut3";
@@ -397,7 +397,7 @@ fn e3c_seed_phrase_input_is_network_agnostic_ok() {
 }
 
 // ===========================================================================
-// E4 — `export-wallet --template/--slot` (export_wallet.rs)
+// E4 — `export-wallet --scheme/--slot` (export_wallet.rs)
 // ===========================================================================
 
 #[test]
@@ -407,7 +407,7 @@ fn e4a_template_slot_testnet_xpub_default_mainnet_network_rejects() {
     let out = bin()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &format!("@0.xpub={TESTNET_TPUB}"),
@@ -420,7 +420,7 @@ fn e4a_template_slot_testnet_xpub_default_mainnet_network_rejects() {
         ])
         .output()
         .expect("spawn");
-    assert_mismatch(&out, "E4a export-wallet --template/--slot");
+    assert_mismatch(&out, "E4a export-wallet --scheme/--slot");
     assert!(
         !String::from_utf8_lossy(&out.stdout).contains("zpub"),
         "no mainnet zpub must be minted: {:?}",
@@ -433,7 +433,7 @@ fn e4b_template_slot_testnet_xpub_explicit_testnet_network_ok() {
     let out = bin()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &format!("@0.xpub={TESTNET_TPUB}"),
@@ -467,7 +467,7 @@ fn e4c_template_slot_mainnet_xpub_default_network_ok() {
     let out = bin()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &format!("@0.xpub={MAINNET_XPUB}"),
@@ -520,7 +520,7 @@ fn e4_minor_master_xpub_slot_testnet_default_mainnet_network_rejects() {
     let out = bin()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &format!("@0.xpub={MAINNET_XPUB}"),

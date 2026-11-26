@@ -26,7 +26,7 @@ flowchart LR
   c0["Cosigner 0<br/>seed phrase A"]:::secret
   c1["Cosigner 1<br/>seed phrase B"]:::secret
   c2["Cosigner 2<br/>seed phrase C"]:::secret
-  toolkit{{mnemonic bundle<br/>--template wsh-sortedmulti<br/>--threshold 2}}:::layer
+  toolkit{{mnemonic bundle<br/>--scheme wsh-sortedmulti<br/>--threshold 2}}:::layer
   c0 --> toolkit
   c1 --> toolkit
   c2 --> toolkit
@@ -67,7 +67,7 @@ For taproot multisig, see [Taproot multisig](#taproot-multisig).
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
@@ -78,7 +78,7 @@ mnemonic bundle \
 
 The interesting flags vs. single-sig:
 
-- **`--template wsh-sortedmulti`** — BIP-67-sorted segwit multisig. The
+- **`--scheme wsh-sortedmulti`** — BIP-67-sorted segwit multisig. The
   emitted descriptor will be `wsh(sortedmulti(2,@0,@1,@2))`.
 - **`--threshold 2`** — the K of K-of-N. Required for multisig
   templates; ignored for single-sig.
@@ -99,7 +99,7 @@ stderr stream; the stdout strings are grouped per card type.
 ```sh
 mnemonic verify-bundle \
   --network mainnet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
@@ -154,7 +154,7 @@ remains:
 |---|---|
 | One cosigner's ms1 | Other two cosigners' ms1s + the public mk1 set + md1 reconstruct the wallet. The lost ms1 is a regenerable surface (re-stamp from the still-valid phrase, if the cosigner can restate it). |
 | One mk1 plate | Re-derive from any cosigner's seed via `mnemonic convert --from phrase=… --to mk1`. The mk1 carries no secret; rebuilding it is fast. |
-| The md1 plate | Re-derive from `mnemonic export-wallet --template wsh-sortedmulti --threshold 2 --slot @N.xpub=…` (one slot per cosigner; only their xpubs are needed, no seeds). |
+| The md1 plate | Re-derive from `mnemonic export-wallet --scheme wsh-sortedmulti --threshold 2 --slot @N.xpub=…` (one slot per cosigner; only their xpubs are needed, no seeds). |
 | Any *one* full card category (all ms1s, or all mk1s, or the md1) | Recoverable — the seeds reconstruct everything from scratch given the policy. |
 | Two ms1s + the md1 | The threshold is 2; the surviving two seeds spend the wallet. |
 | Three ms1s lost | Wallet is bricked — funds unrecoverable. |
@@ -174,7 +174,7 @@ their own air-gapped device:
    mnemonic convert \
      --from phrase="<their phrase>" \
      --to xpub \
-     --template wsh-sortedmulti \
+     --scheme wsh-sortedmulti \
      --account 0
    ```
 
@@ -186,7 +186,7 @@ their own air-gapped device:
    ```sh
    mnemonic bundle \
      --network mainnet \
-     --template wsh-sortedmulti \
+     --scheme wsh-sortedmulti \
      --threshold 2 \
      --slot @0.xpub=<xpub-0> \
      --slot @1.xpub=<xpub-1> \

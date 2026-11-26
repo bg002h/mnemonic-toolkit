@@ -31,7 +31,7 @@ const TREZOR_12_BIP84_TESTNET_UPUB: &str = "upub5DGMS1SD7bMtVaPGsQmFWqyBNYtqrniv
 const TREZOR_24_BIP84_ACCT_XPUB_FINGERPRINT: &str = "2bd87e08";
 
 /// Wallet master fingerprint for the trezor-24 seed; emitted by `convert
-/// --from phrase --to fingerprint --template bip84` (the BIP-39-rooted
+/// --from phrase --to fingerprint --scheme bip84` (the BIP-39-rooted
 /// derivation path returns the master fingerprint via `derive_bip32_from_entropy`).
 const TREZOR_24_MASTER_FINGERPRINT: &str = "5436d724";
 
@@ -170,7 +170,7 @@ fn output_xpub_prefix_zpub_mainnet() {
             "xpub",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--xpub-prefix",
             "zpub",
@@ -194,7 +194,7 @@ fn output_xpub_prefix_big_z_mainnet() {
             "xpub",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--xpub-prefix",
             "Zpub",
@@ -222,7 +222,7 @@ fn output_xpub_prefix_ypub_and_big_y_mainnet() {
                 "xpub",
                 "--network",
                 "mainnet",
-                "--template",
+                "--scheme",
                 "bip84",
                 "--xpub-prefix",
                 variant,
@@ -248,7 +248,7 @@ fn output_xpub_prefix_default_xpub_is_neutral() {
             "xpub",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--xpub-prefix",
             "xpub",
@@ -274,7 +274,7 @@ fn output_xpub_prefix_testnet_zpub_emits_vpub() {
             "xpub",
             "--network",
             "testnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--xpub-prefix",
             "zpub",
@@ -300,7 +300,7 @@ fn refusal_xpub_prefix_non_default_without_network() {
             &format!("phrase={TREZOR_24}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip84",
             "--xpub-prefix",
             "zpub",
@@ -362,7 +362,7 @@ fn xpub_prefix_silently_ignored_on_non_xpub_target() {
             "fingerprint",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--xpub-prefix",
             "zpub",

@@ -230,11 +230,20 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub network: Option<CliNetwork>,
 
-    #[arg(long)]
+    /// Named wallet scheme (single-sig BIP-44/49/84/86 derivation schemes, or the
+    /// BIP-388 common multisig schemes); picks the derivation path (with
+    /// --account) and, for --to address, the script type.
+    // `--template` stays accepted as a hidden alias (renamed 2026-11-26).
+    #[arg(
+        id = "scheme",
+        long = "scheme",
+        value_name = "SCHEME",
+        alias = "template"
+    )]
     pub template: Option<CliTemplate>,
 
     /// BIP-32 derivation path from the master key, literal form `m/...`. Overrides the
-    /// --template/--account path for --to xpub/xprv; required for --to wif, --to address
+    /// --scheme/--account path for --to xpub/xprv; required for --to wif, --to address
     /// (from a seed) and composite --to bip38. Refused where no requested target uses it.
     #[arg(long, verbatim_doc_comment)]
     pub path: Option<String>,
@@ -343,7 +352,7 @@ pub struct ConvertArgs {
     ///   p2sh-p2wpkh  nested-segwit single-sig
     ///   p2tr         taproot single-sig
     ///
-    /// If absent and `--template` is supplied, inferred from the
+    /// If absent and `--scheme` is supplied, inferred from the
     /// template (`bip44` → p2pkh, `bip84` → p2wpkh, `bip49` → p2sh-p2wpkh,
     /// `bip86` → p2tr); else refused. (SPEC v0.7 §10.a; P2PKH added v0.26.0)
     #[arg(long = "script-type", value_parser = parse_script_type_arg, verbatim_doc_comment)]
@@ -402,7 +411,7 @@ pub fn parse_script_type_arg(s: &str) -> Result<ScriptType, String> {
     }
 }
 
-/// SPEC v0.7 §10.a — infer script-type from `--template` when `--script-type`
+/// SPEC v0.7 §10.a — infer script-type from `--scheme` when `--script-type`
 /// is absent. Single-sig templates (`bip44` / `bip49` / `bip84` / `bip86`)
 /// map cleanly; multisig templates return None (refused upstream as
 /// `refusal_address_script_type_unknown_template`).
@@ -489,13 +498,13 @@ fn refusal_sibling_pivot(from: NodeType, to: NodeType) -> ToolkitError {
 
 fn refusal_xpub_to_mk1() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --template ...' to emit a complete bundle.".into(),
+        "--to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --scheme ...' to emit a complete bundle.".into(),
     )
 }
 
 fn refusal_phrase_entropy_to_wif_no_path() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).".into(),
+        "--to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --scheme/--account).".into(),
     )
 }
 
@@ -659,13 +668,13 @@ fn refusal_address_no_path() -> ToolkitError {
 
 fn refusal_address_no_script_type() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
+        "--to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --scheme (script-type inferred from template).".into(),
     )
 }
 
 fn refusal_address_script_type_unknown_template() -> ToolkitError {
     ToolkitError::ConvertRefusal(
-        "--template does not infer a single-sig --script-type for --to address (bip44/bip49/bip84/bip86 supported; multisig templates require explicit --script-type).".into(),
+        "--scheme does not infer a single-sig --script-type for --to address (bip44/bip49/bip84/bip86 supported; multisig templates require explicit --script-type).".into(),
     )
 }
 
@@ -1386,14 +1395,14 @@ fn compute_outputs(
                 )?)
             } else if needs_derive {
                 // A fingerprint-only request does not read --path (R4), so the
-                // refusal names --template alone there.
+                // refusal names --scheme alone there.
                 let reads_path = targets.iter().any(|t| matches!(t, Xpub | Xprv));
                 let template = args.template.ok_or_else(|| {
                     ToolkitError::BadInput(if reads_path {
-                        "--template or --path is required for derivation targets (xpub/xprv/fingerprint)"
+                        "--scheme or --path is required for derivation targets (xpub/xprv/fingerprint)"
                             .into()
                     } else {
-                        "--template is required for --to fingerprint (the master fingerprint; --path is not read)"
+                        "--scheme is required for --to fingerprint (the master fingerprint; --path is not read)"
                             .into()
                     })
                 })?;
@@ -1455,7 +1464,7 @@ fn compute_outputs(
                     Wif => {
                         // SPEC-A v0.6.1: phrase/entropy → wif requires explicit
                         // --path. `needs_derive` deliberately does NOT include
-                        // Wif, so --template is not required for this edge.
+                        // Wif, so --scheme is not required for this edge.
                         let path_str = args
                             .path
                             .as_deref()
@@ -1551,7 +1560,7 @@ fn compute_outputs(
                         // relative to a template-derived account xpub), matching
                         // the semantics of the `phrase|entropy → wif` edge:
                         // the user supplies a path that derives directly to the
-                        // leaf pubkey. `--script-type` (or `--template`-inferred)
+                        // leaf pubkey. `--script-type` (or `--scheme`-inferred)
                         // selects the address dispatch.
                         let path_str = args.path.as_deref().ok_or_else(refusal_address_no_path)?;
                         let path = parse_literal_path(path_str)?;
@@ -1911,7 +1920,7 @@ fn map_electrum_error(_e: electrum::ElectrumError) -> ToolkitError {
 }
 
 /// SPEC v0.7 §10.a — resolve the `--script-type` from explicit flag, then
-/// `--template` inference, then refuse. Callers reach this only on the
+/// `--scheme` inference, then refuse. Callers reach this only on the
 /// `(*, Address)` edge where the resolved type is mandatory.
 fn resolve_script_type(args: &ConvertArgs) -> Result<ScriptType, ToolkitError> {
     if let Some(st) = args.script_type {

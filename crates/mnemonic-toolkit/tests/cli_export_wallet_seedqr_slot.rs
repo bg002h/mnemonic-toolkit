@@ -20,7 +20,7 @@ fn export_wallet_seedqr_slot_refused_watch_only_invariant() {
             "export-wallet",
             "--format",
             "bitcoin-core",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

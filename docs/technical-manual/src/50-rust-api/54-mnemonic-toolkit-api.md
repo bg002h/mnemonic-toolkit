@@ -344,7 +344,7 @@ The `mnemonic bundle` and `mnemonic verify-bundle` subcommands emit a serde-seri
 | `template` | `&'static str` | template name (multisig only) |
 | `threshold` | `Option<u8>` | `K` in `K-of-N` for a plain k-of-n bundle; `None` (`null`) for a general policy (SPEC §5.5) |
 | `cosigner_count` | `usize` | `N` |
-| `path_family` | `&'static str` | `"bip48"` or `"bip87"` (`--template` mode); `"descriptor"` in descriptor mode (`--descriptor`, `--descriptor-file`, `--import-json`), per SPEC v0.3 §5.3 |
+| `path_family` | `&'static str` | `"bip48"` or `"bip87"` (`--scheme` mode); `"descriptor"` in descriptor mode (`--descriptor`, `--descriptor-file`, `--import-json`), per SPEC v0.3 §5.3 |
 | `cosigners` | `Vec<CosignerEntry>` | per-cosigner descriptor |
 
 (Source: `format.rs::MultisigInfo`.)
@@ -428,7 +428,7 @@ The `mk1` field deserialises as `Vec<String>` for single-sig (the `MkField::Sing
 
 Eight vendor formats are wired at HEAD; their `--format` selector values come from the `CliExportFormat` enum at `cmd/export_wallet.rs::CliExportFormat`. The eight sub-sub-sections below cover each format in selector-enum-declaration order. The matrix in §V.4.5.10 cross-tabulates accept / refuse by descriptor shape.
 
-`EmitInputs` field reference (per `wallet_export/mod.rs::EmitInputs`): `canonical_descriptor: &str` (BIP-380 form with `#checksum`); `resolved_slots: &[ResolvedSlot]` (slot-index order; empty when `--descriptor` was supplied without `--template`); `template: Option<CliTemplate>`; `script_type: WalletScriptType`\index{WalletScriptType} (`wallet_export/mod.rs::WalletScriptType`; eight variants — `P2pkh`, `P2shP2wpkh`, `P2wpkh`, `P2tr`, `P2shMulti`, `P2shP2wshMulti`, `P2wshMulti`, `P2trMulti`); `network: CliNetwork`; `account: u32`; `threshold: Option<u8>`; `threshold_user_supplied: bool` (Sparrow consults this); `master_xpub_at_0: Option<bitcoin::bip32::Xpub>` (`@0.master_xpub=<base58>` plumbing — Coldcard only); `wallet_name: &str`; `wallet_name_was_user_supplied: bool` (Specter consults this); `taproot_internal_key: Option<TaprootInternalKey>`\index{TaprootInternalKey} (`Nums` or `Cosigner(u8)`; `wallet_export/mod.rs::TaprootInternalKey`); `range: (u32, u32)`; `timestamp: TimestampArg`\index{TimestampArg} (`wallet_export/mod.rs::TimestampArg`; `Now` or `Unix(i64)`); `bitcoin_core_version: u8`.
+`EmitInputs` field reference (per `wallet_export/mod.rs::EmitInputs`): `canonical_descriptor: &str` (BIP-380 form with `#checksum`); `resolved_slots: &[ResolvedSlot]` (slot-index order; empty when `--descriptor` was supplied without `--scheme`); `template: Option<CliTemplate>`; `script_type: WalletScriptType`\index{WalletScriptType} (`wallet_export/mod.rs::WalletScriptType`; eight variants — `P2pkh`, `P2shP2wpkh`, `P2wpkh`, `P2tr`, `P2shMulti`, `P2shP2wshMulti`, `P2wshMulti`, `P2trMulti`); `network: CliNetwork`; `account: u32`; `threshold: Option<u8>`; `threshold_user_supplied: bool` (Sparrow consults this); `master_xpub_at_0: Option<bitcoin::bip32::Xpub>` (`@0.master_xpub=<base58>` plumbing — Coldcard only); `wallet_name: &str`; `wallet_name_was_user_supplied: bool` (Specter consults this); `taproot_internal_key: Option<TaprootInternalKey>`\index{TaprootInternalKey} (`Nums` or `Cosigner(u8)`; `wallet_export/mod.rs::TaprootInternalKey`); `range: (u32, u32)`; `timestamp: TimestampArg`\index{TimestampArg} (`wallet_export/mod.rs::TimestampArg`; `Now` or `Unix(i64)`); `bitcoin_core_version: u8`.
 
 #### V.4.5.9.1 `--format bitcoin-core`
 
@@ -502,7 +502,7 @@ Representative output for a `wsh(sortedmulti(2, @0/**, @1/**, @2/**))` template 
 | Output | JSON (singlesig generic-wallet-export) or text (multisig) |
 | `extension()` | `"json"` (returned uniformly; multisig output is text-bodied) |
 | Accepted shapes | singlesig `bip44` / `bip49` / `bip84` (JSON); multisig `wsh-multi` / `wsh-sortedmulti` / `sh-wsh-multi` / `sh-wsh-sortedmulti` (text) |
-| Refused shapes | `bip86` → `BadInput` (`wallet_export/coldcard.rs::emit_coldcard_generic_json`); `tr-multi-a` / `tr-sortedmulti-a` → `BadInput` (`wallet_export/coldcard.rs::emit_coldcard_multisig_text`); descriptor passthrough without `--template` → `BadInput` (`wallet_export/coldcard.rs::emit_coldcard_generic_json`) |
+| Refused shapes | `bip86` → `BadInput` (`wallet_export/coldcard.rs::emit_coldcard_generic_json`); `tr-multi-a` / `tr-sortedmulti-a` → `BadInput` (`wallet_export/coldcard.rs::emit_coldcard_multisig_text`); descriptor passthrough without `--scheme` → `BadInput` (`wallet_export/coldcard.rs::emit_coldcard_generic_json`) |
 | `collect_missing` | always empty (`wallet_export/coldcard.rs::ColdcardEmitter::collect_missing`) — refusals surface as `BadInput` with byte-exact pointer text (more helpful than the generic §4 bullet) |
 | Vendor-specific flags | `--slot @0.master_xpub=<base58>` (singlesig only; top-level `xpub` field) |
 
@@ -547,7 +547,7 @@ Notes: `Format: P2WSH` for `wsh-multi` / `wsh-sortedmulti`; `Format: P2SH-P2WSH`
 | Output | text (delegates to `emit_coldcard_multisig_text`) |
 | `extension()` | `"txt"` |
 | Accepted shapes | `wsh-multi` / `wsh-sortedmulti` / `sh-wsh-multi` / `sh-wsh-sortedmulti` (delegates byte-identical to Coldcard's §5.2 multisig text — `wallet_export/jade.rs::JadeEmitter::emit`) |
-| Refused shapes | `bip44` / `bip49` / `bip84` / `bip86` → `BadInput` ("multisig wallet config only; for singlesig setups Jade reads the seed on-device"; `wallet_export/jade.rs::JadeEmitter::emit`); `tr-multi-a` / `tr-sortedmulti-a` → `BadInput` (pending firmware support, FOLLOWUPS `jade-tr-multi-a-pending-firmware`; `wallet_export/jade.rs::JadeEmitter::emit`); descriptor passthrough without `--template` → `BadInput` (`wallet_export/jade.rs::JadeEmitter::emit`) |
+| Refused shapes | `bip44` / `bip49` / `bip84` / `bip86` → `BadInput` ("multisig wallet config only; for singlesig setups Jade reads the seed on-device"; `wallet_export/jade.rs::JadeEmitter::emit`); `tr-multi-a` / `tr-sortedmulti-a` → `BadInput` (pending firmware support, FOLLOWUPS `jade-tr-multi-a-pending-firmware`; `wallet_export/jade.rs::JadeEmitter::emit`); descriptor passthrough without `--scheme` → `BadInput` (`wallet_export/jade.rs::JadeEmitter::emit`) |
 | `collect_missing` | always empty (`wallet_export/jade.rs::JadeEmitter::collect_missing`) — refusals route through `BadInput` |
 | Vendor-specific flags | none beyond `--wallet-name` |
 
@@ -562,7 +562,7 @@ The emitted text is byte-identical to the Coldcard `--format coldcard` multisig 
 | Output | JSON object (`name`, `network`, `policyType`, `scriptType`, `defaultPolicy`, `keystores`) |
 | `extension()` | `"json"` |
 | Accepted shapes | every template (bip44 / bip49 / bip84 / bip86 / wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti / tr-multi-a / tr-sortedmulti-a) |
-| Refused shapes | descriptor passthrough without `--template` → `BadInput` (`wallet_export/sparrow.rs::emit_sparrow_wallet_json`); multisig templates without `--threshold` → `ExportWalletMissingFields { format: "sparrow", missing: [Threshold] }` (`wallet_export/sparrow.rs::SparrowEmitter::collect_missing`) |
+| Refused shapes | descriptor passthrough without `--scheme` → `BadInput` (`wallet_export/sparrow.rs::emit_sparrow_wallet_json`); multisig templates without `--threshold` → `ExportWalletMissingFields { format: "sparrow", missing: [Threshold] }` (`wallet_export/sparrow.rs::SparrowEmitter::collect_missing`) |
 | `collect_missing` | returns `[Threshold]` when `template.is_multisig() && !inputs.threshold_user_supplied` (`wallet_export/sparrow.rs::SparrowEmitter::collect_missing`) |
 | Vendor-specific flags | `--wallet-name <STRING>` (wallet `name`; every keystore `label` is `Keystore <n>`, 1-based slot order); `--threshold <K>` (required for multisig — Sparrow publishes `K` in `defaultPolicy.miniscript.script`'s `multi(K,...)` / `sortedmulti(K,...)` argument, so silent K=N defaulting would emit a wallet that bypasses the K-of-N rule) |
 
@@ -632,7 +632,7 @@ Representative 2-of-3 `wsh-sortedmulti` output (`emit_specter_wallet_json` at `w
 | Output | JSON object (`seed_version`, `wallet_type`, `use_encryption`, `keystore` for singlesig; `seed_version`, `wallet_type`, `use_encryption`, `x1/`, `x2/`, ... for multisig) |
 | `extension()` | `"json"` |
 | Accepted shapes | every template **except** `tr-multi-a` / `tr-sortedmulti-a` (`bip44` / `bip49` / `bip84` / `bip86` / `wsh-multi` / `wsh-sortedmulti` / `sh-wsh-multi` / `sh-wsh-sortedmulti`) |
-| Refused shapes | `tr-multi-a` / `tr-sortedmulti-a` → `BadInput` (pending Electrum libsecp-taproot support, FOLLOWUPS `electrum-tr-multi-a-pending-libsecp-taproot`; `wallet_export/electrum.rs::ElectrumEmitter::emit`); descriptor passthrough without `--template` → `BadInput` (`wallet_export/electrum.rs::ElectrumEmitter::emit`) |
+| Refused shapes | `tr-multi-a` / `tr-sortedmulti-a` → `BadInput` (pending Electrum libsecp-taproot support, FOLLOWUPS `electrum-tr-multi-a-pending-libsecp-taproot`; `wallet_export/electrum.rs::ElectrumEmitter::emit`); descriptor passthrough without `--scheme` → `BadInput` (`wallet_export/electrum.rs::ElectrumEmitter::emit`) |
 | `collect_missing` | always empty (`wallet_export/electrum.rs::ElectrumEmitter::collect_missing`) — `keystore.label` defaults to `""` when `--wallet-name` is absent |
 | Vendor-specific flags | `--wallet-name <STRING>` (label; defaults to `<template>-<account>`) |
 | Schema-version pin | `ELECTRUM_SEED_VERSION_PIN: u32 = 17`\index{ELECTRUM\_SEED\_VERSION\_PIN} (`wallet_export/electrum.rs::ELECTRUM_SEED_VERSION_PIN`) — empirically validated 2026-05-12 against Electrum 4.5.5; the loader walks `_convert_version_<N>` migrations forward to FINAL\_SEED\_VERSION on first save |

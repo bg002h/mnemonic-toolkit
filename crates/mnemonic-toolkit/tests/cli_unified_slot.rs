@@ -16,7 +16,7 @@ fn unified_slot_phrase_singlesig_full_emits_schema_4() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -55,9 +55,9 @@ fn unified_slot_missing_template_or_descriptor_rejected() {
         .failure();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("missing --template or --descriptor")
+        stderr.contains("missing --scheme or --descriptor")
             || stderr.contains("required unless")
-            || stderr.contains("--template"),
+            || stderr.contains("--scheme"),
         "stderr should mention missing template; got: {stderr}"
     );
 }
@@ -82,7 +82,7 @@ fn unified_slot_entropy_singlesig_full_round_trips_against_phrase() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -100,7 +100,7 @@ fn unified_slot_entropy_singlesig_full_round_trips_against_phrase() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -127,7 +127,7 @@ fn unified_slot_xprv_rejected_with_followup_pointer() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -143,7 +143,7 @@ fn unified_slot_xprv_rejected_with_followup_pointer() {
     );
 }
 
-// Bug hunt 2026-11-25 X4: `bundle --template` REFUSES every `--slot @N.wif=`
+// Bug hunt 2026-11-25 X4: `bundle --scheme` REFUSES every `--slot @N.wif=`
 // at mint (exit 1). A WIF is one private key with no chain code, but every
 // template derives ranged child addresses (`/<0;1>/*`); the WIF slot used to be
 // bound as a depth-0 "xpub" with a zero chain code, so the card's addresses
@@ -157,13 +157,13 @@ const SAMPLE_WIF_2: &str = "L4rK1yDtCWekvXuE6oXD9jCYfFNV2cWRpVuPLBcCU2z8TrisoyY1
 fn unified_slot_wif_refused_in_every_template_context() {
     let xpub = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
     let single = vec![
-        "--template".to_string(),
+        "--scheme".to_string(),
         "bip84".into(),
         "--slot".into(),
         format!("@0.wif={SAMPLE_WIF}"),
     ];
     let hybrid = vec![
-        "--template".to_string(),
+        "--scheme".to_string(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -175,7 +175,7 @@ fn unified_slot_wif_refused_in_every_template_context() {
         format!("@2.xpub={xpub}"),
     ];
     let pure = vec![
-        "--template".to_string(),
+        "--scheme".to_string(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -185,7 +185,7 @@ fn unified_slot_wif_refused_in_every_template_context() {
         format!("@1.wif={SAMPLE_WIF_2}"),
     ];
     let twice = vec![
-        "--template".to_string(),
+        "--scheme".to_string(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -228,7 +228,7 @@ fn unified_slot_xpub_alone_emits_partial_origin() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -255,7 +255,7 @@ fn unified_slot_xpub_with_fingerprint_no_path() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

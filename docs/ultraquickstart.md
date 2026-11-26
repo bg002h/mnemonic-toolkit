@@ -36,7 +36,7 @@ recipe uses the **public BIP-39 test phrase** so the output is reproducible
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 ```
 
@@ -47,7 +47,7 @@ engraving guide. Each card has its own BCH error-correcting checksum.
 
 ```sh
 mnemonic verify-bundle \
-  --network mainnet --template bip84 \
+  --network mainnet --scheme bip84 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --ms1 <ms1-string> \
   --mk1 <mk1-line-1> --mk1 <mk1-line-2> \
@@ -88,5 +88,5 @@ returns the wallet policy.
 If you have installed `mk-cli` separately, `mk decode <mk1-string>` is
 the minimal-surface alternative for the public-card recovery step.
 
-For multisig (`--template wsh-sortedmulti --threshold 2 --slot @0.phrase=… --slot @1.phrase=… --slot @2.phrase=…`)
+For multisig (`--scheme wsh-sortedmulti --threshold 2 --slot @0.phrase=… --slot @1.phrase=… --slot @2.phrase=…`)
 or watch-only (`--slot @0.xpub=…`), see the QuickStart's Parts III + IV.

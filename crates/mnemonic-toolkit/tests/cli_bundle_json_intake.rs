@@ -15,7 +15,7 @@ fn verify_bundle_via_bundle_json_schema_4_round_trip() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -44,7 +44,7 @@ fn verify_bundle_via_bundle_json_schema_4_round_trip() {
         .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -75,7 +75,7 @@ fn verify_bundle_via_bundle_json_schema3_envelope_fails_at_field_extraction_v0_5
         .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -101,7 +101,7 @@ fn verify_bundle_bundle_json_conflicts_with_ms1() {
         .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

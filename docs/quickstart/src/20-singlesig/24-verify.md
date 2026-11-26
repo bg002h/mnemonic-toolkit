@@ -6,7 +6,7 @@ produced matches.
 
 ## The command
 
-Pass the same `--network`, `--template`, and `--slot @0.phrase=…`
+Pass the same `--network`, `--scheme`, and `--slot @0.phrase=…`
 as the original `bundle` invocation, plus the cards that came back
 in the bundle output:
 
@@ -17,7 +17,7 @@ in the bundle output:
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
   | MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f mnemonic verify-bundle \
       --network mainnet \
-      --template bip84 \
+      --scheme bip84 \
       --slot @0.phrase=- \
   --ms1 @env:MS1 \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
@@ -37,7 +37,7 @@ The flag set:
 - **`--md1 <STRING>`** — repeat once per md1 string. BIP-84 emits
   three, so `--md1` appears three times.
 
-The `--network`, `--template`, and `--slot` flags must match the
+The `--network`, `--scheme`, and `--slot` flags must match the
 original `bundle` invocation so the verifier knows what to expect.
 
 ## Output
@@ -75,7 +75,7 @@ want to discover after stamping steel:
    The BCH checksum on the affected card catches it; `*_decode`
    fails and the diagnostic names the position.
 2. **Wrong template or network.** If you bundled `bip84` mainnet
-   but mistakenly invoke `verify-bundle` with `--template bip49`,
+   but mistakenly invoke `verify-bundle` with `--scheme bip49`,
    every `*_xpub_match` fails because the verifier re-derives at
    the wrong path.
 3. **Mixed cards from different wallets.** The cross-binding via

@@ -9,7 +9,7 @@
 //!
 //! Fixtures are PUBLIC material (xpub / descriptor) from fixed BIP-39 seeds —
 //! no secrets. mk1/md1 strings produced by `mnemonic bundle --network mainnet
-//! --template bip84` over the `abandon…about` (and two more) deterministic seeds.
+//! --scheme bip84` over the `abandon…about` (and two more) deterministic seeds.
 
 use assert_cmd::Command;
 use predicates::prelude::*;

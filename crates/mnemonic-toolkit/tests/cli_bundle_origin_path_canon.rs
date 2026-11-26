@@ -28,7 +28,7 @@ fn bundle_json(args: &[&str]) -> Value {
         .unwrap_or_else(|e| panic!("bundle JSON invalid: {e}\nstdout:\n{stdout}"))
 }
 
-// T4 — retired by bug hunt 2026-11-25 X4: `bundle --template` now refuses a
+// T4 — retired by bug hunt 2026-11-25 X4: `bundle --scheme` now refuses a
 // `--slot @N.wif=` slot at mint (exit 1), so no pathless-WIF bundle JSON is
 // emitted any more. The refusal is pinned here so T4's input stays covered.
 #[test]
@@ -38,7 +38,7 @@ fn bundle_wif_slot_refused_at_mint() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -66,7 +66,7 @@ fn bundle_descriptor_mode_noncanonical_path_renders_canonical() {
         "@0.fingerprint=deadbeef",
         "--slot",
         "@0.path=48h/0h/0h/2h",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "mainnet",
@@ -95,7 +95,7 @@ fn export_wallet_noncanonical_path_renders_canonical() {
             "export-wallet",
             "--format",
             "electrum",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -130,7 +130,7 @@ fn bundle_distinctness_h_vs_apostrophe_paths_collide() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",

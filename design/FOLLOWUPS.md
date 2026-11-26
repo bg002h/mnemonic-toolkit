@@ -7,6 +7,14 @@ Single source of truth for items that surfaced during a review or implementation
 **Format for each entry:**
 
 ```markdown
+### `scheme-name-json-keys` — JSON keys that hold a named wallet scheme still use the old word `template` / `archetype`
+
+- **Surfaced:** 2026-11-26, the `--template` → `--scheme` / `--archetype` → `--scheme` flag rename (brief `cli-review/scheme-origin-path-plan-2026-11-26.md`, which kept JSON keys out of scope because they are a contract with the GUIs). **What:** these keys hold a scheme name (`bip84`, `wsh-sortedmulti`, `kofn-recovery`, …) under the old word: `bundle --json` / `verify-bundle --json` top-level `template` and `multisig.template` (`format.rs` `BundleJson.template`, `MultisigInfo.template`); the `import-wallet --json` envelope's embedded `bundle.template` (read back by `bundle --import-json` and `export-wallet --from-import-json`); `xpub-search --json` match `template` (path-of-xpub, passphrase-of-xpub, account-of-descriptor); `build-descriptor --spec-schema`'s `archetypes` section; and `gui-schema`'s per-subcommand `meta.template_groups`. Keys holding BIP 388 template text (`inspect --json` `template`) are correct as they are. **Fix:** a later round adds the `scheme` spelling (additively, or with a schema-version bump), paired with `mnemonic-gui`'s consumers. **Tier:** cross-repo (`mnemonic-gui`). **Status:** open.
+
+### `manual-gui-scheme-rename` — the GUI manual still documents `--template` / `--archetype`
+
+- **Surfaced:** 2026-11-26, same rename. **What:** `docs/manual-gui` keeps anchor parity with `mnemonic-gui`'s schema at its pinned tag (`pinned-upstream.toml`, `mnemonic-gui-v0.63.0`) and replays its transcripts against the pinned toolkit tag (v0.105.1), neither of which has `--scheme`. Its pages, `.gui`/`.cmd` transcripts and `tests/expected_gui_schema_inventory.json` therefore still name `--template` (toolkit `bundle`, `verify-bundle`, `convert`, `export-wallet`, `restore`; `ms derive`), `--archetype` (`build-descriptor`) and `--preset` (`md compose`); renaming them now would fail its anchor-parity lint and example replay. **Fix:** move them in the pin-bump PR that takes a `mnemonic-gui` release carrying the schema-mirror rename and toolkit/md/ms releases carrying the flags. **Status:** open, blocked on those releases.
+
 ### `audit-2026-06-10-backlog` — verified findings from the first independent Fable constellation audit
 
 - **Surfaced:** 2026-06-10, the 23-agent read-only architecture audit (find → adversarial-verify → synthesize). 48 verified findings constellation-wide (0 critical); this repo's share below. **Full report + per-finding detail (claim/evidence/fix/disposition):** `design/agent-reports/constellation-architecture-audit-2026-06-10.md` (committed in the toolkit repo). Promote any line to its own `### <id>` entry when worked; resolve here as fixed.

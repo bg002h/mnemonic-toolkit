@@ -110,7 +110,7 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
 
     let template = inputs.template.ok_or_else(|| {
         ToolkitError::BadInput(
-            "--format coldcard requires --template (bip44 / bip49 / bip84); pass a recognized template or use a different format for descriptor passthrough".into(),
+            "--format coldcard requires --scheme (bip44 / bip49 / bip84); pass a recognized template or use a different format for descriptor passthrough".into(),
         )
     })?;
 
@@ -131,7 +131,7 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
         // Until then, refuse cleanly so the v0.7 byte-exact contract holds.
         _ => {
             return Err(ToolkitError::BadInput(format!(
-                "--format coldcard does not yet support --template {} (Phase 1.4 wires Coldcard multisig text)",
+                "--format coldcard does not yet support --scheme {} (Phase 1.4 wires Coldcard multisig text)",
                 template.human_name(),
             )));
         }
@@ -260,7 +260,7 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     use crate::template::CliTemplate;
 
     let template = inputs.template.ok_or_else(|| {
-        ToolkitError::BadInput("--format coldcard multisig text requires --template".into())
+        ToolkitError::BadInput("--format coldcard multisig text requires --scheme".into())
     })?;
 
     // tr-multi-a / tr-sortedmulti-a — refuse pending Coldcard firmware support
@@ -271,7 +271,7 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
         CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA
     ) {
         return Err(ToolkitError::BadInput(format!(
-            "--format coldcard does not yet support --template {} — Coldcard firmware does not currently ingest taproot multisig text exports (tracked by FOLLOWUPS coldcard-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
+            "--format coldcard does not yet support --scheme {} — Coldcard firmware does not currently ingest taproot multisig text exports (tracked by FOLLOWUPS coldcard-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
             template.human_name(),
         )));
     }

@@ -59,7 +59,7 @@ fn phrase_to_xpub_bip84_mainnet() {
             "xpub",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -81,7 +81,7 @@ fn phrase_to_xpub_xprv_compound() {
             "xpub,xprv",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -107,7 +107,7 @@ fn xprv_to_xpub_neuter() {
             "xprv",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -359,7 +359,7 @@ fn entropy_to_xpub_bip84_mainnet() {
             "xpub",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -381,7 +381,7 @@ fn entropy_to_xprv_bip84_mainnet() {
             "xprv",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -403,7 +403,7 @@ fn entropy_to_fingerprint_bip84_mainnet() {
             "fingerprint",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()

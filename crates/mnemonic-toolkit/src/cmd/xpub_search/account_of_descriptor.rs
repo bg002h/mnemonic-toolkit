@@ -109,11 +109,11 @@ pub struct AccountOfDescriptorArgs {
     #[arg(long)]
     pub max_account: Option<u32>,
 
-    /// Additional derivation-path template. Repeatable. The literal token
+    /// Additional derivation path pattern. Repeatable. The literal token
     /// `account'` (or `account`) is substituted with each iterated account
-    /// index. Templates without an `account` token are searched once at the
+    /// index. Patterns without an `account` token are searched once at the
     /// literal path.
-    #[arg(long, value_name = "TEMPLATE")]
+    #[arg(long, value_name = "PATH")]
     pub add_path: Vec<String>,
 
     /// Emit a JSON envelope on stdout instead of the text-form report.

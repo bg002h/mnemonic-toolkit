@@ -28,7 +28,7 @@ printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon aba
   | mnemonic convert \
       --from phrase=- \
       --to xpub \
-      --template bip84 \
+      --scheme bip84 \
       --network mainnet
 ```
 
@@ -46,7 +46,7 @@ work).
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.xpub=xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V
 ```
 
@@ -55,7 +55,7 @@ exists for the toolkit to encode — the output is **2 cards**: one
 mk1 (xpub + origin) and one md1 (wallet policy). No ms1, no secret
 material on stdout, no `warning: secret material` line.
 
-The same `--template`, `--network`, and `--account` choices from
+The same `--scheme`, `--network`, and `--account` choices from
 [chapter 23](../20-singlesig/23-bundle.md) apply — the only
 difference is the slot input shape (`@0.xpub=…` instead of
 `@0.phrase=…`).

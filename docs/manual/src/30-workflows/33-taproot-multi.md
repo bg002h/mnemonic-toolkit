@@ -72,7 +72,7 @@ side; this flag does not exist on `bundle` or `verify-bundle`. See
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template tr-sortedmulti-a \
+  --scheme tr-sortedmulti-a \
   --threshold 2 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
@@ -109,7 +109,7 @@ e.g. `tr(@4,sortedmulti_a(3,@0,@1,@2,@3))` gives a script-path of
 ## Step 3 — verify and stamp
 
 `mnemonic verify-bundle` accepts the same `--descriptor` (or
-`--template`) the bundle was built with and re-derives the expected
+`--scheme`) the bundle was built with and re-derives the expected
 key-path point and script-path leaf to verify the engraved cards
 match. The stamping ceremony is identical to the
 [non-taproot multisig flow](#multi-source-2-of-3-multisig).
@@ -146,7 +146,7 @@ gives a 1-page orientation.
   cosigner xpubs in the script-path leaf are *not* re-sorted. Use
   this only if you have a reason to fix cosigner order on-chain.
 - **Single-sig taproot** — for a one-cosigner taproot wallet, prefer
-  `--template bip86` (covered in
+  `--scheme bip86` (covered in
   [single-sig steel-engraved backup](#single-sig-steel-engraved-backup)).
 - **Tapscript opcodes other than `multi_a`** — supply a
   `--descriptor` directly. The toolkit's user-supplied descriptor

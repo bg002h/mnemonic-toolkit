@@ -88,7 +88,7 @@ fn canonical_multisig_template_args(
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         template.into(),
         "--threshold".into(),
         threshold.into(),
@@ -474,7 +474,7 @@ fn multisig_template_bundle_self_check_passes() {
 fn single_sig_template_still_emits_after_multisig_admission() {
     let (out, _) = bundle_ok(&[
         "bundle".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--network".into(),
         "mainnet".into(),

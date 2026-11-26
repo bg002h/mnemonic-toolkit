@@ -17,7 +17,7 @@ three md1 strings:
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
   | MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f mnemonic verify-bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.phrase=- \
   --ms1 @env:MS1 \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
@@ -38,7 +38,7 @@ The flag set:
 - **`--md1 <STRING>`** can be repeated; this wallet emits three md1
   strings.
 
-The same `--network`, `--template`, and `--slot` flags as the
+The same `--network`, `--scheme`, and `--slot` flags as the
 original `bundle` invocation are required so the verifier knows what
 *should* match.
 
@@ -71,7 +71,7 @@ Verification protects against three failure modes:
 1. **Transcription errors.** If you typed a card wrong from the
    bundle output, `*_decode` fails — the BCH checksum catches it.
 2. **Wrong template / network.** If you bundled BIP-84 mainnet but
-   typed `--template bip49` here, every `*_match` for the expected-
+   typed `--scheme bip49` here, every `*_match` for the expected-
    xpub-side fails.
 3. **Mixed-bundle confusion.** If you passed an mk1 card from a
    different wallet, `policy_id_stub` mismatches via the

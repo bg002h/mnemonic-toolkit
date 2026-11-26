@@ -8,6 +8,24 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### A named wallet scheme is `--scheme`; `--template` and `--archetype` stay as hidden aliases
+
+- **`bundle`, `verify-bundle`, `convert`, `export-wallet`, `restore`**: `--template NAME` is now `--scheme NAME`
+  (same values: `bip44` … `tr-sortedmulti-a`). `--template` is still accepted as a hidden alias with identical
+  output and exit codes, and no longer appears in `--help`. `--template` is kept for BIP 388 wallet descriptor
+  template text (`md`, `mr`); a name such as `bip84` also picks a derivation path, and the flag name now shows that.
+- **`build-descriptor`**: `--archetype NAME` is now `--scheme NAME` (a named wallet scheme); `--archetype` is a
+  hidden alias.
+- **`xpub-search --add-path`**: the value is shown as `<PATH>` (a derivation path pattern), not `<TEMPLATE>`. The
+  no-match hint says "additional derivation path patterns via --add-path".
+- Every error, remedy and note that named `--template` or `--archetype` now prints `--scheme`, and the structured
+  `flag` value of the refusals that carried `"--template"` is `"--scheme"`. `gui-schema` lists `--scheme` (its
+  conditional rules name `--scheme`); the hidden aliases are not listed. JSON keys are unchanged (FOLLOWUPS
+  `scheme-name-json-keys`).
+- Manual: chapter 41 (`mnemonic`), 42 (`md compose --preset` → `--scheme`), 43 (`ms derive --template` →
+  `--origin-path`) and 45 (`mr create`/`mr units --template-preset` → `--scheme`), the workflow chapters, quickstart,
+  technical manual and transcripts.
+
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 
 - **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in

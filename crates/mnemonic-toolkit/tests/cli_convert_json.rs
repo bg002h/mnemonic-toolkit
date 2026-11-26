@@ -73,7 +73,7 @@ fn json_compound_to_preserves_argument_order() {
             "fingerprint,xpub,entropy",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
         ])

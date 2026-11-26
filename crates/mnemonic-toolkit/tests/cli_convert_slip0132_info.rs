@@ -333,7 +333,7 @@ fn convert_phrase_input_emits_no_info_line() {
             "xpub",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()

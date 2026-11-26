@@ -13,7 +13,7 @@ BIP-84 mainnet wallet. End-to-end takes about three minutes.
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
   | mnemonic bundle \
       --network mainnet \
-      --template bip84 \
+      --scheme bip84 \
       --slot @0.phrase=-
 ```
 
@@ -21,7 +21,7 @@ Three flags carry the work:
 
 - **`--network mainnet`** — the wallet is for Bitcoin mainnet.
   Other values: `testnet`, `signet`, `regtest`.
-- **`--template bip84`** — the wallet's spending rule. `bip84` is
+- **`--scheme bip84`** — the wallet's spending rule. `bip84` is
   single-sig native SegWit (P2WPKH) at derivation `m/84'/0'/0'`.
   Other single-sig templates: `bip44` (legacy), `bip49`
   (nested-segwit), `bip86` (taproot).

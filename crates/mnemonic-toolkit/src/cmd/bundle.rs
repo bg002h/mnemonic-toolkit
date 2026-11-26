@@ -23,14 +23,19 @@ pub struct BundleArgs {
     #[arg(long)]
     pub network: CliNetwork,
 
-    /// Pre-built template name (single-sig or multisig). Mutually-required-one-of
-    /// with --descriptor / --descriptor-file / --import-json (clap-level + runtime
+    /// Named wallet scheme (single-sig BIP-44/49/84/86 derivation schemes, or the
+    /// BIP-388 common multisig schemes). Mutually-required-one-of with
+    /// --descriptor / --descriptor-file / --import-json (clap-level + runtime
     /// pre-check; v0.27.0 added the --import-json branch).
-    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file", "import_json"])]
+    // `--template` stays accepted as a hidden alias (renamed 2026-11-26).
+    #[arg(
+        id = "scheme", long = "scheme", value_name = "SCHEME", alias = "template",
+        required_unless_present_any = ["descriptor", "descriptor_file", "import_json"]
+    )]
     pub template: Option<CliTemplate>,
 
     /// User-supplied BIP-388 descriptor (v0.3 §2.1.10). Mutually-required-one-of
-    /// with --template / --descriptor-file. XOR with --descriptor-file (clap conflicts).
+    /// with --scheme / --descriptor-file. XOR with --descriptor-file (clap conflicts).
     /// (v0.49.0) Also accepts a BIP-388 wallet-policy JSON `{name,
     /// description_template, keys_info}` (auto-detected by a leading `{`),
     /// expanded to the concrete descriptor — the inverse of `export-wallet
@@ -139,11 +144,11 @@ pub struct BundleArgs {
     pub slot: Vec<crate::slot_input::SlotInput>,
 
     /// v0.27.0 — synthesize a bundle from an `import-wallet --json`
-    /// envelope rather than from `--template` / `--descriptor`. Accepts a
+    /// envelope rather than from `--scheme` / `--descriptor`. Accepts a
     /// file path or `-` to read the envelope from stdin. The envelope's
     /// `bundle.descriptor` carries the source-of-truth descriptor; the
     /// envelope's `bundle.mk1` chunks decode to per-cosigner xpubs +
-    /// fingerprints + paths. Mutually exclusive with `--template`,
+    /// fingerprints + paths. Mutually exclusive with `--scheme`,
     /// `--descriptor`, `--descriptor-file`.
     ///
     /// Seed overlay (`--slot @N.phrase=`) continues to apply to
@@ -155,7 +160,7 @@ pub struct BundleArgs {
     #[arg(
         long = "import-json",
         value_name = "FILE|-",
-        conflicts_with_all = ["template", "descriptor", "descriptor_file"],
+        conflicts_with_all = ["scheme", "descriptor", "descriptor_file"],
     )]
     pub import_json: Option<String>,
 
@@ -185,16 +190,16 @@ pub struct BundleArgs {
 
 /// SPEC §6.6 byte-exact mode-violation strings. Pinned for integration tests.
 pub mod mode_text {
-    pub const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.";
+    pub const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --scheme; single-sig templates ignore threshold.";
     pub const PATH_FAMILY_WITHOUT_MULTISIG: &str =
-        "--multisig-path-family is meaningful only with a multisig --template.";
+        "--multisig-path-family is meaningful only with a multisig --scheme.";
 
     // v0.3 NEW rows (SPEC §6.9). Byte-exact.
-    pub const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --template are mutually exclusive; pick descriptor passthrough or template, not both.";
+    pub const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --scheme are mutually exclusive; pick descriptor passthrough or template, not both.";
     pub const DESCRIPTOR_AND_DESCRIPTOR_FILE: &str = "--descriptor and --descriptor-file are mutually exclusive; supply the descriptor inline or via file, not both.";
-    pub const DESCRIPTOR_WITH_THRESHOLD: &str = "--threshold is meaningful only with a multisig --template; descriptor mode encodes K directly.";
-    pub const DESCRIPTOR_WITH_PATH_FAMILY: &str = "--multisig-path-family is meaningful only with --template; descriptor mode encodes paths directly via @i/path syntax.";
-    pub const DESCRIPTOR_WITH_NONZERO_ACCOUNT: &str = "--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.";
+    pub const DESCRIPTOR_WITH_THRESHOLD: &str = "--threshold is meaningful only with a multisig --scheme; descriptor mode encodes K directly.";
+    pub const DESCRIPTOR_WITH_PATH_FAMILY: &str = "--multisig-path-family is meaningful only with --scheme; descriptor mode encodes paths directly via @i/path syntax.";
+    pub const DESCRIPTOR_WITH_NONZERO_ACCOUNT: &str = "--account != 0 is meaningful only with --scheme; descriptor mode encodes account index in the @i origin path.";
 }
 
 pub fn run<W: Write, E: Write>(
@@ -277,7 +282,7 @@ pub fn run<W: Write, E: Write>(
     // for a fresh `synthesize_descriptor` pass; the only relevant user
     // flags downstream are `--slot @N.phrase=` (seed overlay),
     // `--privacy-preserving`, `--json`, `--self-check`, `--no-engraving-card`.
-    // Mutex with --template / --descriptor / --descriptor-file is enforced
+    // Mutex with --scheme / --descriptor / --descriptor-file is enforced
     // by clap (`conflicts_with_all` on the `--import-json` arg).
     if args.import_json.is_some() {
         return bundle_run_from_import_json(args, stdin, stdout, stderr);
@@ -294,7 +299,7 @@ pub fn run<W: Write, E: Write>(
     if descriptor_mode && args.template.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
-            flag: "--template",
+            flag: "--scheme",
             message: mode_text::DESCRIPTOR_AND_TEMPLATE,
         });
     }
@@ -325,7 +330,7 @@ pub fn run<W: Write, E: Write>(
     // (canonical_origin's per-shape default supplies the path; user-supplied
     // account is redundant), while non-canonical descriptors consume
     // `--account N` for §4.12.b default-path inference. Pre-bundle_run_unified
-    // site retains the other descriptor-mode guards (--template, --threshold,
+    // site retains the other descriptor-mode guards (--scheme, --threshold,
     // --multisig-path-family) which apply uniformly regardless of canonicity.
     if args.threshold.is_some() && !multisig_template && !descriptor_mode {
         return Err(ToolkitError::ModeViolation {
@@ -424,8 +429,8 @@ fn bundle_run_unified<W: Write, E: Write>(
     } else if args.descriptor.is_none() && args.descriptor_file.is_none() {
         return Err(ToolkitError::ModeViolation {
             mode: "unified-slot",
-            flag: "--template / --descriptor",
-            message: "missing --template or --descriptor",
+            flag: "--scheme / --descriptor",
+            message: "missing --scheme or --descriptor",
         });
     }
 
@@ -436,7 +441,7 @@ fn bundle_run_unified<W: Write, E: Write>(
 
     let template = args
         .template
-        .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
+        .ok_or_else(|| ToolkitError::BadInput("--scheme required for --slot dispatch".into()))?;
 
     // Bug hunt 2026-11-25 X4: a `@N.wif=` slot is one fixed key, not an HD key.
     // Minting it wrote the WIF's public key as a depth-0 "xpub" with an all-zero
@@ -450,7 +455,7 @@ fn bundle_run_unified<W: Write, E: Write>(
         let idx = w.index;
         return Err(ToolkitError::BadInput(format!(
             "--slot @{idx}.wif is refused: a WIF is a single private key with no chain code, but \
-             every --template derives ranged child addresses (/<0;1>/*), so the cards would \
+             every --scheme derives ranged child addresses (/<0;1>/*), so the cards would \
              describe addresses that are children of an all-zero chain code, not the WIF key's \
              own address, and that no wallet importing this WIF would ever watch. Back up the \
              seed (phrase / entropy / ms1) instead, or sweep the WIF's funds into a seed wallet."
@@ -646,7 +651,7 @@ pub(crate) fn resolve_slots(
         // Bug hunt 2026-11-25 toolkit#4: the slot grammar admits `@N.path=` /
         // `@N.fingerprint=` beside a seed (`phrase` / `seedqr` / `ms1`) for
         // non-canonical DESCRIPTOR mode only. Template mode derives the seed at
-        // the `--template` / `--account` / `--multisig-path-family` path and has
+        // the `--scheme` / `--account` / `--multisig-path-family` path and has
         // nowhere to put a typed path or fingerprint, so it used to drop them
         // silently (a request for account 5 produced account-0 cards). Refuse
         // instead: a path the operator supplies must reach the artifact or be
@@ -665,7 +670,7 @@ pub(crate) fn resolve_slots(
             return Err(ToolkitError::SlotInputViolation {
                 kind: "conflict",
                 message: format!(
-                    "slot @{idx}: --template mode ignores `@{idx}.path=` / `@{idx}.fingerprint=` \
+                    "slot @{idx}: --scheme mode ignores `@{idx}.path=` / `@{idx}.fingerprint=` \
                      beside a seed (the key is derived at the template's path and the seed's own \
                      master fingerprint); remove them, and choose the account with --account \
                      (and --multisig-path-family for multisig). A per-key path on a seed slot is \

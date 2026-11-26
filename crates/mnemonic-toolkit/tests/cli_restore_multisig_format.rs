@@ -1,7 +1,7 @@
 //! v0.45.0 — `mnemonic restore --md1 --format <export-format>` (FOLLOWUP
 //! `restore-multisig-format-payloads`). Multisig restore emits an importable
 //! wallet-software payload (the same payload class as `export-wallet
-//! --template <multisig> --format X`) by building a multisig `EmitInputs`
+//! --scheme <multisig> --format X`) by building a multisig `EmitInputs`
 //! from the reconstructed (template, slots, k, descriptor) and running the
 //! shared emitter dispatch. 9 emit / 2 refuse (specter/green). Watch-only-out.
 //! See design/SPEC_restore_multisig_format_payloads.md.
@@ -27,7 +27,7 @@ fn bundle_md1(template: &str, network: &str) -> Vec<String> {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--threshold",
             "2",

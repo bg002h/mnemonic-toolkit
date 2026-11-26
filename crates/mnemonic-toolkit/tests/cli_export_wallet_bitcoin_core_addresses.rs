@@ -616,14 +616,14 @@ fn a_sane_wallet_needs_no_flag() {
     assert_eq!(chg.len(), 2);
 }
 
-/// The `--template` / `--slot` arm reaches the same emitter through the same
+/// The `--scheme` / `--slot` arm reaches the same emitter through the same
 /// gate — a builder-produced descriptor cannot carry a sigless branch, so the
 /// rule runs and does not fire.
 #[test]
 fn the_template_arm_reaches_this_format_too() {
     let entries = emit(&[
         "export-wallet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--slot",
         "@0.xpub=xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX",

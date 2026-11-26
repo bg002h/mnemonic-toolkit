@@ -35,7 +35,7 @@ impl WalletFormatEmitter for JadeEmitter {
         use crate::template::CliTemplate;
         let template = inputs.template.ok_or_else(|| {
             ToolkitError::BadInput(
-                "--format jade requires --template (wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti); descriptor passthrough is not supported by Jade's file-import surface".into(),
+                "--format jade requires --scheme (wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti); descriptor passthrough is not supported by Jade's file-import surface".into(),
             )
         })?;
         match template {
@@ -46,7 +46,7 @@ impl WalletFormatEmitter for JadeEmitter {
             | CliTemplate::ShWshSortedMulti => emit_coldcard_multisig_text(inputs),
             // Taproot multisig: refuse pending firmware support.
             CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA => Err(ToolkitError::BadInput(format!(
-                "--format jade does not yet support --template {} — Blockstream Jade firmware does not currently ingest taproot multisig wallet config (tracked by FOLLOWUPS jade-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
+                "--format jade does not yet support --scheme {} — Blockstream Jade firmware does not currently ingest taproot multisig wallet config (tracked by FOLLOWUPS jade-tr-multi-a-pending-firmware). Use --format bitcoin-core (descriptor) or --format sparrow for taproot multisig watch-only setup.",
                 template.human_name(),
             ))),
             // Singlesig templates: refuse with the §6 byte-exact pointer.

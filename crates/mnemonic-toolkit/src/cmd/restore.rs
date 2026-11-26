@@ -5,7 +5,7 @@
 //! restoring a wallet on a PC: the document leads with the master fingerprint
 //! (the passphrase-correctness oracle) + first receive address(es), then the
 //! concrete single-sig descriptor(s) for bip44/49/84/86 (or a single
-//! `--template`).
+//! `--scheme`).
 //!
 //! Read-only public derivation: NO private keys reach stdout, NO signing
 //! (`feedback_no_signing_read_only_derivation_boundary`). Derivation uses a
@@ -40,7 +40,7 @@ use crate::wallet_export::{
 };
 use miniscript::{translate_hash_clone, Descriptor as MsDescriptor, DescriptorPublicKey};
 
-/// The four single-sig templates restore emits when no `--template` is given.
+/// The four single-sig templates restore emits when no `--scheme` is given.
 const ALL_SINGLE_SIG: [CliTemplate; 4] = [
     CliTemplate::Bip44,
     CliTemplate::Bip49,
@@ -220,9 +220,17 @@ pub struct RestoreArgs {
     #[arg(long = "accept-search-time")]
     pub accept_search_time: Option<String>,
 
-    /// Restrict to a single single-sig wallet type. Omit = all four
-    /// (bip44/49/84/86). A multisig template is refused (restore is single-sig).
-    #[arg(long, value_enum)]
+    /// Restrict to a single named wallet scheme (single-sig derivation scheme).
+    /// Omit = all four (bip44/49/84/86). A multisig scheme is refused (restore
+    /// is single-sig).
+    // `--template` stays accepted as a hidden alias (renamed 2026-11-26).
+    #[arg(
+        id = "scheme",
+        long = "scheme",
+        value_name = "SCHEME",
+        alias = "template",
+        value_enum
+    )]
     pub template: Option<CliTemplate>,
 
     /// Reference master fingerprint (8 lowercase hex). Mismatch → exit 4
@@ -230,7 +238,7 @@ pub struct RestoreArgs {
     #[arg(long)]
     pub expect_fingerprint: Option<String>,
 
-    /// Reference account xpub (requires `--template`). Mismatch → exit 4
+    /// Reference account xpub (requires `--scheme`). Mismatch → exit 4
     /// (unless `--allow-mismatch`).
     #[arg(long)]
     pub expect_xpub: Option<String>,
@@ -245,8 +253,8 @@ pub struct RestoreArgs {
 
     /// Emit an importable wallet-software payload (an `export-wallet` emitter:
     /// `descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, …).
-    /// REQUIRES a single `--template` (emitters are one-descriptor-in/one-out);
-    /// `--format` with no `--template` (the all-4 default) → exit 2. When set,
+    /// REQUIRES a single `--scheme` (emitters are one-descriptor-in/one-out);
+    /// `--format` with no `--scheme` (the all-4 default) → exit 2. When set,
     /// the importable PAYLOAD goes to stdout and the verification block
     /// (fingerprint / CONFIRM / descriptor / first recv) goes to stderr, so the
     /// payload pipes cleanly into wallet software. (With `--json`, the payload is
@@ -400,35 +408,35 @@ pub fn run<R: Read, W: Write, E: Write>(
         )));
     }
 
-    // Reject a multisig --template (restore is single-sig this cycle).
+    // Reject a multisig --scheme (restore is single-sig this cycle).
     if let Some(t) = args.template {
         if t.is_multisig() {
             return Err(bad(
-                "restore is single-sig only; --template ∈ {bip44,bip49,bip84,bip86}",
+                "restore is single-sig only; --scheme ∈ {bip44,bip49,bip84,bip86}",
             ));
         }
     }
 
     // `--expect-xpub` compares the per-template account xpub, which is only
-    // unambiguous when a single `--template` is selected.
+    // unambiguous when a single `--scheme` is selected.
     if args.expect_xpub.is_some() && args.template.is_none() {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--expect-xpub",
             message:
-                "--expect-xpub requires --template <bip44|bip49|bip84|bip86> (the account xpub is per-type)",
+                "--expect-xpub requires --scheme <bip44|bip49|bip84|bip86> (the account xpub is per-type)",
         });
     }
 
     // `--format` drives a single `export-wallet` emitter — one descriptor in,
     // one payload out — so it cannot straddle the all-4 default. Require a single
-    // `--template` (SPEC I-A: ModeViolation exit 2, NOT BadInput exit 1).
+    // `--scheme` (SPEC I-A: ModeViolation exit 2, NOT BadInput exit 1).
     if args.format.is_some() && args.template.is_none() {
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--format",
             message:
-                "--format requires --template <bip44|bip49|bip84|bip86> (an importable payload is one descriptor — pick one type)",
+                "--format requires --scheme <bip44|bip49|bip84|bip86> (an importable payload is one descriptor — pick one type)",
         });
     }
 
@@ -610,7 +618,7 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     // ---- Verification gate (§3.4) -------------------------------------------
     // Compute the reference comparison (if any). `--expect-xpub` is gated to a
-    // single `--template` above, so `rows[0]` is the only row when it is set.
+    // single `--scheme` above, so `rows[0]` is the only row when it is set.
     let mut mismatch: Option<(&'static str, String, String)> = None;
     if let Some(expected) = args.expect_fingerprint.as_deref() {
         let expected_norm = expected.trim().to_lowercase();
@@ -665,7 +673,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     };
 
     // ---- Importable payload (§3.5; Task 2.1) --------------------------------
-    // `--format` is gated to a single `--template` above, so `rows[0]` is the
+    // `--format` is gated to a single `--scheme` above, so `rows[0]` is the
     // only row and the payload is one descriptor in / one payload out.
     let import_payload: Option<String> = if let Some(format) = args.format {
         Some(build_import_payload(
@@ -855,7 +863,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         return Err(ToolkitError::ModeViolation {
             mode: "restore",
             flag: "--format",
-            message: "--format is not supported when completing a keyless single-sig template md1; run without --format to print the completed descriptor, or (canonical origin only) restore with --template <bip44|bip84|bip86> --account <N> --format <FORMAT> and no --md1",
+            message: "--format is not supported when completing a keyless single-sig template md1; run without --format to print the completed descriptor, or (canonical origin only) restore with --scheme <bip44|bip84|bip86> --account <N> --format <FORMAT> and no --md1",
         });
     }
 
@@ -3256,9 +3264,9 @@ fn build_import_payload(
     // channel verbatim (so e.g. `--format specter` refuses identically) AND
     // unifies the single-sig `coldcard-multisig` refusal: it now routes through
     // the helper's 6-variant template `_ =>` arm ("requires a multisig
-    // --template …") instead of the old restore-specific "requires a multisig
+    // --scheme …") instead of the old restore-specific "requires a multisig
     // wallet" string — exit 1 (BadInput) either way (the upfront single-sig
-    // gate at the top of `run` already rejects multisig `--template`).
+    // gate at the top of `run` already rejects multisig `--scheme`).
     crate::cmd::export_wallet::emit_payload(&inputs, format)
 }
 
@@ -3996,7 +4004,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     let network = args.network.unwrap_or(CliNetwork::Mainnet);
 
-    // `--expect-xpub`/`--template` are single-sig-only here. `--format` IS
+    // `--expect-xpub`/`--scheme` are single-sig-only here. `--format` IS
     // supported in multisig mode (v0.45.0) — emitted below via
     // `build_multisig_import_payload`.
     if args.expect_xpub.is_some() {
@@ -4010,8 +4018,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         if !t.is_multisig() {
             return Err(ToolkitError::ModeViolation {
                 mode: "restore",
-                flag: "--template",
-                message: "--template (single-sig) does not apply in multisig --md1 mode; remove it",
+                flag: "--scheme",
+                message: "--scheme (single-sig) does not apply in multisig --md1 mode; remove it",
             });
         }
     }

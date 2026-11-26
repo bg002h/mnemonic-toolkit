@@ -64,7 +64,7 @@ fn run_bsms(extra_args: &[&str]) -> (String, String) {
 #[test]
 fn bsms_4line_emit_2of2_wsh_sortedmulti_mainnet() {
     let (stdout, _) = run_bsms(&[
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -119,7 +119,7 @@ fn bsms_4line_emit_2of2_wsh_sortedmulti_mainnet() {
 #[test]
 fn bsms_4line_emit_2of3_wsh_multi_testnet() {
     let (stdout, _) = run_bsms(&[
-        "--template",
+        "--scheme",
         "wsh-multi",
         "--threshold",
         "2",
@@ -169,7 +169,7 @@ fn bsms_4line_emit_2of3_wsh_multi_testnet() {
 #[test]
 fn bsms_4line_emit_sortedmulti_3of5() {
     let (stdout, _) = run_bsms(&[
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "3",
@@ -223,7 +223,7 @@ fn bsms_4line_emit_sortedmulti_3of5() {
 #[test]
 fn bsms_4line_path_restrictions_emits_slash_0_star_slash_1_star_for_multipath() {
     let (stdout, _) = run_bsms(&[
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -258,7 +258,7 @@ fn bsms_4line_first_address_byte_exact_against_descriptor_derivation() {
     // (line 2). Then independently derive /0/0 from that exact descriptor
     // string via miniscript and compare.
     let (stdout, _) = run_bsms(&[
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -326,7 +326,7 @@ fn bsms_4line_taproot_multisig_refused_carries_full_v0_28_diagnostic() {
             "export-wallet",
             "--format",
             "bsms",
-            "--template",
+            "--scheme",
             "tr-sortedmulti-a",
             "--threshold",
             "2",
@@ -389,7 +389,7 @@ fn bsms_4line_taproot_multisig_refused_carries_full_v0_28_diagnostic() {
 
 /// SPEC v0.27.0 §3.5 cell 6 / v0.28.0 plan-doc §S.8 (P8A) — companion to
 /// the multisig refusal cell above. Exercises **P2tr** (taproot singlesig via
-/// `--template bip86`) to verify the per-script-type discriminator
+/// `--scheme bip86`) to verify the per-script-type discriminator
 /// distinguishes `P2tr` from `P2trMulti`. Same exit-code (2) + same overall
 /// message body except for the parenthetical script-type token.
 #[test]
@@ -402,7 +402,7 @@ fn bsms_taproot_singlesig_refused_carries_p2tr_discriminator() {
             "export-wallet",
             "--format",
             "bsms",
-            "--template",
+            "--scheme",
             "bip86",
             "--network",
             "mainnet",
@@ -442,7 +442,7 @@ fn bsms_2line_lenient_excerpt_emits_descriptor_only() {
     let (stdout, _) = run_bsms(&[
         "--bsms-form",
         "2-line",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -487,7 +487,7 @@ fn bsms_2line_then_import_byte_exact_idempotent() {
     let (stdout, _) = run_bsms(&[
         "--bsms-form",
         "2-line",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",

@@ -142,8 +142,8 @@ annotations.
 > `bitcoin-core`, `bip388`, and `bsms`. Template-only destinations
 > (`sparrow`, `specter`, `coldcard`, `coldcard-multisig`, `jade`,
 > `electrum`, `green`) refuse the envelope with `--format <X>
-> requires --template` and must be reached by supplying the
-> originating seed phrase + `--template` flag directly to
+> requires --scheme` and must be reached by supplying the
+> originating seed phrase + `--scheme` flag directly to
 > `export-wallet`. Recipes 4-8 below all target descriptor-capable
 > sinks; vendor-to-vendor migrations through template-only sinks
 > require an intermediate step through one of the descriptor-capable
@@ -291,18 +291,18 @@ silently picking entry 0 would discard the others).
 | Bitcoin Core | `bitcoin-core` | yes | Descriptor-passthrough; works on all envelopes |
 | BIP-388 wallet-policy | `bip388` | yes | Descriptor-passthrough; canonical multisig + singlesig |
 | BSMS Round-2 emit | `bsms` | yes (v0.27.0+) | 4-line BIP-129-canonical default; `--bsms-form 2-line` for lenient. Refuses taproot inputs (`tr()` script-type) per v0.28.0 P8A. |
-| Sparrow | `sparrow` | no | **Requires `--template`** |
+| Sparrow | `sparrow` | no | **Requires `--scheme`** |
 | Specter | `specter` | conditional | Accepts envelopes that carry `wallet_name`; refuses with `--wallet-name` otherwise |
-| Coldcard single-sig | `coldcard` | no | **Requires `--template`** (`bip44` / `bip49` / `bip84`) |
-| Coldcard multisig | `coldcard` + multi template | no | **Requires `--template`** (`wsh-sortedmulti` / `sh-wsh-sortedmulti` / …) |
-| Jade | `jade` | no | **Requires `--template`** |
-| Electrum | `electrum` | no | **Requires `--template`** |
+| Coldcard single-sig | `coldcard` | no | **Requires `--scheme`** (`bip44` / `bip49` / `bip84`) |
+| Coldcard multisig | `coldcard` + multi template | no | **Requires `--scheme`** (`wsh-sortedmulti` / `sh-wsh-sortedmulti` / …) |
+| Jade | `jade` | no | **Requires `--scheme`** |
+| Electrum | `electrum` | no | **Requires `--scheme`** |
 | Green | `green` | yes (via descriptor) | Refuses multisig at template-mode; descriptor mode passes through |
 
 Template-only destinations refuse `--from-import-json` with a clean
-`--format <X> requires --template` error. The v0.28.0 envelope is
+`--format <X> requires --scheme` error. The v0.28.0 envelope is
 always descriptor-mode (`template: null`); to emit to a template-only
-format, supply the originating BIP-39 phrase + `--template` flag to
+format, supply the originating BIP-39 phrase + `--scheme` flag to
 `export-wallet` directly (skipping the envelope mediator).
 
 For *vendor-to-vendor* migrations where neither end is descriptor-
@@ -329,7 +329,7 @@ mnemonic bundle --network mainnet --import-json envelope.json --json \
 
 # Verify-bundle round-trip via --bundle-json (template-mode path)
 mnemonic verify-bundle \
-  --network mainnet --template wsh-sortedmulti \
+  --network mainnet --scheme wsh-sortedmulti \
   --multisig-path-family bip48 --threshold 2 \
   --slot @0.xpub=<xpub0> --slot @0.fingerprint=<fp0> \
   --slot @1.xpub=<xpub1> --slot @1.fingerprint=<fp1> \

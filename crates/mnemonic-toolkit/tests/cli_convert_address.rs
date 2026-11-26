@@ -22,7 +22,7 @@ const BIP84_CHANGE_0_ADDRESS: &str = "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el
 const BIP49_ACCOUNT_TESTNET_UPUB: &str = "upub5EFU65HtV5TeiSHmZZm7FUffBGy8UKeqp7vw43jYbvZPpoVsgU93oac7Wk3u6moKegAEWtGNF8DehrnHtv21XXEMYRUocHqguyjknFHYfgY";
 
 // BIP-86 §"Test vectors". Account 0 xpub at m/86'/0'/0' (mainnet) for the
-// Trezor 12-word seed; cross-checked via `mnemonic convert --template bip86`.
+// Trezor 12-word seed; cross-checked via `mnemonic convert --scheme bip86`.
 // <https://github.com/bitcoin/bips/blob/master/bip-0086.mediawiki>
 const BIP86_ACCOUNT_XPUB: &str = "xpub6BgBgsespWvERF3LHQu6CnqdvfEvtMcQjYrcRzx53QJjSxarj2afYWcLteoGVky7D3UKDP9QyrLprQ3VCECoY49yfdDEHGCtMMj92pReUsQ";
 const BIP86_RECEIVE_0_ADDRESS: &str =
@@ -110,7 +110,7 @@ fn phrase_to_address_bip49_p2sh_p2wpkh_reference_testnet() {
 
 #[test]
 fn phrase_to_address_bip84_composite_with_template_inferred_script_type() {
-    // Composite phrase → address. `--template bip84` infers --script-type=p2wpkh.
+    // Composite phrase → address. `--scheme bip84` infers --script-type=p2wpkh.
     // From master at m/84'/0'/0'/0/0 → BIP-84 first receive address.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -123,7 +123,7 @@ fn phrase_to_address_bip84_composite_with_template_inferred_script_type() {
             "address",
             "--path",
             "m/84'/0'/0'/0/0",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()
@@ -175,7 +175,7 @@ fn phrase_to_account_upub_bip49_reference_testnet() {
             &format!("phrase={TREZOR_12}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip49",
             "--network",
             "testnet",
@@ -311,7 +311,7 @@ fn refusal_address_no_path() {
 
 #[test]
 fn refusal_address_no_script_type() {
-    // SPEC §10.a byte-pin: --to address requires --script-type or --template.
+    // SPEC §10.a byte-pin: --to address requires --script-type or --scheme.
     // v0.26.0: error message now includes p2pkh in the script-type list.
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
@@ -331,7 +331,7 @@ fn refusal_address_no_script_type() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
-        "error: --to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).\n"
+        "error: --to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --scheme (script-type inferred from template).\n"
     );
 }
 
@@ -341,7 +341,7 @@ fn bip44_template_infers_p2pkh_v0_26_0() {
     // Trezor 12-word seed, mainnet, BIP-44 first receive address.
     // Reference: BIP-44 derivation for "abandon × 11 about" at m/44'/0'/0'/0/0
     // → P2PKH address `1LqBGSKuX5yYUonjxT5qGfpUsXKYYWeabA` (computed via
-    // `mnemonic convert --template bip44`).
+    // `mnemonic convert --scheme bip44`).
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -353,7 +353,7 @@ fn bip44_template_infers_p2pkh_v0_26_0() {
             "address",
             "--path",
             "m/44'/0'/0'/0/0",
-            "--template",
+            "--scheme",
             "bip44",
         ])
         .assert()
@@ -447,7 +447,7 @@ fn xpub_to_address_p2pkh_explicit_script_type_v0_26_0() {
     // P2PKH address (starts with '1').
     //
     // Account-level xpub for Trezor 12-word seed at m/44'/0'/0' computed
-    // via `mnemonic convert --template bip44`.
+    // via `mnemonic convert --scheme bip44`.
     const BIP44_ACCOUNT_XPUB: &str = "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj";
     let out = Command::cargo_bin("mnemonic")
         .unwrap()

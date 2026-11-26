@@ -39,7 +39,7 @@ fn run_verify_bundle(ms1: &str, mk1: &[String], md1: &[String]) -> Value {
         format!("@0.phrase={TREZOR_24}"),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--ms1".into(),
         ms1.into(),
@@ -71,7 +71,7 @@ fn run_verify_bundle_watch_only(xpub: &str, fp: &str, mk1: &[String], md1: &[Str
         format!("@0.fingerprint={fp}"),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--json".into(),
     ];

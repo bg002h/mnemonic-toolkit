@@ -23,7 +23,7 @@ const A_FP: &str = "b8688df1";
 const B_XPUB: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
 const B_FP: &str = "28645006";
 
-/// `export-wallet --format <fmt> --template <tmpl>` with two cosigner slots.
+/// `export-wallet --format <fmt> --scheme <tmpl>` with two cosigner slots.
 /// `extra` carries per-case flags (e.g. `--multisig-path-family`).
 fn export_template(fmt: &str, template: &str) -> assert_cmd::assert::Assert {
     Command::cargo_bin("mnemonic")
@@ -33,7 +33,7 @@ fn export_template(fmt: &str, template: &str) -> assert_cmd::assert::Assert {
             "export-wallet",
             "--format",
             fmt,
-            "--template",
+            "--scheme",
             template,
             "--threshold",
             "2",
@@ -62,7 +62,7 @@ fn export_template(fmt: &str, template: &str) -> assert_cmd::assert::Assert {
 const FIELDLESS: [&str; 3] = ["electrum", "coldcard-multisig", "jade"];
 
 // ===========================================================================
-// 1. `--template wsh-multi` / `sh-wsh-multi` → field-less vendor → exit 2.
+// 1. `--scheme wsh-multi` / `sh-wsh-multi` → field-less vendor → exit 2.
 // ===========================================================================
 
 #[test]
@@ -162,7 +162,7 @@ fn from_import_json_sorted_wsh_multi_still_exports() {
 // 3. Direct `--descriptor 'wsh(multi(…))'` → refused with the TYPED H10
 //    message (v0.70.1 Wave 1 — second arm of the guard now keys on the
 //    descriptor `script_type` + unsorted `multi(` for the `template == None`
-//    direct path, not just the resolved `--template`). Refused with exit 2,
+//    direct path, not just the resolved `--scheme`). Refused with exit 2,
 //    stderr names sortedmulti / a faithful format, never silently coerced.
 //    (The typed kind() boundary is also pinned in the unit module.)
 // ===========================================================================
@@ -202,7 +202,7 @@ fn direct_descriptor_unsorted_multi_refused_not_silently_coerced() {
 
 /// v0.70.1 (Wave 1) no-change guard — a SORTED `sortedmulti(` direct
 /// descriptor to a field-less vendor is still refused (the descriptor path's
-/// per-emitter `--template`-required refusal), but NOT by the typed
+/// per-emitter `--scheme`-required refusal), but NOT by the typed
 /// unsorted-multi message (which is specific to UNSORTED multi). Pins that the
 /// new second arm does not over-refuse the BIP-67-faithful sorted case.
 #[test]
@@ -261,7 +261,7 @@ fn taproot_multi_a_hits_existing_taproot_refusal_not_h10() {
             "export-wallet",
             "--format",
             "electrum",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--threshold",
             "2",
@@ -302,7 +302,7 @@ fn single_sig_to_fieldless_vendor_still_exports() {
             "export-wallet",
             "--format",
             "coldcard",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -343,14 +343,14 @@ const C0: &str =
 const C1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const C2: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
-/// `bundle --template <multisig> --json` → the md1 card chunks.
+/// `bundle --scheme <multisig> --json` → the md1 card chunks.
 fn bundle_md1(template: &str) -> Vec<String> {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--threshold",
             "2",
