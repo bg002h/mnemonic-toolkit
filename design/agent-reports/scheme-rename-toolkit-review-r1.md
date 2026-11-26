@@ -74,3 +74,7 @@ Folded on `claude/project-thread-0jg5n7` in the commit after 87758c5.
 - **M4, fixed.** Chapter 43 now reads `--origin-path <NAME>`.
 - **M5, fixed in prose.** Chapter 45 now reads "An unknown scheme is refused with the six schemes". That sentence is the chapter's own prose, not a quote of mr's output. No mr rename branch existed to check against: mnemonic-refugium `origin/claude/project-thread-0jg5n7` is absent or equal to master.
 - **M6, no action.** The GUI PR is in progress.
+
+## Fold, I2 (controller, after the mr PR's commit 2184d6eff)
+
+mr-codec `kits.rs` now prints `` `--scheme {name}` `` in the kit's "these" list, so chapter 45's description of that line reads `` `--scheme owner-heir` ``. M5's wording ("An unknown scheme is refused with the six schemes") matches the mr branch's help/refusal wording.
