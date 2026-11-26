@@ -726,8 +726,9 @@ pub fn factorial(n: usize) -> Option<u128> {
 /// (Lehmer-code / factorial-number-system decode). Deterministic and
 /// O(n²); `rank ∈ [0, n!)`. This is the per-candidate index → assignment map
 /// that lets the parallel shards address the space by contiguous integer
-/// ranges (no shared enumeration state).
-fn unrank_permutation(mut rank: u128, n: usize) -> Vec<usize> {
+/// ranges (no shared enumeration state). Public for `xpub-search
+/// address-of-seed`'s (path tuple, slot order) enumeration.
+pub fn unrank_permutation(mut rank: u128, n: usize) -> Vec<usize> {
     // Lehmer code: digit i is rank / (n-1-i)! , then reduce.
     let mut elems: Vec<usize> = (0..n).collect();
     let mut out = Vec::with_capacity(n);

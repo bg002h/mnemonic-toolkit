@@ -30,6 +30,7 @@ use std::io::{Read, Write};
 
 pub mod account_of_descriptor;
 pub mod account_search;
+pub mod address_of_seed;
 pub mod address_of_xpub;
 pub mod address_search;
 pub mod candidate_paths;
@@ -39,11 +40,13 @@ pub mod passphrase_search;
 pub mod path_of_xpub;
 pub mod path_search;
 pub mod seed_intake;
+pub mod seed_search;
 pub mod target_intake;
 
 // Re-export the per-mode result struct so the unit-cell-in-tests reaches it
 // via `mnemonic_toolkit::cmd::xpub_search::PathOfXpubResult`.
 pub use account_of_descriptor::AccountOfDescriptorResult;
+pub use address_of_seed::AddressOfSeedResult;
 pub use address_of_xpub::AddressOfXpubResult;
 pub use passphrase_of_xpub::PassphraseOfXpubResult;
 pub use path_of_xpub::PathOfXpubResult;
@@ -71,6 +74,10 @@ pub enum XpubSearchCommand {
     /// the passphrase produces the xpub at a standard path. P1 with a
     /// mandatory passphrase group.
     PassphraseOfXpub(passphrase_of_xpub::PassphraseOfXpubArgs),
+    /// Given one or more seeds + one or more target addresses, search the
+    /// common paths (and, for multisig, the key-to-slot map) for the wallet
+    /// that holds them, and print the `bundle` command that mints it.
+    AddressOfSeed(address_of_seed::AddressOfSeedArgs),
 }
 
 pub fn run<R: Read, W: Write, E: Write>(
@@ -98,6 +105,9 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
         XpubSearchCommand::PassphraseOfXpub(a) => {
             passphrase_of_xpub::run_passphrase_of_xpub(a, stdin, stdout, stderr, no_auto_repair)
+        }
+        XpubSearchCommand::AddressOfSeed(a) => {
+            address_of_seed::run_address_of_seed(a, stdin, stdout, stderr, no_auto_repair)
         }
     }
 }
@@ -127,6 +137,7 @@ pub enum XpubSearchJson {
     AccountOfDescriptor(AccountOfDescriptorResult),
     AddressOfXpub(AddressOfXpubResult),
     PassphraseOfXpub(PassphraseOfXpubResult),
+    AddressOfSeed(AddressOfSeedResult),
 }
 
 #[cfg(test)]

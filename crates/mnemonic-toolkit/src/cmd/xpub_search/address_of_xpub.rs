@@ -42,8 +42,8 @@ pub struct AddressOfXpubArgs {
     #[arg(long, value_name = "ADDR", required = true)]
     pub target_address: Vec<String>,
 
-    /// Per-chain BIP-44 gap-limit window. Scan covers `0..gap_limit` indices
-    /// on each chain. Default 20.
+    /// The index window `[0, N)` scanned on each chain (not BIP-44's "N
+    /// consecutive unused addresses" rule). Default 20.
     #[arg(long, default_value_t = 20)]
     pub gap_limit: u32,
 

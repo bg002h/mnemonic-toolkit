@@ -25,10 +25,8 @@ use std::str::FromStr;
 const A: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const Z: &str = "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
-const C3: &str =
-    "legal winner thank year wave sausage worth useful legal winner thank yellow";
-const D4: &str =
-    "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
+const C3: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
+const D4: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
 const S1: &str = "bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu";
 const S2: &str = "bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el";
@@ -109,7 +107,12 @@ fn run_a(extra: &[&str]) -> Out {
 }
 
 fn run_az(extra: &[&str]) -> Out {
-    let mut args = vec!["--from", "phrase=@env:SEED_A", "--from", "phrase=@env:SEED_Z"];
+    let mut args = vec![
+        "--from",
+        "phrase=@env:SEED_A",
+        "--from",
+        "phrase=@env:SEED_Z",
+    ];
     args.extend_from_slice(extra);
     run_with(&args, &envs(), None)
 }
@@ -139,7 +142,7 @@ fn mint(desc: &str, alt: usize, idx: u32) -> String {
     let d = Descriptor::<DescriptorPublicKey>::from_str(desc).unwrap();
     let singles = d.into_single_descriptors().unwrap();
     singles[alt]
-        .at_derivation_index(idx)
+        .derive_at_index(idx)
         .unwrap()
         .address(bitcoin::Network::Bitcoin)
         .unwrap()
@@ -220,7 +223,9 @@ fn s1_bip84_receive() {
 fn s1_text_form() {
     let o = run_a(&["--target-address", S1]);
     assert_eq!(o.code, 0, "{}", o.stderr);
-    assert!(o.stdout.contains("match: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"));
+    assert!(o
+        .stdout
+        .contains("match: bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu"));
     assert!(o.stdout.contains("path:        m/84'/0'/0'/0/0"));
     assert!(o.stdout.contains("script type: p2wpkh"));
     assert!(o.stdout.contains("@0 = seed 0 (73c5da0a)"));
@@ -252,7 +257,8 @@ fn s6_nonstandard_pair_noted() {
     single(S6, "m/44'/0'/0'/0/0", "p2wpkh");
     let o = run_a(&["--target-address", S6]);
     assert!(
-        o.stdout.contains("note: p2wpkh at a BIP-44 path is not what BIP-44 describes"),
+        o.stdout
+            .contains("note: p2wpkh at a BIP-44 path is not what BIP-44 describes"),
         "{}",
         o.stdout
     );
@@ -298,8 +304,18 @@ fn t1_testnet_and_regtest() {
     assert_eq!(o.code, 0, "{}", o.stderr);
     assert_eq!(first_target_path(found(&o.json()), 0), "m/84'/1'/0'/0/0");
     let o = run_a(&["--target-address", T1]);
-    assert_eq!(o.code, 2, "testnet target under mainnet is refused: {}", o.stderr);
-    let o = run_a(&["--target-address", REGTEST1, "--network", "regtest", "--json"]);
+    assert_eq!(
+        o.code, 2,
+        "testnet target under mainnet is refused: {}",
+        o.stderr
+    );
+    let o = run_a(&[
+        "--target-address",
+        REGTEST1,
+        "--network",
+        "regtest",
+        "--json",
+    ]);
     assert_eq!(o.code, 0, "{}", o.stderr);
     assert_eq!(first_target_path(found(&o.json()), 0), "m/84'/1'/0'/0/0");
 }
@@ -325,7 +341,11 @@ fn p1_passphrase_changes_the_fingerprint() {
     assert_eq!(v["searched"]["passphrase_supplied"], true);
     let o = run_a(&["--target-address", P1]);
     assert_eq!(o.code, 4);
-    assert!(o.stdout.contains("--passphrase"), "no-match names the passphrase: {}", o.stdout);
+    assert!(
+        o.stdout.contains("--passphrase"),
+        "no-match names the passphrase: {}",
+        o.stdout
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +369,10 @@ fn m1_sorted_one_target_is_a_twin() {
         .iter()
         .find(|w| w["role"] == "twin")
         .expect("twin listed");
-    assert!(twin["descriptor"].as_str().unwrap().starts_with("wsh(multi(2,"));
+    assert!(twin["descriptor"]
+        .as_str()
+        .unwrap()
+        .starts_with("wsh(multi(2,"));
     assert_eq!(v["searched"]["slot_orders"], 1, "sorted collapse");
 }
 
@@ -480,7 +503,8 @@ fn m6_sorted_twin_matches_all_targets() {
     ]);
     assert_eq!(o.code, 4, "{}", o.stderr);
     assert!(
-        o.stdout.contains("the sorted twin of your template matches all targets"),
+        o.stdout
+            .contains("the sorted twin of your template matches all targets"),
         "{}",
         o.stdout
     );
@@ -495,7 +519,10 @@ fn m6_sorted_twin_matches_all_targets() {
     ]);
     let v = o.json();
     assert!(reasons(&v).contains(&"twin".to_string()));
-    assert_eq!(v["wallets"][0]["role"], "twin", "the covering twin is listed first");
+    assert_eq!(
+        v["wallets"][0]["role"], "twin",
+        "the covering twin is listed first"
+    );
     assert_eq!(v["wallets"][0]["targets"].as_array().unwrap().len(), 2);
 }
 
@@ -686,7 +713,14 @@ fn keyed_seed_matching_no_key_is_refused() {
         "wsh(sortedmulti(2,[73c5da0a/48h/0h/0h/2h]{ax}/<0;1>/*,[3f635a63/48h/0h/0h/2h]{zx}/<0;1>/*))"
     );
     let o = run_with(
-        &["--phrase", "@env:S", "--descriptor", &desc, "--target-address", M1],
+        &[
+            "--phrase",
+            "@env:S",
+            "--descriptor",
+            &desc,
+            "--target-address",
+            M1,
+        ],
         &[("S", C3)],
         None,
     );
@@ -804,7 +838,12 @@ fn h1_path_step_above_md1_range() {
     assert!(w["bundle_command"].is_null());
     assert_eq!(w["bundle_command_unavailable"], "path_unrecordable");
     assert_eq!(first_target_path(w, 0), "m/84'/0'/536870912'/0/0");
-    let o = run_a(&["--target-address", H1_OK, "--add-path", "m/84'/0'/536870911'"]);
+    let o = run_a(&[
+        "--target-address",
+        H1_OK,
+        "--add-path",
+        "m/84'/0'/536870911'",
+    ]);
     assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
 }
 
@@ -871,7 +910,14 @@ fn refusals_exit_2() {
     // A second stdin reader.
     assert_eq!(
         run_with(
-            &["--from", "phrase=-", "--passphrase", "-", "--target-address", S1],
+            &[
+                "--from",
+                "phrase=-",
+                "--passphrase",
+                "-",
+                "--target-address",
+                S1
+            ],
             &[],
             Some(A)
         )
@@ -896,12 +942,21 @@ fn private_keys_refused_and_not_echoed() {
     let seed = Mnemonic::parse_in(bip39::Language::English, Z)
         .unwrap()
         .to_seed("");
-    let xprv = Xpriv::new_master(NetworkKind::Main, &seed).unwrap().to_string();
+    let xprv = Xpriv::new_master(NetworkKind::Main, &seed)
+        .unwrap()
+        .to_string();
     let desc = format!("wsh(sortedmulti(2,@0/<0;1>/*,{xprv}/<0;1>/*))");
     let o = run_a(&["--descriptor", &desc, "--target-address", M1]);
     assert_eq!(o.code, 2);
     assert!(!o.stderr.contains(&xprv[4..40]), "{}", o.stderr);
-    let o = run_a(&["--descriptor", SORTED, "--cosigner", &xprv, "--target-address", M1]);
+    let o = run_a(&[
+        "--descriptor",
+        SORTED,
+        "--cosigner",
+        &xprv,
+        "--target-address",
+        M1,
+    ]);
     assert_eq!(o.code, 2);
     assert!(!o.stderr.contains(&xprv[4..40]), "{}", o.stderr);
 }
@@ -917,7 +972,11 @@ fn argv_guard_refuses_inline_phrase() {
 // ---------------------------------------------------------------------------
 
 fn bip84_receive(idx: u32) -> String {
-    mint(&format!("wpkh({})", key_with_use_site(A, "m/84'/0'/0'")), 0, idx)
+    mint(
+        &format!("wpkh({})", key_with_use_site(A, "m/84'/0'/0'")),
+        0,
+        idx,
+    )
 }
 
 #[test]
@@ -950,7 +1009,11 @@ fn two_accounts_split() {
 
 #[test]
 fn one_unmatched() {
-    let other = mint(&format!("wpkh({})", key_with_use_site(Z, "m/84'/0'/0'")), 0, 0);
+    let other = mint(
+        &format!("wpkh({})", key_with_use_site(Z, "m/84'/0'/0'")),
+        0,
+        0,
+    );
     let o = run_a(&["--target-address", S1, "--target-address", &other, "--json"]);
     assert_eq!(o.code, 4);
     let v = o.json();
@@ -1009,7 +1072,13 @@ fn intake_entropy_and_seedqr() {
 #[test]
 fn bare_wildcard_has_no_chain_step() {
     let t = mint(&format!("wpkh({}/*)", origin_key(A, "m/84'/0'/0'")), 0, 5);
-    let o = run_a(&["--descriptor", "wpkh(@0/*)", "--target-address", &t, "--json"]);
+    let o = run_a(&[
+        "--descriptor",
+        "wpkh(@0/*)",
+        "--target-address",
+        &t,
+        "--json",
+    ]);
     assert_eq!(o.code, 0, "{}", o.stderr);
     let v = o.json();
     assert_eq!(first_target_path(found(&v), 0), "m/84'/0'/0'/5");
@@ -1018,11 +1087,16 @@ fn bare_wildcard_has_no_chain_step() {
 
 #[test]
 fn no_match_reports_the_searched_set() {
-    let other = mint(&format!("wpkh({})", key_with_use_site(Z, "m/84'/0'/0'")), 0, 0);
+    let other = mint(
+        &format!("wpkh({})", key_with_use_site(Z, "m/84'/0'/0'")),
+        0,
+        0,
+    );
     let o = run_a(&["--target-address", &other]);
     assert_eq!(o.code, 4);
     assert!(
-        o.stdout.contains("m/45' (the bundle bare-sh default, not BIP-45 cosigner branches)"),
+        o.stdout
+            .contains("m/45' (the bundle bare-sh default, not BIP-45 cosigner branches)"),
         "{}",
         o.stdout
     );
@@ -1094,7 +1168,10 @@ fn redaction_inline_passphrase_beside_stdin_seed() {
     let v: Value = serde_json::from_str(stdout.trim()).unwrap();
     let cmd = found(&v)["bundle_command"].as_str().unwrap();
     assert!(cmd.contains("@0.phrase=-"), "{cmd}");
-    assert!(cmd.contains("--passphrase @env:MNEMONIC_PASSPHRASE"), "{cmd}");
+    assert!(
+        cmd.contains("--passphrase @env:MNEMONIC_PASSPHRASE"),
+        "{cmd}"
+    );
     assert!(!stdout.contains("TREZOR"));
 }
 
