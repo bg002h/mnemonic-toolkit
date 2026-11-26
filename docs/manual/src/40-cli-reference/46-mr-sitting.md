@@ -306,7 +306,7 @@ practice cases (run one with mr-sitting practice <case>):
 
 > mr-sitting: could not make \<path\> (\<os error\>): practice writes its files into a folder it can write; give another --dir
 
-ST-PR-04 to ST-PR-07 and ST-PR-12 are exit 2; ST-PR-01 is the banner while the run matches the stored files and ST-PR-02 once it differs.
+ST-PR-04 is exit 2, ST-PR-05 exit 8 (the file exists), ST-PR-06 exit 64 (an unknown case), ST-PR-07 and ST-PR-12 exit 32 (the folder); ST-PR-01 is the banner while the run matches the stored files and ST-PR-02 once it differs.
 
 ### The steel plates step in practice
 
@@ -371,7 +371,7 @@ mr-sitting kit-write --kit <FILE>
 | `--kit <FILE>` | The kit payload plan file mr-gui saved |
 | `-h, --help` | Print help |
 
-`kit-write` writes the kit payload plan mr-gui saved to the SeedHammer's kit payload region (address `0x10D00000`) with `picotool load --verify`, the SeedHammer in BOOTSEL. It reads no secret and runs no hardening, lock, network test or logging-terminal check. It needs a RAM-only folder (`$XDG_RUNTIME_DIR` on tmpfs or ramfs; an empty value counts as not set; the `refugium-sitting` folder `sit` makes in it is not checked) for the one file picotool reads, `refugium-device-<pid>.bin`, which it overwrites with zeros and unlinks before it exits, also when a signal stops it. A signal (Ctrl-C, SIGTERM, SIGHUP) that comes before the device file is made stops the command there once its checks pass (ST-KIT-14, exit 1; a Ctrl-C while `picotool version` runs ends that run, and ST-KIT-09 says so); Ctrl-C in its terminal during a device step also ends picotool, and that step is reported as failed (ST-KIT-07); a signal sent to mr-sitting alone lets the step end, and the command reports its result. The plan is read strictly (ASCII lines: `refugium-kit-payload 1`, `set`, `payload <x> of <y>`, `digest`, `records`, then each card's `card <k> <kind>` and `record` lines, then `end`); its digest line is recomputed from its records.
+`kit-write` writes the kit payload plan mr-gui saved to the SeedHammer's kit payload region (address `0x10D00000`) with `picotool load --verify`, the SeedHammer in BOOTSEL. It reads no secret and runs no hardening, lock, network test or logging-terminal check. It needs a RAM-only folder (`$XDG_RUNTIME_DIR` on tmpfs or ramfs; an empty value counts as not set; the `refugium-sitting` folder `sit` makes in it is not checked) for the one file picotool reads, `refugium-device-<pid>.bin`, which it overwrites with zeros and unlinks before it exits, also when a signal stops it. A signal (Ctrl-C, SIGTERM, SIGHUP) that comes before the device file is made stops the command there once its checks pass (ST-KIT-14; it then ends by the signal, which the shell reports as 128+N; a Ctrl-C while `picotool version` runs ends that run, and ST-KIT-09 says so); Ctrl-C in its terminal during a device step also ends picotool, and that step is reported as failed (ST-KIT-07); a signal sent to mr-sitting alone lets the step end, and the command reports its result. The plan is read strictly (ASCII lines: `refugium-kit-payload 1`, `set`, `payload <x> of <y>`, `digest`, `records`, then each card's `card <k> <kind>` and `record` lines, then `end`); its digest line is recomputed from its records.
 
 ### What it prints
 
@@ -512,7 +512,7 @@ mr-sitting glossary [<term>]...
 | `[TERM]...` | The term, in any case; a space reads as `-`. The words after `glossary` are one term, joined by one space |
 | `-h, --help` | Print help |
 
-`glossary` reads no secret and takes no hardening, lock or file. With no term it prints every entry, a header line, then one `<term>: <text>` per line, on stdout (exit 0); with a term it prints that entry alone (exit 0), or ST-G-02 on stderr (exit 2) if there is none. In the sitting, Ctrl-G opens the same entries as an overlay.
+`glossary` reads no secret and takes no hardening, lock or file. With no term it prints every entry, a header line, then one `<term>: <text>` per line, on stdout (exit 0); with a term it prints that entry alone (exit 0), or ST-G-02 on stderr (exit 64) if there is none. In the sitting, Ctrl-G opens the same entries as an overlay.
 
 **ST-G-02:**
 
@@ -848,8 +848,8 @@ text above.
 | 0 | `sit`: the session ended at ST-END-02. `verify`: exactly one block matched in full. `root`, `child`: as `mr root`, `mr child`. `kit-write`, `kit-wipe`, `erase-sealed`: the SeedHammer was written or erased and read back as the command says (ST-KIT-06, ST-KIT-08, ST-KIT-10). |
 | 1 | A check said no: `verify` mismatch (ST-V-04, ST-V-05, ST-V-06); a well-formed hand-back that belongs to another plan. |
 | 2 | An input is invalid: a malformed plan, hand-back or kit file (ST-PLAN-…, ST-FILE-…, ST-KIT-01 to ST-KIT-04, ST-KIT-13), a refused input value. Also the end of input at a prompt, which can come mid-session, after secrets were read (they are wiped first), and the end of input at the mainnet questions (ST-NET-06). |
-| 8 | Refused under a rule an override or a different destination would waive: another session holds the lock (ST-START-02), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09), an output file that exists (`practice --dir` included). |
-| 32 | Something needed from the system failed: an unreadable plan or hand-back file, a missing `--dir`, no RAM-only folder (ST-KIT-05), picotool not usable (ST-KIT-09), a failed picotool `load` or erase (ST-KIT-07, ST-KIT-11, ST-KIT-12). A wipe that fails during a stop adds 32 to the code (a code of 64 or more becomes 32). |
+| 8 | Refused under a rule an override or a different destination would waive: a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09), an output file that exists (`practice --dir` included). |
+| 32 | Something needed from the system failed: another session holds the lock (ST-START-02), an unreadable plan or hand-back file, a missing `--dir`, no RAM-only folder (ST-KIT-05), picotool not usable (ST-KIT-09), a failed picotool `load` or erase (ST-KIT-07, ST-KIT-11, ST-KIT-12). A wipe that fails during a stop adds 32 to the code (a code of 64 or more becomes 32). |
 | 64 | The command line alone is wrong (clap errors, a bad setting, an unknown practice case or glossary term); nothing ran. |
 | 130 | The operator stopped it by typing: Ctrl-C, or Ctrl-Q then `y`, in the full-screen view, or `quit`, in `sit` (ST-END-03, ST-END-04) and `verify` (ST-V-09); and any answer but `yes` to the mainnet questions (ST-NET-06). |
-| 128+N | A signal N during a session (ST-KIT-14 among them): `mr-sitting` wipes, then raises the signal again, so the shell reports 128+N. |
+| 128+N | A signal N during a session (ST-KIT-14 among them, and a signal at the mainnet questions, ST-NET-02 to ST-NET-05, which ends the run by the signal after ST-END-03, never ST-NET-06): `mr-sitting` wipes, then raises the signal again, so the shell reports 128+N. |
