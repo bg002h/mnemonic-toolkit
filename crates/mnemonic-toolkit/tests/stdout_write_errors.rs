@@ -1,5 +1,5 @@
 //! FIX-tk-stdout-write-errors (bughunt-1119 bh-tk-I2): a failed stdout write must not exit 0.
-//! Rows R1-R18, R22, R23 of `design/FIX-tk-stdout-write-errors.md` section 5. Linux only
+//! Rows R1-R18, R22, R23 of `design/FIX-tk-stdout-write-errors.md` section 5; R18 (changed), R24-R26: closed fd 1 (`>&-`). Linux only
 //! (`/dev/full`). Signet, public test phrases only.
 #![cfg(target_os = "linux")]
 #![allow(missing_docs)]
@@ -332,22 +332,84 @@ fn r17_derive_child_fsize0_exits_1() {
     );
 }
 
-#[test]
-fn r18_gui_schema_closed_fd_keeps_exit_0() {
-    let o = Command::new("sh")
+/// Run `BIN args` with fd 1 closed outright (`>&-`); stdin is `stdin_text`.
+fn run_closed_fd(stdin_text: &str, args: &[&str]) -> Run {
+    let mut child = Command::new("sh")
         .arg("-c")
-        .arg("exec \"$0\" gui-schema >&-")
+        .arg("exec \"$0\" \"$@\" >&-")
         .arg(BIN)
-        .stdin(Stdio::null())
+        .args(args)
+        .stdin(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .unwrap();
-    assert_eq!(o.status.code(), Some(0));
-    assert!(
-        o.stderr.is_empty(),
-        "{}",
-        String::from_utf8_lossy(&o.stderr)
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(format!("{stdin_text}\n").as_bytes())
+        .ok();
+    let o = child.wait_with_output().unwrap();
+    Run {
+        rc: o.status.code().unwrap(),
+        stderr: String::from_utf8_lossy(&o.stderr).into_owned(),
+    }
+}
+
+// Defect 1 of the 2026-11-26 exit-code survey: a stdout closed outright (`>&-`) used to exit 0 with the output
+// lost (std reopens fd 1 on /dev/null before `main`). It now fails like a read-only stdout.
+#[test]
+fn r18_gui_schema_closed_fd_exits_1() {
+    let r = run_closed_fd("", &["gui-schema"]);
+    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.stderr.trim_end(), RO);
+}
+
+#[test]
+fn r24_convert_closed_fd_exits_1() {
+    let r = run_closed_fd(P, &["convert", "--from", "phrase=-", "--to", "entropy"]);
+    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.last(), RO);
+}
+
+#[test]
+fn r25_help_and_version_closed_fd_exit_1() {
+    for flag in ["--help", "--version"] {
+        let r = run_closed_fd("", &[flag]);
+        assert_eq!(r.rc, 1, "{flag}: {}", r.stderr);
+        assert_eq!(r.stderr.trim_end(), RO, "{flag}");
+    }
+}
+
+#[test]
+fn r26_export_wallet_output_file_closed_fd_exits_0() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("wallet.json");
+    let out_s = out.to_str().unwrap();
+    let r = run_closed_fd(
+        "",
+        &[
+            "--allow-argv-secret",
+            "export-wallet",
+            "--format",
+            "coldcard",
+            "--template",
+            "bip84",
+            "--network",
+            "mainnet",
+            "--slot",
+            "@0.xpub=zpub6qTBTNftBzVTjgVcSUw7vW5N1KQbV93Jnrw314RHGkCkSx4vk6nEWH1MJfReXi2WThvuDRiRpyT7cDoakEcZMQ1iZPgfJgQrcVMR4aJWh6S",
+            "--slot",
+            "@0.fingerprint=5436d724",
+            "--output",
+            out_s,
+        ],
     );
+    assert_eq!(r.rc, 0, "{}", r.stderr);
+    assert!(!r.stderr.contains("cannot write"), "{}", r.stderr);
+    let expected =
+        std::fs::read_to_string("tests/export_wallet/coldcard_generic_bip84_mainnet.json").unwrap();
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), expected);
 }
 
 #[test]

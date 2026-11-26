@@ -162,6 +162,9 @@ extern crate self as mnemonic_toolkit;
 mod cli;
 #[doc(hidden)]
 pub use cli::run;
+/// The binary's pre-`main` closed-stdout probe reports through this (`src/main.rs`). Not a library API.
+#[doc(hidden)]
+pub use out_sink::mark_stdout_closed_at_start;
 
 // ---------------------------------------------------------------------------
 // The modules that used to be declared in `main.rs` (binary-private).

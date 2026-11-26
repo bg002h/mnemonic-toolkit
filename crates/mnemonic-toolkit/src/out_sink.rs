@@ -7,11 +7,26 @@
 //! content.
 
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Set before `main` when fd 1 was closed at exec (`>&-`). std's runtime start-up then reopens fd 1 on
+/// `/dev/null`, so the output would be discarded with exit 0; the sink reports it as `EBADF` instead.
+static STDOUT_CLOSED_AT_START: AtomicBool = AtomicBool::new(false);
+
+/// Record that fd 1 was closed when the process started. Called from the binary's pre-`main` probe
+/// (`src/main.rs`); it only stores a flag, so it is safe to call before std's runtime is set up.
+pub fn mark_stdout_closed_at_start() {
+    STDOUT_CLOSED_AT_START.store(true, Ordering::Relaxed);
+}
 
 /// A read-only fd 1 (`1</dev/null`): std's `Stdout` reports `EBADF` as a successful write, so check it once.
+/// A fd 1 that was closed at exec (see `STDOUT_CLOSED_AT_START`) is the same `EBADF`.
 /// A failing `fcntl` is not an error here. Non-unix: no check.
 #[cfg(unix)]
 fn fd1_read_only() -> Option<io::Error> {
+    if STDOUT_CLOSED_AT_START.load(Ordering::Relaxed) {
+        return Some(io::Error::from_raw_os_error(libc::EBADF));
+    }
     // SAFETY: `fcntl(F_GETFL)` reads the status flags of fd 1 and touches no memory.
     let flags = unsafe { libc::fcntl(1, libc::F_GETFL) };
     if flags < 0 {

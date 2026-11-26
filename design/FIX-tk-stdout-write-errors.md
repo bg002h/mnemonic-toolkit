@@ -61,6 +61,10 @@ Its behaviour, which is the spec (code shape is the builder's):
   binary still builds for the release windows row (`release.yml` `x86_64-pc-windows-msvc`).
 - A stdout closed outright (`>&-`) is not an error: std reopens fd 1 on `/dev/null` at start-up, so the output is
   discarded and the code is the verb's own (R18, a guard row, already GREEN at `dbac472f`; md behaves the same).
+  **Superseded 2026-11-26** (exit-code survey Defect 1): a closed stdout now fails as a write error. A pre-`main`
+  probe in `src/main.rs` (`.init_array`) records a closed fd 1 and plugs closed fds 0-2 with `/dev/null`; the sink
+  then records `EBADF` on the first stdout write (exit 1, the `RO` line). A verb that writes nothing to stdout is
+  unaffected. R18 changed accordingly; R24-R26 added.
 - Stderr writes are unchanged: a failed stderr write is ignored, as today.
 
 ### 3.2 `main` maps the exit code once (`main.rs:281-300`)
@@ -162,7 +166,7 @@ states what it does not cover). It prints `<row> rc=<exit> stderr=<last stderr l
 | R15 | `repair --mk1 <K1 with its last char f→q> <K2>` (`>/dev/full`) | rc=1, `error: I/O error: …(os error 28)` | rc=1, `W`; no `error: I/O error` line |
 | R16 | `repair --ms1 -` (stdin: the ms1 card, last char f→q; exit 4 when stdout works) (`>/dev/full`) | rc=1, `error: I/O error: …(os error 28)` | rc=1, last stderr line `W`; no `error: I/O error` line |
 | R17 | R1 into a regular file under `sh -c 'trap "" XFSZ; ulimit -f 0; exec …'` (the consultant's case) | rc=0, bytes=0 | rc=1, bytes=0, `mnemonic: cannot write the output: File too large (os error 27)` |
-| R18 | `gui-schema >&-` | rc=0, stderr empty | rc=0, stderr empty (guard: std reopens fd 1 on /dev/null) |
+| R18 | `gui-schema >&-` | rc=0, stderr empty | (2026-11-26) rc=1, stderr `RO` |
 | R23 | `inspect --md1 md1yppqqxp3cg2x3r70ckk4kjaf` (a dead pathless md1, cli_inspect_partial.rs:42; exit 4 when stdout works) (`>/dev/full`) | rc=1, `error: I/O error: No space left on device (os error 28)` | rc=1, last stderr line `W`; no `error: I/O error` line |
 
 Measured output at `dbac472f`, verbatim except the long advisory line cut to its start (`warning: stdout carries
