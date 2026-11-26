@@ -778,6 +778,23 @@ fn b1_bare_cosigner_with_canonical_header() {
     let cmd = w["bundle_command"].as_str().unwrap();
     assert!(cmd.contains("@1.path=m/48h/0h/0h/2h"), "{cmd}");
     assert!(!cmd.contains("@1.fingerprint"), "{cmd}");
+    // Review r1 M5: the bare cosigner's per-target path is not a path from
+    // the master.
+    assert!(w["targets"][0]["paths"][1]["path"].is_null(), "{w}");
+    let o = run_a(&[
+        "--descriptor",
+        SORTED,
+        "--cosigner",
+        &zs,
+        "--target-address",
+        M1,
+    ]);
+    assert!(o.stdout.contains("@1 <origin unknown>/0/0"), "{}", o.stdout);
+    assert!(
+        o.stdout.contains("cannot be read from") || o.stdout.contains("not the account"),
+        "{}",
+        o.stdout
+    );
 }
 
 #[test]
@@ -2102,4 +2119,99 @@ fn argv_guard_table_for_this_verb() {
             "{err}"
         );
     }
+}
+
+/// Review r1 M4: an `--add-path` equal to a seat path is not a second
+/// wallet when `--refugium-seats` searches it anyway.
+#[test]
+fn add_path_equal_to_a_seat_path_is_not_a_split() {
+    let o = run_a(&[
+        "--target-address",
+        S10,
+        "--refugium-seats",
+        "--add-path",
+        "m/270028'/0'/33'",
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    assert_eq!(o.json()["result"], "match");
+}
+
+/// Review r1 M10: a keyed key without an origin is placed at a seat path
+/// when `--refugium-seats` is given.
+#[test]
+fn keyed_key_without_origin_placed_at_a_seat() {
+    let (_, ax) = xpub_at(A, "m/270028'/0'/1'");
+    let (_, zx) = xpub_at(Z, "m/270028'/0'/0'");
+    let desc = format!("wsh(multi(2,[3f635a63/270028h/0h/0h]{zx}/<0;1>/*,{ax}/<0;1>/*))");
+    let target = mint(&desc, 0, 0);
+    let o = run_a(&["--descriptor", &desc, "--target-address", &target]);
+    assert_eq!(
+        o.code, 2,
+        "without the seats the key is not placed: {}",
+        o.stderr
+    );
+    let o = run_a(&[
+        "--descriptor",
+        &desc,
+        "--refugium-seats",
+        "--target-address",
+        &target,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}\n{}", o.stdout, o.stderr);
+    let v = o.json();
+    assert_eq!(
+        slot_by_fp(found(&v), "73c5da0a")["origin_path"],
+        "m/270028'/0'/1'"
+    );
+    assert_eq!(check_printed(&v, &envs(), None), 1);
+}
+
+/// Review r1 N2, N3: one `error:` per refusal; a bad entropy value is not
+/// echoed.
+#[test]
+fn refusal_wording() {
+    let o = run_with(
+        &[
+            "--phrase-stdin",
+            "--descriptor-from",
+            "md1=-",
+            "--target-address",
+            S1,
+        ],
+        &[],
+        Some(A),
+    );
+    assert_eq!(o.code, 2);
+    assert_eq!(o.stderr.matches("error:").count(), 1, "{}", o.stderr);
+    let o = run_with(
+        &["--from", "entropy=@env:E", "--target-address", S1],
+        &[("E", "0000000000000000000000000000g000")],
+        None,
+    );
+    assert_ne!(o.code, 0);
+    assert!(
+        !o.stderr.contains("'g'") && !o.stderr.contains("position"),
+        "{}",
+        o.stderr
+    );
+}
+
+/// Review r1 M8: a covering twin's "of wallet N" names the found wallet's
+/// position in the output.
+#[test]
+fn covering_twin_names_the_found_wallet_by_position() {
+    let o = run_az(&[
+        "--descriptor",
+        UNSORTED,
+        "--target-address",
+        M1,
+        "--target-address",
+        M1_IDX1,
+    ]);
+    assert_eq!(o.code, 4);
+    // The covering twin is printed first; its found wallet is wallet 2 or
+    // later, never wallet 1 (itself).
+    assert!(!o.stdout.contains("twin (of wallet 1)"), "{}", o.stdout);
 }

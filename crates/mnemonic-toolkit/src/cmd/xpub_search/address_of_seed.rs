@@ -131,7 +131,9 @@ pub struct AddressOfSeedArgs {
     pub add_path: Vec<String>,
 
     /// The index window `[0, N)` searched on each chain (not BIP-44's
-    /// "N consecutive unused addresses" rule). At most 2^31.
+    /// "N consecutive unused addresses" rule). At most 2^31; a run whose
+    /// child-key cache (paths × chains × N per key) would pass 2^26 keys is
+    /// refused (about 208,000 for one seed at the default paths).
     #[arg(long, default_value_t = 20)]
     pub gap_limit: u32,
 
@@ -246,7 +248,10 @@ pub struct TargetJson {
 #[derive(Debug, Serialize, Clone)]
 pub struct SlotPathJson {
     pub slot: usize,
-    pub path: String,
+    /// The full path, or null for a cosigner whose origin is not known
+    /// (review r1 M5: a path from an empty origin would read as a path from
+    /// the master).
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -429,7 +434,8 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
         readers.push((*s, format!("--from #{i} =-")));
     }
     let rd: Vec<(bool, &str)> = readers.iter().map(|(b, s)| (*b, s.as_str())).collect();
-    crate::passphrase_input::refuse_second_stdin(&rd).map_err(|e| refuse(e.to_string()))?;
+    crate::passphrase_input::refuse_second_stdin(&rd)
+        .map_err(|e| refuse(e.to_string().trim_start_matches("error: ").to_string()))?;
 
     let network = args.network;
     let btc_network = network.to_bitcoin_network();
@@ -680,8 +686,14 @@ fn intake_seeds<R: Read, W: Write, E: Write>(
                 Mnemonic::parse_in(lang, phrase.as_str()).map_err(ToolkitError::Bip39)?
             }
             NodeType::Entropy => {
-                let e = Zeroizing::new(hex::decode(value.trim()).map_err(|e| {
-                    ToolkitError::BadInput(format!("--from entropy= hex-decode: {e}"))
+                // The decode error names a character and its position in
+                // the secret; it is not repeated (review r1 N3).
+                let e = Zeroizing::new(hex::decode(value.trim()).map_err(|_| {
+                    ToolkitError::BadInput(
+                        "--from entropy=: not an even-length hex string (the value is not \
+                         repeated)"
+                            .into(),
+                    )
                 })?);
                 Mnemonic::from_entropy_in(lang, &e).map_err(ToolkitError::Bip39)?
             }
@@ -884,6 +896,9 @@ fn standard_paths(ctx: &Ctx) -> Result<(Vec<PathInfo>, Vec<String>, u32), Toolki
         .add_path
         .iter()
         .filter(|t| !add_path_repeats_standard(t, a, ctx.network))
+        // An --add-path equal to a seat path is dropped when the seats are
+        // searched anyway (review r1 M4: it would report two wallets).
+        .filter(|t| !(a.refugium_seats && is_seat_path(t, ctx.network)))
         .cloned()
         .collect();
     let cps = build_candidate_paths(
@@ -986,6 +1001,18 @@ fn seat_paths(network: CliNetwork) -> Vec<PathInfo> {
             }
         })
         .collect()
+}
+
+/// `m/270028'/coin'/n'` with `n < 256`: one of the Refugium seat paths.
+fn is_seat_path(tmpl: &str, network: CliNetwork) -> bool {
+    DerivationPath::from_str(tmpl).is_ok_and(|p| {
+        let v: Vec<ChildNumber> = p.into_iter().copied().collect();
+        matches!(v.as_slice(), [
+            ChildNumber::Hardened { index: 270_028 },
+            ChildNumber::Hardened { index: c },
+            ChildNumber::Hardened { index: n },
+        ] if *c == network.coin_type() && *n < 256)
+    })
 }
 
 /// SPEC §3 dedupe: an `--add-path` that would repeat a standard path is
@@ -1538,7 +1565,12 @@ fn keyed_job<E: Write>(
     }
     let tpl = Template::parse(&templ).map_err(refuse)?;
     let n = tpl.n;
-    let (std, add, end) = standard_paths(ctx)?;
+    let (mut std, add, end) = standard_paths(ctx)?;
+    // A key without an origin is compared with the seat paths too when
+    // they are asked for (review r1 M10).
+    if ctx.args.refugium_seats {
+        std.extend(seat_paths(ctx.network));
+    }
     let secp = Secp256k1::new();
     // Place seeds by key derivation (SPEC §2), fingerprint only a hint.
     let mut placed: Vec<Option<(usize, PathInfo)>> = vec![None; n];
@@ -1608,7 +1640,8 @@ fn keyed_job<E: Write>(
             None => {
                 return Err(refuse(format!(
                     "seed {si} ({}) equals no key of the descriptor: tried each key's stated \
-                     origin path, and the {} standard paths for keys without one",
+                     origin path, and the {} standard (and asked-for seat) paths for keys without \
+                     one",
                     ctx.fps[si],
                     std.len()
                 )))
@@ -2476,13 +2509,19 @@ impl Analysis<'_> {
                     .assign
                     .iter()
                     .enumerate()
-                    .map(|(slot, (src, path))| SlotPathJson {
-                        slot,
-                        path: child_path(
-                            &job.sources[*src].paths[*path].path,
-                            tpl.slot_alts[slot][*alt as usize],
-                            *idx,
-                        ),
+                    .map(|(slot, (src, path))| {
+                        let s = &job.sources[*src];
+                        let known = s.cosigner.as_ref().is_none_or(|c| c.path.is_some());
+                        SlotPathJson {
+                            slot,
+                            path: known.then(|| {
+                                child_path(
+                                    &s.paths[*path].path,
+                                    tpl.slot_alts[slot][*alt as usize],
+                                    *idx,
+                                )
+                            }),
+                        }
                     })
                     .collect(),
             })
@@ -2700,7 +2739,16 @@ impl Analysis<'_> {
         for (p, ((role, w, fi), wj)) in order.iter().zip(wallets).enumerate() {
             let tpl = Template::parse(&w.tpl_text).map_err(refuse)?;
             let tag = if *role == "twin" {
-                format!("twin (of wallet {}): ", fi.map(|f| f + 1).unwrap_or(0))
+                // Numbered by output position, as the "unverified" lines are
+                // (review r1 M8).
+                let of = fi
+                    .and_then(|f| {
+                        order
+                            .iter()
+                            .position(|(r, _, x)| *r == "found" && *x == Some(f))
+                    })
+                    .map_or(0, |pos| pos + 1);
+                format!("twin (of wallet {of}): ")
             } else {
                 String::new()
             };
@@ -2708,7 +2756,12 @@ impl Analysis<'_> {
                 let s = &wj.slots[0];
                 for t in &wj.targets {
                     writeln!(out, "{tag}match: {}", t.address).map_err(io)?;
-                    writeln!(out, "  path:        {}", t.paths[0].path).map_err(io)?;
+                    writeln!(
+                        out,
+                        "  path:        {}",
+                        t.paths[0].path.as_deref().unwrap_or("–")
+                    )
+                    .map_err(io)?;
                     writeln!(
                         out,
                         "  chain:       alternative {} ({})      index: {}",
@@ -2772,7 +2825,21 @@ impl Analysis<'_> {
                     let ps: Vec<String> = t
                         .paths
                         .iter()
-                        .map(|x| format!("@{} {}", x.slot, x.path))
+                        .map(|x| match &x.path {
+                            Some(p) => format!("@{} {p}", x.slot),
+                            None => {
+                                let rest = child_path(
+                                    &DerivationPath::master(),
+                                    tpl.slot_alts[x.slot][t.alternative as usize],
+                                    t.index,
+                                );
+                                format!(
+                                    "@{} <origin unknown>{}",
+                                    x.slot,
+                                    rest.trim_start_matches('m')
+                                )
+                            }
+                        })
                         .collect();
                     writeln!(out, "               {}", ps.join("   ")).map_err(io)?;
                 }
@@ -2799,7 +2866,9 @@ impl Analysis<'_> {
                         writeln!(
                             out,
                             "  note: the cosigner path is assumed: the canonical origin for this \
-                             shape; your xpub carries no origin"
+                             shape; your xpub carries no origin, and its header shows only its \
+                             depth and last step, not the account (an xpub at account 1 fits \
+                             too): check the path against your records"
                         )
                         .map_err(io)?;
                     }

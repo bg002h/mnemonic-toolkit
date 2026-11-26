@@ -5010,17 +5010,17 @@ mnemonic xpub-search address-of-seed \
 | Flag | Purpose |
 |---|---|
 | `--target-address <ADDR>` | an address the wallet holds; repeatable, at least one. Classified by its decoded scriptPubKey; one that does not belong to `--network` is refused (exit 2) |
-| `--phrase <PHRASE>` / `--phrase-stdin` / `--ms1 <MS1>` / `--ms1-stdin` / `<MS1>` | one seed, as in the sibling modes. Inline material is refused by the argv guard unless `--allow-argv-secret`; use `@env:VAR` or stdin |
+| `--phrase <PHRASE>` / `--phrase-stdin` / `--ms1 <MS1>` / `--ms1-stdin` / `<MS1>` | one seed, as in the sibling modes. Inline `--phrase` / `--ms1` is refused by the argv guard unless `--allow-argv-secret`; a positional `<MS1>` is not seen by the guard and gets a stderr warning instead. Use `@env:VAR` or stdin |
 | `--from <node>=<value>` | two or more seeds: `phrase`, `ms1`, `entropy` or `seedqr`, each `=-` (stdin, at most one) or `=@env:VAR`; repeatable. Seeds are numbered from 0 in the order given. Conflicts with the one-seed flags |
 | `--passphrase <-\|@env:VAR>` / `--passphrase-stdin` | one BIP-39 passphrase, applied to every seed (see [How `--passphrase` is read](#mnemonic-cli-reference)). It changes the master fingerprint the output and the printed command use |
-| `--language <L>` | BIP-39 wordlist. Default `english` |
+| `--language <L>` | BIP-39 wordlist. Default `english`. One language for every seed: seeds of two languages cannot be combined in one run |
 | `--descriptor <D>` | an `@N` template (`wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))`), a keyed descriptor (its targets are confirmed directly and the seeds placed by key derivation), or a BIP-388 policy JSON. Without it the search is single-sig: `pkh`, `sh(wpkh)`, `wpkh` and `tr`, each over `@0/<0;1>/*` |
-| `--descriptor-file <FILE>` | the same, read from a file |
+| `--descriptor-file <FILE>` | the same, read from a file. A BIP-380 checksum (`#…`) is verified and accepted. A literal xpub written beside `@N` placeholders is taken as a placed cosigner |
 | `--descriptor-from md1=<CHUNK\|->` | a keyless md1 template (repeat per chunk, or `md1=-` for stdin); its recorded origin paths pin the search |
-| `--cosigner [@N=]<KEY>` | a key that is not a seed: an xpub, `[fp/path]xpub` or mk1. `@N=` states its slot; without it the slot is searched. Needs `--descriptor`. Private keys are refused and never echoed |
+| `--cosigner [@N=]<KEY>` | a key that is not a seed: an xpub, `[fp/path]xpub` or mk1. `@N=` states its slot; without it the slot is searched. An mk1's chunks may be given one per `--cosigner` (grouped by the chunk-set id in their headers) or together in one value; placed chunks repeat `@N=` per chunk. Needs `--descriptor`. Private keys are refused and never echoed |
 | `--min-account <N>` / `--number-of-accounts <N>` / `--max-account <N>` | the account window. Default `[0, 20)`: BIP-44, 49, 84, 86, BIP-48 script types 1', 2', 3' and BIP-87 per account, plus `m/45'` once (161 paths) |
 | `--add-path <T>` | another path template (`account'` substituted per account); repeatable. One that repeats a standard path is dropped |
-| `--gap-limit <N>` | the index window `[0, N)` on each searched chain — not BIP-44's "N consecutive unused addresses" rule. Default `20` |
+| `--gap-limit <N>` | the index window `[0, N)` on each searched chain — not BIP-44's "N consecutive unused addresses" rule. Default `20`, at most 2^31; see the cache ceiling below |
 | `--external-only` | search use-site alternative 0 only (the receive chain under `<0;1>`) |
 | `--independent-paths` | multisig: each seed at its own path (C^k path tuples) instead of every seed at the same path |
 | `--refugium-seats` | add the Refugium seat paths `m/270028'/coin'/n'`: all 256 for one key; for multisig the 8 rounds of each slot's seat (`n = 32r + slot`) |
@@ -5030,9 +5030,11 @@ mnemonic xpub-search address-of-seed \
 
 The search is the whole space: a hit does not stop it. Before it starts,
 stderr states the candidate count, the child-key cache and the estimated time
-(progress follows when the estimate passes 30 s). A run above 10^15
-candidate scripts is refused before it starts (exit 2), naming the flags that
-narrow it.
+(progress follows when the estimate passes 30 s). Two ceilings refuse a run before it
+starts (exit 2), naming the flags that narrow it: more than 10^15 candidate
+scripts, and a child-key cache of more than 2^26 keys (paths × chains ×
+`--gap-limit` per key: one seed at the default 161 paths reaches it at a
+`--gap-limit` of about 208,000).
 
 #### Worked example
 
@@ -5066,9 +5068,13 @@ The printed command is built from references, never from a secret: a seed
 given as `-` or `@env:VAR` is repeated that way; one typed inline becomes `-`
 (if nothing else reads stdin) or `@env:MNEMONIC_SEED_<i>`, and an inline
 passphrase `@env:MNEMONIC_PASSPHRASE`. A match at a path step of 2^29 or more
-(md1 cannot record it) prints the path and no command. A cosigner xpub with no
+(md1 cannot record it), or at the master `m` itself (`--add-path m`; a card
+cannot record the master as a key origin), prints the path and no command
+(exit 4, `path_unrecordable`). A cosigner xpub with no
 origin gets the shape's canonical origin, marked assumed, when its own header
-fits it, and a placeholder otherwise.
+fits it, and a placeholder otherwise; the header shows only the depth and the
+last step, so an xpub at another account can fit too: check the path against
+your records.
 
 #### JSON output
 
@@ -5078,7 +5084,7 @@ Each `wallets[]` entry carries `role` (`found` or `twin`), `twin_of`,
 (`slot`, `source`, `seed_index`, `master_fingerprint`, `stated_fingerprint`,
 `origin_path`, `origin_known`, `template`, `account`, `refugium_seat`,
 `refugium_round`), `targets` (`address`, `alternative`, `step`, `index`, and
-each slot's full `path`), `distinguishing`, `bundle_command` (null when none
+each slot's full `path`, null for a cosigner whose origin is not known), `distinguishing`, `bundle_command` (null when none
 can be printed, with `bundle_command_unavailable` saying why),
 `bundle_command_redacted` and `redaction_note`. The normative shape is the
 spec's §6.

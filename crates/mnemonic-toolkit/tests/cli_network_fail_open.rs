@@ -251,6 +251,54 @@ fn e1_minor_signet_override_accepts_testnet_tpub() {
 }
 
 // ===========================================================================
+// E2s — `xpub-search address-of-seed` (xpub_search/address_of_seed.rs): a
+// target address of another network is refused, its own network matches.
+// ===========================================================================
+
+#[test]
+fn e2s_testnet_target_address_of_seed_mainnet_rejects() {
+    let out = bin()
+        .env("AOS_PHRASE", PHRASE)
+        .args([
+            "xpub-search",
+            "address-of-seed",
+            "--phrase",
+            "@env:AOS_PHRASE",
+            "--target-address",
+            TESTNET_RECEIVE_0,
+            "--network",
+            "mainnet",
+        ])
+        .output()
+        .expect("spawn");
+    assert_mismatch(&out, "E2s xpub-search address-of-seed");
+}
+
+#[test]
+fn e2s_testnet_target_address_of_seed_testnet_agrees_ok() {
+    let out = bin()
+        .env("AOS_PHRASE", PHRASE)
+        .args([
+            "xpub-search",
+            "address-of-seed",
+            "--phrase",
+            "@env:AOS_PHRASE",
+            "--target-address",
+            TESTNET_RECEIVE_0,
+            "--network",
+            "testnet",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+// ===========================================================================
 // E2 — `xpub-search address-of-xpub` (xpub_search/address_of_xpub.rs)
 // ===========================================================================
 
