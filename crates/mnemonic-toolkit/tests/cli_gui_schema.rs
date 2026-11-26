@@ -175,7 +175,7 @@ fn bundle_subcommand_has_network_flag_as_dropdown() {
 fn bundle_subcommand_has_template_dropdown_with_v0_2_multisig_templates() {
     let v = run_gui_schema();
     let bundle = find_sub(&v, "bundle");
-    let template = find_flag(bundle, "--template");
+    let template = find_flag(bundle, "--scheme");
     assert_eq!(template["kind"], "dropdown");
     let choices: Vec<&str> = template["choices"]
         .as_array()

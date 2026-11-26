@@ -24,7 +24,7 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
             &format!("@0.phrase={TREZOR_24}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--self-check",
             "--no-engraving-card",
@@ -44,7 +44,7 @@ fn bundle_self_check_passes_for_canonical_seed_singlesig() {
 
 // G-B (FOLLOWUP self-check-ms1-iteration, R0 C1b) used a `--slot @N.wif=`
 // slot to prove the self-check oracle keys off `entropy.is_some()`. Since bug
-// hunt 2026-11-25 X4, `bundle --template` refuses a WIF slot at mint (exit 1)
+// hunt 2026-11-25 X4, `bundle --scheme` refuses a WIF slot at mint (exit 1)
 // before the self-check runs; the refusal is pinned instead.
 #[test]
 fn bundle_wif_slot_refused_before_self_check() {
@@ -54,7 +54,7 @@ fn bundle_wif_slot_refused_before_self_check() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

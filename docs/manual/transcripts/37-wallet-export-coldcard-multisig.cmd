@@ -1,6 +1,6 @@
 $MNEMONIC_BIN export-wallet \
   --format coldcard \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --multisig-path-family bip48 \
   --network mainnet \

@@ -12,10 +12,10 @@ const TREZOR_24: &str = "abandon abandon abandon abandon abandon abandon abandon
 const TREZOR_24_2: &str =
     "legal winner thank year wave sausage worth useful legal winner thank yellow";
 
-const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --template; single-sig templates ignore threshold.";
+const THRESHOLD_WITHOUT_MULTISIG: &str = "--threshold is meaningful only with a multisig --scheme; single-sig templates ignore threshold.";
 const PATH_FAMILY_WITHOUT_MULTISIG: &str =
-    "--multisig-path-family is meaningful only with a multisig --template.";
-const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --template are mutually exclusive; pick descriptor passthrough or template, not both.";
+    "--multisig-path-family is meaningful only with a multisig --scheme.";
+const DESCRIPTOR_AND_TEMPLATE: &str = "--descriptor and --scheme are mutually exclusive; pick descriptor passthrough or template, not both.";
 
 #[test]
 fn threshold_without_multisig_template_rejected() {
@@ -26,7 +26,7 @@ fn threshold_without_multisig_template_rejected() {
             "bundle",
             "--slot",
             &format!("@0.phrase={TREZOR_24}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -57,7 +57,7 @@ fn threshold_with_multisig_template_accepted() {
             &format!("@0.phrase={TREZOR_24}"),
             "--slot",
             &format!("@1.phrase={TREZOR_24_2}"),
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--network",
             "mainnet",
@@ -78,7 +78,7 @@ fn path_family_without_multisig_template_rejected() {
             "bundle",
             "--slot",
             &format!("@0.phrase={TREZOR_24}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -109,7 +109,7 @@ fn path_family_with_multisig_template_accepted() {
             &format!("@0.phrase={TREZOR_24}"),
             "--slot",
             &format!("@1.phrase={TREZOR_24_2}"),
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--network",
             "mainnet",
@@ -132,7 +132,7 @@ fn descriptor_and_template_rejected() {
             "bundle",
             "--slot",
             &format!("@0.phrase={TREZOR_24}"),
-            "--template",
+            "--scheme",
             "bip84",
             "--descriptor",
             "wpkh([deadbeef/84'/0'/0']@0/<0;1>/*)",

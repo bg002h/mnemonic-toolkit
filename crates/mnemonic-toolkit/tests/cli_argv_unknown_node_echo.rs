@@ -46,15 +46,7 @@ fn unknown_from_node_is_refused_without_echo() {
         "@0.phrase=SECRETWORD",
     ] {
         assert_refused_without_echo(
-            &[
-                "convert",
-                "--from",
-                v,
-                "--to",
-                "xpub",
-                "--template",
-                "bip84",
-            ],
+            &["convert", "--from", v, "--to", "xpub", "--scheme", "bip84"],
             "--from phrase=-",
         );
         assert_refused_without_echo(&["slip39", "split", "--from", v], "--from phrase=-");

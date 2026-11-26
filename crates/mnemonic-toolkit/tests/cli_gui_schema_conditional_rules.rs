@@ -145,12 +145,12 @@ fn bundle_threshold_priority_descriptor_before_single_sig() {
         first_rule["when"]["flag"], "--descriptor",
         "bundle --threshold priority-1 rule must check --descriptor presence"
     );
-    // Second rule's predicate is dropdown_value_in --template.
+    // Second rule's predicate is dropdown_value_in --scheme.
     assert_eq!(
         second_rule["when"]["kind"], "dropdown_value_in",
         "bundle --threshold priority-2 rule must be dropdown_value_in"
     );
-    assert_eq!(second_rule["when"]["flag"], "--template");
+    assert_eq!(second_rule["when"]["flag"], "--scheme");
 }
 
 #[test]
@@ -173,8 +173,8 @@ fn bundle_template_required_unless_uses_not_any_of_predicate() {
     let rules = conditional_rules(&v, "bundle");
     let template_required = rules
         .iter()
-        .find(|r| r["effect"]["flag"] == "--template" && r["effect"]["visibility"] == "required")
-        .expect("bundle must have --template Required rule");
+        .find(|r| r["effect"]["flag"] == "--scheme" && r["effect"]["visibility"] == "required")
+        .expect("bundle must have --scheme Required rule");
     // §6.10.2 Not predicate: {"kind": "not", "predicate": P}
     assert_eq!(template_required["when"]["kind"], "not");
     let inner = &template_required["when"]["predicate"];
@@ -193,7 +193,7 @@ fn bundle_template_required_unless_uses_not_any_of_predicate() {
 fn restore_from_required_unless_md1_uses_not_flag_present_predicate() {
     // FOLLOWUP gui-schema-restore-required-unless-md1-projection: restore's
     // `--from required_unless_present="md1"` (cmd/restore.rs:58) is projected
-    // as a conditional_rule mirroring bundle's --template Required-unless, so
+    // as a conditional_rule mirroring bundle's --scheme Required-unless, so
     // the GUI's hand-authored `conditional::restore` rule (--from Required ⟺
     // --md1 absent) becomes drift-gated by mnemonic-gui's
     // gui_schema_conditional_drift once it bumps its toolkit pin.

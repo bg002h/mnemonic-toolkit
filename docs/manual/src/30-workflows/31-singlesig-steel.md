@@ -52,7 +52,7 @@ in your head; the scratch paper is destroyed at the end.
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --self-check \
   > bundle.txt
@@ -80,7 +80,7 @@ Three additions vs. [Your first bundle](#your-first-bundle):
 MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f \
 mnemonic verify-bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --ms1 @env:MS1 \
   --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \
@@ -157,8 +157,8 @@ The recovery side of this arithmetic is covered in
 
 ## Variants
 
-- **BIP-86 taproot single-sig.** Replace `--template bip84` with
-  `--template bip86`. The derivation switches to `m/86'/0'/0'`; the
+- **BIP-86 taproot single-sig.** Replace `--scheme bip84` with
+  `--scheme bip86`. The derivation switches to `m/86'/0'/0'`; the
   ceremony is otherwise identical.
 - **BIP-44 / BIP-49.** Same pattern, derivation changes to
   `m/44'/0'/0'` (legacy) or `m/49'/0'/0'` (nested-segwit).

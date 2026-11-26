@@ -213,7 +213,7 @@ impl GenWallet {
             "bundle".into(),
             "--network".into(),
             "mainnet".into(),
-            "--template".into(),
+            "--scheme".into(),
             self.script.into(),
             "--threshold".into(),
             self.threshold.to_string(),

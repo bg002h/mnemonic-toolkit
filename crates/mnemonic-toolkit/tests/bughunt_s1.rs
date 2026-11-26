@@ -108,7 +108,7 @@ fn template_md1(template: &str, phrase: &str, account: &str) -> Vec<String> {
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",
@@ -171,7 +171,7 @@ fn bundle_args(
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         script.into(),
         "--threshold".into(),
         threshold.into(),
@@ -288,7 +288,7 @@ fn bughunt_tk_01_restore_checks_xpub_even_when_fingerprint_matches() {
         "restore",
         "--from",
         &format!("phrase={PHRASE_A}"),
-        "--template",
+        "--scheme",
         "bip84",
         "--expect-fingerprint",
         "73c5da0a",
@@ -398,7 +398,7 @@ fn bughunt_tk_02_singlesig_template_md1_honours_reference_flags() {
     assert!(stdout.is_empty(), "(d) stdout must be empty:\n{stdout}");
     assert!(
         stderr.contains(
-            "error: --format is not supported when completing a keyless single-sig template md1; run without --format to print the completed descriptor, or (canonical origin only) restore with --template <bip44|bip84|bip86> --account <N> --format <FORMAT> and no --md1"
+            "error: --format is not supported when completing a keyless single-sig template md1; run without --format to print the completed descriptor, or (canonical origin only) restore with --scheme <bip44|bip84|bip86> --account <N> --format <FORMAT> and no --md1"
         ),
         "(d) stderr:\n{stderr}"
     );
@@ -976,7 +976,7 @@ fn full_multisig_bundle(script: &str, k: &str, phrases: &[&str]) -> Value {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         script,
         "--threshold",
         k,
@@ -1000,7 +1000,7 @@ fn full_verify_base(script: &str, k: &str, phrases: &[&str]) -> Vec<String> {
         "verify-bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         script,
         "--threshold",
         k,
@@ -1253,11 +1253,11 @@ fn bughunt_tk_43_supplied_md1_with_extra_cosigner_does_not_panic() {
 // Single-sig template verify-bundle helpers (#37, #39, #47).
 // ===========================================================================
 
-/// `bundle --template <t> --slot @0.phrase=<p> --json` -> (ms1, mk1 chunks, md1 chunks).
+/// `bundle --scheme <t> --slot @0.phrase=<p> --json` -> (ms1, mk1 chunks, md1 chunks).
 fn singlesig_cards(template: &str, phrase: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
     let (code, stdout, stderr) = run(&s(&[
         "bundle",
-        "--template",
+        "--scheme",
         template,
         "--network",
         "mainnet",
@@ -1277,7 +1277,7 @@ fn singlesig_template_cards(
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let (code, stdout, stderr) = run(&s(&[
         "bundle",
-        "--template",
+        "--scheme",
         template,
         "--network",
         "mainnet",
@@ -1358,7 +1358,7 @@ fn bughunt_tk_37_singlesig_template_verify_checks_the_ms1_card() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "bip84",
         "--md1-form",
         "template",
@@ -1421,7 +1421,7 @@ fn bughunt_tk_39_singlesig_md1_with_other_usesite_or_script_does_not_pass() {
     let verify = |md1: &[String]| -> (Option<i32>, Value) {
         let mut args = s(&[
             "verify-bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

@@ -136,7 +136,7 @@ fn r1_i3_singlesig_exports_keep_the_typed_account_path() {
             "export-wallet",
             "--format",
             format,
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -174,7 +174,7 @@ fn r1_i3_multisig_exports_keep_an_explicit_master_path() {
             "export-wallet",
             "--format",
             format,
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -1177,7 +1177,7 @@ fn bip48_scope_verify_bundle_still_rebuilds_a_pre_ruling_single_key_card() {
     }
 }
 
-/// Template mode is unaffected: every multisig template is a multisig, and
+/// Scheme mode is unaffected: every multisig scheme is a multisig, and
 /// --multisig-path-family bip48 still mints at m/48'/c'/a'/2'.
 #[test]
 fn bip48_scope_multisig_template_is_unaffected() {
@@ -1187,7 +1187,7 @@ fn bip48_scope_multisig_template_is_unaffected() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",

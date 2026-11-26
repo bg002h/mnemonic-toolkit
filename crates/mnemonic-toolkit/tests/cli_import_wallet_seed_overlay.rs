@@ -329,7 +329,7 @@ fn seed_overlay_slot_non_phrase_subkey_rejected() {
 //     (BIP-39 12-word test vector; same file:26)
 //
 // Xpubs at BIP-87 path `m/87'/0'/0'` derived live via
-//   `mnemonic bundle --template wsh-sortedmulti --multisig-path-family bip87
+//   `mnemonic bundle --scheme wsh-sortedmulti --multisig-path-family bip87
 //    --slot @N.phrase=... --json` (see `cosigners[]` in the output). BSMS
 // blob below is hand-rolled at the same path family; BIP-380 checksum
 // `4wup4at0` discovered via the toolkit's "expected <csum>" stderr template.

@@ -135,7 +135,7 @@ pub fn run() -> ExitCode {
     // SPEC_constellation_cli_uniformity 6d, and THE ORDERING IS THE FIX: this
     // must decide before `Cli::try_parse()`. Measured on this binary, clap
     // echoes a stray positional verbatim -- `mnemonic convert --to xpub
-    // --template bip84 "<a 12-word phrase>"` prints the whole phrase back at
+    // --scheme bip84 "<a 12-word phrase>"` prints the whole phrase back at
     // exit 64 -- so a guard placed one line lower has already lost for any
     // shape clap has no declared flag to blame. Nothing below this point runs
     // when the guard refuses: no file is read, no environment variable is

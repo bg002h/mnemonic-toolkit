@@ -371,7 +371,7 @@ fn bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic() {
 }
 
 // ---------------------------------------------------------------------------
-// #33 / #34 GUI schema: a `required` visibility rule on `--template` must agree
+// #33 / #34 GUI schema: a `required` visibility rule on `--scheme` must agree
 // with clap's `required_unless_present_any`. Evaluate the emitted rules for
 // concrete flag sets and compare with what the real parser demands.
 // ---------------------------------------------------------------------------
@@ -410,15 +410,15 @@ fn schema_requires_template(sub: &str, flags: &[&str], positionals: &[usize]) ->
         .as_array()
         .unwrap()
         .iter()
-        .filter(|r| r["effect"]["flag"] == "--template" && r["effect"]["visibility"] == "required")
+        .filter(|r| r["effect"]["flag"] == "--scheme" && r["effect"]["visibility"] == "required")
         .any(|r| eval_pred(&r["when"], flags, positionals))
 }
 
-/// Does the real clap parser list `--template` among the missing required args?
+/// Does the real clap parser list `--scheme` among the missing required args?
 fn clap_demands_template(args: &[&str]) -> bool {
     let out = bin().args(args).output().unwrap();
     let stderr = String::from_utf8_lossy(&out.stderr);
-    stderr.contains("required arguments were not provided") && stderr.contains("--template <")
+    stderr.contains("required arguments were not provided") && stderr.contains("--scheme <")
 }
 
 #[test]
@@ -434,7 +434,7 @@ fn bughunt_tk_33_gui_schema_bundle_import_json_does_not_require_template() {
     let schema = schema_requires_template("bundle", &["--import-json"], &[]);
     assert!(
         !schema || clap,
-        "schema marks --template required when only --import-json is given, but clap does not \
+        "schema marks --scheme required when only --import-json is given, but clap does not \
          require it (clap_demands_template={clap})"
     );
 }
@@ -476,7 +476,7 @@ fn bughunt_tk_34_gui_schema_verify_bundle_alternatives_do_not_require_template()
         let clap = clap_demands_template(&args);
         let schema = schema_requires_template("verify-bundle", &flags, &pos);
         if schema && !clap {
-            mismatches.push(format!("{name}: schema requires --template, clap does not"));
+            mismatches.push(format!("{name}: schema requires --scheme, clap does not"));
         }
     }
     assert!(mismatches.is_empty(), "{mismatches:#?}");

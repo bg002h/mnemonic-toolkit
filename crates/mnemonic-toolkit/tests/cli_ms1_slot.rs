@@ -149,7 +149,7 @@ fn ms1_entr_byte_identical_to_entropy_slot_all_lengths() {
             .arg("--allow-argv-secret")
             .args([
                 "bundle",
-                "--template",
+                "--scheme",
                 "bip84",
                 "--network",
                 "mainnet",
@@ -165,7 +165,7 @@ fn ms1_entr_byte_identical_to_entropy_slot_all_lengths() {
             .arg("--allow-argv-secret")
             .args([
                 "bundle",
-                "--template",
+                "--scheme",
                 "bip84",
                 "--network",
                 "mainnet",
@@ -200,7 +200,7 @@ fn ms1_mnem_japanese_matches_phrase_and_emits_mnem_card() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -221,7 +221,7 @@ fn ms1_mnem_japanese_matches_phrase_and_emits_mnem_card() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -278,7 +278,7 @@ fn ms1_mnem_language_conflict_exit2() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -394,7 +394,7 @@ fn ms1_mnem_japanese_descriptor_mode_emits_mnem_card() {
 // so the re-emitted card byte-matches.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Run a single-sig `bundle --template bip84 --json` and return its emitted
+/// Run a single-sig `bundle --scheme bip84 --json` and return its emitted
 /// (ms1, mk1-chunks-flattened, md1) card lists.
 fn gen_singlesig_bundle(
     extra_slot_args: &[&str],
@@ -402,7 +402,7 @@ fn gen_singlesig_bundle(
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let mut args: Vec<String> = vec![
         "bundle".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--network".into(),
         "mainnet".into(),
@@ -468,7 +468,7 @@ fn verify_bundle_round_trip_entr_ms1() {
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--network".into(),
         "mainnet".into(),
@@ -516,7 +516,7 @@ fn verify_bundle_round_trip_mnem_japanese_ms1() {
 
     let mut args: Vec<String> = vec![
         "verify-bundle".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--network".into(),
         "mainnet".into(),
@@ -557,7 +557,7 @@ fn verify_bundle_mnem_language_conflict_exit2() {
         .arg("--allow-argv-secret")
         .args([
             "verify-bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -663,7 +663,7 @@ fn ms1_kofn_share_rejected_with_combine_prose() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -697,7 +697,7 @@ fn ms1_mnem_english_emits_entr_card_documented_edge() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -731,7 +731,7 @@ fn ms1_mnem_self_check_round_trips() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",

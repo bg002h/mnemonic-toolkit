@@ -21,7 +21,7 @@ fn bip388_row13_fires_for_duplicate_slot_phrases() {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",

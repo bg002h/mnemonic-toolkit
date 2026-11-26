@@ -41,12 +41,12 @@ seed off the bundle-building host:
 mnemonic convert \
   --from phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --to xpub \
-  --template bip84
+  --scheme bip84
 
 # Step 2 (on the internet-connected host)
 mnemonic bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.xpub=<xpub from Step 1>
 ```
 
@@ -58,7 +58,7 @@ and pass `--threshold K`:
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --multisig-path-family bip87 \
   --slot @0.xpub=<xpub-cosigner-0> \
@@ -97,7 +97,7 @@ add `--privacy-preserving`:
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.xpub=<xpub> \
   --privacy-preserving
 ```

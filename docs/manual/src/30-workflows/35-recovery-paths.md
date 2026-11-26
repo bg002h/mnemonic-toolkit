@@ -42,7 +42,7 @@ wrong wallet:
 seed="abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon about"
 printf '%s' "$seed" |
-  mnemonic restore --from phrase=- --template bip84 \
+  mnemonic restore --from phrase=- --scheme bip84 \
     --expect-fingerprint 73c5da0a
 ```
 
@@ -52,7 +52,7 @@ address:
 ```{.text include="35-recovery-restore-fingerprint.out" lines="1-6"}
 ```
 
-If you do not know which wallet type you used, omit `--template` to emit
+If you do not know which wallet type you used, omit `--scheme` to emit
 all four (BIP-44/49/84/86) and match the address against your records.
 If you used a passphrase, feed it through the stdin channel (the seed
 then comes via `@env:` so neither secret touches the argv):
@@ -60,7 +60,7 @@ then comes via `@env:` so neither secret touches the argv):
 ```sh
 export RSEED="$seed"
 printf 'YOUR-PASSPHRASE' |
-  mnemonic restore --from phrase=@env:RSEED --template bip84 \
+  mnemonic restore --from phrase=@env:RSEED --scheme bip84 \
     --passphrase-stdin --expect-fingerprint <your-fingerprint>
 ```
 
@@ -70,7 +70,7 @@ Restore is **watch-only-out and never signs** — it emits public keys,
 addresses, and descriptors only, never `xprv` or WIF. To get an
 importable wallet file rather than a bare descriptor, add `--format`
 (e.g. `--format bitcoin-core` / `sparrow` / `coldcard`) with a single
-`--template`; the payload then pipes from stdout and the verification
+`--scheme`; the payload then pipes from stdout and the verification
 block goes to stderr. See [`mnemonic
 restore`](../40-cli-reference/41-mnemonic.md#mnemonic-restore) for the
 full flag reference.
@@ -110,7 +110,7 @@ Re-stamp.
 mnemonic convert \
   --from phrase="<your phrase>" \
   --to mk1 \
-  --template bip84
+  --scheme bip84
 ```
 
 Re-stamp.
@@ -118,10 +118,10 @@ Re-stamp.
 **Lost md1**: derive a new one from xpub:
 
 ```sh
-xpub=$(mnemonic convert --from phrase="<your phrase>" --to xpub --template bip84)
+xpub=$(mnemonic convert --from phrase="<your phrase>" --to xpub --scheme bip84)
 mnemonic bundle \
   --network mainnet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.xpub=$xpub
 ```
 
@@ -160,7 +160,7 @@ Re-derive from any cosigner's xpub set:
 
 ```sh
 mnemonic export-wallet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --slot @0.xpub=<xpub-0> \
   --slot @1.xpub=<xpub-1> \
@@ -173,7 +173,7 @@ Or rebuild the full bundle:
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --multisig-path-family bip87 \
   --slot @0.xpub=<xpub-0> \

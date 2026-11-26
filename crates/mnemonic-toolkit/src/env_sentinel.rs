@@ -16,7 +16,7 @@
 //! is treated as a literal (§3.2 grammar lock).
 //!
 //! Resolution is opt-in per-callsite: non-secret flags (e.g., `--network`,
-//! `--template`) treat `@env:VAR` as a literal — this matches the locked rule
+//! `--scheme`) treat `@env:VAR` as a literal — this matches the locked rule
 //! per §7.0.d ("sentinel resolution applies ONLY at the 6 secret-flag surfaces").
 //!
 //! Empty-string env-var (`VAR=""`) preserves v0.25.1 watch-only sentinel

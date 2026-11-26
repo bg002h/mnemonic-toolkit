@@ -24,7 +24,7 @@
 //! | `--descriptor` intake | [`run`] | `--descriptor` | canonicalize; lenient |
 //! | canonical re-parse | [`run`] | `--descriptor` (script-type derive) | lenient |
 //! | canonical parse | [`run_from_import_json`] | `--from-import-json` | lenient |
-//! | **gate 1** | [`run`] | all of `--descriptor` / `--template` / `--slot` | ADMISSION |
+//! | **gate 1** | [`run`] | all of `--descriptor` / `--scheme` / `--slot` | ADMISSION |
 //! | **gate 2** | [`run_from_import_json`] | `--from-import-json` | ADMISSION |
 //!
 //! `cmd/restore.rs`'s two `EmitInputs` builders are deliberately NOT gated.
@@ -87,7 +87,7 @@ pub enum CliExportFormat {
 }
 
 /// SPEC v0.37 §2.3 — formats whose file-import surface refuses a bare
-/// descriptor and requires a `--template`. On the `--from-import-json` path
+/// descriptor and requires a `--scheme`. On the `--from-import-json` path
 /// these receive a template derived from the envelope descriptor; all other
 /// formats (descriptor-passthrough / template-agnostic) keep `template: None`
 /// (regression guard: bip388/sparrow branch on `template.is_some()`).
@@ -129,8 +129,8 @@ fn emission_kind(f: CliExportFormat) -> EmissionKind {
 /// genuinely per-site part); this owns only the format dispatch.
 ///
 /// Routing single-sig restore through here unifies the `coldcard-multisig`
-/// refusal: a single-sig `--template` now hits the 6-variant template `_ =>`
-/// arm ("requires a multisig --template …") rather than the old
+/// refusal: a single-sig `--scheme` now hits the 6-variant template `_ =>`
+/// arm ("requires a multisig --scheme …") rather than the old
 /// restore-specific "requires a multisig wallet" string — exit 1 (BadInput)
 /// either way.
 pub(crate) fn emit_payload(
@@ -206,7 +206,7 @@ pub(crate) fn emit_payload(
     // v0.70.1 (Wave 1) — SECOND ARM for the DIRECT-DESCRIPTOR path
     // (`--descriptor 'wsh(multi(…))'`, `template == None`): the resolved-template
     // guard above does not fire, so before this each field-less emitter refused
-    // with a generic `BadInput` ("requires --template"). Already funds-safe
+    // with a generic `BadInput` ("requires --scheme"). Already funds-safe
     // (refused, never coerced), but message-generic. Key on the descriptor
     // `script_type` (`P2wshMulti` / `P2shP2wshMulti`) + an UNSORTED `multi(`
     // (the `sortedmulti(`-as-substring idiom from `wallet_export/mod.rs`'s
@@ -255,7 +255,7 @@ pub(crate) fn emit_payload(
                     | CliTemplate::TrSortedMultiA,
                 ) => ColdcardEmitter::emit(inputs),
                 _ => Err(ToolkitError::BadInput(
-                    "--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
+                    "--format coldcard-multisig requires a multisig --scheme (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
                         .into(),
                 )),
             }
@@ -272,11 +272,20 @@ pub(crate) fn emit_payload(
 
 #[derive(Args, Debug)]
 pub struct ExportWalletArgs {
-    /// Pre-built template name. Mutually-required-one-of with --descriptor.
-    #[arg(long, conflicts_with = "descriptor")]
+    /// Named wallet scheme (single-sig BIP-44/49/84/86 derivation schemes, or the
+    /// BIP-388 common multisig schemes). Mutually-required-one-of with
+    /// --descriptor.
+    // `--template` stays accepted as a hidden alias (renamed 2026-11-26).
+    #[arg(
+        id = "scheme",
+        long = "scheme",
+        value_name = "SCHEME",
+        alias = "template",
+        conflicts_with = "descriptor"
+    )]
     pub template: Option<CliTemplate>,
 
-    /// User-supplied BIP-388 descriptor. Mutually exclusive with --template.
+    /// User-supplied BIP-388 descriptor. Mutually exclusive with --scheme.
     /// (v0.49.0) Also accepts a BIP-388 wallet-policy JSON `{name,
     /// description_template, keys_info}` (auto-detected by a leading `{`),
     /// expanded to the concrete descriptor — the inverse of `--format bip388`.
@@ -396,19 +405,19 @@ pub struct ExportWalletArgs {
     pub bsms_form: BsmsForm,
 
     /// v0.27.0 — emit a per-format wallet config from an
-    /// `import-wallet --json` envelope rather than from `--template` /
+    /// `import-wallet --json` envelope rather than from `--scheme` /
     /// `--descriptor`. Accepts a file path or `-` to read the envelope
     /// from stdin. The envelope's `bundle.descriptor` becomes the
     /// canonical descriptor for the emitter; cosigner xpubs decode
     /// from `bundle.mk1` per SPEC §3.6.1; network derives from
-    /// `bundle.network`. Mutually exclusive with `--template` and
+    /// `bundle.network`. Mutually exclusive with `--scheme` and
     /// `--descriptor`. `--account` is rejected (the envelope's
     /// `bundle.account` value applies; the account is encoded in the
     /// descriptor's origin paths).
     #[arg(
         long = "from-import-json",
         value_name = "FILE|-",
-        conflicts_with_all = ["template", "descriptor"],
+        conflicts_with_all = ["scheme", "descriptor"],
     )]
     pub from_import_json: Option<String>,
 
@@ -501,7 +510,7 @@ pub fn run<W: Write, E: Write>(
     // v0.27.0 — `--from-import-json` dispatch short-circuits before slot /
     // template / descriptor pre-checks. The envelope carries everything the
     // emitter needs (descriptor + per-cosigner xpubs/fingerprints/paths).
-    // Mutex with --template / --descriptor is enforced by clap via
+    // Mutex with --scheme / --descriptor is enforced by clap via
     // `conflicts_with_all` on the `--from-import-json` arg.
     if args.from_import_json.is_some() {
         return run_from_import_json(args, stdout, stderr);
@@ -531,7 +540,7 @@ pub fn run<W: Write, E: Write>(
         ) && args.taproot_internal_key.is_none()
         {
             return Err(ToolkitError::BadInput(format!(
-                "--template {} requires --taproot-internal-key (use 'nums' for an unspendable BIP-341 NUMS point, or '@N' to designate cosigner N as the key-path internal key)",
+                "--scheme {} requires --taproot-internal-key (use 'nums' for an unspendable BIP-341 NUMS point, or '@N' to designate cosigner N as the key-path internal key)",
                 match template {
                     CliTemplate::TrMultiA => "tr-multi-a",
                     CliTemplate::TrSortedMultiA => "tr-sortedmulti-a",
@@ -548,8 +557,7 @@ pub fn run<W: Write, E: Write>(
         )
     {
         return Err(ToolkitError::BadInput(
-            "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"
-                .into(),
+            "--taproot-internal-key applies only to --scheme tr-multi-a / tr-sortedmulti-a".into(),
         ));
     }
 
@@ -557,13 +565,13 @@ pub fn run<W: Write, E: Write>(
     if args.descriptor.is_some() && args.template.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
-            flag: "--template",
-            message: "--descriptor and --template are mutually exclusive",
+            flag: "--scheme",
+            message: "--descriptor and --scheme are mutually exclusive",
         });
     }
     if args.descriptor.is_none() && args.template.is_none() {
         return Err(ToolkitError::BadInput(
-            "export-wallet requires either --template or --descriptor".into(),
+            "export-wallet requires either --scheme or --descriptor".into(),
         ));
     }
 
@@ -575,7 +583,7 @@ pub fn run<W: Write, E: Write>(
     // v0.53.8 (`bip388-policy-name-lossy-roundtrip`): when `--descriptor` is a
     // BIP-388 policy JSON, lift its `name` so a `--format bip388` round-trip
     // (and any other format) preserves it. Declared None UNCONDITIONALLY so the
-    // `||` in `wallet_name_is_non_default` below is safe on the --template path.
+    // `||` in `wallet_name_is_non_default` below is safe on the --scheme path.
     let mut bip388_policy_name: Option<String> = None;
 
     let canonical = if let Some(desc) = &args.descriptor {
@@ -602,7 +610,8 @@ pub fn run<W: Write, E: Write>(
         if crate::wallet_import::pipeline::is_at_n_form(desc) {
             return Err(ToolkitError::BadInput(
                 "export-wallet --descriptor accepts only concrete descriptors with inline keys; \
-                 for keyless @N templates use --template <T> --slot @N.xpub=… or --from-import-json".into(),
+                 for keyless @N templates use --scheme <T> --slot @N.xpub=… or --from-import-json"
+                    .into(),
             ));
         }
         // Descriptor passthrough: parse + canonicalize via miniscript.
@@ -769,7 +778,7 @@ pub fn run<W: Write, E: Write>(
     // ResolvedSlot retains them for future per-cosigner needs).
     let master_xpub_at_0 = resolved_slots_ref.first().and_then(|s| s.master_xpub);
 
-    // cycle-H F3 (R0-Important-1): the `--template`/`--slot` path resolves
+    // cycle-H F3 (R0-Important-1): the `--scheme`/`--slot` path resolves
     // slots via `resolve_slots` but — unlike the `--from-import-json` arm's
     // guard just above `envelope_to_resolved_slots` — never cross-checked each
     // slot's xpub network against the asserted `--network` (which fires on
@@ -781,13 +790,13 @@ pub fn run<W: Write, E: Write>(
         crate::network::assert_network_agrees(
             slot.xpub.network,
             args.network.network_kind(),
-            "export: --template/--slot",
+            "export: --scheme/--slot",
         )?;
         if let Some(mx) = slot.master_xpub {
             crate::network::assert_network_agrees(
                 mx.network,
                 args.network.network_kind(),
-                "export: --template/--slot master_xpub",
+                "export: --scheme/--slot master_xpub",
             )?;
         }
     }
@@ -795,7 +804,7 @@ pub fn run<W: Write, E: Write>(
     // ---- ADMISSION GATE 1 of 2 (PLAN Phase 1, topology (B)) ---------------
     // Runs on THIS arm's canonical descriptor, immediately before `EmitInputs`,
     // honouring the `AllowSet`. Uniform across wrappers and arms: the
-    // `--descriptor` arm can trip `sigless-branch`, and the `--template` /
+    // `--descriptor` arm can trip `sigless-branch`, and the `--scheme` /
     // `--slot` arm runs the same rule and cannot trip it (a builder-produced
     // descriptor never carries a sigless branch) — a CONSEQUENCE of the uniform
     // gate, not an exemption from it. That is why the note printer runs on both.
@@ -866,7 +875,7 @@ fn run_from_import_json<W: Write, E: Write>(
     // a separate account index is ambiguous / contradictory).
     if args.account != 0 {
         return Err(ToolkitError::BadInput(
-            "--account is meaningful only with --template / --descriptor; \
+            "--account is meaningful only with --scheme / --descriptor; \
              --from-import-json reads the account from the envelope (bundle.account)"
                 .to_string(),
         ));
@@ -1345,10 +1354,10 @@ mod h10_unsorted_multi_refusal_tests {
 
     /// v0.70.1 (Wave 1) no-change guard — a SORTED `sortedmulti(` direct
     /// descriptor (`template == None`) to a field-less format still refuses
-    /// (the emitter requires a `--template`), but the SECOND ARM must NOT fire
+    /// (the emitter requires a `--scheme`), but the SECOND ARM must NOT fire
     /// for it: the typed unsorted error is specific to UNSORTED multi. A sorted
     /// descriptor is faithfully representable by the BIP-67 file formats, so the
-    /// refusal here (if any) is the generic `--template`-required one, never the
+    /// refusal here (if any) is the generic `--scheme`-required one, never the
     /// typed unsorted-multi kind.
     #[test]
     fn template_none_sorted_multi_not_typed_unsorted_error() {

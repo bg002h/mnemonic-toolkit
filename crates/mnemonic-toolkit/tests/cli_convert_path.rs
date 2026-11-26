@@ -7,11 +7,11 @@ const P12: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 const ENTROPY: &str = "00000000000000000000000000000000";
 const SEEDQR: &str = "000000000000000000000000000000000000000000000003";
-/// Account key at m/87'/1'/0' (= `--template wsh-sortedmulti`, BIP-87 default).
+/// Account key at m/87'/1'/0' (= `--scheme wsh-sortedmulti`, BIP-87 default).
 const XPUB_87: &str = "tpubDCChhoz5Qdrkn7Z7KXawq6Ad6r3A4MUkCoVTqeWxfTkA6bHNJ3CHUEtALQdkNeixNz4446PcAmw4WKcj3mV2vb29H7sg9EPzbyCU1y2merw";
 const XPRV_87: &str = "tprv8fWfZPwqGGB5teXKRsvMRgWWXpXDu2HqdVtgZ8UfFBwmG72bfeNhHkGJAHjJr9T11jjduBxH2fhi7rW6U2NBMiQcUgSGfc3y5p1JUFQA7gH";
 const WIF_87: &str = "cQSNG6HnKUGreXgRpAr8QV5k9fvZkgrQuKXmgFPFNypaWK3yGe1R";
-/// Account key at m/84'/1'/0' (= `--template bip84`).
+/// Account key at m/84'/1'/0' (= `--scheme bip84`).
 const XPUB_84: &str = "tpubDC8msFGeGuwnKG9Upg7DM2b4DaRqg3CUZa5g8v2SRQ6K4NSkxUgd7HsL2XVWbVm39yBA4LAxysQAm397zwQSQoQgewGiYZqrA9DsP4zbQ1M";
 const XPRV_84: &str = "tprv8fSjiqEQ8YG7Ro7gw2ScwcvweYuuWi1ZzGUtrPz918HvDtBzL5s2voFTrN4y3yUwj5cYD54pLhxk6NKCzHUjcka3zbKjbTEcsuAnkzbjhkL";
 // m/48'/1'/0'/2' (BIP-48 signet P2WSH). XPUB_48's key equals the pubkey of
@@ -84,7 +84,7 @@ fn xpub_xprv_87() -> Vec<String> {
     vec![format!("xpub: {XPUB_87}"), format!("xprv: {XPRV_87}")]
 }
 
-// ---- R1: --path gives the key at P; no --template needed; --path wins; shared by all targets.
+// ---- R1: --path gives the key at P; no --scheme needed; --path wins; shared by all targets.
 
 #[test]
 fn r1_phrase_path_xpub_xprv_without_template() {
@@ -140,7 +140,7 @@ fn r1_path_wins_over_template() {
         &phrase(),
         "--network",
         "signet",
-        "--template",
+        "--scheme",
         "bip84",
         "--to",
         "xpub,xprv",
@@ -160,7 +160,7 @@ fn convert_template_xpub_path_not_silently_ignored() {
     let base = convert(&[
         "--from",
         &phrase(),
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--network",
         "signet",
@@ -171,7 +171,7 @@ fn convert_template_xpub_path_not_silently_ignored() {
     let a = convert(&[
         "--from",
         &phrase(),
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--network",
         "signet",
@@ -254,7 +254,7 @@ fn r2_neither_template_nor_path_names_both() {
     assert_refused(
         &o,
         1,
-        "error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)",
+        "error: --scheme or --path is required for derivation targets (xpub/xprv/fingerprint)",
     );
 }
 
@@ -284,7 +284,7 @@ fn r3_account_nonzero_with_path_refused_template_xpub() {
         &phrase(),
         "--network",
         "signet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--account",
         "3",
@@ -357,7 +357,7 @@ fn r4_phrase_to_fingerprint_path_refused() {
         &phrase(),
         "--network",
         "signet",
-        "--template",
+        "--scheme",
         "bip84",
         "--to",
         "fingerprint",
@@ -447,7 +447,7 @@ fn r5_named_path_form_refused() {
         &phrase(),
         "--network",
         "signet",
-        "--template",
+        "--scheme",
         "bip84",
         "--to",
         "xpub",
@@ -464,7 +464,7 @@ fn r5_hex_path_form_refused() {
         &phrase(),
         "--network",
         "signet",
-        "--template",
+        "--scheme",
         "bip84",
         "--to",
         "xpub",
@@ -508,7 +508,7 @@ fn r5_help_path_block_literal_only() {
     let want = [
         "--path <PATH>",
         "BIP-32 derivation path from the master key, literal form `m/...`. Overrides the",
-        "--template/--account path for --to xpub/xprv; required for --to wif, --to address",
+        "--scheme/--account path for --to xpub/xprv; required for --to wif, --to address",
         "(from a seed) and composite --to bip38. Refused where no requested target uses it.",
     ];
     let at = lines
@@ -740,7 +740,7 @@ fn r4_fingerprint_only_no_template_names_template_only() {
     assert_refused(
         &o,
         1,
-        "error: --template is required for --to fingerprint (the master fingerprint; --path is not read)",
+        "error: --scheme is required for --to fingerprint (the master fingerprint; --path is not read)",
     );
     assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
 }

@@ -145,7 +145,7 @@ fn r4_bundle_dev_full_exits_1() {
         Out::Full,
         &[
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "signet",
@@ -252,7 +252,7 @@ fn vb() -> Vec<&'static str> {
     vec![
         "verify-bundle",
         "--allow-argv-secret",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "signet",

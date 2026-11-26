@@ -22,14 +22,14 @@ of the previous chapter and verified `mnemonic --version` reports
 
 ```sh
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
-  | mnemonic bundle --network mainnet --template bip84 --slot @0.phrase=-
+  | mnemonic bundle --network mainnet --scheme bip84 --slot @0.phrase=-
 ```
 
 Three flags carry the work:
 
 - **`--network mainnet`** — the wallet is for Bitcoin mainnet. Other
   values: `testnet`, `signet`, `regtest`.
-- **`--template bip84`** — single-sig BIP-84 (native SegWit, P2WPKH,
+- **`--scheme bip84`** — single-sig BIP-84 (native SegWit, P2WPKH,
   derivation `m/84'/0'/0'`). For multisig and taproot variants, see
   the [Workflows part](#multi-source-2-of-3-multisig).
 - **`--slot @0.phrase=…`** — cosigner index `@0` (only one for single-

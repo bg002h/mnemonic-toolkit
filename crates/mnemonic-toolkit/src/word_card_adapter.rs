@@ -184,7 +184,7 @@ mod tests {
     use super::*;
 
     // Real fixtures generated from the all-`abandon…about` BIP-39 seed at
-    // `mnemonic bundle --network mainnet --template bip84` (deterministic seed,
+    // `mnemonic bundle --network mainnet --scheme bip84` (deterministic seed,
     // fixed origin path m/84'/0'/0'). The mk1 is a 2-chunk card; the md1 a
     // 3-chunk card. These are PUBLIC material (xpub / descriptor), no secrets.
     const MK1: [&str; 2] = [

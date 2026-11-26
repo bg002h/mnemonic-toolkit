@@ -30,7 +30,7 @@ explicitly; the default is `0` — see the Timestamp note under Tips):
 
 ```sh
 mnemonic export-wallet \
-  --template bip84 \
+  --scheme bip84 \
   --slot @0.xpub=<xpub> \
   --network mainnet \
   --range 0,999 \
@@ -42,7 +42,7 @@ Output is a JSON array with the descriptor, its `range`, the
 into `bitcoin-cli`:
 
 ```sh
-bitcoin-cli importdescriptors "$(mnemonic export-wallet --template bip84 --slot @0.xpub=<xpub>)"
+bitcoin-cli importdescriptors "$(mnemonic export-wallet --scheme bip84 --slot @0.xpub=<xpub>)"
 ```
 
 For a multisig wallet, repeat `--slot @N.xpub` and add `--threshold K`.
@@ -58,7 +58,7 @@ wallets accept BIP-388 wallet policies:
 
 ```sh
 mnemonic export-wallet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --slot @0.xpub=<xpub-0> \
   --slot @1.xpub=<xpub-1> \
@@ -98,7 +98,7 @@ derivation, and watch-only extended public key (`source: SW_WATCH`):
 ```sh
 mnemonic export-wallet \
   --format sparrow \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --multisig-path-family bip48 \
   --network mainnet \
@@ -164,7 +164,7 @@ Taproot multisig requires the `--taproot-internal-key` flag (mirrors
 
 ```sh
 mnemonic export-wallet \
-  --template tr-sortedmulti-a \
+  --scheme tr-sortedmulti-a \
   --threshold 2 \
   --taproot-internal-key nums \
   --slot @0.xpub=<xpub-0> \
@@ -194,15 +194,15 @@ derivation path, so it is the same for all four types — derive it once:
 read -rs PHRASE   # read from stdin: keeps the seed off argv / out of /proc
 
 mfp=$(printf '%s' "$PHRASE" \
-  | mnemonic convert --from phrase=- --to fingerprint --template bip84 \
+  | mnemonic convert --from phrase=- --to fingerprint --scheme bip84 \
   | sed 's/^fingerprint: //')
 
 for t in bip44 bip49 bip84 bip86; do
   xpub=$(printf '%s' "$PHRASE" \
-    | mnemonic convert --from phrase=- --to xpub --template "$t" \
+    | mnemonic convert --from phrase=- --to xpub --scheme "$t" \
     | sed 's/^xpub: //')
   mnemonic export-wallet \
-    --template "$t" \
+    --scheme "$t" \
     --slot "@0.xpub=$xpub" \
     --slot "@0.fingerprint=$mfp" \
     --format bitcoin-core \
@@ -294,14 +294,14 @@ recipe above):
 read -rs PHRASE
 
 mfp=$(printf '%s' "$PHRASE" \
-  | mnemonic convert --from phrase=- --to fingerprint --template bip84 \
+  | mnemonic convert --from phrase=- --to fingerprint --scheme bip84 \
   | sed 's/^fingerprint: //')
 xpub=$(printf '%s' "$PHRASE" \
-  | mnemonic convert --from phrase=- --to xpub --template bip84 \
+  | mnemonic convert --from phrase=- --to xpub --scheme bip84 \
   | sed 's/^xpub: //')
 
 mnemonic export-wallet \
-  --template bip84 \
+  --scheme bip84 \
   --slot "@0.xpub=$xpub" \
   --slot "@0.fingerprint=$mfp" \
   --format descriptor
@@ -388,7 +388,7 @@ xpubs at the BIP-48 wsh path `m/48'/0'/0'/2'`:
 ```sh
 mnemonic export-wallet \
   --format coldcard \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --multisig-path-family bip48 \
   --network mainnet \

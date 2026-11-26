@@ -196,7 +196,7 @@ fn t6_emit_and_verify_agree_on_malformed_descriptor() {
     );
 }
 
-/// T7 — no collateral: the genuine result-tier stays at exit 4. `--template`
+/// T7 — no collateral: the genuine result-tier stays at exit 4. `--scheme`
 /// with a wrong-passphrase / mismatching card set is the canonical exit-4 case;
 /// this cell pins that the tier still exists after the flip.
 #[test]

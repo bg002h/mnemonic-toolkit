@@ -49,7 +49,7 @@ fn find_sub<'a>(v: &'a Value, name: &str) -> &'a Value {
 #[test]
 fn bundle_emits_no_disable_options_rules_after_v0_18_1_rollback() {
     // v0.18.1 reverted rows 10 + 11 (disable_options for single-sig /
-    // multisig --template values). Multi-row template/slot_count
+    // multisig --scheme values). Multi-row template/slot_count
     // mismatch UX migrated to a GUI-internal warning banner (Option A
     // pattern; see mnemonic-gui v0.7.2 release notes). The grammar
     // variant remains defined; no rule emits it after the rollback.

@@ -608,7 +608,7 @@ fn template_corpus() -> Vec<TemplateCase> {
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -949,7 +949,7 @@ fn subset_corpus() -> Vec<SubsetCase> {
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -1398,7 +1398,7 @@ fn bitcoind_h12_taproot_default_origin_differential() {
 // golden`). DEFAULT-CI (NOT `#[ignore]`) — needs no bitcoind.
 
 /// Generate a watch-only multisig bundle's `(ms1, mk1_flat, md1)` from the SAME
-/// two seeds (SEED_A/SEED_B) for a chosen `--template` + `--threshold`. The
+/// two seeds (SEED_A/SEED_B) for a chosen `--scheme` + `--threshold`. The
 /// cosigner pubkey SET is identical across all template/threshold choices.
 fn h1_bundle_cards(template: &str, threshold: &str) -> (Vec<String>, Vec<String>, Vec<String>) {
     let out = AssertCommand::cargo_bin("mnemonic")
@@ -1408,7 +1408,7 @@ fn h1_bundle_cards(template: &str, threshold: &str) -> (Vec<String>, Vec<String>
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             template,
             "--threshold",
             threshold,
@@ -1461,7 +1461,7 @@ fn h1_verify_supplied_md1(
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -1505,7 +1505,7 @@ fn h1_divergent_multipath_md1() -> Vec<String> {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",

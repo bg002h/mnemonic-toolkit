@@ -278,7 +278,7 @@ fn bundle_seed_emits_private_key_material() {
             &slot,
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])
@@ -320,13 +320,7 @@ fn convert_to_xprv_emits_private_key_material() {
     let s = stderr(
         &mnemonic()
             .args([
-                "convert",
-                "--from",
-                &from_arg,
-                "--to",
-                "xprv",
-                "--template",
-                "bip84",
+                "convert", "--from", &from_arg, "--to", "xprv", "--scheme", "bip84",
             ])
             .output()
             .unwrap(),
@@ -340,13 +334,7 @@ fn convert_to_xpub_emits_watch_only() {
     let w = stderr(
         &mnemonic()
             .args([
-                "convert",
-                "--from",
-                &from_arg,
-                "--to",
-                "xpub",
-                "--template",
-                "bip84",
+                "convert", "--from", &from_arg, "--to", "xpub", "--scheme", "bip84",
             ])
             .output()
             .unwrap(),
@@ -360,13 +348,7 @@ fn convert_to_path_only_is_inert() {
     let s = stderr(
         &mnemonic()
             .args([
-                "convert",
-                "--from",
-                &from_arg,
-                "--to",
-                "path",
-                "--template",
-                "bip84",
+                "convert", "--from", &from_arg, "--to", "path", "--scheme", "bip84",
             ])
             .output()
             .unwrap(),
@@ -577,7 +559,7 @@ fn verify_bundle_normal_is_inert() {
                 &format!("@0.phrase={ABANDON}"),
                 "--network",
                 "mainnet",
-                "--template",
+                "--scheme",
                 "bip84",
                 "--json",
                 "--no-engraving-card",
@@ -595,7 +577,7 @@ fn verify_bundle_normal_is_inert() {
             "verify-bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &format!("@0.phrase={ABANDON}"),

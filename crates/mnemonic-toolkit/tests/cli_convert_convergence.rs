@@ -68,7 +68,7 @@ fn convert_lines(args: &[&str]) -> std::collections::BTreeMap<String, String> {
 }
 
 // ===========================================================================
-// C1a — master fingerprint is invariant across --template.
+// C1a — master fingerprint is invariant across --scheme.
 // (The only fingerprint reachable from a BIP-39 source; F-fp.)
 // ===========================================================================
 #[test]
@@ -79,7 +79,7 @@ fn c1a_master_fp_template_account_invariant() {
         &format!("phrase={TREZOR_24}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip84",
     ]);
     let r2 = convert_value(&[
@@ -88,7 +88,7 @@ fn c1a_master_fp_template_account_invariant() {
         &format!("phrase={TREZOR_24}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip44",
     ]);
     let r3 = convert_value(&[
@@ -97,7 +97,7 @@ fn c1a_master_fp_template_account_invariant() {
         &format!("entropy={ENT64}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip86",
     ]);
     assert_eq!(r1, MASTER_FP, "C1a: master fp");
@@ -120,7 +120,7 @@ fn c2_phrase_xpub_vs_phrase_xprv_xpub() {
         &format!("phrase={TREZOR_24}"),
         "--to",
         "xpub",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "mainnet",
@@ -131,7 +131,7 @@ fn c2_phrase_xpub_vs_phrase_xprv_xpub() {
         &format!("phrase={TREZOR_24}"),
         "--to",
         "xprv",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "mainnet",
@@ -170,7 +170,7 @@ fn c3_four_encodings_same_master_fp() {
         &format!("phrase={TREZOR_24}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip84",
     ]);
     let fe = convert_value(&[
@@ -179,7 +179,7 @@ fn c3_four_encodings_same_master_fp() {
         &format!("entropy={ENT64}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip84",
     ]);
     let fs = convert_value(&[
@@ -188,7 +188,7 @@ fn c3_four_encodings_same_master_fp() {
         &format!("seedqr={DIGITS_24}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip84",
     ]);
     let e = convert_value(&[
@@ -204,7 +204,7 @@ fn c3_four_encodings_same_master_fp() {
         &format!("entropy={e}"),
         "--to",
         "fingerprint",
-        "--template",
+        "--scheme",
         "bip84",
     ]);
     assert_eq!(e, ENT64, "C3: ms1→entropy == ENT64");
@@ -377,7 +377,7 @@ fn c7_phrase_address_eq_phrase_xpub_address_p2wpkh() {
         &format!("phrase={TREZOR_12}"),
         "--to",
         "xpub",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "mainnet",
@@ -418,7 +418,7 @@ fn c7_phrase_address_eq_phrase_xpub_address_p2tr() {
         &format!("phrase={TREZOR_12}"),
         "--to",
         "xpub",
-        "--template",
+        "--scheme",
         "bip86",
         "--network",
         "mainnet",

@@ -24,7 +24,7 @@ fn bundle_multisig(template: &str, network: &str) -> (Vec<String>, Vec<Vec<Strin
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--threshold",
             "2",

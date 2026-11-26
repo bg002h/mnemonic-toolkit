@@ -24,7 +24,7 @@ flowchart LR
     x2 --> p2[xpub-2]:::pub
   end
   subgraph CO["Coordinator (any host)"]
-    bundle{{mnemonic bundle<br/>--template wsh-sortedmulti<br/>--threshold 2<br/>--slot @N.xpub=…}}:::layer
+    bundle{{mnemonic bundle<br/>--scheme wsh-sortedmulti<br/>--threshold 2<br/>--slot @N.xpub=…}}:::layer
     bundle --> mk0[mk1 cosigner 0]:::key
     bundle --> mk1c[mk1 cosigner 1]:::key
     bundle --> mk2[mk1 cosigner 2]:::key
@@ -54,7 +54,7 @@ cosigner's own seed:
 mnemonic convert \
   --from phrase="<this cosigner's phrase>" \
   --to xpub --to fingerprint \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --network mainnet
 ```
 
@@ -75,7 +75,7 @@ xpubs only:
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --slot @0.xpub=<xpub-cosigner-0> \
   --slot @1.xpub=<xpub-cosigner-1> \

@@ -12,7 +12,7 @@ flowchart LR
   c0["Cosigner 0<br/>seed phrase A"]:::secret
   c1["Cosigner 1<br/>seed phrase B"]:::secret
   c2["Cosigner 2<br/>seed phrase C"]:::secret
-  toolkit{{mnemonic bundle<br/>--template wsh-sortedmulti<br/>--threshold 2}}:::layer
+  toolkit{{mnemonic bundle<br/>--scheme wsh-sortedmulti<br/>--threshold 2}}:::layer
   c0 --> toolkit
   c1 --> toolkit
   c2 --> toolkit
@@ -50,7 +50,7 @@ discipline as [Generating entropy safely](../20-singlesig/22-generate-entropy.md
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template wsh-sortedmulti \
+  --scheme wsh-sortedmulti \
   --threshold 2 \
   --slot @0.phrase="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about" \
   --slot @1.phrase="legal winner thank year wave sausage worth useful legal winner thank yellow" \
@@ -60,7 +60,7 @@ mnemonic bundle \
 
 Four flags carry the multisig-specific work:
 
-- **`--template wsh-sortedmulti`** — the wallet's spending rule.
+- **`--scheme wsh-sortedmulti`** — the wallet's spending rule.
   `wsh-sortedmulti` is BIP-67-sorted segwit multisig; the emitted
   descriptor is `wsh(sortedmulti(2,@0,@1,@2))`. The "sorted" part
   matters during recovery: BIP-67 fixes a canonical cosigner order

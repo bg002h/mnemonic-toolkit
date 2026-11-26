@@ -68,7 +68,7 @@ fn convert_from_seedqr_to_xpub_bip84() {
             &format!("seedqr={DIGITS_12}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .assert()

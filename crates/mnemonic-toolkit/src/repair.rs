@@ -2606,7 +2606,7 @@ mod tests {
     /// repaired (the xpub-bearing first chunk).
     #[test]
     fn mk_long_target_is_stable_across_distinct_valid_strings() {
-        // Generated 2026-05-17 by `mnemonic bundle --template bip84
+        // Generated 2026-05-17 by `mnemonic bundle --scheme bip84
         // --network mainnet --slot @0.phrase=... --json --no-engraving-card`
         // for 3 distinct BIP-39 test phrases. Each is chunk 0 (108-char
         // data-part → long code).

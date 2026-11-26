@@ -73,7 +73,7 @@ fn bundle_slot_ms1_accepts_comma_grouped() {
             &format!("@0.ms1={grouped}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])

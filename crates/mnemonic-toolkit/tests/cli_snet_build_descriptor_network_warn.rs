@@ -21,7 +21,7 @@ const XPUB_K2: &str = "[97139860/48h/0h/0h/2h]xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9
 fn build(k1: &str, k2: &str, network: Option<&str>) -> std::process::Output {
     let mut args: Vec<String> = vec![
         "build-descriptor".into(),
-        "--archetype".into(),
+        "--scheme".into(),
         "simple-timelocked-inheritance".into(),
         "--key".into(),
         k1.into(),

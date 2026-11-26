@@ -89,7 +89,7 @@ fn bundle_multisig() -> (Vec<String>, Vec<Vec<String>>) {
         .arg("--allow-argv-secret")
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -361,7 +361,7 @@ fn verify_bundle_positional_uppercase_ms1_decodes_ok() {
             "verify-bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             "@0.xpub=xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V",
@@ -530,7 +530,7 @@ fn verify_bundle_positional_uppercase_mk1_md1_round_trip() {
         format!("@0.fingerprint={fp_str}"),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
     ];
     for s in &mk1 {

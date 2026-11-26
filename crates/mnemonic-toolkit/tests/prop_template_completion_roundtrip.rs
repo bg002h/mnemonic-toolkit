@@ -136,7 +136,7 @@ fn key_str(phrase: &str, path: &str) -> String {
 // AND the matching `bundle --md1-form=template` invocation.
 //
 // Two families:
-//   • CANONICAL: wsh(multi/sortedmulti), sh(wsh(...)) at BIP-48 (so `--template`
+//   • CANONICAL: wsh(multi/sortedmulti), sh(wsh(...)) at BIP-48 (so `--scheme`
 //     can emit it) — covers the order-dependent vs order-independent legs.
 //   • GENERAL: wsh(or_i(...)) / wsh(thresh(...)) at BIP-84/BIP-87 (non-canonical
 //     origins) — emitted via `--descriptor`.
@@ -155,8 +155,8 @@ struct GenWallet {
     slots: Vec<&'static str>,
 }
 
-/// Family A (canonical, `--template`): the per-slot path is BIP-48
-/// `48'/0'/acct'/{2'|1'}`. The bundle emits via `--template <script>`.
+/// Family A (canonical, `--scheme`): the per-slot path is BIP-48
+/// `48'/0'/acct'/{2'|1'}`. The bundle emits via `--scheme <script>`.
 fn gen_canonical(
     script: &str, // wsh-multi | wsh-sortedmulti | sh-wsh-multi | sh-wsh-sortedmulti
     threshold: u32,
@@ -173,7 +173,7 @@ fn gen_canonical(
         "bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         script.into(),
         "--threshold".into(),
         threshold.to_string(),

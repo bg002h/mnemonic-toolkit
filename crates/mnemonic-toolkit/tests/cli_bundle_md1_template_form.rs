@@ -66,7 +66,7 @@ fn template_bundle(template: &str, phrase: &str, account: &str) -> (String, Stri
     // ms1/mk1/md1 decode directly via the codec APIs.
     bundle_ok(&[
         "bundle",
-        "--template",
+        "--scheme",
         template,
         "--network",
         "mainnet",
@@ -160,7 +160,7 @@ fn template_md1_does_not_cross_bind_to_policy_form() {
     let (out_t, _) = template_bundle("bip84", PHRASE_A, "0");
     let (out_p, _) = bundle_ok(&[
         "bundle",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "mainnet",
@@ -197,7 +197,7 @@ fn template_bundle_self_check_passes() {
     mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -220,7 +220,7 @@ fn template_form_refuses_multisig_template() {
     mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--network",
             "mainnet",
@@ -247,7 +247,7 @@ fn template_form_refuses_bip49_nested_segwit() {
     let assert = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             "bip49",
             "--network",
             "mainnet",
@@ -342,7 +342,7 @@ fn policy_form_byte_identical_to_default() {
     for template in ["bip44", "bip49", "bip84", "bip86"] {
         let (out_default, _) = bundle_ok(&[
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",
@@ -351,7 +351,7 @@ fn policy_form_byte_identical_to_default() {
         ]);
         let (out_policy, _) = bundle_ok(&[
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",

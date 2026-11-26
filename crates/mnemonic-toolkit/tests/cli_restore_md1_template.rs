@@ -4,7 +4,7 @@
 //! Funds-safety class. The make-or-break gates:
 //!  - completion ADDRESS-EQUIVALENCE: template + seed + account → the SAME
 //!    descriptor + addresses as the INDEPENDENT full-policy single-sig restore
-//!    (`restore --from <seed> --template …`, which does NOT touch the new code
+//!    (`restore --from <seed> --scheme …`, which does NOT touch the new code
 //!    path) — the independent golden.
 //!  - the C2 funds-safety hole: a no-`--from` template restore is REJECTED.
 //!  - keyless MULTISIG template at ingest → refusal (carve-out fall-through).
@@ -28,7 +28,7 @@ fn template_md1(template: &str, phrase: &str, account: &str) -> Vec<String> {
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",
@@ -80,7 +80,7 @@ fn golden_restore(template: &str, phrase: &str, account: &str) -> String {
             "restore",
             "--from",
             &format!("phrase={phrase}"),
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",
@@ -234,7 +234,7 @@ fn bundle_wallet_id_prefix(template: &str, phrase: &str, account: &str) -> Strin
     let out = mnemonic()
         .args([
             "bundle",
-            "--template",
+            "--scheme",
             template,
             "--network",
             "mainnet",

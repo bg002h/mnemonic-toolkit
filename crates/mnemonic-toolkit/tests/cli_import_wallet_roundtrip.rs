@@ -300,7 +300,7 @@ fn export_core_bip84_single_sig() -> String {
         .unwrap()
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -327,7 +327,7 @@ fn export_core_wsh_sortedmulti_2of2() -> String {
             "export-wallet",
             "--format",
             "bitcoin-core",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",

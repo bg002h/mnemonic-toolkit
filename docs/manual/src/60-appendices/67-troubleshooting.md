@@ -7,10 +7,10 @@ m-format constellation bundle, ordered by frequency.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `error: a value is required for '--template <TEMPLATE>'` | Forgot `--template` (or `--descriptor`) | Pick one of `bip44`/`bip49`/`bip84`/`bip86`/`wsh-multi`/`wsh-sortedmulti`/`sh-wsh-multi`/`sh-wsh-sortedmulti`/`tr-multi-a`/`tr-sortedmulti-a`, or supply `--descriptor`. |
+| `error: a value is required for '--scheme <SCHEME>'` | Forgot `--scheme` (or `--descriptor`) | Pick one of `bip44`/`bip49`/`bip84`/`bip86`/`wsh-multi`/`wsh-sortedmulti`/`sh-wsh-multi`/`sh-wsh-sortedmulti`/`tr-multi-a`/`tr-sortedmulti-a`, or supply `--descriptor`. |
 | `error: a value is required for '--threshold <THRESHOLD>'` | Multisig template without `--threshold K` | Pass `--threshold K` (1 ≤ K ≤ N). |
 | `error: invalid mnemonic` | Phrase typo, wordlist mismatch, or non-canonical wordlist | Check word spellings; pass `--language <LANGUAGE>` if the phrase isn't English. |
-| Bundle synthesis silently produces a different xpub from the wallet you intended | Wrong `--template`, `--account`, or `--network` | Run `mnemonic convert --from phrase=… --to xpub --template <T>` and compare to your wallet's xpub *before* stamping. |
+| Bundle synthesis silently produces a different xpub from the wallet you intended | Wrong `--scheme`, `--account`, or `--network` | Run `mnemonic convert --from phrase=… --to xpub --scheme <T>` and compare to your wallet's xpub *before* stamping. |
 
 ## verify-bundle fails
 

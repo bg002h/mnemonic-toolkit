@@ -288,7 +288,7 @@ fn verify_bundle_bundle_json_xor_positional_clap_rejects_per_i3() {
             "verify-bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--bundle-json",
             path.to_str().unwrap(),
@@ -343,7 +343,7 @@ fn verify_bundle_positional_watch_only_round_trip() {
         format!("@0.fingerprint={fp_str}"),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
     ];
     // Pass mk1 + md1 strings positionally — no --mk1 / --md1 flags.
@@ -396,7 +396,7 @@ fn verify_bundle_flag_value_mismatched_hrp_rejects_d34() {
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         // The D34 trigger — `--ms1` flag carrying a value with a non-`ms1` HRP.
         "--ms1".into(),
@@ -472,7 +472,7 @@ fn verify_bundle_positional_unknown_hrp_rejects() {
             "verify-bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             "@0.xpub=xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V",

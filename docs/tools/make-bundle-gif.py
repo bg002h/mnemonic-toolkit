@@ -62,7 +62,7 @@ H = ROWS * CELL_H + 2 * PADDING
 CMD_LINES = [
     'mnemonic bundle \\',
     '    --network mainnet \\',
-    '    --template bip84 \\',
+    '    --scheme bip84 \\',
     '    --slot @0.phrase="abandon abandon abandon abandon abandon abandon \\',
     '                        abandon abandon abandon abandon abandon about"',
 ]

@@ -52,7 +52,7 @@ fn rcw_tr() -> String {
 /// gate runs on it and does NOT fire. The "sane" control.
 const SANE_DESCRIPTOR: &str = "sh(multi(2,[b8688df1/48'/0'/0'/2']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*,[5436d724/48'/0'/0'/2']xpub6Buxw9MmbkJr4iAw8SACNci2hQNuPCMwt9P7HkK62ZQAW9UcJaQ2bc6ARD892TToQQ9Rp6AHujHxBLXqAsvn5fRnLfnhKSRfz8qtaoyKUYx/<0;1>/*,[28645006/48'/0'/0'/2']xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6/<0;1>/*))#ek6d38cp";
 
-/// BIP-48 cosigner xpubs for the `--template` / `--slot` arm.
+/// BIP-48 cosigner xpubs for the `--scheme` / `--slot` arm.
 const COSIGNER_A_XPUB: &str = "xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX";
 const COSIGNER_A_FP: &str = "b8688df1";
 const COSIGNER_B_XPUB: &str = "xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6";
@@ -481,7 +481,7 @@ fn bip388_keyless_leaf_still_refuses_without_the_flag() {
 //    them because prose has no cells.
 // ============================================================================
 
-/// The `--template` / `--slot` arm. Row 1, column 3: the did-not-fire note,
+/// The `--scheme` / `--slot` arm. Row 1, column 3: the did-not-fire note,
 /// and ONLY that. Not an exemption — a builder-produced descriptor cannot carry
 /// a sigless branch, so the rule runs and cannot fire.
 fn template_arm_args(allow: &str) -> Vec<&str> {
@@ -489,7 +489,7 @@ fn template_arm_args(allow: &str) -> Vec<&str> {
         "export-wallet",
         "--format",
         "bitcoin-core",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -516,7 +516,7 @@ fn template_arm_args(allow: &str) -> Vec<&str> {
 
 /// Row 1 of the matrix: `--allow sigless-branch`, per arm.
 /// `--descriptor` and `--from-import-json` can each produce EITHER outcome;
-/// `--template`/`--slot` can only produce the did-not-fire note. Row 1's
+/// `--scheme`/`--slot` can only produce the did-not-fire note. Row 1's
 /// columns are deliberately NOT identical (round 5 caught the earlier wording
 /// that claimed they were, falsified by the grid printed one line above it).
 #[test]
@@ -564,7 +564,7 @@ fn note_matrix_row1_allow_sigless_branch_every_arm() {
     assert_eq!(r.code, 0, "{}", r.stderr);
     assert!(allow_notes(&r.stderr)[0].starts_with(FIRED), "{}", r.stderr);
 
-    // Cell (1,3) --template/--slot: the gate RUNS and CANNOT fire.
+    // Cell (1,3) --scheme/--slot: the gate RUNS and CANNOT fire.
     let r = run(&template_arm_args("sigless-branch"));
     assert_eq!(r.code, 0, "{}", r.stderr);
     assert_eq!(
@@ -624,7 +624,7 @@ fn note_matrix_row2_unenforced_rule_every_arm() {
             r.stderr
         );
 
-        // Column 3 — --template/--slot.
+        // Column 3 — --scheme/--slot.
         let mut args = template_arm_args(rule);
         // template_arm_args already ends with ["--allow", rule].
         args.push("--allow");
@@ -633,7 +633,7 @@ fn note_matrix_row2_unenforced_rule_every_arm() {
         assert_eq!(r.code, 0, "{}", r.stderr);
         assert!(
             allow_notes(&r.stderr).contains(&expected),
-            "arm=--template rule={rule}: {}",
+            "arm=--scheme rule={rule}: {}",
             r.stderr
         );
     }
@@ -682,7 +682,7 @@ fn note_matrix_row2_columns_are_identical() {
         let b = pick(&from_envelope);
         let c = pick(&from_template);
         assert_eq!(a, b, "rule={rule}: --descriptor vs --from-import-json");
-        assert_eq!(a, c, "rule={rule}: --descriptor vs --template");
+        assert_eq!(a, c, "rule={rule}: --descriptor vs --scheme");
     }
 }
 
@@ -895,7 +895,7 @@ fn all_five_rule_names_parse_on_the_export_surface() {
 }
 
 /// A sanity check on the fixtures themselves: the two constants used as the
-/// "sane" control really are sane, and the `--template` cosigners really are
+/// "sane" control really are sane, and the `--scheme` cosigners really are
 /// the ones the arm builds with. Guards against a control that silently stops
 /// being a control (a positive-control failure is what saved the round-1
 /// Bitcoin Core measurement).
@@ -998,7 +998,7 @@ fn with_the_flag_each_format_falls_through_to_its_own_verdict() {
         ("specter", "requires the following missing fields"),
         (
             "sparrow",
-            "requires --template; descriptor passthrough is not supported",
+            "requires --scheme; descriptor passthrough is not supported",
         ),
     ] {
         let r = run(&[
@@ -1039,7 +1039,7 @@ fn sparrow_descriptor_passthrough_refusal_is_untouched_for_a_sane_wallet() {
     assert_eq!(r.code, 1, "stdout={} stderr={}", r.stdout, r.stderr);
     assert!(
         r.stderr
-            .contains("requires --template; descriptor passthrough is not supported"),
+            .contains("requires --scheme; descriptor passthrough is not supported"),
         "{}",
         r.stderr
     );
@@ -1120,7 +1120,7 @@ fn phase3_sparrow_refuses_this_wallet_past_the_gate_both_wrappers() {
         );
         assert!(
             r.stderr
-                .contains("requires --template; descriptor passthrough is not supported"),
+                .contains("requires --scheme; descriptor passthrough is not supported"),
             "{label}: the refusal must be Sparrow's own: {}",
             r.stderr
         );

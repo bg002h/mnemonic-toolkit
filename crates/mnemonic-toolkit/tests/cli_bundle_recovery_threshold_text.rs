@@ -687,13 +687,13 @@ const TPL_XPUBS: [(&str, &str); 3] = [
     ("xpub6DnEBNkSJKBYQmsbhS1sP9cNdtU5c9PLFGCjTJmxicxc13WB8zNNGQazabQpyFAGW5bV9tMko4uBxDxjUKL6dSAcx1tEbgEHtgSqyRsekh6", "28645006"),
 ];
 
-/// `bundle --template wsh-sortedmulti --threshold 2` over three xpub slots.
+/// `bundle --scheme wsh-sortedmulti --threshold 2` over three xpub slots.
 fn template_bundle(extra: &[&str]) -> std::process::Output {
     let mut args: Vec<String> = [
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",

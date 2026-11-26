@@ -12,7 +12,7 @@
 //! Fixtures are FROZEN bundle cards (minted by `mnemonic bundle`) — the md1 is
 //! decoded and re-emitted with its origin ELIDED in-crate (`elide`) to produce
 //! the keyed dead card. Only the SUPPLIED md1 is elided; the expected bundle is
-//! synthesized fresh (WITH origin) from the same `--template`/`--slot` inputs.
+//! synthesized fresh (WITH origin) from the same `--scheme`/`--slot` inputs.
 //! I-2: all md1 fixtures are CHUNK-FORM.
 
 #![allow(missing_docs)]
@@ -20,7 +20,7 @@
 use assert_cmd::Command;
 use md_codec::origin_path::{OriginPath, PathDeclPaths};
 
-// ── FROZEN: `mnemonic bundle --template tr-sortedmulti-a --threshold 2` ──────
+// ── FROZEN: `mnemonic bundle --scheme tr-sortedmulti-a --threshold 2` ──────
 const P1: &str = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const P2: &str = "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
@@ -103,7 +103,7 @@ fn multi_base() -> Vec<String> {
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "tr-sortedmulti-a".into(),
         "--threshold".into(),
         "2".into(),
@@ -191,7 +191,7 @@ fn verify_bundle_mismatch_beats_partial() {
         "verify-bundle".to_string(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "tr-sortedmulti-a".into(),
         "--threshold".into(),
         "1".into(),

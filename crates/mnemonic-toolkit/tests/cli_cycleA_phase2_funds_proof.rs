@@ -41,7 +41,7 @@ const TREZOR_12: &str =
 /// Authoritative BIP-84 test-vector first receive address (account 0, chain 0,
 /// index 0 — `m/84'/0'/0'/0/0`). Already pinned independently at
 /// `cli_restore.rs:26` (`FIRST_RECV_BIP84`) via `restore --from phrase=...
-/// --template bip84`, which drives the canonical-template synthesis engine
+/// --scheme bip84`, which drives the canonical-template synthesis engine
 /// directly and never touches `lex_placeholders`. This file re-proves the SAME
 /// oracle value through the DIFFERENT pipeline that had the bug: a concrete
 /// `bundle --descriptor` (→ `concrete_keys_to_placeholders` →

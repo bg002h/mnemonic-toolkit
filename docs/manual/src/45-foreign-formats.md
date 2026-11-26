@@ -373,8 +373,8 @@ itself (per SPEC §11.1):
 mnemonic import-wallet --format sparrow \
   --blob sparrow-singlesig-p2wpkh.json --json > envelope.json
 
-# Re-emit via export-wallet (v0.37.0+: --template is auto-derived from
-# the envelope descriptor; do NOT pass --template here, it conflicts)
+# Re-emit via export-wallet (v0.37.0+: --scheme is auto-derived from
+# the envelope descriptor; do NOT pass --scheme here, it conflicts)
 mnemonic export-wallet --from-import-json envelope.json \
   --format sparrow > sparrow_re.json
 
@@ -425,11 +425,11 @@ Step 5 substitution branch. The resulting
 the existing pipeline. Closes FOLLOWUP
 `sparrow-taproot-singlesig-template-mode-import`.
 
-The direct export-wallet path requires a recognized `--template` (no
+The direct export-wallet path requires a recognized `--scheme` (no
 descriptor-passthrough); taproot-multisig emit is supported via
-`--template tr-multi-a` / `tr-sortedmulti-a`. **On the `--from-import-json`
-path (v0.37.0+) the `--template` is auto-derived from the envelope's
-descriptor**, so you omit it (passing `--template` there is a clap
+`--scheme tr-multi-a` / `tr-sortedmulti-a`. **On the `--from-import-json`
+path (v0.37.0+) the `--scheme` is auto-derived from the envelope's
+descriptor**, so you omit it (passing `--scheme` there is a clap
 conflict). Import auto-sniff still fires (sniff is `policyType`-based, not
 script-content-based).
 
@@ -577,7 +577,7 @@ preserves Coldcard-specific metadata:
 mnemonic import-wallet --format coldcard \
   --blob coldcard-singlesig-bip84-mainnet.json --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format coldcard > coldcard_re.json   # v0.37.0+: --template auto-derived
+  --format coldcard > coldcard_re.json   # v0.37.0+: --scheme auto-derived
 ```
 
 ### Deferral — legacy Mk1/Mk2 xpub-prefix inference
@@ -716,8 +716,8 @@ diff coldcard-ms-2of3-p2wsh-with-xfp.txt coldcard_ms_re.txt
 > `--format coldcard` for backward compatibility with v0.28.0–v0.28.3
 > readers; `--format coldcard-multisig` is equivalent here (on the
 > `--from-import-json` path the template + threshold are auto-derived
-> from the envelope, v0.37.0+; on the direct `--template` path it would
-> be `--format coldcard-multisig --template wsh-sortedmulti --threshold 2`).
+> from the envelope, v0.37.0+; on the direct `--scheme` path it would
+> be `--format coldcard-multisig --scheme wsh-sortedmulti --threshold 2`).
 
 ## Blockstream Jade (`--format jade`) {#jade-multisig}
 
@@ -891,7 +891,7 @@ Refused variants (`2fa` / `imported` / encrypted) do not produce a
 mnemonic import-wallet --format electrum \
   --blob electrum-standard-bip84-mainnet.json --json > envelope.json
 mnemonic export-wallet --from-import-json envelope.json \
-  --format electrum > electrum_re.json   # v0.37.0+: --template auto-derived
+  --format electrum > electrum_re.json   # v0.37.0+: --scheme auto-derived
 ```
 
 ### Deferrals

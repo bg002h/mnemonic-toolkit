@@ -28,7 +28,7 @@ const TREZOR_12_MASTER_FINGERPRINT: &str = "73c5da0a";
 
 // BIP-49 mainnet account 0 xpub at m/49'/0'/0' for the Trezor 12-word seed.
 // Derived by Phase-2 BIP-49 vector test path; cross-checked at runtime in
-// `cell_8_*` below by re-deriving via `mnemonic convert --template bip49
+// `cell_8_*` below by re-deriving via `mnemonic convert --scheme bip49
 // --network mainnet`. BIP-49's published vector covers testnet only, so
 // this mainnet value is toolkit-derived (not spec-published) — what's
 // pinned is the BIP-388 `description_template` shape, per matrix decision.
@@ -54,7 +54,7 @@ fn derive_xpub_via_cli(template: &str, network: &str) -> (String, String) {
             &format!("phrase={TREZOR_12}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             template,
             "--network",
             network,
@@ -77,7 +77,7 @@ fn derive_xpub_via_cli(template: &str, network: &str) -> (String, String) {
             &format!("phrase={TREZOR_12}"),
             "--to",
             "fingerprint",
-            "--template",
+            "--scheme",
             template,
             "--network",
             network,
@@ -101,7 +101,7 @@ fn cell_1_bitcoin_core_single_sig_wpkh_round_trip() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -150,7 +150,7 @@ fn export_wallet_default_timestamp_is_zero_not_now() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -186,7 +186,7 @@ fn export_wallet_explicit_timestamp_now_stays_now() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -219,7 +219,7 @@ fn cell_2_bip388_wallet_policy_multisig_wsh_sortedmulti() {
             "export-wallet",
             "--format",
             "bip388",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -270,7 +270,7 @@ fn cell_3_phrase_slot_refusal_byte_exact() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -298,7 +298,7 @@ fn cell_5_range_override() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -335,7 +335,7 @@ fn cell_6_bitcoin_core_version_24_matches_25_for_emitted_fields() {
     let mk_args = |ver: &str| {
         vec![
             "export-wallet".to_string(),
-            "--template".into(),
+            "--scheme".into(),
             "bip84".into(),
             "--network".into(),
             "mainnet".into(),
@@ -371,7 +371,7 @@ fn cell_6_bitcoin_core_version_24_matches_25_for_emitted_fields() {
     );
 }
 
-/// Phase-5 post-review: `--template tr-multi-a` and `--template tr-sortedmulti-a`
+/// Phase-5 post-review: `--scheme tr-multi-a` and `--scheme tr-sortedmulti-a`
 /// emit a clean refusal at exit 2. Constructing `tr(<internal-key>,
 /// multi_a(...))` requires picking a NUMS point or designating a key-path key;
 /// deferred to v0.8.
@@ -387,7 +387,7 @@ fn taproot_multisig_template_requires_internal_key_flag() {
             .arg("--allow-argv-secret")
             .args([
                 "export-wallet",
-                "--template",
+                "--scheme",
                 template_name,
                 "--threshold",
                 "2",
@@ -414,7 +414,7 @@ fn taproot_multisig_template_requires_internal_key_flag() {
         let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
         assert!(
             stderr.contains(&format!(
-                "--template {template_name} requires --taproot-internal-key"
+                "--scheme {template_name} requires --taproot-internal-key"
             )),
             "stderr missing taproot-internal-key pointer for {template_name}; got: {stderr:?}",
         );
@@ -469,7 +469,7 @@ fn bip380_valid_checksum_round_trip_via_miniscript() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "bip84",
             "--network",
             "mainnet",
@@ -519,7 +519,7 @@ fn bip380_valid_checksum_round_trip_via_miniscript() {
 
 /// BIP-388 §Reference Wallet Policies row 388.2 — `sh(wpkh(@0/**))` (BIP-49
 /// nested segwit). Pin the `description_template` shape from
-/// `mnemonic export-wallet --format bip388 --template bip49` and the
+/// `mnemonic export-wallet --format bip388 --scheme bip49` and the
 /// `keys_info[0]` `[fingerprint/49h/0h/0h]xpub` shape. The xpub is
 /// toolkit-derived from the Trezor 12-word "abandon ... about" reference
 /// seed (BIP-388's 388.2 spec value uses an unspecified seed, so the spec's
@@ -548,7 +548,7 @@ fn cell_8_bip388_sh_wpkh_bip49_template_shape() {
             "export-wallet",
             "--format",
             "bip388",
-            "--template",
+            "--scheme",
             "bip49",
             "--network",
             "mainnet",
@@ -601,7 +601,7 @@ fn cell_9_bip388_tr_bip86_template_shape() {
             "export-wallet",
             "--format",
             "bip388",
-            "--template",
+            "--scheme",
             "bip86",
             "--network",
             "mainnet",
@@ -635,7 +635,7 @@ fn threshold_greater_than_cosigner_count_refusal() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "5",
@@ -681,7 +681,7 @@ fn tr_multi_a_with_nums_internal_key_emits_canonical_tr_descriptor() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--taproot-internal-key",
             "nums",
@@ -733,7 +733,7 @@ fn tr_multi_a_with_cosigner_internal_key_removes_cosigner_from_leaves() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--taproot-internal-key",
             "@0",
@@ -783,7 +783,7 @@ fn tr_multi_a_internal_key_out_of_range() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--taproot-internal-key",
             "@5",
@@ -824,7 +824,7 @@ fn taproot_internal_key_on_non_taproot_template_refused() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--taproot-internal-key",
             "nums",
@@ -853,7 +853,7 @@ fn taproot_internal_key_on_non_taproot_template_refused() {
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains(
-            "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"
+            "--taproot-internal-key applies only to --scheme tr-multi-a / tr-sortedmulti-a"
         ),
         "stderr missing non-taproot refusal: {stderr:?}",
     );
@@ -868,7 +868,7 @@ fn tr_multi_a_bip388_wallet_policy_with_nums() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--taproot-internal-key",
             "nums",
@@ -971,7 +971,7 @@ fn tr_multi_a_n1_cosigner_internal_degenerate_refused() {
         .arg("--allow-argv-secret")
         .args([
             "export-wallet",
-            "--template",
+            "--scheme",
             "tr-multi-a",
             "--taproot-internal-key",
             "@0",
@@ -1033,7 +1033,7 @@ fn bsms_form_does_not_leak_into_non_bsms_format_output() {
     let mk_args = |with_form: bool| {
         let mut v = vec![
             "export-wallet".to_string(),
-            "--template".into(),
+            "--scheme".into(),
             "bip84".into(),
             "--network".into(),
             "mainnet".into(),

@@ -1,7 +1,7 @@
 printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about' \
   | MS1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f $MNEMONIC_BIN verify-bundle \
       --network mainnet \
-      --template bip84 \
+      --scheme bip84 \
       --slot @0.phrase=- \
       --ms1 @env:MS1 \
       --mk1 mk1qprsqhpqqsq3cqtsleeutks2qvzg3vs70mejhk622ws2kgdemj2cd8zwj2skzx2wq0qw70l4q99vdyh5x0z8v4yslsp8qp3yxg3dpe854wq4 \

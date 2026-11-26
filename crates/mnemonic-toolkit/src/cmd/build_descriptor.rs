@@ -51,57 +51,66 @@ pub struct BuildDescriptorArgs {
     #[arg(long)]
     pub spec_schema: bool,
 
-    /// Build from a curated archetype preset instead of a `--spec` node-tree
+    /// Build from a named wallet scheme instead of a `--spec` node-tree
     /// (presets SPEC §1). Parameters are supplied via the flags below; the
     /// lowered tree flows through the SAME validation gate as `--spec`.
-    #[arg(long, value_enum, conflicts_with = "spec")]
+    ///
+    // `--archetype` stays accepted as a hidden alias (renamed 2026-11-26).
+    #[arg(
+        id = "scheme",
+        long = "scheme",
+        value_name = "SCHEME",
+        alias = "archetype",
+        value_enum,
+        conflicts_with = "spec"
+    )]
     pub archetype: Option<CliArchetype>,
 
     /// Primary-path key(s) (`[fp/path]xpub…`); repeat per cosigner — argv
     /// order is preserved into the quorum.
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub key: Vec<String>,
 
     /// Primary quorum threshold k.
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub threshold: Option<u32>,
 
     /// Recovery-path key(s); repeat per cosigner — argv order is preserved.
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub recovery_key: Vec<String>,
 
     /// Recovery quorum threshold k.
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub recovery_threshold: Option<u32>,
 
     /// Last-resort key (decaying-multisig tier 3).
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub final_key: Option<String>,
 
     /// Relative timelock (blocks) on the gated path (decaying-multisig:
     /// tier-1 timelock).
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub older: Option<u32>,
 
     /// Decaying-multisig tier-2 relative timelock (blocks); must exceed
     /// `--older`.
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub recovery_older: Option<u32>,
 
     /// Decaying-multisig tier-3 absolute locktime (block height or unix
     /// time, per BIP-65 threshold).
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub after: Option<u32>,
 
     /// SHA-256 digest (64 hex chars) for `hashlock-gated`.
-    #[arg(long, requires = "archetype")]
+    #[arg(long, requires = "scheme")]
     pub hash: Option<String>,
 
     /// Print the lowered + gate-validated node-tree spec JSON instead of
     /// building (review it, edit it, feed it back via `--spec`). `--network`
     /// is accepted and ignored. The gate still runs: an invalid preset emits
     /// diagnostics, never a spec.
-    #[arg(long, requires = "archetype", conflicts_with_all = ["format", "json"])]
+    #[arg(long, requires = "scheme", conflicts_with_all = ["format", "json"])]
     pub emit_spec: bool,
 
     /// Reviewed opt-out of ONE funds-safety sanity rule per occurrence

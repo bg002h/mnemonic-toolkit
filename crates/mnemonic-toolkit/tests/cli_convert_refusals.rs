@@ -93,7 +93,7 @@ fn refusal_xpub_to_mk1_distinct_message() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(        "error: --to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --template ...' to emit a complete bundle.\n"),
+        stderr.ends_with(        "error: --to mk1 requires a policy descriptor binding (mk1 cards bind xpubs to specific policies via policy_id_stubs). Use 'mnemonic bundle --slot @0.xpub=... --scheme ...' to emit a complete bundle.\n"),
         "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
     )
@@ -173,7 +173,7 @@ fn refusal_phrase_to_wif_missing_path() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"),
+        stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --scheme/--account).\n"),
         "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
     )
@@ -198,7 +198,7 @@ fn refusal_entropy_to_wif_missing_path() {
         .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"),
+        stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --scheme/--account).\n"),
         "stderr must end with byte-exact SPEC error text; got {:?}",
         stderr,
     )

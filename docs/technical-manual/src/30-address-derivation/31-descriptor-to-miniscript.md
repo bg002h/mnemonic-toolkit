@@ -112,7 +112,7 @@ Descriptor {
 
 The template plus the inline xpub fully specifies the wallet. The wire form for this exact shape (without the xpub — just the template) appears in §II.1's worked encode as the 24-character `md1yqpqqxqq8xtwhw4xwn4qh`.
 
-**Tier 2 — Derivation.** With `chain = 0` and `index = 0`, the use-site path resolves to the suffix `/0/0`; combined with the abandon account xpub `xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V` (derivable from the mnemonic via `mnemonic convert --from "phrase=..." --to xpub --template bip84`), CKDpub\index{CKDpub} produces a definite secp256k1 pubkey for the receive-0 leaf. The origin record `m/84'/0'/0'` is *not consulted* here; only the chain-code and pubkey bytes of the xpub matter for CKDpub.
+**Tier 2 — Derivation.** With `chain = 0` and `index = 0`, the use-site path resolves to the suffix `/0/0`; combined with the abandon account xpub `xpub6CatWdiZiodmUeTDp8LT5or8nmbKNcuyvz7WyksVFkKB4RHwCD3XyuvPEbvqAQY3rAPshWcMLoP2fMFMKHPJ4ZeZXYVUhLv1VMrjPC7PW6V` (derivable from the mnemonic via `mnemonic convert --from "phrase=..." --to xpub --scheme bip84`), CKDpub\index{CKDpub} produces a definite secp256k1 pubkey for the receive-0 leaf. The origin record `m/84'/0'/0'` is *not consulted* here; only the chain-code and pubkey bytes of the xpub matter for CKDpub.
 
 **Tier 3 — Script + Address.** `to_miniscript_descriptor` produces a `wpkh(...)` `miniscript::Descriptor` over that definite key; `miniscript::Descriptor::address(Network::Bitcoin)` produces `bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu`.
 

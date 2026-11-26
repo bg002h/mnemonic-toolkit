@@ -387,7 +387,7 @@ fn flagship_pk_keyed_vault_reconstructs() {
 /// bundle produces `xpub/*` (no `<0;1>` group). The faithful arm must
 /// reconstruct it WITHOUT fabricating `<0;1>` (pass the XPub through unchanged
 /// shape) — and addresses still derive. (The canonical `<0;1>` plain-multisig
-/// path is exercised byte-for-byte by the 13+12 `--template` goldens.)
+/// path is exercised byte-for-byte by the 13+12 `--scheme` goldens.)
 #[test]
 fn general_wildcard_only_multipath_none_reconstructs_without_fabricating_multipath() {
     let md1 = bundle_general("wsh(and_v(v:multi(2,@0/*,@1/*),older(4032)))");

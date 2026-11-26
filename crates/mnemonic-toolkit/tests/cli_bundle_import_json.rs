@@ -101,7 +101,7 @@ fn bundle_import_json_mk1_multi_decodes_to_n_slots_in_declaration_order() {
 }
 
 // ============================================================================
-// Cell 3 — `bundle --import-json` ↔ `--template` mutex.
+// Cell 3 — `bundle --import-json` ↔ `--scheme` mutex.
 // ============================================================================
 
 #[test]
@@ -114,7 +114,7 @@ fn bundle_import_json_with_template_flag_errors_mutex() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--import-json",
             p.to_str().unwrap(),
@@ -530,7 +530,7 @@ fn bundle_import_json_to_verify_bundle_round_trip_yields_ok() {
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--multisig-path-family".into(),
         "bip87".into(),

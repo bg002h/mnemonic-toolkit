@@ -462,7 +462,7 @@ fn guard_restore_keyless_shwpkh_template_refuses_never_49prime() {
 
 /// verify_bundle.rs:391 VERIFY-side guard (mirror of the restore guard) — the
 /// same keyless sh(wpkh) template md1 does NOT route into
-/// `verify_singlesig_template`. With no `--template`/`--descriptor` it falls
+/// `verify_singlesig_template`. With no `--scheme`/`--descriptor` it falls
 /// through and demands one (proving it was NOT recognised as a keyless
 /// single-sig template).
 #[test]
@@ -490,10 +490,10 @@ fn guard_verify_keyless_shwpkh_template_never_singlesig_template_path() {
         .code(2);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("--template is required")
+        stderr.contains("--scheme is required")
             && stderr.contains("not a keyless single-sig template"),
         "keyless sh(wpkh) template verify must fall through (NOT route into the single-sig \
-         template verify path) and demand --template/--descriptor; got:\n{stderr}"
+         template verify path) and demand --scheme/--descriptor; got:\n{stderr}"
     );
 }
 

@@ -65,7 +65,7 @@ fn verify_args<'a>(slot: &'a str, extra: &'a [&'a str]) -> Vec<&'a str> {
     let mut v = vec![
         "verify-bundle",
         "--allow-argv-secret",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "signet",
@@ -118,7 +118,7 @@ fn r2_derive_child_env_dash_is_literal() {
 fn r3_bundle_slot_env_dash_is_literal() {
     let a = [
         "bundle",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "signet",
@@ -264,7 +264,7 @@ fn s2_convert_env_dash_not_a_stdin_reader() {
 fn s3_bundle_slot_env_dash_not_a_stdin_reader() {
     let a = [
         "bundle",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "signet",
@@ -334,7 +334,7 @@ fn s7_ms_shares_combine_two_env_dashes_not_stdin_readers() {
 fn s8_bundle_literal_slot_and_env_dash_slot() {
     let a = [
         "bundle",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "1",
@@ -456,7 +456,7 @@ fn c2_convert_env_phrase_works() {
 fn c3_bundle_slot_literal_dash_reads_stdin() {
     let a = [
         "bundle",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "signet",
@@ -485,7 +485,7 @@ fn c4_stdin_text_is_not_env_resolved() {
 fn c5_bundle_stdin_text_is_not_env_resolved() {
     let a = [
         "bundle",
-        "--template",
+        "--scheme",
         "bip84",
         "--network",
         "signet",
@@ -558,7 +558,7 @@ fn n3b_verify_bundle_literal_slot_and_env_dash_slot() {
     let a = [
         "verify-bundle",
         "--allow-argv-secret",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "1",
@@ -583,7 +583,7 @@ fn n10_bundle_env_slot_then_literal_dash_slot_reads_stdin_into_slot_1() {
     let o = run(
         &[
             "bundle",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "1",

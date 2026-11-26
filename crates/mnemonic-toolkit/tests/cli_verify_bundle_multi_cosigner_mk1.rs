@@ -25,7 +25,7 @@ const BIP39_TEST_2: &str =
 const BIP39_TEST_3: &str =
     "letter advice cage absurd amount doctor acoustic avoid letter advice cage above";
 
-/// Cell 1 — canonical 2-of-2 wsh-sortedmulti via `--template` (synthesize_unified:754 path).
+/// Cell 1 — canonical 2-of-2 wsh-sortedmulti via `--scheme` (synthesize_unified:754 path).
 /// Emit bundle JSON, pipe back through verify-bundle --bundle-json.
 /// Pre-fix: `result: mismatch` with `mk1_decode[0..1]: fail`.
 /// Post-fix: `result: ok`.
@@ -38,7 +38,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_bundle_json() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -68,7 +68,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_bundle_json() {
             "verify-bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -192,7 +192,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_flat_mk1_repetition() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -234,7 +234,7 @@ fn canonical_wsh_sortedmulti_round_trips_via_flat_mk1_repetition() {
         "verify-bundle".into(),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "wsh-sortedmulti".into(),
         "--threshold".into(),
         "2".into(),
@@ -337,7 +337,7 @@ fn self_check_canonical_multisig_passes_both_pre_and_post_fix() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -361,7 +361,7 @@ fn self_check_canonical_multisig_passes_both_pre_and_post_fix() {
 /// Fixture provenance: captured 2026-05-17 from pre-fix toolkit (commit dbd3728)
 /// via:
 /// ```
-/// mnemonic bundle --network mainnet --template bip84 \
+/// mnemonic bundle --network mainnet --scheme bip84 \
 ///     --slot '@0.phrase=...' --json --no-engraving-card
 /// ```
 #[test]
@@ -376,7 +376,7 @@ fn single_sig_csi_unchanged_byte_identical_to_pre_fix_fixture() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &format!("@0.phrase={TREZOR_12_ZERO}"),

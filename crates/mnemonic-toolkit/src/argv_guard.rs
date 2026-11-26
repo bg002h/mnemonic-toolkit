@@ -17,9 +17,9 @@
 //! that it was run, not assumed):
 //!
 //! ```text
-//! $ mnemonic convert --from phrase=<12 words> --to xpub --template bip84 --bogus-flag
+//! $ mnemonic convert --from phrase=<12 words> --to xpub --scheme bip84 --bogus-flag
 //! error: unexpected argument '--bogus-flag' found          <- names the FLAG
-//! $ mnemonic convert --to xpub --template bip84 "<the 12 words>"
+//! $ mnemonic convert --to xpub --scheme bip84 "<the 12 words>"
 //! error: unexpected argument 'abandon abandon … about' found   <- echoes the PHRASE
 //! ```
 //!

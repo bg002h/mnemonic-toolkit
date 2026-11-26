@@ -146,7 +146,7 @@ fn canonical_wsh_sortedmulti_with_nonzero_account_refuses() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "error: --account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.",
+            "error: --account != 0 is meaningful only with --scheme; descriptor mode encodes account index in the @i origin path.",
         ));
 }
 

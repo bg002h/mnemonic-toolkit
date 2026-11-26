@@ -274,7 +274,7 @@ fn ms_shares_combine_to_entropy_composes_into_bundle() {
             "bundle",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--slot",
             &slot,

@@ -25,12 +25,18 @@ pub struct VerifyBundleArgs {
     #[arg(long)]
     pub network: CliNetwork,
 
-    /// Template name. Mutually-required-one-of with --descriptor /
-    /// --descriptor-file. #28: ALSO optional when `--md1` is present — a keyless
-    /// single-sig TEMPLATE md1 carries its own type (the type is read from the
-    /// md1 tree); a keyed wallet-policy md1 still requires `--template` (guarded
-    /// at runtime with a clear error, not a clap-required panic).
-    #[arg(long, required_unless_present_any = ["descriptor", "descriptor_file", "md1", "bundle_json", "extra_strings"])]
+    /// Named wallet scheme (single-sig BIP-44/49/84/86 derivation schemes, or the
+    /// BIP-388 common multisig schemes). Mutually-required-one-of with
+    /// --descriptor / --descriptor-file. #28: ALSO optional when `--md1` is
+    /// present — a keyless single-sig TEMPLATE md1 carries its own type (the
+    /// type is read from the md1 tree); a keyed wallet-policy md1 still requires
+    /// `--scheme` (guarded at runtime with a clear error, not a clap-required
+    /// panic).
+    // `--template` stays accepted as a hidden alias (renamed 2026-11-26).
+    #[arg(
+        id = "scheme", long = "scheme", value_name = "SCHEME", alias = "template",
+        required_unless_present_any = ["descriptor", "descriptor_file", "md1", "bundle_json", "extra_strings"]
+    )]
     pub template: Option<CliTemplate>,
 
     /// User-supplied descriptor (v0.3 §5.7 verify-bundle re-parse path).
@@ -493,7 +499,7 @@ pub fn run<W: Write, E: Write>(
     // dedicated path binds the cards via the template-id stub, then completes +
     // recomposes the watch-only single-sig wallet from the supplied seed
     // (`--slot @0.<secret>=` + `--account`/`--origin`). Escapes before the
-    // template/descriptor dispatch (a template bundle may omit `--template`).
+    // template/descriptor dispatch (a template bundle may omit `--scheme`).
     if !args.md1.is_empty() {
         let md1_refs: Vec<&str> = args.md1.iter().map(|s| s.as_str()).collect();
         // A single supplied md1 may be a NON-chunked single-payload string (bare
@@ -543,7 +549,7 @@ pub fn run<W: Write, E: Write>(
     if descriptor_mode && args.template.is_some() {
         return Err(ToolkitError::ModeViolation {
             mode: "descriptor",
-            flag: "--template",
+            flag: "--scheme",
             message: mode_text::DESCRIPTOR_AND_TEMPLATE,
         });
     }
@@ -558,17 +564,17 @@ pub fn run<W: Write, E: Write>(
         );
     }
 
-    // #28 — `--template` is now clap-optional when `--md1`/`--bundle-json`/
+    // #28 — `--scheme` is now clap-optional when `--md1`/`--bundle-json`/
     // positionals are present (to allow a keyless template md1 to carry its own
     // type). The template-form short-circuit above already handled the keyless
     // single-sig template; any md1 reaching here is a keyed wallet-policy md1
-    // (or a non-template keyless shape) that DOES need an explicit `--template`.
+    // (or a non-template keyless shape) that DOES need an explicit `--scheme`.
     if args.template.is_none() {
         return Err(ToolkitError::ModeViolation {
             mode: "verify-bundle",
-            flag: "--template",
-            message: "--template is required (the supplied md1 is not a keyless single-sig \
-                      template that carries its own type); supply --template <bip44|…> or \
+            flag: "--scheme",
+            message: "--scheme is required (the supplied md1 is not a keyless single-sig \
+                      template that carries its own type); supply --scheme <bip44|…> or \
                       --descriptor",
         });
     }

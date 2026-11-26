@@ -1,4 +1,4 @@
-//! `--template` clap enum + origin paths + md1 wrapper construction.
+//! `--scheme` clap enum + origin paths + md1 wrapper construction.
 //!
 //! Realizes SPEC §2.1.3 (10 templates: 4 single-sig + 6 multisig), §4.2
 //! (origin paths), §4.6.3 (per-template wrapper tag + body).

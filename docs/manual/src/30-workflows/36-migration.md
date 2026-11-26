@@ -43,11 +43,11 @@ Look in your wallet's settings or descriptor export. Common cases:
 
 | Wallet UI says | Template flag |
 |---|---|
-| "Native SegWit" / `bc1q…` | `--template bip84` |
-| "Taproot" / `bc1p…` | `--template bip86` |
-| "Nested SegWit" / `3…` | `--template bip49` |
-| "Legacy" / `1…` | `--template bip44` |
-| Multisig (any) | `--template wsh-sortedmulti` (most common) |
+| "Native SegWit" / `bc1q…` | `--scheme bip84` |
+| "Taproot" / `bc1p…` | `--scheme bip86` |
+| "Nested SegWit" / `3…` | `--scheme bip49` |
+| "Legacy" / `1…` | `--scheme bip44` |
+| Multisig (any) | `--scheme wsh-sortedmulti` (most common) |
 
 If your wallet exports a BIP-388 wallet policy or a descriptor
 string directly, prefer that:
@@ -68,7 +68,7 @@ Once the template is known:
 ```sh
 mnemonic bundle \
   --network mainnet \
-  --template <template> \
+  --scheme <template> \
   --account <account-index> \
   --slot @0.phrase="<your phrase>" \
   --self-check
@@ -89,7 +89,7 @@ bundle would diverge from your existing wallet — fund-loss risk.
 mnemonic convert \
   --from phrase="<your phrase>" \
   --to xpub \
-  --template <template> \
+  --scheme <template> \
   --account <account-index>
 
 # Compare against your wallet's "Show xpub" dialog
@@ -118,7 +118,7 @@ devices:
    ```sh
    mnemonic bundle \
      --network mainnet \
-     --template wsh-sortedmulti \
+     --scheme wsh-sortedmulti \
      --threshold K \
      --multisig-path-family bip87 \
      --slot @0.xpub=<xpub from cosigner 0> \

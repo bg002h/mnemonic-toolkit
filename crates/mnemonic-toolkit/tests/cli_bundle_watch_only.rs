@@ -34,7 +34,7 @@ fn watch_only_bip84_mainnet_omits_ms1_section() {
             &format!("@0.fingerprint={fp_hex}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])
@@ -100,7 +100,7 @@ fn watch_only_bip84_mainnet_accepts_zpub_input_via_slip0132_normalizer() {
             &format!("@0.fingerprint={fp_hex}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])
@@ -116,7 +116,7 @@ fn watch_only_bip84_mainnet_accepts_zpub_input_via_slip0132_normalizer() {
             &format!("@0.fingerprint={fp_hex}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-engraving-card",
         ])

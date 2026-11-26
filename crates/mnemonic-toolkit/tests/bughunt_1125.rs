@@ -303,9 +303,9 @@ fn tk1_explicit_master_path_in_template_mode_is_refused() {
     let s0x = format!("@0.xpub={master}");
     let s0f = format!("@0.fingerprint={FP_A}");
     let s1x = format!("@1.xpub={b87}");
-    let mut cases: Vec<Vec<&str>> = vec![vec!["--template", "bip84"]];
+    let mut cases: Vec<Vec<&str>> = vec![vec!["--scheme", "bip84"]];
     cases.push(vec![
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "1",
@@ -581,7 +581,7 @@ fn tk4_template_mode_refuses_path_beside_seed() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "bip84",
         "--slot",
         &format!("@0.phrase={A}"),
@@ -592,7 +592,7 @@ fn tk4_template_mode_refuses_path_beside_seed() {
         "--json",
     ]);
     assert_eq!(o.code, 2, "{}", o.stderr);
-    assert!(o.stderr.contains("--template mode ignores"), "{}", o.stderr);
+    assert!(o.stderr.contains("--scheme mode ignores"), "{}", o.stderr);
     assert!(o.stdout.is_empty());
 }
 
@@ -602,7 +602,7 @@ fn tk4_template_mode_refuses_path_beside_ms1_and_seedqr_too() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "bip84",
         "--slot",
         "@0.ms1=ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f",
@@ -610,7 +610,7 @@ fn tk4_template_mode_refuses_path_beside_ms1_and_seedqr_too() {
         "@0.path=m/84'/0'/5'",
     ]);
     assert_eq!(o.code, 2, "{}", o.stderr);
-    assert!(o.stderr.contains("--template mode ignores"), "{}", o.stderr);
+    assert!(o.stderr.contains("--scheme mode ignores"), "{}", o.stderr);
 }
 
 // ---------------------------------------------------------------------------
@@ -625,7 +625,7 @@ fn tk5_bip48_xpub_under_bip87_default_is_refused() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -662,7 +662,7 @@ fn tk5_xpub_whose_header_matches_the_default_is_unchanged() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "bip84",
         "--slot",
         &format!("@0.xpub={acct}"),
@@ -687,20 +687,14 @@ fn tk6_account_at_2p31_is_refused_in_every_command() {
     let seed_slot = format!("@0.phrase={A}");
     let xpub_slot = format!("@0.xpub={xpub}");
     let cases: Vec<Vec<&str>> = vec![
-        vec!["bundle", "--template", "bip84", "--slot", &seed_slot],
-        vec!["bundle", "--template", "bip84", "--slot", &xpub_slot],
-        vec!["verify-bundle", "--template", "bip84", "--slot", &seed_slot],
-        vec!["export-wallet", "--template", "bip84", "--slot", &xpub_slot],
+        vec!["bundle", "--scheme", "bip84", "--slot", &seed_slot],
+        vec!["bundle", "--scheme", "bip84", "--slot", &xpub_slot],
+        vec!["verify-bundle", "--scheme", "bip84", "--slot", &seed_slot],
+        vec!["export-wallet", "--scheme", "bip84", "--slot", &xpub_slot],
         vec!["addresses", "--from", &phrase, "--address-type", "p2wpkh"],
-        vec!["restore", "--from", &phrase, "--template", "bip84"],
+        vec!["restore", "--from", &phrase, "--scheme", "bip84"],
         vec![
-            "convert",
-            "--from",
-            &phrase,
-            "--to",
-            "xpub",
-            "--template",
-            "bip84",
+            "convert", "--from", &phrase, "--to", "xpub", "--scheme", "bip84",
         ],
         vec!["silent-payment", "--secret", A],
     ];
@@ -773,7 +767,7 @@ fn x4_wif_slot_is_refused_at_mint() {
     ] {
         let seed_slot = format!("@1.phrase={A}");
         let wif_slot = format!("@0.wif={MAINNET_WIF}");
-        let mut args = vec!["bundle", "--network", "mainnet", "--template", template];
+        let mut args = vec!["bundle", "--network", "mainnet", "--scheme", template];
         args.extend(extra.iter().copied());
         args.extend(["--slot", &wif_slot]);
         if template != "bip84" {

@@ -329,7 +329,7 @@ fn ruling_multisig_template_without_family_exits_4_and_names_the_flag() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "wsh-sortedmulti",
         "--threshold",
         "2",
@@ -361,9 +361,9 @@ fn ruling_named_scheme_or_typed_path_is_not_a_chosen_origin() {
     let s0 = format!("@0.phrase={A}");
     let s1 = format!("@1.phrase={B}");
     for args in [
-        vec!["--template", "bip84", "--slot", &s0],
+        vec!["--scheme", "bip84", "--slot", &s0],
         vec![
-            "--template",
+            "--scheme",
             "wsh-sortedmulti",
             "--threshold",
             "2",
@@ -604,13 +604,13 @@ fn ruling_restore_single_key_card_accepts_a_named_scheme_or_a_path() {
     let r = restore(&md1, &[]);
     assert_eq!(r.code, 2, "{}", r.stderr);
     assert!(
-        r.stderr.contains("--template"),
+        r.stderr.contains("--scheme"),
         "names the scheme form: {}",
         r.stderr
     );
 
     for extra in [
-        vec!["--template", "bip84"],
+        vec!["--scheme", "bip84"],
         vec!["--origin", "m/84'/0'/0'"],
         vec!["--origin", "@0=m/84'/0'/0'"],
     ] {
@@ -631,7 +631,7 @@ fn ruling_restore_single_key_card_accepts_a_named_scheme_or_a_path() {
         );
     }
     // A scheme of another script type does not describe this card.
-    let r = restore(&md1, &["--template", "bip44"]);
+    let r = restore(&md1, &["--scheme", "bip44"]);
     assert_eq!(r.code, 2, "{}", r.stderr);
 }
 
@@ -1096,7 +1096,7 @@ fn master_key_card(md1: Vec<String>) -> Vec<String> {
 fn review_fable_i2_master_key_card_refuses_a_path_below_m() {
     let md1 = master_key_wpkh();
     for extra in [
-        vec!["--template", "bip84"],
+        vec!["--scheme", "bip84"],
         vec!["--origin", "m/84'/0'/0'"],
         vec!["--origin", "@0=m/84'/0'/0'"],
     ] {
@@ -1313,7 +1313,7 @@ fn review_fable_m1_header_refusal_prints_no_example_path() {
         "bundle",
         "--network",
         "mainnet",
-        "--template",
+        "--scheme",
         "bip84",
         "--slot",
         &s,

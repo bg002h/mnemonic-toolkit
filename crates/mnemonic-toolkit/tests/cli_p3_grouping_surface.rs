@@ -99,7 +99,7 @@ fn carriers() -> Vec<Carrier> {
                 "@0.phrase=-",
                 "--network",
                 "mainnet",
-                "--template",
+                "--scheme",
                 "bip84",
             ]),
             stdin: PHRASE.to_string(),
@@ -345,7 +345,7 @@ fn bundle_stdout_keeps_its_comment_headers_and_blank_separators() {
             "@0.phrase=-",
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .write_stdin(PHRASE)

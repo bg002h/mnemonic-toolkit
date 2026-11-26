@@ -16,7 +16,7 @@ fn bundle_json_schema_field_order() {
             &format!("@0.phrase={TREZOR_24}"),
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
             "--json",
         ])
@@ -64,7 +64,7 @@ fn verify_bundle_json_emits_10_checks_in_spec_order() {
         format!("@0.phrase={TREZOR_24}"),
         "--network".into(),
         "mainnet".into(),
-        "--template".into(),
+        "--scheme".into(),
         "bip84".into(),
         "--ms1".into(),
         ms1,

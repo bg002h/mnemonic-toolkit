@@ -120,7 +120,7 @@ fn the_five_named_channels_all_refuse() {
             secret,
             "--network",
             "mainnet",
-            "--template",
+            "--scheme",
             "bip84",
         ],
         secret,
@@ -189,7 +189,7 @@ fn argv_parity_covers_every_secret_node_type() {
                 &format!("{token}={material}"),
                 "--to",
                 "xpub",
-                "--template",
+                "--scheme",
                 "bip84",
             ],
             material,
@@ -219,7 +219,7 @@ fn argv_parity_covers_every_secret_slot_subkey() {
                 &format!("@1.{subkey}={material}"),
                 "--network",
                 "mainnet",
-                "--template",
+                "--scheme",
                 "bip84",
             ],
             material,
@@ -240,13 +240,7 @@ fn the_existing_private_channels_are_not_refused() {
     let out = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert",
-            "--from",
-            "phrase=-",
-            "--to",
-            "xpub",
-            "--template",
-            "bip84",
+            "convert", "--from", "phrase=-", "--to", "xpub", "--scheme", "bip84",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -264,7 +258,7 @@ fn the_existing_private_channels_are_not_refused() {
             "phrase=@env:P3_TEST_PHRASE",
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .write_stdin("")
@@ -298,7 +292,7 @@ fn watch_only_material_still_travels_on_argv() {
 /// **THE ORDERING, ASSERTED — and this is the assertion that distinguishes a
 /// pre-parser guard from a post-parser one.**
 ///
-/// The invocation below is *also* invalid to clap: `--network` and `--template`
+/// The invocation below is *also* invalid to clap: `--network` and `--scheme`
 /// are required on `bundle` and are absent. A guard that ran after the parser
 /// would produce clap's usage error at exit 64. A guard that runs before it
 /// produces the refusal at exit 2, and clap never sees the phrase.
@@ -462,7 +456,7 @@ fn the_override_proceeds_and_matches_the_stdin_run_byte_for_byte() {
             &format!("phrase={PHRASE}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip84",
         ])
         .write_stdin("")
@@ -471,13 +465,7 @@ fn the_override_proceeds_and_matches_the_stdin_run_byte_for_byte() {
     let via_stdin = Command::cargo_bin("mnemonic")
         .unwrap()
         .args([
-            "convert",
-            "--from",
-            "phrase=-",
-            "--to",
-            "xpub",
-            "--template",
-            "bip84",
+            "convert", "--from", "phrase=-", "--to", "xpub", "--scheme", "bip84",
         ])
         .write_stdin(PHRASE)
         .assert()
@@ -509,7 +497,7 @@ fn an_unrelated_clap_error_names_the_flag_and_never_the_value() {
             &format!("phrase={PHRASE}"),
             "--to",
             "xpub",
-            "--template",
+            "--scheme",
             "bip84",
             "--no-such-flag",
         ])
@@ -534,13 +522,7 @@ fn an_unrelated_clap_error_names_the_flag_and_never_the_value() {
 #[test]
 fn the_override_is_a_no_op_when_nothing_is_on_argv() {
     let args = [
-        "convert",
-        "--from",
-        "phrase=-",
-        "--to",
-        "xpub",
-        "--template",
-        "bip84",
+        "convert", "--from", "phrase=-", "--to", "xpub", "--scheme", "bip84",
     ];
     let plain = Command::cargo_bin("mnemonic")
         .unwrap()

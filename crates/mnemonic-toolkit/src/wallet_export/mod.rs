@@ -83,7 +83,7 @@ pub fn format_stub_message(name: &str) -> String {
 #[allow(dead_code)]
 pub fn taproot_multisig_unsupported_message(name: &str) -> String {
     format!(
-        "--template <{name}> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts."
+        "--scheme <{name}> is not yet supported by 'mnemonic export-wallet' (taproot internal-key designation deferred to v0.8); use 'mnemonic bundle' for taproot multisig artifacts."
     )
 }
 
@@ -194,7 +194,7 @@ impl WalletScriptType {
 }
 
 /// SPEC v0.8 §12 — map a `CliTemplate` to the corresponding `WalletScriptType`.
-/// Used by emitters that operate on the template path (`--template`).
+/// Used by emitters that operate on the template path (`--scheme`).
 pub(crate) fn script_type_from_template(t: &CliTemplate) -> WalletScriptType {
     match t {
         CliTemplate::Bip44 => WalletScriptType::P2pkh,
@@ -374,12 +374,12 @@ impl MissingField {
                 "master_fingerprint for slot @{slot} (supply via --slot @{slot}.fingerprint=<8-hex>)"
             ),
             MissingField::DerivationPath { slot } => format!(
-                "derivation_path for slot @{slot} (supply via --slot @{slot}.path=<m/...> or use --template)"
+                "derivation_path for slot @{slot} (supply via --slot @{slot}.path=<m/...> or use --scheme)"
             ),
             MissingField::Xpub { slot } => format!(
                 "xpub for slot @{slot} (supply via --slot @{slot}.xpub=<base58>)"
             ),
-            MissingField::ScriptType => "script_type (supply --template <bip44|bip49|bip84|bip86|wsh-sortedmulti|...> or --descriptor)".to_string(),
+            MissingField::ScriptType => "script_type (supply --scheme <bip44|bip49|bip84|bip86|wsh-sortedmulti|...> or --descriptor)".to_string(),
             MissingField::Threshold => "threshold (multisig templates require --threshold <K>)".to_string(),
             MissingField::WalletName => "wallet_name (supply --wallet-name <STRING>)".to_string(),
             MissingField::IncompatibleFormatForTemplate => "format_template_compatibility (this format does not represent the resolved template)".to_string(),
@@ -509,9 +509,9 @@ pub(crate) struct EmitInputs<'a> {
     /// `bsms.rs`).
     pub canonical_descriptor: CheckedDescriptor<'a>,
     /// Resolved slots in slot-index order. Empty when `--descriptor` was used
-    /// without `--template` (descriptor-passthrough path).
+    /// without `--scheme` (descriptor-passthrough path).
     pub resolved_slots: &'a [ResolvedSlot],
-    /// `None` when `--descriptor` was used without `--template`.
+    /// `None` when `--descriptor` was used without `--scheme`.
     pub template: Option<CliTemplate>,
     /// Derived via `script_type_from_template` or `script_type_from_descriptor`.
     pub script_type: WalletScriptType,
