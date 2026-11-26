@@ -559,7 +559,9 @@ fn ruling_restore_asserted_origin_is_checked_against_a_supplied_xpub_header() {
     );
     assert_eq!(r.code, 4, "{}", r.stderr);
     assert!(
-        r.stderr.contains("depth and child number agree"),
+        r.stderr
+            .contains("depth and child number this path implies")
+            && r.stderr.contains("not the steps before it"),
         "{}",
         r.stderr
     );
@@ -641,4 +643,336 @@ fn ruling_restore_origin_for_a_key_with_a_card_origin_is_refused() {
     // Unchanged without it.
     let r = restore(&md1, &[]);
     assert_eq!(r.code, 0, "{}", r.stderr);
+}
+
+// ---------------------------------------------------------------------------
+// Review r1 (bughunt-2026-11-25-mnemonic-toolkit-review-rulings-r1) I1, I2.
+// ---------------------------------------------------------------------------
+
+/// The empty-origin 2-of-2 card plus the mk1 chunks the same bundle wrote for
+/// each slot (their origins are m/48'/0'/0'/2', fingerprints recorded).
+fn empty_origin_multisig_with_mk1(privacy: bool) -> (Vec<String>, Vec<Vec<String>>) {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let mut args = vec![
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))",
+        "--json",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+    ];
+    if privacy {
+        args.push("--privacy-preserving");
+    }
+    let o = run(&args);
+    assert!(o.code == 0 || o.code == 4, "{}", o.stderr);
+    let v: serde_json::Value = serde_json::from_str(&o.stdout).unwrap();
+    let mk1 = v["mk1"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|slot| {
+            slot.as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string())
+                .collect()
+        })
+        .collect();
+    (with_empty_origins(&md1_of(&o.stdout)), mk1)
+}
+
+/// `--cosigner @N=<chunk>` once per chunk.
+fn cosigner_args(n: u8, chunks: &[String]) -> Vec<String> {
+    chunks
+        .iter()
+        .flat_map(|c| ["--cosigner".to_string(), format!("@{n}={c}")])
+        .collect()
+}
+
+fn restore_s(md1: &[String], extra: &[String]) -> Out {
+    let refs: Vec<&str> = extra.iter().map(|s| s.as_str()).collect();
+    restore(md1, &refs)
+}
+
+fn json_keys(o: &Out) -> (serde_json::Value, Vec<serde_json::Value>) {
+    let v: serde_json::Value = serde_json::from_str(&o.stdout).expect("restore --json");
+    let keys = v["wallets"][0]["cosigner_keys"].as_array().unwrap().clone();
+    (v, keys)
+}
+
+#[test]
+fn review_r1_i1_mk1_cosigner_supplies_its_recorded_origin() {
+    let (md1, mk1) = empty_origin_multisig_with_mk1(false);
+    // Both keys' mk1 cards, no --origin: the paths are on cards; exit 0.
+    let mut extra = cosigner_args(0, &mk1[0]);
+    extra.extend(cosigner_args(1, &mk1[1]));
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    for fp in [FP_A, FP_B] {
+        assert!(
+            r.stdout.contains(&format!("[{fp}/48'/0'/0'/2']")),
+            "{}",
+            r.stdout
+        );
+    }
+    assert!(!r.stderr.contains(ASSERTED), "{}", r.stderr);
+    assert!(
+        r.stdout.contains("origin from its mk1 card"),
+        "{}",
+        r.stdout
+    );
+
+    extra.push("--json".into());
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let (v, keys) = json_keys(&r);
+    assert_eq!(v["verification"]["status"], "verified", "{}", r.stdout);
+    for k in &keys {
+        assert_eq!(k["origin_source"], "mk1", "{k}");
+        assert_eq!(k["origin"], "48'/0'/0'/2'", "{k}");
+    }
+
+    // One mk1 (@1), @0 asserted: @1 is the mk1's path, @0 asserted; exit 4.
+    let mut extra = vec!["--origin".to_string(), "@0=m/48'/0'/0'/2'".to_string()];
+    extra.extend(cosigner_args(1, &mk1[1]));
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("md1 cosigner @0's origin"),
+        "{}",
+        r.stderr
+    );
+    assert!(!r.stderr.contains("(--origin @1)"), "{}", r.stderr);
+    assert!(r.stderr.contains("read from the mk1 card"), "{}", r.stderr);
+}
+
+#[test]
+fn review_r1_i1_origin_contradicting_the_mk1_card_is_refused() {
+    let (md1, mk1) = empty_origin_multisig_with_mk1(false);
+    // The reviewer's repro: a same-length path ending in the same component.
+    let mut extra = vec![
+        "--origin".to_string(),
+        "@0=m/48'/0'/0'/2'".to_string(),
+        "--origin".to_string(),
+        "@1=m/86'/0'/0'/2'".to_string(),
+    ];
+    extra.extend(cosigner_args(1, &mk1[1]));
+    extra.push("--json".into());
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
+    assert!(
+        r.stderr.contains("m/86'/0'/0'/2'") && r.stderr.contains("m/48'/0'/0'/2'"),
+        "names both: {}",
+        r.stderr
+    );
+
+    // The same path as the mk1 is confirmed by the card: not an assertion.
+    let mut extra = vec!["--origin".to_string(), "@1=m/48'/0'/0'/2'".to_string()];
+    extra.extend(cosigner_args(0, &mk1[0]));
+    extra.extend(cosigner_args(1, &mk1[1]));
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(!r.stderr.contains(ASSERTED), "{}", r.stderr);
+}
+
+#[test]
+fn review_r1_i1_mk1_without_a_path_falls_back_to_the_header_check() {
+    use bitcoin::bip32::{ChildNumber, DerivationPath, Fingerprint, Xpub};
+    use std::str::FromStr;
+    let (md1, _) = empty_origin_multisig_with_mk1(false);
+    let real = Xpub::from_str(&xpub_at(B, "m/48'/0'/0'/2'")).unwrap();
+    let bare = Xpub {
+        depth: 0,
+        child_number: ChildNumber::Normal { index: 0 },
+        parent_fingerprint: Fingerprint::default(),
+        ..real
+    };
+    let card = mk_codec::KeyCard::new(
+        vec![[0, 0, 0, 0]],
+        Some(Fingerprint::from_str(FP_B).unwrap()),
+        DerivationPath::master(),
+        bare,
+    );
+    let chunks = mk_codec::encode(&card).expect("encode");
+    // No path anywhere: refused as before.
+    let r = restore_s(&md1, &{
+        let mut e = vec!["--origin".to_string(), "@0=m/48'/0'/0'/2'".to_string()];
+        e.extend(cosigner_args(1, &chunks));
+        e
+    });
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("@1 carries NO origin path"),
+        "{}",
+        r.stderr
+    );
+    // Asserted: exit 4, and the warning does not claim the card checked it.
+    let mut e = vec![
+        "--origin".to_string(),
+        "@0=m/48'/0'/0'/2'".to_string(),
+        "--origin".to_string(),
+        "@1=m/48'/0'/0'/2'".to_string(),
+    ];
+    e.extend(cosigner_args(1, &chunks));
+    let r = restore_s(&md1, &e);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(r.stderr.contains("records no path either"), "{}", r.stderr);
+    assert!(!r.stderr.contains("agree"), "{}", r.stderr);
+}
+
+#[test]
+fn review_r1_i1_mk1_fingerprint_contradicting_the_md1_is_refused() {
+    use bitcoin::bip32::{DerivationPath, Fingerprint, Xpub};
+    use std::str::FromStr;
+    let (md1, _) = empty_origin_multisig_with_mk1(false);
+    let real = Xpub::from_str(&xpub_at(B, "m/48'/0'/0'/2'")).unwrap();
+    let card = mk_codec::KeyCard::new(
+        vec![[0, 0, 0, 0]],
+        Some(Fingerprint::from_str("deadbeef").unwrap()),
+        DerivationPath::from_str("m/48'/0'/0'/2'").unwrap(),
+        real,
+    );
+    let chunks = mk_codec::encode(&card).expect("encode");
+    let mut e = vec!["--origin".to_string(), "@0=m/48'/0'/0'/2'".to_string()];
+    e.extend(cosigner_args(1, &chunks));
+    let r = restore_s(&md1, &e);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("deadbeef") && r.stderr.contains(FP_B),
+        "{}",
+        r.stderr
+    );
+}
+
+#[test]
+fn review_r1_i1_privacy_mk1_without_fingerprint_still_supplies_the_path() {
+    let (md1, mk1) = empty_origin_multisig_with_mk1(true);
+    let mut extra = cosigner_args(0, &mk1[0]);
+    extra.extend(cosigner_args(1, &mk1[1]));
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(r.stdout.contains("48'/0'/0'/2'"), "{}", r.stdout);
+}
+
+#[test]
+fn review_r1_i2_stdout_and_json_mark_an_asserted_origin() {
+    let md1 = empty_origin_multisig();
+    let xa = xpub_at(A, "m/48'/0'/0'/2'");
+    let xb = xpub_at(B, "m/48'/0'/0'/2'");
+    let c0 = format!("@0={xa}");
+    let c1 = format!("@1={xb}");
+    let base = [
+        "--origin",
+        "@0=m/48'/0'/0'/2'",
+        "--origin",
+        "@1=m/48'/0'/0'/2'",
+        "--cosigner",
+        &c0,
+        "--cosigner",
+        &c1,
+    ];
+    // Text: beside the origin, never "from md1".
+    let r = restore(&md1, &base);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    for line in r.stdout.lines().filter(|l| l.contains("cosigner @")) {
+        assert!(line.contains(ASSERTED), "{line}");
+        assert!(!line.contains("from md1"), "{line}");
+    }
+    // The header check is not described as more than it is.
+    assert!(!r.stderr.contains("agree with the xpub"), "{}", r.stderr);
+    // JSON: per-key source; status is not "verified" at exit 4.
+    let mut j = base.to_vec();
+    j.push("--json");
+    let r = restore(&md1, &j);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    let (v, keys) = json_keys(&r);
+    assert_eq!(v["verification"]["status"], "unverified", "{}", r.stdout);
+    for k in &keys {
+        assert_eq!(k["origin_source"], "asserted", "{k}");
+        assert!(k["note"].as_str().unwrap().contains(ASSERTED), "{k}");
+    }
+    // An exported wallet file: stderr says the file carries an asserted path.
+    let mut f = base.to_vec();
+    f.extend(["--format", "sparrow"]);
+    let r = restore(&md1, &f);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("the exported wallet file carries"),
+        "{}",
+        r.stderr
+    );
+}
+
+#[test]
+fn review_r1_i2_card_and_seed_search_origins_are_labelled() {
+    // A card origin: origin_source "card".
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let md1 = minted("wsh(sortedmulti(2,@0/<0;1>/*,@1/<0;1>/*))", &[&s0, &s1]);
+    let r = restore(&md1, &["--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let (_, keys) = json_keys(&r);
+    assert!(
+        keys.iter().all(|k| k["origin_source"] == "card"),
+        "{keys:?}"
+    );
+    // A seed-found origin: "seed-search"; the asserted one "asserted".
+    let md1 = empty_origin_multisig();
+    let from = format!("phrase={A}");
+    let r = restore(
+        &md1,
+        &["--from", &from, "--origin", "@1=m/48'/0'/0'/2'", "--json"],
+    );
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    let (v, keys) = json_keys(&r);
+    assert_eq!(keys[0]["origin_source"], "seed-search", "{:?}", keys);
+    assert_eq!(keys[1]["origin_source"], "asserted", "{:?}", keys);
+    assert_ne!(v["verification"]["status"], "verified");
+}
+
+#[test]
+fn review_r1_i1_depth_one_xpub_parent_must_be_the_md1_fingerprint() {
+    use bitcoin::bip32::{ChildNumber, Fingerprint, Xpub};
+    use std::str::FromStr;
+    let md1 = empty_origin_multisig();
+    let real = Xpub::from_str(&xpub_at(B, "m/48'/0'/0'/2'")).unwrap();
+    let forged = |parent: &str| {
+        Xpub {
+            depth: 1,
+            child_number: ChildNumber::Hardened { index: 2 },
+            parent_fingerprint: Fingerprint::from_str(parent).unwrap(),
+            ..real
+        }
+        .to_string()
+    };
+    let run_with = |x: String| {
+        let c = format!("@1={x}");
+        restore(
+            &md1,
+            &[
+                "--origin",
+                "@0=m/48'/0'/0'/2'",
+                "--origin",
+                "@1=m/2'",
+                "--cosigner",
+                &c,
+            ],
+        )
+    };
+    let r = run_with(forged("deadbeef"));
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("parent fingerprint deadbeef") && r.stderr.contains(FP_B),
+        "{}",
+        r.stderr
+    );
+    let r = run_with(forged(FP_B));
+    assert_eq!(r.code, 4, "{}", r.stderr);
 }

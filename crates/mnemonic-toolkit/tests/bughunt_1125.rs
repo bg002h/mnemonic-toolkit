@@ -472,6 +472,21 @@ fn tk2_master_key_card_is_found_at_m_with_master_warning() {
     assert_eq!(r.code, 4, "{}", r.stderr);
     assert!(r.stderr.contains("at m."), "{}", r.stderr);
     assert!(r.stderr.contains("MASTER key"), "{}", r.stderr);
+    // Review r1 M6 (FOLLOWUP fable-m1): the key found at m is never also
+    // reported as carrying no path, and only @1 is asserted.
+    assert!(!r.stderr.contains("Its key is shown"), "{}", r.stderr);
+    assert!(!r.stderr.contains("no path is guessed"), "{}", r.stderr);
+    assert_eq!(
+        r.stderr.matches("@0 carries NO origin").count(),
+        1,
+        "{}",
+        r.stderr
+    );
+    assert!(
+        !r.stderr.contains("md1 cosigner @0's origin"),
+        "{}",
+        r.stderr
+    );
 }
 
 #[test]
