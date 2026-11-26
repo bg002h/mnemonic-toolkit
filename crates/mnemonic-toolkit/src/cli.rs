@@ -345,7 +345,7 @@ pub fn run() -> ExitCode {
              corrected value was used (exit bit 16); the plate is damaged -- run \
              `mnemonic repair` on it and re-engrave it"
         );
-        code | crate::exit_code::REPAIRED
+        crate::repair::with_r6(code)
     } else {
         code
     };

@@ -181,6 +181,15 @@ fn run_split<R: Read, W: Write, E: Write>(
         ));
     }
 
+    // R2 (review I6): `--shares` is a setting, judged from argv alone, so it
+    // is checked before the phrase is read (64 whatever the input).
+    if args.shares < mnemonic_toolkit::seed_xor::MIN_SHARES {
+        return Err(map_seed_xor_error(SeedXorError::TooFewShares {
+            got: args.shares,
+            min: mnemonic_toolkit::seed_xor::MIN_SHARES,
+        }));
+    }
+
     if from_inline {
         secret_in_argv_warning(stderr, "--from phrase=", "--from phrase=-");
     }
@@ -288,6 +297,16 @@ fn run_combine<R: Read, W: Write, E: Write>(
             "seed-xor combine: at most one --share value may be `-` (single stdin per invocation)"
                 .into(),
         ));
+    }
+
+    // R2 (review I6): too few shares is judged from argv alone (64), before
+    // any share is read.
+    if args.shares < mnemonic_toolkit::seed_xor::MIN_SHARES {
+        return Err(ToolkitError::Usage(format!(
+            "seed-xor combine: --shares must be >= {}; got {}",
+            mnemonic_toolkit::seed_xor::MIN_SHARES,
+            args.shares,
+        )));
     }
 
     // SPEC §2.5 row 3 — cardinality assertion.

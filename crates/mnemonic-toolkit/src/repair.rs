@@ -468,6 +468,13 @@ pub struct RepairOutcome {
     /// never `Ok` at all; it surfaces as
     /// `RepairError::SetReassemblyMismatch` from `repair_card` instead.
     pub set_verify: SetVerify,
+    /// One stderr line per printed string that does not decode as a card or
+    /// a chunk of one (exit-code spec decision 6: `mnemonic repair` adds 2).
+    /// mk1: a chunk whose header does not parse, or a corrected single
+    /// string that does not decode; md1: a corrected non-chunked string that
+    /// does not decode ([`md1_printed_despite_failure`]). An outcome with any
+    /// is never applied by auto-repair.
+    pub not_a_card: Vec<String>,
 }
 
 /// See [`RepairOutcome::set_verify`].
@@ -575,6 +582,16 @@ pub enum RepairError {
     WireVersionUnsupported {
         got: u8,
     },
+    /// Exit-code spec decision 6 (review C1): a group that needed no
+    /// correction is complete but does not decode as a card. Atomic (2,
+    /// nothing printed), as `mk repair` / `md repair`; never an indel
+    /// trigger (every string already passed its checksum).
+    NotACard {
+        /// The group (as in [`RepairError::SetReassemblyMismatch`]).
+        group: String,
+        /// The codec's error text.
+        detail: String,
+    },
     SetReassemblyMismatch {
         /// Human-readable identifier of the failing group (e.g.
         /// `"chunk_set_id 0x12345"` or `"single-string chunk 2"`), so a
@@ -666,6 +683,10 @@ impl std::fmt::Display for RepairError {
                 f,
                 "repair: post-correction decode failed: {}",
                 md_codec::Error::WireVersionMismatch { got: *got }
+            ),
+            RepairError::NotACard { group, detail } => write!(
+                f,
+                "repair: nothing to correct, but the input ({group}) is not a card: {detail}"
             ),
             RepairError::SetReassemblyMismatch { group, detail } => write!(
                 f,
@@ -822,6 +843,19 @@ pub(crate) fn correction_used() -> bool {
     CORRECTION_USED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// The status `code` becomes once R6 is applied: 16 added when this run used a
+/// corrected value, below 64 (64, 101 and 130 never combine). The bit stays
+/// set on a later failure (the plate is damaged either way); `cli::run`
+/// applies it at exit, and a JSON object that states the status uses it too,
+/// so the two agree (R14, review M3).
+pub(crate) fn with_r6(code: u8) -> u8 {
+    if correction_used() && code < crate::exit_code::USAGE {
+        code | crate::exit_code::REPAIRED
+    } else {
+        code
+    }
+}
+
 /// True when this mk1 string's checksum is not valid as written, so a decode
 /// that succeeded on it used a BCH correction. A string that does not parse
 /// as a chunk reports false (its decode failed anyway).
@@ -937,20 +971,14 @@ fn repair_chunk_one(
 // chunks belonging to the same card and re-verify the group as a whole.
 // ============================================================================
 
-/// Per-`chunk_set_id`-group verdict (SPEC §2). Only ever computed for a
-/// group that had AT LEAST ONE chunk corrected — a set of chunks that were
-/// already fully valid carries no aliasing risk, so it is never classified
-/// (see `verify_mk1_set`'s `touched` gate) and is treated as `Bless`-
-/// equivalent by omission.
+/// Per-`chunk_set_id`-group verdict (SPEC §2) for a group that had AT
+/// LEAST ONE chunk corrected. A complete group whose decode fails (THE
+/// FUNDS FIX, or a clean group that is no card) is not a verdict: it returns
+/// `Err` from `verify_mk1_set` at once.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GroupVerdict {
     /// `mk_codec::decode` on the exact supplied group returned `Ok`.
     Bless,
-    /// The group is complete-and-consistent (every index `0..total_chunks`
-    /// present exactly once, consistent `total_chunks`) but `decode`
-    /// returned `Err` — the per-chunk correction(s) aliased to a DIFFERENT
-    /// valid codeword. THE FUNDS FIX.
-    Reject,
     /// The group is incomplete (a partial-set / single-plate repair) — it
     /// cannot be set-verified NOW, but the rest of the set verifies it when
     /// it is reassembled (D26 `REPAIR_APPLIED`; exit-code spec decision 7).
@@ -1076,10 +1104,9 @@ fn group_is_complete_and_consistent(headers: &[&StringLayerHeader]) -> bool {
 }
 
 /// Fold two `GroupVerdict`s to the dominant one across a multi-group batch
-/// (SPEC §2 — `reject > candidate > incomplete > bless`).
+/// (SPEC §2 — `candidate > incomplete > bless`; a reject is an `Err`).
 fn fold_verdict(acc: Option<GroupVerdict>, v: GroupVerdict) -> GroupVerdict {
     match (acc, v) {
-        (Some(GroupVerdict::Reject), _) | (_, GroupVerdict::Reject) => GroupVerdict::Reject,
         (Some(GroupVerdict::Candidate), _) | (_, GroupVerdict::Candidate) => {
             GroupVerdict::Candidate
         }
@@ -1091,52 +1118,50 @@ fn fold_verdict(acc: Option<GroupVerdict>, v: GroupVerdict) -> GroupVerdict {
 }
 
 /// SPEC §2 tri-state re-verify over the FULL supplied mk1 `corrected_chunks`
-/// (already per-string BCH-corrected). Groups by `chunk_set_id`, classifies
-/// only the groups that had at least one chunk actually corrected (an
-/// all-already-valid group carries no aliasing risk — the task is
-/// specifically to re-verify a set AFTER a per-string correction, so an
-/// untouched group is left exactly as today: `Bless`-equivalent, no
-/// decode attempt, no advisory), then folds to the dominant outcome.
+/// (already per-string BCH-corrected), extended by the exit-code spec
+/// (decisions 6 and 7) to EVERY group, corrected or not: `repair` no longer
+/// calls a string clean that `mk decode` rejects (review C1). Mirrors
+/// `mk repair`'s `classify_mk1_set` (mnemonic-key `crates/mk-cli/src/cmd/
+/// repair.rs`) over the same `mk_codec` library:
 ///
-/// Returns `Ok(SetVerify::Blessed)` / `Ok(SetVerify::Unverified{..})` on
-/// Bless / Candidate; a dominant `Reject` returns `Err(RepairError::
-/// SetReassemblyMismatch)` — never `Ok` (plan-R0 PM-r2-2: a batch that folds
-/// to Reject suppresses ALL output, including any co-batched Bless group).
+/// - a chunk whose string-layer header does not parse is no chunk of the
+///   format: it is printed, with a line in [`Mk1SetCheck::not_a_card`]
+///   (INVALID, 2);
+/// - a **complete** group is reassembled through `mk_codec::decode`. Success
+///   after a correction is `Bless` (a single string: `Candidate`). Failure is
+///   atomic, nothing printed: a corrected chunked set is
+///   [`RepairError::SetReassemblyMismatch`] (THE FUNDS FIX), a clean group is
+///   [`RepairError::NotACard`]. A CORRECTED single (not chunked) string that
+///   fails is printed instead, as a candidate that is not a card (16 + 4 + 2);
+/// - an **incomplete** group with a correction is `Incomplete` (16: the rest
+///   of the set verifies it on reassembly); a clean one is left alone.
+///
+/// The verdicts fold to the dominant one (`candidate > incomplete > bless`);
+/// the first atomic failure in group order is returned as `Err`
+/// (plan-R0 PM-r2-1/2: it suppresses ALL output, including any co-batched
+/// good group).
 fn verify_mk1_set(
     corrected_chunks: &[SecretString],
     repairs: &[RepairDetail],
-) -> Result<SetVerify, RepairError> {
+) -> Result<Mk1SetCheck, RepairError> {
     let touched: HashSet<usize> = repairs.iter().map(|r| r.chunk_index).collect();
 
-    // Parse each corrected chunk's header for grouping. A header-region
-    // parse failure (e.g. a reserved/invalid type byte, or a malformed
-    // total_chunks/chunk_index) on a chunk that WAS corrected is itself one
-    // of the decode-Err shapes SPEC §2 rule 2 explicitly covers ("a
-    // header-region ChunkedHeaderMalformed/MixedHeaderTypes... failure from
-    // a hash-colliding miscorrection") — a per-string BCH correction landed
-    // on a valid CHECKSUM whose interpreted header is nonetheless garbage.
-    // Fold that in as an immediate Reject signal for this chunk rather than
-    // hard-aborting the whole classify via `?` (which would surface the
-    // wrong, more primitive `PostCorrectionDecodeFailed` instead of the
-    // funds-relevant `SetReassemblyMismatch`). An UNTOUCHED (already-valid)
-    // chunk failing to parse should never occur for genuine encoder output
-    // — skip it (ungrouped) rather than reject on something the toolkit
-    // never corrected.
     let mut parsed: Vec<Option<ParsedMk1Chunk>> = Vec::with_capacity(corrected_chunks.len());
     let mut dominant: Option<GroupVerdict> = None;
-    let mut first_reject: Option<(String, String)> = None;
+    let mut not_a_card: Vec<String> = Vec::new();
     for (i, c) in corrected_chunks.iter().enumerate() {
         match parse_mk1_group_key(c, i) {
             Ok(p) => parsed.push(Some(p)),
             Err(e) => {
                 parsed.push(None);
-                if touched.contains(&i) {
-                    if first_reject.is_none() {
-                        first_reject =
-                            Some((format!("chunk {i} (post-correction header)"), e.to_string()));
-                    }
-                    dominant = Some(fold_verdict(dominant, GroupVerdict::Reject));
-                }
+                let detail = match e {
+                    RepairError::PostCorrectionDecodeFailed { detail, .. } => detail,
+                    other => other.to_string(),
+                };
+                not_a_card.push(format!(
+                    "chunk {i} is not an mk1 chunk ({detail}); the string printed for it is not \
+                     a valid card"
+                ));
             }
         }
     }
@@ -1160,10 +1185,7 @@ fn verify_mk1_set(
 
     for key in &order {
         let idxs = &members[key];
-        if !idxs.iter().any(|i| touched.contains(i)) {
-            // Untouched group — no aliasing risk, skip re-verify entirely.
-            continue;
-        }
+        let corrected = idxs.iter().any(|i| touched.contains(i));
         let headers: Vec<&StringLayerHeader> = idxs
             .iter()
             .map(|&i| {
@@ -1173,61 +1195,85 @@ fn verify_mk1_set(
                     .header
             })
             .collect();
-        let verdict = if !group_is_complete_and_consistent(&headers) {
-            GroupVerdict::Incomplete
-        } else {
-            let refs: Vec<&str> = idxs.iter().map(|&i| &*corrected_chunks[i]).collect();
-            match mk_codec::decode(&refs) {
-                // v0.86.0 (`toolkit-v0860-demote`) — a `GroupKey::
-                // SingleString` singleton has no cross-chunk reassembly
-                // oracle either (mirrors the md1 non-chunked demote):
-                // `mk_codec::decode` on a lone SingleString never touches
-                // chunk_set_id / cross-chunk hashing, so a >4-error
-                // correction could alias to a DIFFERENT valid card
-                // undetectably. DEFENSIVE / encoder-UNREACHABLE in v0.1:
-                // every real `KeyCard`'s bytecode carries a 73-byte
-                // compact xpub (`mk_codec::XPUB_COMPACT_BYTES`), which
-                // ALONE exceeds the 56-byte SingleString envelope
-                // (`mk_codec::SINGLE_STRING_LONG_BYTES` — locked by the
-                // `cell_4_7`-adjacent const-assertion in
-                // `cli_mk1_repair_reverify.rs`), so `Ok(_)` can never
-                // actually be reached here for a genuine card — no live
-                // fixture can hit this arm. Kept for defense-in-depth /
-                // documentation symmetry with the md1 fix, not for test
-                // coverage (SPEC `toolkit-v0860-demote` M3).
-                Ok(_) if matches!(key, GroupKey::SingleString(_)) => GroupVerdict::Candidate,
-                Ok(_) => GroupVerdict::Bless,
-                Err(e) => {
-                    if first_reject.is_none() {
-                        first_reject = Some((describe_group_key(*key), e.to_string()));
-                    }
-                    GroupVerdict::Reject
-                }
+        if !group_is_complete_and_consistent(&headers) {
+            if corrected {
+                dominant = Some(fold_verdict(dominant, GroupVerdict::Incomplete));
             }
-        };
-        dominant = Some(fold_verdict(dominant, verdict));
+            continue;
+        }
+        let refs: Vec<&str> = idxs.iter().map(|&i| &*corrected_chunks[i]).collect();
+        let single = matches!(key, GroupKey::SingleString(_));
+        match mk_codec::decode(&refs) {
+            // v0.86.0 (`toolkit-v0860-demote`) — a `GroupKey::SingleString`
+            // singleton has no cross-chunk reassembly oracle: a >4-error
+            // correction could alias to a DIFFERENT valid card undetectably.
+            // DEFENSIVE / encoder-UNREACHABLE in v0.1: every real `KeyCard`'s
+            // 73-byte compact xpub (`mk_codec::XPUB_COMPACT_BYTES`) alone
+            // exceeds the 56-byte SingleString envelope
+            // (`mk_codec::SINGLE_STRING_LONG_BYTES`), so no single string
+            // decodes (SPEC `toolkit-v0860-demote` M3).
+            Ok(_) if corrected && single => {
+                dominant = Some(fold_verdict(dominant, GroupVerdict::Candidate));
+            }
+            Ok(_) if corrected => {
+                dominant = Some(fold_verdict(dominant, GroupVerdict::Bless));
+            }
+            Ok(_) => {}
+            // Decision 6: a corrected string that is not chunked has no
+            // oracle, so it is printed although it does not decode, at
+            // 16 + 4 + 2 = 22 (as `mk repair`, `md repair`, `ms repair`).
+            Err(e) if corrected && single => {
+                dominant = Some(fold_verdict(dominant, GroupVerdict::Candidate));
+                not_a_card.push(format!(
+                    "the corrected string ({}) passed its checksum but is not a card mk can \
+                     decode: {e}. The string is not chunked, so nothing checks the correction \
+                     a second time. Do not trust it.",
+                    describe_group_key(*key)
+                ));
+            }
+            Err(e) if corrected => {
+                return Err(RepairError::SetReassemblyMismatch {
+                    group: describe_group_key(*key),
+                    detail: e.to_string(),
+                });
+            }
+            Err(e) => {
+                return Err(RepairError::NotACard {
+                    group: describe_group_key(*key),
+                    detail: e.to_string(),
+                });
+            }
+        }
     }
 
-    match dominant.unwrap_or(GroupVerdict::Bless) {
-        GroupVerdict::Bless => Ok(SetVerify::Blessed),
-        GroupVerdict::Incomplete => Ok(SetVerify::IncompleteSet {
+    let set_verify = match dominant.unwrap_or(GroupVerdict::Bless) {
+        GroupVerdict::Bless => SetVerify::Blessed,
+        GroupVerdict::Incomplete => SetVerify::IncompleteSet {
             reason: "correction applied to an INCOMPLETE mk1 chunk set — it is verified when \
                 the rest of the set is reassembled (`mk decode` / import the full set); until \
                 then, a >4-error correction could alias to a different card"
                 .to_string(),
-        }),
-        GroupVerdict::Candidate => Ok(SetVerify::Unverified {
+        },
+        GroupVerdict::Candidate => SetVerify::Unverified {
             reason: "correction UNVERIFIED — a >4-error correction can alias to a different card; \
                 reassemble the full card (`mk decode` / import the full set) to confirm; \
                 BIP-93 recommends confirmation"
                 .to_string(),
-        }),
-        GroupVerdict::Reject => {
-            let (group, detail) =
-                first_reject.expect("dominant Reject implies a recorded reject detail");
-            Err(RepairError::SetReassemblyMismatch { group, detail })
-        }
-    }
+        },
+    };
+    Ok(Mk1SetCheck {
+        set_verify,
+        not_a_card,
+    })
+}
+
+/// What [`verify_mk1_set`] found over a batch that every string of which
+/// passed the BCH layer.
+struct Mk1SetCheck {
+    set_verify: SetVerify,
+    /// One line per printed string that does not decode as a card or chunk
+    /// (exit-code spec decision 6: INVALID, 2).
+    not_a_card: Vec<String>,
 }
 
 /// Primary entry point. Per-chunk atomic per D8: if ANY chunk fails, returns
@@ -1263,12 +1309,13 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
             // discarding corrected_chunks/repairs entirely (plan-R0
             // PM-r2-2 — a batch that folds to Reject suppresses ALL
             // output, not just the failing group).
-            let set_verify = verify_mk1_set(&corrected_chunks, &repairs)?;
+            let check = verify_mk1_set(&corrected_chunks, &repairs)?;
             Ok(RepairOutcome {
                 kind,
                 corrected_chunks,
                 repairs,
-                set_verify,
+                set_verify: check.set_verify,
+                not_a_card: check.not_a_card,
             })
         }
         CardKind::Ms1 => {
@@ -1357,6 +1404,7 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                 corrected_chunks,
                 repairs,
                 set_verify,
+                not_a_card: Vec::new(),
             })
         }
         CardKind::Md1 => {
@@ -1800,6 +1848,7 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
         RepairError::EmptyInput
         | RepairError::UnsupportedCodeVariant { .. }
         | RepairError::IndelUnrecoverable { .. }
+        | RepairError::NotACard { .. }
         | RepairError::SetReassemblyMismatch { .. } => false,
     }
 }
@@ -1966,6 +2015,7 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
                 corrected_chunks,
                 repairs,
                 set_verify,
+                not_a_card: Vec::new(),
             })
         }
         Err(MdErr::TooManyErrors { chunk_index, bound }) => Err(RepairError::TooManyErrors {
@@ -2037,7 +2087,208 @@ pub fn correct_unreadable_md1(chunks: &[String], got: u8) -> Option<RepairOutcom
         corrected_chunks,
         repairs,
         set_verify: SetVerify::UnreadableVersion { got },
+        not_a_card: Vec::new(),
     })
+}
+
+/// Exit-code spec decisions 6 and 7 (review I1, I2): the md1 shapes
+/// `mnemonic repair` prints although they do not decode as a whole card, as
+/// `md repair` does (descriptor-mnemonic `crates/md-cli/src/cmd/repair.rs`).
+/// Called only by `mnemonic repair`, after [`repair_card`] failed; the
+/// auto-repair sites never see these outcomes.
+///
+/// - **An incomplete chunk set** (fewer chunks than its count, distinct
+///   indices below it; a lone chunk of a larger set counts): each chunk is
+///   corrected on its own (`md_codec::correct_chunks`) and printed, as
+///   [`SetVerify::IncompleteSet`]: 16 with a correction, 0 without (decision
+///   7). A set with too many, repeated or stray chunks is `Some(Err)` (2).
+/// - **A corrected single string that is not chunked** and does not decode:
+///   printed as a candidate that is not a card (decision 6), 16 + 4 + 2 = 22.
+///
+/// `None` for everything else (an uncorrectable chunk, a clean single string
+/// that does not decode, a complete set that does not reassemble, an
+/// unreadable wire version): the caller keeps `repair_card`'s error.
+pub fn md1_printed_despite_failure(
+    chunks: &[String],
+) -> Option<Result<RepairOutcome, RepairError>> {
+    let refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
+    let (corrected, corrections) = md_codec::correct_chunks(&refs).ok()?;
+    let corrected_refs: Vec<&str> = corrected.iter().map(|s| s.as_str()).collect();
+    let single_unchunked = corrected.len() == 1 && is_non_chunked_md1(&corrected[0]);
+    let decoded = if single_unchunked {
+        md_codec::decode::decode_md1_string(&corrected[0])
+    } else {
+        md_codec::chunk::reassemble(&corrected_refs)
+    };
+    match decoded {
+        Err(md_codec::Error::ChunkSetIncomplete { got, expected }) => {
+            if let Err(why) = short_set_of_distinct_md1_chunks(&corrected, got, expected) {
+                return Some(Err(RepairError::PostCorrectionDecodeFailed {
+                    chunk_index: None,
+                    detail: why,
+                }));
+            }
+            let (corrected_chunks, repairs) = apply_md_corrections(chunks, &corrections);
+            let reason = if repairs.is_empty() {
+                format!("nothing to correct; the md1 chunk set is incomplete ({got} of {expected} chunks)")
+            } else {
+                format!(
+                    "the md1 chunk set is incomplete ({got} of {expected} chunks): each correction \
+                     passed its chunk's checksum, and is verified when the rest of the set is \
+                     reassembled (`mnemonic repair --md1` or `md decode` with every chunk)"
+                )
+            };
+            Some(Ok(RepairOutcome {
+                kind: CardKind::Md1,
+                corrected_chunks,
+                repairs,
+                set_verify: SetVerify::IncompleteSet { reason },
+                not_a_card: Vec::new(),
+            }))
+        }
+        // An unreadable wire version keeps F-642's own path.
+        Err(md_codec::Error::WireVersionMismatch { .. }) => None,
+        Err(e) if single_unchunked && !corrections.is_empty() => {
+            let (corrected_chunks, repairs) = apply_md_corrections(chunks, &corrections);
+            Some(Ok(RepairOutcome {
+                kind: CardKind::Md1,
+                corrected_chunks,
+                repairs,
+                set_verify: SetVerify::Unverified {
+                    reason: "correction UNVERIFIED — a non-chunked single-string md1 has no \
+                        cross-chunk/content-id oracle, and a >4-error correction can alias to a \
+                        different string"
+                        .to_string(),
+                },
+                not_a_card: vec![format!(
+                    "the corrected string passed its checksum but is not a card md can decode: \
+                     {e}. Do not trust it."
+                )],
+            }))
+        }
+        _ => None,
+    }
+}
+
+/// Exit-code spec decision 6 (review I2): a single ms1 string whose BCH
+/// correction succeeded but which then does not decode as an ms1 card is
+/// printed, as `ms repair` prints it (mnemonic-secret `crates/ms-cli/src/
+/// cmd/repair.rs`), at 16 + 4 + 2 = 22: a candidate with no oracle that is
+/// not a card. Called only by `mnemonic repair` after [`repair_card`]
+/// failed; `None` (keep the error) for a clean string, an uncorrectable one,
+/// or more than one string.
+pub fn ms1_printed_despite_failure(chunks: &[String]) -> Option<RepairOutcome> {
+    let [chunk] = chunks else {
+        return None;
+    };
+    let corrections = ms1_correct_only(chunk)?;
+    if corrections.is_empty() {
+        return None;
+    }
+    let detail = match ms_codec::decode_with_correction(chunk) {
+        Ok((_tag, payload, _)) => {
+            // It decodes after all: not this function's case.
+            scrub_payload_husk(payload);
+            return None;
+        }
+        Err(e) => e.to_string(),
+    };
+    let (corrected_chunk, corrected_positions) = apply_ms_corrections(chunk, &corrections);
+    Some(RepairOutcome {
+        kind: CardKind::Ms1,
+        corrected_chunks: vec![SecretString::new(corrected_chunk.clone())],
+        repairs: vec![RepairDetail {
+            chunk_index: 0,
+            original_chunk: SecretString::new(chunk.to_string()),
+            corrected_chunk: SecretString::new(corrected_chunk),
+            corrected_positions,
+        }],
+        set_verify: SetVerify::Unverified {
+            reason: "correction UNVERIFIED — a corrected codex32 string cannot be \
+                self-verified; BIP-93 recommends confirming a corrected codex32 string"
+                .to_string(),
+        },
+        not_a_card: vec![format!(
+            "the corrected string passed its checksum but is not an ms1 card this build \
+             decodes: {detail}. Do not trust it."
+        )],
+    })
+}
+
+/// BCH-correct one ms1 string without decoding it: `Some(corrections)`
+/// (empty when the checksum already holds), `None` when it cannot be
+/// corrected or is not an `ms1` string. The symbol buffers are secret and
+/// are zeroized.
+fn ms1_correct_only(s: &str) -> Option<Vec<ms_codec::CorrectionDetail>> {
+    const ALPHA: &[u8; 32] = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    let lower = zeroize::Zeroizing::new(s.to_ascii_lowercase());
+    let rest = lower.strip_prefix("ms1")?;
+    let mut symbols: zeroize::Zeroizing<Vec<u8>> =
+        zeroize::Zeroizing::new(Vec::with_capacity(rest.len()));
+    for c in rest.bytes() {
+        symbols.push(ALPHA.iter().position(|&b| b == c)? as u8);
+    }
+    let residue = |data: &[u8]| {
+        let mut input = zeroize::Zeroizing::new(ms_codec::bch::hrp_expand("ms"));
+        input.extend_from_slice(data);
+        ms_codec::bch::polymod_run(&input) ^ ms_codec::bch::MS_REGULAR_CONST
+    };
+    let r = residue(&symbols);
+    if r == 0 {
+        return Some(Vec::new());
+    }
+    let (positions, magnitudes) = ms_codec::bch_decode::decode_regular_errors(r, symbols.len())?;
+    let mut details = Vec::with_capacity(positions.len());
+    for (&pos, &mag) in positions.iter().zip(&magnitudes) {
+        let was = *symbols.get(pos)?;
+        let now = was ^ mag;
+        details.push(ms_codec::CorrectionDetail {
+            position: pos,
+            was: ALPHA[(was & 0x1F) as usize] as char,
+            now: ALPHA[(now & 0x1F) as usize] as char,
+        });
+        symbols[pos] = now;
+    }
+    (residue(&symbols) == 0).then_some(details)
+}
+
+/// `Ok` when `chunks` are fewer than the `expected` count of their set, and
+/// their indices are distinct and below that count; otherwise what is wrong.
+/// The guard `md repair` applies before it calls a set incomplete
+/// (descriptor-mnemonic `short_set_of_distinct_chunks`).
+fn short_set_of_distinct_md1_chunks(
+    chunks: &[String],
+    got: usize,
+    expected: usize,
+) -> Result<(), String> {
+    if got > expected {
+        return Err(format!(
+            "{got} chunks were given, but the set holds {expected}; the set does not reassemble"
+        ));
+    }
+    let mut seen = vec![false; expected];
+    for (n, chunk) in chunks.iter().enumerate() {
+        let (bytes, bits) =
+            md_codec::codex32::unwrap_string(chunk).map_err(|e| format!("chunk {n}: {e}"))?;
+        let mut r = md_codec::bitstream::BitReader::with_bit_limit(&bytes, bits);
+        let h =
+            md_codec::chunk::ChunkHeader::read(&mut r).map_err(|e| format!("chunk {n}: {e}"))?;
+        let index = usize::from(h.index);
+        match seen.get_mut(index) {
+            None => {
+                return Err(format!(
+                    "chunk {n} claims index {index}, outside its set of {expected}"
+                ));
+            }
+            Some(true) => {
+                return Err(format!(
+                    "chunk {n} repeats index {index}; each chunk of the set is given once"
+                ));
+            }
+            Some(slot) => *slot = true,
+        }
+    }
+    Ok(())
 }
 
 /// F-642: the two stderr lines `mnemonic repair` prints after keeping a
@@ -2168,7 +2419,7 @@ pub fn try_repair_and_short_circuit<O: Write + ?Sized, E: Write + ?Sized>(
     // surfaces — a partial mk1 card cannot convert/inspect/verify-bundle
     // anyway (SPEC §2 residual-partial-set-exposure note), and an
     // unverified ms1 candidate is never silently applied.
-    if !matches!(outcome.set_verify, SetVerify::Blessed) {
+    if !matches!(outcome.set_verify, SetVerify::Blessed) || !outcome.not_a_card.is_empty() {
         // Cycle F I2, widened v0.86.0 (`toolkit-v0860-demote` I4) — the
         // verify-bundle ms1 sites bypass this helper entirely (a direct
         // `repair_card` call feeds the ground-truth compare instead), so
@@ -2290,8 +2541,8 @@ fn emit_repair_report_text<O: Write + ?Sized>(
 /// JSON-envelope report (v0.22.1 D20). Schema reuses the standalone
 /// `cmd/repair.rs::RepairJson` shape (schema_version: "1", kind,
 /// corrected_chunks, repairs) plus two discriminator fields
-/// (`auto_repair_short_circuit: true`, `exit_code: 2` — the process's exit
-/// status, exit-code spec R14 and R7) marking the
+/// (`auto_repair_short_circuit: true`, `exit_code`: the process's exit
+/// status, 2 by R7 plus 16 when R6 applies, exit-code spec R14) marking the
 /// envelope as an auto-fire emission rather than a standalone subcommand
 /// invocation.
 fn emit_repair_report_json<O: Write + ?Sized>(
@@ -2306,7 +2557,8 @@ fn emit_repair_report_json<O: Write + ?Sized>(
     let envelope = AutoFireRepairJson {
         schema_version: "1",
         auto_repair_short_circuit: true,
-        exit_code: crate::exit_code::INVALID,
+        // R14 (review M3): the status the process will exit with, R6 included.
+        exit_code: with_r6(crate::exit_code::INVALID),
         kind: kind_str,
         corrected_chunks: &outcome.corrected_chunks,
         repairs: outcome

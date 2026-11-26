@@ -455,3 +455,222 @@ fn repair_ms1_stdin_dash_does_not_fire_argv_advisory() {
         "--ms1 - (stdin) must not fire the argv advisory; stderr: {stderr:?}"
     );
 }
+
+// ============================================================================
+// Exit-code spec decisions 6 and 7 (review I1, I2): `mnemonic repair` prints
+// an incomplete md1 set chunk by chunk (16, or 0 when clean) and a corrected
+// single string that is no card (22), as `md repair` / `ms repair` do. The
+// expected codes are the siblings' (measured with md-cli and ms-cli at their
+// exit-code cutover); with `MD_BIN` / `MS_BIN` set, each row also runs the
+// sibling and requires the same `(code, printed)`.
+// ============================================================================
+
+const PARITY_MD1_C0: &str = "md1fgdxlpqpqpm6jzzqqvqpdqw0za5zs4gyy55aq4vsmnhy4s6wyaypu34c7raqu8np";
+const PARITY_MD1_C1: &str = "md1fgdxlpqf2zcgefcpupmel75q5435j7seugaj5jr7qyur6vt76es5cdeyrq7zdy0d";
+const PARITY_MD1_C2: &str = "md1fgdxlpq3xa2dk8vwpj7gx74hwqxqdp083jehp5tdrfa0n5zdfkqcdlrvnh5r62jn";
+
+/// One substitution 8 characters from the end (inside the checksum).
+fn damage_near_end(s: &str) -> String {
+    let sep = s.rfind('1').unwrap();
+    flip_at(s, s.len() - sep - 1 - 8)
+}
+
+fn code_and_printed(bin: &std::path::Path, args: &[&str]) -> (i32, bool) {
+    code_and_printed_with_stdin(bin, args, "")
+}
+
+fn code_and_printed_with_stdin(bin: &std::path::Path, args: &[&str], stdin: &str) -> (i32, bool) {
+    use std::io::Write as _;
+    let mut child = std::process::Command::new(bin)
+        .args(args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().expect("run");
+    (
+        out.status.code().expect("exit code"),
+        !String::from_utf8_lossy(&out.stdout).trim().is_empty(),
+    )
+}
+
+/// `mnemonic repair --<flag> s ...` against `want`, and the sibling (`bin`
+/// from `env`, called with the strings on stdin, as
+/// `ms` refuses a secret on the command line) when the variable is set.
+fn assert_repair_parity(flag: &str, env: &str, label: &str, strings: &[String], want: (i32, bool)) {
+    let mnemonic = assert_cmd::cargo::cargo_bin("mnemonic");
+    let mut args: Vec<&str> = vec!["--allow-argv-secret", "repair"];
+    for s in strings {
+        args.push(flag);
+        args.push(s);
+    }
+    assert_eq!(
+        code_and_printed(&mnemonic, &args),
+        want,
+        "{label}: mnemonic"
+    );
+    if let Ok(bin) = std::env::var(env) {
+        let lines: String = strings.iter().fold(String::new(), |mut acc, s| {
+            acc.push_str(s);
+            acc.push('\n');
+            acc
+        });
+        assert_eq!(
+            code_and_printed_with_stdin(
+                std::path::Path::new(&bin),
+                &sibling_stdin_args(env),
+                &lines
+            ),
+            want,
+            "{label}: {env}"
+        );
+    }
+}
+
+/// The sibling's own way to take its strings on stdin.
+fn sibling_stdin_args(env: &str) -> Vec<&'static str> {
+    match env {
+        "MS_BIN" => vec!["repair", "--ms1", "-"],
+        _ => vec!["repair", "-"],
+    }
+}
+
+#[test]
+fn i1_md1_incomplete_sets_repair_as_md_does() {
+    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    let rows: Vec<(&str, Vec<String>, (i32, bool))> = vec![
+        ("a lone chunk, clean", s(&[PARITY_MD1_C0]), (0, true)),
+        (
+            "a lone chunk, corrected",
+            vec![damage_near_end(PARITY_MD1_C0)],
+            (16, true),
+        ),
+        (
+            "a lone later chunk, corrected",
+            vec![damage_near_end(PARITY_MD1_C1)],
+            (16, true),
+        ),
+        (
+            "two of three, clean",
+            s(&[PARITY_MD1_C0, PARITY_MD1_C1]),
+            (0, true),
+        ),
+        (
+            "two of three, corrected",
+            vec![damage_near_end(PARITY_MD1_C0), PARITY_MD1_C1.to_string()],
+            (16, true),
+        ),
+        (
+            "a repeated index",
+            s(&[PARITY_MD1_C0, PARITY_MD1_C0]),
+            (2, false),
+        ),
+        (
+            "more chunks than the set",
+            s(&[PARITY_MD1_C0, PARITY_MD1_C0, PARITY_MD1_C1, PARITY_MD1_C2]),
+            (2, false),
+        ),
+        (
+            "the full set, clean",
+            s(&[PARITY_MD1_C0, PARITY_MD1_C1, PARITY_MD1_C2]),
+            (0, true),
+        ),
+        (
+            "the full set, corrected",
+            vec![
+                PARITY_MD1_C0.to_string(),
+                damage_near_end(PARITY_MD1_C1),
+                PARITY_MD1_C2.to_string(),
+            ],
+            (16, true),
+        ),
+    ];
+    for (label, strings, want) in rows {
+        assert_repair_parity("--md1", "MD_BIN", label, &strings, want);
+    }
+}
+
+#[test]
+fn i1_md1_incomplete_set_corrected_chunk_is_printed_with_the_advisory() {
+    let bad = damage_near_end(PARITY_MD1_C0);
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--md1", &bad, "--md1", PARITY_MD1_C1])
+        .assert()
+        .code(16)
+        .stdout(predicate::str::contains(PARITY_MD1_C0))
+        .stdout(predicate::str::contains(PARITY_MD1_C1))
+        .stderr(predicate::str::contains(
+            "the md1 chunk set is incomplete (2 of 3 chunks)",
+        ));
+}
+
+#[test]
+fn i2_corrected_single_string_that_is_no_card_is_printed_with_22() {
+    // md1: a non-chunked string (version 4, chunked bit 0) whose payload is
+    // no descriptor.
+    let md1 =
+        md_codec::codex32::wrap_payload(&[0x40, 0xff, 0xff, 0xff, 0xff, 0xff], 48).expect("wrap");
+    assert_repair_parity(
+        "--md1",
+        "MD_BIN",
+        "md1 not a card, clean",
+        &[md1.clone()],
+        (2, false),
+    );
+    assert_repair_parity(
+        "--md1",
+        "MD_BIN",
+        "md1 not a card, corrected",
+        &[damage_near_end(&md1)],
+        (22, true),
+    );
+    // ms1: a BIP-93 string with an unknown tag (`zzzz`), as ms-cli's test.
+    let mut data = vec![0x00u8];
+    data.extend_from_slice(&[0u8; 16]);
+    let ms1 = ms_codec::codex32::Codex32String::from_seed(
+        "ms",
+        0,
+        "zzzz",
+        ms_codec::codex32::Fe::S,
+        &data,
+    )
+    .unwrap()
+    .to_string();
+    assert_repair_parity(
+        "--ms1",
+        "MS_BIN",
+        "ms1 not a card, clean",
+        &[ms1.clone()],
+        (2, false),
+    );
+    assert_repair_parity(
+        "--ms1",
+        "MS_BIN",
+        "ms1 not a card, corrected",
+        &[damage_near_end(&ms1)],
+        (22, true),
+    );
+    // The printed string carries its warning.
+    Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "--allow-argv-secret",
+            "repair",
+            "--ms1",
+            &damage_near_end(&ms1),
+        ])
+        .assert()
+        .code(22)
+        .stdout(predicate::str::contains(&ms1))
+        .stderr(predicate::str::contains(
+            "repair: error: the corrected string",
+        ));
+}

@@ -220,3 +220,34 @@ fn refusal_fingerprint_as_source() {
         "stderr should reject fingerprint as primary source; got: {stderr}"
     );
 }
+
+/// R2 (review I6): a setting judged from argv alone exits 64 before the input
+/// is read, so the code does not depend on the input: garbage on stdin and
+/// a valid phrase give the same 64.
+#[test]
+fn r2_convert_setting_refusals_do_not_depend_on_the_input() {
+    const PHRASE: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    for to in [
+        &["--to", "xpub"][..],
+        &["--to", "wif"][..],
+        &["--to", "address"][..],
+        &["--to", "fingerprint"][..],
+    ] {
+        for input in [PHRASE, "garbage"] {
+            let out = Command::cargo_bin("mnemonic")
+                .unwrap()
+                .args(["convert", "--from", "phrase=-"])
+                .args(to)
+                .write_stdin(format!("{input}\n"))
+                .output()
+                .unwrap();
+            assert_eq!(
+                out.status.code(),
+                Some(64),
+                "{to:?} with {input:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
+}

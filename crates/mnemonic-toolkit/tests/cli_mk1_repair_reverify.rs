@@ -794,3 +794,116 @@ fn r6_inspect_with_a_corrected_mk1_sets_bit_16_and_says_so() {
     assert_eq!(clean.status.code(), Some(0), "stderr: {clean_err}");
     assert!(!clean_err.contains("damaged card"), "stderr: {clean_err}");
 }
+
+// ============================================================================
+// Exit-code spec decision 6 (review C1, I2): `mnemonic repair --mk1` decodes
+// every group, touched or not, and prints a corrected single string or an
+// unparseable chunk with INVALID, exactly as `mk repair` does. The table holds
+// `mk repair`'s codes on mk-codec's negative vectors N6..N21 (measured with
+// mk-cli at its exit-code cutover), clean and with one substitution in the
+// first string; `true` when the strings are printed. With `MK_BIN` set to an
+// `mk` binary, the test also runs it on every row and requires the same.
+// ============================================================================
+
+/// mk-codec's corpus as this build resolves it (`vendor/mk-codec`).
+fn mk_negative_vectors() -> Vec<(String, Vec<String>)> {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../vendor/mk-codec/src/test_vectors/v0.1.json"
+    );
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("read mk vectors"))
+            .expect("parse mk vectors");
+    v["vectors"]
+        .as_array()
+        .expect("vectors")
+        .iter()
+        .filter_map(|e| {
+            let name = e["name"].as_str()?.to_string();
+            let n: u32 = name.strip_prefix('N')?.split('_').next()?.parse().ok()?;
+            if !(6..=21).contains(&n) {
+                return None;
+            }
+            let strings = e["input"]["strings"]
+                .as_array()?
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string())
+                .collect();
+            Some((name, strings))
+        })
+        .collect()
+}
+
+/// One substitution 8 characters from the end of `s` (inside the checksum
+/// of every vector, so the header and payload stay as the vector has them).
+fn substitute_near_end(s: &str) -> String {
+    let i = s.len() - 8;
+    let c = s.as_bytes()[i] as char;
+    let next = ALPHABET[(char_to_5bit(c) as usize + 1) % 32] as char;
+    format!("{}{}{}", &s[..i], next, &s[i + 1..])
+}
+
+fn run_codes(bin: &str, args: &[String]) -> (i32, bool) {
+    let out = std::process::Command::new(bin)
+        .args(args)
+        .output()
+        .expect("run");
+    (
+        out.status.code().expect("exit code"),
+        !String::from_utf8_lossy(&out.stdout).trim().is_empty(),
+    )
+}
+
+/// (exit code, whether anything was printed on stdout)
+type CodePrinted = (i32, bool);
+
+#[test]
+fn c1_mk_negative_vectors_repair_as_mk_does() {
+    // name prefix -> ((clean code, printed), (one substitution, printed))
+    let expected: &[(&str, CodePrinted, CodePrinted)] = &[
+        ("N6_", (2, true), (18, true)),
+        ("N7_", (2, false), (22, true)),
+        ("N8_", (0, true), (16, true)),
+        ("N9_", (2, true), (18, true)),
+        ("N10_", (2, false), (22, true)),
+        ("N11_", (2, false), (2, false)),
+        ("N12_", (2, false), (2, false)),
+        ("N13_", (2, false), (2, false)),
+        ("N14_", (2, false), (2, false)),
+        ("N15_", (2, false), (2, false)),
+        ("N16_", (2, false), (2, false)),
+        ("N17_", (2, false), (2, false)),
+        ("N18_", (2, false), (2, false)),
+        ("N19_", (2, false), (2, false)),
+        ("N20_", (2, false), (2, false)),
+        ("N21_", (2, false), (2, false)),
+    ];
+    let vectors = mk_negative_vectors();
+    assert_eq!(vectors.len(), expected.len(), "N6..N21 all present");
+    let mnemonic = assert_cmd::cargo::cargo_bin("mnemonic");
+    let mk = std::env::var("MK_BIN").ok();
+    for (name, strings) in &vectors {
+        let row = expected
+            .iter()
+            .find(|(p, _, _)| name.starts_with(p))
+            .unwrap_or_else(|| panic!("no expected row for {name}"));
+        let mut damaged = strings.clone();
+        damaged[0] = substitute_near_end(&strings[0]);
+        for (label, input, want) in [
+            ("clean", strings, row.1),
+            ("one substitution", &damaged, row.2),
+        ] {
+            let args: Vec<String> = std::iter::once("repair".to_string())
+                .chain(input.iter().flat_map(|s| ["--mk1".to_string(), s.clone()]))
+                .collect();
+            let got = run_codes(mnemonic.to_str().unwrap(), &args);
+            assert_eq!(got, want, "{name} {label}: mnemonic repair --mk1");
+            if let Some(mk) = &mk {
+                let mk_args: Vec<String> = std::iter::once("repair".to_string())
+                    .chain(input.iter().cloned())
+                    .collect();
+                assert_eq!(run_codes(mk, &mk_args), got, "{name} {label}: mk repair");
+            }
+        }
+    }
+}

@@ -271,6 +271,37 @@ pub struct RestoreArgs {
     pub output: String,
 }
 
+/// Exit-code spec decision 2 (review I5): `--expect-fingerprint` and
+/// `--expect-xpub` are input values. A value that is not a fingerprint (8 hex
+/// digits) or an extended key is wrong input (2), refused before it is
+/// compared, so a typo is never reported as a mismatch (1) nor waved through
+/// by `--allow-mismatch`.
+fn check_expect_references(args: &RestoreArgs) -> Result<(), ToolkitError> {
+    if let Some(fp) = args.expect_fingerprint.as_deref() {
+        let fp = fp.trim();
+        if fp.len() != 8 || !fp.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(bad(format!(
+                "--expect-fingerprint {fp:?} is not a master fingerprint (8 hex digits)"
+            )));
+        }
+    }
+    if let Some(x) = args.expect_xpub.as_deref() {
+        crate::slip0132::normalize_xpub_prefix(x.trim())
+            .and_then(|(neutral, _)| {
+                bitcoin::bip32::Xpub::from_str(&neutral)
+                    .map(|_| ())
+                    .map_err(|e| ToolkitError::BadInput(e.to_string()))
+            })
+            .map_err(|e| {
+                bad(format!(
+                    "--expect-xpub is not an extended public key: {}",
+                    e.message()
+                ))
+            })?;
+    }
+    Ok(())
+}
+
 fn bad(s: impl Into<String>) -> ToolkitError {
     ToolkitError::BadInput(s.into())
 }
@@ -635,6 +666,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // ---- Verification gate (§3.4) -------------------------------------------
     // Compute the reference comparison (if any). `--expect-xpub` is gated to a
     // single `--template` above, so `rows[0]` is the only row when it is set.
+    check_expect_references(args)?;
     let mut mismatch: Option<(&'static str, String, String)> = None;
     if let Some(expected) = args.expect_fingerprint.as_deref() {
         let expected_norm = expected.trim().to_lowercase();
@@ -1065,6 +1097,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     )?;
 
     // FIX #2: honour --expect-fingerprint / --expect-xpub / --allow-mismatch.
+    check_expect_references(args)?;
     let mut ref_mismatch: Option<(&'static str, String, String)> = None;
     if let Some(expected) = args.expect_fingerprint.as_deref() {
         let expected_norm = expected.trim().to_lowercase();

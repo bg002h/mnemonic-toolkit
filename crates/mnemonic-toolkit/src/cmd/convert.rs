@@ -567,8 +567,10 @@ fn refusal_composite_bip38_no_bip38_passphrase() -> ToolkitError {
     )
 }
 
+/// Review M5 ruling: the key passed its base58check checksum, so a failed
+/// address-hash check is a wrong passphrase, not corrupt data (1, NO).
 fn refusal_bip38_passphrase_mismatch() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::PassphraseMismatch(
         "BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §\"Decryption\" address-hash check).".into(),
     )
 }
@@ -917,51 +919,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             "{pp_spelling} and {bip38_spelling} cannot both be set (single stdin per invocation); pick the channel that needs the NULL-byte-preserving route",
         )));
     }
-    // cycle-14 (L22): wrap the stdin/argv passphrase secret in Zeroizing so it
-    // scrubs on drop (these handler-scope locals linger for the whole run() and
-    // are mlock-pinned below — mlock prevents swap-out but does NOT scrub).
-    // `args.passphrase` is already `@env:`-resolved (above); `pp_argv` is the
-    // value as the operator wrote it, which is what decides stdin-vs-literal.
-    let effective_passphrase: Option<zeroize::Zeroizing<String>> = if pp_reads_stdin {
-        Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?))
-    } else {
-        args.passphrase.clone().map(zeroize::Zeroizing::new)
-    };
-
-    // SPEC v0.9.0 §1 item 1 — `--bip38-passphrase-stdin` populates the
-    // BIP-38 Scrypt passphrase channel from stdin (preserves NULLs).
-    let effective_bip38_passphrase: Option<zeroize::Zeroizing<String>> = if bip38_reads_stdin {
-        Some(zeroize::Zeroizing::new(
-            crate::passphrase_input::read_stdin_secret(
-                &crate::passphrase_input::BIP38_PASSPHRASE,
-                stdin,
-            )?,
-        ))
-    } else {
-        args.bip38_passphrase.clone().map(zeroize::Zeroizing::new)
-    };
-
-    // 2.b) Stdin if `--from <node>=-`.
-    let primary_value: zeroize::Zeroizing<String> = if primary_uses_stdin {
-        zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
-    } else {
-        zeroize::Zeroizing::new(primary.value.clone())
-    };
-
-    // Cycle B Phase 3a Site 1 — pin secret-bearing heap pages for the
-    // remainder of the handler scope. convert.rs has no apply_stdin_substitutions;
-    // instead three local secret-bearing String bindings (effective_passphrase,
-    // effective_bip38_passphrase, primary_value) are populated above. Pin
-    // each post-binding so the pin covers the actual secret bytes consumed
-    // downstream (per SPEC §4 P3a + per-handler anchor lock).
-    let _pin_pp = effective_passphrase
-        .as_ref()
-        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
-    let _pin_bip38 = effective_bip38_passphrase
-        .as_ref()
-        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
-    let _pin_primary = mnemonic_toolkit::mlock::pin_pages_for(primary_value.as_bytes());
-
+    // Steps 3-5 judge the command line alone (R2: a usage error exits 64
+    // before any input is read), so they run before stdin is read.
     // 3) Parse `--to`.
     let mut targets: Vec<NodeType> = Vec::new();
     for chunk in &args.to {
@@ -1032,9 +991,62 @@ pub fn run<R: Read, W: Write, E: Write>(
     //      (`--passphrase`, `--passphrase-stdin`, or `--bip38-passphrase`).
     let bip38_edge =
         primary.node == NodeType::Bip38 || targets.iter().any(|t| *t == NodeType::Bip38);
-    if bip38_edge && effective_passphrase.is_none() && effective_bip38_passphrase.is_none() {
+    // Whether each passphrase channel will be set, judged from argv (the
+    // values themselves are read below).
+    let pp_given = pp_reads_stdin || args.passphrase.is_some();
+    let bip38_pp_given = bip38_reads_stdin || args.bip38_passphrase.is_some();
+    if bip38_edge && !pp_given && !bip38_pp_given {
         return Err(refusal_bip38_no_passphrase());
     }
+
+    // 5.c) R2 (review I6): the per-target setting checks `compute_outputs`
+    //      makes, run here so they exit 64 before any input is read.
+    precheck_target_settings(primary.node, &targets, args, bip38_pp_given)?;
+
+    // cycle-14 (L22): wrap the stdin/argv passphrase secret in Zeroizing so it
+    // scrubs on drop (these handler-scope locals linger for the whole run() and
+    // are mlock-pinned below — mlock prevents swap-out but does NOT scrub).
+    // `args.passphrase` is already `@env:`-resolved (above); `pp_argv` is the
+    // value as the operator wrote it, which is what decides stdin-vs-literal.
+    let effective_passphrase: Option<zeroize::Zeroizing<String>> = if pp_reads_stdin {
+        Some(zeroize::Zeroizing::new(read_stdin_passphrase(stdin)?))
+    } else {
+        args.passphrase.clone().map(zeroize::Zeroizing::new)
+    };
+
+    // SPEC v0.9.0 §1 item 1 — `--bip38-passphrase-stdin` populates the
+    // BIP-38 Scrypt passphrase channel from stdin (preserves NULLs).
+    let effective_bip38_passphrase: Option<zeroize::Zeroizing<String>> = if bip38_reads_stdin {
+        Some(zeroize::Zeroizing::new(
+            crate::passphrase_input::read_stdin_secret(
+                &crate::passphrase_input::BIP38_PASSPHRASE,
+                stdin,
+            )?,
+        ))
+    } else {
+        args.bip38_passphrase.clone().map(zeroize::Zeroizing::new)
+    };
+
+    // 2.b) Stdin if `--from <node>=-`.
+    let primary_value: zeroize::Zeroizing<String> = if primary_uses_stdin {
+        zeroize::Zeroizing::new(read_stdin_to_string(stdin)?)
+    } else {
+        zeroize::Zeroizing::new(primary.value.clone())
+    };
+
+    // Cycle B Phase 3a Site 1 — pin secret-bearing heap pages for the
+    // remainder of the handler scope. convert.rs has no apply_stdin_substitutions;
+    // instead three local secret-bearing String bindings (effective_passphrase,
+    // effective_bip38_passphrase, primary_value) are populated above. Pin
+    // each post-binding so the pin covers the actual secret bytes consumed
+    // downstream (per SPEC §4 P3a + per-handler anchor lock).
+    let _pin_pp = effective_passphrase
+        .as_ref()
+        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
+    let _pin_bip38 = effective_bip38_passphrase
+        .as_ref()
+        .map(|s| mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes()));
+    let _pin_primary = mnemonic_toolkit::mlock::pin_pages_for(primary_value.as_bytes());
 
     // 6) §8 --passphrase warning when not on PBKDF2 edge.
     //    SPEC-A v0.6.1: `Wif` joins the PBKDF2-bearing target set so
@@ -1908,6 +1920,71 @@ fn map_bip38_error(e: bip38::Error) -> ToolkitError {
 /// Electrum native seed."
 fn map_electrum_error(_e: electrum::ElectrumError) -> ToolkitError {
     refusal_electrum_invalid_format()
+}
+
+/// R2 (review I6): the setting checks `compute_outputs` makes per target,
+/// judged from argv alone, so `run` can refuse before reading any input.
+/// Each mirrors the check at its use site (which stays, as a backstop) in
+/// the same order, with the same error.
+fn precheck_target_settings(
+    from: NodeType,
+    targets: &[NodeType],
+    args: &ConvertArgs,
+    bip38_pp_given: bool,
+) -> Result<(), ToolkitError> {
+    use NodeType::*;
+    match from {
+        Seedqr | Phrase | Entropy => {
+            let needs_derive = targets
+                .iter()
+                .any(|t| matches!(t, Xpub | Xprv | Fingerprint));
+            if needs_derive && args.path.is_none() && args.template.is_none() {
+                let reads_path = targets.iter().any(|t| matches!(t, Xpub | Xprv));
+                return Err(ToolkitError::Usage(if reads_path {
+                    "--template or --path is required for derivation targets (xpub/xprv/fingerprint)"
+                        .into()
+                } else {
+                    "--template is required for --to fingerprint (the master fingerprint; --path is not read)"
+                        .into()
+                }));
+            }
+            for &t in targets {
+                match t {
+                    Wif if args.path.is_none() => {
+                        return Err(refusal_phrase_entropy_to_wif_no_path())
+                    }
+                    Path => {
+                        return Err(ToolkitError::Usage(
+                            "--to path is informational; not emitted as a value".into(),
+                        ))
+                    }
+                    Bip38 if !bip38_pp_given => {
+                        return Err(refusal_composite_bip38_no_bip38_passphrase())
+                    }
+                    Bip38 if args.path.is_none() => {
+                        return Err(refusal_phrase_entropy_to_wif_no_path())
+                    }
+                    Address if args.path.is_none() => return Err(refusal_address_no_path()),
+                    Address => {
+                        resolve_script_type(args)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Xpub => {
+            for &t in targets {
+                if t == Address {
+                    if args.path.is_none() {
+                        return Err(refusal_address_no_path());
+                    }
+                    resolve_script_type(args)?;
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 /// SPEC v0.7 §10.a — resolve the `--script-type` from explicit flag, then

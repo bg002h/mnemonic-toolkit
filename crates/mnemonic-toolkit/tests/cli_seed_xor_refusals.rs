@@ -181,3 +181,29 @@ fn refusal_unknown_language() {
     ]);
     assert_ne!(exit, 0, "unknown --language must refuse");
 }
+
+/// R2 (review I6): `--shares 1` is judged from argv alone and exits 64
+/// before the phrase or any share is read, whatever the input.
+#[test]
+fn r2_seed_xor_too_few_shares_does_not_depend_on_the_input() {
+    const PHRASE: &str =
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    for input in [PHRASE, "garbage"] {
+        let out = assert_cmd::Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["seed-xor", "split", "--from", "phrase=-", "--shares", "1"])
+            .write_stdin(format!("{input}\n"))
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(64), "split with {input:?}");
+        let out = assert_cmd::Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args([
+                "seed-xor", "combine", "--shares", "1", "--share", "phrase=-",
+            ])
+            .write_stdin(format!("{input}\n"))
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(64), "combine with {input:?}");
+    }
+}

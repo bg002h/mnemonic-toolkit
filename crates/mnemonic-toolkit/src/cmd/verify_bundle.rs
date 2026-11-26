@@ -8,7 +8,7 @@
 //! envelope).
 
 use crate::error::ToolkitError;
-use crate::format::{chunk_set_id_extract, VerifyBundleJson, VerifyCheck};
+use crate::format::{chunk_set_id_extract, FailClass, VerifyBundleJson, VerifyCheck};
 use crate::language::CliLanguage;
 use crate::network::CliNetwork;
 use crate::parse::MultisigPathFamily;
@@ -860,6 +860,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
     }
     checks.push(VerifyCheck {
         name: "md1_template_match".into(),
+        failure: FailClass::No,
         passed: md1_match,
         detail: if md1_match {
             "supplied md1 matches the expected keyless single-sig template".into()
@@ -870,6 +871,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
     });
     checks.push(VerifyCheck {
         name: "mk1_template_stub_bind".into(),
+        failure: FailClass::No,
         passed: mk1_match,
         detail: if mk1_match {
             "supplied mk1 binds via the template-id stub".into()
@@ -939,6 +941,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
                 id.as_bytes().len() >= prefix.len() && id.as_bytes()[..prefix.len()] == prefix[..];
             checks.push(VerifyCheck {
                 name: "wallet_id_match".into(),
+                failure: FailClass::No,
                 passed: ok,
                 detail: if ok {
                     "completed wallet matches --expect-wallet-id".into()
@@ -1133,6 +1136,7 @@ fn verify_multisig_template<W: Write, E: Write>(
     let mut checks: Vec<VerifyCheck> = Vec::new();
     checks.push(VerifyCheck {
         name: "md1_template_match".into(),
+        failure: FailClass::No,
         passed: md1_match,
         detail: if md1_match {
             "supplied md1 matches the recomposed wallet's keyless template (WalletDescriptorTemplateId)".into()
@@ -1157,6 +1161,7 @@ fn verify_multisig_template<W: Write, E: Write>(
         };
         checks.push(VerifyCheck {
             name: "mk1_template_stub_bind".into(),
+            failure: FailClass::No,
             passed,
             detail: detail.into(),
             ..Default::default()
@@ -1181,6 +1186,7 @@ fn verify_multisig_template<W: Write, E: Write>(
     let completed_id_hex = hex::encode(completed_id.as_bytes());
     checks.push(VerifyCheck {
         name: "wallet_completed".into(),
+        failure: FailClass::No,
         passed: true,
         detail: format!("completed WalletPolicyId {completed_id_hex}; first receive {first_recv}"),
         ..Default::default()
@@ -2387,6 +2393,7 @@ fn ms1_card_checks(
         Ok(_) => {
             checks.push(VerifyCheck {
                 name: "ms1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "decoded successfully".into(),
                 ..Default::default()
@@ -2394,6 +2401,7 @@ fn ms1_card_checks(
             if supplied_ms1 == expected_ms1 {
                 checks.push(VerifyCheck {
                     name: "ms1_entropy_match".into(),
+                    failure: FailClass::No,
                     passed: true,
                     detail: "ms1 byte-identical".into(),
                     ..Default::default()
@@ -2402,6 +2410,7 @@ fn ms1_card_checks(
                 let diff = VerifyCheck::diff_offset(expected_ms1, supplied_ms1);
                 checks.push(VerifyCheck {
                     name: "ms1_entropy_match".into(),
+                    failure: FailClass::No,
                     passed: false,
                     detail: "expected ms1 bytes differ from supplied".into(),
                     expected: Some(expected_ms1.to_string()),
@@ -2434,12 +2443,14 @@ fn ms1_card_checks(
                     // confirmed by the ground truth the user typed.
                     checks.push(VerifyCheck {
                         name: "ms1_decode".into(),
+                        failure: FailClass::Invalid,
                         passed: true,
                         detail: "recovered via auto-repair, confirmed against expected seed".into(),
                         ..Default::default()
                     });
                     checks.push(VerifyCheck {
                         name: "ms1_entropy_match".into(),
+                        failure: FailClass::No,
                         passed: true,
                         detail: "recovered via auto-repair, confirmed against expected seed".into(),
                         ..Default::default()
@@ -2453,12 +2464,14 @@ fn ms1_card_checks(
                     // about two secret strings).
                     checks.push(VerifyCheck {
                         name: "ms1_decode".into(),
+                        failure: FailClass::Invalid,
                         passed: true,
                         detail: "recovered via auto-repair (unconfirmed)".into(),
                         ..Default::default()
                     });
                     checks.push(VerifyCheck {
                         name: "ms1_entropy_match".into(),
+                        failure: FailClass::No,
                         passed: false,
                         detail: "auto-repair candidate did not match the expected seed — \
                             this card is not a card for this seed"
@@ -2472,6 +2485,7 @@ fn ms1_card_checks(
                     let err_msg = format!("{:?}", e);
                     checks.push(VerifyCheck {
                         name: "ms1_decode".into(),
+                        failure: FailClass::Invalid,
                         passed: false,
                         detail: err_msg.clone(),
                         decode_error: Some(err_msg),
@@ -2479,6 +2493,7 @@ fn ms1_card_checks(
                     });
                     checks.push(VerifyCheck {
                         name: "ms1_entropy_match".into(),
+                        failure: FailClass::No,
                         passed: true,
                         detail: "ms1 decode failed; entropy match cannot run".into(),
                         decode_error: Some("skipped: ms1 decode failed".into()),
@@ -2551,6 +2566,7 @@ pub fn emit_verify_checks(
     if watch_only {
         checks.push(VerifyCheck {
             name: "ms1_decode".into(),
+            failure: FailClass::Invalid,
             passed: true,
             detail: "skipped: watch-only slot".into(),
             decode_error: Some("skipped: watch-only slot".into()),
@@ -2558,6 +2574,7 @@ pub fn emit_verify_checks(
         });
         checks.push(VerifyCheck {
             name: "ms1_entropy_match".into(),
+            failure: FailClass::No,
             passed: true,
             detail: "skipped: watch-only slot".into(),
             decode_error: Some("skipped: watch-only slot".into()),
@@ -2576,6 +2593,7 @@ pub fn emit_verify_checks(
         Ok(_) => {
             checks.push(VerifyCheck {
                 name: "mk1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "decoded successfully".into(),
                 ..Default::default()
@@ -2596,6 +2614,7 @@ pub fn emit_verify_checks(
             let err_msg = format!("{:?}", e);
             checks.push(VerifyCheck {
                 name: "mk1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: false,
                 detail: err_msg.clone(),
                 decode_error: Some(err_msg),
@@ -2605,6 +2624,7 @@ pub fn emit_verify_checks(
             for n in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
                 checks.push(VerifyCheck {
                     name: (*n).into(),
+                    failure: FailClass::No,
                     passed: true,
                     detail: "mk1 decode failed; check cannot run".into(),
                     decode_error: Some("skipped: mk1 decode failed".into()),
@@ -2643,6 +2663,7 @@ pub fn emit_verify_checks(
     if exp_xpub == act_xpub {
         checks.push(VerifyCheck {
             name: "mk1_xpub_match".into(),
+            failure: FailClass::No,
             passed: true,
             detail: "xpub matches".into(),
             ..Default::default()
@@ -2651,6 +2672,7 @@ pub fn emit_verify_checks(
         let diff = VerifyCheck::diff_offset(&exp_xpub, &act_xpub);
         checks.push(VerifyCheck {
             name: "mk1_xpub_match".into(),
+            failure: FailClass::No,
             passed: false,
             detail: "xpub does not match".into(),
             expected: Some(exp_xpub),
@@ -2672,6 +2694,7 @@ pub fn emit_verify_checks(
     if exp_fp == act_fp {
         checks.push(VerifyCheck {
             name: "mk1_fingerprint_match".into(),
+            failure: FailClass::No,
             passed: true,
             detail: "fingerprint matches".into(),
             ..Default::default()
@@ -2680,6 +2703,7 @@ pub fn emit_verify_checks(
         let diff = VerifyCheck::diff_offset(&exp_fp, &act_fp);
         checks.push(VerifyCheck {
             name: "mk1_fingerprint_match".into(),
+            failure: FailClass::No,
             passed: false,
             detail: "fingerprint does not match".into(),
             expected: Some(exp_fp),
@@ -2695,6 +2719,7 @@ pub fn emit_verify_checks(
     if exp_path == act_path {
         checks.push(VerifyCheck {
             name: "mk1_path_match".into(),
+            failure: FailClass::No,
             passed: true,
             detail: "path matches".into(),
             ..Default::default()
@@ -2703,6 +2728,7 @@ pub fn emit_verify_checks(
         let diff = VerifyCheck::diff_offset(&exp_path, &act_path);
         checks.push(VerifyCheck {
             name: "mk1_path_match".into(),
+            failure: FailClass::No,
             passed: false,
             detail: "path does not match".into(),
             expected: Some(exp_path),
@@ -2946,6 +2972,7 @@ fn emit_multisig_checks(
             // Case 1: watch-only slot — pass-vacuously regardless of supplied.
             checks.push(VerifyCheck {
                 name: format!("ms1_decode[{}]", i),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "skipped: watch-only slot".into(),
                 decode_error: Some("skipped: watch-only slot".into()),
@@ -2953,6 +2980,7 @@ fn emit_multisig_checks(
             });
             checks.push(VerifyCheck {
                 name: format!("ms1_entropy_match[{}]", i),
+                failure: FailClass::No,
                 passed: true,
                 detail: "skipped: watch-only slot".into(),
                 decode_error: Some("skipped: watch-only slot".into()),
@@ -2964,6 +2992,7 @@ fn emit_multisig_checks(
                     // Case 2: full-mode, supplied present, decodes Ok.
                     checks.push(VerifyCheck {
                         name: format!("ms1_decode[{}]", i),
+                        failure: FailClass::Invalid,
                         passed: true,
                         detail: format!("cosigner[{}] ms1 decoded", i),
                         ..Default::default()
@@ -2971,6 +3000,7 @@ fn emit_multisig_checks(
                     if s == exp_ms1 {
                         checks.push(VerifyCheck {
                             name: format!("ms1_entropy_match[{}]", i),
+                            failure: FailClass::No,
                             passed: true,
                             detail: format!("cosigner[{}] ms1 byte-identical", i),
                             ..Default::default()
@@ -2979,6 +3009,7 @@ fn emit_multisig_checks(
                         let diff = VerifyCheck::diff_offset(exp_ms1, s);
                         checks.push(VerifyCheck {
                             name: format!("ms1_entropy_match[{}]", i),
+                            failure: FailClass::No,
                             passed: false,
                             detail: format!("cosigner[{}] ms1 differs", i),
                             expected: Some(exp_ms1.to_string()),
@@ -3007,6 +3038,7 @@ fn emit_multisig_checks(
                         Some(true) => {
                             checks.push(VerifyCheck {
                                 name: format!("ms1_decode[{}]", i),
+                                failure: FailClass::Invalid,
                                 passed: true,
                                 detail: format!(
                                     "cosigner[{}] recovered via auto-repair, confirmed against \
@@ -3017,6 +3049,7 @@ fn emit_multisig_checks(
                             });
                             checks.push(VerifyCheck {
                                 name: format!("ms1_entropy_match[{}]", i),
+                                failure: FailClass::No,
                                 passed: true,
                                 detail: format!(
                                     "cosigner[{}] recovered via auto-repair, confirmed against \
@@ -3031,6 +3064,7 @@ fn emit_multisig_checks(
                             // (G5): no seed bytes, diff_byte_offset pinned None.
                             checks.push(VerifyCheck {
                                 name: format!("ms1_decode[{}]", i),
+                                failure: FailClass::Invalid,
                                 passed: true,
                                 detail: format!(
                                     "cosigner[{}] recovered via auto-repair (unconfirmed)",
@@ -3040,6 +3074,7 @@ fn emit_multisig_checks(
                             });
                             checks.push(VerifyCheck {
                                 name: format!("ms1_entropy_match[{}]", i),
+                                failure: FailClass::No,
                                 passed: false,
                                 detail: format!(
                                     "cosigner[{}] auto-repair candidate did not match the \
@@ -3054,6 +3089,7 @@ fn emit_multisig_checks(
                             let err_msg = format!("{:?}", e);
                             checks.push(VerifyCheck {
                                 name: format!("ms1_decode[{}]", i),
+                                failure: FailClass::Invalid,
                                 passed: false,
                                 detail: err_msg.clone(),
                                 decode_error: Some(err_msg),
@@ -3061,6 +3097,7 @@ fn emit_multisig_checks(
                             });
                             checks.push(VerifyCheck {
                                 name: format!("ms1_entropy_match[{}]", i),
+                                failure: FailClass::No,
                                 passed: true,
                                 detail: format!(
                                     "cosigner[{}] ms1 decode failed; entropy match cannot run",
@@ -3077,6 +3114,7 @@ fn emit_multisig_checks(
             // Case 4: full-mode, supplied absent. v0.5 SPEC §5.7 — passed: false.
             checks.push(VerifyCheck {
                 name: format!("ms1_decode[{}]", i),
+                failure: FailClass::Invalid,
                 passed: false,
                 detail: format!(
                     "cosigner[{}] ms1 expected (full-mode bundle) but not supplied",
@@ -3090,6 +3128,7 @@ fn emit_multisig_checks(
             });
             checks.push(VerifyCheck {
                 name: format!("ms1_entropy_match[{}]", i),
+                failure: FailClass::No,
                 passed: false,
                 detail: format!("cosigner[{}] ms1 not supplied", i),
                 decode_error: Some(format!("skipped: ms1[{}] not supplied", i)),
@@ -3104,6 +3143,7 @@ fn emit_multisig_checks(
             (Ok(sup), Some(exp)) => {
                 checks.push(VerifyCheck {
                     name: format!("mk1_decode[{}]", i),
+                    failure: FailClass::Invalid,
                     passed: true,
                     detail: format!("cosigner[{}] mk1 decoded", i),
                     ..Default::default()
@@ -3113,6 +3153,7 @@ fn emit_multisig_checks(
                 if exp_x == act_x {
                     checks.push(VerifyCheck {
                         name: format!("mk1_xpub_match[{}]", i),
+                        failure: FailClass::No,
                         passed: true,
                         detail: format!("cosigner[{}] xpub matches", i),
                         ..Default::default()
@@ -3121,6 +3162,7 @@ fn emit_multisig_checks(
                     let diff = VerifyCheck::diff_offset(&exp_x, &act_x);
                     checks.push(VerifyCheck {
                         name: format!("mk1_xpub_match[{}]", i),
+                        failure: FailClass::No,
                         passed: false,
                         detail: format!("cosigner[{}] xpub mismatch", i),
                         expected: Some(exp_x),
@@ -3140,6 +3182,7 @@ fn emit_multisig_checks(
                 if exp_fp == act_fp {
                     checks.push(VerifyCheck {
                         name: format!("mk1_fingerprint_match[{}]", i),
+                        failure: FailClass::No,
                         passed: true,
                         detail: format!("cosigner[{}] fingerprint matches", i),
                         ..Default::default()
@@ -3148,6 +3191,7 @@ fn emit_multisig_checks(
                     let diff = VerifyCheck::diff_offset(&exp_fp, &act_fp);
                     checks.push(VerifyCheck {
                         name: format!("mk1_fingerprint_match[{}]", i),
+                        failure: FailClass::No,
                         passed: false,
                         detail: format!("cosigner[{}] fingerprint mismatch", i),
                         expected: Some(exp_fp),
@@ -3161,6 +3205,7 @@ fn emit_multisig_checks(
                 if exp_p == act_p {
                     checks.push(VerifyCheck {
                         name: format!("mk1_path_match[{}]", i),
+                        failure: FailClass::No,
                         passed: true,
                         detail: format!("cosigner[{}] path matches", i),
                         ..Default::default()
@@ -3169,6 +3214,7 @@ fn emit_multisig_checks(
                     let diff = VerifyCheck::diff_offset(&exp_p, &act_p);
                     checks.push(VerifyCheck {
                         name: format!("mk1_path_match[{}]", i),
+                        failure: FailClass::No,
                         passed: false,
                         detail: format!("cosigner[{}] path mismatch", i),
                         expected: Some(exp_p),
@@ -3198,6 +3244,7 @@ fn emit_multisig_checks(
                 };
                 checks.push(VerifyCheck {
                     name: format!("mk1_decode[{}]", i),
+                    failure: FailClass::Invalid,
                     passed: false,
                     detail,
                     decode_error: Some(decode_error),
@@ -3207,6 +3254,7 @@ fn emit_multisig_checks(
                 for nm in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
                     checks.push(VerifyCheck {
                         name: format!("{}[{}]", nm, i),
+                        failure: FailClass::No,
                         passed: true,
                         detail: format!("cosigner[{}] mk1 decode failed; cannot evaluate", i),
                         decode_error: Some(format!("skipped: mk1[{}] decode failed", i)),
@@ -3219,6 +3267,7 @@ fn emit_multisig_checks(
                 // unknown — supplied card decoded but no comparison oracle.
                 checks.push(VerifyCheck {
                     name: format!("mk1_decode[{}]", i),
+                    failure: FailClass::Invalid,
                     passed: true,
                     detail: format!("cosigner[{}] mk1 decoded; no expected oracle", i),
                     ..Default::default()
@@ -3226,6 +3275,7 @@ fn emit_multisig_checks(
                 for nm in &["mk1_xpub_match", "mk1_fingerprint_match", "mk1_path_match"] {
                     checks.push(VerifyCheck {
                         name: format!("{}[{}]", nm, i),
+                        failure: FailClass::No,
                         passed: true,
                         detail: format!("cosigner[{}] no expected mk1 oracle", i),
                         decode_error: Some(format!("skipped: expected mk1[{}] not available", i)),
@@ -3245,6 +3295,7 @@ fn emit_multisig_checks(
         Ok(desc) => {
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "decoded successfully".into(),
                 ..Default::default()
@@ -3253,6 +3304,7 @@ fn emit_multisig_checks(
             if wp {
                 checks.push(VerifyCheck {
                     name: "md1_wallet_policy".into(),
+                    failure: FailClass::Invalid,
                     passed: true,
                     detail: "wallet-policy mode confirmed".into(),
                     ..Default::default()
@@ -3324,6 +3376,7 @@ fn emit_multisig_checks(
                 if policy_match && pubkeys_match {
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
+                        failure: FailClass::No,
                         passed: true,
                         detail: format!(
                             "all {} pubkeys match expected (multiset) and decoded policy \
@@ -3351,6 +3404,7 @@ fn emit_multisig_checks(
                     }
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
+                        failure: FailClass::No,
                         passed: false,
                         detail: format!(
                             "md1 reconstructs a DIFFERENT wallet — structural policy mismatch: {}",
@@ -3375,6 +3429,7 @@ fn emit_multisig_checks(
                     let diff = VerifyCheck::diff_offset(&exp_hex, &act_hex);
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
+                        failure: FailClass::No,
                         passed: false,
                         detail: "md1 pubkeys differ from expected set".into(),
                         expected: Some(exp_hex),
@@ -3386,6 +3441,7 @@ fn emit_multisig_checks(
             } else {
                 checks.push(VerifyCheck {
                     name: "md1_wallet_policy".into(),
+                    failure: FailClass::Invalid,
                     passed: false,
                     detail: "descriptor is template-only (no pubkeys TLV)".into(),
                     decode_error: Some("not in wallet-policy mode".into()),
@@ -3393,6 +3449,7 @@ fn emit_multisig_checks(
                 });
                 checks.push(VerifyCheck {
                     name: "md1_xpub_match".into(),
+                    failure: FailClass::No,
                     passed: true,
                     detail: "skipped: not in wallet-policy mode".into(),
                     decode_error: Some("skipped: not in wallet-policy mode".into()),
@@ -3410,6 +3467,7 @@ fn emit_multisig_checks(
             let err_msg = format!("{:?}", e);
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: false,
                 detail: err_msg.clone(),
                 decode_error: Some(err_msg),
@@ -3417,6 +3475,7 @@ fn emit_multisig_checks(
             });
             checks.push(VerifyCheck {
                 name: "md1_wallet_policy".into(),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "skipped: md1 decode failed".into(),
                 decode_error: Some("skipped: md1 decode failed".into()),
@@ -3424,6 +3483,7 @@ fn emit_multisig_checks(
             });
             checks.push(VerifyCheck {
                 name: "md1_xpub_match".into(),
+                failure: FailClass::No,
                 passed: true,
                 detail: "skipped: md1 decode failed".into(),
                 decode_error: Some("skipped: md1 decode failed".into()),
@@ -3458,6 +3518,7 @@ fn emit_md1_checks(
         Ok(desc) => {
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "decoded successfully".into(),
                 ..Default::default()
@@ -3466,6 +3527,7 @@ fn emit_md1_checks(
             if wp {
                 checks.push(VerifyCheck {
                     name: "md1_wallet_policy".into(),
+                    failure: FailClass::Invalid,
                     passed: true,
                     detail: "wallet-policy mode confirmed".into(),
                     ..Default::default()
@@ -3494,6 +3556,7 @@ fn emit_md1_checks(
                 if xpub_match && policy_match {
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
+                        failure: FailClass::No,
                         passed: true,
                         detail: "65-byte xpub matches expected".into(),
                         ..Default::default()
@@ -3511,6 +3574,7 @@ fn emit_md1_checks(
                     }
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
+                        failure: FailClass::No,
                         passed: false,
                         detail: format!(
                             "md1 reconstructs a DIFFERENT wallet — structural policy mismatch: {}",
@@ -3527,6 +3591,7 @@ fn emit_md1_checks(
                     let diff = VerifyCheck::diff_offset(&exp_hex, &act_hex);
                     checks.push(VerifyCheck {
                         name: "md1_xpub_match".into(),
+                        failure: FailClass::No,
                         passed: false,
                         detail: "md1 xpub differs from expected".into(),
                         expected: Some(exp_hex),
@@ -3538,6 +3603,7 @@ fn emit_md1_checks(
             } else {
                 checks.push(VerifyCheck {
                     name: "md1_wallet_policy".into(),
+                    failure: FailClass::Invalid,
                     passed: false,
                     detail: "descriptor is template-only (no pubkeys TLV)".into(),
                     decode_error: Some("not in wallet-policy mode".into()),
@@ -3545,6 +3611,7 @@ fn emit_md1_checks(
                 });
                 checks.push(VerifyCheck {
                     name: "md1_xpub_match".into(),
+                    failure: FailClass::No,
                     passed: true,
                     detail: "skipped: not in wallet-policy mode".into(),
                     decode_error: Some("skipped: not in wallet-policy mode".into()),
@@ -3567,6 +3634,7 @@ fn emit_md1_checks(
             let err_msg = format!("{:?}", e);
             checks.push(VerifyCheck {
                 name: "md1_decode".into(),
+                failure: FailClass::Invalid,
                 passed: false,
                 detail: err_msg.clone(),
                 decode_error: Some(err_msg),
@@ -3574,6 +3642,7 @@ fn emit_md1_checks(
             });
             checks.push(VerifyCheck {
                 name: "md1_wallet_policy".into(),
+                failure: FailClass::Invalid,
                 passed: true,
                 detail: "skipped: md1 decode failed".into(),
                 decode_error: Some("skipped: md1 decode failed".into()),
@@ -3581,6 +3650,7 @@ fn emit_md1_checks(
             });
             checks.push(VerifyCheck {
                 name: "md1_xpub_match".into(),
+                failure: FailClass::No,
                 passed: true,
                 detail: "skipped: md1 decode failed".into(),
                 decode_error: Some("skipped: md1 decode failed".into()),
@@ -4076,6 +4146,7 @@ fn md1_origin_check(expected: &md_codec::Descriptor, actual: &md_codec::Descript
     let (Some(exp), Some(act)) = (render(expected), render(actual)) else {
         return VerifyCheck {
             name: "md1_origin_match".into(),
+            failure: FailClass::No,
             passed: true,
             detail: "skipped: origins not expandable".into(),
             decode_error: Some("skipped: origins not expandable".into()),
@@ -4085,6 +4156,7 @@ fn md1_origin_check(expected: &md_codec::Descriptor, actual: &md_codec::Descript
     if exp.len() != act.len() {
         return VerifyCheck {
             name: "md1_origin_match".into(),
+            failure: FailClass::No,
             passed: false,
             detail: format!(
                 "expected {} origins, card declares {}",
@@ -4109,6 +4181,7 @@ fn md1_origin_check(expected: &md_codec::Descriptor, actual: &md_codec::Descript
     if !contradictions.is_empty() {
         return VerifyCheck {
             name: "md1_origin_match".into(),
+            failure: FailClass::No,
             passed: false,
             detail: format!(
                 "the card declares a DIFFERENT key origin than expected — a signer \
@@ -4122,6 +4195,7 @@ fn md1_origin_check(expected: &md_codec::Descriptor, actual: &md_codec::Descript
         let which: Vec<String> = omissions.iter().map(|i| format!("@{i}")).collect();
         return VerifyCheck {
             name: "md1_origin_match".into(),
+            failure: FailClass::No,
             passed: true,
             detail: format!(
                 "card omits the key origin for {} — same wallet and same addresses, \
@@ -4134,6 +4208,7 @@ fn md1_origin_check(expected: &md_codec::Descriptor, actual: &md_codec::Descript
     }
     VerifyCheck {
         name: "md1_origin_match".into(),
+        failure: FailClass::No,
         passed: true,
         detail: format!("all {} key origins match expected", exp.len()),
         ..Default::default()
@@ -4148,6 +4223,7 @@ fn md1_origin_check_from_strings(expected_md1: &[String], supplied_md1: &[&str])
     let exp_refs: Vec<&str> = expected_md1.iter().map(String::as_str).collect();
     let skipped = |why: &str| VerifyCheck {
         name: "md1_origin_match".into(),
+        failure: FailClass::No,
         passed: true,
         detail: format!("skipped: {why}"),
         decode_error: Some(format!("skipped: {why}")),
@@ -4166,19 +4242,23 @@ fn md1_origin_check_from_strings(expected_md1: &[String], supplied_md1: &[&str])
 }
 
 /// The exit status of a verify-bundle verdict (`SPEC_constellation_exit_codes.md`
-/// §3, §7f): a failed comparison row is 1 (NO), a row that says a supplied card
-/// does not decode (`*_decode`, `*_decode[i]`) is 2 (INVALID), and a `partial`
-/// result (the origin is unspecified on the backup) is 4 (UNVERIFIED). The
-/// bits sum; no failed row and no partial is 0.
+/// §3, §7f): each failed row adds its own [`FailClass`] (review M4: set where
+/// the row is made, never read from its name): a comparison that came out no
+/// is 1 (NO), a supplied card that does not decode or is insufficient for the
+/// check (a template-only md1) is 2 (INVALID). A `partial` result (the origin
+/// is unspecified on the backup) adds 4 (UNVERIFIED). The bits sum; no failed
+/// row and no partial is 0. A failed row with no class is a bug: 101.
 pub(crate) fn verdict_exit_code(checks: &[VerifyCheck], partial: bool) -> u8 {
     use crate::exit_code::Bits;
     let mut bits = Bits::OK;
     for c in checks.iter().filter(|c| !c.passed) {
-        let base = c.name.split('[').next().unwrap_or("");
-        bits |= if base.ends_with("_decode") {
-            Bits::INVALID
-        } else {
-            Bits::NO
+        bits |= match c.failure {
+            FailClass::No => Bits::NO,
+            FailClass::Invalid => Bits::INVALID,
+            FailClass::Unclassified => {
+                debug_assert!(false, "verify-bundle row {} failed with no class", c.name);
+                return crate::exit_code::INTERNAL;
+            }
         };
     }
     if partial {
@@ -4196,6 +4276,11 @@ mod helper_tests {
         let row = |name: &str, passed: bool| VerifyCheck {
             name: name.into(),
             passed,
+            failure: if name.contains("_decode") || name == "md1_wallet_policy" {
+                FailClass::Invalid
+            } else {
+                FailClass::No
+            },
             ..VerifyCheck::default()
         };
         assert_eq!(verdict_exit_code(&[row("mk1_xpub_match", true)], false), 0);
@@ -4210,6 +4295,12 @@ mod helper_tests {
             3
         );
         assert_eq!(verdict_exit_code(&[row("ok", true)], true), 4);
+        // Review M4: a template-only md1 is insufficient input (2), not a
+        // mismatch, although its row name has no `_decode`.
+        assert_eq!(
+            verdict_exit_code(&[row("md1_wallet_policy", false)], false),
+            2
+        );
     }
 
     use super::*;

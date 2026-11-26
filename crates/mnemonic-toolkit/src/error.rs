@@ -74,9 +74,11 @@ pub enum ToolkitError {
     /// `build-descriptor` spec parse / input error (bad JSON, unknown field,
     /// unsupported schema_version, stdin/file read failure). Exit 2.
     BuildDescriptorSpec(String),
-    /// SPEC §6.1 exit-4 verify-bundle mismatch variant. `card` identifies the
-    /// mismatching card (e.g., "mk1", "md1", or "mk1[N]" for multisig cosigner N).
-    #[allow(dead_code)]
+    /// `bundle --self-check`: a card the toolkit itself just encoded does not
+    /// round-trip. `card` identifies it (e.g., "mk1", "md1", or "mk1[N]" for
+    /// multisig cosigner N). Exit 101 (INTERNAL, review M1): the cards were
+    /// built from the user's input, so their failing is the toolkit's bug
+    /// (§3 test 7), not a verdict on the input.
     BundleMismatch {
         card: String,
         message: String,
@@ -323,6 +325,15 @@ pub enum ToolkitError {
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
     NostrKeyParse(String),
+    /// A passphrase or password check on otherwise valid material came out
+    /// no (Brian's ruling on review M5): a BIP-38 key whose address hash
+    /// does not match under the passphrase given, or an Electrum BIE1 wallet
+    /// whose HMAC does not verify under the password given. Exit 1 (§3 test
+    /// 4), as me's `OpenFailed` and the BSMS MAC (`BsmsMacMismatch`). A
+    /// decryption with no authentication check to fail (Electrum field
+    /// encryption: a padding or UTF-8 failure, wrong password or corrupt
+    /// data alike) stays `BadInput` (2).
+    PassphraseMismatch(String),
     /// Exit-code spec §3 tests 3 and 5: the tool declined under a safety or
     /// policy rule that a flag, network, channel or different destination
     /// would waive, or a network mismatch. Exit 8.
@@ -639,7 +650,7 @@ impl ToolkitError {
             ToolkitError::BsmsTaprootImportRefused => INVALID,
             ToolkitError::BsmsTaprootRefused { .. } => INVALID,
             ToolkitError::BuildDescriptorSpec(_) => INVALID,
-            ToolkitError::BundleMismatch { .. } => NO,
+            ToolkitError::BundleMismatch { .. } => INTERNAL,
             ToolkitError::CompareCost(e) => e.exit_code(),
             ToolkitError::ConvertRefusal(_) => INVALID,
             ToolkitError::CosignerSpec { .. } => INVALID,
@@ -695,6 +706,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => INVALID,
             ToolkitError::NetworkMismatch { .. } => REFUSED,
             ToolkitError::NostrKeyParse(_) => INVALID,
+            ToolkitError::PassphraseMismatch(_) => NO,
             ToolkitError::Refused(_) => REFUSED,
             ToolkitError::Render(_) => INVALID,
             ToolkitError::Repair(_) => INVALID,
@@ -777,6 +789,7 @@ impl ToolkitError {
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
+            ToolkitError::PassphraseMismatch(_) => "PassphraseMismatch",
             ToolkitError::Refused(_) => "Refused",
             ToolkitError::Render(_) => "Render",
             ToolkitError::Repair(_) => "Repair",
@@ -976,6 +989,7 @@ impl ToolkitError {
                  mainnet vs testnet/signet/regtest only)"
             ),
             ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
+            ToolkitError::PassphraseMismatch(m) => m.clone(),
             ToolkitError::Refused(m) => m.clone(),
             // `RenderError`'s Display already carries a structural-guard message
             // ("malformed descriptor tree: …"); surface it via the source.
@@ -1197,7 +1211,7 @@ mod tests {
                     card: "mk1".into(),
                     message: "x".into(),
                 },
-                NO,
+                INTERNAL,
             ),
             (
                 ToolkitError::CompareCost(crate::cost::CompareCostError::Parse("x".into())),
@@ -1383,6 +1397,7 @@ mod tests {
                 REFUSED,
             ),
             (ToolkitError::NostrKeyParse("x".into()), INVALID),
+            (ToolkitError::PassphraseMismatch("x".into()), NO),
             (ToolkitError::Refused("x".into()), REFUSED),
             (
                 ToolkitError::Render(md_codec::RenderError::MalformedTree("x".into())),
@@ -1513,23 +1528,24 @@ mod tests {
             ToolkitError::MultisigConfig { .. } => 46,
             ToolkitError::NetworkMismatch { .. } => 47,
             ToolkitError::NostrKeyParse(_) => 48,
-            ToolkitError::Refused(_) => 49,
-            ToolkitError::Render(_) => 50,
-            ToolkitError::Repair(_) => 51,
-            ToolkitError::RepairShortCircuit { .. } => 52,
-            ToolkitError::RestoreMismatch { .. } => 53,
-            ToolkitError::SilentPayment(_) => 54,
-            ToolkitError::SlotInputViolation { .. } => 55,
-            ToolkitError::TemplateFormUnsupportedShape { .. } => 56,
-            ToolkitError::UnknownHrp { .. } => 57,
-            ToolkitError::Usage(_) => 58,
-            ToolkitError::VerifyMessage(_) => 59,
-            ToolkitError::WordCard(_) => 60,
-            ToolkitError::XpubSearchNoMatch { .. } => 61,
-            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 62,
+            ToolkitError::PassphraseMismatch(_) => 49,
+            ToolkitError::Refused(_) => 50,
+            ToolkitError::Render(_) => 51,
+            ToolkitError::Repair(_) => 52,
+            ToolkitError::RepairShortCircuit { .. } => 53,
+            ToolkitError::RestoreMismatch { .. } => 54,
+            ToolkitError::SilentPayment(_) => 55,
+            ToolkitError::SlotInputViolation { .. } => 56,
+            ToolkitError::TemplateFormUnsupportedShape { .. } => 57,
+            ToolkitError::UnknownHrp { .. } => 58,
+            ToolkitError::Usage(_) => 59,
+            ToolkitError::VerifyMessage(_) => 60,
+            ToolkitError::WordCard(_) => 61,
+            ToolkitError::XpubSearchNoMatch { .. } => 62,
+            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 63,
         }
     }
-    const VARIANT_COUNT: usize = 63;
+    const VARIANT_COUNT: usize = 64;
 
     #[test]
     fn exit_code_every_variant_has_its_class() {
@@ -1572,35 +1588,161 @@ mod tests {
         assert_eq!(m.exit_code(), NO);
     }
 
-    /// Every ms-codec and mk-codec variant this crate's pin has is classified
-    /// (the enums are `#[non_exhaustive]`; an unnamed one would be 101).
+    /// R13 (review M2): every named ms-codec, mk-codec and compare-cost
+    /// variant, each with its class written out here rather than read back
+    /// from the classifier. The codec enums are `#[non_exhaustive]`, so a
+    /// variant a later pin adds falls to the classifier's `_ => INTERNAL`
+    /// (101) until it is named there and here.
     #[test]
     fn codec_variants_have_their_class() {
-        use crate::exit_code::{INVALID, USAGE};
-        let ms = [
-            ms_codec::Error::MnemUnknownLanguage(9),
-            ms_codec::Error::WrongHrp { got: "mq".into() },
-            ms_codec::Error::ReservedPrefixViolation { got: 1 },
-            ms_codec::Error::SecretShareSuppliedToCombine,
-            ms_codec::Error::InconsistentShareSet,
+        use crate::cost::CompareCostError as C;
+        use crate::exit_code::{INVALID, REFUSED, USAGE};
+        let ms: Vec<(ms_codec::Error, u8)> = vec![
+            (
+                ms_codec::Error::Codex32(ms_codec::codex32::Error::InvalidLength(5)),
+                INVALID,
+            ),
+            (ms_codec::Error::MnemUnknownLanguage(9), INVALID),
+            (ms_codec::Error::WrongHrp { got: "mq".into() }, INVALID),
+            (ms_codec::Error::ThresholdNotZero { got: 2 }, INVALID),
+            (ms_codec::Error::ShareIndexNotSecret { got: 'a' }, INVALID),
+            (
+                ms_codec::Error::TagInvalidAlphabet { got: *b"zz!z" },
+                INVALID,
+            ),
+            (ms_codec::Error::UnknownTag { got: *b"zzzz" }, INVALID),
+            (
+                ms_codec::Error::ReservedTagNotEmittedInV01 { got: *b"seed" },
+                INVALID,
+            ),
+            (ms_codec::Error::ReservedPrefixViolation { got: 1 }, INVALID),
+            (
+                ms_codec::Error::UnexpectedStringLength {
+                    got: 51,
+                    allowed: &[],
+                },
+                INVALID,
+            ),
+            (
+                ms_codec::Error::PayloadLengthMismatch {
+                    tag: *b"entr",
+                    expected: &[16],
+                    got: 3,
+                },
+                INVALID,
+            ),
+            (ms_codec::Error::TooManyErrors { bound: 8 }, INVALID),
+            (ms_codec::Error::InvalidShareCount { k: 3, n: 2 }, USAGE),
+            (ms_codec::Error::InvalidThreshold(1), USAGE),
+            (
+                ms_codec::Error::IsShareNotSingleString {
+                    threshold: '2',
+                    index: 'a',
+                },
+                INVALID,
+            ),
+            (ms_codec::Error::SecretShareSuppliedToCombine, INVALID),
+            (ms_codec::Error::InconsistentShareSet, INVALID),
         ];
-        for e in ms {
-            assert_eq!(ToolkitError::MsCodec(e).exit_code(), INVALID);
+        for (e, class) in ms {
+            let shown = format!("{e:?}");
+            assert_eq!(ToolkitError::MsCodec(e).exit_code(), class, "{shown}");
         }
-        assert_eq!(
-            ToolkitError::MsCodec(ms_codec::Error::InvalidShareCount { k: 3, n: 2 }).exit_code(),
-            USAGE
-        );
-        let mk = [
-            mk_codec::Error::InvalidHrp("x".into()),
-            mk_codec::Error::MixedCase,
-            mk_codec::Error::InvalidStringLength(5),
-            mk_codec::Error::UnsupportedVersion(1),
-            mk_codec::Error::TrailingBytes,
+        let child = bitcoin::bip32::ChildNumber::from_normal_idx(0).unwrap();
+        let mk: Vec<(mk_codec::Error, u8)> = vec![
+            (mk_codec::Error::InvalidHrp("x".into()), INVALID),
+            (mk_codec::Error::MixedCase, INVALID),
+            (mk_codec::Error::InvalidStringLength(5), INVALID),
+            (
+                mk_codec::Error::InvalidChar {
+                    ch: 'b',
+                    position: 2,
+                },
+                INVALID,
+            ),
+            (mk_codec::Error::BchUncorrectable("x".into()), INVALID),
+            (mk_codec::Error::UnsupportedCardType(2), INVALID),
+            (mk_codec::Error::MalformedPayloadPadding, INVALID),
+            (mk_codec::Error::ChunkSetIdMismatch, INVALID),
+            (mk_codec::Error::ChunkedHeaderMalformed("x".into()), INVALID),
+            (mk_codec::Error::MixedHeaderTypes, INVALID),
+            (mk_codec::Error::CrossChunkHashMismatch, INVALID),
+            (mk_codec::Error::UnsupportedVersion(1), INVALID),
+            (mk_codec::Error::ReservedBitsSet, INVALID),
+            (mk_codec::Error::InvalidPolicyIdStubCount, INVALID),
+            (mk_codec::Error::InvalidPathIndicator(0), INVALID),
+            (mk_codec::Error::PathTooDeep(11), INVALID),
+            (mk_codec::Error::InvalidPathComponent("x".into()), INVALID),
+            (mk_codec::Error::InvalidXpubVersion(0xdeadbeef), INVALID),
+            (mk_codec::Error::InvalidXpubPublicKey("x".into()), INVALID),
+            (mk_codec::Error::UnexpectedEnd, INVALID),
+            (mk_codec::Error::TrailingBytes, INVALID),
+            (
+                mk_codec::Error::CardPayloadTooLarge {
+                    bytecode_len: 2,
+                    max_supported: 1,
+                },
+                INVALID,
+            ),
+            (
+                mk_codec::Error::XpubOriginPathMismatch {
+                    xpub_depth: 1,
+                    path_depth: 2,
+                    xpub_child: child,
+                    path_child: None,
+                },
+                INVALID,
+            ),
         ];
-        for e in mk {
-            assert_eq!(ToolkitError::MkCodec(e).exit_code(), INVALID);
+        for (e, class) in mk {
+            let shown = format!("{e:?}");
+            assert_eq!(ToolkitError::MkCodec(e).exit_code(), class, "{shown}");
         }
+        let cost: Vec<(C, u8)> = vec![
+            (C::Parse("x".into()), INVALID),
+            (
+                C::ContextIncompat {
+                    valid_in: "wsh",
+                    invalid_in: "tr",
+                    detail: "x".into(),
+                },
+                INVALID,
+            ),
+            (C::UnsupportedWrapper("pkh".into()), INVALID),
+            (C::MultiLeafTr, INVALID),
+            (C::ConditionsTooMany { raw: 9, cap: 1 }, REFUSED),
+            (C::NoSatisfyingConditions, INVALID),
+        ];
+        for (e, class) in cost {
+            let shown = format!("{e:?}");
+            assert_eq!(ToolkitError::CompareCost(e).exit_code(), class, "{shown}");
+        }
+    }
+
+    /// R13 (review M2): `variant_index` is dense, `0..VARIANT_COUNT` with each
+    /// index once, read from this file's own source. A variant added with an
+    /// arm but without bumping `VARIANT_COUNT` (or without a table row, which
+    /// `exit_code_every_variant_has_its_class` then reports) cannot pass.
+    #[test]
+    fn variant_index_is_dense_and_counted() {
+        let src = include_str!("error.rs");
+        let start = src.find("fn variant_index(e: &ToolkitError)").expect("fn");
+        let end = start + src[start..].find("const VARIANT_COUNT").expect("const");
+        let mut idx: Vec<usize> = src[start..end]
+            .lines()
+            .filter(|l| l.trim_start().starts_with("ToolkitError::"))
+            .map(|l| {
+                l.trim()
+                    .trim_end_matches(',')
+                    .rsplit("=> ")
+                    .next()
+                    .unwrap()
+                    .parse()
+                    .unwrap_or_else(|_| panic!("arm without a number: {l}"))
+            })
+            .collect();
+        idx.sort_unstable();
+        assert_eq!(idx, (0..VARIANT_COUNT).collect::<Vec<_>>());
     }
 
     #[test]

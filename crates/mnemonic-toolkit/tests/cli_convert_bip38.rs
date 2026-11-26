@@ -430,7 +430,9 @@ fn refusal_bip38_to_wif_wrong_passphrase() {
         ])
         .assert()
         .failure()
-        .code(2);
+        // Review M5: the address-hash check proves the passphrase wrong on a
+        // key whose base58check already passed, so this is NO (1), not 2.
+        .code(1);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: BIP-38 decryption failed: passphrase does not match the encrypted key (per BIP-38 §\"Decryption\" address-hash check).\n"),

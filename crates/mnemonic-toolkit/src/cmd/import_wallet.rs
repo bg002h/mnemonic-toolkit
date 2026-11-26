@@ -2384,14 +2384,17 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
 /// Map a library-local `EciesDecryptError` to a CLI-boundary `ToolkitError`.
 /// The wrong-password / corruption modes (`HmacMismatch`, `AesDecryptFailure`)
 /// are UNIFIED into one non-leaky message (mirrors `electrum-decrypt`).
+///
+/// Review M5 ruling: the HMAC is the wallet's authentication check, so its
+/// failing is the password check coming out no (1, `PassphraseMismatch`), as
+/// a BSMS MAC or me's `OpenFailed`; an AES failure AFTER the HMAC verified is
+/// corrupt data (2). The message stays the same for both.
 fn map_ecies_storage_error(e: EciesDecryptError) -> ToolkitError {
+    const FAILED: &str =
+        "import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)";
     match e {
-        EciesDecryptError::HmacMismatch | EciesDecryptError::AesDecryptFailure => {
-            ToolkitError::BadInput(
-                "import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)"
-                    .to_string(),
-            )
-        }
+        EciesDecryptError::HmacMismatch => ToolkitError::PassphraseMismatch(FAILED.to_string()),
+        EciesDecryptError::AesDecryptFailure => ToolkitError::BadInput(FAILED.to_string()),
         other => ToolkitError::BadInput(format!("import-wallet: electrum: {other}")),
     }
 }

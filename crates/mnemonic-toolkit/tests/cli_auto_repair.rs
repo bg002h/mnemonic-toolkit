@@ -710,3 +710,41 @@ fn cell_33_convert_default_pipe_no_auto_fire() {
         .code(predicate::ne(5))
         .stdout(predicate::str::contains("# Repair report").not());
 }
+
+/// R14 (review M3): the auto-repair JSON's `exit_code` is the process status.
+/// Here an mk1 decoded through a BCH correction (R6: 16, kept on the later
+/// failure) precedes an md1 that triggers auto-repair (R7: 2), so the status
+/// is 18 and the envelope says 18.
+#[test]
+fn m3_auto_repair_json_exit_code_is_the_process_status_with_r6() {
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "1")
+        .args([
+            "inspect",
+            "--json",
+            "--mk1",
+            VALID_MK1_CHUNK0,
+            "--mk1",
+            &flip_at(VALID_MK1_CHUNK1, 25),
+            "--md1",
+            &flip_at(VALID_MD1_CHUNK0, 20),
+            "--md1",
+            VALID_MD1_CHUNK1,
+            "--md1",
+            VALID_MD1_CHUNK2,
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(18));
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    let envelope = stdout
+        .lines()
+        .find(|l| l.contains("auto_repair_short_circuit"))
+        .expect("auto-repair envelope");
+    let v: serde_json::Value = serde_json::from_str(envelope).unwrap();
+    assert_eq!(
+        v["exit_code"], 18,
+        "R14: the JSON states the process status"
+    );
+}

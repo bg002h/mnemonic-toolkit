@@ -10,17 +10,24 @@
 //!   - D9 sensitive-secret stderr warning when corrected ms1 hits stdout
 //!
 //! Exit codes (`SPEC_constellation_exit_codes.md` §3; D26's meanings, new numbers):
-//!   - 0 — all chunks already valid (no repair applied)
+//!   - 0 — all chunks already valid and every string decodes (an incomplete
+//!         md1 or mk1 set of clean chunks included)
 //!   - 16 — REPAIRED: a blessed correction (mk1/md1 full-set reassembly-
 //!         confirmed), a unique full-checksum indel, or a correction in an
-//!         INCOMPLETE mk1 chunk set (verifiable by reassembly later; decision 7)
+//!         INCOMPLETE mk1 or md1 chunk set, a lone chunk included (verifiable
+//!         by reassembly later; decision 7)
 //!   - 20 — 16 + 4, verify before trusting: a correction with no oracle (ms1
 //!         substitution-correction — Cycle F; non-chunked md1; ambiguous or
 //!         substitution-bearing indel)
-//!   - 22 — 20 + 2: F-642 ruling 8, a corrected SINGLE-STRING md1 at a wire
-//!         version this build cannot read (printed, but it does not decode;
-//!         decision 6); see `repair::correct_unreadable_md1`
-//!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
+//!   - 22 — 20 + 2: a corrected single string printed although it does not
+//!         decode as a card (decision 6): ms1, a non-chunked md1 (F-642's
+//!         unreadable wire version included), a single-string mk1
+//!   - 18 — 16 + 2: a corrected mk1 chunk whose header does not parse,
+//!         printed (decision 6); a clean one adds only 2
+//!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure,
+//!         nothing printed: an uncorrectable string, a clean string or
+//!         complete set that does not decode, a corrected complete set that
+//!         does not reassemble
 
 use crate::error::ToolkitError;
 use crate::indel::{IndelCandidate, IndelDirection, IndelOutcome, IndelRegion};
@@ -195,6 +202,20 @@ pub fn run<R: Read, W: Write, E: Write>(
                     None => Err(RepairError::WireVersionUnsupported { got }),
                 }
             }
+            // Decisions 6 and 7 (review I1, I2): an incomplete md1 set is
+            // corrected chunk by chunk and printed (16, or 0 if clean), and a
+            // corrected non-chunked string that does not decode is printed
+            // (22), as `md repair` does. Anything else keeps its error.
+            Err(e) if *kind == CardKind::Md1 => match repair::md1_printed_despite_failure(chunks) {
+                Some(r) => r,
+                None => Err(e),
+            },
+            // Decision 6 (review I2): a corrected ms1 that is not a card is
+            // printed (22), as `ms repair` does.
+            Err(e) if *kind == CardKind::Ms1 => match repair::ms1_printed_despite_failure(chunks) {
+                Some(o) => Ok(o),
+                None => Err(e),
+            },
             other => other,
         };
         match result {
@@ -223,6 +244,12 @@ pub fn run<R: Read, W: Write, E: Write>(
                         writeln!(stderr, "repair: {reason}").ok();
                     }
                     repair::SetVerify::Blessed | repair::SetVerify::UnreadableVersion { .. } => {}
+                }
+                // Decision 6: a printed string that does not decode as a
+                // card adds 2 (INVALID).
+                for line in &outcome.not_a_card {
+                    writeln!(stderr, "repair: error: {line}").ok();
+                    invalid_seen = true;
                 }
             }
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {

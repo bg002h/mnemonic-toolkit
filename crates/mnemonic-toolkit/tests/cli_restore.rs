@@ -383,7 +383,7 @@ fn restore_expect_fingerprint_mismatch_exit_4_no_descriptors() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(1), "mismatch must be exit 4");
+    assert_eq!(out.status.code(), Some(1), "mismatch must be exit 1 (NO)");
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
         !stdout.contains("wpkh("),
@@ -723,7 +723,7 @@ fn restore_format_mismatch_no_allow_exit_4_no_payload() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(1), "mismatch must be exit 4");
+    assert_eq!(out.status.code(), Some(1), "mismatch must be exit 1 (NO)");
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
         stdout.is_empty(),
@@ -1187,4 +1187,59 @@ fn restore_format_descriptor_unaffected_by_collect_missing() {
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert_eq!(stdout.trim_end(), DESC_BIP84, "stdout payload:\n{stdout}");
+}
+
+/// Exit-code spec decision 2 (review I5): a malformed `--expect-fingerprint`
+/// or `--expect-xpub` is wrong input (2), refused before the comparison, so
+/// it is neither a mismatch (1) nor waved through by `--allow-mismatch` (0).
+#[test]
+fn i5_malformed_expect_reference_is_input_2_even_with_allow_mismatch() {
+    for (flag, value) in [
+        ("--expect-fingerprint", "zz"),
+        ("--expect-fingerprint", "ZZZZZZZZ"),
+        ("--expect-fingerprint", "73c5da0"),
+        ("--expect-xpub", "garbage"),
+        (
+            "--expect-xpub",
+            &ACCT_XPUB_BIP84[..ACCT_XPUB_BIP84.len() - 1],
+        ),
+    ] {
+        for allow in [false, true] {
+            let mut c = bin();
+            c.args([
+                "restore",
+                "--from",
+                &format!("phrase={TREZOR_12}"),
+                "--template",
+                "bip84",
+                flag,
+                value,
+            ]);
+            if allow {
+                c.arg("--allow-mismatch");
+            }
+            let out = c.output().expect("spawn");
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert_eq!(
+                out.status.code(),
+                Some(2),
+                "{flag} {value} allow={allow}: {stderr}"
+            );
+            assert!(out.stdout.is_empty(), "{flag} {value}: nothing written");
+            assert!(!stderr.contains("MISMATCH"), "{flag} {value}: {stderr}");
+        }
+    }
+    // Upper-case hex is still a fingerprint (compared case-insensitively).
+    bin()
+        .args([
+            "restore",
+            "--from",
+            &format!("phrase={TREZOR_12}"),
+            "--template",
+            "bip84",
+            "--expect-fingerprint",
+            &FP_NO_PP.to_uppercase(),
+        ])
+        .assert()
+        .code(0);
 }

@@ -175,6 +175,26 @@ pub struct VerifyCheck {
     /// Also used for skipped checks: `Some("skipped: <reason>")`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decode_error: Option<String>,
+    /// What a FAILED row says, for the exit status (exit-code spec §3, §7f;
+    /// review M4): set at every row, never read from the row's name. Not
+    /// serialized.
+    #[serde(skip)]
+    pub failure: FailClass,
+}
+
+/// The class a failed [`VerifyCheck`] row contributes to `verify-bundle`'s
+/// exit status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FailClass {
+    /// No class was given. A failed row left so is a toolkit bug: the
+    /// verdict is 101 (and a debug build asserts).
+    #[default]
+    Unclassified,
+    /// A comparison against the expected bundle came out no (§3 test 4): 1.
+    No,
+    /// A supplied card does not decode, or is insufficient for the check
+    /// (a template-only md1 where a wallet policy is needed; test 6): 2.
+    Invalid,
 }
 
 impl Default for VerifyCheck {
@@ -187,6 +207,7 @@ impl Default for VerifyCheck {
             actual: None,
             diff_byte_offset: None,
             decode_error: None,
+            failure: FailClass::Unclassified,
         }
     }
 }
@@ -610,6 +631,7 @@ mod tests {
             actual: Some("ms1abcXX".into()),
             diff_byte_offset: Some(6),
             decode_error: None,
+            failure: FailClass::No,
         };
         let json = serde_json::to_string(&vc).unwrap();
         assert!(json.contains("\"expected\":\"ms1abcde\""));

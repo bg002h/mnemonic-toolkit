@@ -38,20 +38,20 @@ pub enum CompareCostError {
     /// script contexts. Exit 2.
     Parse(String),
     /// Input miniscript valid in one context but not the other after
-    /// `multi ↔ multi_a` rewriting. Exit 3.
+    /// `multi ↔ multi_a` rewriting. Exit 2.
     ContextIncompat {
         valid_in: &'static str,
         invalid_in: &'static str,
         detail: String,
     },
-    /// Descriptor wrapper not in {`wsh`, `sh(wsh)`, single-leaf `tr`}. Exit 3.
+    /// Descriptor wrapper not in {`wsh`, `sh(wsh)`, single-leaf `tr`}. Exit 2.
     UnsupportedWrapper(String),
-    /// Multi-leaf `tr(IK, {M1, M2, …})` descriptor input. Exit 3.
+    /// Multi-leaf `tr(IK, {M1, M2, …})` descriptor input. Exit 2.
     MultiLeafTr,
     /// Spending-condition power-set pre-check would exceed `--max-conditions`
-    /// hard cap. Exit 3.
+    /// hard cap. Exit 8 (REFUSED: a larger `--max-conditions` waives it).
     ConditionsTooMany { raw: usize, cap: usize },
-    /// Miniscript has zero satisfying conditions (degenerate). Exit 3.
+    /// Miniscript has zero satisfying conditions (degenerate). Exit 2.
     NoSatisfyingConditions,
 }
 
