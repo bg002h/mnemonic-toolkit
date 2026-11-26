@@ -148,7 +148,7 @@ secret from stdin"**, which you point at a file with the shell's `< file`
 redirect:
 
 MD
-show "mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed.txt"
+show "mnemonic bundle --scheme bip84 --network mainnet --slot @0.phrase=- < seed.txt"
 cat <<'MD'
 
 This is the **secure** idiom: the phrase travels on stdin, so it never appears
@@ -232,11 +232,11 @@ run "printf '%s\n' '$S0' > seed0.txt"
 run 'cat seed0.txt'
 cat <<'MD'
 
-(`--template` choices for single-sig: `bip44`, `bip49`, `bip84`, `bip86`.) Run
+(`--scheme` choices for single-sig: `bip44`, `bip49`, `bip84`, `bip86`.) Run
 the bundle. stdout carries the three cards to engrave; stderr carries the
 human-readable engraving panel and the secret-material warning:
 MD
-run 'mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed0.txt'
+run 'mnemonic bundle --scheme bip84 --network mainnet --slot @0.phrase=- < seed0.txt'
 cat <<'MD'
 
 Each card is printed once, grouped into 5-character blocks
@@ -260,34 +260,34 @@ run "printf '%s\n' '$S2' > seed2.txt"
 cat <<'MD'
 
 On each device, derive that cosigner's BIP-87 multisig fingerprint and account
-xpub (`--template wsh-sortedmulti` implies the `m/87'/0'/0'` path) from the seed
+xpub (`--scheme wsh-sortedmulti` implies the `m/87'/0'/0'` path) from the seed
 file. Cosigner @0:
 MD
 run 'cat seed0.txt'
-run 'mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed0.txt'
-run 'mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed0.txt'
+run 'mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed0.txt'
+run 'mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed0.txt'
 cat <<'MD'
 
 Cosigner @1:
 MD
 run 'cat seed1.txt'
-run 'mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed1.txt'
-run 'mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed1.txt'
+run 'mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed1.txt'
+run 'mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed1.txt'
 cat <<'MD'
 
 Cosigner @2:
 MD
 run 'cat seed2.txt'
-run 'mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed2.txt'
-run 'mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed2.txt'
+run 'mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed2.txt'
+run 'mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed2.txt'
 
 # Assemble the descriptor from the captured public keys (no secrets involved).
-FP0=$(mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed0.txt 2>/dev/null | sed -n 's/^fingerprint: //p')
-XP0=$(mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed0.txt 2>/dev/null | sed -n 's/^xpub: //p')
-FP1=$(mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed1.txt 2>/dev/null | sed -n 's/^fingerprint: //p')
-XP1=$(mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed1.txt 2>/dev/null | sed -n 's/^xpub: //p')
-FP2=$(mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed2.txt 2>/dev/null | sed -n 's/^fingerprint: //p')
-XP2=$(mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed2.txt 2>/dev/null | sed -n 's/^xpub: //p')
+FP0=$(mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed0.txt 2>/dev/null | sed -n 's/^fingerprint: //p')
+XP0=$(mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed0.txt 2>/dev/null | sed -n 's/^xpub: //p')
+FP1=$(mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed1.txt 2>/dev/null | sed -n 's/^fingerprint: //p')
+XP1=$(mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed1.txt 2>/dev/null | sed -n 's/^xpub: //p')
+FP2=$(mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed2.txt 2>/dev/null | sed -n 's/^fingerprint: //p')
+XP2=$(mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed2.txt 2>/dev/null | sed -n 's/^xpub: //p')
 K0="[$FP0/87'/0'/0']$XP0"
 K1="[$FP1/87'/0'/0']$XP1"
 K2="[$FP2/87'/0'/0']$XP2"
@@ -340,13 +340,13 @@ set** -- one `ms1` per cosigner -- not the watch-only placeholders of 3.3:
 MD
 export SEED0="$(cat seed0.txt)" SEED1="$(cat seed1.txt)" SEED2="$(cat seed2.txt)"
 run 'export SEED0="$(cat seed0.txt)" SEED1="$(cat seed1.txt)" SEED2="$(cat seed2.txt)"'
-run 'mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=@env:SEED0" --slot "@1.phrase=@env:SEED1" --slot "@2.phrase=@env:SEED2"'
+run 'mnemonic bundle --scheme wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=@env:SEED0" --slot "@1.phrase=@env:SEED1" --slot "@2.phrase=@env:SEED2"'
 cat <<'MD'
 
 Only one secret may arrive on stdin, so you cannot replace more than one
 substitution with the `=-` file-redirect form -- a second `=-` is rejected:
 MD
-run 'mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=@env:SEED2" < seed0.txt'
+run 'mnemonic bundle --scheme wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=@env:SEED2" < seed0.txt'
 
 cat <<'MD'
 

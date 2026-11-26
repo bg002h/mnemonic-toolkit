@@ -6,8 +6,8 @@ S1="abandon abandon abandon abandon abandon abandon abandon abandon abandon aban
 S2="legal winner thank year wave sausage worth useful legal winner thank yellow"
 S3="letter advice cage absurd amount doctor acoustic avoid letter advice cage above"
 
-fp () { printf '%s' "$1" | $B convert --from phrase=- --to fingerprint --template bip84 --network mainnet 2>/dev/null | sed -n 's/^fingerprint: //p'; }
-xp () { printf '%s' "$1" | $B convert --from phrase=- --to xpub --template bip84 --account "$2" --network mainnet 2>/dev/null | sed -n 's/^xpub: //p'; }
+fp () { printf '%s' "$1" | $B convert --from phrase=- --to fingerprint --scheme bip84 --network mainnet 2>/dev/null | sed -n 's/^fingerprint: //p'; }
+xp () { printf '%s' "$1" | $B convert --from phrase=- --to xpub --scheme bip84 --account "$2" --network mainnet 2>/dev/null | sed -n 's/^xpub: //p'; }
 
 declare -A FP
 FP[1]=$(fp "$S1"); FP[2]=$(fp "$S2"); FP[3]=$(fp "$S3")

@@ -37,7 +37,7 @@ redirect:
 
 
 ```
-$ mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed.txt
+$ mnemonic bundle --scheme bip84 --network mainnet --slot @0.phrase=- < seed.txt
 ```
 
 This is the **secure** idiom: the phrase travels on stdin, so it never appears
@@ -241,12 +241,12 @@ $ cat seed0.txt
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about
 ```
 
-(`--template` choices for single-sig: `bip44`, `bip49`, `bip84`, `bip86`.) Run
+(`--scheme` choices for single-sig: `bip44`, `bip49`, `bip84`, `bip86`.) Run
 the bundle. stdout carries the three cards to engrave; stderr carries the
 human-readable engraving panel and the secret-material warning:
 
 ```
-$ mnemonic bundle --template bip84 --network mainnet --slot @0.phrase=- < seed0.txt
+$ mnemonic bundle --scheme bip84 --network mainnet --slot @0.phrase=- < seed0.txt
 # ms1 (entropy, BCH-checksummed)
 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
@@ -300,7 +300,7 @@ $ printf '%s\n' 'letter advice cage absurd amount doctor acoustic avoid letter a
 ```
 
 On each device, derive that cosigner's BIP-87 multisig fingerprint and account
-xpub (`--template wsh-sortedmulti` implies the `m/87'/0'/0'` path) from the seed
+xpub (`--scheme wsh-sortedmulti` implies the `m/87'/0'/0'` path) from the seed
 file. Cosigner @0:
 
 ```
@@ -309,12 +309,12 @@ abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon 
 ```
 
 ```
-$ mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed0.txt
+$ mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed0.txt
 fingerprint: 73c5da0a
 ```
 
 ```
-$ mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed0.txt
+$ mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed0.txt
 xpub: xpub6DBjiYnc4ewKti13Q1L35bqdodw5z3VGJnf516B3icHrEGEUcCuCG5GVQDZtH8Xmsyt3Fs9YDNwLaqjUbbRidwXZ6sxufZcr4VqqzrXvicM
 note: stdout is watch-only — public keys only, cannot spend
 ```
@@ -327,12 +327,12 @@ legal winner thank year wave sausage worth useful legal winner thank yellow
 ```
 
 ```
-$ mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed1.txt
+$ mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed1.txt
 fingerprint: b8688df1
 ```
 
 ```
-$ mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed1.txt
+$ mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed1.txt
 xpub: xpub6CbhrPzY2z7NcCGCGjLAJLq8iRyjUfwmdXQs66MxTVUReKqb9DpLnVJ5D1qpatZjUuPGTyxf5TYU1vA34YFE9FHB4TvfYmokYLVsyEFZFt9
 note: stdout is watch-only — public keys only, cannot spend
 ```
@@ -345,12 +345,12 @@ letter advice cage absurd amount doctor acoustic avoid letter advice cage above
 ```
 
 ```
-$ mnemonic convert --from phrase=- --to fingerprint --template wsh-sortedmulti --network mainnet < seed2.txt
+$ mnemonic convert --from phrase=- --to fingerprint --scheme wsh-sortedmulti --network mainnet < seed2.txt
 fingerprint: 28645006
 ```
 
 ```
-$ mnemonic convert --from phrase=- --to xpub        --template wsh-sortedmulti --network mainnet < seed2.txt
+$ mnemonic convert --from phrase=- --to xpub        --scheme wsh-sortedmulti --network mainnet < seed2.txt
 xpub: xpub6DB7HNqw6CZojxN85NuFTPWZhi2FagSnexPS1rv3nYQhngkmdHgb7iebYvTFmFKKDA3ozf5yezDsCH6cXAw3WZijviSZtZC2hjHn2uazz4z
 note: stdout is watch-only — public keys only, cannot spend
 ```
@@ -457,7 +457,7 @@ $ export SEED0="$(cat seed0.txt)" SEED1="$(cat seed1.txt)" SEED2="$(cat seed2.tx
 ```
 
 ```
-$ mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=@env:SEED0" --slot "@1.phrase=@env:SEED1" --slot "@2.phrase=@env:SEED2"
+$ mnemonic bundle --scheme wsh-sortedmulti --threshold 2 --network mainnet --slot "@0.phrase=@env:SEED0" --slot "@1.phrase=@env:SEED1" --slot "@2.phrase=@env:SEED2"
 # ms1[0] (entropy, BCH-checksummed)
 ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 
@@ -503,7 +503,7 @@ Only one secret may arrive on stdin, so you cannot replace more than one
 substitution with the `=-` file-redirect form -- a second `=-` is rejected:
 
 ```
-$ mnemonic bundle --template wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=@env:SEED2" < seed0.txt
+$ mnemonic bundle --scheme wsh-sortedmulti --threshold 2 --network mainnet --slot @0.phrase=- --slot @1.phrase=- --slot "@2.phrase=@env:SEED2" < seed0.txt
 error: at most one --slot @N.<secret>=- per invocation (single stdin per invocation)
 ```
 

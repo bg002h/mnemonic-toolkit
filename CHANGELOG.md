@@ -18,10 +18,9 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
   hidden alias.
 - **`xpub-search --add-path`**: the value is shown as `<PATH>` (a derivation path pattern), not `<TEMPLATE>`. The
   no-match hint says "additional derivation path patterns via --add-path".
-- Every error, remedy and note that named `--template` or `--archetype` now prints `--scheme`, and the structured
-  `flag` value of the refusals that carried `"--template"` is `"--scheme"`. `gui-schema` lists `--scheme` (its
-  conditional rules name `--scheme`); the hidden aliases are not listed. JSON keys are unchanged (FOLLOWUPS
-  `scheme-name-json-keys`).
+- Every error, remedy and note that named `--template` or `--archetype` now prints `--scheme`. `gui-schema` lists
+  `--scheme` (its conditional rules name `--scheme`); the hidden aliases are not listed. JSON keys are unchanged
+  (FOLLOWUPS `scheme-name-json-keys`). `.examples-build` (Examples.md) types `--scheme`.
 - Manual: chapter 41 (`mnemonic`), 42 (`md compose --preset` → `--scheme`), 43 (`ms derive --template` →
   `--origin-path`) and 45 (`mr create`/`mr units --template-preset` → `--scheme`), the workflow chapters, quickstart,
   technical manual and transcripts.

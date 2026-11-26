@@ -215,7 +215,7 @@ fn build_descriptor_archetype_is_a_hidden_alias_of_scheme() {
     assert_help_shows_scheme_only("build-descriptor", "--archetype");
 }
 
-/// A refusal reached through the old spelling names the new one.
+/// A runtime refusal about a missing scheme names `--scheme`, not `--template`.
 #[test]
 fn remedies_name_scheme() {
     let o = run(&["export-wallet", "--format", "descriptor"]);
@@ -280,4 +280,50 @@ fn gui_schema_lists_scheme_not_aliases() {
         !o.stdout.contains("\"--template\""),
         "conditional rules must name --scheme"
     );
+}
+
+/// Error paths: under the old spelling a refusal is byte-identical (stdout,
+/// stderr, exit code) to the same refusal under `--scheme`, and names `--scheme`.
+#[test]
+fn refusals_are_identical_under_the_alias() {
+    let cases: &[(&[&str], &str)] = &[
+        // clap conflict: a scheme beside --descriptor.
+        (
+            &[
+                "export-wallet",
+                "{flag}",
+                "bip84",
+                "--descriptor",
+                "wpkh(@0/<0;1>/*)",
+            ],
+            "--template",
+        ),
+        // clap value error: an unknown scheme name.
+        (
+            &["bundle", "--network", "mainnet", "{flag}", "bogus"],
+            "--template",
+        ),
+        // clap conflict: a scheme beside --spec.
+        (
+            &[
+                "build-descriptor",
+                "{flag}",
+                "kofn-recovery",
+                "--spec",
+                "x.json",
+            ],
+            "--archetype",
+        ),
+        // runtime refusal: a multisig scheme for single-sig restore.
+        (
+            &["restore", "--from", "phrase=-", "{flag}", "wsh-sortedmulti"],
+            "--template",
+        ),
+    ];
+    for (args, old) in cases {
+        let o = assert_alias_identical(args, old);
+        assert_ne!(o.code, 0, "{args:?} must be refused: {}", o.stdout);
+        assert!(o.stderr.contains("--scheme"), "{args:?}: {}", o.stderr);
+        assert!(!o.stderr.contains(old), "{args:?}: {}", o.stderr);
+    }
 }
