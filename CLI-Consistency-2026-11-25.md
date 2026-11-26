@@ -23,10 +23,14 @@ of the report is written assuming it.
 2. **Consent-flag prefix (CLI-08). Decided by Brian on 2026-11-26: `--allow-`.**
    The other candidate was `--accept-` (used across mr). Attestations use
    `--confirm-`; `mr` is still alpha, so renaming its flags is cheapest now.
-3. **The toolkit's `--template` (CLI-06).** It names a preset (`bip84`,
-   `wsh-sortedmulti`), while `md` and `mr` use `--template` for BIP-388 template
-   text. *Recommended: rename to `--preset`*, keeping `--template` as an alias
-   for longer than usual because it is the toolkit's most-typed flag.
+3. **`--template` and named shapes (CLI-06). Decided by Brian on 2026-11-26.**
+   `--template` means BIP-388 template text only. Named wallet shapes become
+   `--scheme NAME` (BIP-43: "Scheme described in BIP44"; BIP-388: "Common
+   multisig schemes"), and named account paths become `--origin-path NAME`.
+   Old names stay as hidden aliases, the toolkit's `--template` for longer than
+   usual because it is its most-typed flag. This replaces the earlier
+   `--preset` proposal, which failed the test of using BIP and bitcoin-dev
+   wording; the consult is in the project's `cli-review/template-naming-2026-11-26.md`.
 
 ## Part A. Recommendations for mnemonic-toolkit (`mnemonic`)
 
@@ -48,7 +52,7 @@ the constellation exit-code table (CLI-14) and the glossary (CLI-11) belong here
 
 | # | item | now | proposed |
 | --- | --- | --- | --- |
-| tk-5 | CLI-06 | `--template bip84\|wsh-sortedmulti\|…` (bundle, verify-bundle, convert, restore, export-wallet); `build-descriptor --archetype` | `--preset` for both (decision 3), `--template` and `--archetype` as aliases; one archetype list shared with `md compose --preset` |
+| tk-5 | CLI-06 | `--template bip84\|wsh-sortedmulti\|…` (bundle, verify-bundle, convert, restore, export-wallet); `build-descriptor --archetype` | `--scheme` for both (decision 3), `--template` and `--archetype` as aliases; one scheme list shared with `md compose --scheme` |
 | tk-6 | CLI-05 | `--origin` (restore, verify-bundle) | `--origin-path` (keep alias) |
 | tk-7 | CLI-05 | `--privacy-preserving` | `--no-fingerprints` (keep alias) |
 | tk-8 | CLI-05 | `--multisig-path-family bip48\|bip87` | names from the shared named-path table |
@@ -153,7 +157,7 @@ and presentation.
 | CLI-03 | Every file a tool writes is created 0600 (`--json-out`, `--output`) | P1 | toolkit |
 | CLI-04 | `--separator space` accepted by every encoder | P1 | transaction |
 | CLI-05 | Key, fingerprint and path flags: one name per concept | P2 | md, mk, toolkit, refugium, ms |
-| CLI-06 | `--template` means a BIP-388 template; named shapes are `--preset` | P2 | toolkit, ms, refugium, md |
+| CLI-06 | `--template` means a BIP-388 template; named shapes are `--scheme` | P2 | toolkit, ms, refugium, md |
 | CLI-07 | Address ranges and chains: one vocabulary | P2 | md, mk, toolkit, refugium |
 | CLI-08 | Consent flags start with `--allow-`; attestations with `--confirm-` | P2 | refugium, md, ms, engrave, toolkit |
 | CLI-09 | Output form: `--to` for forms, `--format` for external formats, `--out`/`--json` for channels | P2 | toolkit, md, refugium, engrave |
@@ -327,10 +331,11 @@ archetype names overlap). `mr --preset none|classic` is a *slot table*, not a
 shape.
 
 **Standard.** `--template` is only ever BIP-388 template text. A named shape is
-`--preset NAME` (toolkit `--template` and `--archetype`, `mr --template-preset`).
+`--scheme NAME` (toolkit `--template` and `--archetype`, `mr --template-preset`,
+`md compose --preset`; decided 2026-11-26).
 `mr`'s slot-table preset becomes `--slot-preset`. `ms derive --template`
 becomes `--origin-path NAME` with the shared named-path table (CLI-05). One
-archetype list for `md compose --preset` and `mnemonic build-descriptor`, or
+scheme list for `md compose --scheme` and `mnemonic build-descriptor`, or
 help text saying why they differ.
 
 **Breaking?** Not with aliases, but the toolkit's `--template` is the most-typed
