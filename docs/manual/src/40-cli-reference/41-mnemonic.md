@@ -752,7 +752,7 @@ The miniscript body is single-line; using a shell variable keeps the
 recipe readable while preserving that constraint:
 
 ```sh
-DESC='wsh(andor(pkh(@0/*),after(12000000),or_i(and_v(v:pkh(@1/*),older(4032)),and_v(v:pkh(@2/*),older(32768)))))'
+DESC='wsh(andor(pkh(@0/<0;1>/*),after(12000000),or_i(and_v(v:pkh(@1/<0;1>/*),older(4032)),and_v(v:pkh(@2/<0;1>/*),older(32768)))))'
 ```
 
 ##### Default text-form output
@@ -808,7 +808,7 @@ the only child of `wsh`, `sh` or `sh(wsh)` is `multi`, `sortedmulti`,
 `multi_a`, `sortedmulti_a`, or a `thresh` whose children are all
 `pk`/`pkh` keys with only `s:`/`a:` wrappers, or when that operator is
 the only leaf of a `tr` whose internal key is the NUMS point. A
-single-key bundle prints neither line. The `6e6be` / `6e6b` short tags
+single-key bundle prints neither line. The `abd03` / `abd0` short tags
 are chunk-set-id hex prefixes for the corresponding cards, useful when
 matching a recovered card-set back to its bundle.
 
@@ -924,16 +924,17 @@ PLACEHOLDER — generated from transcripts/41-inheritance.out lines 1-2 at build
 The `info:` line is the v0.19.0 silent-default-with-stderr-notice
 feature firing on this recipe's non-canonical `wsh(andor(...))`
 descriptor — the BIP-48 origin path is inferred silently and the
-bundle proceeds. `verify-bundle` emits no info-notice (the default-path
-inference fired once at bundle-time and is now baked into the envelope).
+bundle proceeds. `verify-bundle` prints its own `info:` line (the first
+line of its output below), naming the path it assumes to rebuild the
+expected cards.
 Neither command emits a secret-on-argv line, because the three phrases
 arrive through the `@env:` sentinel rather than on argv — on argv they
 would be REFUSED before the command line was parsed.
 
 Expected output (one block per cosigner; final `result: ok`):
 
-```{.text include="41-inheritance.out" lines="3-24"}
-PLACEHOLDER — generated from transcripts/41-inheritance.out lines 3-24 at build
+```{.text include="41-inheritance.out" lines="3-26"}
+PLACEHOLDER — generated from transcripts/41-inheritance.out lines 3-26 at build
 ```
 
 Per SPEC §5.8 emission rule (v0.21.0+), descriptor mode populates
