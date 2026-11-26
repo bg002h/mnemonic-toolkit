@@ -709,32 +709,52 @@ descriptor string itself. The toolkit handles this two ways:
 
 1. **Default path inference** — when an `@N` has no inline
    `[fingerprint/path]@N` annotation AND no `--slot @N.path=` CLI input,
-   the toolkit picks a path from the descriptor's outermost wrapper:
+   the toolkit picks a path from the descriptor's outermost wrapper,
+   **only when the descriptor is a multisig**, which here means it
+   references two or more distinct keys (two or more `@N`), whatever its
+   fragments (`multi`, `thresh`, `or_d`, taproot leaves, ...):
    - `wsh(...)` → BIP-48 `m/48'/<coin>'/<account>'/2'` (BIP-48: "Native
      Segwit (p2wsh)"; the Liana / Specter convention);
    - `sh(wsh(...))` → BIP-48 `m/48'/<coin>'/<account>'/1'` (BIP-48:
      "Nested Segwit (p2sh-p2wsh)");
-   - any other `sh(...)` (legacy bare P2SH) and any `tr(...)` that holds
-     a multisig fragment (`multi`, `sortedmulti`, `multi_a` or
-     `sortedmulti_a`, anywhere in the descriptor, including a taproot
-     script tree) → BIP-87 `m/87'/<coin>'/<account>'`. BIP-48 defines
-     only `1'` and `2'`, so it has no path for bare P2SH or taproot;
-     BIP-87 is script-agnostic: "Any script that is supported by
-     descriptors (and the specific wallet implementation) is compatible
-     with this BIP."
-   - a non-canonical `tr(...)` or bare `sh(...)` with **no** multisig
-     fragment (for example a single-key script tree
-     `tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(N)))`, or a tree of `pk`
-     leaves) gets **no** default: BIP-87 says "it is best to restrict
-     this script-agnostic hierarchy to multisignature wallets only".
-     `bundle` refuses it (`SlotInputViolation` `kind:"missing-origin"`,
-     exit 2) when any `@N` has no origin, names those `@N`, and asks for
-     each key's real origin with `--slot @N.path=m/...` or inline
-     `[fp/path]@N`. An `@N.entropy=` slot cannot carry `@N.path=`, so for
-     it only the inline form works. `verify-bundle` mints nothing and
-     still rebuilds such a card at the BIP-87 default when no origin is
-     given, so a card minted that way before 2026-11-26 still verifies
-     with its original command line.
+   - any other `sh(...)` (legacy bare P2SH) and any `tr(...)` script
+     tree → BIP-87 `m/87'/<coin>'/<account>'`. BIP-48 defines only `1'`
+     and `2'`, so it has no path for bare P2SH or taproot; BIP-87 is
+     script-agnostic: "Any script that is supported by descriptors (and
+     the specific wallet implementation) is compatible with this BIP."
+   - a non-canonical descriptor that holds **only one key** gets **no**
+     default, whichever family would apply: BIP-48 and BIP-87 are
+     multisig hierarchies (BIP-87: "it is best to restrict this
+     script-agnostic hierarchy to multisignature wallets only"). For
+     example `wsh(and_v(v:pk(@0/<0;1>/*),older(144)))`,
+     `sh(wsh(pk(@0/<0;1>/*)))`,
+     `wsh(thresh(2,pk(@0/<0;1>/*),sln:after(1000000),sln:older(65535)))`
+     (one key and two timelocks), `tr(NUMS,and_v(v:pk(@0/<0;1>/*),after(N)))`
+     and the 1-of-1 `tr(NUMS,multi_a(1,@0/<0;1>/*))` are all single-key.
+     Two keys make a multisig even without a `multi` fragment:
+     `wsh(thresh(2,pk(@0/<0;1>/*),s:pk(@1/<0;1>/*),sln:after(1000000)))`,
+     `wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@1/<0;1>/*),older(144))))` and
+     `tr(NUMS,{pk(@0/<0;1>/*),pk(@1/<0;1>/*)})` take the family default.
+     `bundle` refuses a single-key descriptor (`SlotInputViolation`
+     `kind:"missing-origin"`, exit 2) when its `@N` has no origin, names
+     it, and asks for the key's real origin with `--slot @N.path=m/...`
+     or inline `[fp/path]@N`. An `@N.entropy=` slot cannot carry
+     `@N.path=`, so for it only the inline form works. `verify-bundle`
+     mints nothing and still rebuilds such a card at the family default
+     when no origin is given, so a single-key card minted at that default
+     before 2026-11-26 still verifies with its original command line.
+   - The same rule covers the canonical BIP-48 shapes: a 1-of-1
+     `wsh(multi(1,@0/**))`, `wsh(sortedmulti(1,@0/<0;1>/*))` or
+     `sh(wsh(sortedmulti(1,@0/<0;1>/*)))` (any `wsh` / `sh(wsh)` of
+     `multi` / `sortedmulti` with fewer than two distinct keys) whose `@N`
+     has no origin does **not** take the canonical `m/48'/...` origin;
+     `bundle` refuses it with the same `missing-origin` error (exit 2).
+     A canonical shape refuses `@N.path=` beside a phrase, SeedQR or
+     `ms1` slot, so for those slots the error adds that only the inline
+     `[fp/path]@N` form works. The single-sig canonical shapes (`pkh`,
+     `wpkh`, `sh(wpkh)`, key-path `tr`) keep their BIP-44/49/84/86 fill.
+     Decoding, `verify-bundle` and `restore` of an existing 1-of-1 card
+     are unchanged.
 
    `<coin>` = `0'` for mainnet, `1'` for testnet/signet/regtest;
    `<account>` consumes `--account N` (defaults to `0'`). An `@N.xpub=`
@@ -1044,8 +1064,8 @@ unspendable internal-key hex
 `50929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0`
 before rust-miniscript parses. The resulting wallet is P2TR (bech32m
 addresses) with key-path spending intentionally disabled — only the
-tap-script path is spendable. This single-key tree holds no multisig
-fragment, so it gets no default origin: give the path at which `@0`'s key
+tap-script path is spendable. This tree holds only one key, so it is not a multisig,
+and it gets no default origin: give the path at which `@0`'s key
 lives with `--slot @0.path=` (or inline `[fp/path]@0`); without it `bundle`
 refuses (see the inference rule above).
 
@@ -1053,7 +1073,7 @@ refuses (see the inference rule above).
 
 | Trigger | Stderr |
 |---|---|
-| Non-multisig `tr(...)` / bare `sh(...)` with an `@N` lacking an origin | `error: no origin was given for @{N}, and this descriptor is not a multisig (it has no multi, sortedmulti, multi_a or sortedmulti_a). BIP-87 (m/87'/...) is for multisig wallets only, so no default origin is assumed. Give each key's real origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor.` (exit 2; an `@N.entropy=` slot adds that it takes only the inline form) |
+| Descriptor with only one key (non-canonical `wsh(...)`, `sh(wsh(...))`, `tr(...)` script tree or bare `sh(...)`, or a canonical 1-of-1 `wsh` / `sh(wsh)` of `multi` / `sortedmulti`) and an `@N` lacking an origin | `error: no origin was given for @{N}, and this descriptor holds only one key. BIP-48 (m/48'/...) is for wallets with two or more keys, so no default origin is assumed. Give each key's real origin with --slot @N.path=m/... or inline [fp/path]@N in the descriptor.` (exit 2; `BIP-87 (m/87'/...)` for a `tr(...)` or bare `sh(...)`; an `@N.entropy=` slot adds that it takes only the inline form; on a canonical 1-of-1 shape a phrase, SeedQR or `ms1` slot adds `On this descriptor shape a seed slot (@N) takes only the inline form.`) |
 | Bare `tr(<miniscript>)` (no internal key) | `error: tr() requires an internal key. For script-path-only spending use tr(NUMS, <ms>); for full taproot use tr(@<index>, <ms>) with a slot binding for the internal key.` |
 | Canonical descriptor + `--account != 0` | `error: --account != 0 is meaningful only with --scheme; descriptor mode encodes account index in the @i origin path.` |
 | `--slot @N.fingerprint=X` AND inline `[Y/...]@N` disagree | `error: slot @{N} fingerprint mismatch: --slot says X, descriptor inline [Y/...] disagrees; supply consistent values.` |
@@ -1715,7 +1735,7 @@ of that fingerprint:
   because the right one is wherever the key really lives:
 
   ```text
-  error: --md1 cosigner @0, @1 carries NO origin path on the card, and without its seed nothing can be derived. Refusing rather than show the key with no path (a bare [fp]xpub claims to be the master key of fp). If you know where the key lives, state it with --origin @N=m/<path>: restore then checks it against any --cosigner @N=<xpub> you give, shows it as asserted by you, and exits 4. Or give the key's seed with --from to search its common paths. To state each path you know, replace each <path> and run:
+  error: --md1 cosigner @0, @1 carries NO origin path on the card, and without its seed nothing can be derived. Refusing rather than show the key with no path (a bare [fp]xpub claims to be the master key of fp, and this key is not). If you know where the key lives, state it with --origin @N=m/<path>: restore then checks it against any --cosigner @N=<xpub> you give, shows it as asserted by you, and exits 4. Or give the key's seed with --from to search its common paths. To state each path you know, replace each <path> and run:
     mnemonic restore --md1 md1f2z66psp... --md1 md1f2z66psw... --md1 md1f2z66psh... --md1 md1f2z66psm... --origin '@0=m/<path>' --origin '@1=m/<path>'
   ```
 
@@ -1724,14 +1744,45 @@ of that fingerprint:
   (`--scheme bip44|bip49|bip84|bip86` with `--account`; the scheme must
   describe the card's script, so `--scheme bip44` on a `wpkh` card is
   refused). For the master node `m` the key must be the master key of its
-  fingerprint. Conversely, a key the card itself proves to be the master
-  key (its own fingerprint, the hash160 of its public key, is the card's
-  fingerprint) can only be at `m`: any other path stated for it,
-  `--scheme` included, is refused (exit 2, `kind: "path-mismatch"`,
-  "the key is the master key of <fp>"), and the missing-origin refusal for
-  such a key prints `--origin @N=m` instead of `m/<path>` and suggests no
-  scheme. `--origin @N=m` for it is accepted as before (asserted, exit 4).
-  If you also give `--cosigner @N=<xpub>` for that key, the
+  fingerprint. A malformed or empty value (`--origin @1=`, as an unset
+  shell variable gives), an `@N` the card does not have, or the same `@N`
+  twice is refused (exit 2, like every `--origin` refusal); an empty value
+  is never read as `m`.
+
+  **A key the card proves to be the master key** (Brian's ruling of
+  2026-11-26 17:33Z): when an empty-origin key's own fingerprint (the
+  first 4 bytes of the hash160 of its public key) is the fingerprint the
+  card records for it, the key is the master key of that fingerprint (a
+  chance match is about 1 in 2^32), so restore resolves its origin to `m`
+  without a seed and without `--origin`. That proof holds only if the
+  card's fingerprint field is the seed's genuine master fingerprint: a
+  card that records the key's own fingerprint instead (forged, or minted
+  by an operator who typed the xpub's own fingerprint as
+  `--slot @N.fingerprint=`) matches too. The addresses are the same
+  either way, but the origin shown would be wrong, so the warning and the
+  cosigner line (`…, if the card's fingerprint is genuine; …`) say so and
+  ask for `--cosigner @N=<the master xpub, depth 0, from your wallet>` or
+  `--from` to confirm (a depth-4 xpub or the wrong seed is refused). It prints the wallet on the
+  master key (`[fp]xpub661My…`), shows the origin as `m`
+  (`cosigner @0: 73c5da0a [m]  origin m: the key is the master key of its
+  fingerprint, if the card's fingerprint is genuine; …`), labels it `origin_source: "master"` in `--json` (its
+  `origin` is `""`, the master node), warns on stderr that the wallet sits
+  on the master key, and counts the origin as read from the card: restore
+  exits 0 unless something else is unverified (an asserted origin for
+  another key). An explicit `--origin @N=m` (or `--origin m` for a
+  single-key card) for such a key is consistent with it and gives the same
+  result. Any other path stated for it, `--scheme` included, or an mk1
+  card for it recording a path, is refused (exit 2,
+  `kind: "path-mismatch"`, "the key is the master key of <fp>"). A
+  `--cosigner @N=<xpub>` for it must have depth 0. `--format coldcard`
+  and `--format jade` refuse such a multisig (`a cosigner of this wallet
+  sits on its master key (origin m), …`; exit 1) and name `sparrow`,
+  `bitcoin-core` and `descriptor` instead. With a `--from` seed the
+  search is unchanged: it tries `m` first, labels the key `"seed-search"`
+  (the seed proved it), and prints the same `m` and the same master-key
+  warning.
+
+  If you also give `--cosigner @N=<xpub>` for a key with a stated path, the
   path's length and last component must match the xpub's depth and child
   number, and for a one-step path the xpub's parent fingerprint must be the
   md1's fingerprint; otherwise restore refuses (exit 2,
@@ -1769,7 +1820,7 @@ of that fingerprint:
   card; key not independently verified` (or `key cross-checked; origin
   asserted by you, not on the card` when a `--cosigner @N` matched the key).
   With `--json` each `cosigner_keys` entry carries `origin_source`
-  (`"card"`, `"mk1"`, `"asserted"` or `"seed-search"`), and
+  (`"card"`, `"mk1"`, `"asserted"`, `"seed-search"` or `"master"`), and
   `verification.status` is `"unverified"` whenever any origin is asserted,
   however many keys were cross-checked. No `--format` wallet file has a
   field that marks an asserted path, so restore says on stderr that the
@@ -3682,9 +3733,9 @@ is suppressed and a single line is printed to stdout:
   canonical shape. The `mnemonic bundle` default-path inference per
   SPEC §4.12.b applies (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`,
   `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87
-  `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)` that
-  holds a multisig fragment; a non-multisig `tr(...)` or bare `sh(...)`
-  gets no default and `bundle` refuses it without an origin; see
+  `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`,
+  when the descriptor has two or more keys; a single-key descriptor gets no
+  default and `bundle` refuses it without an origin; see
   "Non-canonical descriptor mode" under `mnemonic bundle`).
 - exit 2 with empty stdout — descriptor failed to parse
   (`DescriptorParse` error variant).
@@ -4576,7 +4627,7 @@ Explicit override via `--descriptor-from <node>=<value>` where `<node>` is `lite
 
 #### v0.19.0 silent-default-path inference
 
-Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; `xpub-search` records no origin, so it keeps the BIP-87 default even for the non-multisig shapes `bundle` refuses) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
+Literal-xpub descriptors with missing `[fp/path]` annotations on `@N` cosigners trigger the same default path as `mnemonic bundle` (`m/48'/<coin>'/<account>'/2'` for `wsh(...)`, `m/48'/<coin>'/<account>'/1'` for `sh(wsh(...))`, BIP-87 `m/87'/<coin>'/<account>'` for any other `sh(...)` and for `tr(...)`; `xpub-search` records no origin, so it keeps these defaults even for the single-key shapes `bundle` refuses) + a stderr `info:` notice naming the path (`info: non-canonical descriptor; defaulting origin path for @0,@1 to m/87'/0'/0' (BIP-87). …`). The notice is printed only for a descriptor with two or more distinct keys; a one-key descriptor is no multisig, so no multisig hierarchy is named for it (the search is the same). Override per-placeholder via inline `[fp/path]xpub.../<...>/*` in the descriptor.
 
 #### NUMS sentinel
 

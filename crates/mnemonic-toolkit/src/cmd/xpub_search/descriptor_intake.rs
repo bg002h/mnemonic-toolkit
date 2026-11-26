@@ -407,8 +407,13 @@ fn parse_literal_xpub(
         ));
     }
     // Emit the v0.19.0 default-path notice (mirrors `cmd/bundle.rs:1367-1388`
-    // ~6 LOC inline per plan §4.3 step 4 + R0 I7 lock).
-    if !defaulted_indices.is_empty() {
+    // ~6 LOC inline per plan §4.3 step 4 + R0 I7 lock). Review rulings2-r1
+    // N-4: a descriptor with fewer than two distinct keys is no multisig
+    // (Brian's ruling of 2026-11-26), so the notice naming a multisig
+    // hierarchy is not printed for it; the search itself is unchanged.
+    let distinct_keys: std::collections::BTreeSet<[u8; 65]> =
+        cosigners.iter().filter_map(|c| c.xpub_65).collect();
+    if !defaulted_indices.is_empty() && distinct_keys.len() >= 2 {
         let idx_list = defaulted_indices
             .iter()
             .map(|i| format!("@{i}"))

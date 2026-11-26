@@ -573,8 +573,10 @@ fn ruling_restore_with_own_seed_still_refuses_the_foreign_empty_origin_key() {
     let from = format!("phrase={A}");
     let r = restore(&md1, &["--from", &from]);
     assert_eq!(r.code, 2, "{}", r.stderr);
-    // The seed's own key was found by the (unchanged) search; only @1 is refused.
-    assert!(r.stderr.contains("Its key was FOUND"), "{}", r.stderr);
+    // The seed's own key was found by the (unchanged) search; only @1 is
+    // refused. The found-path warning waits until nothing is refused (review
+    // rulings2 final N-3), so it appears in the run below, not here.
+    assert!(!r.stderr.contains("Its key was FOUND"), "{}", r.stderr);
     assert!(
         r.stderr.contains("@1 carries NO origin path"),
         "{}",
@@ -588,6 +590,7 @@ fn ruling_restore_with_own_seed_still_refuses_the_foreign_empty_origin_key() {
 
     let r = restore(&md1, &["--from", &from, "--origin", "@1=m/48'/0'/0'/2'"]);
     assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(r.stderr.contains("Its key was FOUND"), "{}", r.stderr);
     assert!(
         r.stdout.contains(&format!("[{FP_B}/48'/0'/0'/2']")),
         "{}",
@@ -1107,18 +1110,6 @@ fn review_fable_i2_master_key_card_refuses_a_path_below_m() {
         );
         assert!(!r.stderr.contains(ASSERTED), "{extra:?}: {}", r.stderr);
     }
-    // The master node itself keeps its behaviour: asserted, exit 4.
-    let r = restore(&md1, &["--origin", "m"]);
-    assert_eq!(r.code, 4, "{}", r.stderr);
-    assert!(r.stdout.contains(&format!("[{FP_A}]")), "{}", r.stdout);
-    // The refusal without a path does not steer to a scheme: it names m.
-    let r = restore(&md1, &[]);
-    assert_eq!(r.code, 2, "{}", r.stderr);
-    assert!(!r.stderr.contains("--scheme"), "{}", r.stderr);
-    assert!(!r.stderr.contains("m/<path>"), "{}", r.stderr);
-    assert!(r.stderr.contains("is the master key of"), "{}", r.stderr);
-    assert!(r.stderr.contains("@0=m"), "{}", r.stderr);
-
     // Multisig: the master-key @0 refuses a stated path too.
     let md1 = master_key_card(empty_origin_multisig());
     let r = restore(
@@ -1132,13 +1123,186 @@ fn review_fable_i2_master_key_card_refuses_a_path_below_m() {
     );
     assert_eq!(r.code, 2, "{}", r.stderr);
     assert!(r.stderr.contains("is the master key of"), "{}", r.stderr);
-    // Its refusal states @0's path as m and @1's as a placeholder.
+}
+
+// ---------------------------------------------------------------------------
+// Brian's ruling of 2026-11-26 17:33Z (`tk-bh1125-rf-decision-master-key-auto-m`,
+// folds `tk-bh1125-rf-nits` N1, N2, N4, N5): an empty-origin key the card
+// proves to be the master key resolves to `m` without a seed or an assertion.
+// ---------------------------------------------------------------------------
+
+const MASTER_WARNING: &str = "the wallet sits on the master key";
+
+/// The cosigner line of a text restore for `@idx`.
+fn cosigner_line(stdout: &str, idx: u8) -> String {
+    stdout
+        .lines()
+        .find(|l| l.trim_start().starts_with(&format!("cosigner @{idx}:")))
+        .unwrap_or_else(|| panic!("no cosigner @{idx} line: {stdout}"))
+        .to_string()
+}
+
+#[test]
+fn ruling_master_key_resolves_to_m_without_a_seed() {
+    let md1 = master_key_wpkh();
+    let master = xpub_at(A, "m");
+    // No --origin: resolved from the card, exit 0 (nothing else unverified
+    // beyond the usual no-cross-check banner).
+    let r = restore(&md1, &[]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(
+        r.stdout.contains(&format!("[{FP_A}]{master}")),
+        "{}",
+        r.stdout
+    );
+    let line = cosigner_line(&r.stdout, 0);
+    assert!(line.contains(&format!("{FP_A} [m]")), "N1: {line}");
+    assert!(!line.contains("[]"), "N1: {line}");
+    assert!(!line.contains(ASSERTED), "{line}");
+    assert!(line.contains("master key"), "{line}");
+    assert!(r.stderr.contains(MASTER_WARNING), "{}", r.stderr);
+    for not in [
+        ASSERTED,
+        "not even its depth",
+        "carries NO origin path on the card, and",
+    ] {
+        assert!(!r.stderr.contains(not), "{not:?}: {}", r.stderr);
+    }
+    assert!(!r.stderr.contains("not a mismatch"), "{}", r.stderr);
+    // JSON: origin_source "master"; status as for any card without a
+    // cross-check.
+    let r = restore(&md1, &["--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let (v, keys) = json_keys(&r);
+    assert_eq!(keys[0]["origin_source"], "master", "{keys:?}");
+    assert_eq!(keys[0]["origin"], "", "{keys:?}");
+    assert_eq!(v["verification"]["status"], "unverified", "{}", r.stdout);
+    // With the master xpub as a cross-check: verified, exit 0.
+    let c = format!("@0={master}");
+    let r = restore(&md1, &["--cosigner", &c, "--json"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    let (v, keys) = json_keys(&r);
+    assert_eq!(keys[0]["origin_source"], "master", "{keys:?}");
+    assert_eq!(v["verification"]["status"], "verified", "{}", r.stdout);
+}
+
+#[test]
+fn ruling_master_key_explicit_m_is_consistent_and_exits_0() {
+    // N2: an explicit `--origin m` for a proven master key is not an
+    // assertion that went unchecked.
+    let md1 = master_key_wpkh();
+    for extra in [vec!["--origin", "m"], vec!["--origin", "@0=m"]] {
+        let mut j = extra.clone();
+        j.push("--json");
+        let r = restore(&md1, &j);
+        assert_eq!(r.code, 0, "{extra:?}: {}", r.stderr);
+        let (_, keys) = json_keys(&r);
+        assert_eq!(keys[0]["origin_source"], "master", "{extra:?}: {keys:?}");
+        let r = restore(&md1, &extra);
+        assert_eq!(r.code, 0, "{extra:?}: {}", r.stderr);
+        for not in [ASSERTED, "not even its depth", "UNVERIFIED: an origin path"] {
+            assert!(!r.stderr.contains(not), "{extra:?} {not:?}: {}", r.stderr);
+        }
+        assert!(r.stderr.contains(MASTER_WARNING), "{extra:?}: {}", r.stderr);
+        assert!(
+            cosigner_line(&r.stdout, 0).contains(&format!("{FP_A} [m]")),
+            "{extra:?}: {}",
+            r.stdout
+        );
+    }
+}
+
+#[test]
+fn ruling_master_key_in_a_multisig_resolves_and_only_the_other_key_is_refused() {
+    let md1 = master_key_card(empty_origin_multisig());
     let r = restore(&md1, &[]);
     assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stderr.contains("@1 carries NO origin"), "{}", r.stderr);
+    assert!(!r.stderr.contains("@0, @1"), "{}", r.stderr);
     let cmd = line_after(&r.stderr, "run:");
-    assert!(cmd.contains("@0=m ") || cmd.ends_with("@0=m"), "{cmd}");
     assert!(cmd.contains("'@1=m/<path>'"), "{cmd}");
-    assert!(!cmd.contains("'@0=m/<path>'"), "{cmd}");
+    assert!(!cmd.contains("@0="), "{cmd}");
+    // @1 stated: @0 is the master (exit would be 0), @1 asserted (exit 4).
+    let r = restore(&md1, &["--origin", "@1=m/48'/0'/0'/2'", "--json"]);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    let (_, keys) = json_keys(&r);
+    assert_eq!(keys[0]["origin_source"], "master", "{keys:?}");
+    assert_eq!(keys[1]["origin_source"], "asserted", "{keys:?}");
+    assert!(
+        r.stderr.contains(
+            "UNVERIFIED: an origin path is asserted by you, not on the card (@1 m/48'/0'/0'/2')"
+        ),
+        "{}",
+        r.stderr
+    );
+}
+
+#[test]
+fn ruling_master_key_with_a_seed_is_labelled_like_the_seedless_path() {
+    // With a seed the search is unchanged (it tries m first) and keeps its
+    // source; the printed origin and the master-key warning are the same.
+    let md1 = master_key_wpkh();
+    let from = format!("phrase={A}");
+    let r = restore(&md1, &["--from", &from]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert!(r.stderr.contains(MASTER_WARNING), "{}", r.stderr);
+    let seeded = cosigner_line(&r.stdout, 0);
+    assert!(seeded.contains(&format!("{FP_A} [m]")), "N1: {seeded}");
+    let seedless = restore(&md1, &[]);
+    let desc = |o: &Out| line_after(&format!("x\n{}", o.stdout), "x");
+    assert_eq!(desc(&r), desc(&seedless), "same descriptor");
+    let r = restore(&md1, &["--from", &from, "--json"]);
+    let (v, keys) = json_keys(&r);
+    assert_eq!(keys[0]["origin_source"], "seed-search", "{keys:?}");
+    assert_eq!(keys[0]["origin"], "", "{keys:?}");
+    assert_eq!(v["verification"]["status"], "verified", "{}", r.stdout);
+}
+
+#[test]
+fn ruling_master_check_for_a_non_master_key_prints_m_not_m_slash() {
+    // N1: the refusal of `m` for a key that is not the master key.
+    let md1 = empty_origin_wpkh();
+    let r = restore(&md1, &["--origin", "m"]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("states m for md1 cosigner @0"),
+        "{}",
+        r.stderr
+    );
+    assert!(!r.stderr.contains("m/ "), "{}", r.stderr);
+}
+
+#[test]
+fn ruling_origin_refusals_exit_2_and_an_empty_value_is_refused() {
+    let md1 = empty_origin_multisig();
+    // N4: an empty value (an unset shell variable) is not `m`.
+    for (v, other) in [("@0=", "@1=m/48'/0'/0'/2'"), ("@1= ", "@0=m/48'/0'/0'/2'")] {
+        let r = restore(&md1, &["--origin", v, "--origin", other]);
+        assert_eq!(r.code, 2, "{v:?}: {}", r.stderr);
+        assert!(r.stderr.contains("empty"), "{v:?}: {}", r.stderr);
+    }
+    let single = empty_origin_wpkh();
+    let r = restore(&single, &["--origin", ""]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stderr.contains("empty"), "{}", r.stderr);
+    // N5: every --origin refusal exits 2.
+    for extra in [
+        vec!["--origin", "@9=m/0"],
+        vec!["--origin", "@0=m/x'"],
+        vec!["--origin", "@x=m/0"],
+        vec!["--origin", "@0"],
+        vec!["--origin", "m/48'/0'/0'/2'"],
+        vec![
+            "--origin",
+            "@0=m/48'/0'/0'/2'",
+            "--origin",
+            "@0=m/48'/0'/0'/2'",
+        ],
+    ] {
+        let r = restore(&md1, &extra);
+        assert_eq!(r.code, 2, "{extra:?}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{extra:?}: {}", r.stdout);
+    }
 }
 
 #[test]
@@ -1183,4 +1347,186 @@ fn review_fable_m2_m3_asserted_exit_4_is_told_apart_from_a_mismatch() {
     assert!(r.stderr.contains("✗ MISMATCH"), "{}", r.stderr);
     assert!(r.stderr.contains("error: restore: "), "{}", r.stderr);
     assert!(!r.stderr.contains("UNVERIFIED"), "{}", r.stderr);
+}
+
+// ---------------------------------------------------------------------------
+// Review rulings2-r1 M-1, M-2, M-3.
+// ---------------------------------------------------------------------------
+
+/// M-1: the auto-m is proven only if the card's fingerprint is genuine; the
+/// warning says so and names the two cross-checks.
+#[test]
+fn rulings2_m1_master_warning_says_the_proof_rests_on_the_card_fingerprint() {
+    let md1 = master_key_wpkh();
+    let r = restore(&md1, &[]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    for want in [
+        "That holds only if the card's fingerprint for it is the genuine master fingerprint of the seed",
+        "--cosigner @0=<the master xpub (depth 0) from your wallet>",
+        "--from <the seed>",
+        MASTER_WARNING,
+    ] {
+        assert!(r.stderr.contains(want), "{want:?}: {}", r.stderr);
+    }
+    let line = cosigner_line(&r.stdout, 0);
+    assert!(
+        line.contains("if the card's fingerprint is genuine"),
+        "{line}"
+    );
+}
+
+/// M-2: restore's Coldcard (and Jade) refusal for a master-key cosigner names
+/// no `--slot`, which restore does not take.
+#[test]
+fn rulings2_m2_coldcard_refusal_on_a_master_key_card_names_no_slot_flag() {
+    let md1 = master_key_card(empty_origin_multisig());
+    for format in ["coldcard", "jade"] {
+        let r = restore(&md1, &["--origin", "@1=m/48'/0'/0'/2'", "--format", format]);
+        assert_eq!(r.code, 1, "{format}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{format}: {}", r.stdout);
+        assert!(!r.stderr.contains("--slot"), "{format}: {}", r.stderr);
+        assert!(
+            r.stderr.contains("sits on its master key (origin m)"),
+            "{format}: {}",
+            r.stderr
+        );
+    }
+}
+
+/// M-3: with a seed, a path stated below the found `m` prints `m` (never
+/// `m/`), and no found-path warning precedes the refusal.
+#[test]
+fn rulings2_m3_seed_found_m_refusal_prints_m_and_no_warning_first() {
+    let md1 = master_key_wpkh();
+    let from = format!("phrase={A}");
+    let r = restore(&md1, &["--from", &from, "--origin", "m/84'/0'/0'"]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
+    assert!(
+        r.stderr
+            .contains("the --from seed's key is at m; remove one of them"),
+        "{}",
+        r.stderr
+    );
+    assert!(!r.stderr.contains("m/;"), "{}", r.stderr);
+    assert!(
+        !r.stderr
+            .contains("WARNING: md1 cosigner @0 carries NO origin"),
+        "no warning before the refusal: {}",
+        r.stderr
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Review rulings2 final (fable) M-1, N-1, N-2, N-3.
+// ---------------------------------------------------------------------------
+
+/// A's master xprv (mainnet).
+fn xprv_a() -> String {
+    let seed = bip39::Mnemonic::parse(A).unwrap().to_seed("");
+    bitcoin::bip32::Xpriv::new_master(bitcoin::NetworkKind::Main, &seed)
+        .unwrap()
+        .to_string()
+}
+
+/// M-1: an `@N.xprv=` slot in descriptor mode is refused as unsupported
+/// before any origin advice (which it could not follow) is given.
+#[test]
+fn rulings2_fable_m1_xprv_slot_in_descriptor_mode_is_refused_as_unsupported_first() {
+    let s = format!("@0.xprv={}", xprv_a());
+    // A one-key tree with no origin (the one-key refusal used to come first),
+    // and a canonical shape with its origin inline.
+    for d in [
+        "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+        "wpkh(@0/<0;1>/*)",
+    ] {
+        let r = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            d,
+            "--slot",
+            &s,
+        ]);
+        assert_eq!(r.code, 1, "{d}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{d}: {}", r.stdout);
+        assert!(
+            r.stderr
+                .contains("subkey set [\"xprv\"] not supported in descriptor mode"),
+            "{d}: {}",
+            r.stderr
+        );
+        assert!(
+            !r.stderr.contains("no origin was given"),
+            "{d}: {}",
+            r.stderr
+        );
+        assert!(!r.stderr.contains("--slot @N.path="), "{d}: {}", r.stderr);
+    }
+}
+
+/// N-1: a malformed `--origin` path prints one `error:` prefix and the value
+/// as typed (with its `@N=`).
+#[test]
+fn rulings2_fable_n1_malformed_origin_has_one_prefix_and_keeps_at_n() {
+    let md1 = empty_origin_multisig();
+    let r = restore(
+        &md1,
+        &["--origin", "@0=m/84x", "--origin", "@1=m/48'/0'/0'/2'"],
+    );
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(!r.stderr.contains("error: error:"), "{}", r.stderr);
+    assert!(r.stderr.contains("`@0=m/84x`"), "{}", r.stderr);
+}
+
+/// N-2: one leading `m` (or `m/`) is the master node; a second is a typo and
+/// refused as malformed, never read as `m` or as the path after it.
+#[test]
+fn rulings2_fable_n2_a_doubled_m_is_refused_as_malformed() {
+    let master = master_key_wpkh();
+    let single = empty_origin_wpkh();
+    for (md1, v) in [
+        (&master, "mm"),
+        (&master, "m/m"),
+        (&single, "m/m/84'/0'/0'"),
+        (&single, "mm/84'/0'/0'"),
+        (&single, "@0=m/m/84'/0'/0'"),
+    ] {
+        let r = restore(md1, &["--origin", v, "--json"]);
+        assert_eq!(r.code, 2, "{v}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{v}: {}", r.stdout);
+        assert!(
+            r.stderr.contains("m may appear only once, at the start"),
+            "{v}: {}",
+            r.stderr
+        );
+    }
+    // The one-prefix spellings still work.
+    let r = restore(&master, &["--origin", "m"]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    for v in ["m/84'/0'/0'", "84'/0'/0'"] {
+        let r = restore(&single, &["--origin", v]);
+        assert_eq!(r.code, 4, "{v}: {}", r.stderr);
+    }
+}
+
+/// N-3: with a seed, the found-path warning for one key is not printed when
+/// another key is then refused.
+#[test]
+fn rulings2_fable_n3_no_found_path_warning_before_a_refusal_about_another_key() {
+    let md1 = master_key_card(empty_origin_multisig());
+    let from = format!("phrase={A}");
+    let r = restore(&md1, &["--from", &from]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stderr.contains("@1 carries NO origin"), "{}", r.stderr);
+    assert!(!r.stderr.contains("WARNING"), "{}", r.stderr);
+    // Once @1 is stated, the warning about @0 is printed.
+    let r = restore(&md1, &["--from", &from, "--origin", "@1=m/48'/0'/0'/2'"]);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(
+        r.stderr.contains("WARNING: md1 cosigner @0"),
+        "{}",
+        r.stderr
+    );
 }

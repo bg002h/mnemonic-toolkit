@@ -24,6 +24,12 @@ fn bundle_general(descriptor: &str) -> Vec<String> {
 }
 
 fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
+    bundle_general_with(descriptor, network, &[], 4)
+}
+
+/// `extra` is appended to the bundle command; `code` is its expected exit
+/// (4 when the toolkit chooses an origin, 0 when every origin is given).
+fn bundle_general_with(descriptor: &str, network: &str, extra: &[&str], code: i32) -> Vec<String> {
     let phrases = [C0, C1, C2];
     let max_n = (0u8..3)
         .filter(|n| descriptor.contains(&format!("@{n}")))
@@ -40,6 +46,7 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
         args.push("--slot".into());
         args.push(format!("@{n}.phrase={}", phrases[n as usize]));
     }
+    args.extend(extra.iter().map(|e| e.to_string()));
     args.push("--json".into());
     args.push("--no-engraving-card".into());
     let out = Command::cargo_bin("mnemonic")
@@ -47,7 +54,7 @@ fn bundle_general_net(descriptor: &str, network: &str) -> Vec<String> {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .code(4);
+        .code(code);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).expect("bundle JSON");
     v["md1"]
         .as_array()
@@ -198,7 +205,14 @@ fn general_and_v_older_reconstructs_faithfully() {
 /// this single-key class would have collapsed) + md1 fixed-point.
 #[test]
 fn n1_general_wsh_timelocked_restores_faithfully() {
-    let md1 = bundle_general("wsh(and_v(v:pk(@0/*),older(144)))");
+    // A single-key wsh takes no BIP-48 default (tk-bh1125-rr1-m3-bip48-thresh-
+    // scope, Brian 2026-11-26), so the origin is given.
+    let md1 = bundle_general_with(
+        "wsh(and_v(v:pk(@0/*),older(144)))",
+        "mainnet",
+        &["--slot", "@0.path=m/48'/0'/0'/2'"],
+        0,
+    );
     let v = restore_json(&md1);
     let w = &v["wallets"][0];
     let desc = w["descriptor"].as_str().unwrap();

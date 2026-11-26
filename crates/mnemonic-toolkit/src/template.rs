@@ -357,26 +357,44 @@ impl DefaultOriginFamily {
     }
 }
 
-/// Whether `tree` holds a multisig fragment (`multi`, `sortedmulti`,
-/// `multi_a`, `sortedmulti_a`) anywhere, including inside a taproot script
-/// tree. Brian's ruling of 2026-11-26 (`tk-bh1125-tr-tree-bip87-scope`): the
-/// BIP-87 default origin applies only to such shapes, since BIP-87 says "it is
-/// best to restrict this script-agnostic hierarchy to multisignature wallets
-/// only". A shape without one (a single-key script tree, a `thresh` of `pk`s,
-/// a bare `sh(...)` timelock) is not given a default.
-pub fn tree_has_multisig_fragment(tree: &Node) -> bool {
-    if matches!(
-        tree.tag,
-        Tag::Multi | Tag::SortedMulti | Tag::MultiA | Tag::SortedMultiA
-    ) {
-        return true;
-    }
+/// Whether `tree` references two or more distinct keys (distinct `@N`
+/// placeholders: a key slot, a multi-family index list or a taproot internal
+/// key; the NUMS point and Liana's derived unspendable key are not keys).
+///
+/// This is the toolkit's test for "multisig" when it chooses a default origin.
+/// The BIP-87 default (Brian's ruling of 2026-11-26,
+/// `tk-bh1125-tr-tree-bip87-scope`; BIP-87: "it is best to restrict this
+/// script-agnostic hierarchy to multisignature wallets only") and the BIP-48
+/// default (`tk-bh1125-rr1-m3-bip48-thresh-scope`) apply only to such trees.
+/// Brian, 2026-11-26 17:27Z: the fragments do not decide it, the keys do:
+/// `thresh(2,pk(A),pk(B),after(..))` and `tr(NUMS,{pk(A),pk(B)})` are
+/// multisig, `thresh(1,pk(A),after(..),older(..))` is not.
+pub fn tree_has_multiple_keys(tree: &Node) -> bool {
+    let mut keys = std::collections::BTreeSet::new();
+    collect_key_indices(tree, &mut keys);
+    keys.len() >= 2
+}
+
+fn collect_key_indices(tree: &Node, keys: &mut std::collections::BTreeSet<u8>) {
     match &tree.body {
-        Body::Children(c) | Body::Variable { children: c, .. } => {
-            c.iter().any(tree_has_multisig_fragment)
+        Body::KeyArg { index } => {
+            keys.insert(*index);
         }
-        Body::Tr { tree: Some(t), .. } => tree_has_multisig_fragment(t),
-        _ => false,
+        Body::MultiKeys { indices, .. } => keys.extend(indices.iter().copied()),
+        Body::Children(c) | Body::Variable { children: c, .. } => {
+            for child in c {
+                collect_key_indices(child, keys);
+            }
+        }
+        Body::Tr { internal_key, tree } => {
+            if let md_codec::tree::InternalKey::Slot(i) = internal_key {
+                keys.insert(*i);
+            }
+            if let Some(t) = tree {
+                collect_key_indices(t, keys);
+            }
+        }
+        Body::Hash256Body(_) | Body::Hash160Body(_) | Body::Timelock(_) | Body::Empty => {}
     }
 }
 
@@ -785,5 +803,129 @@ mod tests {
             "internal key must be the NUMS H-point; got: {s}"
         );
         assert!(s.contains("multi_a("), "leaf must be multi_a; got: {s}");
+    }
+
+    // Review rulings2-r1 N-2: `tree_has_multiple_keys` counts DISTINCT `@N`
+    // across every body that carries keys.
+    mod tree_has_multiple_keys {
+        use super::super::tree_has_multiple_keys;
+        use md_codec::tag::Tag;
+        use md_codec::tree::{Body, InternalKey, Node};
+
+        fn pk(i: u8) -> Node {
+            Node {
+                tag: Tag::PkK,
+                body: Body::KeyArg { index: i },
+            }
+        }
+        fn node(tag: Tag, children: Vec<Node>) -> Node {
+            Node {
+                tag,
+                body: Body::Children(children),
+            }
+        }
+        fn multi(tag: Tag, k: u8, indices: Vec<u8>) -> Node {
+            Node {
+                tag,
+                body: Body::MultiKeys { k, indices },
+            }
+        }
+        fn tr(internal_key: InternalKey, tree: Option<Node>) -> Node {
+            Node {
+                tag: Tag::Tr,
+                body: Body::Tr {
+                    internal_key,
+                    tree: tree.map(Box::new),
+                },
+            }
+        }
+        fn older() -> Node {
+            Node {
+                tag: Tag::Older,
+                body: Body::Timelock(144),
+            }
+        }
+
+        #[test]
+        fn repeated_index_counts_once() {
+            let t = node(
+                Tag::Wsh,
+                vec![node(
+                    Tag::OrD,
+                    vec![pk(0), node(Tag::AndV, vec![pk(0), older()])],
+                )],
+            );
+            assert!(!tree_has_multiple_keys(&t));
+            let t = node(
+                Tag::Wsh,
+                vec![node(
+                    Tag::OrD,
+                    vec![pk(0), node(Tag::AndV, vec![pk(1), older()])],
+                )],
+            );
+            assert!(tree_has_multiple_keys(&t));
+        }
+
+        #[test]
+        fn multi_lists_count_distinct_indices() {
+            for tag in [Tag::Multi, Tag::SortedMulti, Tag::MultiA, Tag::SortedMultiA] {
+                assert!(!tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0])]
+                )));
+                assert!(!tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0, 0])]
+                )));
+                assert!(tree_has_multiple_keys(&node(
+                    Tag::Wsh,
+                    vec![multi(tag, 1, vec![0, 1])]
+                )));
+            }
+        }
+
+        #[test]
+        fn unspendable_internal_keys_are_not_keys() {
+            for ik in [InternalKey::NumsPoint, InternalKey::LianaUnspendable] {
+                assert!(!tree_has_multiple_keys(&tr(ik, Some(pk(0)))));
+                assert!(!tree_has_multiple_keys(&tr(
+                    ik,
+                    Some(multi(Tag::MultiA, 1, vec![0]))
+                )));
+                assert!(tree_has_multiple_keys(&tr(
+                    ik,
+                    Some(node(Tag::TapTree, vec![pk(0), pk(1)]))
+                )));
+            }
+        }
+
+        #[test]
+        fn slot_internal_key_counts_and_a_same_index_leaf_does_not_add() {
+            assert!(!tree_has_multiple_keys(&tr(InternalKey::Slot(0), None)));
+            assert!(!tree_has_multiple_keys(&tr(
+                InternalKey::Slot(0),
+                Some(pk(0))
+            )));
+            assert!(tree_has_multiple_keys(&tr(
+                InternalKey::Slot(0),
+                Some(pk(1))
+            )));
+        }
+
+        #[test]
+        fn thresh_counts_keys_not_fragments() {
+            let thresh = |k: u8, children: Vec<Node>| Node {
+                tag: Tag::Thresh,
+                body: Body::Variable { k, children },
+            };
+            assert!(!tree_has_multiple_keys(&node(
+                Tag::Wsh,
+                vec![thresh(2, vec![pk(0), older(), older()])]
+            )));
+            assert!(tree_has_multiple_keys(&node(
+                Tag::Wsh,
+                vec![thresh(1, vec![pk(0), pk(1)])]
+            )));
+        }
     }
 }

@@ -707,16 +707,24 @@ fn r2_ib_foreign_xpub_at_the_bip87_default_still_mints() {
 // tk-bh1125-tr-tree-bip87-scope (Brian's ruling, 2026-11-26): BIP-87 is for
 // multisig ("it is best to restrict this script-agnostic hierarchy to
 // multisignature wallets only"), so a non-canonical tr(...) or bare sh(...)
-// that holds no multi / sortedmulti / multi_a / sortedmulti_a fragment is
-// refused when any @N has no origin. Multisig shapes keep their defaults.
+// that is not a multisig is refused when any @N has no origin.
+// tk-bh1125-rr1-m3-bip48-thresh-scope (Brian, 2026-11-26 17:25Z and 17:27Z):
+// the same holds for the BIP-48 default (wsh, sh(wsh)), and "multisig" means
+// the tree references two or more distinct keys, whatever its fragments:
+// thresh(2,pk(A),pk(B),after(..)) is multisig, thresh(1,pk(A),after(..),
+// older(..)) is not.
 // ---------------------------------------------------------------------------
 
 fn assert_bip87_scope_refusal(o: &Out, missing: &str, ctx: &str) {
+    assert_scope_refusal(o, missing, "BIP-87 (m/87'/...)", ctx);
+}
+
+fn assert_scope_refusal(o: &Out, missing: &str, family: &str, ctx: &str) {
     assert_eq!(o.code, 2, "{ctx}: exit 2 (usage class): {}", o.stderr);
     assert!(o.stdout.is_empty(), "{ctx}: no card minted: {}", o.stdout);
     for want in [
-        format!("no origin was given for {missing}"),
-        "BIP-87 (m/87'/...) is for multisig wallets only".to_string(),
+        format!("no origin was given for {missing}, and this descriptor holds only one key"),
+        format!("{family} is for wallets with two or more keys"),
         "--slot @N.path=m/...".to_string(),
         "[fp/path]@N".to_string(),
     ] {
@@ -769,11 +777,8 @@ fn bip87_scope_single_key_tr_script_tree_without_origin_is_refused() {
 }
 
 #[test]
-fn bip87_scope_non_multisig_trees_without_origin_are_refused() {
+fn bip87_scope_single_key_bare_sh_without_origin_is_refused() {
     let s0 = format!("@0.phrase={A}");
-    let s1 = format!("@1.phrase={B}");
-    // Bare sh(...) with one key, and a two-key taproot tree with no multi
-    // fragment: both refused, naming every @N that lacks an origin.
     let o = run(&[
         "bundle",
         "--network",
@@ -785,6 +790,16 @@ fn bip87_scope_non_multisig_trees_without_origin_are_refused() {
         "--json",
     ]);
     assert_bip87_scope_refusal(&o, "@0", "bare sh");
+}
+
+/// Brian, 2026-11-26 17:27Z: two or more distinct keys make a multisig,
+/// whatever the fragments, so a two-key taproot tree of `pk` leaves takes the
+/// BIP-87 default (with the chosen-origin warning, exit 4). It was refused by
+/// d15b2eff, which counted only multi-family fragments.
+#[test]
+fn bip87_scope_two_key_tree_without_multi_fragment_takes_the_default() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
     let o = run(&[
         "bundle",
         "--network",
@@ -797,8 +812,19 @@ fn bip87_scope_non_multisig_trees_without_origin_are_refused() {
         &s1,
         "--json",
     ]);
-    assert_bip87_scope_refusal(&o, "@0,@1", "two-key tree");
-    // Only the @N that lacks an origin is named.
+    assert_eq!(o.code, 4, "two-key tree: {}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["87'/0'/0'", "87'/0'/0'"]
+    );
+    assert!(
+        o.stderr.contains(
+            "warning: no origin was given for @0,@1; the toolkit chose m/87'/0'/0' (BIP-87)"
+        ),
+        "{}",
+        o.stderr
+    );
+    // Only the @N that lacks an origin takes the default.
     let o = run(&[
         "bundle",
         "--network",
@@ -811,8 +837,17 @@ fn bip87_scope_non_multisig_trees_without_origin_are_refused() {
         &s1,
         "--json",
     ]);
-    assert_bip87_scope_refusal(&o, "@1", "partial origins");
-    assert!(!o.stderr.contains("@0,"), "{}", o.stderr);
+    assert_eq!(o.code, 4, "partial origins: {}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["86'/0'/0'", "87'/0'/0'"]
+    );
+    assert!(
+        o.stderr
+            .contains("warning: no origin was given for @1; the toolkit chose m/87'/0'/0'"),
+        "{}",
+        o.stderr
+    );
 }
 
 #[test]
@@ -953,4 +988,416 @@ fn bip87_scope_refusal_for_an_entropy_slot_names_only_the_inline_form() {
         "{}",
         o.stderr
     );
+}
+
+// ---------------------------------------------------------------------------
+// tk-bh1125-rr1-m3-bip48-thresh-scope: the BIP-48 default (m/48'/c'/a'/2' for
+// wsh, /1' for sh(wsh)) is for wallets with two or more keys, like BIP-87.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bip48_scope_single_key_wsh_shapes_without_origin_are_refused() {
+    let s0 = format!("@0.phrase={A}");
+    for desc in [
+        "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+        "wsh(pk(@0/<0;1>/*))",
+        // Brian's counter-example: a thresh of one key and timelocks is single-sig.
+        "wsh(thresh(2,pk(@0/<0;1>/*),sln:after(1000000),sln:older(65535)))",
+        "wsh(thresh(1,pk(@0/<0;1>/*),sln:after(1000000),sln:older(65535)))",
+        "sh(wsh(pk(@0/<0;1>/*)))",
+        "sh(wsh(and_v(v:pk(@0/<0;1>/*),older(144))))",
+    ] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--json",
+        ]);
+        assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", desc);
+    }
+    // A foreign xpub slot is refused the same way.
+    let s0x = format!("@0.xpub={}", xpub_at(A, "m/48'/0'/0'/2'"));
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+        "--slot",
+        &s0x,
+        "--slot",
+        "@0.fingerprint=73c5da0a",
+        "--json",
+    ]);
+    assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", "xpub slot");
+    // An entropy slot names only the inline form.
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+        "--slot",
+        "@0.entropy=07070707070707070707070707070707",
+        "--json",
+    ]);
+    assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", "entropy slot");
+    assert!(
+        o.stderr
+            .contains("An @N.entropy= slot (@0) takes only the inline form."),
+        "{}",
+        o.stderr
+    );
+}
+
+#[test]
+fn bip48_scope_two_key_shapes_keep_the_bip48_default() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    for (desc, want) in [
+        (
+            "wsh(thresh(2,pk(@0/<0;1>/*),s:pk(@1/<0;1>/*),sln:after(1000000)))",
+            "48'/0'/0'/2'",
+        ),
+        (
+            "wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@1/<0;1>/*),older(144))))",
+            "48'/0'/0'/2'",
+        ),
+        (
+            "sh(wsh(or_d(pk(@0/<0;1>/*),and_v(v:pk(@1/<0;1>/*),older(144)))))",
+            "48'/0'/0'/1'",
+        ),
+    ] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--slot",
+            &s1,
+            "--json",
+        ]);
+        assert_eq!(o.code, 4, "{desc}: {}", o.stderr);
+        assert_eq!(
+            origins_on_card(&md1_of(&o.stdout)),
+            vec![want, want],
+            "{desc}"
+        );
+        assert!(
+            o.stderr.contains(&format!(
+                "warning: no origin was given for @0,@1; the toolkit chose m/{want} (BIP-48 cosigner path)"
+            )),
+            "{desc}: {}",
+            o.stderr
+        );
+    }
+}
+
+#[test]
+fn bip48_scope_single_key_wsh_with_explicit_origin_mints() {
+    let s0 = format!("@0.phrase={A}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+        "--slot",
+        &s0,
+        "--slot",
+        "@0.path=m/84'/0'/3'",
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec!["84'/0'/3'"]);
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "sh(wsh(pk([73c5da0a/49'/0'/0']@0/<0;1>/*)))",
+        "--slot",
+        &s0,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec!["49'/0'/0'"]);
+}
+
+/// verify-bundle mints nothing and keeps rebuilding at the BIP-48 default, so
+/// a single-key wsh card minted there before the ruling still verifies with
+/// its original command line (no path).
+#[test]
+fn bip48_scope_verify_bundle_still_rebuilds_a_pre_ruling_single_key_card() {
+    let s0 = format!("@0.phrase={A}");
+    for (desc, path) in [
+        ("wsh(and_v(v:pk(@0/<0;1>/*),older(144)))", "m/48'/0'/0'/2'"),
+        ("sh(wsh(pk(@0/<0;1>/*)))", "m/48'/0'/0'/1'"),
+    ] {
+        let slot_path = format!("@0.path={path}");
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--slot",
+            &slot_path,
+            "--json",
+        ]);
+        assert_eq!(o.code, 0, "{desc}: {}", o.stderr);
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("bundle.json");
+        std::fs::write(&file, &o.stdout).unwrap();
+        let v = run(&[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--bundle-json",
+            file.to_str().unwrap(),
+        ]);
+        assert_eq!(
+            v.code, 0,
+            "{desc}: verify-bundle: {}\n{}",
+            v.stdout, v.stderr
+        );
+    }
+}
+
+/// Scheme mode is unaffected: every multisig scheme is a multisig, and
+/// --multisig-path-family bip48 still mints at m/48'/c'/a'/2'.
+#[test]
+fn bip48_scope_multisig_template_is_unaffected() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--scheme",
+        "wsh-sortedmulti",
+        "--threshold",
+        "2",
+        "--multisig-path-family",
+        "bip48",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(
+        origins_on_card(&md1_of(&o.stdout)),
+        vec!["48'/0'/0'/2'", "48'/0'/0'/2'"]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// rulings2-r1 I-1 — the canonical BIP-48 fill of wsh / sh(wsh) of multi /
+// sortedmulti is a multisig hierarchy too: a one-key `multi(1,@0)` with no
+// origin is refused at mint like every other one-key tree.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn bip48_scope_single_key_canonical_multi_without_origin_is_refused() {
+    let s0 = format!("@0.phrase={A}");
+    for desc in [
+        "wsh(multi(1,@0/**))",
+        "wsh(sortedmulti(1,@0/<0;1>/*))",
+        "sh(wsh(sortedmulti(1,@0/<0;1>/*)))",
+        "sh(wsh(multi(1,@0/<0;1>/*)))",
+    ] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--json",
+        ]);
+        assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", desc);
+        assert!(
+            o.stderr
+                .contains("On this descriptor shape a seed slot (@0) takes only the inline form."),
+            "{desc}: a phrase slot cannot take @0.path= here: {}",
+            o.stderr
+        );
+        assert!(
+            !o.stderr.contains("the toolkit chose"),
+            "{desc}: no chosen-origin warning before a refusal: {}",
+            o.stderr
+        );
+    }
+    // A foreign xpub slot is refused the same way.
+    let s0x = format!("@0.xpub={}", xpub_at(A, "m/48'/0'/0'/2'"));
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(1,@0/<0;1>/*))",
+        "--slot",
+        &s0x,
+        "--slot",
+        "@0.fingerprint=73c5da0a",
+        "--json",
+    ]);
+    assert_scope_refusal(&o, "@0", "BIP-48 (m/48'/...)", "xpub slot");
+    // The `[fp]@0` refusal on a one-key canonical multi does not advise
+    // dropping the brackets (that would be refused too).
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(1,[73c5da0a]@0/<0;1>/*))",
+        "--slot",
+        &s0,
+    ]);
+    assert_eq!(o.code, 2, "{}", o.stderr);
+    assert!(
+        !o.stderr.contains("drop the brackets"),
+        "no refused advice: {}",
+        o.stderr
+    );
+}
+
+/// The ruling is mint-time admission only: a one-key canonical multi with an
+/// explicit origin mints, and a card minted at the BIP-48 path (as the fill
+/// used to do) still verifies with no path, as before the ruling.
+#[test]
+fn bip48_scope_single_key_canonical_multi_explicit_and_pre_ruling_verify() {
+    let s0 = format!("@0.phrase={A}");
+    for (desc, minted, want) in [
+        (
+            "wsh(sortedmulti(1,@0/<0;1>/*))",
+            "wsh(sortedmulti(1,[73c5da0a/84'/0'/0']@0/<0;1>/*))",
+            "84'/0'/0'",
+        ),
+        (
+            "wsh(sortedmulti(1,@0/<0;1>/*))",
+            "wsh(sortedmulti(1,[73c5da0a/48'/0'/0'/2']@0/<0;1>/*))",
+            "48'/0'/0'/2'",
+        ),
+        (
+            "sh(wsh(sortedmulti(1,@0/<0;1>/*)))",
+            "sh(wsh(sortedmulti(1,[73c5da0a/48'/0'/0'/1']@0/<0;1>/*)))",
+            "48'/0'/0'/1'",
+        ),
+    ] {
+        let o = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            minted,
+            "--slot",
+            &s0,
+            "--json",
+        ]);
+        assert_eq!(o.code, 0, "{minted}: {}", o.stderr);
+        if !want.starts_with("48'") {
+            assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec![want], "{minted}");
+            continue;
+        }
+        // The card a pre-ruling `bundle --descriptor <desc>` (no origin)
+        // minted is this one; verify-bundle still rebuilds it with no path.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("bundle.json");
+        std::fs::write(&file, &o.stdout).unwrap();
+        let v = run(&[
+            "verify-bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            desc,
+            "--slot",
+            &s0,
+            "--bundle-json",
+            file.to_str().unwrap(),
+        ]);
+        assert_eq!(
+            v.code, 0,
+            "{desc}: verify-bundle: {}\n{}",
+            v.stdout, v.stderr
+        );
+    }
+}
+
+/// Two-key canonical multisig keeps the canonical BIP-48 fill (exit 4 notice).
+#[test]
+fn bip48_scope_two_key_canonical_multi_keeps_the_fill() {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(1,@0/<0;1>/*,@1/<0;1>/*))",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+        "--json",
+    ]);
+    assert_eq!(o.code, 4, "{}", o.stderr);
+    assert!(
+        o.stderr.contains("the toolkit chose m/48'/0'/0'/2'"),
+        "{}",
+        o.stderr
+    );
+}
+
+/// rulings2-r1 N-4: xpub-search names no multisig default for a descriptor
+/// with one key (the search itself is unchanged and still finds the key).
+#[test]
+fn xpub_search_prints_no_multisig_default_notice_for_one_key() {
+    let a = format!("{}/<0;1>/*", xpub_at(A, "m/84'/0'/0'"));
+    for desc in [
+        format!("wsh(and_v(v:pk({a}),older(144)))"),
+        format!("wsh(or_d(pk({a}),and_v(v:pk({a}),older(144))))"),
+    ] {
+        let o = run_stdin(
+            &[
+                "xpub-search",
+                "account-of-descriptor",
+                "--phrase-stdin",
+                "--descriptor",
+                &desc,
+                "--min-account",
+                "0",
+                "--number-of-accounts",
+                "1",
+            ],
+            A,
+        );
+        assert!(
+            !o.stderr.contains("defaulting origin path"),
+            "{desc}: {}",
+            o.stderr
+        );
+        assert!(
+            o.stdout.contains("m/84'/0'/0'"),
+            "{desc}: {}{}",
+            o.stdout,
+            o.stderr
+        );
+    }
 }
