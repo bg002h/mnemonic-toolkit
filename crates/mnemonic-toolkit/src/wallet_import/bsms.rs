@@ -85,7 +85,7 @@ impl WalletFormatParser for BsmsParser {
         }
 
         // SPEC §4.2 step 2: verify line 1 == `BSMS 1.0`. Other versions →
-        // FutureFormat (exit 3) per §2.3.
+        // FutureFormat (exit 2, an invalid input) per §2.3.
         let header = lines[0];
         if header != BSMS_HEADER {
             if let Some(version) = header.strip_prefix("BSMS ") {

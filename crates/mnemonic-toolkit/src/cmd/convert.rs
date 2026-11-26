@@ -810,7 +810,7 @@ pub(crate) fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, Too
     let mut buf = zeroize::Zeroizing::new(String::new());
     stdin
         .read_to_string(&mut buf)
-        .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
+        .map_err(|e| crate::error::read_error("stdin read", e))?;
     Ok(buf.trim().to_string())
 }
 
@@ -836,7 +836,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // gate; unset → runtime `is_terminal()` detection. Computed once at
     // function entry and threaded to the downstream auto-fire call so
     // piped consumers (no TTY) see the typed decode error instead of
-    // exit 5 short-circuit.
+    // the repair short-circuit (which exits with the repair's own status).
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure (advisories first).
@@ -1113,7 +1113,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         Ok(o) => o,
         Err(orig) => {
             // v0.22.0 auto-fire — on Ms1 / Mk1 sibling-codec decode failures,
-            // attempt BCH correction and short-circuit with exit 5 on success.
+            // attempt BCH correction and short-circuit with the repair's status on success.
             // Falls through to typed `orig` if repair fails or the original
             // error wasn't a decode-class failure. Per D6 / §2.5 standalone
             // `repair` subcommand ignores --no-auto-repair; here we honor it.
@@ -1140,7 +1140,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                     };
                     // try_repair_and_short_circuit is always-Err on
                     // repair-success; `?` propagates RepairShortCircuit
-                    // (exit 5) up to main.rs's special-case. v0.22.1 D20:
+                    // (the repair's status) up to main.rs's special-case. v0.22.1 D20:
                     // pass `args.json` so the auto-fire emits a JSON
                     // envelope on stdout when the caller expected JSON.
                     crate::repair::try_repair_and_short_circuit(

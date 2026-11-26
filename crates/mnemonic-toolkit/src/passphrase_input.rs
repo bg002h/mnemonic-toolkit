@@ -629,7 +629,7 @@ pub(crate) fn read_stdin_raw<R: Read + ?Sized>(
     f: &SecretFlag,
     stdin: &mut R,
 ) -> Result<Zeroizing<String>, ToolkitError> {
-    let err = |e: std::io::Error| ToolkitError::IoFailure(format!("stdin read: {e}"));
+    let err = |e: std::io::Error| crate::error::read_error("stdin read", e);
     // wave2 T4: scrub the SCRATCH buffer (passphrase material).
     let mut buf = Zeroizing::new(String::new());
     if stdin_is_terminal() {

@@ -21,7 +21,7 @@ pub fn read_phrase_input(arg: Option<&str>, stdin: &mut dyn Read) -> Result<Stri
             let mut buf = String::new();
             stdin
                 .read_to_string(&mut buf)
-                .map_err(|e| ToolkitError::IoFailure(format!("stdin read failed: {}", e)))?;
+                .map_err(|e| crate::error::read_error("stdin read failed", e))?;
             Ok(normalize_phrase(&buf))
         }
         Some(s) => Ok(normalize_phrase(s)),

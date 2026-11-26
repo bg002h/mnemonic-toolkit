@@ -2363,10 +2363,10 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
     );
     if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
-            ToolkitError::IoFailure(format!(
-                "--decrypt-password-file: cannot read {}: {e}",
-                path.display()
-            ))
+            crate::error::read_error(
+                format!("--decrypt-password-file: cannot read {}", path.display()),
+                e,
+            )
         })?;
         Ok(Some(Zeroizing::new(
             raw.strip_suffix('\n').unwrap_or(&raw).to_string(),
@@ -2424,10 +2424,13 @@ fn read_bsms_token<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<String, Too
         buf
     } else {
         fs::read_to_string(path).map_err(|e| {
-            ToolkitError::IoFailure(format!(
-                "--bsms-encryption-token: cannot read token file {}: {e}",
-                path.display()
-            ))
+            crate::error::read_error(
+                format!(
+                    "--bsms-encryption-token: cannot read token file {}",
+                    path.display()
+                ),
+                e,
+            )
         })?
     };
     Ok(raw.trim().to_lowercase())

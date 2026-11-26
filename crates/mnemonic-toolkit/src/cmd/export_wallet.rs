@@ -884,9 +884,8 @@ fn run_from_import_json<W: Write, E: Write>(
             .map_err(ToolkitError::Io)?;
         buf
     } else {
-        std::fs::read_to_string(value).map_err(|e| {
-            ToolkitError::IoFailure(format!("--from-import-json: read {value}: {e}"))
-        })?
+        std::fs::read_to_string(value)
+            .map_err(|e| crate::error::read_error(format!("--from-import-json: read {value}"), e))?
     };
     let envelope =
         parse_import_json_envelopes(&raw, args.from_import_json_index, "--from-import-json")?;

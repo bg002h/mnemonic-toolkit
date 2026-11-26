@@ -256,8 +256,8 @@ fn restore_non_seed_from_rejected() {
         .expect("spawn");
     assert_eq!(
         out.status.code(),
-        Some(64),
-        "non-seed --from must be exit 1"
+        Some(2),
+        "non-seed --from is an invalid input (final review M3)"
     );
 }
 

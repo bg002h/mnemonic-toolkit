@@ -100,7 +100,7 @@ where
         let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
+            .map_err(|e| crate::error::read_error("stdin read", e))?;
         Source::Phrase(Zeroizing::new(normalize_phrase(&buf)))
     } else if let Some(m) = args.ms1() {
         secret_in_argv_warning(stderr, "--ms1", "--ms1-stdin");
@@ -111,7 +111,7 @@ where
         let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
+            .map_err(|e| crate::error::read_error("stdin read", e))?;
         let trimmed: Zeroizing<String> = Zeroizing::new(buf.trim().to_string());
         crate::repair::validate_flag_hrp("--ms1-stdin", "ms", &trimmed)?;
         Source::Ms1(trimmed)

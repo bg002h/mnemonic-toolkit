@@ -65,9 +65,8 @@ pub(super) fn run_candidate_scan<W: Write, E: Write>(
     for (idx, line) in reader.lines().enumerate() {
         // `BufRead::lines` drops `\n`; strip a trailing `\r` for CRLF. NO other
         // trim — a passphrase is an exact byte string.
-        let mut raw = line.map_err(|e| {
-            ToolkitError::IoFailure(format!("--passphrase-candidates-file read: {e}"))
-        })?;
+        let mut raw =
+            line.map_err(|e| crate::error::read_error("--passphrase-candidates-file read", e))?;
         if raw.ends_with('\r') {
             raw.pop();
         }

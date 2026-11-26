@@ -464,7 +464,7 @@ pub(crate) fn read_import_json_arg<R: std::io::Read + ?Sized>(
         return Ok(buf);
     }
     std::fs::read_to_string(value)
-        .map_err(|e| ToolkitError::IoFailure(format!("{flag_label}: read {value}: {e}")))
+        .map_err(|e| crate::error::read_error(format!("{flag_label}: read {value}"), e))
 }
 
 /// Parse the envelope's `descriptor` field, stripping the BIP-380

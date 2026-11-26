@@ -698,3 +698,120 @@ fn e5e_multipath_testnet_tpub_explicit_testnet_bsms_4line_ok() {
     assert_eq!(lines[2], "/0/*,/1/*");
     assert_eq!(lines[3], TESTNET_RECEIVE_0);
 }
+
+// ---------------------------------------------------------------------------
+// Final review I2 — a `--slot` xpub of the other network is refused (8) in
+// `bundle` and `verify-bundle`, single-sig and multisig, as export-wallet
+// (E4) and import-wallet already do. It was a bad cosigner spec (2).
+// ---------------------------------------------------------------------------
+
+/// A second mainnet xpub (BIP-84 account 1, m/84'/0'/1'), so the multisig
+/// row has two distinct keys.
+const MAINNET_XPUB_ACCT1: &str = "xpub6CatWdiZiodmYVtWLtEQsAg1H9ooS1bmsJUBwQ83FE1Fyk386FWcyicJgEZv3quZSJKA5dh5Lo2PbubMGxCfZtRthV6ST2qquL9w3HSzcUn";
+
+/// The testnet bundle for `TESTNET_TPUB` (fingerprint 00000000, bip84), as
+/// positional strings for `verify-bundle`.
+fn testnet_bundle_strings() -> Vec<String> {
+    let out = bin()
+        .args([
+            "bundle",
+            "--network",
+            "testnet",
+            "--template",
+            "bip84",
+            "--slot",
+            &format!("@0.xpub={TESTNET_TPUB}"),
+            "--slot",
+            "@0.fingerprint=00000000",
+            "--json",
+        ])
+        .output()
+        .expect("spawn");
+    assert_eq!(out.status.code(), Some(0), "testnet bundle must mint");
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    let mut s = Vec::new();
+    for k in ["md1", "mk1"] {
+        for x in v[k].as_array().expect("array") {
+            let x = x.as_str().expect("str");
+            if !x.is_empty() {
+                s.push(x.to_owned());
+            }
+        }
+    }
+    s
+}
+
+#[test]
+fn i2_bundle_singlesig_mainnet_slot_xpub_on_testnet_is_8() {
+    let out = bin()
+        .args([
+            "bundle",
+            "--network",
+            "testnet",
+            "--template",
+            "bip84",
+            "--slot",
+            &format!("@0.xpub={MAINNET_XPUB}"),
+            "--slot",
+            "@0.fingerprint=00000000",
+        ])
+        .output()
+        .expect("spawn");
+    assert_mismatch(&out, "I2 bundle single-sig");
+    assert!(out.stdout.is_empty(), "nothing is minted: {:?}", out.stdout);
+}
+
+#[test]
+fn i2_bundle_multisig_mainnet_slot_xpub_on_testnet_is_8() {
+    let out = bin()
+        .args([
+            "bundle",
+            "--network",
+            "testnet",
+            "--template",
+            "wsh-sortedmulti",
+            "--threshold",
+            "1",
+            "--slot",
+            &format!("@0.xpub={MAINNET_XPUB}"),
+            "--slot",
+            "@0.fingerprint=00000000",
+            "--slot",
+            "@0.path=m/87'/1'/0'",
+            "--slot",
+            &format!("@1.xpub={MAINNET_XPUB_ACCT1}"),
+            "--slot",
+            "@1.fingerprint=00000001",
+            "--slot",
+            "@1.path=m/87'/1'/1'",
+        ])
+        .output()
+        .expect("spawn");
+    assert_mismatch(&out, "I2 bundle multisig");
+    assert!(out.stdout.is_empty(), "nothing is minted: {:?}", out.stdout);
+}
+
+#[test]
+fn i2_verify_bundle_mainnet_slot_xpub_on_testnet_is_8() {
+    let strings = testnet_bundle_strings();
+    let mut c = bin();
+    c.args([
+        "verify-bundle",
+        "--network",
+        "testnet",
+        "--template",
+        "bip84",
+        "--slot",
+        &format!("@0.xpub={MAINNET_XPUB}"),
+        "--slot",
+        "@0.fingerprint=00000000",
+    ]);
+    c.args(&strings);
+    let out = c.output().expect("spawn");
+    assert_mismatch(&out, "I2 verify-bundle");
+}
+
+#[test]
+fn i2_control_bundle_testnet_slot_xpub_on_testnet_is_0() {
+    assert!(!testnet_bundle_strings().is_empty());
+}

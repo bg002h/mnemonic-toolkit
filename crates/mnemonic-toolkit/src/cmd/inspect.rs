@@ -98,7 +98,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // gate; unset → runtime `is_terminal()` detection. Computed once at
     // function entry and threaded to the downstream auto-fire call so
     // piped consumers (no TTY) see the typed decode error instead of
-    // exit 5 short-circuit.
+    // the repair short-circuit (which exits with the repair's own status).
     let effective_no_auto_repair = crate::repair::resolve_no_auto_repair(no_auto_repair);
 
     // `inspect` has no indel mode; always keep the strict typed-flag HRP gate.
@@ -123,7 +123,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             Err(orig) => {
                 // v0.22.0 auto-fire — same pattern as `cmd/convert.rs`. On a
                 // sibling-codec decode failure, attempt BCH correction and
-                // short-circuit with exit 5. Falls through to typed `orig` if
+                // short-circuit with the repair's status. Falls through to typed `orig` if
                 // repair fails or the error wasn't a decode-class failure.
                 // v0.25.0 §2.B — use `effective_no_auto_repair` (TTY-aware)
                 // so piped invocations skip auto-fire by default; see top-of-fn.
@@ -246,7 +246,7 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
         // v0.89.0 (`toolkit-inspect-nonchunked-md1-intake-gap`): intake now
         // length-dispatches so a plain NON-chunked single-string md1 (the bare
         // `md encode` form) is accepted too — previously it hit `unsupported
-        // version 2` / exit 3 because the chunk-layer `reassemble` misread a
+        // version 2` (then exit 3) because the chunk-layer `reassemble` misread a
         // non-chunked string's 4-bit version as `2`. `decode_md1_string_with_opts`
         // dispatches on the codec's IN-BAND chunked-flag (bit 3 of byte 0),
         // BCH-verified BEFORE the flag is read (so corruption can't re-route):

@@ -421,6 +421,27 @@ fn run_split<R: Read, W: Write, E: Write>(
         }
     }
 
+    // Build GroupSpec vec from --group args (R0 I4 fold:
+    // order-preserving so group_idx matches argv position).
+    let groups: Vec<GroupSpec> = args
+        .group
+        .iter()
+        .map(|(n, t)| GroupSpec {
+            member_count: *n,
+            member_threshold: *t,
+        })
+        .collect();
+
+    // Final review M2 (spec R2): the group, threshold and iteration settings
+    // are judged before the secret is read, so a bad one is 64 whatever the
+    // input is.
+    mnemonic_toolkit::slip39::validate_split_settings(
+        args.group_threshold,
+        &groups,
+        args.iteration_exponent,
+    )
+    .map_err(map_slip39_error)?;
+
     // SPEC §2.6 rows 1a/1b — argv-leakage advisories for inline --from.
     if from_inline {
         match args.from.node {
@@ -475,17 +496,6 @@ fn run_split<R: Read, W: Write, E: Write>(
     if let Some(msg) = crate::language::non_english_seed_advisory(args.language, "SLIP-39 shares") {
         let _ = writeln!(stderr, "{msg}");
     }
-
-    // Build GroupSpec vec from --group args (R0 I4 fold:
-    // order-preserving so group_idx matches argv position).
-    let groups: Vec<GroupSpec> = args
-        .group
-        .iter()
-        .map(|(n, t)| GroupSpec {
-            member_count: *n,
-            member_threshold: *t,
-        })
-        .collect();
 
     // Identifier override (env-var wedge).
     #[cfg(not(feature = "slip39-test-rng"))]

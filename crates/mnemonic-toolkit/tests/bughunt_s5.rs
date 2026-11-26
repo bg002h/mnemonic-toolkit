@@ -359,7 +359,8 @@ fn bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share() {
              --share @env:VAR …, one share on stdin and each further share in an exported \
              variable) and confirm the recovered seed's address/xpub against a \
              known-good copy before use; BIP-93 recommends confirming a corrected codex32 \
-             string\n{PK_ADVISORY}\n"
+             string\nrepair: this is share 'q' of a 2-of-N set, not a single card; recover the \
+             secret with `mnemonic ms-shares combine` and 2 shares\n{PK_ADVISORY}\n"
         )
     );
     if d.code != 20 || !d.stdout.contains(SHARE_1) {
@@ -375,7 +376,14 @@ fn bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share() {
         .args(["repair", "--ms1", "-"])
         .write_stdin(format!("{SHARE_1}\n")));
     assert_eq!(c.stdout, format!("{SHARE_1}\n"));
-    assert_eq!(c.stderr, format!("{PK_ADVISORY}\n"));
+    // Final-review ruling (b): a clean share is named too, as `ms repair` does.
+    assert_eq!(
+        c.stderr,
+        format!(
+            "repair: this is share 'q' of a 2-of-N set, not a single card; recover the \
+             secret with `mnemonic ms-shares combine` and 2 shares\n{PK_ADVISORY}\n"
+        )
+    );
     if c.code != 0 || !c.stdout.contains(SHARE_1) {
         failures.push(format!(
             "clean share: exit {} (want 0 with the share echoed); stderr: {}",

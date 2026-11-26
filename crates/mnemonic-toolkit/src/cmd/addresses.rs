@@ -156,6 +156,22 @@ pub fn run<R: Read, W: Write, E: Write>(
         crate::passphrase_input::emit_argv_note(pp_value, args.passphrase_stdin, stderr);
     }
 
+    // Final review M2 (spec R2): the settings are judged before any input is
+    // read, so a bad one is 64 whatever the input is.
+    let indices = resolve_indices(args.count, args.range.as_deref())?;
+    if from.node == NodeType::Xpub {
+        if args.account != 0 {
+            return Err(usage(
+                "--account does not apply to --from xpub= (the xpub is already an account key)",
+            ));
+        }
+        if args.passphrase.is_some() || args.passphrase_stdin {
+            return Err(usage(
+                "--passphrase / --passphrase-stdin do not apply to --from xpub= (no BIP-39 seed)",
+            ));
+        }
+    }
+
     // Effective BIP-39 passphrase (stdin / @env: / inline).
     // cycle-14 (L22): wrap the passphrase / --from secret in Zeroizing so the
     // handler-scope local scrubs on drop (mlock-pinned below; mlock != scrub).
@@ -172,16 +188,6 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Resolve the account xpub + effective network (+ the JSON `account` field).
     let (account_xpub, network, account_field): (Xpub, CliNetwork, Option<u32>) = match from.node {
         NodeType::Xpub => {
-            if args.account != 0 {
-                return Err(usage(
-                    "--account does not apply to --from xpub= (the xpub is already an account key)",
-                ));
-            }
-            if args.passphrase.is_some() || args.passphrase_stdin {
-                return Err(usage(
-                    "--passphrase / --passphrase-stdin do not apply to --from xpub= (no BIP-39 seed)",
-                ));
-            }
             let xpub = Xpub::from_str(&from_value)
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?;
             let net = match args.network {
@@ -286,7 +292,6 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     };
 
-    let indices = resolve_indices(args.count, args.range.as_deref())?;
     let secp = Secp256k1::verification_only();
 
     // (chain, index, address), chain-major (receive before change).

@@ -144,6 +144,10 @@ pub fn run<R: Read, W: Write, E: Write>(
         )));
     }
 
+    // Final review M2 (spec R2): every setting is judged before any input
+    // is read, so a bad `--length` is 64 whatever the input is.
+    check_settings(args)?;
+
     // SPEC §2 + v0.8 §3 — `--from` accepts xprv= or phrase=. Stdin via `=-`.
     // SPEC v0.9.0 §1 item 2 — wrap the OWNED secret string in Zeroizing so
     // it scrubs on drop after seed derivation.
@@ -213,12 +217,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             Xpriv::new_master(NetworkKind::Main, &seed[..])
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?
         }
-        _ => {
-            return Err(ToolkitError::Usage(format!(
-                "derive-child: --from must be xprv=<master-xprv> or phrase=<mnemonic>; got {}",
-                args.from.node.as_str(),
-            )))
-        }
+        _ => unreachable!("check_settings refuses a --from node other than xprv/phrase"),
     };
     if (args.passphrase.is_some() || args.passphrase_stdin) && args.from.node != NodeType::Phrase {
         let _ = writeln!(
@@ -229,86 +228,35 @@ pub fn run<R: Read, W: Write, E: Write>(
 
     let emit_network = args.network.unwrap_or(CliNetwork::Mainnet).network_kind();
 
-    // SPEC §5 + §7 — out-of-scope apps surface byte-exact refusal here.
-    // v0.8: `dice` lifted to in-scope; `rsa` and `rsa-gpg` remain deferred
-    // per Phase 6 RSA-crate security spike (RUSTSEC-2023-0071 unpatched).
-    match args.application.as_str() {
-        "rsa" | "rsa-gpg" => return Err(ToolkitError::DeriveChildUnsupportedApp),
-        _ => {}
-    }
-
     // cycle-15t — every `format_*` returns `SecretString` (length-only
     // redacting Debug; Display/Deref render verbatim so `writeln!` below is
     // byte-identical), so the rendered child secret scrubs on drop.
     let output: crate::secret_string::SecretString = match args.application.as_str() {
         "bip39" => {
             let words = args.length;
-            if !matches!(words, 12 | 15 | 18 | 21 | 24) {
-                return Err(ToolkitError::DeriveChildLengthOutOfRange {
-                    app: "bip39",
-                    length: words,
-                    valid_text: "12 | 15 | 18 | 21 | 24 words",
-                });
-            }
             let cli_lang = args.language.unwrap_or_default();
             let (lang_code, bip39_lang) = resolve_bip85_language(cli_lang)?;
             bip85::format_bip39_phrase(&master, lang_code, bip39_lang, words, args.index)?
         }
-        "hd-seed" => {
-            reject_length(args.length)?;
-            bip85::format_hd_seed_wif(&master, args.index, emit_network)?
-        }
-        "xprv" => {
-            reject_length(args.length)?;
-            bip85::format_xprv_child(&master, args.index, emit_network)?
-        }
+        "hd-seed" => bip85::format_hd_seed_wif(&master, args.index, emit_network)?,
+        "xprv" => bip85::format_xprv_child(&master, args.index, emit_network)?,
         "hex" => {
             let n = args.length;
-            if !(16..=64).contains(&n) {
-                return Err(ToolkitError::DeriveChildLengthOutOfRange {
-                    app: "hex",
-                    length: n,
-                    valid_text: "16..=64 bytes",
-                });
-            }
             bip85::format_hex_bytes(&master, n, args.index)?
         }
         "password-base64" => {
             let n = args.length;
-            if !(20..=86).contains(&n) {
-                return Err(ToolkitError::DeriveChildLengthOutOfRange {
-                    app: "password-base64",
-                    length: n,
-                    valid_text: "20..=86 chars",
-                });
-            }
             bip85::format_password_base64(&master, n, args.index)?
         }
         "password-base85" => {
             let n = args.length;
-            if !(10..=80).contains(&n) {
-                return Err(ToolkitError::DeriveChildLengthOutOfRange {
-                    app: "password-base85",
-                    length: n,
-                    valid_text: "10..=80 chars",
-                });
-            }
             bip85::format_password_base85(&master, n, args.index)?
         }
         "dice" => {
             let rolls = args.length;
-            if !(1..=bip85::DICE_MAX_ROLLS).contains(&rolls) {
-                return Err(ToolkitError::DeriveChildLengthOutOfRange {
-                    app: "dice",
-                    length: rolls,
-                    valid_text: "1..=2^31-1 rolls",
-                });
-            }
-            let sides = args.dice_sides.ok_or_else(|| {
-                ToolkitError::Usage(
-                    "--application dice requires --dice-sides <N> (number of sides; >=2)".into(),
-                )
-            })?;
+            let sides = args
+                .dice_sides
+                .expect("check_settings refuses dice without --dice-sides");
             // The rolls are written as they are drawn (constant memory in
             // `--length`); no aggregate secret is built.
             bip85::write_dice_rolls(&master, sides, rolls, args.index, stdout)?;
@@ -319,13 +267,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             );
             return Ok(());
         }
-        other => {
-            return Err(ToolkitError::BadInput(format!(
-                "derive-child: --application {other:?} is not recognized; \
-                 expected one of: bip39, hd-seed, xprv, hex, password-base64, \
-                 password-base85, dice (or out-of-scope: rsa, rsa-gpg)",
-            )));
-        }
+        other => unreachable!("check_settings refuses --application {other:?}"),
     };
 
     writeln!(stdout, "{output}").map_err(ToolkitError::Io)?;
@@ -335,6 +277,75 @@ pub fn run<R: Read, W: Write, E: Write>(
         stderr,
     );
     Ok(())
+}
+
+/// Final review M2 (spec R2): the settings, judged before any input is read.
+/// The `--from` node, the application (SPEC §5 + §7: `rsa` and `rsa-gpg`
+/// stay out of scope), its `--length` range and dice's `--dice-sides`.
+fn check_settings(args: &DeriveChildArgs) -> Result<(), ToolkitError> {
+    if !matches!(args.from.node, NodeType::Xprv | NodeType::Phrase) {
+        return Err(ToolkitError::Usage(format!(
+            "derive-child: --from must be xprv=<master-xprv> or phrase=<mnemonic>; got {}",
+            args.from.node.as_str(),
+        )));
+    }
+    // BIP-85 hardens the index: it must be a valid BIP-32 child number.
+    if args.index >= 0x8000_0000 {
+        return Err(ToolkitError::Usage(format!(
+            "derive-child: --index {} is out of range; BIP-85 indices are 0..=2147483647",
+            args.index,
+        )));
+    }
+    let length = args.length;
+    let range = |app: &'static str, ok: bool, valid_text: &'static str| {
+        if ok {
+            Ok(())
+        } else {
+            Err(ToolkitError::DeriveChildLengthOutOfRange {
+                app,
+                length,
+                valid_text,
+            })
+        }
+    };
+    match args.application.as_str() {
+        "rsa" | "rsa-gpg" => Err(ToolkitError::DeriveChildUnsupportedApp),
+        "bip39" => range(
+            "bip39",
+            matches!(length, 12 | 15 | 18 | 21 | 24),
+            "12 | 15 | 18 | 21 | 24 words",
+        ),
+        "hd-seed" | "xprv" => reject_length(length),
+        "hex" => range("hex", (16..=64).contains(&length), "16..=64 bytes"),
+        "password-base64" => range(
+            "password-base64",
+            (20..=86).contains(&length),
+            "20..=86 chars",
+        ),
+        "password-base85" => range(
+            "password-base85",
+            (10..=80).contains(&length),
+            "10..=80 chars",
+        ),
+        "dice" => {
+            range(
+                "dice",
+                (1..=bip85::DICE_MAX_ROLLS).contains(&length),
+                "1..=2^31-1 rolls",
+            )?;
+            if args.dice_sides.is_none() {
+                return Err(ToolkitError::Usage(
+                    "--application dice requires --dice-sides <N> (number of sides; >=2)".into(),
+                ));
+            }
+            Ok(())
+        }
+        other => Err(ToolkitError::BadInput(format!(
+            "derive-child: --application {other:?} is not recognized; \
+             expected one of: bip39, hd-seed, xprv, hex, password-base64, \
+             password-base85, dice (or out-of-scope: rsa, rsa-gpg)",
+        ))),
+    }
 }
 
 /// SPEC §7 — `hd-seed` / `xprv` ignore `--length 0` (sentinel for grammar-

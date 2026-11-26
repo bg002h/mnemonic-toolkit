@@ -239,7 +239,7 @@ pub fn friendly_md_codec(e: &md_codec::Error) -> String {
         // by the more general MalformedHeader { detail }.
         E::MalformedHeader { detail } => format!("md1 malformed header: {}", detail),
         // v0.30 renamed UnsupportedVersion -> WireVersionMismatch.
-        // Routes via From → FutureFormat (exit 3); arm retained for
+        // Routes via From → FutureFormat (exit 2); arm retained for
         // exhaustiveness with a defensive message in case the routing
         // is ever bypassed (e.g., direct construction in a test).
         E::WireVersionMismatch { got } => {

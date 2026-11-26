@@ -119,7 +119,7 @@ pub fn intake_from_explicit_form<R: std::io::Read>(
         let mut buf = String::new();
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
+            .map_err(|e| crate::error::read_error("stdin read", e))?;
         buf
     } else {
         value.to_string()

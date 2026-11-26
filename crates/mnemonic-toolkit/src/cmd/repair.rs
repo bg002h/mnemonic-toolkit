@@ -163,11 +163,12 @@ pub fn run<R: Read, W: Write, E: Write>(
         .ok();
     }
 
-    // Emit per-kind reports in fixed (ms1, mk1, md1) order for deterministic
-    // output regardless of CLI arg ordering. Multi-group (e.g. `--ms1 X
-    // --mk1 Y`) is supported: the indel branch must NOT early-return on the
-    // non-fatal (Ambiguous / recovered) outcomes, so every group still emits
-    // (R0 I1). Only Unrecoverable short-circuits (exit 2).
+    // Final review M1: decide every group before anything is printed, so a
+    // group that fails atomically fails the whole call with nothing on
+    // stdout, whatever the order of the groups (R1). Groups are decided in
+    // fixed (ms1, mk1, md1) order for deterministic output; the indel branch
+    // does not stop on its non-fatal outcomes (R0 I1).
+    let mut decided: Vec<(CardKind, Decided)> = Vec::with_capacity(groups.len());
     for (kind, chunks) in &groups {
         // F-642: an md1 card at a wire version this build cannot read. BCH
         // correction is version-agnostic, so a correctable SINGLE-STRING card
@@ -183,20 +184,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             Err(RepairError::WireVersionUnsupported { got }) if *kind == CardKind::Md1 => {
                 match repair::correct_unreadable_md1(chunks, got) {
                     Some(outcome) => {
-                        total_repairs += outcome.repairs.len();
-                        if args.json {
-                            emit_repair_json(&outcome, stdout)?;
-                        } else {
-                            emit_repair_text(&outcome, stdout)?;
-                        }
-                        for line in repair::unreadable_version_advisory(got) {
-                            writeln!(stderr, "{line}").ok();
-                        }
-                        // Ruling 8: a correction with no oracle (20), and
-                        // the printed string does not decode here (+2,
-                        // decision 6): 22.
-                        candidate_seen = true;
-                        invalid_seen = true;
+                        decided.push((*kind, Decided::Unreadable(outcome, got)));
                         continue;
                     }
                     None => Err(RepairError::WireVersionUnsupported { got }),
@@ -219,9 +207,56 @@ pub fn run<R: Read, W: Write, E: Write>(
             other => other,
         };
         match result {
-            Ok(outcome) => {
+            Ok(outcome) => decided.push((*kind, Decided::Repaired(outcome))),
+            Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
+                match repair::recover_indel_card(
+                    *kind,
+                    chunks,
+                    args.max_indel as usize,
+                    args.max_subst as usize,
+                )? {
+                    IndelOutcome::Unrecoverable => {
+                        return match e {
+                            // Phase 4: a genuine wrong-HRP value entered indel
+                            // search (because `is_indel_trigger` includes
+                            // `HrpMismatch`), failed to recover, and deserves
+                            // its original "did you mean" suggestion rather than
+                            // the generic "could not be recovered within
+                            // --max-indel" message.
+                            RepairError::HrpMismatch { .. } => Err(e.into()),
+                            _ => Err(ToolkitError::Repair(RepairError::IndelUnrecoverable {
+                                hrp: kind.hrp(),
+                                max_indel: args.max_indel as usize,
+                            })),
+                        };
+                    }
+                    other => decided.push((*kind, Decided::Indel(other))),
+                }
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    for (kind, d) in decided {
+        match d {
+            Decided::Unreadable(outcome, got) => {
                 total_repairs += outcome.repairs.len();
-                kinds.push(crate::secret_advisory::card_kind_class(*kind));
+                if args.json {
+                    emit_repair_json(&outcome, stdout)?;
+                } else {
+                    emit_repair_text(&outcome, stdout)?;
+                }
+                for line in repair::unreadable_version_advisory(got) {
+                    writeln!(stderr, "{line}").ok();
+                }
+                // Ruling 8: a correction with no oracle (20), and the
+                // printed string does not decode here (+2, decision 6): 22.
+                candidate_seen = true;
+                invalid_seen = true;
+            }
+            Decided::Repaired(outcome) => {
+                total_repairs += outcome.repairs.len();
+                kinds.push(crate::secret_advisory::card_kind_class(kind));
                 if args.json {
                     emit_repair_json(&outcome, stdout)?;
                 } else {
@@ -238,77 +273,65 @@ pub fn run<R: Read, W: Write, E: Write>(
                         candidate_seen = true;
                         writeln!(stderr, "repair: {reason}").ok();
                     }
-                    // Decision 7: an incomplete mk1 set is REPAIRED (16),
+                    // Decision 7: an incomplete set is REPAIRED (16),
                     // verifiable by reassembly later; it still warns.
                     repair::SetVerify::IncompleteSet { reason } => {
                         writeln!(stderr, "repair: {reason}").ok();
                     }
                     repair::SetVerify::Blessed | repair::SetVerify::UnreadableVersion { .. } => {}
                 }
+                // Final-review ruling (b): a distributed share is named.
+                if let Some((threshold, index)) = outcome.share {
+                    writeln!(
+                        stderr,
+                        "repair: this is share '{index}' of a {threshold}-of-N set, not a single \
+                         card; recover the secret with `mnemonic ms-shares combine` and \
+                         {threshold} shares"
+                    )
+                    .ok();
+                }
                 // Decision 6: a printed string that does not decode as a
                 // card adds 2 (INVALID).
-                for line in &outcome.not_a_card {
-                    writeln!(stderr, "repair: error: {line}").ok();
+                for n in &outcome.not_a_card {
+                    writeln!(stderr, "repair: error: {}", n.message).ok();
                     invalid_seen = true;
                 }
             }
-            Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
-                match repair::recover_indel_card(
-                    *kind,
-                    chunks,
-                    args.max_indel as usize,
-                    args.max_subst as usize,
-                )? {
-                    IndelOutcome::Unique(c) => {
-                        kinds.push(crate::secret_advisory::card_kind_class(*kind));
-                        if c.subst_count >= 1 {
-                            substitution_seen = true;
-                        }
-                        if args.json {
-                            emit_indel_json("unique", &[&c], stdout)?;
-                        } else {
-                            emit_indel_text(&[&c], stdout)?;
-                        }
-                        total_repairs += 1;
-                    }
-                    IndelOutcome::Ambiguous(v) => {
-                        kinds.push(crate::secret_advisory::card_kind_class(*kind));
-                        if v.iter().any(|c| c.subst_count >= 1) {
-                            substitution_seen = true;
-                        }
-                        let refs: Vec<&IndelCandidate> = v.iter().collect();
-                        if args.json {
-                            emit_indel_json("ambiguous", &refs, stdout)?;
-                        } else {
-                            emit_indel_text(&refs, stdout)?;
-                        }
-                        writeln!(
-                            stderr,
-                            "repair: ambiguous — {} candidates within --max-indel {}; choose manually",
-                            v.len(),
-                            args.max_indel
-                        )
-                        .ok();
-                        ambiguous_seen = true;
-                    }
-                    IndelOutcome::Unrecoverable => {
-                        return match e {
-                            // Phase 4: a genuine wrong-HRP value entered indel
-                            // search (because `is_indel_trigger` includes
-                            // `HrpMismatch`), failed to recover, and deserves
-                            // its original "did you mean" suggestion rather than
-                            // the generic "could not be recovered within
-                            // --max-indel" message.
-                            RepairError::HrpMismatch { .. } => Err(e.into()),
-                            _ => Err(ToolkitError::Repair(RepairError::IndelUnrecoverable {
-                                hrp: kind.hrp(),
-                                max_indel: args.max_indel as usize,
-                            })),
-                        };
-                    }
+            Decided::Indel(IndelOutcome::Unique(c)) => {
+                kinds.push(crate::secret_advisory::card_kind_class(kind));
+                if c.subst_count >= 1 {
+                    substitution_seen = true;
                 }
+                if args.json {
+                    emit_indel_json("unique", &[&c], stdout)?;
+                } else {
+                    emit_indel_text(&[&c], stdout)?;
+                }
+                total_repairs += 1;
             }
-            Err(e) => return Err(e.into()),
+            Decided::Indel(IndelOutcome::Ambiguous(v)) => {
+                kinds.push(crate::secret_advisory::card_kind_class(kind));
+                if v.iter().any(|c| c.subst_count >= 1) {
+                    substitution_seen = true;
+                }
+                let refs: Vec<&IndelCandidate> = v.iter().collect();
+                if args.json {
+                    emit_indel_json("ambiguous", &refs, stdout)?;
+                } else {
+                    emit_indel_text(&refs, stdout)?;
+                }
+                writeln!(
+                    stderr,
+                    "repair: ambiguous — {} candidates within --max-indel {}; choose manually",
+                    v.len(),
+                    args.max_indel
+                )
+                .ok();
+                ambiguous_seen = true;
+            }
+            Decided::Indel(IndelOutcome::Unrecoverable) => {
+                unreachable!("an unrecoverable indel returns before printing")
+            }
         }
     }
 
@@ -338,6 +361,14 @@ pub fn run<R: Read, W: Write, E: Write>(
     } else {
         code
     })
+}
+
+/// A group decided before anything is printed (final review M1).
+enum Decided {
+    Repaired(RepairOutcome),
+    /// F-642: corrected at a wire version this build cannot read.
+    Unreadable(RepairOutcome, u8),
+    Indel(IndelOutcome),
 }
 
 fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result<(), ToolkitError> {
@@ -383,8 +414,31 @@ struct RepairJson<'a> {
     /// — ms-cli's `RepairJson` (Phase P1) must byte-match this field order
     /// (D27/D9).
     verdict: &'static str,
+    /// Present only at exit 22 (decision 6): why a printed string is not a
+    /// card, named and shaped as `ms`, `md` and `mk` name it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    not_a_card: Option<NotACardJson<'a>>,
+    /// `true` only for a short chunk set or a lone chunk (decision 7), as
+    /// `md repair --json` and `mk repair --json`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    incomplete: bool,
+    /// A distributed K-of-N ms1 share, as `ms repair --json`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    share: Option<ShareJson>,
     corrected_chunks: &'a [SecretString],
     repairs: Vec<RepairJsonDetail<'a>>,
+}
+
+#[derive(serde::Serialize)]
+struct NotACardJson<'a> {
+    kind: &'a str,
+    message: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct ShareJson {
+    threshold: u32,
+    index: String,
 }
 
 #[derive(serde::Serialize)]
@@ -407,6 +461,15 @@ fn emit_repair_json<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result
         schema_version: "1",
         kind: kind_str(outcome.kind),
         verdict: verdict_str(&outcome.set_verify),
+        not_a_card: outcome.not_a_card.first().map(|n| NotACardJson {
+            kind: &n.kind,
+            message: &n.message,
+        }),
+        incomplete: outcome.incomplete,
+        share: outcome.share.map(|(threshold, index)| ShareJson {
+            threshold,
+            index: index.to_string(),
+        }),
         corrected_chunks: &outcome.corrected_chunks,
         repairs: outcome
             .repairs

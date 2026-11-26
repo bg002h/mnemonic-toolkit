@@ -445,11 +445,13 @@ pub fn run<R: Read, W: Write, E: Write>(
     let from_uses_stdin = from.value == "-";
 
     // Seed-bearing nodes only — restore needs a master secret to derive from.
+    // Final review M3: a node of another kind is an invalid input (2), not a
+    // usage error; the same at every `--from` site below.
     if !matches!(
         from.node,
         NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
     ) {
-        return Err(usage(format!(
+        return Err(bad(format!(
             "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
             from.node.as_str()
         )));
@@ -932,7 +934,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         from.node,
         NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
     ) {
-        return Err(usage(format!(
+        return Err(bad(format!(
             "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
             from.node.as_str()
         )));
@@ -1549,7 +1551,7 @@ pub(crate) fn resolve_template_completion_seed<E: Write>(
         from.node,
         NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
     ) {
-        return Err(usage(format!(
+        return Err(bad(format!(
             "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
             from.node.as_str()
         )));
@@ -4647,7 +4649,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             from.node,
             NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
         ) {
-            return Err(usage(format!(
+            return Err(bad(format!(
                 "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
                 from.node.as_str()
             )));

@@ -249,13 +249,13 @@ fn read_spec<R: Read>(args: &BuildDescriptorArgs, stdin: &mut R) -> Result<Strin
         let mut buf = String::new();
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::IoFailure(format!("--spec stdin read: {e}")))?;
+            .map_err(|e| crate::error::read_error("--spec stdin read", e))?;
         Ok(buf)
     };
     match args.spec.as_deref() {
         Some("-") => read_stdin(stdin),
         Some(path) => std::fs::read_to_string(path)
-            .map_err(|e| ToolkitError::IoFailure(format!("--spec {path}: {e}"))),
+            .map_err(|e| crate::error::read_error(format!("--spec {path}"), e)),
         None => {
             if std::io::stdin().is_terminal() {
                 Err(ToolkitError::Usage(

@@ -641,17 +641,14 @@ pub fn synthesize_multisig_watch_only(
     }
 
     // 2. SPEC §4.3 per-cosigner network/xpub cross-check.
-    for (i, c) in cosigners.iter().enumerate() {
-        if c.xpub.network != network.network_kind() {
-            return Err(ToolkitError::CosignerSpec {
-                cosigner_idx: i,
-                message: format!(
-                    "xpub network {:?} does not match --network {}",
-                    c.xpub.network,
-                    network.human_name()
-                ),
-            });
-        }
+    for c in cosigners {
+        // Final review I2: a key of the other network is refused (8), as
+        // the WIF arm and import-wallet already do, not a bad spec (2).
+        crate::network::assert_network_agrees(
+            c.xpub.network,
+            network.network_kind(),
+            "--slot @N.xpub",
+        )?;
     }
 
     // 3. Per-cosigner path resolution (default to family).
@@ -896,17 +893,14 @@ pub fn synthesize_unified(
         });
     }
     // SPEC §4.3 per-slot network/xpub cross-check.
-    for (i, s) in slots.iter().enumerate() {
-        if s.xpub.network != network.network_kind() {
-            return Err(ToolkitError::CosignerSpec {
-                cosigner_idx: i,
-                message: format!(
-                    "xpub network {:?} does not match --network {}",
-                    s.xpub.network,
-                    network.human_name()
-                ),
-            });
-        }
+    for s in slots {
+        // Final review I2: a key of the other network is refused (8), as
+        // the WIF arm and import-wallet already do, not a bad spec (2).
+        crate::network::assert_network_agrees(
+            s.xpub.network,
+            network.network_kind(),
+            "--slot @N.xpub",
+        )?;
     }
 
     // Path family check (single-sig N=1: use template default; multisig: use

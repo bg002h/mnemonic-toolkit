@@ -861,10 +861,12 @@ type CodePrinted = (i32, bool);
 fn c1_mk_negative_vectors_repair_as_mk_does() {
     // name prefix -> ((clean code, printed), (one substitution, printed))
     let expected: &[(&str, CodePrinted, CodePrinted)] = &[
-        ("N6_", (2, true), (18, true)),
+        // Final-review ruling (a): a chunk whose header does not parse is
+        // refused clean (nothing printed) and printed at 22 when corrected.
+        ("N6_", (2, false), (22, true)),
         ("N7_", (2, false), (22, true)),
         ("N8_", (0, true), (16, true)),
-        ("N9_", (2, true), (18, true)),
+        ("N9_", (2, false), (22, true)),
         ("N10_", (2, false), (22, true)),
         ("N11_", (2, false), (2, false)),
         ("N12_", (2, false), (2, false)),
@@ -906,4 +908,70 @@ fn c1_mk_negative_vectors_repair_as_mk_does() {
             }
         }
     }
+}
+
+/// Final-review ruling (c): a malformed mk1 chunk set (an index twice, more
+/// chunks than declared) is not one card's set, so nothing later can verify
+/// it: 2 with nothing printed, clean or corrected, as `md repair` and
+/// `mk repair` do.
+#[test]
+fn final_c_malformed_mk1_set_is_2_with_nothing_printed() {
+    let mnemonic = assert_cmd::cargo::cargo_bin("mnemonic");
+    let mk = std::env::var("MK_BIN").ok();
+    let cases: Vec<(&str, Vec<String>)> = vec![
+        ("an index twice", vec![CHUNK0.into(), CHUNK0.into()]),
+        (
+            "an index twice, one corrected",
+            vec![CHUNK0.into(), substitute_near_end(CHUNK0)],
+        ),
+        (
+            "more chunks than declared",
+            vec![CHUNK0.into(), CHUNK1.into(), CHUNK1.into()],
+        ),
+    ];
+    for (label, strings) in cases {
+        let args: Vec<String> = std::iter::once("repair".to_string())
+            .chain(
+                strings
+                    .iter()
+                    .flat_map(|s| ["--mk1".to_string(), s.clone()]),
+            )
+            .collect();
+        let got = run_codes(mnemonic.to_str().unwrap(), &args);
+        assert_eq!(got, (2, false), "{label}: mnemonic repair --mk1");
+        if let Some(mk) = &mk {
+            let mk_args: Vec<String> = std::iter::once("repair".to_string())
+                .chain(strings.iter().cloned())
+                .collect();
+            assert_eq!(run_codes(mk, &mk_args), got, "{label}: mk repair");
+        }
+    }
+}
+
+/// Final-review ruling (d): `repair --json` marks an incomplete mk1 set with
+/// `"incomplete": true` (the field `mk repair --json` and `md repair --json`
+/// use), clean or corrected; a complete card's envelope has no such field.
+#[test]
+fn final_d_json_marks_an_incomplete_mk1_set() {
+    for (label, chunk, code) in [
+        ("clean lone chunk", CHUNK0.to_string(), 0),
+        ("corrected lone chunk", substitute_near_end(CHUNK0), 16),
+    ] {
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["repair", "--json", "--mk1", &chunk])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(code), "{label}");
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+        assert_eq!(v["incomplete"], true, "{label}: {v}");
+    }
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--json", "--mk1", CHUNK0, "--mk1", CHUNK1])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+    assert!(v.get("incomplete").is_none(), "complete card: {v}");
 }

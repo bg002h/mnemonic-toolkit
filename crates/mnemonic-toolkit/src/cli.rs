@@ -375,7 +375,10 @@ mod tests {
     /// R11: the root `--help` ends with the spec's legend, word for word.
     #[test]
     fn root_help_ends_with_the_exit_code_legend() {
-        assert!(super::ROOT_AFTER_HELP.ends_with(crate::exit_code::HELP_LEGEND));
+        // Final review N2: compared with whitespace normalised, so the legend
+        // may be wrapped or joined to one line without failing this test.
+        let norm = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(norm(super::ROOT_AFTER_HELP).ends_with(&norm(crate::exit_code::HELP_LEGEND)));
         assert!(super::ROOT_AFTER_HELP.starts_with("RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:"));
     }
 }

@@ -474,7 +474,33 @@ pub struct RepairOutcome {
     /// string that does not decode; md1: a corrected non-chunked string that
     /// does not decode ([`md1_printed_despite_failure`]). An outcome with any
     /// is never applied by auto-repair.
-    pub not_a_card: Vec<String>,
+    pub not_a_card: Vec<NotACard>,
+    /// Exit-code spec decision 7: the input is a short chunk set (or a lone
+    /// chunk of a larger one), clean or corrected; `--json` says
+    /// `"incomplete": true`, as `md repair` and `mk repair` do.
+    pub incomplete: bool,
+    /// A distributed K-of-N ms1 share: its threshold and index, as
+    /// `ms repair --json`'s `share` field.
+    pub share: Option<(u32, char)>,
+}
+
+/// Why a printed string is not a card (exit-code spec decision 6). `kind`
+/// is the codec error's variant name and `message` the stderr line, as the
+/// siblings' `--json` `not_a_card: {kind, message}`.
+#[derive(Debug, Clone)]
+pub struct NotACard {
+    pub kind: String,
+    pub message: String,
+}
+
+/// The variant name of a codec error (its `Debug` up to the first
+/// non-alphanumeric character), the `kind` the siblings print.
+pub(crate) fn error_kind<E: std::fmt::Debug>(e: &E) -> String {
+    format!("{e:?}")
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .next()
+        .unwrap_or_default()
+        .to_string()
 }
 
 /// See [`RepairOutcome::set_verify`].
@@ -1055,21 +1081,25 @@ fn parse_mk1_group_key(chunk: &str, idx: usize) -> Result<ParsedMk1Chunk, Repair
     Ok(ParsedMk1Chunk { key, header })
 }
 
-/// True iff `headers` (all members of ONE `GroupKey` group, in arbitrary
-/// order) form a complete, internally-consistent chunk set: every index
-/// `0..total_chunks` present EXACTLY once, with every member reporting the
-/// SAME `total_chunks`. Discriminates on the PARSED indices, never on the
-/// overloaded error string (SPEC §2 header-corruption note) — a substitution
-/// that corrupts `total_chunks` itself just misclassifies the group as
-/// incomplete, never as a false confident success.
-fn group_is_complete_and_consistent(headers: &[&StringLayerHeader]) -> bool {
+/// The shape of one `GroupKey` group (all its members, in arbitrary order),
+/// from the PARSED indices, never from the overloaded error string (SPEC §2
+/// header-corruption note).
+enum GroupShape {
+    /// Every index `0..total_chunks` exactly once (a single string alone).
+    Complete,
+    /// Fewer distinct indices than `total_chunks`, all in range, every member
+    /// agreeing on the total (decision 7).
+    Short,
+    /// Members that disagree on `total_chunks`, an index out of range, an
+    /// index twice, or more members than declared: not one card's set.
+    Malformed(String),
+}
+
+fn group_shape(headers: &[&StringLayerHeader]) -> GroupShape {
     match headers.first() {
-        Some(StringLayerHeader::SingleString { .. }) => headers.len() == 1,
+        Some(StringLayerHeader::SingleString { .. }) if headers.len() == 1 => GroupShape::Complete,
         Some(StringLayerHeader::Chunked { total_chunks, .. }) => {
             let total = *total_chunks as usize;
-            if headers.len() > total {
-                return false; // more members than total_chunks declares
-            }
             let mut seen = vec![false; total];
             for h in headers {
                 match h {
@@ -1079,27 +1109,33 @@ fn group_is_complete_and_consistent(headers: &[&StringLayerHeader]) -> bool {
                         ..
                     } => {
                         if *t as usize != total {
-                            return false; // inconsistent total_chunks within one csid
+                            return GroupShape::Malformed(format!(
+                                "the chunks disagree on the set's size ({total} and {t})"
+                            ));
                         }
                         let idx = *chunk_index as usize;
-                        if idx >= total || seen[idx] {
-                            return false; // out-of-range or duplicate index
+                        if idx >= total {
+                            return GroupShape::Malformed(format!(
+                                "chunk index {idx} is out of range for a set of {total}"
+                            ));
+                        }
+                        if seen[idx] {
+                            return GroupShape::Malformed(format!(
+                                "chunk index {idx} appears twice"
+                            ));
                         }
                         seen[idx] = true;
                     }
-                    // Unreachable by construction — GroupKey partitions
-                    // Chunked from SingleString — but handled defensively
-                    // (fail-closed: NOT complete-and-consistent) rather
-                    // than panicking on a future grouping change or a
-                    // future `#[non_exhaustive]` variant.
-                    _ => return false,
+                    _ => return GroupShape::Malformed("mixed chunk header types".into()),
                 }
             }
-            seen.iter().all(|&done| done)
+            if seen.iter().all(|&done| done) {
+                GroupShape::Complete
+            } else {
+                GroupShape::Short
+            }
         }
-        // `None` (empty group) never occurs (built from ≥1 member); a future
-        // `#[non_exhaustive]` header variant fails closed (not complete).
-        _ => false,
+        _ => GroupShape::Malformed("an unknown chunk header".into()),
     }
 }
 
@@ -1148,7 +1184,8 @@ fn verify_mk1_set(
 
     let mut parsed: Vec<Option<ParsedMk1Chunk>> = Vec::with_capacity(corrected_chunks.len());
     let mut dominant: Option<GroupVerdict> = None;
-    let mut not_a_card: Vec<String> = Vec::new();
+    let mut not_a_card: Vec<NotACard> = Vec::new();
+    let mut incomplete = false;
     for (i, c) in corrected_chunks.iter().enumerate() {
         match parse_mk1_group_key(c, i) {
             Ok(p) => parsed.push(Some(p)),
@@ -1158,10 +1195,25 @@ fn verify_mk1_set(
                     RepairError::PostCorrectionDecodeFailed { detail, .. } => detail,
                     other => other.to_string(),
                 };
-                not_a_card.push(format!(
-                    "chunk {i} is not an mk1 chunk ({detail}); the string printed for it is not \
-                     a valid card"
-                ));
+                // Final-review ruling (a), as `mk repair`: no chunk of the
+                // format. Clean, it is refused with nothing printed;
+                // corrected, nothing checks the correction a second time, so
+                // it is printed at 16 + 4 + 2 = 22.
+                if !touched.contains(&i) {
+                    return Err(RepairError::NotACard {
+                        group: format!("chunk {i}"),
+                        detail: format!("it is not an mk1 chunk ({detail})"),
+                    });
+                }
+                dominant = Some(fold_verdict(dominant, GroupVerdict::Candidate));
+                not_a_card.push(NotACard {
+                    kind: mk1_header_error_kind(c),
+                    message: format!(
+                        "chunk {i} is not an mk1 chunk ({detail}). The corrected string passed \
+                         its checksum, but nothing checks the correction a second time. Do not \
+                         trust it."
+                    ),
+                });
             }
         }
     }
@@ -1195,11 +1247,25 @@ fn verify_mk1_set(
                     .header
             })
             .collect();
-        if !group_is_complete_and_consistent(&headers) {
-            if corrected {
-                dominant = Some(fold_verdict(dominant, GroupVerdict::Incomplete));
+        match group_shape(&headers) {
+            GroupShape::Complete => {}
+            // Final-review ruling (c), as `md repair` and `mk repair`: not
+            // one card's chunk set, so no later reassembly can verify it.
+            GroupShape::Malformed(reason) => {
+                return Err(RepairError::NotACard {
+                    group: describe_group_key(*key),
+                    detail: format!("{reason}; these strings are not one card's chunk set"),
+                });
             }
-            continue;
+            // Decision 7: a short set is verified when the rest of it is
+            // reassembled (16 corrected, 0 clean).
+            GroupShape::Short => {
+                incomplete = true;
+                if corrected {
+                    dominant = Some(fold_verdict(dominant, GroupVerdict::Incomplete));
+                }
+                continue;
+            }
         }
         let refs: Vec<&str> = idxs.iter().map(|&i| &*corrected_chunks[i]).collect();
         let single = matches!(key, GroupKey::SingleString(_));
@@ -1224,12 +1290,15 @@ fn verify_mk1_set(
             // 16 + 4 + 2 = 22 (as `mk repair`, `md repair`, `ms repair`).
             Err(e) if corrected && single => {
                 dominant = Some(fold_verdict(dominant, GroupVerdict::Candidate));
-                not_a_card.push(format!(
-                    "the corrected string ({}) passed its checksum but is not a card mk can \
-                     decode: {e}. The string is not chunked, so nothing checks the correction \
-                     a second time. Do not trust it.",
-                    describe_group_key(*key)
-                ));
+                not_a_card.push(NotACard {
+                    kind: error_kind(&e),
+                    message: format!(
+                        "the corrected string ({}) passed its checksum but is not a card mk can \
+                         decode: {e}. The string is not chunked, so nothing checks the \
+                         correction a second time. Do not trust it.",
+                        describe_group_key(*key)
+                    ),
+                });
             }
             Err(e) if corrected => {
                 return Err(RepairError::SetReassemblyMismatch {
@@ -1264,16 +1333,31 @@ fn verify_mk1_set(
     Ok(Mk1SetCheck {
         set_verify,
         not_a_card,
+        incomplete,
     })
+}
+
+/// The mk-codec error variant that refuses `chunk`'s string-layer header
+/// (`--json`'s `not_a_card.kind`, as `mk repair` names it).
+fn mk1_header_error_kind(chunk: &str) -> String {
+    match decode_string(chunk) {
+        Err(e) => error_kind(&e),
+        Ok(d) => match StringLayerHeader::from_5bit_symbols(d.data()) {
+            Err(e) => error_kind(&e),
+            Ok(_) => "UnknownHeader".to_string(),
+        },
+    }
 }
 
 /// What [`verify_mk1_set`] found over a batch that every string of which
 /// passed the BCH layer.
 struct Mk1SetCheck {
     set_verify: SetVerify,
-    /// One line per printed string that does not decode as a card or chunk
+    /// One entry per printed string that does not decode as a card or chunk
     /// (exit-code spec decision 6: INVALID, 2).
-    not_a_card: Vec<String>,
+    not_a_card: Vec<NotACard>,
+    /// A short chunk set was supplied (decision 7).
+    incomplete: bool,
 }
 
 /// Primary entry point. Per-chunk atomic per D8: if ANY chunk fails, returns
@@ -1316,6 +1400,8 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                 repairs,
                 set_verify: check.set_verify,
                 not_a_card: check.not_a_card,
+                incomplete: check.incomplete,
+                share: None,
             })
         }
         CardKind::Ms1 => {
@@ -1399,12 +1485,44 @@ pub fn repair_card(kind: CardKind, chunks: &[String]) -> Result<RepairOutcome, R
                         .to_string(),
                 }
             };
+            // Final-review ruling (b), as `ms repair`: the string at share
+            // index `s` is the secret itself, not a card `repair` reads: a
+            // clean one is refused (2, nothing printed), a corrected one is
+            // printed at 22. A distributed share is named with its threshold
+            // and index.
+            let touched: HashSet<usize> = repairs.iter().map(|r| r.chunk_index).collect();
+            let mut not_a_card = Vec::new();
+            let mut share = None;
+            for (i, c) in corrected_chunks.iter().enumerate() {
+                if ms1_is_secret_share(c) {
+                    let threshold = ms1_share_fields(c).map_or('?', |(t, _)| t);
+                    let what = format!(
+                        "the secret share of a K-of-N set (threshold '{threshold}', index 's'): it \
+                         is the secret itself, not a distributed share, and `mnemonic ms-shares \
+                         combine` does not take it"
+                    );
+                    if !touched.contains(&i) {
+                        return Err(RepairError::NotACard {
+                            group: format!("chunk {i}"),
+                            detail: format!("it is {what}"),
+                        });
+                    }
+                    not_a_card.push(NotACard {
+                        kind: "IsShareNotSingleString".to_string(),
+                        message: format!("chunk {i} is {what}. Do not trust it as a card."),
+                    });
+                } else if share.is_none() && ms1_is_share(c) {
+                    share = ms1_share_fields(c).map(|(t, idx)| (t.to_digit(10).unwrap_or(0), idx));
+                }
+            }
             Ok(RepairOutcome {
                 kind,
                 corrected_chunks,
                 repairs,
                 set_verify,
-                not_a_card: Vec::new(),
+                not_a_card,
+                incomplete: false,
+                share,
             })
         }
         CardKind::Md1 => {
@@ -1556,6 +1674,14 @@ fn ms1_is_share(s: &str) -> bool {
         Some(sep) => lower[sep + 1..].chars().next().is_some_and(|c| c != '0'),
         None => false,
     }
+}
+
+/// A share's threshold and index characters (BIP-93: threshold at +1,
+/// index +6 after the separator), lower case.
+fn ms1_share_fields(s: &str) -> Option<(char, char)> {
+    let lower = s.to_lowercase();
+    let data = &lower[lower.rfind('1')? + 1..];
+    Some((data.chars().next()?, data.chars().nth(5)?))
 }
 
 /// A K-of-N share whose share index (BIP-93: threshold at +1, identifier
@@ -2016,6 +2142,8 @@ fn repair_via_md_codec(chunks: &[String]) -> Result<RepairOutcome, RepairError> 
                 repairs,
                 set_verify,
                 not_a_card: Vec::new(),
+                incomplete: false,
+                share: None,
             })
         }
         Err(MdErr::TooManyErrors { chunk_index, bound }) => Err(RepairError::TooManyErrors {
@@ -2087,7 +2215,14 @@ pub fn correct_unreadable_md1(chunks: &[String], got: u8) -> Option<RepairOutcom
         corrected_chunks,
         repairs,
         set_verify: SetVerify::UnreadableVersion { got },
-        not_a_card: Vec::new(),
+        // `--json`'s `not_a_card` (22), as `md repair --json`; the text form
+        // prints F-642's own two lines instead.
+        not_a_card: vec![NotACard {
+            kind: "WireVersionMismatch".to_string(),
+            message: md_codec::Error::WireVersionMismatch { got }.to_string(),
+        }],
+        incomplete: false,
+        share: None,
     })
 }
 
@@ -2144,6 +2279,8 @@ pub fn md1_printed_despite_failure(
                 repairs,
                 set_verify: SetVerify::IncompleteSet { reason },
                 not_a_card: Vec::new(),
+                incomplete: true,
+                share: None,
             }))
         }
         // An unreadable wire version keeps F-642's own path.
@@ -2160,10 +2297,15 @@ pub fn md1_printed_despite_failure(
                         different string"
                         .to_string(),
                 },
-                not_a_card: vec![format!(
-                    "the corrected string passed its checksum but is not a card md can decode: \
-                     {e}. Do not trust it."
-                )],
+                not_a_card: vec![NotACard {
+                    kind: error_kind(&e),
+                    message: format!(
+                        "the corrected string passed its checksum but is not a card md can \
+                         decode: {e}. Do not trust it."
+                    ),
+                }],
+                incomplete: false,
+                share: None,
             }))
         }
         _ => None,
@@ -2185,13 +2327,13 @@ pub fn ms1_printed_despite_failure(chunks: &[String]) -> Option<RepairOutcome> {
     if corrections.is_empty() {
         return None;
     }
-    let detail = match ms_codec::decode_with_correction(chunk) {
+    let (kind, detail) = match ms_codec::decode_with_correction(chunk) {
         Ok((_tag, payload, _)) => {
             // It decodes after all: not this function's case.
             scrub_payload_husk(payload);
             return None;
         }
-        Err(e) => e.to_string(),
+        Err(e) => (error_kind(&e), e.to_string()),
     };
     let (corrected_chunk, corrected_positions) = apply_ms_corrections(chunk, &corrections);
     Some(RepairOutcome {
@@ -2208,10 +2350,15 @@ pub fn ms1_printed_despite_failure(chunks: &[String]) -> Option<RepairOutcome> {
                 self-verified; BIP-93 recommends confirming a corrected codex32 string"
                 .to_string(),
         },
-        not_a_card: vec![format!(
-            "the corrected string passed its checksum but is not an ms1 card this build \
-             decodes: {detail}. Do not trust it."
-        )],
+        not_a_card: vec![NotACard {
+            kind,
+            message: format!(
+                "the corrected string passed its checksum but is not an ms1 card this build \
+                 decodes: {detail}. Do not trust it."
+            ),
+        }],
+        incomplete: false,
+        share: None,
     })
 }
 

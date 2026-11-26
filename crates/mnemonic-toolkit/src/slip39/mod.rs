@@ -74,36 +74,14 @@ pub struct GroupSpec {
     pub member_threshold: u8,
 }
 
-/// Split a master secret into a hierarchical SLIP-0039 share set.
-///
-/// Per SPEC §2.1 + plan §3.1. Returns `Vec<Vec<Share>>` where the outer
-/// vector indexes groups (in input order) and each inner vector holds
-/// the group's `member_count` shares.
-///
-/// - `master_secret`: 16/20/24/28/32 bytes (BIP-39 entropy sizes).
-/// - `passphrase`: arbitrary bytes; must be re-supplied at combine time.
-/// - `group_threshold`: groups required to reconstruct.
-/// - `groups`: per-group member configurations.
-/// - `iteration_exponent`: PBKDF2 cost (0..=15; iterations = 10000 · 2^E).
-/// - `extendable`: SLIP-0039 ext bit; when true, salt_prefix is empty.
-/// - `identifier`: optional 15-bit identifier; derived from `rng` if `None`.
-/// - `rng`: cryptographically-secure RNG for identifier (if needed) +
-///   random shares + digest random_part.
-#[allow(clippy::too_many_arguments)]
-pub fn slip39_split<R: CryptoRng + RngCore>(
-    master_secret: &[u8],
-    passphrase: &[u8],
+/// The split's settings (group threshold, groups, iteration exponent), judged
+/// apart from the secret so a caller can refuse them before reading any input
+/// (final review M2, spec R2). [`slip39_split`] applies the same checks.
+pub fn validate_split_settings(
     group_threshold: u8,
     groups: &[GroupSpec],
     iteration_exponent: u8,
-    extendable: bool,
-    identifier: Option<u16>,
-    rng: &mut R,
-) -> Result<Vec<Vec<Share>>, Slip39Error> {
-    // ----- Validate -----
-    if !VALID_SECRET_LENGTHS.contains(&master_secret.len()) {
-        return Err(Slip39Error::BadEntropyByteLength(master_secret.len()));
-    }
+) -> Result<(), Slip39Error> {
     if iteration_exponent > 15 {
         return Err(Slip39Error::BadIterationExponent(iteration_exponent));
     }
@@ -139,6 +117,41 @@ pub fn slip39_split<R: CryptoRng + RngCore>(
             });
         }
     }
+    Ok(())
+}
+
+/// Split a master secret into a hierarchical SLIP-0039 share set.
+///
+/// Per SPEC §2.1 + plan §3.1. Returns `Vec<Vec<Share>>` where the outer
+/// vector indexes groups (in input order) and each inner vector holds
+/// the group's `member_count` shares.
+///
+/// - `master_secret`: 16/20/24/28/32 bytes (BIP-39 entropy sizes).
+/// - `passphrase`: arbitrary bytes; must be re-supplied at combine time.
+/// - `group_threshold`: groups required to reconstruct.
+/// - `groups`: per-group member configurations.
+/// - `iteration_exponent`: PBKDF2 cost (0..=15; iterations = 10000 · 2^E).
+/// - `extendable`: SLIP-0039 ext bit; when true, salt_prefix is empty.
+/// - `identifier`: optional 15-bit identifier; derived from `rng` if `None`.
+/// - `rng`: cryptographically-secure RNG for identifier (if needed) +
+///   random shares + digest random_part.
+#[allow(clippy::too_many_arguments)]
+pub fn slip39_split<R: CryptoRng + RngCore>(
+    master_secret: &[u8],
+    passphrase: &[u8],
+    group_threshold: u8,
+    groups: &[GroupSpec],
+    iteration_exponent: u8,
+    extendable: bool,
+    identifier: Option<u16>,
+    rng: &mut R,
+) -> Result<Vec<Vec<Share>>, Slip39Error> {
+    // ----- Validate -----
+    if !VALID_SECRET_LENGTHS.contains(&master_secret.len()) {
+        return Err(Slip39Error::BadEntropyByteLength(master_secret.len()));
+    }
+    validate_split_settings(group_threshold, groups, iteration_exponent)?;
+    let group_count_u = groups.len();
 
     // ----- Identifier -----
     let identifier = identifier.unwrap_or_else(|| (rng.next_u32() as u16) & 0x7FFF) & 0x7FFF;

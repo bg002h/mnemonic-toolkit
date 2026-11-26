@@ -123,10 +123,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     );
     let password: zeroize::Zeroizing<String> = if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
-            ToolkitError::IoFailure(format!(
-                "--decrypt-password-file: cannot read {}: {e}",
-                path.display()
-            ))
+            crate::error::read_error(
+                format!("--decrypt-password-file: cannot read {}", path.display()),
+                e,
+            )
         })?;
         // Strip a single trailing newline (mirrors token/file conventions).
         zeroize::Zeroizing::new(raw.strip_suffix('\n').unwrap_or(&raw).to_string())

@@ -1564,9 +1564,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         // v0.97.0 exit-tier: an unreadable file is INPUT, not evidence about an
         // artifact. Same tier + byte-identical detail as `bundle.rs`'s emit twin.
         (None, Some(p)) => std::fs::read_to_string(p)
-            .map_err(|e| {
-                ToolkitError::IoFailure(format!("--descriptor-file {}: {e}", p.display()))
-            })?
+            .map_err(|e| crate::error::read_error(format!("--descriptor-file {}", p.display()), e))?
             .trim_end()
             .to_string(),
         _ => unreachable!("clap conflicts_with rules out both"),
@@ -2254,7 +2252,7 @@ fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArg
         .as_ref()
         .expect("caller checked bundle_json.is_some()");
     let raw = std::fs::read_to_string(path)
-        .map_err(|e| ToolkitError::IoFailure(format!("--bundle-json {}: {e}", path.display())))?;
+        .map_err(|e| crate::error::read_error(format!("--bundle-json {}", path.display()), e))?;
     let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
         ToolkitError::BadInput(format!("--bundle-json {} parse: {e}", path.display()))
     })?;

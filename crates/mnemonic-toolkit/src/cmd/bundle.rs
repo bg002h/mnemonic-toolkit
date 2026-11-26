@@ -356,7 +356,7 @@ pub fn run<W: Write, E: Write>(
             (Some(s), None) => s.clone(),
             (None, Some(p)) => std::fs::read_to_string(p)
                 .map_err(|e| {
-                    ToolkitError::IoFailure(format!("--descriptor-file {}: {e}", p.display()))
+                    crate::error::read_error(format!("--descriptor-file {}", p.display()), e)
                 })?
                 .trim_end()
                 .to_string(),
@@ -1635,9 +1635,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
         (Some(s), None) => s.clone(),
         (None, Some(p)) => std::fs::read_to_string(p)
-            .map_err(|e| {
-                ToolkitError::IoFailure(format!("--descriptor-file {}: {e}", p.display()))
-            })?
+            .map_err(|e| crate::error::read_error(format!("--descriptor-file {}", p.display()), e))?
             .trim_end()
             .to_string(),
         _ => unreachable!("clap conflicts_with rules out both / pre-checks rule out neither"),

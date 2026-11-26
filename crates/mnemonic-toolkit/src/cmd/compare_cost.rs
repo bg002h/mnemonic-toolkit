@@ -119,7 +119,7 @@ fn classify_stdin_input<R: Read>(stdin: &mut R) -> Result<InputForm, ToolkitErro
     let mut buf = String::new();
     stdin
         .read_to_string(&mut buf)
-        .map_err(|e| ToolkitError::IoFailure(format!("compare-cost: stdin read: {e}")))?;
+        .map_err(|e| crate::error::read_error("compare-cost: stdin read", e))?;
     let trimmed = buf.trim();
     let first_line = trimmed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
     let first_line = first_line.trim();

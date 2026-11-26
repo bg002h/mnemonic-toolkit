@@ -106,6 +106,7 @@ const S2B: &str = "ms12testsqqqqqqqqqqqqqqqqqqqqqqqqqqqqkwe5qlrp6ykwq";
 const A2B: &str = "ms12testaqqqqqqqqqqqqqqqqqqqqqqqqqqqqzfvk7urqpuwdq";
 
 const S_INDEX_TEXT: &str = "ms1 this is the secret share of a K-of-N set (threshold '2', index 's'); it is the secret itself, not a distributed share, and `mnemonic ms-shares combine` does not take it";
+const S_INDEX_NOT_A_CARD: &str = "chunk 0 is the secret share of a K-of-N set (threshold '2', index 's'): it is the secret itself, not a distributed share, and `mnemonic ms-shares combine` does not take it. Do not trust it as a card.";
 const S_INDEX_REPAIR_B: &str = "correction UNVERIFIED — a corrected codex32 secret (share index 's' of a K-of-N set) cannot be self-verified; it is the secret itself, not a distributed share, and `mnemonic ms-shares combine` does not take it; BIP-93 recommends confirming a corrected codex32 string";
 const S_INDEX_REPAIR_C: &str = "correction UNVERIFIED — a corrected K-of-N share cannot be self-verified; recombine it with the other shares (mnemonic ms-shares combine --share - --share @env:VAR …, one share on stdin and each further share in an exported variable) and confirm the recovered seed's address/xpub against a known-good copy before use; leave out the corrected string at share index 's': it is the secret itself, not a distributed share, and `mnemonic ms-shares combine` does not take it; BIP-93 recommends confirming a corrected codex32 string";
 const PK_ADVISORY: &str = "warning: stdout carries private key material (can spend) — redirect or encrypt (e.g. '> file.txt' or '| age -e ...')";
@@ -169,20 +170,25 @@ fn bh_tk_ms_s_index_control_distributed() {
 #[test]
 fn bh_tk_ms_s_index_repair() {
     let (code, so, se) = run_stdin(&["repair", "--ms1", "-"], &format!("{S2B}\n"));
-    assert_eq!(code, 20);
+    // Final-review ruling (b): the secret at index `s` is no card, so a
+    // corrected one is printed at 22 (16 + 4 + 2), as `ms repair`.
+    assert_eq!(code, 22);
     assert_eq!(
         so,
         format!(
             "# Repair report\n#   ms1 chunk 0: 1 correction at position 46: 'q' -> 'a'\n{S2}\n"
         )
     );
-    assert_eq!(se, format!("repair: {S_INDEX_REPAIR_B}\n{PK_ADVISORY}\n"));
+    assert_eq!(
+        se,
+        format!("repair: {S_INDEX_REPAIR_B}\nrepair: error: {S_INDEX_NOT_A_CARD}\n{PK_ADVISORY}\n")
+    );
 }
 
 #[test]
 fn bh_tk_ms_s_index_repair_mixed() {
     let (code, _so, se) = run_stdin(&["repair", "--allow-argv-secret", S2B, A2B], "");
-    assert_eq!(code, 20);
+    assert_eq!(code, 22);
     // stderr opens with two argv-secret warning lines, so `contains`, not `starts_with`.
     assert!(
         se.contains(&format!("repair: {S_INDEX_REPAIR_C}\n")),

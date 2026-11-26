@@ -272,6 +272,19 @@ fn run_split<R: Read, W: Write, E: Write>(
         )));
     }
 
+    // Final review M2 (spec R2): --threshold and --shares are settings, judged
+    // before any input is read, so a bad pair is 64 whatever the input is.
+    // Threshold validation (2..=9) → InvalidThreshold; K <= N <= 31 →
+    // InvalidShareCount (the bound encode_shares applies). Both surface via
+    // friendly_ms_codec.
+    let threshold = ms_codec::Threshold::new(args.threshold).map_err(ToolkitError::from)?;
+    if !(usize::from(args.threshold) <= args.shares && args.shares <= 31) {
+        return Err(ToolkitError::from(ms_codec::Error::InvalidShareCount {
+            k: args.threshold,
+            n: args.shares,
+        }));
+    }
+
     // argv-leakage advisory for an inline --from value (non-stdin).
     if from_inline {
         match args.from.node {
@@ -308,9 +321,6 @@ fn run_split<R: Read, W: Write, E: Write>(
         ms_codec::Payload::Entr((*entropy).clone())
     };
 
-    // Threshold validation (2..=9) → InvalidThreshold; encode_shares validates
-    // K <= N <= 31 → InvalidShareCount. Both surface via friendly_ms_codec.
-    let threshold = ms_codec::Threshold::new(args.threshold).map_err(ToolkitError::from)?;
     let shares = ms_codec::encode_shares(ms_codec::Tag::ENTR, threshold, args.shares, &payload)
         .map_err(ToolkitError::from)?;
 

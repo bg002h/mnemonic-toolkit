@@ -353,7 +353,8 @@ pub enum ToolkitError {
     /// `RepairError` variant (EmptyInput / HrpMismatch / TooManyErrors /
     /// UnparseableInput).
     Repair(crate::repair::RepairError),
-    /// v0.22.0 repair feature — auto-fire short-circuit signal (exit 5).
+    /// v0.22.0 repair feature — auto-fire short-circuit signal; the process exits
+    /// with the repair's own status (`exit_code`: 16 when it corrected).
     /// Synthesized by `repair::try_repair_and_short_circuit` on
     /// repair-success; `?`-propagated through the helper hierarchy up to
     /// the run() boundary; main.rs special-cases this variant to suppress
@@ -964,6 +965,9 @@ impl ToolkitError {
                     .to_string()
             }
             ToolkitError::Internal(m) => format!("internal error (a bug; please report it): {m}"),
+            ToolkitError::Io(e) if e.kind() == std::io::ErrorKind::InvalidData => {
+                "the input is not UTF-8 text".to_string()
+            }
             ToolkitError::Io(e) => format!("I/O error: {e}"),
             ToolkitError::IoFailure(m) => m.clone(),
             ToolkitError::Md1CardNotADescriptor { surface } => format!(
@@ -1086,6 +1090,18 @@ impl ToolkitError {
             ToolkitError::SlotInputViolation { kind, .. } => Some(json!({ "kind": kind })),
             _ => None,
         }
+    }
+}
+
+/// Final review I3: the one mapping for an input read that failed. Bytes that
+/// are not UTF-8 (`InvalidData`) are an invalid input (2); any other read
+/// failure is an I/O failure (32). `what` is the prefix the site's message
+/// always had, so the I/O failure text is unchanged.
+pub(crate) fn read_error(what: impl std::fmt::Display, e: std::io::Error) -> ToolkitError {
+    if e.kind() == std::io::ErrorKind::InvalidData {
+        ToolkitError::BadInput(format!("{what}: the input is not UTF-8 text"))
+    } else {
+        ToolkitError::IoFailure(format!("{what}: {e}"))
     }
 }
 

@@ -142,7 +142,7 @@ fn read_xpub_value<R: Read>(
         let mut buf = String::new();
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
+            .map_err(|e| crate::error::read_error("stdin read", e))?;
         let trimmed = buf.trim();
         if trimmed.is_empty() {
             return Err(ToolkitError::BadInput(

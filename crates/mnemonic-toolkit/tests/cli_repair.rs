@@ -674,3 +674,159 @@ fn i2_corrected_single_string_that_is_no_card_is_printed_with_22() {
             "repair: error: the corrected string",
         ));
 }
+
+/// Final review M1: a call with several card kinds decides every group
+/// before it prints anything, so one group's atomic failure prints nothing
+/// for any group (the whole call fails, as one card's failure does).
+#[test]
+fn final_m1_mixed_kind_repair_prints_nothing_when_a_group_fails() {
+    let mut uncorrectable = PARITY_MD1_C1.to_string();
+    for k in 0..6 {
+        uncorrectable = flip_at(&uncorrectable, 10 + 3 * k);
+    }
+    for order in [false, true] {
+        let mut args: Vec<String> = vec!["repair".into()];
+        let mk = [
+            "--mk1".to_string(),
+            damage_near_end(VALID_MK1_LONG_CHUNK0),
+            "--mk1".to_string(),
+            VALID_MK1_REG_CHUNK1.to_string(),
+        ];
+        let md = [
+            "--md1".to_string(),
+            PARITY_MD1_C0.to_string(),
+            "--md1".to_string(),
+            uncorrectable.clone(),
+            "--md1".to_string(),
+            PARITY_MD1_C2.to_string(),
+        ];
+        if order {
+            args.extend(md.iter().cloned());
+            args.extend(mk.iter().cloned());
+        } else {
+            args.extend(mk.iter().cloned());
+            args.extend(md.iter().cloned());
+        }
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "order {order}");
+        assert!(
+            out.stdout.is_empty(),
+            "order {order}: nothing printed, got {:?}",
+            String::from_utf8_lossy(&out.stdout)
+        );
+    }
+}
+
+const SHARE_A2: &str = "ms12testaqqqqqqqqqqqqqqqqqqqqqqqqqqqqzfvk7urqpuwd0";
+const SHARE_S2: &str = "ms12testsqqqqqqqqqqqqqqqqqqqqqqqqqqqqkwe5qlrp6ykwa";
+
+/// Final-review ruling (b): a K-of-N share is repaired as `ms repair` does:
+/// a distributed share is echoed at 0 (corrected: 20), with a stderr line
+/// naming it a share and `share: {threshold, index}` in the JSON; the
+/// secret at index `s` is no card: 2 clean (nothing printed), 22 corrected.
+#[test]
+fn final_b_ms1_shares_repair_as_ms_does() {
+    assert_repair_parity(
+        "--ms1",
+        "MS_BIN",
+        "share a, clean",
+        &[SHARE_A2.into()],
+        (0, true),
+    );
+    assert_repair_parity(
+        "--ms1",
+        "MS_BIN",
+        "share a, corrected",
+        &[damage_near_end(SHARE_A2)],
+        (20, true),
+    );
+    assert_repair_parity(
+        "--ms1",
+        "MS_BIN",
+        "share s, clean",
+        &[SHARE_S2.into()],
+        (2, false),
+    );
+    assert_repair_parity(
+        "--ms1",
+        "MS_BIN",
+        "share s, corrected",
+        &[damage_near_end(SHARE_S2)],
+        (22, true),
+    );
+    for (input, code) in [(SHARE_A2.to_string(), 0), (damage_near_end(SHARE_A2), 20)] {
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["--allow-argv-secret", "repair", "--json", "--ms1", &input])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(code));
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+        assert_eq!(v["share"]["threshold"], 2, "{v}");
+        assert_eq!(v["share"]["index"], "a", "{v}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("this is share 'a' of a 2-of-N set"),
+            "stderr names the share"
+        );
+    }
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args([
+            "--allow-argv-secret",
+            "repair",
+            "--json",
+            "--ms1",
+            &damage_near_end(SHARE_S2),
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(22));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+    assert_eq!(v["not_a_card"]["kind"], "IsShareNotSingleString", "{v}");
+}
+
+/// Final-review ruling (d): `repair --json` at 22 carries
+/// `"not_a_card": {"kind", "message"}`, and an incomplete md1 set carries
+/// `"incomplete": true`, the names `ms`, `md` and `mk` use.
+#[test]
+fn final_d_json_not_a_card_and_incomplete() {
+    let md1 =
+        md_codec::codex32::wrap_payload(&[0x40, 0xff, 0xff, 0xff, 0xff, 0xff], 48).expect("wrap");
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .args(["repair", "--json", "--md1", &damage_near_end(&md1)])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(22));
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+    assert!(
+        v["not_a_card"]["kind"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty()),
+        "{v}"
+    );
+    assert!(
+        v["not_a_card"]["message"]
+            .as_str()
+            .is_some_and(|s| !s.is_empty()),
+        "{v}"
+    );
+    for (input, code) in [
+        (PARITY_MD1_C0.to_string(), 0),
+        (damage_near_end(PARITY_MD1_C0), 16),
+    ] {
+        let out = Command::cargo_bin("mnemonic")
+            .unwrap()
+            .args(["repair", "--json", "--md1", &input])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(code));
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("JSON");
+        assert_eq!(v["incomplete"], true, "{v}");
+        assert!(v.get("not_a_card").is_none(), "{v}");
+    }
+}
