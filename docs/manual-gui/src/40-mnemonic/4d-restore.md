@@ -436,8 +436,16 @@ card records for it; Brian's ruling of 2026-11-26 17:33Z) needs no
 `--origin`: restore resolves it to `m`, shows the origin as `m`, warns
 that the wallet sits on the master key, labels it `--json`
 `origin_source: "master"`, and exits 0 unless another key's origin is
-asserted. `--origin @N=m` for it gives the same result; any other path
-for it, `--template` included, is refused (exit 2). The CLI takes
+asserted. The proof is only as good as the card's fingerprint field: a
+card that records the key's own fingerprint instead of the seed's
+master fingerprint (forged, or minted with that fingerprint typed by
+mistake) matches too, so the warning asks you to confirm with
+`--cosigner @N=<the master xpub from your wallet>` (depth 0) or
+`--from` (the addresses are the same either way). `--origin @N=m` for it
+gives the same result; any other path for it, `--template` included, is
+refused (exit 2). `--format coldcard` and `--format jade` refuse such a
+wallet (their multisig file is not written for a cosigner at the master
+node) and point to `sparrow`, `bitcoin-core` or `descriptor`. The CLI takes
 `--origin` more than once in this form; the GUI's Text widget passes one
 value (FOLLOWUP `gui-restore-origin-repeating`).
 

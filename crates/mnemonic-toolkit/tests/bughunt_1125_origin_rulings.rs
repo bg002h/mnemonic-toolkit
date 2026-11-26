@@ -1345,3 +1345,71 @@ fn review_fable_m2_m3_asserted_exit_4_is_told_apart_from_a_mismatch() {
     assert!(r.stderr.contains("error: restore: "), "{}", r.stderr);
     assert!(!r.stderr.contains("UNVERIFIED"), "{}", r.stderr);
 }
+
+// ---------------------------------------------------------------------------
+// Review rulings2-r1 M-1, M-2, M-3.
+// ---------------------------------------------------------------------------
+
+/// M-1: the auto-m is proven only if the card's fingerprint is genuine; the
+/// warning says so and names the two cross-checks.
+#[test]
+fn rulings2_m1_master_warning_says_the_proof_rests_on_the_card_fingerprint() {
+    let md1 = master_key_wpkh();
+    let r = restore(&md1, &[]);
+    assert_eq!(r.code, 0, "{}", r.stderr);
+    for want in [
+        "That holds only if the card's fingerprint for it is the genuine master fingerprint of the seed",
+        "--cosigner @0=<the master xpub (depth 0) from your wallet>",
+        "--from <the seed>",
+        MASTER_WARNING,
+    ] {
+        assert!(r.stderr.contains(want), "{want:?}: {}", r.stderr);
+    }
+    let line = cosigner_line(&r.stdout, 0);
+    assert!(
+        line.contains("if the card's fingerprint is genuine"),
+        "{line}"
+    );
+}
+
+/// M-2: restore's Coldcard (and Jade) refusal for a master-key cosigner names
+/// no `--slot`, which restore does not take.
+#[test]
+fn rulings2_m2_coldcard_refusal_on_a_master_key_card_names_no_slot_flag() {
+    let md1 = master_key_card(empty_origin_multisig());
+    for format in ["coldcard", "jade"] {
+        let r = restore(&md1, &["--origin", "@1=m/48'/0'/0'/2'", "--format", format]);
+        assert_eq!(r.code, 1, "{format}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{format}: {}", r.stdout);
+        assert!(!r.stderr.contains("--slot"), "{format}: {}", r.stderr);
+        assert!(
+            r.stderr.contains("sits on its master key (origin m)"),
+            "{format}: {}",
+            r.stderr
+        );
+    }
+}
+
+/// M-3: with a seed, a path stated below the found `m` prints `m` (never
+/// `m/`), and no found-path warning precedes the refusal.
+#[test]
+fn rulings2_m3_seed_found_m_refusal_prints_m_and_no_warning_first() {
+    let md1 = master_key_wpkh();
+    let from = format!("phrase={A}");
+    let r = restore(&md1, &["--from", &from, "--origin", "m/84'/0'/0'"]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
+    assert!(
+        r.stderr
+            .contains("the --from seed's key is at m; remove one of them"),
+        "{}",
+        r.stderr
+    );
+    assert!(!r.stderr.contains("m/;"), "{}", r.stderr);
+    assert!(
+        !r.stderr
+            .contains("WARNING: md1 cosigner @0 carries NO origin"),
+        "no warning before the refusal: {}",
+        r.stderr
+    );
+}

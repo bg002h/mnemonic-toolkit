@@ -1754,10 +1754,18 @@ of that fingerprint:
   first 4 bytes of the hash160 of its public key) is the fingerprint the
   card records for it, the key is the master key of that fingerprint (a
   chance match is about 1 in 2^32), so restore resolves its origin to `m`
-  without a seed and without `--origin`. It prints the wallet on the
+  without a seed and without `--origin`. That proof holds only if the
+  card's fingerprint field is the seed's genuine master fingerprint: a
+  card that records the key's own fingerprint instead (forged, or minted
+  by an operator who typed the xpub's own fingerprint as
+  `--slot @N.fingerprint=`) matches too. The addresses are the same
+  either way, but the origin shown would be wrong, so the warning and the
+  cosigner line (`…, if the card's fingerprint is genuine; …`) say so and
+  ask for `--cosigner @N=<the master xpub, depth 0, from your wallet>` or
+  `--from` to confirm (a depth-4 xpub or the wrong seed is refused). It prints the wallet on the
   master key (`[fp]xpub661My…`), shows the origin as `m`
   (`cosigner @0: 73c5da0a [m]  origin m: the key is the master key of its
-  fingerprint; …`), labels it `origin_source: "master"` in `--json` (its
+  fingerprint, if the card's fingerprint is genuine; …`), labels it `origin_source: "master"` in `--json` (its
   `origin` is `""`, the master node), warns on stderr that the wallet sits
   on the master key, and counts the origin as read from the card: restore
   exits 0 unless something else is unverified (an asserted origin for
@@ -1766,7 +1774,10 @@ of that fingerprint:
   result. Any other path stated for it, `--template` included, or an mk1
   card for it recording a path, is refused (exit 2,
   `kind: "path-mismatch"`, "the key is the master key of <fp>"). A
-  `--cosigner @N=<xpub>` for it must have depth 0. With a `--from` seed the
+  `--cosigner @N=<xpub>` for it must have depth 0. `--format coldcard`
+  and `--format jade` refuse such a multisig (`a cosigner of this wallet
+  sits on its master key (origin m), …`; exit 1) and name `sparrow`,
+  `bitcoin-core` and `descriptor` instead. With a `--from` seed the
   search is unchanged: it tries `m` first, labels the key `"seed-search"`
   (the seed proved it), and prints the same `m` and the same master-key
   warning.

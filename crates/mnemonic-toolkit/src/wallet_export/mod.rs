@@ -39,6 +39,7 @@ pub(crate) use bitcoin_core::BitcoinCoreEmitter;
 pub(crate) use bitcoin_core_addresses::{BitcoinCoreAddressesEmitter, DEFAULT_ADDRESS_COUNT};
 pub(crate) use bsms::BsmsEmitter;
 pub use bsms::BsmsForm;
+pub(crate) use coldcard::EMPTY_ORIGIN_REFUSAL_PREFIX as COLDCARD_EMPTY_ORIGIN_REFUSAL_PREFIX;
 pub(crate) use pipeline::{descriptor_to_bip388_wallet_policy, DEFAULT_BIP388_POLICY_NAME};
 // v0.28.0 P8B (plan-doc §S.8) — re-export the per-script-type discriminator
 // helper for use by `ToolkitError::BsmsTaprootRefused`'s message rendering

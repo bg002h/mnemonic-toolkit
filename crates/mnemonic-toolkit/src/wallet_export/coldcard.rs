@@ -256,6 +256,11 @@ fn sub_clone<'a>(s: &ColdcardSubDerivation<'a>) -> ColdcardSubDerivation<'a> {
 /// <https://coldcard.com/docs/multisig>. Jade's `register_multisig.multisig_file`
 /// accepts byte-identical text (SPEC §6); Phase 1.5 wires `JadeEmitter` to
 /// delegate here directly.
+/// The start of the empty-origin refusal of [`emit_coldcard_multisig_text`],
+/// so a caller with other advice (restore has no `--slot`) can recognise it.
+pub(crate) const EMPTY_ORIGIN_REFUSAL_PREFIX: &str =
+    "--format coldcard multisig text: at least one cosigner has an empty origin";
+
 pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String, ToolkitError> {
     use crate::template::CliTemplate;
 

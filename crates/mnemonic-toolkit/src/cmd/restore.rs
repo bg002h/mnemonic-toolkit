@@ -3601,7 +3601,25 @@ fn build_multisig_import_payload(
     // Shared 4-way dispatch (collect_missing-first → emit) via the canonical
     // `emit_payload` helper — byte-identical to the former inline copy,
     // INCLUDING the coldcard-multisig six-variant CliTemplate match.
-    crate::cmd::export_wallet::emit_payload(&inputs, format)
+    //
+    // Review rulings2-r1 M-2: the Coldcard (and Jade) multisig refusal of a
+    // cosigner at the master node advises `--slot @N.path=`, which restore
+    // does not take; for restore the master node is the key's real origin
+    // (proven or stated), so name no flag that would change it.
+    crate::cmd::export_wallet::emit_payload(&inputs, format).map_err(|e| match e {
+        ToolkitError::BadInput(msg)
+            if msg.starts_with(wallet_export::COLDCARD_EMPTY_ORIGIN_REFUSAL_PREFIX) =>
+        {
+            ToolkitError::BadInput(
+                "--format coldcard / jade multisig file: a cosigner of this wallet sits on its \
+                 master key (origin m), and the toolkit's Coldcard multisig export does not \
+                 write a cosigner at the master node, so no file is written. Use --format \
+                 sparrow, --format bitcoin-core or --format descriptor for this wallet."
+                    .to_string(),
+            )
+        }
+        other => other,
+    })
 }
 
 fn template_label(t: CliTemplate) -> &'static str {
@@ -3998,8 +4016,13 @@ fn master_origin_warning(idx: u8, fingerprint: Fingerprint) -> String {
     format!(
         "WARNING: md1 cosigner @{idx} carries NO origin path on the card. Its key is the master \
          key of {fp}: its own fingerprint (the first 4 bytes of the hash160 of its public key) is \
-         {fp}, the fingerprint the card records for it, so its origin is m (a chance match is \
-         about 1 in 2^32). The key is the MASTER key (m): {MASTER_KEY_NOTE}",
+         {fp}, the fingerprint the card records for it, so its origin is m. That holds only if \
+         the card's fingerprint for it is the genuine master fingerprint of the seed: a chance \
+         match is about 1 in 2^32, but a card that records the key's own fingerprint instead \
+         (forged, or minted with that fingerprint typed by mistake) matches too, and the \
+         addresses are the same either way. Confirm it with --cosigner @{idx}=<the master xpub \
+         (depth 0) from your wallet> or --from <the seed>. The key is the MASTER key (m): \
+         {MASTER_KEY_NOTE}",
         fp = fingerprint.to_string().to_lowercase()
     )
 }
@@ -4737,6 +4760,24 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                             Some(c_idx),
                         ));
                     } else {
+                        // A path the seed search FOUND is read from the seed; a
+                        // different one the user asserted for the same key is
+                        // refused (an equal one is no assertion). Checked
+                        // before the found-path warning, so no warning about a
+                        // wallet that is then not shown (review rulings2-r1 M-3).
+                        if let Some((path, source)) = asserted.get(&c_idx) {
+                            if path != found {
+                                return Err(ToolkitError::SlotInputViolation {
+                                    kind: "path-mismatch",
+                                    message: format!(
+                                        "{source} states {} for md1 cosigner @{c_idx}, but the \
+                                         --from seed's key is at {}; remove one of them.",
+                                        origin_text(path),
+                                        origin_text(found)
+                                    ),
+                                });
+                            }
+                        }
                         writeln!(stderr, "{}", empty_origin_found_warning(c_idx, found))
                             .map_err(ToolkitError::Io)?;
                         cosigners[ci].origin = found.clone();
@@ -4796,22 +4837,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         }
     }
 
-    // A path the seed search FOUND is read from the seed; a different one the
-    // user asserted for the same key is refused, an equal one is no assertion.
-    for c in cosigners.iter().filter(|c| found_by_seed.contains(&c.idx)) {
-        if let Some((path, source)) = asserted.get(&c.idx) {
-            if *path != c.origin {
-                return Err(ToolkitError::SlotInputViolation {
-                    kind: "path-mismatch",
-                    message: format!(
-                        "{source} states m/{path} for md1 cosigner @{}, but the --from seed's \
-                         key is at m/{}; remove one of them.",
-                        c.idx, c.origin
-                    ),
-                });
-            }
-        }
-    }
+    // A path the seed search FOUND was checked against an asserted one above;
+    // an equal one is no assertion.
     asserted.retain(|i, _| !found_by_seed.contains(i));
 
     // What each xpub or mk1 the user gave (--cosigner @N=) says about an
@@ -4964,8 +4991,11 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             if *mk_path != c.origin {
                 return Err(path_mismatch(format!(
                     "the mk1 card you gave for md1 cosigner @{} (--cosigner @{}) records \
-                     m/{mk_path}, but the --from seed's key is at m/{}; refusing.",
-                    c.idx, c.idx, c.origin
+                     {}, but the --from seed's key is at {}; refusing.",
+                    c.idx,
+                    c.idx,
+                    origin_text(mk_path),
+                    origin_text(&c.origin)
                 )));
             }
             continue;
@@ -4986,9 +5016,12 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         if let Some((path, source)) = asserted.get(&c.idx) {
             if path != mk_path {
                 return Err(path_mismatch(format!(
-                    "{source} states m/{path} for md1 cosigner @{}, but the mk1 card you gave \
-                     for it (--cosigner @{}) records m/{mk_path}; remove one of them.",
-                    c.idx, c.idx
+                    "{source} states {} for md1 cosigner @{}, but the mk1 card you gave \
+                     for it (--cosigner @{}) records {}; remove one of them.",
+                    origin_text(path),
+                    c.idx,
+                    c.idx,
+                    origin_text(mk_path)
                 )));
             }
         }
@@ -5136,8 +5169,8 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             "master" if key_checked => {
                 "cross-checked; origin m: the key is the master key of its fingerprint".to_string()
             }
-            "master" => "origin m: the key is the master key of its fingerprint; key not \
-                         independently verified"
+            "master" => "origin m: the key is the master key of its fingerprint, if the \
+                         card's fingerprint is genuine; key not independently verified"
                 .to_string(),
             _ if Some(c.idx) == own_pos => "← your seed (verified)".to_string(),
             _ if key_checked => "cross-checked".to_string(),
