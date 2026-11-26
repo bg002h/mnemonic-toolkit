@@ -594,7 +594,10 @@ fn check_resolved_slots_distinctness(slots: &[ResolvedSlot]) -> Result<(), Toolk
 /// Bug hunt 2026-11-25 toolkit#5: refuse a DEFAULTED origin path that the
 /// xpub's own BIP-32 header contradicts (depth differs from the path length, or
 /// the child number differs from the path's last component). Only called when
-/// no `@N.path=` was given; a typed path is not checked here.
+/// no `@N.path=` was given; a typed path is not checked here. The refusal
+/// suggests no example path (FOLLOWUPS `tk-bh1125-r3-m1-refusal-example-path`):
+/// a typed path is not checked against the header, so a copied example would
+/// mint a card with a wrong origin.
 pub(crate) fn check_defaulted_xpub_origin(
     idx: u8,
     xpub: &bitcoin::bip32::Xpub,
@@ -611,8 +614,8 @@ pub(crate) fn check_defaulted_xpub_origin(
         message: format!(
             "slot @{idx}: no `@{idx}.path=` was given, and the default origin m/{default_path} \
              does not match the xpub's own header (depth {}, child number {}); the key does not \
-             live at the default path. Supply the key's real origin with `--slot @{idx}.path=m/...` \
-             (for example m/48'/0'/0'/2' for a BIP-48 P2WSH cosigner xpub).",
+             live at the default path. Supply the key's real origin with \
+             `--slot @{idx}.path=m/...`.",
             xpub.depth, xpub.child_number
         ),
     })

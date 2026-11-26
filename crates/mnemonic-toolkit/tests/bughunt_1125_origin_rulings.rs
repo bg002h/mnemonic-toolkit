@@ -976,3 +976,211 @@ fn review_r1_i1_depth_one_xpub_parent_must_be_the_md1_fingerprint() {
     let r = run_with(forged(FP_B));
     assert_eq!(r.code, 4, "{}", r.stderr);
 }
+
+// ---------------------------------------------------------------------------
+// Final review (bughunt-2026-11-25-mnemonic-toolkit-review-rulings-fable)
+// I-1, I-2, M-1, M-2/M-3.
+// ---------------------------------------------------------------------------
+
+/// The mk1 chunks a bundle writes for B's key at m/48'/0'/7'/2': same seed
+/// (fingerprint b8688df1) as the md1's @1, another key.
+fn mk1_of_b_at_account_7() -> Vec<String> {
+    let s0 = format!("@0.phrase={A}");
+    let s1 = format!("@1.phrase={B}");
+    let o = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--descriptor",
+        "wsh(sortedmulti(2,[73c5da0a/48'/0'/0'/2']@0/<0;1>/*,[b8688df1/48'/0'/7'/2']@1/<0;1>/*))",
+        "--json",
+        "--slot",
+        &s0,
+        "--slot",
+        &s1,
+    ]);
+    assert_eq!(o.code, 0, "{}", o.stderr);
+    let v: serde_json::Value = serde_json::from_str(&o.stdout).unwrap();
+    v["mk1"][1]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn review_fable_i1_mismatching_mk1_supplies_no_origin_under_allow_mismatch() {
+    let (md1, mk1) = empty_origin_multisig_with_mk1(false);
+    let mkb7 = mk1_of_b_at_account_7();
+    // The reviewer's reproduction: A's real mk1, and an mk1 for another key
+    // of B's seed, with --allow-mismatch. The mk1 for another key says
+    // nothing about @1's origin, so @1 has none: refused, nothing rendered.
+    let mut extra = cosigner_args(0, &mk1[0]);
+    extra.extend(cosigner_args(1, &mkb7));
+    extra.push("--allow-mismatch".into());
+    let mut j = extra.clone();
+    j.push("--json".into());
+    let r = restore_s(&md1, &j);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
+    assert!(!r.stderr.contains("48'/0'/7'/2'"), "{}", r.stderr);
+    assert!(
+        !r.stderr.contains("the mk1's key is the md1's key"),
+        "{}",
+        r.stderr
+    );
+    assert!(r.stderr.contains("@1 carries NO origin"), "{}", r.stderr);
+
+    // With @1's path stated, the wallet is shown at the stated path, the
+    // mismatching mk1 is not described as checking it, and @1 is not
+    // labelled cross-checked or as having its origin from an mk1.
+    j.extend(["--origin".into(), "@1=m/48'/0'/0'/2'".into()]);
+    let r = restore_s(&md1, &j);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(!r.stdout.contains("48'/0'/7'/2'"), "{}", r.stdout);
+    assert!(
+        !r.stderr.contains("NOTE: md1 cosigner @1's origin"),
+        "{}",
+        r.stderr
+    );
+    assert!(
+        !r.stderr
+            .contains("has the depth and child number this path implies"),
+        "{}",
+        r.stderr
+    );
+    assert!(
+        r.stderr.contains("is not the md1's key"),
+        "says the given key does not match: {}",
+        r.stderr
+    );
+    let (v, keys) = json_keys(&r);
+    assert_eq!(v["verification"]["status"], "overridden", "{}", r.stdout);
+    assert_eq!(keys[0]["origin_source"], "mk1", "{keys:?}");
+    assert_eq!(keys[1]["origin_source"], "asserted", "{keys:?}");
+    assert_eq!(keys[1]["origin"], "48'/0'/0'/2'", "{keys:?}");
+    assert!(
+        !keys[1]["note"].as_str().unwrap().contains("cross-checked"),
+        "{keys:?}"
+    );
+}
+
+/// A single-key `wpkh` card whose key is A's MASTER key and whose origin is
+/// empty (what the old descriptor-mode mint wrote for a bare `@0`).
+fn master_key_wpkh() -> Vec<String> {
+    master_key_card(empty_origin_wpkh())
+}
+
+fn master_key_card(md1: Vec<String>) -> Vec<String> {
+    use bitcoin::bip32::Xpub;
+    use std::str::FromStr;
+    let refs: Vec<&str> = md1.iter().map(|s| s.as_str()).collect();
+    let mut d = md_codec::chunk::reassemble(&refs).expect("decode");
+    let master = Xpub::from_str(&xpub_at(A, "m")).unwrap();
+    let mut k65 = [0u8; 65];
+    k65[..32].copy_from_slice(master.chain_code.as_bytes());
+    k65[32..].copy_from_slice(&master.public_key.serialize());
+    for (idx, key) in d.tlv.pubkeys.as_mut().expect("keyed card").iter_mut() {
+        if *idx == 0 {
+            *key = k65;
+        }
+    }
+    md_codec::chunk::split(&d).expect("re-split")
+}
+
+#[test]
+fn review_fable_i2_master_key_card_refuses_a_path_below_m() {
+    let md1 = master_key_wpkh();
+    for extra in [
+        vec!["--template", "bip84"],
+        vec!["--origin", "m/84'/0'/0'"],
+        vec!["--origin", "@0=m/84'/0'/0'"],
+    ] {
+        let r = restore(&md1, &extra);
+        assert_eq!(r.code, 2, "{extra:?}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{extra:?}: {}", r.stdout);
+        assert!(
+            r.stderr.contains("is the master key of 73c5da0a"),
+            "{extra:?}: {}",
+            r.stderr
+        );
+        assert!(!r.stderr.contains(ASSERTED), "{extra:?}: {}", r.stderr);
+    }
+    // The master node itself keeps its behaviour: asserted, exit 4.
+    let r = restore(&md1, &["--origin", "m"]);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(r.stdout.contains(&format!("[{FP_A}]")), "{}", r.stdout);
+    // The refusal without a path does not steer to a scheme: it names m.
+    let r = restore(&md1, &[]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(!r.stderr.contains("--template"), "{}", r.stderr);
+    assert!(!r.stderr.contains("m/<path>"), "{}", r.stderr);
+    assert!(r.stderr.contains("is the master key of"), "{}", r.stderr);
+    assert!(r.stderr.contains("@0=m"), "{}", r.stderr);
+
+    // Multisig: the master-key @0 refuses a stated path too.
+    let md1 = master_key_card(empty_origin_multisig());
+    let r = restore(
+        &md1,
+        &[
+            "--origin",
+            "@0=m/48'/0'/0'/2'",
+            "--origin",
+            "@1=m/48'/0'/0'/2'",
+        ],
+    );
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stderr.contains("is the master key of"), "{}", r.stderr);
+    // Its refusal states @0's path as m and @1's as a placeholder.
+    let r = restore(&md1, &[]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    let cmd = line_after(&r.stderr, "run:");
+    assert!(cmd.contains("@0=m ") || cmd.ends_with("@0=m"), "{cmd}");
+    assert!(cmd.contains("'@1=m/<path>'"), "{cmd}");
+    assert!(!cmd.contains("'@0=m/<path>'"), "{cmd}");
+}
+
+#[test]
+fn review_fable_m1_header_refusal_prints_no_example_path() {
+    let x = xpub_at(A, "m/84'/0'/5'");
+    let s = format!("@0.xpub={x}");
+    let r = run(&[
+        "bundle",
+        "--network",
+        "mainnet",
+        "--template",
+        "bip84",
+        "--slot",
+        &s,
+        "--slot",
+        "@0.fingerprint=73c5da0a",
+    ]);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stderr.contains("does not match the xpub"), "{}", r.stderr);
+    assert!(!r.stderr.contains("for example"), "{}", r.stderr);
+    assert!(!r.stderr.contains("48'"), "{}", r.stderr);
+}
+
+#[test]
+fn review_fable_m2_m3_asserted_exit_4_is_told_apart_from_a_mismatch() {
+    let (md1, mk1) = empty_origin_multisig_with_mk1(false);
+    // Asserted origin, one key cross-checked: UNVERIFIED, not PARTIAL.
+    let mut extra = vec!["--origin".to_string(), "@0=m/48'/0'/0'/2'".to_string()];
+    extra.extend(cosigner_args(1, &mk1[1]));
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(!r.stderr.contains("PARTIAL"), "{}", r.stderr);
+    assert!(r.stderr.contains("UNVERIFIED: "), "{}", r.stderr);
+    assert!(r.stderr.contains("not a mismatch"), "{}", r.stderr);
+    assert!(!r.stderr.contains("MISMATCH"), "{}", r.stderr);
+    // A mismatch: refused, nothing on stdout, MISMATCH and the error line.
+    let mut extra = cosigner_args(0, &mk1[1]);
+    extra.extend(["--origin".into(), "@1=m/48'/0'/0'/2'".into()]);
+    let r = restore_s(&md1, &extra);
+    assert_eq!(r.code, 4, "{}", r.stderr);
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
+    assert!(r.stderr.contains("✗ MISMATCH"), "{}", r.stderr);
+    assert!(r.stderr.contains("error: restore: "), "{}", r.stderr);
+    assert!(!r.stderr.contains("UNVERIFIED"), "{}", r.stderr);
+}

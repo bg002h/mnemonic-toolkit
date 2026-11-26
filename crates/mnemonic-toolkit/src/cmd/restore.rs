@@ -3918,6 +3918,9 @@ enum SuppliedHeader {
     /// An mk1 card recording no path: its depth and child number are rebuilt
     /// from that empty path, so they say nothing about an asserted one.
     Mk1WithoutPath,
+    /// A key given with `--cosigner @N` that is not the md1's key (kept only
+    /// under `--allow-mismatch`): it says nothing about this key's origin.
+    NotTheKey,
 }
 
 /// Bug hunt 2026-11-25 toolkit#1/#2 — the common paths a seed is searched at
@@ -4104,7 +4107,17 @@ fn asserted_origins(
 /// statement of the user's places. No example path is suggested (FOLLOWUPS
 /// `tk-bh1125-r3-m1-refusal-example-path`): the right one is wherever the key
 /// really lives.
-fn missing_origin_refusal(missing: &[u8], single_key: bool, seed_given: bool) -> ToolkitError {
+///
+/// `masters` are the missing keys the card itself proves to be master keys
+/// (review fable I-2): their own fingerprint is the card's, so their origin
+/// can only be `m`. For them the refusal states `m`, not a placeholder, and
+/// never suggests a scheme (`--template`), whose path is below `m`.
+fn missing_origin_refusal(
+    missing: &[u8],
+    masters: &[u8],
+    single_key: bool,
+    seed_given: bool,
+) -> ToolkitError {
     let origin_flag = restore_flag("origin");
     let idx_list = missing
         .iter()
@@ -4116,7 +4129,8 @@ fn missing_origin_refusal(missing: &[u8], single_key: bool, seed_given: bool) ->
     } else {
         ""
     };
-    let scheme_note = if single_key {
+    let all_master = missing.iter().all(|i| masters.contains(i));
+    let scheme_note = if single_key && !all_master {
         format!(
             ", or name the scheme the card was made with ({} bip44|bip49|bip84|bip86, with \
              --account)",
@@ -4127,18 +4141,49 @@ fn missing_origin_refusal(missing: &[u8], single_key: bool, seed_given: bool) ->
     };
     let extra: Vec<String> = missing
         .iter()
-        .flat_map(|i| [origin_flag.clone(), format!("@{i}=m/<path>")])
+        .flat_map(|i| {
+            let v = if masters.contains(i) {
+                format!("@{i}=m")
+            } else {
+                format!("@{i}=m/<path>")
+            };
+            [origin_flag.clone(), v]
+        })
         .collect();
+    let master_note = if masters.is_empty() {
+        String::new()
+    } else {
+        let list = masters
+            .iter()
+            .map(|i| format!("@{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            " The key of {list} is the master key of its fingerprint (its own fingerprint is \
+             the card's), so its origin can only be m; the command below states m for it, and \
+             restore refuses any path below m for it."
+        )
+    };
     let (cmd, redacted) = crate::cmd::bundle::rerun_command_with(&extra, None);
-    let mut message = format!(
-        "--md1 cosigner {idx_list} carries NO origin path on the card, and without its seed \
+    let mut message = if all_master {
+        format!(
+            "--md1 cosigner {idx_list} carries NO origin path on the card{seed_note}, and its \
+             key is the master key of its fingerprint (its own fingerprint is the card's), so \
+             its origin can only be m and no path below it can be right. Refusing rather than \
+             assume it. If this wallet uses the master key, state it with {origin_flag} @N=m: \
+             restore then shows it as asserted by you and exits 4. To state it, run:\n  {cmd}"
+        )
+    } else {
+        format!(
+            "--md1 cosigner {idx_list} carries NO origin path on the card, and without its seed \
          nothing can be derived{seed_note}. Refusing rather than show the key with no path (a \
          bare [fp]xpub claims to be the master key of fp). If you know where the key lives, \
          state it with {origin_flag} @N=m/<path>{scheme_note}: restore then checks it against \
          any --cosigner @N=<xpub> you give, shows it as asserted by you, and exits 4. Or give \
-         the key's seed with --from to search its common paths. To state each path you know, \
-         replace each <path> and run:\n  {cmd}"
-    );
+         the key's seed with --from to search its common paths.{master_note} To state each \
+         path you know, replace each <path> and run:\n  {cmd}"
+        )
+    };
     if redacted {
         message.push_str(
             "\nSecret values typed on the command line are not repeated above; put yours back \
@@ -4198,6 +4243,18 @@ fn check_asserted_origin(
             fingerprint.to_string().to_lowercase()
         )));
     }
+    // Review fable I-2: the converse. A key whose own fingerprint (hash160
+    // of its public key) is the card's fingerprint IS the master key, so its
+    // origin is m and no path below it can be right.
+    if !path.is_empty() && xpub.fingerprint() == fingerprint {
+        return Err(mismatch(format!(
+            "the key is the master key of {fp} (its own fingerprint is {fp}), so its origin \
+             can only be m and no path below it can be right; state {} @{idx}=m if this \
+             wallet uses the master key",
+            restore_flag("origin"),
+            fp = fingerprint.to_string().to_lowercase()
+        )));
+    }
     Ok(())
 }
 
@@ -4212,6 +4269,10 @@ fn asserted_origin_warning(
             " The xpub you gave for it (--cosigner @{idx}) has the depth and child number this \
              path implies; that checks only the path's length and last step, not the steps \
              before it."
+        ),
+        Some(SuppliedHeader::NotTheKey) => format!(
+            " The key you gave for it (--cosigner @{idx}) is not the md1's key, so it says \
+             nothing about this path and checked nothing."
         ),
         Some(SuppliedHeader::Mk1WithoutPath) => format!(
             " The mk1 card you gave for it (--cosigner @{idx}) records no path either, so it \
@@ -4764,36 +4825,36 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             // mk1 (multi-chunk) vs a single raw xpub. Case-insensitive PROBE
             // (v0.53.3 audit M11); originals pass to mk-codec, the case
             // authority (it lowercase-normalizes; rejects mixed).
+            // Review fable I-1: what the supplied key says about an origin
+            // (its header, an mk1's recorded path) counts only once that key
+            // IS the md1's key; under --allow-mismatch a key for another key
+            // supplies and checks nothing.
+            let header: SuppliedHeader;
+            let mut mk1_origin: Option<(DerivationPath, Option<Fingerprint>)> = None;
             let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1"))
             {
                 let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
                 let kc = mk_codec::decode(&refs)
                     .map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
                 if kc.origin_path.is_empty() {
-                    supplied_headers.insert(*n, SuppliedHeader::Mk1WithoutPath);
+                    header = SuppliedHeader::Mk1WithoutPath;
                 } else {
-                    supplied_headers.insert(
-                        *n,
-                        SuppliedHeader::Xpub {
-                            depth: kc.xpub.depth,
-                            child: kc.xpub.child_number,
-                            parent: kc.xpub.parent_fingerprint,
-                        },
-                    );
-                    mk1_origins.insert(*n, (kc.origin_path.clone(), kc.origin_fingerprint));
+                    header = SuppliedHeader::Xpub {
+                        depth: kc.xpub.depth,
+                        child: kc.xpub.child_number,
+                        parent: kc.xpub.parent_fingerprint,
+                    };
+                    mk1_origin = Some((kc.origin_path.clone(), kc.origin_fingerprint));
                 }
                 crate::synthesize::xpub_to_65(&kc.xpub)
             } else if values.len() == 1 {
                 let xpub = Xpub::from_str(&values[0])
                     .map_err(|e| bad(format!("--cosigner @{n} xpub parse: {e}")))?;
-                supplied_headers.insert(
-                    *n,
-                    SuppliedHeader::Xpub {
-                        depth: xpub.depth,
-                        child: xpub.child_number,
-                        parent: xpub.parent_fingerprint,
-                    },
-                );
+                header = SuppliedHeader::Xpub {
+                    depth: xpub.depth,
+                    child: xpub.child_number,
+                    parent: xpub.parent_fingerprint,
+                };
                 crate::synthesize::xpub_to_65(&xpub)
             } else {
                 return Err(bad(format!(
@@ -4801,6 +4862,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 )));
             };
             if supplied65 != c.key65 {
+                supplied_headers.insert(*n, SuppliedHeader::NotTheKey);
                 mismatch = Some((
                     "cosigner-key",
                     format!("supplied key for @{n}"),
@@ -4813,6 +4875,10 @@ fn run_multisig<R: Read, W: Write, E: Write>(
                 break;
             }
             verified_positions.insert(*n);
+            supplied_headers.insert(*n, header);
+            if let Some(o) = mk1_origin {
+                mk1_origins.insert(*n, o);
+            }
         }
     }
 
@@ -4840,8 +4906,9 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         .filter(|(_, c)| c.origin.is_empty() && !found_by_seed.contains(&c.idx))
         .map(|(i, _)| i)
         .collect();
-    // Review r1 I1: an mk1 card given for such a key (--cosigner @N, its key
-    // already matched to the md1's above) records the origin. A path the user
+    // Review r1 I1: an mk1 card given for such a key (--cosigner @N) records
+    // the origin. `mk1_origins` holds only mk1s whose key matched the md1's
+    // (review fable I-1, including under --allow-mismatch). A path the user
     // states must equal it, and a fingerprint it records must equal the md1's.
     // The same holds for a path the seed search found.
     let path_mismatch = |message: String| ToolkitError::SlotInputViolation {
@@ -4900,8 +4967,18 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         .filter(|i| !asserted.contains_key(i))
         .collect();
     if !missing.is_empty() {
+        // Review fable I-2: a missing key whose own fingerprint is the card's
+        // is the master key; the refusal states m for it.
+        let mut masters = Vec::new();
+        for c in cosigners.iter().filter(|c| missing.contains(&c.idx)) {
+            let x = xpub_from_65_bytes(&c.key65, network, &DerivationPath::master())?;
+            if x.fingerprint() == c.fingerprint {
+                masters.push(c.idx);
+            }
+        }
         return Err(missing_origin_refusal(
             &missing,
+            &masters,
             cosigners.len() == 1,
             args.from.is_some(),
         ));
@@ -5169,6 +5246,38 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             stderr,
             "✗ MISMATCH (overridden): a supplied cross-check key does NOT match the md1 wallet; \
              the descriptor above is the md1's wallet, NOT what your --from/--cosigner asserted"
+        )
+        .map_err(ToolkitError::Io)?;
+    } else if any_asserted {
+        // Review fable M-2/M-3: the same word as `--json`'s status, and the
+        // line that tells this exit 4 (wallet shown) from a refused mismatch.
+        let which: Vec<String> = cosigners
+            .iter()
+            .filter(|c| c.origin_source == "asserted")
+            .map(|c| format!("@{} m/{}", c.idx, c.origin))
+            .collect();
+        let unchecked: Vec<String> = cosigners
+            .iter()
+            .filter(|c| !verified_positions.contains(&c.idx))
+            .map(|c| format!("@{}", c.idx))
+            .collect();
+        let unchecked_note = if unchecked.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " (keys {} were NOT independently verified)",
+                unchecked.join(", ")
+            )
+        };
+        writeln!(
+            stderr,
+            "UNVERIFIED: an origin path is asserted by you, not on the card ({}); exit 4 here \
+             means verify before trusting, not a mismatch. Cross-checked {}/{} keys{}; check \
+             each asserted path and fingerprint against your records before importing",
+            which.join(", "),
+            verified_positions.len(),
+            cosigners.len(),
+            unchecked_note
         )
         .map_err(ToolkitError::Io)?;
     } else if !has_reference {
