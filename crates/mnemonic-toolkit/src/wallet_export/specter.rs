@@ -70,5 +70,5 @@ pub(crate) fn emit_specter_wallet_json(inputs: &EmitInputs) -> Result<String, To
     };
 
     serde_json::to_string_pretty(&wallet)
-        .map_err(|e| ToolkitError::BadInput(format!("--format specter: serialize: {e}")))
+        .map_err(|e| ToolkitError::Internal(format!("--format specter: serialize: {e}")))
 }

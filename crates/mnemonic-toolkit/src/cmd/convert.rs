@@ -494,13 +494,13 @@ fn refusal_xpub_to_mk1() -> ToolkitError {
 }
 
 fn refusal_phrase_entropy_to_wif_no_path() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).".into(),
     )
 }
 
 fn refusal_xpub_prefix_no_network() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).".into(),
     )
 }
@@ -516,14 +516,14 @@ fn reads_path(from: NodeType, to: NodeType) -> bool {
 }
 
 fn refusal_path_unused() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--path is not used by any requested --to target from this --from source; drop --path."
             .into(),
     )
 }
 
 fn refusal_account_with_path() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--account has no effect when --path is given; put the account in --path (e.g. m/84'/1'/3') or drop --path."
             .into(),
     )
@@ -537,21 +537,21 @@ fn reads_account(from: NodeType, to: NodeType) -> bool {
 }
 
 fn refusal_account_unused() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--account is not used by any requested --to target from this --from source (only --to xpub or --to xprv from a phrase, seedqr or entropy reads it); drop --account."
             .into(),
     )
 }
 
 fn refusal_wif_with_path() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--from wif does not retain a chain code; --path-driven derivation is impossible.".into(),
     )
 }
 
 // SPEC v0.7 §3.d, v0.8 §12.b
 fn refusal_bip38_no_passphrase() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).".into(),
     )
 }
@@ -562,7 +562,7 @@ fn refusal_bip38_no_passphrase() -> ToolkitError {
 /// arm, and the "ignored passphrase" warning is suppressed on BIP-38 edges).
 /// Refuse fail-closed; the explicit empty path is `--bip38-passphrase ""`.
 fn refusal_composite_bip38_no_bip38_passphrase() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "composite (seedqr|phrase|entropy)→bip38 requires --bip38-passphrase (or --bip38-passphrase-stdin); on this edge --passphrase feeds only BIP-39 PBKDF2 and the BIP-38 layer would be encrypted with the empty passphrase. To deliberately use an empty BIP-38 passphrase, pass --bip38-passphrase \"\" explicitly.".into(),
     )
 }
@@ -652,19 +652,19 @@ fn parse_literal_path(s: &str) -> Result<bip32::DerivationPath, ToolkitError> {
 
 // SPEC v0.7 §10.a / §3.d — Address derivation refusals.
 fn refusal_address_no_path() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--to address requires --path (xpub does not carry an origin path; supply BIP-32 derivation explicitly).".into(),
     )
 }
 
 fn refusal_address_no_script_type() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--to address requires --script-type <p2pkh|p2wpkh|p2sh-p2wpkh|p2tr> or --template (script-type inferred from template).".into(),
     )
 }
 
 fn refusal_address_script_type_unknown_template() -> ToolkitError {
-    ToolkitError::ConvertRefusal(
+    ToolkitError::Usage(
         "--template does not infer a single-sig --script-type for --to address (bip44/bip49/bip84/bip86 supported; multisig templates require explicit --script-type).".into(),
     )
 }
@@ -808,7 +808,7 @@ pub(crate) fn read_stdin_to_string<R: Read>(stdin: &mut R) -> Result<String, Too
     let mut buf = zeroize::Zeroizing::new(String::new());
     stdin
         .read_to_string(&mut buf)
-        .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+        .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
     Ok(buf.trim().to_string())
 }
 
@@ -869,12 +869,12 @@ pub fn run<R: Read, W: Write, E: Write>(
         .filter(|(f, _)| !f.node.is_side_input_only())
         .collect();
     if primaries.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--from requires at least one primary value-bearing node (phrase, entropy, xpub, xprv, wif, ms1, mk1)".into(),
         ));
     }
     if primaries.len() > 1 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "--from accepts at most one primary value-bearing node in v0.6; got {} ({})",
             primaries.len(),
             primaries
@@ -897,7 +897,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     let pp_reads_stdin = crate::passphrase_input::reads_stdin(pp_argv, args.passphrase_stdin);
     let pp_spelling = crate::passphrase_input::stdin_spelling(args.passphrase_stdin);
     if pp_reads_stdin && primary_uses_stdin {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{pp_spelling} cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv",
         )));
     }
@@ -908,12 +908,12 @@ pub fn run<R: Read, W: Write, E: Write>(
         args.bip38_passphrase_stdin,
     );
     if bip38_reads_stdin && primary_uses_stdin {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{bip38_spelling} cannot coexist with --from <node>=- (a single stdin cannot serve both); supply the value-bearing source via argv",
         )));
     }
     if pp_reads_stdin && bip38_reads_stdin {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{pp_spelling} and {bip38_spelling} cannot both be set (single stdin per invocation); pick the channel that needs the NULL-byte-preserving route",
         )));
     }
@@ -968,13 +968,13 @@ pub fn run<R: Read, W: Write, E: Write>(
         for tok in chunk.split(',') {
             let t = tok.trim();
             if t.is_empty() {
-                return Err(ToolkitError::BadInput(format!(
+                return Err(ToolkitError::Usage(format!(
                     "--to value contains an empty token; got {:?}",
                     chunk
                 )));
             }
             let n = NodeType::from_token(t).ok_or_else(|| {
-                ToolkitError::BadInput(format!(
+                ToolkitError::Usage(format!(
                     "unknown --to node {:?}; expected one of: phrase, entropy, xpub, xprv, wif, fingerprint, path, ms1, mk1, bip38, minikey, electrum-phrase, address",
                     t
                 ))
@@ -989,7 +989,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
     }
     if targets.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--to requires at least one node".into(),
         ));
     }
@@ -1389,7 +1389,7 @@ fn compute_outputs(
                 // refusal names --template alone there.
                 let reads_path = targets.iter().any(|t| matches!(t, Xpub | Xprv));
                 let template = args.template.ok_or_else(|| {
-                    ToolkitError::BadInput(if reads_path {
+                    ToolkitError::Usage(if reads_path {
                         "--template or --path is required for derivation targets (xpub/xprv/fingerprint)"
                             .into()
                     } else {
@@ -1478,7 +1478,7 @@ fn compute_outputs(
                         pk.to_wif()
                     }
                     Path => {
-                        return Err(ToolkitError::BadInput(
+                        return Err(ToolkitError::Usage(
                             "--to path is informational; not emitted as a value".into(),
                         ))
                     }
@@ -1793,7 +1793,7 @@ fn compute_outputs(
             // served by `mk decode`; here space delimits chunks.)
             let cleaned: String = value.chars().filter(|c| *c != '-' && *c != ',').collect();
             let tokens: Vec<&str> = cleaned.split_whitespace().collect();
-            let card = mk_codec::decode(&tokens).map_err(ToolkitError::from)?;
+            let card = crate::repair::decode_mk1(&tokens).map_err(ToolkitError::from)?;
             let mut out = Vec::with_capacity(targets.len());
             for &t in targets {
                 let v = match t {
@@ -1828,7 +1828,7 @@ fn compute_outputs(
             };
             Ok((out, None, None, path_hint))
         }
-        Fingerprint | Path => Err(ToolkitError::BadInput(format!(
+        Fingerprint | Path => Err(ToolkitError::Usage(format!(
             "--from {} is not a primary value-bearing node",
             from.as_str()
         ))),

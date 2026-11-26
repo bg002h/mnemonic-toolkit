@@ -50,7 +50,7 @@ fn emit_import_line<W: Write>(
 ) -> Result<(), ToolkitError> {
     if let Some(recipe) = recipe {
         let line = serde_json::to_string(recipe)
-            .map_err(|e| ToolkitError::BadInput(format!("nostr: import recipe serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("nostr: import recipe serialize: {e}")))?;
         writeln!(stdout, "  import:      importdescriptors '{line}'").map_err(ToolkitError::Io)?;
     }
     Ok(())
@@ -183,7 +183,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 import: import_recipe.clone(),
             };
             serde_json::to_writer_pretty(&mut *stdout, &envelope)
-                .map_err(|e| ToolkitError::BadInput(format!("nostr: json serialize: {e}")))?;
+                .map_err(|e| ToolkitError::Internal(format!("nostr: json serialize: {e}")))?;
             writeln!(stdout).map_err(ToolkitError::Io)?;
         } else {
             writeln!(stdout, "nostr key (public)").map_err(ToolkitError::Io)?;
@@ -257,7 +257,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 import: import_recipe.clone(),
             };
             serde_json::to_writer_pretty(&mut *stdout, &envelope)
-                .map_err(|e| ToolkitError::BadInput(format!("nostr: json serialize: {e}")))?;
+                .map_err(|e| ToolkitError::Internal(format!("nostr: json serialize: {e}")))?;
             writeln!(stdout).map_err(ToolkitError::Io)?;
         } else {
             writeln!(stdout, "nostr key (secret)").map_err(ToolkitError::Io)?;

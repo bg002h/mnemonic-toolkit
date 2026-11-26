@@ -111,7 +111,7 @@ fn candidates_miss_exit4_candidates_tried() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(v["result"], "no_match");
     assert_eq!(v["candidates_tried"], 3);
@@ -161,7 +161,7 @@ fn candidates_blank_lines_skipped() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(v["candidates_tried"], 2);
 }
@@ -203,7 +203,7 @@ fn candidates_exact_bytes_trailing_space() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 }
 
 // ── Cell 7 — mutex: --passphrase + --passphrase-candidates-file → exit 64 ────
@@ -266,7 +266,7 @@ fn candidates_empty_file_exit4_zero_tried() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
     let v: Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     assert_eq!(v["candidates_tried"], 0);
 }
@@ -314,7 +314,7 @@ fn candidates_missing_file_exit_1() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1);
+        .code(32);
 }
 
 // ── Cell 12 — sensitivity advisory on stderr (impl-review I1 / SPEC §2) ──────

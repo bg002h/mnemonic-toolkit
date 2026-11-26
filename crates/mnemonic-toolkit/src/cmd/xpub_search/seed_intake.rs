@@ -64,13 +64,13 @@ where
     ];
     let n_active = modes_active.iter().filter(|b| **b).count();
     if n_active == 0 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "supply one of --phrase / --phrase-stdin / --ms1 / --ms1-stdin / <positional ms1 card>"
                 .into(),
         ));
     }
     if n_active > 1 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "exactly one seed-intake mode allowed: --phrase / --phrase-stdin / --ms1 / --ms1-stdin / <positional ms1 card>"
                 .into(),
         ));
@@ -100,7 +100,7 @@ where
         let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
         Source::Phrase(Zeroizing::new(normalize_phrase(&buf)))
     } else if let Some(m) = args.ms1() {
         secret_in_argv_warning(stderr, "--ms1", "--ms1-stdin");
@@ -111,7 +111,7 @@ where
         let mut buf: Zeroizing<String> = Zeroizing::new(String::new());
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
         let trimmed: Zeroizing<String> = Zeroizing::new(buf.trim().to_string());
         crate::repair::validate_flag_hrp("--ms1-stdin", "ms", &trimmed)?;
         Source::Ms1(trimmed)
@@ -120,7 +120,7 @@ where
         // via the count check above; we accept >= 1 but reject BIP-39).
         let positional = args.positional();
         if positional.len() > 1 {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "xpub-search accepts a single positional ms1 card; got {} arguments",
                 positional.len()
             )));

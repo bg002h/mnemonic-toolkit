@@ -118,7 +118,7 @@ fn decode_rejects_length_47() {
         .args(["seedqr", "decode", "--digits", bad])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: decode: invalid digit count",
         ));
@@ -131,7 +131,7 @@ fn decode_rejects_length_49() {
         .args(["seedqr", "decode", "--digits", &bad])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: decode: invalid digit count",
         ));
@@ -144,7 +144,7 @@ fn decode_rejects_length_95() {
         .args(["seedqr", "decode", "--digits", bad])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn decode_rejects_length_97() {
         .args(["seedqr", "decode", "--digits", &bad])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn decode_rejects_non_digit_char() {
         .args(["seedqr", "decode", "--digits", bad])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: decode: invalid character",
         ));
@@ -177,7 +177,7 @@ fn decode_rejects_word_index_out_of_range() {
         .args(["seedqr", "decode", "--digits", &bad])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: decode: invalid word index",
         ));
@@ -190,7 +190,7 @@ fn decode_rejects_checksum_failure() {
         .args(["seedqr", "decode", "--digits", bad])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: decode: BIP-39 checksum failure",
         ));
@@ -334,7 +334,7 @@ fn encode_compact_rejects_15_word_cli() {
         .arg(format!("phrase={fifteen}"))
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("compact") && stderr.contains("only 12 or 24"),
@@ -362,7 +362,7 @@ fn standard_decode_of_64_char_hex_clean_error() {
         .arg(format!("seedqr={COMPACT_HEX_24}"))
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("invalid digit count"),
@@ -394,7 +394,7 @@ fn encode_json_mode_24_word() {
 #[test]
 fn encode_rejects_non_phrase_node_xpub() {
     mnemonic().args(["seedqr", "encode", "--from", "xpub=xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"])
-        .assert().failure().code(1)
+        .assert().failure().code(64)
         .stderr(predicates::str::contains("seedqr encode only accepts phrase="));
 }
 
@@ -406,7 +406,7 @@ fn encode_rejects_13_word_count() {
         .arg(format!("phrase={bad}"))
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: encode: invalid word count",
         ));
@@ -490,7 +490,7 @@ fn encode_rejects_25_word_count() {
         .arg(format!("phrase={bad}"))
         .assert()
         .failure()
-        .code(1);
+        .code(2);
 }
 
 #[test]
@@ -501,7 +501,7 @@ fn encode_rejects_invalid_word() {
         .arg(format!("phrase={bad}"))
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: encode: BIP-39 checksum failure",
         ));
@@ -515,7 +515,7 @@ fn encode_rejects_checksum_failure() {
         .arg(format!("phrase={bad}"))
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "seedqr: encode: BIP-39 checksum failure",
         ));

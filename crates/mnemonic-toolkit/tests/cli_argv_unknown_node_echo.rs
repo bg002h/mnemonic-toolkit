@@ -5,7 +5,7 @@
 use assert_cmd::Command;
 
 const SECRET: &str = "SECRETWORD";
-const EXIT_REFUSED: i32 = 2;
+const EXIT_REFUSED: i32 = 8;
 
 fn run(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")

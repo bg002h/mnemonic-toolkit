@@ -481,7 +481,7 @@ fn encode_without_input_refuses_exit_1() {
         .args(["word-card"])
         .assert()
         .failure()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains("at least one --from"));
 }
 
@@ -491,7 +491,7 @@ fn integrity_bits_below_floor_refuses() {
         .args(["word-card", "--from", MK1, "--integrity-bits", "16"])
         .assert()
         .failure()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains("below the"));
 }
 
@@ -540,7 +540,7 @@ fn assert_mixed_refused(args: &[&str], stdin: &str, n: usize) {
         .args(args)
         .write_stdin(stdin.to_string())
         .assert()
-        .code(1)
+        .code(64)
         .get_output()
         .clone();
     assert!(out.stdout.is_empty(), "stdout must be empty");

@@ -244,7 +244,7 @@ fn missing_parent_refused(verb: &str) {
     let d = tempfile::tempdir().unwrap();
     let p = d.path().join("no-such-dir").join("o.json");
     let out = run_verb(verb, "022", &p);
-    assert_eq!(out.code, 1, "stderr: {}", out.stderr);
+    assert_eq!(out.code, 32, "stderr: {}", out.stderr);
     assert!(
         out.stderr
             .contains(&format!("seedqr: {verb}: json-out write to")),

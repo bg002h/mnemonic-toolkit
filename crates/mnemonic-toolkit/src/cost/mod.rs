@@ -87,15 +87,18 @@ impl std::fmt::Display for CompareCostError {
 }
 
 impl CompareCostError {
-    /// SPEC §9 exit-code mapping.
+    /// Exit code by the exit-code spec's §3 tests: the `--max-conditions` cap
+    /// is a limit a flag raises (8); every other refusal is an input this verb
+    /// cannot cost (2), including an unsupported wrapper (§3 worked table).
     pub fn exit_code(&self) -> u8 {
+        use crate::exit_code::{INVALID, REFUSED};
         match self {
-            CompareCostError::Parse(_) => 2,
-            CompareCostError::ContextIncompat { .. }
+            CompareCostError::ConditionsTooMany { .. } => REFUSED,
+            CompareCostError::Parse(_)
+            | CompareCostError::ContextIncompat { .. }
             | CompareCostError::UnsupportedWrapper(_)
             | CompareCostError::MultiLeafTr
-            | CompareCostError::ConditionsTooMany { .. }
-            | CompareCostError::NoSatisfyingConditions => 3,
+            | CompareCostError::NoSatisfyingConditions => INVALID,
         }
     }
 }

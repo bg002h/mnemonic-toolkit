@@ -262,7 +262,7 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
     ])?;
     // Mutex: --descriptor xor --descriptor-from.
     if args.descriptor.is_none() && args.descriptor_from.is_none() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "supply --descriptor <value> or --descriptor-from <node>=<value>".into(),
         ));
     }
@@ -356,7 +356,7 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
                 )),
             };
             let body = serde_json::to_string(&envelope).map_err(|e| {
-                ToolkitError::BadInput(format!("account-of-descriptor JSON serialize: {e}"))
+                ToolkitError::Internal(format!("account-of-descriptor JSON serialize: {e}"))
             })?;
             writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
         } else {
@@ -398,7 +398,7 @@ pub fn run_account_of_descriptor<R: Read, W: Write, E: Write>(
                 )),
             };
             let body = serde_json::to_string(&envelope).map_err(|e| {
-                ToolkitError::BadInput(format!("account-of-descriptor JSON serialize: {e}"))
+                ToolkitError::Internal(format!("account-of-descriptor JSON serialize: {e}"))
             })?;
             writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
         }

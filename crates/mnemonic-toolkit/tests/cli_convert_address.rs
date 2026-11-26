@@ -301,7 +301,7 @@ fn refusal_address_no_path() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,
@@ -327,7 +327,7 @@ fn refusal_address_no_script_type() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert_eq!(
         stderr,

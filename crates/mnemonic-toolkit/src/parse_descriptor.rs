@@ -1171,7 +1171,7 @@ pub fn bind_descriptor_keys(
         if n == 1 {
             bind_watch_only_singlesig(resolved, x, master_fp_arg)
         } else {
-            Err(ToolkitError::ModeViolation {
+            Err(ToolkitError::ModeInputViolation {
                 mode: "watch-only-multisig",
                 flag: "--xpub",
                 message: "--xpub is single-sig watch-only; for multisig watch-only, use --cosigner / --cosigners-file with no --phrase / --xpub.",
@@ -1180,7 +1180,7 @@ pub fn bind_descriptor_keys(
     } else if !cosigner_specs.is_empty() && n >= 2 {
         bind_watch_only_multisig(resolved, cosigner_specs)
     } else {
-        Err(ToolkitError::ModeViolation {
+        Err(ToolkitError::ModeInputViolation {
             mode: "descriptor",
             flag: "--phrase / --xpub / --cosigner",
             message: "descriptor uses @0 but no key source provided; supply --phrase OR a cosigner triple bound to @0.",
@@ -3047,7 +3047,7 @@ mod tests {
             &[],
         )
         .unwrap_err();
-        assert!(matches!(err, ToolkitError::ModeViolation { .. }));
+        assert!(matches!(err, ToolkitError::ModeInputViolation { .. }));
     }
 
     // ---- A.7: parse_descriptor top-level orchestration (4 tests) ----

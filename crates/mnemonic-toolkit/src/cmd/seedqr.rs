@@ -143,7 +143,7 @@ fn run_decode<R: Read, W: Write, E: Write>(
     let raw_value: String = match (&args.digits, &args.from) {
         (Some(_), Some(_)) => unreachable!("clap conflicts_with prevents --digits + --from"),
         (None, None) => {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Usage(
                 "seedqr decode requires an input: --from seedqr=<VALUE|-> (canonical) or --digits <VALUE|-> (deprecated)".into(),
             ));
         }
@@ -161,7 +161,7 @@ fn run_decode<R: Read, W: Write, E: Write>(
         (None, Some(fi)) => {
             // Canonical `--from seedqr=` path. Reject non-seedqr node types.
             if fi.node != NodeType::Seedqr {
-                return Err(ToolkitError::BadInput(format!(
+                return Err(ToolkitError::Usage(format!(
                     "seedqr decode --from accepts only the `seedqr` node type; got `{}`",
                     fi.node.as_str()
                 )));
@@ -230,7 +230,7 @@ fn run_encode<R: Read, W: Write, E: Write>(
     // Validate that --from carries a phrase= node (NOT xpub=, ms1=, etc.).
     // Mirrors cmd/seed_xor.rs:163-167.
     if args.from.node != NodeType::Phrase {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "seedqr encode only accepts phrase=<value> or phrase=-".into(),
         ));
     }
@@ -305,13 +305,13 @@ fn emit_decode_output<W: Write>(
             digits,
         };
         let json = serde_json::to_string_pretty(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("seedqr: decode: json serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("seedqr: decode: json serialize: {e}")))?;
         mnemonic_io_lib::write::write_private(path, json.as_bytes()).map_err(|e| {
-            ToolkitError::BadInput(format!("seedqr: decode: json-out write to {path:?}: {e}"))
+            ToolkitError::IoFailure(format!("seedqr: decode: json-out write to {path:?}: {e}"))
         })?;
     } else {
         writeln!(stdout, "{phrase}")
-            .map_err(|e| ToolkitError::BadInput(format!("seedqr: decode: stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("seedqr: decode: stdout write: {e}")))?;
     }
     Ok(0)
 }
@@ -333,13 +333,13 @@ fn emit_encode_output<W: Write>(
             digits,
         };
         let json = serde_json::to_string_pretty(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("seedqr: encode: json serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("seedqr: encode: json serialize: {e}")))?;
         mnemonic_io_lib::write::write_private(path, json.as_bytes()).map_err(|e| {
-            ToolkitError::BadInput(format!("seedqr: encode: json-out write to {path:?}: {e}"))
+            ToolkitError::IoFailure(format!("seedqr: encode: json-out write to {path:?}: {e}"))
         })?;
     } else {
         writeln!(stdout, "{digits}")
-            .map_err(|e| ToolkitError::BadInput(format!("seedqr: encode: stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("seedqr: encode: stdout write: {e}")))?;
     }
     Ok(0)
 }

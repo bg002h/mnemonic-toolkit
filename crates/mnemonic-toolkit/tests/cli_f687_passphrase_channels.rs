@@ -720,7 +720,7 @@ fn verify_bundle_template_completion_takes_every_passphrase_form() {
 
     // Control: no passphrase is the wrong seed, so NO MATCH (exit 4).
     let none = run(&argv, b"", &[]);
-    assert_eq!(none.code, 4, "control: {}\n{}", none.stdout, none.stderr);
+    assert_eq!(none.code, 1, "control: {}\n{}", none.stdout, none.stderr);
 
     for (label, extra, stdin, env, notes) in [
         (
@@ -783,7 +783,7 @@ fn xpub_search_phrase_stdin_and_passphrase_stdin_are_refused() {
                 pp,
             );
             let r = run(&argv, format!("{SEED}\n").as_bytes(), &[]);
-            assert_eq!(r.code, 1, "{mode} {pp:?}: {}", r.stderr);
+            assert_eq!(r.code, 64, "{mode} {pp:?}: {}", r.stderr);
             assert!(
                 r.stderr.contains("only one input can come from stdin"),
                 "{}",
@@ -906,7 +906,7 @@ fn non_utf8_input_is_refused_by_name_not_panicked() {
         .output()
         .unwrap();
     let err = String::from_utf8_lossy(&o.stderr);
-    assert_eq!(o.status.code(), Some(1), "{err}");
+    assert_eq!(o.status.code(), Some(2), "{err}");
     assert!(
         err.contains("F687_PP") && err.contains("not valid UTF-8"),
         "{err}"

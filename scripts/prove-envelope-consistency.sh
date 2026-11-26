@@ -63,13 +63,13 @@ refused() {
   local name="$1" env="$2" net="$3" want="$4" cmd="$5" bad="" fmt rc
   if [ "$cmd" = bundle ]; then
     "$BIN" bundle --network "$net" --import-json "$env" >"$WORK/o" 2>"$WORK/e"; rc=$?
-    [ $rc = 1 ] || bad="exit $rc"
+    [ $rc = 2 ] || bad="exit $rc"
     [ -s "$WORK/o" ] && bad="$bad stdout not empty"
     grep -qxF "$want" "$WORK/e" || bad="$bad missing line"
   else
     for fmt in $FORMATS; do
       "$BIN" export-wallet --from-import-json "$env" --format "$fmt" >"$WORK/o" 2>"$WORK/e"; rc=$?
-      [ $rc = 1 ] || bad="$bad [$fmt exit $rc]"
+      [ $rc = 2 ] || bad="$bad [$fmt exit $rc]"
       [ -s "$WORK/o" ] && bad="$bad [$fmt stdout not empty]"
       grep -qxF "$want" "$WORK/e" || bad="$bad [$fmt missing line]"
     done

@@ -160,13 +160,13 @@ fn run_encode<R: Read, W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     let sources = collect_from_sources(&args.from, stdin)?;
     if sources.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "word-card: encode requires at least one --from <mk1|md1> card (or `-` for stdin)"
                 .into(),
         ));
     }
     if args.integrity_bits < wc_codec::MIN_INTEGRITY_BITS {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "word-card: --integrity-bits {} below the {}-bit floor",
             args.integrity_bits,
             wc_codec::MIN_INTEGRITY_BITS
@@ -249,13 +249,13 @@ fn run_encode_raid<W: Write>(
     stdout: &mut W,
 ) -> Result<u8, ToolkitError> {
     if !(1..=2).contains(&args.raid) {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "word-card: --raid must be 0, 1, or 2 (got {})",
             args.raid
         )));
     }
     if sources.len() < 2 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "word-card: --raid {} needs at least 2 mk1 data cards via repeated --from (got {})",
             args.raid,
             sources.len()
@@ -280,7 +280,7 @@ fn run_encode_raid<W: Write>(
         // fingerprint (4 bytes each); a privacy-mode card (no fingerprint)
         // contributes 4 zero bytes so the seed length stays deterministic.
         let chunk_tokens: Vec<&str> = s.split_whitespace().collect();
-        let card = mk_codec::decode(&chunk_tokens).map_err(ToolkitError::from)?;
+        let card = crate::repair::decode_mk1(&chunk_tokens).map_err(ToolkitError::from)?;
         match card.origin_fingerprint {
             Some(fp) => array_id_seed.extend_from_slice(&fp[..]),
             None => array_id_seed.extend_from_slice(&[0u8; 4]),
@@ -344,7 +344,7 @@ fn run_decode_solo<R: Read, W: Write>(
 ) -> Result<u8, ToolkitError> {
     let words = collect_words(&args.words, stdin)?;
     if words.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "word-card: --decode requires the Word-Card words (positional <WORD>... or `-` stdin)"
                 .into(),
         ));
@@ -417,7 +417,7 @@ fn run_decode_raid<R: Read, W: Write, E: Write>(
             body: &report,
         };
         let s = serde_json::to_string(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("word-card JSON serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("word-card JSON serialize: {e}")))?;
         writeln!(stdout, "{s}").map_err(ToolkitError::Io)?;
     } else {
         writeln!(
@@ -491,7 +491,7 @@ fn collect_from_sources<R: Read>(
 fn collect_words<R: Read>(words: &[String], stdin: &mut R) -> Result<Vec<String>, ToolkitError> {
     if words.iter().any(|w| w == "-") {
         if words.len() != 1 {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "word-card: `-` (read the words from stdin) must be the only positional <WORD>; got {} positional values",
                 words.len()
             )));
@@ -545,7 +545,7 @@ fn emit_encode_json<W: Write>(
         cards,
     };
     let s = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("word-card JSON serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("word-card JSON serialize: {e}")))?;
     writeln!(stdout, "{s}").map_err(ToolkitError::Io)?;
     Ok(())
 }
@@ -653,7 +653,7 @@ fn emit_decode_json<W: Write>(
         body: report,
     };
     let s = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("word-card JSON serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("word-card JSON serialize: {e}")))?;
     writeln!(stdout, "{s}").map_err(ToolkitError::Io)?;
     Ok(())
 }
@@ -786,8 +786,8 @@ mod tests {
         for input in [["nonsense", "-"], ["-", "-"]] {
             let words: Vec<String> = input.iter().map(|s| s.to_string()).collect();
             match collect_words(&words, &mut Panics) {
-                Err(ToolkitError::BadInput(m)) => assert_eq!(m, want),
-                other => panic!("expected BadInput, got {other:?}"),
+                Err(ToolkitError::Usage(m)) => assert_eq!(m, want),
+                other => panic!("expected Usage, got {other:?}"),
             }
         }
     }

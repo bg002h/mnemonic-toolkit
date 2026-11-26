@@ -149,7 +149,7 @@ fn cell_6_flipped_sig_strict_errors_signature_mismatch_exit_2() {
             "--bsms-verify-strict",
         ])
         .assert()
-        .code(2)
+        .code(1)
         .stderr(predicate::str::contains(
             "BIP-129 signature verification failed",
         ));
@@ -173,7 +173,7 @@ fn cell_7_flipped_token_strict_errors_signature_mismatch() {
             "--bsms-verify-strict",
         ])
         .assert()
-        .code(2)
+        .code(1)
         .stderr(predicate::str::contains(
             "BIP-129 signature verification failed",
         ));
@@ -239,7 +239,7 @@ fn cell_10_verify_strict_without_round1_errors_bad_input() {
             "tests/fixtures/wallet_import/bsms-1of1-singlesig.txt",
         ])
         .assert()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains(
             "--bsms-verify-strict requires `--bsms-round1`",
         ));
@@ -252,7 +252,7 @@ fn cell_11_stdin_dash_rejected_in_v_0_27_0() {
         .unwrap()
         .args(["import-wallet", "--bsms-round1", "-"])
         .assert()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains(
             "--bsms-round1 -: stdin input deferred",
         ));
@@ -352,7 +352,7 @@ fn cell_15_record_index_propagates_in_multi_record_error() {
             "--bsms-verify-strict",
         ])
         .assert()
-        .code(2)
+        .code(1)
         .get_output()
         .stderr
         .clone();

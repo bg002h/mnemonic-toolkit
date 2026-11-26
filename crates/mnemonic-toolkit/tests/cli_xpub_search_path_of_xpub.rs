@@ -183,7 +183,7 @@ fn path_of_xpub_no_match_returns_exit_4() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4)
+        .code(1)
         .get_output()
         .stdout
         .clone();
@@ -217,7 +217,7 @@ fn path_of_xpub_min_account_5_number_of_accounts_3_searches_5_to_8() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 
     // Target at account=6 SHOULD match.
     let target_a6 = xpub_at("m/84'/0'/6'", "").to_string();
@@ -435,7 +435,7 @@ fn path_of_xpub_passphrase_alters_match() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -485,7 +485,7 @@ fn path_of_xpub_invalid_phrase_exits_1() {
             &target,
         ])
         .assert()
-        .code(1);
+        .code(2);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,7 +505,7 @@ fn path_of_xpub_invalid_xpub_exits_1() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1);
+        .code(2);
 }
 
 // ---------------------------------------------------------------------------
@@ -557,7 +557,7 @@ fn path_of_xpub_ms1_decode_failure_auto_fires() {
             &target,
         ])
         .assert()
-        .code(1)
+        .code(2)
         .stdout(predicate::str::contains("# Repair report").not())
         .stderr(predicate::str::contains(
             "candidate correction exists but a seed card cannot be self-verified",

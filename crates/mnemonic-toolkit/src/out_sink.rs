@@ -99,17 +99,15 @@ impl<W: Write> OutSink<W> {
         }
     }
 
-    /// The exit code once stdout failed (T6, FIX section 3.2). `exit4_is_result` is true for `repair` and
-    /// `inspect`, whose exit 4 carries the result on stdout. No recorded error: the code is unchanged.
-    pub fn exit_code(&self, code: u8, exit4_is_result: bool) -> u8 {
+    /// The exit code once stdout failed: a recorded error ADDS 32 to a
+    /// combinable code and does not replace it (exit-code spec R8); 64 and 101
+    /// are kept. No recorded error (or only a closed pipe): the code is
+    /// unchanged.
+    pub fn exit_code(&self, code: u8) -> u8 {
         if self.error.is_none() {
             return code;
         }
-        match code {
-            0 | 5 => 1,
-            4 if exit4_is_result => 1,
-            c => c,
-        }
+        crate::exit_code::with_io_failure(code)
     }
 }
 
@@ -230,36 +228,30 @@ mod tests {
     fn r21_exit_code_mapping() {
         // No error: every code kept.
         let s = OutSink::new(Flaky::new(100, libc::ENOSPC, false));
-        for c in [0u8, 1, 2, 3, 4, 5, 64] {
-            assert_eq!(s.exit_code(c, false), c);
-            assert_eq!(s.exit_code(c, true), c);
+        for c in [0u8, 1, 2, 4, 16, 20, 64, 101] {
+            assert_eq!(s.exit_code(c), c);
         }
         // Closed pipe only: every code kept.
         let mut s = OutSink::new(Flaky::new(0, libc::EPIPE, false));
         s.write_all(b"x").unwrap();
         assert!(s.error().is_none());
-        for c in [0u8, 1, 2, 3, 4, 5, 64] {
-            assert_eq!(s.exit_code(c, false), c);
-            assert_eq!(s.exit_code(c, true), c);
+        for c in [0u8, 1, 2, 4, 16, 20, 64, 101] {
+            assert_eq!(s.exit_code(c), c);
         }
-        // ENOSPC.
+        // ENOSPC: R8 adds 32; 64 and 101 never combine.
         let mut s = OutSink::new(Flaky::new(0, libc::ENOSPC, false));
         s.write_all(b"x").unwrap();
-        for (c, other, repair_inspect) in [
-            (0u8, 1u8, 1u8),
-            (5, 1, 1),
-            (1, 1, 1),
-            (2, 2, 2),
-            (3, 3, 3),
-            (64, 64, 64),
-            (4, 4, 1),
+        for (c, want) in [
+            (0u8, 32u8),
+            (1, 33),
+            (2, 34),
+            (4, 36),
+            (16, 48),
+            (20, 52),
+            (64, 64),
+            (101, 101),
         ] {
-            assert_eq!(s.exit_code(c, false), other, "code {c} other verb");
-            assert_eq!(
-                s.exit_code(c, true),
-                repair_inspect,
-                "code {c} repair/inspect"
-            );
+            assert_eq!(s.exit_code(c), want, "code {c}");
         }
     }
 }

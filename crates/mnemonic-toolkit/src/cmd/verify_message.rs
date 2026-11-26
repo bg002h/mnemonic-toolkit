@@ -103,8 +103,8 @@ pub fn run<R: Read, W: Write, E: Write>(
         stdin.read_to_string(&mut buf).map_err(ToolkitError::Io)?;
         strip_one_trailing_newline(&buf).to_string()
     } else {
-        return Err(ToolkitError::VerifyMessage(
-            "exactly one of --message / --message-file / --message-stdin is required".into(),
+        return Err(ToolkitError::Usage(
+            "verify-message: exactly one of --message / --message-file / --message-stdin is required".into(),
         ));
     };
 
@@ -131,7 +131,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         .map_err(ToolkitError::Io)?;
     }
 
-    // Disposition (d): malformed input already returned Err (exit 1, stderr).
+    // Disposition (d): malformed input already returned Err (exit 2, stderr).
     // A cleanly-decoded signature that simply does not verify → exit 1 with the
     // structured result on stdout (no error).
     Ok(if outcome.valid { 0 } else { 1 })

@@ -142,7 +142,7 @@ fn read_xpub_value<R: Read>(
         let mut buf = String::new();
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
         let trimmed = buf.trim();
         if trimmed.is_empty() {
             return Err(ToolkitError::BadInput(
@@ -153,7 +153,7 @@ fn read_xpub_value<R: Read>(
     } else if let Some(v) = &args.xpub {
         Ok(v.clone())
     } else {
-        Err(ToolkitError::BadInput(
+        Err(ToolkitError::Usage(
             "supply --xpub <VALUE> or --xpub-stdin".into(),
         ))
     }
@@ -278,7 +278,7 @@ pub fn run_address_of_xpub<R: Read, W: Write, E: Write>(
             }),
         };
         let body = serde_json::to_string(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("address-of-xpub JSON serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("address-of-xpub JSON serialize: {e}")))?;
         writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     } else {
         for m in &matches {

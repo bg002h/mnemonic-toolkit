@@ -329,7 +329,7 @@ pub(crate) fn resolve_groups<R: Read, E: Write>(
     }
 
     if ms1_vec.is_empty() && mk1_vec.is_empty() && md1_vec.is_empty() {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{subcmd_name}: at least one of --ms1 / --mk1 / --md1 (or positional STRING) is required"
         )));
     }
@@ -339,7 +339,7 @@ pub(crate) fn resolve_groups<R: Read, E: Write>(
     // a single non-replayable stream).
     let total_dashes = count_dashes(args);
     if total_dashes > 1 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{subcmd_name}: at most one `-` (stdin) value across all {subcmd_name} inputs"
         )));
     }
@@ -487,6 +487,12 @@ pub enum SetVerify {
     /// chunk/content-id oracle either — see `repair_via_md_codec`).
     /// `reason` is the loud user-facing advisory text.
     Unverified { reason: String },
+    /// A corrected mk1 chunk_set_id group that is incomplete (a single-plate
+    /// or partial-set repair). D26 `REPAIR_APPLIED`, "verifiable by
+    /// reassembly later": `mnemonic repair` exits 16, not 20
+    /// (`SPEC_constellation_exit_codes.md` decision 7). Auto-repair still
+    /// never applies it (it is not `Blessed`). `reason` is the advisory text.
+    IncompleteSet { reason: String },
     /// F-642: a SINGLE-STRING md1 card whose wire version `got` this build
     /// cannot read, and which BCH correction (`md_codec::correct_chunks`,
     /// version-agnostic) DID correct. The correction is kept and reported;
@@ -799,6 +805,51 @@ fn encode_chunk(hrp: &str, data_with_checksum: &[u8]) -> String {
     out
 }
 
+/// Exit-code spec R6 (decision 5): a verb that USED a checksum-corrected value
+/// sets bit 16 (REPAIRED). mk-codec's `decode` BCH-corrects silently, and the
+/// verbs that decode an mk1 (inspect, convert, word-card, xpub-search, restore,
+/// verify-bundle) return their own code, so the fact is recorded here once per
+/// process and `cli::run` adds 16 (and prints a note) at exit.
+static CORRECTION_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Record that this run used a corrected value (R6).
+pub(crate) fn note_correction_used() {
+    CORRECTION_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// True when this run used a corrected value (R6).
+pub(crate) fn correction_used() -> bool {
+    CORRECTION_USED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// True when this mk1 string's checksum is not valid as written, so a decode
+/// that succeeded on it used a BCH correction. A string that does not parse
+/// as a chunk reports false (its decode failed anyway).
+fn mk1_chunk_needs_correction(chunk_index: usize, chunk: &str) -> bool {
+    let kind = CardKind::Mk1;
+    let Ok((values, code)) = parse_chunk(chunk, chunk_index, kind) else {
+        return false;
+    };
+    let Some(target) = kind.target_residue(code) else {
+        return false;
+    };
+    polymod_residue(kind.hrp(), &values, target, code) != 0
+}
+
+/// `mk_codec::decode`, recording a silent BCH correction (R6). Every verb
+/// that decodes a user-supplied mk1 card calls this instead of the codec.
+pub(crate) fn decode_mk1(chunks: &[&str]) -> Result<mk_codec::KeyCard, mk_codec::Error> {
+    let card = mk_codec::decode(chunks)?;
+    if chunks
+        .iter()
+        .enumerate()
+        .any(|(i, c)| mk1_chunk_needs_correction(i, c))
+    {
+        note_correction_used();
+    }
+    Ok(card)
+}
+
 /// Attempt to repair a single chunk. Returns `Ok(Some(detail))` on
 /// repair-applied; `Ok(None)` on already-valid; `Err` on unrecoverable.
 fn repair_chunk_one(
@@ -900,8 +951,12 @@ enum GroupVerdict {
     /// returned `Err` — the per-chunk correction(s) aliased to a DIFFERENT
     /// valid codeword. THE FUNDS FIX.
     Reject,
-    /// The group is incomplete (a partial-set / single-plate repair) —
-    /// cannot set-verify; preserved as an unverified candidate.
+    /// The group is incomplete (a partial-set / single-plate repair) — it
+    /// cannot be set-verified NOW, but the rest of the set verifies it when
+    /// it is reassembled (D26 `REPAIR_APPLIED`; exit-code spec decision 7).
+    Incomplete,
+    /// No oracle exists for the correction at all (the encoder-unreachable
+    /// `SingleString` singleton) — preserved as an unverified candidate.
     Candidate,
 }
 
@@ -1021,12 +1076,15 @@ fn group_is_complete_and_consistent(headers: &[&StringLayerHeader]) -> bool {
 }
 
 /// Fold two `GroupVerdict`s to the dominant one across a multi-group batch
-/// (SPEC §2 — `reject > candidate > bless`).
+/// (SPEC §2 — `reject > candidate > incomplete > bless`).
 fn fold_verdict(acc: Option<GroupVerdict>, v: GroupVerdict) -> GroupVerdict {
     match (acc, v) {
         (Some(GroupVerdict::Reject), _) | (_, GroupVerdict::Reject) => GroupVerdict::Reject,
         (Some(GroupVerdict::Candidate), _) | (_, GroupVerdict::Candidate) => {
             GroupVerdict::Candidate
+        }
+        (Some(GroupVerdict::Incomplete), _) | (_, GroupVerdict::Incomplete) => {
+            GroupVerdict::Incomplete
         }
         _ => GroupVerdict::Bless,
     }
@@ -1116,7 +1174,7 @@ fn verify_mk1_set(
             })
             .collect();
         let verdict = if !group_is_complete_and_consistent(&headers) {
-            GroupVerdict::Candidate
+            GroupVerdict::Incomplete
         } else {
             let refs: Vec<&str> = idxs.iter().map(|&i| &*corrected_chunks[i]).collect();
             match mk_codec::decode(&refs) {
@@ -1152,6 +1210,12 @@ fn verify_mk1_set(
 
     match dominant.unwrap_or(GroupVerdict::Bless) {
         GroupVerdict::Bless => Ok(SetVerify::Blessed),
+        GroupVerdict::Incomplete => Ok(SetVerify::IncompleteSet {
+            reason: "correction applied to an INCOMPLETE mk1 chunk set — it is verified when \
+                the rest of the set is reassembled (`mk decode` / import the full set); until \
+                then, a >4-error correction could alias to a different card"
+                .to_string(),
+        }),
         GroupVerdict::Candidate => Ok(SetVerify::Unverified {
             reason: "correction UNVERIFIED — a >4-error correction can alias to a different card; \
                 reassemble the full card (`mk decode` / import the full set) to confirm; \
@@ -1740,9 +1804,9 @@ pub(crate) fn is_indel_trigger(e: &RepairError) -> bool {
     }
 }
 
-/// Exit-code decision for the indel CLI path (§1.6). Precedence within the
-/// emitting outcomes: ambiguous-or-substitution(4) > recovered/repaired(5) >
-/// already-valid(0). `substitution_seen` is true when at least one candidate
+/// Exit-code decision for the indel CLI path (§1.6), in the exit-code spec's
+/// numbers: ambiguous-or-substitution 20 (16 + 4: corrected, verify before
+/// trusting) > recovered/repaired 16 > already-valid 0. `substitution_seen` is true when at least one candidate
 /// used a substitution beyond the placeholder positions (`subst_count >= 1`).
 /// (Unrecoverable(2) is handled out-of-band via the `Err` short-circuit in
 /// `run()`, so it never reaches this helper.)
@@ -1751,12 +1815,13 @@ pub(crate) fn indel_exit_code(
     substitution_seen: bool,
     total_repairs: usize,
 ) -> u8 {
+    use crate::exit_code::Bits;
     if ambiguous_seen || substitution_seen {
-        4
+        (Bits::REPAIRED | Bits::UNVERIFIED).to_exit_code()
     } else if total_repairs == 0 {
-        0
+        Bits::OK.to_exit_code()
     } else {
-        5
+        Bits::REPAIRED.to_exit_code()
     }
 }
 
@@ -2065,8 +2130,11 @@ fn apply_md_corrections(
 
 /// Auto-fire convenience wrapper. Returns `Ok(())` on repair-failure (caller
 /// falls through to its own typed-error path per §5 fallthrough discipline);
-/// returns `Err(ToolkitError::RepairShortCircuit { 5 })` on repair-success
-/// (caller's `?` short-circuits to exit 5).
+/// returns `Err(ToolkitError::RepairShortCircuit { 2 })` on repair-success
+/// (caller's `?` short-circuits to exit 2). Exit-code spec R7: the verb did
+/// NOT do its job on an invalid input, so it exits 2 on a terminal and in a
+/// pipe alike; the printed repair report is advice, and bits 16 and 4 belong
+/// only to a verb that USED a corrected value.
 ///
 /// `json_context = true` (v0.22.1 D20) routes the stdout report through
 /// `emit_repair_report_json` so callers invoked with `--json` get a
@@ -2138,7 +2206,9 @@ pub fn try_repair_and_short_circuit<O: Write + ?Sized, E: Write + ?Sized>(
     }
 
     emit_repair_report(&outcome, stdout, stderr, json_context).map_err(ToolkitError::Io)?;
-    Err(ToolkitError::RepairShortCircuit { exit_code: 5 })
+    Err(ToolkitError::RepairShortCircuit {
+        exit_code: crate::exit_code::INVALID,
+    })
 }
 
 /// Render the repair report. Stdout = either the text-form comment lines +
@@ -2220,7 +2290,8 @@ fn emit_repair_report_text<O: Write + ?Sized>(
 /// JSON-envelope report (v0.22.1 D20). Schema reuses the standalone
 /// `cmd/repair.rs::RepairJson` shape (schema_version: "1", kind,
 /// corrected_chunks, repairs) plus two discriminator fields
-/// (`auto_repair_short_circuit: true`, `exit_code: 5`) marking the
+/// (`auto_repair_short_circuit: true`, `exit_code: 2` — the process's exit
+/// status, exit-code spec R14 and R7) marking the
 /// envelope as an auto-fire emission rather than a standalone subcommand
 /// invocation.
 fn emit_repair_report_json<O: Write + ?Sized>(
@@ -2235,7 +2306,7 @@ fn emit_repair_report_json<O: Write + ?Sized>(
     let envelope = AutoFireRepairJson {
         schema_version: "1",
         auto_repair_short_circuit: true,
-        exit_code: 5,
+        exit_code: crate::exit_code::INVALID,
         kind: kind_str,
         corrected_chunks: &outcome.corrected_chunks,
         repairs: outcome
@@ -2352,7 +2423,9 @@ mod tests {
                 assert!(reason.contains("BIP-93"), "reason: {reason}");
                 assert!(reason.contains("self-verified"), "reason: {reason}");
             }
-            SetVerify::Blessed | SetVerify::UnreadableVersion { .. } => {
+            SetVerify::Blessed
+            | SetVerify::IncompleteSet { .. }
+            | SetVerify::UnreadableVersion { .. } => {
                 panic!("a touched ms1 correction must NOT be Blessed")
             }
         }
@@ -3143,11 +3216,11 @@ mod tests {
     #[test]
     fn indel_exit_code_precedence() {
         assert_eq!(indel_exit_code(false, false, 0), 0); // nothing recovered
-        assert_eq!(indel_exit_code(false, false, 5), 5); // recovered/repaired
-        assert_eq!(indel_exit_code(true, false, 0), 4); // ambiguous wins
-        assert_eq!(indel_exit_code(true, false, 5), 4);
-        assert_eq!(indel_exit_code(false, true, 1), 4); // substitution wins
-        assert_eq!(indel_exit_code(true, true, 0), 4); // ambiguous+subst wins
+        assert_eq!(indel_exit_code(false, false, 5), 16); // recovered/repaired
+        assert_eq!(indel_exit_code(true, false, 0), 20); // ambiguous wins
+        assert_eq!(indel_exit_code(true, false, 5), 20);
+        assert_eq!(indel_exit_code(false, true, 1), 20); // substitution wins
+        assert_eq!(indel_exit_code(true, true, 0), 20); // ambiguous+subst wins
     }
 
     /// `is_indel_trigger` set (§1.7 — HrpMismatch INCLUDED so a prefix-region

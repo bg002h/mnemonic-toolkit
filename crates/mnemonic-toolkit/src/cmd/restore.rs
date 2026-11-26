@@ -91,7 +91,7 @@ pub struct RestoreArgs {
     /// Cross-check assertion (multisig mode): `@N=<mk1-chunk|xpub>` — cosigner at
     /// position `N` is this public key. Repeat the SAME `@N=` for each chunk of a
     /// multi-chunk `mk1`. A mismatch against the md1's slot is a hard error
-    /// (exit 4) unless `--allow-mismatch`. Watch-only (non-secret).
+    /// (exit 1) unless `--allow-mismatch`. Watch-only (non-secret).
     #[arg(long)]
     pub cosigner: Vec<String>,
 
@@ -135,7 +135,7 @@ pub struct RestoreArgs {
     /// #28 phase 1 — expected `WalletPolicyId` (hex prefix) for single-sig
     /// template-completion. Restore recomputes the `WalletPolicyId` from the
     /// completed, fully-keyed, explicit-origin wallet and matches its leading
-    /// bytes against this prefix; a MISMATCH refuses loudly (exit 4). Any-length
+    /// bytes against this prefix; a MISMATCH refuses loudly (exit 1). Any-length
     /// prefix; an advisory warns when shorter than 4 bytes (8 hex chars) — a
     /// collision footgun — but does NOT enforce it (the printed convenience
     /// prefix is 4 bytes). The value the `bundle --md1-form=template` advisory
@@ -220,12 +220,12 @@ pub struct RestoreArgs {
     #[arg(long, value_enum)]
     pub template: Option<CliTemplate>,
 
-    /// Reference master fingerprint (8 lowercase hex). Mismatch → exit 4
+    /// Reference master fingerprint (8 lowercase hex). Mismatch → exit 1
     /// (unless `--allow-mismatch`).
     #[arg(long)]
     pub expect_fingerprint: Option<String>,
 
-    /// Reference account xpub (requires `--template`). Mismatch → exit 4
+    /// Reference account xpub (requires `--template`). Mismatch → exit 1
     /// (unless `--allow-mismatch`).
     #[arg(long)]
     pub expect_xpub: Option<String>,
@@ -241,7 +241,7 @@ pub struct RestoreArgs {
     /// Emit an importable wallet-software payload (an `export-wallet` emitter:
     /// `descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, …).
     /// REQUIRES a single `--template` (emitters are one-descriptor-in/one-out);
-    /// `--format` with no `--template` (the all-4 default) → exit 2. When set,
+    /// `--format` with no `--template` (the all-4 default) → exit 64. When set,
     /// the importable PAYLOAD goes to stdout and the verification block
     /// (fingerprint / CONFIRM / descriptor / first recv) goes to stderr, so the
     /// payload pipes cleanly into wallet software. (With `--json`, the payload is
@@ -264,6 +264,26 @@ pub struct RestoreArgs {
 
 fn bad(s: impl Into<String>) -> ToolkitError {
     ToolkitError::BadInput(s.into())
+}
+
+/// Exit-code spec decision 2: the command line alone is wrong (64).
+fn usage(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::Usage(s.into())
+}
+
+/// Exit-code spec §3 test 5 (or 3, a network mismatch): refused (8).
+fn refused(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::Refused(s.into())
+}
+
+/// Exit-code spec R13: a bug (101).
+fn internal(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::Internal(s.into())
+}
+
+/// Exit-code spec §3 test 2: a file or stream the tool needed failed (32).
+fn io_failure(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::IoFailure(s.into())
 }
 
 /// `--search-chain` value enum (#28 phase 2). Maps to the engine's
@@ -389,7 +409,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         from.node,
         NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
     ) {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
             from.node.as_str()
         )));
@@ -398,7 +418,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Reject a multisig --template (restore is single-sig this cycle).
     if let Some(t) = args.template {
         if t.is_multisig() {
-            return Err(bad(
+            return Err(usage(
                 "restore is single-sig only; --template ∈ {bip44,bip49,bip84,bip86}",
             ));
         }
@@ -432,7 +452,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     if crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
         && from_uses_stdin
     {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
             crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
         )));
@@ -709,7 +729,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             envelope["import_payload"] = json!(payload);
         }
         let s = serde_json::to_string(&envelope)
-            .map_err(|e| bad(format!("json serialization: {e}")))?;
+            .map_err(|e| internal(format!("json serialization: {e}")))?;
         format!("{s}\n")
     } else if let Some(payload) = &import_payload {
         // `--format` without `--json`: the payload alone is stdout so it pipes
@@ -773,7 +793,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         write!(stdout, "{stdout_content}").map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, &stdout_content)
-            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| io_failure(format!("--output {}: {e}", args.output)))?;
     }
 
     // ---- Verification banners (stderr) --------------------------------------
@@ -839,7 +859,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     if d.use_site_path != md_codec::use_site_path::UseSitePath::standard_multipath()
         || d.tlv.use_site_path_overrides.is_some()
     {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "this keyless single-sig template md1 has a use-site path other than /<0;1>/*, which single-sig template completion cannot rebuild (it would print a different wallet); use the wallet's full descriptor or a --md1-form=policy card instead",
@@ -847,7 +867,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     }
     // FIX #2: --format is refused in template completion.
     if args.format.is_some() {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--format",
             message: "--format is not supported when completing a keyless single-sig template md1; run without --format to print the completed descriptor, or (canonical origin only) restore with --template <bip44|bip84|bip86> --account <N> --format <FORMAT> and no --md1",
@@ -855,20 +875,23 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     }
 
     // --- (b) `--from` REQUIRED (the C2 funds-safety hole) -------------------
-    let from_raw = args.from.as_deref().ok_or(ToolkitError::ModeViolation {
-        mode: "restore",
-        flag: "--md1",
-        message: "restore of a keyless single-sig TEMPLATE md1 requires --from <seed> \
+    let from_raw = args
+        .from
+        .as_deref()
+        .ok_or(ToolkitError::ModeInputViolation {
+            mode: "restore",
+            flag: "--md1",
+            message: "restore of a keyless single-sig TEMPLATE md1 requires --from <seed> \
                   (the template carries no key; the seed derives it). Supply \
                   --from ms1=…/phrase=…/entropy=…/seedqr=…",
-    })?;
+        })?;
     let from = parse_from_input(from_raw).map_err(bad)?;
     let from_uses_stdin = from.value == "-";
     if !matches!(
         from.node,
         NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
     ) {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
             from.node.as_str()
         )));
@@ -879,7 +902,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
     if crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
         && from_uses_stdin
     {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
             crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
         )));
@@ -1137,7 +1160,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         format!(
             "{}\n",
             serde_json::to_string(&envelope)
-                .map_err(|e| bad(format!("json serialization: {e}")))?
+                .map_err(|e| internal(format!("json serialization: {e}")))?
         )
     } else {
         let mut s = String::new();
@@ -1165,7 +1188,7 @@ fn run_singlesig_template_completion<R: Read, W: Write, E: Write>(
         write!(stdout, "{stdout_content}").map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, &stdout_content)
-            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| io_failure(format!("--output {}: {e}", args.output)))?;
     }
 
     if ref_mismatch.is_some() {
@@ -1484,14 +1507,14 @@ pub(crate) fn resolve_template_completion_seed<E: Write>(
         from.node,
         NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
     ) {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
             from.node.as_str()
         )));
     }
     // F-687: `--passphrase -` reads stdin exactly as `--passphrase-stdin`.
     if passphrase.reads_stdin() && from_uses_stdin {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
             passphrase.stdin_spelling()
         )));
@@ -1554,7 +1577,7 @@ fn run_multisig_template_completion<R: Read, W: Write, E: Write>(
     // Factored into the SHARED helper so verify-bundle's multisig-template path
     // resolves the seed identically (same argv advisories, stdin coexist gate,
     // `@env:`/stdin handling).
-    let no_from = ToolkitError::ModeViolation {
+    let no_from = ToolkitError::ModeInputViolation {
         mode: "restore",
         flag: "--md1",
         message: "restore of a keyless MULTISIG TEMPLATE md1 requires --from <seed> \
@@ -1663,7 +1686,7 @@ fn emit_candidate_list<W: Write, E: Write>(
         let envelope = candidate_list_envelope(list, network);
         body.push_str(
             &serde_json::to_string(&envelope)
-                .map_err(|e| bad(format!("json serialization: {e}")))?,
+                .map_err(|e| internal(format!("json serialization: {e}")))?,
         );
         body.push('\n');
     } else {
@@ -1691,7 +1714,7 @@ fn emit_candidate_list<W: Write, E: Write>(
             .map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, &body)
-            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| io_failure(format!("--output {}: {e}", args.output)))?;
     }
 
     // The annotation and the summary go to stderr: stdout carries what a script
@@ -1764,12 +1787,12 @@ pub(crate) fn complete_multisig_template<E: Write>(
         Some(k) => {
             let k = k as usize;
             if k == 0 {
-                return Err(bad(
+                return Err(usage(
                     "--own-account-max must be ≥ 1 (it derives the own seed at accounts 0..K)",
                 ));
             }
             if k > OWN_ACCOUNT_MAX_CEILING {
-                return Err(bad(format!(
+                return Err(usage(format!(
                     "--own-account-max {k} exceeds the hard ceiling of {OWN_ACCOUNT_MAX_CEILING} \
                      own-account candidates: narrow the range (the subset-search space grows as \
                      C(K, own-slots)·N!)."
@@ -1799,14 +1822,14 @@ pub(crate) fn complete_multisig_template<E: Write>(
     // a future bundle form emitting a hardened canonical multisig template gets
     // the precise refusal instead of a confusing NO-MATCH.
     if md_codec::to_miniscript::has_hardened_use_site(d) {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "this md1 uses a hardened use-site path (`/*h` wildcard or a hardened multipath alternative, baseline or per-cosigner) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened path. Faithful reconstruction is not supported. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
         });
     }
     if taproot_override_card(d) && !restorable_taproot_override_card(d) {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "this taproot md1 carries per-cosigner use-site path overrides in a shape the toolkit cannot yet reconstruct faithfully (a sortedmulti_a tap leaf, or a non-NUMS internal/trunk key). Non-hardened tr(NUMS, multi_a(...)) override cards ARE restorable; other taproot override shapes route around the per-key reconstruction path and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-taproot-use-site-override-arm",
@@ -1883,7 +1906,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
 
     // Mixing assigned + unassigned cosigners is ambiguous (which mode?). Refuse.
     if any_assigned && !unassigned_cosigners.is_empty() {
-        return Err(bad(
+        return Err(usage(
             "--cosigner: mix of assigned (@N=) and unassigned forms — use one or the other \
              (assigned @N= for explicit mode, unassigned for id/address search)",
         ));
@@ -1896,7 +1919,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
     // them is a contradiction. Refuse up front (BadInput).
     // scratch fix #41: refuse the combination (the address would be ignored).
     if any_assigned && ctx.search_address.is_some() {
-        return Err(bad(
+        return Err(usage(
             "explicit @N= assignment cannot combine with --search-address: @N= asserts the \
              key→slot placement, so the address would not be checked. Drop the @N= prefixes \
              to let --search-address place the cosigners, or keep them and check the \
@@ -1904,7 +1927,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
         ));
     }
     if any_assigned && (own_account_max.is_some() || ctx.search_cosigner_subset) {
-        return Err(bad(
+        return Err(usage(
             "explicit @N= assignment cannot combine with subset-search \
              (--own-account-max / --search-cosigner-subset): @N= asserts the key→slot \
              placement while the subset-search resolves it. Use one or the other.",
@@ -1984,7 +2007,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
         &ctx.own_accounts
     };
     if own_accounts.is_empty() {
-        return Err(bad("--account list is empty"));
+        return Err(usage("--account list is empty"));
     }
     // A duplicate own account would derive the SAME own key twice → a guaranteed
     // duplicate-key collision (floor 2). Reject early with a clear message.
@@ -1993,7 +2016,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
         let mut seen = std::collections::BTreeSet::new();
         for a in own_accounts {
             if !seen.insert(*a) {
-                return Err(bad(format!(
+                return Err(usage(format!(
                     "--account: duplicate account {a} (the own seed at one account is one key)"
                 )));
             }
@@ -2139,13 +2162,13 @@ pub(crate) fn complete_multisig_template<E: Write>(
         //   - `s_opt ≤ REALIZED_S_MAX` (the combinatorial DoS bound),
         //   - `s_opt` overflow (None) → refuse.
         if k_own > OWN_ACCOUNT_MAX_CEILING {
-            return Err(bad(format!(
+            return Err(refused(format!(
                 "--search-cosigner-subset: {k_own} own-account candidates exceeds the hard \
                  ceiling of {OWN_ACCOUNT_MAX_CEILING}: narrow --account / --own-account-max."
             )));
         }
         if m_cosigners > COSIGNER_SUBSET_MAX_CANDIDATES {
-            return Err(bad(format!(
+            return Err(refused(format!(
                 "--search-cosigner-subset: {m_cosigners} supplied cosigner candidates exceeds \
                  the hard ceiling of {COSIGNER_SUBSET_MAX_CANDIDATES}: narrow the --cosigner \
                  cards (the opt-in space grows as Σ_j C(K_own,j)·C(M_sup,N−j)·N!)."
@@ -2159,10 +2182,10 @@ pub(crate) fn complete_multisig_template<E: Write>(
         // Refuse early with an actionable message (s_opt == 0).
         // W1: the SAME predicate the enumeration uses, not the shape alone.
         let s = ps::s_opt(k_own, m_cosigners, n, collapse_orderings).ok_or_else(|| {
-            bad("multisig template: opt-in subset-search candidate space overflow")
+            refused("multisig template: opt-in subset-search candidate space overflow")
         })?;
         if s == 0 {
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--search-cosigner-subset",
                 message: "not enough keys to fill every slot under the opt-in cosigner-subset \
@@ -2172,7 +2195,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             });
         }
         if s > REALIZED_S_MAX {
-            return Err(bad(format!(
+            return Err(refused(format!(
                 "opt-in cosigner-subset search space ({s} candidates) exceeds the hard ceiling \
                  of {REALIZED_S_MAX}: narrow --own-account-max or supply fewer --cosigner cards."
             )));
@@ -2189,7 +2212,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             // No own slot left (M' ≥ N): either over-supplied cosigners or a
             // degenerate request. Refuse with the own-only / --search-cosigner-
             // subset pointer (the §5a M'>M arm; M'==N leaves zero own slots).
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--cosigner",
                 message: "own-only subset-search needs EXACT cosigner cards (fewer than the \
@@ -2201,7 +2224,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
         let j = n - m_cosigners; // own slots (1..=n-? ; ≥1 since m_cosigners < n)
         if k_own < j {
             // Fewer own candidates than own slots → cannot fill → NO-MATCH.
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--own-account-max",
                 message: "not enough own-account candidates to fill the own slots: raise \
@@ -2213,9 +2236,9 @@ pub(crate) fn complete_multisig_template<E: Write>(
         // (None) → refuse.
         // W1: the SAME predicate the enumeration uses, not the shape alone.
         let s = ps::s_own(k_own, j, m_cosigners, collapse_orderings)
-            .ok_or_else(|| bad("multisig template: subset-search candidate space overflow"))?;
+            .ok_or_else(|| refused("multisig template: subset-search candidate space overflow"))?;
         if s > REALIZED_S_MAX {
-            return Err(bad(format!(
+            return Err(refused(format!(
                 "own-account subset-search space ({s} candidates) exceeds the hard ceiling of \
                  {REALIZED_S_MAX}: narrow --own-account-max or supply more --cosigner cards."
             )));
@@ -2224,7 +2247,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
     } else {
         // EXACT pool (v0.60.0): the supplied keys must EXACTLY fill the N slots.
         if pool.len() < n {
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--cosigner",
                 message: "not enough keys to fill every cosigner slot: the count of own keys \
@@ -2233,7 +2256,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
             });
         }
         if pool.len() > n {
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--account",
                 message: "too many keys for the cosigner slots: the supplied own keys (one per \
@@ -2249,7 +2272,8 @@ pub(crate) fn complete_multisig_template<E: Write>(
             n,
             "the every-slot gate guarantees pool.len() == n"
         );
-        perm_count_u128(n, n).ok_or_else(|| bad("multisig template: candidate space overflow"))?
+        perm_count_u128(n, n)
+            .ok_or_else(|| refused("multisig template: candidate space overflow"))?
     };
 
     // --- Floor 2: reject duplicate supplied keys (BEFORE the search) ---------
@@ -2375,7 +2399,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
         let addr_str = ctx.search_address.as_deref().unwrap();
         let target_spk = address_to_script_pubkey(addr_str, network)?;
         if ctx.search_addr_max <= ctx.search_addr_min {
-            return Err(bad(
+            return Err(usage(
                 "--search-addr-max must be greater than --search-addr-min",
             ));
         }
@@ -2441,7 +2465,7 @@ pub(crate) fn complete_multisig_template<E: Write>(
         )?
     } else {
         // ---- no mode given → refuse (SPEC §2 precedence (d)) ---------------
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "supply a recorded --expect-wallet-id, a --search-address, or explicit \
@@ -2575,7 +2599,8 @@ fn decode_cosigner_card(
 /// set, and the leftover-chunks path can surface the real "received K chunks,
 /// header declares total = M" message).
 fn try_decode_cosigner_card(chunks: &[&str]) -> Result<CandidateKey, ToolkitError> {
-    let kc = mk_codec::decode(chunks).map_err(|e| bad(format!("--cosigner mk1 decode: {e}")))?;
+    let kc = crate::repair::decode_mk1(chunks)
+        .map_err(|e| bad(format!("--cosigner mk1 decode: {e}")))?;
     Ok(CandidateKey {
         key65: crate::synthesize::xpub_to_65(&kc.xpub),
         fingerprint: kc.origin_fingerprint.unwrap_or_default(),
@@ -2601,7 +2626,7 @@ fn parse_search_duration(s: &str) -> Result<std::time::Duration, ToolkitError> {
         (s, 1)
     };
     let n: u64 = num_str.trim().parse().map_err(|_| {
-        bad(format!(
+        usage(format!(
             "--accept-search-time `{s}`: expected e.g. 90s/30m/2h"
         ))
     })?;
@@ -2626,17 +2651,24 @@ fn perm_count_u128(pool: usize, n: usize) -> Option<u128> {
 /// 4); the structural ones (empty/too-large) are bad input.
 fn map_search_error(e: mnemonic_toolkit::permutation_search::SearchError) -> ToolkitError {
     use mnemonic_toolkit::permutation_search::SearchError as SE;
+    // Exit-code spec §3: duplicate cosigner keys are an input that breaks the
+    // verb's rules (2); a prefix too short to identify a wallet, the search-time
+    // ceiling and an oversized search space are guardrails (8). The message
+    // keeps its "multisig-template-floor mismatch" wording.
+    let floor = |e: &SE| {
+        format!(
+            "restore: multisig-template-floor mismatch — derived {e}, expected distinct \
+             cosigner keys + a strong --expect-wallet-id prefix"
+        )
+    };
     match e {
-        SE::DuplicateKeys { .. } | SE::PrefixTooShort { .. } => ToolkitError::RestoreMismatch {
-            reference: "multisig-template-floor",
-            derived: e.to_string(),
-            expected: "distinct cosigner keys + a strong --expect-wallet-id prefix".to_string(),
-            slot: None,
-        },
+        SE::DuplicateKeys { .. } => bad(floor(&e)),
+        SE::PrefixTooShort { .. } => refused(floor(&e)),
         SE::SearchTimeExceedsCeiling { .. } | SE::AcceptSearchTimeTooLow { .. } => {
-            bad(e.to_string())
+            refused(e.to_string())
         }
-        SE::EmptySearchSpace | SE::SearchSpaceTooLarge { .. } => bad(e.to_string()),
+        SE::SearchSpaceTooLarge { .. } => refused(e.to_string()),
+        SE::EmptySearchSpace => bad(e.to_string()),
     }
 }
 
@@ -2953,7 +2985,7 @@ fn complete_explicit_assignment<E: Write>(
     use mnemonic_toolkit::permutation_search as ps;
     let n = d.n as usize;
     if own_keys.len() != 1 {
-        return Err(bad(
+        return Err(usage(
             "explicit --cosigner @N= mode supports a single own account (one --account)",
         ));
     }
@@ -2969,7 +3001,7 @@ fn complete_explicit_assignment<E: Write>(
     // The own key fills the single uncovered slot.
     let empty: Vec<usize> = (0..n).filter(|i| slots[*i].is_none()).collect();
     if empty.len() != 1 {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--cosigner",
             message: "explicit --cosigner @N= mode requires assigning every slot but the own \
@@ -3083,7 +3115,7 @@ fn emit_completed_multisig<W: Write, E: Write>(
     let parsed = MsDescriptor::<DescriptorPublicKey>::from_str(&descriptor)
         .map_err(|e| bad(format!("completed descriptor parse: {e}")))?;
     if parsed.to_string() != descriptor {
-        return Err(bad(
+        return Err(internal(
             "completed multisig descriptor does not survive a parse→print round-trip; refusing.",
         ));
     }
@@ -3139,7 +3171,7 @@ fn emit_completed_multisig<W: Write, E: Write>(
         format!(
             "{}\n",
             serde_json::to_string(&envelope)
-                .map_err(|e| bad(format!("json serialization: {e}")))?
+                .map_err(|e| internal(format!("json serialization: {e}")))?
         )
     } else {
         let mut s = String::new();
@@ -3156,7 +3188,7 @@ fn emit_completed_multisig<W: Write, E: Write>(
             .map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, &stdout_content)
-            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| io_failure(format!("--output {}: {e}", args.output)))?;
     }
 
     let _ = writeln!(stderr, "✓ wallet-id (completed): {id_hex}");
@@ -3172,7 +3204,7 @@ fn address_to_script_pubkey(addr: &str, network: CliNetwork) -> Result<Vec<u8>, 
     let parsed = bitcoin::Address::from_str(addr.trim())
         .map_err(|e| bad(format!("--search-address parse: {e}")))?
         .require_network(network.to_bitcoin_network())
-        .map_err(|e| bad(format!("--search-address network mismatch: {e}")))?;
+        .map_err(|e| refused(format!("--search-address network mismatch: {e}")))?;
     Ok(parsed.script_pubkey().to_bytes())
 }
 
@@ -3326,7 +3358,7 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
             ));
         }
         _ => {
-            return Err(bad(
+            return Err(internal(
                 "--md1: internal error — taproot handler on a non-Tr tree",
             ))
         }
@@ -3336,7 +3368,7 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
     if let md_codec::tree::Body::MultiKeys { indices, .. } = &inner.body {
         let mut seen = std::collections::BTreeSet::new();
         if !indices.iter().all(|i| seen.insert(*i)) {
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--md1",
                 message: "taproot md1 repeats a key index inside its multi_a/sortedmulti_a leaf; the toolkit cannot reconstruct it faithfully",
@@ -3360,7 +3392,7 @@ fn classify_taproot_restore(tree: &md_codec::tree::Node) -> Result<TaprootRestor
         }
         _ => {
             if subtree_contains_sortedmulti_a(inner) {
-                return Err(ToolkitError::ModeViolation {
+                return Err(ToolkitError::ModeInputViolation {
                     mode: "restore",
                     flag: "--md1",
                     message: "taproot md1 carries sortedmulti_a under a tap-script tree — md-codec cannot yet render it back as a non-root tap leaf (FOLLOWUP md-codec-sortedmulti-a-to-miniscript-rendering-gap); the engraved card remains a faithful backup",
@@ -3404,7 +3436,7 @@ fn refuse_at_in_both(
     if let TaprootInternalKey::Cosigner(i) = internal_key {
         if let Body::MultiKeys { indices, .. } = &leaf.body {
             if indices.iter().any(|&idx| idx == *i) {
-                return Err(ToolkitError::ModeViolation {
+                return Err(ToolkitError::ModeInputViolation {
                     mode: "restore",
                     flag: "--md1",
                     message: "taproot md1 has a non-NUMS internal (trunk) key that is also a leaf key (@-in-both) — the engraved card is a faithful backup, but the toolkit will not reconstruct this shape: the trunk key already spends unilaterally via the key path, so re-using it inside the script-path multisig is a degenerate construction. Refusing rather than emit a silently-different multisig (WONTFIX restore-non-nums-tr-internal-key-also-in-leaf)",
@@ -3463,7 +3495,7 @@ fn ensure_taptree_wellformed(inner: &md_codec::tree::Node) -> Result<(), Toolkit
     let children = match &inner.body {
         Body::Children(c) if c.len() == 2 => c,
         _ => {
-            return Err(ToolkitError::ModeViolation {
+            return Err(ToolkitError::ModeInputViolation {
                 mode: "restore",
                 flag: "--md1",
                 message: "taproot md1 tap-script tree node is malformed (a TapTree must carry exactly 2 children); refusing to reconstruct",
@@ -3770,7 +3802,7 @@ pub(crate) fn refuse_liana_unspendable(d: &md_codec::Descriptor) -> Result<(), T
 }
 
 fn liana_unspendable_refusal() -> ToolkitError {
-    ToolkitError::ModeViolation {
+    ToolkitError::ModeInputViolation {
         mode: "restore",
         flag: "--md1",
         message: LIANA_UNSPENDABLE_REFUSAL,
@@ -3917,7 +3949,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
 
     // --- 2. Gate: wallet-policy requirement (taproot multisig handled in §3) ---
     if !d.is_wallet_policy() {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "--md1 is template-only (no concrete cosigner keys); multisig restore needs a wallet-policy md1 (the toolkit emits these for every cosigner set)",
@@ -3942,14 +3974,14 @@ fn run_multisig<R: Read, W: Write, E: Write>(
     //      RESTORABLE subset — non-hardened `tr(NUMS, multi_a)` — is ADMITTED
     //      (`restorable_taproot_override_card`) and reaches the P2.2 reroute.
     if md_codec::to_miniscript::has_hardened_use_site(&d) {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "this md1 uses a hardened use-site path (`/*h` wildcard or a hardened multipath alternative, baseline or per-cosigner) — watch-only addresses cannot be derived from it, and a reconstructed descriptor would silently render an unhardened path. Faithful reconstruction is not supported. The engraved card remains a faithful backup. Tracked: restore-md1-per-key-use-site-and-hardened-wildcard",
         });
     }
     if taproot_override_card(&d) && !restorable_taproot_override_card(&d) {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "restore",
             flag: "--md1",
             message: "this taproot md1 carries per-cosigner use-site path overrides in a shape the toolkit cannot yet reconstruct faithfully (a sortedmulti_a tap leaf, or a non-NUMS internal/trunk key). Non-hardened tr(NUMS, multi_a(...)) override cards ARE restorable; other taproot override shapes route around the per-key reconstruction path and emitting a single shared suffix would misrepresent the wallet. The engraved card remains a faithful backup. Tracked: restore-md1-taproot-use-site-override-arm",
@@ -4089,7 +4121,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         // output is already `to_string()` of a parsed descriptor
         // (Display-stable by construction), as is the faithful arm's.
         if parsed.to_string() != descriptor {
-            return Err(bad(
+            return Err(internal(
                 "--md1 internal error: the reconstructed descriptor does not survive a parse→print round-trip (miniscript Display infidelity); refusing rather than print a possibly-unfaithful descriptor. The engraved card remains a faithful backup.",
             ));
         }
@@ -4131,7 +4163,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             from.node,
             NodeType::Ms1 | NodeType::Phrase | NodeType::Entropy | NodeType::Seedqr
         ) {
-            return Err(bad(format!(
+            return Err(usage(format!(
                 "--from {} is not a seed source for restore (use ms1/phrase/entropy/seedqr)",
                 from.node.as_str()
             )));
@@ -4140,7 +4172,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         if crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             && from_uses_stdin
         {
-            return Err(bad(format!(
+            return Err(usage(format!(
                 "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
                 crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
             )));
@@ -4260,7 +4292,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
             let supplied65: [u8; 65] = if values.iter().all(|v| v.to_lowercase().starts_with("mk1"))
             {
                 let refs: Vec<&str> = values.iter().map(|v| v.as_str()).collect();
-                let kc = mk_codec::decode(&refs)
+                let kc = crate::repair::decode_mk1(&refs)
                     .map_err(|e| bad(format!("--cosigner @{n} mk1 decode: {e}")))?;
                 crate::synthesize::xpub_to_65(&kc.xpub)
             } else if values.len() == 1 {
@@ -4413,7 +4445,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         format!(
             "{}\n",
             serde_json::to_string(&envelope)
-                .map_err(|e| bad(format!("json serialization: {e}")))?
+                .map_err(|e| internal(format!("json serialization: {e}")))?
         )
     } else if let Some(payload) = &import_payload {
         // `--format` without `--json`: the payload alone is stdout so it pipes
@@ -4445,7 +4477,7 @@ fn run_multisig<R: Read, W: Write, E: Write>(
         write!(stdout, "{stdout_content}").map_err(ToolkitError::Io)?;
     } else {
         std::fs::write(&args.output, &stdout_content)
-            .map_err(|e| bad(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| io_failure(format!("--output {}: {e}", args.output)))?;
     }
 
     // When `--format` is set (and not `--json`), the human verification doc is

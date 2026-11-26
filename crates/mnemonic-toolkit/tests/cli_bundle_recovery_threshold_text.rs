@@ -514,7 +514,7 @@ fn v7_null_threshold_envelope_template_format_still_refuses_general_policy() {
     let t = "wsh(or_d(pk(K2),multi(2,K0,K1)))";
     let env = envelope_file(dir.path(), "null.json", t, Value::Null);
     let out = export_from_envelope(&env, "sparrow");
-    assert_eq!(out.status.code(), Some(1), "{t}");
+    assert_eq!(out.status.code(), Some(2), "{t}");
     assert!(out.stdout.is_empty(), "{t}: stdout not empty");
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),
@@ -802,7 +802,7 @@ fn v7_export_wallet_refuses_disagreeing_md1() {
     std::fs::write(&edited, serde_json::to_string(&v).unwrap()).unwrap();
     for format in ["sparrow", "coldcard", "electrum"] {
         let got = export_from_envelope(&edited, format);
-        assert_eq!(got.status.code(), Some(1), "{format}");
+        assert_eq!(got.status.code(), Some(2), "{format}");
         assert!(got.stdout.is_empty(), "{format}: stdout must be empty");
         let stderr = String::from_utf8_lossy(&got.stderr);
         assert!(

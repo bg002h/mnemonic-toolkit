@@ -253,7 +253,7 @@ fn r2_neither_template_nor_path_names_both() {
     let o = convert(&["--from", &phrase(), "--network", "signet", "--to", "xpub"]);
     assert_refused(
         &o,
-        1,
+        64,
         "error: --template or --path is required for derivation targets (xpub/xprv/fingerprint)",
     );
 }
@@ -274,7 +274,7 @@ fn r3_account_nonzero_with_path_refused_wif() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, R3_TEXT);
+    assert_refused(&o, 64, R3_TEXT);
 }
 
 #[test]
@@ -293,7 +293,7 @@ fn r3_account_nonzero_with_path_refused_template_xpub() {
         "--path",
         "m/87'/1'/3'",
     ]);
-    assert_refused(&o, 2, R3_TEXT);
+    assert_refused(&o, 64, R3_TEXT);
 }
 
 #[test]
@@ -331,7 +331,7 @@ fn r4_xprv_to_xpub_path_refused() {
         "--path",
         "m/0",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
@@ -347,7 +347,7 @@ fn r4_xprv_to_fingerprint_path_refused() {
         "--path",
         "m/0",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
@@ -364,27 +364,27 @@ fn r4_phrase_to_fingerprint_path_refused() {
         "--path",
         "m/84'/1'/0'",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
 fn r4_phrase_to_entropy_path_refused() {
     let o = convert(&["--from", &phrase(), "--to", "entropy", "--path", "m/0"]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
 fn r4_seedqr_to_phrase_path_refused() {
     let from = format!("seedqr={SEEDQR}");
     let o = convert(&["--from", &from, "--to", "phrase", "--path", "m/0"]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
 fn r4_entropy_to_phrase_path_refused() {
     let from = format!("entropy={ENTROPY}");
     let o = convert(&["--from", &from, "--to", "phrase", "--path", "m/0"]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
@@ -400,21 +400,21 @@ fn r4_xpub_to_fingerprint_path_refused() {
         "--path",
         "m/0/0",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
 fn r4_mk1_to_xpub_path_refused() {
     let from = format!("mk1={MK1_84}");
     let o = convert(&["--from", &from, "--to", "xpub", "--path", "m/0"]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
 fn r4_ms1_to_phrase_path_refused() {
     let from = format!("ms1={MS1}");
     let o = convert(&["--from", &from, "--to", "phrase", "--path", "m/0"]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
@@ -454,7 +454,7 @@ fn r5_named_path_form_refused() {
         "--path",
         "bip84",
     ]);
-    assert_refused(&o, 1, R5_TEXT);
+    assert_refused(&o, 2, R5_TEXT);
 }
 
 #[test]
@@ -471,7 +471,7 @@ fn r5_hex_path_form_refused() {
         "--path",
         "0x54",
     ]);
-    assert_refused(&o, 1, R5_TEXT);
+    assert_refused(&o, 2, R5_TEXT);
 }
 
 #[test]
@@ -538,7 +538,7 @@ fn r4_before_r3_xprv_to_xpub_path_and_account() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
@@ -553,7 +553,7 @@ fn r4_before_xpub_prefix_network() {
         "--xpub-prefix",
         "zpub",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
 }
 
 #[test]
@@ -570,7 +570,7 @@ fn r3_before_r5_named_path_with_account() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, R3_TEXT);
+    assert_refused(&o, 64, R3_TEXT);
 }
 
 #[test]
@@ -640,7 +640,7 @@ fn s2_account_one_with_path_refused() {
         "--account",
         "1",
     ]);
-    assert_refused(&o, 2, R3_TEXT);
+    assert_refused(&o, 64, R3_TEXT);
 }
 
 #[test]
@@ -695,7 +695,7 @@ fn r5_empty_path_refused() {
         "--path",
         "",
     ]);
-    assert_refused(&o, 1, R5_FORM_TEXT);
+    assert_refused(&o, 2, R5_FORM_TEXT);
     assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
 }
 
@@ -712,7 +712,7 @@ fn r5_m_slash_path_refused() {
         "--path",
         "m/",
     ]);
-    assert_refused(&o, 1, R5_FORM_TEXT);
+    assert_refused(&o, 2, R5_FORM_TEXT);
     assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
 }
 
@@ -729,7 +729,7 @@ fn r5_unprefixed_path_refused() {
         "--path",
         "84'/1'/0'",
     ]);
-    assert_refused(&o, 1, R5_FORM_TEXT);
+    assert_refused(&o, 2, R5_FORM_TEXT);
     assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);
 }
 
@@ -739,7 +739,7 @@ fn r4_fingerprint_only_no_template_names_template_only() {
     let o = convert(&["--from", &p, "--network", "signet", "--to", "fingerprint"]);
     assert_refused(
         &o,
-        1,
+        64,
         "error: --template is required for --to fingerprint (the master fingerprint; --path is not read)",
     );
     assert!(o.stdout.is_empty(), "stdout: {}", o.stdout);

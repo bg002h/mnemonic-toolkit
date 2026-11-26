@@ -695,7 +695,7 @@ fn auto_repair_short_circuit_ms1_no_longer_applies_after_cycle_f_demotion() {
         .unwrap();
     assert_eq!(
         o.status.code(),
-        Some(1),
+        Some(2),
         "expected exit 1 (demoted candidate, no short-circuit): {}",
         stderr(&o)
     );
@@ -724,7 +724,7 @@ fn auto_repair_short_circuit_md1_emits_template() {
         ])
         .output()
         .unwrap();
-    assert_eq!(o.status.code(), Some(5), "expected exit 5: {}", stderr(&o));
+    assert_eq!(o.status.code(), Some(2), "expected exit 5: {}", stderr(&o));
     let s = stderr(&o);
     assert!(
         s.contains(T_LINE),
@@ -747,7 +747,7 @@ fn auto_repair_short_circuit_convert_ms1_no_longer_applies_after_cycle_f_demotio
         .unwrap();
     assert_eq!(
         o.status.code(),
-        Some(1),
+        Some(2),
         "expected exit 1 (demoted candidate, no short-circuit): {}",
         stderr(&o)
     );

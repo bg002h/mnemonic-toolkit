@@ -322,7 +322,7 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
     let passphrase: Zeroizing<String> =
         crate::passphrase_input::resolve(args.passphrase.as_deref(), args.passphrase_stdin, stdin)?
             .ok_or_else(|| {
-                ToolkitError::BadInput(
+                ToolkitError::Usage(
                     "passphrase-of-xpub requires --passphrase <VALUE> or --passphrase-stdin".into(),
                 )
             })?;
@@ -372,7 +372,7 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
                     )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
-                    ToolkitError::BadInput(format!("passphrase-of-xpub JSON serialize: {e}"))
+                    ToolkitError::Internal(format!("passphrase-of-xpub JSON serialize: {e}"))
                 })?;
                 writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
             } else {
@@ -412,7 +412,7 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
                     )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
-                    ToolkitError::BadInput(format!("passphrase-of-xpub JSON serialize: {e}"))
+                    ToolkitError::Internal(format!("passphrase-of-xpub JSON serialize: {e}"))
                 })?;
                 writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
             }

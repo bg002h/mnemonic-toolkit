@@ -50,7 +50,7 @@ impl WalletFormatEmitter for ElectrumEmitter {
     fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
         use crate::template::CliTemplate;
         let template = inputs.template.ok_or_else(|| {
-            ToolkitError::BadInput(
+            ToolkitError::Usage(
                 "--format electrum requires --template; descriptor passthrough is not supported by Electrum's wallet-db schema".into(),
             )
         })?;
@@ -111,7 +111,7 @@ struct ElectrumKeystore<'a> {
 /// SPEC §9.1 — singlesig wallet shape.
 fn emit_electrum_standard_json(inputs: &EmitInputs) -> Result<String, ToolkitError> {
     if inputs.resolved_slots.len() != 1 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "--format electrum singlesig requires exactly one --slot @0; got {}",
             inputs.resolved_slots.len(),
         )));
@@ -135,19 +135,19 @@ fn emit_electrum_standard_json(inputs: &EmitInputs) -> Result<String, ToolkitErr
     };
 
     serde_json::to_string_pretty(&wallet)
-        .map_err(|e| ToolkitError::BadInput(format!("--format electrum: serialize: {e}")))
+        .map_err(|e| ToolkitError::Internal(format!("--format electrum: serialize: {e}")))
 }
 
 /// SPEC §9.2 — multisig wallet shape.
 fn emit_electrum_multisig_json(inputs: &EmitInputs) -> Result<String, ToolkitError> {
     let n = inputs.resolved_slots.len();
     if n < 2 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "--format electrum multisig requires at least 2 cosigners; got {n}"
         )));
     }
     let k = inputs.threshold.ok_or_else(|| {
-        ToolkitError::BadInput("--format electrum multisig requires --threshold <K>".into())
+        ToolkitError::Usage("--format electrum multisig requires --threshold <K>".into())
     })?;
     let wallet_type = format!("{k}of{n}");
 
@@ -198,7 +198,7 @@ fn emit_electrum_multisig_json(inputs: &EmitInputs) -> Result<String, ToolkitErr
     }
 
     serde_json::to_string_pretty(&Value::Object(top))
-        .map_err(|e| ToolkitError::BadInput(format!("--format electrum multisig: serialize: {e}")))
+        .map_err(|e| ToolkitError::Internal(format!("--format electrum multisig: serialize: {e}")))
 }
 
 /// SPEC §9.1 / §9.2 — render xpub in the SLIP-132 variant matching the
@@ -220,7 +220,7 @@ fn render_slip132_xpub(
         WalletScriptType::P2shP2wshMulti => XpubPrefix::YpubMultisig,
         WalletScriptType::P2wshMulti => XpubPrefix::ZpubMultisig,
         WalletScriptType::P2trMulti => {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Internal(
                 "--format electrum: taproot multisig is refused upstream by emit()".into(),
             ))
         }

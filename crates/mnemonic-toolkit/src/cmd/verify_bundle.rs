@@ -80,7 +80,7 @@ pub struct VerifyBundleArgs {
     /// single-sig TEMPLATE bundle. When set, verify-bundle recomputes the
     /// `WalletPolicyId` from the completed (fully-keyed, explicit-origin)
     /// wallet and matches its leading bytes; a mismatch is reported as a failed
-    /// check (overall `mismatch`, exit 4). Only meaningful for a template
+    /// check (overall `mismatch`, exit 1). Only meaningful for a template
     /// bundle (`bundle --md1-form=template` output); ignored otherwise. NOT
     /// checked when `--origin` overrides the canonical account path.
     #[arg(long = "expect-wallet-id")]
@@ -311,7 +311,7 @@ pub fn run<W: Write, E: Write>(
     let ms1_as_written: Vec<String> = args.ms1.clone();
     let ms1_dash_count = ms1_as_written.iter().filter(|v| v.as_str() == "-").count();
     if ms1_dash_count > 1 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "at most one --ms1 - per invocation (single stdin per invocation)".into(),
         ));
     }
@@ -564,7 +564,7 @@ pub fn run<W: Write, E: Write>(
     // single-sig template; any md1 reaching here is a keyed wallet-policy md1
     // (or a non-template keyless shape) that DOES need an explicit `--template`.
     if args.template.is_none() {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "verify-bundle",
             flag: "--template",
             message: "--template is required (the supplied md1 is not a keyless single-sig \
@@ -675,6 +675,7 @@ pub fn run<W: Write, E: Write>(
         "ok"
     };
 
+    let code = verdict_exit_code(&checks, partial);
     if args.json {
         let json = VerifyBundleJson {
             schema_version: "4",
@@ -703,7 +704,7 @@ pub fn run<W: Write, E: Write>(
         crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
     }
 
-    Ok(if any_fail || partial { 4 } else { 0 })
+    Ok(code)
 }
 
 /// #28 phase 1 — verify + recompose a keyless SINGLE-SIG TEMPLATE bundle.
@@ -742,7 +743,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
         .iter()
         .any(|s| s.index == 0 && s.subkey.is_secret_bearing());
     if !secret_bearing_at_0 {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "verify-bundle",
             flag: "--md1",
             message: "verifying a keyless single-sig TEMPLATE bundle requires the seed \
@@ -775,7 +776,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
     let origin_slot: Option<ResolvedSlot> = match args.origin.as_deref() {
         Some(origin_str) => {
             let entropy = canonical_slot.entropy.as_ref().ok_or_else(|| {
-                ToolkitError::BadInput(
+                ToolkitError::Usage(
                     "verify-bundle --origin requires a secret-bearing seed slot (the override \
                      re-derives the key at the supplied path)"
                         .into(),
@@ -985,7 +986,7 @@ fn verify_singlesig_template<W: Write, E: Write>(
         }
     }
 
-    Ok(if any_fail { 4 } else { 0 })
+    Ok(verdict_exit_code(&checks, false))
 }
 
 /// #28 phase 2 — verify + recompose a keyless MULTISIG / general TEMPLATE bundle.
@@ -1030,7 +1031,7 @@ fn verify_multisig_template<W: Write, E: Write>(
     let network = args.network;
 
     // (1) Floor 1(i): `--from` REQUIRED + resolve the seed (SHARED with restore).
-    let no_from = ToolkitError::ModeViolation {
+    let no_from = ToolkitError::ModeInputViolation {
         mode: "verify-bundle",
         flag: "--md1",
         message: "verifying a keyless MULTISIG TEMPLATE bundle requires the operator's own seed \
@@ -1112,7 +1113,7 @@ fn verify_multisig_template<W: Write, E: Write>(
     let outcome = match complete_multisig_template(d, &ctx, stderr)? {
         crate::cmd::restore::MultisigCompletion::Completed(o) => o,
         crate::cmd::restore::MultisigCompletion::Listed(_) => {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Internal(
                 "verify-bundle received a candidate LIST from the completion engine, which it \
                  must never do (allow_enumerate is false here): a verifier cannot report a \
                  verdict on a set of candidate wallets. This is a bug -- please report it."
@@ -1228,7 +1229,7 @@ fn verify_multisig_template<W: Write, E: Write>(
         }
     }
 
-    Ok(if any_fail { 4 } else { 0 })
+    Ok(verdict_exit_code(&checks, false))
 }
 
 /// `mk1_template_stub_bind`: validate the supplied `--mk1` TEMPLATE stub cards
@@ -1558,7 +1559,7 @@ fn descriptor_mode_verify_run<W: Write, E: Write>(
         // artifact. Same tier + byte-identical detail as `bundle.rs`'s emit twin.
         (None, Some(p)) => std::fs::read_to_string(p)
             .map_err(|e| {
-                ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
+                ToolkitError::IoFailure(format!("--descriptor-file {}: {e}", p.display()))
             })?
             .trim_end()
             .to_string(),
@@ -2054,6 +2055,7 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     } else {
         "ok"
     };
+    let code = verdict_exit_code(&checks, partial);
     if args.json {
         let json = VerifyBundleJson {
             schema_version: "4",
@@ -2081,7 +2083,7 @@ fn verify_emit_from_expected<W: Write, E: Write>(
     if partial {
         crate::cmd::md1_partial::emit_partial_stderr_note(&partial_indices, stderr);
     }
-    Ok(if any_fail || partial { 4 } else { 0 })
+    Ok(code)
 }
 
 /// Returns true if any two slots share the same (xpub, path) pair.
@@ -2190,7 +2192,7 @@ fn apply_stdin_substitutions(
     // written, before `@env:` resolution.
     let has_slot_stdin = !slot_stdin_idxs.is_empty();
     if pp_reads_stdin && has_slot_stdin {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{} cannot be used with --slot @N.<secret>=- (single stdin per invocation)",
             crate::passphrase_input::stdin_spelling(owned.passphrase_stdin)
         )));
@@ -2218,7 +2220,7 @@ fn load_bundle_json_into_args(args: &VerifyBundleArgs) -> Result<VerifyBundleArg
         .as_ref()
         .expect("caller checked bundle_json.is_some()");
     let raw = std::fs::read_to_string(path)
-        .map_err(|e| ToolkitError::BadInput(format!("--bundle-json {}: {e}", path.display())))?;
+        .map_err(|e| ToolkitError::IoFailure(format!("--bundle-json {}: {e}", path.display())))?;
     let v: serde_json::Value = serde_json::from_str(&raw).map_err(|e| {
         ToolkitError::BadInput(format!("--bundle-json {} parse: {e}", path.display()))
     })?;
@@ -2471,6 +2473,8 @@ fn ms1_ground_truth_compare(supplied_ms1: &str, expected_ms1: &str) -> Option<bo
         // defensively rather than assume — fall back to the original error.
         return None;
     }
+    // R6: the verdict below uses the corrected value, so the run reports 16.
+    crate::repair::note_correction_used();
     // `outcome.repairs.is_empty()` already guarded non-empty above, so
     // `corrected_chunks` (len() == input chunk count, SPEC §1) is guaranteed
     // non-empty here — no `SecretString: Default` fallback needed.
@@ -2539,7 +2543,7 @@ pub fn emit_verify_checks(
 
     // 3. mk1_decode — must succeed for checks 4/5/6 to run.
     let mk1_strs: Vec<&str> = supplied.mk1.iter().map(|s| s.as_str()).collect();
-    let mk_card_result = mk_codec::decode(&mk1_strs);
+    let mk_card_result = crate::repair::decode_mk1(&mk1_strs);
     match &mk_card_result {
         Ok(_) => {
             checks.push(VerifyCheck {
@@ -2602,7 +2606,8 @@ pub fn emit_verify_checks(
             unreachable!("single-sig branch reached MkField::Multi — caller invariant violation")
         }
     };
-    let exp_card = mk_codec::decode(&expected_mk1_strs).expect("expected bundle is well-formed");
+    let exp_card =
+        crate::repair::decode_mk1(&expected_mk1_strs).expect("expected bundle is well-formed");
 
     // 4. mk1_xpub_match.
     let exp_xpub = exp_card.xpub.to_string();
@@ -2732,12 +2737,12 @@ fn emit_multisig_checks(
             .iter()
             .map(|chunks| {
                 let strs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
-                mk_codec::decode(&strs).ok()
+                crate::repair::decode_mk1(&strs).ok()
             })
             .collect(),
         crate::format::MkField::Single(v) => {
             let strs: Vec<&str> = v.iter().map(|s| s.as_str()).collect();
-            let mut out = vec![mk_codec::decode(&strs).ok()];
+            let mut out = vec![crate::repair::decode_mk1(&strs).ok()];
             out.resize_with(n, || None);
             out
         }
@@ -2769,7 +2774,7 @@ fn emit_multisig_checks(
         .iter()
         .map(
             |g| -> Result<Result<mk_codec::KeyCard, String>, ToolkitError> {
-                match mk_codec::decode(g) {
+                match crate::repair::decode_mk1(g) {
                     Ok(card) => Ok(Ok(card)),
                     Err(e) => {
                         if !no_auto_repair {
@@ -3649,7 +3654,7 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
         let pubkeys = desc.tlv.pubkeys.as_ref();
         let mut assigned = vec![false; n];
         for (gi, g) in groups.iter().enumerate() {
-            let card = match mk_codec::decode(g) {
+            let card = match crate::repair::decode_mk1(g) {
                 Ok(c) => c,
                 Err(_) => continue,
             };
@@ -3672,7 +3677,7 @@ fn emit_watch_only_xpub_path_cross_check<E: std::io::Write>(
         }
         out
     } else {
-        match mk_codec::decode(&mk1_strs_to_str_refs(supplied_mk1)) {
+        match crate::repair::decode_mk1(&mk1_strs_to_str_refs(supplied_mk1)) {
             Ok(card) => vec![(0, card)],
             Err(_) => Vec::new(),
         }
@@ -3847,7 +3852,7 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
         let pubkeys = desc.tlv.pubkeys.as_ref();
         let mut assigned = vec![false; n];
         for (gi, g) in groups.iter().enumerate() {
-            let card = match mk_codec::decode(g) {
+            let card = match crate::repair::decode_mk1(g) {
                 Ok(c) => c,
                 Err(_) => continue,
             };
@@ -3870,7 +3875,7 @@ fn emit_full_path_parent_fingerprint_check<E: std::io::Write>(
         }
         out
     } else {
-        match mk_codec::decode(&mk1_strs_to_str_refs(supplied_mk1)) {
+        match crate::repair::decode_mk1(&mk1_strs_to_str_refs(supplied_mk1)) {
             Ok(card) => vec![(0, card)],
             Err(_) => Vec::new(),
         }
@@ -4132,8 +4137,53 @@ fn md1_origin_check_from_strings(expected_md1: &[String], supplied_md1: &[&str])
     md1_origin_check(&e, &a)
 }
 
+/// The exit status of a verify-bundle verdict (`SPEC_constellation_exit_codes.md`
+/// §3, §7f): a failed comparison row is 1 (NO), a row that says a supplied card
+/// does not decode (`*_decode`, `*_decode[i]`) is 2 (INVALID), and a `partial`
+/// result (the origin is unspecified on the backup) is 4 (UNVERIFIED). The
+/// bits sum; no failed row and no partial is 0.
+pub(crate) fn verdict_exit_code(checks: &[VerifyCheck], partial: bool) -> u8 {
+    use crate::exit_code::Bits;
+    let mut bits = Bits::OK;
+    for c in checks.iter().filter(|c| !c.passed) {
+        let base = c.name.split('[').next().unwrap_or("");
+        bits |= if base.ends_with("_decode") {
+            Bits::INVALID
+        } else {
+            Bits::NO
+        };
+    }
+    if partial {
+        bits |= Bits::UNVERIFIED;
+    }
+    bits.to_exit_code()
+}
+
 #[cfg(test)]
 mod helper_tests {
+    /// Exit-code spec §7f: a mismatch row is 1, an undecodable card row 2,
+    /// a partial result 4; the bits sum.
+    #[test]
+    fn verdict_exit_code_classes() {
+        let row = |name: &str, passed: bool| VerifyCheck {
+            name: name.into(),
+            passed,
+            ..VerifyCheck::default()
+        };
+        assert_eq!(verdict_exit_code(&[row("mk1_xpub_match", true)], false), 0);
+        assert_eq!(verdict_exit_code(&[row("mk1_xpub_match", false)], false), 1);
+        assert_eq!(verdict_exit_code(&[row("md1_decode", false)], false), 2);
+        assert_eq!(verdict_exit_code(&[row("ms1_decode[1]", false)], false), 2);
+        assert_eq!(
+            verdict_exit_code(
+                &[row("ms1_decode[1]", false), row("mk1_path_match[0]", false)],
+                false
+            ),
+            3
+        );
+        assert_eq!(verdict_exit_code(&[row("ok", true)], true), 4);
+    }
+
     use super::*;
     use crate::format::MkField;
     use crate::network::CliNetwork;

@@ -88,7 +88,7 @@ pub(crate) fn derive_bip32_from_entropy_at_path(
     let account_xpub = Xpub::from_priv(&secp, &account_xpriv);
 
     if account_xpub.network != network.network_kind() {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Internal(format!(
             "derived-xpub network {:?} does not match --network {}; this is a toolkit bug",
             account_xpub.network,
             network.human_name(),
@@ -367,7 +367,7 @@ fn derive_one_xpub_only(
     );
     let account_xpub = account.xpub(secp);
     if account_xpub.network != network.network_kind() {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Internal(format!(
             "derived-xpub network {:?} does not match --network {}; this is a toolkit bug",
             account_xpub.network,
             network.human_name(),

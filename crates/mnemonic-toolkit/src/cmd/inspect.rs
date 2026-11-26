@@ -206,7 +206,7 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
     match kind {
         CardKind::Ms1 => {
             if chunks.len() != 1 {
-                return Err(ToolkitError::BadInput(format!(
+                return Err(ToolkitError::Usage(format!(
                     "inspect: expected 1 ms1 card, got {}; inspect each ms1 card in its own run",
                     chunks.len()
                 )));
@@ -234,7 +234,7 @@ fn decode_card(kind: CardKind, chunks: &[&str]) -> Result<InspectPayload, Toolki
                 language,
             })
         }
-        CardKind::Mk1 => Ok(InspectPayload::Mk1(mk_codec::decode(chunks)?)),
+        CardKind::Mk1 => Ok(InspectPayload::Mk1(crate::repair::decode_mk1(chunks)?)),
         // P2.3 (pathless partial-decode): opt the md1 decode into the
         // partial-allowing entry. A `canonical_origin == None` card with an
         // elided-and-unresolvable origin (a "dead card") now decodes Ok (with
@@ -477,7 +477,7 @@ fn emit_inspect_json<W: Write>(
         body,
     };
     let body_str = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("inspect JSON serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("inspect JSON serialize: {e}")))?;
     writeln!(stdout, "{body_str}").map_err(ToolkitError::Io)?;
     Ok(())
 }

@@ -158,7 +158,7 @@ fn account_of_descriptor_multisig_no_match_exits_4() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4)
+        .code(1)
         .get_output()
         .stdout
         .clone();
@@ -257,7 +257,7 @@ fn account_of_descriptor_unknown_descriptor_from_node_refused() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("unknown node"));
 }
 
@@ -317,7 +317,7 @@ fn account_of_descriptor_toolkit_at_n_placeholder_refused() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("toolkit @N"));
 }
 
@@ -431,7 +431,7 @@ fn account_of_descriptor_no_xpubs_in_descriptor_refused() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("no extended keys"));
 }
 
@@ -459,7 +459,7 @@ fn account_of_descriptor_max_account_widens_per_cosigner_range() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 
     // --max-account 50: match.
     let out = Command::cargo_bin("mnemonic")
@@ -509,7 +509,7 @@ fn account_of_descriptor_add_path_extends_candidates() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 
     // With --add-path: match.
     let out = Command::cargo_bin("mnemonic")
@@ -559,7 +559,7 @@ fn account_of_descriptor_passphrase_honored() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 
     // With --passphrase: match.
     let out = Command::cargo_bin("mnemonic")

@@ -52,7 +52,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     if args.from.node != NodeType::Phrase {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "final-word --from only accepts phrase=<value> or phrase=-; got {}=",
             args.from.node.as_str(),
         )));
@@ -81,7 +81,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // Plain stdout: one candidate per line, sorted (library guarantees sort).
     for word in &candidates {
         writeln!(stdout, "{word}")
-            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
     }
 
     if let Some(path) = &args.json_out {
@@ -173,9 +173,10 @@ fn write_json_envelope<E: Write>(
         candidates,
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
+        .map_err(|e| ToolkitError::Internal(format!("--json-out serialize: {e}")))?;
+    std::fs::write(path, &body).map_err(|e| {
+        ToolkitError::IoFailure(format!("--json-out write {}: {e}", path.display()))
+    })?;
 
     // SPEC §2.6 row 3 — world-readable permission-mode advisory.
     warn_if_world_readable(path, stderr);

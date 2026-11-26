@@ -211,6 +211,7 @@ mod env_sentinel;
 pub mod error;
 #[cfg(not(fuzzing))]
 mod error;
+pub mod exit_code;
 #[cfg(fuzzing)]
 pub mod format;
 #[cfg(not(fuzzing))]

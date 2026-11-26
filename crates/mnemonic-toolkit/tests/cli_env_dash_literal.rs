@@ -52,7 +52,7 @@ fn dash(args: &[&str], stdin: &str) -> Out {
 
 /// rc=1, empty stdout, `line` present as a whole stderr line.
 fn refused(o: &Out, line: &str) {
-    assert_eq!(o.rc, 1, "stderr: {}", o.stderr);
+    assert_eq!(o.rc, 2, "stderr: {}", o.stderr);
     assert_eq!(o.stdout, "", "stdout must be empty");
     assert!(
         o.stderr.lines().any(|l| l == line),

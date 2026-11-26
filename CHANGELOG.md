@@ -8,6 +8,50 @@ Releases under the `tech-manual-vX.Y.Z` tag namespace are documented inline belo
 
 ## [Unreleased]
 
+### [BREAKING] Constellation exit codes
+
+`mnemonic` now exits with the codes every constellation binary shares
+(`SPEC_constellation_exit_codes.md` rev 5 in mnemonic-engrave; the user
+manual's Appendix J). `$?`-gated scripts need updating. The codes quoted
+in the entries further down this Unreleased section are the old numbers;
+this entry supersedes them.
+
+- **The codes.** 0 done; 64 a bad command line (nothing ran); 101 an
+  internal error; 130 stopped by the operator; otherwise the sum of 1 (a
+  check said no), 2 (an input is invalid), 4 (verify the result before
+  trusting it), 8 (refused), 16 (a correction was applied) and 32 (a file,
+  device or helper failed). The root `--help` ends with a legend of these
+  codes, and a test pins it as the last text.
+- **Renumbered.** A mismatch (`verify-bundle`, `restore --expect-*`,
+  `--cosigner`, `--expect-wallet-id`, `import-wallet` seed overlay, BSMS
+  MAC and strict signature checks, `xpub-search` no match) is 1, was 4 or
+  2. An invalid input is 2, was 1 (and 3 for a future format). A network
+  mismatch, a secret on the command line and a `compare-cost
+  --max-conditions` cap are 8, were 2 or 3. A file, stdin, stdout, `@env:`
+  variable or `gen-man` failure is 32, was 1. A flag combination judged from
+  the command line alone (`convert --account`/`--path`/`--xpub-prefix`
+  refusals, `restore --format` without `--template`, `word-card` and
+  `slip39` settings) is 64, was 2 or 1.
+- **`repair`.** A verified correction is 16 (was 5); a correction with no
+  oracle or an ambiguous one is 20 (was 4); a correction in an incomplete
+  mk1 chunk set is 16 (was 4), since the rest of the set verifies it; a
+  corrected single-string md1 at an unreadable wire version is 22 (was 4).
+  The JSON `verdict` gains `"incomplete_set"`.
+- **A correction used anywhere adds 16.** A verb that decoded a damaged
+  card by correcting it (mk-codec corrects inside `decode`) exits with 16
+  set and says on stderr that the plate is damaged.
+- **Auto-repair is advice.** When `convert`, `inspect`, `verify-bundle` or
+  `import-wallet` prints a repair for a damaged card, the verb still exits
+  2, on a terminal and in a pipe (was 5 on a terminal). The JSON
+  auto-repair envelope's `exit_code` is 2.
+- **Stdout failures add 32** to the verb's own code (they replaced it with
+  1, and turned `repair`/`inspect` 4 into 1). A closed pipe keeps the
+  verb's code.
+- **JSON.** Every `exit_code` field holds the process's exit status. New
+  error `kind` values: `Internal`, `IoFailure`, `ModeInputViolation`,
+  `Refused` and `Usage`; a flag-combination refusal of `convert` reports
+  `Usage` where it reported `ConvertRefusal`.
+
 ### Huge `--length` and account-window values are refused or streamed, not aborted
 
 - **`derive-child --application dice`**: the rolls are written as they are drawn, so every `--length` in

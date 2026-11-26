@@ -112,7 +112,7 @@ const DERIVE: &[&str] = &[
 #[test]
 fn r1_derive_child_dev_full_exits_1() {
     let r = run(P, Out::Full, DERIVE);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
 
@@ -123,7 +123,7 @@ fn r2_convert_text_dev_full_exits_1() {
         Out::Full,
         &["convert", "--from", "phrase=-", "--to", "entropy"],
     );
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
 
@@ -134,7 +134,7 @@ fn r3_convert_json_dev_full_exits_1() {
         Out::Full,
         &["convert", "--from", "phrase=-", "--to", "entropy", "--json"],
     );
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
 
@@ -153,14 +153,14 @@ fn r4_bundle_dev_full_exits_1() {
             "@0.phrase=-",
         ],
     );
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), W);
 }
 
 #[test]
 fn r5_gui_schema_dev_full_exits_1() {
     let r = run("", Out::Full, &["gui-schema"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), W);
 }
 
@@ -181,7 +181,7 @@ fn r6_addresses_dev_full_prints_the_contract_line() {
             "3",
         ],
     );
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), W);
     r.no_io_error_line();
 }
@@ -217,14 +217,14 @@ fn r8_gui_schema_closed_pipe_keeps_exit_0() {
 #[test]
 fn r9_help_dev_full_exits_1() {
     let r = run("", Out::Full, &["--help"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), W);
 }
 
 #[test]
 fn r10_version_dev_full_exits_1() {
     let r = run("", Out::Full, &["--version"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), W);
 }
 
@@ -233,7 +233,7 @@ const RO: &str = "mnemonic: cannot write the output: Bad file descriptor (os err
 #[test]
 fn r11_gui_schema_read_only_stdout_exits_1() {
     let r = run("", Out::ReadOnly, &["gui-schema"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), RO);
 }
 
@@ -244,7 +244,7 @@ fn r12_convert_read_only_stdout_exits_1() {
         Out::ReadOnly,
         &["convert", "--from", "phrase=-", "--to", "entropy"],
     );
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), RO);
 }
 
@@ -273,21 +273,21 @@ fn vb() -> Vec<&'static str> {
 #[test]
 fn r13_verify_bundle_ok_dev_full_exits_1() {
     let r = run(P, Out::Full, &vb());
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), W);
 }
 
 #[test]
 fn r14_verify_bundle_mismatch_dev_full() {
     let r = run(Z, Out::Full, &vb());
-    assert_eq!(r.rc, 4, "{}", r.stderr);
+    assert_eq!(r.rc, 33, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), W);
 }
 
 #[test]
 fn r15_repair_applied_dev_full_exits_1() {
     let r = run("", Out::Full, &["repair", "--mk1", K1BAD, K2]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 48, "{}", r.stderr);
     assert_eq!(r.last(), W);
     r.no_io_error_line();
 }
@@ -296,7 +296,7 @@ fn r15_repair_applied_dev_full_exits_1() {
 fn r16_repair_unverified_dev_full() {
     let bad = format!("{}q", MS.strip_suffix('f').unwrap());
     let r = run(&bad, Out::Full, &["repair", "--ms1", "-"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 52, "{}", r.stderr);
     assert_eq!(r.last(), W);
     r.no_io_error_line();
 }
@@ -324,7 +324,7 @@ fn r17_derive_child_fsize0_exits_1() {
         .ok();
     let o = child.wait_with_output().unwrap();
     let err = String::from_utf8_lossy(&o.stderr).into_owned();
-    assert_eq!(o.status.code(), Some(1), "{err}");
+    assert_eq!(o.status.code(), Some(32), "{err}");
     assert_eq!(std::fs::metadata(&out).unwrap().len(), 0);
     assert_eq!(
         err.lines().last().unwrap(),
@@ -361,14 +361,14 @@ fn run_closed_fd(stdin_text: &str, args: &[&str]) -> Run {
 #[test]
 fn r18_gui_schema_closed_fd_exits_1() {
     let r = run_closed_fd("", &["gui-schema"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.stderr.trim_end(), RO);
 }
 
 #[test]
 fn r24_convert_closed_fd_exits_1() {
     let r = run_closed_fd(P, &["convert", "--from", "phrase=-", "--to", "entropy"]);
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 32, "{}", r.stderr);
     assert_eq!(r.last(), RO);
 }
 
@@ -376,7 +376,7 @@ fn r24_convert_closed_fd_exits_1() {
 fn r25_help_and_version_closed_fd_exit_1() {
     for flag in ["--help", "--version"] {
         let r = run_closed_fd("", &[flag]);
-        assert_eq!(r.rc, 1, "{flag}: {}", r.stderr);
+        assert_eq!(r.rc, 32, "{flag}: {}", r.stderr);
         assert_eq!(r.stderr.trim_end(), RO, "{flag}");
     }
 }
@@ -419,7 +419,7 @@ fn r23_inspect_partial_dev_full_exits_1() {
         Out::Full,
         &["inspect", "--md1", "md1yppqqxp3cg2x3r70ckk4kjaf"],
     );
-    assert_eq!(r.rc, 1, "{}", r.stderr);
+    assert_eq!(r.rc, 36, "{}", r.stderr);
     assert_eq!(r.last(), W);
     r.no_io_error_line();
 }

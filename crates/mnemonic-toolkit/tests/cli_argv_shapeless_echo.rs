@@ -10,7 +10,7 @@ use assert_cmd::Command;
 const PHRASE: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
-const EXIT_REFUSED: i32 = 2;
+const EXIT_REFUSED: i32 = 8;
 
 fn run(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")

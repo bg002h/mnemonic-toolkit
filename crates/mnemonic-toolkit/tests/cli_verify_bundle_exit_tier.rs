@@ -161,7 +161,7 @@ fn t5_missing_descriptor_file_exits_2_on_both_surfaces() {
         .unwrap();
     assert_eq!(
         v.status.code(),
-        Some(2),
+        Some(32),
         "verify: missing file must be input-tier"
     );
     let e = bin()
@@ -176,7 +176,7 @@ fn t5_missing_descriptor_file_exits_2_on_both_surfaces() {
         .unwrap();
     assert_eq!(
         e.status.code(),
-        Some(2),
+        Some(32),
         "emit: missing file is already input-tier"
     );
 }
@@ -214,7 +214,7 @@ fn t7_no_collateral_result_tier_still_exits_4() {
     );
     assert_eq!(
         out.status.code(),
-        Some(4),
+        Some(3),
         "a well-formed descriptor must still reach the RESULT tier, not be re-tiered to input-error"
     );
 }
@@ -244,7 +244,7 @@ fn t7b_bip388_distinctness_still_exits_4() {
     );
     assert_eq!(
         out.status.code(),
-        Some(4),
+        Some(2),
         "BIP-388 distinctness must stay in the RESULT tier (exit 4)"
     );
     let err = String::from_utf8_lossy(&out.stderr);

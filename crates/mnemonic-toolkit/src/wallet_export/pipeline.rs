@@ -81,7 +81,7 @@ fn build_descriptor_string_inner(
     taproot_internal_key: Option<TaprootInternalKey>,
 ) -> Result<String, ToolkitError> {
     if slots.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "export-wallet: at least one --slot @N.xpub=... required".into(),
         ));
     }
@@ -128,7 +128,7 @@ fn build_tr_multi_a_descriptor(
     taproot_internal_key: Option<TaprootInternalKey>,
 ) -> Result<String, ToolkitError> {
     let internal = taproot_internal_key.ok_or_else(|| {
-        ToolkitError::BadInput(
+        ToolkitError::Internal(
             "internal: tr-multi-a / tr-sortedmulti-a reached without --taproot-internal-key".into(),
         )
     })?;
@@ -146,7 +146,7 @@ fn build_tr_multi_a_descriptor(
             // Cosigner N is the key-path key; remaining N-1 cosigners are
             // the multi_a leaves. Bounds-checked in the caller.
             let internal_seg = key_segs.get(idx as usize).ok_or_else(|| {
-                ToolkitError::BadInput(format!(
+                ToolkitError::Usage(format!(
                     "--taproot-internal-key @{idx} out of range (only {} cosigners)",
                     key_segs.len(),
                 ))

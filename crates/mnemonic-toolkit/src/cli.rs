@@ -20,8 +20,13 @@ use std::process::ExitCode;
 /// per the 2026-05-25 recon decision; guarded by
 /// `cli_help_fixtures::top_level_help_points_to_btcrecover_for_passphrase_recovery`
 /// and mirrored in `docs/manual/src/40-cli-reference/41-mnemonic.md`.
-const PASSPHRASE_RECOVERY_HELP: &str = "\
-RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:
+///
+/// The root `--help` footer: the passphrase pointer, then the
+/// constellation exit-code legend (`SPEC_constellation_exit_codes.md` R11,
+/// word for word; the text lives in `exit_code::HELP_LEGEND`). A `concat!` of
+/// literals because clap's `after_help` takes a `&'static str` here.
+const ROOT_AFTER_HELP: &str = concat!(
+    "RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:
   If you have your seed words (entropy) but not the BIP-39 passphrase
   (the optional \"25th word\"): if you have a LIST of likely passphrases,
   `mnemonic xpub-search passphrase-of-xpub --passphrase-candidates-file
@@ -34,14 +39,75 @@ RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:
     btcrecover (maintained):  https://github.com/3rdIteration/btcrecover
     original:                 https://github.com/gurnec/btcrecover
   Pointer current as of 2026-05-25. Run untrusted recovery tools
-  offline, on an air-gapped machine.";
+  offline, on an air-gapped machine.
+
+",
+    "Exit status: 0 = done, every check passed. 64 = bad command line, nothing
+ran. 101 = internal error. 130 = stopped by the operator. Other codes from
+128 up = killed by a signal. Otherwise the sum (1 to 63) of: 1 a check said
+no; 2 an input is invalid; 4 verify the result before trusting it; 8 refused
+(network mismatch, secret on the command line, unsafe output); 16 a
+correction was applied; 32 a file, device or helper failed."
+);
+
+/// The arguments whose VALUE is an input the verb works on, not a setting
+/// (`SPEC_constellation_exit_codes.md` decision 2): when clap's value parser
+/// rejects one of these, the run exits 2 (an input is invalid), not 64. "Who
+/// checks the value does not change its class": a fingerprint typo is 2 in
+/// every tool, and so is a malformed `--from`/`--slot` under
+/// `--allow-argv-secret` (without it the argv guard answers first, 8).
+const INPUT_VALUE_ARGS: &[&str] = &[
+    "--address",
+    "--cosigner",
+    "--descriptor",
+    "--descriptor-from",
+    "--expect-fingerprint",
+    "--expect-wallet-id",
+    "--expect-xpub",
+    "--fingerprint",
+    "--from",
+    "--master-fingerprint",
+    "--md1",
+    "--mk1",
+    "--ms1",
+    "--origin",
+    "--path",
+    "--search-address",
+    "--share",
+    "--slot",
+    "--target-address",
+    "--target-xpub",
+    "--template",
+    "--xpub",
+];
+
+/// The exit code for a clap parse error: 0 for `--help`/`--version`, 2 for a
+/// rejected value of an input argument ([`INPUT_VALUE_ARGS`]), 64 otherwise.
+fn clap_error_exit_code(e: &clap::Error) -> u8 {
+    use clap::error::{ContextKind, ContextValue, ErrorKind};
+    if e.exit_code() == 0 {
+        return crate::exit_code::OK;
+    }
+    if matches!(
+        e.kind(),
+        ErrorKind::InvalidValue | ErrorKind::ValueValidation
+    ) {
+        if let Some(ContextValue::String(arg)) = e.get(ContextKind::InvalidArg) {
+            let name = arg.split([' ', '=']).next().unwrap_or("");
+            if INPUT_VALUE_ARGS.contains(&name) {
+                return crate::exit_code::INVALID;
+            }
+        }
+    }
+    crate::exit_code::USAGE
+}
 
 #[derive(Parser, Debug)]
 #[command(
     name = "mnemonic",
     about = "engraving-bundle CLI for the m-format star (ms1 + mk1 + md1)",
     version,
-    after_help = PASSPHRASE_RECOVERY_HELP
+    after_help = ROOT_AFTER_HELP
 )]
 struct Cli {
     /// v0.22.0 — skip auto-fire repair on decode failures; preserve
@@ -154,7 +220,7 @@ pub fn run() -> ExitCode {
                 "error: argument {i} on argv (0 is `mnemonic` itself) is not valid UTF-8; \
                  refused (the value is not shown)"
             );
-            return ExitCode::from(64);
+            return ExitCode::from(crate::exit_code::USAGE);
         }
     };
     if let argv_guard::Verdict::Refuse(findings) = argv_guard::inspect(&argv) {
@@ -169,8 +235,9 @@ pub fn run() -> ExitCode {
     let cli = match Cli::try_parse() {
         Ok(c) => c,
         Err(e) => {
-            // Override clap's default exit code 2 → 64 to keep format-violations distinct.
-            let base = if e.exit_code() == 0 { 0 } else { 64 };
+            // Exit-code spec decision 2: usage is 64 (clap's own 2 is the
+            // INVALID bit here), except a rejected input VALUE, which is 2.
+            let base = clap_error_exit_code(&e);
             if e.use_stderr() {
                 // A usage error goes to stderr as today; a failed stderr print stays ignored.
                 e.print().ok();
@@ -184,7 +251,7 @@ pub fn run() -> ExitCode {
                     sink.record(pe);
                 }
             }
-            return finish_exit(&sink, base, false);
+            return finish_exit(&sink, base);
         }
     };
 
@@ -265,18 +332,31 @@ pub fn run() -> ExitCode {
             e.exit_code()
         }
     };
+    // R6 (decision 5): a verb that used a checksum-corrected value adds 16;
+    // the plate is damaged, so say so (mk-codec corrects silently).
+    let code = if crate::repair::correction_used() && code < crate::exit_code::USAGE {
+        let _ = writeln!(
+            io::stderr(),
+            "mnemonic: note: a damaged card was corrected by BCH error correction and the \
+             corrected value was used (exit bit 16); the plate is damaged -- run \
+             `mnemonic repair` on it and re-engrave it"
+        );
+        code | crate::exit_code::REPAIRED
+    } else {
+        code
+    };
     let _ = sink.flush();
-    let exit4_is_result = matches!(cli.command, Command::Repair(_) | Command::Inspect(_));
-    finish_exit(&sink, code, exit4_is_result)
+    finish_exit(&sink, code)
 }
 
 /// Map the exit code once (T6): a recorded stdout write error prints
-/// `mnemonic: cannot write the output: <error>` on stderr and may turn the code into 1.
-fn finish_exit(sink: &out_sink::OutSink<io::Stdout>, code: u8, exit4_is_result: bool) -> ExitCode {
+/// `mnemonic: cannot write the output: <error>` on stderr and ADDS 32 to the
+/// code (exit-code spec R8); 64 and 101 are kept.
+fn finish_exit(sink: &out_sink::OutSink<io::Stdout>, code: u8) -> ExitCode {
     if let Some(err) = sink.error() {
         let _ = writeln!(io::stderr(), "mnemonic: cannot write the output: {err}");
     }
-    let exit = ExitCode::from(sink.exit_code(code, exit4_is_result));
+    let exit = ExitCode::from(sink.exit_code(code));
 
     // Cycle B SPEC §2 row 3 + §6 G2.5 — emit a 2-line stderr summary iff
     // any pin_pages_for call soft-failed during this invocation. No-op
@@ -284,4 +364,14 @@ fn finish_exit(sink: &out_sink::OutSink<io::Stdout>, code: u8, exit4_is_result: 
     mnemonic_toolkit::mlock::report_at_exit();
 
     exit
+}
+
+#[cfg(test)]
+mod tests {
+    /// R11: the root `--help` ends with the spec's legend, word for word.
+    #[test]
+    fn root_help_ends_with_the_exit_code_legend() {
+        assert!(super::ROOT_AFTER_HELP.ends_with(crate::exit_code::HELP_LEGEND));
+        assert!(super::ROOT_AFTER_HELP.starts_with("RECOVERING A FORGOTTEN BIP-39 PASSPHRASE:"));
+    }
 }

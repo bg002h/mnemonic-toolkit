@@ -173,7 +173,12 @@ fn bughunt_tk_51_inspect_second_ms1_not_ignored() {
         VALID_MS1,
         corrupt_b,
     ]));
-    assert_eq!((a.code, a.stdout.as_str()), (1, ""), "stderr: {}", a.stderr);
+    assert_eq!(
+        (a.code, a.stdout.as_str()),
+        (64, ""),
+        "stderr: {}",
+        a.stderr
+    );
     assert_eq!(
         last_line(&a.stderr),
         "error: inspect: expected 1 ms1 card, got 2; inspect each ms1 card in its own run"
@@ -187,7 +192,12 @@ fn bughunt_tk_51_inspect_second_ms1_not_ignored() {
         VALID_MS1,
         VALID_MS1_256,
     ]));
-    assert_eq!((b.code, b.stdout.as_str()), (1, ""), "stderr: {}", b.stderr);
+    assert_eq!(
+        (b.code, b.stdout.as_str()),
+        (64, ""),
+        "stderr: {}",
+        b.stderr
+    );
     assert_eq!(
         last_line(&b.stderr),
         "error: inspect: expected 1 ms1 card, got 2; inspect each ms1 card in its own run"
@@ -352,9 +362,9 @@ fn bughunt_tk_x3_repair_corrects_one_substitution_in_kofn_share() {
              string\n{PK_ADVISORY}\n"
         )
     );
-    if d.code != 4 || !d.stdout.contains(SHARE_1) {
+    if d.code != 20 || !d.stdout.contains(SHARE_1) {
         failures.push(format!(
-            "damaged share: exit {} (want 4 with the clean share on stdout); stdout: {:?}; stderr: {}",
+            "damaged share: exit {} (want 20 with the clean share on stdout); stdout: {:?}; stderr: {}",
             d.code,
             d.stdout.trim(),
             d.stderr.trim()
@@ -403,8 +413,8 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
         &ms_dropped,
     ]));
     assert!(
-        low.code == 5 && low.stdout.contains(VALID_MS1),
-        "baseline broke: lowercase ms1 with a dropped char must exit 5: exit {} stderr {}",
+        low.code == 16 && low.stdout.contains(VALID_MS1),
+        "baseline broke: lowercase ms1 with a dropped char must exit 16: exit {} stderr {}",
         low.code,
         low.stderr.trim()
     );
@@ -418,12 +428,12 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
     ]));
     assert_eq!(
         (up.code, up.stdout.as_str()),
-        (5, low.stdout.as_str()),
+        (16, low.stdout.as_str()),
         "ms1 capitals"
     );
-    if up.code != 5 || !up.stdout.to_lowercase().contains(VALID_MS1) {
+    if up.code != 16 || !up.stdout.to_lowercase().contains(VALID_MS1) {
         failures.push(format!(
-            "ms1 all-capitals: exit {} (want 5 with the card); stderr: {}",
+            "ms1 all-capitals: exit {} (want 16 with the card); stderr: {}",
             up.code,
             up.stderr.trim()
         ));
@@ -441,8 +451,8 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
         &mk_dropped,
     ]));
     assert_eq!(
-        mk_low.code, 5,
-        "baseline: lowercase mk1 exits 5: {}",
+        mk_low.code, 16,
+        "baseline: lowercase mk1 exits 16: {}",
         mk_low.stderr
     );
     let up = run(mnemonic().args([
@@ -456,12 +466,12 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
     ]));
     assert_eq!(
         (up.code, up.stdout.as_str()),
-        (5, mk_low.stdout.as_str()),
+        (16, mk_low.stdout.as_str()),
         "mk1 capitals"
     );
-    if up.code != 5 || !up.stdout.to_lowercase().contains(MK1_C1) {
+    if up.code != 16 || !up.stdout.to_lowercase().contains(MK1_C1) {
         failures.push(format!(
-            "mk1 all-capitals: exit {} (want 5 with the card); stderr: {}",
+            "mk1 all-capitals: exit {} (want 16 with the card); stderr: {}",
             up.code,
             up.stderr.trim()
         ));
@@ -481,8 +491,8 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
         MD1_C2,
     ]));
     assert_eq!(
-        md_low.code, 5,
-        "baseline: lowercase md1 exits 5: {}",
+        md_low.code, 16,
+        "baseline: lowercase md1 exits 16: {}",
         md_low.stderr
     );
     let up = run(mnemonic().args([
@@ -498,12 +508,12 @@ fn bughunt_tk_x4_repair_max_indel_accepts_all_capitals() {
     ]));
     assert_eq!(
         (up.code, up.stdout.as_str()),
-        (5, md_low.stdout.as_str()),
+        (16, md_low.stdout.as_str()),
         "md1 capitals"
     );
-    if up.code != 5 || !up.stdout.to_lowercase().contains(MD1_C1) {
+    if up.code != 16 || !up.stdout.to_lowercase().contains(MD1_C1) {
         failures.push(format!(
-            "md1 all-capitals: exit {} (want 5 with the card); stderr: {}",
+            "md1 all-capitals: exit {} (want 16 with the card); stderr: {}",
             up.code,
             up.stderr.trim()
         ));

@@ -254,7 +254,7 @@ pub(crate) fn emit_payload(
                     | CliTemplate::TrMultiA
                     | CliTemplate::TrSortedMultiA,
                 ) => ColdcardEmitter::emit(inputs),
-                _ => Err(ToolkitError::BadInput(
+                _ => Err(ToolkitError::Usage(
                     "--format coldcard-multisig requires a multisig --template (wsh-sortedmulti, wsh-multi, sh-wsh-sortedmulti, sh-wsh-multi, tr-multi-a, tr-sortedmulti-a). For Coldcard singlesig export use --format coldcard with bip44/bip49/bip84."
                         .into(),
                 )),
@@ -530,7 +530,7 @@ pub fn run<W: Write, E: Write>(
             CliTemplate::TrMultiA | CliTemplate::TrSortedMultiA
         ) && args.taproot_internal_key.is_none()
         {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "--template {} requires --taproot-internal-key (use 'nums' for an unspendable BIP-341 NUMS point, or '@N' to designate cosigner N as the key-path internal key)",
                 match template {
                     CliTemplate::TrMultiA => "tr-multi-a",
@@ -547,7 +547,7 @@ pub fn run<W: Write, E: Write>(
             Some(CliTemplate::TrMultiA) | Some(CliTemplate::TrSortedMultiA)
         )
     {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--taproot-internal-key applies only to --template tr-multi-a / tr-sortedmulti-a"
                 .into(),
         ));
@@ -562,7 +562,7 @@ pub fn run<W: Write, E: Write>(
         });
     }
     if args.descriptor.is_none() && args.template.is_none() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "export-wallet requires either --template or --descriptor".into(),
         ));
     }
@@ -649,7 +649,7 @@ pub fn run<W: Write, E: Write>(
         validate_watch_only_resolved(&resolved)?;
         let n = resolved.len() as u8;
         if n == 0 {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Usage(
                 "export-wallet: at least one --slot @N.xpub=... required".into(),
             ));
         }
@@ -668,7 +668,7 @@ pub fn run<W: Write, E: Write>(
         // leaves no multi_a leaves. Refuse cleanly here rather than letting
         // miniscript reject `multi_a(0,)` with an opaque parse error.
         if leaf_count == 0 {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Usage(
                 "--taproot-internal-key @N with a single cosigner leaves no multi_a leaves; supply at least 2 cosigners (or use --taproot-internal-key nums for unspendable key-path)".into(),
             ));
         }
@@ -682,7 +682,7 @@ pub fn run<W: Write, E: Write>(
             } else {
                 format!("--threshold {k} exceeds cosigner count {n}")
             };
-            return Err(ToolkitError::BadInput(msg));
+            return Err(ToolkitError::Usage(msg));
         }
         if matches!(
             template,
@@ -694,7 +694,7 @@ pub fn run<W: Write, E: Write>(
             // Validate cosigner index range.
             if let Some(TaprootInternalKey::Cosigner(idx)) = args.taproot_internal_key {
                 if idx >= n {
-                    return Err(ToolkitError::BadInput(format!(
+                    return Err(ToolkitError::Usage(format!(
                         "--taproot-internal-key @{idx} out of range; only {n} cosigners supplied",
                     )));
                 }
@@ -841,7 +841,7 @@ pub fn run<W: Write, E: Write>(
         );
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
-            .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("--output {}: {e}", args.output)))?;
     }
     Ok(())
 }
@@ -865,7 +865,7 @@ fn run_from_import_json<W: Write, E: Write>(
     // (the envelope's bundle.account is authoritative; the user supplying
     // a separate account index is ambiguous / contradictory).
     if args.account != 0 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--account is meaningful only with --template / --descriptor; \
              --from-import-json reads the account from the envelope (bundle.account)"
                 .to_string(),
@@ -884,8 +884,9 @@ fn run_from_import_json<W: Write, E: Write>(
             .map_err(ToolkitError::Io)?;
         buf
     } else {
-        std::fs::read_to_string(value)
-            .map_err(|e| ToolkitError::BadInput(format!("--from-import-json: read {value}: {e}")))?
+        std::fs::read_to_string(value).map_err(|e| {
+            ToolkitError::IoFailure(format!("--from-import-json: read {value}: {e}"))
+        })?
     };
     let envelope =
         parse_import_json_envelopes(&raw, args.from_import_json_index, "--from-import-json")?;
@@ -1123,7 +1124,7 @@ fn run_from_import_json<W: Write, E: Write>(
         );
     } else {
         std::fs::write(&args.output, format!("{emitted}\n"))
-            .map_err(|e| ToolkitError::BadInput(format!("--output {}: {e}", args.output)))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("--output {}: {e}", args.output)))?;
     }
     Ok(())
 }

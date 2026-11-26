@@ -134,7 +134,7 @@ fn restore_over_93_symbol_md1_exits_1_pre_existing_bad_input() {
     bin()
         .args(["restore", "--md1", &over_93_md1(94)])
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicates::str::contains(
             "the codex32 regular code caps a string at 93",
         ));

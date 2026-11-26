@@ -216,9 +216,8 @@ pub fn run<R: Read, W: Write, E: Write>(
             writeln!(
                 stdout,
                 "{}",
-                serde_json::to_string_pretty(&doc).map_err(|e| {
-                    ToolkitError::BuildDescriptorSpec(format!("spec serialize: {e}"))
-                })?
+                serde_json::to_string_pretty(&doc)
+                    .map_err(|e| { ToolkitError::Internal(format!("spec serialize: {e}")) })?
             )
             .map_err(ToolkitError::Io)?;
             return Ok(0);
@@ -250,16 +249,16 @@ fn read_spec<R: Read>(args: &BuildDescriptorArgs, stdin: &mut R) -> Result<Strin
         let mut buf = String::new();
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BuildDescriptorSpec(format!("--spec stdin read: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("--spec stdin read: {e}")))?;
         Ok(buf)
     };
     match args.spec.as_deref() {
         Some("-") => read_stdin(stdin),
         Some(path) => std::fs::read_to_string(path)
-            .map_err(|e| ToolkitError::BuildDescriptorSpec(format!("--spec {path}: {e}"))),
+            .map_err(|e| ToolkitError::IoFailure(format!("--spec {path}: {e}"))),
         None => {
             if std::io::stdin().is_terminal() {
-                Err(ToolkitError::BuildDescriptorSpec(
+                Err(ToolkitError::Usage(
                     "build-descriptor: no spec; supply --spec <FILE|-> (or pipe JSON to stdin)"
                         .to_string(),
                 ))
@@ -281,9 +280,8 @@ fn emit_diagnostics<W: Write, E: Write>(
         writeln!(
             stdout,
             "{}",
-            serde_json::to_string_pretty(&env).map_err(|e| ToolkitError::BuildDescriptorSpec(
-                format!("diagnostics serialize: {e}")
-            ))?
+            serde_json::to_string_pretty(&env)
+                .map_err(|e| ToolkitError::Internal(format!("diagnostics serialize: {e}")))?
         )
         .map_err(ToolkitError::Io)?;
     } else {
@@ -362,9 +360,8 @@ fn emit<W: Write, E: Write>(
         writeln!(
             stdout,
             "{}",
-            serde_json::to_string_pretty(&env).map_err(|e| ToolkitError::BuildDescriptorSpec(
-                format!("envelope serialize: {e}")
-            ))?
+            serde_json::to_string_pretty(&env)
+                .map_err(|e| ToolkitError::Internal(format!("envelope serialize: {e}")))?
         )
         .map_err(ToolkitError::Io)?;
         return Ok(());
@@ -378,9 +375,8 @@ fn emit<W: Write, E: Write>(
             writeln!(
                 stdout,
                 "{}",
-                serde_json::to_string_pretty(&bip388()?).map_err(|e| {
-                    ToolkitError::BuildDescriptorSpec(format!("bip388 serialize: {e}"))
-                })?
+                serde_json::to_string_pretty(&bip388()?)
+                    .map_err(|e| { ToolkitError::Internal(format!("bip388 serialize: {e}")) })?
             )
             .map_err(ToolkitError::Io)?;
         }
@@ -506,12 +502,11 @@ fn single_path_descriptor(vp: &ValidatedPolicy) -> Result<String, ToolkitError> 
         .descriptor
         .clone()
         .into_single_descriptors()
-        .map_err(|e| {
-            ToolkitError::BuildDescriptorSpec(format!("multipath split for cost preview: {e}"))
-        })?;
-    singles.first().map(|d| d.to_string()).ok_or_else(|| {
-        ToolkitError::BuildDescriptorSpec("multipath split produced no branch".into())
-    })
+        .map_err(|e| ToolkitError::Internal(format!("multipath split for cost preview: {e}")))?;
+    singles
+        .first()
+        .map(|d| d.to_string())
+        .ok_or_else(|| ToolkitError::Internal("multipath split produced no branch".into()))
 }
 
 fn cost_preview_value(vp: &ValidatedPolicy) -> Result<Value, ToolkitError> {
@@ -532,7 +527,7 @@ fn cost_preview_value(vp: &ValidatedPolicy) -> Result<Value, ToolkitError> {
         &mut _discard_advisory,
     )?;
     serde_json::from_slice(&buf)
-        .map_err(|e| ToolkitError::BuildDescriptorSpec(format!("cost preview parse: {e}")))
+        .map_err(|e| ToolkitError::Internal(format!("cost preview parse: {e}")))
 }
 
 #[cfg(test)]

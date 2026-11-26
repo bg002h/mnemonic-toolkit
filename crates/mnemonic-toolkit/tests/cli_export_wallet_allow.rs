@@ -375,7 +375,7 @@ fn from_import_json_taproot_stays_refused_by_fix_alpha_with_or_without_allow() {
         ];
         args.extend(extra.iter().copied());
         let r = run(&args);
-        assert_eq!(r.code, 1, "stdout={} stderr={}", r.stdout, r.stderr);
+        assert_eq!(r.code, 2, "stdout={} stderr={}", r.stdout, r.stderr);
         assert!(
             r.stderr.contains(
                 "taproot descriptors are not yet supported on the export-from-envelope path"
@@ -1036,7 +1036,7 @@ fn sparrow_descriptor_passthrough_refusal_is_untouched_for_a_sane_wallet() {
         "--format",
         "sparrow",
     ]);
-    assert_eq!(r.code, 1, "stdout={} stderr={}", r.stdout, r.stderr);
+    assert_eq!(r.code, 64, "stdout={} stderr={}", r.stdout, r.stderr);
     assert!(
         r.stderr
             .contains("requires --template; descriptor passthrough is not supported"),
@@ -1100,7 +1100,7 @@ fn phase3_sparrow_refuses_this_wallet_past_the_gate_both_wrappers() {
             "sigless-branch",
         ]);
         assert_eq!(
-            r.code, 1,
+            r.code, 64,
             "{label}: must refuse, and at Sparrow's tier (1), not the gate's (2). \
              stdout={} stderr={}",
             r.stdout, r.stderr

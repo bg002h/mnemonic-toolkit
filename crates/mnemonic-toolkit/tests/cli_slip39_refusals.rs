@@ -133,7 +133,7 @@ fn refusal_row_01_bad_phrase_word_count() {
         "--group",
         "3,2",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 split: input phrase must be 12/15/18/21/24 words; got 11"),
         "expected row 1 stem with 'got 11'; got: {stderr}"
@@ -155,7 +155,7 @@ fn refusal_row_02_bad_entropy_byte_length() {
         "--group",
         "3,2",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr
             .contains("slip39 split: entropy hex must decode to 16/20/24/28/32 bytes; got 2 bytes"),
@@ -181,7 +181,7 @@ fn refusal_row_03_bad_group_threshold() {
         "--group",
         "3,2",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 64, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 split: --group-threshold must be in 1..=2 (number of --group flags); got 5"
@@ -206,7 +206,7 @@ fn refusal_row_04_bad_group_spec_n_too_large() {
         "--group",
         "17,2",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 64, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 split: --group N,T requires 1 <= T <= N <= 16; got group 0=17,2"),
         "expected row 4 stem with 'got group 0=17,2'; got: {stderr}"
@@ -228,7 +228,7 @@ fn refusal_row_05_bad_group_spec_one_of_one() {
         "--group",
         "1,1",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 64, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 split: 1-of-1 group offers no recovery benefit; use --group N,T with N >= 2 (toolkit policy); got group 0=1,1"
@@ -254,7 +254,7 @@ fn refusal_row_06_bad_iteration_exponent() {
         "--group",
         "3,2",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 64, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 split: --iteration-exponent must be 0..=15 (4-bit field); got 16"),
         "expected row 6 stem with 'got 16'; got: {stderr}"
@@ -268,7 +268,7 @@ fn refusal_row_06_bad_iteration_exponent() {
 #[test]
 fn refusal_row_07_identifier_mismatch() {
     let (_, stderr, exit) = combine(&["--share", V6_DIFF_ID_A, "--share", V6_DIFF_ID_B]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 combine: shares disagree on identifier; shares must come from the same secret"
@@ -284,7 +284,7 @@ fn refusal_row_07_identifier_mismatch() {
 #[test]
 fn refusal_row_08_iteration_exponent_mismatch() {
     let (_, stderr, exit) = combine(&["--share", V7_DIFF_ITER_A, "--share", V7_DIFF_ITER_B]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: shares disagree on iteration-exponent"),
         "expected row 8 stem; got: {stderr}"
@@ -298,7 +298,7 @@ fn refusal_row_08_iteration_exponent_mismatch() {
 #[test]
 fn refusal_row_09_invalid_checksum() {
     let (_, stderr, exit) = combine(&["--share", V2_INVALID_CHECKSUM]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr
             .contains("slip39 combine: share at position 0 has invalid SLIP-39 checksum (RS1024)"),
@@ -316,7 +316,7 @@ fn refusal_row_10_unknown_word() {
     // by "xyzzy" (not in the SLIP-39 wordlist).
     let bad_share = "shadow pistol academic always adequate xyzzy fancy gross oasis cylinder mustang wrist rescue view short owner flip making coding armed";
     let (_, stderr, exit) = combine(&["--share", bad_share]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 combine: share at position 0: word at index 5 not in SLIP-39 wordlist"
@@ -332,7 +332,7 @@ fn refusal_row_10_unknown_word() {
 #[test]
 fn refusal_row_11_digest_verification_failed() {
     let (_, stderr, exit) = combine(&["--share", V13_BAD_DIGEST_A, "--share", V13_BAD_DIGEST_B]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 combine: reconstructed master digest mismatch — a share was substituted, corrupted, or the shares do not reconstruct the intended secret; this check runs BEFORE passphrase decryption and does NOT verify --passphrase (a wrong --passphrase still exits 0 with a different, incorrect master)"
@@ -355,7 +355,7 @@ fn refusal_row_12_insufficient_shares_member_level() {
     // `Slip39Error::InsufficientShares { group_idx: u8, needed: u8, got: u8 }`
     // carries these exact bytes (N-4 fold from R0 review).
     let (_, stderr, exit) = combine(&["--share", V5_INSUFFICIENT_SINGLE]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: insufficient shares for group 0: need 2, got 1"),
         "expected row 12 stem with 'group 0: need 2, got 1'; got: {stderr}"
@@ -376,7 +376,7 @@ fn refusal_row_13_group_threshold_mismatch() {
         "--share",
         V8_GROUP_THRESH_C,
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: shares disagree on group_threshold"),
         "expected row 13 stem; got: {stderr}"
@@ -390,7 +390,7 @@ fn refusal_row_13_group_threshold_mismatch() {
 #[test]
 fn refusal_row_14_group_count_mismatch() {
     let (_, stderr, exit) = combine(&["--share", V9_GROUP_COUNT_A, "--share", V9_GROUP_COUNT_B]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: shares disagree on group_count"),
         "expected row 14 stem; got: {stderr}"
@@ -410,7 +410,7 @@ fn refusal_row_15_duplicate_member_index() {
     // shape. R0 review should verify the exact values once the lib
     // handler is wired at GREEN.
     let (_, stderr, exit) = combine(&["--share", V11_DUP_MEMBER_A, "--share", V11_DUP_MEMBER_B]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: duplicate member index ") && stderr.contains(" in group "),
         "expected row 15 stem template; got: {stderr}"
@@ -424,7 +424,7 @@ fn refusal_row_15_duplicate_member_index() {
 #[test]
 fn refusal_row_16_invalid_padding() {
     let (_, stderr, exit) = combine(&["--share", V3_INVALID_PADDING]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 combine: share at position 0 has non-zero padding bits (encoding violation)"
@@ -448,7 +448,7 @@ fn refusal_row_17_from_variant_not_phrase_or_entropy() {
         "--group",
         "3,2",
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 64, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39 split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got xprv="
@@ -483,7 +483,7 @@ fn refusal_row_18_multi_stdin_contention_passphrase_plus_from_dash() {
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert_eq!(out.status.code(), Some(1), "exit; stderr={stderr:?}");
+    assert_eq!(out.status.code(), Some(64), "exit; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)"
@@ -510,7 +510,7 @@ fn refusal_row_19_empty_shares() {
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert_eq!(out.status.code(), Some(1), "exit; stderr={stderr:?}");
+    assert_eq!(out.status.code(), Some(2), "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: at least one share required"),
         "expected row 19 stem; got: {stderr}"
@@ -540,7 +540,7 @@ fn refusal_row_20_invalid_share_value_length() {
     // SPEC §4 G5 24-row enumeration. R1 LOCK round may reissue with
     // a proper row-20 vector once one is hand-crafted.
     let (_, stderr, exit) = combine(&["--share", V40_INVALID_VALUE_LEN]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     let fires_row_20 = stderr.contains("slip39 combine: share at position 0 has value length ")
         && stderr.contains(" (must be 16/20/24/28/32 bytes)");
     let fires_row_16 = stderr.contains(
@@ -571,7 +571,7 @@ fn refusal_row_21_share_value_length_mismatch() {
     // class-of-record OR re-issue isolated-mismatch fixtures.
     let v45_256_share = "western apart academic always artist resident briefing sugar woman oven coding club ajar merit pecan answer prisoner artist fraction amount desktop mild false necklace muscle photo wealthy alpha category unwrap spew losing making";
     let (_, stderr, exit) = combine(&["--share", V4_SHARE_0, "--share", v45_256_share]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     let fires_row_21 = stderr.contains("slip39 combine: shares disagree on value length");
     let fires_row_22 = stderr.contains("slip39 combine: shares disagree on the extendable bit");
     let fires_row_7 = stderr.contains("slip39 combine: shares disagree on identifier");
@@ -598,7 +598,7 @@ fn refusal_row_22_extendable_mismatch() {
     // §3.2 at RED; R1 LOCK round will pin once the handler is in
     // place.
     let (_, stderr, exit) = combine(&["--share", V43_EXT_TRUE, "--share", V4_SHARE_0]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     let fires_row_22 = stderr.contains("slip39 combine: shares disagree on the extendable bit");
     let fires_row_7 = stderr.contains("slip39 combine: shares disagree on identifier");
     assert!(
@@ -618,7 +618,7 @@ fn refusal_row_23_group_threshold_exceeds_count() {
     // Stem template: `share at position 0: group_threshold <T> exceeds group_count <N>`.
     // Exact T/N values come from the encoded share.
     let (_, stderr, exit) = combine(&["--share", V10_GT_EXCEEDS_GC]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: share at position 0: group_threshold ")
             && stderr.contains(" exceeds group_count "),
@@ -642,7 +642,7 @@ fn refusal_row_24_member_threshold_mismatch() {
         "--share",
         V12_MEMBER_THRESH_B,
     ]);
-    assert_eq!(exit, 1, "exit; stderr={stderr:?}");
+    assert_eq!(exit, 2, "exit; stderr={stderr:?}");
     assert!(
         stderr.contains("slip39 combine: shares within a group disagree on member_threshold"),
         "expected row 24 stem (NEW per Q3 fold); got: {stderr}"
@@ -716,7 +716,7 @@ fn slip39_test_rng_env_refused_without_feature() {
         let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
         assert_eq!(
             out.status.code(),
-            Some(1),
+            Some(32),
             "case {name}: exit; stderr={stderr:?}"
         );
         assert_eq!(stdout, "", "case {name}: stdout");

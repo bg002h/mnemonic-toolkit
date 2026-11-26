@@ -312,7 +312,7 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
                     )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
-                    ToolkitError::BadInput(format!("path-of-xpub JSON serialize: {e}"))
+                    ToolkitError::Internal(format!("path-of-xpub JSON serialize: {e}"))
                 })?;
                 writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
             } else {
@@ -354,7 +354,7 @@ pub fn run_path_of_xpub<R: Read, W: Write, E: Write>(
                     )),
                 };
                 let body = serde_json::to_string(&envelope).map_err(|e| {
-                    ToolkitError::BadInput(format!("path-of-xpub JSON serialize: {e}"))
+                    ToolkitError::Internal(format!("path-of-xpub JSON serialize: {e}"))
                 })?;
                 writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
             }

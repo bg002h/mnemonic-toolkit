@@ -145,7 +145,7 @@ fn bh_tk_mn7_dice_length_outside_range_is_refused() {
     for n in ["0", "4294967295"] {
         let r = run(None, &dice_args(n), &stdin_t());
         assert!(!r.timed_out);
-        assert_eq!(r.code, Some(2), "N={n}; stderr: {}", r.err());
+        assert_eq!(r.code, Some(64), "N={n}; stderr: {}", r.err());
         assert_eq!(r.out(), "", "N={n}");
         assert_eq!(
             r.err(),
@@ -195,7 +195,7 @@ fn run_xs(ulimit_kb: Option<u32>, args: Vec<String>) -> Run {
 fn assert_w1(r: &Run) {
     assert!(!r.timed_out, "deadline; stderr: {}", r.err());
     assert_eq!(r.signal, None, "signal; stderr: {}", r.err());
-    assert_eq!(r.code, Some(1), "stderr: {}", r.err());
+    assert_eq!(r.code, Some(64), "stderr: {}", r.err());
     assert_eq!(r.out(), "");
     assert_eq!(r.err(), W1);
 }
@@ -268,7 +268,7 @@ fn bh_tk_mn11_window_ending_at_2p31_is_accepted() {
         ),
     );
     assert!(!r.timed_out);
-    assert_eq!(r.code, Some(4), "stderr: {}", r.err());
+    assert_eq!(r.code, Some(1), "stderr: {}", r.err());
     assert!(
         r.err()
             .starts_with("error: no match in searched set: mode=path-of-xpub, paths searched=14; widen the range"),

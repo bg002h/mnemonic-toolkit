@@ -156,7 +156,7 @@ mod tests {
             }
             other => panic!("expected NetworkMismatch, got {other:?}"),
         }
-        assert_eq!(err_exit_code(NetworkKind::Main, NetworkKind::Test), 2);
+        assert_eq!(err_exit_code(NetworkKind::Main, NetworkKind::Test), 8);
     }
 
     #[test]

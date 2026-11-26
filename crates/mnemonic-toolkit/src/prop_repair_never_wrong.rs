@@ -390,7 +390,9 @@ fn f4_a_touched_ms1_correction_is_unverified() {
     assert_eq!(&*outcome.corrected_chunks[0], VALID_MS1);
     match outcome.set_verify {
         SetVerify::Unverified { .. } => {}
-        SetVerify::Blessed | SetVerify::UnreadableVersion { .. } => {
+        SetVerify::Blessed
+        | SetVerify::IncompleteSet { .. }
+        | SetVerify::UnreadableVersion { .. } => {
             panic!("a touched ms1 correction must be Unverified (Cycle-F demotion)")
         }
     }
@@ -460,7 +462,9 @@ fn f4_c_single_string_non_chunked_md1_correction_is_unverified() {
     assert_eq!(&*outcome.corrected_chunks[0], VALID_SINGLE_MD1);
     match outcome.set_verify {
         SetVerify::Unverified { .. } => {}
-        SetVerify::Blessed | SetVerify::UnreadableVersion { .. } => {
+        SetVerify::Blessed
+        | SetVerify::IncompleteSet { .. }
+        | SetVerify::UnreadableVersion { .. } => {
             panic!("a touched non-chunked md1 correction must be Unverified (v0.86.0 demote)")
         }
     }

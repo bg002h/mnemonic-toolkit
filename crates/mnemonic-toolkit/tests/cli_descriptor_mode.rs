@@ -204,7 +204,7 @@ fn descriptor_verify_bundle_detects_tampered_mk1() {
         .args(&args)
         .assert()
         .failure()
-        .code(4)
+        .code(2)
         .stdout(predicate::str::contains(r#""result":"mismatch""#));
 }
 

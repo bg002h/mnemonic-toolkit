@@ -81,7 +81,7 @@ fn p25_export_wallet_template_nums_bip388_refuses() {
     let (code, stdout, stderr) = run(&export_args("bip388", "nums", "-"));
     assert_eq!(
         (code, stdout.as_str(), stderr.as_str()),
-        (1, "", refusal().as_str())
+        (2, "", refusal().as_str())
     );
 }
 
@@ -91,7 +91,7 @@ fn p25_export_wallet_template_nums_bip388_writes_no_file() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("policy.json");
     let (code, _stdout, stderr) = run(&export_args("bip388", "nums", path.to_str().unwrap()));
-    assert_eq!((code, stderr.as_str()), (1, refusal().as_str()));
+    assert_eq!((code, stderr.as_str()), (2, refusal().as_str()));
     assert!(!path.exists(), "refusal must not create {}", path.display());
 }
 
@@ -128,7 +128,7 @@ fn p25_restore_nums_tr_multisig_bip388_refuses() {
     r.push("--format".into());
     r.push("bip388".into());
     let (code, stdout, stderr) = run(&r);
-    assert_eq!((code, stdout.as_str()), (1, ""), "stderr: {stderr}");
+    assert_eq!((code, stdout.as_str()), (2, ""), "stderr: {stderr}");
     assert_eq!(
         stderr,
         refusal(),
@@ -256,7 +256,7 @@ fn export_template_dup(format: &str, x1: &str, fp1: &str, p1: &str, output: &str
 }
 
 fn refused(r: (i32, String, String), stderr: &str) {
-    assert_eq!((r.0, r.1.as_str(), r.2.as_str()), (1, "", stderr));
+    assert_eq!((r.0, r.1.as_str(), r.2.as_str()), (2, "", stderr));
 }
 
 /// RED: descriptor arm, the same key twice (the grade's probe shape).
@@ -327,7 +327,7 @@ fn bip388v_export_template_repeated_slot_refused() {
         "m/48'/1'/0'/2'",
         path.to_str().unwrap(),
     ));
-    assert_eq!((r.0, r.2.as_str()), (1, dup_text(0, 1, XA).as_str()));
+    assert_eq!((r.0, r.2.as_str()), (2, dup_text(0, 1, XA).as_str()));
     assert!(!path.exists(), "refusal must not create {}", path.display());
 }
 
@@ -400,7 +400,7 @@ fn bip388v_build_descriptor_repeated_key_bip388_refused() {
     let want = format!("{ALLOW_BANNER}{}", dup_text_build(0, 1, XA));
     assert_eq!(
         (code, stdout.as_str(), stderr.as_str()),
-        (1, "", want.as_str())
+        (2, "", want.as_str())
     );
 }
 

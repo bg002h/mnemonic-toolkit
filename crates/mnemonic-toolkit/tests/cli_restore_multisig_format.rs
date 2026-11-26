@@ -204,7 +204,7 @@ fn format_green_refuses_no_multisig() {
         .arg("--allow-argv-secret")
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("multisig"));
 }
 
@@ -273,7 +273,7 @@ fn mismatch_blocks_payload_exit4() {
         .arg("--allow-argv-secret")
         .args(&a)
         .assert()
-        .code(4)
+        .code(1)
         // No descriptor payload on stdout (the refusal precedes emit).
         .stdout(predicate::str::contains("sortedmulti").not());
 }

@@ -722,7 +722,7 @@ fn core_sniff_smoke() {
     let specter_like = "{\"label\":\"Daily\",\"blockheight\":0,\"descriptor\":\"wpkh([b8688df1/84'/0'/0']xpub6FQya7zGhR92kacYsNnjreouvnHJMpXYsUXnW6NJJAJRCKsa26TzDy4LdnGhEurr3d6y1J8PJ7EEMKQp74XTqYvmGJNogYXSKDszYHtF8mX/<0;1>/*)#00lx6ere\",\"devices\":[\"unknown\"]}";
     let assert = run_core_stdin(specter_like).failure();
     let code = assert.get_output().status.code().unwrap_or(-1);
-    assert_eq!(code, 1, "post-v0.28.7 Slug 3: bitcoin-core arm refuses Specter-shaped blob via ImportWalletFormatMismatch (exit 1)");
+    assert_eq!(code, 2, "post-v0.28.7 Slug 3: bitcoin-core arm refuses Specter-shaped blob via ImportWalletFormatMismatch (exit 2)");
 }
 
 // ============================================================================
@@ -1190,7 +1190,7 @@ fn core_fixture_file_empty_descriptors_array_sniff_no_match() {
     let code = assertion.get_output().status.code().unwrap_or(-1);
     // SniffOutcome::NoMatch → exit 1 with the auto-detect failure template
     // (distinct from the parse-time exit-2 path the previous cell pins).
-    assert_eq!(code, 1, "expected exit 1 (sniff NoMatch); stderr: {stderr}");
+    assert_eq!(code, 2, "expected exit 2 (sniff NoMatch); stderr: {stderr}");
     assert!(
         stderr.contains("could not detect format"),
         "expected sniff-NoMatch template; stderr: {stderr}"

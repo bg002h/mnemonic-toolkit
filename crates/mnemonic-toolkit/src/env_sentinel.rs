@@ -241,7 +241,7 @@ mod tests {
             err.message(),
             "--ms1: env-var MY_VAR referenced by sentinel is not set"
         );
-        assert_eq!(err.exit_code(), 1);
+        assert_eq!(err.exit_code(), 32);
     }
 
     #[test]
@@ -252,6 +252,6 @@ mod tests {
             reason: EnvVarMissingReason::InvalidName,
         };
         assert_eq!(err.message(), "--passphrase: invalid env-var name `1bad`");
-        assert_eq!(err.exit_code(), 1);
+        assert_eq!(err.exit_code(), 64);
     }
 }

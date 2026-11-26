@@ -195,7 +195,7 @@ fn verify_bundle_ms1_ground_truth_mismatch_wrong_bundle_exit_4() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(&args)
         .assert()
-        .code(4)
+        .code(17)
         .get_output()
         .clone();
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -266,7 +266,7 @@ fn verify_bundle_ms1_ground_truth_mismatch_wrong_bundle_multisig_exit_4() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(&args)
         .assert()
-        .code(4)
+        .code(17)
         .get_output()
         .clone();
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -308,7 +308,7 @@ fn ms1_unique_indel_recovery_stays_exit_5_post_cycle_f() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["repair", "--ms1", &out, "--max-indel", "1"])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1));
 }
 
@@ -330,7 +330,7 @@ fn repair_mixed_ms1_candidate_and_clean_mk1_exit_4_dominates() {
         .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad_ms1, "--mk1", VALID_MK1_CHUNK0])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains(VALID_MS1))
         .stdout(predicate::str::contains(VALID_MK1_CHUNK0));
 }
@@ -376,7 +376,7 @@ fn verify_bundle_no_auto_repair_suppresses_ground_truth_compare() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(&args)
         .assert()
-        .code(4)
+        .code(2)
         .stdout(predicate::str::contains("ms1_decode: fail"))
         .stdout(predicate::str::contains("recovered via auto-repair").not());
 }

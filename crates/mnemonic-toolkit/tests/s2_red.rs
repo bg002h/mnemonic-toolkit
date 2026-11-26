@@ -44,7 +44,7 @@ fn s2_red_x3_every_single_substitution_of_a_share_is_corrected() {
             let damaged = format!("{}{}{}", &SHARE_1[..pos], rep, &SHARE_1[pos + 1..]);
             let (code, stdout, stderr) =
                 run(&["repair", "--ms1", "-"], Some(&format!("{damaged}\n")));
-            if code != 4 || !stdout.ends_with(&format!("{SHARE_1}\n")) {
+            if code != 20 || !stdout.ends_with(&format!("{SHARE_1}\n")) {
                 failures.push(format!(
                     "pos {pos} -> {rep}: exit {code}; stdout {stdout:?}; stderr {stderr:?}"
                 ));
@@ -61,7 +61,7 @@ fn s2_red_corrected_seed_card_gets_seed_card_text() {
     let damaged = format!("{}x{}", &VALID_MS1[..21], &VALID_MS1[22..]);
     assert_ne!(damaged, VALID_MS1);
     let (code, stdout, stderr) = run(&["repair", "--ms1", "-"], Some(&format!("{damaged}\n")));
-    assert_eq!(code, 4, "stderr: {stderr}");
+    assert_eq!(code, 20, "stderr: {stderr}");
     assert!(
         stdout.ends_with(&format!("{VALID_MS1}\n")),
         "stdout: {stdout}"
@@ -106,7 +106,7 @@ fn s2_red_28b_compare_cost_repeated_digest_all_kinds() {
             &["compare-cost", "--miniscript", &ms, "--max-conditions", "7"],
             None,
         );
-        assert_eq!(c7, 3, "{kind} cap 7");
+        assert_eq!(c7, 8, "{kind} cap 7");
     }
 }
 

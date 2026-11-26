@@ -50,7 +50,7 @@ pub fn check_account_window(
         || max_account.is_some_and(|m| u64::from(m) >= LIMIT)
         || u64::from(min_account) + u64::from(number_of_accounts) > LIMIT;
     if too_big {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits"
                 .into(),
         ));
@@ -383,10 +383,7 @@ mod tests {
             (0, u32::MAX, None),
         ] {
             let e = check_account_window(min, n, max).unwrap_err();
-            assert!(
-                matches!(e, ToolkitError::BadInput(_)),
-                "({min},{n},{max:?})"
-            );
+            assert!(matches!(e, ToolkitError::Usage(_)), "({min},{n},{max:?})");
             assert_eq!(e.to_string(), format!("error: {w1}"), "({min},{n},{max:?})");
         }
     }

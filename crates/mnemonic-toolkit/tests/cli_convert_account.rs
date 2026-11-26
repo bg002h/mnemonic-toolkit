@@ -82,7 +82,7 @@ fn assert_no_line(o: &Out, text: &str) {
 
 fn acct_refused(args: &[&str]) {
     let o = convert(args);
-    assert_refused(&o, 2, ACCT);
+    assert_refused(&o, 64, ACCT);
 }
 
 // ---- 6.1 RED rows.
@@ -216,7 +216,7 @@ fn acct_phrase_to_address_account_refused() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, ACCT);
+    assert_refused(&o, 64, ACCT);
     assert_no_line(&o, ADDR_PATH_TEXT);
 }
 
@@ -235,7 +235,7 @@ fn acct_xpub_to_address_account_before_address_path() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, ACCT);
+    assert_refused(&o, 64, ACCT);
     assert_no_line(&o, ADDR_PATH_TEXT);
 }
 
@@ -383,7 +383,7 @@ fn acct_order_r4_before_account_unused() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, R4_TEXT);
+    assert_refused(&o, 64, R4_TEXT);
     assert_no_line(&o, ACCT);
 }
 
@@ -404,7 +404,7 @@ fn acct_order_r3_before_account_unused() {
         "--account",
         "3",
     ]);
-    assert_refused(&o, 2, R3_TEXT);
+    assert_refused(&o, 64, R3_TEXT);
     assert_no_line(&o, ACCT);
 }
 

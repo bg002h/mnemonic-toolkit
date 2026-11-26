@@ -418,7 +418,7 @@ fn bsms_unsupported_version_exit_3() {
     let blob = "BSMS 2.0\nwsh(pk(deadbeef))#00000000\n";
     let assert = run_import_stdin(blob).failure();
     let code = assert.get_output().status.code().unwrap_or(-1);
-    assert_eq!(code, 3, "expected FutureFormat exit 3; got {code}");
+    assert_eq!(code, 2, "expected FutureFormat exit 2; got {code}");
 }
 
 // ============================================================================

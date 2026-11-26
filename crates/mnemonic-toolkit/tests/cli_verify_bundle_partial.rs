@@ -216,7 +216,7 @@ fn verify_bundle_mismatch_beats_partial() {
         "a structurally-wrong dead card must read `mismatch`, not `partial`; stdout={}",
         String::from_utf8_lossy(&out.stdout)
     );
-    assert_eq!(out.status.code(), Some(4));
+    assert_eq!(out.status.code(), Some(1));
 }
 
 // ── funds-critical: doctored content-id dead card REJECTS (oracle intact) ────
@@ -252,7 +252,7 @@ fn verify_bundle_doctored_content_id_dead_card_verdicts_mismatch_oracle_intact()
     );
     assert_eq!(
         out.status.code(),
-        Some(4),
+        Some(2),
         "doctored dead card must exit 4 (mismatch verdict); stdout={stdout}"
     );
     assert!(

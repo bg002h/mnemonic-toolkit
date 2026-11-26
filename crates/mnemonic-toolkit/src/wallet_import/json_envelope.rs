@@ -344,7 +344,7 @@ pub(crate) fn envelope_to_resolved_slots<E: std::io::Write>(
     let mut out = Vec::with_capacity(mk1_outer.len());
     for (i, chunks) in mk1_outer.iter().enumerate() {
         let chunk_refs: Vec<&str> = chunks.iter().map(|s| s.as_str()).collect();
-        let card = mk_codec::decode(&chunk_refs).map_err(|e| {
+        let card = crate::repair::decode_mk1(&chunk_refs).map_err(|e| {
             ToolkitError::BadInput(format!("--import-json: mk1[{i}] decode failed: {e}"))
         })?;
         let mut slot = mk1_card_to_resolved_slot(&card, i, stderr)?;
@@ -464,7 +464,7 @@ pub(crate) fn read_import_json_arg<R: std::io::Read + ?Sized>(
         return Ok(buf);
     }
     std::fs::read_to_string(value)
-        .map_err(|e| ToolkitError::BadInput(format!("{flag_label}: read {value}: {e}")))
+        .map_err(|e| ToolkitError::IoFailure(format!("{flag_label}: read {value}: {e}")))
 }
 
 /// Parse the envelope's `descriptor` field, stripping the BIP-380

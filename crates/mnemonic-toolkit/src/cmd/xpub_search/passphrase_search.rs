@@ -54,7 +54,7 @@ pub(super) fn run_candidate_scan<W: Write, E: Write>(
     let searched_count = candidates.len();
 
     let file = std::fs::File::open(path).map_err(|e| {
-        ToolkitError::BadInput(format!(
+        ToolkitError::IoFailure(format!(
             "--passphrase-candidates-file {}: {e}",
             path.display()
         ))
@@ -66,7 +66,7 @@ pub(super) fn run_candidate_scan<W: Write, E: Write>(
         // `BufRead::lines` drops `\n`; strip a trailing `\r` for CRLF. NO other
         // trim — a passphrase is an exact byte string.
         let mut raw = line.map_err(|e| {
-            ToolkitError::BadInput(format!("--passphrase-candidates-file read: {e}"))
+            ToolkitError::IoFailure(format!("--passphrase-candidates-file read: {e}"))
         })?;
         if raw.ends_with('\r') {
             raw.pop();
@@ -107,7 +107,7 @@ pub(super) fn run_candidate_scan<W: Write, E: Write>(
             }),
         };
         let body = serde_json::to_string(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("passphrase scan JSON serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("passphrase scan JSON serialize: {e}")))?;
         writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     }
     Err(ToolkitError::XpubSearchPassphraseCandidatesExhausted { candidates_tried })
@@ -140,7 +140,7 @@ fn emit_match<W: Write>(
             }),
         };
         let body = serde_json::to_string(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("passphrase scan JSON serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("passphrase scan JSON serialize: {e}")))?;
         writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     } else {
         // Default text: report the FILE LINE, NOT the passphrase (the secret is

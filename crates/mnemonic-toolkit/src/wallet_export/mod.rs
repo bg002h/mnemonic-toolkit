@@ -286,7 +286,7 @@ pub(crate) fn template_from_descriptor(
         } else {
             CliTemplate::WshMulti
         }),
-        Tr(_) => Err(ToolkitError::BadInput(
+        Tr(_) => Err(ToolkitError::Internal(
             "--from-import-json: taproot descriptors are refused upstream; template_from_descriptor should not be reached for taproot".into(),
         )),
         Bare(_) => Err(ToolkitError::DescriptorParse(
@@ -456,19 +456,19 @@ impl<'a> CheckedDescriptor<'a> {
     /// the suffix is missing, the wrong length, or not ASCII-alphanumeric.
     pub(crate) fn new(desc: &'a str) -> Result<Self, crate::error::ToolkitError> {
         let pos = desc.rfind('#').ok_or_else(|| {
-            crate::error::ToolkitError::BadInput(format!(
+            crate::error::ToolkitError::Internal(format!(
                 "CheckedDescriptor: missing BIP-380 `#<csum>` suffix in: {desc:?}"
             ))
         })?;
         let csum = &desc[pos + 1..];
         if csum.len() != 8 {
-            return Err(crate::error::ToolkitError::BadInput(format!(
+            return Err(crate::error::ToolkitError::Internal(format!(
                 "CheckedDescriptor: BIP-380 checksum must be 8 chars, got {} in: {desc:?}",
                 csum.len()
             )));
         }
         if !csum.chars().all(|c| c.is_ascii_alphanumeric()) {
-            return Err(crate::error::ToolkitError::BadInput(format!(
+            return Err(crate::error::ToolkitError::Internal(format!(
                 "CheckedDescriptor: BIP-380 checksum must be ASCII-alphanumeric, got {csum:?} in: {desc:?}"
             )));
         }

@@ -239,12 +239,12 @@ pub(crate) fn write_dice_rolls<W: std::io::Write + ?Sized>(
     out: &mut W,
 ) -> Result<(), ToolkitError> {
     if sides < 2 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "BIP-85 dice: sides must be >= 2, got {sides}",
         )));
     }
     if rolls < 1 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "BIP-85 dice: rolls must be >= 1".into(),
         ));
     }
@@ -526,9 +526,7 @@ mod tests {
     fn dice_sides_too_small_refused() {
         let mut out: Vec<u8> = Vec::new();
         let r = write_dice_rolls(&master(), 1, 5, 0, &mut out);
-        assert!(
-            matches!(r, Err(ToolkitError::BadInput(ref m)) if m.contains("sides must be >= 2"))
-        );
+        assert!(matches!(r, Err(ToolkitError::Usage(ref m)) if m.contains("sides must be >= 2")));
     }
 
     /// Cycle B Phase 1 lock — `derive_entropy` returns

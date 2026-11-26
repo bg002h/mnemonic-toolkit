@@ -21,11 +21,11 @@ pub fn read_phrase_input(arg: Option<&str>, stdin: &mut dyn Read) -> Result<Stri
             let mut buf = String::new();
             stdin
                 .read_to_string(&mut buf)
-                .map_err(|e| ToolkitError::BadInput(format!("stdin read failed: {}", e)))?;
+                .map_err(|e| ToolkitError::IoFailure(format!("stdin read failed: {}", e)))?;
             Ok(normalize_phrase(&buf))
         }
         Some(s) => Ok(normalize_phrase(s)),
-        None => Err(ToolkitError::BadInput("missing argument".into())),
+        None => Err(ToolkitError::Usage("missing argument".into())),
     }
 }
 
@@ -229,7 +229,7 @@ pub fn check_no_concurrent_stdin(
     passphrase: Option<&str>,
 ) -> Result<(), ToolkitError> {
     if phrase == Some("-") && passphrase == Some("-") {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "only one of --phrase and --passphrase may read from stdin".into(),
         ));
     }
@@ -306,11 +306,11 @@ mod tests {
     fn concurrent_stdin_rejected() {
         let e = check_no_concurrent_stdin(Some("-"), Some("-")).unwrap_err();
         match e {
-            ToolkitError::BadInput(m) => assert_eq!(
+            ToolkitError::Usage(m) => assert_eq!(
                 m,
                 "only one of --phrase and --passphrase may read from stdin"
             ),
-            _ => panic!("expected BadInput"),
+            _ => panic!("expected Usage"),
         }
     }
 

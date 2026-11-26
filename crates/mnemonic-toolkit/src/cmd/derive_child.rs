@@ -139,7 +139,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // SPEC v0.9.0 §1 item 1 — single-stdin-per-invocation. `--from <node>=-`
     // and `--passphrase-stdin` both want stdin; refuse the combination.
     if pp_reads_stdin && from_reads_stdin {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{pp_spelling} cannot be used with --from <node>=- (single stdin per invocation)"
         )));
     }
@@ -214,7 +214,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 .map_err(|e| ToolkitError::Bitcoin(BitcoinErrorKind::Bip32(e)))?
         }
         _ => {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "derive-child: --from must be xprv=<master-xprv> or phrase=<mnemonic>; got {}",
                 args.from.node.as_str(),
             )))
@@ -305,7 +305,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 });
             }
             let sides = args.dice_sides.ok_or_else(|| {
-                ToolkitError::BadInput(
+                ToolkitError::Usage(
                     "--application dice requires --dice-sides <N> (number of sides; >=2)".into(),
                 )
             })?;

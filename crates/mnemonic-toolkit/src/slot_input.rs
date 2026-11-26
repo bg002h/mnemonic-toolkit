@@ -238,7 +238,7 @@ pub fn apply_slot_stdin_at<R: Read + ?Sized>(
             let mut buf = String::new();
             stdin
                 .read_to_string(&mut buf)
-                .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+                .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
             if buf.ends_with('\n') {
                 buf.pop();
                 if buf.ends_with('\r') {
@@ -248,7 +248,7 @@ pub fn apply_slot_stdin_at<R: Read + ?Sized>(
             slots[stdin_idxs[0]].value = SecretString::new(buf);
             Ok(())
         }
-        _ => Err(ToolkitError::BadInput(
+        _ => Err(ToolkitError::Usage(
             "at most one --slot @N.<secret>=- per invocation (single stdin per invocation)".into(),
         )),
     }

@@ -646,7 +646,7 @@ fn general_tr_format_green_refused() {
         .unwrap()
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("singlesig-only"));
 }
 
@@ -664,7 +664,7 @@ fn multi_a_2leaf_tr_format_green_refused_as_multisig() {
         .unwrap()
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("does not support multisig"));
 }
 
@@ -687,7 +687,7 @@ fn general_tr_format_bip388_refused() {
         .unwrap()
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("BIP-388 wallet policy"));
 }
 
@@ -705,7 +705,7 @@ fn bip388v_restore_general_tr_text_names_non_nums() {
         .unwrap()
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stdout("")
         .stderr(
             "error: --format bip388 cannot express this taproot policy as a BIP-388 wallet policy \u{2014} a tap-script-tree reconstructed via the general route-around has no named-template form. Use --format descriptor or --format bitcoin-core for a watch-only import. (A non-NUMS distinct-trunk tr-multisig md1 DOES export bip388 via its template path.)\n",
@@ -759,7 +759,7 @@ fn non_nums_general_tr_format_bip388_refused() {
         .unwrap()
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("BIP-388 wallet policy"));
 }
 
@@ -826,7 +826,7 @@ fn non_nums_general_tr_format_green_refused() {
         .unwrap()
         .args(&a)
         .assert()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("singlesig-only"));
 }
 

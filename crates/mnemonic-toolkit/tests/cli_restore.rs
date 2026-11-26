@@ -245,7 +245,7 @@ fn restore_stdin_mutex_rejected() {
         .write_stdin(TREZOR_12)
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(1), "expected exit 1 stdin-mutex");
+    assert_eq!(out.status.code(), Some(64), "expected exit 1 stdin-mutex");
 }
 
 #[test]
@@ -254,7 +254,11 @@ fn restore_non_seed_from_rejected() {
         .args(["restore", "--from", &format!("xpub={ACCT_XPUB_BIP84}")])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(1), "non-seed --from must be exit 1");
+    assert_eq!(
+        out.status.code(),
+        Some(64),
+        "non-seed --from must be exit 1"
+    );
 }
 
 #[test]
@@ -379,7 +383,7 @@ fn restore_expect_fingerprint_mismatch_exit_4_no_descriptors() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(4), "mismatch must be exit 4");
+    assert_eq!(out.status.code(), Some(1), "mismatch must be exit 4");
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
         !stdout.contains("wpkh("),
@@ -463,7 +467,7 @@ fn restore_expect_xpub_without_template_exit_2() {
         .expect("spawn");
     assert_eq!(
         out.status.code(),
-        Some(2),
+        Some(64),
         "expect-xpub w/o template = exit 2"
     );
 }
@@ -480,7 +484,7 @@ fn restore_multisig_template_rejected_exit_1() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(1), "multisig template = exit 1");
+    assert_eq!(out.status.code(), Some(64), "multisig template = exit 1");
 }
 
 #[test]
@@ -655,7 +659,7 @@ fn restore_format_without_template_exit_2() {
         .expect("spawn");
     assert_eq!(
         out.status.code(),
-        Some(2),
+        Some(64),
         "--format + all-4 default = ModeViolation exit 2"
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -689,7 +693,7 @@ fn restore_format_coldcard_multisig_single_sig_refused_exit_1() {
         .expect("spawn");
     assert_eq!(
         out.status.code(),
-        Some(1),
+        Some(64),
         "coldcard-multisig on a single-sig template = BadInput exit 1"
     );
     let stderr = String::from_utf8(out.stderr).unwrap();
@@ -719,7 +723,7 @@ fn restore_format_mismatch_no_allow_exit_4_no_payload() {
         ])
         .output()
         .expect("spawn");
-    assert_eq!(out.status.code(), Some(4), "mismatch must be exit 4");
+    assert_eq!(out.status.code(), Some(1), "mismatch must be exit 4");
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(
         stdout.is_empty(),
@@ -890,7 +894,7 @@ fn restore_json_mismatch_exits_4_not_json_success_body() {
         .expect("spawn");
     assert_eq!(
         out.status.code(),
-        Some(4),
+        Some(1),
         "mismatch in --json must be exit 4"
     );
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -1153,7 +1157,7 @@ fn restore_format_jade_singlesig_refused_exit_1() {
         .expect("spawn");
     assert_eq!(
         out.status.code(),
-        Some(1),
+        Some(2),
         "jade single-sig = BadInput exit 1 (matches export-wallet)"
     );
     let stdout = String::from_utf8(out.stdout).unwrap();

@@ -169,7 +169,7 @@ fn bh_tk_ms_s_index_control_distributed() {
 #[test]
 fn bh_tk_ms_s_index_repair() {
     let (code, so, se) = run_stdin(&["repair", "--ms1", "-"], &format!("{S2B}\n"));
-    assert_eq!(code, 4);
+    assert_eq!(code, 20);
     assert_eq!(
         so,
         format!(
@@ -182,7 +182,7 @@ fn bh_tk_ms_s_index_repair() {
 #[test]
 fn bh_tk_ms_s_index_repair_mixed() {
     let (code, _so, se) = run_stdin(&["repair", "--allow-argv-secret", S2B, A2B], "");
-    assert_eq!(code, 4);
+    assert_eq!(code, 20);
     // stderr opens with two argv-secret warning lines, so `contains`, not `starts_with`.
     assert!(
         se.contains(&format!("repair: {S_INDEX_REPAIR_C}\n")),

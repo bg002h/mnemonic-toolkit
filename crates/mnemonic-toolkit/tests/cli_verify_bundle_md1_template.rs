@@ -324,7 +324,7 @@ fn verify_template_bundle_expect_wallet_id_wrong_mismatch() {
         ))
         .assert()
         .failure()
-        .code(4);
+        .code(1);
 }
 
 #[test]
@@ -628,7 +628,7 @@ fn verify_bundle_nonchunked_noncanonical_encoding_mismatch() {
     }
     args.push("--md1".into());
     args.push(doctored);
-    let assert = mnemonic().args(&args).assert().code(4);
+    let assert = mnemonic().args(&args).assert().code(1);
     let v: serde_json::Value = serde_json::from_slice(&assert.get_output().stdout).unwrap();
     let md1c = v["checks"]
         .as_array()
@@ -687,7 +687,7 @@ fn verify_bundle_nonchunked_doctored_origin_stricter_than_wdt() {
     }
     args.push("--md1".into());
     args.push(doctored);
-    mnemonic().args(&args).assert().code(4); // md1_template_match mismatch → exit 4
+    mnemonic().args(&args).assert().code(1); // md1_template_match mismatch → exit 4
 }
 
 #[test]
@@ -716,5 +716,5 @@ fn verify_bundle_mk1_tolerance_not_extended() {
     }
     args.push("--md1".into());
     args.push(single);
-    mnemonic().args(&args).assert().code(4); // mk1 stub-bind fails → mismatch
+    mnemonic().args(&args).assert().code(1); // mk1 stub-bind fails → mismatch
 }

@@ -56,7 +56,7 @@ fn cell_9_text_form_ms1_happy_path_exit_4_candidate_with_report() {
         .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "ms1 chunk 0: 1 correction at position 17",
@@ -90,7 +90,7 @@ fn cell_10_json_form_ms1_happy_path_envelope_shape() {
         .arg("--allow-argv-secret")
         .args(["repair", "--json", "--ms1", &bad])
         .assert()
-        .code(4)
+        .code(20)
         .get_output()
         .stdout
         .clone();
@@ -190,7 +190,7 @@ fn cell_12b_ms1_repair_works_for_all_entropy_lengths() {
             .arg("--allow-argv-secret")
             .args(["repair", "--ms1", &bad])
             .assert()
-            .code(4)
+            .code(20)
             .stdout(predicate::str::contains("# Repair report"))
             .stdout(predicate::str::contains(valid.as_str()));
     }
@@ -212,7 +212,7 @@ fn cell_13_multi_chunk_mk1_one_corrupted_exit_5_both_emitted() {
             &bad_chunk1,
         ])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "mk1 chunk 1: 1 correction at position 25",
@@ -233,7 +233,7 @@ fn cell_14_stdin_form_ms1_dash_reads_from_stdin() {
         .write_stdin(format!("{bad}\n"))
         .assert()
         // Cycle F FLIP — was exit 5.
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(VALID_MS1));
 }
@@ -266,7 +266,7 @@ fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
         .arg("--allow-argv-secret")
         .args(["repair", "--ms1", &bad_ms1])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "ms1 chunk 0: 1 correction at position 17",
@@ -309,7 +309,7 @@ fn cell_b7_1_migrated_repair_byte_exact_with_pre_v0_23() {
             &bad_chunk1,
         ])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "mk1 chunk 1: 1 correction at position 25",
@@ -400,7 +400,7 @@ fn repair_inline_ms1_fires_secret_in_argv_advisory() {
         .assert()
         // Cycle F FLIP — was exit 5; a touched ms1 correction is now a
         // demoted exit-4 candidate. The argv advisory is unaffected.
-        .code(4)
+        .code(20)
         .get_output()
         .clone();
     let stderr = String::from_utf8(out.stderr).unwrap();
@@ -446,7 +446,7 @@ fn repair_ms1_stdin_dash_does_not_fire_argv_advisory() {
         .write_stdin(format!("{bad}\n"))
         .assert()
         // Cycle F FLIP — was exit 5; see repair_inline_ms1_fires_secret_in_argv_advisory.
-        .code(4)
+        .code(20)
         .get_output()
         .clone();
     let stderr = String::from_utf8(out.stderr).unwrap();

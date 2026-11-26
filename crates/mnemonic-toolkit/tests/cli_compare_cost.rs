@@ -546,7 +546,7 @@ fn hard_cap_too_small_for_n_keys_exit_3() {
         .unwrap();
     assert_eq!(
         out.status.code(),
-        Some(3),
+        Some(8),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -860,7 +860,7 @@ fn tr_descriptor_multi_leaf_refused_exit_3() {
         .unwrap();
     assert_eq!(
         out.status.code(),
-        Some(3),
+        Some(2),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -921,7 +921,7 @@ fn tr_descriptor_nums_keypath_only_refused_no_script() {
         .unwrap();
     assert_eq!(
         out.status.code(),
-        Some(3),
+        Some(2),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
@@ -1033,7 +1033,7 @@ fn descriptor_pkh_refused_exit_3() {
         .unwrap();
     assert_eq!(
         out.status.code(),
-        Some(3),
+        Some(2),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );

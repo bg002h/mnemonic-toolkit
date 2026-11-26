@@ -131,7 +131,7 @@ fn seed_overlay_ms1_mismatch_exit_4() {
         .write_stdin(blob)
         .assert()
         .failure()
-        .code(4);
+        .code(1);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("cosigner 0:")
@@ -274,7 +274,7 @@ fn seed_overlay_env_var_unset_exit_1() {
         .write_stdin(blob)
         .assert()
         .failure()
-        .code(1);
+        .code(32);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--ms1: env-var") && stderr.contains("is not set"),
@@ -472,7 +472,7 @@ fn seed_overlay_slot_phrase_mismatch_exit_4() {
         .failure();
     let code = assertion.get_output().status.code().unwrap_or(-1);
     assert_eq!(
-        code, 4,
+        code, 1,
         "phrase mismatch must exit 4 (sibling to BundleMismatch)"
     );
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();

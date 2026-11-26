@@ -117,7 +117,7 @@ fn env_var_unset_fails_exit_1() {
         .args(&args)
         .assert()
         .failure()
-        .code(1)
+        .code(32)
         .stderr(predicate::str::contains(
             "--ms1: env-var MNEMONIC_TEST_NEVER_SET_DEFINITELY_NOT_PRESENT \
              referenced by sentinel is not set",
@@ -195,7 +195,7 @@ fn env_var_invalid_name_with_space_fails() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains(
             "--ms1: invalid env-var name `FOO BAR`",
         ));
@@ -221,7 +221,7 @@ fn env_var_invalid_name_leading_digit_fails() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains(
             "--ms1: invalid env-var name `1FOO`",
         ));
@@ -247,7 +247,7 @@ fn env_var_invalid_name_empty_fails() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains("--ms1: invalid env-var name"));
 }
 
@@ -271,7 +271,7 @@ fn env_var_invalid_name_lowercase_fails() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(64)
         .stderr(predicate::str::contains(
             "--ms1: invalid env-var name `lowercase`",
         ));
@@ -372,7 +372,7 @@ fn env_var_works_on_share_unset_fails() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(32)
         .stderr(predicate::str::contains(
             "--share: env-var MNEMONIC_TEST_NEVER_SET_SHARE_X referenced by sentinel is not set",
         ));

@@ -61,8 +61,8 @@ fn run_fixture(format: &str, name: &str) -> std::process::Output {
 fn assert_network_mismatch(out: &std::process::Output, who: &str) {
     assert_eq!(
         out.status.code(),
-        Some(2),
-        "{who}: xpub-version-vs-coin-type mismatch must exit 2; stderr: {}",
+        Some(8),
+        "{who}: xpub-version-vs-coin-type mismatch must exit 8; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     let stderr = String::from_utf8_lossy(&out.stderr);

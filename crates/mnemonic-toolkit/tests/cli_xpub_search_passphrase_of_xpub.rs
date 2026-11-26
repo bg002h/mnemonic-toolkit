@@ -83,7 +83,7 @@ fn passphrase_of_xpub_wrong_passphrase_no_match_exit_4() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4);
+        .code(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ fn passphrase_of_xpub_advisory_emitted_on_match_and_no_match() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(4)
+        .code(1)
         .stderr(predicate::str::contains(ADVISORY_FRAGMENT));
 }
 

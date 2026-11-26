@@ -71,7 +71,7 @@ fn non_chunked_md1_single_error_repair_exits_4_and_recovers() {
         .unwrap()
         .args(["repair", "--md1", &bad])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(VALID_NON_CHUNKED_MD1));
 }
@@ -91,7 +91,7 @@ fn non_chunked_md1_demote_reason_and_json_verdict_candidate() {
         .unwrap()
         .args(["repair", "--md1", &bad])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains("# Repair report"))
         .stderr(predicate::str::contains("UNVERIFIED"))
         .stderr(predicate::str::contains("non-chunked single-string md1"))
@@ -102,7 +102,7 @@ fn non_chunked_md1_demote_reason_and_json_verdict_candidate() {
         .unwrap()
         .args(["repair", "--md1", &bad, "--json"])
         .assert()
-        .code(4)
+        .code(20)
         .get_output()
         .stdout
         .clone();
@@ -143,7 +143,7 @@ fn chunked_of_1_md1_single_error_repair_stays_exit_5() {
         .unwrap()
         .args(["repair", "--md1", &bad])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(original.as_str()));
 }

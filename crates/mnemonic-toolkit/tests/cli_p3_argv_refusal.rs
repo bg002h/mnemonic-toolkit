@@ -31,9 +31,9 @@ use mnemonic_toolkit::secret_taxonomy::{SECRET_NODE_TYPES_ARGV, SECRET_SLOT_SUBK
 const PHRASE: &str =
     "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
 
-/// `mnemonic`'s refusal family exit code. Not 64 (clap's usage code — this
-/// happens *instead of* parsing) and not 3 (already `FutureFormat` here).
-const EXIT_REFUSED: i32 = 2;
+/// `mnemonic`'s refusal exit code (REFUSED, constellation exit-code spec R2).
+/// Not 64 (clap's usage code — this happens *instead of* parsing).
+const EXIT_REFUSED: i32 = 8;
 
 fn run(args: &[&str]) -> (String, String, i32) {
     let out = Command::cargo_bin("mnemonic")
@@ -301,7 +301,7 @@ fn watch_only_material_still_travels_on_argv() {
 /// The invocation below is *also* invalid to clap: `--network` and `--template`
 /// are required on `bundle` and are absent. A guard that ran after the parser
 /// would produce clap's usage error at exit 64. A guard that runs before it
-/// produces the refusal at exit 2, and clap never sees the phrase.
+/// produces the refusal at exit 8, and clap never sees the phrase.
 #[test]
 fn the_refusal_wins_against_a_clap_error_on_the_same_argv() {
     let (_stdout, stderr, code) = run(&["bundle", "--slot", &format!("@0.phrase={PHRASE}")]);

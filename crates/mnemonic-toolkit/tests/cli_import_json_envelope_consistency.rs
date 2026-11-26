@@ -118,10 +118,10 @@ fn bundle(env: &Path, network: &str) -> std::process::Output {
         .unwrap()
 }
 
-/// Exit 1, nothing on stdout, and `line` is one whole line of stderr.
+/// Exit 2, nothing on stdout, and `line` is one whole line of stderr.
 fn assert_refused(out: &std::process::Output, line: &str, what: &str) {
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1), "{what}: stderr={stderr}");
+    assert_eq!(out.status.code(), Some(2), "{what}: stderr={stderr}");
     assert!(
         out.stdout.is_empty(),
         "{what}: stdout={}",

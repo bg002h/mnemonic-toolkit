@@ -78,7 +78,7 @@ fn path_of_xpub_env_phrase_unset_fails() {
             &target,
         ])
         .assert()
-        .code(1)
+        .code(32)
         .stderr(predicate::str::contains(
             "--phrase: env-var XPS_PHRASE_UNSET referenced by sentinel is not set",
         ));
@@ -128,7 +128,7 @@ fn path_of_xpub_env_passphrase_unset_fails() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1)
+        .code(32)
         .stderr(predicate::str::contains(
             "--passphrase: env-var XPS_PASSPHRASE_UNSET referenced by sentinel is not set",
         ));
@@ -191,7 +191,7 @@ fn account_of_descriptor_env_passphrase_unset_fails() {
         ])
         .write_stdin(PHRASE)
         .assert()
-        .code(1)
+        .code(32)
         .stderr(predicate::str::contains(
             "--passphrase: env-var AOD_PASSPHRASE_UNSET referenced by sentinel is not set",
         ));

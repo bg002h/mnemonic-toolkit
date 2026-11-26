@@ -292,7 +292,7 @@ fn d7_round_trip_expect_wallet_id_correct_passes() {
 fn expect_wallet_id_wrong_refuses_loudly() {
     let assert = restore_with_expect("bip84", PHRASE_A, "0", "deadbeefdeadbeef")
         .failure()
-        .code(4);
+        .code(1);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("MISMATCH"),

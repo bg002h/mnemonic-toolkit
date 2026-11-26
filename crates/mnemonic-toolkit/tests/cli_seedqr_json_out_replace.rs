@@ -105,7 +105,7 @@ fn failed_replace_keeps_previous_file(op: &str) {
     } else {
         decode(NO_SPACE, &p)
     };
-    assert_eq!(out.code, 1, "exit; stderr: {}", out.stderr);
+    assert_eq!(out.code, 32, "exit; stderr: {}", out.stderr);
     assert_eq!(out.stdout, "", "stdout must stay empty");
     assert_eq!(
         last_line(&out.stderr),
@@ -133,7 +133,7 @@ fn failed_create_leaves_no_file(op: &str) {
     } else {
         decode(NO_SPACE, &p)
     };
-    assert_eq!(out.code, 1, "exit; stderr: {}", out.stderr);
+    assert_eq!(out.code, 32, "exit; stderr: {}", out.stderr);
     assert_eq!(
         last_line(&out.stderr),
         format!("error: seedqr: {op}: json-out write to {p:?}: File too large (os error 27)"),
@@ -251,7 +251,7 @@ fn i3_seedqr_encode_retry_after_failure_writes_envelope() {
     write_previous(&p);
     let failed = encode(NO_SPACE, &p);
     assert_eq!(
-        failed.code, 1,
+        failed.code, 32,
         "control: the first run fails; stderr: {}",
         failed.stderr
     );

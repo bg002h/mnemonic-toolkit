@@ -187,7 +187,7 @@ fn range_and_ceiling_reject() {
             "--range",
             "5,2"
         ])),
-        1
+        64
     );
     assert_eq!(
         code(&mn(&[
@@ -199,7 +199,7 @@ fn range_and_ceiling_reject() {
             "--count",
             "2147483649"
         ])),
-        1
+        64
     );
     assert_eq!(
         code(&mn(&[
@@ -211,7 +211,7 @@ fn range_and_ceiling_reject() {
             "--range",
             "0,2147483648"
         ])),
-        1
+        64
     );
 }
 
@@ -269,7 +269,7 @@ fn network_infer_override_and_mismatch() {
             "--network",
             "mainnet"
         ])),
-        1
+        8
     );
 }
 
@@ -285,7 +285,7 @@ fn xpub_rejects_account_and_passphrase() {
             "--account",
             "5"
         ])),
-        1
+        64
     );
     assert_eq!(
         code(&mn(&[
@@ -297,7 +297,7 @@ fn xpub_rejects_account_and_passphrase() {
             "--passphrase",
             "x"
         ])),
-        1
+        64
     );
 }
 
@@ -440,5 +440,5 @@ fn env_and_stdin_channels() {
         .write_stdin(ABANDON)
         .output()
         .unwrap();
-    assert_eq!(dual.status.code().unwrap(), 1);
+    assert_eq!(dual.status.code().unwrap(), 64);
 }

@@ -256,7 +256,7 @@ fn stdin_refusal_pairwise_a_combine_passphrase_stdin_plus_share_dash() {
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert_eq!(out.status.code(), Some(1), "exit 1; stderr={stderr:?}");
+    assert_eq!(out.status.code(), Some(64), "exit 1; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)"
@@ -289,7 +289,7 @@ fn stdin_refusal_pairwise_b_split_passphrase_stdin_plus_from_dash() {
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert_eq!(out.status.code(), Some(1), "exit 1; stderr={stderr:?}");
+    assert_eq!(out.status.code(), Some(64), "exit 1; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)"
@@ -314,7 +314,7 @@ fn stdin_refusal_pairwise_c_combine_two_share_dash() {
         .output()
         .unwrap();
     let stderr = String::from_utf8(out.stderr).unwrap();
-    assert_eq!(out.status.code(), Some(1), "exit 1; stderr={stderr:?}");
+    assert_eq!(out.status.code(), Some(64), "exit 1; stderr={stderr:?}");
     assert!(
         stderr.contains(
             "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)"

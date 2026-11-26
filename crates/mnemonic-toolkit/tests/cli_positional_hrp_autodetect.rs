@@ -62,7 +62,7 @@ fn repair_positional_single_ms1_routes_correctly() {
         .arg("--allow-argv-secret")
         .args(["repair", &bad])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "ms1 chunk 0: 1 correction at position 17",
@@ -117,7 +117,7 @@ fn repair_mixed_positional_and_flag_combined_routing() {
         .args(["repair", "--ms1", &bad_ms1, VALID_MK1_CHUNK0])
         .assert()
         // Cycle F FLIP — was exit 5; the candidate (ms1) OR-folds to exit 4.
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains(VALID_MS1))
         .stdout(predicate::str::contains(VALID_MK1_CHUNK0))
         .stdout(predicate::str::contains(

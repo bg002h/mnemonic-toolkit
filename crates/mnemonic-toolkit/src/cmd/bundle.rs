@@ -349,7 +349,7 @@ pub fn run<W: Write, E: Write>(
             (Some(s), None) => s.clone(),
             (None, Some(p)) => std::fs::read_to_string(p)
                 .map_err(|e| {
-                    ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
+                    ToolkitError::IoFailure(format!("--descriptor-file {}: {e}", p.display()))
                 })?
                 .trim_end()
                 .to_string(),
@@ -436,7 +436,7 @@ fn bundle_run_unified<W: Write, E: Write>(
 
     let template = args
         .template
-        .ok_or_else(|| ToolkitError::BadInput("--template required for --slot dispatch".into()))?;
+        .ok_or_else(|| ToolkitError::Usage("--template required for --slot dispatch".into()))?;
 
     // FOLLOWUP `multisig-tr-bip48-script-type-3-policy` (bless + warn): taproot
     // multisig under --multisig-path-family bip48 derives at the non-standard
@@ -1490,7 +1490,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         (Some(s), None) => s.clone(),
         (None, Some(p)) => std::fs::read_to_string(p)
             .map_err(|e| {
-                ToolkitError::DescriptorParse(format!("--descriptor-file {}: {e}", p.display()))
+                ToolkitError::IoFailure(format!("--descriptor-file {}: {e}", p.display()))
             })?
             .trim_end()
             .to_string(),
@@ -1530,7 +1530,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
 
     // v0.19.0 SPEC §4.12.g — DESCRIPTOR_WITH_NONZERO_ACCOUNT canonicity-gated.
     if !is_non_canonical && args.account != 0 {
-        return Err(ToolkitError::ModeViolation {
+        return Err(ToolkitError::ModeInputViolation {
             mode: "descriptor",
             flag: "--account",
             message: mode_text::DESCRIPTOR_WITH_NONZERO_ACCOUNT,
@@ -2122,7 +2122,7 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
         // wallet as testnet, so signet/regtest against it gets the longer text.
         let same_class = matches!(envelope_network, CliNetwork::Testnet)
             && matches!(args.network, CliNetwork::Signet | CliNetwork::Regtest);
-        return Err(ToolkitError::BadInput(if same_class {
+        return Err(ToolkitError::Refused(if same_class {
             format!(
                 "--network {flag} disagrees with the --import-json envelope's bundle.network \
                  ({env}); if the wallet is on {flag}, re-create the envelope with import-wallet \
@@ -2196,7 +2196,7 @@ fn bundle_run_from_import_json<W: Write, E: Write>(
     {
         use crate::slot_input::SlotSubkey as K;
         let sub = s.subkey.as_str();
-        return Err(ToolkitError::BadInput(match s.subkey {
+        return Err(ToolkitError::Usage(match s.subkey {
             K::Entropy | K::Ms1 | K::Seedqr => format!(
                 "--slot @{n}.{sub}=: not supported with --import-json; only --slot @N.phrase= can \
                  add a seed to a watch-only cosigner. Get the phrase with: mnemonic convert \
@@ -2697,7 +2697,7 @@ fn emit_default_path_notice<E: Write>(
         // ways to override. The shape of the descriptor is not their problem.
         "info: no origin supplied for {idx_list}; defaulting to m/48'/{coin}'/{account}'/{script_type}' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
     )
-    .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
+    .map_err(|e| ToolkitError::IoFailure(format!("stderr write: {e}")))?;
     Ok(())
 }
 
@@ -3030,7 +3030,7 @@ fn apply_stdin_substitutions(
     // written, before `@env:` resolution.
     let has_slot_stdin = !slot_stdin_idxs.is_empty();
     if pp_reads_stdin && has_slot_stdin {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{} cannot be used with --slot @N.<secret>=- (single stdin per invocation)",
             crate::passphrase_input::stdin_spelling(owned.passphrase_stdin)
         )));

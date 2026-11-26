@@ -189,7 +189,7 @@ fn bughunt_tk_05_electrum_export_bip86_refused() {
          \"standard\" wallet that Electrum reads as p2pkh (wrong addresses). stdout:\n{}",
         out_s(&o)
     );
-    assert_eq!(o.status.code(), Some(1), "stderr:\n{}", err_s(&o));
+    assert_eq!(o.status.code(), Some(2), "stderr:\n{}", err_s(&o));
     assert!(out_s(&o).is_empty(), "nothing on stdout:\n{}", out_s(&o));
     assert!(
         err_s(&o).contains(
@@ -287,7 +287,7 @@ fn bughunt_tk_09_unparseable_slot_fingerprint_refused() {
         "--slot @0.fingerprint=zzzz is not a fingerprint and must be refused (template mode \
          refuses it); descriptor mode instead: {detail}"
     );
-    assert_eq!(o.status.code(), Some(1), "stderr:\n{}", err_s(&o));
+    assert_eq!(o.status.code(), Some(2), "stderr:\n{}", err_s(&o));
     assert!(out_s(&o).is_empty(), "nothing on stdout:\n{}", out_s(&o));
     assert!(
         err_s(&o).contains("error: --slot @0.fingerprint parse: "),
@@ -486,7 +486,7 @@ fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
 
     // mainnet against a testnet envelope: refused.
     let o = bundle("mainnet", &env_path);
-    assert_eq!(o.status.code(), Some(1), "stdout:\n{}", out_s(&o));
+    assert_eq!(o.status.code(), Some(8), "stdout:\n{}", out_s(&o));
     assert!(out_s(&o).is_empty(), "stdout:\n{}", out_s(&o));
     assert!(
         err_s(&o).contains(
@@ -503,7 +503,7 @@ fn bughunt_tk_45_import_json_testnet_envelope_not_labelled_mainnet() {
 
     // signet against a default (testnet) envelope: the longer text.
     let o = bundle("signet", &env_path);
-    assert_eq!(o.status.code(), Some(1), "stdout:\n{}", out_s(&o));
+    assert_eq!(o.status.code(), Some(8), "stdout:\n{}", out_s(&o));
     assert!(out_s(&o).is_empty(), "stdout:\n{}", out_s(&o));
     assert!(
         err_s(&o).contains(
@@ -600,12 +600,12 @@ fn bughunt_tk_46_import_json_slot_overlays_other_than_phrase_not_silently_droppe
                 "--slot @0.{label}=...: exit 0 but ms1[0] is {ms1_0:?} (mode {})",
                 v["mode"]
             ));
-        } else if o.status.code() != Some(1)
+        } else if o.status.code() != Some(64)
             || !out_s(&o).is_empty()
             || !err_s(&o).contains(&want)
         {
             failures.push(format!(
-                "{label}: want exit 1, empty stdout and `{want}`; got {:?}\nstderr: {}",
+                "{label}: want exit 64, empty stdout and `{want}`; got {:?}\nstderr: {}",
                 o.status.code(),
                 err_s(&o)
             ));
@@ -804,7 +804,7 @@ fn bughunt_tk_52_template_stub_check_not_passed_by_garbage_mk1() {
          mk1_template_stub_bind check must fail (or the run must refuse). stdout:\n{}",
         out_s(&bad)
     );
-    assert_eq!(bad.status.code(), Some(4), "stdout:\n{}", out_s(&bad));
+    assert_eq!(bad.status.code(), Some(1), "stdout:\n{}", out_s(&bad));
     let j = json(&bad);
     assert_eq!(j["result"], "mismatch", "stdout:\n{}", out_s(&bad));
     let row = j["checks"]

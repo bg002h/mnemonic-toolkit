@@ -320,7 +320,7 @@ fn cell_8_bip39_length_out_of_range_refusal() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.trim().ends_with(        "error: --length 16 out of range for --application bip39 (valid: 12 | 15 | 18 | 21 | 24 words)"),
@@ -348,7 +348,7 @@ fn cell_9_hd_seed_length_not_applicable_refusal() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.trim().ends_with(        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)"),
@@ -377,7 +377,7 @@ fn cell_9b_xprv_length_not_applicable_refusal() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.trim().ends_with(        "error: --length not applicable for --application <hd-seed|xprv> (output is fixed-size)"),
@@ -761,7 +761,7 @@ fn dice_missing_dice_sides_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--application dice requires --dice-sides"),
@@ -778,7 +778,7 @@ const NON_MASTER_TPRV: &str =
 const NON_MASTER_REFUSAL: &str = "error: derive-child: the xprv/tprv is at depth 1, not a master key (depth 0); supply the master xprv/tprv, or the seed phrase it came from (with its --passphrase, if it has one)";
 
 fn assert_refused(out: assert_cmd::assert::Assert) {
-    let out = out.code(1);
+    let out = out.code(2);
     let o = out.get_output();
     assert_eq!(String::from_utf8(o.stdout.clone()).unwrap(), "");
     assert_eq!(
@@ -884,7 +884,7 @@ fn r5_non_master_xprv_depth2_refused() {
         .args(["derive-child", "--from", "xprv=-", "--application", "hex", "--length", "16", "--index", "0"])
         .write_stdin("xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs\n")
         .assert()
-        .code(1);
+        .code(2);
     let e = String::from_utf8(o.get_output().stderr.clone()).unwrap();
     assert!(
         e.trim().starts_with(

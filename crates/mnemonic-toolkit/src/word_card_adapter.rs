@@ -83,7 +83,7 @@ pub struct CanonicalPayload {
 /// uses) → `KeyCard::canonical_payload_bytes`. `mk1` bytecode is byte-aligned, so
 /// `payload_bits = 8 * len` and `kind = SourceKind::Mk1Xpub`.
 pub fn mk1_to_canonical(chunks: &[&str]) -> Result<CanonicalPayload, ToolkitError> {
-    let card = mk_codec::decode(chunks).map_err(ToolkitError::from)?;
+    let card = crate::repair::decode_mk1(chunks).map_err(ToolkitError::from)?;
     let bytes = card.canonical_payload_bytes().map_err(ToolkitError::from)?;
     let payload_bits = bytes.len() * 8;
     Ok(CanonicalPayload {

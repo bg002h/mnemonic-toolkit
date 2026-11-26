@@ -446,16 +446,17 @@ fn cell_4_1d_auto_repair_does_not_short_circuit_on_miscorrection() {
 /// workflow (`44-mk-cli.md:247`-style single-plate repair) at the toolkit
 /// `mnemonic repair` surface.
 #[test]
-fn cell_4_2_partial_set_single_plate_repair_exit_4_unverified() {
+fn cell_4_2_partial_set_single_plate_repair_exit_16_incomplete_set() {
     let bad_chunk1 = flip_at(CHUNK1, 25); // genuine 1-substitution — within t<=4
     Command::cargo_bin("mnemonic")
         .unwrap()
         .args(["repair", "--mk1", &bad_chunk1])
         .assert()
-        .code(4)
+        .code(16)
         .stdout(predicate::str::contains(CHUNK1))
-        .stderr(predicate::str::contains("UNVERIFIED"))
-        .stderr(predicate::str::contains("BIP-93"));
+        // Decision 7: an incomplete set is 16, not 20; the rest of the set
+        // verifies it on reassembly, and stderr says so.
+        .stderr(predicate::str::contains("INCOMPLETE mk1 chunk set"));
 }
 
 /// Auto-repair on a partial (single-chunk) mk1 correction must NOT
@@ -499,7 +500,7 @@ fn cell_4_3_genuine_t4_full_set_correction_still_blesses_exit_5() {
         .unwrap()
         .args(["repair", "--mk1", CHUNK0, "--mk1", &bad_chunk1])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(CHUNK0))
         .stdout(predicate::str::contains(CHUNK1))
@@ -762,3 +763,34 @@ const _: () = assert!(
 // payload. No live fixture can therefore reach `Ok(_)` here at all; the
 // demote is kept for defense-in-depth / documentation symmetry with the
 // md1 fix, not for test coverage.
+
+/// Constellation exit codes R6 (decision 5): a verb that decodes a damaged
+/// card by correcting it, and uses the corrected value, exits with bit 16 set
+/// and says on stderr that the plate is damaged. mk-codec corrects inside
+/// `decode`, so without this the damage would pass unnoticed.
+#[test]
+fn r6_inspect_with_a_corrected_mk1_sets_bit_16_and_says_so() {
+    let bad_chunk1 = flip_at(CHUNK1, 25);
+    let out = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "0")
+        .args(["inspect", "--mk1", CHUNK0, "--mk1", &bad_chunk1])
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    assert_eq!(out.status.code(), Some(16), "stderr: {stderr}");
+    assert!(
+        stderr.contains("a damaged card was corrected by BCH error correction"),
+        "stderr: {stderr}"
+    );
+    // The clean set decodes with no note and exit 0.
+    let clean = Command::cargo_bin("mnemonic")
+        .unwrap()
+        .env("MNEMONIC_FORCE_TTY", "0")
+        .args(["inspect", "--mk1", CHUNK0, "--mk1", CHUNK1])
+        .output()
+        .unwrap();
+    let clean_err = String::from_utf8(clean.stderr).unwrap();
+    assert_eq!(clean.status.code(), Some(0), "stderr: {clean_err}");
+    assert!(!clean_err.contains("damaged card"), "stderr: {clean_err}");
+}

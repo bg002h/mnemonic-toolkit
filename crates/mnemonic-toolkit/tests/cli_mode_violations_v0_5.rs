@@ -36,7 +36,7 @@ fn threshold_without_multisig_template_rejected() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(&(format!("error: {}\n", THRESHOLD_WITHOUT_MULTISIG))),
@@ -88,7 +88,7 @@ fn path_family_without_multisig_template_rejected() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(&(format!("error: {}\n", PATH_FAMILY_WITHOUT_MULTISIG))),
@@ -142,7 +142,7 @@ fn descriptor_and_template_rejected() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(&(format!("error: {}\n", DESCRIPTOR_AND_TEMPLATE))),

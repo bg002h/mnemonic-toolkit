@@ -102,7 +102,7 @@ pub fn run<R: Read, W: Write, E: Write>(
         .as_deref()
         .is_some_and(crate::passphrase_input::path_is_stdin);
     if ciphertext_uses_stdin && pw_reads_stdin {
-        return Err(ToolkitError::BadInput(if args.decrypt_password_stdin {
+        return Err(ToolkitError::Usage(if args.decrypt_password_stdin {
             "--ciphertext=- and --decrypt-password-stdin cannot both read from stdin".to_string()
         } else {
             "--ciphertext=- and --decrypt-password - (or a --decrypt-password-file that is stdin) \
@@ -123,7 +123,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     );
     let password: zeroize::Zeroizing<String> = if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
-            ToolkitError::BadInput(format!(
+            ToolkitError::IoFailure(format!(
                 "--decrypt-password-file: cannot read {}: {e}",
                 path.display()
             ))
@@ -139,7 +139,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             args.decrypt_password_stdin,
             stdin,
         )?
-        .ok_or_else(|| ToolkitError::BadInput("electrum-decrypt: no password source".into()))?
+        .ok_or_else(|| ToolkitError::Usage("electrum-decrypt: no password source".into()))?
     };
     let _pin_pw = mnemonic_toolkit::mlock::pin_pages_for(password.as_bytes());
 
@@ -162,15 +162,15 @@ pub fn run<R: Read, W: Write, E: Write>(
             plaintext: plaintext.as_str(),
         };
         let json = serde_json::to_string_pretty(&envelope).map_err(|e| {
-            ToolkitError::BadInput(format!("electrum-decrypt: json serialize: {e}"))
+            ToolkitError::Internal(format!("electrum-decrypt: json serialize: {e}"))
         })?;
         std::fs::write(path, json).map_err(|e| {
-            ToolkitError::BadInput(format!("electrum-decrypt: json-out write to {path:?}: {e}"))
+            ToolkitError::IoFailure(format!("electrum-decrypt: json-out write to {path:?}: {e}"))
         })?;
         warn_if_world_readable(path, stderr);
     } else {
         writeln!(stdout, "{}", plaintext.as_str())
-            .map_err(|e| ToolkitError::BadInput(format!("electrum-decrypt: stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("electrum-decrypt: stdout write: {e}")))?;
         crate::secret_advisory::emit_output_class_advisory(
             crate::secret_advisory::OutputClass::PrivateKeyMaterial,
             stderr,

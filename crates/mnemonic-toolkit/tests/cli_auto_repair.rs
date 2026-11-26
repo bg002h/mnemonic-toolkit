@@ -66,7 +66,7 @@ fn cell_19_convert_auto_fire_ms1_one_substitution() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["convert", "--from", &format!("ms1={bad}"), "--to", "phrase"])
         .assert()
-        .code(1)
+        .code(2)
         .stdout(predicate::str::contains("# Repair report").not())
         .stderr(predicate::str::contains(
             "candidate correction exists but a seed card cannot be self-verified",
@@ -106,7 +106,7 @@ fn cell_20a_mk1_internal_correction_preempts_auto_fire() {
             "xpub",
         ])
         .assert()
-        .code(0)
+        .code(16)
         .stdout(predicate::str::contains(EXPECTED_XPUB))
         // No repair report — mk-codec's internal correction silently fixed it.
         .stdout(predicate::str::contains("# Repair report").not());
@@ -136,7 +136,7 @@ fn cell_20b_inspect_auto_fire_md1_one_substitution() {
             VALID_MD1_CHUNK2,
         ])
         .assert()
-        .code(5)
+        .code(2)
         .stdout(predicate::str::contains("# Repair report"))
         .stdout(predicate::str::contains(
             "md1 chunk 0: 1 correction at position 20",
@@ -159,7 +159,7 @@ fn cell_18b_inspect_auto_fire_on_corrupted_ms1() {
         .env("MNEMONIC_FORCE_TTY", "1")
         .args(["inspect", "--ms1", &bad])
         .assert()
-        .code(1)
+        .code(2)
         .stdout(predicate::str::contains("# Repair report").not())
         .stderr(predicate::str::contains(
             "candidate correction exists but a seed card cannot be self-verified",
@@ -260,7 +260,7 @@ fn cell_24_convert_json_context_ms1_no_longer_short_circuits() {
             "phrase",
         ])
         .assert()
-        .code(1)
+        .code(2)
         .get_output()
         .clone();
     let stdout = String::from_utf8(out.stdout).unwrap();
@@ -302,7 +302,7 @@ fn cell_25_inspect_json_context_auto_fire_emits_json_envelope() {
             VALID_MD1_CHUNK2,
         ])
         .assert()
-        .code(5)
+        .code(2)
         .get_output()
         .stdout
         .clone();
@@ -311,7 +311,7 @@ fn cell_25_inspect_json_context_auto_fire_emits_json_envelope() {
     let v: serde_json::Value = serde_json::from_str(s.trim()).expect("valid JSON envelope");
     assert_eq!(v["schema_version"], "1");
     assert_eq!(v["auto_repair_short_circuit"], true);
-    assert_eq!(v["exit_code"], 5);
+    assert_eq!(v["exit_code"], 2);
     assert_eq!(v["kind"], "md1");
     assert_eq!(v["corrected_chunks"][0], VALID_MD1_CHUNK0);
     assert_eq!(v["repairs"][0]["chunk_index"], 0);
@@ -346,7 +346,7 @@ fn cell_26_d20_json_envelope_schema_v1_pin() {
             VALID_MD1_CHUNK2,
         ])
         .assert()
-        .code(5)
+        .code(2)
         .get_output()
         .stdout
         .clone();
@@ -519,7 +519,7 @@ fn cell_27_verify_bundle_auto_fire_happy_path_tty() {
             path.to_str().unwrap(),
         ])
         .assert()
-        .code(0)
+        .code(16)
         .stdout(predicate::str::contains("# Repair report").not())
         .stdout(predicate::str::contains(
             "ms1_decode: ok recovered via auto-repair, confirmed against expected seed",
@@ -553,7 +553,7 @@ fn cell_28_verify_bundle_no_auto_repair_forced_off() {
             path.to_str().unwrap(),
         ])
         .assert()
-        .code(4)
+        .code(2)
         .stdout(predicate::str::contains("# Repair report").not())
         .stdout(predicate::str::contains("ms1_decode: fail"));
 }
@@ -583,7 +583,7 @@ fn cell_29_verify_bundle_piped_preserves_legacy() {
             path.to_str().unwrap(),
         ])
         .assert()
-        .code(4)
+        .code(2)
         .stdout(predicate::str::contains("# Repair report").not())
         .stdout(predicate::str::contains("ms1_decode: fail"));
 }
@@ -615,7 +615,7 @@ fn cell_30_verify_bundle_json_context_under_tty_emits_envelope() {
             path.to_str().unwrap(),
         ])
         .assert()
-        .code(0)
+        .code(16)
         .get_output()
         .stdout
         .clone();

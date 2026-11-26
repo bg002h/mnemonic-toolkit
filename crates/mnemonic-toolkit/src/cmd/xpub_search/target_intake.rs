@@ -27,7 +27,7 @@ pub fn resolve_target_xpub(value: &str) -> Result<(Xpub, Option<&'static str>), 
         // mk1 card route: tokenize whitespace (mk1 cards may have multiple
         // chunks separated by spaces) and decode via mk_codec.
         let tokens: Vec<&str> = value.split_whitespace().collect();
-        let card = mk_codec::decode(&tokens).map_err(ToolkitError::from)?;
+        let card = crate::repair::decode_mk1(&tokens).map_err(ToolkitError::from)?;
         // The mk_codec card carries its xpub as a `bitcoin::bip32::Xpub`
         // already. No variant signal (mk1 carries canonical xpub bytes).
         Ok((card.xpub, None))

@@ -36,8 +36,8 @@ fn fixture(name: &str) -> PathBuf {
 fn assert_mismatch(out: &std::process::Output, who: &str) {
     assert_eq!(
         out.status.code(),
-        Some(2),
-        "{who}: must exit 2; stderr: {}",
+        Some(8),
+        "{who}: must exit 8; stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(

@@ -104,7 +104,7 @@ fn bundle_seedqr_slot_invalid_digit_count_refused() {
         .arg(format!("@0.seedqr={bad_digits}"))
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("seedqr: slot @0 decode") && stderr.contains("invalid digit count"),
@@ -130,7 +130,7 @@ fn bundle_seedqr_slot_checksum_failure_refused() {
         .arg(format!("@0.seedqr={bad_digits}"))
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("seedqr: slot @0 decode") && stderr.contains("checksum"),
@@ -187,7 +187,7 @@ fn bundle_seedqr_slot_double_stdin_refused() {
         .write_stdin("ignored")
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("at most one --slot @N.<secret>=- per invocation"),

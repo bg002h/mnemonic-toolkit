@@ -119,7 +119,7 @@ pub fn intake_from_explicit_form<R: std::io::Read>(
         let mut buf = String::new();
         stdin
             .read_to_string(&mut buf)
-            .map_err(|e| ToolkitError::BadInput(format!("stdin read: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdin read: {e}")))?;
         buf
     } else {
         value.to_string()
@@ -413,7 +413,7 @@ fn parse_literal_xpub(
             stderr,
             "info: non-canonical descriptor; defaulting origin path for {idx_list} to m/48'/{coin}'/{account}'/{default_script_type}' (BIP-48 cosigner path). Override per-placeholder with [fp/path] in the descriptor."
         )
-        .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
+        .map_err(|e| ToolkitError::IoFailure(format!("stderr write: {e}")))?;
     }
     Ok(DescriptorIntake {
         cosigners,

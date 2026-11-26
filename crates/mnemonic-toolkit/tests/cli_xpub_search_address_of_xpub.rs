@@ -285,7 +285,7 @@ fn no_match_within_gap_limit_returns_exit_4() {
         ])
         .assert()
         .failure()
-        .code(4);
+        .code(1);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("address-of-xpub"),
@@ -316,7 +316,7 @@ fn external_only_skips_internal_chain() {
         ])
         .assert()
         .failure()
-        .code(4);
+        .code(1);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid JSON");
     let r0 = &json["results"][0];
@@ -352,7 +352,7 @@ fn gap_limit_50_extends_scan() {
         ])
         .assert()
         .failure()
-        .code(4);
+        .code(1);
 
     // --gap-limit 50 → match
     let out = Command::cargo_bin("mnemonic")
@@ -434,7 +434,7 @@ fn multi_target_partial_unmatch_returns_exit_4() {
         ])
         .assert()
         .failure()
-        .code(4);
+        .code(1);
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +460,7 @@ fn multisig_zpub_prefix_refused_exit_1() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("single-sig only"),
@@ -490,7 +490,7 @@ fn xpub_without_address_type_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--address-type"),
@@ -592,7 +592,7 @@ fn invalid_xpub_returns_exit_1() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
 }
 
 #[test]
@@ -652,7 +652,7 @@ fn no_match_json_envelope_has_scan_counts() {
         ])
         .assert()
         .failure()
-        .code(4);
+        .code(1);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(stdout.trim()).expect("valid JSON");
     let r0 = &json["results"][0];

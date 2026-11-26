@@ -233,6 +233,6 @@ fn passphrase_mismatch_detected() {
             &["--passphrase", "wrong"],
         ))
         .assert()
-        .code(4)
+        .code(1)
         .stdout(predicate::str::contains("result: mismatch"));
 }

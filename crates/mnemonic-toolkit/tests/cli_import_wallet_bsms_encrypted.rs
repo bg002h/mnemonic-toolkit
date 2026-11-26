@@ -70,7 +70,7 @@ fn wrong_token_yields_mac_mismatch_exit_2() {
         .arg(tmp.path())
         .assert()
         .failure()
-        .code(2)
+        .code(1)
         .stderr(predicates::str::contains("MAC verification failed"))
         .stderr(predicates::str::contains(
             "wrong token or tampered ciphertext",
@@ -135,7 +135,7 @@ fn extended_mode_32_hex_token_passes_width_check() {
         .arg(tmp.path())
         .assert()
         .failure()
-        .code(2)
+        .code(1)
         // The 32-char width passes; MAC verify fails (wrong token for this wire).
         .stderr(predicates::str::contains("MAC verification failed"))
         .stderr(predicates::str::contains("token width 32 hex chars"));
@@ -371,7 +371,7 @@ fn round1_encrypted_without_token_refused() {
         .arg(&dat)
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("looks encrypted")
@@ -392,7 +392,7 @@ fn round1_encrypted_wrong_token_mac_mismatch() {
         .arg(tmp.path())
         .assert()
         .failure()
-        .code(2)
+        .code(1)
         .stderr(predicates::str::contains("MAC verification failed"));
 }
 
@@ -558,7 +558,7 @@ fn per_signer_token_count_mismatch_refused() {
         .arg(tok2.path())
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("counts must match for positional pairing"),
@@ -586,7 +586,7 @@ fn per_signer_mixed_plaintext_encrypted_refused() {
         .arg(tok1.path())
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("per-Signer mode requires every record to be encrypted"),
@@ -617,7 +617,7 @@ fn per_signer_multi_token_with_encrypted_blob_refused() {
         .arg(tok1.path())
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("Round-2 --blob decrypt requires exactly one --bsms-encryption-token"),
@@ -644,7 +644,7 @@ fn multi_token_zero_records_refused() {
         .arg(tok1.path())
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("require matching --bsms-round1 records; none supplied"),
@@ -673,7 +673,7 @@ fn per_signer_token_i_mac_mismatch_cites_index() {
         .arg(tok1_wrong.path())
         .assert()
         .failure()
-        .code(2)
+        .code(1)
         .stderr(predicates::str::contains("MAC verification failed"));
 }
 
@@ -702,7 +702,7 @@ fn two_token_stdin_refused() {
         .write_stdin(TV3_TOKEN_HEX)
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("at most one --bsms-encryption-token=- per invocation"),
@@ -805,6 +805,6 @@ fn coinkite_xref_round2_wrong_token_mac_mismatch() {
         .arg(tmp.path())
         .assert()
         .failure()
-        .code(2)
+        .code(1)
         .stderr(predicates::str::contains("MAC verification failed"));
 }

@@ -192,7 +192,7 @@ fn decode_neither_digits_nor_from_required_input() {
         .args(["seedqr", "decode"])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("seedqr decode requires an input") && stderr.contains("--from seedqr="),
@@ -206,7 +206,7 @@ fn decode_from_non_seedqr_node_refused() {
         .args(["seedqr", "decode", "--from", &format!("phrase={PHRASE_12}")])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("accepts only the `seedqr` node type") && stderr.contains("got `phrase`"),

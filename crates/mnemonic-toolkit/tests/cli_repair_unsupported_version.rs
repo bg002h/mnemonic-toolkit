@@ -58,7 +58,7 @@ fn legacy_one_error() -> String {
 fn a_single_string_correction_on_an_unsupported_version_is_kept_and_exits_4() {
     let (out, err, code) = mnemonic(&["repair", "--md1", V12_ONE_ERROR]);
     assert_eq!(
-        code, 4,
+        code, 22,
         "VERIFY-ME (ruling 8): not the atomic-fail 2, not the verified 5: {err}"
     );
     assert!(
@@ -78,7 +78,7 @@ fn a_single_string_correction_on_an_unsupported_version_is_kept_and_exits_4() {
 #[test]
 fn the_json_report_carries_the_unreadable_version_verdict() {
     let (out, err, code) = mnemonic(&["repair", "--json", "--md1", V12_ONE_ERROR]);
-    assert_eq!(code, 4, "{err}");
+    assert_eq!(code, 22, "{err}");
     let v: serde_json::Value =
         serde_json::from_str(&out).unwrap_or_else(|e| panic!("not JSON ({e}): {out}"));
     assert_eq!(v["kind"], "md1", "{v}");
@@ -134,7 +134,7 @@ fn a_multi_chunk_set_at_an_unsupported_version_exits_2() {
 fn a_legacy_card_is_corrected_without_the_newer_md_advice() {
     let bad = legacy_one_error();
     let (out, err, code) = mnemonic(&["repair", "--md1", &bad]);
-    assert_eq!(code, 4, "{err}");
+    assert_eq!(code, 22, "{err}");
     assert!(out.contains("position 7: 'q' -> 'x'"), "{out}");
     assert!(out.lines().any(|l| l == LEGACY_CLEAN), "{out}");
     assert!(err.contains("wire version 0"), "{err}");
@@ -148,7 +148,7 @@ fn a_legacy_card_is_corrected_without_the_newer_md_advice() {
 #[test]
 fn an_odd_version_above_8_is_not_sent_to_a_newer_md() {
     let (out, err, code) = mnemonic(&["repair", "--md1", V9_ONE_ERROR]);
-    assert_eq!(code, 4, "{err}");
+    assert_eq!(code, 22, "{err}");
     assert!(out.lines().any(|l| l == V9_CLEAN), "{out}");
     assert!(err.contains("wire version 9"), "{err}");
     assert!(!err.contains("newer md"), "9 is odd: {err}");

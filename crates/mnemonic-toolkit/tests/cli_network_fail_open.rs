@@ -30,12 +30,12 @@ fn bin() -> Command {
     c
 }
 
-/// Assert exit 2 + the canonical `NetworkMismatch` stderr message.
+/// Assert exit 8 + the canonical `NetworkMismatch` stderr message.
 fn assert_mismatch(out: &std::process::Output, who: &str) {
     assert_eq!(
         out.status.code(),
-        Some(2),
-        "{who}: must exit 2 (NetworkMismatch); stderr: {}",
+        Some(8),
+        "{who}: must exit 8 (NetworkMismatch); stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
     assert!(

@@ -117,7 +117,7 @@ fn refusal_wif_with_path_chain_code_destroyed() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: --from wif does not retain a chain code; --path-driven derivation is impossible.\n"),
@@ -170,7 +170,7 @@ fn refusal_phrase_to_wif_missing_path() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"),
@@ -195,7 +195,7 @@ fn refusal_entropy_to_wif_missing_path() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: --to wif requires explicit --path; supply a BIP-32 path producing a leaf privkey (the toolkit does not auto-default a path from --template/--account).\n"),

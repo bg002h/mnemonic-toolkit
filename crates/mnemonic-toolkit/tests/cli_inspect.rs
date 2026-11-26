@@ -537,6 +537,6 @@ fn inspect_refuses_non_ascii_char_that_aliased_a_codex32_symbol() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("not in codex32 alphabet"));
 }

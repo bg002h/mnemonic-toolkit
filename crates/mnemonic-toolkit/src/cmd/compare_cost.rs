@@ -22,7 +22,7 @@ pub struct CompareCostArgs {
     /// Full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf `tr(IK, {M})`
     /// (v0.28.0). The wrapper is stripped to recover the inner miniscript M
     /// before the comparison. Multi-leaf `tr(IK, {M1, M2, ...})` and keypath-
-    /// only `tr(IK)` inputs are refused with exit 3. Mutually exclusive with
+    /// only `tr(IK)` inputs are refused with exit 2. Mutually exclusive with
     /// `--miniscript`.
     #[arg(long)]
     pub descriptor: Option<String>,
@@ -82,14 +82,14 @@ pub fn run<R: Read, W: Write, E: Write>(
         }
         (Some(_), Some(_)) => {
             // Should be unreachable: clap's `conflicts_with` rejects this at parse-time.
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Usage(
                 "supply exactly one of --miniscript or --descriptor".to_string(),
             ));
         }
         (None, None) => {
             // Phase 3: stdin fallback when piped. TTY case → clear error.
             if std::io::stdin().is_terminal() {
-                return Err(ToolkitError::BadInput(
+                return Err(ToolkitError::Usage(
                     "compare-cost: no input; supply --miniscript <STR> or --descriptor <STR>"
                         .to_string(),
                 ));
@@ -119,7 +119,7 @@ fn classify_stdin_input<R: Read>(stdin: &mut R) -> Result<InputForm, ToolkitErro
     let mut buf = String::new();
     stdin
         .read_to_string(&mut buf)
-        .map_err(|e| ToolkitError::BadInput(format!("compare-cost: stdin read: {e}")))?;
+        .map_err(|e| ToolkitError::IoFailure(format!("compare-cost: stdin read: {e}")))?;
     let trimmed = buf.trim();
     let first_line = trimmed.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
     let first_line = first_line.trim();

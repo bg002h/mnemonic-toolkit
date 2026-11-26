@@ -219,7 +219,7 @@ fn md1_with_foreign_seed_mismatch_exit4() {
         .arg("--allow-argv-secret")
         .args(&a)
         .assert()
-        .code(4)
+        .code(1)
         .stderr(predicate::str::contains("MISMATCH"));
 }
 

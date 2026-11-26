@@ -27,7 +27,7 @@ impl WalletFormatEmitter for BitcoinCoreEmitter {
             inputs.bitcoin_core_version,
         )?;
         serde_json::to_string_pretty(&value)
-            .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))
+            .map_err(|e| ToolkitError::Internal(format!("export-wallet json: {e}")))
     }
 
     fn extension() -> &'static str {

@@ -9,16 +9,17 @@
 //!   - text-form or JSON-form output (D14)
 //!   - D9 sensitive-secret stderr warning when corrected ms1 hits stdout
 //!
-//! Exit codes:
+//! Exit codes (`SPEC_constellation_exit_codes.md` §3; D26's meanings, new numbers):
 //!   - 0 — all chunks already valid (no repair applied)
-//!   - 4 — VERIFY-ME candidate: a correction was applied but cannot be
-//!         self-verified (ms1 substitution-correction — Cycle F; mk1
-//!         partial-set / ambiguous indel — Cycle E)
-//!   - 5 — REPAIR_APPLIED, confidently: a blessed correction (mk1/md1
-//!         full-set reassembly-confirmed) or a unique full-checksum indel;
-//!         (F-642 ruling 8: a corrected SINGLE-STRING md1 at a wire version
-//!         this build cannot read is NOT here -- it exits 4, where `md repair`
-//!         exits 5; see `repair::correct_unreadable_md1`)
+//!   - 16 — REPAIRED: a blessed correction (mk1/md1 full-set reassembly-
+//!         confirmed), a unique full-checksum indel, or a correction in an
+//!         INCOMPLETE mk1 chunk set (verifiable by reassembly later; decision 7)
+//!   - 20 — 16 + 4, verify before trusting: a correction with no oracle (ms1
+//!         substitution-correction — Cycle F; non-chunked md1; ambiguous or
+//!         substitution-bearing indel)
+//!   - 22 — 20 + 2: F-642 ruling 8, a corrected SINGLE-STRING md1 at a wire
+//!         version this build cannot read (printed, but it does not decode;
+//!         decision 6); see `repair::correct_unreadable_md1`
 //!   - non-zero ToolkitError exit per `error.rs::exit_code()` on failure
 
 use crate::error::ToolkitError;
@@ -74,7 +75,7 @@ pub struct RepairArgs {
 
     /// Also tolerate up to E substitution (wrong-but-in-place) errors alongside the
     /// indels (default 0 = pure indel). A recovery that used a substitution is printed
-    /// as a VERIFY-ME candidate (exit 4), not a confident correction. ms1/mk1/md1.
+    /// as a VERIFY-ME candidate (exit 20 = 16 + 4), not a confident correction. ms1/mk1/md1.
     #[arg(long, value_name = "E", default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=4))]
     pub max_subst: u8,
 
@@ -124,13 +125,16 @@ pub fn run<R: Read, W: Write, E: Write>(
     let mut substitution_seen = false;
     // Cycle E (`mk1-repair-set-level-reverify`) + Cycle F
     // (`ms1-repair-demote-to-candidate`) — set to true when ANY group's
-    // `repair_card` outcome is `SetVerify::Unverified`: an incomplete
-    // corrected mk1 chunk_set_id group (a partial-plate repair, preserved
-    // but unverified), OR (Cycle F) ANY touched ms1 substitution-correction
-    // (ms1 has no chunk-set at all — every correction is Unverified).
-    // Folded into the exit-4 VERIFY-ME mapping alongside `ambiguous_seen`
+    // `repair_card` outcome is `SetVerify::Unverified`: (Cycle F) ANY touched
+    // ms1 substitution-correction (ms1 has no chunk-set at all — every
+    // correction is Unverified) or a non-chunked md1 correction. An incomplete
+    // mk1 group is `IncompleteSet` since the exit-code spec (16, decision 7).
+    // Folded into the 20 VERIFY-ME mapping alongside `ambiguous_seen`
     // (SPEC §2 rule 3 / §3).
     let mut candidate_seen = false;
+    // Exit-code spec decision 6: a corrected string printed although it does
+    // not decode (F-642's unreadable wire version) adds 2 (INVALID).
+    let mut invalid_seen = false;
 
     // No-op notice: --max-subst only takes effect when --max-indel >= 1.
     if args.max_subst >= 1 && args.max_indel == 0 {
@@ -160,11 +164,10 @@ pub fn run<R: Read, W: Write, E: Write>(
     for (kind, chunks) in &groups {
         // F-642: an md1 card at a wire version this build cannot read. BCH
         // correction is version-agnostic, so a correctable SINGLE-STRING card
-        // keeps its correction. RULING 8: it is a VERIFY-ME candidate (exit
-        // 4), NOT REPAIR_APPLIED (5) -- nothing past the BCH checksum checks
-        // it, which is less than the v0.86.0 non-chunked demotion (also 4)
-        // had. `md repair` (md-cli 0.19.0) exits 5 here; the toolkit's exit-5
-        // contract is "corrected AND self-verified". Everything else -- a
+        // keeps its correction. RULING 8: it is a VERIFY-ME candidate (20),
+        // NOT a verified repair (16) -- nothing past the BCH checksum checks
+        // it -- and the printed string does not decode here, so +2 (22,
+        // exit-code spec decision 6). Everything else -- a
         // multi-string set (ruling 7), a clean card, an uncorrectable one --
         // keeps today's error, unchanged. No output-class advisory: there is
         // no decoded descriptor to classify, and the md1 kind-default
@@ -182,8 +185,11 @@ pub fn run<R: Read, W: Write, E: Write>(
                         for line in repair::unreadable_version_advisory(got) {
                             writeln!(stderr, "{line}").ok();
                         }
-                        // Ruling 8: fold into the exit-4 VERIFY-ME tier.
+                        // Ruling 8: a correction with no oracle (20), and
+                        // the printed string does not decode here (+2,
+                        // decision 6): 22.
                         candidate_seen = true;
+                        invalid_seen = true;
                         continue;
                     }
                     None => Err(RepairError::WireVersionUnsupported { got }),
@@ -203,12 +209,20 @@ pub fn run<R: Read, W: Write, E: Write>(
                 // Cycle E (mk1 incomplete chunk_set_id group — a partial-
                 // plate repair) + Cycle F (ms1 — every touched substitution-
                 // correction) preserve the candidate but mark it UNVERIFIED;
-                // loud advisory + fold into the exit-4 VERIFY-ME mapping
-                // below (PM-r2-3: the exit-4 mapping is a `mnemonic repair`
+                // loud advisory + fold into the 20 VERIFY-ME mapping
+                // below (PM-r2-3: the 20 mapping is a `mnemonic repair`
                 // CALLER concern, not baked into the shared engine).
-                if let repair::SetVerify::Unverified { reason } = &outcome.set_verify {
-                    candidate_seen = true;
-                    writeln!(stderr, "repair: {reason}").ok();
+                match &outcome.set_verify {
+                    repair::SetVerify::Unverified { reason } => {
+                        candidate_seen = true;
+                        writeln!(stderr, "repair: {reason}").ok();
+                    }
+                    // Decision 7: an incomplete mk1 set is REPAIRED (16),
+                    // verifiable by reassembly later; it still warns.
+                    repair::SetVerify::IncompleteSet { reason } => {
+                        writeln!(stderr, "repair: {reason}").ok();
+                    }
+                    repair::SetVerify::Blessed | repair::SetVerify::UnreadableVersion { .. } => {}
                 }
             }
             Err(e) if args.max_indel >= 1 && repair::is_indel_trigger(&e) => {
@@ -284,14 +298,19 @@ pub fn run<R: Read, W: Write, E: Write>(
     }
 
     // An Unverified group — a partial-set mk1 (Cycle E) or ANY touched ms1
-    // substitution-correction (Cycle F) — folds into the same exit-4
+    // substitution-correction (Cycle F) — folds into the same 20 (16 + 4)
     // VERIFY-ME precedence tier as an ambiguous indel recovery (SPEC §2
     // rule 3 / §3); `indel_exit_code` itself is unchanged.
-    Ok(repair::indel_exit_code(
+    let code = repair::indel_exit_code(
         ambiguous_seen || candidate_seen,
         substitution_seen,
         total_repairs,
-    ))
+    );
+    Ok(if invalid_seen {
+        code | crate::exit_code::INVALID
+    } else {
+        code
+    })
 }
 
 fn emit_repair_text<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result<(), ToolkitError> {
@@ -329,10 +348,11 @@ struct RepairJson<'a> {
     /// Cycle F (`ms1-repair-demote-to-candidate`) M1/M4 — `"blessed"` for a
     /// clean (or confidently-recovered) card, `"candidate"` for a
     /// touched-but-unverified correction (currently only reachable for ms1
-    /// substitution-corrections and an incomplete mk1 partial-plate group;
+    /// substitution-corrections;
     /// see [`crate::repair::SetVerify`]), `"unreadable_version"` for a
     /// single-string md1 correction at a wire version this build cannot read
-    /// (F-642; exit 4, ruling 8). Fixed position right after `kind`
+    /// (F-642; exit 22, ruling 8). `"incomplete_set"` is a correction in an
+    /// incomplete mk1 chunk set (exit 16, exit-code spec decision 7). Fixed position right after `kind`
     /// — ms-cli's `RepairJson` (Phase P1) must byte-match this field order
     /// (D27/D9).
     verdict: &'static str,
@@ -381,7 +401,7 @@ fn emit_repair_json<W: Write>(outcome: &RepairOutcome, stdout: &mut W) -> Result
             .collect(),
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("repair JSON serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("repair JSON serialize: {e}")))?;
     writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     Ok(())
 }
@@ -400,6 +420,8 @@ fn verdict_str(set_verify: &repair::SetVerify) -> &'static str {
     match set_verify {
         repair::SetVerify::Blessed => "blessed",
         repair::SetVerify::Unverified { .. } => "candidate",
+        // Decision 7: corrected; the rest of the chunk set verifies it.
+        repair::SetVerify::IncompleteSet { .. } => "incomplete_set",
         // F-642: corrected, but at a wire version this build cannot read.
         repair::SetVerify::UnreadableVersion { .. } => "unreadable_version",
     }
@@ -483,7 +505,7 @@ fn emit_indel_json<W: Write>(
         candidates: cands.iter().map(|c| candidate_json(c)).collect(),
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("indel JSON serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("indel JSON serialize: {e}")))?;
     writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     Ok(())
 }

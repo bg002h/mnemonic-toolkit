@@ -573,6 +573,15 @@ Same shape as ms-cli SPEC §5.4:
 
 ## §6. Errors and exit codes
 
+> **Superseded (2026-11-26).** The numbers in §6.1, §6.3 and §6.4.0 are
+> the v0.1 scheme. `mnemonic` now exits with the constellation codes of
+> `SPEC_constellation_exit_codes.md` (mnemonic-engrave `design/`): 0 done;
+> 64 usage; 101 internal; 130 stopped; otherwise a sum of 1 NO, 2 INVALID,
+> 4 UNVERIFIED, 8 REFUSED, 16 REPAIRED, 32 IO. `ToolkitError::exit_code`
+> (`crates/mnemonic-toolkit/src/error.rs`) decides each variant's class,
+> and its class-table test pins every variant. The user manual's
+> Appendix J has the table. The text below is kept as the v0.1 record.
+
 ### §6.1 Exit-code table
 
 | Code | Meaning |

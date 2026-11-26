@@ -75,7 +75,7 @@ fn label_zero_refused() {
         .args(["silent-payment", "--secret", PHRASE, "--label", "0"])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("reserved BIP-352 change label"));
 }
 
@@ -91,7 +91,7 @@ fn wif_input_refused() {
         ])
         .assert()
         .failure()
-        .code(1)
+        .code(2)
         .stderr(predicate::str::contains("seed-bearing"));
 }
 

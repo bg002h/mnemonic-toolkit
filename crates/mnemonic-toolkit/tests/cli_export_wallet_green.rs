@@ -181,7 +181,7 @@ fn cell_5_green_general_taproot_refuses() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("singlesig-only"),
@@ -213,7 +213,7 @@ fn cell_6_green_single_leaf_taproot_refuses() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("singlesig-only"),

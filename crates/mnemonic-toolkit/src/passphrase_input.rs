@@ -196,7 +196,7 @@ pub(crate) fn refuse_second_stdin(readers: &[(bool, &str)]) -> Result<(), Toolki
         .map(|(_, n)| *n)
         .collect();
     if names.len() > 1 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{} all read stdin; only one input can come from stdin per invocation",
             names.join(" and ")
         )));
@@ -629,7 +629,7 @@ pub(crate) fn read_stdin_raw<R: Read + ?Sized>(
     f: &SecretFlag,
     stdin: &mut R,
 ) -> Result<Zeroizing<String>, ToolkitError> {
-    let err = |e: std::io::Error| ToolkitError::BadInput(format!("stdin read: {e}"));
+    let err = |e: std::io::Error| ToolkitError::IoFailure(format!("stdin read: {e}"));
     // wave2 T4: scrub the SCRATCH buffer (passphrase material).
     let mut buf = Zeroizing::new(String::new());
     if stdin_is_terminal() {
@@ -743,7 +743,7 @@ pub(crate) fn resolve_for<R: Read + ?Sized>(
     stdin: &mut R,
 ) -> Result<Option<Zeroizing<String>>, ToolkitError> {
     if stdin_flag && value.is_some() {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "{} and {} cannot both be given (one value, one stdin)",
             f.flag, f.stdin_flag
         )));

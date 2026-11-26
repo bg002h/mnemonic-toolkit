@@ -308,7 +308,7 @@ fn refusal_xpub_prefix_non_default_without_network() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: --xpub-prefix <variant> requires explicit --network (cannot infer mainnet vs. testnet swap from defaults).\n"),
@@ -338,7 +338,7 @@ fn refusal_unknown_extended_key_version_prefix() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with("error: unknown extended-key version prefix: deadbeef\n"),

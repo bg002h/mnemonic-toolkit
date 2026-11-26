@@ -109,7 +109,7 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
     use bitcoin::Address;
 
     let template = inputs.template.ok_or_else(|| {
-        ToolkitError::BadInput(
+        ToolkitError::Usage(
             "--format coldcard requires --template (bip44 / bip49 / bip84); pass a recognized template or use a different format for descriptor passthrough".into(),
         )
     })?;
@@ -139,7 +139,7 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
 
     // Single-slot input — singlesig templates have exactly one resolved slot.
     if inputs.resolved_slots.len() != 1 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "--format coldcard + singlesig template expects exactly one --slot @0 input; got {}",
             inputs.resolved_slots.len(),
         )));
@@ -225,7 +225,7 @@ pub(crate) fn emit_coldcard_generic_json(inputs: &EmitInputs) -> Result<String, 
     };
 
     serde_json::to_string_pretty(&top)
-        .map_err(|e| ToolkitError::BadInput(format!("--format coldcard: serialize: {e}")))
+        .map_err(|e| ToolkitError::Internal(format!("--format coldcard: serialize: {e}")))
 }
 
 /// Which `bipNN` field to populate in the top-level struct.
@@ -259,7 +259,7 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     use crate::template::CliTemplate;
 
     let template = inputs.template.ok_or_else(|| {
-        ToolkitError::BadInput("--format coldcard multisig text requires --template".into())
+        ToolkitError::Usage("--format coldcard multisig text requires --template".into())
     })?;
 
     // tr-multi-a / tr-sortedmulti-a — refuse pending Coldcard firmware support
@@ -285,16 +285,16 @@ pub(crate) fn emit_coldcard_multisig_text(inputs: &EmitInputs) -> Result<String,
     };
 
     let threshold = inputs.threshold.ok_or_else(|| {
-        ToolkitError::BadInput("--format coldcard multisig text requires --threshold <K>".into())
+        ToolkitError::Usage("--format coldcard multisig text requires --threshold <K>".into())
     })?;
     let cosigner_count = inputs.resolved_slots.len();
     if cosigner_count < 2 {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "--format coldcard multisig text requires at least 2 cosigners (--slot @0..@N); got {cosigner_count}",
         )));
     }
     if (threshold as usize) < 1 || (threshold as usize) > cosigner_count {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "--threshold {threshold} out of range for {cosigner_count} cosigners",
         )));
     }
@@ -479,9 +479,9 @@ mod cycle13a_h11_tests {
                     "H11-d must never emit the m/0'/0' placeholder; got: {msg}"
                 );
             }
-            other => panic!("expected BadInput (exit 1), got: {other:?}"),
+            other => panic!("expected BadInput (exit 2), got: {other:?}"),
         }
-        // Exit-code class: BadInput → exit 1.
-        assert_eq!(err.exit_code(), 1, "BadInput must map to exit 1");
+        // Exit-code class: BadInput → exit 2.
+        assert_eq!(err.exit_code(), 2, "BadInput must map to exit 2");
     }
 }

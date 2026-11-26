@@ -34,7 +34,7 @@ impl WalletFormatEmitter for JadeEmitter {
     fn emit(inputs: &EmitInputs) -> Result<String, ToolkitError> {
         use crate::template::CliTemplate;
         let template = inputs.template.ok_or_else(|| {
-            ToolkitError::BadInput(
+            ToolkitError::Usage(
                 "--format jade requires --template (wsh-multi / wsh-sortedmulti / sh-wsh-multi / sh-wsh-sortedmulti); descriptor passthrough is not supported by Jade's file-import surface".into(),
             )
         })?;

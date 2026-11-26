@@ -1284,7 +1284,7 @@ fn search_cosigner_subset_anti_vacuity_missing_true_cosigner_no_match() {
     // Exit 4 = a genuine search NO-MATCH (RestoreMismatch), NOT a parse/input
     // error — the opt-in search ran the full space and found no reproducing
     // subset (load-bearing: it must REACH the search, not refuse early).
-    let assert = mnemonic().args(&args).assert().code(4);
+    let assert = mnemonic().args(&args).assert().code(1);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.to_uppercase().contains("NO MATCH"),
@@ -1915,7 +1915,7 @@ fn explicit_assignment_honours_expect_wallet_id() {
 
     assert_eq!(
         out.status.code(),
-        Some(4),
+        Some(1),
         "a wrong explicit placement that contradicts --expect-wallet-id must \
          exit 4 (RestoreMismatch); stderr: {stderr}"
     );

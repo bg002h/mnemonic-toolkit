@@ -1901,7 +1901,7 @@ fn allow_repeated_keys_bip388_refused() {
         ])
         .write_stdin(repeated_keys_spec())
         .assert()
-        .code(1)
+        .code(2)
         .stdout("")
         .stderr(predicates::str::ends_with(format!(
             "error: --format bip388 cannot express a wallet that uses one public key more than \

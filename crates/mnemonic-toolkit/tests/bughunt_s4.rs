@@ -109,7 +109,7 @@ fn bughunt_tk_15_dice_huge_length_is_refused_cleanly() {
     );
     assert_eq!(
         status.code(),
-        Some(2),
+        Some(64),
         "expected exit 2; got {status:?}; stderr: {err}"
     );
     let mut out = String::new();
@@ -293,7 +293,7 @@ fn bughunt_tk_28_compare_cost_repeated_hash_counted_once() {
         .args(["compare-cost", "--miniscript", &ms, "--max-conditions", "7"])
         .output()
         .unwrap();
-    assert_eq!(over.status.code(), Some(3));
+    assert_eq!(over.status.code(), Some(8));
     assert_eq!(
         String::from_utf8_lossy(&over.stderr),
         "error: compare-cost: spending conditions exceed --max-conditions cap (8 > 7); raise \
@@ -334,7 +334,7 @@ fn bughunt_tk_32_path_of_xpub_min_account_2p31_no_panic() {
         .output()
         .unwrap();
     assert_no_panic(&out, "path-of-xpub --min-account 2147483648");
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(64));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),
         "error: --min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits\n"
@@ -364,7 +364,7 @@ fn bughunt_tk_32_account_of_descriptor_zero_window_2p31_no_panic() {
         &out,
         "account-of-descriptor --min-account 2147483648 --number-of-accounts 0",
     );
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(64));
     assert_eq!(
         String::from_utf8_lossy(&out.stderr),
         "error: --min-account / --max-account / --number-of-accounts: the account window must stay below 2147483648 (2^31): BIP-32 hardened account indexes are 31 bits\n"
@@ -594,7 +594,7 @@ fn bughunt_tk_56_silent_payment_refuses_non_master_xprv() {
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     assert_eq!(
         out.status.code(),
-        Some(1),
+        Some(2),
         "stdout: {stdout}; stderr: {stderr}"
     );
     assert_eq!(stdout, "");

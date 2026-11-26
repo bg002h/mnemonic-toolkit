@@ -541,7 +541,7 @@ fn subset_search_unreachable_own_account_no_match_refuses() {
         args.push(c.clone());
     }
     // No own candidate in 0..2 reproduces the own@4 id → loud refuse, never OK.
-    let assert = bin().args(&args).assert().code(4);
+    let assert = bin().args(&args).assert().code(1);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.to_uppercase().contains("NO MATCH"),

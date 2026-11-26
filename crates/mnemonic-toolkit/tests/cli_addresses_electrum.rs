@@ -147,7 +147,7 @@ fn electrum_address_type_mismatch_refused_exit_1() {
     ]);
     assert_eq!(
         code(&o),
-        1,
+        2,
         "stdout: {}\nstderr: {}",
         stdout(&o),
         stderr(&o)
@@ -174,7 +174,7 @@ fn electrum_account_refused_exit_1() {
     ]);
     assert_eq!(
         code(&o),
-        1,
+        64,
         "stdout: {}\nstderr: {}",
         stdout(&o),
         stderr(&o)
@@ -195,7 +195,7 @@ fn electrum_2fa_refused_exit_1() {
     ]);
     assert_eq!(
         code(&o),
-        1,
+        2,
         "stdout: {}\nstderr: {}",
         stdout(&o),
         stderr(&o)

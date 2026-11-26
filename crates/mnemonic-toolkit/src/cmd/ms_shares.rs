@@ -248,7 +248,7 @@ fn parse_secret_to_entropy(
             }
             Ok(zeroize::Zeroizing::new(bytes))
         }
-        _ => Err(ToolkitError::BadInput(format!(
+        _ => Err(ToolkitError::Usage(format!(
             "ms-shares split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got {}=",
             from.node.as_str(),
         ))),
@@ -266,7 +266,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     // --from variant must be phrase= or entropy= (checked here so the message
     // names the node; parse_secret_to_entropy enforces the same).
     if args.from.node != NodeType::Phrase && args.from.node != NodeType::Entropy {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "ms-shares split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got {}=",
             args.from.node.as_str(),
         )));
@@ -327,10 +327,10 @@ fn run_split<R: Read, W: Write, E: Write>(
             shares: rendered.iter().map(|s| s.as_str()).collect(),
         };
         let body = serde_json::to_string(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("--json serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("--json serialize: {e}")))?;
         let _pin = mnemonic_toolkit::mlock::pin_pages_for(body.as_bytes());
         writeln!(stdout, "{body}")
-            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
     } else {
         // mstring display-grouping (SPEC §6): text shares are flag-controlled
         // (default space/5); the --json branch above stays unbroken.
@@ -343,7 +343,7 @@ fn run_split<R: Read, W: Write, E: Write>(
                 "{}",
                 crate::display_grouping::render_grouped(s.as_str(), gs, sep)
             )
-            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
         }
     }
 
@@ -370,7 +370,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // Single stdin consumer per invocation.
     let stdin_count = share_dash.iter().filter(|d| **d).count();
     if stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "ms-shares combine: at most one stdin consumer per invocation (across --share)".into(),
         ));
     }
@@ -381,7 +381,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     for (sh, dash) in args.share.iter().zip(share_dash.iter().copied()) {
         let s = if dash {
             if stdin_consumed {
-                return Err(ToolkitError::BadInput(
+                return Err(ToolkitError::Usage(
                     "ms-shares combine: at most one stdin consumer per invocation".into(),
                 ));
             }
@@ -500,10 +500,10 @@ fn run_combine<R: Read, W: Write, E: Write>(
             ms1,
         };
         let body = serde_json::to_string(&envelope)
-            .map_err(|e| ToolkitError::BadInput(format!("--json serialize: {e}")))?;
+            .map_err(|e| ToolkitError::Internal(format!("--json serialize: {e}")))?;
         let _pin = mnemonic_toolkit::mlock::pin_pages_for(body.as_bytes());
         writeln!(stdout, "{body}")
-            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
     } else {
         // mstring display-grouping (SPEC §6): group ONLY a recovered `--to ms1`
         // card; --to phrase/entropy emit raw. --json stays unbroken (above).
@@ -516,7 +516,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
             _ => output.to_string(),
         };
         writeln!(stdout, "{rendered}")
-            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
     }
 
     // The recovered secret is PrivateKeyMaterial.

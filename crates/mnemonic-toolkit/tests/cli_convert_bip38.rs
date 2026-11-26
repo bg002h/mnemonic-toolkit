@@ -382,7 +382,7 @@ fn refusal_wif_to_bip38_no_passphrase() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"),
@@ -405,7 +405,7 @@ fn refusal_bip38_to_wif_no_passphrase() {
         ])
         .assert()
         .failure()
-        .code(2);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.ends_with(        "error: --from <bip38|wif> --to <wif|bip38> requires --passphrase or --bip38-passphrase (BIP-38 encryption is passphrase-driven).\n"),
@@ -785,7 +785,7 @@ fn composite_phrase_to_bip38_unset_bip38_passphrase_refuses() {
             "X",
         ])
         .assert()
-        .code(2)
+        .code(64)
         .stderr(
             predicates::str::contains("--bip38-passphrase")
                 .and(predicates::str::contains("--bip38-passphrase \"\"")),
@@ -810,7 +810,7 @@ fn composite_entropy_to_bip38_unset_bip38_passphrase_refuses() {
             "X",
         ])
         .assert()
-        .code(2)
+        .code(64)
         .stderr(predicates::str::contains("--bip38-passphrase"));
 }
 
@@ -836,7 +836,7 @@ fn composite_seedqr_to_bip38_unset_bip38_passphrase_refuses() {
             "X",
         ])
         .assert()
-        .code(2)
+        .code(64)
         .stderr(predicates::str::contains("--bip38-passphrase"));
 }
 

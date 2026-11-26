@@ -31,7 +31,7 @@ fn invalid_checksum_does_not_echo_input_on_stderr() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains(CORRUPTED_MS1),

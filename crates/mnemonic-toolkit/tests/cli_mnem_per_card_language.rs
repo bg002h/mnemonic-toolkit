@@ -206,7 +206,7 @@ fn repair_recovers_corrupt_japanese_mnem_ms1() {
         "corrupted must be invalid"
     );
 
-    // repair should exit 0 (already valid) or 4 (Cycle F
+    // repair should exit 0 (already valid) or 20 = 16 + 4 (Cycle F
     // `ms1-repair-demote-to-candidate` — a touched ms1 substitution
     // correction is a demoted VERIFY-ME candidate, not a silent exit-5
     // "recovered"; the corrected string is still presented on stdout).
@@ -219,8 +219,8 @@ fn repair_recovers_corrupt_japanese_mnem_ms1() {
 
     let exit_code = out.status.code().unwrap_or(-1);
     assert!(
-        exit_code == 0 || exit_code == 4,
-        "repair should exit 0 (already valid) or 4 (candidate correction applied), got {exit_code}"
+        exit_code == 0 || exit_code == 20,
+        "repair should exit 0 (already valid) or 20 (candidate correction applied), got {exit_code}"
     );
 
     let stdout = String::from_utf8(out.stdout.clone()).unwrap();

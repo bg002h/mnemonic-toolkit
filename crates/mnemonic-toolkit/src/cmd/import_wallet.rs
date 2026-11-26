@@ -223,7 +223,7 @@ pub struct ImportWalletArgs {
     /// chars for EXTENDED mode); leading/trailing whitespace + newlines
     /// stripped. Encrypted blobs don't carry the `BSMS 1.0` header so
     /// they don't auto-sniff as BSMS; `--format bsms` is REQUIRED.
-    /// MAC verify failure → exit 2 (typed `BsmsMacMismatch`).
+    /// MAC verify failure → exit 1 (typed `BsmsMacMismatch`).
     /// v0.32.2 — repeatable: one TOKEN per Signer (BIP-129 line 74). A
     /// SINGLE `--bsms-encryption-token` is SHARED (decrypts all encrypted
     /// Round-1 records + the Round-2 blob; backward-compatible with
@@ -236,7 +236,7 @@ pub struct ImportWalletArgs {
     /// v0.27.0 — make BIP-129 Round-1 SIG verification failures fatal.
     /// Without this flag, verify mismatches emit a stderr NOTICE and proceed
     /// with `signature_verified: false`. With this flag, verify mismatch is
-    /// `BsmsSignatureMismatch` exit 2.
+    /// `BsmsSignatureMismatch` exit 1.
     #[arg(long = "bsms-verify-strict")]
     pub bsms_verify_strict: bool,
 
@@ -316,7 +316,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // v0.27.0 — `--bsms-verify-strict` without `--bsms-round1` is meaningless;
     // reject explicitly so the user notices the typo.
     if args.bsms_verify_strict && args.bsms_round1.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--bsms-verify-strict requires `--bsms-round1` (the flag controls \
              BIP-129 Round-1 SIG verify strictness; there are no records to verify)"
                 .to_string(),
@@ -339,14 +339,14 @@ pub fn run<R: Read, W: Write, E: Write>(
         .filter(|p| p.as_os_str() == "-")
         .count();
     if token_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "at most one --bsms-encryption-token=- per invocation (single stdin per invocation)"
                 .to_string(),
         ));
     }
     if let Some(blob_p) = &args.blob {
         if blob_p.as_os_str() == "-" && token_stdin_count > 0 {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Usage(
                 "--blob=- and --bsms-encryption-token=- cannot both read from stdin".to_string(),
             ));
         }
@@ -375,13 +375,13 @@ pub fn run<R: Read, W: Write, E: Write>(
         if let Some(blob_p) = &args.blob {
             // F-687b fold 1 (review M2): a blob PATH that is stdin too.
             if blob_p.as_os_str() == "-" || crate::passphrase_input::path_is_stdin(blob_p) {
-                return Err(ToolkitError::BadInput(format!(
+                return Err(ToolkitError::Usage(format!(
                     "--blob=- and {pw_spelling} cannot both read from stdin"
                 )));
             }
         }
         if token_stdin_count > 0 {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "--bsms-encryption-token=- and {pw_spelling} cannot both read from stdin"
             )));
         }
@@ -392,7 +392,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // count check in `verify_bsms_round1_files` would never fire, so guard
     // here before the token read.
     if args.bsms_encryption_token.len() > 1 && args.bsms_round1.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "per-Signer tokens (multiple --bsms-encryption-token) require matching --bsms-round1 records; none supplied".to_string(),
         ));
     }
@@ -1160,7 +1160,7 @@ electrum|jade|sparrow|specter>"
         // multiple tokens is ambiguous → refuse. (Reached only after the
         // Round-1 verify path above, per the error-precedence design.)
         if bsms_tokens.len() > 1 {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "Round-2 --blob decrypt requires exactly one --bsms-encryption-token; got {} (per-Signer tokens pair with --bsms-round1 records only)",
                 bsms_tokens.len(),
             )));
@@ -1420,7 +1420,7 @@ fn parse_select(s: &str) -> Result<SelectDescriptor, ToolkitError> {
             if let Ok(n) = other.parse::<usize>() {
                 return Ok(SelectDescriptor::ByIndex(n));
             }
-            Err(ToolkitError::BadInput(format!(
+            Err(ToolkitError::Usage(format!(
                 "--select-descriptor: invalid value `{other}`; expected `N` (integer), `active-receive`, `active-change`, or `all`"
             )))
         }
@@ -1643,7 +1643,7 @@ fn emit_json_envelope<W: Write, E: Write>(
             privacy_preserving: false,
         };
         let bundle_value = serde_json::to_value(&bundle_json).map_err(|e| {
-            ToolkitError::BadInput(format!("import-wallet --json bundle serialize: {e}"))
+            ToolkitError::Internal(format!("import-wallet --json bundle serialize: {e}"))
         })?;
 
         // Round-trip per SPEC §7.4 + §7.3 — preserved from v0.26.0 wire
@@ -2093,7 +2093,7 @@ fn emit_json_envelope<W: Write, E: Write>(
     }
 
     let text = serde_json::to_string_pretty(&serde_json::Value::Array(envelopes))
-        .map_err(|e| ToolkitError::BadInput(format!("import-wallet --json serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("import-wallet --json serialize: {e}")))?;
     writeln!(stdout, "{text}").map_err(ToolkitError::Io)?;
     Ok(())
 }
@@ -2363,7 +2363,7 @@ fn resolve_import_decrypt_password<R: Read, E: Write>(
     );
     if let Some(path) = &args.decrypt_password_file {
         let raw = std::fs::read_to_string(path).map_err(|e| {
-            ToolkitError::BadInput(format!(
+            ToolkitError::IoFailure(format!(
                 "--decrypt-password-file: cannot read {}: {e}",
                 path.display()
             ))
@@ -2421,7 +2421,7 @@ fn read_bsms_token<R: Read>(path: &PathBuf, stdin: &mut R) -> Result<String, Too
         buf
     } else {
         fs::read_to_string(path).map_err(|e| {
-            ToolkitError::BadInput(format!(
+            ToolkitError::IoFailure(format!(
                 "--bsms-encryption-token: cannot read token file {}: {e}",
                 path.display()
             ))
@@ -2579,7 +2579,7 @@ fn verify_bsms_round1_files(
     // positional `token[i] ↔ record[i]` mapping is unambiguous.
     if tokens.len() > 1 {
         if tokens.len() != paths.len() {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "per-Signer tokens: supplied {} --bsms-encryption-token but {} --bsms-round1 record(s); counts must match for positional pairing",
                 tokens.len(),
                 paths.len(),
@@ -2604,7 +2604,7 @@ fn verify_bsms_round1_files(
             // v0.27.0 first cut: stdin input for --bsms-round1 deferred. Future:
             // multi-record stdin (one record per blob, separated by sentinel)
             // or single-record-from-stdin (mutually exclusive with --blob -).
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "--bsms-round1 -: stdin input deferred in v0.27.0; supply a file path \
                  (record index {})",
                 i
@@ -2704,7 +2704,7 @@ fn emit_round1_only_envelope<W: Write>(
             .collect::<Vec<_>>(),
     });
     let body = serde_json::to_string(&payload)
-        .map_err(|e| ToolkitError::BadInput(format!("--bsms-round1 envelope serialize: {e}")))?;
+        .map_err(|e| ToolkitError::Internal(format!("--bsms-round1 envelope serialize: {e}")))?;
     writeln!(stdout, "{body}").map_err(ToolkitError::Io)?;
     Ok(())
 }

@@ -18,7 +18,7 @@ pub enum ToolkitError {
         i: u8,
         j: u8,
     },
-    /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 4.
+    /// SPEC §4.11.c BIP-388 distinct-key violation at verify-bundle. Exit 2 (exit-code spec §3).
     /// Re-emitted from `check_key_vector_distinctness` post-binding under
     /// verify-bundle (different exit code + message vs `Bip388Distinctness`).
     Bip388VerifyDistinctness,
@@ -28,7 +28,7 @@ pub enum ToolkitError {
     /// MAC verify failed: either the supplied TOKEN is wrong, or the wire
     /// blob has been tampered with. Per BIP-129 §Encryption (Encrypt-and-MAC
     /// ordering), the MAC is recomputed over decrypted plaintext and
-    /// compared to the received MAC (first 32 bytes of wire). Exit 2 —
+    /// compared to the received MAC (first 32 bytes of wire). Exit 1 (a comparison that came out no) —
     /// authentication-class refusal (typed per FOLLOWUP body recommendation).
     BsmsMacMismatch {
         token_len_hex: usize,
@@ -44,7 +44,7 @@ pub enum ToolkitError {
     /// v0.27.0 — BIP-129 §Round 1 BIP-322 ECDSA recoverable signature
     /// verification failed: signature recovered to a different pubkey than
     /// the one declared on the record's line 3, OR recovery itself failed.
-    /// Exit 2 — explicit failure (NOT a stderr NOTICE; the user opted into
+    /// Exit 1 — explicit failure (NOT a stderr NOTICE; the user opted into
     /// verify by supplying `--bsms-round1` + `--bsms-verify-strict`).
     BsmsSignatureMismatch {
         record_index: usize,
@@ -88,26 +88,26 @@ pub enum ToolkitError {
     /// or otherwise invalid. Exit 2.
     ConvertRefusal(String),
     /// SPEC §6.2 v0.2 cosigner-spec parse error
-    /// (`--cosigner=<xpub>:<fp>:<path>`). Exit 1.
+    /// (`--cosigner=<xpub>:<fp>:<path>`). Exit 2.
     #[allow(dead_code)]
     CosignerSpec {
         cosigner_idx: usize,
         message: String,
     },
-    /// SPEC §6.2 v0.2 cosigners-file (JSON) parse error. Exit 1.
+    /// SPEC §6.2 v0.2 cosigners-file (JSON) parse error. Exit 2.
     #[allow(dead_code)]
     CosignersFile {
         message: String,
     },
     /// v0.36.0 `mnemonic decode-address` — the supplied string is not a valid
-    /// Bitcoin address (bad prefix/HRP/checksum). Exit 1. Public-data utility,
+    /// Bitcoin address (bad prefix/HRP/checksum). Exit 2. Public-data utility,
     /// no secrets.
     DecodeAddress(String),
     /// SPEC_derive_child_v0_7.md §4 / §7 — non-zero `--length` supplied to
-    /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 2.
+    /// an app whose output is fixed-size (`hd-seed`, `xprv`). Exit 64 (`--length` is a setting).
     DeriveChildLengthNotApplicable,
     /// SPEC_derive_child_v0_7.md §7 — `--length <N>` falls outside the
-    /// per-app valid range. Exit 2.
+    /// per-app valid range. Exit 64.
     DeriveChildLengthOutOfRange {
         app: &'static str,
         length: u32,
@@ -122,7 +122,7 @@ pub enum ToolkitError {
     /// `DescriptorParse` covers descriptor *content* failures.
     DescriptorParse(String),
     /// verify-bundle descriptor mode: the completed keyed wallet failed to
-    /// re-parse. Exit 4 (BundleMismatch tier).
+    /// re-parse. Exit 101 (a bug).
     ///
     /// **v0.97.0: believed UNREACHABLE, retained defensively.** Descriptor
     /// INPUT errors (lex/resolve/parse, unreadable `--descriptor-file`,
@@ -141,7 +141,7 @@ pub enum ToolkitError {
     /// v0.26.0 wallet-import cycle — cross-cutting `@env:<VAR>` sentinel
     /// resolution failed. Either the env-var was unset (`Unset`) or the
     /// `<VAR>` token failed POSIX env-var-name validation (`InvalidName`).
-    /// Exit 1 (Tier-1, user-input class) per SPEC_wallet_import_v0_26_0.md §2.3.
+    /// Exit 32 when unset, 64 for an invalid NAME, 2 for a non-UTF-8 value (exit-code spec §3).
     /// Carries the offending `--flag` name for stderr disambiguation across
     /// the 6 secret-flag surfaces enumerated in SPEC §3.1.
     EnvVarMissing {
@@ -263,9 +263,18 @@ pub enum ToolkitError {
     /// `wallet_import::bitcoin_core::BitcoinCoreParser::parse`.
     #[allow(dead_code)]
     ImportWalletXprvForbidden,
+    /// Exit-code spec R13/§3 test 7: a failure no class covers — a toolkit bug
+    /// (a serializer that cannot fail failing, an invariant the code
+    /// guarantees broken). Exit 101.
+    Internal(String),
     /// v0.22.0 repair feature — std::io::Error from emit_repair_report
-    /// writes to stdout/stderr. Exit 1 (generic toolkit failure).
+    /// writes to stdout/stderr. Exit 32 (2 for bytes that are not UTF-8).
     Io(std::io::Error),
+    /// Exit-code spec §3 test 2: something the tool needed from the system
+    /// failed or is missing — a file it reads or writes, stdin, stdout, an
+    /// unset environment variable, a feature this build lacks. The message
+    /// names the flag and the OS error. Exit 32.
+    IoFailure(String),
     /// An md1 `descriptor-mnemonic` CARD was passed where a raw descriptor is
     /// expected (`export-wallet`/`bundle` `--descriptor`). md1 is an engraved
     /// card, not a descriptor — decode it first. `surface` names the CLI context.
@@ -274,6 +283,18 @@ pub enum ToolkitError {
     },
     MdCodec(md_codec::Error),
     MkCodec(mk_codec::Error),
+    /// A `ModeViolation`-shaped refusal whose decision READ an input (the md1
+    /// card, the descriptor), so it is not a usage error (exit-code spec
+    /// decision 2): the input is wrong or insufficient for this verb. Same
+    /// message as `ModeViolation`. Exit 2.
+    ModeInputViolation {
+        // mode/flag are read by `details()` for SPEC §5.5 JSON output.
+        #[allow(dead_code)]
+        mode: &'static str,
+        #[allow(dead_code)]
+        flag: &'static str,
+        message: &'static str,
+    },
     ModeViolation {
         // mode/flag are read by `details()` for SPEC §5.5 JSON output (wired in v0.1+ JSON path).
         #[allow(dead_code)]
@@ -284,7 +305,7 @@ pub enum ToolkitError {
     },
     MsCodec(ms_codec::Error),
     /// SPEC §6.2 v0.2 multisig configuration error (threshold/cosigner-count
-    /// out of range, k > n, etc.). Exit 1 (user-input).
+    /// out of range, k > n, etc.). Exit 2.
     #[allow(dead_code)]
     MultisigConfig {
         message: String,
@@ -293,7 +314,7 @@ pub enum ToolkitError {
     /// disagrees with the asserted network (coin-type-derived, `--network`, or
     /// a WIF's own network byte). cycle-5 S-NET: fail-closed network-provenance
     /// invariant, wired at import/convert/export sites via
-    /// `network::assert_network_agrees`. Exit 2 (user-input / funds-safety).
+    /// `network::assert_network_agrees`. Exit 8 (a network mismatch, exit-code spec decision 1).
     NetworkMismatch {
         decoded_network: &'static str,
         expected_network: &'static str,
@@ -302,6 +323,10 @@ pub enum ToolkitError {
     /// A nostr key (`npub`/`nsec` NIP-19 bech32 or 64-hex) failed to decode or
     /// validate (bad bech32/HRP/length, not-on-curve x-only, out-of-range scalar).
     NostrKeyParse(String),
+    /// Exit-code spec §3 tests 3 and 5: the tool declined under a safety or
+    /// policy rule that a flag, network, channel or different destination
+    /// would waive, or a network mismatch. Exit 8.
+    Refused(String),
     /// v0.75.0 `mnemonic inspect <md1>` — the canonical
     /// `md_codec::descriptor_to_template` renderer (relocated into md-codec
     /// 0.40.0) refused to render the keyless `@N` wallet-policy template for a
@@ -328,7 +353,7 @@ pub enum ToolkitError {
         exit_code: u8,
     },
     /// `restore` reference cross-check failed: derived material ≠ supplied
-    /// `--expect-*` (or, future, cosigner slot). Exit 4 (verify/mismatch tier,
+    /// `--expect-*` (or, future, cosigner slot). Exit 1 (a comparison that came out no,
     /// alongside `BundleMismatch`/`ImportWalletSeedMismatch`). Surfaced via
     /// `message()` only (no `details()` JSON-error envelope — SPEC I3).
     RestoreMismatch {
@@ -339,7 +364,7 @@ pub enum ToolkitError {
     },
     /// v0.35.0 — `mnemonic silent-payment` BIP-352 receiver-address derivation
     /// failure: a non-seed-bearing secret (WIF/minikey), the reserved `m=0`
-    /// change label, or a derivation/label-tweak error. Exit 1 (parse/usage
+    /// change label, or a derivation/label-tweak error. Exit 2 (parse
     /// class, like `NostrKeyParse`).
     SilentPayment(String),
     /// SPEC §6.6 row 4 (conflict) / row 8 (gap) / §6.6.b (invalid subkey set)
@@ -371,9 +396,13 @@ pub enum ToolkitError {
         got: String,
         expected_one_of: Vec<&'static str>,
     },
+    /// Exit-code spec decision 2: the command line alone is wrong (a flag
+    /// combination, a missing argument, a bad SETTING such as a count or a
+    /// range), judged without reading any input. Nothing ran. Exit 64.
+    Usage(String),
     /// v0.36.0 `mnemonic verify-message` — message-signature verification
     /// could not be performed (bad address, undecodable signature, or
-    /// `--format legacy` on a non-P2PKH address). Exit 1. A cleanly-decoded
+    /// `--format legacy` on a non-P2PKH address). Exit 2. A cleanly-decoded
     /// signature that simply does NOT verify is NOT this error — that path
     /// emits a structured `valid:false` result. Public-data, no secrets.
     VerifyMessage(String),
@@ -387,7 +416,7 @@ pub enum ToolkitError {
     /// MUST refuse with a non-zero exit, NEVER return a wrong payload).
     WordCard(wc_codec::WcError),
     /// v0.26.0 `mnemonic xpub-search` — no match found in the searched
-    /// candidate set. Exit 4 (sibling to `BundleMismatch` /
+    /// candidate set. Exit 1 (sibling to `BundleMismatch` /
     /// `Bip388VerifyDistinctness` — search-target mismatch class).
     /// `mode` distinguishes which xpub-search mode emitted (one of
     /// `"path-of-xpub"`, `"account-of-descriptor"`, `"address-of-xpub"`,
@@ -444,47 +473,48 @@ pub enum BitcoinErrorKind {
     FingerprintParse(String),
 }
 
-/// SPEC §6.4.3 routing (delegates to ms-cli's §6.1.1 dispatch table).
-/// `ReservedTagNotEmittedInV01` is intercepted by `From` to `FutureFormat` (exit 3).
+/// ms-codec errors by the exit-code spec's §3 tests. `ReservedTagNotEmittedInV01`
+/// is intercepted by `From` to `FutureFormat` (2). Every variant this crate's
+/// pinned ms-codec has is named; the enum is `#[non_exhaustive]`, so a variant
+/// a later ms-codec adds is unclassified until it is named here: 101 (R13).
 fn ms_codec_exit_code(e: &ms_codec::Error) -> u8 {
+    use crate::exit_code::{INTERNAL, INVALID, USAGE};
     match e {
+        // Every decode, format and share-set reject is an input wrong for the
+        // verb (test 6), including a combine over an INCONSISTENT share set
+        // (cycle-4 M6), which pre-0.5.0 silently produced a wrong secret.
         ms_codec::Error::Codex32(_)
+        | ms_codec::Error::MnemUnknownLanguage(_)
         | ms_codec::Error::UnexpectedStringLength { .. }
-        | ms_codec::Error::PayloadLengthMismatch { .. } => 1,
-        ms_codec::Error::WrongHrp { .. }
+        | ms_codec::Error::PayloadLengthMismatch { .. }
+        | ms_codec::Error::TooManyErrors { .. }
+        | ms_codec::Error::WrongHrp { .. }
         | ms_codec::Error::ThresholdNotZero { .. }
         | ms_codec::Error::ShareIndexNotSecret { .. }
         | ms_codec::Error::TagInvalidAlphabet { .. }
         | ms_codec::Error::UnknownTag { .. }
+        | ms_codec::Error::ReservedTagNotEmittedInV01 { .. }
         | ms_codec::Error::ReservedPrefixViolation { .. }
-        // v0.2 K-of-N (SPEC_ms_v0_2_kofn §4 R0-m3): a consume path handed a
-        // share, or the secret-at-S handed to combine, is a FORMAT VIOLATION
-        // (the string is well-formed codex32 but the wrong shape/kind for the
-        // op) → exit 2, mirroring ms-cli's `FormatViolation`. The split-side
-        // `InvalidThreshold`/`InvalidShareCount` are user-input (BadInput,
-        // exit 1) and fall through to the wildcard below — matching ms-cli.
         | ms_codec::Error::IsShareNotSingleString { .. }
         | ms_codec::Error::SecretShareSuppliedToCombine
-        // cycle-4 M6 (ms-codec 0.5.0): a combine over a same-id but
-        // INCONSISTENT share set (shares from different splits sharing
-        // hrp/id/threshold/length) — would have silently produced a WRONG
-        // secret pre-0.5.0. This is a funds-safety FORMAT VIOLATION → exit 2,
-        // alongside the other combine-family rejects. The enum is
-        // `#[non_exhaustive]`, so this is a SILENT fallthrough (the `_ => 1`
-        // wildcard would otherwise absorb it) — the arm is explicit by design.
-        | ms_codec::Error::InconsistentShareSet => 2,
-        // ReservedTagNotEmittedInV01 is intercepted by From → FutureFormat.
-        _ => 1,
+        | ms_codec::Error::InconsistentShareSet => INVALID,
+        // A split's K and N are SETTINGS (decision 2): judged from the command
+        // line alone, so a bad one is a usage error.
+        ms_codec::Error::InvalidThreshold(_) | ms_codec::Error::InvalidShareCount { .. } => USAGE,
+        _ => INTERNAL,
     }
 }
 
-/// SPEC §6.4.4 routing. `UnsupportedVersion` is intercepted by `From` to `FutureFormat`.
+/// mk-codec errors by §3. `UnsupportedVersion` is intercepted by `From` to
+/// `FutureFormat` (2). Every variant is an input wrong for the verb (test 6);
+/// a variant a later mk-codec adds is 101 until it is named here (R13).
 fn mk_codec_exit_code(e: &mk_codec::Error) -> u8 {
+    use crate::exit_code::{INTERNAL, INVALID};
     match e {
         mk_codec::Error::InvalidStringLength(_)
         | mk_codec::Error::InvalidChar { .. }
-        | mk_codec::Error::BchUncorrectable(_) => 1,
-        mk_codec::Error::InvalidHrp(_)
+        | mk_codec::Error::BchUncorrectable(_)
+        | mk_codec::Error::InvalidHrp(_)
         | mk_codec::Error::MixedCase
         | mk_codec::Error::UnsupportedCardType(_)
         | mk_codec::Error::MalformedPayloadPadding
@@ -492,6 +522,7 @@ fn mk_codec_exit_code(e: &mk_codec::Error) -> u8 {
         | mk_codec::Error::ChunkedHeaderMalformed(_)
         | mk_codec::Error::MixedHeaderTypes
         | mk_codec::Error::CrossChunkHashMismatch
+        | mk_codec::Error::UnsupportedVersion(_)
         | mk_codec::Error::ReservedBitsSet
         | mk_codec::Error::InvalidPolicyIdStubCount
         | mk_codec::Error::InvalidPathIndicator(_)
@@ -501,28 +532,26 @@ fn mk_codec_exit_code(e: &mk_codec::Error) -> u8 {
         | mk_codec::Error::InvalidXpubPublicKey(_)
         | mk_codec::Error::UnexpectedEnd
         | mk_codec::Error::TrailingBytes
-        | mk_codec::Error::CardPayloadTooLarge { .. } => 2,
-        mk_codec::Error::XpubOriginPathMismatch { .. } => 2,
-        // UnsupportedVersion is intercepted by From → FutureFormat.
-        _ => 1,
+        | mk_codec::Error::CardPayloadTooLarge { .. }
+        | mk_codec::Error::XpubOriginPathMismatch { .. } => INVALID,
+        _ => INTERNAL,
     }
 }
 
-/// SPEC §6.4.5 routing. md_codec::Error is NOT `#[non_exhaustive]`; match is exhaustive.
-/// `WireVersionMismatch` is intercepted by `From` to `FutureFormat` (exit 3).
-///
-/// v0.30 wire-format clean break (md-codec) removed `ReservedHeaderBitSet`,
-/// `UnsupportedVersion`, `UnknownPrimaryTag`, `UnknownExtensionTag`. v0.32
-/// removed `UnsupportedDerivationShape`. Replacements: `WireVersionMismatch`
-/// (semantic replacement for UnsupportedVersion; same exit-3 routing),
-/// `TagOutOfRange` (replaces both Unknown*Tag variants), `MalformedHeader`,
-/// `NUMSSentinelConflict`, `OperatorContextViolation`,
-/// `DecodeRecursionDepthExceeded`, `AddressDerivationFailed` (replaces
-/// UnsupportedDerivationShape).
+/// md-codec errors by §3. md_codec::Error is NOT `#[non_exhaustive]`, so this
+/// match is exhaustive and a new md-codec variant fails the build until it is
+/// classified. Every variant is a card, descriptor or value wrong for the verb
+/// (test 6): checksum and BCH failures, structural and TLV rejects, the
+/// funds-safety rejects detectable from the card alone (DuplicateKeySlots,
+/// OriginKeyContradiction, RelativeTimelockTruncated, the Unspendable*
+/// refusals), chunk-set rejects, the encode-side length caps, and a newer wire
+/// version (intercepted by `From` to `FutureFormat`, also 2).
 fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
+    use crate::exit_code::INVALID;
     match e {
-        md_codec::Error::Codex32DecodeError(_) | md_codec::Error::Codex32EncodeError(_) => 1,
-        md_codec::Error::BitStreamTruncated { .. }
+        md_codec::Error::Codex32DecodeError(_)
+        | md_codec::Error::Codex32EncodeError(_)
+        | md_codec::Error::BitStreamTruncated { .. }
         | md_codec::Error::MalformedHeader { .. }
         | md_codec::Error::PathDepthExceeded { .. }
         | md_codec::Error::KeyCountOutOfRange { .. }
@@ -533,16 +562,9 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::ChildCountOutOfRange { .. }
         | md_codec::Error::KGreaterThanN { .. }
         | md_codec::Error::TlvOrderingViolation { .. }
-        // md-codec 0.48.x: an unknown TLV tag outside the reserved range
-        // 0x04..=0x1f is non-canonical wire, a decode reject like its siblings.
         | md_codec::Error::TlvUnknownTagOutOfRange { .. }
         | md_codec::Error::PlaceholderIndexOutOfRange { .. }
         | md_codec::Error::OverrideOrderViolation { .. }
-        // md-codec 0.37.0 D5(a) decode canonical-form rejects: an `@0`
-        // override (`@0` is the baseline, never overridable) or a redundant
-        // override equal to the baseline. Both are non-canonical / adversarial
-        // wire (our encoders never emit either) → decode-reject class, exit 2,
-        // same routing as the sibling TLV/override decode rejects.
         | md_codec::Error::BaselineUseSiteOverride { .. }
         | md_codec::Error::RedundantUseSiteOverride { .. }
         | md_codec::Error::EmptyTlvEntry { .. }
@@ -552,19 +574,6 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::MultipathAltCountMismatch { .. }
         | md_codec::Error::ForbiddenTapTreeLeaf { .. }
         | md_codec::Error::OperatorContextViolation { .. }
-        // md-codec 0.43/0.44 funds-safety refusals. All three are detectable
-        // from the card alone and are refused rather than warned about, so they
-        // route with the sibling validation rejects at exit 2:
-        //   DuplicateKeySlots       — two @N slots carry the same key AND
-        //                             use-site, so the policy is not the k-of-n
-        //                             it claims.
-        //   OriginKeyContradiction  — one (fingerprint, path) pair, two
-        //                             different xpubs. BIP-32 is deterministic,
-        //                             so that is impossible; no address check
-        //                             catches it because addresses derive from
-        //                             the xpubs a card CARRIES.
-        //   RelativeTimelockTruncated — an `older()` above 65535 that BIP-68
-        //                             silently masks to something shorter.
         | md_codec::Error::DuplicateKeySlots { .. }
         | md_codec::Error::OriginKeyContradiction { .. }
         | md_codec::Error::RelativeTimelockTruncated { .. }
@@ -580,13 +589,6 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::ChunkSetIdMismatch { .. }
         | md_codec::Error::VarintOverflow { .. }
         | md_codec::Error::MissingExplicitOrigin { .. }
-        // md-codec 0.42.0 (partial-decode P0.3): a use-site override that
-        // resolves to an EMPTY origin. The unconditional pre-canonical reject
-        // that partial-decode's `allow_unresolved_origin` must NOT swallow (only
-        // `MissingExplicitOrigin` is fatal-in-partial-suppressible) — an empty
-        // override is malformed/adversarial wire our encoders never emit →
-        // decode-reject class, exit 2, same routing as the sibling origin/TLV
-        // rejects above. See design/SPEC_pathless_partial_decode.md (SPEC-R0 I1).
         | md_codec::Error::EmptyOriginOverride { .. }
         | md_codec::Error::InvalidPresenceByte { .. }
         | md_codec::Error::InvalidXpubBytes { .. }
@@ -596,108 +598,116 @@ fn md_codec_exit_code(e: &md_codec::Error) -> u8 {
         | md_codec::Error::AddressDerivationFailed { .. }
         | md_codec::Error::NUMSSentinelConflict
         | md_codec::Error::DecodeRecursionDepthExceeded { .. }
-        // v0.34.0 BCH-error-correction variant (Phase B.2): uncorrectable chunk
-        // → exit 2 (Repair error class, matches RepairError::TooManyErrors).
         | md_codec::Error::TooManyErrors { .. }
-        // md-codec 0.41.0 F-A8: the shared TLV parser now rejects a non-zero
-        // trailing-pad tail (`reject_non_zero_pad`, ≤7 bits) that pre-0.41.0
-        // silently accepted (`break;`). A non-zero pad is non-canonical /
-        // adversarial wire (our encoders always zero-pad) → decode-reject
-        // class, exit 2, same routing as the sibling structural/TLV rejects
-        // (sibling precedent: mk_codec::Error::MalformedPayloadPadding → 2).
         | md_codec::Error::MalformedPayloadPadding { .. }
-        // cycle-4 (md-codec 0.38.0) length-cap rejects on the codex32 regular
-        // code (93-symbol bounded). H6 = encode-side over-80-data-symbol reject;
-        // M4 = correcting-decode over-93-symbol chunk reject; I1 = non-correcting
-        // decode over-93-symbol string reject. All three are decode/format-reject
-        // class → exit 2, same routing as the sibling chunk-shape/TooManyErrors
-        // rejects above.
         | md_codec::Error::PayloadTooLongForSingleString { .. }
         | md_codec::Error::ChunkSymbolCountOutOfRange { .. }
         | md_codec::Error::StringSymbolCountOutOfRange { .. }
-        // md-codec 0.46.0/0.47.0 (F-449, wire-kind-1 Liana unspendable internal
-        // key). The three `Unspendable*` refusals are detectable from the card
-        // alone and refused rather than warned about, so they route with the
-        // sibling funds-safety validation rejects (DuplicateKeySlots,
-        // ForbiddenTapTreeLeaf) at exit 2. `NonMinimalWireVersion` is an
-        // encode-side reject no public encoder reaches → with the other
-        // encode-side reject (PayloadTooLongForSingleString) at exit 2.
-        // `NetworkRequiredForUnspendable` is a render-time refusal (a
-        // network-less renderer asked for a Liana tree) → with its nearest
-        // render-time sibling AddressDerivationFailed at exit 2.
         | md_codec::Error::NetworkRequiredForUnspendable
         | md_codec::Error::NonMinimalWireVersion { .. }
         | md_codec::Error::UnspendableNotRootTr
         | md_codec::Error::UnspendableUseSiteNotCanonical { .. }
-        | md_codec::Error::UnspendableWithSortedMultiA => 2,
-        // WireVersionMismatch is intercepted by From → FutureFormat.
-        md_codec::Error::WireVersionMismatch { .. } => 3,
+        | md_codec::Error::UnspendableWithSortedMultiA
+        | md_codec::Error::WireVersionMismatch { .. } => INVALID,
     }
 }
 
 impl ToolkitError {
-    /// SPEC §6.1 exit-code mapping; sibling-codec wrappers dispatch to per-variant
-    /// helpers per SPEC §6.4.3 / §6.4.4 / §6.4.5 routing tables.
+    /// The process exit status for this error, by the ordered tests of
+    /// `SPEC_constellation_exit_codes.md` §3 (mnemonic-engrave `design/`).
+    /// Every variant is classified here and pinned by the R13 table test
+    /// `exit_code_every_variant_has_its_class`. A verb that prints a result
+    /// despite a failure returns its bit sum as `Ok(code)` instead.
     pub fn exit_code(&self) -> u8 {
+        use crate::exit_code::{INTERNAL, INVALID, IO, NO, REFUSED, USAGE};
         match self {
-            ToolkitError::BadInput(_) => 1,
-            ToolkitError::Bip39(_) => 1,
-            ToolkitError::Bip388Distinctness { .. } => 2,
-            ToolkitError::Bip388VerifyDistinctness => 4,
-            ToolkitError::Bitcoin(_) => 1,
-            ToolkitError::BsmsMacMismatch { .. } => 2,
-            ToolkitError::BsmsRound1Malformed { .. } => 2,
-            ToolkitError::BsmsSignatureMismatch { .. } => 2,
-            ToolkitError::BsmsTaprootImportRefused => 2,
-            ToolkitError::BsmsTaprootRefused { .. } => 2,
-            ToolkitError::BuildDescriptorSpec(_) => 2,
-            ToolkitError::BundleMismatch { .. } => 4,
+            // Mostly a malformed or insufficient input value (test 6). The
+            // flag-combination, file and network cases that were BadInput
+            // moved to `Usage`, `IoFailure` and `Refused`.
+            ToolkitError::BadInput(_) => INVALID,
+            ToolkitError::Bip39(_) => INVALID,
+            ToolkitError::Bip388Distinctness { .. } => INVALID,
+            // §3 worked table: "a BIP-388 distinctness violation in verify" is 2.
+            ToolkitError::Bip388VerifyDistinctness => INVALID,
+            ToolkitError::Bitcoin(_) => INVALID,
+            // Decision 11 / §7f: the strict BSMS MAC and signature mismatches
+            // are comparisons that came out no (test 4).
+            ToolkitError::BsmsMacMismatch { .. } => NO,
+            ToolkitError::BsmsRound1Malformed { .. } => INVALID,
+            ToolkitError::BsmsSignatureMismatch { .. } => NO,
+            ToolkitError::BsmsTaprootImportRefused => INVALID,
+            ToolkitError::BsmsTaprootRefused { .. } => INVALID,
+            ToolkitError::BuildDescriptorSpec(_) => INVALID,
+            ToolkitError::BundleMismatch { .. } => NO,
             ToolkitError::CompareCost(e) => e.exit_code(),
-            ToolkitError::ConvertRefusal(_) => 2,
-            ToolkitError::CosignerSpec { .. } => 1,
-            ToolkitError::CosignersFile { .. } => 1,
-            ToolkitError::DecodeAddress(_) => 1,
-            ToolkitError::DeriveChildLengthNotApplicable => 2,
-            ToolkitError::DeriveChildLengthOutOfRange { .. } => 2,
-            ToolkitError::DeriveChildUnsupportedApp => 2,
-            ToolkitError::DescriptorParse(_) => 2,
-            ToolkitError::DescriptorReparseFailed { .. } => 4,
-            ToolkitError::EnvVarMissing { .. } => 1,
-            ToolkitError::ExportWalletFormatStub(_) => 2,
-            ToolkitError::ExportWalletMissingFields { .. } => 2,
-            ToolkitError::ExportWalletSecretInput => 2,
-            ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => 2,
-            ToolkitError::ExportWalletUnsortedMultisigUnsupported { .. } => 2,
-            ToolkitError::FutureFormat { .. } => 3,
-            ToolkitError::HrpMismatch { .. } => 2,
-            ToolkitError::ImportWalletAmbiguousFormat(_) => 1,
-            ToolkitError::ImportWalletFormatMismatch { .. } => 1,
-            ToolkitError::ImportWalletNetworkClassMismatch { .. } => 1,
-            ToolkitError::ImportWalletParse(_) => 2,
-            ToolkitError::ImportWalletSeedMismatch { .. } => 4,
-            ToolkitError::ImportWalletWatchOnlyViolation(_) => 2,
-            ToolkitError::ImportWalletXprvForbidden => 2,
-            ToolkitError::Io(_) => 1,
-            ToolkitError::Md1CardNotADescriptor { .. } => 2,
+            ToolkitError::ConvertRefusal(_) => INVALID,
+            ToolkitError::CosignerSpec { .. } => INVALID,
+            ToolkitError::CosignersFile { .. } => INVALID,
+            ToolkitError::DecodeAddress(_) => INVALID,
+            // `--length` is a SETTING (the output's size), judged from argv.
+            ToolkitError::DeriveChildLengthNotApplicable => USAGE,
+            ToolkitError::DeriveChildLengthOutOfRange { .. } => USAGE,
+            // §3 worked table: a valid name the tool will not do; no flag waives it.
+            ToolkitError::DeriveChildUnsupportedApp => INVALID,
+            ToolkitError::DescriptorParse(_) => INVALID,
+            // Believed unreachable: a failure would be toolkit-internal parse
+            // non-determinism, a bug.
+            ToolkitError::DescriptorReparseFailed { .. } => INTERNAL,
+            // §3 worked table: `@env:NAME` with NAME unset is 32. A NAME that is
+            // not a valid variable name is judged from argv (64); a value that
+            // is not UTF-8 is a malformed input (2).
+            ToolkitError::EnvVarMissing { reason, .. } => match reason {
+                EnvVarMissingReason::Unset => IO,
+                EnvVarMissingReason::InvalidName => USAGE,
+                EnvVarMissingReason::NotUnicode => INVALID,
+            },
+            ToolkitError::ExportWalletFormatStub(_) => INVALID,
+            ToolkitError::ExportWalletMissingFields { .. } => INVALID,
+            // §7f: export is watch-only by definition, so no flag clears it.
+            ToolkitError::ExportWalletSecretInput => INVALID,
+            ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => INVALID,
+            ToolkitError::ExportWalletUnsortedMultisigUnsupported { .. } => INVALID,
+            // §7f: a newer wire version is an invalid input (was 3).
+            ToolkitError::FutureFormat { .. } => INVALID,
+            ToolkitError::HrpMismatch { .. } => INVALID,
+            ToolkitError::ImportWalletAmbiguousFormat(_) => INVALID,
+            ToolkitError::ImportWalletFormatMismatch { .. } => INVALID,
+            // A network mismatch (test 3).
+            ToolkitError::ImportWalletNetworkClassMismatch { .. } => REFUSED,
+            ToolkitError::ImportWalletParse(_) => INVALID,
+            ToolkitError::ImportWalletSeedMismatch { .. } => NO,
+            // "watch-only invariant violated (internal bug)".
+            ToolkitError::ImportWalletWatchOnlyViolation(_) => INTERNAL,
+            ToolkitError::ImportWalletXprvForbidden => INVALID,
+            ToolkitError::Internal(_) => INTERNAL,
+            // A read whose bytes are not UTF-8 is a malformed input, not a
+            // system failure.
+            ToolkitError::Io(e) if e.kind() == std::io::ErrorKind::InvalidData => INVALID,
+            ToolkitError::Io(_) => IO,
+            ToolkitError::IoFailure(_) => IO,
+            ToolkitError::Md1CardNotADescriptor { .. } => INVALID,
             ToolkitError::MdCodec(e) => md_codec_exit_code(e),
             ToolkitError::MkCodec(e) => mk_codec_exit_code(e),
-            ToolkitError::ModeViolation { .. } => 2,
+            ToolkitError::ModeInputViolation { .. } => INVALID,
+            ToolkitError::ModeViolation { .. } => USAGE,
             ToolkitError::MsCodec(e) => ms_codec_exit_code(e),
-            ToolkitError::MultisigConfig { .. } => 1,
-            ToolkitError::NetworkMismatch { .. } => 2,
-            ToolkitError::NostrKeyParse(_) => 1,
-            ToolkitError::Render(_) => 2,
-            ToolkitError::Repair(_) => 2,
+            ToolkitError::MultisigConfig { .. } => INVALID,
+            ToolkitError::NetworkMismatch { .. } => REFUSED,
+            ToolkitError::NostrKeyParse(_) => INVALID,
+            ToolkitError::Refused(_) => REFUSED,
+            ToolkitError::Render(_) => INVALID,
+            ToolkitError::Repair(_) => INVALID,
             ToolkitError::RepairShortCircuit { exit_code } => *exit_code,
-            ToolkitError::RestoreMismatch { .. } => 4,
-            ToolkitError::SilentPayment(_) => 1,
-            ToolkitError::SlotInputViolation { .. } => 2,
-            ToolkitError::TemplateFormUnsupportedShape { .. } => 2,
-            ToolkitError::UnknownHrp { .. } => 2,
-            ToolkitError::VerifyMessage(_) => 1,
-            ToolkitError::WordCard(_) => 2,
-            ToolkitError::XpubSearchNoMatch { .. } => 4,
-            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 4,
+            ToolkitError::RestoreMismatch { .. } => NO,
+            ToolkitError::SilentPayment(_) => INVALID,
+            ToolkitError::SlotInputViolation { .. } => INVALID,
+            ToolkitError::TemplateFormUnsupportedShape { .. } => INVALID,
+            ToolkitError::UnknownHrp { .. } => INVALID,
+            ToolkitError::Usage(_) => USAGE,
+            ToolkitError::VerifyMessage(_) => INVALID,
+            ToolkitError::WordCard(_) => INVALID,
+            ToolkitError::XpubSearchNoMatch { .. } => NO,
+            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => NO,
         }
     }
 
@@ -749,15 +759,19 @@ impl ToolkitError {
             ToolkitError::ImportWalletSeedMismatch { .. } => "ImportWalletSeedMismatch",
             ToolkitError::ImportWalletWatchOnlyViolation(_) => "ImportWalletWatchOnlyViolation",
             ToolkitError::ImportWalletXprvForbidden => "ImportWalletXprvForbidden",
+            ToolkitError::Internal(_) => "Internal",
             ToolkitError::Io(_) => "Io",
+            ToolkitError::IoFailure(_) => "IoFailure",
             ToolkitError::Md1CardNotADescriptor { .. } => "Md1CardNotADescriptor",
             ToolkitError::MdCodec(_) => "MdCodec",
             ToolkitError::MkCodec(_) => "MkCodec",
+            ToolkitError::ModeInputViolation { .. } => "ModeInputViolation",
             ToolkitError::ModeViolation { .. } => "ModeViolation",
             ToolkitError::MsCodec(_) => "MsCodec",
             ToolkitError::MultisigConfig { .. } => "MultisigConfig",
             ToolkitError::NetworkMismatch { .. } => "NetworkMismatch",
             ToolkitError::NostrKeyParse(_) => "NostrKeyParse",
+            ToolkitError::Refused(_) => "Refused",
             ToolkitError::Render(_) => "Render",
             ToolkitError::Repair(_) => "Repair",
             ToolkitError::RepairShortCircuit { .. } => "RepairShortCircuit",
@@ -766,6 +780,7 @@ impl ToolkitError {
             ToolkitError::SlotInputViolation { .. } => "SlotInputViolation",
             ToolkitError::TemplateFormUnsupportedShape { .. } => "TemplateFormUnsupportedShape",
             ToolkitError::UnknownHrp { .. } => "UnknownHrp",
+            ToolkitError::Usage(_) => "Usage",
             ToolkitError::VerifyMessage(_) => "VerifyMessage",
             ToolkitError::WordCard(_) => "WordCard",
             ToolkitError::XpubSearchNoMatch { .. } => "XpubSearchNoMatch",
@@ -929,7 +944,9 @@ impl ToolkitError {
                  xpub-only output"
                     .to_string()
             }
+            ToolkitError::Internal(m) => format!("internal error (a bug; please report it): {m}"),
             ToolkitError::Io(e) => format!("I/O error: {e}"),
+            ToolkitError::IoFailure(m) => m.clone(),
             ToolkitError::Md1CardNotADescriptor { surface } => format!(
                 "{surface}: this is an md1 descriptor-mnemonic CARD, not a raw descriptor. \
                  md1 cards are not accepted on --descriptor. Decode the card first \
@@ -939,6 +956,7 @@ impl ToolkitError {
             ),
             ToolkitError::MdCodec(e) => crate::friendly::friendly_md_codec(e),
             ToolkitError::MkCodec(e) => crate::friendly::friendly_mk_codec(e),
+            ToolkitError::ModeInputViolation { message, .. } => (*message).to_owned(),
             ToolkitError::ModeViolation { message, .. } => (*message).to_owned(),
             ToolkitError::MsCodec(e) => crate::friendly::friendly_ms_codec(e),
             ToolkitError::MultisigConfig { message } => message.clone(),
@@ -952,6 +970,7 @@ impl ToolkitError {
                  mainnet vs testnet/signet/regtest only)"
             ),
             ToolkitError::NostrKeyParse(msg) => format!("nostr: {msg}"),
+            ToolkitError::Refused(m) => m.clone(),
             // `RenderError`'s Display already carries a structural-guard message
             // ("malformed descriptor tree: …"); surface it via the source.
             ToolkitError::Render(e) => format!("inspect: template render failed: {e}"),
@@ -990,6 +1009,7 @@ impl ToolkitError {
                     expected_one_of.join(", ")
                 )
             }
+            ToolkitError::Usage(m) => m.clone(),
             ToolkitError::VerifyMessage(m) => format!("verify-message: {m}"),
             // `WcError`'s own Display already carries the `word-card: …` prefix
             // and a refuse/repair-aware message; surface it verbatim.
@@ -1029,7 +1049,8 @@ impl ToolkitError {
                 "source": source,
                 "detail": detail,
             })),
-            ToolkitError::ModeViolation { mode, flag, .. } => Some(json!({
+            ToolkitError::ModeInputViolation { mode, flag, .. }
+            | ToolkitError::ModeViolation { mode, flag, .. } => Some(json!({
                 "mode": mode,
                 "flag": flag,
             })),
@@ -1099,7 +1120,7 @@ impl From<md_codec::Error> for ToolkitError {
     fn from(e: md_codec::Error) -> Self {
         match e {
             // v0.30 renamed UnsupportedVersion -> WireVersionMismatch.
-            // Same exit-3 routing; user-facing detail message kept as
+            // Routed to FutureFormat (exit 2); user-facing detail message kept as
             // "unsupported version N" for CLI message stability.
             md_codec::Error::WireVersionMismatch { got } => ToolkitError::FutureFormat {
                 source: "md_codec",
@@ -1130,54 +1151,417 @@ pub type Result<T> = std::result::Result<T, ToolkitError>;
 mod tests {
     use super::*;
 
+    /// R13 (exit-code spec): every variant maps to its §3 class. The
+    /// exhaustive `match` in `sample_count_is_every_variant` fails to compile
+    /// when a variant is added, so a new one cannot skip this table.
+    fn class_table() -> Vec<(ToolkitError, u8)> {
+        use crate::exit_code::{INTERNAL, INVALID, IO, NO, REFUSED, USAGE};
+        vec![
+            (ToolkitError::BadInput("x".into()), INVALID),
+            (ToolkitError::Bip39(bip39::Error::BadWordCount(5)), INVALID),
+            (ToolkitError::Bip388Distinctness { i: 0, j: 1 }, INVALID),
+            (ToolkitError::Bip388VerifyDistinctness, INVALID),
+            (
+                ToolkitError::Bitcoin(BitcoinErrorKind::FingerprintParse("zz".into())),
+                INVALID,
+            ),
+            (ToolkitError::BsmsMacMismatch { token_len_hex: 16 }, NO),
+            (
+                ToolkitError::BsmsRound1Malformed { reason: "x".into() },
+                INVALID,
+            ),
+            (
+                ToolkitError::BsmsSignatureMismatch {
+                    record_index: 0,
+                    signer_pubkey: "x".into(),
+                    reason: "x".into(),
+                },
+                NO,
+            ),
+            (ToolkitError::BsmsTaprootImportRefused, INVALID),
+            (
+                ToolkitError::BsmsTaprootRefused {
+                    script_type: crate::wallet_export::WalletScriptType::P2tr,
+                },
+                INVALID,
+            ),
+            (ToolkitError::BuildDescriptorSpec("x".into()), INVALID),
+            (
+                ToolkitError::BundleMismatch {
+                    card: "mk1".into(),
+                    message: "x".into(),
+                },
+                NO,
+            ),
+            (
+                ToolkitError::CompareCost(crate::cost::CompareCostError::Parse("x".into())),
+                INVALID,
+            ),
+            (
+                ToolkitError::CompareCost(crate::cost::CompareCostError::ConditionsTooMany {
+                    raw: 9,
+                    cap: 1,
+                }),
+                REFUSED,
+            ),
+            (ToolkitError::ConvertRefusal("x".into()), INVALID),
+            (
+                ToolkitError::CosignerSpec {
+                    cosigner_idx: 0,
+                    message: "x".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::CosignersFile {
+                    message: "x".into(),
+                },
+                INVALID,
+            ),
+            (ToolkitError::DecodeAddress("x".into()), INVALID),
+            (ToolkitError::DeriveChildLengthNotApplicable, USAGE),
+            (
+                ToolkitError::DeriveChildLengthOutOfRange {
+                    app: "x",
+                    length: 1,
+                    valid_text: "x",
+                },
+                USAGE,
+            ),
+            (ToolkitError::DeriveChildUnsupportedApp, INVALID),
+            (ToolkitError::DescriptorParse("x".into()), INVALID),
+            (
+                ToolkitError::DescriptorReparseFailed { detail: "x".into() },
+                INTERNAL,
+            ),
+            (
+                ToolkitError::EnvVarMissing {
+                    flag: "--from".into(),
+                    var: "X".into(),
+                    reason: EnvVarMissingReason::Unset,
+                },
+                IO,
+            ),
+            (
+                ToolkitError::EnvVarMissing {
+                    flag: "--from".into(),
+                    var: "x y".into(),
+                    reason: EnvVarMissingReason::InvalidName,
+                },
+                USAGE,
+            ),
+            (
+                ToolkitError::EnvVarMissing {
+                    flag: "--from".into(),
+                    var: "X".into(),
+                    reason: EnvVarMissingReason::NotUnicode,
+                },
+                INVALID,
+            ),
+            (ToolkitError::ExportWalletFormatStub("x"), INVALID),
+            (
+                ToolkitError::ExportWalletMissingFields {
+                    format: "x",
+                    missing: vec![],
+                },
+                INVALID,
+            ),
+            (ToolkitError::ExportWalletSecretInput, INVALID),
+            (
+                ToolkitError::ExportWalletTaprootMultisigUnsupported("x"),
+                INVALID,
+            ),
+            (
+                ToolkitError::ExportWalletUnsortedMultisigUnsupported { format: "x" },
+                INVALID,
+            ),
+            (
+                ToolkitError::FutureFormat {
+                    source: "ms_codec",
+                    detail: "x".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::HrpMismatch {
+                    flag: "--md1",
+                    expected: "md",
+                    got: "mk".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::ImportWalletAmbiguousFormat("x".into()),
+                INVALID,
+            ),
+            (
+                ToolkitError::ImportWalletFormatMismatch {
+                    supplied: "x".into(),
+                    sniffed: "y".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::ImportWalletNetworkClassMismatch {
+                    requested: "mainnet".into(),
+                    parsed_coin_type: 1,
+                },
+                REFUSED,
+            ),
+            (ToolkitError::ImportWalletParse("x".into()), INVALID),
+            (
+                ToolkitError::ImportWalletSeedMismatch {
+                    cosigner_index: 0,
+                    derived_xpub: "x".into(),
+                    blob_xpub: "y".into(),
+                    path: "m".into(),
+                },
+                NO,
+            ),
+            (ToolkitError::ImportWalletWatchOnlyViolation(0), INTERNAL),
+            (ToolkitError::ImportWalletXprvForbidden, INVALID),
+            (ToolkitError::Internal("x".into()), INTERNAL),
+            (
+                ToolkitError::Io(std::io::Error::from(std::io::ErrorKind::NotFound)),
+                IO,
+            ),
+            (
+                ToolkitError::Io(std::io::Error::from(std::io::ErrorKind::InvalidData)),
+                INVALID,
+            ),
+            (ToolkitError::IoFailure("x".into()), IO),
+            (
+                ToolkitError::Md1CardNotADescriptor { surface: "x" },
+                INVALID,
+            ),
+            (
+                ToolkitError::MdCodec(md_codec::Error::Codex32DecodeError("x".into())),
+                INVALID,
+            ),
+            (
+                ToolkitError::MkCodec(mk_codec::Error::BchUncorrectable("x".into())),
+                INVALID,
+            ),
+            (
+                ToolkitError::ModeInputViolation {
+                    mode: "x",
+                    flag: "--md1",
+                    message: "x",
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::ModeViolation {
+                    mode: "x",
+                    flag: "--template",
+                    message: "x",
+                },
+                USAGE,
+            ),
+            (
+                ToolkitError::MsCodec(ms_codec::Error::InvalidThreshold(1)),
+                USAGE,
+            ),
+            (
+                ToolkitError::MultisigConfig {
+                    message: "x".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::NetworkMismatch {
+                    decoded_network: "mainnet",
+                    expected_network: "testnet",
+                    context: "x",
+                },
+                REFUSED,
+            ),
+            (ToolkitError::NostrKeyParse("x".into()), INVALID),
+            (ToolkitError::Refused("x".into()), REFUSED),
+            (
+                ToolkitError::Render(md_codec::RenderError::MalformedTree("x".into())),
+                INVALID,
+            ),
+            (
+                ToolkitError::Repair(crate::repair::RepairError::EmptyInput),
+                INVALID,
+            ),
+            (ToolkitError::RepairShortCircuit { exit_code: 2 }, INVALID),
+            (
+                ToolkitError::RestoreMismatch {
+                    reference: "fingerprint",
+                    derived: "x".into(),
+                    expected: "y".into(),
+                    slot: None,
+                },
+                NO,
+            ),
+            (ToolkitError::SilentPayment("x".into()), INVALID),
+            (
+                ToolkitError::SlotInputViolation {
+                    kind: "x",
+                    message: "x".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::TemplateFormUnsupportedShape {
+                    message: "x".into(),
+                },
+                INVALID,
+            ),
+            (
+                ToolkitError::UnknownHrp {
+                    got: "x".into(),
+                    expected_one_of: vec!["md"],
+                },
+                INVALID,
+            ),
+            (ToolkitError::Usage("x".into()), USAGE),
+            (ToolkitError::VerifyMessage("x".into()), INVALID),
+            (
+                ToolkitError::WordCard(wc_codec::WcError::HeaderCrcMismatch),
+                INVALID,
+            ),
+            (
+                ToolkitError::XpubSearchNoMatch {
+                    mode: "x",
+                    searched: 1,
+                },
+                NO,
+            ),
+            (
+                ToolkitError::XpubSearchPassphraseCandidatesExhausted {
+                    candidates_tried: 1,
+                },
+                NO,
+            ),
+        ]
+    }
+
+    /// Compile-time completeness of `class_table`: adding a variant breaks this
+    /// match until the variant is given an arm, and its arm's comment points at
+    /// the table.
+    fn variant_index(e: &ToolkitError) -> usize {
+        match e {
+            ToolkitError::BadInput(_) => 0,
+            ToolkitError::Bip39(_) => 1,
+            ToolkitError::Bip388Distinctness { .. } => 2,
+            ToolkitError::Bip388VerifyDistinctness => 3,
+            ToolkitError::Bitcoin(_) => 4,
+            ToolkitError::BsmsMacMismatch { .. } => 5,
+            ToolkitError::BsmsRound1Malformed { .. } => 6,
+            ToolkitError::BsmsSignatureMismatch { .. } => 7,
+            ToolkitError::BsmsTaprootImportRefused => 8,
+            ToolkitError::BsmsTaprootRefused { .. } => 9,
+            ToolkitError::BuildDescriptorSpec(_) => 10,
+            ToolkitError::BundleMismatch { .. } => 11,
+            ToolkitError::CompareCost(_) => 12,
+            ToolkitError::ConvertRefusal(_) => 13,
+            ToolkitError::CosignerSpec { .. } => 14,
+            ToolkitError::CosignersFile { .. } => 15,
+            ToolkitError::DecodeAddress(_) => 16,
+            ToolkitError::DeriveChildLengthNotApplicable => 17,
+            ToolkitError::DeriveChildLengthOutOfRange { .. } => 18,
+            ToolkitError::DeriveChildUnsupportedApp => 19,
+            ToolkitError::DescriptorParse(_) => 20,
+            ToolkitError::DescriptorReparseFailed { .. } => 21,
+            ToolkitError::EnvVarMissing { .. } => 22,
+            ToolkitError::ExportWalletFormatStub(_) => 23,
+            ToolkitError::ExportWalletMissingFields { .. } => 24,
+            ToolkitError::ExportWalletSecretInput => 25,
+            ToolkitError::ExportWalletTaprootMultisigUnsupported(_) => 26,
+            ToolkitError::ExportWalletUnsortedMultisigUnsupported { .. } => 27,
+            ToolkitError::FutureFormat { .. } => 28,
+            ToolkitError::HrpMismatch { .. } => 29,
+            ToolkitError::ImportWalletAmbiguousFormat(_) => 30,
+            ToolkitError::ImportWalletFormatMismatch { .. } => 31,
+            ToolkitError::ImportWalletNetworkClassMismatch { .. } => 32,
+            ToolkitError::ImportWalletParse(_) => 33,
+            ToolkitError::ImportWalletSeedMismatch { .. } => 34,
+            ToolkitError::ImportWalletWatchOnlyViolation(_) => 35,
+            ToolkitError::ImportWalletXprvForbidden => 36,
+            ToolkitError::Internal(_) => 37,
+            ToolkitError::Io(_) => 38,
+            ToolkitError::IoFailure(_) => 39,
+            ToolkitError::Md1CardNotADescriptor { .. } => 40,
+            ToolkitError::MdCodec(_) => 41,
+            ToolkitError::MkCodec(_) => 42,
+            ToolkitError::ModeInputViolation { .. } => 43,
+            ToolkitError::ModeViolation { .. } => 44,
+            ToolkitError::MsCodec(_) => 45,
+            ToolkitError::MultisigConfig { .. } => 46,
+            ToolkitError::NetworkMismatch { .. } => 47,
+            ToolkitError::NostrKeyParse(_) => 48,
+            ToolkitError::Refused(_) => 49,
+            ToolkitError::Render(_) => 50,
+            ToolkitError::Repair(_) => 51,
+            ToolkitError::RepairShortCircuit { .. } => 52,
+            ToolkitError::RestoreMismatch { .. } => 53,
+            ToolkitError::SilentPayment(_) => 54,
+            ToolkitError::SlotInputViolation { .. } => 55,
+            ToolkitError::TemplateFormUnsupportedShape { .. } => 56,
+            ToolkitError::UnknownHrp { .. } => 57,
+            ToolkitError::Usage(_) => 58,
+            ToolkitError::VerifyMessage(_) => 59,
+            ToolkitError::WordCard(_) => 60,
+            ToolkitError::XpubSearchNoMatch { .. } => 61,
+            ToolkitError::XpubSearchPassphraseCandidatesExhausted { .. } => 62,
+        }
+    }
+    const VARIANT_COUNT: usize = 63;
+
     #[test]
-    fn exit_code_table_per_variant() {
-        assert_eq!(ToolkitError::BadInput("x".into()).exit_code(), 1);
-        assert_eq!(
-            ToolkitError::DescriptorParse("descriptor parse failed: ...".into()).exit_code(),
-            2,
+    fn exit_code_every_variant_has_its_class() {
+        let table = class_table();
+        let mut seen = [false; VARIANT_COUNT];
+        for (e, class) in &table {
+            seen[variant_index(e)] = true;
+            assert_eq!(e.exit_code(), *class, "{} ({e:?})", e.kind());
+            // No error maps to 0, and every code is a §3 code.
+            let c = e.exit_code();
+            assert!(
+                matches!(c, 1..=63 | 64 | 101),
+                "{}: {c} is not a §3 code",
+                e.kind()
+            );
+        }
+        let missing: Vec<usize> = (0..VARIANT_COUNT).filter(|i| !seen[*i]).collect();
+        assert!(
+            missing.is_empty(),
+            "variants with no class row: {missing:?}"
         );
+    }
+
+    /// Every ms-codec and mk-codec variant this crate's pin has is classified
+    /// (the enums are `#[non_exhaustive]`; an unnamed one would be 101).
+    #[test]
+    fn codec_variants_have_their_class() {
+        use crate::exit_code::{INVALID, USAGE};
+        let ms = [
+            ms_codec::Error::MnemUnknownLanguage(9),
+            ms_codec::Error::WrongHrp { got: "mq".into() },
+            ms_codec::Error::ReservedPrefixViolation { got: 1 },
+            ms_codec::Error::SecretShareSuppliedToCombine,
+            ms_codec::Error::InconsistentShareSet,
+        ];
+        for e in ms {
+            assert_eq!(ToolkitError::MsCodec(e).exit_code(), INVALID);
+        }
         assert_eq!(
-            ToolkitError::Md1CardNotADescriptor {
-                surface: "export-wallet --descriptor"
-            }
-            .exit_code(),
-            2,
+            ToolkitError::MsCodec(ms_codec::Error::InvalidShareCount { k: 3, n: 2 }).exit_code(),
+            USAGE
         );
-        assert_eq!(
-            ToolkitError::ModeViolation {
-                mode: "watch-only",
-                flag: "--passphrase",
-                message: "x",
-            }
-            .exit_code(),
-            2,
-        );
-        assert_eq!(
-            ToolkitError::NetworkMismatch {
-                decoded_network: "mainnet",
-                expected_network: "testnet",
-                context: "test"
-            }
-            .exit_code(),
-            2,
-        );
-        assert_eq!(
-            ToolkitError::FutureFormat {
-                source: "ms_codec",
-                detail: "x".into()
-            }
-            .exit_code(),
-            3,
-        );
-        assert_eq!(
-            ToolkitError::BundleMismatch {
-                card: "mk1".into(),
-                message: "x".into()
-            }
-            .exit_code(),
-            4,
-        );
+        let mk = [
+            mk_codec::Error::InvalidHrp("x".into()),
+            mk_codec::Error::MixedCase,
+            mk_codec::Error::InvalidStringLength(5),
+            mk_codec::Error::UnsupportedVersion(1),
+            mk_codec::Error::TrailingBytes,
+        ];
+        for e in mk {
+            assert_eq!(ToolkitError::MkCodec(e).exit_code(), INVALID);
+        }
     }
 
     #[test]
@@ -1199,7 +1583,7 @@ mod tests {
                 allowed: &[],
             })
             .exit_code(),
-            1,
+            2,
         );
         // v0.2 K-of-N: a share handed to a single-string consume path, or the
         // secret-at-S handed to combine, is a format violation (exit 2).
@@ -1215,14 +1599,14 @@ mod tests {
             ToolkitError::MsCodec(ms_codec::Error::SecretShareSuppliedToCombine).exit_code(),
             2,
         );
-        // Split-side bad-input variants stay exit-1 (BadInput).
+        // Split-side K and N are settings: usage (64).
         assert_eq!(
             ToolkitError::MsCodec(ms_codec::Error::InvalidThreshold(1)).exit_code(),
-            1,
+            64,
         );
         assert_eq!(
             ToolkitError::MsCodec(ms_codec::Error::InvalidShareCount { k: 3, n: 2 }).exit_code(),
-            1,
+            64,
         );
     }
 
@@ -1244,11 +1628,11 @@ mod tests {
         // Exit-1 (user-input) variants.
         assert_eq!(
             ToolkitError::MkCodec(mk_codec::Error::InvalidStringLength(50)).exit_code(),
-            1,
+            2,
         );
         assert_eq!(
             ToolkitError::MkCodec(mk_codec::Error::BchUncorrectable("foo".into())).exit_code(),
-            1,
+            2,
         );
     }
 
@@ -1276,24 +1660,24 @@ mod tests {
         // Exit-1 (user-input) variants.
         assert_eq!(
             ToolkitError::MdCodec(md_codec::Error::Codex32DecodeError("foo".into())).exit_code(),
-            1,
+            2,
         );
         assert_eq!(
             ToolkitError::MdCodec(md_codec::Error::Codex32EncodeError("bar".into())).exit_code(),
-            1,
+            2,
         );
     }
 
     /// v0.30/v0.31/v0.32 added 7 new md-codec variants. This cell pins
     /// the exit-code routing for each — 1 routes via From → FutureFormat
-    /// (exit 3); the other 6 route to MdCodec → exit 2 per SPEC §6.4.5.
+    /// (exit 2 since the exit-code spec; was 3); the other 6 route to MdCodec → exit 2 per SPEC §6.4.5.
     #[test]
     fn md_codec_v0_30_new_variant_routing() {
-        // exit-3: WireVersionMismatch is the v0.30 semantic replacement
+        // exit 2 (was 3): WireVersionMismatch is the v0.30 semantic replacement
         // for the v0.x UnsupportedVersion variant; both route via From →
         // FutureFormat.
         let tk: ToolkitError = md_codec::Error::WireVersionMismatch { got: 99 }.into();
-        assert_eq!(tk.exit_code(), 3);
+        assert_eq!(tk.exit_code(), 2);
         assert_eq!(tk.kind(), "FutureFormat");
 
         // exit-2: the six remaining new variants must route to MdCodec.
@@ -1341,7 +1725,7 @@ mod tests {
     /// `MalformedPayloadPadding { bits }`, the non-zero trailing-pad decode
     /// reject fired by the shared TLV parser (`reject_non_zero_pad`). Pin its
     /// routing: it is a decode-reject-class error → MdCodec → exit 2 +
-    /// kind() == "MdCodec" (NOT the exit-3 FutureFormat interception, which is
+    /// kind() == "MdCodec" (NOT the FutureFormat interception, which is
     /// reserved for WireVersionMismatch). Mirrors
     /// `md_codec_v0_30_new_variant_routing`.
     #[test]
@@ -1362,7 +1746,7 @@ mod tests {
     /// `EmptyOriginOverride { idx }`, the unconditional pre-canonical reject of a
     /// use-site override that resolves to an empty origin. Pin its routing: it is
     /// a decode-reject-class error → MdCodec → exit 2 + kind() == "MdCodec" (NOT
-    /// the exit-3 FutureFormat interception). It is deliberately NOT swallowed by
+    /// the FutureFormat interception). It is deliberately NOT swallowed by
     /// partial-decode's `allow_unresolved_origin` (only `MissingExplicitOrigin`
     /// is fatal-in-partial-suppressible). Mirrors `md_codec_v0_41_new_variant_routing`.
     #[test]
@@ -1384,14 +1768,14 @@ mod tests {
         let e = ToolkitError::MultisigConfig {
             message: "k > n".into(),
         };
-        assert_eq!(e.exit_code(), 1);
+        assert_eq!(e.exit_code(), 2);
         assert_eq!(e.kind(), "MultisigConfig");
 
         let e = ToolkitError::CosignerSpec {
             cosigner_idx: 2,
             message: "fingerprint required".into(),
         };
-        assert_eq!(e.exit_code(), 1);
+        assert_eq!(e.exit_code(), 2);
         assert_eq!(e.kind(), "CosignerSpec");
         let det = e.details().unwrap();
         assert_eq!(det["cosigner_idx"], 2);
@@ -1399,7 +1783,7 @@ mod tests {
         let e = ToolkitError::CosignersFile {
             message: "json parse error".into(),
         };
-        assert_eq!(e.exit_code(), 1);
+        assert_eq!(e.exit_code(), 2);
         assert_eq!(e.kind(), "CosignersFile");
     }
 
@@ -1417,7 +1801,7 @@ mod tests {
         assert_eq!(det["j"], 1);
 
         let v = ToolkitError::Bip388VerifyDistinctness;
-        assert_eq!(v.exit_code(), 4);
+        assert_eq!(v.exit_code(), 2);
         assert_eq!(v.kind(), "Bip388VerifyDistinctness");
         assert_eq!(
             v.message(),

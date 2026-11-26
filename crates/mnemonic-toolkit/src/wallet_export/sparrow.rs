@@ -102,13 +102,13 @@ struct SparrowKeyDerivation {
 /// SPEC v0.8 §7 — Sparrow wallet JSON emitter.
 pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, ToolkitError> {
     let template = inputs.template.ok_or_else(|| {
-        ToolkitError::BadInput(
+        ToolkitError::Usage(
             "--format sparrow requires --template; descriptor passthrough is not supported by Sparrow's file-import surface".into(),
         )
     })?;
 
     if inputs.resolved_slots.is_empty() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--format sparrow: at least one --slot @N.xpub=... required".into(),
         ));
     }
@@ -154,7 +154,7 @@ pub(crate) fn emit_sparrow_wallet_json(inputs: &EmitInputs) -> Result<String, To
     };
 
     serde_json::to_string_pretty(&wallet)
-        .map_err(|e| ToolkitError::BadInput(format!("--format sparrow: serialize: {e}")))
+        .map_err(|e| ToolkitError::Internal(format!("--format sparrow: serialize: {e}")))
 }
 
 /// SPEC §7: scriptType discriminant mirrored from Sparrow's `ScriptType` enum

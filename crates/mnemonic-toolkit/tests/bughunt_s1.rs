@@ -297,7 +297,7 @@ fn bughunt_tk_01_restore_checks_xpub_even_when_fingerprint_matches() {
     ]));
     assert_eq!(
         code,
-        Some(4),
+        Some(1),
         "a matching --expect-fingerprint must not mask a wrong --expect-xpub \
          (want exit 4 RestoreMismatch);\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -344,7 +344,7 @@ fn bughunt_tk_02_singlesig_template_md1_honours_reference_flags() {
     let (code, stdout, stderr) = run(&base(&["--expect-fingerprint", "deadbeef"]));
     assert_eq!(
         code,
-        Some(4),
+        Some(1),
         "(a) --expect-fingerprint deadbeef: want exit 4 (or a refusal), got exit {code:?}; stdout: {stdout}\nstderr: {stderr}"
     );
     assert!(stdout.is_empty(), "(a) stdout must be empty:\n{stdout}");
@@ -359,7 +359,7 @@ fn bughunt_tk_02_singlesig_template_md1_honours_reference_flags() {
     let (code, stdout, stderr) = run(&base(&["--expect-xpub", ACCT1_XPUB_BIP84]));
     assert_eq!(
         code,
-        Some(4),
+        Some(1),
         "(b) --expect-xpub <account-1 xpub>: want exit 4, got exit {code:?}; stdout: {stdout}\nstderr: {stderr}"
     );
     assert!(stdout.is_empty(), "(b) stdout must be empty:\n{stdout}");
@@ -899,7 +899,7 @@ fn bughunt_tk_41_explicit_placement_does_not_ignore_search_address() {
     let (code, stdout, stderr) = run(&args);
     assert_eq!(
         code,
-        Some(1),
+        Some(64),
         "a wrong @N= placement plus the wallet's TRUE address must be refused (exit 1);\n\
          stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -936,7 +936,7 @@ fn bughunt_tk_42_own_slot_with_wrong_engraved_fingerprint_is_not_verified() {
     let (code, stdout, stderr) = run(&args);
     assert_eq!(
         code,
-        Some(4),
+        Some(1),
         "the own slot's engraved fingerprint deadbeef != the seed's real master fingerprint \
          {real_fp}, yet it is labelled verified (exit {code:?}):\n{stdout}\n{stderr}"
     );
@@ -1241,7 +1241,7 @@ fn bughunt_tk_43_supplied_md1_with_extra_cosigner_does_not_panic() {
     );
     assert_eq!(
         code,
-        Some(4),
+        Some(1),
         "a 3-cosigner card set cannot verify a 2-cosigner wallet (exit 4):\n{stdout}\n{stderr}"
     );
     let j: Value = serde_json::from_str(&stdout)
@@ -1337,7 +1337,7 @@ fn bughunt_tk_37_singlesig_template_verify_checks_the_ms1_card() {
     let (code, stdout, stderr) = verify(&ms1_other);
     assert_eq!(
         code,
-        Some(4),
+        Some(1),
         "an --ms1 card from a DIFFERENT seed must fail verification (exit 4);\n\
          stdout:\n{stdout}\nstderr:\n{stderr}"
     );
@@ -1475,13 +1475,13 @@ fn bughunt_tk_39_singlesig_md1_with_other_usesite_or_script_does_not_pass() {
         } else {
             "md1 reconstructs a DIFFERENT wallet — structural policy mismatch: use-site path (change-chain/multipath)"
         };
-        if code != Some(4)
+        if code != Some(1)
             || j["result"] != "mismatch"
             || row.map(|r| r["passed"].clone()) != Some(Value::Bool(false))
             || row.and_then(|r| r["detail"].as_str()) != Some(want)
         {
             failures.push(format!(
-                "{label}: want exit 4, mismatch, md1_xpub_match failed with `{want}`; got exit {code:?} row {row:?}"
+                "{label}: want exit 1, mismatch, md1_xpub_match failed with `{want}`; got exit {code:?} row {row:?}"
             ));
         }
     }
@@ -1633,7 +1633,7 @@ fn bughunt_tk_44c_descriptor_mode_verify_refuses_unparseable_slot_fingerprint() 
     let mut args = d44_verify_args();
     args.extend(s(&["--slot", "@1.fingerprint=zzzz"]));
     let (code, stdout, stderr) = run(&args);
-    assert_eq!(code, Some(1), "stdout:\n{stdout}\nstderr:\n{stderr}");
+    assert_eq!(code, Some(2), "stdout:\n{stdout}\nstderr:\n{stderr}");
     assert!(stdout.is_empty(), "nothing on stdout:\n{stdout}");
     assert!(
         stderr.contains("error: --slot @1.fingerprint parse: "),
@@ -1669,7 +1669,7 @@ fn bughunt_tk_47_empty_expect_wallet_id_is_rejected_by_verify_bundle() {
     let (code, stdout, stderr) = run(&args);
     assert_eq!(
         code,
-        Some(1),
+        Some(2),
         "an empty --expect-wallet-id (e.g. an unset shell variable) must be rejected, \
          not reported as a passing wallet_id_match; exit {code:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );

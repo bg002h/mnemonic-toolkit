@@ -54,7 +54,7 @@ impl WalletFormatEmitter for Bip388Emitter {
             )?
         };
         serde_json::to_string_pretty(&value)
-            .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))
+            .map_err(|e| ToolkitError::Internal(format!("export-wallet json: {e}")))
     }
 
     fn extension() -> &'static str {
@@ -156,7 +156,7 @@ pub(crate) fn format_bip388_wallet_policy(
                 _ => unreachable!(),
             };
             let internal = taproot_internal_key.ok_or_else(|| {
-                ToolkitError::BadInput(
+                ToolkitError::Internal(
                     "internal: tr-multi-a wallet_policy needs --taproot-internal-key".into(),
                 )
             })?;

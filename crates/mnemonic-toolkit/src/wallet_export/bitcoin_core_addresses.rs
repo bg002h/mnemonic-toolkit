@@ -72,7 +72,7 @@ fn checksummed(body_no_csum: &str) -> Result<String, ToolkitError> {
     use miniscript::descriptor::checksum::Engine as ChecksumEngine;
     let mut eng = ChecksumEngine::new();
     eng.input(body_no_csum).map_err(|e| {
-        ToolkitError::BadInput(format!(
+        ToolkitError::Internal(format!(
             "export-wallet: bitcoin-core-addresses: checksum engine rejected {body_no_csum:?}: {e}"
         ))
     })?;
@@ -127,7 +127,7 @@ impl WalletFormatEmitter for BitcoinCoreAddressesEmitter {
             inputs.timestamp,
         )?;
         serde_json::to_string_pretty(&value)
-            .map_err(|e| ToolkitError::BadInput(format!("export-wallet json: {e}")))
+            .map_err(|e| ToolkitError::Internal(format!("export-wallet json: {e}")))
     }
 
     fn extension() -> &'static str {
@@ -145,7 +145,7 @@ pub(crate) fn format_addr_list(
     timestamp: super::TimestampArg,
 ) -> Result<Value, ToolkitError> {
     if count == 0 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "--count 0 would emit an empty watch list, which imports successfully and \
              watches nothing. Supply --count >= 1."
                 .to_string(),

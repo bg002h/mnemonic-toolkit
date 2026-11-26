@@ -95,7 +95,7 @@ fn decrypt_wrong_password_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("decryption failed (wrong password or corrupted ciphertext)"),
@@ -115,7 +115,7 @@ fn decrypt_bad_base64_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("not valid base64"),
@@ -166,7 +166,7 @@ fn decrypt_ciphertext_stdin_and_password_stdin_refused() {
         .write_stdin(TV_PASSWORD)
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("cannot both read from stdin"),

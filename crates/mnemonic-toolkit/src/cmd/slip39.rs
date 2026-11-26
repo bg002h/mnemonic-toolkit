@@ -295,7 +295,7 @@ fn resolve_combine_env_sentinels(
 #[cfg(not(feature = "slip39-test-rng"))]
 fn refuse_test_rng_env() -> Result<(), ToolkitError> {
     if std::env::var_os(ENV_TEST_RNG).is_some() || std::env::var_os(ENV_TEST_IDENTIFIER).is_some() {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::IoFailure(
             "slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source".to_string(),
         ));
     }
@@ -390,7 +390,7 @@ fn run_split<R: Read, W: Write, E: Write>(
 ) -> Result<u8, ToolkitError> {
     // SPEC §2.5 row 17 — --from variant must be phrase= or entropy=.
     if args.from.node != NodeType::Phrase && args.from.node != NodeType::Entropy {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "slip39 split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got {}=",
             args.from.node.as_str(),
         )));
@@ -402,7 +402,7 @@ fn run_split<R: Read, W: Write, E: Write>(
         + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             as usize;
     if split_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(stdin_conflict_message(
+        return Err(ToolkitError::Usage(stdin_conflict_message(
             args.passphrase.as_deref(),
             args.passphrase_stdin,
         )));
@@ -415,7 +415,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     // is CLI-only per plan §3.5 step 1.
     for (g_idx, (n, t)) in args.group.iter().enumerate() {
         if *n == 1 && *t == 1 {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "slip39 split: 1-of-1 group offers no recovery benefit; use --group N,T with N >= 2 (toolkit policy); got group {g_idx}=1,1"
             )));
         }
@@ -581,12 +581,12 @@ fn run_split<R: Read, W: Write, E: Write>(
     // inside the loop (Q6 fold — O(N) pinning).
     for (g_idx, g) in rendered.iter().enumerate() {
         if g_idx > 0 {
-            writeln!(stdout).map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            writeln!(stdout).map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
         }
         for s in g {
             let _pin = mnemonic_toolkit::mlock::pin_pages_for(s.as_bytes());
             writeln!(stdout, "{}", s.as_str())
-                .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+                .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
         }
     }
 
@@ -633,7 +633,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
         + crate::passphrase_input::reads_stdin(args.passphrase.as_deref(), args.passphrase_stdin)
             as usize;
     if combine_stdin_count > 1 {
-        return Err(ToolkitError::BadInput(stdin_conflict_message(
+        return Err(ToolkitError::Usage(stdin_conflict_message(
             args.passphrase.as_deref(),
             args.passphrase_stdin,
         )));
@@ -653,7 +653,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     for (sh, dash) in args.share.iter().zip(share_dash.iter().copied()) {
         let s = if dash {
             if stdin_consumed {
-                return Err(ToolkitError::BadInput(
+                return Err(ToolkitError::Usage(
                     "slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)".into(),
                 ));
             }
@@ -724,7 +724,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     let _pin_output = mnemonic_toolkit::mlock::pin_pages_for(output.as_bytes());
 
     writeln!(stdout, "{}", output.as_str())
-        .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+        .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
 
     // SPEC §2.6 row 3 — emit class advisory unconditionally (TTY gate dropped, Cycle B P1).
     // Addendum with the bespoke safety clause follows the unified line.
@@ -777,6 +777,13 @@ fn reindex_share_idx(e: Slip39Error, idx: usize) -> Slip39Error {
 /// added in this commit (Q3 fold).
 fn map_slip39_error(e: Slip39Error) -> ToolkitError {
     use Slip39Error::*;
+    // Exit-code spec decision 2: a split's group, threshold and iteration
+    // settings are judged from the command line alone (64); everything else is
+    // an input wrong for the verb (2).
+    let is_setting = matches!(
+        e,
+        BadGroupThreshold { .. } | BadGroupSpec { .. } | BadIterationExponent(_)
+    );
     let msg = match e {
         BadPhraseWordCount(got) => format!(
             "slip39 split: input phrase must be 12/15/18/21/24 words; got {got}"
@@ -846,7 +853,11 @@ fn map_slip39_error(e: Slip39Error) -> ToolkitError {
         ),
         MemberThresholdMismatch => "slip39 combine: shares within a group disagree on member_threshold".to_string(),
     };
-    ToolkitError::BadInput(msg)
+    if is_setting {
+        ToolkitError::Usage(msg)
+    } else {
+        ToolkitError::BadInput(msg)
+    }
 }
 
 // ============================================================
@@ -912,9 +923,10 @@ fn write_split_json<E: Write>(
         groups,
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
+        .map_err(|e| ToolkitError::Internal(format!("--json-out serialize: {e}")))?;
+    std::fs::write(path, &body).map_err(|e| {
+        ToolkitError::IoFailure(format!("--json-out write {}: {e}", path.display()))
+    })?;
     warn_if_world_readable(path, stderr);
     Ok(())
 }
@@ -941,9 +953,10 @@ fn write_combine_json<E: Write>(
         entropy_hex,
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
+        .map_err(|e| ToolkitError::Internal(format!("--json-out serialize: {e}")))?;
+    std::fs::write(path, &body).map_err(|e| {
+        ToolkitError::IoFailure(format!("--json-out write {}: {e}", path.display()))
+    })?;
     warn_if_world_readable(path, stderr);
     Ok(())
 }

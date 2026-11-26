@@ -122,15 +122,14 @@ fn mnemonic_writes_to_a_terminal_without_refusing() {
     );
 }
 
-/// §6f closure condition 17: **no exit code moves except `mk`'s invalid
-/// artifact**, which is another repo's row. `mnemonic`'s
-/// 1-or-2-by-input-shape split is unchanged by P3, and the two cells are the
-/// ones §6f measured under verbs that EXIST (`mnemonic` has no `decode`).
+/// §6f closure condition 17: P3 moved no `mnemonic` exit code. The two cells
+/// are the ones §6f measured under verbs that EXIST (`mnemonic` has no
+/// `decode`). Since the constellation exit-code cutover both are INVALID (2).
 #[test]
 fn mnemonic_invalid_artifact_exit_codes_are_unchanged() {
     for (arg, expected, why) in [
         ("notanartifact", 2, "unknown HRP"),
-        ("md1nonsense", 1, "md1 HRP, decode failure"),
+        ("md1nonsense", 2, "md1 HRP, decode failure"),
     ] {
         let code = Command::cargo_bin("mnemonic")
             .unwrap()

@@ -82,13 +82,11 @@ pub const OVERRIDE_FLAG: &str = "--allow-argv-secret";
 
 /// Exit code for the refusal.
 ///
-/// **2, not 3 and not 64.** `mnemonic`'s own refusal family is 2 —
-/// `ExportWalletSecretInput`, `ModeViolation`, `ConvertRefusal` all exit 2 —
-/// while 3 is already taken here by `ToolkitError::FutureFormat` and 64 is
-/// clap's usage code, which this is not (the refusal happens *instead of*
-/// parsing). §6f's closure condition is that no existing code moves; this adds
-/// a path, it renumbers nothing.
-pub const EXIT_REFUSED: u8 = 2;
+/// **8, REFUSED** (`SPEC_constellation_exit_codes.md` §3 test 1's exception
+/// and R2): a secret on argv is declined under a safety rule that a channel
+/// (stdin, `@env:`) or `--allow-argv-secret` would waive. The guard runs
+/// before clap, so a secret on argv plus a bad flag is 8, not 64.
+pub const EXIT_REFUSED: u8 = crate::exit_code::REFUSED;
 
 /// The flags whose VALUE is secret material, with the private channel that
 /// exists for each.

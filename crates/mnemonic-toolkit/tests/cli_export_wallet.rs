@@ -410,7 +410,7 @@ fn taproot_multisig_template_requires_internal_key_flag() {
             ])
             .assert()
             .failure()
-            .code(1);
+            .code(64);
         let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
         assert!(
             stderr.contains(&format!(
@@ -658,7 +658,7 @@ fn threshold_greater_than_cosigner_count_refusal() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--threshold 5 exceeds cosigner count 2"),
@@ -808,7 +808,7 @@ fn tr_multi_a_internal_key_out_of_range() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--taproot-internal-key @5 out of range"),
@@ -849,7 +849,7 @@ fn taproot_internal_key_on_non_taproot_template_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains(
@@ -894,7 +894,7 @@ fn tr_multi_a_bip388_wallet_policy_with_nums() {
             "@1.path=m/48'/0'/0'/2'",
         ])
         .assert()
-        .code(1)
+        .code(2)
         .stdout("")
         .stderr(predicates::str::contains(format!(
             "error: --format bip388 cannot express the literal key {NUMS_HEX} (a taproot internal key with no origin"
@@ -988,7 +988,7 @@ fn tr_multi_a_n1_cosigner_internal_degenerate_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(64);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("with a single cosigner leaves no multi_a leaves"),
@@ -1014,7 +1014,7 @@ fn descriptor_to_bip388_non_multipath_refused() {
         ])
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("requires the --descriptor to use multipath form"),

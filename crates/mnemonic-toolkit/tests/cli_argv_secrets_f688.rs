@@ -20,7 +20,7 @@ const PHRASE: &str =
 /// the material never has to decode; it only has to be distinctive.
 const MS1_DUMMY: &str = "ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f";
 
-const EXIT_REFUSED: i32 = 2;
+const EXIT_REFUSED: i32 = 8;
 
 fn run_with(args: &[&str], stdin: &str, envs: &[(&str, &str)]) -> (String, String, i32) {
     let mut cmd = Command::cargo_bin("mnemonic").unwrap();

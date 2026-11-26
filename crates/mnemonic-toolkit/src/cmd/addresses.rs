@@ -106,6 +106,21 @@ fn bad(s: impl Into<String>) -> ToolkitError {
     ToolkitError::BadInput(s.into())
 }
 
+/// Exit-code spec decision 2: the command line alone is wrong (64).
+fn usage(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::Usage(s.into())
+}
+
+/// Exit-code spec §3 test 5 (or 3, a network mismatch): refused (8).
+fn refused(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::Refused(s.into())
+}
+
+/// Exit-code spec R13: a bug (101).
+fn internal(s: impl Into<String>) -> ToolkitError {
+    ToolkitError::Internal(s.into())
+}
+
 /// Run `mnemonic addresses`.
 pub fn run<R: Read, W: Write, E: Write>(
     args: &AddressesArgs,
@@ -120,7 +135,7 @@ pub fn run<R: Read, W: Write, E: Write>(
     // exactly as `--passphrase-stdin` does, so it is counted here too.
     let pp_value = args.passphrase.as_deref();
     if crate::passphrase_input::reads_stdin(pp_value, args.passphrase_stdin) && from_uses_stdin {
-        return Err(bad(format!(
+        return Err(usage(format!(
             "{} cannot coexist with --from <node>=- (a single stdin cannot serve both)",
             crate::passphrase_input::stdin_spelling(args.passphrase_stdin)
         )));
@@ -158,12 +173,12 @@ pub fn run<R: Read, W: Write, E: Write>(
     let (account_xpub, network, account_field): (Xpub, CliNetwork, Option<u32>) = match from.node {
         NodeType::Xpub => {
             if args.account != 0 {
-                return Err(bad(
+                return Err(usage(
                     "--account does not apply to --from xpub= (the xpub is already an account key)",
                 ));
             }
             if args.passphrase.is_some() || args.passphrase_stdin {
-                return Err(bad(
+                return Err(usage(
                     "--passphrase / --passphrase-stdin do not apply to --from xpub= (no BIP-39 seed)",
                 ));
             }
@@ -173,7 +188,7 @@ pub fn run<R: Read, W: Write, E: Write>(
                 None => network_from_xpub(&xpub),
                 Some(n) => {
                     if n.network_kind() != xpub.network {
-                        return Err(bad(format!(
+                        return Err(refused(format!(
                             "--network {} disagrees with the xpub's network kind; refusing to render wrong-network addresses",
                             n.human_name()
                         )));
@@ -219,7 +234,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             // p2wpkh. The script type + derivation are fixed by the seed
             // version, so --address-type must match it and --account is N/A.
             if args.account != 0 {
-                return Err(bad(
+                return Err(usage(
                     "--account does not apply to --from electrum-phrase= (Electrum native derivation has no BIP-44 account level)",
                 ));
             }
@@ -265,7 +280,7 @@ pub fn run<R: Read, W: Write, E: Write>(
             (Xpub::from_priv(&secp_sign, &node), network, None)
         }
         other => {
-            return Err(bad(format!(
+            return Err(usage(format!(
                 "--from {other:?} is not supported by `addresses` (use xpub/phrase/entropy/seedqr/electrum-phrase)"
             )));
         }
@@ -323,7 +338,7 @@ fn resolve_indices(count: Option<u32>, range: Option<&str>) -> Result<Vec<u32>, 
         (Some(_), Some(_)) => unreachable!("clap conflicts_with"),
         (Some(c), None) => {
             if c > MAX_PLUS1 {
-                return Err(bad(format!(
+                return Err(usage(format!(
                     "--count {c} exceeds the BIP-32 normal-index ceiling (max 2147483648)"
                 )));
             }
@@ -332,20 +347,20 @@ fn resolve_indices(count: Option<u32>, range: Option<&str>) -> Result<Vec<u32>, 
         (None, Some(r)) => {
             let (a, b) = r
                 .split_once(',')
-                .ok_or_else(|| bad(format!("--range expects `A,B`, got {r:?}")))?;
+                .ok_or_else(|| usage(format!("--range expects `A,B`, got {r:?}")))?;
             let a: u32 = a
                 .trim()
                 .parse()
-                .map_err(|e| bad(format!("--range start {a:?}: {e}")))?;
+                .map_err(|e| usage(format!("--range start {a:?}: {e}")))?;
             let b: u32 = b
                 .trim()
                 .parse()
-                .map_err(|e| bad(format!("--range end {b:?}: {e}")))?;
+                .map_err(|e| usage(format!("--range end {b:?}: {e}")))?;
             if a > b {
-                return Err(bad(format!("--range start {a} must be <= end {b}")));
+                return Err(usage(format!("--range start {a} must be <= end {b}")));
             }
             if b >= MAX_PLUS1 {
-                return Err(bad(format!(
+                return Err(usage(format!(
                     "--range end {b} exceeds the BIP-32 normal-index ceiling (2147483647)"
                 )));
             }
@@ -408,8 +423,8 @@ fn emit_json<W: Write>(
     if let Some(acct) = account {
         envelope["account"] = json!(acct);
     }
-    let s =
-        serde_json::to_string(&envelope).map_err(|e| bad(format!("json serialization: {e}")))?;
+    let s = serde_json::to_string(&envelope)
+        .map_err(|e| internal(format!("json serialization: {e}")))?;
     writeln!(stdout, "{s}").map_err(ToolkitError::Io)?;
     Ok(())
 }

@@ -74,7 +74,7 @@ fn ms1_too_long_recovers_exit_5() {
     cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1"])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1));
 }
 
@@ -85,7 +85,7 @@ fn ms1_too_short_recovers_exit_5() {
     cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1"])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1));
 }
 
@@ -106,7 +106,7 @@ fn ms1_max_indel_recovers_all_entropy_lengths() {
         cmd()
             .args(["repair", "--ms1", &bad, "--max-indel", "1"])
             .assert()
-            .code(5)
+            .code(16)
             .stdout(predicate::str::contains(valid.as_str()));
     }
 }
@@ -119,7 +119,7 @@ fn ms1_prefix_dropped_m_recovers_exit_5() {
     cmd()
         .args(["repair", "--ms1", bad, "--max-indel", "1"])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1));
 }
 
@@ -139,7 +139,7 @@ fn mk1_multichunk_one_corrupted_recovers_exit_5() {
             "1",
         ])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(MK1_C1));
 }
 
@@ -217,7 +217,7 @@ fn md1_multichunk_one_corrupted_recovers_exit_5() {
             "1",
         ])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(MD1_C1));
 }
 
@@ -228,7 +228,7 @@ fn json_unique_envelope_shape() {
     let out = cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1", "--json"])
         .assert()
-        .code(5)
+        .code(16)
         .get_output()
         .stdout
         .clone();
@@ -251,7 +251,7 @@ fn ms1_indel_recovery_fires_secret_advisory() {
     cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1"])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1))
         .stderr(predicate::str::contains(ADVISORY));
 }
@@ -275,7 +275,7 @@ fn multi_group_both_emit_exit_5() {
             "1",
         ])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1))
         .stdout(predicate::str::contains(MK1_C0))
         .stdout(predicate::str::contains(MK1_C1));
@@ -310,7 +310,7 @@ fn ms1_indel_plus_subst_exit_4_with_verify_warning() {
             "1",
         ])
         .assert()
-        .code(4)
+        .code(20)
         .stderr(predicate::str::contains("verify it controls your funds"));
 }
 
@@ -333,7 +333,7 @@ fn ms1_max_subst_0_regression_pure_indel_exit_5() {
     cmd()
         .args(["repair", "--ms1", &bad, "--max-indel", "1"]) // --max-subst defaults 0
         .assert()
-        .code(5);
+        .code(16);
 }
 
 /// Phase 3 Test D — --max-subst 5 is rejected by clap (range 0..=4).
@@ -371,7 +371,7 @@ fn ms1_indel_plus_subst_json_confident_false() {
             "--json",
         ])
         .assert()
-        .code(4)
+        .code(20)
         .get_output()
         .stdout
         .clone();
@@ -426,7 +426,7 @@ fn prefix_drop_still_recovers_under_phase4() {
     cmd()
         .args(["repair", "--ms1", bad, "--max-indel", "1"])
         .assert()
-        .code(5)
+        .code(16)
         .stdout(predicate::str::contains(VALID_MS1));
 }
 
@@ -470,7 +470,7 @@ fn ms1_all_three_cross_region_plus_substitution_exit_4() {
             "1",
         ])
         .assert()
-        .code(4)
+        .code(20)
         .stdout(predicate::str::contains(VALID_MS1))
         .stderr(predicate::str::contains("verify it controls your funds"));
 }

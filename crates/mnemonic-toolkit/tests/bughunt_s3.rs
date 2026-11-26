@@ -227,7 +227,7 @@ fn bughunt_tk_18b_bsms_round1_line3_edited_after_signing_refused() {
         ],
         None,
     );
-    assert_eq!(code, 2, "stderr: {stderr}");
+    assert_eq!(code, 1, "stderr: {stderr}");
     assert_eq!(stdout, "");
     let prefix = format!(
         "error: import-wallet: --bsms-round1: BIP-129 signature verification failed for record 0 \
@@ -447,7 +447,7 @@ fn bughunt_tk_21_bip388_export_from_descriptor_taproot_nums_multisig() {
         ],
         None,
     );
-    assert_eq!(c3, 1, "stderr: {stderr}");
+    assert_eq!(c3, 2, "stderr: {stderr}");
     assert_eq!(stdout, "");
     assert_eq!(
         stderr,

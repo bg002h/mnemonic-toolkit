@@ -92,7 +92,7 @@ pub(crate) fn apply_seed_overlay(
             by_index.push(None);
         }
         if by_index[i].is_some() {
-            return Err(ToolkitError::BadInput(format!(
+            return Err(ToolkitError::Usage(format!(
                 "import-wallet: cosigner {i} has both `--ms1` and `--slot @{i}.phrase=` \
                  supplied; use one or the other"
             )));

@@ -176,7 +176,7 @@ fn run_split<R: Read, W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     if args.from.node != NodeType::Phrase {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "seed-xor only accepts phrase=<value> or phrase=-".into(),
         ));
     }
@@ -224,7 +224,7 @@ fn run_split<R: Read, W: Write, E: Write>(
 
     for phrase in &share_phrases {
         writeln!(stdout, "{}", phrase.as_str())
-            .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+            .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
     }
 
     if let Some(path) = &args.json_out {
@@ -275,7 +275,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // SPEC §2.5 row 8 — non-phrase variants refuse.
     for sh in &args.share {
         if sh.node != NodeType::Phrase {
-            return Err(ToolkitError::BadInput(
+            return Err(ToolkitError::Usage(
                 "seed-xor only accepts phrase=<value> or phrase=-".into(),
             ));
         }
@@ -284,7 +284,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
     // SPEC §2.5 row 9 — multi-stdin refusal.
     let stdin_count = share_dash.iter().filter(|d| **d).count();
     if stdin_count > 1 {
-        return Err(ToolkitError::BadInput(
+        return Err(ToolkitError::Usage(
             "seed-xor combine: at most one --share value may be `-` (single stdin per invocation)"
                 .into(),
         ));
@@ -292,7 +292,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
 
     // SPEC §2.5 row 3 — cardinality assertion.
     if args.share.len() != args.shares {
-        return Err(ToolkitError::BadInput(format!(
+        return Err(ToolkitError::Usage(format!(
             "seed-xor combine: --shares {} requires exactly {} --share arguments; got {} --share values for --shares {}",
             args.shares, args.shares, args.share.len(), args.shares,
         )));
@@ -305,7 +305,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
         let s = if dash {
             if stdin_consumed {
                 // Defensive: already rejected by stdin_count check above, but be belt-and-suspenders.
-                return Err(ToolkitError::BadInput(
+                return Err(ToolkitError::Usage(
                     "seed-xor combine: at most one --share value may be `-` (single stdin per invocation)".into(),
                 ));
             }
@@ -360,7 +360,7 @@ fn run_combine<R: Read, W: Write, E: Write>(
         .map_err(ToolkitError::Bip39)?;
 
     writeln!(stdout, "{}", phrase.as_str())
-        .map_err(|e| ToolkitError::BadInput(format!("stdout write: {e}")))?;
+        .map_err(|e| ToolkitError::IoFailure(format!("stdout write: {e}")))?;
 
     let word_count = entropy_bytes_to_word_count(first_len);
     if let Some(path) = &args.json_out {
@@ -407,7 +407,7 @@ fn map_seed_xor_error(e: SeedXorError) -> ToolkitError {
         } => ToolkitError::BadInput(format!(
             "seed-xor: entropy length {got} bytes invalid; expected one of {expected_one_of:?}",
         )),
-        SeedXorError::TooFewShares { got, min } => ToolkitError::BadInput(format!(
+        SeedXorError::TooFewShares { got, min } => ToolkitError::Usage(format!(
             "seed-xor split: --shares must be >= {min}; got {got}",
         )),
         SeedXorError::MismatchedShareLengths { lengths } => ToolkitError::BadInput(format!(
@@ -456,9 +456,10 @@ fn write_split_json<E: Write>(
         shares,
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
+        .map_err(|e| ToolkitError::Internal(format!("--json-out serialize: {e}")))?;
+    std::fs::write(path, &body).map_err(|e| {
+        ToolkitError::IoFailure(format!("--json-out write {}: {e}", path.display()))
+    })?;
 
     warn_if_world_readable(path, stderr);
     Ok(())
@@ -481,9 +482,10 @@ fn write_combine_json<E: Write>(
         phrase,
     };
     let body = serde_json::to_string(&envelope)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out serialize: {e}")))?;
-    std::fs::write(path, &body)
-        .map_err(|e| ToolkitError::BadInput(format!("--json-out write {}: {e}", path.display())))?;
+        .map_err(|e| ToolkitError::Internal(format!("--json-out serialize: {e}")))?;
+    std::fs::write(path, &body).map_err(|e| {
+        ToolkitError::IoFailure(format!("--json-out write {}: {e}", path.display()))
+    })?;
 
     warn_if_world_readable(path, stderr);
     Ok(())

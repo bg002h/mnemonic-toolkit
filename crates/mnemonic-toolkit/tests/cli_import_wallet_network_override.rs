@@ -64,7 +64,7 @@ fn testnet_blob_override_to_regtest() {
 #[test]
 fn testnet_blob_override_to_mainnet_refused() {
     let out = run_import("core-testnet-bip84.json", Some("mainnet"));
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(8));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
         stderr.contains("coin-type"),
@@ -75,7 +75,7 @@ fn testnet_blob_override_to_mainnet_refused() {
 #[test]
 fn mainnet_blob_override_to_signet_refused() {
     let out = run_import("core-bip84-mainnet.json", Some("signet"));
-    assert_eq!(out.status.code(), Some(1));
+    assert_eq!(out.status.code(), Some(8));
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn mixed_mainnet_testnet_blob_override_mainnet_refused_per_entry() {
     let out = run_import("core-mixed-mainnet-testnet.json", Some("mainnet"));
     assert_eq!(
         out.status.code(),
-        Some(1),
+        Some(8),
         "cross-entry heterogeneous [Bitcoin, Testnet] + --network mainnet must refuse (exit 1)"
     );
     let stderr = String::from_utf8_lossy(&out.stderr);

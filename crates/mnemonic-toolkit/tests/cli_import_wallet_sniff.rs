@@ -83,7 +83,7 @@ fn sniff_ambiguous_with_specter_markers() {
         .write_stdin(blob.to_string())
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("could not detect format"),
@@ -96,7 +96,7 @@ fn sniff_format_mismatch_explicit_override() {
     let p = fixture_path("core-bip84-mainnet.json");
     let assertion = run_import(&["--blob", p.to_str().unwrap(), "--format", "bsms"])
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("--format bsms supplied but blob looks like bitcoin-core"),
@@ -113,7 +113,7 @@ fn sniff_no_match_random_text() {
         .write_stdin(blob.to_string())
         .assert()
         .failure()
-        .code(1);
+        .code(2);
     let stderr = String::from_utf8(assertion.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("could not detect format"),
