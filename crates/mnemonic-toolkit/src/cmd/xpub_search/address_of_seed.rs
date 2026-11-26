@@ -13,7 +13,7 @@
 //! printed `bundle` argv is built from references (`-`, `@env:VAR`), never
 //! from a secret, and passes `redact_and_quote` as a fail-closed second check.
 
-use super::candidate_paths::{build_candidate_paths, check_account_window};
+use super::candidate_paths::{build_candidate_paths, check_account_window, check_add_paths};
 use super::seed_intake::{resolve_seed, SeedIntakeArgs};
 use super::seed_search::{
     derive_child, leaf_slot, leaf_use_site, multi_family, probe_eval, scan, slot_orders,
@@ -47,6 +47,14 @@ const MD1_STEP_MAX: u32 = (1 << 29) - 1;
 const REALIZED_S_MAX: u128 = 1_000_000_000_000_000;
 /// The child-key cache is refused above this many keys (about 4.5 GB).
 const CACHE_MAX_KEYS: u128 = 1 << 26;
+/// Bytes per cached child key (a `PublicKey`, rounded up).
+const KEY_BYTES: u128 = 72;
+/// Bytes per path entry of one key source (its `PathInfo`, the labels'
+/// heap, the account xpub and the transient candidate), rounded up.
+const PATH_BYTES: u128 = 320;
+/// A run whose estimated memory (path lists plus the child-key cache)
+/// passes this is refused before anything is built (final review M4).
+const MEMORY_MAX_BYTES: u128 = 6 << 30;
 /// Hits kept for the post-scan analysis; more is itself exit 4 (`cap`).
 const MATCH_CAP: usize = 10_000;
 
@@ -126,14 +134,17 @@ pub struct AddressOfSeedArgs {
     pub max_account: Option<u32>,
 
     /// Additional path template (`account'` substituted per account).
-    /// Repeatable. A template that repeats a standard path is dropped.
+    /// Repeatable. Hardened steps take `'` or `h`; a template that is not a
+    /// path is refused (exit 2). One that repeats a searched path is dropped.
     #[arg(long, value_name = "TEMPLATE")]
     pub add_path: Vec<String>,
 
     /// The index window `[0, N)` searched on each chain (not BIP-44's
     /// "N consecutive unused addresses" rule). At most 2^31; a run whose
     /// child-key cache (paths × chains × N per key) would pass 2^26 keys is
-    /// refused (about 208,000 for one seed at the default paths).
+    /// refused (about 208,000 for one seed at the default paths), as is a
+    /// run whose estimated memory (path lists plus that cache) passes
+    /// 6144 MB.
     #[arg(long, default_value_t = 20)]
     pub gap_limit: u32,
 
@@ -336,7 +347,7 @@ struct Source {
 }
 
 fn refuse(m: impl Into<String>) -> ToolkitError {
-    ToolkitError::XpubSearchRefusal(m.into())
+    ToolkitError::XpubSearchRefusal(format!("address-of-seed: {}", m.into()))
 }
 
 fn path_str(p: &DerivationPath) -> String {
@@ -405,6 +416,13 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
     no_auto_repair: bool,
 ) -> Result<u8, ToolkitError> {
     check_account_window(args.min_account, args.number_of_accounts, args.max_account)?;
+    check_add_paths(
+        "address-of-seed",
+        args.min_account,
+        args.number_of_accounts,
+        args.max_account,
+        &args.add_path,
+    )?;
     if u64::from(args.gap_limit) > 1 << 31 || args.gap_limit == 0 {
         return Err(refuse(
             "--gap-limit must be between 1 and 2147483648 (2^31)",
@@ -459,6 +477,17 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
                 "--target-address {t}: not a searchable output type"
             ))
         })?;
+        // A repeated target (also in another case) is one target (final
+        // review M1: a second copy would never match and read `unmatched`).
+        if let Some((first, _, _)) = targets.iter().find(|x| x.1 == spk) {
+            writeln!(
+                stderr,
+                "note: --target-address {} repeats {first}; it is searched once",
+                t.trim()
+            )
+            .map_err(ToolkitError::Io)?;
+            continue;
+        }
         targets.push((t.trim().to_string(), spk, kind));
     }
     let target_map: HashMap<ScriptBuf, usize> = targets
@@ -567,7 +596,7 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
         passphrase_supplied: !passphrase.is_empty(),
     };
 
-    let job = if let Some(text) = descriptor_text {
+    let mut job = if let Some(text) = descriptor_text {
         let text = if text.trim_start().starts_with('{') {
             text
         } else {
@@ -578,15 +607,19 @@ pub fn run_address_of_seed<R: Read, W: Write, E: Write>(
             refuse_private("--descriptor", &expanded)?;
             keyed_job(&ctx, &expanded, &masters, stderr)?
         } else if Regex::new(r"@\d").expect("static").is_match(&text) {
-            template_job(&ctx, &text, None, &masters)?
+            template_job(&ctx, &text, None)?
         } else {
             keyed_job(&ctx, &text, &masters, stderr)?
         }
     } else if let Some(md) = md1_intake {
-        template_job(&ctx, &md.text, Some(&md), &masters)?
+        template_job(&ctx, &md.text, Some(&md))?
     } else {
-        single_sig_job(&ctx, &masters)?
+        single_sig_job(&ctx)?
     };
+    // The estimate is printed, and the memory ceiling checked, before any
+    // account key or child key is derived (final review M4).
+    print_plan(&ctx, &job, &masters, stderr)?;
+    derive_accounts(&mut job.sources, &masters)?;
     drop(masters);
 
     execute(&ctx, job, stdout, stderr)
@@ -679,9 +712,14 @@ fn intake_seeds<R: Read, W: Write, E: Write>(
                 Mnemonic::parse_in(lang, norm.as_str()).map_err(ToolkitError::Bip39)?
             }
             NodeType::Seedqr => {
+                // The decode error can name a character and its position in
+                // the secret; it is not repeated (final review N3).
                 let phrase = Zeroizing::new(
-                    mnemonic_toolkit::seedqr::decode(value.trim())
-                        .map_err(|e| crate::cmd::seedqr::map_seedqr_error(e, "xpub-search"))?,
+                    mnemonic_toolkit::seedqr::decode(value.trim()).map_err(|_| {
+                        ToolkitError::BadInput(
+                            "--from seedqr=: not a valid SeedQR (the value is not repeated)".into(),
+                        )
+                    })?,
                 );
                 Mnemonic::parse_in(lang, phrase.as_str()).map_err(ToolkitError::Bip39)?
             }
@@ -827,7 +865,15 @@ fn intake_cosigners(values: &[String]) -> Result<Vec<(Option<usize>, CosignerIn)
             let n: usize = n
                 .parse()
                 .map_err(|_| refuse(format!("--cosigner @{n}=: not a slot number")))?;
-            placed.entry(n).or_default().push(val.to_string());
+            // Placed mk1 chunks of one slot are joined; any other second
+            // value for a slot is a conflict (final review M6).
+            let vals = placed.entry(n).or_default();
+            let is_mk1 = |x: &str| x.trim().to_lowercase().starts_with("mk1");
+            let joinable = vals.is_empty() || (is_mk1(val) && vals.iter().all(|x| is_mk1(x)));
+            if !joinable {
+                return Err(refuse(format!("@{n} is given two keys")));
+            }
+            vals.push(val.to_string());
         } else if v.trim().to_lowercase().starts_with("mk1") {
             for tok in v.split_whitespace() {
                 let header = decode_string(tok)
@@ -916,8 +962,20 @@ fn standard_paths(ctx: &Ctx) -> Result<(Vec<PathInfo>, Vec<String>, u32), Toolki
         }
     };
     early_ceiling(ctx, cps.len())?;
-    let list = cps
+    // An --add-path entry whose path an earlier entry already names (the
+    // same template twice, or `m/0'` beside `m/0h`) is dropped (final review
+    // M2: it would report the one wallet twice, a false `split`).
+    let mut seen: std::collections::HashSet<DerivationPath> = std::collections::HashSet::new();
+    let mut contributed: BTreeSet<String> = BTreeSet::new();
+    let list: Vec<PathInfo> = cps
         .iter()
+        .filter(|c| {
+            let new = seen.insert(c.path.clone());
+            if new {
+                contributed.insert(c.template_name.clone());
+            }
+            new
+        })
         .map(|c| {
             let (template, label) = match c.template_name.as_str() {
                 n @ ("bip44" | "bip49" | "bip84" | "bip86" | "bip87") => {
@@ -945,6 +1003,11 @@ fn standard_paths(ctx: &Ctx) -> Result<(Vec<PathInfo>, Vec<String>, u32), Toolki
                 seat: None,
             }
         })
+        .collect();
+    let mut listed: BTreeSet<String> = BTreeSet::new();
+    let add: Vec<String> = add
+        .into_iter()
+        .filter(|t| contributed.contains(t) && listed.insert(t.clone()))
         .collect();
     Ok((list, add, end))
 }
@@ -979,7 +1042,110 @@ fn early_ceiling(ctx: &Ctx, c: usize) -> Result<(), ToolkitError> {
              --gap-limit or the account window"
         )));
     }
+    memory_ceiling(c * u128::from(k), keys)
+}
+
+/// Refuse a run whose estimated memory passes `MEMORY_MAX_BYTES`.
+fn memory_ceiling(paths: u128, keys: u128) -> Result<(), ToolkitError> {
+    let bytes = paths * PATH_BYTES + keys * KEY_BYTES;
+    if bytes > MEMORY_MAX_BYTES {
+        return Err(refuse(format!(
+            "the search would need an estimated {} MB of memory ({paths} path entries and a child-key \
+             cache of {keys} keys), above the ceiling of {} MB; narrow --number-of-accounts / \
+             --max-account or --gap-limit",
+            bytes >> 20,
+            MEMORY_MAX_BYTES >> 20
+        )));
+    }
     Ok(())
+}
+
+/// The child steps the scan caches (each template's use-site steps over the
+/// searched alternatives), in first-seen order.
+fn cached_steps(ctx: &Ctx, templates: &[Template]) -> Vec<Option<u32>> {
+    let mut steps: Vec<Option<u32>> = Vec::new();
+    for t in templates {
+        let a = alts_used(ctx, t);
+        for sa in &t.slot_alts {
+            for st in sa.iter().take(a) {
+                if !steps.contains(st) {
+                    steps.push(*st);
+                }
+            }
+        }
+    }
+    steps
+}
+
+/// Print the estimate before any account or child key is derived (final
+/// review M4): candidates, scripts, the derivations and the child-key cache
+/// with their time (sampled on a few derivations), and the memory; refuse
+/// a run above the memory ceiling. The scan's own time follows once the
+/// keys exist (it is measured on them).
+fn print_plan<E: Write>(
+    ctx: &Ctx,
+    job: &Job,
+    masters: &[Xpriv],
+    stderr: &mut E,
+) -> Result<(), ToolkitError> {
+    let gap = u128::from(ctx.args.gap_limit);
+    let mut cands: u128 = 0;
+    let mut scripts: u128 = 0;
+    for u in &job.units {
+        let mut sp = u.space.clone();
+        sp.sources = job.sources.iter().map(|s| s.sp.clone()).collect();
+        let c = u128::from(sp.candidates().unwrap_or(0));
+        cands += c;
+        scripts += c * alts_used(ctx, &job.templates[u.tpl_idx]) as u128 * gap;
+    }
+    let nsteps = cached_steps(ctx, &job.templates).len() as u128;
+    let paths: u128 = job.sources.iter().map(|s| s.paths.len() as u128).sum();
+    let keys = paths * nsteps * gap;
+    memory_ceiling(paths, keys)?;
+    let derivs: u128 = job
+        .sources
+        .iter()
+        .filter(|s| s.seed.is_some())
+        .map(|s| s.paths.len() as u128)
+        .sum();
+    // Sample up to 4 account derivations of the first seed, then 16 child
+    // derivations of the last account key.
+    let secp = Secp256k1::new();
+    let (mut per_path, mut per_child) = (Duration::ZERO, Duration::ZERO);
+    if let Some(s) = job.sources.iter().find(|s| s.seed.is_some()) {
+        let m = &masters[s.seed.unwrap_or(0)];
+        let n = s.paths.len().min(4);
+        let t0 = std::time::Instant::now();
+        let mut last: Option<Xpub> = None;
+        for p in s.paths.iter().take(n) {
+            if let Ok(x) = m.derive_priv(&secp, &p.path) {
+                last = Some(Xpub::from_priv(&secp, &x));
+            }
+        }
+        if n > 0 {
+            per_path = t0.elapsed() / n as u32;
+        }
+        if let Some(x) = last {
+            let t1 = std::time::Instant::now();
+            for i in 0..16 {
+                let _ = x.ckd_pub(&secp, ChildNumber::Normal { index: i });
+            }
+            per_child = t1.elapsed() / 16;
+        }
+    }
+    let threads = search_threads().max(1) as f64;
+    let derive_s =
+        per_path.as_secs_f64() * derivs as f64 + per_child.as_secs_f64() * keys as f64 / threads;
+    let mem = paths * PATH_BYTES + keys * KEY_BYTES;
+    writeln!(
+        stderr,
+        "estimate: {cands} candidate(s), {scripts} script(s) over index window [0, {gap}); \
+         {derivs} account key derivation(s) and a child-key cache of {keys} keys, estimated \
+         {derive_s:.1} s to derive; memory estimated {} MB (ceiling {} MB)",
+        (mem >> 20).max(1),
+        MEMORY_MAX_BYTES >> 20
+    )
+    .map_err(ToolkitError::Io)
 }
 
 fn seat_paths(network: CliNetwork) -> Vec<PathInfo> {
@@ -1167,7 +1333,7 @@ const SINGLE_SIG_TEMPLATES: [&str; 4] = [
     "tr(@0/<0;1>/*)",
 ];
 
-fn single_sig_job(ctx: &Ctx, masters: &[Xpriv]) -> Result<Job, ToolkitError> {
+fn single_sig_job(ctx: &Ctx) -> Result<Job, ToolkitError> {
     let (mut std, add, end) = standard_paths(ctx)?;
     if ctx.args.refugium_seats {
         std.extend(seat_paths(ctx.network));
@@ -1175,9 +1341,9 @@ fn single_sig_job(ctx: &Ctx, masters: &[Xpriv]) -> Result<Job, ToolkitError> {
     let c = std.len();
     let templates: Vec<Template> = SINGLE_SIG_TEMPLATES
         .iter()
-        .map(|t| Template::parse(t).map_err(refuse))
+        .map(|t| Template::parse(t).map_err(|e| tpl_refuse(&e, 0, &[])))
         .collect::<Result<_, _>>()?;
-    let mut sources: Vec<Source> = (0..ctx.seeds.len())
+    let sources: Vec<Source> = (0..ctx.seeds.len())
         .map(|i| seed_source(i, ctx.fps, std.clone(), c, None, 1))
         .collect();
     let kinds: BTreeSet<SpkKind> = ctx.targets.iter().map(|t| t.2).collect();
@@ -1195,7 +1361,7 @@ fn single_sig_job(ctx: &Ctx, masters: &[Xpriv]) -> Result<Job, ToolkitError> {
                     pinned_key: vec![Some(s)],
                     free_slots: vec![],
                     free_keys: vec![],
-                    orders: 1,
+                    orders: vec![1],
                     segments: vec![PathTuples::Shared { c: c as u64 }],
                     sources: Vec::new(),
                 },
@@ -1209,7 +1375,6 @@ fn single_sig_job(ctx: &Ctx, masters: &[Xpriv]) -> Result<Job, ToolkitError> {
         ));
     }
     precheck_counts(ctx, &units, &sources, &templates)?;
-    derive_accounts(&mut sources, masters)?;
     Ok(Job {
         mode: "search",
         templates,
@@ -1225,12 +1390,7 @@ fn single_sig_job(ctx: &Ctx, masters: &[Xpriv]) -> Result<Job, ToolkitError> {
     })
 }
 
-fn template_job(
-    ctx: &Ctx,
-    text: &str,
-    md1: Option<&Md1Template>,
-    masters: &[Xpriv],
-) -> Result<Job, ToolkitError> {
+fn template_job(ctx: &Ctx, text: &str, md1: Option<&Md1Template>) -> Result<Job, ToolkitError> {
     // A literal key beside `@N` placeholders becomes a placed cosigner slot
     // after the last placeholder (review r1 I2): the evaluator translates
     // slots only, so a literal key left in place would match nothing.
@@ -1240,8 +1400,8 @@ fn template_job(
         .filter_map(|c| c[1].parse::<usize>().ok())
         .max()
         .map_or(0, |m| m + 1);
-    let (lifted_text, lifted) = templatise_keys(text, placeholders)?;
-    let tpl = Template::parse(&lifted_text).map_err(refuse)?;
+    let (lifted_text, lifted, typed) = templatise_keys(text, placeholders)?;
+    let tpl = Template::parse(&lifted_text).map_err(|e| tpl_refuse(&e, placeholders, &typed))?;
     let n = tpl.n;
     let (std, add, end) = standard_paths(ctx)?;
     let mut std = std;
@@ -1454,7 +1614,6 @@ fn template_job(
     }];
     let templates = vec![tpl];
     precheck_counts(ctx, &units, &sources, &templates)?;
-    derive_accounts(&mut sources, masters)?;
     Ok(Job {
         mode: "search",
         templates,
@@ -1481,10 +1640,51 @@ fn key_regex() -> &'static Regex {
     })
 }
 
+/// A template refusal in the user's terms (final review M5): one `error:`
+/// prefix, and each `@N` the toolkit made from a typed key (`N >= first`)
+/// named by that key, since the user never typed the placeholder.
+fn tpl_refuse(e: &str, first: usize, typed: &[String]) -> ToolkitError {
+    let mut m = e;
+    while let Some(r) = m.strip_prefix("error: ") {
+        m = r;
+    }
+    let mut named = false;
+    let out = Regex::new(r"@(\d+)")
+        .expect("static")
+        .replace_all(m, |c: &regex::Captures| {
+            match c[1]
+                .parse::<usize>()
+                .ok()
+                .and_then(|n| n.checked_sub(first))
+                .and_then(|j| typed.get(j))
+            {
+                Some(k) => {
+                    named = true;
+                    let short: String = k.chars().take(16).collect();
+                    format!("the key {short}…")
+                }
+                None => c[0].to_string(),
+            }
+        })
+        .into_owned();
+    if named {
+        refuse(format!(
+            "{out} (this descriptor shape cannot be put on a card, so `bundle` cannot mint it \
+             and it is not searched)"
+        ))
+    } else {
+        refuse(out)
+    }
+}
+
 /// Replace every literal key of `text` by `@{first + i}` (one slot per
 /// distinct key, in order of first appearance); return the rewritten text
-/// and the keys with their stated origins.
-fn templatise_keys(text: &str, first: usize) -> Result<(String, Vec<CosignerIn>), ToolkitError> {
+/// the keys with their stated origins, and the keys as typed.
+#[allow(clippy::type_complexity)]
+fn templatise_keys(
+    text: &str,
+    first: usize,
+) -> Result<(String, Vec<CosignerIn>, Vec<String>), ToolkitError> {
     let mut keys: Vec<CosignerIn> = Vec::new();
     let mut key_strs: Vec<String> = Vec::new();
     let mut bad: Option<ToolkitError> = None;
@@ -1530,7 +1730,7 @@ fn templatise_keys(text: &str, first: usize) -> Result<(String, Vec<CosignerIn>)
     if let Some(e) = bad {
         return Err(e);
     }
-    Ok((templ, keys))
+    Ok((templ, keys, key_strs))
 }
 
 /// Verify a BIP-380 checksum on the text as given and strip it (review r1
@@ -1552,7 +1752,7 @@ fn keyed_job<E: Write>(
     stderr: &mut E,
 ) -> Result<Job, ToolkitError> {
     let expanded = crate::parse_descriptor::expand_literal_double_star(text).into_owned();
-    let (templ, keys) = templatise_keys(&expanded, 0)?;
+    let (templ, keys, typed) = templatise_keys(&expanded, 0)?;
     if keys.is_empty() {
         return Err(refuse(
             "--descriptor has neither @N placeholders nor public keys",
@@ -1563,7 +1763,7 @@ fn keyed_job<E: Write>(
             "--cosigner is for @N templates; a keyed descriptor already states every key",
         ));
     }
-    let tpl = Template::parse(&templ).map_err(refuse)?;
+    let tpl = Template::parse(&templ).map_err(|e| tpl_refuse(&e, 0, &typed))?;
     let n = tpl.n;
     let (mut std, add, end) = standard_paths(ctx)?;
     // A key without an origin is compared with the seat paths too when
@@ -1677,13 +1877,12 @@ fn keyed_job<E: Write>(
             pinned_key,
             free_slots: vec![],
             free_keys: vec![],
-            orders: 1,
+            orders: vec![1],
             segments: vec![PathTuples::Shared { c: 1 }],
             sources: Vec::new(),
         },
     }];
     let templates = vec![tpl];
-    derive_accounts(&mut sources, masters)?;
     Ok(Job {
         mode: "keyed",
         templates,
@@ -1780,17 +1979,7 @@ fn execute<W: Write, E: Write>(
     stderr: &mut E,
 ) -> Result<u8, ToolkitError> {
     let threads = search_threads();
-    let mut steps: Vec<Option<u32>> = Vec::new();
-    for t in &job.templates {
-        let a = alts_used(ctx, t);
-        for sa in &t.slot_alts {
-            for st in sa.iter().take(a) {
-                if !steps.contains(st) {
-                    steps.push(*st);
-                }
-            }
-        }
-    }
+    let steps = cached_steps(ctx, &job.templates);
     let accounts: Vec<Vec<Xpub>> = job.sources.iter().map(|s| s.accounts.clone()).collect();
     let cache = ChildCache::build(&accounts, &steps, ctx.args.gap_limit, threads);
     let src_paths: Vec<SourcePaths> = job.sources.iter().map(|s| s.sp.clone()).collect();
@@ -1828,13 +2017,13 @@ fn execute<W: Write, E: Write>(
     let orders = if job.single_sig {
         1
     } else {
-        job.units[0].space.orders
+        job.units[0].space.max_orders()
     };
     writeln!(
         stderr,
-        "estimate: {total_cands} candidate(s), {total_scripts} script(s) over {} alternative(s) \
-         and index window [0, {}); {} slot order(s); child-key cache {} keys ({} KB); estimated {:.1} s \
-         on {threads} thread(s)",
+        "scan estimate: {total_cands} candidate(s), {total_scripts} script(s) over {} \
+         alternative(s) and index window [0, {}); {} slot order(s); child-key cache {} keys ({} \
+         KB); estimated {:.1} s on {threads} thread(s)",
         job.templates
             .iter()
             .map(|t| alts_used(ctx, t))
@@ -1959,7 +2148,6 @@ fn canonical_label(text: &str, assign: &[(usize, usize)]) -> String {
 struct Analysis<'a> {
     ctx: &'a Ctx<'a>,
     job: &'a Job,
-    #[allow(dead_code)]
     cache: &'a ChildCache,
 }
 
@@ -1981,25 +2169,41 @@ impl Analysis<'_> {
         let mut keys: Vec<PublicKey> = Vec::with_capacity(tpl.n);
         for (slot, (src, path)) in assign.iter().enumerate() {
             let step = tpl.slot_alts[slot][alt];
-            keys.push(derive_child(
-                &secp,
-                &self.job.sources[*src].accounts[*path],
-                step,
-                idx,
-            )?);
+            // The scan's child-key cache when it holds the key (every index
+            // of the window), else a derivation.
+            let cached = self
+                .cache
+                .steps
+                .iter()
+                .position(|s| *s == step)
+                .filter(|_| idx < self.cache.gap);
+            keys.push(match cached {
+                Some(si) => self.cache.get(*src, *path, si, idx),
+                None => derive_child(&secp, &self.job.sources[*src].accounts[*path], step, idx)?,
+            });
         }
         tpl.eval(&keys)
+    }
+
+    /// True when `tpl`+`assign` produces each of the wallet's matched
+    /// targets at that target's own (alternative, index): the twin check's
+    /// "one script per target" (final review I2: no index cap).
+    fn fits_hits(&self, tpl: &Template, assign: &[(usize, usize)], w: &Wallet) -> bool {
+        w.hits.iter().all(|(t, a, i)| {
+            self.spk(tpl, assign, *a as usize, *i).as_ref() == Some(&self.ctx.targets[*t].1)
+        })
     }
 
     fn alts(&self, tpl: &Template) -> usize {
         alts_used(self.ctx, tpl)
     }
 
-    /// (target, alt, idx) the wallet `tpl`+`assign` produces in the window.
+    /// (target, alt, idx) the wallet `tpl`+`assign` produces in the whole
+    /// index window (served from the child-key cache; no cap).
     fn coverage(&self, tpl: &Template, assign: &[(usize, usize)]) -> Vec<(usize, u32, u32)> {
         let mut out = Vec::new();
         for a in 0..self.alts(tpl) {
-            for i in 0..self.ctx.args.gap_limit.min(100_000) {
+            for i in 0..self.ctx.args.gap_limit {
                 if let Some(s) = self.spk(tpl, assign, a, i) {
                     if let Some(t) = self.ctx.target_map.get(&s) {
                         if !out.iter().any(|x: &(usize, u32, u32)| x.0 == *t) {
@@ -2024,11 +2228,13 @@ impl Analysis<'_> {
         let Ok(base) = Template::parse(&w.tpl_text) else {
             return (None, "none".into());
         };
-        let want = w.target_set();
         let mut fitting: Vec<(Vec<usize>, Expr)> = Vec::new();
         let mut why: Vec<String> = Vec::new();
         for f in &frags {
             let Some(rep) = self.fragment_twin(&expr, f, &base, w) else {
+                // Visible skip (final review N7): a sorted fragment with an
+                // argument that is not a slot gets no twin check.
+                why.push("a fragment with an argument that is not a slot was not checked".into());
                 continue;
             };
             let mut e2 = expr.clone();
@@ -2036,8 +2242,7 @@ impl Analysis<'_> {
             let Ok(t2) = Template::parse(&e2.render()) else {
                 continue;
             };
-            let cov: BTreeSet<usize> = self.coverage(&t2, &w.assign).iter().map(|x| x.0).collect();
-            if want.is_subset(&cov) {
+            if self.fits_hits(&t2, &w.assign, w) {
                 fitting.push((f.clone(), rep));
             } else if let Expr::Node { name, .. } = expr.at(f) {
                 why.push(if matches!(multi_family(name), Some((true, _))) {
@@ -2066,14 +2271,22 @@ impl Analysis<'_> {
         let Ok(t2) = Template::parse(&text) else {
             return (None, "none".into());
         };
-        let cov = self.coverage(&t2, &w.assign);
-        let covers: BTreeSet<usize> = cov.iter().map(|x| x.0).collect();
-        if !want.is_subset(&covers) {
+        if !self.fits_hits(&t2, &w.assign, w) {
             return (
                 None,
                 "none (the fragments' twins do not fit together)".into(),
             );
         }
+        // The twin's own hits: the wallet's (at their own indices), then any
+        // further target it produces in the window.
+        let mut cov: Vec<(usize, u32, u32)> = w.hits.clone();
+        for h in self.coverage(&t2, &w.assign) {
+            if !cov.iter().any(|x| x.0 == h.0) {
+                cov.push(h);
+            }
+        }
+        cov.sort();
+        let covers: BTreeSet<usize> = cov.iter().map(|x| x.0).collect();
         let note = if frags.len() > 1 {
             format!("{text} also fits every target (several fragments: other mixtures also fit)")
         } else {
@@ -2420,7 +2633,7 @@ impl Analysis<'_> {
             } else if job.single_sig {
                 Some(1)
             } else {
-                Some(job.units[0].space.orders)
+                Some(job.units[0].space.max_orders())
             },
             independent_paths: ctx.args.independent_paths,
             passphrase_supplied: ctx.passphrase_supplied,

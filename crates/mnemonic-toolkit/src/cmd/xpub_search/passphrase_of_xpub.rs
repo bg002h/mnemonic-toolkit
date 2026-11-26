@@ -131,7 +131,8 @@ pub struct PassphraseOfXpubArgs {
     /// Additional derivation-path template. Repeatable. The literal token
     /// `account'` (or `account`) is substituted with each iterated account
     /// index. Templates without an `account` token are searched once at the
-    /// literal path.
+    /// literal path. Hardened steps take `'` or `h`; a template that is not a
+    /// path is refused (exit 2).
     #[arg(long, value_name = "TEMPLATE")]
     pub add_path: Vec<String>,
 
@@ -273,6 +274,13 @@ pub fn run_passphrase_of_xpub<R: Read, W: Write, E: Write>(
         args.min_account,
         args.number_of_accounts,
         args.max_account,
+    )?;
+    super::candidate_paths::check_add_paths(
+        "passphrase-of-xpub",
+        args.min_account,
+        args.number_of_accounts,
+        args.max_account,
+        &args.add_path,
     )?;
     // 0) Emit the unconditional stderr advisory FIRST (plan §6.4 "always
     //    emit … before search starts"). Errors in writeln are non-fatal —

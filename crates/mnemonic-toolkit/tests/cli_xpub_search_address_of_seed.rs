@@ -2418,7 +2418,7 @@ fn fable_m4_estimate_states_memory() {
     assert_eq!(o.code, 0, "{}", o.stderr);
     let first = o.stderr.lines().next().unwrap_or("");
     assert!(first.starts_with("estimate:"), "{}", o.stderr);
-    assert!(first.contains("memory about"), "{}", o.stderr);
+    assert!(first.contains("memory estimated"), "{}", o.stderr);
 }
 
 /// Final review M5: a keyed shape `bundle` cannot record is refused naming
@@ -2461,4 +2461,21 @@ fn fable_m6_two_keys_for_one_placed_slot() {
     ]);
     assert_eq!(o.code, 2, "{}", o.stderr);
     assert!(o.stderr.contains("@1 is given two keys"), "{}", o.stderr);
+}
+
+/// Final review N3: a bad `--from seedqr=` value is not echoed (no
+/// character, no position).
+#[test]
+fn fable_n3_bad_seedqr_not_echoed() {
+    let o = run_with(
+        &["--from", "seedqr=@env:Q", "--target-address", S1],
+        &[("Q", "000000000000000000000000000000000000000000000x00")],
+        None,
+    );
+    assert_ne!(o.code, 0);
+    assert!(
+        !o.stderr.contains("'x'") && !o.stderr.contains("position"),
+        "{}",
+        o.stderr
+    );
 }

@@ -418,8 +418,9 @@ pub enum ToolkitError {
     /// `xpub-search address-of-seed`: a refusal that needs user input (a slot
     /// without a key, more keys than slots, the same seed twice, private-key
     /// material, a second stdin reader, a count above the ceiling, ...).
-    /// SPEC_xpub_search_address_of_seed §5. Exit 2. The message never carries
-    /// a secret value.
+    /// SPEC_xpub_search_address_of_seed §5. Also every xpub-search verb's
+    /// malformed `--add-path`. Exit 2. The message starts with the verb
+    /// (`address-of-seed: …`) and never carries a secret value.
     XpubSearchRefusal(String),
     /// `xpub-search address-of-seed`: a wallet was found but must be verified
     /// (`twin`, `split`, `unmatched`, `path_unrecordable`, `origin_unknown`,
@@ -1029,7 +1030,8 @@ impl ToolkitError {
                     )
                 }
             }
-            ToolkitError::XpubSearchRefusal(m) => format!("xpub-search address-of-seed: {m}"),
+            // The message starts with the verb (`address-of-seed: …`).
+            ToolkitError::XpubSearchRefusal(m) => format!("xpub-search {m}"),
             ToolkitError::XpubSearchUnverified { reasons } => format!(
                 "a wallet was found but must be verified ({}); see the report above",
                 reasons.join(", ")

@@ -414,8 +414,10 @@ pub struct Space {
     pub free_slots: Vec<usize>,
     /// Sources without a pinned slot, in seed-then-cosigner order.
     pub free_keys: Vec<usize>,
-    /// Slot orders per tuple: 1 under the sorted collapse, else `f!`.
-    pub orders: u64,
+    /// Slot orders per tuple, one entry per segment: 1 under the sorted
+    /// collapse, else `f!` (final review M3: a seat segment's `f!` does not
+    /// undo the shared segment's collapse).
+    pub orders: Vec<u64>,
     pub segments: Vec<PathTuples>,
     pub sources: Vec<SourcePaths>,
 }
@@ -424,11 +426,21 @@ pub struct Space {
 pub type Assignment = Vec<(usize, usize)>;
 
 impl Space {
-    /// Candidate count `Σ Tₛ × S`, or `None` past `u64`.
+    /// Slot orders of segment `i`.
+    fn seg_orders(&self, i: usize) -> Option<u64> {
+        self.orders.get(i).copied()
+    }
+
+    /// The largest per-segment slot-order count (the reported figure).
+    pub fn max_orders(&self) -> u64 {
+        self.orders.iter().copied().max().unwrap_or(1)
+    }
+
+    /// Candidate count `Σ Tₛ × Sₛ`, or `None` past `u64`.
     pub fn candidates(&self) -> Option<u64> {
         let mut total: u64 = 0;
-        for seg in &self.segments {
-            total = total.checked_add(seg.count()?.checked_mul(self.orders)?)?;
+        for (i, seg) in self.segments.iter().enumerate() {
+            total = total.checked_add(seg.count()?.checked_mul(self.seg_orders(i)?)?)?;
         }
         Some(total)
     }
@@ -438,7 +450,7 @@ impl Space {
         let mut seg_i = 0;
         loop {
             let seg = self.segments.get(seg_i)?;
-            let size = seg.count()?.checked_mul(self.orders)?;
+            let size = seg.count()?.checked_mul(self.seg_orders(seg_i)?)?;
             if rank < size {
                 break;
             }
@@ -446,10 +458,11 @@ impl Space {
             seg_i += 1;
         }
         let seg = &self.segments[seg_i];
-        let t = rank / self.orders;
-        let sigma_rank = rank % self.orders;
+        let orders = self.seg_orders(seg_i)?;
+        let t = rank / orders;
+        let sigma_rank = rank % orders;
         let f = self.free_slots.len();
-        let sigma: Vec<usize> = if self.orders == 1 {
+        let sigma: Vec<usize> = if orders == 1 {
             (0..f).collect()
         } else {
             unrank_permutation(u128::from(sigma_rank), f)
@@ -507,8 +520,9 @@ pub fn orders_for(f: usize) -> Option<u64> {
     factorial(f).and_then(|v| u64::try_from(v).ok())
 }
 
-/// Slot orders searched per path tuple: 1 under the sorted collapse, `f!`
-/// otherwise, or `None` past `u64`.
+/// Slot orders searched per path tuple of each segment (one entry per
+/// segment): 1 under the sorted collapse, `f!` otherwise, or `None` past
+/// `u64`.
 ///
 /// The collapse is sound only when a slot contributes nothing but its
 /// use-site path (SPEC §4 pruning 4): the template passes
@@ -516,7 +530,8 @@ pub fn orders_for(f: usize) -> Option<u64> {
 /// path set in every free slot. Two things make a slot select a path, and
 /// either one disables the collapse (review r1 C1, I1):
 /// - a Refugium seat segment (the seat is `32 r + slot`, so the path fixes
-///   the slot);
+///   the slot); this disables the collapse for that segment only (final
+///   review M3);
 /// - a path pin that differs between free slots (a keyless md1's per-slot
 ///   origins, which bind the path to the slot, not to a seed).
 pub fn slot_orders(
@@ -525,21 +540,24 @@ pub fn slot_orders(
     free_keys: &[usize],
     segments: &[PathTuples],
     sources: &[SourcePaths],
-) -> Option<u64> {
+) -> Option<Vec<u64>> {
     let same_paths_in_every_free_slot = free_keys.iter().all(|k| {
         let pin = &sources[*k].pin;
         free_slots
             .iter()
             .all(|s| free_slots.first().is_none_or(|s0| pin[*s] == pin[*s0]))
     });
-    let seat_segment = segments
+    let collapse = sorted_collapse_applies(tpl) && same_paths_in_every_free_slot;
+    segments
         .iter()
-        .any(|s| matches!(s, PathTuples::Refugium { .. }));
-    if sorted_collapse_applies(tpl) && !seat_segment && same_paths_in_every_free_slot {
-        Some(1)
-    } else {
-        orders_for(free_slots.len())
-    }
+        .map(|seg| {
+            if collapse && !matches!(seg, PathTuples::Refugium { .. }) {
+                Some(1)
+            } else {
+                orders_for(free_slots.len())
+            }
+        })
+        .collect()
 }
 
 /// True when the template evaluates at the space's first candidate (a
@@ -1373,7 +1391,7 @@ mod tests {
                 pinned_key: case.pinned_key.clone(),
                 free_slots,
                 free_keys,
-                orders,
+                orders: orders.clone(),
                 segments: case.segments.clone(),
                 sources: case.sources.clone(),
             };
@@ -1427,7 +1445,7 @@ mod tests {
                     (canon(&tpl, &asg), h.alt, h.index, h.target)
                 })
                 .collect();
-            assert_eq!(got, expect, "{} (orders {orders})", case.text);
+            assert_eq!(got, expect, "{} (orders {orders:?})", case.text);
             let reference = scan_reference(&space, &tpl, &cache, &targets, 2, 1 << 20);
             assert_eq!(parallel, reference, "{}", case.text);
             // The cap is counted, not silently dropped.
