@@ -43,7 +43,7 @@ reference tracks the current release.
 ## Secret material on argv is REFUSED {#argv-refusal}
 
 **`mnemonic` will not accept secret material as a command-line argument.**
-It refuses at **exit 2**, before the command line is parsed — nothing is
+It refuses at **exit 8**, before the command line is parsed — nothing is
 read, nothing is written, and the argument parser never sees the value.
 
 Why the refusal exists: argv is **public**. It is visible in
@@ -109,8 +109,8 @@ and for `import-wallet` / `electrum-decrypt --decrypt-password` /
 | nothing | empty (the no-passphrase wallet) |
 | `--passphrase-stdin` | stdin, with exactly **one** trailing newline (`\n` or `\r\n`) removed; every other byte kept |
 | `--passphrase -` | the same as `--passphrase-stdin`, byte for byte |
-| `--passphrase @env:VAR` | the value of `VAR`, resolved once, with the same one-newline rule. `VAR` unset, not valid UTF-8, or not a valid name (`[A-Z_][A-Z0-9_]*`) is an error naming it; set but empty is the empty passphrase (warned, see below) |
-| `--passphrase <anything else>` | refused as argv material (exit 2) unless `--allow-argv-secret` is given; with it, that string, verbatim, plus one stderr line: `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
+| `--passphrase @env:VAR` | the value of `VAR`, resolved once, with the same one-newline rule. `VAR` unset, not valid UTF-8, or not a valid name (`[A-Z_][A-Z0-9_]*`) is an error naming it (unset: exit 32; not a valid name: exit 64; not UTF-8: exit 2); set but empty is the empty passphrase (warned, see below) |
+| `--passphrase <anything else>` | refused as argv material (exit 8) unless `--allow-argv-secret` is given; with it, that string, verbatim, plus one stderr line: `warning: secret material on argv (--passphrase) — read it privately with --passphrase - or --passphrase-stdin (stdin), or --passphrase @env:VAR (environment variable)` |
 
 A passphrase that differs by one byte is a different wallet, so leading and
 trailing spaces, a second trailing newline and interior newlines are all
@@ -389,7 +389,7 @@ mnemonic bundle --network <NETWORK> [OPTIONS]
 | `--self-check` | re-parse and verify the emitted bundle round-trips |
 | `--threshold <THRESHOLD>` | multisig K of N (1 ≤ K ≤ N ≤ 16) |
 | `--slot <SLOT>` | repeating; `@N.<subkey>=<value>` (subkey: `phrase`, `seedqr`, `entropy`, `ms1`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv`); for secret-bearing subkeys `=-` reads from stdin. `seedqr` (v0.31.3+) takes a 48- or 96-digit SeedQR string and decodes inline at slot-emit time, materializing the BIP-39 phrase identically to a `@N.phrase=` invocation. `ms1` (v0.41.0+) takes a raw BIP-93 codex32 secret string and decodes it inline, materializing the slot's entropy identically to a `@N.entropy=` invocation; it is **language-preserving** — a `mnem`-kind ms1 carries its BIP-39 wordlist language on the wire, so the emitted card round-trips that language without re-specifying `--language`. Supplying `--language` whose wordlist disagrees with the slot's wire language is refused (`SlotInputViolation` `kind:"language-conflict"`, exit 2); omit `--language` or set it to match. A K-of-N codex32 **share** (not a single-string secret) is rejected with a pointer to `ms-shares combine` — reassemble the secret first, then slot the combined `ms1`. The share at index `s` is the secret itself, not a distributed share, and `ms-shares combine` does not take it, so it is rejected (exit 2) without that pointer. |
-| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 1): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 1). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
+| `--import-json <FILE\|->` | (v0.27.0) synthesize a bundle from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` carries the descriptor and `bundle.mk1` chunks decode to per-cosigner xpubs + fingerprints + paths; mutually exclusive with `--template`, `--descriptor`, `--descriptor-file`; seed overlay (`--slot @N.phrase=`) applies to slots where envelope `ms1[N] == ""` (watch-only); supplying overlay for an already-seeded slot is `BadInput`. Any other `--slot` subkey (`entropy`, `ms1`, `seedqr`, `xpub`, `fingerprint`, `path`, …) is refused (exit 64): get the phrase of a seed card with `mnemonic convert --from <subkey>=- --to phrase` (it prints `phrase: <words>`) and give the words alone, without the "phrase: " label, on stdin to `--slot @N.phrase=-`. `--threshold` is ignored: K comes from the envelope's descriptor; `--network` must equal the envelope's `bundle.network`; a disagreement is refused (exit 8). An envelope imported without `--network` records a signet or regtest wallet as testnet: re-create it with `import-wallet --network signet` (or `regtest`). The replayed `bundle.descriptor` re-parses through the same pipeline as `--descriptor`, so an old envelope carrying a fixed use-site step (`/0/*`) now hits the [use-site residue reject](#non-representable-use-site-steps) too (exit 2) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 2 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array (e.g., Bitcoin Core `listdescriptors` with multiple descriptors); required when the envelope has > 1 entry; out-of-range is `BadInput` exit 2 |
 | `--help` | print help |
 
@@ -446,16 +446,16 @@ The same completion works on [`verify-bundle`](#mnemonic-verify-bundle)
 via its `--slot @0.phrase=` seed slot (or `.ms1=` / `.entropy=` /
 `.seedqr=`) + `--account` / `--origin` / `--expect-wallet-id` flags.
 `--expect-wallet-id` recomputes the `WalletPolicyId` from the
-completed wallet and refuses loudly on mismatch (exit 4); it is **not**
+completed wallet and refuses loudly on mismatch (exit 1); it is **not**
 checked when `--origin` is supplied (the explicit-origin id is a
 different preimage from the canonical-account one). On `verify-bundle`, a
 supplied `--ms1` is compared against the seed (the `ms1_decode` /
 `ms1_entropy_match` rows of the keyed single-sig check); a card for a
-different seed fails (exit 4).
+different seed fails (exit 1).
 
 The single-sig reference flags work on `restore` here too: a wrong
 `--expect-fingerprint` or `--expect-xpub` refuses with `✗ MISMATCH`
-(exit 4) unless `--allow-mismatch`, which prints the descriptor under a
+(exit 1) unless `--allow-mismatch`, which prints the descriptor under a
 `✗ MISMATCH (overridden)` banner. `--format` is refused (exit 2); run
 without it to print the completed descriptor.
 
@@ -508,7 +508,7 @@ The engine then resolves the unique key→slot assignment via one of three
    `--search-chain` branch(es) (`receive` (default) / `change` / `both`).
 3. **explicit assignment** — pin every cosigner with `--cosigner @N=` (no
    search). It checks `--expect-wallet-id` if given (a mismatch refuses,
-   exit 4) and refuses `--search-address` (exit 1): drop the `@N=` prefixes
+   exit 1) and refuses `--search-address` (exit 64): drop the `@N=` prefixes
    to let the address place the cosigners.
 
 There is **no search-time ceiling** (since v0.99.0). The scan starts at
@@ -917,7 +917,7 @@ mnemonic verify-bundle --network <NETWORK> [OPTIONS] [--ms1 ...] [--mk1 ...] [--
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); single stdin per invocation |
 | `--account <ACCOUNT>` | BIP-32 account index |
 | `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for verifying + recomposing a **keyless single-sig template** bundle (`bundle --md1-form=template`); overrides the canonical `m/<purpose>'/<coin>'/<account>'` default, mirroring [`restore --origin`](#mnemonic-restore). Only meaningful for a keyless single-sig template bundle; ignored otherwise. See [Template-only md1](#template-only-md1) |
-| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for a keyless single-sig template bundle. When set, verify-bundle recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a mismatch is a **failed check** (overall `mismatch`, exit 4). An empty, odd-length or non-hex, or longer-than-16-byte prefix is refused (exit 1), as on [`restore`](#mnemonic-restore). Only meaningful for a template bundle; ignored otherwise. **NOT** checked when `--origin` overrides the canonical account path (a different preimage). See [Template-only md1](#template-only-md1) |
+| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for a keyless single-sig template bundle. When set, verify-bundle recomputes the id from the completed, fully-keyed, explicit-origin wallet and matches its leading bytes; a mismatch is a **failed check** (overall `mismatch`, exit 1). An empty, odd-length or non-hex, or longer-than-16-byte prefix is refused (exit 2), as on [`restore`](#mnemonic-restore). Only meaningful for a template bundle; ignored otherwise. **NOT** checked when `--origin` overrides the canonical account path (a different preimage). See [Template-only md1](#template-only-md1) |
 | `--from <FROM>` | (#28 phase 2) the operator's OWN seed for completing a keyless **multisig / general** TEMPLATE bundle (`bundle --md1-form=template`, n≥2). Same grammar + semantics as [`restore --from`](#mnemonic-restore) (`ms1=` / `phrase=` / `entropy=` / `seedqr=`; `@env:VAR` or stdin). REQUIRED to complete a multisig template; ignored for a single-sig template or keyed wallet-policy bundle. The own key is derived at `--account` (a single own account for verify) honoring `--origin`. See [Multisig template completion](#multisig-template-completion) |
 | `--cosigner <COSIGNER>` | (#28 phase 2) an UNASSIGNED cosigner key (`mk1` / xpub) for completing a keyless multisig / general TEMPLATE bundle; repeat per cosigner card. Same grammar + semantics as [`restore --cosigner`](#mnemonic-restore): the bare form is search-placed, `@N=<mk1\|xpub>` assigns it explicitly. Only meaningful with `--from` + a keyless multisig template. Distinct from `--mk1` (the engraved STUB cards the binding check validates) |
 | `--own-account-max <OWN_ACCOUNT_MAX>` | (v0.70.0; #28 phase 2) RANGE fallback for the OWN seed's account when the exact account is unknown: derive the own seed at every account in `0..K` and let the multisig-template **own-account subset-search** select the account actually used (own-only — the `--cosigner` cards must be EXACT; over-supply cosigners with `--search-cosigner-subset`). NEW on `verify-bundle` (mirrors [`restore --own-account-max`](#mnemonic-restore)). Mutually exclusive with `--account` (clap `conflicts_with` — `--own-account-max K` ALONE passes; the scalar `--account` default is ignored). `K ≤ 256`. Threaded into the SAME shared completion engine `restore` uses (verify == restore). See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
@@ -953,6 +953,11 @@ descriptor (keys supplied via `--slot`) alike.
 > **BIP-388 key-distinctness failed**. `$?`-gated scripts that treated
 > exit 4 from this path as "possible bundle corruption" should treat
 > exit 2 as "fix your input".
+>
+> **Changed again at the constellation exit-code cutover.** A card
+> mismatch is now exit 1, a failed BIP-388 key-distinctness check and an
+> undecodable supplied card are exit 2, and exit 4 means only `result:
+> partial` (see [Appendix J](#appendix-j-exit-codes)).
 
 ### Worked example
 
@@ -969,27 +974,27 @@ v0.22.1 D18 default). The behavior matrix:
 
 | TTY? | `--no-auto-repair`? | Outcome |
 |---|---|---|
-| yes | no | Auto-fire attempts a correction: **mk1** (a full `chunk_set_id` group that reassembles cleanly) / **md1 chunked** (multi-chunk, or chunked-of-1 — e.g. the `mnemonic bundle` / `--md1-form=template` shape) — exit 5 + repair report on stderr, corrected chunk on stdout. **md1 non-chunked** (v0.86.0 — the plain `md encode` single-string form; no cross-chunk/content-id oracle, see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below) and **ms1** (Cycle F) — NO short-circuit. The md1 non-chunked candidate falls through with a one-line stderr advisory pointing at `mnemonic repair --md1`; the ms1 corrected candidate is instead compared to the expected (typed) seed via the `ms1_decode` / `ms1_entropy_match` check rows below |
-| yes | yes | Legacy VerifyCheck row + `result: mismatch` + exit 4 |
-| no (pipe / redirected / CI) | no | Legacy VerifyCheck row + exit 4 (preserves automation contract) |
-| no | yes | Legacy VerifyCheck row + exit 4 |
+| yes | no | Auto-fire attempts a correction: **mk1** (a full `chunk_set_id` group that reassembles cleanly) / **md1 chunked** (multi-chunk, or chunked-of-1 — e.g. the `mnemonic bundle` / `--md1-form=template` shape) — exit 2 + repair report on stderr, corrected chunk on stdout (the report is advice: the verb still failed on an invalid input, so the code is the same as in a pipe; run `mnemonic repair` and re-verify with the corrected card). **md1 non-chunked** (v0.86.0 — the plain `md encode` single-string form; no cross-chunk/content-id oracle, see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below) and **ms1** (Cycle F) — NO short-circuit. The md1 non-chunked candidate falls through with a one-line stderr advisory pointing at `mnemonic repair --md1`; the ms1 corrected candidate is instead compared to the expected (typed) seed via the `ms1_decode` / `ms1_entropy_match` check rows below |
+| yes | yes | Legacy VerifyCheck row (`md1_decode` / `mk1_decode` fails) + `result: mismatch` + exit 2 |
+| no (pipe / redirected / CI) | no | Legacy VerifyCheck row + exit 2 (preserves automation contract) |
+| no | yes | Legacy VerifyCheck row + exit 2 |
 
-**Principled distinction across all four CLIs (SPEC §4):** exit-5
-`REPAIR_APPLIED` means a correction is **verified now** (an mk1/**chunked**
-md1 cross-chunk reassembly hash or content-id check; a unique
-full-checksum `--max-indel` recovery) **or verifiable-by-reassembly
-later** (an mk1 single-plate chunk under the standalone `mk repair` codec
-CLI, once the rest of its set is supplied — note that `mnemonic repair`
-*itself* instead demotes an incomplete mk1 group to exit-4, per the
-Cycle-E note below). exit-4 `VERIFY-ME` means a bounded-distance BCH
-SUBSTITUTION correction spent the checksum's error-detection budget and
-has **no self-oracle** — this is ms1's case always, a **non-chunked**
-md1 single-string correction (v0.86.0 — see [md1 non-chunked
-demotion](#mnemonic-repair-md1-non-chunked-demotion) below), an
-incomplete mk1 `chunk_set_id` group, or an ambiguous `--max-indel`
-recovery. Exit-5 is never "an oracle verified it" — that phrasing is
-false for the mk1 single-plate case, which is merely *not yet*
-falsified.
+The exit code does not depend on whether stdout is a terminal: an
+undecodable supplied card is exit 2 in every row.
+
+**Principled distinction across all CLIs:** exit bit 16 means a
+correction was applied and the corrected value used; it is **verified
+now** (an mk1/**chunked** md1 cross-chunk reassembly hash or content-id
+check; a unique full-checksum `--max-indel` recovery) **or verifiable
+by reassembly later** (an incomplete mk1 `chunk_set_id` group, once the
+rest of its set is supplied). Bit 4 is added (exit 20) when a
+bounded-distance BCH SUBSTITUTION correction spent the checksum's
+error-detection budget and has **no self-oracle** — this is ms1's case
+always, a **non-chunked** md1 single-string correction (see [md1
+non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below),
+or an ambiguous `--max-indel` recovery. Bit 16 is never "an oracle
+verified it" — that phrasing is false for the incomplete-set case, which
+is merely *not yet* falsified.
 
 **Pathless (dead-card) partial verdict (v0.88.0).** When the SUPPLIED `md1` is a
 **dead card** — no canonical origin *and* an elided-and-unresolvable per-`@N`
@@ -997,8 +1002,8 @@ origin (see [inspect](#mnemonic-inspect)) — that would otherwise verify `ok`,
 `verify-bundle` returns `result: partial` and exits **4** instead of `ok`/exit 0.
 All structural checks (which already exclude origin) still run; the verdict
 precedence is **mismatch > partial > ok** — a dead card that ALSO fails any
-structural check reports `mismatch` (exit 4) as before, and a *corrupted* dead
-card (content-id oracle failure) fails `md1_decode` → `mismatch`, never
+structural check reports `mismatch` (exit 1), and a *corrupted* dead
+card (content-id oracle failure) fails `md1_decode` → `mismatch` (exit 2), never
 `partial`. The partial verdict downgrades only an otherwise-clean `ok`, honestly
 signalling that the origin on this backup is unspecified and must be confirmed
 out-of-band before restoring funds. The `--json` envelope gains an additive
@@ -1010,8 +1015,8 @@ follow-up; the clap flag surface is unchanged, so the schema mirror is not
 affected).
 
 **mk1 set-level re-verify (Cycle E):** for an `--mk1` / `--bundle-json`
-mk1 payload, the "Auto-fire" outcome above (exit 5, corrected chunk
-applied to stdout) only occurs when the FULL `chunk_set_id` group is
+mk1 payload, the "Auto-fire" outcome above (exit 2, corrected chunk
+printed to stdout) only occurs when the FULL `chunk_set_id` group is
 supplied AND the correction reassembles cleanly. If the correction
 would alias to a different card (a complete group whose reassembly
 fails), auto-fire does **not** apply it — the original decode error
@@ -1038,10 +1043,11 @@ so `verify-bundle` feeds the corrected candidate into the existing
 `ms1_decode` / `ms1_entropy_match` check-row comparison against it
 instead of emitting a stderr advisory: **match** ⇒ both checks PASS
 ("recovered via auto-repair, confirmed against expected seed") and the
-run can still finish `exit 0`; **mismatch** ⇒ `ms1_entropy_match` FAILS
+run finishes `exit 16` (a correction was used: the plate is damaged, so
+re-engrave it); **mismatch** ⇒ `ms1_entropy_match` FAILS
 ("auto-repair candidate did not match the expected seed — this card is
 not a card for this seed"), the full check table is still emitted, and
-the run exits `4` — never a silent "recovered", never an abort. This
+the run exits `17` (`16 + 1`) — never a silent "recovered", never an abort. This
 closes the wrong-bundle attack a derived-xpub oracle could not: a
 corroded `--ms1` that happens to correct to a DIFFERENT wallet's seed is
 caught by the comparison rather than accepted. No mk1/xpub derivation is
@@ -1098,14 +1104,14 @@ v0.25.0:
 
 | Subcommand | Trigger | TTY-positive default | TTY-negative default |
 |---|---|---|---|
-| `convert` | `mk_codec` decode failure on `--from mk1=…` | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `convert` | `mk_codec` decode failure on `--from mk1=…` | Auto-fire (repair report printed as advice; exit 2) | Typed decode error (exit 2) |
 | `convert` | `ms_codec` decode failure on `--from ms1=…` (Cycle F) | **NO short-circuit** — the original decode error surfaces (its own exit code) + a one-line stderr advisory pointing at `mnemonic repair --ms1` | Typed decode error (no advisory) |
-| `inspect` | `mk_codec` decode failure on `--mk1`, or `md_codec` decode failure on a **chunked** `--md1` (multi-chunk, or chunked-of-1) | Auto-fire (exit 5 + repair report) | Typed decode error (exit ≠ 5) |
+| `inspect` | `mk_codec` decode failure on `--mk1`, or `md_codec` decode failure on a **chunked** `--md1` (multi-chunk, or chunked-of-1) | Auto-fire (repair report printed as advice; exit 2) | Typed decode error (exit 2) |
 | `inspect` | `md_codec` decode failure on a **non-chunked** `--md1` (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below) | **NO short-circuit** — same advisory-and-fall-through shape as ms1 below, pointing at `mnemonic repair --md1` | Typed decode error (no advisory) |
 | `inspect` | `ms_codec` decode failure on `--ms1` (Cycle F) | **NO short-circuit** — same advisory-and-fall-through as `convert` above | Typed decode error (no advisory) |
-| `verify-bundle` | `mk_codec` decode failure, or `md_codec` decode failure on a **chunked** md1 (as above, plus the `--bundle-json` intake path) | Auto-fire (exit 5 + repair report; corrected chunk on stdout) | Legacy VerifyCheck row + exit 4 |
-| `verify-bundle` | `md_codec` decode failure on a **non-chunked** md1 (v0.86.0, plus `--bundle-json`) | **NO short-circuit** — falls through to the Legacy VerifyCheck row + a one-line stderr advisory pointing at `mnemonic repair --md1` | Legacy VerifyCheck row + exit 4 |
-| `verify-bundle` | `ms_codec` decode failure (as above, plus `--bundle-json`) (Cycle F) | `ms1_decode` / `ms1_entropy_match` check-row compare against the typed seed — PASS on match, `ms1_entropy_match` fail → exit 4 on mismatch (see [ms1 ground-truth compare](#auto-fire-on-decode-failure-v0221) above); NO stderr advisory on this path | Legacy VerifyCheck row + exit 4 |
+| `verify-bundle` | `mk_codec` decode failure, or `md_codec` decode failure on a **chunked** md1 (as above, plus the `--bundle-json` intake path) | Auto-fire (repair report; corrected chunk on stdout as advice; exit 2) | Legacy VerifyCheck row + exit 2 |
+| `verify-bundle` | `md_codec` decode failure on a **non-chunked** md1 (v0.86.0, plus `--bundle-json`) | **NO short-circuit** — falls through to the Legacy VerifyCheck row + a one-line stderr advisory pointing at `mnemonic repair --md1` | Legacy VerifyCheck row + exit 2 |
+| `verify-bundle` | `ms_codec` decode failure (as above, plus `--bundle-json`) (Cycle F) | `ms1_decode` / `ms1_entropy_match` check-row compare against the typed seed — PASS on match, `ms1_entropy_match` fail → exit 1 on mismatch, with 16 added when a correction was used (see [ms1 ground-truth compare](#auto-fire-on-decode-failure-v0221) above); NO stderr advisory on this path | Legacy VerifyCheck row + exit 2 |
 
 The TTY gate exists so scripts that parse the typed error envelope
 (or, for `verify-bundle`, the `VerifyCheck` array / JSON envelope's
@@ -1136,10 +1142,10 @@ mnemonic convert --from <NODE>=<value> --to <NODE> [--to <NODE>]... [OPTIONS]
 |---|---|
 | `--from <FROM>` | source node (`phrase=…`, `seedqr=…`, `entropy=…`, `xpub=…`, `xprv=…`, `wif=…`, `ms1=…`, `mk1=…`, `bip38=…`, `minikey=…`, `electrum-phrase=…`); `=-` reads from stdin. `seedqr=<digits>` (v0.31.6+) decodes a 48/60/72/84/96-digit SeedQR string to a BIP-39 phrase then projects to any phrase-reachable target |
 | `--to <TO>` | target node; repeating for multi-output. `seedqr` is NOT a valid target (input-only); use `mnemonic seedqr encode` to emit a SeedQR digit-string |
-| `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 2) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
+| `--network <NETWORK>` | mainnet / testnet / signet / regtest. For `(Xpub, Address)` derivation, an explicit `--network` disagreeing with the xpub's own version bytes is refused fail-closed (exit 8, a network mismatch) rather than rendering a wrong-network address; omit `--network` to infer it from the xpub instead |
 | `--template <TEMPLATE>` | as for `bundle` |
 | `--path <PATH>` | BIP-32 path from the master key, literal `m/...` only. For `--to xpub`/`--to xprv` it overrides the `--template`/`--account` path (and makes `--template` optional); required for `--to wif`, `--to address` from a seed, and composite `--to bip38`. Does not change `--to fingerprint` (always the master fingerprint). Refused (exit 2) with a non-zero `--account`, or when no requested target uses it |
-| `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 2) when non-zero together with `--path`, or when non-zero and no requested target reads it |
+| `--account <ACCOUNT>` | account index (default 0); read only by `--to xpub` / `--to xprv` from a `phrase=`, `seedqr=` or `entropy=` source without `--path`. Refused (exit 64) when non-zero together with `--path`, or when non-zero and no requested target reads it |
 | `--language <LANGUAGE>` | BIP-39 wordlist |
 | `--passphrase <PASSPHRASE>` | BIP-39 passphrase |
 | `--passphrase-stdin` | read `--passphrase` from stdin (raw, NULL-byte preserving); BIP-38 V3 use case |
@@ -1192,11 +1198,11 @@ mnemonic export-wallet [OPTIONS]
 | `--descriptor <DESCRIPTOR>` | accepts a concrete descriptor (with or without key origins); **(v0.49.0) also a BIP-388 wallet-policy JSON** `{name, description_template, keys_info}` (auto-detected by a leading `{`), expanded to the concrete descriptor — the inverse of `--format bip388`; a keyless `@N` template is rejected with a pointer to `--template … --slot …` or `--from-import-json` |
 | `--threshold <THRESHOLD>` | multisig threshold |
 | `--multisig-path-family <FAMILY>` | bip48 or bip87 |
-| `--network <NETWORK>` | default mainnet. Every resolved `--slot` xpub (and `@N.master_xpub=`) must agree with `--network`'s version-byte family, and a concrete `--descriptor`'s extended keys must agree with it for `--format bsms` 4-line's first-address line — a disagreement (including against the clap default, with no explicit flag) is refused fail-closed (exit 2) rather than re-emitting a wrong-network xpub / minting a wrong-network address |
+| `--network <NETWORK>` | default mainnet. Every resolved `--slot` xpub (and `@N.master_xpub=`) must agree with `--network`'s version-byte family, and a concrete `--descriptor`'s extended keys must agree with it for `--format bsms` 4-line's first-address line — a disagreement (including against the clap default, with no explicit flag) is refused fail-closed (exit 8, a network mismatch) rather than re-emitting a wrong-network xpub / minting a wrong-network address |
 | `--language <LANGUAGE>` | ignored (watch-only); accepted for slot-parser symmetry |
 | `--account <ACCOUNT>` | account index (default 0) |
 | `--slot <SLOT>` | repeating `@N.<subkey>=<value>`; subkeys: `phrase`, `seedqr`, `entropy`, `xpub`, `master_xpub`, `fingerprint`, `path`, `wif`, `xprv` (secret-bearing subkeys, including `seedqr`, are refused by `export-wallet`'s watch-only validator per SPEC §3) |
-| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 1): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot. **`bip388`** refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins), and a `--descriptor` key with a derivation step before `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`; a BIP-388 key entry is an xpub with no path after it); use `descriptor` or `bitcoin-core` for these wallets |
+| `--format <FORMAT>` | `bitcoin-core` (default) / `bitcoin-core-addresses` / `bip388` / `coldcard` / `jade` / `sparrow` / `specter` / `electrum` / `green` / `bsms` (v0.27.0) / `descriptor` (v0.42.0) — bare canonical descriptor string + BIP-380 checksum (`<descriptor>#<checksum>`), no wallet-file wrapper. **`bitcoin-core-addresses`** emits an `addr()` WATCH LIST instead of a descriptor — see "Watching a wallet Core will not describe" below. **`electrum`** refuses every taproot template (`bip86`, `tr-multi-a`, `tr-sortedmulti-a`; exit 2): Electrum reads a plain-xpub `standard` wallet as p2pkh and has no taproot multisig wallet type, so use `bitcoin-core` or `sparrow` for taproot. **`bip388`** refuses (exit 2) a policy BIP-388 calls invalid: a NUMS taproot internal key (`--taproot-internal-key nums`, or a `--descriptor` `tr(<NUMS hex>,…)`), which is a literal key and not an `@N` placeholder, and a wallet that uses one public key more than once (BIP-388 requires pairwise distinct `keys_info` keys, whatever their origins), and a `--descriptor` key with a derivation step before `/<0;1>/*` (e.g. `xpub/5/<0;1>/*`; a BIP-388 key entry is an xpub with no path after it); use `descriptor` or `bitcoin-core` for these wallets |
 | `--output <OUTPUT>` | output path (`-` = stdout, default) |
 | `--range <RANGE>` | Bitcoin Core `range` field; comma-separated; default `0,999` |
 | `--timestamp <TIMESTAMP>` | Bitcoin Core `timestamp` field; `0` (default; rescan from genesis to discover an existing key's funds), `now`, or unix seconds |
@@ -1205,7 +1211,7 @@ mnemonic export-wallet [OPTIONS]
 | `--wallet-name <WALLET_NAME>` | wallet name/label for formats that publish one (Coldcard generic JSON, Sparrow, Specter, Electrum); default `<template-human-name>-<account>` |
 | `--taproot-internal-key <TAPROOT_INTERNAL_KEY>` | `nums` or `@N` for `tr-multi-a` / `tr-sortedmulti-a` |
 | `--bsms-form <FORM>` | (v0.27.0) BSMS Round-2 emit shape — `4-line` (default; BIP-129-canonical) or `2-line` (lenient excerpt symmetric with the v0.26.0 import-side parser); ignored by every non-BSMS format per the per-format ignored-input contract |
-| `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--template` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative). **(v0.37.0)** for template-requiring file-import formats (`sparrow`/`coldcard`/`jade`/`electrum`) the `--template` is **auto-derived from the envelope descriptor** (so these now round-trip via `--from-import-json`); you still cannot pass `--template` explicitly here (it remains mutually exclusive) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 1 and ask you to re-create the envelope with `import-wallet` from the same blob. |
+| `--from-import-json <FILE\|->` | (v0.27.0) emit a per-format wallet config from an `import-wallet --json` envelope rather than from `--template` / `--descriptor`; the envelope's `bundle.descriptor` becomes the canonical descriptor, cosigner xpubs decode from `bundle.mk1` per SPEC §3.6.1, network derives from `bundle.network`; mutually exclusive with `--template` and `--descriptor`; `--account` is rejected (envelope's `bundle.account` is authoritative). **(v0.37.0)** for template-requiring file-import formats (`sparrow`/`coldcard`/`jade`/`electrum`) the `--template` is **auto-derived from the envelope descriptor** (so these now round-trip via `--from-import-json`); you still cannot pass `--template` explicitly here (it remains mutually exclusive) **An inconsistent envelope is refused.** If the envelope's md1, mk1 cards or descriptor disagree, both `--from-import-json` and `bundle --import-json` exit 2 and ask you to re-create the envelope with `import-wallet` from the same blob. |
 | `--from-import-json-index <N>` | (v0.27.0) pick a specific entry from a multi-entry envelope array; required when the envelope has > 1 entry |
 | `--allow <RULE>` | reviewed opt-out of ONE funds-safety sanity rule per occurrence (repeatable): `malleable`, `mixed-timelock`, `repeated-keys`, `resource-limit`, `sigless-branch` — the same vocabulary as `build-descriptor`. On THIS surface only `sigless-branch` is ENFORCED; the other four never run and say so. Never silent — see "Reviewed sanity opt-out" below |
 | `--help` | print help |
@@ -1363,37 +1369,37 @@ mnemonic restore --md1 <card> [--md1 <card> …] \
 
 `<node>` is one of `ms1` / `phrase` / `entropy` / `seedqr` (seed-bearing
 only — a non-seed node such as `xpub=` / `xprv=` / `wif=` is refused with
-exit 1). The value supports `@env:VAR` and `-` (stdin), the two secret
+exit 64). The value supports `@env:VAR` and `-` (stdin), the two secret
 channels that keep the seed off the argv.
 
 ### Flags
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) and that slot's engraved master fingerprint (a different engraved fingerprint refuses, exit 4, unless `--allow-mismatch`). See [Multisig template completion](#multisig-template-completion) |
+| `--from <FROM>` | seed source `ms1=<v>` / `phrase=<v>` / `entropy=<hex>` / `seedqr=<digits>`; value supports `@env:VAR` and `-` (stdin). Non-seed nodes (`xpub` / `xprv` / `wif` / …) are refused (restore needs a master secret). REQUIRED for single-sig restore **and for multisig-template completion** (the OWN seed); OPTIONAL in keyed-multisig (`--md1`) mode, where it cross-checks the own cosigner position (inferred by matching the derived key against the md1's slots) and that slot's engraved master fingerprint (a different engraved fingerprint refuses, exit 1, unless `--allow-mismatch`). See [Multisig template completion](#multisig-template-completion) |
 | `--md1 <MD1>` | (v0.44.0; multisig mode) the shared wallet-policy `md1` card chunk(s) — reconstructs the concrete watch-only multisig descriptor from the card alone. **(#28 phase 2) also accepts a keyless multisig / general TEMPLATE `md1`** (`bundle --md1-form=template`), completed via `--from` + `--account` + `--cosigner` (see [Multisig template completion](#multisig-template-completion)). Repeat for chunked cards. `wsh` / `sh(wsh)`, taproot NUMS multisig (`tr-multi-a` / `tr-sortedmulti-a`), (v0.55.1) general NUMS-taproot policies in a tap tree of any depth, and (v0.55.3) non-NUMS key-path taproot (a real cosigner trunk key) for general policies + distinct-trunk multisig; the `@-in-both` shape (trunk key also a leaf key) or a `sortedmulti_a` leaf inside a multi-leaf tree is refused (exit 2). Watch-only (non-secret) |
-| `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 4) unless `--allow-mismatch`. **(#28 phase 2) for multisig-template completion** the bare form (`--cosigner <mk1>`, no `@N=`) supplies an UNASSIGNED cosigner the search places; the `@N=` form assigns it explicitly. Watch-only (non-secret) |
+| `--cosigner <@N=KEY>` | (v0.44.0; multisig mode) cross-check assertion `@N=<mk1-chunk\|xpub>` — cosigner at position `N` is this public key. Repeat the same `@N=` for each chunk of a multi-chunk `mk1`. A mismatch against the md1's slot is a hard error (exit 1) unless `--allow-mismatch`. **(#28 phase 2) for multisig-template completion** the bare form (`--cosigner <mk1>`, no `@N=`) supplies an UNASSIGNED cosigner the search places; the `@N=` form assigns it explicitly. Watch-only (non-secret) |
 | `--passphrase <PASSPHRASE>` | BIP-39 mnemonic-extension passphrase; `-` reads stdin, `@env:VAR` the environment. Empty (default) = no passphrase |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (conflicts with `--passphrase`; mutually exclusive with `--from <node>=-`) |
 | `--language <LANGUAGE>` | BIP-39 wordlist for `phrase=` / `seedqr=` (default `english`); one of `english` / `simplifiedchinese` / `traditionalchinese` / `czech` / `french` / `italian` / `japanese` / `korean` / `portuguese` / `spanish`. A `mnem`-kind ms1 carries its own wire language; a conflicting `--language` is refused |
 | `--network <NETWORK>` | `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--account <ACCOUNT>` | BIP-32 account index(es) (default 0). Single-sig restore + single-sig template completion: one account (the first value). **(#28 phase 2) MULTISIG template completion**: the comma-separated LIST of accounts the OWN seed is used at — one own key per account (e.g. `--account 0,1,2,3` for a 4-own-slot policy); the search places each own-derived key. See [Multisig template completion](#multisig-template-completion) |
 | `--origin <ORIGIN>` | (#28) explicit BIP-32 origin path (e.g. `m/84'/0'/7'`) for completing a **keyless single-sig template** `md1` (`bundle --md1-form=template`); overrides the template's canonical `m/<purpose>'/<coin>'/<account>'` default. Only meaningful for keyless single-sig template restore; ignored otherwise. See [Template-only md1](#template-only-md1) |
-| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion (single-sig phase 1 **and** multisig phase 2 id-search). Restore recomputes the id from the completed, fully-keyed wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). For multisig the prefix must be **strong** (sized to the realized search space) or the search refuses an ambiguous match. **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
+| `--expect-wallet-id <PREFIX>` | (#28) expected `WalletPolicyId` hex prefix for template-completion (single-sig phase 1 **and** multisig phase 2 id-search). Restore recomputes the id from the completed, fully-keyed wallet and matches its leading bytes; a **mismatch refuses loudly** (exit 1). Any-length prefix (an advisory warns when shorter than 4 bytes — a collision footgun — but does not enforce it; the convenience prefix the `bundle` advisory prints is 4 bytes). For multisig the prefix must be **strong** (sized to the realized search space) or the search refuses an ambiguous match. **NOT** checked when `--origin` is supplied (a different preimage). See [Template-only md1](#template-only-md1) and [Multisig template completion](#multisig-template-completion) |
 | `--own-account-max <OWN_ACCOUNT_MAX>` | (v0.70.0; #28 phase 2) RANGE fallback for the OWN seed's account(s) when the exact accounts are unknown: derive the own seed at **every** account in `0..K` and let the multisig-template **own-account subset-search** select the subset actually used. Own-only — the supplied `--cosigner` cards must be EXACT (over-supply cosigners with `--search-cosigner-subset`). Mutually exclusive with `--account` (clap `conflicts_with` — `--own-account-max K` ALONE passes; the `--account` default is ignored). `K ≤ 256`. The realized search space sizes the strong-prefix requirement, so a LONGER `--expect-wallet-id` prefix (or `--search-address`) is needed than for the exact-account path. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
 | `--search-cosigner-subset` | (v0.70.0; #28 phase 2) **OPT-IN bounded cosigner-subset search.** By default (OFF) a multisig template completion requires the supplied `--cosigner` cards to be EXACT (own-only — over-supplying cosigners refuses). With this flag the operator MAY over-supply `--cosigner` cards (unsure which/how many cosigners belong); the search resolves the correct cosigner subset too. The space grows to `S_opt = Σ_j C(K_own,j)·C(M_sup,N−j)·N!`, so a LONGER `--expect-wallet-id` prefix is needed (a too-short prefix refuses; `--search-address` is the recommended collision-free mode for large opt-in pools). Bounded by the §6 hard ceiling (`S_opt ≤ 1e15`) + the adaptive time-cap. Mutually exclusive with `--cosigner @N=` (explicit placement). Composes with `--own-account-max` / `--account`. See [Subset-search / over-supply completion](#subset-search-over-supply-completion) |
-| `--search-address <SEARCH_ADDRESS>` | (#28 phase 2) a known receive (or change) ADDRESS of the wallet; triggers **address-search** for a multisig-template completion — the search finds the unique key→slot assignment whose scriptPubKey at some `(chain, index)` in the range equals this address's. Recommended over `--expect-wallet-id` (full-scriptPubKey match — collision-free). Not combinable with explicit `--cosigner @N=` placement (exit 1). See [Multisig template completion](#multisig-template-completion) |
+| `--search-address <SEARCH_ADDRESS>` | (#28 phase 2) a known receive (or change) ADDRESS of the wallet; triggers **address-search** for a multisig-template completion — the search finds the unique key→slot assignment whose scriptPubKey at some `(chain, index)` in the range equals this address's. Recommended over `--expect-wallet-id` (full-scriptPubKey match — collision-free). Not combinable with explicit `--cosigner @N=` placement (exit 64). See [Multisig template completion](#multisig-template-completion) |
 | `--search-addr-min <SEARCH_ADDR_MIN>` | (#28 phase 2) inclusive lower address index for `--search-address` (default 0) |
 | `--search-addr-max <SEARCH_ADDR_MAX>` | (#28 phase 2) exclusive upper address index for `--search-address` (default 20). Deepen (`0..20`, then `20..40`, …) if the target is not found; a narrow range expresses "I know the index" |
 | `--search-chain <SEARCH_CHAIN>` | (#28 phase 2) which BIP-32 change-chain branch(es) `--search-address` scans: `receive` (chain 0, the **default**), `change` (chain 1), or `both` (doubles the per-index search cost) |
 | `--accept-search-time <ACCEPT_SEARCH_TIME>` | **Deprecated and ignored since v0.99.0.** Accepted (and still parsed as a humantime duration such as `2h` or `90min`) so existing scripts do not fail on an unknown flag, but it changes nothing: there is no search-time ceiling any more — the completion declares its measured estimate and reports progress, and Ctrl-C stops it |
 | `--recalibrate-threads` | ignore the search-thread count recorded under `[search]` in `~/.mnemonic/mt.conf`, measure this machine again and overwrite the record. The count is measured once, on the first multisig-template search, and reused, because the best count is a property of the machine rather than of its core count; use this after a hardware change or when the recorded value looks wrong. Only a multisig-template completion (id-search or `--search-address`) runs the search, so on any other restore the flag has no effect |
 | `--template <TEMPLATE>` | restrict to a single wallet type (`bip44` / `bip49` / `bip84` / `bip86`); omit = emit all four. A multisig template is refused (restore is single-sig) |
-| `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 4 (unless `--allow-mismatch`) |
-| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`, or a keyless single-sig template `--md1`, whose type it takes); mismatch → exit 4 (unless `--allow-mismatch`) |
+| `--expect-fingerprint <EXPECT_FINGERPRINT>` | reference master fingerprint (8 lowercase hex); mismatch → exit 1 (unless `--allow-mismatch`) |
+| `--expect-xpub <EXPECT_XPUB>` | reference account xpub (requires `--template`, or a keyless single-sig template `--md1`, whose type it takes); mismatch → exit 1 (unless `--allow-mismatch`) |
 | `--allow-mismatch` | emit descriptors even when a reference does not match (loud `✗ MISMATCH (overridden)` banner, exit 0) |
 | `--count <COUNT>` | number of first-receive addresses to show per wallet type (default 1) |
-| `--format <FORMAT>` | emit an importable wallet-software payload via an `export-wallet` emitter (`descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, `specter`, `jade`, `electrum`, `green`, `bsms`, …). REQUIRES a single `--template` (one-descriptor-in/one-out); `--format` with no `--template` → exit 2. Refused (exit 2) when completing a keyless single-sig template `--md1`. When set, the importable payload goes to stdout and the verification block goes to stderr so the payload pipes cleanly. With `--json` the payload is embedded as the `import_payload` field instead |
+| `--format <FORMAT>` | emit an importable wallet-software payload via an `export-wallet` emitter (`descriptor`, `bitcoin-core`, `bip388`, `coldcard`, `sparrow`, `specter`, `jade`, `electrum`, `green`, `bsms`, …). REQUIRES a single `--template` (one-descriptor-in/one-out); `--format` with no `--template` → exit 64. Refused (exit 2) when completing a keyless single-sig template `--md1`. When set, the importable payload goes to stdout and the verification block goes to stderr so the payload pipes cleanly. With `--json` the payload is embedded as the `import_payload` field instead |
 | `--json` | emit a single structured JSON object on stdout instead of the text document; seed material is NEVER echoed (redacted by construction). `import_payload` is present only when `--format` is also set |
 | `--output <OUTPUT>` | write the stdout content to `<FILE>` (`-`, the default, → stdout); the verification block / banners / advisory still go to stderr |
 | `--no-auto-repair` | (global) skip auto-fire repair on decode failures; same global flag honored by `convert` / `inspect` / `verify-bundle` |
@@ -1406,7 +1412,7 @@ Restore is built around the master fingerprint as the
 
 - **Reference present** (`--expect-fingerprint` / `--expect-xpub`) and
   the derived material **matches** → emit, exit 0.
-- **Reference present and it does NOT match** → **hard error, exit 4**
+- **Reference present and it does NOT match** → **hard error, exit 1**
   (`RestoreMismatch`); the verification block prints derived-vs-expected
   under a `✗ MISMATCH` banner and **no descriptors are emitted**. This is
   the wrong-passphrase / wrong-seed guard.
@@ -1450,7 +1456,7 @@ printf '%s' "$seed" | mnemonic restore --from phrase=-
 emits a `bip44` / `bip49` / `bip84` / `bip86` block each (same
 master fingerprint, four descriptors + first-recv addresses).
 
-**The hard-gate (exit 4) on a wrong reference:**
+**The hard-gate (exit 1) on a wrong reference:**
 
 ```sh
 printf '%s' "$seed" |
@@ -1460,7 +1466,7 @@ printf '%s' "$seed" |
 
 prints `✗ MISMATCH` + `error: restore: fingerprint mismatch — derived
 73c5da0a, expected deadbeef` on stderr, **emits no descriptor**, and
-`exit=4`. Add `--allow-mismatch` to override (descriptors emitted under
+`exit=1`. Add `--allow-mismatch` to override (descriptors emitted under
 `✗ MISMATCH (overridden)`, exit 0) — only when you know the reference
 itself is wrong.
 
@@ -1547,7 +1553,7 @@ mnemonic restore --md1 md1f5przzs... \
 ```
 
 A supplied key (own seed or `--cosigner`) that does **not** match the md1's
-slot is a hard error (`✗ MISMATCH`, exit 4, `RestoreMismatch`) unless
+slot is a hard error (`✗ MISMATCH`, exit 1, `RestoreMismatch`) unless
 `--allow-mismatch`. Restore stays watch-only-out in multisig mode too: no
 `xprv` / WIF / seed reaches stdout, stderr, or `--json`.
 
@@ -1619,13 +1625,13 @@ card (a tap-script-tree reconstructed via the general route-around has no
 named-template form): such a card emits `descriptor` / `bitcoin-core` only.
 A non-NUMS **distinct-trunk taproot multisig** card, by contrast,
 takes the template path and *does* emit `bip388` faithfully — `tr(@idx/**,
-multi_a(k,…))`. A **NUMS** taproot multisig card refuses `bip388` (exit 1):
+multi_a(k,…))`. A **NUMS** taproot multisig card refuses `bip388` (exit 2):
 its internal key is a literal key, and BIP-388 allows only `@N` key
 placeholders; it emits `descriptor` / `bitcoin-core`. A card whose policy
 uses one public key more than once (e.g. a `bundle --descriptor` that
-repeats `@0`) refuses `bip388` too (exit 1; BIP-388 requires pairwise
+repeats `@0`) refuses `bip388` too (exit 2; BIP-388 requires pairwise
 distinct keys). No `--template` is needed (the threshold and script type come
-from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 4)
+from the `md1`). A cross-check `✗ MISMATCH` still hard-fails (exit 1)
 **before** any payload is emitted unless `--allow-mismatch`.
 
 **Scope.** `wsh`, `sh(wsh)`, **NUMS taproot** (`tr-multi-a` /
@@ -1718,13 +1724,13 @@ mnemonic import-wallet --blob <FILE|-> [OPTIONS]
 | `--ms1 <STRING>` | seed overlay (SPEC §8.3): supply the secret material that matches the blob's declared xpub at the cosigner's origin path; repeatable + positional cosigner-index — the i-th `--ms1` applies to cosigner i; cosigners not addressed by any `--ms1[N]` flag remain watch-only (no entropy attached); accepts the `@env:VAR` sentinel; empty-string `""` preserves the v0.25.1 watch-only sentinel An inline card on argv is refused unless `--allow-argv-secret` is given; pass it as `@env:VAR`. |
 | `--slot <@N.phrase=<phrase>>` | per-slot seed overlay; equivalent to `--ms1` but the phrase is converted to entropy and the derived xpub at the cosigner's origin path is compared against the blob's xpub; mutually exclusive with `--ms1[N]` for the same N; accepts `@env:VAR`; only the `phrase` subkey is accepted on `import-wallet` in v0.26.0 |
 | `--json` | emit a JSON envelope array on stdout (SPEC §7.4) instead of the human-readable summary; the v0.27.0 envelope `bundle` field is the full toolkit-native `BundleJson` shape (was a parse-side summary in v0.26.0; the v0.27.0 wire-shape replacement is documented in CHANGELOG `### Changed`) plus a new top-level `schema_version: "1"` field |
-| `--bsms-encryption-token <FILE\|->` | (v0.31.0) BIP-129 §Encryption decrypt token; reads session TOKEN from PATH (or `-` for stdin); applies PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 per BIP-129 §Encryption. Combine with `--format bsms` to decrypt encrypted Round-2 wallet shares (`--blob`), **OR (v0.32.1)** with `--bsms-round1` to decrypt encrypted Round-1 key records. **(v0.32.2) repeatable** (BIP-129 line 74: one shared TOKEN or one per Signer): a SINGLE `--bsms-encryption-token` is SHARED — it decrypts every encrypted Round-1 record AND the Round-2 blob (backward-compatible). MULTIPLE tokens are paired POSITIONALLY with `--bsms-round1` records (the Nth token decrypts the Nth record); per-Signer mode requires every `--bsms-round1` record to be encrypted, the token count to equal the record count, and NO encrypted Round-2 `--blob` in the same invocation (a single Round-2 share carries a single token → supplying multiple tokens with an encrypted blob is refused). Token file contents: lowercase ASCII hex (16 chars STANDARD, 32 chars EXTENDED); whitespace stripped; uppercase normalized. At most one token may read from stdin (`-`). Encrypted Round-2 blobs lack the `BSMS 1.0` header so `--format bsms` is REQUIRED for the encrypted Round-2 path. MAC verify failure → exit 2 (typed `BsmsMacMismatch`). |
-| `--bsms-round1 <FILE>` | (v0.27.0) BIP-129 Round-1 key record (Signer → Coordinator) for BIP-322 ECDSA signature verification; repeating flag — one per record; each record verified independently; verify state propagates to `--json` envelope's `bsms_round1_verifications` field; standalone mode (no `--blob` supplied) emits per-record verify envelope and exits 0 when every record verifies. v0.27.0 accepts a file path only — stdin form `-` is rejected, supply a file path per record (FOLLOWUP: multi-record stdin intake). **(v0.32.1)** the record file may be EITHER plaintext (5-line `BSMS 1.0\n…`) OR an ENCRYPTED Round-1 wire (hex `MAC \|\| ciphertext`); encrypted records are auto-detected (raw hex, no `BSMS 1.0` header) and decrypted with `--bsms-encryption-token` (MAC-verified per BIP-129 §Encryption) before the BIP-322 verify. An encrypted record supplied without `--bsms-encryption-token` → `BadInput` (exit 1); MAC verify failure → exit 2 (`BsmsMacMismatch`). **(v0.85.0)** in the default lenient mode, if ANY record's `signature_verified` is `false`, the full per-record report/envelope is still printed but the invocation now exits **4** (VERIFY-ME — do not trust) instead of 0 — this applies in BOTH standalone mode (no `--blob`) AND combined mode (`--blob` + `--bsms-round1` together; the parsed bundle/card is still synthesized and emitted, only the exit code changes). `$?`-gated scripts that previously treated exit 0 as "all signatures verified" must check for exit 4. `--bsms-verify-strict` is unaffected — a failed signature under strict mode was already fatal (exit 2) before this point. |
+| `--bsms-encryption-token <FILE\|->` | (v0.31.0) BIP-129 §Encryption decrypt token; reads session TOKEN from PATH (or `-` for stdin); applies PBKDF2-SHA512 + AES-256-CTR + HMAC-SHA256 per BIP-129 §Encryption. Combine with `--format bsms` to decrypt encrypted Round-2 wallet shares (`--blob`), **OR (v0.32.1)** with `--bsms-round1` to decrypt encrypted Round-1 key records. **(v0.32.2) repeatable** (BIP-129 line 74: one shared TOKEN or one per Signer): a SINGLE `--bsms-encryption-token` is SHARED — it decrypts every encrypted Round-1 record AND the Round-2 blob (backward-compatible). MULTIPLE tokens are paired POSITIONALLY with `--bsms-round1` records (the Nth token decrypts the Nth record); per-Signer mode requires every `--bsms-round1` record to be encrypted, the token count to equal the record count, and NO encrypted Round-2 `--blob` in the same invocation (a single Round-2 share carries a single token → supplying multiple tokens with an encrypted blob is refused). Token file contents: lowercase ASCII hex (16 chars STANDARD, 32 chars EXTENDED); whitespace stripped; uppercase normalized. At most one token may read from stdin (`-`). Encrypted Round-2 blobs lack the `BSMS 1.0` header so `--format bsms` is REQUIRED for the encrypted Round-2 path. MAC verify failure → exit 1 (typed `BsmsMacMismatch`). |
+| `--bsms-round1 <FILE>` | (v0.27.0) BIP-129 Round-1 key record (Signer → Coordinator) for BIP-322 ECDSA signature verification; repeating flag — one per record; each record verified independently; verify state propagates to `--json` envelope's `bsms_round1_verifications` field; standalone mode (no `--blob` supplied) emits per-record verify envelope and exits 0 when every record verifies. v0.27.0 accepts a file path only — stdin form `-` is rejected, supply a file path per record (FOLLOWUP: multi-record stdin intake). **(v0.32.1)** the record file may be EITHER plaintext (5-line `BSMS 1.0\n…`) OR an ENCRYPTED Round-1 wire (hex `MAC \|\| ciphertext`); encrypted records are auto-detected (raw hex, no `BSMS 1.0` header) and decrypted with `--bsms-encryption-token` (MAC-verified per BIP-129 §Encryption) before the BIP-322 verify. An encrypted record supplied without `--bsms-encryption-token` → `BadInput` (exit 2); MAC verify failure → exit 1 (`BsmsMacMismatch`). **(v0.85.0)** in the default lenient mode, if ANY record's `signature_verified` is `false`, the full per-record report/envelope is still printed but the invocation now exits **4** (VERIFY-ME — do not trust) instead of 0 — this applies in BOTH standalone mode (no `--blob`) AND combined mode (`--blob` + `--bsms-round1` together; the parsed bundle/card is still synthesized and emitted, only the exit code changes). `$?`-gated scripts that previously treated exit 0 as "all signatures verified" must check for exit 4. `--bsms-verify-strict` is unaffected — a failed signature under strict mode was already fatal (exit 1) before this point. |
 | `--bsms-verify-strict` | (v0.27.0) make BIP-129 Round-1 SIG verification failures fatal; without this flag, verify mismatches emit a stderr NOTICE and proceed with `signature_verified: false` (exit 4 per the `--bsms-round1` row above, v0.85.0); requires `--bsms-round1` to be meaningful |
 | `--decrypt-password <VALUE>` | (v0.33.2) password for an Electrum **BIE1** (user-password) storage-encrypted wallet file. A storage-encrypted Electrum wallet is a single base64 blob (decoded magic `BIE1`), NOT JSON; the toolkit auto-detects it and decrypts it to the wallet JSON (ECIES: PBKDF2-HMAC-SHA512 → secp256k1 key → AES-128-CBC + HMAC-SHA256 + zlib) BEFORE sniff/parse, then imports watch-only as usual. Only consumed when a `BIE1` blob is detected; ignored (with a stderr notice) otherwise. `-` reads it from stdin and `@env:VAR` from the environment (the `--passphrase` rule); any other inline value emits the argv-leakage advisory. Wrong password → `decryption failed (wrong password or corrupted wallet file)`. Mutually exclusive with the other two `--decrypt-password*` forms. |
 | `--decrypt-password-file <PATH>` | (v0.33.2) read the BIE1 decryption password from a file (one trailing newline stripped). |
 | `--decrypt-password-stdin` | (v0.33.2) read the BIE1 decryption password from stdin (NULL-byte preserving). Cannot co-exist with any other stdin consumer (`--blob=-`, `--bsms-encryption-token=-`). |
-| `--network <mainnet\|testnet\|signet\|regtest>` | (v0.34.6) re-bind the imported network to disambiguate **signet/regtest** from the coin-type-1→testnet collapse (BIP-129 BSMS + Bitcoin Core `listdescriptors` use coin-type `1` for testnet/signet/regtest alike, so the network is collapsed to testnet by default). Honored ONLY within the parsed coin-type class (testnet ↔ {testnet, signet, regtest}; mainnet ↔ mainnet) — a cross-class request (e.g. `--network mainnet` on a testnet-coin-type blob) is refused (exit 1, `ImportWalletNetworkClassMismatch`) because the blob's xpub prefix is coin-type-bound. Absent = use the coin-type-derived network. Note: signet shares testnet's address params (`tb1…`), so `testnet→signet` changes only the network label; `testnet→regtest` changes the HRP to `bcrt1…`. |
+| `--network <mainnet\|testnet\|signet\|regtest>` | (v0.34.6) re-bind the imported network to disambiguate **signet/regtest** from the coin-type-1→testnet collapse (BIP-129 BSMS + Bitcoin Core `listdescriptors` use coin-type `1` for testnet/signet/regtest alike, so the network is collapsed to testnet by default). Honored ONLY within the parsed coin-type class (testnet ↔ {testnet, signet, regtest}; mainnet ↔ mainnet) — a cross-class request (e.g. `--network mainnet` on a testnet-coin-type blob) is refused (exit 8, `ImportWalletNetworkClassMismatch`) because the blob's xpub prefix is coin-type-bound. Absent = use the coin-type-derived network. Note: signet shares testnet's address params (`tb1…`), so `testnet→signet` changes only the network label; `testnet→regtest` changes the HRP to `bcrt1…`. |
 | `--help` | print help |
 
 ### Description
@@ -1754,13 +1760,13 @@ entropy. To re-attach secret material to a known cosigner, pass
 `--ms1 <ms1-string>` (or `--slot @N.phrase=<BIP-39 phrase>`) at the
 positional cosigner-index. The toolkit derives the xpub from the
 supplied entropy at the cosigner's declared origin path and asserts
-equality against the blob's declared xpub. Mismatch returns exit 4
+equality against the blob's declared xpub. Mismatch returns exit 1
 with stderr `error: import-wallet: cosigner <N>: supplied seed
 produces xpub <X> at path <P>; blob declares <Y>`.
 
 The `@env:<VAR>` sentinel (SPEC §3) resolves at clap-parse time via
 `std::env::var(VAR)`. Whole-value only — `--ms1 prefix@env:VAR` is
-treated as literal text. Missing or unset env-var → exit 1 with
+treated as literal text. Missing or unset env-var → exit 32 with
 `error: --ms1: env-var VAR referenced by sentinel is not set`.
 Pipe entropy via `@env:VAR` sentinel to avoid argv-leak; the
 v0.11.0 GUI emits typed values verbatim, so users must type
@@ -1773,11 +1779,12 @@ auto-rewriting).
 | Code | Meaning |
 |---|---|
 | `0` | success (round-trip ok; may emit WARNING for semantic-only match) |
-| `1` | `ImportWalletAmbiguousFormat`, `ImportWalletFormatMismatch`, `EnvVarMissing` — user-input or generic |
-| `2` | `ImportWalletParse`, `ImportWalletXprvForbidden`, `ImportWalletWatchOnlyViolation` — format-violation / refusal |
-| `3` | future-format refusal (e.g., `BSMS 2.0`) — via existing `FutureFormat` From-impl |
-| `4` | `ImportWalletSeedMismatch` — supplied seed does not match blob's declared xpub at the cosigner's origin path; OR (v0.85.0) `--bsms-round1` lenient-default mode with any record's `signature_verified: false` (standalone OR combined with `--blob`) — report/envelope still printed |
-| `5` | repair short-circuit — BCH-correctable BSMS descriptor `mk1` chunk; see [auto-fire on decode failure](#auto-fire-on-decode-failure-v0221) |
+| `1` | `ImportWalletSeedMismatch` — supplied seed does not match blob's declared xpub at the cosigner's origin path; `BsmsMacMismatch`; a failed BIP-322 signature under `--bsms-verify-strict` |
+| `2` | `ImportWalletAmbiguousFormat`, `ImportWalletFormatMismatch`, `ImportWalletParse`, `ImportWalletXprvForbidden`, a future format (e.g. `BSMS 2.0`, `FutureFormat`), or a BCH-correctable BSMS descriptor `mk1` chunk (the repair is printed as advice; see [auto-fire on decode failure](#auto-fire-on-decode-failure-v0221)) |
+| `4` | (v0.85.0) `--bsms-round1` lenient-default mode with any record's `signature_verified: false` (standalone OR combined with `--blob`) — report/envelope still printed |
+| `32` | `EnvVarMissing` (an `@env:VAR` that is unset), or a file that cannot be read |
+| `64` | an `@env:` reference with an invalid variable name, or another command-line error |
+| `101` | `ImportWalletWatchOnlyViolation` — an internal invariant failed (a watch-only path carried private material); report it |
 
 ### Stderr templates
 
@@ -1793,17 +1800,17 @@ auto-rewriting).
 | NOTICE (decrypt succeeded; overall exit is 0 or 4 — v0.85.0) | `notice: import-wallet: --bsms-round1: BIP-129 encrypted Round-1 record <i> decrypted (token width <N> hex chars; MAC verified)` (v0.32.1). This NOTICE only reports that the record's ENCRYPTION layer decrypted and MAC-verified; it says nothing about the record's own BIP-322 SIGNATURE. Since v0.85.0, if that signature then fails to verify (lenient mode), the overall invocation exits `4` despite this NOTICE having fired — see the `--bsms-round1` exit-code row above. |
 | NOTICE (exit 0) | `notice: import-wallet: electrum: BIE1 user-password storage decrypted` (v0.33.2) |
 | NOTICE (exit 0) | `notice: import-wallet: no BIE1 storage-encrypted wallet detected; --decrypt-password* ignored` (v0.33.2; emitted when a `--decrypt-password*` flag is supplied for a non-encrypted wallet) |
-| Error (exit 2) | `error: import-wallet: bsms: BIP-129 MAC verification failed (token width <N> hex chars; wrong token or tampered ciphertext)` |
-| Error (exit 1) | `error: import-wallet: electrum: this wallet is encrypted with a hardware-device key (BIE2 / XPUB_PASSWORD); it cannot be decrypted from a password…` (v0.33.2) |
-| Error (exit 1) | `error: import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)` (v0.33.2) |
-| Error (exit 1) | `error: import-wallet: electrum: BIE1 storage-encrypted wallet detected; supply the wallet password via --decrypt-password, --decrypt-password-file, or --decrypt-password-stdin` (v0.33.2) |
-| Error (exit 1) | `error: import-wallet: could not detect format; supply --format <bsms\|bitcoin-core>` |
-| Error (exit 1) | `error: import-wallet: --format <X> supplied but blob looks like <Y>` |
-| Error (exit 1) | `error: <flag>: env-var <VAR> referenced by sentinel is not set` |
+| Error (exit 1) | `error: import-wallet: bsms: BIP-129 MAC verification failed (token width <N> hex chars; wrong token or tampered ciphertext)` |
+| Error (exit 2) | `error: import-wallet: electrum: this wallet is encrypted with a hardware-device key (BIE2 / XPUB_PASSWORD); it cannot be decrypted from a password…` (v0.33.2) |
+| Error (exit 2) | `error: import-wallet: electrum: decryption failed (wrong password or corrupted wallet file)` (v0.33.2) |
+| Error (exit 2) | `error: import-wallet: electrum: BIE1 storage-encrypted wallet detected; supply the wallet password via --decrypt-password, --decrypt-password-file, or --decrypt-password-stdin` (v0.33.2) |
+| Error (exit 2) | `error: import-wallet: could not detect format; supply --format <bsms\|bitcoin-core>` |
+| Error (exit 2) | `error: import-wallet: --format <X> supplied but blob looks like <Y>` |
+| Error (exit 32) | `error: <flag>: env-var <VAR> referenced by sentinel is not set` |
 | Error (exit 2) | `error: import-wallet: <format>: parse error: <detail>` |
 | Error (exit 2) | `error: import-wallet: bitcoin-core: xprv-bearing descriptor refused; re-run \`bitcoin-cli listdescriptors\` without \`true\` to get xpub-only output` |
-| Error (exit 3) | `error: future format: bsms: version "<V>"; toolkit supports "1.0"` |
-| Error (exit 4) | `error: import-wallet: cosigner <N>: supplied seed produces xpub <X> at path <P>; blob declares <Y>` |
+| Error (exit 2) | `error: future format: bsms: version "<V>"; toolkit supports "1.0"` |
+| Error (exit 1) | `error: import-wallet: cosigner <N>: supplied seed produces xpub <X> at path <P>; blob declares <Y>` |
 
 The first-address-mismatch WARNING is deferred to v0.27+ (FOLLOWUP
 `bsms-first-address-verify`): the audit field is preserved verbatim
@@ -1900,13 +1907,13 @@ on stdout + the round-trip status on stderr.
 | Bitcoin Core blob contains `xprv` | exit 2 — see `xprv-bearing descriptor refused` stderr template above |
 | Cosigner in `ParsedImport.cosigners` carries entropy post-parse | exit 2 — `error: import-wallet: cosigner <N> has entropy populated post-parse; watch-only invariant violated (internal bug)` |
 | BSMS line 1 is not `BSMS 1.0` | exit 2 `ImportWalletParse` |
-| BSMS version > 1.0 (e.g., `BSMS 2.0`) | exit 3 via existing `FutureFormat` From-impl |
-| Sniff finds no match AND no `--format` supplied | exit 1 — see `could not detect format` stderr template |
-| Sniff finds positive match for format X AND `--format Y` supplied | exit 1 — see `--format X supplied but blob looks like Y` template |
-| Auto-detect ambiguity (≥2 parsers' sniff return true) | exit 1 — `blob matches multiple format heuristics; supply --format <X>` |
-| Supplied `--ms1` derives a different xpub than declared at cosigner's path | exit 4 `ImportWalletSeedMismatch` (see template above) |
-| `@env:VAR` sentinel references unset env-var | exit 1 `EnvVarMissing` (see template above) |
-| Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 1 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
+| BSMS version > 1.0 (e.g., `BSMS 2.0`) | exit 2 via existing `FutureFormat` From-impl |
+| Sniff finds no match AND no `--format` supplied | exit 2 — see `could not detect format` stderr template |
+| Sniff finds positive match for format X AND `--format Y` supplied | exit 2 — see `--format X supplied but blob looks like Y` template |
+| Auto-detect ambiguity (≥2 parsers' sniff return true) | exit 2 — `blob matches multiple format heuristics; supply --format <X>` |
+| Supplied `--ms1` derives a different xpub than declared at cosigner's path | exit 1 `ImportWalletSeedMismatch` (see template above) |
+| `@env:VAR` sentinel references unset env-var | exit 32 `EnvVarMissing` (see template above) |
+| Invalid env-var name (e.g., `@env:1FOO`, `@env:`) | exit 64 `EnvVarMissing` with stderr `invalid env-var name '<VARNAME>'` |
 | Descriptor's key placeholder use-site path ends in a fixed step (`/0/*`, `/0h/*`) | exit 2 `ImportWalletParse` — message names the offending residue and the multipath remedy; see [Non-representable use-site steps](#non-representable-use-site-steps). The BIP-388 `/**` shorthand is **accepted** (expanded to `/<0;1>/*`), not refused. Bitcoin Core's separate receive/change entries are **auto-recombined** into one `/<0;1>/*` bundle before this check, so a standard split export imports cleanly; a lone fixed-step entry with no receive/change partner still rejects — see [foreign wallet formats](#foreign-wallet-formats) |
 | Descriptor's key placeholder multipath repeats a value (`<0;0>`, `<0;1;0>`) | exit 2 `ImportWalletParse` — the `bundle` text after the format's parse-error prefix (``import-wallet: descriptor: parse error: @0 multipath `<0;0>` repeats the value 0; …``); see [Non-representable use-site steps](#non-representable-use-site-steps) |
 | Bitcoin Core receive/change-shaped pair whose keys/origins differ | exit 2 `ImportWalletParse` — not merged (distinct keys are different wallets); see [foreign wallet formats](#foreign-wallet-formats) |
@@ -1960,7 +1967,7 @@ mnemonic derive-child --from <FROM> --application <APP> --length <LEN> --index <
 
 | Flag | Purpose |
 |---|---|
-| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 1) |
+| `--from <FROM>` | `xprv=<value>` or `phrase=<bip39>` (with `--passphrase` + `--language`); `=-` to read from stdin. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 2) |
 | `--application <APPLICATION>` | `bip39` / `hd-seed` / `xprv` / `hex` / `password-base64` / `password-base85` / `dice` |
 | `--length <LENGTH>` | application-specific size; pass `0` for `hd-seed` and `xprv` |
 | `--index <INDEX>` | hardened child index (`0..2^31`) |
@@ -2007,7 +2014,7 @@ mnemonic electrum-decrypt --ciphertext <VALUE|-> (--decrypt-password <VAL> | --d
 The three password forms are mutually exclusive and exactly one is
 required (clap arg-group; missing/multiple → exit 64). A wrong password
 (or corrupted ciphertext) surfaces as `electrum-decrypt: decryption failed
-(wrong password or corrupted ciphertext)` (exit 1) — Format A field
+(wrong password or corrupted ciphertext)` (exit 2) — Format A field
 encryption carries no MAC, so the two underlying failure modes (PKCS7
 unpad refusal / non-UTF-8 result) are reported uniformly. The recovered
 plaintext on stdout is private key material and emits the
@@ -2423,7 +2430,7 @@ or `--share "<share-2>" --share "<share-3>"`. (Without `--to phrase`,
 `combine` defaults to `--to entropy` and emits 64 hex chars.)
 
 > Attempting recovery with only 1 share: `mnemonic slip39 combine
-> --share "<share-1>"` exits 1 with stderr `slip39 combine: insufficient
+> --share "<share-1>"` exits 2 with stderr `slip39 combine: insufficient
 > shares for group 0: need 2, got 1` (refusal row 12).
 
 #### Example 4 — multi-group 2-of-3 of 2-of-3, with passphrase
@@ -2557,7 +2564,7 @@ permission advisory on stderr (advisories table below).
 
 ### Refusals
 
-All refusals exit 1 with the stem on stderr. Mirror of SPEC §2.5
+Each refusal prints its stem on stderr and exits with the code in the last column: 64 for a bad setting on the command line, 2 for an input that is wrong, 32 for a feature this build lacks. Mirror of SPEC §2.5
 (26 classes; row 24 added at v0.13.0 P2.2 GREEN per Q3 fold; row 25
 added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
 `--group N,T` with `T==1 AND N>1` — surfaced when chapter examples
@@ -2565,34 +2572,34 @@ added at v0.13.0 P3 R1 fold for the toolkit-policy refusal of any
 `split_ems` rule; row 26 refuses the test-only RNG variables, which a shipped
 binary does not read).
 
-| Trigger | Refusal stem |
-|---|---|
-| `--from phrase` word-count not in {12,15,18,21,24} | `slip39 split: input phrase must be 12/15/18/21/24 words; got K` |
-| `--from entropy=` hex not parseable / odd length / length not in {16,20,24,28,32} bytes | `slip39 split: entropy hex must decode to 16/20/24/28/32 bytes; got K bytes` |
-| `--group-threshold` outside `1..=group_count` | `slip39 split: --group-threshold must be in 1..=K (number of --group flags); got G` |
-| `--group N,T` with `T > N` OR `T < 1` OR `N > 16` | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` |
-| Any `--group 1,1` (toolkit usability policy) | `slip39 split: 1-of-1 group offers no recovery benefit; use --group N,T with N >= 2 (toolkit policy)` |
-| `--iteration-exponent` outside 0..=15 | `slip39 split: --iteration-exponent must be 0..=15 (4-bit field); got E` |
-| `combine` shares: identifier mismatch across shares | `slip39 combine: shares disagree on identifier; shares must come from the same secret` |
-| `combine` shares: iteration-exponent mismatch | `slip39 combine: shares disagree on iteration-exponent` |
-| `combine` shares: RS1024 checksum failure on share I | `slip39 combine: share at position I has invalid SLIP-39 checksum (RS1024)` |
-| `combine` shares: unknown SLIP-39 word at position I in share J | `slip39 combine: share at position J: word at index I not in SLIP-39 wordlist` |
-| `combine` shares: digest verification failure | `slip39 combine: reconstructed master digest mismatch — a share was substituted, corrupted, or the shares do not reconstruct the intended secret; this check runs BEFORE passphrase decryption and does NOT verify --passphrase (a wrong --passphrase still exits 0 with a different, incorrect master)` |
-| `combine` shares: insufficient share count for one or more required groups | `slip39 combine: insufficient shares for group <idx>: need <member_threshold>, got <K>` |
-| `combine` shares: mismatching group thresholds across shares | `slip39 combine: shares disagree on group_threshold` |
-| `combine` shares: mismatching group counts across shares | `slip39 combine: shares disagree on group_count` |
-| `combine` shares: duplicate member index within a single group | `slip39 combine: duplicate member index <I> in group <G>` |
-| Invalid padding bits in encoded share | `slip39 combine: share at position I has non-zero padding bits (encoding violation)` |
-| `--from` variant other than `phrase=` / `entropy=` | `slip39 split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got <node>=` |
-| Multi-stdin contention (e.g. `--passphrase-stdin` + `--share -`) | `slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` |
-| `combine` called with empty share list | `slip39 combine: at least one share required` |
-| `combine` shares: share at position I has value-byte length L not in {16,20,24,28,32} | `slip39 combine: share at position I has value length L (must be 16/20/24/28/32 bytes)` |
-| `combine` shares: shares disagree on value-byte length | `slip39 combine: shares disagree on value length` |
-| `combine` shares: shares disagree on the `extendable` (ext) bit | `slip39 combine: shares disagree on the extendable bit` |
-| `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` | `slip39 combine: share at position J: group_threshold T exceeds group_count N` |
-| `combine` shares: shares within a single group disagree on `member_threshold` | `slip39 combine: shares within a group disagree on member_threshold` |
-| Any `--group N,T` with `T==1 AND N>1` (toolkit policy; python `split_ems` rule — algorithm replicates the group share to all N members so T=1+N>1 is degenerate; jointly with row 5 means smallest legal split is `--group 2,2`) | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` |
-| `split` with `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any value, even empty; checked before every other refusal in this table and before any input is read) | `slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source` |
+| Trigger | Refusal stem | Exit |
+|---|---|---|
+| `--from phrase` word-count not in {12,15,18,21,24} | `slip39 split: input phrase must be 12/15/18/21/24 words; got K` | 2 |
+| `--from entropy=` hex not parseable / odd length / length not in {16,20,24,28,32} bytes | `slip39 split: entropy hex must decode to 16/20/24/28/32 bytes; got K bytes` | 2 |
+| `--group-threshold` outside `1..=group_count` | `slip39 split: --group-threshold must be in 1..=K (number of --group flags); got G` | 64 |
+| `--group N,T` with `T > N` OR `T < 1` OR `N > 16` | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` | 64 |
+| Any `--group 1,1` (toolkit usability policy) | `slip39 split: 1-of-1 group offers no recovery benefit; use --group N,T with N >= 2 (toolkit policy)` | 64 |
+| `--iteration-exponent` outside 0..=15 | `slip39 split: --iteration-exponent must be 0..=15 (4-bit field); got E` | 64 |
+| `combine` shares: identifier mismatch across shares | `slip39 combine: shares disagree on identifier; shares must come from the same secret` | 2 |
+| `combine` shares: iteration-exponent mismatch | `slip39 combine: shares disagree on iteration-exponent` | 2 |
+| `combine` shares: RS1024 checksum failure on share I | `slip39 combine: share at position I has invalid SLIP-39 checksum (RS1024)` | 2 |
+| `combine` shares: unknown SLIP-39 word at position I in share J | `slip39 combine: share at position J: word at index I not in SLIP-39 wordlist` | 2 |
+| `combine` shares: digest verification failure | `slip39 combine: reconstructed master digest mismatch — a share was substituted, corrupted, or the shares do not reconstruct the intended secret; this check runs BEFORE passphrase decryption and does NOT verify --passphrase (a wrong --passphrase still exits 0 with a different, incorrect master)` | 2 |
+| `combine` shares: insufficient share count for one or more required groups | `slip39 combine: insufficient shares for group <idx>: need <member_threshold>, got <K>` | 2 |
+| `combine` shares: mismatching group thresholds across shares | `slip39 combine: shares disagree on group_threshold` | 2 |
+| `combine` shares: mismatching group counts across shares | `slip39 combine: shares disagree on group_count` | 2 |
+| `combine` shares: duplicate member index within a single group | `slip39 combine: duplicate member index <I> in group <G>` | 2 |
+| Invalid padding bits in encoded share | `slip39 combine: share at position I has non-zero padding bits (encoding violation)` | 2 |
+| `--from` variant other than `phrase=` / `entropy=` | `slip39 split: --from only accepts phrase=<value-or-> or entropy=<hex-or->; got <node>=` | 64 |
+| Multi-stdin contention (e.g. `--passphrase-stdin` + `--share -`) | `slip39: at most one stdin consumer per invocation (across --share, --from, and --passphrase-stdin)` | 64 |
+| `combine` called with empty share list | `slip39 combine: at least one share required` | 2 |
+| `combine` shares: share at position I has value-byte length L not in {16,20,24,28,32} | `slip39 combine: share at position I has value length L (must be 16/20/24/28/32 bytes)` | 2 |
+| `combine` shares: shares disagree on value-byte length | `slip39 combine: shares disagree on value length` | 2 |
+| `combine` shares: shares disagree on the `extendable` (ext) bit | `slip39 combine: shares disagree on the extendable bit` | 2 |
+| `combine` shares: parse-time refusal — share at position J encodes `group_count < group_threshold` | `slip39 combine: share at position J: group_threshold T exceeds group_count N` | 2 |
+| `combine` shares: shares within a single group disagree on `member_threshold` | `slip39 combine: shares within a group disagree on member_threshold` | 2 |
+| Any `--group N,T` with `T==1 AND N>1` (toolkit policy; python `split_ems` rule — algorithm replicates the group share to all N members so T=1+N>1 is degenerate; jointly with row 5 means smallest legal split is `--group 2,2`) | `slip39 split: --group N,T requires 1 <= T <= N <= 16; got group <idx>=N,T` | 64 |
+| `split` with `MNEMONIC_SLIP39_TEST_RNG` or `MNEMONIC_SLIP39_TEST_IDENTIFIER` set in the environment (any value, even empty; checked before every other refusal in this table and before any input is read) | `slip39 split: MNEMONIC_SLIP39_TEST_RNG or MNEMONIC_SLIP39_TEST_IDENTIFIER is set, but this build has no test RNG; unset both to split with the system random source` | 32 |
 
 ### Advisories
 
@@ -2994,7 +3001,9 @@ The two outputs match byte-for-byte.
 ### Exit codes
 
 - `0` — success.
-- `1` — `BadInput` (any `SeedqrError` variant: invalid digit count/character, word index out of range, wrong word count, BIP-39 checksum failure; OR non-phrase node passed to `encode --from`).
+- `2` — `BadInput` (any `SeedqrError` variant: invalid digit count/character, word index out of range, wrong word count, BIP-39 checksum failure).
+- `32` — a `--json-out` file or stdout could not be written.
+- `64` — a non-phrase node passed to `encode --from`, a non-`seedqr` node passed to `decode --from`, or `decode` with no input named.
 
 ### Stderr templates
 
@@ -3219,12 +3228,12 @@ The scan key is derived at `m/352'/<coin>'/<account>'/1'/0` and the spend key at
 
 | Flag | Purpose |
 |---|---|
-| `--secret <SEED>` | seed-bearing secret: BIP-39 phrase / ms1 / entropy-hex / master xprv. A single private key (WIF/minikey) is refused — it cannot derive `m/352'`. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 1). SECRET: leaks via argv; prefer `--secret-file` / `--secret-stdin` |
+| `--secret <SEED>` | seed-bearing secret: BIP-39 phrase / ms1 / entropy-hex / master xprv. A single private key (WIF/minikey) is refused — it cannot derive `m/352'`. A non-master xprv/tprv (depth ≠ 0, e.g. an account-level key) is refused (exit 2). SECRET: leaks via argv; prefer `--secret-file` / `--secret-stdin` |
 | `--secret-file <PATH>` | read the seed-bearing secret from a file (avoids argv exposure) |
 | `--secret-stdin` | read the seed-bearing secret from stdin |
 | `--passphrase <P>` | BIP-39 mnemonic-extension passphrase ("25th word"). Applies to phrase / ms1 / entropy-hex inputs; **ignored (with a warning) for an xprv input** (the xprv is already the master). SECRET: leaks via argv; prefer `--passphrase -` / `--passphrase-stdin` (stdin) or `--passphrase @env:VAR` |
 | `--passphrase-stdin` | read the BIP-39 passphrase from stdin (whitespace-preserving — significant PBKDF2 salt). Mutually exclusive with `--passphrase`, and with `--secret-stdin` (one stdin per invocation) |
-| `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet). For an xprv/tprv `--secret`, `--network` (including the default) must agree with the key's own version bytes — a disagreement is refused fail-closed (exit 2) rather than deriving at the wrong coin-type; phrase/ms1/entropy-hex secrets are network-agnostic (the master mints AT `--network`) and are unaffected |
+| `--network <mainnet\|testnet\|signet\|regtest>` | mainnet → `sp` address + coin-type 0; testnet/signet/regtest → `tsp` address + coin-type 1 (default mainnet). For an xprv/tprv `--secret`, `--network` (including the default) must agree with the key's own version bytes — a disagreement is refused fail-closed (exit 8, a network mismatch) rather than deriving at the wrong coin-type; phrase/ms1/entropy-hex secrets are network-agnostic (the master mints AT `--network`) and are unaffected |
 | `--account <N>` | BIP-32 account index `m/352'/coin'/<account>'/…` (default 0) |
 | `--label <m>` | emit a labeled address for label m (repeatable); **m≥1**. `--label 0` is refused — m=0 is the reserved BIP-352 change label and must never be published |
 | `--change-address` | also emit the BIP-352 **m=0 change address** — for the wallet's OWN change detection ONLY; **never hand it out as a receiving address** (additive; the base address is still emitted) |
@@ -3348,7 +3357,7 @@ Exactly one of `--message` / `--message-file` / `--message-stdin` is required.
 
 ### Exit codes
 
-A **valid** signature exits 0. A cleanly-decoded signature that simply does **not** verify exits 1 with the structured `valid: false` result on stdout (no error on stderr). Malformed input — a bad address, an undecodable signature, or `--format legacy` on a non-P2PKH address — exits 1 with an error on stderr.
+A **valid** signature exits 0. A cleanly-decoded signature that simply does **not** verify exits 1 with the structured `valid: false` result on stdout (no error on stderr). Malformed input — a bad address, an undecodable signature, or `--format legacy` on a non-P2PKH address — exits 2 with an error on stderr.
 
 ### Scope
 
@@ -3471,7 +3480,7 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 | `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` to read chunks from stdin (one per line); may be combined with `--ms1` / `--mk1` (one HRP per card; per D35) |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form repair report |
 | `--max-indel <N>` | search up to N (0–4, default 0) insert/delete edits to recover a chunk that failed normal repair — a single character added (too long) or dropped (too short) during transcription; ms1/mk1/md1 |
-| `--max-subst <E>` | also tolerate up to E (0–4, default 0) substitution errors alongside the indels; a recovery that used a substitution is printed as a VERIFY-ME candidate (exit 4), not a confident correction |
+| `--max-subst <E>` | also tolerate up to E (0–4, default 0) substitution errors alongside the indels; a recovery that used a substitution is printed as a VERIFY-ME candidate (exit 20), not a confident correction |
 | `--help` | print help |
 
 ### Exit codes
@@ -3479,10 +3488,12 @@ mnemonic repair [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md1
 | Code | Meaning |
 |---|---|
 | `0` | all chunks already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks |
-| `4` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **every non-chunked `--md1` single-string correction (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below)**, **or (mk1 only, Cycle E) a corrected chunk set is INCOMPLETE and so cannot be set-verified**, **or (F-642) a corrected single-string `--md1` at a wire version this build cannot read (see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version) below)** — verify each before trusting; all candidates are printed |
+| `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — mk1 (full `chunk_set_id` group reassembles) / **chunked** md1 (multi-chunk, or chunked-of-1 — content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly (a non-chunked md1 indel cannot reassemble, so it is not among these — it exits 2); stdout = repair report + corrected chunks; also **(mk1 only, Cycle E) a corrected chunk set that is INCOMPLETE**: the rest of the set verifies it when it is reassembled, so it is not a no-oracle correction |
+| `20` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction (Cycle F — see [ms1 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion) below)**, **every non-chunked `--md1` single-string correction (v0.86.0 — see [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion) below)** — verify each before trusting; all candidates are printed |
+| `22` | (F-642) a corrected single-string `--md1` at a wire version this build cannot read (see [md1 at an unreadable wire version](#mnemonic-repair-md1-unreadable-version) below): 16 + 4 + 2, a correction was applied, it cannot be verified, and the corrected string is not a card this build can decode. The corrected string is still printed |
 | `2` | unrepairable (per-chunk `RepairError`; e.g. `TooManyErrors`, `HrpMismatch`, `ReservedInvalidLength`, `UnsupportedCodeVariant`, or `--max-indel` exhausted without a recovery; an md1 at an unreadable wire version that is multi-string, clean, or uncorrectable) **or (mk1 only, Cycle E) a COMPLETE corrected chunk set that fails cross-chunk reassembly** (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; auto-repair does NOT apply it). See [mk1 set-level re-verify](#mnemonic-repair-mk1-set-level-reverify) |
-| `1` | I/O error or other generic failure |
+| `32` | a file, stdin or stdout failed (stdout failure adds 32 to the code above) |
+| `64` | a bad command line; nothing ran |
 
 **Case.** A chunk typed all in lower case or all in capitals (the
 BIP-93 handwritten and QR form) is accepted, with or without
@@ -3530,7 +3541,7 @@ re-verify every full `chunk_set_id` group before reporting a confident
 fix:
 
 - **A COMPLETE group (every chunk of the card supplied) reassembles
-  cleanly** — reported as repaired, exit `5`, as before.
+  cleanly** — reported as repaired, exit `16`, as before.
 - **A COMPLETE group's correction FAILS reassembly** — the per-chunk
   correction has aliased to a different card. `mnemonic repair` REJECTS
   it outright: the un-repaired decode error surfaces (exit `2`); no
@@ -3542,7 +3553,7 @@ fix:
 - **An INCOMPLETE group is supplied** (a single plate of a multi-chunk
   card, or otherwise fewer chunks than `total_chunks`) — reassembly
   cannot be checked, because the other chunks aren't present.
-  `mnemonic repair` reports it as an exit-`4` VERIFY-ME candidate (the
+  `mnemonic repair` reports it as an exit-`20` VERIFY-ME candidate (the
   same precedence tier as an ambiguous `--max-indel` recovery) with an
   `UNVERIFIED` advisory: reassemble the full card (e.g. `mnemonic
   inspect --mk1` for every chunk, or `mk decode`) before trusting the
@@ -3572,12 +3583,12 @@ genuine ≤4-error fix from a longer-distance aliasing event at the same
 apparent edit distance.
 
 Every `ms1` substitution-correction is therefore demoted to an
-exit-`4` **VERIFY-ME Candidate** — **never** a silent exit-`5`
+exit-`20` **VERIFY-ME Candidate** — **never** a silent exit-`16`
 "recovered" — across every surface that touches it:
 
 - **`mnemonic repair --ms1`** (and **`ms repair`**, ms-cli's standalone
   binary): any touched correction reports the corrected string as a
-  Candidate, exit `4`, plus a stderr advisory recommending the user
+  Candidate, exit `20`, plus a stderr advisory recommending the user
   confirm the derived address/xpub against a known-good copy before
   trusting it. A clean (already-valid) decode is unaffected: exit `0`.
 - **Auto-fire on `convert` / `inspect` / `xpub-search`:** a corrected
@@ -3590,9 +3601,9 @@ exit-`4` **VERIFY-ME Candidate** — **never** a silent exit-`5`
   available — the user's own TYPED seed. See [ms1 ground-truth
   compare](#auto-fire-on-decode-failure-v0221) above: match against the
   expected seed ⇒ checks pass; mismatch ⇒ `ms1_entropy_match` fails ⇒
-  exit `4`.
+  exit `20`.
 
-**The one carve-out — indel recovery keeps exit `5`:** `mnemonic repair
+**The one carve-out — indel recovery keeps exit `16`:** `mnemonic repair
 --ms1 --max-indel <N>` (standalone only; `ms repair` has no `--max-indel`
 flag, and no auto-fire site has indel plumbing) is a DIFFERENT
 mechanism: it enumerates candidate insert/delete edits and RE-VALIDATES
@@ -3601,8 +3612,8 @@ substitution budget. A UNIQUE full-checksum indel candidate is
 trustworthy to within the checksum's own false-accept rate —
 cryptographically stronger than the reassembly/content-id check mk1 /
 chunked md1 are ALREADY blessed on — so it remains a genuine
-self-verification and stays exit `5`. A multi-hit (ambiguous) indel
-recovery is not unique and falls to exit `4` like any other ambiguous
+self-verification and stays exit `16`. A multi-hit (ambiguous) indel
+recovery is not unique and falls to exit `20` like any other ambiguous
 candidate.
 
 BIP-93 itself recommends against automatically proceeding with a
@@ -3611,14 +3622,14 @@ operationalizes that recommendation for the one card kind with no
 self-oracle at all.
 
 **K-of-N shares.** A K-of-N `ms1` share (threshold `2`–`9`) is
-corrected like any `ms1`: a corrected share exits `4` (VERIFY-ME),
+corrected like any `ms1`: a corrected share exits `20` (VERIFY-ME),
 and stderr says `repair: correction UNVERIFIED — a corrected K-of-N
 share cannot be self-verified; recombine it with the other shares
 (mnemonic ms-shares combine --share - --share @env:VAR …, one share on
 stdin and each further share in an exported variable) and confirm the
 recovered seed's address/xpub against a known-good copy before use;
 BIP-93 recommends confirming a corrected codex32 string`. A clean share exits `0`, echoed.
-A corrected string at share index `s` (the secret itself, which `ms-shares combine` does not take) gets the same exit `4` with
+A corrected string at share index `s` (the secret itself, which `ms-shares combine` does not take) gets the same exit `20` with
 its own reason instead of the recombine advice. A call that corrects both kinds keeps the recombine advice and says
 to leave the index-`s` string out.
 
@@ -3642,15 +3653,15 @@ to a DIFFERENT, valid-but-wrong descriptor**, with no cross-chunk hash
 or content-id to catch it.
 
 From v0.86.0, every TOUCHED non-chunked md1 correction is therefore
-demoted to an exit-`4` **VERIFY-ME Candidate** — **never** a silent
-exit-`5` "recovered" — mirroring the ms1 treatment exactly:
+demoted to an exit-`20` **VERIFY-ME Candidate** — **never** a silent
+exit-`16` "recovered" — mirroring the ms1 treatment exactly:
 
 - **`mnemonic repair --md1`:** any touched correction on a non-chunked
-  single string reports the corrected string as a Candidate, exit `4`,
+  single string reports the corrected string as a Candidate, exit `20`,
   plus a stderr `UNVERIFIED` advisory recommending the user re-derive
   the wallet/address to confirm before trusting it. A clean
   (already-valid) decode, and any CHUNKED correction (multi-chunk or
-  chunked-of-1), are unaffected: still exit `0` / exit `5` respectively.
+  chunked-of-1), are unaffected: still exit `0` / exit `16` respectively.
 - **Auto-fire on `convert`\* / `inspect` / `verify-bundle`:** a
   corrected non-chunked md1 no longer short-circuits (no silent apply).
   The caller's ORIGINAL decode error surfaces unchanged, plus a
@@ -3661,18 +3672,18 @@ exit-`5` "recovered" — mirroring the ms1 treatment exactly:
   to `inspect` / `verify-bundle` only.
 - md1 has no `--max-indel` carve-out distinct from the above. A
   `--max-indel` recovery re-validates the whole checksum **by
-  reassembly**, so it succeeds (and correctly stays exit 5) only for a
+  reassembly**, so it succeeds (and correctly stays exit 16) only for a
   **chunked** md1 (chunked-of-1 or multi-chunk); a **non-chunked** md1
   indel cannot reassemble and is not recoverable at all (exit 2), so
   this substitution-correction demotion leaves the md1 indel path
   untouched (see [Recovering an incorrect-length
   card](#mnemonic-repair-max-indel) below).
 
-**Sibling-CLI divergence:** the standalone `md repair` (md-cli, see
-`42-md.md`) does NOT yet apply this demotion — it still reports exit
-`5` for every correction, chunked or not. `mnemonic repair --md1` and
-`md repair` therefore currently disagree on a non-chunked md1's exit
-code; see FOLLOWUP `md-cli-non-chunked-single-string-repair-demote`.
+**Sibling CLI:** the standalone `md repair` (md-cli, see `42-md.md`)
+applies the same demotion since the constellation exit-code cutover:
+a corrected non-chunked md1 exits `20` there too, and the two agree on
+every md1 shape (FOLLOWUP `md-cli-non-chunked-single-string-repair-demote`
+is closed).
 
 BIP-93 itself recommends against automatically proceeding with a
 corrected codex32 string without user confirmation; this demotion
@@ -3686,7 +3697,7 @@ wire version this build cannot decode (md-codec 0.48.7 reads versions 4
 and 8). On a **single-string** `--md1` card at such a version,
 `mnemonic repair` keeps the correction: the report and corrected string
 go to stdout, the JSON `verdict` is `"unreadable_version"`, and the exit
-is `4`, a VERIFY-ME candidate. Two stderr lines follow:
+is `22`, a VERIFY-ME candidate. Two stderr lines follow:
 `repair: corrected, but this build cannot read wire version N (accepted:
 4, 8)`, then advice that depends on `N` — an even version above 8 may be
 a newer md's (`take the corrected card to a newer md`); any other version
@@ -3694,13 +3705,12 @@ a newer md's (`take the corrected card to a newer md`); any other version
 misread card`. There is no output-class advisory, since nothing was
 decoded to classify.
 
-**Why `4`, not `5`.** Exit `5` means corrected AND self-verified. Nothing
-past the BCH checksum checks this string, which is less verification than
-the [md1 non-chunked demotion](#mnemonic-repair-md1-non-chunked-demotion)
-case, and that case also exits `4`. Verify the corrected card with a build
-that reads its wire version before trusting it. **This differs from
-`md repair`**, which exits `5` on the same card (md-cli 0.19.0); the
-report on stdout and the stderr advice are the same.
+**Why `22`.** It is 16 + 4 + 2: a correction was applied (16), nothing
+past the BCH checksum checks it (4, as in the [md1 non-chunked
+demotion](#mnemonic-repair-md1-non-chunked-demotion), which exits `20`),
+and the corrected string is not a card this build can decode (2). Verify
+the corrected card with a build that reads its wire version before
+trusting it. `md repair` exits `22` on the same card.
 
 The branch is single-string only. A **multi-string** set at an
 unreadable version exits `2` with empty stdout: a build cannot read the
@@ -3730,23 +3740,25 @@ Stderr:
 PLACEHOLDER — generated from transcripts/41-repair-ms1.err at build
 ```
 
-Exit code: `4` (Candidate — see [ms1 substitution-correction
+Exit code: `20` (Candidate — see [ms1 substitution-correction
 demotion](#mnemonic-repair-ms1-substitution-demotion) above; the
 corrected string is printed, but a seed card cannot self-verify, so it
-is never a confident exit-`5` "recovered").
+is never a confident exit-`16` "recovered").
 
 ### JSON output
 
 The `verdict` field (Cycle F) is `"blessed"` for a clean or confidently-
-recovered card, `"candidate"` for a touched-but-unverified correction —
-reachable for every `ms1` substitution-correction, an incomplete mk1
-partial-plate group, and (v0.86.0) every non-chunked `md1` single-string
+recovered card, `"candidate"` for a touched-but-unverified correction (exit `20`) —
+reachable for every `ms1` substitution-correction and (v0.86.0) every non-chunked `md1` single-string
 correction (see [md1 non-chunked
 demotion](#mnemonic-repair-md1-non-chunked-demotion) above). It is
 `"unreadable_version"` (F-642) for a single-string md1 corrected at a wire
-version this build cannot read, which exits `4` like `"candidate"` (see
+version this build cannot read, which exits `22` (see
 [md1 at an unreadable wire
-version](#mnemonic-repair-md1-unreadable-version) above). `ms-cli`'s
+version](#mnemonic-repair-md1-unreadable-version) above), and
+`"incomplete_set"` for a correction in an incomplete mk1 chunk set,
+which exits `16` because the rest of the set verifies it when it is
+reassembled. `ms-cli`'s
 standalone `ms repair --json` byte-matches this field's position.
 
 ```{.text include="41-repair-ms1-json.out"}
@@ -3812,10 +3824,10 @@ search for that indel. The search covers the data-part (delete-and-validate
 for too-long; BCH-solve the omitted symbol for too-short) and the `ms1`/`mk1`
 prefix; it also considers indels split across **both** the prefix and the
 data-part simultaneously (tagged `cross-region`), within the `--max-indel`
-budget. Outcomes: a unique recovery prints the corrected string (exit 5 — a
+budget. Outcomes: a unique recovery prints the corrected string (exit 16 — a
 unique indel candidate re-validates the full checksum, so it self-verifies,
-unlike a substitution-correction which is demoted to an exit-4 candidate);
-multiple equally-valid candidates print all of them (exit 4 — choose
+unlike a substitution-correction which is demoted to an exit-20 candidate);
+multiple equally-valid candidates print all of them (exit 20 — choose
 manually); none within the budget exits 2. `ms1` candidates are secret
 material (the usual stderr advisory applies). `md1` (chunked) recovers
 per-chunk like mk1, with cross-chunk reassembly validation. Default `0`
@@ -3833,8 +3845,8 @@ correction beyond the indel itself. The shared BCH budget is
 meaning `--max-indel` and `--max-subst` draw from the same pool.
 
 Candidates that needed a substitution are printed as **VERIFY-ME**
-candidates (exit 4 — same as ambiguous), NOT as confident corrections
-(exit 5). This is intentional: the BCH code cannot distinguish a
+candidates (exit 20 — same as ambiguous), NOT as confident corrections
+(exit 16). This is intentional: the BCH code cannot distinguish a
 genuine indel+substitution from a longer-distance all-substitution
 error at the same budget; the user should verify the recovered string
 against independent notes before trusting it. `--max-subst` has no
@@ -3882,15 +3894,17 @@ Cycle F, an `ms1` substitution-correction can no longer produce this
 envelope; it always falls through to the original decode error plus a
 stderr advisory instead, see [ms1 substitution-correction
 demotion](#mnemonic-repair-ms1-substitution-demotion). The only kinds
-that can still emit `auto_repair_short_circuit: true` / `exit_code: 5`
-are `mk1` — a full, cleanly-reassembling `chunk_set_id` group — and
-`md1`):
+that can still emit `auto_repair_short_circuit: true` are `mk1` — a
+full, cleanly-reassembling `chunk_set_id` group — and `md1`). Since the
+constellation exit-code cutover the process exits `2` here, as it does
+in a pipe: the repair is advice, and the verb still failed on an invalid
+input. `exit_code` holds that same number:
 
 ```json
 {
   "schema_version": "1",
   "auto_repair_short_circuit": true,
-  "exit_code": 5,
+  "exit_code": 2,
   "kind": "ms1",
   "corrected_chunks": ["ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f"],
   "repairs": [
@@ -3905,7 +3919,7 @@ are `mk1` — a full, cleanly-reassembling `chunk_set_id` group — and
 ```
 
 The two top-level fields `auto_repair_short_circuit: true` and
-`exit_code: 5` discriminate the envelope from the standalone
+`exit_code` discriminate the envelope from the standalone
 `mnemonic repair --json` envelope (which is structurally similar but
 omits those fields). Stderr summary and D9 sensitive-secret warning
 remain identical regardless of stdout format.
@@ -3935,10 +3949,10 @@ the `--json` envelope instead has the shape:
 }
 ```
 
-`status` is `"unique"` (one candidate, exit 5) or `"ambiguous"` (multiple,
-exit 4). `confident` is `true` iff every candidate has `subst_count == 0`
+`status` is `"unique"` (one candidate, exit 16) or `"ambiguous"` (multiple,
+exit 20). `confident` is `true` iff every candidate has `subst_count == 0`
 (pure-indel recovery — no substitution was needed); `false` when any
-candidate required a substitution (exit 4, VERIFY-ME advisory). `region` is
+candidate required a substitution (exit 20, VERIFY-ME advisory). `region` is
 `"data-part"`, `"prefix"`, or `"cross-region"` (the indel spanned both the
 prefix and the data-part). `direction` is `"deleted"` (removed an added
 char — too-long input) or `"inserted"` (restored a dropped char — too-short
@@ -4001,7 +4015,7 @@ mnemonic inspect [--ms1 <MS1>] [--mk1 <MK1> [--mk1 <MK1>...]] [--md1 <MD1> [--md
 
 | Flag | Purpose |
 |---|---|
-| `--ms1 <MS1>` | single `ms1` chunk to inspect; use `-` to read one chunk from stdin; may be combined with `--mk1` / `--md1` (one HRP per card; per D35); a second ms1 (positional or stdin line) is refused (exit 1) |
+| `--ms1 <MS1>` | single `ms1` chunk to inspect; use `-` to read one chunk from stdin; may be combined with `--mk1` / `--md1` (one HRP per card; per D35); a second ms1 (positional or stdin line) is refused (exit 64) |
 | `--mk1 <MK1>` | one or more `mk1` chunks (repeating flag); use `-` for stdin |
 | `--md1 <MD1>` | one or more `md1` chunks (repeating flag); use `-` for stdin |
 | `--json` | emit a single JSON envelope on stdout instead of the text-form report |
@@ -4053,7 +4067,9 @@ not touch it.
 When a corrupted card is supplied to `inspect`, the sibling-codec
 decode fails and v0.22.0 auto-fire kicks in. For `md1`, instead of
 surfacing the typed decode error, the toolkit attempts BCH correction
-and — on success — prints the corrected card and exits with code `5`.
+and — on success — prints the corrected card as advice and exits `2`
+(the input was invalid; the exit does not depend on whether stdout is a
+terminal).
 For **`ms1` (Cycle F)**, auto-fire no longer short-circuits: a
 substitution-correction is a Candidate with no self-oracle (see [ms1
 substitution-correction
@@ -4066,8 +4082,10 @@ that advisory and restore the pre-v0.22 behavior verbatim.
 For `mk1` specifically, the toolkit's auto-fire is essentially
 redundant: `mk-codec` performs INTERNAL BCH correction at the same
 `t=4` capacity inside `mk_codec::decode`, so corrupted `mk1` chunks
-within capacity are silently fixed before reaching the auto-fire
-boundary. Auto-fire (the exit-`5` short-circuit) is reachable only for
+within capacity are fixed before reaching the auto-fire boundary. Such
+a correction is not silent: stderr says a correction was used and the
+exit has 16 added (the plate is damaged; re-engrave it). Auto-fire (the
+short-circuit) is reachable only for
 `md1` (no internal correction in `md-codec`); `ms1` (codex32-delegated;
 no internal correction) never short-circuits per the above.
 
@@ -4135,13 +4153,13 @@ mnemonic xpub-search path-of-xpub \
 | `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
-| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
+| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 64 otherwise) |
 | `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path. Multi-occurrence within one template requires multiple `--add-path` flags |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
 | `-h, --help` | print help |
 
-Seed-intake mutex: exactly one of `{--phrase, --phrase-stdin, --ms1, --ms1-stdin, positional}` is required. Auto-fire BCH repair applies ONLY to the `--ms1` decode-failure path (BIP-39 phrase parse failure routes direct exit 1 — phrases have no BCH primitive).
+Seed-intake mutex: exactly one of `{--phrase, --phrase-stdin, --ms1, --ms1-stdin, positional}` is required. Auto-fire BCH repair applies ONLY to the `--ms1` decode-failure path (BIP-39 phrase parse failure routes direct exit 2 — phrases have no BCH primitive).
 
 #### Worked example
 
@@ -4203,14 +4221,14 @@ No-match shape:
 | Code | Meaning |
 |---|---|
 | 0 | Match found |
-| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
-| 4 | No match in searched set (`ToolkitError::XpubSearchNoMatch`) |
+| 1 | No match in searched set (`ToolkitError::XpubSearchNoMatch`) |
+| 2 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
 | 64 | Clap arg-parse error |
 
-Exit `5` is **not reachable** by this subcommand (Cycle F): the seed's
+The auto-fire short-circuit is **not reachable** by this subcommand (Cycle F): the seed's
 `--ms1` intake previously auto-fired a short-circuit on TTY-positive
 decode failure; it now always falls through to the typed decode error
-(exit `1`) plus the advisory above. See [ms1 substitution-correction
+(exit `2`) plus the advisory above. See [ms1 substitution-correction
 demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 #### Refusals
@@ -4219,7 +4237,7 @@ demotion](#mnemonic-repair-ms1-substitution-demotion).
 |---|---|
 | Positional argument with no `ms1` HRP (e.g., a BIP-39 phrase typed positionally) | `BIP-39 phrase must be supplied via --phrase or --phrase-stdin (no HRP for positional autodetect)` |
 | Multiple seed-intake flags supplied (`--phrase` AND `--ms1`, etc.) | clap mutex error |
-| Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 1) |
+| Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 2) |
 
 #### Advisories
 
@@ -4321,11 +4339,11 @@ searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
 | Code | Meaning |
 |---|---|
 | 0 | At least one cosigner matched |
-| 1 | Bad input (descriptor parse error, toolkit-@N refusal, no-xpub-keys refusal, seed-intake error — since Cycle F an `--ms1` decode failure always surfaces here, with a stderr advisory when a candidate correction exists) |
-| 4 | No cosigner matched (`ToolkitError::XpubSearchNoMatch`) |
+| 1 | No cosigner matched (`ToolkitError::XpubSearchNoMatch`) |
+| 2 | Bad input (descriptor parse error, toolkit-@N refusal, no-xpub-keys refusal, seed-intake error — since Cycle F an `--ms1` decode failure always surfaces here, with a stderr advisory when a candidate correction exists) |
 | 64 | Clap arg-parse error |
 
-Exit `5` is **not reachable** here (Cycle F) — see [ms1
+The auto-fire short-circuit is **not reachable** here (Cycle F) — see [ms1
 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 #### Refusals
@@ -4334,7 +4352,7 @@ substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 |---|---|
 | Toolkit `@N`-placeholder descriptor (e.g. `wsh(sortedmulti(2, @0[fp/...], @1[fp/...]))`) | `toolkit @N descriptors carry synthetic xpubs; supply a literal-xpub descriptor, md1 card, or BIP-388 wallet-policy JSON instead` |
 | Descriptor containing no extended keys (all raw public keys) | `descriptor contains no extended keys; xpub-search requires xpub-shaped cosigners` |
-| Bare `tr(...)` with no key form | rust-miniscript parse error (exit 1) |
+| Bare `tr(...)` with no key form | rust-miniscript parse error (exit 2) |
 | `--descriptor-from <unknown>=...` | `--descriptor-from: <node> must be one of literal / md1 / bip388` |
 
 ### `mnemonic xpub-search address-of-xpub`
@@ -4366,7 +4384,7 @@ mnemonic xpub-search address-of-xpub \
 | `--gap-limit <N>` | per-chain scan window, indices `0..N`. Default `20` |
 | `--external-only` | restrict scan to the external (receive) chain; skip change chain. Default scans both |
 | `--address-type <TYPE>` | explicit script-type for child-address rendering (`p2pkh` / `p2sh-p2wpkh` / `p2wpkh` / `p2tr`). Required for neutral `xpub`/`tpub`; overrides prefix-inferred type otherwise |
-| `--network <NET>` | network selector: `mainnet` / `testnet` / `signet` / `regtest`. Default inferred from the xpub version byte; `--network signet`/`--network regtest` overrides the test/signet/regtest ambiguity collapsed by the version byte. An explicit `--network` that disagrees with the (possibly mk1-decoded) xpub's own version bytes is refused fail-closed (exit 2) rather than scanning wrong-network addresses; omit `--network` to infer it instead |
+| `--network <NET>` | network selector: `mainnet` / `testnet` / `signet` / `regtest`. Default inferred from the xpub version byte; `--network signet`/`--network regtest` overrides the test/signet/regtest ambiguity collapsed by the version byte. An explicit `--network` that disagrees with the (possibly mk1-decoded) xpub's own version bytes is refused fail-closed (exit 8, a network mismatch) rather than scanning wrong-network addresses; omit `--network` to infer it instead |
 | `--json` | emit JSON envelope on stdout instead of text-form report |
 | `-h, --help` | print help |
 
@@ -4440,11 +4458,11 @@ No-match entry (single target):
 | Code | Meaning |
 |---|---|
 | 0 | All targets matched |
-| 1 | Bad input (xpub parse failure, address parse failure, multisig SLIP-0132 prefix, missing `--address-type` for neutral xpub) |
-| 4 | At least one target unmatched (`ToolkitError::XpubSearchNoMatch` with `mode: "address-of-xpub"`) |
+| 1 | At least one target unmatched (`ToolkitError::XpubSearchNoMatch` with `mode: "address-of-xpub"`) |
+| 2 | Bad input (xpub parse failure, address parse failure, multisig SLIP-0132 prefix, missing `--address-type` for neutral xpub) |
 | 64 | Clap arg-parse error |
 
-P3 takes no secret material; auto-fire BCH repair (exit 5) does not apply.
+P3 takes no secret material; auto-fire BCH repair does not apply.
 
 #### Refusals
 
@@ -4488,13 +4506,13 @@ mnemonic xpub-search passphrase-of-xpub \
 | `<positional MS1>` | positional ms1 card (HRP-autodetect). BIP-39 phrase text is NOT accepted positionally (no HRP for autodetect) |
 | `--passphrase <P>` | BIP-39 passphrase; `-` reads stdin, `@env:VAR` the environment; any other (literal) value emits the argv-leakage advisory. One of the mandatory passphrase-source group |
 | `--passphrase-stdin` | read BIP-39 passphrase from stdin (NULL-byte-preserving; single trailing newline stripped). One of the mandatory passphrase-source group |
-| `--passphrase-candidates-file <PATH>` | scan a text file of candidate passphrases (one per line, no argv exposure); first match wins, reports the file line (passphrase only in `--json`); exit 4 if none match. One of the mandatory passphrase-source group |
+| `--passphrase-candidates-file <PATH>` | scan a text file of candidate passphrases (one per line, no argv exposure); first match wins, reports the file line (passphrase only in `--json`); exit 1 if none match. One of the mandatory passphrase-source group |
 | `--target-xpub <XPUB-OR-MK1>` | target xpub (any SLIP-0132 prefix: `xpub`/`tpub`/`ypub`/`Ypub`/`zpub`/`Zpub`/`upub`/`Upub`/`vpub`/`Vpub`) OR an `mk1...` bech32 card carrying an xpub |
 | `--language <LANGUAGE>` | BIP-39 wordlist (default `english`) |
 | `--network <NETWORK>` | network selector: `mainnet` (default) / `testnet` / `signet` / `regtest` |
 | `--min-account <N>` | lower bound of account-index iteration, inclusive (default `0`) |
 | `--number-of-accounts <N>` | window size starting at `--min-account` (default `20`) |
-| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 1 otherwise) |
+| `--max-account <N>` | optional upper bound; effective end is `max(min_account + number_of_accounts, max_account + 1)`; every account in the window must be below `2^31` (exit 64 otherwise) |
 | `--add-path <TEMPLATE>` | additional derivation-path template (repeatable). Literal token `account'` (or `account`) substituted with each iterated account index. Templates without an `account` token are searched once at the literal path |
 | `--json` | emit JSON envelope on stdout instead of text-form |
 | `--no-auto-repair` | (global) skip BCH auto-fire on `--ms1` decode failure; preserve typed decode error exit |
@@ -4610,11 +4628,11 @@ path, so that envelope is byte-unchanged:
 | Code | Meaning |
 |---|---|
 | 0 | Match found (this passphrase produces the target xpub at one of the searched paths) |
-| 1 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
-| 4 | No match — single passphrase (`XpubSearchNoMatch`), OR no candidate in `--passphrase-candidates-file` produced the target (`XpubSearchPassphraseCandidatesExhausted`, with the count of candidates tried; an all-blank/empty file gets a tailored "no candidates" note) |
+| 2 | Bad input (BIP-39 parse failure, xpub parse failure, mk1 decode failure, or an `--ms1` decode failure — since Cycle F an `--ms1` substitution-correction never short-circuits here; the original decode error always surfaces, with a stderr advisory when a candidate correction exists) |
+| 1 | No match — single passphrase (`XpubSearchNoMatch`), OR no candidate in `--passphrase-candidates-file` produced the target (`XpubSearchPassphraseCandidatesExhausted`, with the count of candidates tried; an all-blank/empty file gets a tailored "no candidates" note) |
 | 64 | Clap arg-parse error (missing/duplicate passphrase source — exactly one of `--passphrase` / `--passphrase-stdin` / `--passphrase-candidates-file`) |
 
-Exit `5` is **not reachable** by this subcommand (Cycle F) — see [ms1
+The auto-fire short-circuit is **not reachable** by this subcommand (Cycle F) — see [ms1
 substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 
 #### Refusals
@@ -4625,7 +4643,7 @@ substitution-correction demotion](#mnemonic-repair-ms1-substitution-demotion).
 | More than one of the three passphrase sources supplied | clap `passphrase_source` group mutex error (exit 64) |
 | Positional argument with no `ms1` HRP (e.g., a BIP-39 phrase typed positionally) | `BIP-39 phrase must be supplied via --phrase or --phrase-stdin (no HRP for positional autodetect)` |
 | Multiple seed-intake flags supplied | clap mutex error |
-| Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 1) |
+| Invalid SLIP-0132 prefix on `--target-xpub` | xpub parse error (exit 2) |
 
 #### Advisories
 
@@ -4673,7 +4691,7 @@ mnemonic compare-cost {--miniscript <STR> | --descriptor <STR> | stdin (when non
 | `--miniscript <STR>` | bare miniscript fragment with abstract labels (`pk(A)`, `pk(B)`, …) or concrete hex pubkeys; cost is key-agnostic so abstract labels auto-substitute to deterministic dummy keys. Mutually exclusive with `--descriptor`. |
 | `--descriptor <STR>` | full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf `tr(IK, {M})` (v0.28.0). The wrapper is stripped to recover the inner miniscript `M` before the comparison. Multi-leaf `tr(IK, {M1, M2, ...})` and keypath-only `tr(IK)` are refused with exit `3`. Mutually exclusive with `--miniscript`. |
 | `--feerate <SATS_PER_VB>` | decimal sats per virtual byte for the sats columns; default `1.0`, max `10000.0`. Out-of-range values exit `64`. |
-| `--max-conditions <N>` | hard cap on raw enumeration size `n_abs × n_rel × 2^(\|signers\|+\|preimages\|)`; exceeding the cap exits `3` before any enumeration. Default `4096` (permits up to 10 signers+preimages). When `>256`, a soft warn-trail entry appears in `notes[]` once 256 rows are produced. Min `1`. |
+| `--max-conditions <N>` | hard cap on raw enumeration size `n_abs × n_rel × 2^(\|signers\|+\|preimages\|)`; exceeding the cap exits `8` (refused; raise the cap to proceed) before any enumeration. Default `4096` (permits up to 10 signers+preimages). When `>256`, a soft warn-trail entry appears in `notes[]` once 256 rows are produced. Min `1`. |
 | `--json` | emit a JSON envelope on stdout instead of the plaintext aligned-column table. |
 | `--help` | print help. |
 
@@ -4816,12 +4834,13 @@ in plaintext output) carry advisory text. Known entries:
 |---|---|
 | success (rows emitted; advisories in `notes[]`) | `0` |
 | input parse error (malformed miniscript / descriptor) | `2` |
-| no input supplied (TTY stdin + no flag) | `1` |
-| miniscript valid in only one of {Segwitv0, Tap} after `multi↔multi_a` rewrite | `3` |
-| unsupported wrapper (pkh, wpkh, bare, keypath-only `tr(IK)` with no script-tree) | `3` |
-| multi-leaf `tr(IK, {M1, M2, ...})` (one-leaf-at-a-time via `--miniscript`) | `3` |
-| eager precheck exceeded `--max-conditions` cap | `3` |
-| miniscript has zero satisfying conditions | `3` |
+| no input supplied (TTY stdin + no flag) | `64` |
+| empty input on stdin | `2` |
+| miniscript valid in only one of {Segwitv0, Tap} after `multi↔multi_a` rewrite | `2` |
+| unsupported wrapper (pkh, wpkh, bare, keypath-only `tr(IK)` with no script-tree) | `2` |
+| multi-leaf `tr(IK, {M1, M2, ...})` (one-leaf-at-a-time via `--miniscript`) | `2` |
+| eager precheck exceeded `--max-conditions` cap (raise the cap to proceed) | `8` |
+| miniscript has zero satisfying conditions | `2` |
 | `--miniscript` AND `--descriptor` both supplied | `64` (clap mutex) |
 | `--feerate` out of `[0.0, 10000.0]` or non-numeric | `64` |
 | `--max-conditions 0` | `64` |
@@ -4991,7 +5010,7 @@ invocation — a deliberate, reviewed act, never silent:
   emitted spec without `--allow` correctly refuses. The banner still
   prints on the emitting run.
 - An allowed `repeated-keys` policy has no BIP-388 form (BIP-388 requires
-  pairwise distinct `keys_info` keys): `--format bip388` refuses it (exit 1)
+  pairwise distinct `keys_info` keys): `--format bip388` refuses it (exit 2)
   with `error: --format bip388 cannot express a wallet that uses one public
   key more than once (keys_info @<i> and @<j>: <xpub>): a BIP-388 wallet
   policy requires pairwise distinct keys; use --format descriptor for this
@@ -5039,7 +5058,9 @@ bip388` reproduces `build-descriptor --format bip388`.
 | Condition | Exit |
 |---|---|
 | success | `0` |
-| spec parse / IO error (bad JSON, unknown field, unsupported `schema_version`) | `2` |
+| spec parse error (bad JSON, unknown field, unsupported `schema_version`) | `2` |
+| spec file or stdin cannot be read, or stdout cannot be written | `32` |
+| no spec named and stdin is a terminal | `64` |
 | validation-gate failure (field / type / sanity / over-envelope / secret-key) | `2` |
 
 ## `mnemonic gen-man` (v0.73.0) {#mnemonic-gen-man}
@@ -5090,7 +5111,7 @@ man mnemonic            # if man does not find it: man -M ~/.local/share/man mne
 | Condition | Exit |
 |---|---|
 | success | `0` |
-| output-dir create / write I/O error | `1` |
+| output-dir create / write I/O error | `32` |
 
 ---
 
@@ -5133,7 +5154,7 @@ mnemonic word-card --decode --decode-plate "<WORDS>" --decode-plate "<WORDS>"...
 | Flag | Purpose |
 |---|---|
 | `--from <MK1\|MD1>` | source `m*1` card to encode: an `mk1` xpub card or an `md1` descriptor card. Repeating flag (one per `mk1`/`md1`; multi-chunk cards may be passed joined or repeated — chunks auto-group by HRP). `-` reads one card per line from stdin. With `--raid 1\|2`, supply the `n` `mk1` data cards via repeated `--from`. PUBLIC material — not a secret |
-| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or a lone `-` (stdin, whitespace-separated; `-` with any other `<WORD>` is refused, exit 1). For a RAID array, repeat `--decode-plate` once per surviving plate |
+| `--decode` | decode mode: recover the payload from an engraved Word Card. Words come from the positional `<WORD>...` list or a lone `-` (stdin, whitespace-separated; `-` with any other `<WORD>` is refused, exit 64). For a RAID array, repeat `--decode-plate` once per surviving plate |
 | `--decode-plate <WORDS>` | one RAID plate's whitespace-separated word list for `--decode` reconstruction (repeating flag). Supply the surviving `≥ n` plates of an `n + r` array to reconstruct a lost data plate. Mutually exclusive with the positional `<WORD>...` single-card form |
 | `--parity-words <N>` | Reed–Solomon parity words `m` to append (the repair budget; corrects `⌊m/2⌋` substitutions / fills `m` erasures). Default `0` (detection only). Mutually exclusive with `--parity-pct` |
 | `--parity-pct <PCT>` | Reed–Solomon parity as a PERCENTAGE of the data-symbol count `K` (`m = ceil(K * pct / 100)`), an alternative to `--parity-words`. E.g. `--parity-pct 25` ≈ a 25% redundancy budget. Mutually exclusive with `--parity-words` |
@@ -5241,11 +5262,13 @@ check, instead of silently returning a wrong xpub (constellation-eval F2).
 | Condition | Exit |
 |---|---|
 | success (encode or decode) | `0` |
-| bad input (no `--from`, non-`mk1` card under `--raid`, `--integrity-bits` below floor, `-` mixed with other `<WORD>` values, I/O error) | `1` |
+| bad command line (no `--from`, no words to decode, `--raid` other than 0/1/2 or with too few cards, `--integrity-bits` below floor, `-` mixed with other `<WORD>` values) | `64` |
+| a non-`mk1` card under `--raid` | `2` |
+| a file, stdin or stdout failed | `32` |
 | decode / reconstruct refusal (parse failure beyond the repair budget, integrity-tag or header-CRC mismatch, unknown BIP-39 word, `ms1` / unknown HRP, RAID array-id or parity mismatch, RAID underdetermined — more than `r` plates missing) | `2` |
 
 ---
 
 ## When stdout fails
 
-A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mnemonic: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code. Exit 4 from `repair` or `inspect` (the candidates or the partial decode on stdout are the result) also becomes 1; every other exit 4 is a verdict and is kept.
+A reader that closes the pipe early (`mnemonic addresses … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mnemonic: cannot write the output: <error>` on stderr and adds 32 to the exit code: a clean run exits 32, and a `repair` that would have exited 20 exits 52. Exit 64 and 101 are kept as they are. See [Appendix J](#appendix-j-exit-codes).

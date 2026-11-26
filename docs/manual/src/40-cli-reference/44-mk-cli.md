@@ -53,7 +53,7 @@ underlying `KeyCard.policy_id_stubs` slot must be non-empty).
 
 A depth-0 xpub (`--origin-path m`, or a key record with no path) must be a valid BIP 32 master: its parent
 fingerprint must be `00000000`, and a declared origin fingerprint must be the key's own. At depth 1 a declared
-origin fingerprint must be the xpub's parent fingerprint. `mk encode` refuses any of these with exit 64 and mints
+origin fingerprint must be the xpub's parent fingerprint. `mk encode` refuses any of these with exit 2 and mints
 nothing.
 
 ### Worked example
@@ -118,7 +118,7 @@ In mk1 the script type is conveyed by the card's origin path
 BIP-48 multisig), not by the key prefix. When `--origin-path` is
 supplied and the prefix's implied script type contradicts it (for
 example a `zpub` with an `m/49'/…` path), `mk` refuses the input with
-a `UsageError` (exit 64) and an actionable message naming the
+an `InvalidInput` error (exit 2) and an actionable message naming the
 expected path and the alternative prefix to use.
 
 ---
@@ -261,28 +261,21 @@ mk repair [OPTIONS] [MK1_STRINGS]...
 | Code | Meaning |
 |---|---|
 | `0` | all strings already valid (no repair applied; input echoed to stdout unchanged) |
-| `5` | at least one string corrected (`REPAIR_APPLIED`); stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory — see [Set-level re-verify](#set-level-re-verify) below |
-| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch) **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below) |
-| `1` | I/O error or other generic failure |
+| `16` | at least one string corrected (`REPAIR_APPLIED`), and the corrected group decodes; stdout = repair report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory telling you to reassemble the full card — see [Set-level re-verify](#set-level-re-verify) below |
+| `22` | `16 + 4 + 2`: a corrected single (not chunked) string that does not decode; it is still printed, with an error telling you not to trust it. (A corrected single string that decodes, `20`, cannot occur in mk: a single string cannot hold a 65-byte xpub.) |
+| `2` | unrepairable (per-chunk `RepairError`; e.g. too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (`SetReassemblyMismatch` — the per-chunk correction aliased to a different, wrong card; see [Set-level re-verify](#set-level-re-verify) below). Nothing is printed |
+| `32` | a file or stream could not be read or written |
+| `64` | the command line is wrong; nothing ran |
 
-**Asymmetry vs. the toolkit (read before relying on `exit == 5`
-uniformly):** this standalone `mk repair` binary reports exit `5` for
-ANY correction — including an INCOMPLETE `chunk_set_id` group, where it
-adds the `UNVERIFIED` advisory above but does NOT change the exit code.
-`mnemonic repair --mk1` (the toolkit's own copy of this same engine)
-instead **demotes** that identical incomplete-group case to exit `4`
-`VERIFY-ME` (see `41-mnemonic.md`'s [mk1 set-level
-re-verify](#mnemonic-repair-mk1-set-level-reverify)) — the two surfaces
-diverge on this one case; both share every other exit code. The
-principled rule across all four CLIs (D26 of the v0.22.x follow-ups
-cycle, refined by Cycle E + Cycle F): exit-5 `REPAIR_APPLIED` means a
-correction is **verified now** (a complete, cleanly-reassembling
-`chunk_set_id` group) **or verifiable-by-reassembly later** (this
-binary's own incomplete-group case, above) — never "an oracle verified
-it" standing alone. Exit-4 `VERIFY-ME` means a substitution correction
-that spent the checksum's error-detection budget and has **no
-self-oracle** — always true for `ms1` (see `43-ms.md`), and true for an
-incomplete `mk1` group specifically in `mnemonic repair --mk1`.
+**The same codes as the toolkit.** `mk repair` and `mnemonic repair
+--mk1` give the same code on the same strings. Bit 16 means a correction
+was applied: it is **verified now** (a complete, cleanly-reassembling
+`chunk_set_id` group) or **verifiable by reassembly later** (an
+incomplete group, whose `UNVERIFIED` advisory tells you to reassemble the
+full card). A corrected single (not chunked) string that does not decode
+is printed at `22`; a chunked set of one follows the complete-set rule
+(`2`, nothing printed). See
+[Appendix J](#appendix-j-exit-codes).
 
 ### Set-level re-verify {#set-level-re-verify}
 
@@ -308,7 +301,7 @@ looks exactly like a confident fix.
 reporting a confident fix:
 
 - **A COMPLETE group (every chunk of the card supplied) reassembles
-  cleanly** — reported as repaired, exit `5`, as before.
+  cleanly** — reported as repaired, exit `16`.
 - **A COMPLETE group's correction FAILS reassembly** — the per-chunk
   correction has aliased to a different card. `mk repair` REJECTS it
   outright: exit `2` (`SetReassemblyMismatch`), no corrected string is
@@ -319,8 +312,8 @@ reporting a confident fix:
   card, or otherwise fewer chunks than the card's `total_chunks` — the
   documented per-plate recovery workflow in the worked example below) —
   reassembly cannot be checked, because the other chunks aren't
-  present. `mk repair` still corrects and reports the chunk (exit `5`,
-  unchanged), but adds a loud `UNVERIFIED` advisory on stderr instructing
+  present. `mk repair` still corrects and reports the chunk (exit `16`:
+  the rest of the set verifies it when reassembled), but adds a loud `UNVERIFIED` advisory on stderr instructing
   the operator to reassemble the full card before trusting the
   correction.
 
@@ -356,7 +349,7 @@ so reassemble the full card with `mk decode` before trusting the fix):
 ```{.text include="44-mk-repair-text.err"}
 ```
 
-Exit code: `5`.
+Exit code: `16`.
 
 ### JSON output
 
@@ -448,9 +441,12 @@ mk verify \
   mk1qpu9e2pp0f30mtxzd65mvwcur9usdatwuqvq6z70r9nwrgk6xn6l8gy6n0sh92dm9ygtac94unyvx
 ```
 
-Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success. Exits 1 when the card breaks one of the key-origin rules in `mk encode` (kind
-`MasterParentFingerprintNonzero`, `MasterFingerprintMismatch` or `OriginParentFingerprintMismatch`), before any expected-\* comparison. Exits 4 with a
-`ContentMismatch` error envelope when an expected-* flag disagrees with the decoded value.
+Exits 0 with `OK: mk1 string(s) decode cleanly ...` on success. Exits 2 when the card breaks one of the key-origin rules in `mk encode` (kind
+`MasterParentFingerprintNonzero`, `MasterFingerprintMismatch` or `OriginParentFingerprintMismatch`), before any expected-\* comparison. Exits 1 with a
+`ContentMismatch` error envelope when an expected-* flag disagrees with the decoded value. A card that
+decoded only after BCH correction adds 16 (17 for a mismatch on a corrected card), and the OK line reads
+`decode after BCH correction` instead of `decode cleanly`, and
+the `--json` report carries an additive `"corrected": true|false` field.
 For a chunked card the `--json` envelope also carries `chunk_set_id`: `declared`, `derived`,
 `matches`, and `bundle_stamped` (true when the stamped id is the bundle id `mnemonic bundle` stamps).
 
@@ -495,7 +491,7 @@ The address type is inferred from the origin-path purpose **at canonical
 single-sig account depth** (`m/44'`→`p2pkh`, `49'`→`p2sh-p2wpkh`, `84'`→`p2wpkh`,
 `86'`→`p2tr`) and is overridable with `--address-type`. A card whose origin is
 not at account depth requires the explicit flag (and prints a stderr advisory
-that addresses are derived relative to the card's xpub). A card that holds one fixed key (depth 0 with an all-zero chain code — how the toolkit writes a WIF key) is **refused** before anything else is checked (exit 64): it has no child keys that any wallet watches. The refusal prints the `mnemonic convert` command that renders the key's own address; a key in a multisig wallet takes its addresses from the md1 policy card with `md address`. Multisig-cosigner cards
+that addresses are derived relative to the card's xpub). A card that holds one fixed key (depth 0 with an all-zero chain code — how the toolkit writes a WIF key) is **refused** before anything else is checked (exit 2): it has no child keys that any wallet watches. The refusal prints the `mnemonic convert` command that renders the key's own address; a key in a multisig wallet takes its addresses from the md1 policy card with `md address`. Multisig-cosigner cards
 (`m/48'`/`m/87'`) are **refused** — single-key addresses would not match the
 wallet; derive its addresses with `md address <MD1>... --from-mk1-file FILE` (the md1 policy card, and every cosigner's mk1 card in FILE; for testnet cards add `--network testnet`, `--network signet` or `--network regtest`) instead.
 
@@ -599,7 +595,7 @@ In `--json` mode, errors are emitted as a structured envelope:
   "error": {
     "kind": "<error-kind-name>",
     "message": "<human-readable>",
-    "exit_code": 1,
+    "exit_code": 2,
     "details": { }
   }
 }
@@ -608,9 +604,11 @@ In `--json` mode, errors are emitted as a structured envelope:
 Error `kind` values map 1:1 to mk-codec's `Error` enum variants
 (e.g., `InvalidHrp`, `MixedCase`, `BchUncorrectable`,
 `ChunkSetIdMismatch`, `PathTooDeep`) plus mk-cli-only kinds:
-`UsageError`, `ContentMismatch`, `IoError`, `MdCodec` (`--from-md1`
-parse failures), and `FutureFormat` (reserved for v0.3+ when mk-codec
-distinguishes future-version strings from currently-unsupported ones).
+`UsageError`, `InvalidInput`, `ContentMismatch`, `Mismatch`, `Refused`,
+`IoError`, `Internal`, `MdCodec` (`--from-md1` parse failures),
+`SetReassemblyMismatch`, and `FutureFormat` (reserved for v0.3+ when
+mk-codec distinguishes future-version strings from currently-unsupported
+ones). The envelope's `exit_code` is the process's exit status.
 The `details` field is kind-specific (e.g., `ContentMismatch` carries
 `{field, expected, actual}`).
 
@@ -618,15 +616,22 @@ The `details` field is kind-specific (e.g., `ContentMismatch` carries
 
 | Code | Meaning |
 |---|---|
-| 0 | Success. |
-| 1 | mk1 format violation; codec rejected the input. Maps to `Error::*` kinds except `UnsupportedVersion`. Also an I/O error reading stdin, or writing `mk vectors --out` / `mk gen-man --out` (an unreadable `--in FILE` and an unwritable `mk encode --out FILE` are `64`). |
-| 2 | `mk repair` only: unrepairable, or a reassembly mismatch (see [`mk repair`](#mk-repair)'s exit codes). |
-| 3 | FutureFormat — string is well-formed but its declared version is newer than this tool. Maps to `Error::UnsupportedVersion`. |
-| 4 | Verify content mismatch (only `mk verify` with expected-* flags emits this). |
-| 5 | `mk repair` only: at least one string corrected (see [`mk repair`](#mk-repair)'s exit codes). |
-| 64 | CLI usage error per clap convention (unrecognized flag, missing required argument, etc.). |
+`mk` uses the constellation codes of [Appendix J](#appendix-j-exit-codes);
+codes 1 to 63 are sums of the bits below.
 
-A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and exits 1; a verb that was already failing keeps its own code.
+| Code | Meaning |
+|---|---|
+| 0 | Success. |
+| 1 | A check said no: `mk verify` content mismatch with an expected-* flag, a key that is not a cosigner of the policy, an origin that contradicts its policy, a `--keys` batch membership failure. |
+| 2 | An input is invalid: an mk1 format violation (every `Error::*` kind, including `UnsupportedVersion` for a newer format) in any verb, an md1 that does not decode, a bad stub, fingerprint, origin path or SLIP-132 xpub, a bad key record, an empty named input (an empty `--in` file or empty stdin), input that is not UTF-8, a fixed-key card given to `derive` or `address`, a multisig card given to `address`, or a repair that fails reassembly. |
+| 8 | Refused: an output file that is also an input, or a card of the other network given to `address`. |
+| 16 | A BCH correction was applied and the corrected value used: `mk repair`, and also `decode`, `verify`, `inspect`, `address` and `derive` on a damaged card (re-engrave it). |
+| 22 | `16 + 4 + 2`: `mk repair` corrected a single (not chunked) string that does not decode; it is printed. |
+| 32 | A file, stdin or stdout failed: an unreadable `--in FILE` or `--keys FILE`, an unwritable `--out`. |
+| 64 | The command line is wrong (unrecognized flag, missing required argument, a bad setting, no input named at all: no positional, no `--in`, no `-`); nothing ran. |
+| 101 | An internal error. |
+
+A reader that closes the pipe early (`mk address … | head -3`) only stops the output: the exit code is the verb's own. Any other write error on stdout (a full disk, `> /dev/full`), from a verb or `--help`, prints `mk: cannot write the output: <error>` on stderr and adds 32 to the verb's code (0 becomes 32, 16 becomes 48, 2 becomes 34); 64 and 101 are kept.
 
 ## `mk gui-schema`
 
@@ -667,4 +672,4 @@ mk gen-man --out <DIR>
 | Condition | Exit |
 |---|---|
 | success | `0` |
-| output-dir create / write I/O error | `1` |
+| output-dir create / write I/O error | `32` |

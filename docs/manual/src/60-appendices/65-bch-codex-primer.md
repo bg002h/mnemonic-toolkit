@@ -212,13 +212,13 @@ line (not only the damaged one).
   ```
 
   For an `mk1` or `md1` card write `--mk1 -` or `--md1 -` in place of
-  `--ms1 -`. A unique recovery prints the full string and exits 5;
-  several equally valid candidates are all printed, exit 4, and you
+  `--ms1 -`. A unique recovery prints the full string and exits 16;
+  several equally valid candidates are all printed, exit 20, and you
   keep the one that matches every character you can read. Exit 2
   means nothing was found: if the string may also hold a wrong
   character, run the command again with `--max-subst 1` added (raise
   it for more wrong characters; the characters left out plus the
-  wrong ones may be at most 4); such a recovery usually exits 4, a
+  wrong ones may be at most 4); such a recovery usually exits 20, a
   candidate you confirm before use. This search reads lowercase only:
   if your plate is engraved in capitals, type the card in lowercase
   for this command (the second way takes either case). It does not
@@ -229,10 +229,12 @@ line (not only the damaged one).
   Then run `ms repair --in card.txt` for an `ms1` card, or
   `mnemonic repair --mk1 - < card.txt` (`--md1 -` for an `md1` card).
   Up to 4 wrong characters in total are corrected, and exit 0 means
-  every guess was right. A corrected `ms1` is a candidate, exit 4,
-  which you confirm before use. For an `mk1` or `md1` card, exit 5
-  means the correction checked itself across the card's strings;
-  exit 4 means it could not, so confirm it before use.
+  every guess was right. A corrected `ms1` is a candidate, exit 20,
+  which you confirm before use. For an `mk1` or `md1` card, exit 16
+  means the correction checked itself across the card's strings (or
+  will, when the rest of an incomplete set is read); exit 20 means it
+  could not, so confirm it before use. Bit 16 in either code means the
+  plate is damaged: re-engrave it.
 
 Neither way works yet for one share of a K-of-N `ms1` set (a string
 that starts `ms12` to `ms19`): `ms repair` and `mnemonic repair` both

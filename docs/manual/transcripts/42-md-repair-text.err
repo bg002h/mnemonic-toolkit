@@ -1,1 +1,2 @@
 note: stdout is a keyless descriptor template (no keys)
+md: repair: UNVERIFIED: this card is a single string, so nothing checks the correction a second time, and it can alias to a different valid card. Verify the corrected card (for example `md verify <card> --template <TEMPLATE>`) before trusting it.

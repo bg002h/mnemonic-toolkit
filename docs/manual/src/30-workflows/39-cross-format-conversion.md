@@ -111,7 +111,7 @@ printf '%s' 'abandon abandon abandon abandon abandon abandon abandon abandon aba
 
 The bundle synthesizer re-derives the xpub from the supplied phrase at
 the envelope's `m/84'/0'/0'` origin path and asserts equality against
-the blob's xpub. Mismatch returns exit 4 (`ImportWalletSeedMismatch`) —
+the blob's xpub. Mismatch returns exit 1 (`ImportWalletSeedMismatch`) —
 the `abandon abandon … about` phrase above is a placeholder that does
 *not* match this wallet's key, so it deliberately trips the guard.
 

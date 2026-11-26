@@ -1021,7 +1021,7 @@ FOLLOWUP):
   via `--bsms-encryption-token <FILE|->` (PBKDF2-SHA512 + AES-256-CTR +
   HMAC-SHA256 per BIP-129 §Encryption; STANDARD + EXTENDED token widths).
   Encrypted blobs lack the `BSMS 1.0` header so `--format bsms` is
-  REQUIRED. MAC verify failure → exit 2 (typed `BsmsMacMismatch`).
+  REQUIRED. MAC verify failure → exit 1 (typed `BsmsMacMismatch`).
   Encrypted Round-1 decrypt-then-verify shipped in v0.31.2/v0.32.1;
   per-Signer TOKEN variants (repeatable `--bsms-encryption-token`)
   shipped in v0.32.2. **Cross-implementation validated** against (a)

@@ -1628,6 +1628,15 @@ Reference the `<short-id>` from commit messages when closing: `closes FOLLOWUPS.
 - **Status:** `open` (mirror invariant active for the lifetime of `docs/manual/`)
 - **Tier:** `cross-repo`
 
+### `md-exit-codes-manual-lockstep` — the manuals follow md's constellation exit codes (companion to descriptor-mnemonic)
+
+- **Surfaced:** 2026-11-26, independent review of the constellation exit-code cutover (descriptor-mnemonic `design/agent-reports/exit-codes-impl-review-2026-11-26.md` M-7).
+- **Where:** `docs/manual/src/40-cli-reference/42-md.md` (option rows, the repair and `gen-man` exit tables, "When stdout fails"); `docs/manual-gui/src/50-md/` (53, 59, 5A, 5C, 5D, 5E, 5F); outside this repo, mnemonic-engrave `demo/sh2/rehearse.sh:60` (expects 5 from `md repair` of a single string; it now gets 20) and mnemonic-gui's exit badge (spec §7j).
+- **What:** md-cli moved to the constellation exit codes (mnemonic-engrave `design/SPEC_constellation_exit_codes.md` rev 5, §7a); the toolkit's manuals state md's codes and must follow. The toolkit side is done on branch `fx/mnemonic-toolkit` with the exit-code cutover, including md's review fold: a set with a repeated, stray or extra chunk is 2; empty or non-UTF-8 input is 2; `--force-long-code` is 64 even with a missing `--in`; `--from-mk1-file` with no policy card is 64. `rehearse.sh` and the GUI badge are not in this repo.
+- **Status:** `open` until the toolkit manual change merges (then `resolved <COMMIT>`, and the md entry's Status notes it).
+- **Tier:** `cross-repo`
+- **Companion:** descriptor-mnemonic `design/FOLLOWUPS.md` `md-exit-codes-manual-lockstep` (primary).
+
 ### `spec-5-5-kind-enum-gap` — SPEC §5.5 `kind` enum table omits `NetworkMismatch` and `FutureFormat`
 
 - **Surfaced:** Phase 1 review r1 (L-1).

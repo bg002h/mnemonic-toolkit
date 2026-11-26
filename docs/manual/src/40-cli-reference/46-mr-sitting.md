@@ -838,8 +838,19 @@ ST-END-02's `<pw>` is `; (4) destroy the paper with the plates password` when th
 
 ## Exit codes
 
+`mr-sitting` uses the constellation codes of
+[Appendix J](#appendix-j-exit-codes). This table was written from the
+constellation exit-code spec (`SPEC_constellation_exit_codes.md` §7h)
+ahead of `mr-sitting`'s implementing change; the ST- codes named are
+those of the spec's sitting text.
+
 | Code | Meaning |
 |---|---|
 | 0 | `sit`: the session ended at ST-END-02. `verify`: exactly one block matched in full. `root`, `child`: as `mr root`, `mr child`. `kit-write`, `kit-wipe`, `erase-sealed`: the SeedHammer was written or erased and read back as the command says (ST-KIT-06, ST-KIT-08, ST-KIT-10). |
-| 1 | A refusal of holder material or a check, or the holder stopped: `sit` stopped (ST-END-03, ST-END-04), a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09); `verify` mismatch (ST-V-04, ST-V-05, ST-V-06), or stopped (ST-V-09); `kit-write`, `kit-wipe`, `erase-sealed`: the device step failed (ST-KIT-07, ST-KIT-11, ST-KIT-12), or a signal came before it (ST-KIT-14). |
-| 2 | Usage and input files: clap errors; a refused I1, I2 or argument (ST-PLAN-…, ST-FILE-…, ST-HB-02, ST-START-02, ST-START-03, ST-START-04, ST-START-07, ST-START-11, ST-V-07, ST-V-08); `practice`: ST-PR-04 to ST-PR-07 and ST-PR-12; `glossary`: ST-G-02; `kit-write`, `kit-wipe`, `erase-sealed`: the plan file (ST-KIT-01 to ST-KIT-04), the RAM-only folder (ST-KIT-05), picotool not usable (ST-KIT-09), the file (ST-KIT-13), always before any picotool run but `version`. Always before any secret is read. |
+| 1 | A check said no: `verify` mismatch (ST-V-04, ST-V-05, ST-V-06); a well-formed hand-back that belongs to another plan. |
+| 2 | An input is invalid: a malformed plan, hand-back or kit file (ST-PLAN-…, ST-FILE-…, ST-KIT-01 to ST-KIT-04, ST-KIT-13), a refused input value, end of input at a prompt. Always before any secret is read. |
+| 8 | Refused under a rule an override or a different destination would waive: a mainnet refusal not overridden (ST-NET-06), a brought-seed refusal that ends the session (ST-BR-07, ST-BR-09), `practice --dir` whose files exist. |
+| 32 | Something needed from the system failed: an unreadable file, the lock, no RAM-only folder (ST-KIT-05), picotool not usable (ST-KIT-09), a failed picotool `load` or erase (ST-KIT-07, ST-KIT-11, ST-KIT-12), a wipe that failed during a stop. |
+| 64 | The command line alone is wrong (clap errors, a bad setting); nothing ran. |
+| 130 | The operator stopped it: `sit` stopped (ST-END-03, ST-END-04), `verify` stopped (ST-V-09). |
+| 128+N | A signal N during a session (ST-KIT-14 among them), reported after the wipe. |

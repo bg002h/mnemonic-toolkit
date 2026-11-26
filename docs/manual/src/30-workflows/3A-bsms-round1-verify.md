@@ -72,13 +72,13 @@ full report/envelope is still printed but the process exits **4**
 (VERIFY-ME — do not trust), not `0`; `$?`-gated scripts that treated
 exit `0` as "all signatures verified" must check for exit `4` instead.
 Strict mode (`--bsms-verify-strict`, below) flips failure to fatal
-`BsmsSignatureMismatch` exit 2 on the first failing record.
+`BsmsSignatureMismatch` exit 1 on the first failing record.
 
 ## Strict mode (`--bsms-verify-strict`)
 
 For audit / signing-ceremony contexts where any verification failure
 is unacceptable, add `--bsms-verify-strict`. Verify failures become
-fatal `BsmsSignatureMismatch` (exit 2):
+fatal `BsmsSignatureMismatch` (exit 1, a check said no):
 
 ```sh
 mnemonic import-wallet \
@@ -87,7 +87,7 @@ mnemonic import-wallet \
   --bsms-verify-strict
 ```
 
-On any record's signature mismatch the toolkit exits 2 with a stderr
+On any record's signature mismatch the toolkit exits 1 with a stderr
 template like:
 
 ```text

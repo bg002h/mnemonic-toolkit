@@ -1,2 +1,2 @@
-warning: correction UNVERIFIED — reassemble the full card (`mk decode`) to confirm; a >4-error correction can alias to a different card; BIP-93 recommends confirming a corrected codex32 string
+warning: corrected chunk(s) of an incomplete chunk set (chunk_set_id 0xe172a): the correction is verifiable when the rest of the set is reassembled — run `mk decode` with every chunk of the card to confirm it
 note: stdout is watch-only — public keys only, cannot spend

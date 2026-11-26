@@ -113,6 +113,15 @@ flag suppresses generation.
 Raw byte-level wallet seed material. BIP-39 phrases encode entropy of
 128, 160, 192, 224, or 256 bits.
 
+## exit code
+
+The number a binary returns when it ends. Every binary in the
+constellation uses the same codes: 0 done, 64 a bad command line, 101
+an internal error, 130 stopped by the operator, and otherwise a sum of
+the bits 1 (a check said no), 2 (an input is invalid), 4 (verify before
+trusting), 8 (refused), 16 (a correction was applied) and 32 (a file,
+device or helper failed). See [Appendix J](#appendix-j-exit-codes).
+
 ## fingerprint
 
 The first 4 bytes of HASH160 of a public master key. Identifies a
@@ -242,8 +251,9 @@ codex32 BCH code family to fix up to four substitution errors per
 chunk in any `ms1` / `mk1` / `md1` card. Documented in chapter
 *`mnemonic` reference*, section *`mnemonic repair`*. Also fires
 automatically on decode failures in `convert` and `inspect` (an
-`auto-fire short-circuit` applies a confidently-verified mk1/md1
-correction at exit code `5`; since Cycle F an `ms1` substitution-
+`auto-fire short-circuit` prints a confidently-verified mk1/md1
+correction as advice, and the verb still exits `2` because its input
+was invalid; since Cycle F an `ms1` substitution-
 correction is instead a VERIFY-ME candidate — it is NOT auto-applied but
 falls through with an advisory); opt out with the global
 `--no-auto-repair` flag.

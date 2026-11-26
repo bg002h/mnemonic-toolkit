@@ -35,7 +35,7 @@ trusting any address.** The fingerprint is the cheapest
 passphrase-correctness oracle: a wrong passphrase (or a transcription
 slip in the seed) derives a *different* valid wallet, with a different
 fingerprint, silently. Hard-gate it with `--expect-fingerprint` so a
-mismatch fails loudly (exit 4) instead of handing you addresses for the
+mismatch fails loudly (exit 1) instead of handing you addresses for the
 wrong wallet:
 
 ```sh
