@@ -1413,3 +1413,52 @@ fn rulings2_m3_seed_found_m_refusal_prints_m_and_no_warning_first() {
         r.stderr
     );
 }
+
+// ---------------------------------------------------------------------------
+// Review rulings2 final (fable) M-1, N-1, N-2, N-3.
+// ---------------------------------------------------------------------------
+
+/// A's master xprv (mainnet).
+fn xprv_a() -> String {
+    let seed = bip39::Mnemonic::parse(A).unwrap().to_seed("");
+    bitcoin::bip32::Xpriv::new_master(bitcoin::NetworkKind::Main, &seed)
+        .unwrap()
+        .to_string()
+}
+
+/// M-1: an `@N.xprv=` slot in descriptor mode is refused as unsupported
+/// before any origin advice (which it could not follow) is given.
+#[test]
+fn rulings2_fable_m1_xprv_slot_in_descriptor_mode_is_refused_as_unsupported_first() {
+    let s = format!("@0.xprv={}", xprv_a());
+    // A one-key tree with no origin (the one-key refusal used to come first),
+    // and a canonical shape with its origin inline.
+    for d in [
+        "wsh(and_v(v:pk(@0/<0;1>/*),older(144)))",
+        "wpkh(@0/<0;1>/*)",
+    ] {
+        let r = run(&[
+            "bundle",
+            "--network",
+            "mainnet",
+            "--descriptor",
+            d,
+            "--slot",
+            &s,
+        ]);
+        assert_eq!(r.code, 1, "{d}: {}", r.stderr);
+        assert!(r.stdout.is_empty(), "{d}: {}", r.stdout);
+        assert!(
+            r.stderr
+                .contains("subkey set [\"xprv\"] not supported in descriptor mode"),
+            "{d}: {}",
+            r.stderr
+        );
+        assert!(
+            !r.stderr.contains("no origin was given"),
+            "{d}: {}",
+            r.stderr
+        );
+        assert!(!r.stderr.contains("--slot @N.path="), "{d}: {}", r.stderr);
+    }
+}

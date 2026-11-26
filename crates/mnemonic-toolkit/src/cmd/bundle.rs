@@ -1623,6 +1623,29 @@ use md_codec::origin_path::PathDeclPaths;
 /// Phase N (binding-type merge) collapses the legacy CosignerKeyInfo into
 /// ResolvedSlot; v0.4.2 Phase L continues to construct CosignerKeyInfo as a
 /// bridge so synthesize_descriptor's existing signature is preserved.
+/// Whether descriptor mode can materialize a slot with these subkeys: the
+/// arms of the per-slot dispatch in [`bundle_run_unified_descriptor`].
+fn descriptor_mode_materializes(
+    subkeys: &std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+) -> bool {
+    use crate::slot_input::SlotSubkey as K;
+    [K::Phrase, K::Xpub, K::Entropy, K::Ms1]
+        .iter()
+        .any(|k| subkeys.contains(k))
+}
+
+fn descriptor_mode_unsupported_subkeys(
+    idx: u8,
+    subkeys: &std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+) -> ToolkitError {
+    ToolkitError::BadInput(format!(
+        "--slot @{idx} subkey set {:?} not supported in descriptor mode in v0.4.2 \
+        (xprv → v0.5+; wif → multisig FOLLOWUP; partial xpub may be supported but \
+        requires full descriptor binding context — file a FOLLOWUP if needed)",
+        subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+    ))
+}
+
 fn bundle_run_unified_descriptor<W: Write, E: Write>(
     args: &BundleArgs,
     slots: &[crate::slot_input::SlotInput],
@@ -1687,6 +1710,24 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     let canonicity_probe = parse_descriptor(&descriptor_str, &[], &[])?;
     let is_non_canonical =
         md_codec::canonical_origin::canonical_origin(&canonicity_probe.tree).is_none();
+
+    // Review rulings2 final (fable) M-1: a slot whose subkey set descriptor
+    // mode cannot materialize (xprv, wif, a lone fingerprint or path) is
+    // refused here, before any origin advice it could not follow.
+    {
+        let mut by_index_kinds: std::collections::BTreeMap<
+            u8,
+            std::collections::BTreeSet<crate::slot_input::SlotSubkey>,
+        > = std::collections::BTreeMap::new();
+        for s in slots {
+            by_index_kinds.entry(s.index).or_default().insert(s.subkey);
+        }
+        for (idx, subkeys) in &by_index_kinds {
+            if !descriptor_mode_materializes(subkeys) {
+                return Err(descriptor_mode_unsupported_subkeys(*idx, subkeys));
+            }
+        }
+    }
 
     // v0.19.0 SPEC §4.12.g — DESCRIPTOR_WITH_NONZERO_ACCOUNT canonicity-gated.
     if !is_non_canonical && args.account != 0 {
@@ -2043,12 +2084,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
                 res.emit_language,
             )
         } else {
-            return Err(ToolkitError::BadInput(format!(
-                "--slot @{idx} subkey set {:?} not supported in descriptor mode in v0.4.2 \
-                (xprv → v0.5+; wif → multisig FOLLOWUP; partial xpub may be supported but \
-                requires full descriptor binding context — file a FOLLOWUP if needed)",
-                subkeys.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-            )));
+            return Err(descriptor_mode_unsupported_subkeys(idx, &subkeys));
         };
 
         // v0.4.3 Phase N: per-slot entropy goes on the ResolvedSlot directly.
