@@ -113,7 +113,7 @@ multipath (`<0;1>`) or fixed-path. The GUI ends its options with `--`
 before it, so a descriptor can never be read as a flag.
 
 **Public keys only.** md refuses a descriptor holding a private key
-(`md: decompose: this is not a descriptor md can parse …`, exit 1), but
+(`md: decompose: this is not a descriptor md can parse …`, exit 2), but
 by then it would have been on screen. So when any key-shaped part of
 the value reads as a private extended key (`xprv`, `tprv`, …), the GUI
 masks the field, never saves it with the session (no positional is
@@ -130,7 +130,7 @@ a copied command would carry the key.
 3. Leave `--emit` at `all`; **Run**.
 
 ```text
-exit: 0
+exit: 0 — done, every check passed
 stdout:
 # template — `md encode <TEMPLATE>` / `md descriptor --template`
 wpkh(@0/84'/0'/0'/<0;1>/*)
@@ -147,8 +147,8 @@ wpkh(@0/84'/0'/0'/<0;1>/*)
 
 | Trigger | Refusal |
 |---|---|
-| Neither the positional nor `--in` | clap, exit 2 (the GUI marks both Required first) |
-| Both | clap `cannot be used with`, exit 2 (the GUI greys `--in`) |
-| Two descriptors (a receive/change pair) | `md: decompose: decompose takes ONE descriptor and 2 were supplied. …`, exit 1 — combine them into one `<0;1>` descriptor first |
-| A BIP-388 template (`@0`, `@1`, …) instead of a descriptor | md, exit 1: a template goes to `md encode` |
-| A private key in the descriptor | md, exit 1; the GUI masks it first |
+| Neither the positional nor `--in` | clap, exit 64 (the GUI marks both Required first) |
+| Both | clap `cannot be used with`, exit 64 (the GUI greys `--in`) |
+| Two descriptors (a receive/change pair) | `md: decompose: decompose takes ONE descriptor and 2 were supplied. …`, exit 2 — combine them into one `<0;1>` descriptor first |
+| A BIP-388 template (`@0`, `@1`, …) instead of a descriptor | md, exit 2: a template goes to `md encode` |
+| A private key in the descriptor | md, exit 2; the GUI masks it first |

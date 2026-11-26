@@ -273,7 +273,7 @@ The GUI renders this as a Text widget; no `?` help-icon.
 (#28) Expected `WalletPolicyId` hex prefix for a keyless single-sig
 template bundle. When set, `verify-bundle` recomputes the id from the
 completed, fully-keyed, explicit-origin wallet and matches its leading
-bytes; a mismatch is a **failed check** (overall `mismatch`, exit 4).
+bytes; a mismatch is a **failed check** (overall `mismatch`, exit 1).
 Only meaningful for a template bundle; ignored otherwise. **NOT**
 checked when `--origin` overrides the canonical account path (a
 different preimage). The GUI renders this as a Text widget.

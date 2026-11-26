@@ -12,9 +12,9 @@ code's `t=4` capacity (up to four substitution errors per chunk).
 v0.81.0's ms1 demotion, the toolkit's `RepairJson` is a strict
 superset (an extra `verdict` field, `"blessed"`/`"candidate"`) that
 this NO-BUMP `md repair` envelope does not carry; a shared-field
-parser still reads both. `md1` is exit-5 `REPAIR_APPLIED` on every
-correction — but that is **not** a uniform constant across the four
-m-format CLIs; see Exit codes below.
+parser still reads both. A correction sets exit bit 16; a single
+string that nothing can verify adds bit 4 (exit 20); see Exit codes
+below.
 
 The repair form is the smallest md-tab form: one positional
 (`md1-strings`, repeating, required) plus a single optional
@@ -78,19 +78,19 @@ data for the failing chunk.
 | Code | Meaning |
 |---|---|
 | `0` | every chunk already valid; no correction applied; inputs echoed unchanged. |
-| `5` | at least one chunk corrected (`REPAIR_APPLIED`); stdout = repair report + corrected chunks. |
-| `2` | atomic-fail: any chunk exceeding BCH `t=4` capacity (or a structural wire-format error) aborts the whole call; the failing chunk index is named on stderr; NO partial output. |
-| `1` | I/O error or other generic failure. |
+| `16` | at least one chunk corrected and verified (a chunked set that reassembles), or a chunk of an incomplete set corrected on its own (the rest of the set verifies it later); stdout = repair report + corrected chunks. |
+| `20` | `16 + 4`: a single (non-chunked) string corrected; nothing can verify it, so stderr carries an `UNVERIFIED` note. |
+| `22` | `16 + 4 + 2`: a corrected single string that still does not decode; it is printed. |
+| `2` | atomic-fail: any chunk exceeding BCH `t=4` capacity (or a structural wire-format error), a complete set that does not reassemble, or a set with a repeated, stray or extra chunk aborts the whole call; the failing chunk index is named on stderr; NO partial output. |
+| `32` | a file or stream could not be read or written. |
+| `64` | the command line is wrong; nothing ran. |
 
-**`md1` is unaffected by later cycles.** Its content-id check already
-rejects a full-set alias on its own, so a correction is always
-**verified now** and stays exit `5`, unlike `mk1` (an incomplete
-`chunk_set_id` group demotes to exit `4` in `mnemonic repair --mk1`;
-see [`mk repair`](#mk-repair)) or `ms1` (every substitution correction
-demotes to exit `4`; see [`ms repair`](#ms-repair)). Wrapper scripts
-must NOT branch on a single `exit == 5` constant across the four
-binaries — `md1` is the one surface where that shortcut happens to
-hold.
+**The same rule on every CLI.** Bit 16 means a correction was applied
+and the corrected value used. Bit 4 is added when nothing can verify it:
+a single non-chunked `md1`, and every `ms1` (see [`ms
+repair`](#ms-repair)). Wrapper
+scripts test bits, not one number: `[ $(( rc & 16 )) -ne 0 ]` means
+"corrected".
 
 ## Worked example — repair a single-chunk `md1`
 
@@ -104,7 +104,8 @@ hold.
 
 The output panel renders the repair report header (describing the
 fix) followed by the corrected chunk on the trailing line. Exit
-code `5`. For a multi-chunk `md1`, the report names each corrected
+code `20` for a single string (with an `UNVERIFIED` note on stderr),
+`16` for a chunked one. For a multi-chunk `md1`, the report names each corrected
 chunk's index on its own `#` comment line and emits every chunk on
 the trailing lines.
 

@@ -16,7 +16,7 @@ Three input modes (`form::conditional::md_descriptor`):
 - **B — template + keys.** Fill [`--template`](#md-descriptor-template);
   [`--key`](#md-descriptor-key) becomes **Required** until it has at
   least one row (md: `--key @i=<XPUB> required when --template is
-  supplied`, exit 2), and the key-card flags grey out.
+  supplied`, exit 64), and the key-card flags grey out.
 - **C — key cards.** Fill [`--from-mk1`](#md-descriptor-from-mk1) or
   [`--from-mk1-file`](#md-descriptor-from-mk1-file) together with the
   **keyless** policy card's phrases (the positional turns Required).
@@ -149,7 +149,7 @@ Boolean. Sugar for `--chain 1`; greyed while `--chain` has a value.
 
 Dropdown. Enabled only in mode C; greyed otherwise, which also keeps a
 stale `md1` choice off the command line (md refuses `--emit md1`
-outside mode C, exit 2, and points to `md encode <TEMPLATE> --key …`).
+outside mode C, exit 64, and points to `md encode <TEMPLATE> --key …`).
 
 ### Outline {#md-descriptor-emit-outline}
 
@@ -194,8 +194,9 @@ Boolean. Emit JSON output.
 ## `--verify-against` {#md-descriptor-verify-against}
 
 Text widget. A **spend-equality** comparison target: an `md1` string,
-or a FILE holding one or more. Exit `0` = spend-equal, `5` = not
-spend-equal. Works with any input mode.
+or a FILE holding one or more. Exit `0` = spend-equal, `1` = not
+spend-equal, `2` = an input that does not decode, `32` = a file that
+cannot be read. Works with any input mode.
 
 ## `--experimental` {#md-descriptor-experimental}
 
@@ -216,7 +217,7 @@ policy card's phrases (mode C). Mutually exclusive with `--template`.
 4. **Run**.
 
 ```text
-exit: 0
+exit: 0 — done, every check passed
 stdout:
 wpkh([73c5da0a/84'/0'/0']xpub6BemYiVNp19ZzsXfZEitq3w1XJmqRCJcSbxPVjjkZEbmdd445fc9CJ9qiRzFf5MLa3KsF6tb8rWoVUfQW489vNiYJUAYvfiaDBP3Tq1adUC/<0;1>/*)#j8a2anzg
 stderr:
@@ -235,7 +236,7 @@ cannot carry one (the key and chain code are unchanged). Tick
 
 | Trigger | Refusal |
 |---|---|
-| `--template` without a `--key` | `md: --key @i=<XPUB> required when --template is supplied`, exit 2 (the GUI marks `--key` Required) |
-| `--emit md1` outside mode C | md, exit 2 (the GUI greys `--emit`) |
-| `--chain` and `--change` together | clap, exit 2 (the GUI greys the other) |
-| A private key in `--key` | md refuses it (exit 1); the GUI masks it first |
+| `--template` without a `--key` | `md: --key @i=<XPUB> required when --template is supplied`, exit 64 (the GUI marks `--key` Required) |
+| `--emit md1` outside mode C | md, exit 64 (the GUI greys `--emit`) |
+| `--chain` and `--change` together | clap, exit 64 (the GUI greys the other) |
+| A private key in `--key` | md refuses it (exit 2; a key of the other network, exit 8); the GUI masks it first |

@@ -81,4 +81,4 @@ line per failed SPEC §4 rule, then the structured fields.
 
 | Trigger | Refusal |
 |---|---|
-| Positional `ms1` is not a parseable BIP-93 string (includes the empty-stdin case, which decodes as `InvalidLength(0)`) | exit 1 with the `friendly_codex32`-rendered text, e.g. `error: string length 0 not a valid codex32 length` for empty input |
+| Positional `ms1` is not a parseable BIP-93 string (includes the empty-stdin case, which decodes as `InvalidLength(0)`) | exit 2 with the `friendly_codex32`-rendered text, e.g. `error: string length 0 not a valid codex32 length` for empty input |

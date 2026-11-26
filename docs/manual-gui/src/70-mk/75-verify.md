@@ -3,22 +3,25 @@
 Verify that one or more `mk1` strings decode cleanly (BCH check
 passes, payload-format is valid) and optionally that their
 decoded content matches user-supplied expected fields. **Exit 0**
-on success; **exit 2** on decode failure; **exit 3** on
-future-format (`UnsupportedVersion`); **exit 4** on content
-mismatch; **exit 64** on user-input error.
+on success; **exit 1** on content mismatch; **exit 2** on an invalid
+input (a decode failure, a future format `UnsupportedVersion`, an
+expected value that does not parse); **exit 64** on a command line
+that cannot run. A card that decoded only after BCH correction adds
+16 (17 for a mismatch on a corrected card), the OK line then reads
+`decode after BCH correction`, and `--json` carries `"corrected": true`.
 
 The content-match flags are all optional. A bare `mk verify
 <mk1-strings>` exits 0 iff the strings decode cleanly. Supplying
 any of `--xpub` / `--origin-fingerprint` / `--origin-path` /
 `--policy-id-stub` / `--from-md1` adds an equality assertion on
-the matching decoded field; mismatch returns exit 4 with the
+the matching decoded field; mismatch returns exit 1 with the
 field name and the actual-vs-expected values.
 
 > **GUI form:** see [GUI Forms › mk › verify](#gui-form-mk-verify).
 
 ## Outline {#mk-verify-outline}
 
-- [`--xpub`](#mk-verify-xpub) — expected xpub (exit 4 on mismatch)
+- [`--xpub`](#mk-verify-xpub) — expected xpub (exit 1 on mismatch)
 - [`--origin-fingerprint`](#mk-verify-origin-fingerprint) — expected master fingerprint
 - [`--origin-path`](#mk-verify-origin-path) — expected derivation path
 - [`--policy-id-stub`](#mk-verify-policy-id-stub) — expected stub(s); repeating, order-sensitive
@@ -29,7 +32,7 @@ field name and the actual-vs-expected values.
 
 Expected extended public key. Optional. When supplied, the
 binary parses it via `parse_xpub` and compares against the
-decoded card's xpub field. Mismatch returns exit 4 with
+decoded card's xpub field. Mismatch returns exit 1 with
 `error: verify mismatch on xpub: expected <expected>, got
 <actual>` (per `crates/mk-cli/src/error.rs:65-75` ContentMismatch
 formatting).
@@ -46,7 +49,7 @@ message reports `actual: (omitted, privacy-preserving mode)`
 
 Expected BIP-32 derivation path (e.g. `m/84'/0'/0'`). Optional.
 Compared against the decoded card's `origin_path` after parsing
-via `parse_derivation_path`. Mismatch returns exit 4.
+via `parse_derivation_path`. Mismatch returns exit 1.
 
 ## `--policy-id-stub` {#mk-verify-policy-id-stub}
 
@@ -111,7 +114,7 @@ even when no content-match flags were supplied.)
 
 All four fields match the decoded values; stdout emits the same
 `OK:` line and exit 0. Changing any field to a non-matching
-value (e.g. `--origin-fingerprint cafebabe`) exits 4 with stderr
+value (e.g. `--origin-fingerprint cafebabe`) exits 1 with stderr
 `error: verify mismatch on origin_fingerprint: expected cafebabe,
 got deadbeef`.
 
@@ -122,9 +125,9 @@ got deadbeef`.
 | No positional `mk1-strings` provided AND stdin not used | clap-level `required` error |
 | Any positional that does not parse as `mk1` | exit 2 with the matching `mk-codec` error |
 | Supplied chunks have inconsistent `chunk_set_id` headers | exit 2 with `error: chunk_set_id mismatch` |
-| `mk1` future-format (`UnsupportedVersion`) | exit 3 with `error: unsupported version …` |
-| `--xpub <value>` does not match the decoded card | **exit 4** with `error: verify mismatch on xpub: expected <expected>, got <actual>` |
-| `--origin-fingerprint <value>` does not match the decoded card | **exit 4** with `error: verify mismatch on origin_fingerprint: …` (privacy-preserving mode reports `actual: (omitted, privacy-preserving mode)`) |
-| `--origin-path <value>` does not match | **exit 4** with `error: verify mismatch on origin_path: …` |
-| `--policy-id-stub` / `--from-md1` produces an expected stub list that does not equal the decoded `policy_id_stubs` (order-sensitive) | **exit 4** with `error: verify mismatch on policy_id_stubs: expected <comma-joined>, got <comma-joined>` |
-| `--xpub` / `--origin-fingerprint` / `--policy-id-stub` / `--from-md1` value fails its own parse (bad hex, malformed xpub, etc.) | exit 64 with `error: …` per the matching `parse_*` helper |
+| `mk1` future-format (`UnsupportedVersion`) | exit 2 with `error: unsupported version …` |
+| `--xpub <value>` does not match the decoded card | **exit 1** with `error: verify mismatch on xpub: expected <expected>, got <actual>` |
+| `--origin-fingerprint <value>` does not match the decoded card | **exit 1** with `error: verify mismatch on origin_fingerprint: …` (privacy-preserving mode reports `actual: (omitted, privacy-preserving mode)`) |
+| `--origin-path <value>` does not match | **exit 1** with `error: verify mismatch on origin_path: …` |
+| `--policy-id-stub` / `--from-md1` produces an expected stub list that does not equal the decoded `policy_id_stubs` (order-sensitive) | **exit 1** with `error: verify mismatch on policy_id_stubs: expected <comma-joined>, got <comma-joined>` |
+| `--xpub` / `--origin-fingerprint` / `--policy-id-stub` / `--from-md1` value fails its own parse (bad hex, malformed xpub, etc.) | exit 2 with `error: …` per the matching `parse_*` helper |

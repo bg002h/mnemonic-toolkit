@@ -216,7 +216,7 @@ the path is intentional.
 
 Waive the `repeated_keys` rule (the same key in two branches — e.g. a
 "degrading threshold"). Such a policy has no BIP-388 form (BIP-388 requires pairwise
-distinct keys): `--format bip388` refuses it (exit 1) and `--json` carries
+distinct keys): `--format bip388` refuses it (exit 2) and `--json` carries
 `"bip388": null`.
 
 ### `resource-limit` {#mnemonic-build-descriptor-allow-resource-limit}

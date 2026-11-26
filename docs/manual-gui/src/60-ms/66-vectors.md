@@ -34,4 +34,4 @@ the in-tree `vectors/v0.1.json` to detect drift.
 
 | Trigger | Refusal |
 |---|---|
-| Internal vector-corpus parse failure | exit 1 with `error: vector corpus parse: <serde error>` (defensive; corpus is baked at compile time so this is unreachable in practice) |
+| Internal vector-corpus parse failure | exit 101 with `error: vector corpus parse: <serde error>` (defensive; corpus is baked at compile time so this is unreachable in practice) |

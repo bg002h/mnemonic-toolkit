@@ -188,7 +188,7 @@ ASCII space between groups.
 
 Boolean. A phrase of exactly 40 or 64 hex characters is probably a
 digest pasted into the wrong field: hashing it would commit the wallet
-to the ASCII text of the digest. `ms` stops on such a phrase (exit 1,
+to the ASCII text of the digest. `ms` stops on such a phrase (exit 8,
 *"that phrase is 64 hex characters, the width of a digest …"*) unless
 this box is ticked.
 
@@ -210,7 +210,7 @@ every other source.
 
 ```text
 argv: ms hashlock --hashlock-phrase-stdin --kind sha256
-exit: 0
+exit: 0 — done, every check passed
 stdout:
 hash:3cf5d421caf2a9c8eb9de1d400866ea7d475e6ba978861bb0167a37cb70a4c12
 stderr:
@@ -234,6 +234,6 @@ term to paste. Engrave the preimage `ms1`; the digest is public.
 | More than one source | the GUI greys every source after the first filled one |
 | `--random` without `--out` | `ms`, exit 64 (the GUI marks `--out` Required) |
 | `--method` or `--emit-record` with a non-phrase source | `ms`, exit 64 (the GUI greys both) |
-| A phrase of 40 or 64 hex characters | `ms`, exit 1, unless `--phrase-looks-like-digest-ok` |
+| A phrase of 40 or 64 hex characters | `ms`, exit 8, unless `--phrase-looks-like-digest-ok` |
 | A secret field holding `-`, a lookalike, or a value ending in CR/LF | GUI refusal before Run; see [Secret channels](#secret-channels-refusals) |
 | macOS / Windows: a phrase starting with `-` | GUI `value-starts-with-dash`: there the phrase goes on the command line, and `--hashlock-phrase=VALUE` is not byte-exact for `ms` |

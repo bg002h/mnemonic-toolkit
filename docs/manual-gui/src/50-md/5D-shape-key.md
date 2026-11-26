@@ -57,6 +57,6 @@ stdout is one line, `wpkh(@0/<0;1>/*)` + `U+001F` + `[[[0]]][[0]]` +
 
 | Trigger | Refusal |
 |---|---|
-| Neither `[PHRASES]` nor `--descriptor` | clap, exit 2 (the GUI marks both Required first) |
-| Both | clap `cannot be used with`, exit 2 (the GUI greys `--descriptor`) |
+| Neither `[PHRASES]` nor `--descriptor` | clap, exit 64 (the GUI marks both Required first) |
+| Both | clap `cannot be used with`, exit 64 (the GUI greys `--descriptor`) |
 | A private key in `--descriptor` | `md: shape-key: not a descriptor: public keys must be …`, exit 2 |

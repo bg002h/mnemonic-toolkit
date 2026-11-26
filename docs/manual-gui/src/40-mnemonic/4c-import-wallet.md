@@ -154,7 +154,7 @@ out-of-union values:
 - `<N>` (integer index) — select the N-th descriptor entry.
 - `active-receive` — filter to entries with
   `active: true, internal: false` (Core's external chain). Multiple
-  matches emit multiple bundles; zero matches yields exit 1.
+  matches emit multiple bundles; zero matches yields exit 2.
 - `active-change` — filter to entries with
   `active: true, internal: true` (Core's internal / change chain).
   Same multi/zero handling.
@@ -172,10 +172,10 @@ Seed overlay (SPEC §8.3). Repeatable flag; positional cosigner-index
 — the i-th `--ms1` applies to cosigner i. The toolkit derives the
 xpub from the supplied entropy at the cosigner's blob-declared
 origin path and asserts equality against the blob's xpub; mismatch
-yields exit 4. Three value shapes are accepted: an inline
+yields exit 1. Three value shapes are accepted: an inline
 `ms1xxx...` string (canonical `ms1` HRP form), the `@env:<VAR>`
 sentinel (resolved at clap-parse time via `std::env::var(VAR)`;
-whole-value only; missing → exit 1 `EnvVarMissing`), and the
+whole-value only; missing → exit 32 `EnvVarMissing`), and the
 empty-string sentinel `""` (preserves v0.25.1 watch-only semantics;
 stderr NOTICE; cosigner stays watch-only).
 
@@ -241,7 +241,7 @@ SINGLE token is SHARED (decrypts every encrypted Round-1 record AND the
 Round-2 blob); MULTIPLE tokens pair POSITIONALLY with `--bsms-round1`
 records (the Nth token decrypts the Nth record). Token file contents:
 lowercase ASCII hex (16 chars STANDARD, 32 chars EXTENDED). A MAC verify
-failure → exit 2 (`BsmsMacMismatch`).
+failure → exit 1 (`BsmsMacMismatch`).
 
 The GUI renders this as a Path widget with `repeating: true` and
 `stdio_sentinel: true`. The token is BIP-129 key material; treat it as
@@ -309,7 +309,7 @@ Bitcoin Core `listdescriptors` use coin-type `1` for testnet / signet
 / regtest alike). Honored ONLY within the parsed coin-type class
 (testnet ↔ {testnet, signet, regtest}; mainnet ↔ mainnet) — a
 cross-class request (e.g. `--network mainnet` on a testnet-coin-type
-blob) is refused (exit 1, `ImportWalletNetworkClassMismatch`) because
+blob) is refused (exit 8, a network mismatch, `ImportWalletNetworkClassMismatch`) because
 the blob's xpub prefix is coin-type-bound. Absent = use the
 coin-type-derived network. The GUI renders this flag as a Dropdown with
 a `?` help-icon.

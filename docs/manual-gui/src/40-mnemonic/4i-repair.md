@@ -76,14 +76,14 @@ Number widget (0..=4; default 0). The maximum insert/delete (indel)
 distance to search when a chunk failed normal BCH repair because a
 character was added (too long) or dropped (too short) during
 transcription. `0` disables indel recovery. Applies to `ms1` / `mk1` /
-`md1`. A unique indel recovery is reported as `REPAIR_APPLIED` (exit 5).
+`md1`. A unique indel recovery is reported as `REPAIR_APPLIED` (exit 16).
 
 ## `--max-subst` {#mnemonic-repair-max-subst}
 
 Number widget (0..=4; default 0). Also tolerate up to E substitution
 (wrong-but-in-place) errors alongside the indels. `0` is pure indel.
 A recovery that consumed a substitution is printed as a **VERIFY-ME**
-candidate (exit 4) rather than a confident correction — verify each
+candidate (exit 20) rather than a confident correction — verify each
 candidate against an independent source before trusting it.
 
 ## Exit codes
@@ -93,33 +93,28 @@ The GUI surfaces the toolkit exit code in the output panel:
 | Code | Meaning |
 |---|---|
 | `0` | all chunks already valid (input echoed unchanged) |
-| `5` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — `mk1` (a full `chunk_set_id` group reassembles) / `md1` (content-id check passes), incl. a unique full-checksum `--max-indel` recovery for any kind; stdout = repair report + corrected chunks |
-| `4` | ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction**, **or** (`mk1` only) a corrected chunk set is INCOMPLETE and so cannot be set-verified — verify each candidate before trusting it |
+| `16` | at least one chunk corrected AND self-verified (`REPAIR_APPLIED`) — `mk1` (a full `chunk_set_id` group reassembles) / chunked `md1` (content-id check passes), incl. a unique full-checksum `--max-indel` recovery that re-validates by reassembly; also a corrected `mk1` chunk set that is INCOMPLETE (the rest of the set verifies it when it is reassembled); stdout = repair report + corrected chunks |
+| `20` | 16 + 4: ambiguous (multiple `--max-indel` candidates), **or a candidate required ≥1 substitution with no self-oracle** — **every `--ms1` substitution correction** and every non-chunked `--md1` single-string correction — verify each candidate before trusting it |
+| `22` | 16 + 4 + 2: a corrected single-string `--md1` at a wire version this build cannot read; the corrected string is printed |
 | `2` | unrepairable (too many errors, HRP mismatch, reserved-length, or `--max-indel` exhausted) **or** (`mk1` only, since toolkit v0.80.0) a COMPLETE corrected chunk set that fails cross-chunk reassembly (`SetReassemblyMismatch` — the correction aliased to a different, wrong card; the correction is NOT applied) |
-| `1` | I/O or other generic failure |
+| `32` | a file, stdin or stdout failed |
+| `64` | a bad command line; nothing ran |
 
-**Not a single uniform "exit 5 = repaired" code.** `5` means a
-correction is **verified now** (a cross-chunk reassembly hash /
-content-id check) **or verifiable-by-reassembly later** (an
-incomplete `mk1` single-plate group) — never "an oracle verified it"
-standing alone. `4` means a bounded-distance substitution correction
-that spent the checksum's error-detection budget and has **no
-self-oracle** — always true for `--ms1` (a bearer secret with no
-cross-chunk hash), and true for an incomplete `--mk1` group
-specifically. `--md1` never demotes (its content-id check always
-self-verifies). See [`ms repair`](#ms-repair), [`mk
+These are the constellation codes (see the user manual's exit-code
+appendix). Bit 16 in any code means a correction was applied: the
+plate is damaged, so re-engrave it. Bit 4 means nothing checked the
+correction a second time — always true for `--ms1` (a bearer secret
+with no cross-chunk hash) and for a single non-chunked `--md1` string —
+so verify it before trusting it. See [`ms repair`](#ms-repair), [`mk
 repair`](#mk-repair), and [`md repair`](#md-repair) for each sibling
-CLI's own (differently-scoped) exit-code table.
+CLI's own table.
 
-**Version scoping.** This split ships in two legs: the `--mk1`
-incomplete-group candidate demotion in **toolkit v0.80.0**, and the
-`--ms1` every-substitution-correction demotion in **toolkit v0.81.0**.
-The pinned `mnemonic` 0.104.0 carries both, and the table above is
-its behavior: an incomplete `--mk1` chunk-set-id group and any
-`--ms1` substitution correction both exit `4` with an `UNVERIFIED`
-advisory. The `--max-indel`/`--max-subst` rule (unique indel → `5`;
-an indel that consumed a substitution, or an ambiguous indel, → `4`)
-predates both legs.
+**Version scoping.** A `mnemonic` released before the constellation
+exit-code cutover (its root `--help` does not end with the exit-code
+legend) uses the old codes: `5` for a verified correction, `4` for an
+ambiguous or unverified one, `1` for an I/O failure. The output panel
+reads such a binary's code with those meanings (see [Run and read the
+output panel](#run-and-read-the-output-panel)).
 
 ## Worked example — repair a single-character `ms1` corruption
 
@@ -146,7 +141,7 @@ predates both legs.
 
 The output panel renders the repair report on stdout — comment lines
 describe the fix and the corrected chunk is on the last line — with exit
-code `4` (`VERIFY-ME` Candidate, as of toolkit v0.81.0; see Exit codes
+code `20` (16 + 4: a correction was applied and it is a `VERIFY-ME` Candidate; see Exit codes
 above). A `repair: correction UNVERIFIED — a corrected
 seed card cannot be self-verified; confirm the derived address/xpub
 against a known-good copy before use; BIP-93 recommends confirming a

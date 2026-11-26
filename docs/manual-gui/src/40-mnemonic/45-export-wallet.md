@@ -324,7 +324,7 @@ because the file holds addresses, not the descriptor.
 Bare BIP-388 wallet-policy JSON without the Bitcoin-Core-specific
 wrapper. Use for descriptor-aware tooling that consumes the
 upstream BIP-388 standard format directly.
-It refuses (exit 1) a policy BIP-388 calls invalid: a NUMS taproot internal key, or one public key used twice; see Refusals below.
+It refuses (exit 2) a policy BIP-388 calls invalid: a NUMS taproot internal key, or one public key used twice; see Refusals below.
 
 ### `coldcard` {#mnemonic-export-wallet-format-coldcard}
 

@@ -75,6 +75,6 @@ Stderr emits the one-line summary (`wrote 40 vector file(s) to
 
 | Trigger | Refusal |
 |---|---|
-| Internal vector-corpus parse failure | exit 64 with `error: vector corpus parse: <serde error>` (defensive; the corpus is baked at compile time and the build's integration tests gate this) |
-| `--out` path exists but is not a directory, or directory is not writable | exit 1 with `error: io error: …` per `std::io::Error` |
-| Per-fixture serialization or write failure | exit 1 with `error: io error: …` or exit 64 with `error: vector serialize: …` |
+| Internal vector-corpus parse failure | exit 101 with `error: vector corpus parse: <serde error>` (defensive; the corpus is baked at compile time and the build's integration tests gate this) |
+| `--out` path exists but is not a directory, or directory is not writable | exit 32 with `error: io error: …` per `std::io::Error` |
+| Per-fixture serialization or write failure | exit 32 with `error: io error: …` or exit 101 with `error: vector serialize: …` |

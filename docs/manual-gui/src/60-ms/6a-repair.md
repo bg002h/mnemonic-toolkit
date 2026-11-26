@@ -63,39 +63,39 @@ directory.
 | Code | Meaning |
 |---|---|
 | `0` | input already valid; no correction applied; echoed unchanged |
-| `4` | **`VERIFY-ME` Candidate** (as of `ms-cli v0.14.0`) — at least one substitution corrected; stdout = repair report + corrected string; stderr carries a `repair: correction UNVERIFIED …` advisory. `ms repair` has no `--max-indel` flag, so exit `5` is unreachable from this binary. |
-| `2` | unrepairable (> 4 substitution errors, or a structural `ms1` error before correction could run) |
-| `1` | I/O error or other generic failure |
+| `20` | `16 + 4`: **`VERIFY-ME` Candidate** — at least one substitution corrected; stdout = repair report + corrected string; stderr carries a `repair: correction UNVERIFIED …` advisory. `ms repair` has no `--max-indel` flag, so a plain `16` is unreachable from this binary. |
+| `22` | `16 + 4 + 2`: the corrected string is not a valid card; it is printed, and `--out` is not written. Under `--json` the envelope adds `"not_a_card": {"kind": …, "message": …}` after `verdict` (still `"candidate"`) |
+| `2` | unrepairable (> 4 substitution errors, or a structural `ms1` error before correction could run), a clean string that is not a card, or empty input |
+| `8` | refused: the `ms1` on argv, or `--out` naming stdout |
+| `32` | a file or stream could not be read or written |
+| `64` | the command line is wrong; nothing ran |
 
-**No self-verification, no exit 5.** `ms1` encodes raw BIP-39 entropy
+**No self-verification: always `20`.** `ms1` encodes raw BIP-39 entropy
 as a single codex32 string — a bearer secret with no cross-chunk hash,
 no fingerprint, and no internal redundancy beyond the BCH checksum
 itself. A bounded-distance (≤4-error) substitution correction is
 provably the original string, but beyond that bound the correction can
 still *succeed* while **aliasing to a DIFFERENT, valid seed** — and
-unlike `mk1`/`md1`, there is nothing else to catch it. `ms repair`
-therefore **always** demotes a touched correction to an exit-`4`
-Candidate, with a stderr advisory recommending the user confirm the
-derived address/xpub against a known-good copy before trusting it.
-BIP-93 recommends confirming a corrected codex32 string before relying
-on it; this demotion puts that recommendation into practice.
+unlike `mk1`/`md1`, there is nothing else to catch it. So every
+correction `ms repair` applies exits `20`: bit 16 (a correction was
+applied) plus bit 4 (it cannot be verified), with a stderr advisory
+recommending the user confirm the derived address/xpub against a
+known-good copy before trusting it. BIP-93 recommends confirming a
+corrected codex32 string before relying on it; this puts that
+recommendation into practice.
 
-**A per-surface model, not a single uniform code.** Each of the four
-m-format CLIs applies the same principled rule (refined by Cycle E +
-Cycle F): exit-`5` `REPAIR_APPLIED` means a correction is **verified
-now** or **verifiable-by-reassembly later** (`mk1`/`md1`'s cross-chunk
-structure); exit-`4` `VERIFY-ME` means a substitution correction spent
-the checksum's error-detection budget with **no self-oracle** —
-`ms1`'s case, always. Wrapper scripts must NOT branch on a single
-`exit == 5` constant across the four binaries; see [`mnemonic
+**One rule on every CLI.** Bit 16 means a correction was applied and the
+corrected value used; bit 4 is added when nothing can verify it. Wrapper
+scripts test bits, not one number; see [`mnemonic
 repair`](#mnemonic-repair) and [`mk repair`](#mk-repair) for the other
 two surfaces' own exit-code tables.
 
-**Version scoping.** This demotion ships in **`ms-cli v0.14.0`**;
-before that release `ms repair` reported ANY substitution correction
-as a confident exit-`5` `REPAIR_APPLIED`, with no UNVERIFIED advisory.
-The pinned `ms` 0.19.1 carries it: the worked example below exits
-`4`.
+**Version scoping.** These codes ship with the constellation exit-code
+cutover. Before it, `ms repair` reported the same Candidate as exit `4`
+(from `ms-cli v0.14.0`), and before `ms-cli v0.14.0` as a confident
+exit `5` with no UNVERIFIED advisory. The output panel reads a status from a
+binary older than the cutover with that release's own meanings (see
+[Run and read the output panel](#run-and-read-the-output-panel)).
 
 ## Worked example — one-character repair
 
@@ -117,8 +117,8 @@ derived from it.
    `--ms1`); confirm to proceed.
 
 The output panel renders the repair report with the corrected
-`ms1` on the last line; exit code `4` (`VERIFY-ME` Candidate, as of
-`ms-cli v0.14.0` — see Exit codes above). A
+`ms1` on the last line; exit code `20` (`VERIFY-ME` Candidate — see
+Exit codes above). A
 `repair: correction UNVERIFIED — a corrected seed card cannot be
 self-verified; confirm the derived address/xpub against a known-good
 copy before use; BIP-93 recommends confirming a corrected codex32

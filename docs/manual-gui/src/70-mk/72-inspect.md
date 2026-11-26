@@ -73,4 +73,4 @@ trailing chunk.
 | No positional `mk1-strings` provided AND stdin not used | clap-level `required` error |
 | Any positional that does not parse as `mk1` | exit 2 with the matching `mk-codec` error (e.g. `error: invalid HRP …`, `error: invalid string length …`, `error: BCH uncorrectable …`) |
 | One supplied mk1 has a `chunk_set_id` that disagrees with the others | exit 2 with `error: chunk_set_id mismatch` per `mk-codec` |
-| `mk1` strings parse but the embedded version is newer than this build understands | exit 3 with `error: unsupported version …` per `mk-codec` |
+| `mk1` strings parse but the embedded version is newer than this build understands | exit 2 with `error: unsupported version …` per `mk-codec` |

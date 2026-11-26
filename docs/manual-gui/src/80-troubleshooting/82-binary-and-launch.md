@@ -63,6 +63,24 @@ itself. `mnemonic --version`, `md --version`,
 `ms --version` and `mk --version` printing the newer versions is
 expected.
 
+**Exit codes change at the constellation cutover.** From the first
+release of each CLI whose root `--help` ends with the exit-code legend
+(`Exit status: 0 = done, …`), every CLI exits with the constellation
+codes: 0 done; 64 a bad command line (nothing ran);
+101 an internal error; 130 stopped by the operator; otherwise a sum of
+1 (a check said no), 2 (an input is invalid), 4 (verify the result
+before trusting it), 8 (refused), 16 (a correction was applied) and 32
+(a file, device or helper failed). A `repair` that corrected a card now
+exits 16 or 20, not 5 or 4; a mismatch is 1, not 4; a secret typed on
+the command line is 8, not 2. The output panel tells the two apart by
+the legend at the end of each binary's root `--help`: it decodes the
+new codes for a binary whose help ends with the legend, reads an older
+binary's code with that release's own meanings, and shows the code
+undecoded only when the binary could not be asked (see [Run and read
+the output panel](#run-and-read-the-output-panel)). The codes quoted for older releases on this page are
+those releases' own. The user manual's exit-code appendix has the full
+table.
+
 Outputs differ, mostly on invalid or unusual input or on the recovery
 line of a card, and `md encode`, `ms encode` and `mk encode` now print
 each string once, on stdout; none changes a derived wallet. First `mnemonic`, three

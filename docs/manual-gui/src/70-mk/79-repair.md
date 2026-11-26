@@ -58,52 +58,33 @@ avoid surfacing a half-fixed card.
 | Code | Meaning |
 |---|---|
 | `0` | all strings already valid (input echoed unchanged) |
-| `5` | at least one string corrected (`REPAIR_APPLIED`); stdout = report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory — the exit code does NOT change (see the asymmetry note below) |
-| `2` | unrepairable (too many errors, HRP mismatch), **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (the per-chunk correction aliased to a different, wrong card) |
-| `1` | I/O or other generic failure |
+| `16` | at least one string corrected (`REPAIR_APPLIED`) and the corrected group decodes; stdout = report + corrected strings. If the supplied strings are an INCOMPLETE `chunk_set_id` group (e.g. a single chunk of a multi-chunk card), stderr additionally carries an `UNVERIFIED` advisory: the rest of the set verifies the correction when it is reassembled |
+| `22` | `16 + 4 + 2`: a corrected single (not chunked) string that does not decode; it is still printed, with an error telling you not to trust it. A corrected single string that decodes (`20`) cannot occur in mk |
+| `2` | unrepairable (too many errors, HRP mismatch), a string `mk decode` rejects, **or** a COMPLETE `chunk_set_id` group whose correction fails cross-chunk reassembly (the per-chunk correction aliased to a different, wrong card); nothing is printed |
+| `32` | a file or stream could not be read or written |
+| `64` | the command line is wrong; nothing ran |
 
-**Asymmetry vs. the toolkit — read before relying on `exit == 5`
-uniformly.** This standalone `mk repair` binary reports exit `5` for
-any NON-rejected correction — including an INCOMPLETE `chunk_set_id`
-group, where it adds the `UNVERIFIED` advisory above but does NOT
-change the exit code (a DESIGNED Cycle-E difference: `mk1` is
-watch-only material, so the standalone binary emits a stderr advisory
-yet still exits 5). A COMPLETE group whose correction fails
-cross-chunk reassembly is instead REJECTED at exit `2` (row 2 above),
-not `5`.
-[`mnemonic repair --mk1`](#mnemonic-repair-mk1) (the toolkit's own
-copy of this same engine) instead **demotes** that identical
-incomplete-group case to exit `4` `VERIFY-ME`. The two surfaces
-diverge on this one case; both share every other exit code. The
-principled rule across all four CLIs: exit-`5` `REPAIR_APPLIED` means
-a correction is **verified now** (a complete, cleanly-reassembling
-`chunk_set_id` group) **or verifiable-by-reassembly later** (this
-binary's own incomplete-group case, above) — never "an oracle
-verified it" standing alone. Exit-`4` `VERIFY-ME` means a substitution
-correction that spent the checksum's error-detection budget and has
-**no self-oracle** — always true for `ms1` (see [`ms
-repair`](#ms-repair)), and true for an incomplete `mk1` group
-specifically in `mnemonic repair --mk1`. `md1` never demotes at all
-(see [`md repair`](#md-repair)). Wrapper scripts must NOT branch on a
-single `exit == 5` constant across the four binaries.
+**The same codes as the toolkit.** `mk repair` and [`mnemonic repair
+--mk1`](#mnemonic-repair-mk1) give the same code on the same strings.
+Bit 16 means a correction was applied: it is **verified now** (a
+complete, cleanly-reassembling `chunk_set_id` group) or **verifiable by
+reassembly later** (an incomplete group). Bit 4 is added only where
+nothing can verify it, as for every `ms1` (see [`ms
+repair`](#ms-repair)). Wrapper scripts test bits, not one number.
 
-**Version scoping — set-level re-verify ships in `mk-cli v0.12.0`.**
-That release (the Cycle-E funds fix) added BOTH the incomplete-group
-`UNVERIFIED` advisory AND the complete-group reassembly-reject: a
-COMPLETE `chunk_set_id` group whose correction FAILS cross-chunk
-reassembly now exits `2` (`SetReassemblyMismatch`; row 2 above),
-whereas at `≤ v0.11.2` no set-level re-verify existed, so that same
-aliased correction was blessed at exit `5`. Only the INCOMPLETE-group
-case kept exit `5` (with the new advisory). The
-`v0.12.0`+ advisory reads
-`` warning: correction UNVERIFIED — reassemble the full card (`mk
-decode`) to confirm; a >4-error correction can alias to a different
-card; BIP-93 recommends confirming a corrected codex32 string `` —
-worded differently from the `ms`/toolkit surfaces' advisory (compare
-[`ms repair`](#ms-repair)) but making the same recommendation.
-The pinned `mk` 0.13.0 carries both: an incomplete-group correction
-exits `5` with the `UNVERIFIED` line, and a complete group whose
-correction fails reassembly is rejected at exit `2`.
+**Version scoping.** Set-level re-verify shipped in `mk-cli v0.12.0`
+(the Cycle-E funds fix): a COMPLETE `chunk_set_id` group whose
+correction FAILS cross-chunk reassembly exits `2`
+(`SetReassemblyMismatch`), whereas at `≤ v0.11.2` that aliased
+correction was blessed. A correction in an incomplete chunk set reads
+`` warning: corrected chunk(s) of an incomplete chunk set
+(chunk_set_id 0x…): the correction is verifiable when the rest of the
+set is reassembled — run `mk decode` with every chunk of the card to
+confirm it `` and exits `16`. Before the constellation exit-code
+cutover a correction exited `5`, and the advisory said the correction
+was UNVERIFIED; the output panel reads such a binary's code with the
+old meanings (see [Run and read the output
+panel](#run-and-read-the-output-panel)).
 
 ## Worked example
 
@@ -120,7 +101,7 @@ all-`abandon` seed corpus. **Never fund the wallet it describes.**
    material).
 
 The output panel renders the repair report; the corrected string
-is on the LAST line. Exit code `5` signals a repair was applied.
+is on the LAST line. Exit code `16` signals a repair was applied.
 
 ## Refusals
 

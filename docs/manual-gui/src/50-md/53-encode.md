@@ -291,7 +291,7 @@ corresponding `md1`.
 
 | Trigger | Refusal |
 |---|---|
-| None of positional `[TEMPLATE]`, `--in`, `--from-policy` set | runtime pre-check, exit 2: `md: encode: TEMPLATE required (on argv, via --in FILE, or use --from-policy with cli-compiler)` |
+| None of positional `[TEMPLATE]`, `--in`, `--from-policy` set | runtime pre-check, exit 64: `md: encode: TEMPLATE required (on argv, via --in FILE, or use --from-policy with cli-compiler)` |
 | Both positional `[TEMPLATE]` and `--from-policy` set | clap-level `conflicts_with` refusal (per `md-cli/src/main.rs:66`'s `conflicts_with = "template"` on `from_policy`) |
 | `--from-policy` set without `--context` | runtime pre-check (per `md-cli/src/main.rs:263`): `--from-policy requires --context tap\|segwitv0` |
 | `--context segwitv0` AND `--unspendable-key <value>` | value-inspect refusal (per `md-cli/src/main.rs:270`): `--unspendable-key is only valid for --context tap (segwitv0 has no internal key)` |

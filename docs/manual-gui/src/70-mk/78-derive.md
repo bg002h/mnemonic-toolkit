@@ -62,8 +62,8 @@ child card, or into descriptor tooling.
 | Trigger | Refusal |
 |---|---|
 | No positional `mk1-strings` provided AND stdin not used | clap-level `required` error |
-| Neither `--path` nor `--index` supplied | exit ≠ 0 — exactly one is required |
+| Neither `--path` nor `--index` supplied | exit 64 — exactly one is required |
 | Both `--path` and `--index` supplied | exit 64 — mutually exclusive |
-| `--path` contains a hardened component (`'`/`h`) | exit ≠ 0 — xpubs cannot derive hardened children |
+| `--path` contains a hardened component (`'`/`h`) | exit 64 — xpubs cannot derive hardened children |
 | `--path` not a parseable relative derivation path | exit 64 with the matching parse error |
 | Any positional that does not parse as `mk1` | exit 2 with the matching `mk-codec` error |

@@ -101,7 +101,7 @@ chain (rows grouped `receive` then `change`).
 |---|---|
 | No positional `mk1-strings` provided AND stdin not used | clap-level `required` error |
 | Origin path not at a recognized account depth AND `--address-type` omitted | exit ≠ 0 with an advisory that the script type is undetermined |
-| `m/48'` / `m/87'` multisig-cosigner origin | exit ≠ 0 — single-key addresses refused (use descriptor tooling) |
+| `m/48'` / `m/87'` multisig-cosigner origin | exit 2 — single-key addresses refused (use descriptor tooling) |
 | Both `--count` and `--range` supplied | exit 64 — mutually exclusive |
-| `--network` disagrees with the xpub's network kind | exit ≠ 0 — network mismatch |
+| `--network` disagrees with the xpub's network kind | exit 8 — network mismatch |
 | Any positional that does not parse as `mk1` | exit 2 with the matching `mk-codec` error |

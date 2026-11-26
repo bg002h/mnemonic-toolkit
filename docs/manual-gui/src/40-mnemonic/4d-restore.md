@@ -48,7 +48,7 @@ for every secret-bearing invocation.
 - [`--count`](#mnemonic-restore-count) — number of first-receive addresses to show per wallet type (default 1)
 - [`--origin`](#mnemonic-restore-origin) — explicit BIP-32 origin path for a keyless single-sig template `md1`
 - [`--expect-wallet-id`](#mnemonic-restore-expect-wallet-id) — expected `WalletPolicyId` hex prefix for template-completion
-- [`--expect-fingerprint`](#mnemonic-restore-expect-fingerprint) — reference master fingerprint (mismatch → exit 4)
+- [`--expect-fingerprint`](#mnemonic-restore-expect-fingerprint) — reference master fingerprint (mismatch → exit 1)
 - [`--expect-xpub`](#mnemonic-restore-expect-xpub) — reference account xpub (requires `--template`)
 - [`--allow-mismatch`](#mnemonic-restore-allow-mismatch) — emit descriptors even when a reference does not match
 - [`--passphrase`](#mnemonic-restore-passphrase) — BIP-39 mnemonic-extension passphrase (XOR with `--passphrase-stdin`)
@@ -94,7 +94,7 @@ Emit an importable wallet-software payload via an
 [`export-wallet`](#mnemonic-export-wallet) emitter, instead of the
 plain restore document. Dropdown; twelve values. For single-sig this
 REQUIRES a single `--template` (one-descriptor-in / one-out);
-`--format` with no `--template` → exit 2. For multisig (`--md1`) mode
+`--format` with no `--template` → exit 64. For multisig (`--md1`) mode
 the payload class matches `export-wallet --template <multisig>
 --format <X>`, built from the reconstructed cosigner keys + threshold —
 `--md1` mode needs NO `--template` for `--format` (the multisig shape
@@ -139,7 +139,7 @@ BIP-388 wallet-policy JSON. See
 For a general taproot policy card this format refuses (no named-template
 form); such a card emits `descriptor` / `bitcoin-core` only.
 A NUMS taproot multisig card, and a card whose policy uses one public key more than
-once, refuse it too (exit 1): BIP-388 allows only `@N` key placeholders and requires pairwise distinct keys.
+once, refuse it too (exit 2): BIP-388 allows only `@N` key placeholders and requires pairwise distinct keys.
 
 ### `coldcard` {#mnemonic-restore-format-coldcard}
 
@@ -417,7 +417,7 @@ ignored otherwise. When supplied, `--expect-wallet-id` is NOT checked
 (#28) Expected `WalletPolicyId` hex prefix for template-completion
 (single-sig phase 1 **and** multisig phase 2 id-search). Restore
 recomputes the id from the completed, fully-keyed wallet and matches
-its leading bytes; a **mismatch refuses loudly** (exit 4). Any-length
+its leading bytes; a **mismatch refuses loudly** (exit 1). Any-length
 prefix (an advisory warns when shorter than 4 bytes — a collision
 footgun). For multisig the prefix must be **strong** (sized to the
 realized search space) or the search refuses an ambiguous match. **NOT**
@@ -427,7 +427,7 @@ widget.
 ## `--expect-fingerprint` {#mnemonic-restore-expect-fingerprint}
 
 Reference master fingerprint (8 lowercase hex). When the derived
-material does not match → **hard error, exit 4** (`RestoreMismatch`),
+material does not match → **hard error, exit 1** (`RestoreMismatch`),
 the wrong-passphrase / wrong-seed guard; the verification block prints
 derived-vs-expected under a `✗ MISMATCH` banner and no descriptors are
 emitted (unless `--allow-mismatch`). The GUI renders this as a Text
@@ -436,7 +436,7 @@ widget.
 ## `--expect-xpub` {#mnemonic-restore-expect-xpub}
 
 Reference account xpub. Requires `--template` (single-sig only).
-Mismatch → exit 4 unless `--allow-mismatch`. The GUI renders this as a
+Mismatch → exit 1 unless `--allow-mismatch`. The GUI renders this as a
 Text widget.
 
 ## `--allow-mismatch` {#mnemonic-restore-allow-mismatch}
@@ -501,7 +501,7 @@ renders this as a Text widget with `repeating: true`.
 (v0.44.0; multisig mode) A cross-check assertion `@N=<mk1-chunk|xpub>`
 — cosigner at position `N` is this public key. Repeat the same `@N=`
 for each chunk of a multi-chunk `mk1`. A mismatch against the md1's
-slot is a hard error (exit 4) unless `--allow-mismatch`. For
+slot is a hard error (exit 1) unless `--allow-mismatch`. For
 multisig-template completion the bare form (no `@N=`) supplies an
 UNASSIGNED cosigner the search places; the `@N=` form assigns it
 explicitly. Watch-only (non-secret). The GUI renders this as a Text
@@ -623,18 +623,18 @@ advisory (`note: stdout is watch-only — public keys only, cannot
 spend`) on stderr. The seed is never echoed in any output mode.
 
 A wrong `--expect-fingerprint` prints `✗ MISMATCH`, emits no
-descriptor, and exits 4 — add `--allow-mismatch` to override only when
+descriptor, and exits 1 — add `--allow-mismatch` to override only when
 you know the reference itself is wrong.
 
 ## Refusals
 
 | Trigger | Refusal |
 |---|---|
-| `--from` with a non-seed node (`xpub` / `xprv` / `wif`) | exit 1 — restore needs a master secret |
-| `--format` without `--template` (single-sig) | exit 2 — `--format` needs one `--template` (one-in/one-out) |
+| `--from` with a non-seed node (`xpub` / `xprv` / `wif`) | exit 64 — restore needs a master secret |
+| `--format` without `--template` (single-sig) | exit 64 — `--format` needs one `--template` (one-in/one-out) |
 | `--template <multisig value>` (single-sig restore) | refused — reconstruct multisig via `--md1` |
-| `--expect-fingerprint` / `--expect-xpub` mismatch | exit 4 (`RestoreMismatch`) unless `--allow-mismatch` |
-| `--cosigner @N=` mismatch against the md1 slot | exit 4 unless `--allow-mismatch` |
+| `--expect-fingerprint` / `--expect-xpub` mismatch | exit 1 (`RestoreMismatch`) unless `--allow-mismatch` |
+| `--cosigner @N=` mismatch against the md1 slot | exit 1 unless `--allow-mismatch` |
 | `--md1` `@-in-both` taproot shape | exit 2 (faithful card preserved) |
 | `--language` conflicting with a `mnem`-kind ms1's wire language | refused |
 

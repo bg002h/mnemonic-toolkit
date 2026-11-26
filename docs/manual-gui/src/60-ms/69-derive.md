@@ -220,5 +220,5 @@ language:            english (DEFAULT)
 | More than one entropy source | clap-group refusal: mutually-exclusive |
 | `--passphrase` and `--passphrase-stdin` together | clap conflict refusal |
 | `--account` without `--template` | the account index is ignored (master-fingerprint-only output) |
-| `--phrase` with invalid BIP-39 checksum | exit 1 with `error: <bip39 error>` |
+| `--phrase` with invalid BIP-39 checksum | exit 2 with `error: <bip39 error>` |
 | `--language <token>` not in the 10-value set | clap value-parser refusal |

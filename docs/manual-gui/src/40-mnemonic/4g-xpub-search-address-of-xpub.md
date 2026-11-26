@@ -169,18 +169,18 @@ targets: 1; matched: 1; unmatched: 0
 ```
 
 The summary line reports total / matched / unmatched counts after the
-per-target lines. An unmatched target exits 4; bad input (xpub or
+per-target lines. An unmatched target exits 1; bad input (xpub or
 address parse failure, multisig prefix, missing `--address-type` for a
-neutral xpub) exits 1.
+neutral xpub) exits 2.
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | All targets matched |
-| 1 | Bad input (xpub parse failure, address parse failure, multisig SLIP-0132 prefix, missing `--address-type` for neutral xpub) |
-| 4 | At least one target unmatched |
+| 1 | At least one target unmatched |
+| 2 | Bad input (xpub parse failure, address parse failure, multisig SLIP-0132 prefix, missing `--address-type` for neutral xpub) |
 | 64 | Clap arg-parse error |
 
-This mode takes no secret material; auto-fire BCH repair (exit 5)
+This mode takes no secret material; auto-fire BCH repair
 does not apply.

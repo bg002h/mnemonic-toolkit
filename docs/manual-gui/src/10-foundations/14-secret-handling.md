@@ -374,7 +374,7 @@ the all-`abandon` phrase and the passphrase `TREZOR` (fingerprint
   EMPTY passphrase` (or `… from environment variable VAR is empty …`),
   and the run derives the no-passphrase wallet. An unset variable is
   refused: `error: --passphrase: env-var VAR referenced by sentinel is
-  not set`, exit 1.
+  not set`, exit 32.
 - **A passphrase typed on the command line** is refused before parsing
   unless you add `--allow-argv-secret`; with it, the CLI warns
   `warning: secret material on argv (--passphrase) — read it privately

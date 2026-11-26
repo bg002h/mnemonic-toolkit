@@ -229,15 +229,14 @@ target-xpub: xpub6... (normalized from zpub; variant=zpub)
 searched: 7 templates × 20 accounts = 140 paths
 ```
 
-A no-match result exits 4; bad input (BIP-39/xpub parse failure)
-exits 1; a clap arg-parse error exits 64.
+A no-match result exits 1; bad input (BIP-39/xpub parse failure)
+exits 2; a clap arg-parse error exits 64.
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Match found |
-| 1 | Bad input (BIP-39 parse failure, xpub parse failure, seed-intake error) |
-| 4 | No match in searched set |
-| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated) |
+| 1 | No match in searched set |
+| 2 | Bad input (BIP-39 parse failure, xpub parse failure, seed-intake error) |
 | 64 | Clap arg-parse error |

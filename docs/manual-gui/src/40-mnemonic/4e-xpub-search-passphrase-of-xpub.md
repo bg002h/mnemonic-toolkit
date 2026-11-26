@@ -93,7 +93,7 @@ candidate and stops at the first that produces `--target-xpub`,
 reporting the matching **file line number** to stdout (the matching
 passphrase appears only under `--json`). Blank lines are skipped;
 each non-blank line is a literal candidate (only the trailing
-newline/CR is stripped). No match ⇒ exit 4 with the count tried. This
+newline/CR is stripped). No match ⇒ exit 1 with the count tried. This
 is bounded **verification of a list you supply**, not keyspace
 generation. The candidate file is sensitive (holds secret candidates)
 but is classified as a path (non-secret) flag. The GUI renders this
@@ -279,7 +279,6 @@ match: candidate on line 2 derives the target xpub at m/84'/0'/0' (template=bip8
 | Code | Meaning |
 |---|---|
 | 0 | Match found |
-| 1 | Bad input (BIP-39 parse failure, xpub parse failure, seed-intake error) |
-| 4 | No match in searched set |
-| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated) |
+| 1 | No match in searched set |
+| 2 | Bad input (BIP-39 parse failure, xpub parse failure, seed-intake error) |
 | 64 | Clap arg-parse error (including no passphrase-source supplied) |

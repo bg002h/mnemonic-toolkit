@@ -245,9 +245,9 @@ mode)`.
 | `--origin-path` missing | clap-level `required` error |
 | Both `--origin-fingerprint` and `--privacy-preserving` supplied | exit 64 with `error: --privacy-preserving and --origin-fingerprint are mutually exclusive` (runtime guard at `encode.rs:58-62`; no clap `conflicts_with`, so the runtime always fires when both are present) |
 | Neither `--policy-id-stub` nor `--from-md1` supplied | exit 64 with `error: at least one of --policy-id-stub or --from-md1 is required` |
-| `--policy-id-stub <value>` not 8 lowercase hex chars | exit 64 with `error: …` per `parse_stub_hex` |
+| `--policy-id-stub <value>` not 8 lowercase hex chars | exit 2 with `error: …` per `parse_stub_hex` |
 | `--from-md1 <value>` not a parseable md1 | exit 2 with `error: md1 input rejected: …` per `md-codec` |
-| `--origin-fingerprint <value>` not 8 hex chars | exit 64 with `error: …` per `parse_fingerprint` |
-| `--xpub <value>` not a parseable BIP-32 extended public key | exit 64 with `error: …` per `parse_xpub` |
-| `--origin-path <value>` not a parseable BIP-32 derivation path string | exit 64 with `error: …` per `parse_derivation_path` (caught before mk-codec dispatch) |
+| `--origin-fingerprint <value>` not 8 hex chars | exit 2 with `error: …` per `parse_fingerprint` |
+| `--xpub <value>` not a parseable BIP-32 extended public key | exit 2 with `error: …` per `parse_xpub` |
+| `--origin-path <value>` not a parseable BIP-32 derivation path string | exit 2 with `error: …` per `parse_derivation_path` (caught before mk-codec dispatch) |
 | `--origin-path <value>` parses but is rejected by mk-codec's path-indicator dictionary | exit 2 with `error: invalid path indicator …` or `error: path too deep …` |

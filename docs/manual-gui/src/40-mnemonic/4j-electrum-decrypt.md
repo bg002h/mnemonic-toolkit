@@ -79,7 +79,7 @@ only to encrypted, access-controlled storage.
 
 A wrong password (or corrupted ciphertext) surfaces as
 `electrum-decrypt: decryption failed (wrong password or corrupted
-ciphertext)` (exit 1). Field encryption carries no MAC, so the two
+ciphertext)` (exit 2). Field encryption carries no MAC, so the two
 underlying failure modes (PKCS7 unpad refusal / non-UTF-8 result) are
 reported uniformly — the GUI shows this string in the output panel's
 stderr region. A successful decrypt emits the recovered plaintext on

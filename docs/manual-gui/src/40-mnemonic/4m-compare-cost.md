@@ -39,7 +39,7 @@ A full descriptor — `wsh(M)`, `sh(wsh(M))`, or single-leaf
 `tr(IK, {M})` (v0.28.0). The wrapper is stripped to recover the inner
 miniscript `M` before the comparison. Multi-leaf
 `tr(IK, {M1, M2, ...})` and keypath-only `tr(IK)` are refused with
-exit `3`. Mutually exclusive with `--miniscript`. The GUI renders this
+exit `2`. Mutually exclusive with `--miniscript`. The GUI renders this
 as a Text widget. When neither `--miniscript` nor `--descriptor` is
 supplied and stdin is not a terminal, the first non-blank line of
 stdin is classified as a descriptor or miniscript by its top-level

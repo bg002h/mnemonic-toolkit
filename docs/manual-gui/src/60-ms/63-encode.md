@@ -269,9 +269,9 @@ ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 |---|---|
 | None of `--phrase`, `--hex`, `--in` supplied | clap-group refusal, exit 64: `error: the following required arguments were not provided: <--phrase <PHRASE>\|--hex <HEX>\|--in <FILE>>` |
 | Both `--phrase` and `--hex` supplied | clap-group refusal: `error: the argument '--phrase <PHRASE>' cannot be used with '--hex <HEX>'` |
-| `--hex` with empty string | exit 1 with `error: expected hex of length 32/40/48/56/64 chars (got empty input)` |
-| `--hex` with odd-length value | exit 1 with `error: expected even-length hex (one byte = 2 chars); got <N> chars` |
-| `--hex` with non-hex character | exit 1 with `error: invalid character '<c>' at position <i>` |
+| `--hex` with empty string | exit 2 with `error: expected hex of length 32/40/48/56/64 chars (got empty input)` |
+| `--hex` with odd-length value | exit 2 with `error: expected even-length hex (one byte = 2 chars); got <N> chars` |
+| `--hex` with non-hex character | exit 2 with `error: invalid character '<c>' at position <i>` |
 | `--hex` value of valid hex but not 16 / 20 / 24 / 28 / 32 bytes | ms-codec entropy-length refusal per `ms encode` upstream |
-| `--phrase` with invalid BIP-39 checksum | exit 1 with `error: <bip39 error>` per `ms-cli` `friendly_bip39` |
+| `--phrase` with invalid BIP-39 checksum | exit 2 with `error: <bip39 error>` per `ms-cli` `friendly_bip39` |
 | `--language <token>` not a member of the 10-value set | clap-level value-parser refusal |

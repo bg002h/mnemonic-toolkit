@@ -221,7 +221,7 @@ re-derives the same descriptor that the md1 cards encode).
 
 | Trigger | Refusal |
 |---|---|
-| None of `[PHRASES]`, `--template`, `--from-mk1` set | clap-group refusal, exit 2: `error: the following required arguments were not provided: <PHRASES\|--template <TEMPLATE>\|--from-mk1 <STRING>...>` |
+| None of `[PHRASES]`, `--template`, `--from-mk1` set | clap-group refusal, exit 64: `error: the following required arguments were not provided: <PHRASES\|--template <TEMPLATE>\|--from-mk1 <STRING>...>` |
 | Both `[PHRASES]` positional and `--template` set | clap-level `conflicts_with` (per `md-cli` `conflicts_with = "phrases"` on `--template`) |
 | `--key` set without `--template` | clap-level requirement refusal |
 | `--fingerprint` set without `--template` | clap-level requirement refusal |

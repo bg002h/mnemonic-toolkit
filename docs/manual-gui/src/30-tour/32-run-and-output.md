@@ -21,7 +21,7 @@ the bottom of the window updates in place:
 +--------------------------------------------------------------+
 | ☑ show command-line  ☑ show stdout  ☑ show stderr            |
 | argv: mk inspect mk1qprsqhpqqsq3cqtsleeutks...854wq4         |
-| exit: 0                                                      |
+| exit: 0 — done, every check passed                           |
 | stdout:                                                      |
 |   xpub:                xpub6CatWdiZiodmU...VMrjPC7PW6V       |
 |   origin_fingerprint:  73c5da0a                              |
@@ -49,9 +49,31 @@ each section: **show command-line** (the assembled argv as it was
 spawned), **show stdout** (the binary's standard-output stream),
 and **show stderr** (its standard-error stream). All three are
 checked by default. The `exit:` line shows the subprocess's exit
-code (`0` on success; a non-zero integer on failure; the literal
-string `(killed)` if the process was terminated by a signal before
-it could exit). When stderr is non-empty (warnings, diagnostic
+code, decoded by the codes that CLI speaks. The GUI asks each binary
+once (and again when the binary file changes) whether its root `--help`
+ends with the constellation exit-code legend, the paragraph that begins
+`Exit status: 0 = done`:
+
+- **The legend is there (new codes).** The code is decoded with the
+  constellation's codes (see the user manual's exit-code appendix):
+  `exit: 0 — done, every check passed`; a sum from 1 to 63 names each
+  bit, for example `exit: 20 = 4 + 16 — verify the result before
+  trusting it; a correction was applied: re-engrave the damaged plate`;
+  `64 — bad command line, nothing ran`; `101 — internal error (a bug;
+  report it)`; `130 — stopped by the operator`; and any other code `—
+  ended abnormally (a bug: please report)`. Red marks 1, 2, 8, 32, 64
+  and 101; amber marks 4 and 130; green marks 16 alone.
+- **No legend (old codes, a CLI released before the change).** The
+  code is read with the old per-command meanings: `md descriptor
+  --verify-against` 5 is a red NOT spend-equal, `mk verify` and `ms
+  verify` 4 is a red MISMATCH, any other 4 is an amber VERIFY-ME, any
+  other 5 is a green Repair Applied, and anything else is `exit: N`.
+- **The binary could not be asked** (its `--help` failed or hung): the
+  code is shown undecoded, as `exit: N (not decoded: …)`.
+
+In every case a process terminated by a signal shows `killed by signal
+N`. When stderr is
+non-empty (warnings, diagnostic
 messages, errors), it renders below stdout in its own scroll
 region. If the subprocess could not be spawned at all (binary
 missing from `$PATH`, permission denied, etc.), the GUI shows a
@@ -61,12 +83,12 @@ instead of an `exit:` line.
 ## A non-zero-exit example
 
 If you click **Run** on `mk inspect` with no positional arguments
-and the `--json` checkbox unchecked, the subprocess exits non-zero
-(usage error). The output panel renders the CLI's own error
+and the `--json` checkbox unchecked, the subprocess exits 64
+(usage error: nothing ran). The output panel renders the CLI's own error
 message in the `stderr:` region:
 
 ```text
-exit: 2
+exit: 64 — bad command line, nothing ran
 stderr:
   error: the following required arguments were not provided:
     [MK1_STRINGS]...
@@ -154,7 +176,7 @@ Click **Run** in the modal. The subprocess fires; the output panel
 updates with the `ms1` encoding of the test vector:
 
 ```text
-exit: 0
+exit: 0 — done, every check passed
 stdout:
   ms10entrsqqqqqqqqqqqqqqqqqqqqqqqqqqqqcj9sxraq34v7f
 ```

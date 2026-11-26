@@ -13,7 +13,7 @@ This command takes no secret material — an address, a message, and a
 signature are all public. Output is the verification verdict on stdout
 (text line or JSON). A valid signature exits 0; a cleanly-decoded
 signature that simply does not verify exits 1 with `valid: false` on
-stdout; malformed input exits 1 with an error on stderr.
+stdout; malformed input exits 2 with an error on stderr.
 
 > **GUI form:** see [GUI Forms › mnemonic › verify-message](#gui-form-mnemonic-verify-message).
 
@@ -103,4 +103,4 @@ BIP-322 witness encoding. The GUI renders this as a Text widget.
 A valid signature exits 0 with the verdict line; an invalid (but
 well-formed) signature exits 1 with `valid: false`; malformed input —
 a bad address, an undecodable signature, or `--format legacy` on a
-non-P2PKH address — exits 1 with an error on stderr.
+non-P2PKH address — exits 2 with an error on stderr.

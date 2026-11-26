@@ -155,8 +155,8 @@ note: --language defaulted to 'english'; if your wallet was created with a diffe
 
 | Trigger | Refusal |
 |---|---|
-| Positional `ms1` is not a parseable BIP-93 string | exit 1 with `error: <codex32 parse error>` |
+| Positional `ms1` is not a parseable BIP-93 string | exit 2 with `error: <codex32 parse error>` |
 | `ms1` parses but its tag is `entr`-adjacent unknown (not `entr`, not reserved-not-emitted) | exit 2 with `error: unknown tag …` |
-| `ms1` tag is `reserved-not-emitted-in-v0.1` | **exit 3, silent in text mode** (stdout silent; stderr suppressed by the `FutureFormat`-text-mode carve-out at `ms-cli/src/main.rs:147-155`). Under `--json`, the standard error envelope on stdout carries `kind: "FutureFormat"` |
+| `ms1` tag is `reserved-not-emitted-in-v0.1` | exit 2 with `error: tag "<tag>" reserved-not-emitted…` on stderr (the old silent exit 3 is gone). Under `--json`, the standard error envelope on stdout |
 | `ms1` has wrong HRP / threshold / share-index / prefix byte | exit 2 with the matching `FormatViolation` message |
 | `--language <token>` not a member of the 10-value set | clap-level value-parser refusal |

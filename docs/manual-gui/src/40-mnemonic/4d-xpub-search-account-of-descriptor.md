@@ -64,7 +64,7 @@ and `--passphrase-stdin`.
 An `ms1` card carrying BIP-39 entropy, supplied inline. Inline use
 emits the argv-leakage advisory; prefer `--ms1-stdin`. Auto-fire BCH
 repair applies only to the `--ms1` decode-failure path (a BIP-39
-phrase parse failure routes a direct exit 1 — phrases have no BCH
+phrase parse failure routes a direct exit 2 — phrases have no BCH
 primitive). The GUI renders this as a masked `SecretLineEdit`.
 
 ## `--ms1-stdin` {#mnemonic-xpub-search-account-of-descriptor-ms1-stdin}
@@ -269,16 +269,15 @@ matched cosigner indices: [0]
 searched: 7 templates × 20 accounts × 3 cosigners = 420 paths
 ```
 
-A no-cosigner-match result exits 4 (`ToolkitError::XpubSearchNoMatch`);
+A no-cosigner-match result exits 1 (`ToolkitError::XpubSearchNoMatch`);
 bad input (descriptor parse error, `@N` refusal, no-xpub-keys refusal)
-exits 1; a clap arg-parse error exits 64.
+exits 2; a clap arg-parse error exits 64.
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | At least one cosigner matched |
-| 1 | Bad input (descriptor parse error, toolkit-`@N` refusal, no-xpub-keys refusal, seed-intake error) |
-| 4 | No cosigner matched |
-| 5 | Auto-fire BCH short-circuit on `--ms1` decode failure (TTY-gated) |
+| 1 | No cosigner matched |
+| 2 | Bad input (descriptor parse error, toolkit-`@N` refusal, no-xpub-keys refusal, seed-intake error) |
 | 64 | Clap arg-parse error |
