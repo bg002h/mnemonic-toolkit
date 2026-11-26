@@ -48,7 +48,8 @@ fn bundle_taproot(descriptor: &str, extra: &[&str]) -> (Value, String) {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        // Brian's ruling of 2026-11-26: an origin the toolkit chose exits 4.
+        .code(if extra.is_empty() { 4 } else { 0 });
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout)
@@ -131,7 +132,7 @@ fn taproot_multi_a_defaults_origin_to_bip87() {
     );
 
     assert!(
-        stderr.contains("defaulting to m/87'/1'/0' (BIP-87)"),
+        stderr.contains("chose m/87'/1'/0' (BIP-87)"),
         "default-path notice must render the BIP-87 path; got stderr:\n{stderr}"
     );
     assert!(

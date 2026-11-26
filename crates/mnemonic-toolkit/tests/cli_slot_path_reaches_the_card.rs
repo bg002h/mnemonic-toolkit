@@ -152,7 +152,7 @@ fn a_canonical_descriptor_with_partial_inline_origins_fills_the_canonical_origin
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
     let md1: Vec<String> = String::from_utf8(out.get_output().stdout.clone())
         .unwrap()
         .lines()
@@ -166,7 +166,7 @@ fn a_canonical_descriptor_with_partial_inline_origins_fills_the_canonical_origin
     // --slot path. It used to be left EMPTY on the card while its key was
     // derived at the MASTER node. It is now derived at the shape's canonical
     // origin (md-codec `canonical_origin`, BIP-48 /2' for wsh) and that origin
-    // is WRITTEN on the card (with an info: line), so the card records where
+    // is WRITTEN on the card (with a warning and exit 4), so the card records where
     // the key really lives.
     assert_eq!(
         got[1], "48'/0'/0'/2'",
@@ -174,8 +174,8 @@ fn a_canonical_descriptor_with_partial_inline_origins_fills_the_canonical_origin
     );
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("info: no origin path supplied for @1")
-            && stderr.contains("canonical origin m/48'/0'/0'/2'"),
+        stderr.contains("warning: no origin was given for @1")
+            && stderr.contains("chose m/48'/0'/0'/2' (this descriptor shape's canonical origin)"),
         "stderr: {stderr}"
     );
 }

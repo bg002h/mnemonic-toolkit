@@ -41,14 +41,19 @@ fn non_canonical_wsh_andor_default_path_inference_emits_bundle() {
             &format!("@2.phrase={BIP39_TEST_3}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
-    // SPEC §4.12.d byte-exact info notice on default-path emission.
+    // SPEC §4.12.d, Brian's ruling of 2026-11-26: the default-path warning
+    // (exit 4 above) and the command that states the path explicitly.
     assert!(
         stderr.contains(
-            "info: no origin supplied for @0,@1,@2; defaulting to m/48'/0'/0'/2' (BIP-48 cosigner path). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
+            "warning: no origin was given for @0,@1,@2; the toolkit chose m/48'/0'/0'/2' (BIP-48 cosigner path) and the cards record it."
         ),
-        "stderr did not contain default-path info notice; got:\n{stderr}"
+        "stderr did not contain the default-path warning; got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("warning: to state this path explicitly, run:"),
+        "{stderr}"
     );
     // Bundle emitted; engraving card on stderr pins per-`@N` derivation
     // at the default path.
@@ -80,7 +85,7 @@ fn non_canonical_default_path_consumes_account_arg() {
             &format!("@1.phrase={BIP39_TEST_2}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("m/48'/0'/5'/2'"),
@@ -107,7 +112,7 @@ fn non_canonical_default_path_uses_testnet_coin_type() {
             &format!("@1.phrase={BIP39_TEST_2}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains("m/48'/1'/0'/2'"),
@@ -222,7 +227,7 @@ fn canonical_descriptor_does_not_emit_default_path_notice() {
             &format!("@1.phrase={BIP39_TEST_2}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains("info: non-canonical descriptor"),
@@ -261,7 +266,7 @@ fn non_canonical_default_path_self_check_round_trips() {
             "--self-check",
         ])
         .assert()
-        .success();
+        .code(4);
 }
 
 /// Same round-trip test for `tr(NUMS, <ms>)` (NUMS substitution + tap-leaf
@@ -476,7 +481,9 @@ fn parity_round_trips(descriptor: &str, slots: &[String]) -> (String, bool, usiz
         .arg("--allow-argv-secret")
         .args(&emit_args)
         .assert()
-        .success();
+        // 4 when an @N took a default origin (Brian's ruling of 2026-11-26),
+        // 0 when every origin was given.
+        .code(predicates::prelude::predicate::in_iter([0, 4]));
     let bundle: Value =
         serde_json::from_slice(&emit.get_output().stdout).expect("valid bundle JSON");
 

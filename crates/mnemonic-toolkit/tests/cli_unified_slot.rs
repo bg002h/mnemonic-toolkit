@@ -322,7 +322,7 @@ fn unified_slot_descriptor_watch_only_xpub_via_slot() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
     assert_eq!(v["mode"], "watch-only");

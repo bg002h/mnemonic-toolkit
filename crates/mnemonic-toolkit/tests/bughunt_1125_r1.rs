@@ -93,10 +93,10 @@ fn r1_n4_canonical_notice_names_the_missing_path() {
         "--slot",
         &seed_a,
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert!(
         o.stderr
-            .contains("info: no origin path supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0'"),
+            .contains("warning: no origin was given for @0; the toolkit chose m/84'/0'/0' (this descriptor shape's canonical origin)"),
         "{}",
         o.stderr
     );
@@ -283,14 +283,15 @@ fn b3_taproot_multisig_descriptor_defaults_to_bip87() {
         &s1,
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/1'/0'", "87'/1'/0'"]
     );
     assert!(
-        o.stderr
-            .contains("info: no origin supplied for @0,@1; defaulting to m/87'/1'/0' (BIP-87)"),
+        o.stderr.contains(
+            "warning: no origin was given for @0,@1; the toolkit chose m/87'/1'/0' (BIP-87)"
+        ),
         "{}",
         o.stderr
     );
@@ -384,20 +385,21 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
         "--json",
     ];
     let o = run_stdin(&args, A);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/0'/0'", "87'/0'/0'"]
     );
     for want in [
-        "warning: no origin supplied for @0,@1 in a legacy P2SH descriptor",
+        "warning: no origin was given for @0,@1 in a legacy P2SH descriptor",
         "m/87'/0'/0' (BIP-87)",
         "m/45', m/45'/0, m/45'/0'/0'",
-        "compare its first address before funding",
+        "compare the first address",
         "use a different --account",
+        "warning: to state this path explicitly, run:",
         "warning: to mint this bundle at m/45' instead, run:",
         "warning: m/45' has no coin or account level (every --account and network gives the \
-         same keys); pass the same --slot @N.path=m/45' to verify-bundle.",
+         same keys); pass the same m/45' origins to verify-bundle.",
     ] {
         assert!(o.stderr.contains(want), "missing {want:?}: {}", o.stderr);
     }
@@ -412,7 +414,21 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
         .position(|l| l.contains("to mint this bundle at m/45' instead"))
         .unwrap();
     let cmd = lines[at + 1].trim();
-    assert!(cmd.ends_with("--slot '@0.path=m/45'\\'''"), "{cmd}");
+    // @0 (the seed) moves to m/45'; the xpub @1 keeps the path it was minted
+    // at, stated explicitly, so the printed command chooses nothing (exit 0).
+    assert!(
+        cmd.ends_with("--slot '@0.path=m/45'\\''' --slot '@1.path=m/87'\\''/0'\\''/0'\\'''"),
+        "{cmd}"
+    );
+    let cmd = cmd
+        .strip_prefix("mnemonic ")
+        .map(|rest| {
+            format!(
+                "'{}' {rest}",
+                assert_cmd::cargo::cargo_bin("mnemonic").display()
+            )
+        })
+        .expect("printed as `mnemonic ...`");
     assert!(
         !o.stderr.contains("not repeated above"),
         "no inline secret: {}",
@@ -477,7 +493,7 @@ fn b2_bare_sh_multisig_defaults_to_bip87_with_a_runnable_m45_command() {
 }
 
 /// A non-canonical sh(wsh(...)) is BIP-48 1' (P2SH-P2WSH), not legacy P2SH:
-/// the plain info notice, no P2SH warning and no m/45' command.
+/// the plain default warning, no P2SH warning and no m/45' command.
 #[test]
 fn b2_sh_wsh_multisig_keeps_bip48_1h_and_no_warning() {
     let s0 = format!("@0.phrase={A}");
@@ -494,14 +510,14 @@ fn b2_sh_wsh_multisig_keeps_bip48_1h_and_no_warning() {
         &s1,
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["48'/0'/0'/1'", "48'/0'/0'/1'"]
     );
     assert!(
         o.stderr.contains(
-            "info: no origin supplied for @0,@1; defaulting to m/48'/0'/0'/1' (BIP-48 cosigner path)"
+            "warning: no origin was given for @0,@1; the toolkit chose m/48'/0'/0'/1' (BIP-48 cosigner path)"
         ),
         "{}",
         o.stderr
@@ -562,7 +578,7 @@ fn b4_explicit_derivations_still_mint_and_restore() {
             &s0,
             "--json",
         ]);
-        assert_eq!(o.code, 0, "{desc}: {}", o.stderr);
+        assert_eq!(o.code, 4, "{desc}: canonical origin chosen: {}", o.stderr);
         let md1 = md1_of(&o.stdout);
         let mut args = vec!["restore".to_string()];
         for m in &md1 {
@@ -626,7 +642,8 @@ fn r2_ib_foreign_xpub_whose_header_contradicts_the_default_is_refused() {
         // refuses the same way, and with it accepts.
         let p1 = format!("@1.path={foreign_path}");
         let ok = mint(&["--slot", &p1]);
-        assert_eq!(ok.code, 0, "{desc}: {}", ok.stderr);
+        // @0 (the seed) still takes the default: exit 4.
+        assert_eq!(ok.code, 4, "{desc}: {}", ok.stderr);
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("b.json");
         std::fs::write(&file, &ok.stdout).unwrap();
@@ -679,7 +696,7 @@ fn r2_ib_foreign_xpub_at_the_bip87_default_still_mints() {
         "@1.fingerprint=b8688df1",
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/0'/0'", "87'/0'/0'"]
@@ -841,7 +858,7 @@ fn bip87_scope_non_multisig_tree_with_explicit_origin_mints() {
 #[test]
 fn bip87_scope_multisig_trees_keep_the_bip87_default() {
     // A taproot tree with a multi_a leaf beside a single-key recovery leaf is a
-    // multisig wallet: every @N keeps the BIP-87 default and the info notice.
+    // multisig wallet: every @N keeps the BIP-87 default and the warning (exit 4).
     let s0 = format!("@0.phrase={A}");
     let s1 = format!("@1.phrase={B}");
     let s2 = "@2.phrase=zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong";
@@ -859,14 +876,15 @@ fn bip87_scope_multisig_trees_keep_the_bip87_default() {
         s2,
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(
         origins_on_card(&md1_of(&o.stdout)),
         vec!["87'/1'/0'", "87'/1'/0'", "87'/1'/0'"]
     );
     assert!(
-        o.stderr
-            .contains("info: no origin supplied for @0,@1,@2; defaulting to m/87'/1'/0' (BIP-87)"),
+        o.stderr.contains(
+            "warning: no origin was given for @0,@1,@2; the toolkit chose m/87'/1'/0' (BIP-87)"
+        ),
         "{}",
         o.stderr
     );

@@ -89,7 +89,7 @@ fn bundle_descriptor_watch_only_zpub_emits_info_line_then_card_no_warning() {
             &format!("@0.fingerprint={TREZOR_FP_HEX}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let info_idx = stderr
         .find(&info_line("zpub"))
@@ -128,7 +128,7 @@ fn bundle_descriptor_watch_only_neutral_xpub_no_info_line() {
             &format!("@0.fingerprint={TREZOR_FP_HEX}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         !stderr.contains("info: normalized"),
@@ -204,7 +204,7 @@ fn bundle_watch_only_no_origin_xpub_now_records_canonical_origin() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid bundle JSON");
     let mk1: Vec<String> = json["mk1"]
@@ -255,7 +255,7 @@ fn bundle_multisig_full_zpub_cosigner_emits_info_then_card_then_warning() {
             &format!("@1.path={path}"),
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let info_idx = stderr
         .find(&info_line("Ypub"))
@@ -395,7 +395,7 @@ fn bundle_json_watch_only_zpub_emits_info_line_no_warning() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains(&info_line("zpub")),
@@ -433,7 +433,7 @@ fn bundle_no_engraving_card_zpub_emits_info_line_only() {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     assert!(
         stderr.contains(&info_line("zpub")),

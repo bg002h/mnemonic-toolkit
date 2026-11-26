@@ -366,7 +366,7 @@ fn bundle_md1(template: &str) -> Vec<String> {
             "--no-engraving-card",
         ])
         .assert()
-        .success();
+        .code(4);
     let v: serde_json::Value = serde_json::from_slice(&out.get_output().stdout).unwrap();
     v["md1"]
         .as_array()

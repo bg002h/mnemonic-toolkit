@@ -42,10 +42,11 @@ const SEED_MASTER_XPUB: &str = "xpub661MyMwAqRbcFkPHucMnrGNzDwb6teAX1RbKQmqtEF8k
 // property of the INPUT that the notice never checked, and once path-binding
 // was ungated for canonical shapes it could be false. It now names the SLOTS
 // and the remedy, which is what the operator can act on.
-const DEFAULT_PATH_NOTICE: &str = "info: no origin supplied for";
-/// Substring of the canonical-shape notice (bug hunt 2026-11-25 toolkit#1;
-/// "path" since review r1 N4).
-const CANONICAL_ORIGIN_NOTICE: &str = "info: no origin path supplied for";
+// Since Brian's ruling of 2026-11-26 both are one WARNING (exit 4) naming the
+// path the toolkit chose, followed by the command that states it.
+const DEFAULT_PATH_NOTICE: &str = "(BIP-48 cosigner path) and the cards record it";
+/// Substring of the canonical-shape warning (bug hunt 2026-11-25 toolkit#1).
+const CANONICAL_ORIGIN_NOTICE: &str = "(this descriptor shape's canonical origin)";
 
 /// `bundle --descriptor <d> --slot <s>… --json` → (parsed JSON, raw stderr).
 /// Always `--no-engraving-card`, mainnet.
@@ -68,7 +69,12 @@ fn bundle(descriptor: &str, slots: &[&str]) -> (Value, String) {
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        // An origin the toolkit chose exits 4 (Brian's ruling of 2026-11-26).
+        .code(if slots.iter().any(|s| s.contains(".path=")) {
+            0
+        } else {
+            4
+        });
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let stderr = String::from_utf8(out.get_output().stderr.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout)
@@ -123,8 +129,8 @@ fn flip1_shwpkh_no_origin_emits_canonical_origin_card_with_notice() {
         "the master key must never be bound implicitly"
     );
     assert!(
-        stderr.contains("info: no origin path supplied for @0")
-            && stderr.contains("canonical origin m/49'/0'/0'"),
+        stderr.contains("warning: no origin was given for @0")
+            && stderr.contains("chose m/49'/0'/0' (this descriptor shape's canonical origin)"),
         "the canonical-origin notice must name the path; got stderr:\n{stderr}"
     );
     assert!(
@@ -229,7 +235,7 @@ fn flip2_shwpkh_account_zero_still_succeeds() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
 }
 
 // ============================================================================

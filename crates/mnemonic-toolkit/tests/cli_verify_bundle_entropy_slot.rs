@@ -89,7 +89,7 @@ fn bundle_cards(
         .arg("--allow-argv-secret")
         .args(&args)
         .assert()
-        .success();
+        .code(4);
     let v: serde_json::Value =
         serde_json::from_slice(&out.get_output().stdout).expect("descriptor bundle JSON");
     extract_cards(&v)

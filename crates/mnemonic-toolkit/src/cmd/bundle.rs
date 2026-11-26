@@ -197,12 +197,19 @@ pub mod mode_text {
     pub const DESCRIPTOR_WITH_NONZERO_ACCOUNT: &str = "--account != 0 is meaningful only with --template; descriptor mode encodes account index in the @i origin path.";
 }
 
+/// Exit status of a successful `bundle` whose cards record an origin path the
+/// user did not supply (Brian's ruling of 2026-11-26,
+/// `tk-bh1125-decision-descriptor-vs-template-multisig`): the cards are
+/// written in full, and 4 says "verify before trusting".
+pub const EXIT_CHOSEN_ORIGIN: u8 = 4;
+
+/// Returns the exit status: 0, or [`EXIT_CHOSEN_ORIGIN`].
 pub fn run<W: Write, E: Write>(
     args: &BundleArgs,
     stdin: &mut dyn std::io::Read,
     stdout: &mut W,
     stderr: &mut E,
-) -> Result<(), ToolkitError> {
+) -> Result<u8, ToolkitError> {
     // SPEC v0.9.0 §1 item 1 — argv-leakage closure. Run BEFORE any
     // dispatch logic so the advisory fires uniformly regardless of
     // downstream success/error. v0.26.0 §I1 fold: emit BEFORE
@@ -280,7 +287,7 @@ pub fn run<W: Write, E: Write>(
     // Mutex with --template / --descriptor / --descriptor-file is enforced
     // by clap (`conflicts_with_all` on the `--import-json` arg).
     if args.import_json.is_some() {
-        return bundle_run_from_import_json(args, stdin, stdout, stderr);
+        return bundle_run_from_import_json(args, stdin, stdout, stderr).map(|()| 0);
     }
 
     let descriptor_mode = args.descriptor.is_some() || args.descriptor_file.is_some();
@@ -374,7 +381,7 @@ pub fn run<W: Write, E: Write>(
         };
         use crate::wallet_import::pipeline::{classify_descriptor_form, DescriptorForm};
         if classify_descriptor_form(&body)? == DescriptorForm::Concrete {
-            return bundle_run_concrete_descriptor(args, body, stdout, stderr);
+            return bundle_run_concrete_descriptor(args, body, stdout, stderr).map(|()| 0);
         }
         // AtN: fall through to bundle_run_unified (re-reads the file as today).
     }
@@ -399,7 +406,7 @@ fn bundle_run_unified<W: Write, E: Write>(
     _stdin: &mut dyn std::io::Read,
     stdout: &mut W,
     stderr: &mut E,
-) -> Result<(), ToolkitError> {
+) -> Result<u8, ToolkitError> {
     use crate::bundle_unified::{pre_check_template_n, pre_check_threshold};
     use crate::slot_input::validate_slot_set;
 
@@ -522,6 +529,24 @@ fn bundle_run_unified<W: Write, E: Write>(
         )?,
     };
 
+    // Brian's ruling of 2026-11-26: a multisig template with no
+    // --multisig-path-family records the BIP-87 default, a path the user did
+    // not choose. Say so, print the command that chooses it, and exit 4. A
+    // single-sig template names its own path (bip84 is m/84'/...), and a slot
+    // with a typed `@N.path=` takes no default.
+    let chosen_origin = if template.is_multisig() && args.multisig_path_family.is_none() {
+        let defaulted: Vec<u8> = (0..n as u8)
+            .filter(|i| {
+                !slots
+                    .iter()
+                    .any(|s| s.index == *i && s.subkey == SlotSubkey::Path)
+            })
+            .collect();
+        emit_template_family_warning(stderr, &defaulted, template, args.network, args.account)?
+    } else {
+        false
+    };
+
     // Emit (reuse legacy text/JSON renderer; engraving card omitted for now;
     // unified card lands in Phase I).
     emit_unified(
@@ -541,7 +566,7 @@ fn bundle_run_unified<W: Write, E: Write>(
             .collect();
         self_check_bundle(&bundle, args, &expected_entropy)?;
     }
-    Ok(())
+    Ok(if chosen_origin { EXIT_CHOSEN_ORIGIN } else { 0 })
 }
 
 /// v0.4.1 H.5 BIP-388 distinct-key check on ResolvedSlot vector. Mirrors
@@ -1601,7 +1626,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     _mode: BundleMode,
     stdout: &mut W,
     stderr: &mut E,
-) -> Result<(), ToolkitError> {
+) -> Result<u8, ToolkitError> {
     use std::collections::BTreeMap;
 
     let descriptor_str = match (&args.descriptor, &args.descriptor_file) {
@@ -2112,37 +2137,66 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
     // when no `@N` received the default (defaulted_indices is empty).
     // Seed-bound slots among the defaulted ones: the printed m/45' command
     // overrides only those (an xpub slot's key does not move with its path).
-    let seed_defaulted: Vec<u8> = bound_paths
-        .defaulted
-        .iter()
-        .copied()
-        .filter(|i| {
-            slots.iter().any(|s| {
-                s.index == *i
-                    && matches!(
-                        s.subkey,
-                        crate::slot_input::SlotSubkey::Phrase
-                            | crate::slot_input::SlotSubkey::Seedqr
-                            | crate::slot_input::SlotSubkey::Entropy
-                            | crate::slot_input::SlotSubkey::Ms1
-                    )
-            })
-        })
-        .collect();
-    emit_default_path_notice(
-        stderr,
-        &bound_paths.defaulted,
-        &seed_defaulted,
-        args.network,
-        args.account,
-        default_family,
-        // Bare P2SH only: sh(wsh(...)) keeps BIP-48 1' and the plain notice.
-        canonicity_probe.tree.tag == md_codec::tag::Tag::Sh
-            && matches!(default_family, crate::template::DefaultOriginFamily::Bip87),
-    )?;
-    // Bug hunt 2026-11-25 toolkit#1: say which canonical-shape slots were given
-    // the shape's canonical origin (and so were derived / recorded there).
-    emit_canonical_origin_notice(stderr, &bound_paths.canonical_filled, &descriptor)?;
+    //
+    // Brian's ruling of 2026-11-26: either way (family default, or a canonical
+    // shape's canonical origin, bug hunt 2026-11-25 toolkit#1) the card records
+    // a path the user did not supply, so one warning says so, the command that
+    // states it explicitly follows, and the exit status is 4.
+    let chosen_slot = |i: u8| {
+        use crate::slot_input::SlotSubkey as K;
+        let subkeys: Vec<K> = slots
+            .iter()
+            .filter(|s| s.index == i)
+            .map(|s| s.subkey)
+            .collect();
+        let seed = subkeys
+            .iter()
+            .any(|k| matches!(k, K::Phrase | K::Seedqr | K::Entropy | K::Ms1));
+        ChosenSlot {
+            idx: i,
+            fingerprint: resolved_slots[i as usize].fingerprint,
+            seed,
+            // The slot grammar refuses `@N.path=` beside `@N.entropy=`, and a
+            // canonical shape refuses it beside any seed (SPEC §6.6 row 4): for
+            // those the path can only be stated inline, `[fp/path]@N`.
+            inline_only: subkeys.contains(&K::Entropy) || (seed && !is_non_canonical),
+        }
+    };
+    let chosen_origin = if !bound_paths.defaulted.is_empty() {
+        let chosen: Vec<ChosenSlot> = bound_paths
+            .defaulted
+            .iter()
+            .map(|i| chosen_slot(*i))
+            .collect();
+        emit_chosen_origin_warning(
+            stderr,
+            &chosen,
+            &default_family.derivation_path(args.network, args.account),
+            ChosenWhy::Family {
+                family: default_family,
+                // Bare P2SH only: sh(wsh(...)) keeps BIP-48 1' and the plain warning.
+                bare_sh: canonicity_probe.tree.tag == md_codec::tag::Tag::Sh
+                    && matches!(default_family, crate::template::DefaultOriginFamily::Bip87),
+            },
+            args.descriptor_file.is_some(),
+        )?
+    } else if !bound_paths.canonical_filled.is_empty() {
+        let filled = &bound_paths.canonical_filled;
+        let op = match &descriptor.path_decl.paths {
+            PathDeclPaths::Shared(op) => op.clone(),
+            PathDeclPaths::Divergent(v) => v[filled[0] as usize].clone(),
+        };
+        let chosen: Vec<ChosenSlot> = filled.iter().map(|i| chosen_slot(*i)).collect();
+        emit_chosen_origin_warning(
+            stderr,
+            &chosen,
+            &origin_to_derivation_path(&op)?,
+            ChosenWhy::Canonical,
+            args.descriptor_file.is_some(),
+        )?
+    } else {
+        false
+    };
 
     // SPEC_older_timelock_advisory Task 5 (Adapter-A, Site 1) — surface
     // BIP-68 consensus-masked older() operands on the finalized MdDescriptor
@@ -2179,7 +2233,7 @@ fn bundle_run_unified_descriptor<W: Write, E: Write>(
         self_check_bundle(&bundle, args, &expected_entropy)?;
     }
 
-    Ok(())
+    Ok(if chosen_origin { EXIT_CHOSEN_ORIGIN } else { 0 })
 }
 
 /// Theme-A Phase 3a entry point — `bundle --descriptor <CONCRETE>`. Accepts a
@@ -2954,111 +3008,309 @@ pub fn derivation_path_to_origin(dp: &DerivationPath) -> md_codec::origin_path::
     }
 }
 
-/// v0.19.0 SPEC §4.12.d — emit the stderr notice naming the `@N` indices that
-/// received the default path, and the path. For a legacy bare-P2SH multisig
-/// `sh(...)` (no BIP-48 script type; BIP-87 default per Brian's 2026-11-25
-/// ruling; a non-multisig `sh(...)` is refused before this) it is
-/// a WARNING: other wallets put those keys elsewhere, so it lists the common
-/// alternatives, asks for an address comparison and a distinct `--account`
-/// for a second wallet, and prints the ready-to-run command that mints the
-/// same bundle at `m/45'` instead.
-fn emit_default_path_notice<E: Write>(
-    stderr: &mut E,
-    defaulted_indices: &[u8],
-    seed_defaulted: &[u8],
-    network: crate::network::CliNetwork,
-    account: u32,
-    family: crate::template::DefaultOriginFamily,
-    bare_sh: bool,
-) -> Result<(), ToolkitError> {
-    if defaulted_indices.is_empty() {
-        return Ok(());
+/// An `@N` whose card origin the toolkit chose (Brian's ruling of 2026-11-26,
+/// `tk-bh1125-decision-descriptor-vs-template-multisig`).
+pub(crate) struct ChosenSlot {
+    pub idx: u8,
+    /// The key's master fingerprint, for the inline `[fp/path]@N` form.
+    pub fingerprint: Fingerprint,
+    /// A seed slot: its key moves with its path (the m/45' alternative).
+    pub seed: bool,
+    /// `--slot @N.path=` is refused for this slot, so only the inline form
+    /// states its path.
+    pub inline_only: bool,
+}
+
+/// Why the toolkit chose the origin.
+pub(crate) enum ChosenWhy {
+    /// A canonical shape's canonical origin (bug hunt 2026-11-25 toolkit#1).
+    Canonical,
+    /// A non-canonical shape's family default (v0.19.0 SPEC §4.12.b, Brian's
+    /// 2026-11-25 BIP-defaults ruling). `bare_sh`: a legacy bare P2SH multisig,
+    /// for which BIP-48 assigns no path.
+    Family {
+        family: crate::template::DefaultOriginFamily,
+        bare_sh: bool,
+    },
+}
+
+/// `[fp/path]` for `chosen` (the descriptor's inline origin form).
+fn inline_origin_text(fingerprint: Fingerprint, path: &DerivationPath) -> String {
+    let fp = fingerprint.to_string().to_lowercase();
+    if path.is_empty() {
+        format!("[{fp}]")
+    } else {
+        format!("[{fp}/{path}]")
     }
-    let idx_list = defaulted_indices
-        .iter()
-        .map(|i| format!("@{i}"))
-        .collect::<Vec<_>>()
-        .join(",");
-    let path = family.path_string(network, account);
-    let label = family.label();
-    let w = |e: std::io::Error| ToolkitError::BadInput(format!("stderr write: {e}"));
-    let bip87 = matches!(family, crate::template::DefaultOriginFamily::Bip87);
-    if !bare_sh {
-        // Says "defaulting", not "non-canonical descriptor": what the operator
-        // needs is which slots got an origin chosen for them, and how to
-        // choose it themselves.
-        //
-        // Review r2 M5: m/87'/c'/a' is also the default of the multisig
-        // templates and of every other bare-sh / tr descriptor, so one seed at
-        // one account would reuse one key across script types, which BIP-87
-        // asks wallets to avoid ("the wallet must increment the `account'`
-        // level. This prevents key reuse - across ECDSA and Schnorr
-        // signatures, across different script types"). Only multisig shapes
-        // reach here with a BIP-87 default: a non-multisig one is refused by
-        // `check_bip87_default_scope` (Brian's ruling, 2026-11-26).
-        let mut line = format!(
-            "info: no origin supplied for {idx_list}; defaulting to {path} ({label}). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
-        );
-        if bip87 {
-            line.push_str(
-                " The same BIP-87 key serves every script type at one account: use a \
-                 different --account for each wallet from this seed.",
-            );
+}
+
+/// Write the inline origin `[fp/path]` in front of every `@idx` placeholder of
+/// `desc`, replacing an inline origin already there (a fingerprint-only one).
+pub(crate) fn rewrite_inline_origin(desc: &str, idx: u8, origin: &str) -> String {
+    let needle = format!("@{idx}");
+    let bytes = desc.as_bytes();
+    let mut out = String::with_capacity(desc.len() + 32);
+    let mut last = 0;
+    let mut from = 0;
+    while let Some(off) = desc[from..].find(&needle) {
+        let at = from + off;
+        let after = at + needle.len();
+        from = after;
+        if bytes.get(after).is_some_and(|b| b.is_ascii_digit()) {
+            continue; // `@1` inside `@12`
         }
-        writeln!(stderr, "{line}").map_err(w)?;
-        return Ok(());
+        let start = if at > 0 && bytes[at - 1] == b']' {
+            desc[..at].rfind('[').unwrap_or(at)
+        } else {
+            at
+        };
+        out.push_str(&desc[last..start]);
+        out.push_str(origin);
+        out.push_str(&needle);
+        last = after;
     }
-    writeln!(
-        stderr,
-        "warning: no origin supplied for {idx_list} in a legacy P2SH descriptor (sh(...)); derived at \
-         {path} ({label}). BIP-48 assigns no path to this script type, and other wallets place \
-         legacy P2SH multisig keys elsewhere (for example m/45', m/45'/0, m/45'/0'/0'). If this \
-         card is meant to match an existing wallet, compare its first address before funding, or \
-         set the origin with [fp/path]@N or --slot @N.path=m/... . For a second wallet from the \
-         same seed, use a different --account."
-    )
-    .map_err(w)?;
-    if !seed_defaulted.is_empty() {
-        let extra: Vec<String> = seed_defaulted
+    out.push_str(&desc[last..]);
+    out
+}
+
+/// One printed command line that states `path_for(slot)` for every chosen
+/// slot: `--slot @N.path=` where the grammar takes it, inline `[fp/path]@N` in
+/// `--descriptor` otherwise. `Err(forms)`: the inline forms to write by hand,
+/// when the descriptor comes from `--descriptor-file`.
+fn explicit_origin_command(
+    chosen: &[ChosenSlot],
+    path_for: &dyn Fn(&ChosenSlot) -> DerivationPath,
+    from_file: bool,
+) -> (Option<(String, bool)>, Vec<String>) {
+    let mut extra: Vec<String> = Vec::new();
+    let mut inline: Vec<(u8, String)> = Vec::new();
+    for c in chosen {
+        let p = path_for(c);
+        if c.inline_only {
+            inline.push((c.idx, inline_origin_text(c.fingerprint, &p)));
+        } else {
+            extra.push("--slot".into());
+            extra.push(format!("@{}.path=m/{p}", c.idx));
+        }
+    }
+    if from_file && !inline.is_empty() {
+        let forms = inline
             .iter()
-            .flat_map(|i| ["--slot".to_string(), format!("@{i}.path=m/45'")])
-            .collect();
-        let (cmd, redacted) = rerun_command_with(&extra);
+            .map(|(i, o)| format!("{o}@{i}"))
+            .collect::<Vec<_>>();
+        let cmd = (!extra.is_empty()).then(|| rerun_command_with(&extra, None));
+        return (cmd, forms);
+    }
+    let rewrite = |d: &str| {
+        inline.iter().fold(d.to_string(), |acc, (i, o)| {
+            rewrite_inline_origin(&acc, *i, o)
+        })
+    };
+    let cmd = rerun_command_with(&extra, (!inline.is_empty()).then_some(&rewrite as _));
+    (Some(cmd), Vec::new())
+}
+
+/// Write `cmd` (and the inline forms for a descriptor file) after `lead`.
+fn write_explicit<E: Write>(
+    stderr: &mut E,
+    lead: &str,
+    cmd: Option<&(String, bool)>,
+    forms: &[String],
+    redacted: &mut bool,
+) -> Result<(), ToolkitError> {
+    let w = |e: std::io::Error| ToolkitError::BadInput(format!("stderr write: {e}"));
+    if !forms.is_empty() {
+        let tail = if cmd.is_some() { ", and run:" } else { "." };
         writeln!(
             stderr,
-            "warning: to mint this bundle at m/45' instead, run:"
+            "warning: {lead} write {} in the descriptor file{tail}",
+            forms.join(", ")
         )
         .map_err(w)?;
-        writeln!(stderr, "  {cmd}").map_err(w)?;
+    } else {
+        writeln!(stderr, "warning: {lead} run:").map_err(w)?;
+    }
+    if let Some((c, r)) = cmd {
+        writeln!(stderr, "  {c}").map_err(w)?;
+        *redacted |= *r;
+    }
+    Ok(())
+}
+
+const REDACTED_NOTE: &str = "warning: secret values typed on the command line are not repeated \
+     above; put yours back in place of each <...>, or pass one as =- on stdin.";
+
+/// Brian's ruling of 2026-11-26 (`tk-bh1125-decision-descriptor-vs-template-
+/// multisig`): descriptor mode recorded `path` for the `chosen` slots, a path
+/// the user did not supply. One warning names the slots and the path and asks
+/// for verification; the command that states the path explicitly follows
+/// (`--slot @N.path=`, or inline `[fp/path]@N` where the slot grammar refuses
+/// that). For a legacy bare-P2SH `sh(...)` (BIP-87 default, v0.19.0 SPEC
+/// §4.12.d) the warning also lists where other wallets put those keys, and a
+/// second command mints the same bundle at `m/45'`. Returns whether anything
+/// was chosen (the caller exits 4).
+fn emit_chosen_origin_warning<E: Write>(
+    stderr: &mut E,
+    chosen: &[ChosenSlot],
+    path: &DerivationPath,
+    why: ChosenWhy,
+    from_file: bool,
+) -> Result<bool, ToolkitError> {
+    if chosen.is_empty() {
+        return Ok(false);
+    }
+    let w = |e: std::io::Error| ToolkitError::BadInput(format!("stderr write: {e}"));
+    let idx_list = chosen
+        .iter()
+        .map(|c| format!("@{}", c.idx))
+        .collect::<Vec<_>>()
+        .join(",");
+    let verify = "Verify that your wallet keeps these keys there (compare the first address \
+                  with it) before trusting the cards.";
+    let bare_sh = matches!(why, ChosenWhy::Family { bare_sh: true, .. });
+    let line = match &why {
+        ChosenWhy::Canonical => format!(
+            "warning: no origin was given for {idx_list}; the toolkit chose m/{path} (this \
+             descriptor shape's canonical origin) and the cards record it. {verify}"
+        ),
+        ChosenWhy::Family {
+            family,
+            bare_sh: true,
+        } => format!(
+            "warning: no origin was given for {idx_list} in a legacy P2SH descriptor (sh(...)); \
+             the toolkit chose m/{path} ({}) and the cards record it. BIP-48 assigns no path \
+             to this script type, and other wallets place legacy P2SH multisig keys elsewhere \
+             (for example m/45', m/45'/0, m/45'/0'/0'). {verify} For a second wallet from the \
+             same seed, use a different --account.",
+            family.label()
+        ),
+        ChosenWhy::Family { family, .. } => {
+            let mut l = format!(
+                "warning: no origin was given for {idx_list}; the toolkit chose m/{path} ({}) \
+                 and the cards record it. {verify}",
+                family.label()
+            );
+            // Review r2 M5: m/87'/c'/a' is also the default of the multisig
+            // templates and of every other bare-sh / tr descriptor, so one seed
+            // at one account would reuse one key across script types, which
+            // BIP-87 asks wallets to avoid ("the wallet must increment the
+            // `account'` level. This prevents key reuse - across ECDSA and
+            // Schnorr signatures, across different script types").
+            if matches!(family, crate::template::DefaultOriginFamily::Bip87) {
+                l.push_str(
+                    " The same BIP-87 key serves every script type at one account: use a \
+                     different --account for each wallet from this seed.",
+                );
+            }
+            l
+        }
+    };
+    writeln!(stderr, "{line}").map_err(w)?;
+
+    let mut redacted = false;
+    let (cmd, forms) = explicit_origin_command(chosen, &|_| path.clone(), from_file);
+    write_explicit(
+        stderr,
+        "to state this path explicitly,",
+        cmd.as_ref(),
+        &forms,
+        &mut redacted,
+    )?;
+
+    if bare_sh && chosen.iter().any(|c| c.seed) {
+        // A seed slot's key moves with its path; an xpub slot's does not, so
+        // it keeps the path it was minted at.
+        let m45: DerivationPath =
+            vec![bitcoin::bip32::ChildNumber::from_hardened_idx(45).expect("below 2^31")].into();
+        let (cmd, forms) = explicit_origin_command(
+            chosen,
+            &|c| if c.seed { m45.clone() } else { path.clone() },
+            from_file,
+        );
+        write_explicit(
+            stderr,
+            "to mint this bundle at m/45' instead,",
+            cmd.as_ref(),
+            &forms,
+            &mut redacted,
+        )?;
         // Review r2 M3: m/45' has no coin or account level, and verify-bundle
         // rebuilds the card from the same slot set.
         writeln!(
             stderr,
             "warning: m/45' has no coin or account level (every --account and network gives the \
-             same keys); pass the same --slot @N.path=m/45' to verify-bundle."
+             same keys); pass the same m/45' origins to verify-bundle."
         )
         .map_err(w)?;
-        if redacted {
-            writeln!(
-                stderr,
-                "warning: secret values typed on the command line are not repeated above; put \
-                 yours back in place of each <...>, or pass one as =- on stdin."
-            )
-            .map_err(w)?;
-        }
     }
-    Ok(())
+    if redacted {
+        writeln!(stderr, "{REDACTED_NOTE}").map_err(w)?;
+    }
+    Ok(true)
 }
 
-/// This process's own command line with `extra` appended, quoted for a POSIX
-/// shell. Secret values typed inline (`--slot @N.<phrase|seedqr|entropy|ms1|
-/// wif|xprv>=<value>` and `--passphrase <value>`) are replaced by a `<...>`
-/// placeholder and never echoed; the `bool` says whether any was.
-fn rerun_command_with(extra: &[String]) -> (String, bool) {
+/// Brian's ruling of 2026-11-26: template mode, a multisig template, no
+/// `--multisig-path-family`: the `defaulted` slots were given the BIP-87
+/// default (the family default), which the user did not choose. Returns
+/// whether anything was chosen (the caller exits 4).
+fn emit_template_family_warning<E: Write>(
+    stderr: &mut E,
+    defaulted: &[u8],
+    template: CliTemplate,
+    network: CliNetwork,
+    account: u32,
+) -> Result<bool, ToolkitError> {
+    if defaulted.is_empty() {
+        return Ok(false);
+    }
+    let w = |e: std::io::Error| ToolkitError::BadInput(format!("stderr write: {e}"));
+    let family = MultisigPathFamily::default();
+    let path =
+        family.default_origin_path(network, account, template.bip48_script_type().unwrap_or(0));
+    let idx_list = defaulted
+        .iter()
+        .map(|i| format!("@{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let label = match family {
+        MultisigPathFamily::Bip87 => "BIP-87",
+        MultisigPathFamily::Bip48 => "BIP-48",
+    };
+    writeln!(
+        stderr,
+        "warning: --multisig-path-family was not given, so the toolkit chose {label} ({path}) \
+         for {idx_list} and the cards record it. Verify that your wallet keeps these keys there \
+         (compare the first address with it) before trusting the cards."
+    )
+    .map_err(w)?;
+    let (cmd, redacted) = rerun_command_with(
+        &[
+            "--multisig-path-family".to_string(),
+            family.human_name().to_string(),
+        ],
+        None,
+    );
+    writeln!(stderr, "warning: to state this choice explicitly, run:").map_err(w)?;
+    writeln!(stderr, "  {cmd}").map_err(w)?;
+    if redacted {
+        writeln!(stderr, "{REDACTED_NOTE}").map_err(w)?;
+    }
+    Ok(true)
+}
+
+/// This process's own command line, as `mnemonic ...`, with `extra` appended
+/// and the `--descriptor` value passed through `descriptor`, quoted for a
+/// POSIX shell. Secret values typed inline are replaced by a `<...>`
+/// placeholder and never echoed (see [`redact_and_quote`]); the `bool` says
+/// whether any was.
+pub(crate) fn rerun_command_with(
+    extra: &[String],
+    descriptor: Option<&dyn Fn(&str) -> String>,
+) -> (String, bool) {
     let argv: Vec<String> = std::env::args_os()
         .map(|a| a.to_string_lossy().into_owned())
         .collect();
-    redact_and_quote(&argv, extra)
+    redact_and_quote(&argv, extra, descriptor)
 }
 
 /// Slot subkeys whose values are public and may be repeated in a printed
@@ -3066,13 +3318,19 @@ fn rerun_command_with(extra: &[String]) -> (String, bool) {
 /// entropy, ms1, wif or xprv, or any subkey added later) is redacted.
 const PUBLIC_SLOT_SUBKEYS: &[&str] = &["xpub", "master_xpub", "fingerprint", "path"];
 
+/// A value that names where a secret comes from instead of holding it: stdin
+/// (`-`) or an environment variable (`@env:VAR`). Repeated as typed.
+fn is_secret_reference(value: &str) -> bool {
+    value == "-" || value.starts_with("@env:")
+}
+
 fn redact_slot_value(v: &str, redacted: &mut bool) -> String {
     // `@N.<subkey>=<value>`
     if let Some((key, value)) = v.split_once('=') {
         let public = key
             .split_once('.')
             .is_some_and(|(_, sub)| PUBLIC_SLOT_SUBKEYS.contains(&sub));
-        if public || value == "-" {
+        if public || is_secret_reference(value) {
             return v.to_string();
         }
         *redacted = true;
@@ -3081,37 +3339,86 @@ fn redact_slot_value(v: &str, redacted: &mut bool) -> String {
     v.to_string()
 }
 
-fn redact_and_quote(argv: &[String], extra: &[String]) -> (String, bool) {
+/// `restore --from <node>=<value>`: every node there is a seed.
+fn redact_from_value(v: &str, redacted: &mut bool) -> String {
+    match v.split_once('=') {
+        Some((_, value)) if is_secret_reference(value) => v.to_string(),
+        Some((node, _)) => {
+            *redacted = true;
+            format!("{node}=<your {node}>")
+        }
+        None => v.to_string(),
+    }
+}
+
+/// `argv` (argv[0] printed as `mnemonic`) with `extra` appended, quoted for a
+/// POSIX shell. Secret values typed inline (`--slot @N.<phrase|seedqr|entropy|
+/// ms1|wif|xprv>=<value>`, `--from <node>=<value>` and `--passphrase <value>`)
+/// are replaced by a `<...>` placeholder and never echoed; `-` and `@env:VAR`
+/// are kept. `descriptor` rewrites the `--descriptor` value.
+pub(crate) fn redact_and_quote(
+    argv: &[String],
+    extra: &[String],
+    descriptor: Option<&dyn Fn(&str) -> String>,
+) -> (String, bool) {
     let mut redacted = false;
     let mut out: Vec<String> = Vec::with_capacity(argv.len() + extra.len());
-    let mut i = 0;
+    out.push("mnemonic".into());
+    let mut i = 1;
     while i < argv.len() {
         let a = &argv[i];
-        if a == "--slot" && i + 1 < argv.len() {
-            out.push(a.clone());
-            out.push(redact_slot_value(&argv[i + 1], &mut redacted));
-            i += 2;
-            continue;
+        let next = argv.get(i + 1);
+        match (a.as_str(), next) {
+            ("--slot", Some(v)) => {
+                out.push(a.clone());
+                out.push(redact_slot_value(v, &mut redacted));
+                i += 2;
+                continue;
+            }
+            ("--from", Some(v)) => {
+                out.push(a.clone());
+                out.push(redact_from_value(v, &mut redacted));
+                i += 2;
+                continue;
+            }
+            ("--passphrase", Some(v)) => {
+                out.push(a.clone());
+                if is_secret_reference(v) {
+                    out.push(v.clone());
+                } else {
+                    out.push("<your passphrase>".into());
+                    redacted = true;
+                }
+                i += 2;
+                continue;
+            }
+            ("--descriptor", Some(v)) => {
+                out.push(a.clone());
+                out.push(descriptor.map_or_else(|| v.clone(), |f| f(v)));
+                i += 2;
+                continue;
+            }
+            _ => {}
         }
         if let Some(v) = a.strip_prefix("--slot=") {
             out.push(format!("--slot={}", redact_slot_value(v, &mut redacted)));
-            i += 1;
-            continue;
-        }
-        if a == "--passphrase" && i + 1 < argv.len() {
+        } else if let Some(v) = a.strip_prefix("--from=") {
+            out.push(format!("--from={}", redact_from_value(v, &mut redacted)));
+        } else if let Some(v) = a.strip_prefix("--passphrase=") {
+            if is_secret_reference(v) {
+                out.push(a.clone());
+            } else {
+                out.push("--passphrase=<your passphrase>".into());
+                redacted = true;
+            }
+        } else if let Some(v) = a.strip_prefix("--descriptor=") {
+            out.push(format!(
+                "--descriptor={}",
+                descriptor.map_or_else(|| v.to_string(), |f| f(v))
+            ));
+        } else {
             out.push(a.clone());
-            out.push("<your passphrase>".into());
-            redacted = true;
-            i += 2;
-            continue;
         }
-        if a.starts_with("--passphrase=") {
-            out.push("--passphrase=<your passphrase>".into());
-            redacted = true;
-            i += 1;
-            continue;
-        }
-        out.push(a.clone());
         i += 1;
     }
     out.extend(extra.iter().cloned());
@@ -3130,36 +3437,6 @@ fn shell_quote(a: &str) -> String {
     } else {
         format!("'{}'", a.replace('\'', "'\\''"))
     }
-}
-
-/// Bug hunt 2026-11-25 toolkit#1 — stderr `info:` line naming the canonical
-/// origin written for canonical-shape `@N` that had none. `descriptor` is the
-/// final descriptor, so the printed path is the one on the card.
-fn emit_canonical_origin_notice<E: Write>(
-    stderr: &mut E,
-    filled: &[u8],
-    descriptor: &md_codec::Descriptor,
-) -> Result<(), ToolkitError> {
-    use md_codec::origin_path::PathDeclPaths;
-    if filled.is_empty() {
-        return Ok(());
-    }
-    let idx_list = filled
-        .iter()
-        .map(|i| format!("@{i}"))
-        .collect::<Vec<_>>()
-        .join(",");
-    let op = match &descriptor.path_decl.paths {
-        PathDeclPaths::Shared(op) => op.clone(),
-        PathDeclPaths::Divergent(v) => v[filled[0] as usize].clone(),
-    };
-    let path = origin_to_derivation_path(&op)?;
-    writeln!(
-        stderr,
-        "info: no origin path supplied for {idx_list}; using this descriptor shape's canonical origin m/{path} (written on the card). Set it explicitly with [fp/path]@N or --slot @N.path=m/..."
-    )
-    .map_err(|e| ToolkitError::BadInput(format!("stderr write: {e}")))?;
-    Ok(())
 }
 
 /// Convert a md-codec OriginPath to bitcoin::bip32::DerivationPath. Required
@@ -3946,7 +4223,8 @@ mod self_check_mk1_xpub_binding_tests {
         .iter()
         .map(|s| s.to_string())
         .collect();
-        let (cmd, redacted) = redact_and_quote(&argv, &["--slot".into(), "@0.path=m/45'".into()]);
+        let (cmd, redacted) =
+            redact_and_quote(&argv, &["--slot".into(), "@0.path=m/45'".into()], None);
         assert!(redacted);
         for secret in ["abandon", "ms10secret", "hunter2", "topsecret"] {
             assert!(!cmd.contains(secret), "fail-closed: {cmd}");

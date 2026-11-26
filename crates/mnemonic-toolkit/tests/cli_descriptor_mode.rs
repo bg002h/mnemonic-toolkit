@@ -68,7 +68,7 @@ fn descriptor_watch_only_singlesig_emits_no_ms1() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
     let v: Value = serde_json::from_str(&stdout).expect("valid JSON");
     assert_eq!(v["mode"], "watch-only");
@@ -346,7 +346,7 @@ fn descriptor_watch_only_singlesig_accepts_zpub_input_via_slip0132_normalizer() 
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let from_zpub = Command::cargo_bin("mnemonic")
         .unwrap()
         .arg("--allow-argv-secret")
@@ -363,7 +363,7 @@ fn descriptor_watch_only_singlesig_accepts_zpub_input_via_slip0132_normalizer() 
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     assert_eq!(
         from_xpub.get_output().stdout,
         from_zpub.get_output().stdout,

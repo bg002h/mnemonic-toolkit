@@ -145,11 +145,12 @@ fn tk1_wpkh_seed_slot_derives_at_canonical_origin_not_master() {
         &format!("@0.phrase={A}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    // Brian's ruling of 2026-11-26: an origin the toolkit chose exits 4.
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert!(
         o.stderr
-            .contains("info: no origin path supplied for @0; using this descriptor shape's canonical origin m/84'/0'/0'"),
-        "info line naming the path; stderr: {}",
+            .contains("warning: no origin was given for @0; the toolkit chose m/84'/0'/0' (this descriptor shape's canonical origin)"),
+        "warning naming the path; stderr: {}",
         o.stderr
     );
     let md1 = md1_of(&o.stdout);
@@ -180,10 +181,11 @@ fn tk1_multisig_seed_slots_get_bip48_canonical_origin() {
         &format!("@1.phrase={B}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert!(
-        o.stderr
-            .contains("@0,@1; using this descriptor shape's canonical origin m/48'/0'/0'/2'"),
+        o.stderr.contains(
+            "@0,@1; the toolkit chose m/48'/0'/0'/2' (this descriptor shape's canonical origin)"
+        ),
         "{}",
         o.stderr
     );
@@ -228,7 +230,7 @@ fn tk1_testnet_canonical_origin_uses_coin_1() {
         &format!("@0.phrase={A}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert_eq!(origins_on_card(&md1_of(&o.stdout)), vec!["84'/1'/0'"]);
 }
 
@@ -247,7 +249,7 @@ fn tk1_xpub_slot_uses_canonical_origin_only_when_header_agrees() {
         &format!("@0.fingerprint={FP_A}"),
         "--json",
     ]);
-    assert_eq!(ok.code, 0, "{}", ok.stderr);
+    assert_eq!(ok.code, 4, "{}", ok.stderr);
     assert_eq!(origins_on_card(&md1_of(&ok.stdout)), vec!["84'/0'/0'"]);
 
     // A BIP-48 (depth 4) xpub under the canonical wpkh origin: refused.
@@ -356,29 +358,26 @@ fn empty_origin_multisig() -> Vec<String> {
         &format!("@1.phrase={B}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     with_empty_origins(&md1_of(&o.stdout))
 }
 
 #[test]
 fn tk2_restore_without_seed_never_guesses_a_path() {
+    // Brian's ruling of 2026-11-26 (tk-bh1125-r1-m2-no-seed-depth0-render):
+    // no seed and no stated path refuses; nothing is rendered or guessed.
     let md1 = empty_origin_multisig();
     let r = restore(&md1, &[]);
-    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(r.code, 2, "{}", r.stderr);
+    assert!(r.stdout.is_empty(), "{}", r.stdout);
     assert!(
-        !r.stdout.contains("87'"),
+        !r.stderr.contains("87'"),
         "no template default: {}",
-        r.stdout
-    );
-    assert!(r.stdout.contains(&format!("[{FP_A}]")), "{}", r.stdout);
-    assert!(r.stdout.contains(&format!("[{FP_B}]")), "{}", r.stdout);
-    assert!(
-        r.stderr.contains("@0 carries NO origin path on the card"),
-        "{}",
         r.stderr
     );
     assert!(
-        r.stderr.contains("@1 carries NO origin path on the card"),
+        r.stderr
+            .contains("@0, @1 carries NO origin path on the card"),
         "{}",
         r.stderr
     );
@@ -387,8 +386,18 @@ fn tk2_restore_without_seed_never_guesses_a_path() {
 #[test]
 fn tk2_restore_with_seed_finds_the_path_and_warns() {
     let md1 = empty_origin_multisig();
-    let r = restore(&md1, &["--from", &format!("phrase={A}")]);
-    assert_eq!(r.code, 0, "{}", r.stderr);
+    // The foreign @1 has no seed here, so its path is stated (2026-11-26
+    // ruling); that assertion makes the result unverified (exit 4).
+    let r = restore(
+        &md1,
+        &[
+            "--from",
+            &format!("phrase={A}"),
+            "--origin",
+            "@1=m/48'/0'/0'/2'",
+        ],
+    );
+    assert_eq!(r.code, 4, "{}", r.stderr);
     assert!(
         r.stderr
             .contains("@0 carries NO origin path on the card. Its key was FOUND")
@@ -401,11 +410,15 @@ fn tk2_restore_with_seed_finds_the_path_and_warns() {
         "{}",
         r.stdout
     );
-    // The foreign cosigner is still not guessed.
-    assert!(r.stdout.contains(&format!("[{FP_B}]")), "{}", r.stdout);
+    // The foreign cosigner is never guessed: it carries the stated path,
+    // marked as asserted.
     assert!(
-        r.stderr
-            .contains("@1 carries NO origin path on the card. Its key is shown"),
+        r.stdout.contains(&format!("[{FP_B}/48'/0'/0'/2']")),
+        "{}",
+        r.stdout
+    );
+    assert!(
+        r.stderr.contains("is asserted by you, not on the card"),
         "{}",
         r.stderr
     );
@@ -447,8 +460,16 @@ fn tk2_master_key_card_is_found_at_m_with_master_warning() {
         }
     }
     let md1 = md_codec::chunk::split(&d).expect("re-split");
-    let r = restore(&md1, &["--from", &format!("phrase={A}")]);
-    assert_eq!(r.code, 0, "{}", r.stderr);
+    let r = restore(
+        &md1,
+        &[
+            "--from",
+            &format!("phrase={A}"),
+            "--origin",
+            "@1=m/48'/0'/0'/2'",
+        ],
+    );
+    assert_eq!(r.code, 4, "{}", r.stderr);
     assert!(r.stderr.contains("at m."), "{}", r.stderr);
     assert!(r.stderr.contains("MASTER key"), "{}", r.stderr);
 }
@@ -473,13 +494,20 @@ fn tk2_refugium_path_is_found_on_testnet() {
         &format!("@1.phrase={B}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     let md1 = with_empty_origins(&md1_of(&o.stdout));
     let r = restore(
         &md1,
-        &["--network", "testnet", "--from", &format!("phrase={A}")],
+        &[
+            "--network",
+            "testnet",
+            "--from",
+            &format!("phrase={A}"),
+            "--origin",
+            "@1=m/48'/1'/0'/2'",
+        ],
     );
-    assert_eq!(r.code, 0, "{}", r.stderr);
+    assert_eq!(r.code, 4, "{}", r.stderr);
     assert!(r.stderr.contains("m/270028'/1'/34'"), "{}", r.stderr);
     assert!(
         r.stdout.contains(&format!("[{FP_A}/270028'/1'/34']")),
@@ -512,10 +540,18 @@ fn b5_bip45_purpose_key_is_found_by_the_empty_origin_search() {
         &format!("@1.phrase={B}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     let md1 = with_empty_origins(&md1_of(&o.stdout));
-    let r = restore(&md1, &["--from", &format!("phrase={A}")]);
-    assert_eq!(r.code, 0, "{}", r.stderr);
+    let r = restore(
+        &md1,
+        &[
+            "--from",
+            &format!("phrase={A}"),
+            "--origin",
+            "@1=m/48'/0'/0'/2'",
+        ],
+    );
+    assert_eq!(r.code, 4, "{}", r.stderr);
     assert!(r.stderr.contains("at m/45'."), "{}", r.stderr);
     assert!(r.stdout.contains(&format!("[{FP_A}/45']")), "{}", r.stdout);
 }
@@ -697,9 +733,9 @@ fn tk7_legacy_sh_sortedmulti_defaults_to_bip87_with_a_warning() {
         &format!("@1.phrase={B}"),
         "--json",
     ]);
-    assert_eq!(o.code, 0, "{}", o.stderr);
+    assert_eq!(o.code, 4, "{}", o.stderr);
     assert!(
-        o.stderr.contains("derived at m/87'/0'/0' (BIP-87)") && o.stderr.contains("m/45'"),
+        o.stderr.contains("chose m/87'/0'/0' (BIP-87)") && o.stderr.contains("m/45'"),
         "bare sh(...) defaults to BIP-87 and names m/45'; {}",
         o.stderr
     );

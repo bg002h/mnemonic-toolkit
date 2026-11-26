@@ -290,7 +290,7 @@ fn non_canonical_wsh_andor_round_trips_via_bundle_json() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
 
     let tmpdir = tempfile::tempdir().unwrap();
@@ -422,7 +422,7 @@ fn non_canonical_3_of_3_wsh_andor_round_trips_via_bundle_json() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
 
     let tmpdir = tempfile::tempdir().unwrap();
@@ -490,7 +490,7 @@ fn descriptor_mode_3_of_3_emits_per_slot_ms1_post_v0_21() {
             "--json",
         ])
         .assert()
-        .success();
+        .code(4);
     let stdout = String::from_utf8(bundle_out.get_output().stdout.clone()).unwrap();
     let bundle: serde_json::Value = serde_json::from_str(&stdout).expect("bundle is valid JSON");
 
